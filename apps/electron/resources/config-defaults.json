@@ -4,7 +4,8 @@
   "defaults": {
     "authType": "api_key",
     "notificationsEnabled": true,
-    "colorTheme": "default"
+    "colorTheme": "default",
+    "uiLocale": "pt-BR"
   },
   "workspaceDefaults": {
     "thinkingLevel": "think",

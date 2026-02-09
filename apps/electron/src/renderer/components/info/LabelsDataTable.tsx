@@ -127,7 +127,7 @@ export function LabelsDataTable({
   searchable = false,
   maxHeight = 400,
   fullscreen = false,
-  fullscreenTitle = 'Labels',
+  fullscreenTitle = 'Tags',
   className,
 }: LabelsDataTableProps) {
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -160,9 +160,9 @@ export function LabelsDataTable({
       <Info_DataTable
         columns={columns}
         data={data}
-        searchable={searchable ? { placeholder: 'Search labels...' } : false}
+        searchable={searchable ? { placeholder: 'Search tags...' } : false}
         maxHeight={maxHeight}
-        emptyContent="No labels configured"
+        emptyContent="No tags configured"
         floatingAction={fullscreenButton}
         className={cn(fullscreen && 'group', className)}
         getSubRows={getSubRows}
@@ -174,14 +174,14 @@ export function LabelsDataTable({
           isOpen={isFullscreen}
           onClose={() => setIsFullscreen(false)}
           title={fullscreenTitle}
-          subtitle={`${totalCount} ${totalCount === 1 ? 'label' : 'labels'}`}
+          subtitle={`${totalCount} ${totalCount === 1 ? 'tag' : 'tags'}`}
           theme={isDark ? 'dark' : 'light'}
         >
           <Info_DataTable
             columns={columns}
             data={data}
-            searchable={searchable ? { placeholder: 'Search labels...' } : false}
-            emptyContent="No labels configured"
+            searchable={searchable ? { placeholder: 'Search tags...' } : false}
+            emptyContent="No tags configured"
             getSubRows={getSubRows}
           />
         </DataTableOverlay>

@@ -64,6 +64,7 @@ const AuthTypeSchema = z.enum(['api_key', 'oauth_token']);
 
 export const StoredConfigSchema = z.object({
   authType: AuthTypeSchema.optional(),
+  uiLocale: z.enum(['pt-BR', 'en-US']).optional(),
   workspaces: z.array(WorkspaceSchema).min(0),
   activeWorkspaceId: z.string().nullable(),
   activeSessionId: z.string().nullable(),

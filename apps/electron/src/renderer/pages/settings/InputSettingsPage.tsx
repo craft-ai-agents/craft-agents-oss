@@ -23,6 +23,7 @@ import {
   SettingsToggle,
   SettingsMenuSelectRow,
 } from '@/components/settings'
+import { useLocale } from '@/context/LocaleContext'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -34,6 +35,8 @@ export const meta: DetailsPageMeta = {
 // ============================================
 
 export default function InputSettingsPage() {
+  const { t } = useLocale()
+
   // Auto-capitalisation state
   const [autoCapitalisation, setAutoCapitalisation] = useState(true)
 
@@ -81,23 +84,23 @@ export default function InputSettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Input" actions={<HeaderMenu route={routes.view.settings('input')} />} />
+      <PanelHeader title={t('settings.input.title')} actions={<HeaderMenu route={routes.view.settings('input')} />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
             <div className="space-y-8">
               {/* Typing Behavior */}
-              <SettingsSection title="Typing" description="Control how text is entered in the chat input.">
+              <SettingsSection title={t('settings.input.section.typing')} description={t('settings.input.section.typing.description')}>
                 <SettingsCard>
                   <SettingsToggle
-                    label="Auto capitalisation"
-                    description="Automatically capitalise the first letter when typing a message."
+                    label={t('settings.input.autoCapitalisation.label')}
+                    description={t('settings.input.autoCapitalisation.description')}
                     checked={autoCapitalisation}
                     onCheckedChange={handleAutoCapitalisationChange}
                   />
                   <SettingsToggle
-                    label="Spell check"
-                    description="Underline misspelled words while typing."
+                    label={t('settings.input.spellCheck.label')}
+                    description={t('settings.input.spellCheck.description')}
                     checked={spellCheck}
                     onCheckedChange={handleSpellCheckChange}
                   />
@@ -105,16 +108,16 @@ export default function InputSettingsPage() {
               </SettingsSection>
 
               {/* Send Behavior */}
-              <SettingsSection title="Sending" description="Choose how to send messages.">
+              <SettingsSection title={t('settings.input.section.sending')} description={t('settings.input.section.sending.description')}>
                 <SettingsCard>
                   <SettingsMenuSelectRow
-                    label="Send message with"
-                    description="Keyboard shortcut for sending messages"
+                    label={t('settings.input.sendMessageWith.label')}
+                    description={t('settings.input.sendMessageWith.description')}
                     value={sendMessageKey}
                     onValueChange={handleSendMessageKeyChange}
                     options={[
-                      { value: 'enter', label: 'Enter', description: 'Use Shift+Enter for new lines' },
-                      { value: 'cmd-enter', label: isMac ? '⌘ Enter' : 'Ctrl+Enter', description: 'Use Enter for new lines' },
+                      { value: 'enter', label: t('settings.input.sendMessageWith.enter.label'), description: t('settings.input.sendMessageWith.enter.description') },
+                      { value: 'cmd-enter', label: isMac ? '⌘ Enter' : 'Ctrl+Enter', description: t('settings.input.sendMessageWith.cmdEnter.description') },
                     ]}
                   />
                 </SettingsCard>

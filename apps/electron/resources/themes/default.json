@@ -1,6 +1,6 @@
 {
   "name": "Default",
-  "description": "Clean blue-tinted neutral theme",
+  "description": "G4 brand theme — Navy, Silver, Gold",
   "author": "G4 OS",
   "license": "MIT",
   "supportedModes": ["light", "dark"],
@@ -8,18 +8,18 @@
     "light": "github-light",
     "dark": "github-dark"
   },
-  "background": "#faf9fb",
-  "foreground": "#1a1625",
-  "accent": "#184560",
-  "info": "#d97706",
-  "success": "#16a34a",
-  "destructive": "#dc2626",
+  "background": "#F5F4F3",
+  "foreground": "#001F35",
+  "accent": "#B9915B",
+  "info": "#C88B2E",
+  "success": "#2D8A4E",
+  "destructive": "#842E20",
   "dark": {
-    "background": "#1e1d21",
-    "foreground": "#f5f5f7",
-    "accent": "#3D8AB5",
-    "info": "#fbbf24",
-    "success": "#22c55e",
-    "destructive": "#ef4444"
+    "background": "#00101D",
+    "foreground": "#E8E6E4",
+    "accent": "#D1BEA4",
+    "info": "#C49A50",
+    "success": "#3DA066",
+    "destructive": "#C45A4A"
   }
 }

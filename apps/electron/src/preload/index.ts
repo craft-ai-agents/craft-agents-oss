@@ -439,6 +439,21 @@ const api: ElectronAPI = {
   setKeepAwakeWhileRunning: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.POWER_SET_KEEP_AWAKE, enabled),
 
+  // Frontend locale settings
+  getUiLocale: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.LOCALE_GET_UI) as Promise<import('../shared/types').UiLocale>,
+  setUiLocale: (locale: import('../shared/types').UiLocale) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LOCALE_SET_UI, locale),
+  onUiLocaleChange: (callback: (locale: import('../shared/types').UiLocale) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, locale: import('../shared/types').UiLocale) => {
+      callback(locale)
+    }
+    ipcRenderer.on(IPC_CHANNELS.LOCALE_UI_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.LOCALE_UI_CHANGED, handler)
+    }
+  },
+
   updateBadgeCount: (count: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.BADGE_UPDATE, count),
   clearBadgeCount: () =>

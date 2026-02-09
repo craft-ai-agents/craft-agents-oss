@@ -12,6 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { useTheme } from '@/context/ThemeContext'
+import { useLocale } from '@/context/LocaleContext'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { routes } from '@/lib/navigate'
 import { Monitor, Sun, Moon } from 'lucide-react'
@@ -29,6 +30,7 @@ import { useWorkspaceIcons } from '@/hooks/useWorkspaceIcon'
 import { Info_DataTable, SortableHeader } from '@/components/info/Info_DataTable'
 import { Info_Badge } from '@/components/info/Info_Badge'
 import type { PresetTheme } from '@config/theme'
+import type { TranslationKey } from '@/i18n'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -43,10 +45,11 @@ export const meta: DetailsPageMeta = {
  * Column definitions for the tool icon mappings table.
  * Shows a preview icon, tool name, and the CLI commands that trigger it.
  */
-const toolIconColumns: ColumnDef<ToolIconMapping>[] = [
+function getToolIconColumns(t: (key: TranslationKey, params?: Record<string, string | number>) => string): ColumnDef<ToolIconMapping>[] {
+  return [
   {
     accessorKey: 'iconDataUrl',
-    header: () => <span className="p-1.5 pl-2.5">Icon</span>,
+    header: () => <span className="p-1.5 pl-2.5">{t('settings.appearance.toolIcons.table.icon')}</span>,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
         <img
@@ -61,7 +64,7 @@ const toolIconColumns: ColumnDef<ToolIconMapping>[] = [
   },
   {
     accessorKey: 'displayName',
-    header: ({ column }) => <SortableHeader column={column} title="Tool" />,
+    header: ({ column }) => <SortableHeader column={column} title={t('settings.appearance.toolIcons.table.tool')} />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5 font-medium">
         {row.original.displayName}
@@ -71,7 +74,7 @@ const toolIconColumns: ColumnDef<ToolIconMapping>[] = [
   },
   {
     accessorKey: 'commands',
-    header: () => <span className="p-1.5 pl-2.5">Commands</span>,
+    header: () => <span className="p-1.5 pl-2.5">{t('settings.appearance.toolIcons.table.commands')}</span>,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5 flex flex-wrap gap-1">
         {row.original.commands.map(cmd => (
@@ -84,13 +87,15 @@ const toolIconColumns: ColumnDef<ToolIconMapping>[] = [
     meta: { fillWidth: true },
     enableSorting: false,
   },
-]
+  ]
+}
 
 // ============================================
 // Main Component
 // ============================================
 
 export default function AppearanceSettingsPage() {
+  const { t } = useLocale()
   const { mode, setMode, colorTheme, setColorTheme, font, setFont, activeWorkspaceId, setWorkspaceColorTheme } = useTheme()
   const { workspaces } = useAppShellContext()
 
@@ -108,6 +113,8 @@ export default function AppearanceSettingsPage() {
 
   // Resolved path to tool-icons.json (needed for EditPopover and "Edit File" action)
   const [toolIconsJsonPath, setToolIconsJsonPath] = useState<string | null>(null)
+
+  const toolIconColumns = useMemo(() => getToolIconColumns(t), [t])
 
   // Load preset themes on mount
   useEffect(() => {
@@ -185,14 +192,14 @@ export default function AppearanceSettingsPage() {
 
   // Theme options for dropdowns
   const themeOptions = useMemo(() => [
-    { value: 'default', label: 'Default' },
+    { value: 'default', label: t('settings.appearance.workspaceTheme.useDefault') },
     ...presetThemes
       .filter(t => t.id !== 'default')
       .map(t => ({
         value: t.id,
         label: t.theme.name || t.id,
       })),
-  ], [presetThemes])
+  ], [presetThemes, t])
 
   // Get current app default theme label for display (null when using 'default' to avoid redundant "Use Default (Default)")
   const appDefaultLabel = useMemo(() => {
@@ -204,7 +211,7 @@ export default function AppearanceSettingsPage() {
   return (
     <div className="h-full flex flex-col">
       <PanelHeader
-        title="Appearance"
+        title={t('settings.appearance.title')}
         actions={<HeaderMenu route={routes.view.settings('appearance')} helpFeature="themes" />}
       />
       <div className="flex-1 min-h-0 mask-fade-y">
@@ -213,33 +220,33 @@ export default function AppearanceSettingsPage() {
             <div className="space-y-8">
 
               {/* Default Theme */}
-              <SettingsSection title="Default Theme">
+              <SettingsSection title={t('settings.appearance.section.defaultTheme')}>
                 <SettingsCard>
-                  <SettingsRow label="Mode">
+                  <SettingsRow label={t('settings.appearance.mode.label')}>
                     <SettingsSegmentedControl
                       value={mode}
                       onValueChange={setMode}
                       options={[
-                        { value: 'system', label: 'System', icon: <Monitor className="w-4 h-4" /> },
-                        { value: 'light', label: 'Light', icon: <Sun className="w-4 h-4" /> },
-                        { value: 'dark', label: 'Dark', icon: <Moon className="w-4 h-4" /> },
+                        { value: 'system', label: t('settings.appearance.mode.system'), icon: <Monitor className="w-4 h-4" /> },
+                        { value: 'light', label: t('settings.appearance.mode.light'), icon: <Sun className="w-4 h-4" /> },
+                        { value: 'dark', label: t('settings.appearance.mode.dark'), icon: <Moon className="w-4 h-4" /> },
                       ]}
                     />
                   </SettingsRow>
-                  <SettingsRow label="Color theme">
+                  <SettingsRow label={t('settings.appearance.colorTheme.label')}>
                     <SettingsMenuSelect
                       value={colorTheme}
                       onValueChange={setColorTheme}
                       options={themeOptions}
                     />
                   </SettingsRow>
-                  <SettingsRow label="Font">
+                  <SettingsRow label={t('settings.appearance.font.label')}>
                     <SettingsSegmentedControl
                       value={font}
                       onValueChange={setFont}
                       options={[
-                        { value: 'inter', label: 'Inter' },
-                        { value: 'system', label: 'System' },
+                        { value: 'manrope', label: t('settings.appearance.font.manrope') },
+                        { value: 'system', label: t('settings.appearance.font.system') },
                       ]}
                     />
                   </SettingsRow>
@@ -249,8 +256,8 @@ export default function AppearanceSettingsPage() {
               {/* Workspace Themes */}
               {workspaces.length > 0 && (
                 <SettingsSection
-                  title="Workspace Themes"
-                  description="Override theme settings per workspace"
+                  title={t('settings.appearance.section.workspaceThemes')}
+                  description={t('settings.appearance.section.workspaceThemes.description')}
                 >
                   <SettingsCard>
                     {workspaces.map((workspace) => {
@@ -278,7 +285,9 @@ export default function AppearanceSettingsPage() {
                             value={hasCustomTheme ? wsTheme : 'default'}
                             onValueChange={(value) => handleWorkspaceThemeChange(workspace.id, value)}
                             options={[
-                              { value: 'default', label: appDefaultLabel ? `Use Default (${appDefaultLabel})` : 'Use Default' },
+                              { value: 'default', label: appDefaultLabel
+                                ? t('settings.appearance.workspaceTheme.useDefaultWithTheme', { theme: appDefaultLabel })
+                                : t('settings.appearance.workspaceTheme.useDefault') },
                               ...presetThemes
                                 .filter(t => t.id !== 'default')
                                 .map(t => ({
@@ -296,15 +305,15 @@ export default function AppearanceSettingsPage() {
 
               {/* Tool Icons — shows the command → icon mapping used in turn cards */}
               <SettingsSection
-                title="Tool Icons"
-                description="Icons shown next to CLI commands in chat activity. Stored in ~/.g4os/tool-icons/."
+                title={t('settings.appearance.section.toolIcons')}
+                description={t('settings.appearance.section.toolIcons.description')}
                 action={
                   toolIconsJsonPath ? (
                     <EditPopover
                       trigger={<EditButton />}
                       {...getEditConfig('edit-tool-icons', toolIconsJsonPath)}
                       secondaryAction={{
-                        label: 'Edit File',
+                        label: t('settings.common.editFile'),
                         filePath: toolIconsJsonPath,
                       }}
                     />
@@ -315,9 +324,9 @@ export default function AppearanceSettingsPage() {
                   <Info_DataTable
                     columns={toolIconColumns}
                     data={toolIcons}
-                    searchable={{ placeholder: 'Search tools...' }}
+                    searchable={{ placeholder: t('settings.appearance.toolIcons.searchPlaceholder') }}
                     maxHeight={480}
-                    emptyContent="No tool icon mappings found"
+                    emptyContent={t('settings.appearance.toolIcons.empty')}
                   />
                 </SettingsCard>
               </SettingsSection>

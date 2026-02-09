@@ -22,6 +22,7 @@ import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { SettingsSubpage } from '../../../shared/types'
 import { SETTINGS_ITEMS } from '../../../shared/menu-schema'
 import { SETTINGS_ICONS } from '@/components/icons/SettingsIcons'
+import { useLocale } from '@/context/LocaleContext'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -54,6 +55,7 @@ interface SettingsItemRowProps {
   item: SettingsItem
   isSelected: boolean
   isFirst: boolean
+  openInNewWindowLabel: string
   onSelect: () => void
 }
 
@@ -61,7 +63,7 @@ interface SettingsItemRowProps {
  * SettingsItemRow - Individual settings item with dropdown menu
  * Tracks menu open state to keep "..." button visible when menu is open
  */
-function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRowProps) {
+function SettingsItemRow({ item, isSelected, isFirst, openInNewWindowLabel, onSelect }: SettingsItemRowProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const Icon = item.icon
 
@@ -137,7 +139,7 @@ function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRo
                 <DropdownMenuProvider>
                   <StyledDropdownMenuItem onClick={handleOpenInNewWindow}>
                     <AppWindow className="h-3.5 w-3.5" />
-                    <span className="flex-1">Open in New Window</span>
+                    <span className="flex-1">{openInNewWindowLabel}</span>
                   </StyledDropdownMenuItem>
                 </DropdownMenuProvider>
               </StyledDropdownMenuContent>
@@ -153,6 +155,38 @@ export default function SettingsNavigator({
   selectedSubpage,
   onSelectSubpage,
 }: SettingsNavigatorProps) {
+  const { t } = useLocale()
+
+  const getSettingsLabel = (id: SettingsSubpage): string => {
+    switch (id) {
+      case 'app': return t('settings.page.app.label')
+      case 'ai': return t('settings.page.ai.label')
+      case 'appearance': return t('settings.page.appearance.label')
+      case 'input': return t('settings.page.input.label')
+      case 'workspace': return t('settings.page.workspace.label')
+      case 'permissions': return t('settings.page.permissions.label')
+      case 'labels': return t('settings.page.labels.label')
+      case 'shortcuts': return t('settings.page.shortcuts.label')
+      case 'preferences': return t('settings.page.preferences.label')
+      default: return id
+    }
+  }
+
+  const getSettingsDescription = (id: SettingsSubpage): string => {
+    switch (id) {
+      case 'app': return t('settings.page.app.description')
+      case 'ai': return t('settings.page.ai.description')
+      case 'appearance': return t('settings.page.appearance.description')
+      case 'input': return t('settings.page.input.description')
+      case 'workspace': return t('settings.page.workspace.description')
+      case 'permissions': return t('settings.page.permissions.description')
+      case 'labels': return t('settings.page.labels.description')
+      case 'shortcuts': return t('settings.page.shortcuts.description')
+      case 'preferences': return t('settings.page.preferences.description')
+      default: return ''
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto">
@@ -160,7 +194,8 @@ export default function SettingsNavigator({
           {settingsItems.map((item, index) => (
             <SettingsItemRow
               key={item.id}
-              item={item}
+              item={{ ...item, label: getSettingsLabel(item.id), description: getSettingsDescription(item.id) }}
+              openInNewWindowLabel={t('settings.nav.openInNewWindow')}
               isSelected={selectedSubpage === item.id}
               isFirst={index === 0}
               onSelect={() => onSelectSubpage(item.id)}

@@ -65,6 +65,7 @@ import type { PermissionMode } from '@g4os/shared/agent/modes'
 import { PERMISSION_MODE_ORDER } from '@g4os/shared/agent/modes'
 import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelName } from '@g4os/shared/agent/thinking-levels'
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
+import { useLocale } from '@/context/LocaleContext'
 import { hasOpenOverlay } from '@/lib/overlay-detection'
 import { EscapeInterruptOverlay } from './EscapeInterruptOverlay'
 
@@ -247,6 +248,7 @@ export function FreeFormInput({
   currentConnection,
   onConnectionChange,
 }: FreeFormInputProps) {
+  const { t } = useLocale()
   // Read custom model, capabilities, connections, and workspace info from context.
   // Uses optional variant so playground (no provider) doesn't crash.
   const appShellCtx = useOptionalAppShellContext()
@@ -1460,12 +1462,12 @@ export function FreeFormInput({
                 }
                 label={
                   optimisticSourceSlugs.length === 0
-                    ? "Choose Sources"
+                    ? t('input.sources.choose')
                     : (() => {
                         const enabledSources = sources.filter(s => optimisticSourceSlugs.includes(s.config.slug))
                         if (enabledSources.length === 1) return enabledSources[0].config.name
                         if (enabledSources.length === 2) return enabledSources.map(s => s.config.name).join(', ')
-                        return `${enabledSources.length} sources`
+                        return t('input.sources.count', { count: enabledSources.length })
                       })()
                 }
                 isExpanded={isEmptySession}
@@ -1489,7 +1491,7 @@ export function FreeFormInput({
                   }
                   setSourceDropdownOpen(!sourceDropdownOpen)
                 }}
-                tooltip="Sources"
+                tooltip={t('sidebar.nav.sources')}
               />
               {sourceDropdownOpen && sourceDropdownPosition && ReactDOM.createPortal(
                 <>
@@ -1510,9 +1512,9 @@ export function FreeFormInput({
                   >
                     {sources.length === 0 ? (
                       <div className="text-xs text-muted-foreground p-3 select-none">
-                        No sources configured.
+                        {t('content.empty.noSourcesConfigured')}
                         <br />
-                        Add sources in Settings.
+                        {t('input.sources.addInSettings')}
                       </div>
                     ) : (
                       <CommandPrimitive
@@ -1524,7 +1526,7 @@ export function FreeFormInput({
                             ref={sourceFilterInputRef}
                             value={sourceFilter}
                             onValueChange={setSourceFilter}
-                            placeholder="Search sources..."
+                            placeholder={t('input.sources.searchPlaceholder')}
                             className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground placeholder:select-none"
                           />
                         </div>

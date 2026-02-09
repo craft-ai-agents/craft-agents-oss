@@ -25,7 +25,7 @@ export type CSSColor = string;
 export interface ThemeColors {
   background?: CSSColor;
   foreground?: CSSColor;
-  accent?: CSSColor; // Brand purple (Execute mode)
+  accent?: CSSColor; // Royal Gold (Execute mode)
   info?: CSSColor; // Amber (Ask mode, warnings)
   success?: CSSColor; // Green
   destructive?: CSSColor; // Red
@@ -230,8 +230,8 @@ export function themeToCSS(theme: ThemeOverrides, isDark: boolean = false): stri
  * that visually match the DEFAULT_THEME oklch colors.
  */
 export const BACKGROUND_HEX = {
-  light: '#faf9fb', // matches oklch(0.98 0.003 265)
-  dark: '#302f33', // matches oklch(0.2 0.005 270)
+  light: '#F5F4F3', // Royal Silver
+  dark: '#00101D', // Deep Navy
 } as const;
 
 /**
@@ -246,19 +246,19 @@ export function getBackgroundColor(isDark: boolean): string {
  * Default theme values (matches current index.css)
  */
 export const DEFAULT_THEME: ThemeOverrides = {
-  background: 'oklch(0.98 0.003 265)',
-  foreground: 'oklch(0.185 0.01 270)',
-  accent: '#184560',
-  info: 'oklch(0.75 0.16 70)',
-  success: 'oklch(0.55 0.17 145)',
-  destructive: 'oklch(0.58 0.24 28)',
+  background: '#F5F4F3',           // Royal Silver
+  foreground: '#001F35',           // Navy Blue
+  accent: '#B9915B',               // Royal Gold
+  info: 'oklch(0.65 0.14 65)',     // Deeper warm amber
+  success: 'oklch(0.50 0.15 155)', // Cooler green
+  destructive: '#842E20',          // Ground Clay
   dark: {
-    background: 'oklch(0.145 0.015 270)',
-    foreground: 'oklch(0.95 0.01 270)',
-    accent: '#3D8AB5',
-    info: 'oklch(0.78 0.14 70)',
-    success: 'oklch(0.60 0.17 145)',
-    destructive: 'oklch(0.65 0.22 28)',
+    background: '#00101D',         // Deep Navy
+    foreground: '#E8E6E4',         // Warm Silver
+    accent: '#D1BEA4',             // Lightened Gold
+    info: 'oklch(0.72 0.13 65)',   // Warmer amber
+    success: 'oklch(0.58 0.15 155)', // Brighter green
+    destructive: '#C45A4A',        // Brightened Clay
   },
 };
 

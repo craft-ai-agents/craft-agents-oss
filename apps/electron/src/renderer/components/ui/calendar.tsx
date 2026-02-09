@@ -11,25 +11,29 @@ import { DayButton, DayPicker, getDefaultClassNames } from 'react-day-picker'
 
 import { cn } from '@/lib/utils'
 import { buttonVariants } from '@/components/ui/button'
+import { useLocale } from '@/context/LocaleContext'
 
 function Calendar({
   className,
   classNames,
   showOutsideDays = true,
   captionLayout = 'label',
+  locale: localeProp,
   formatters,
   ...props
 }: React.ComponentProps<typeof DayPicker>) {
+  const { localeCode, dateFnsLocale } = useLocale()
   const defaultClassNames = getDefaultClassNames()
 
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
       captionLayout={captionLayout}
+      locale={localeProp ?? dateFnsLocale}
       formatters={{
         // Show short month names in the dropdown (Jan, Feb, ...)
         formatMonthDropdown: (date) =>
-          date.toLocaleString('default', { month: 'short' }),
+          date.toLocaleString(localeCode, { month: 'short' }),
         ...formatters,
       }}
       className={cn(

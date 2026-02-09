@@ -12,7 +12,7 @@ import {
 } from '@config/theme'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
-export type FontFamily = 'inter' | 'system'
+export type FontFamily = 'manrope' | 'system'
 
 interface ThemeContextType {
   // Preferences (persisted at app level)
@@ -100,10 +100,14 @@ export function ThemeProvider({
 }: ThemeProviderProps) {
   const stored = loadStoredTheme()
 
+  // Migrate legacy font value: 'inter' → 'manrope'
+  const migrateFont = (f?: FontFamily | string): FontFamily =>
+    f === 'inter' ? 'manrope' : (f as FontFamily) ?? defaultFont
+
   // === Preference state (persisted at app level) ===
   const [mode, setModeState] = useState<ThemeMode>(stored?.mode ?? defaultMode)
   const [colorTheme, setColorThemeState] = useState<string>(stored?.colorTheme ?? defaultColorTheme)
-  const [font, setFontState] = useState<FontFamily>(stored?.font ?? defaultFont)
+  const [font, setFontState] = useState<FontFamily>(migrateFont(stored?.font))
   const [systemPreference, setSystemPreference] = useState<'light' | 'dark'>(getSystemPreference)
   const [previewColorTheme, setPreviewColorTheme] = useState<string | null>(null)
 
@@ -194,8 +198,8 @@ export function ThemeProvider({
     const root = document.documentElement
 
     // Apply font
-    if (font === 'inter') {
-      root.dataset.font = 'inter'
+    if (font === 'manrope') {
+      root.dataset.font = 'manrope'
     } else {
       delete root.dataset.font
     }
@@ -321,13 +325,14 @@ export function ThemeProvider({
 
     const cleanup = window.electronAPI.onThemePreferencesChange((preferences) => {
       isExternalUpdate.current = true
+      const migratedFont = migrateFont(preferences.font)
       setModeState(preferences.mode as ThemeMode)
       setColorThemeState(preferences.colorTheme)
-      setFontState(preferences.font as FontFamily)
+      setFontState(migratedFont)
       saveTheme({
         mode: preferences.mode as ThemeMode,
         colorTheme: preferences.colorTheme,
-        font: preferences.font as FontFamily
+        font: migratedFont
       })
       setTimeout(() => {
         isExternalUpdate.current = false

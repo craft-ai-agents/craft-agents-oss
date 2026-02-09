@@ -70,7 +70,7 @@ import { registerIpcHandlers } from './ipc'
 import { createApplicationMenu } from './menu'
 import { WindowManager } from './window-manager'
 import { loadWindowState, saveWindowState } from './window-state'
-import { getWorkspaces, loadStoredConfig, addWorkspace, saveConfig } from '@g4os/shared/config'
+import { getWorkspaces, loadStoredConfig, addWorkspace, saveConfig, loadConfigDefaults } from '@g4os/shared/config'
 import { getDefaultWorkspacesDir } from '@g4os/shared/workspaces'
 import { initializeDocs } from '@g4os/shared/docs'
 import { ensureDefaultPermissions } from '@g4os/shared/agent/permissions-config'
@@ -178,7 +178,13 @@ async function createInitialWindows(): Promise<void> {
   if (workspaces.length === 0) {
     // Ensure config file exists (addWorkspace requires it)
     if (!loadStoredConfig()) {
-      saveConfig({ workspaces: [], activeWorkspaceId: null, activeSessionId: null })
+      const defaults = loadConfigDefaults()
+      saveConfig({
+        workspaces: [],
+        activeWorkspaceId: null,
+        activeSessionId: null,
+        uiLocale: defaults.defaults.uiLocale,
+      })
     }
     const defaultPath = join(getDefaultWorkspacesDir(), 'my-workspace')
     addWorkspace({ rootPath: defaultPath, name: 'My Workspace' })

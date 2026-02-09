@@ -52,11 +52,13 @@ import { useFocusZone, useRovingTabIndex } from "@/hooks/keyboard"
 import { useEscapeInterrupt } from "@/context/EscapeInterruptContext"
 import { useNavigation, useNavigationState, routes, isSessionsNavigation, type SessionFilter } from "@/contexts/NavigationContext"
 import { useFocusContext } from "@/context/FocusContext"
+import { useLocale } from "@/context/LocaleContext"
 import { getSessionTitle } from "@/utils/session"
 import type { SessionMeta } from "@/atoms/sessions"
 import type { ViewConfig } from "@g4os/shared/views"
 import { PERMISSION_MODE_CONFIG, type PermissionMode } from "@g4os/shared/agent/modes"
 import { fuzzyScore } from "@g4os/shared/search"
+import type { TranslationKey } from "@/i18n"
 
 // Pagination constants
 const INITIAL_DISPLAY_LIMIT = 20
@@ -84,17 +86,25 @@ const shortTimeLocale: Pick<Locale, 'formatDistance'> = {
  * Format a date for the date header
  * Returns "Today", "Yesterday", or formatted date like "Dec 19"
  */
-function formatDateHeader(date: Date): string {
-  if (isToday(date)) return "Today"
-  if (isYesterday(date)) return "Yesterday"
-  return format(date, "MMM d")
+function formatDateHeader(
+  date: Date,
+  t: (key: TranslationKey) => string,
+  dateLocale: Locale
+): string {
+  if (isToday(date)) return t('date.today')
+  if (isYesterday(date)) return t('date.yesterday')
+  return format(date, "MMM d", { locale: dateLocale })
 }
 
 /**
  * Group sessions by date (day boundary)
  * Returns array of { date, sessions } sorted by date descending
  */
-function groupSessionsByDate(sessions: SessionMeta[]): Array<{ date: Date; label: string; sessions: SessionMeta[] }> {
+function groupSessionsByDate(
+  sessions: SessionMeta[],
+  t: (key: TranslationKey) => string,
+  dateLocale: Locale
+): Array<{ date: Date; label: string; sessions: SessionMeta[] }> {
   const groups = new Map<string, { date: Date; sessions: SessionMeta[] }>()
 
   for (const session of sessions) {
@@ -113,7 +123,7 @@ function groupSessionsByDate(sessions: SessionMeta[]): Array<{ date: Date; label
     .sort((a, b) => b.date.getTime() - a.date.getTime())
     .map(group => ({
       ...group,
-      label: formatDateHeader(group.date),
+      label: formatDateHeader(group.date, t, dateLocale),
     }))
 }
 
@@ -393,6 +403,7 @@ function SessionItem({
 
   // Theme context for resolving label colors (light/dark aware)
   const { isDark } = useTheme()
+  const { dateFnsLocale } = useLocale()
 
   const handleClick = (e: React.MouseEvent) => {
     // Always activate session-list zone for keyboard navigation (arrow keys, Cmd+A, etc.)
@@ -705,7 +716,7 @@ function SessionItem({
                     </span>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" sideOffset={4}>
-                    {formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true })}
+                    {formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true, locale: dateFnsLocale })}
                   </TooltipContent>
                 </Tooltip>
               )}
@@ -913,6 +924,7 @@ export function SessionList({
   statusFilter,
   labelFilterMap,
 }: SessionListProps) {
+  const { t, dateFnsLocale } = useLocale()
   const {
     state: selectionState,
     select: selectSession,
@@ -1157,7 +1169,7 @@ export function SessionList({
   }, [hasMore, loadMore])
 
   // Group sessions by date (only used in normal mode, not search mode)
-  const dateGroups = useMemo(() => groupSessionsByDate(paginatedItems), [paginatedItems])
+  const dateGroups = useMemo(() => groupSessionsByDate(paginatedItems, t, dateFnsLocale), [paginatedItems, t, dateFnsLocale])
 
   // Create flat list for keyboard navigation (maintains order across groups/sections)
   const flatItems = useMemo(() => {
@@ -1459,9 +1471,9 @@ export function SessionList({
           <EmptyMedia variant="icon">
             <Inbox />
           </EmptyMedia>
-          <EmptyTitle>No sessions yet</EmptyTitle>
+          <EmptyTitle>{t('content.empty.noConversationsYet')}</EmptyTitle>
           <EmptyDescription>
-            Sessions with your agent appear here. Start one to get going.
+            {t('content.empty.selectConversationToStart')}
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
@@ -1475,7 +1487,7 @@ export function SessionList({
             }}
             className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors"
           >
-            New Session
+            {t('session.action.newSession')}
           </button>
         </EmptyContent>
       </Empty>
@@ -1692,4 +1704,3 @@ export function SessionList({
     </div>
   )
 }
-

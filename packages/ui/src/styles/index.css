@@ -1,22 +1,22 @@
 /**
- * @craft-agent/ui - Shared Tailwind CSS v4 theme
+ * @g4os/ui - Shared Tailwind CSS v4 theme
  *
- * This file provides the base theme configuration for all Craft Agent UIs.
+ * This file provides the base theme configuration for all G4 OS UIs.
  * Import this in your app's main CSS file:
  *
- *   @import "@craft-agent/ui/styles";
+ *   @import "@g4os/ui/styles";
  *
  * The consuming app can then add its own source directive:
  *
  *   @source "../**\/*.{tsx,ts,jsx,js}";
  *
  * 6-Color System:
- * - background: Light/dark surface
- * - foreground: Text and icons
- * - accent: Brand purple (highlights, Auto mode)
+ * - background: Royal Silver / Deep Navy
+ * - foreground: Navy Blue / Warm Silver
+ * - accent: Royal Gold (highlights, Execute mode)
  * - info: Amber (warnings, Ask mode)
  * - success: Green (connected, checkmarks)
- * - destructive: Red (errors, failed)
+ * - destructive: Ground Clay (errors, failed)
  *
  * Variants:
  * - /50 = 50% alpha (transparency) - for borders, hovers, overlays
@@ -32,15 +32,15 @@
 
 :root {
   /* === 6 BASE COLORS === */
-  --background: oklch(0.98 0.003 265);
-  --foreground: oklch(0.185 0.01 270);
-  --foreground-rgb: 38, 36, 42;             /* RGB for shadow borders */
-  --accent: oklch(0.58 0.22 293);           /* purple - brand, Auto mode */
-  --accent-rgb: 104, 78, 133;               /* darkened RGB for shadow-tinted (70% of accent) */
-  --info: oklch(0.75 0.16 70);              /* amber - warnings, Ask mode */
-  --success: oklch(0.55 0.17 145);          /* green - connected, checkmarks */
-  --destructive: oklch(0.58 0.24 28);       /* red - errors, failed */
-  --destructive-rgb: 180, 60, 50;           /* RGB for shadow-tinted */
+  --background: #F5F4F3;                    /* Royal Silver */
+  --foreground: #001F35;                    /* Navy Blue */
+  --foreground-rgb: 0, 31, 53;             /* RGB for shadow borders */
+  --accent: #B9915B;                         /* Royal Gold - brand, Execute mode */
+  --accent-rgb: 129, 101, 63;               /* darkened RGB for shadow-tinted (70% of accent) */
+  --info: oklch(0.65 0.14 65);              /* deeper warm amber - warnings, Ask mode */
+  --success: oklch(0.50 0.15 155);          /* cooler green - connected, checkmarks */
+  --destructive: #842E20;                   /* Ground Clay - errors, failed */
+  --destructive-rgb: 92, 32, 22;           /* RGB for shadow-tinted */
   --info-rgb: 180, 120, 40;                 /* RGB for shadow-tinted */
   --success-rgb: 34, 120, 60;               /* RGB for shadow-tinted */
 
@@ -87,15 +87,15 @@
   --md-bullets: var(--foreground-50);
   --md-counters: var(--foreground-50);
 
-  /* Fonts - System fonts for UI, JetBrains Mono for code */
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Fonts - Manrope for UI, JetBrains Mono for code */
+  --font-sans: "Manrope", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-serif: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --font-default: var(--font-sans);
 
   /* Layout */
   --font-size-base: 15px;
-  --radius: 0rem;
+  --radius: 0.5rem;
   --spacing: 0.25rem;
   --tracking-normal: 0em;
 }
@@ -106,15 +106,15 @@
 
 .dark {
   /* === 6 BASE COLORS === */
-  --background: oklch(0.2 0.005 270);
-  --foreground: oklch(0.92 0.005 270);
-  --foreground-rgb: 227, 226, 229;           /* RGB for shadow borders */
-  --accent: oklch(0.65 0.20 293);            /* brighter purple in dark */
-  --accent-rgb: 118, 92, 147;                /* darkened RGB for shadow-tinted (70% of accent) */
-  --info: oklch(0.70 0.16 70);               /* amber */
-  --success: oklch(0.60 0.17 145);           /* green */
-  --destructive: oklch(0.70 0.19 22);        /* brighter red in dark */
-  --destructive-rgb: 200, 80, 70;            /* RGB for shadow-tinted */
+  --background: #00101D;                     /* Deep Navy */
+  --foreground: #E8E6E4;                     /* Warm Silver */
+  --foreground-rgb: 232, 230, 228;           /* RGB for shadow borders */
+  --accent: #D1BEA4;                          /* Lightened Gold */
+  --accent-rgb: 146, 131, 114;               /* darkened RGB for shadow-tinted (70% of accent) */
+  --info: oklch(0.72 0.13 65);               /* warmer amber */
+  --success: oklch(0.58 0.15 155);           /* brighter green */
+  --destructive: #C45A4A;                    /* Brightened Clay */
+  --destructive-rgb: 137, 63, 52;            /* RGB for shadow-tinted */
   --info-rgb: 200, 140, 60;                  /* RGB for shadow-tinted */
   --success-rgb: 50, 140, 80;                /* RGB for shadow-tinted */
 
@@ -160,13 +160,10 @@
   --md-counters: var(--foreground-50);
 }
 
-/* Inter font option (requires loading Inter from Google Fonts or locally)
-   For best results, load Inter with optical sizing: family=Inter:opsz,wght@14..32,400;... */
-html[data-font="inter"] {
-  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+/* Manrope font option (requires loading Manrope from Google Fonts or locally) */
+html[data-font="manrope"] {
+  --font-sans: "Manrope", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-default: var(--font-sans);
-  font-optical-sizing: auto;
-  font-feature-settings: "cv01", "cv02", "cv03", "cv04", "case";
 }
 
 /* =============================================================================

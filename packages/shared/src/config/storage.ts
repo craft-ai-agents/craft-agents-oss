@@ -49,6 +49,23 @@ import {
   isCodexModel,
 } from './models.ts';
 
+export type UiLocale = 'pt-BR' | 'en-US';
+
+export function isUiLocale(value: unknown): value is UiLocale {
+  return value === 'pt-BR' || value === 'en-US';
+}
+
+/**
+ * Resolve effective UI locale from stored config.
+ * Existing configs without uiLocale stay on en-US to avoid forced language change.
+ */
+export function resolveUiLocale(config: Pick<StoredConfig, 'uiLocale'> | null | undefined): UiLocale {
+  if (isUiLocale(config?.uiLocale)) {
+    return config.uiLocale;
+  }
+  return 'en-US';
+}
+
 // Config stored in JSON file (credentials stored in encrypted file, not here)
 export interface StoredConfig {
   // LLM Connections (authoritative source for auth and model config)
@@ -76,6 +93,8 @@ export interface StoredConfig {
   openaiVariant?: 'responses' | 'codex-sdk';
   // Power settings
   keepAwakeWhileRunning?: boolean;  // Prevent screen sleep while sessions are running (default: false)
+  // UI locale for frontend translations
+  uiLocale?: UiLocale;
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -426,6 +445,29 @@ export function setKeepAwakeWhileRunning(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.keepAwakeWhileRunning = enabled;
+  saveConfig(config);
+}
+
+/**
+ * Get the UI locale used for frontend translations.
+ *
+ * Behavior:
+ * - If explicitly configured, return that value.
+ * - Existing installs without uiLocale set default to 'en-US' (preserve current UX).
+ * - New installs set uiLocale in initial config and get bundled default ('pt-BR').
+ */
+export function getUiLocale(): UiLocale {
+  const config = loadStoredConfig();
+  return resolveUiLocale(config);
+}
+
+/**
+ * Set the UI locale for frontend translations.
+ */
+export function setUiLocale(locale: UiLocale): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.uiLocale = locale;
   saveConfig(config);
 }
 

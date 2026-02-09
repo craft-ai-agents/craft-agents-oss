@@ -62,8 +62,8 @@ import type { AgentCapabilities } from '@g4os/shared/agent/backend';
 export type { AgentCapabilities };
 
 // Import LLM connection types
-import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType } from '@g4os/shared/config';
-export type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType };
+import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, UiLocale } from '@g4os/shared/config';
+export type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, UiLocale };
 
 /**
  * Setup data for creating/updating an LLM connection via IPC.
@@ -836,6 +836,11 @@ export const IPC_CHANNELS = {
   POWER_GET_KEEP_AWAKE: 'power:getKeepAwake',
   POWER_SET_KEEP_AWAKE: 'power:setKeepAwake',
 
+  // Frontend locale settings
+  LOCALE_GET_UI: 'locale:getUi',
+  LOCALE_SET_UI: 'locale:setUi',
+  LOCALE_UI_CHANGED: 'locale:uiChanged',
+
   BADGE_UPDATE: 'badge:update',
   BADGE_CLEAR: 'badge:clear',
   BADGE_SET_ICON: 'badge:setIcon',
@@ -1128,6 +1133,11 @@ export interface ElectronAPI {
   // Power settings
   getKeepAwakeWhileRunning(): Promise<boolean>
   setKeepAwakeWhileRunning(enabled: boolean): Promise<void>
+
+  // Frontend locale settings
+  getUiLocale(): Promise<UiLocale>
+  setUiLocale(locale: UiLocale): Promise<void>
+  onUiLocaleChange(callback: (locale: UiLocale) => void): () => void
 
   updateBadgeCount(count: number): Promise<void>
   clearBadgeCount(): Promise<void>

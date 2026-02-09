@@ -6,6 +6,7 @@ import { captureConsoleIntegration } from '@sentry/react'
 import { Provider as JotaiProvider } from 'jotai'
 import App from './App'
 import { ThemeProvider } from './context/ThemeContext'
+import { LocaleProvider } from './context/LocaleContext'
 import { Toaster } from '@/components/ui/sonner'
 import './index.css'
 
@@ -99,10 +100,12 @@ function Root() {
   }, [])
 
   return (
-    <ThemeProvider activeWorkspaceId={workspaceId}>
-      <App />
-      <Toaster />
-    </ThemeProvider>
+    <LocaleProvider>
+      <ThemeProvider activeWorkspaceId={workspaceId}>
+        <App />
+        <Toaster />
+      </ThemeProvider>
+    </LocaleProvider>
   )
 }
 

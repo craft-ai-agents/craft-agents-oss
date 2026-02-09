@@ -219,12 +219,20 @@ async function main(): Promise<void> {
   // Verify session tools core exists (shared utilities for session-scoped tools)
   verifySessionToolsCore();
 
-  // Build bridge server (needed for API sources in Codex sessions)
-  await buildBridgeServer();
+  // Build MCP servers if source files exist (skipped in OSS release)
+  const bridgeSrc = join(BRIDGE_SERVER_DIR, "src/index.ts");
+  const sessionSrc = join(SESSION_SERVER_DIR, "src/index.ts");
 
-  // Build session server (provides session-scoped tools like SubmitPlan for Codex sessions)
-  // Depends on session-tools-core being built first
-  await buildSessionServer();
+  if (!existsSync(bridgeSrc) || !existsSync(sessionSrc)) {
+    console.log("⏭️  MCP server sources not found, skipping (Codex features unavailable)");
+  } else {
+    // Build bridge server (needed for API sources in Codex sessions)
+    await buildBridgeServer();
+
+    // Build session server (provides session-scoped tools like SubmitPlan for Codex sessions)
+    // Depends on session-tools-core being built first
+    await buildSessionServer();
+  }
 
   const buildDefines = getBuildDefines();
 

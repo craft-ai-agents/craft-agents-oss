@@ -3077,6 +3077,24 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // ============================================================
+  // Frontend Locale Settings
+  // ============================================================
+
+  ipcMain.handle(IPC_CHANNELS.LOCALE_GET_UI, async () => {
+    const { getUiLocale } = await import('@g4os/shared/config/storage')
+    return getUiLocale()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.LOCALE_SET_UI, async (_event, locale: 'pt-BR' | 'en-US') => {
+    if (locale !== 'pt-BR' && locale !== 'en-US') {
+      throw new Error(`Unsupported UI locale: ${locale}`)
+    }
+    const { setUiLocale } = await import('@g4os/shared/config/storage')
+    setUiLocale(locale)
+    windowManager.broadcastToAll(IPC_CHANNELS.LOCALE_UI_CHANGED, locale)
+  })
+
+  // ============================================================
   // Notifications and Badge
   // ============================================================
 

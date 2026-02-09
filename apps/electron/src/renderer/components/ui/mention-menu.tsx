@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { FadingText } from '@/components/ui/fading-text'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { SourceAvatar } from '@/components/ui/source-avatar'
+import { useLocale } from '@/context/LocaleContext'
 import type { LoadedSkill, LoadedSource, FileSearchResult } from '../../../shared/types'
 
 // ============================================================================
@@ -445,6 +446,7 @@ export function useInlineMention({
   onSelect,
   workspaceId,
 }: UseInlineMentionOptions): UseInlineMentionReturn {
+  const { t } = useLocale()
   const [isOpen, setIsOpen] = React.useState(false)
   const [filter, setFilter] = React.useState('')
   // committedFilter: only updates when IPC returns (or immediately when no IPC needed).
@@ -479,7 +481,7 @@ export function useInlineMention({
     if (skills.length > 0) {
       result.push({
         id: 'skills',
-        label: 'Skills',
+        label: t('sidebar.nav.skills_feature'),
         items: skills.map(skill => ({
           id: skill.slug,
           type: 'skill' as const,
@@ -494,7 +496,7 @@ export function useInlineMention({
     if (sources.length > 0) {
       result.push({
         id: 'sources',
-        label: 'Sources',
+        label: t('sidebar.nav.sources'),
         items: sources
           .filter(source => source.config.slug && source.config.name)
           .map(source => ({
@@ -517,7 +519,7 @@ export function useInlineMention({
     }
 
     return result
-  }, [skills, sources, fileResults])
+  }, [skills, sources, fileResults, t])
 
   const handleInputChange = React.useCallback((value: string, cursorPosition: number) => {
     // Store current state for handleSelect

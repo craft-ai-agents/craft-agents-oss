@@ -20,6 +20,7 @@ export interface ConfigDefaults {
     sendMessageKey: 'enter' | 'cmd-enter';
     spellCheck: boolean;
     keepAwakeWhileRunning: boolean;
+    uiLocale: 'pt-BR' | 'en-US';
   };
   workspaceDefaults: {
     thinkingLevel: ThinkingLevel;

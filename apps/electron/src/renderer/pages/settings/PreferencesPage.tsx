@@ -23,6 +23,7 @@ import {
 } from '@/components/settings'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
+import { useLocale } from '@/context/LocaleContext'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -86,6 +87,8 @@ function serializePreferences(state: PreferencesFormState): string {
 }
 
 export default function PreferencesPage() {
+  const { t } = useLocale()
+
   const [formState, setFormState] = useState<PreferencesFormState>(emptyFormState)
   const [isLoading, setIsLoading] = useState(true)
   const [preferencesPath, setPreferencesPath] = useState<string | null>(null)
@@ -190,38 +193,38 @@ export default function PreferencesPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Preferences" actions={<HeaderMenu route={routes.view.settings('preferences')} helpFeature="preferences" />} />
+      <PanelHeader title={t('settings.preferences.title')} actions={<HeaderMenu route={routes.view.settings('preferences')} helpFeature="preferences" />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto space-y-8">
           {/* Basic Info */}
           <SettingsSection
-            title="Basic Info"
-            description="Help G4 OS personalize responses to you."
+            title={t('settings.preferences.section.basicInfo')}
+            description={t('settings.preferences.section.basicInfo.description')}
           >
             <SettingsCard divided>
               <SettingsInput
-                label="Name"
-                description="How G4 OS should address you."
+                label={t('settings.preferences.name.label')}
+                description={t('settings.preferences.name.description')}
                 value={formState.name}
                 onChange={(v) => updateField('name', v)}
-                placeholder="Your name"
+                placeholder={t('settings.preferences.name.placeholder')}
                 inCard
               />
               <SettingsInput
-                label="Timezone"
-                description="Used for relative dates like 'tomorrow' or 'next week'."
+                label={t('settings.preferences.timezone.label')}
+                description={t('settings.preferences.timezone.description')}
                 value={formState.timezone}
                 onChange={(v) => updateField('timezone', v)}
-                placeholder="e.g., America/New_York"
+                placeholder={t('settings.preferences.timezone.placeholder')}
                 inCard
               />
               <SettingsInput
-                label="Language"
-                description="Preferred language for G4 OS's responses."
+                label={t('settings.preferences.language.label')}
+                description={t('settings.preferences.language.description')}
                 value={formState.language}
                 onChange={(v) => updateField('language', v)}
-                placeholder="e.g., English"
+                placeholder={t('settings.preferences.language.placeholder')}
                 inCard
               />
             </SettingsCard>
@@ -229,24 +232,24 @@ export default function PreferencesPage() {
 
           {/* Location */}
           <SettingsSection
-            title="Location"
-            description="Enables location-aware responses like weather, local time, and regional context."
+            title={t('settings.preferences.section.location')}
+            description={t('settings.preferences.section.location.description')}
           >
             <SettingsCard divided>
               <SettingsInput
-                label="City"
-                description="Your city for local information and context."
+                label={t('settings.preferences.city.label')}
+                description={t('settings.preferences.city.description')}
                 value={formState.city}
                 onChange={(v) => updateField('city', v)}
-                placeholder="e.g., New York"
+                placeholder={t('settings.preferences.city.placeholder')}
                 inCard
               />
               <SettingsInput
-                label="Country"
-                description="Your country for regional formatting and context."
+                label={t('settings.preferences.country.label')}
+                description={t('settings.preferences.country.description')}
                 value={formState.country}
                 onChange={(v) => updateField('country', v)}
-                placeholder="e.g., USA"
+                placeholder={t('settings.preferences.country.placeholder')}
                 inCard
               />
             </SettingsCard>
@@ -254,8 +257,8 @@ export default function PreferencesPage() {
 
           {/* Notes */}
           <SettingsSection
-            title="Notes"
-            description="Free-form context that helps G4 OS understand your preferences."
+            title={t('settings.preferences.section.notes')}
+            description={t('settings.preferences.section.notes.description')}
             action={
               // EditPopover for AI-assisted notes editing with "Edit File" as secondary action
               preferencesPath ? (
@@ -263,7 +266,7 @@ export default function PreferencesPage() {
                   trigger={<EditButton />}
                   {...getEditConfig('preferences-notes', preferencesPath)}
                   secondaryAction={{
-                    label: 'Edit File',
+                    label: t('settings.common.editFile'),
                     filePath: preferencesPath!,
                   }}
                 />
@@ -274,7 +277,7 @@ export default function PreferencesPage() {
               <SettingsTextarea
                 value={formState.notes}
                 onChange={(v) => updateField('notes', v)}
-                placeholder="Any additional context you'd like G4 OS to know..."
+                placeholder={t('settings.preferences.notes.placeholder')}
                 rows={5}
                 inCard
               />

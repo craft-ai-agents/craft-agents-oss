@@ -25,8 +25,10 @@ import {
   SettingsCard,
   SettingsRow,
   SettingsToggle,
+  SettingsMenuSelectRow,
 } from '@/components/settings'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
+import { useLocale } from '@/context/LocaleContext'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -38,6 +40,8 @@ export const meta: DetailsPageMeta = {
 // ============================================
 
 export default function AppSettingsPage() {
+  const { t, locale, setLocale } = useLocale()
+
   // Notifications state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
 
@@ -88,17 +92,17 @@ export default function AppSettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="App" actions={<HeaderMenu route={routes.view.settings('app')} helpFeature="app-settings" />} />
+      <PanelHeader title={t('settings.app.title')} actions={<HeaderMenu route={routes.view.settings('app')} helpFeature="app-settings" />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
             <div className="space-y-8">
               {/* Notifications */}
-              <SettingsSection title="Notifications">
+              <SettingsSection title={t('settings.app.section.notifications')}>
                 <SettingsCard>
                   <SettingsToggle
-                    label="Desktop notifications"
-                    description="Get notified when AI finishes working in a chat."
+                    label={t('settings.app.notifications.desktop.label')}
+                    description={t('settings.app.notifications.desktop.description')}
                     checked={notificationsEnabled}
                     onCheckedChange={handleNotificationsEnabledChange}
                   />
@@ -106,24 +110,40 @@ export default function AppSettingsPage() {
               </SettingsSection>
 
               {/* Power */}
-              <SettingsSection title="Power">
+              <SettingsSection title={t('settings.app.section.power')}>
                 <SettingsCard>
                   <SettingsToggle
-                    label="Keep screen awake"
-                    description="Prevent the screen from turning off while sessions are running."
+                    label={t('settings.app.power.keepAwake.label')}
+                    description={t('settings.app.power.keepAwake.description')}
                     checked={keepAwakeEnabled}
                     onCheckedChange={handleKeepAwakeEnabledChange}
                   />
                 </SettingsCard>
               </SettingsSection>
 
-              {/* About */}
-              <SettingsSection title="About">
+              {/* Language */}
+              <SettingsSection title={t('settings.app.section.language')}>
                 <SettingsCard>
-                  <SettingsRow label="Version">
+                  <SettingsMenuSelectRow
+                    label={t('settings.app.language.label')}
+                    description={t('settings.app.language.description')}
+                    value={locale}
+                    onValueChange={(value) => setLocale(value as 'pt-BR' | 'en-US')}
+                    options={[
+                      { value: 'pt-BR', label: t('settings.app.language.option.ptBR') },
+                      { value: 'en-US', label: t('settings.app.language.option.enUS') },
+                    ]}
+                  />
+                </SettingsCard>
+              </SettingsSection>
+
+              {/* About */}
+              <SettingsSection title={t('settings.app.section.about')}>
+                <SettingsCard>
+                  <SettingsRow label={t('settings.app.about.version')}>
                     <div className="flex items-center gap-2">
                       <span className="text-muted-foreground">
-                        {updateChecker.updateInfo?.currentVersion ?? 'Loading...'}
+                        {updateChecker.updateInfo?.currentVersion ?? t('settings.app.about.loading')}
                       </span>
                       {updateChecker.updateAvailable && updateChecker.updateInfo?.latestVersion && (
                         <Button
@@ -131,12 +151,12 @@ export default function AppSettingsPage() {
                           size="sm"
                           onClick={updateChecker.installUpdate}
                         >
-                          Update to {updateChecker.updateInfo.latestVersion}
+                          {t('settings.app.about.updateToVersion', { version: updateChecker.updateInfo.latestVersion })}
                         </Button>
                       )}
                     </div>
                   </SettingsRow>
-                  <SettingsRow label="Check for updates">
+                  <SettingsRow label={t('settings.app.about.checkUpdates')}>
                     <Button
                       variant="outline"
                       size="sm"
@@ -146,20 +166,20 @@ export default function AppSettingsPage() {
                       {isCheckingForUpdates ? (
                         <>
                           <Spinner className="mr-1.5" />
-                          Checking...
+                          {t('settings.app.about.checking')}
                         </>
                       ) : (
-                        'Check Now'
+                        t('settings.app.about.checkNow')
                       )}
                     </Button>
                   </SettingsRow>
                   {updateChecker.isReadyToInstall && (
-                    <SettingsRow label="Install update">
+                    <SettingsRow label={t('settings.app.about.installUpdate')}>
                       <Button
                         size="sm"
                         onClick={updateChecker.installUpdate}
                       >
-                        Restart to Update
+                        {t('settings.app.about.restartToUpdate')}
                       </Button>
                     </SettingsRow>
                   )}

@@ -36,6 +36,7 @@ import type { TodoStateId } from '@/config/todo-states'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
+import { useLocale } from '@/context/LocaleContext'
 
 export interface MainContentPanelProps {
   /** Whether the app is in focused mode (single chat, no sidebar) */
@@ -48,6 +49,7 @@ export function MainContentPanel({
   isFocusedMode = false,
   className,
 }: MainContentPanelProps) {
+  const { t } = useLocale()
   const navState = useNavigationState()
   const {
     activeWorkspaceId,
@@ -159,7 +161,7 @@ export function MainContentPanel({
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <div className="flex items-center justify-center h-full text-muted-foreground">
-          <p className="text-sm">No sources configured</p>
+          <p className="text-sm">{t('content.empty.noSourcesConfigured')}</p>
         </div>
       </Panel>
     )
@@ -181,7 +183,7 @@ export function MainContentPanel({
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <div className="flex items-center justify-center h-full text-muted-foreground">
-          <p className="text-sm">No skills configured</p>
+          <p className="text-sm">{t('content.empty.noSkillsConfigured_feature')}</p>
         </div>
       </Panel>
     )
@@ -221,8 +223,8 @@ export function MainContentPanel({
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">
             {navState.filter.kind === 'flagged'
-              ? 'No flagged conversations'
-              : 'No conversations yet'}
+              ? t('content.empty.noFlaggedConversations')
+              : t('content.empty.noConversationsYet')}
           </p>
         </div>
       </Panel>
@@ -233,7 +235,7 @@ export function MainContentPanel({
   return wrapWithStoplight(
     <Panel variant="grow" className={className}>
       <div className="flex items-center justify-center h-full text-muted-foreground">
-        <p className="text-sm">Select a conversation to get started</p>
+        <p className="text-sm">{t('content.empty.selectConversationToStart')}</p>
       </div>
     </Panel>
   )

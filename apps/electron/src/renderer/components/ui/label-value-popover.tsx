@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import { parseDate } from 'chrono-node'
 import { format, parse } from 'date-fns'
 import type { LabelConfig } from '@g4os/shared/labels'
+import { useLocale } from '@/context/LocaleContext'
 
 export interface LabelValuePopoverProps {
   /** Label configuration (color, name, valueType) */
@@ -44,6 +45,8 @@ export function LabelValuePopover({
   onOpenChange,
   children,
 }: LabelValuePopoverProps) {
+  const { t, dateFnsLocale } = useLocale()
+
   // Local draft value — resets to prop value when popover opens
   const [draft, setDraft] = React.useState(value ?? '')
   // Whether the inline calendar picker is visible (date labels only)
@@ -59,7 +62,7 @@ export function LabelValuePopover({
       if (label.valueType === 'date' && value) {
         try {
           const parsed = parse(value, 'yyyy-MM-dd', new Date())
-          setDraft(format(parsed, 'MMMM d, yyyy'))
+          setDraft(format(parsed, 'MMMM d, yyyy', { locale: dateFnsLocale }))
         } catch {
           setDraft(value)
         }
@@ -199,7 +202,7 @@ export function LabelValuePopover({
                       onValueChange?.(undefined)
                     }
                   }}
-                  placeholder="tomorrow, next friday..."
+                  placeholder={t('labels.value.datePlaceholder')}
                   className={cn(
                     'flex-1 h-7 px-2 text-[13px]',
                     'bg-transparent',
@@ -212,7 +215,7 @@ export function LabelValuePopover({
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      aria-label="Select date"
+                      aria-label={t('labels.value.selectDate')}
                       className={cn(
                         'flex items-center justify-center w-7 h-7 rounded-[5px]',
                         'hover:bg-foreground/5 transition-colors cursor-pointer',
@@ -238,7 +241,7 @@ export function LabelValuePopover({
                         if (date) {
                           // Commit directly and update draft for display
                           onValueChange?.(format(date, 'yyyy-MM-dd'))
-                          setDraft(format(date, 'MMMM d, yyyy'))
+                          setDraft(format(date, 'MMMM d, yyyy', { locale: dateFnsLocale }))
                           setCalendarOpen(false)
                         }
                       }}
@@ -249,7 +252,7 @@ export function LabelValuePopover({
             {/* Show the resolved date below the input when parsing succeeds */}
             {parsedDate && (
               <div className="px-2 text-[11px] text-foreground/50">
-                {format(parsedDate, 'EEE, MMM d, yyyy')}
+                {format(parsedDate, 'EEE, MMM d, yyyy', { locale: dateFnsLocale })}
               </div>
             )}
           </div>
@@ -266,7 +269,7 @@ export function LabelValuePopover({
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleKeyDown}
               onBlur={commitValue}
-              placeholder={label.valueType === 'number' ? 'Enter number...' : 'Enter value...'}
+              placeholder={label.valueType === 'number' ? t('labels.value.numberPlaceholder') : t('labels.value.textPlaceholder')}
               className={cn(
                 'w-full h-7 px-2 text-[13px]',
                 'bg-transparent',
@@ -294,7 +297,7 @@ export function LabelValuePopover({
             )}
           >
             <Trash2 className="w-3.5 h-3.5" />
-            <span>Remove</span>
+            <span>{t('labels.value.remove')}</span>
           </button>
         </div>
       </PopoverContent>

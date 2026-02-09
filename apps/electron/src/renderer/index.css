@@ -16,49 +16,49 @@
 @property --background {
   syntax: "<color>";
   inherits: true;
-  initial-value: oklch(0.98 0.003 265);
+  initial-value: #F5F4F3;
 }
 
 @property --foreground {
   syntax: "<color>";
   inherits: true;
-  initial-value: oklch(0.185 0.01 270);
+  initial-value: #001F35;
 }
 
 @property --accent {
   syntax: "<color>";
   inherits: true;
-  initial-value: #184560;
+  initial-value: #B9915B;
 }
 
 @property --info {
   syntax: "<color>";
   inherits: true;
-  initial-value: oklch(0.65 0.16 70);
+  initial-value: oklch(0.65 0.14 65);
 }
 
 @property --success {
   syntax: "<color>";
   inherits: true;
-  initial-value: oklch(0.55 0.17 145);
+  initial-value: oklch(0.50 0.15 155);
 }
 
 @property --destructive {
   syntax: "<color>";
   inherits: true;
-  initial-value: oklch(0.55 0.22 27);
+  initial-value: #842E20;
 }
 
 /* =============================================================================
-   CRAFT AGENT THEME - 6 Color System
+   G4 OS THEME - 6 Color System
 
    Base colors:
-   - background: Light/dark surface
-   - foreground: Text and icons
-   - accent: Brand purple (highlights, Auto mode)
+   - background: Royal Silver / Deep Navy
+   - foreground: Navy Blue / Warm Silver
+   - accent: Royal Gold (highlights, Execute mode)
    - info: Amber (warnings, Ask mode)
    - success: Green (connected, checkmarks)
-   - destructive: Red (errors, failed)
+   - destructive: Ground Clay (errors, failed)
 
    Variants:
    - /50 = 50% alpha (transparency) - for borders, hovers, overlays
@@ -70,17 +70,17 @@
 /* Light Mode */
 :root {
   /* === 6 BASE COLORS === */
-  --background: oklch(0.98 0.003 265);
-  --foreground: oklch(0.185 0.01 270);
-  --foreground-rgb: 38, 36, 42;             /* RGB for shadow borders */
-  --accent: #184560;                         /* Scaling Blue - brand, Auto mode */
-  --accent-rgb: 17, 48, 67;                 /* darkened RGB for shadow-tinted (70% of accent) */
-  --info: oklch(0.75 0.16 70);              /* amber - warnings, Ask mode */
+  --background: #F5F4F3;                    /* Royal Silver */
+  --foreground: #001F35;                    /* Navy Blue */
+  --foreground-rgb: 0, 31, 53;             /* RGB for shadow borders */
+  --accent: #B9915B;                         /* Royal Gold - brand, Execute mode */
+  --accent-rgb: 129, 101, 63;               /* darkened RGB for shadow-tinted (70% of accent) */
+  --info: oklch(0.65 0.14 65);              /* deeper warm amber - warnings, Ask mode */
   --info-rgb: 180, 120, 40;                 /* RGB for shadow-tinted */
-  --success: oklch(0.55 0.17 145);          /* green - connected, checkmarks */
+  --success: oklch(0.50 0.15 155);          /* cooler green - connected, checkmarks */
   --success-rgb: 34, 120, 60;               /* RGB for shadow-tinted */
-  --destructive: oklch(0.58 0.24 28);       /* red - errors, failed */
-  --destructive-rgb: 180, 60, 50;           /* RGB for shadow-tinted */
+  --destructive: #842E20;                   /* Ground Clay - errors, failed */
+  --destructive-rgb: 92, 32, 22;           /* RGB for shadow-tinted */
 
   /* === SHADOW OPACITY (light mode = subtle, dark mode = stronger) === */
   --shadow-border-opacity: 0.08;            /* Border ring opacity */
@@ -157,15 +157,15 @@
   --step-content-gap: 1.5rem;
   --step-actions-margin: 2rem;
 
-  /* Fonts - System fonts as default, Inter via data-font="inter" */
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Fonts - Manrope as default, system via data-font fallback */
+  --font-sans: "Manrope", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-serif: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --font-default: var(--font-sans);
 
   /* Layout */
   --font-size-base: 15px;
-  --radius: 0rem;
+  --radius: 0.5rem;
   --spacing: 0.25rem;
   --tracking-normal: 0em;
 
@@ -208,17 +208,17 @@
 /* Dark Mode */
 .dark {
   /* === 6 BASE COLORS === */
-  --background: oklch(0.2 0.005 270);
-  --foreground: oklch(0.92 0.005 270);
-  --foreground-rgb: 227, 226, 229;           /* RGB for shadow borders */
-  --accent: #3D8AB5;                          /* lighter Scaling Blue in dark */
-  --accent-rgb: 43, 97, 127;                 /* darkened RGB for shadow-tinted (70% of accent) */
-  --info: oklch(0.70 0.16 70);               /* amber */
+  --background: #00101D;                     /* Deep Navy */
+  --foreground: #E8E6E4;                     /* Warm Silver */
+  --foreground-rgb: 232, 230, 228;           /* RGB for shadow borders */
+  --accent: #D1BEA4;                          /* Lightened Gold */
+  --accent-rgb: 146, 131, 114;               /* darkened RGB for shadow-tinted (70% of accent) */
+  --info: oklch(0.72 0.13 65);               /* warmer amber */
   --info-rgb: 200, 140, 60;                  /* RGB for shadow-tinted */
-  --success: oklch(0.60 0.17 145);           /* green */
+  --success: oklch(0.58 0.15 155);           /* brighter green */
   --success-rgb: 50, 140, 80;                /* RGB for shadow-tinted */
-  --destructive: oklch(0.70 0.19 22);        /* brighter red in dark */
-  --destructive-rgb: 200, 80, 70;            /* RGB for shadow-tinted */
+  --destructive: #C45A4A;                    /* Brightened Clay */
+  --destructive-rgb: 137, 63, 52;            /* RGB for shadow-tinted */
 
   /* === SHADOW OPACITY (stronger in dark mode for visibility) === */
   --shadow-border-opacity: 0.15;
@@ -334,16 +334,14 @@ html[data-scenic][data-theme-override]::before {
 /* Scenic mode: Make background color semi-transparent for glass effect
    Panels with bg-background will become translucent glass */
 html[data-scenic] {
-  --background: oklch(0.2 0.005 270 / 0.55);
+  --background: oklch(0.12 0.01 220 / 0.55);
 }
 
-/* Inter Font - Opt-in via data-font="inter" attribute
-   Loaded from Google Fonts in index.html with optical sizing (opsz) axis */
-html[data-font="inter"] {
-  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+/* Manrope Font - Opt-in via data-font="manrope" attribute
+   Loaded from Google Fonts in index.html */
+html[data-font="manrope"] {
+  --font-sans: "Manrope", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-default: var(--font-sans);
-  font-optical-sizing: auto;
-  font-feature-settings: "cv01", "cv02", "cv03", "cv04", "case";
 }
 
 /* Theme integration for Tailwind v4 */

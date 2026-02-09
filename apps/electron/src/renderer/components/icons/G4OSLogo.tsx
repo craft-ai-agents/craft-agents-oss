@@ -17,7 +17,7 @@ export function G4OSLogo({ className }: G4OSLogoProps) {
       <text
         x="0"
         y="32"
-        fontFamily="system-ui, -apple-system, sans-serif"
+        fontFamily="Manrope, system-ui, -apple-system, sans-serif"
         fontWeight="800"
         fontSize="36"
         fill="currentColor"

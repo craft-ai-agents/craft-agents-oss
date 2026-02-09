@@ -87,7 +87,7 @@ function PatternBadge({ pattern }: { pattern: string }) {
 const columns: ColumnDef<AutoRuleRow>[] = [
   {
     id: 'label',
-    header: ({ column }) => <SortableHeader column={column} title="Label" />,
+    header: ({ column }) => <SortableHeader column={column} title="Tag" />,
     accessorFn: (row) => row.label.name,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5 flex items-center gap-1.5">
