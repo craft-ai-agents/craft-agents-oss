@@ -21,18 +21,15 @@ import type {
 import { AbortReason } from './backend/types.ts';
 
 // Import models from centralized registry
-import { DEFAULT_COPILOT_MODEL, getModelById } from '../config/models.ts';
+import { getModelById } from '../config/models.ts';
 
 /**
  * Validate that a model ID is a known Copilot model.
- * Returns the model ID if valid, or DEFAULT_COPILOT_MODEL as fallback.
+ * Returns the model ID as-is — Copilot models are dynamic (from listModels()),
+ * not in the static registry, so we trust the connection's model list.
  */
 export function resolveCopilotModelId(modelId: string): string {
-  const model = getModelById(modelId);
-  if (model && model.provider === 'copilot') {
-    return modelId;
-  }
-  return DEFAULT_COPILOT_MODEL;
+  return modelId;
 }
 
 // BaseAgent provides common functionality
@@ -104,8 +101,8 @@ import { getCredentialManager } from '../credentials/manager.ts';
 // Error typing
 import { parseError, type AgentError } from './errors.ts';
 
-// GitHub OAuth token refresh
-import { refreshGithubTokens, type GithubTokens } from '../auth/github-oauth.ts';
+// GitHub OAuth types
+import type { GithubTokens } from '../auth/github-oauth.ts';
 
 // ============================================================
 // Constants
@@ -118,6 +115,34 @@ const THINKING_TO_EFFORT: Record<ThinkingLevel, ReasoningEffort> = {
   off: 'low',
   think: 'medium',
   max: 'high',
+};
+
+/**
+ * Map Copilot CLI lowercase tool names to PascalCase names used by our permission system.
+ * The Copilot CLI emits lowercase tool names (e.g., 'glob', 'bash') but
+ * ALWAYS_ALLOWED_TOOLS and shouldAllowToolInMode expect PascalCase (e.g., 'Glob', 'Bash').
+ */
+const COPILOT_TOOL_NAME_MAP: Record<string, string> = {
+  bash: 'Bash',
+  read: 'Read',
+  write: 'Write',
+  edit: 'Edit',
+  multi_edit: 'MultiEdit',
+  glob: 'Glob',
+  grep: 'Grep',
+  web_fetch: 'WebFetch',
+  web_search: 'WebSearch',
+  todo_write: 'TodoWrite',
+  notebook_edit: 'NotebookEdit',
+  task: 'Task',
+  task_output: 'TaskOutput',
+  list_dir: 'Glob',
+  // Native Copilot CLI tools (str_replace_editor subcommands)
+  view: 'Read',
+  create: 'Write',
+  str_replace: 'Edit',
+  insert: 'Edit',
+  str_replace_editor: 'Edit',
 };
 
 // ============================================================
@@ -139,6 +164,9 @@ export class CopilotAgent extends BaseAgent {
   private client: CopilotClient | null = null;
   private session: CopilotSession | null = null;
   private copilotSessionId: string | null = null;
+
+  /** Model IDs that support reasoning effort (cached from listModels) */
+  private modelsWithReasoning: Set<string> = new Set();
 
   // State
   private _isProcessing: boolean = false;
@@ -180,9 +208,9 @@ export class CopilotAgent extends BaseAgent {
   // ============================================================
 
   constructor(config: BackendConfig) {
-    const resolvedModel = resolveCopilotModelId(config.model || DEFAULT_COPILOT_MODEL);
+    const resolvedModel = resolveCopilotModelId(config.model || '');
     const modelDef = getModelById(resolvedModel);
-    super({ ...config, model: resolvedModel }, DEFAULT_COPILOT_MODEL, modelDef?.contextWindow);
+    super({ ...config, model: resolvedModel }, resolvedModel, modelDef?.contextWindow);
 
     this.copilotSessionId = config.session?.sdkSessionId || null;
     this.adapter = new CopilotEventAdapter();
@@ -204,17 +232,41 @@ export class CopilotAgent extends BaseAgent {
 
     const githubToken = await this.getStoredGithubToken();
 
+    // Pass token via COPILOT_GITHUB_TOKEN env var instead of githubToken option.
+    // The githubToken option uses --auth-token-env which bypasses the CLI's normal
+    // copilot_internal/v2/token exchange, causing 403 on model listing.
+    if (githubToken) {
+      process.env.COPILOT_GITHUB_TOKEN = githubToken;
+    }
+
     this.client = new CopilotClient({
       useStdio: true,
-      githubToken: githubToken || undefined,
       cwd: this.workingDirectory,
       autoStart: true,
       autoRestart: true,
       logLevel: this.config.debugMode?.enabled ? 'debug' : 'error',
+      // Disable the CLI's native sandboxing — our onPreToolUse hook handles all permission logic.
+      // --allow-all = --allow-all-tools --allow-all-paths --allow-all-urls
+      cliArgs: ['--allow-all'],
+      ...(this.config.copilotCliPath ? { cliPath: this.config.copilotCliPath } : {}),
     });
 
     await this.client.start();
     this.debug('Copilot client started');
+
+    // Cache which models support reasoning effort
+    try {
+      const models = await this.client.listModels();
+      this.modelsWithReasoning = new Set(
+        models
+          .filter(m => m.supportedReasoningEfforts && m.supportedReasoningEfforts.length > 0)
+          .map(m => m.id)
+      );
+      this.debug(`Models with reasoning support: ${[...this.modelsWithReasoning].join(', ') || 'none'}`);
+    } catch {
+      this.debug('Failed to fetch model capabilities — reasoning effort will be omitted');
+    }
+
     return this.client;
   }
 
@@ -257,9 +309,11 @@ export class CopilotAgent extends BaseAgent {
       // Build context from sources
       const sourceContext = this.sourceManager.formatSourceState();
 
-      // Determine reasoning effort
+      // Determine reasoning effort (only for models that support it)
       const thinkingLevel = options?.thinkingOverride || this._thinkingLevel;
-      const reasoningEffort = THINKING_TO_EFFORT[thinkingLevel];
+      const reasoningEffort = this.modelsWithReasoning.has(this._model)
+        ? THINKING_TO_EFFORT[thinkingLevel]
+        : undefined;
 
       // Create or resume session
       if (this.copilotSessionId && !options?.isRetry) {
@@ -421,6 +475,50 @@ export class CopilotAgent extends BaseAgent {
       const data = event.data as Record<string, unknown>;
       if (typeof data.tokenLimit === 'number') {
         this.usageTracker.setContextWindow(data.tokenLimit);
+      }
+    }
+
+    // Capture shutdown metrics for final usage report
+    if (event.type === 'session.shutdown') {
+      const data = event.data as {
+        modelMetrics?: Record<string, {
+          usage: {
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+          };
+          requests: { count: number; cost: number };
+        }>;
+      };
+      if (data.modelMetrics) {
+        // Aggregate metrics across all models used in the session
+        let totalInput = 0;
+        let totalOutput = 0;
+        let totalCost = 0;
+        for (const model of Object.values(data.modelMetrics)) {
+          totalInput += model.usage.inputTokens + model.usage.cacheReadTokens;
+          totalOutput += model.usage.outputTokens;
+          totalCost += model.requests.cost;
+        }
+        // Emit a final usage_update with aggregated session metrics
+        this.enqueueEvent({
+          type: 'usage_update',
+          usage: {
+            inputTokens: totalInput,
+          },
+        });
+      }
+    }
+
+    // Trigger auth callback for authentication errors
+    if (event.type === 'session.error') {
+      const data = event.data as { errorType: string; statusCode?: number; message: string };
+      if (
+        data.statusCode === 401 || data.statusCode === 403 ||
+        data.errorType === 'authentication' || data.errorType === 'authorization'
+      ) {
+        this.onGithubAuthRequired?.(`Authentication failed: ${data.message}`);
       }
     }
 
@@ -675,43 +773,16 @@ export class CopilotAgent extends BaseAgent {
 
   /**
    * Handle SDK permission requests.
+   *
+   * Auto-approve all SDK-level permission requests because our onPreToolUse hook
+   * already handles permission logic (mode-based blocking, user prompts).
+   * Without this, tools would be double-prompted: once by our hook, once by the SDK.
    */
   private async handlePermissionRequest(
-    request: CopilotPermissionRequest,
+    _request: CopilotPermissionRequest,
     _sessionId: string
   ): Promise<PermissionRequestResult> {
-    const permissionMode = this.getPermissionMode();
-
-    // Auto-allow in allow-all mode
-    if (permissionMode === 'allow-all') {
-      return { kind: 'approved' };
-    }
-
-    // Block in safe mode
-    if (permissionMode === 'safe') {
-      return {
-        kind: 'denied-by-rules',
-        rules: [{ description: 'Blocked in Explore mode' }],
-      };
-    }
-
-    // In ask mode, prompt the user
-    const requestId = `copilot-sdk-perm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const toolName = this.mapPermissionKindToToolName(request.kind);
-
-    this.onPermissionRequest?.({
-      requestId,
-      toolName,
-      description: `Permission required: ${request.kind}`,
-      type: this.getPermissionType(toolName),
-    });
-
-    return new Promise((resolve) => {
-      this.pendingPermissions.set(requestId, {
-        resolve,
-        toolName,
-      });
-    });
+    return { kind: 'approved' };
   }
 
   /**
@@ -800,7 +871,7 @@ export class CopilotAgent extends BaseAgent {
   /**
    * Try to inject stored GitHub tokens.
    * Returns true if tokens were successfully loaded.
-   * Checks token expiry and refreshes if needed.
+   * Device flow tokens don't expire, so no refresh logic is needed.
    */
   async tryInjectStoredGithubToken(): Promise<boolean> {
     try {
@@ -808,39 +879,8 @@ export class CopilotAgent extends BaseAgent {
       const slug = this.config.connectionSlug || 'copilot';
       const storedCreds = await credentialManager.getLlmOAuth(slug);
 
-      if (!storedCreds) {
+      if (!storedCreds?.accessToken) {
         this.debug('No stored GitHub credentials found');
-        return false;
-      }
-
-      // Check if expired (with 5-minute buffer)
-      if (storedCreds.expiresAt && Date.now() > storedCreds.expiresAt - 5 * 60 * 1000) {
-        if (storedCreds.refreshToken) {
-          this.debug('Stored tokens expired, attempting refresh...');
-          const newTokens = await refreshGithubTokens(storedCreds.refreshToken);
-
-          // Store refreshed tokens
-          await credentialManager.setLlmOAuth(slug, {
-            accessToken: newTokens.accessToken,
-            refreshToken: newTokens.refreshToken,
-            expiresAt: newTokens.expiresAt,
-          });
-
-          // Restart client with new token
-          if (this.client) {
-            await this.client.stop();
-            this.client = null;
-          }
-
-          this.debug('GitHub tokens refreshed and stored');
-          return true;
-        }
-        this.debug('Stored tokens expired and no refresh token available');
-        return false;
-      }
-
-      if (!storedCreds.accessToken) {
-        this.debug('Stored credentials missing accessToken');
         return false;
       }
 
@@ -958,10 +998,10 @@ export class CopilotAgent extends BaseAgent {
 
   /**
    * Map Copilot tool names to SDK tool names for permission checking.
+   * Copilot CLI uses lowercase tool names but our permission system expects PascalCase.
    */
   private mapCopilotToolName(toolName: string, _input: Record<string, unknown>): string {
-    // Copilot uses the same tool naming as Claude Code
-    return toolName;
+    return COPILOT_TOOL_NAME_MAP[toolName] || toolName;
   }
 
   /**
@@ -997,6 +1037,21 @@ export class CopilotAgent extends BaseAgent {
    */
   private parseCopilotError(error: Error): AgentError {
     const errorMessage = error.message.toLowerCase();
+
+    // Model listing / access errors (403 from model API, not auth failure)
+    if (errorMessage.includes('failed to list models') || errorMessage.includes('list models')) {
+      return {
+        code: 'service_error',
+        title: 'Model Access Denied',
+        message: 'Could not access model list. Your Copilot plan may not support this feature, or the service may be temporarily unavailable.',
+        actions: [
+          { key: 'r', label: 'Retry', action: 'retry' },
+        ],
+        canRetry: true,
+        retryDelayMs: 2000,
+        originalError: error.message,
+      };
+    }
 
     // GitHub OAuth errors
     if (

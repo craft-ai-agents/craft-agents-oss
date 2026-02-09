@@ -29,6 +29,8 @@ interface CredentialsStepProps {
   isWaitingForCode?: boolean
   onSubmitAuthCode?: (code: string) => void
   onCancelOAuth?: () => void
+  // Device flow (Copilot)
+  copilotDeviceCode?: { userCode: string; verificationUri: string }
 }
 
 export function CredentialsStep({
@@ -41,6 +43,7 @@ export function CredentialsStep({
   isWaitingForCode,
   onSubmitAuthCode,
   onCancelOAuth,
+  copilotDeviceCode,
 }: CredentialsStepProps) {
   const isClaudeOAuth = apiSetupMethod === 'claude_oauth'
   const isChatGptOAuth = apiSetupMethod === 'chatgpt_oauth'
@@ -89,7 +92,7 @@ export function CredentialsStep({
     )
   }
 
-  // --- Copilot OAuth flow (native browser OAuth) ---
+  // --- Copilot OAuth flow (device flow) ---
   if (isCopilotOAuth) {
     return (
       <StepFormLayout
@@ -102,7 +105,7 @@ export function CredentialsStep({
               onClick={() => onStartOAuth?.()}
               className="gap-2"
               loading={status === 'validating'}
-              loadingText="Connecting..."
+              loadingText="Waiting for authorization..."
             >
               <ExternalLink className="size-4" />
               Sign in with GitHub
@@ -111,9 +114,26 @@ export function CredentialsStep({
         }
       >
         <div className="space-y-4">
-          <div className="rounded-xl bg-foreground-2 p-4 text-sm text-muted-foreground">
-            <p>Click the button above to sign in with your GitHub account. A browser window will open for authentication.</p>
-          </div>
+          {copilotDeviceCode ? (
+            <div className="rounded-xl bg-foreground-2 p-4 text-sm space-y-3">
+              <p className="text-muted-foreground">
+                Enter this code on GitHub to authorize:
+              </p>
+              <div className="flex items-center justify-center">
+                <code className="text-2xl font-mono font-bold tracking-widest text-foreground px-4 py-2 rounded-lg bg-background border border-border">
+                  {copilotDeviceCode.userCode}
+                </code>
+              </div>
+              <p className="text-muted-foreground text-xs text-center">
+                A browser window should have opened to{' '}
+                <span className="font-medium">github.com/login/device</span>
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl bg-foreground-2 p-4 text-sm text-muted-foreground">
+              <p>Click the button above to sign in with your GitHub account. A browser window will open for authentication.</p>
+            </div>
+          )}
           {status === 'error' && errorMessage && (
             <div className="rounded-lg bg-destructive/10 text-destructive text-sm p-3">
               {errorMessage}

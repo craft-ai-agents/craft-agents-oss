@@ -7,10 +7,37 @@
  * The Copilot SDK uses SessionEvent types with discriminated unions on the `type` field.
  */
 
-import type { AgentEvent } from '@craft-agent/core/types';
+import type { AgentEvent, TypedError } from '@craft-agent/core/types';
 import type { SessionEvent } from '@github/copilot-sdk';
 import { parseReadCommand, type ReadCommandInfo } from '../codex/read-patterns.ts';
 import { createLogger } from '../../../utils/debug.ts';
+
+/**
+ * Map Copilot CLI lowercase tool names to PascalCase names used by the UI.
+ * Mirrors COPILOT_TOOL_NAME_MAP in copilot-agent.ts.
+ */
+const TOOL_NAME_MAP: Record<string, string> = {
+  bash: 'Bash',
+  read: 'Read',
+  write: 'Write',
+  edit: 'Edit',
+  multi_edit: 'MultiEdit',
+  glob: 'Glob',
+  grep: 'Grep',
+  web_fetch: 'WebFetch',
+  web_search: 'WebSearch',
+  todo_write: 'TodoWrite',
+  notebook_edit: 'NotebookEdit',
+  task: 'Task',
+  task_output: 'TaskOutput',
+  list_dir: 'Glob',
+  // Native Copilot CLI tools (str_replace_editor subcommands)
+  view: 'Read',
+  create: 'Write',
+  str_replace: 'Edit',
+  insert: 'Edit',
+  str_replace_editor: 'Edit',
+};
 
 /**
  * Maps Copilot SDK session events to AgentEvents for UI compatibility.
@@ -52,6 +79,16 @@ export class CopilotEventAdapter {
   // Current turn ID for event correlation
   private currentTurnId: string | null = null;
 
+  // Track whether streaming deltas have been received for the current message
+  private hasStreamedDeltas: boolean = false;
+
+  // Track whether a final (non-intermediate) text_complete has been emitted this turn
+  // Guards against duplicate assistant.message events from the SDK
+  private hasEmittedFinalText: boolean = false;
+
+  // Track whether we're currently in a reasoning block (for styling reasoning deltas differently)
+  private inReasoning: boolean = false;
+
   /**
    * Store the block reason for a tool call that will be declined.
    * Called from copilot-agent when PreToolUse hook blocks a tool.
@@ -71,6 +108,9 @@ export class CopilotEventAdapter {
     this.readCommands.clear();
     this.blockReasons.clear();
     this.currentTurnId = null;
+    this.hasStreamedDeltas = false;
+    this.hasEmittedFinalText = false;
+    this.inReasoning = false;
     this.log.debug('Turn started', { turnIndex: this.turnIndex });
   }
 
@@ -88,31 +128,50 @@ export class CopilotEventAdapter {
         break;
 
       case 'session.resume':
-        yield { type: 'status', message: 'Session resumed' };
+        // Internal — fires on every reconnect/resume, too noisy for UI.
+        this.log.debug('Session resumed', { eventCount: event.data.eventCount });
         break;
 
       case 'session.idle':
         yield { type: 'complete' };
         break;
 
-      case 'session.error':
-        yield { type: 'error', message: event.data.message };
+      case 'session.error': {
+        const typedError = this.mapSessionError(event.data);
+        if (typedError) {
+          yield { type: 'typed_error', error: typedError };
+        } else {
+          yield { type: 'error', message: event.data.message };
+        }
         break;
+      }
 
       case 'session.compaction_start':
+        // Use "Compacting" keyword so session handler detects statusType: 'compacting'
         yield { type: 'status', message: 'Compacting context...' };
         break;
 
       case 'session.compaction_complete':
         if (event.data.success) {
-          yield { type: 'status', message: 'Context compacted to fit within limits' };
+          const tokenInfo = event.data.preCompactionTokens && event.data.postCompactionTokens
+            ? ` (${event.data.preCompactionTokens} → ${event.data.postCompactionTokens} tokens)`
+            : '';
+          // Use "Compacted" keyword so session handler detects statusType: 'compaction_complete'
+          yield { type: 'info', message: `Compacted context to fit within limits${tokenInfo}` };
         } else {
           yield { type: 'error', message: `Context compaction failed: ${event.data.error || 'unknown error'}` };
         }
         break;
 
       case 'session.usage_info':
-        // Internal usage tracking - handled by the agent class directly
+        // Emit usage_update so the UI can show context window utilization
+        yield {
+          type: 'usage_update',
+          usage: {
+            inputTokens: event.data.currentTokens,
+            contextWindow: event.data.tokenLimit,
+          },
+        };
         break;
 
       case 'session.info':
@@ -151,41 +210,83 @@ export class CopilotEventAdapter {
         break;
 
       case 'assistant.turn_end':
-        yield { type: 'complete' };
+        // Don't emit 'complete' here — session.idle handles it.
+        // Emitting from both causes duplicate messages in session persistence.
         this.currentTurnId = null;
+        this.hasStreamedDeltas = false;
+        this.hasEmittedFinalText = false;
+        this.inReasoning = false;
         break;
 
       case 'assistant.message_delta':
         if (event.data.deltaContent) {
+          this.hasStreamedDeltas = true;
+          this.inReasoning = false; // Exited reasoning block
           yield {
             type: 'text_delta',
             text: event.data.deltaContent,
             turnId: this.currentTurnId || undefined,
+            parentToolUseId: event.data.parentToolCallId || undefined,
           };
         }
         break;
 
-      case 'assistant.message':
-        if (event.data.content) {
+      case 'assistant.message': {
+        // The SDK always emits assistant.message with the full content, even when streaming.
+        // Only emit text_complete here — deltas were just for streaming display.
+        // The session handler uses text_complete to create the canonical persisted message.
+        // Guard: only emit once per turn to prevent duplicate messages.
+        if (event.data.content && !this.hasEmittedFinalText) {
+          this.hasEmittedFinalText = true;
           yield {
             type: 'text_complete',
             text: event.data.content,
             turnId: this.currentTurnId || undefined,
+            parentToolUseId: event.data.parentToolCallId || undefined,
           };
+          this.hasStreamedDeltas = false;
+        }
+
+        // Extract toolRequests for early tool_start events.
+        // The SDK may emit tool requests before tool.execution_start, giving earlier UI feedback.
+        if (event.data.toolRequests) {
+          for (const req of event.data.toolRequests) {
+            // Only emit if we haven't seen this tool call yet via tool.execution_start
+            if (!this.toolNames.has(req.toolCallId)) {
+              const toolName = this.resolveToolName({ toolName: req.name });
+              this.toolNames.set(req.toolCallId, toolName);
+              const args = (req.arguments ?? {}) as Record<string, unknown>;
+              yield {
+                type: 'tool_start',
+                toolName,
+                toolUseId: req.toolCallId,
+                input: args,
+                displayName: this.getToolDisplayName(toolName),
+                turnId: this.currentTurnId || undefined,
+                parentToolUseId: event.data.parentToolCallId || undefined,
+              };
+            }
+          }
         }
         break;
+      }
 
       case 'assistant.reasoning_delta':
         if (event.data.deltaContent) {
+          this.inReasoning = true;
           yield {
             type: 'text_delta',
             text: event.data.deltaContent,
             turnId: this.currentTurnId || undefined,
+            // Note: isIntermediate is set on text_complete (assistant.reasoning),
+            // deltas are always partial. The inReasoning flag distinguishes these from
+            // regular message deltas for consumers that need the distinction.
           };
         }
         break;
 
       case 'assistant.reasoning':
+        this.inReasoning = false; // Reasoning block complete
         if (event.data.content) {
           yield {
             type: 'text_complete',
@@ -197,12 +298,28 @@ export class CopilotEventAdapter {
         break;
 
       case 'assistant.intent':
-        // Internal intent tracking
+        if (event.data.intent) {
+          yield {
+            type: 'text_complete',
+            text: event.data.intent,
+            isIntermediate: true,
+            turnId: this.currentTurnId || undefined,
+          };
+        }
         break;
 
-      case 'assistant.usage':
-        // Usage tracking - handled by the agent class directly
+      case 'assistant.usage': {
+        // Emit usage_update with computed input tokens for context window display
+        const inputTokens = (event.data.inputTokens || 0)
+          + (event.data.cacheReadTokens || 0);
+        if (inputTokens > 0) {
+          yield {
+            type: 'usage_update',
+            usage: { inputTokens },
+          };
+        }
         break;
+      }
 
       // ============================================================
       // Tool events
@@ -211,6 +328,7 @@ export class CopilotEventAdapter {
       case 'tool.execution_start': {
         const toolName = this.resolveToolName(event.data);
         this.toolNames.set(event.data.toolCallId, toolName);
+        const parentToolUseId = event.data.parentToolCallId || undefined;
 
         const args = (event.data.arguments ?? {}) as Record<string, unknown>;
         const intent = (event.data as { description?: string }).description || undefined;
@@ -236,6 +354,7 @@ export class CopilotEventAdapter {
               intent,
               displayName: 'Read File',
               turnId: this.currentTurnId || undefined,
+              parentToolUseId,
             };
             break;
           }
@@ -249,12 +368,14 @@ export class CopilotEventAdapter {
           intent,
           displayName,
           turnId: this.currentTurnId || undefined,
+          parentToolUseId,
         };
         break;
       }
 
       case 'tool.execution_complete': {
         const toolCallId = event.data.toolCallId;
+        const parentToolUseId = event.data.parentToolCallId || undefined;
 
         const blockReason = this.blockReasons.get(toolCallId);
         if (blockReason) {
@@ -275,9 +396,12 @@ export class CopilotEventAdapter {
         if (accumulatedOutput) {
           result = accumulatedOutput;
         } else if (event.data.error) {
-          result = blockReason || event.data.error.message;
+          // Include error code for richer context when available
+          const errorCode = event.data.error.code ? `[${event.data.error.code}] ` : '';
+          result = blockReason || `${errorCode}${event.data.error.message}`;
         } else if (event.data.result) {
-          result = event.data.result.content;
+          // Prefer detailedContent when available (provides more context)
+          result = event.data.result.detailedContent || event.data.result.content;
         } else {
           result = blockReason || (isError ? 'Tool execution failed' : 'Success');
         }
@@ -293,6 +417,7 @@ export class CopilotEventAdapter {
             result,
             isError,
             turnId: this.currentTurnId || undefined,
+            parentToolUseId,
           };
           break;
         }
@@ -304,6 +429,7 @@ export class CopilotEventAdapter {
           result,
           isError,
           turnId: this.currentTurnId || undefined,
+          parentToolUseId,
         };
         break;
       }
@@ -399,7 +525,8 @@ export class CopilotEventAdapter {
 
   /**
    * Resolve the display tool name from execution_start event data.
-   * Maps MCP tool calls to mcp__server__tool format.
+   * Maps MCP tool calls to mcp__server__tool format, and normalizes
+   * built-in tool names from lowercase to PascalCase for UI consistency.
    */
   private resolveToolName(data: {
     toolName: string;
@@ -409,7 +536,73 @@ export class CopilotEventAdapter {
     if (data.mcpServerName && data.mcpToolName) {
       return `mcp__${data.mcpServerName}__${data.mcpToolName}`;
     }
-    return data.toolName;
+    // Normalize lowercase tool names to PascalCase (bash → Bash, etc.)
+    return TOOL_NAME_MAP[data.toolName] || data.toolName;
+  }
+
+  /**
+   * Map session.error data to a TypedError when the error type/status code is recognized.
+   * Returns null for unknown errors (caller falls back to plain error event).
+   */
+  private mapSessionError(data: {
+    errorType: string;
+    message: string;
+    statusCode?: number;
+  }): TypedError | null {
+    const { errorType, message, statusCode } = data;
+
+    // Auth errors (401, 403)
+    if (statusCode === 401 || statusCode === 403 || errorType === 'authentication' || errorType === 'authorization') {
+      return {
+        code: 'invalid_credentials',
+        title: 'Authentication Required',
+        message: message || 'Your GitHub credentials are invalid or expired.',
+        actions: [{ key: 'r', label: 'Retry', action: 'retry' }],
+        canRetry: true,
+        originalError: message,
+      };
+    }
+
+    // Rate limiting (429)
+    if (statusCode === 429 || errorType === 'rate_limit') {
+      return {
+        code: 'rate_limited',
+        title: 'Rate Limited',
+        message: message || 'Too many requests. Please wait a moment.',
+        actions: [{ key: 'r', label: 'Retry', action: 'retry' }],
+        canRetry: true,
+        retryDelayMs: 5000,
+        originalError: message,
+      };
+    }
+
+    // Server errors (5xx)
+    if (statusCode && statusCode >= 500) {
+      return {
+        code: 'service_error',
+        title: 'Service Error',
+        message: message || 'The AI service is temporarily unavailable.',
+        actions: [{ key: 'r', label: 'Retry', action: 'retry' }],
+        canRetry: true,
+        retryDelayMs: 2000,
+        originalError: message,
+      };
+    }
+
+    // Network errors
+    if (errorType === 'network' || errorType === 'connection') {
+      return {
+        code: 'network_error',
+        title: 'Connection Error',
+        message: message || 'Could not connect to the server.',
+        actions: [{ key: 'r', label: 'Retry', action: 'retry' }],
+        canRetry: true,
+        retryDelayMs: 1000,
+        originalError: message,
+      };
+    }
+
+    return null;
   }
 
   /**

@@ -11,7 +11,6 @@ import {
   type ModelDefinition,
   ANTHROPIC_MODELS,
   OPENAI_MODELS,
-  COPILOT_MODELS,
 } from './models';
 
 // ============================================================
@@ -339,7 +338,7 @@ export function getModelsForProviderType(providerType: LlmProviderType): ModelDe
   }
 
   if (providerType === 'copilot') {
-    return COPILOT_MODELS;
+    return []; // Copilot models are dynamic — fetched via listModels(), no hardcoded fallbacks
   }
 
   // Anthropic, Bedrock, Vertex all use Claude models
@@ -362,7 +361,7 @@ export function getDefaultModelsForConnection(providerType: LlmProviderType): Ar
     'openai/gpt-5.1-codex-mini',
   ];
   if (providerType === 'openai') return OPENAI_MODELS;
-  if (providerType === 'copilot') return COPILOT_MODELS;
+  if (providerType === 'copilot') return []; // Dynamic — fetched via listModels()
   if (providerType === 'anthropic_compat') return [
     'anthropic/claude-opus-4.6',
     'anthropic/claude-sonnet-4.5',

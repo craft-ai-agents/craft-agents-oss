@@ -712,6 +712,7 @@ export const IPC_CHANNELS = {
   COPILOT_CANCEL_OAUTH: 'copilot:cancelOAuth',
   COPILOT_GET_AUTH_STATUS: 'copilot:getAuthStatus',
   COPILOT_LOGOUT: 'copilot:logout',
+  COPILOT_DEVICE_CODE: 'copilot:deviceCode',
 
   // Settings - API Setup
   SETUP_LLM_CONNECTION: 'settings:setupLlmConnection',
@@ -993,8 +994,9 @@ export interface ElectronAPI {
   // GitHub Copilot OAuth
   startCopilotOAuth(connectionSlug: string): Promise<{ success: boolean; error?: string }>
   cancelCopilotOAuth(): Promise<{ success: boolean }>
-  getCopilotAuthStatus(connectionSlug: string): Promise<{ authenticated: boolean; expiresAt?: number; hasRefreshToken?: boolean }>
+  getCopilotAuthStatus(connectionSlug: string): Promise<{ authenticated: boolean }>
   copilotLogout(connectionSlug: string): Promise<{ success: boolean }>
+  onCopilotDeviceCode(callback: (data: { userCode: string; verificationUri: string }) => void): () => void
 
   /** Unified LLM connection setup */
   setupLlmConnection(setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }>

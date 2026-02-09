@@ -183,6 +183,13 @@ const api: ElectronAPI = {
   cancelCopilotOAuth: () => ipcRenderer.invoke(IPC_CHANNELS.COPILOT_CANCEL_OAUTH),
   getCopilotAuthStatus: (connectionSlug: string) => ipcRenderer.invoke(IPC_CHANNELS.COPILOT_GET_AUTH_STATUS, connectionSlug),
   copilotLogout: (connectionSlug: string) => ipcRenderer.invoke(IPC_CHANNELS.COPILOT_LOGOUT, connectionSlug),
+  onCopilotDeviceCode: (callback: (data: { userCode: string; verificationUri: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { userCode: string; verificationUri: string }) => {
+      callback(data)
+    }
+    ipcRenderer.on(IPC_CHANNELS.COPILOT_DEVICE_CODE, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.COPILOT_DEVICE_CODE, handler)
+  },
 
   // Settings - API Setup
   setupLlmConnection: (setup: LlmConnectionSetup) =>

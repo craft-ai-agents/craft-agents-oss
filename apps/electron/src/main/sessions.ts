@@ -783,6 +783,8 @@ export class SessionManager {
    * marked as unread when assistant completes - if user is viewing it, don't mark unread.
    */
   private activeViewingSession: Map<string, string> = new Map()
+  /** Resolved path to @github/copilot CLI entry point (for CopilotAgent) */
+  copilotCliPath: string | undefined
 
   setWindowManager(wm: WindowManager): void {
     this.windowManager = wm
@@ -1137,6 +1139,21 @@ export class SessionManager {
     }
     sessionLog.info('Setting pathToClaudeCodeExecutable:', cliPath)
     setPathToClaudeCodeExecutable(cliPath)
+
+    // Resolve path to @github/copilot CLI (for CopilotAgent)
+    // The SDK's getBundledCliPath() uses import.meta.resolve() which breaks in esbuild bundles
+    const copilotRelativePath = join('node_modules', '@github', 'copilot', 'index.js')
+    let copilotPath = join(basePath, copilotRelativePath)
+    if (!existsSync(copilotPath) && !app.isPackaged) {
+      const monorepoRoot = join(basePath, '..', '..')
+      copilotPath = join(monorepoRoot, copilotRelativePath)
+    }
+    if (existsSync(copilotPath)) {
+      this.copilotCliPath = copilotPath
+      sessionLog.info('Resolved Copilot CLI path:', copilotPath)
+    } else {
+      sessionLog.warn('Copilot CLI not found — Copilot sessions will try SDK default resolution')
+    }
 
     // Set path to fetch interceptor for SDK subprocess
     // This interceptor captures API errors and adds metadata to MCP tool schemas
@@ -2226,6 +2243,7 @@ export class SessionManager {
           miniModel: connection ? getMiniModel(connection) : undefined,
           thinkingLevel: managed.thinkingLevel,
           connectionSlug: connection?.slug,
+          copilotCliPath: this.copilotCliPath,
           session: {
             id: managed.id,
             workspaceRootPath: managed.workspace.rootPath,

@@ -349,6 +349,13 @@ export interface BackendConfig {
   codexHome?: string;
 
   /**
+   * Path to the @github/copilot CLI entry point (CopilotAgent only).
+   * Required because esbuild bundles break `import.meta.resolve()` used by the SDK.
+   * Resolved in the Electron main process and passed here.
+   */
+  copilotCliPath?: string;
+
+  /**
    * Per-session config directory for Copilot SDK (CopilotAgent only).
    * When set, the Copilot CLI will use this directory for storing config and state.
    */

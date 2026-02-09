@@ -36,6 +36,8 @@ export interface ModelDefinition {
   provider: ModelProvider;
   /** Maximum context window in tokens */
   contextWindow: number;
+  /** Whether this model supports thinking/reasoning effort. Defaults to true when undefined. */
+  supportsThinking?: boolean;
 }
 
 // ============================================
@@ -98,24 +100,9 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
 
   // ----------------------------------------
   // GitHub Copilot Models (via Copilot SDK)
-  // Default entries — actual models discovered at runtime via client.listModels()
+  // No hardcoded entries — models are discovered at runtime via client.listModels()
+  // and stored on the connection. See fetchAndStoreCopilotModels() in ipc.ts.
   // ----------------------------------------
-  {
-    id: 'gpt-5',
-    name: 'GPT-5',
-    shortName: 'GPT-5',
-    description: 'Most capable Copilot model',
-    provider: 'copilot',
-    contextWindow: 200_000,
-  },
-  {
-    id: 'claude-sonnet-4.5',
-    name: 'Sonnet 4.5 (Copilot)',
-    shortName: 'Copilot Sonnet',
-    description: 'Claude via GitHub Copilot',
-    provider: 'copilot',
-    contextWindow: 200_000,
-  },
 ];
 
 // ============================================
@@ -172,8 +159,8 @@ export const DEFAULT_MODEL = getModelIdByShortName('Sonnet');
 /** Default model for Codex/OpenAI connections (used when creating/backfilling connections) */
 export const DEFAULT_CODEX_MODEL = getModelIdByShortName('Codex');
 
-/** Default model for Copilot connections (used when creating/backfilling connections) */
-export const DEFAULT_COPILOT_MODEL = getModelIdByShortName('GPT-5');
+/** Default model for Copilot connections — no hardcoded default; models come from listModels() */
+export const DEFAULT_COPILOT_MODEL: string | undefined = undefined;
 
 // ============================================
 // UTILITY MODELS

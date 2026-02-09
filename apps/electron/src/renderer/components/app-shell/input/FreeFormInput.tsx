@@ -289,12 +289,19 @@ export function FreeFormInput({
 
   const availableThinkingLevels = THINKING_LEVELS
 
+  // Disable thinking selector when the current model explicitly doesn't support it
+  const thinkingDisabled = React.useMemo(() => {
+    const model = availableModels.find(m => m.id === currentModel)
+    return model?.supportsThinking === false
+  }, [availableModels, currentModel])
+
   // Group connections by provider type for hierarchical dropdown
   // Each provider (Anthropic, OpenAI) can have multiple connections (API Key, Claude Max, etc.)
   const connectionsByProvider = React.useMemo(() => {
     const groups: Record<string, typeof llmConnections> = {
       'Anthropic': [],
       'OpenAI': [],
+      'GitHub Copilot': [],
     }
     for (const conn of llmConnections) {
       const provider = conn.providerType || 'anthropic'
@@ -303,6 +310,8 @@ export function FreeFormInput({
         groups['Anthropic'].push(conn)
       } else if (provider === 'openai' || provider === 'openai_compat') {
         groups['OpenAI'].push(conn)
+      } else if (provider === 'copilot') {
+        groups['GitHub Copilot'].push(conn)
       }
     }
     // Return only non-empty groups
@@ -1759,10 +1768,10 @@ export function FreeFormInput({
                   <StyledDropdownMenuSeparator className="my-1" />
 
                   <DropdownMenuSub>
-                    <StyledDropdownMenuSubTrigger className="flex items-center justify-between px-2 py-2 rounded-lg">
+                    <StyledDropdownMenuSubTrigger disabled={thinkingDisabled} className={cn("flex items-center justify-between px-2 py-2 rounded-lg", thinkingDisabled && "opacity-50 cursor-not-allowed")}>
                       <div className="text-left flex-1">
                         <div className="font-medium text-sm">{getThinkingLevelName(thinkingLevel)}</div>
-                        <div className="text-xs text-muted-foreground">Extended reasoning depth</div>
+                        <div className="text-xs text-muted-foreground">{thinkingDisabled ? 'Not supported by this model' : 'Extended reasoning depth'}</div>
                       </div>
                     </StyledDropdownMenuSubTrigger>
                     <StyledDropdownMenuSubContent className="min-w-[220px]">
