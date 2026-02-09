@@ -79,6 +79,20 @@ Combine operators: `from:john@example.com after:2024/01/01 has:attachment`
 
 See [Google OAuth Setup](/source-guides/google-oauth-setup) for instructions on creating OAuth credentials, then use `source_google_oauth_trigger` to start the OAuth flow.
 
+### Troubleshooting
+
+#### "Gmail API has not been used in project" error
+
+The Gmail API needs to be enabled in your Google Cloud project:
+
+1. Visit the [Gmail API page](https://console.developers.google.com/apis/api/gmail.googleapis.com/overview)
+2. Click **Enable**
+3. Wait 1-2 minutes for changes to propagate
+
+#### "Google OAuth credentials not configured" error
+
+Add your OAuth client ID and secret to the source's `config.json` under the `api` section.
+
 ### Rate Limits
 - 250 quota units per user per second
 - Most read operations cost 1-5 units
