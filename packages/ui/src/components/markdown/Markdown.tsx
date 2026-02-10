@@ -182,19 +182,19 @@ function createComponents(
           const code = String(children).replace(/\n$/, '')
           // Diff code blocks → pierre/diffs for a proper diff viewer
           if (match?.[1] === 'diff') {
-            return <MarkdownDiffBlock code={code} className="my-1" />
+            return <MarkdownDiffBlock code={code} className="my-2" />
           }
           // JSON code blocks → interactive tree viewer
           if (match?.[1] === 'json') {
-            return <MarkdownJsonBlock code={code} className="my-1" />
+            return <MarkdownJsonBlock code={code} className="my-2" />
           }
           // Datatable code blocks → sortable/filterable data table
           if (match?.[1] === 'datatable') {
-            return <MarkdownDatatableBlock code={code} className="my-1" />
+            return <MarkdownDatatableBlock code={code} className="my-2" />
           }
           // Spreadsheet code blocks → Excel-style grid
           if (match?.[1] === 'spreadsheet') {
-            return <MarkdownSpreadsheetBlock code={code} className="my-1" />
+            return <MarkdownSpreadsheetBlock code={code} className="my-2" />
           }
           // Mermaid code blocks → zinc-styled SVG diagram.
           // Hide the inline expand button when the mermaid block is the first
@@ -206,9 +206,9 @@ function createComponents(
             const isFirstBlock = hideFirstMermaidExpand &&
                                 firstMermaidCodeRef?.current != null &&
                                 code === firstMermaidCodeRef.current
-            return <MarkdownMermaidBlock code={code} className="my-1" showExpandButton={!isFirstBlock} />
+            return <MarkdownMermaidBlock code={code} className="my-2" showExpandButton={!isFirstBlock} />
           }
-          return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
+          return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-2" />
         }
 
         // Inline code
@@ -270,19 +270,19 @@ function createComponents(
         const code = String(children).replace(/\n$/, '')
         // Diff code blocks → pierre/diffs for a proper diff viewer
         if (match?.[1] === 'diff') {
-          return <MarkdownDiffBlock code={code} className="my-1" />
+          return <MarkdownDiffBlock code={code} className="my-2" />
         }
         // JSON code blocks → interactive tree viewer
         if (match?.[1] === 'json') {
-          return <MarkdownJsonBlock code={code} className="my-1" />
+          return <MarkdownJsonBlock code={code} className="my-2" />
         }
         // Datatable code blocks → sortable/filterable data table
         if (match?.[1] === 'datatable') {
-          return <MarkdownDatatableBlock code={code} className="my-1" />
+          return <MarkdownDatatableBlock code={code} className="my-2" />
         }
         // Spreadsheet code blocks → Excel-style grid
         if (match?.[1] === 'spreadsheet') {
-          return <MarkdownSpreadsheetBlock code={code} className="my-1" />
+          return <MarkdownSpreadsheetBlock code={code} className="my-2" />
         }
         // Mermaid code blocks → zinc-styled SVG diagram.
         // (Same first-block detection as minimal mode — see comment above.)
@@ -290,9 +290,9 @@ function createComponents(
           const isFirstBlock = hideFirstMermaidExpand &&
                               firstMermaidCodeRef?.current != null &&
                               code === firstMermaidCodeRef.current
-          return <MarkdownMermaidBlock code={code} className="my-1" showExpandButton={!isFirstBlock} />
+          return <MarkdownMermaidBlock code={code} className="my-2" showExpandButton={!isFirstBlock} />
         }
-        return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
+        return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-2" />
       }
 
       return <InlineCode>{children}</InlineCode>
