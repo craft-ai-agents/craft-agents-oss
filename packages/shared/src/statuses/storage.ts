@@ -33,7 +33,15 @@ const STATUS_ICONS_DIR = 'statuses/icons';
  * Get default status configuration (matches current hardcoded behavior)
  * Note: icon field is omitted - uses auto-discovered files in statuses/icons/{id}.svg
  */
-export function getDefaultStatusConfig(): WorkspaceStatusConfig {
+export function getDefaultStatusConfig(language?: string): WorkspaceStatusConfig {
+  const isChinese = language?.toLowerCase() === 'zh-cn'
+  const labels = {
+    backlog: isChinese ? '待办队列' : 'Backlog',
+    todo: isChinese ? '待处理' : 'Todo',
+    needsReview: isChinese ? '需要复核' : 'Needs Review',
+    done: isChinese ? '已完成' : 'Done',
+    cancelled: isChinese ? '已取消' : 'Cancelled',
+  }
   // Note: color is omitted - defaults from colors/defaults.ts are applied:
   // - backlog: foreground/50 (muted, not yet planned)
   // - todo: foreground/50 (muted, ready to work on)
@@ -47,7 +55,7 @@ export function getDefaultStatusConfig(): WorkspaceStatusConfig {
     statuses: [
       {
         id: 'backlog',
-        label: 'Backlog',
+        label: labels.backlog,
         category: 'open',
         isFixed: false,
         isDefault: true,
@@ -55,7 +63,7 @@ export function getDefaultStatusConfig(): WorkspaceStatusConfig {
       },
       {
         id: 'todo',
-        label: 'Todo',
+        label: labels.todo,
         category: 'open',
         isFixed: true,
         isDefault: false,
@@ -63,7 +71,7 @@ export function getDefaultStatusConfig(): WorkspaceStatusConfig {
       },
       {
         id: 'needs-review',
-        label: 'Needs Review',
+        label: labels.needsReview,
         category: 'open',
         isFixed: false,
         isDefault: true,
@@ -71,7 +79,7 @@ export function getDefaultStatusConfig(): WorkspaceStatusConfig {
       },
       {
         id: 'done',
-        label: 'Done',
+        label: labels.done,
         category: 'closed',
         isFixed: true,
         isDefault: false,
@@ -79,7 +87,7 @@ export function getDefaultStatusConfig(): WorkspaceStatusConfig {
       },
       {
         id: 'cancelled',
-        label: 'Cancelled',
+        label: labels.cancelled,
         category: 'closed',
         isFixed: true,
         isDefault: false,
@@ -139,7 +147,9 @@ export function loadStatusConfig(workspaceRootPath: string): WorkspaceStatusConf
 
   const configPath = join(workspaceRootPath, STATUS_CONFIG_FILE);
 
-  // Return defaults if config doesn't exist
+  // Return defaults if config doesn't exist.
+  // IMPORTANT: This fallback does NOT rewrite existing status labels for a workspace.
+  // Localization is applied when defaults are initially seeded at workspace creation.
   if (!existsSync(configPath)) {
     return getDefaultStatusConfig();
   }

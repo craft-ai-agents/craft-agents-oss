@@ -1,0 +1,140 @@
+{
+  "panel": {
+    "title": "对话"
+  },
+  "rename": {
+    "title": "重命名对话",
+    "placeholder": "输入对话名称..."
+  },
+  "session": {
+    "missing": "该对话已不存在"
+  },
+  "toast": {
+    "linkCopied": "链接已复制到剪贴板",
+    "shareFailed": "分享失败",
+    "shareUnknownError": "未知错误",
+    "updateShareFailed": "更新分享失败",
+    "stopShareFailed": "停止分享失败",
+    "shareUpdated": "分享已更新",
+    "shareStopped": "已停止分享",
+    "titleRefreshed": "标题已刷新",
+    "titleRefreshFailed": "刷新标题失败"
+  },
+  "actions": {
+    "open": "打开"
+  },
+  "share": {
+    "action": "分享",
+    "shared": "已分享",
+    "openInBrowser": "在浏览器中打开",
+    "copyLink": "复制链接",
+    "updateShare": "更新分享",
+    "stopSharing": "停止分享",
+    "learnMore": "了解更多",
+    "shareOnline": "在线分享"
+  },
+  "processing": {
+    "thinking": "思考中...",
+    "pondering": "沉思中...",
+    "contemplating": "沉吟中...",
+    "reasoning": "推理中...",
+    "processing": "处理中...",
+    "computing": "计算中...",
+    "considering": "考虑中...",
+    "reflecting": "反思中...",
+    "deliberating": "斟酌中...",
+    "cogitating": "冥思中...",
+    "ruminating": "反刍中...",
+    "musing": "默想中...",
+    "workingOnIt": "处理中...",
+    "onIt": "处理中...",
+    "crunching": "计算中...",
+    "brewing": "酝酿中...",
+    "connectingDots": "连接线索中...",
+    "mullingOver": "思量中...",
+    "deepInThought": "深思中...",
+    "hmm": "嗯...",
+    "letMeSee": "让我看看...",
+    "oneMoment": "稍等...",
+    "holdOn": "请稍候...",
+    "bearWithMe": "请耐心...",
+    "justASec": "马上...",
+    "hangTight": "稍等...",
+    "gettingThere": "快好了...",
+    "almost": "差不多了...",
+    "working": "处理中...",
+    "busyBusy": "忙碌中...",
+    "whirring": "运转中...",
+    "churning": "运算中...",
+    "percolating": "酝酿中...",
+    "simmering": "酝酿中...",
+    "cooking": "处理中...",
+    "baking": "处理中...",
+    "stirring": "酝酿中...",
+    "spinningUp": "启动中...",
+    "warmingUp": "预热中...",
+    "revving": "加速中...",
+    "buzzing": "嗡嗡作响...",
+    "humming": "嗡鸣中...",
+    "ticking": "滴答作响...",
+    "clicking": "咔哒作响...",
+    "whizzing": "嗖嗖作响...",
+    "zooming": "飞速处理中...",
+    "zipping": "飞速处理中...",
+    "chugging": "运转中...",
+    "trucking": "处理中...",
+    "rolling": "进行中..."
+  },
+  "compact": {
+    "emptyTitle": "你想修改什么？",
+    "emptySubtitle": "只需描述一下 — 其余交给我"
+  },
+  "loadMore": "↑ 向上滚动查看更早的消息",
+  "loadMoreCount": "↑ 向上滚动查看更早的消息（还有 {{count}} 条）",
+  "plan": {
+    "approvedMessage": "计划已批准，请执行。"
+  },
+  "overlay": {
+    "messagePreview": "消息预览",
+    "responsePreview": "回复预览",
+    "turnDetails": "回合详情"
+  },
+  "input": {
+    "attachSingle": "1 个文件",
+    "attachMultiple": "{{count}} 个文件",
+    "attachFiles": "添加文件",
+    "attachTooltip": "添加文件",
+    "chooseSources": "选择来源",
+    "sourcesCount": "{{count}} 个来源",
+    "sourcesTooltip": "来源",
+    "sourcesEmptyTitle": "暂无来源配置。",
+    "sourcesEmptyDescription": "请在设置中添加来源。",
+    "sourcesSearchPlaceholder": "搜索来源...",
+    "modelTooltip": "模型",
+    "customModelDescription": "自定义 API 连接",
+    "thinkingLevelDescription": "扩展推理深度",
+    "contextLabel": "上下文",
+    "contextWarningIdle": "已使用 {{percent}}% 上下文 — 点击压缩",
+    "contextWarningBusy": "已使用 {{percent}}% 上下文 — 请等待当前操作",
+    "pathPrefix": "位于 {{path}}",
+    "folderFallback": "文件夹",
+    "workInFolder": "在文件夹中工作",
+    "workingDirectoryTitle": "工作目录",
+    "workingDirectoryOn": "位于",
+    "chooseWorkingDirectory": "选择工作目录",
+    "filterFoldersPlaceholder": "筛选文件夹...",
+    "noFoldersFound": "未找到文件夹",
+    "chooseFolder": "选择文件夹...",
+    "reset": "重置",
+    "searchPlaceholder": "搜索标题和内容...",
+    "placeholder": {
+      "default": "你想要做什么？",
+      "modeHint": "使用 Shift + Tab 在探索与执行之间切换",
+      "mentionsHint": "输入 @ 来引用文件、文件夹或技能",
+      "labelsHint": "输入 # 为此对话添加标签",
+      "newLineHint": "按 Shift + Return 换行",
+      "toggleSidebar": "按 {{key}} + B 切换侧边栏",
+      "focusMode": "按 {{key}} + . 切换专注模式"
+    }
+  }
+}

@@ -1,0 +1,551 @@
+{
+  "edit": "Edit",
+  "closeEsc": "Close (Esc)",
+  "loading": "Loading...",
+  "open": "Open",
+  "pathCopied": "Path copied to clipboard",
+  "unknownError": "Unknown error",
+  "undo": "Undo",
+  "clearSearch": "Clear search",
+  "menu": {
+    "share": "Share",
+    "shared": "Shared",
+    "openInNewWindow": "Open in New Window",
+    "learnMore": "Learn More",
+    "configureStatuses": "Configure Statuses",
+    "addSource": "Add Source",
+    "addSkill": "Add Skill",
+    "addNewLabel": "Add New Label",
+    "editLabels": "Edit Labels",
+    "deleteLabel": "Delete Label",
+    "editViews": "Edit Views",
+    "deleteView": "Delete View",
+    "learnMoreApis": "Learn More about APIs",
+    "learnMoreMcp": "Learn More about MCP",
+    "learnMoreLocalFolders": "Learn More about Local Folders",
+    "learnMoreSources": "Learn More about Sources",
+    "showInFinder": "Show in Finder",
+    "deleteSource": "Delete Source",
+    "deleteSkill": "Delete Skill",
+    "status": "Status",
+    "labels": "Labels",
+    "flag": "Flag",
+    "unflag": "Unflag",
+    "markAsUnread": "Mark as Unread",
+    "rename": "Rename",
+    "regenerateTitle": "Regenerate Title",
+    "copyPath": "Copy Path",
+    "delete": "Delete"
+  },
+  "sources": {
+    "add": "Add Source",
+    "type": {
+      "api": "API",
+      "mcp": "MCP",
+      "local": "Local",
+      "localFolder": "local folder"
+    },
+    "emptyTitle": "No sources configured.",
+    "emptyTitleWithType": "No {{type}} sources configured.",
+    "emptyDescription": "Sources connect your agent to external data — MCP servers, REST APIs, and local folders.",
+    "learnMore": "Learn more",
+    "addSource": "Add Source",
+    "addApi": {
+      "title": "Add API",
+      "placeholder": "What API would you like to connect?",
+      "example": "Connect to the OpenAI API"
+    },
+    "addMcp": {
+      "title": "Add MCP Server",
+      "placeholder": "What MCP server would you like to connect?",
+      "example": "Connect to Linear"
+    },
+    "addLocal": {
+      "title": "Add Local Folder",
+      "placeholder": "What folder would you like to connect?",
+      "example": "Connect to my Obsidian vault"
+    },
+    "addGeneric": {
+      "title": "Add Source",
+      "placeholder": "What would you like to connect?",
+      "example": "Connect to my Craft space"
+    },
+    "status": {
+      "needsAuth": "Auth Required",
+      "failed": "Disconnected",
+      "untested": "Not Tested",
+      "localDisabled": "Disabled"
+    }
+  },
+  "skills": {
+    "emptyTitle": "No skills configured",
+    "emptyDescription": "Skills are reusable instructions that teach your agent specialized behaviors.",
+    "learnMore": "Learn more",
+    "addSkill": "Add Skill",
+    "addSkillPlaceholder": "What should I learn to do?"
+  },
+  "labels": {
+    "addLabelPlaceholder": "What label would you like to create?"
+  },
+  "editPopover": {
+    "basePlaceholder": "Describe what you'd like to change...",
+    "placeholderWithExample": "{{placeholder}}, e.g., \"{{example}}\"",
+    "compact": {
+      "justTellMe": "Just tell me what to change",
+      "describeUpdate": "Describe your update",
+      "whatModify": "What should I modify?"
+    },
+    "examples": {
+      "workspacePermissions": "Allow running 'make build' in Explore mode",
+      "defaultPermissions": "Allow git fetch command",
+      "skillInstructions": "Add error handling guidelines",
+      "skillMetadata": "Update the skill description",
+      "sourceGuide": "Add rate limit documentation",
+      "sourceConfig": "Update the display name",
+      "sourcePermissions": "Allow list operations in Explore mode",
+      "sourceToolPermissions": "Only allow read operations (list, get, search)",
+      "preferencesNotes": "Add coding style preferences",
+      "addSkill": "Review PRs following our code standards",
+      "editStatuses": "Add a \"Blocked\" status",
+      "editLabels": "Add a \"Bug\" label with red color",
+      "editAutoRules": "Add a rule to detect GitHub issue URLs",
+      "addLabel": "A red \"Bug\" label",
+      "editViews": "Add a \"Stale\" view for sessions inactive > 7 days",
+      "editToolIcons": "Add an icon for my custom CLI tool \"deploy\""
+    }
+  },
+  "labelsMenu": {
+    "states": "States"
+  },
+  "navigation": {
+    "newChat": "New Chat",
+    "allChats": "All Chats",
+    "allSkills": "All Skills",
+    "flagged": "Flagged",
+    "status": "Status",
+    "labels": "Labels",
+    "sources": "Sources",
+    "skills": "Skills",
+    "settings": "Settings",
+    "apis": "APIs",
+    "mcps": "MCPs",
+    "localFolders": "Local Folders",
+    "helpDocs": "Help & Documentation",
+    "allDocumentation": "All Documentation",
+    "permissions": "Permissions",
+    "views": "Views"
+  },
+  "filters": {
+    "filterChats": "Filter Chats",
+    "clear": "Clear",
+    "searchPlaceholder": "Search statuses & labels...",
+    "statuses": "Statuses",
+    "labels": "Labels",
+    "search": "Search",
+    "noLabelsConfigured": "No labels configured",
+    "noMatchingFilters": "No matching statuses or labels"
+  },
+  "filterMode": {
+    "include": "Include",
+    "exclude": "Exclude",
+    "remove": "Clear"
+  },
+  "actions": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "revert": "Revert",
+    "reset": "Reset",
+    "delete": "Delete",
+    "remove": "Remove",
+    "done": "Done",
+    "editFile": "Edit File"
+  },
+  "rename": {
+    "title": "Rename",
+    "placeholder": "Enter a name..."
+  },
+  "reset": {
+    "title": "Reset App",
+    "description": "This will permanently delete:",
+    "warningTitle": "Back up any important data first!",
+    "warningDescription": "This action cannot be undone.",
+    "confirmationPrompt": "To confirm, solve: {{a}} + {{b}} =",
+    "placeholder": "Enter answer",
+    "confirm": "Reset App",
+    "items": {
+      "workspaces": "All workspaces and their settings",
+      "credentials": "All credentials and API keys",
+      "preferences": "All preferences and session data"
+    }
+  },
+  "panels": {
+    "filesComingSoon": "Files panel - Coming soon",
+    "historyComingSoon": "History panel - Coming soon"
+  },
+  "fileViewer": {
+    "emptyTitle": "No file selected",
+    "emptyDescription": "Click a file path in the chat to view it here",
+    "loading": "Loading content...",
+    "errorTitle": "Error loading file"
+  },
+  "toc": {
+    "empty": "No headings"
+  },
+  "info": {
+    "errorLoading": "Error loading content",
+    "authRequired": "Authenticate with this source to view available data",
+    "sourceNotFound": "Source not found",
+    "skillNotFound": "Skill not found"
+  },
+  "sourceInfo": {
+    "disabledTitle": "Source Disabled",
+    "disabledDescription": "Local MCP servers are disabled in Settings > Advanced. Enable them to use this source.",
+    "deletedToast": "Deleted source: {{name}}",
+    "deleteFailed": "Failed to delete source",
+    "connectionTitle": "Connection",
+    "connectionLocalCommand": "Local command that spawns this MCP server.",
+    "connectionServerUrl": "Server URL and connection status.",
+    "connectionApiBaseUrl": "Base URL for API requests.",
+    "connectionLocalPath": "Filesystem path for this source.",
+    "connectionDetails": "Connection details.",
+    "permissionsTitle": "Permissions",
+    "permissionsMcp": "Tool patterns allowed in Explore mode.",
+    "permissionsApi": "API endpoints allowed in Explore mode.",
+    "permissionsLocal": "Access rules for Explore mode.",
+    "toolsTitle": "Tools",
+    "toolsDescription": "Operations exposed by this server.",
+    "documentationTitle": "Documentation",
+    "documentationDescription": "Context and guidelines for the agent.",
+    "typeLabel": "Type",
+    "urlLabel": "URL",
+    "lastTestedLabel": "Last Tested"
+  },
+  "skillInfo": {
+    "metadataTitle": "Metadata",
+    "deletedToast": "Deleted skill: {{name}}",
+    "deleteFailed": "Failed to delete skill",
+    "slugLabel": "Slug",
+    "nameLabel": "Name",
+    "descriptionLabel": "Description",
+    "locationLabel": "Location",
+    "permissionModesTitle": "Permission Modes",
+    "permissionModesDescription": "How \"Always Allowed Tools\" interacts with permission modes:",
+    "permissionModeExplore": "Explore",
+    "permissionModeAsk": "Ask to Edit",
+    "permissionModeAuto": "Auto",
+    "permissionBlocked": "Blocked — write tools blocked regardless",
+    "permissionAutoApproved": "Auto-approved — no prompts for allowed tools",
+    "permissionNoEffect": "No effect — all tools already auto-approved",
+    "instructionsTitle": "Instructions",
+    "noInstructions": "No instructions provided."
+  },
+  "table": {
+    "searchPlaceholder": "Search..."
+  },
+  "permissionsTable": {
+    "access": "Access",
+    "type": "Type",
+    "pattern": "Pattern",
+    "comment": "Comment",
+    "searchPlaceholder": "Search patterns...",
+    "empty": "No permissions configured",
+    "fullscreen": "View Fullscreen",
+    "patternCopied": "Pattern copied to clipboard",
+    "patternCopyFailed": "Failed to copy pattern",
+    "ruleCount_one": "{{count}} rule",
+    "ruleCount_other": "{{count}} rules"
+  },
+  "tables": {
+    "searchPlaceholder": "Search...",
+    "emptyDefault": "No data available",
+    "permissions": {
+      "accessHeader": "Access",
+      "typeHeader": "Type",
+      "patternHeader": "Pattern",
+      "commentHeader": "Comment",
+      "searchPlaceholder": "Search patterns...",
+      "empty": "No permissions configured",
+      "fullscreen": "View Fullscreen",
+      "patternCopied": "Pattern copied to clipboard",
+      "patternCopyFailed": "Failed to copy pattern",
+      "subtitle": {
+        "rule": "{{count}} rule",
+        "rules": "{{count}} rules"
+      }
+    },
+    "labels": {
+      "colorHeader": "Color",
+      "nameHeader": "Name",
+      "typeHeader": "Type",
+      "searchPlaceholder": "Search labels...",
+      "empty": "No labels configured",
+      "fullscreen": "View Fullscreen",
+      "subtitle": {
+        "label": "{{count}} label",
+        "labels": "{{count}} labels"
+      }
+    },
+    "autoRules": {
+      "labelHeader": "Label",
+      "patternHeader": "Pattern",
+      "flagsHeader": "Flags",
+      "templateHeader": "Template",
+      "descriptionHeader": "Description",
+      "searchPlaceholder": "Search rules...",
+      "empty": "No auto-apply rules configured",
+      "fullscreen": "View Fullscreen",
+      "subtitle": {
+        "rule": "{{count}} rule",
+        "rules": "{{count}} rules"
+      },
+      "patternCopied": "Pattern copied to clipboard",
+      "patternCopyFailed": "Failed to copy pattern"
+    },
+    "tools": {
+      "accessHeader": "Access",
+      "toolHeader": "Tool",
+      "descriptionHeader": "Description",
+      "empty": "No tool permissions configured"
+    }
+  },
+  "time": {
+    "never": "Never",
+    "justNow": "Just now",
+    "minutesAgo_one": "{{count}} minute ago",
+    "minutesAgo_other": "{{count}} minutes ago",
+    "hoursAgo_one": "{{count}} hour ago",
+    "hoursAgo_other": "{{count}} hours ago",
+    "daysAgo_one": "{{count}} day ago",
+    "daysAgo_other": "{{count}} days ago"
+  },
+  "sessionList": {
+    "date": {
+      "today": "Today",
+      "yesterday": "Yesterday"
+    },
+    "share": {
+      "openInBrowser": "Open in Browser",
+      "copyLink": "Copy Link",
+      "updateShare": "Update Share",
+      "stopSharing": "Stop Sharing",
+      "linkCopied": "Link copied to clipboard",
+      "updated": "Share updated",
+      "updateFailed": "Failed to update share",
+      "stopped": "Sharing stopped",
+      "stopFailed": "Failed to stop sharing"
+    },
+    "search": {
+      "noResultsInCurrentFilter": "No results in current filter",
+      "inCurrentView": "In Current View",
+      "otherConversations": "Other Conversations",
+      "noConversations": "No conversations found",
+      "description": "Searched titles and message content",
+      "clear": "Clear search",
+      "sessionsAria": "Sessions"
+    },
+    "empty": {
+      "title": "No conversations yet",
+      "description": "Conversations with your agent appear here. Start one to get going.",
+      "action": "New Conversation"
+    },
+    "rename": {
+      "title": "Rename conversation",
+      "placeholder": "Enter a name..."
+    }
+  },
+  "skillsList": {
+    "empty": {
+      "title": "No skills configured",
+      "description": "Skills are reusable instructions that teach your agent specialized behaviors.",
+      "learnMore": "Learn more",
+      "addSkill": "Add Skill"
+    }
+  },
+  "taskActions": {
+    "title": "Click for task actions",
+    "type": {
+      "task": "Task",
+      "shell": "Shell"
+    },
+    "viewOutput": "View Output",
+    "stopTask": "Stop Task",
+    "overlayUnavailable": "Terminal overlay not available",
+    "outputFallback": "No output available yet",
+    "loadFailed": "Failed to load task output"
+  },
+  "appMenu": {
+    "aria": {
+      "craftMenu": "Craft menu",
+      "goBack": "Go back",
+      "goForward": "Go forward"
+    },
+    "file": {
+      "newChat": "New Chat",
+      "newWindow": "New Window"
+    },
+    "settings": {
+      "menu": "Settings",
+      "open": "Settings..."
+    },
+    "help": {
+      "menu": "Help",
+      "docs": "Help & Documentation",
+      "shortcuts": "Keyboard Shortcuts"
+    },
+    "debug": {
+      "menu": "Debug",
+      "checkUpdates": "Check for Updates",
+      "installUpdate": "Install Update",
+      "toggleDevtools": "Toggle DevTools"
+    },
+    "schema": {
+      "sections": {
+        "edit": "Edit",
+        "view": "View",
+        "window": "Window"
+      },
+      "items": {
+        "undo": "Undo",
+        "redo": "Redo",
+        "cut": "Cut",
+        "copy": "Copy",
+        "paste": "Paste",
+        "selectAll": "Select All",
+        "zoomIn": "Zoom In",
+        "zoomOut": "Zoom Out",
+        "resetZoom": "Reset Zoom",
+        "toggleFocusMode": "Toggle Focus Mode",
+        "toggleSidebar": "Toggle Sidebar",
+        "minimize": "Minimize",
+        "maximize": "Maximize"
+      }
+    },
+    "quit": "Quit Craft Agents"
+  },
+  "chatInput": {
+    "placeholders": {
+      "workOn": "What would you like to work on?",
+      "shiftTabMode": "Use Shift + Tab to switch between Explore and Execute",
+      "mentionHint": "Type @ to mention files, folders, or skills",
+      "labelHint": "Type # to apply labels to this conversation",
+      "newlineHint": "Press Shift + Return to add a new line",
+      "sidebarToggleHint": "Press ⌘/Ctrl + B to toggle the sidebar",
+      "focusModeHint": "Press ⌘/Ctrl + . for focus mode"
+    },
+    "actions": {
+      "attachFiles": "Attach Files",
+      "attachFilesTooltip": "Attach files",
+      "chooseSources": "Choose Sources",
+      "noSourcesConfigured": "No sources configured.",
+      "sourcesTooltip": "Sources",
+      "addSourcesInSettings": "Add sources in Settings.",
+      "searchSources": "Search sources...",
+      "workInFolder": "Work in Folder",
+      "folderFallback": "Folder",
+      "filterFolders": "Filter folders...",
+      "noFoldersFound": "No folders found",
+      "chooseFolder": "Choose Folder...",
+      "resetFolder": "Reset",
+      "gitBranchPrefix": "on ",
+      "noDetailsProvided": "No details provided"
+    }
+  },
+  "todoFilter": {
+    "placeholder": "Filter statuses...",
+    "noResults": "No status found"
+  },
+  "slashMenu": {
+    "searchPlaceholder": "Search commands...",
+    "noResults": "No commands found",
+    "footerHint": "Use @ for skills and files",
+    "sections": {
+      "modes": "Modes",
+      "features": "Features",
+      "folders": "Recent Working Directories"
+    },
+    "ultrathink": {
+      "label": "Ultrathink",
+      "description": "Extended reasoning for complex problems"
+    }
+  },
+  "rightSidebar": {
+    "files": {
+      "comingSoon": "Files panel - Coming soon",
+      "title": "Files",
+      "loading": "Loading...",
+      "empty": "Files attached or created by this chat will appear here.",
+      "directory": "Directory",
+      "clickExpand": "Click to expand",
+      "clickReveal": "Click to reveal",
+      "doubleClickOpen": "double-click to open"
+    },
+    "history": {
+      "comingSoon": "History panel - Coming soon"
+    },
+    "metadata": {
+      "title": "Chat Info",
+      "noSession": "No session selected",
+      "loading": "Loading session...",
+      "name": "Name",
+      "namePlaceholder": "Untitled",
+      "notes": "Notes",
+      "notesPlaceholder": "Add notes...",
+      "notesLoading": "Loading..."
+    }
+  },
+  "sessionMenu": {
+    "shareFailed": "Failed to share",
+    "titleRefresh": {
+      "success": "Title refreshed",
+      "failed": "Failed to refresh title"
+    }
+  },
+  "sessionSearch": {
+    "placeholder": "Search titles and content...",
+    "close": "Close search",
+    "loading": "Loading…",
+    "results": "{{count}} results"
+  },
+  "chatDisplay": {
+    "compactEmpty": {
+      "title": "What would you like to change?",
+      "description": "Just describe it — I'll handle the rest"
+    }
+  },
+  "authBanner": {
+    "title": {
+      "mcpAuth": "Connection required",
+      "apiAuth": "API credentials required",
+      "error": "Something went wrong"
+    },
+    "description": {
+      "mcpAuth": "Connect to required services to continue.",
+      "apiAuth": "Enter API credentials to continue.",
+      "error": "Something went wrong. Tap to retry."
+    },
+    "cta": {
+      "connect": "Connect",
+      "addCredentials": "Add Credentials",
+      "retry": "Retry",
+      "continue": "Continue"
+    }
+  },
+  "mainContent": {
+    "empty": {
+      "noSourcesConfigured": "No sources configured",
+      "noSkillsConfigured": "No skills configured",
+      "noFlaggedConversations": "No flagged conversations",
+      "noConversationsYet": "No conversations yet",
+      "selectConversation": "Select a conversation to get started"
+    }
+  },
+  "permissionRequest": {
+    "title": "Permission Required",
+    "actions": {
+      "allow": "Allow",
+      "alwaysAllow": "Always Allow",
+      "deny": "Deny"
+    },
+    "tip": "\"Always Allow\" remembers this command for the session"
+  }
+}

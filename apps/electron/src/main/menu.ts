@@ -4,6 +4,8 @@ import { EDIT_MENU, VIEW_MENU, WINDOW_MENU } from '../shared/menu-schema'
 import type { MenuItem } from '../shared/menu-schema'
 import type { WindowManager } from './window-manager'
 import { mainLog } from './logger'
+import { getMainI18n } from './i18n'
+import { buildResetDefaultsDialogOptions, getMenuI18nLabels } from './i18n-labels'
 
 // Store reference for rebuilding menu
 let cachedWindowManager: WindowManager | null = null
@@ -43,17 +45,19 @@ export async function rebuildMenu(): Promise<void> {
   const { getUpdateInfo, installUpdate, checkForUpdates } = await import('./auto-update')
   const updateInfo = getUpdateInfo()
   const updateReady = updateInfo.available && updateInfo.downloadState === 'ready'
+  const { t } = await getMainI18n(['menu', 'dialogs'])
+  const labels = getMenuI18nLabels(t, updateInfo.latestVersion ?? undefined)
 
   // Build the update menu item based on state
   const updateMenuItem: Electron.MenuItemConstructorOptions = updateReady
     ? {
-        label: `Install Update…\t【${updateInfo.latestVersion}】`,
+        label: labels.installUpdateWithVersion,
         click: async () => {
           await installUpdate()
         }
       }
     : {
-        label: 'Check for Updates…',
+        label: labels.checkForUpdates,
         click: async () => {
           await checkForUpdates({ autoDownload: true })
         }
@@ -62,36 +66,36 @@ export async function rebuildMenu(): Promise<void> {
   const template: Electron.MenuItemConstructorOptions[] = [
     // App menu (macOS only)
     ...(isMac ? [{
-      label: 'Craft Agents',
+      label: labels.appName,
       submenu: [
-        { role: 'about' as const, label: 'About Craft Agents' },
+        { role: 'about' as const, label: labels.aboutApp },
         updateMenuItem,
         { type: 'separator' as const },
         {
-          label: 'Settings...',
+          label: labels.settings,
           accelerator: 'CmdOrCtrl+,',
           click: () => sendToRenderer(IPC_CHANNELS.MENU_OPEN_SETTINGS)
         },
         { type: 'separator' as const },
-        { role: 'hide' as const, label: 'Hide Craft Agents' },
+        { role: 'hide' as const, label: labels.hideApp },
         { role: 'hideOthers' as const },
         { role: 'unhide' as const },
         { type: 'separator' as const },
-        { role: 'quit' as const, label: 'Quit Craft Agents' }
+        { role: 'quit' as const, label: labels.quitApp }
       ]
     }] : []),
 
     // File menu
     {
-      label: 'File',
+      label: labels.file,
       submenu: [
         {
-          label: 'New Chat',
+          label: labels.newChat,
           accelerator: 'CmdOrCtrl+N',
           click: () => sendToRenderer(IPC_CHANNELS.MENU_NEW_CHAT)
         },
         {
-          label: 'New Window',
+          label: labels.newWindow,
           accelerator: 'CmdOrCtrl+Shift+N',
           click: () => {
             const focused = BrowserWindow.getFocusedWindow()
@@ -144,10 +148,10 @@ export async function rebuildMenu(): Promise<void> {
 
     // Debug menu (development only)
     ...(!app.isPackaged ? [{
-      label: 'Debug',
+      label: labels.debug,
       submenu: [
         {
-          label: 'Check for Updates',
+          label: labels.debugCheckForUpdates,
           click: async () => {
             const { checkForUpdates } = await import('./auto-update')
             const info = await checkForUpdates({ autoDownload: true })
@@ -155,7 +159,7 @@ export async function rebuildMenu(): Promise<void> {
           }
         },
         {
-          label: 'Install Update',
+          label: labels.debugInstallUpdate,
           click: async () => {
             const { installUpdate } = await import('./auto-update')
             try {
@@ -167,15 +171,10 @@ export async function rebuildMenu(): Promise<void> {
         },
         { type: 'separator' as const },
         {
-          label: 'Reset to Defaults...',
+          label: labels.resetToDefaults,
           click: async () => {
             const { dialog } = await import('electron')
-            await dialog.showMessageBox({
-              type: 'info',
-              message: 'Reset to Defaults',
-              detail: 'To reset Craft Agent to defaults, quit the app and run:\n\nbun run fresh-start\n\nThis will delete all configuration, credentials, workspaces, and sessions.',
-              buttons: ['OK']
-            })
+            await dialog.showMessageBox(buildResetDefaultsDialogOptions(t))
           }
         }
       ]
@@ -183,14 +182,14 @@ export async function rebuildMenu(): Promise<void> {
 
     // Help menu
     {
-      label: 'Help',
+      label: labels.help,
       submenu: [
         {
-          label: 'Help & Documentation',
+          label: labels.helpDocumentation,
           click: () => shell.openExternal('https://agents.craft.do/docs')
         },
         {
-          label: 'Keyboard Shortcuts',
+          label: labels.keyboardShortcuts,
           accelerator: 'CmdOrCtrl+/',
           click: () => sendToRenderer(IPC_CHANNELS.MENU_KEYBOARD_SHORTCUTS)
         }

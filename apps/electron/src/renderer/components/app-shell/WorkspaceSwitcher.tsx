@@ -6,6 +6,7 @@ import { useSetAtom } from "jotai"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
+import { useTranslation } from "react-i18next"
 import { fullscreenOverlayOpenAtom } from "@/atoms/overlay"
 import {
   DropdownMenu,
@@ -45,6 +46,7 @@ export function WorkspaceSwitcher({
   onSelect,
   onWorkspaceCreated,
 }: WorkspaceSwitcherProps) {
+  const { t } = useTranslation(['settings'])
   const [showCreationScreen, setShowCreationScreen] = useState(false)
   const setFullscreenOverlayOpen = useSetAtom(fullscreenOverlayOpenAtom)
   // Cache stores { dataUrl, sourceUrl } to detect when icon file changes
@@ -85,7 +87,7 @@ export function WorkspaceSwitcher({
       }
     }
     fetchIcons()
-  }, [workspaces])
+  }, [workspaces, iconCache])
 
   // Merge iconCache with workspace iconUrls
   const getIconUrl = (workspace: Workspace): string | undefined => {
@@ -108,7 +110,7 @@ export function WorkspaceSwitcher({
   const handleWorkspaceCreated = (workspace: Workspace) => {
     setShowCreationScreen(false)
     setFullscreenOverlayOpen(false)
-    toast.success(`Created workspace "${workspace.name}"`)
+    toast.success(t('settings:workspace.add.createdToast', { name: workspace.name }))
     onWorkspaceCreated?.(workspace)
     onSelect(workspace.id)
   }
@@ -135,6 +137,7 @@ export function WorkspaceSwitcher({
             Hover effect: subtle background tint */}
         <DropdownMenuTrigger asChild>
         <button
+          type="button"
           className={cn(
             "flex items-center gap-1 w-full min-w-0 justify-start px-2 py-1.5 rounded-md",
             "text-foreground hover:bg-foreground/5 data-[state=open]:bg-foreground/5 transition-colors duration-150",
@@ -155,7 +158,7 @@ export function WorkspaceSwitcher({
           {!isCollapsed && (
             <>
               <FadingText className="ml-1 font-sans min-w-0 text-sm" fadeWidth={36}>
-                {selectedWorkspace?.name || 'Select workspace'}
+                {selectedWorkspace?.name || t('settings:workspace.add.selectPlaceholder')}
               </FadingText>
               <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
             </>
@@ -191,12 +194,13 @@ export function WorkspaceSwitcher({
               {/* Open in new window button - only visible on hover for non-active workspaces */}
               {activeWorkspaceId !== workspace.id && (
                 <button
+                  type="button"
                   className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-foreground/10 transition-opacity"
                   onClick={(e) => {
                     e.stopPropagation()
                     onSelect(workspace.id, true)
                   }}
-                  title="Open in new window"
+                  title={t('settings:workspace.add.openInNewWindow')}
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                 </button>
@@ -215,7 +219,7 @@ export function WorkspaceSwitcher({
           className="font-sans"
         >
           <FolderPlus className="h-4 w-4" />
-          Add Workspace...
+          {t('settings:workspace.add.menuAction')}
         </StyledDropdownMenuItem>
       </StyledDropdownMenuContent>
     </DropdownMenu>

@@ -11,13 +11,19 @@ import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type SendMessageOptions, type LlmConnectionSetup } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
-import { safeJsonParse } from '@craft-agent/shared/utils/files'
-import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, loadStoredConfig, saveConfig, type Workspace, getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, isOpenAIProvider, isCopilotProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus } from '@craft-agent/shared/config'
+import { getAuthType, setAuthType, getPreferencesPath, getCustomModel, setCustomModel, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getAnthropicBaseUrl, setAnthropicBaseUrl, loadStoredConfig, saveConfig, getAppLanguage, setAppLanguage, type Workspace, SUMMARIZATION_MODEL } from '@craft-agent/shared/config'
 import { getSessionAttachmentsPath, validateSessionId } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@craft-agent/shared/sources'
 import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { MarkItDown } from 'markitdown-js'
+import { getMainI18n } from './i18n'
+import {
+  buildDeleteSessionDialogOptions,
+  buildGitBashBrowseDialogOptions,
+  buildLogoutDialogOptions,
+  buildOpenFolderDialogOptions,
+} from './i18n-labels'
 
 /**
  * Sanitizes a filename to prevent path traversal and filesystem issues.
@@ -318,7 +324,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Create a new workspace at a folder path (Obsidian-style: folder IS the workspace)
   ipcMain.handle(IPC_CHANNELS.CREATE_WORKSPACE, async (_event, folderPath: string, name: string) => {
     const rootPath = folderPath
-    const workspace = addWorkspace({ name, rootPath })
+    const workspace = addWorkspace({ name, rootPath }, getAppLanguage() ?? undefined)
     // Make it active
     setActiveWorkspace(workspace.id)
     ipcLog.info(`Created workspace "${name}" at ${rootPath}`)
@@ -374,6 +380,14 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Close the calling window (triggers close event which may be intercepted)
   ipcMain.handle(IPC_CHANNELS.CLOSE_WINDOW, (event) => {
     windowManager.closeWindow(event.sender.id)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GET_APP_LANGUAGE, () => {
+    return getAppLanguage()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SET_APP_LANGUAGE, (_event, language: string) => {
+    setAppLanguage(language)
   })
 
   // Confirm close - force close the window (bypasses interception).
@@ -809,62 +823,42 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
           // Validate image for Claude API
           const validation = validateImageForClaudeAPI(decoded.length, imageSize.width, imageSize.height)
 
-          // Determine if we should resize
-          let shouldResize = validation.needsResize
-          let targetSize = validation.suggestedSize
-
-          if (!validation.valid && validation.errorCode === 'dimension_exceeded') {
-            // Image exceeds 8000px limit - calculate resize to fit within limits
-            const maxDim = IMAGE_LIMITS.MAX_DIMENSION
-            const scale = Math.min(maxDim / imageSize.width, maxDim / imageSize.height)
-            targetSize = {
-              width: Math.floor(imageSize.width * scale),
-              height: Math.floor(imageSize.height * scale),
-            }
-            shouldResize = true
-            ipcLog.info(`Image exceeds ${maxDim}px limit (${imageSize.width}×${imageSize.height}), will resize to ${targetSize.width}×${targetSize.height}`)
-          } else if (!validation.valid) {
-            // Other validation errors (e.g., file size > 5MB) - reject
+          if (!validation.valid) {
+            // Hard error - reject the image
             throw new Error(validation.error)
           }
 
-          // If resize is needed (either recommended or required), do it now
-          if (shouldResize && targetSize) {
-            ipcLog.info(`Resizing image from ${imageSize.width}×${imageSize.height} to ${targetSize.width}×${targetSize.height}`)
+          // If resize is recommended, do it now
+          if (validation.needsResize && validation.suggestedSize) {
+            ipcLog.info(`Resizing image from ${imageSize.width}×${imageSize.height} to ${validation.suggestedSize.width}×${validation.suggestedSize.height}`)
 
-            try {
-              const resized = image.resize({
-                width: targetSize.width,
-                height: targetSize.height,
-                quality: 'best',
-              })
+            const resized = image.resize({
+              width: validation.suggestedSize.width,
+              height: validation.suggestedSize.height,
+              quality: 'best',
+            })
 
-              // Get as PNG for best quality (or JPEG for photos to save space)
-              const isPhoto = attachment.mimeType === 'image/jpeg'
-              decoded = isPhoto ? resized.toJPEG(IMAGE_LIMITS.JPEG_QUALITY_HIGH) : resized.toPNG()
-              wasResized = true
+            // Get as PNG for best quality (or JPEG for photos to save space)
+            const isPhoto = attachment.mimeType === 'image/jpeg'
+            decoded = isPhoto ? resized.toJPEG(90) : resized.toPNG()
+            wasResized = true
+            finalSize = decoded.length
+
+            // Re-validate final size after resize (should be much smaller)
+            if (decoded.length > IMAGE_LIMITS.MAX_SIZE) {
+              // Even after resize it's too big - try more aggressive compression
+              decoded = resized.toJPEG(75)
               finalSize = decoded.length
-
-              // Re-validate final size after resize (should be much smaller)
               if (decoded.length > IMAGE_LIMITS.MAX_SIZE) {
-                // Even after resize it's too big - try more aggressive compression
-                decoded = resized.toJPEG(IMAGE_LIMITS.JPEG_QUALITY_FALLBACK)
-                finalSize = decoded.length
-                if (decoded.length > IMAGE_LIMITS.MAX_SIZE) {
-                  throw new Error(`Image still too large after resize (${(decoded.length / 1024 / 1024).toFixed(1)}MB). Please use a smaller image.`)
-                }
+                throw new Error(`Image still too large after resize (${(decoded.length / 1024 / 1024).toFixed(1)}MB). Please use a smaller image.`)
               }
-
-              ipcLog.info(`Image resized: ${attachment.size} → ${finalSize} bytes (${Math.round((1 - finalSize / attachment.size) * 100)}% reduction)`)
-
-              // Store resized base64 to return to renderer
-              // This is used when sending to Claude API instead of original large base64
-              resizedBase64 = decoded.toString('base64')
-            } catch (resizeError) {
-              ipcLog.error('Image resize failed:', resizeError)
-              const reason = resizeError instanceof Error ? resizeError.message : String(resizeError)
-              throw new Error(`Image too large (${imageSize.width}×${imageSize.height}) and automatic resize failed: ${reason}. Please manually resize it before attaching.`)
             }
+
+            ipcLog.info(`Image resized: ${attachment.size} → ${finalSize} bytes (${Math.round((1 - finalSize / attachment.size) * 100)}% reduction)`)
+
+            // Store resized base64 to return to renderer
+            // This is used when sending to Claude API instead of original large base64
+            resizedBase64 = decoded.toString('base64')
           }
         }
 
@@ -1042,12 +1036,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return null
 
-    const result = await dialog.showOpenDialog(win, {
-      title: 'Select bash.exe',
-      filters: [{ name: 'Executable', extensions: ['exe'] }],
-      properties: ['openFile'],
-      defaultPath: 'C:\\Program Files\\Git\\bin',
-    })
+    const { t } = await getMainI18n(['dialogs'])
+
+    const result = await dialog.showOpenDialog(win, buildGitBashBrowseDialogOptions(t))
 
     if (result.canceled || result.filePaths.length === 0) {
       return null
@@ -1341,15 +1332,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Show logout confirmation dialog
   ipcMain.handle(IPC_CHANNELS.SHOW_LOGOUT_CONFIRMATION, async () => {
     const window = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
-    const result = await dialog.showMessageBox(window, {
-      type: 'warning',
-      buttons: ['Cancel', 'Log Out'],
-      defaultId: 0,
-      cancelId: 0,
-      title: 'Log Out',
-      message: 'Are you sure you want to log out?',
-      detail: 'All conversations will be deleted. This action cannot be undone.',
-    } as Electron.MessageBoxOptions)
+    const { t } = await getMainI18n(['dialogs'])
+    const result = await dialog.showMessageBox(window, buildLogoutDialogOptions(t))
     // result.response is the index of the clicked button
     // 0 = Cancel, 1 = Log Out
     return result.response === 1
@@ -1358,15 +1342,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Show delete session confirmation dialog
   ipcMain.handle(IPC_CHANNELS.SHOW_DELETE_SESSION_CONFIRMATION, async (_event, name: string) => {
     const window = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
-    const result = await dialog.showMessageBox(window, {
-      type: 'warning',
-      buttons: ['Cancel', 'Delete'],
-      defaultId: 0,
-      cancelId: 0,
-      title: 'Delete Conversation',
-      message: `Are you sure you want to delete: "${name}"?`,
-      detail: 'This action cannot be undone.',
-    } as Electron.MessageBoxOptions)
+    const { t } = await getMainI18n(['dialogs'])
+    const result = await dialog.showMessageBox(window, buildDeleteSessionDialogOptions(t, name))
     // result.response is the index of the clicked button
     // 0 = Cancel, 1 = Delete
     return result.response === 1
@@ -1578,7 +1555,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       let testModel: string
       if (!trimmedUrl || trimmedUrl.includes('openrouter.ai') || trimmedUrl.includes('ai-gateway.vercel.sh')) {
         // Anthropic, OpenRouter, and Vercel are all Anthropic-compatible — same model IDs
-        testModel = getDefaultModelForConnection('anthropic')
+        testModel = SUMMARIZATION_MODEL
       } else {
         // Custom endpoint with no model specified — can't test without knowing the model
         return { success: false, error: 'Please specify a model for custom endpoints' }
@@ -1636,7 +1613,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         lowerMsg.includes('tool use is not supported') ||
         (lowerMsg.includes('tool') && lowerMsg.includes('not') && lowerMsg.includes('support'))
       if (isToolSupportError) {
-        const displayModel = normalizedModels[0] || getDefaultModelForConnection('anthropic')
+        const displayModel = modelName?.trim() || SUMMARIZATION_MODEL
         return { success: false, error: `Model "${displayModel}" does not support tool/function calling. Craft Agent requires a model with tool support (e.g. Claude, GPT-4, Gemini).` }
       }
 
@@ -1764,10 +1741,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Open native folder dialog for selecting working directory
   ipcMain.handle(IPC_CHANNELS.OPEN_FOLDER_DIALOG, async () => {
-    const result = await dialog.showOpenDialog({
-      properties: ['openDirectory', 'createDirectory'],
-      title: 'Select Working Directory',
-    })
+    const { t } = await getMainI18n(['dialogs'])
+    const result = await dialog.showOpenDialog(buildOpenFolderDialogOptions(t))
     return result.canceled ? null : result.filePaths[0]
   })
 
@@ -3011,16 +2986,16 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Skills (Workspace-scoped)
   // ============================================================
 
-  // Get all skills for a workspace (and optionally project-level skills from workingDirectory)
-  ipcMain.handle(IPC_CHANNELS.SKILLS_GET, async (_event, workspaceId: string, workingDirectory?: string) => {
-    ipcLog.info(`SKILLS_GET: Loading skills for workspace: ${workspaceId}${workingDirectory ? `, workingDirectory: ${workingDirectory}` : ''}`)
+  // Get all skills for a workspace
+  ipcMain.handle(IPC_CHANNELS.SKILLS_GET, async (_event, workspaceId: string) => {
+    ipcLog.info(`SKILLS_GET: Loading skills for workspace: ${workspaceId}`)
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) {
       ipcLog.error(`SKILLS_GET: Workspace not found: ${workspaceId}`)
       return []
     }
-    const { loadAllSkills } = await import('@craft-agent/shared/skills')
-    const skills = loadAllSkills(workspace.rootPath, workingDirectory)
+    const { loadWorkspaceSkills } = await import('@craft-agent/shared/skills')
+    const skills = loadWorkspaceSkills(workspace.rootPath)
     ipcLog.info(`SKILLS_GET: Loaded ${skills.length} skills from ${workspace.rootPath}`)
     return skills
   })

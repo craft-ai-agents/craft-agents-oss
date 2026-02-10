@@ -41,6 +41,8 @@ const api: ElectronAPI = {
   openSessionInNewWindow: (workspaceId: string, sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_SESSION_IN_NEW_WINDOW, workspaceId, sessionId),
   switchWorkspace: (workspaceId: string) => ipcRenderer.invoke(IPC_CHANNELS.SWITCH_WORKSPACE, workspaceId),
   closeWindow: () => ipcRenderer.invoke(IPC_CHANNELS.CLOSE_WINDOW),
+  getAppLanguage: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_LANGUAGE),
+  setAppLanguage: (language: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_APP_LANGUAGE, language),
   confirmCloseWindow: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_CONFIRM_CLOSE),
   onCloseRequested: (callback: () => void) => {
     const handler = () => callback()
@@ -302,8 +304,8 @@ const api: ElectronAPI = {
   },
 
   // Skills
-  getSkills: (workspaceId: string, workingDirectory?: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SKILLS_GET, workspaceId, workingDirectory),
+  getSkills: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SKILLS_GET, workspaceId),
   getSkillFiles: (workspaceId: string, skillSlug: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SKILLS_GET_FILES, workspaceId, skillSlug),
   deleteSkill: (workspaceId: string, skillSlug: string) =>

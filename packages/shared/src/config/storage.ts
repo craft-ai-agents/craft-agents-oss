@@ -45,10 +45,10 @@ import {
 
 // Config stored in JSON file (credentials stored in encrypted file, not here)
 export interface StoredConfig {
-  // LLM Connections (authoritative source for auth and model config)
-  llmConnections?: LlmConnection[];
-  defaultLlmConnection?: string;  // Slug of default connection for new sessions
-
+  authType?: AuthType;
+  anthropicBaseUrl?: string;  // Custom Anthropic API base URL (for third-party compatible APIs)
+  customModel?: string;  // Custom model ID override (for third-party APIs like OpenRouter, Ollama)
+  language?: string;
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   activeSessionId: string | null;  // Currently active session (primary scope)
@@ -168,7 +168,7 @@ export function loadStoredConfig(): StoredConfig | null {
     // Ensure workspace folder structure exists for all workspaces
     for (const workspace of config.workspaces) {
       if (!isValidWorkspace(workspace.rootPath)) {
-        createWorkspaceAtPath(workspace.rootPath, workspace.name);
+        createWorkspaceAtPath(workspace.rootPath, workspace.name, undefined, config.language);
       }
     }
 
@@ -203,6 +203,18 @@ export function saveConfig(config: StoredConfig): void {
 // - getAuthType/setAuthType -> derive from getDefaultLlmConnection()/getLlmConnection()
 // - getAnthropicBaseUrl/setAnthropicBaseUrl -> use connection.baseUrl
 // - getCustomModel/setCustomModel -> use connection.defaultModel
+
+export function getAppLanguage(): string | null {
+  const config = loadStoredConfig();
+  return config?.language ?? null;
+}
+
+export function setAppLanguage(language: string): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.language = language;
+  saveConfig(config);
+}
 
 
 /**
@@ -489,7 +501,10 @@ export async function switchWorkspaceAtomic(workspaceId: string): Promise<{ work
  * Add a workspace to the global config.
  * @param workspace - Workspace data (must include rootPath)
  */
-export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Workspace {
+export function addWorkspace(
+  workspace: Omit<Workspace, 'id' | 'createdAt'>,
+  language?: string,
+): Workspace {
   const config = loadStoredConfig();
   if (!config) {
     throw new Error('No config found');
@@ -519,7 +534,12 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Wo
 
   // Create workspace folder structure if it doesn't exist
   if (!isValidWorkspace(newWorkspace.rootPath)) {
-    createWorkspaceAtPath(newWorkspace.rootPath, newWorkspace.name);
+    createWorkspaceAtPath(
+      newWorkspace.rootPath,
+      newWorkspace.name,
+      undefined,
+      language ?? config.language,
+    );
   }
 
   config.workspaces.push(newWorkspace);

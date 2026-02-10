@@ -1,4 +1,6 @@
 import { Shield, Check, X, RefreshCw } from 'lucide-react'
+import type { TFunction } from 'i18next'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { PermissionRequest as PermissionRequestType } from '../../../../../shared/types'
@@ -9,6 +11,18 @@ interface PermissionRequestProps {
   onResponse: (response: PermissionResponse) => void
   /** When true, removes container styling (shadow, rounded) - used when wrapped by InputContainer */
   unstyled?: boolean
+}
+
+export function getPermissionRequestLabels(t: TFunction) {
+  return {
+    title: t('common:permissionRequest.title'),
+    actions: {
+      allow: t('common:permissionRequest.actions.allow'),
+      alwaysAllow: t('common:permissionRequest.actions.alwaysAllow'),
+      deny: t('common:permissionRequest.actions.deny'),
+    },
+    tip: t('common:permissionRequest.tip'),
+  }
 }
 
 /**
@@ -22,6 +36,8 @@ interface PermissionRequestProps {
  * - Action buttons: Allow, Always Allow, Deny
  */
 export function PermissionRequest({ request, onResponse, unstyled = false }: PermissionRequestProps) {
+  const { t } = useTranslation(['common'])
+  const labels = getPermissionRequestLabels(t)
 
   const handleAllow = () => {
     onResponse({ type: 'permission', allowed: true, alwaysAllow: false })
@@ -55,7 +71,7 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
           <div className="flex-1 min-w-0 space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-foreground">
-                Permission Required
+                {labels.title}
               </span>
               <span className="text-xs text-muted-foreground">({request.toolName})</span>
             </div>
@@ -81,7 +97,7 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
           data-tutorial="permission-allow-button"
         >
           <Check className="h-3.5 w-3.5" />
-          Allow
+          {labels.actions.allow}
         </Button>
         <Button
           size="sm"
@@ -90,7 +106,7 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
           onClick={handleAlwaysAllow}
         >
           <RefreshCw className="h-3.5 w-3.5" />
-          Always Allow
+          {labels.actions.alwaysAllow}
         </Button>
         <Button
           size="sm"
@@ -99,7 +115,7 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
           onClick={handleDeny}
         >
           <X className="h-3.5 w-3.5" />
-          Deny
+          {labels.actions.deny}
         </Button>
 
         {/* Spacer */}
@@ -107,7 +123,7 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
 
         {/* Tip text */}
         <span className="text-[10px] text-muted-foreground">
-          "Always Allow" remembers this command for the session
+          {labels.tip}
         </span>
       </div>
     </div>

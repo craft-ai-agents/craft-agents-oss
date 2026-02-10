@@ -1,0 +1,435 @@
+{
+  "pageTitle": "应用设置",
+  "sections": {
+    "notifications": {
+      "title": "通知",
+      "label": "桌面通知",
+      "description": "当 AI 完成聊天工作时提醒你。"
+    },
+    "language": {
+      "title": "语言",
+      "description": "选择应用显示语言。",
+      "label": "应用语言",
+      "options": {
+        "english": "English",
+        "chinese": "简体中文"
+      }
+    },
+    "apiConnection": {
+      "title": "API 连接",
+      "description": "你的 AI 智能体如何连接到语言模型。",
+      "connectionType": "连接类型",
+      "connectionTypeOauth": "Claude Pro/Max — 使用你的 Claude 订阅",
+      "connectionTypeApiKey": "API Key — Anthropic、OpenRouter 或兼容 API",
+      "connectionTypeNone": "未配置",
+      "editButton": "编辑",
+      "closeButton": "关闭（Esc）"
+    },
+    "about": {
+      "title": "关于",
+      "versionLabel": "版本",
+      "loadingVersion": "加载中...",
+      "checkForUpdatesLabel": "检查更新",
+      "checkingLabel": "正在检查...",
+      "checkNowLabel": "立即检查",
+      "updateReadyLabel": "更新已准备",
+      "restartToUpdateLabel": "重启以更新到 v{{version}}",
+      "downloadingLabel": "正在下载 v{{version}}...",
+      "downloadingProgressLabel": "正在下载 v{{version}}（{{progress}}%）"
+    }
+  },
+  "appearance": {
+    "pageTitle": "外观",
+    "defaultTheme": {
+      "title": "默认主题",
+      "modeLabel": "模式",
+      "colorThemeLabel": "颜色主题",
+      "fontLabel": "字体",
+      "modeOptions": {
+        "system": "系统",
+        "light": "浅色",
+        "dark": "深色"
+      },
+      "fontOptions": {
+        "inter": "Inter",
+        "system": "系统"
+      },
+      "themeOptionDefault": "默认"
+    },
+    "workspaceThemes": {
+      "title": "工作区主题",
+      "description": "为每个工作区覆盖主题设置",
+      "useDefault": "使用默认",
+      "useDefaultWithName": "使用默认（{{name}}）"
+    },
+    "toolIcons": {
+      "title": "工具图标",
+      "description": "聊天活动中显示在 CLI 命令旁的图标，存储于 ~/.craft-agent/tool-icons/。",
+      "editFileLabel": "编辑文件",
+      "searchPlaceholder": "搜索工具...",
+      "emptyState": "未找到工具图标映射",
+      "table": {
+        "icon": "图标",
+        "tool": "工具",
+        "commands": "命令"
+      }
+    }
+  },
+  "input": {
+    "pageTitle": "输入",
+    "typing": {
+      "title": "输入行为",
+      "description": "控制聊天输入框中的文本输入方式。",
+      "autoCapitalisation": {
+        "label": "自动大写",
+        "description": "输入消息时自动将首字母大写。"
+      },
+      "spellCheck": {
+        "label": "拼写检查",
+        "description": "输入时为拼写错误的单词添加下划线。"
+      }
+    },
+    "sending": {
+      "title": "发送",
+      "description": "选择发送消息的方式。"
+    },
+    "sendMessage": {
+      "label": "发送消息方式",
+      "description": "发送消息的键盘快捷键",
+      "options": {
+        "enter": {
+          "label": "Enter",
+          "description": "使用 Shift+Enter 换行"
+        },
+        "cmdEnter": {
+          "label": "⌘ Enter",
+          "description": "使用 Enter 换行"
+        }
+      }
+    }
+  },
+  "permissions": {
+    "pageTitle": "权限",
+    "loading": "正在加载权限",
+    "about": {
+      "title": "关于权限",
+      "paragraph1": "权限决定智能体的自主程度。在探索模式下，智能体只能阅读和研究，非常适合理解问题再开始修改。当你准备好后，切换到执行模式即可让智能体自动实施计划。",
+      "paragraph2": "推荐流程：先用探索模式调查，审阅计划后再执行。",
+      "learnMore": "了解更多"
+    },
+    "defaultPermissions": {
+      "title": "默认权限",
+      "description": "探索模式下应用级允许的模式。未列出命令将被阻止。",
+      "fullscreenTitle": "默认权限",
+      "empty": {
+        "title": "未找到默认权限。",
+        "descriptionPrefix": "默认权限应位于"
+      }
+    },
+    "customPermissions": {
+      "title": "工作区自定义",
+      "description": "扩展上述默认规则的工作区级模式。",
+      "fullscreenTitle": "工作区自定义",
+      "empty": {
+        "title": "未配置自定义权限。",
+        "descriptionPrefix": "在工作区创建",
+        "descriptionSuffix": "文件以添加自定义规则。"
+      }
+    },
+    "actions": {
+      "editFile": "编辑文件"
+    },
+    "table": {
+      "writeToPattern": "写入：{{pattern}}",
+      "customBlockedTool": "自定义阻止工具",
+      "customBashPattern": "自定义 Bash 模式",
+      "customMcpPattern": "自定义 MCP 模式",
+      "customApiEndpoint": "自定义 API 端点",
+      "allowedWritePath": "允许写入路径"
+    }
+  },
+  "shortcuts": {
+    "pageTitle": "快捷键",
+    "sections": {
+      "global": {
+        "title": "全局",
+        "focusSidebar": "聚焦侧边栏",
+        "focusSessionList": "聚焦会话列表",
+        "focusChatInput": "聚焦聊天输入框",
+        "newChat": "新建聊天",
+        "toggleSidebar": "切换侧边栏",
+        "openSettings": "打开设置"
+      },
+      "navigation": {
+        "title": "导航",
+        "moveNextZone": "移动到下一个区域",
+        "cyclePermissionMode": "切换权限模式",
+        "moveBetweenZones": "在区域间移动（列表中）",
+        "navigateItems": "导航列表项目",
+        "goToFirstItem": "跳转到第一项",
+        "goToLastItem": "跳转到最后一项",
+        "closeDialog": "关闭对话框 / 取消输入"
+      },
+      "sessionList": {
+        "title": "会话列表",
+        "sessionFocusChatInput": "聚焦聊天输入框",
+        "deleteSession": "删除会话"
+      },
+      "chat": {
+        "title": "聊天",
+        "sendMessage": "发送消息",
+        "newLine": "换行",
+        "sendMessageAlt": "发送消息"
+      }
+    }
+  },
+  "preferences": {
+    "pageTitle": "偏好设置",
+    "basicInfo": {
+      "title": "基础信息",
+      "description": "帮助 Craft Agent 个性化你的回答。",
+      "name": {
+        "label": "姓名",
+        "description": "Craft Agent 应如何称呼你。",
+        "placeholder": "你的名字"
+      },
+      "timezone": {
+        "label": "时区",
+        "description": "用于“明天”“下周”等相对日期。",
+        "placeholder": "例如 America/New_York"
+      },
+      "language": {
+        "label": "语言",
+        "description": "Craft Agent 回复的首选语言。",
+        "placeholder": "例如 中文"
+      }
+    },
+    "location": {
+      "title": "位置",
+      "description": "启用天气、本地时间和区域上下文等位置相关响应。",
+      "city": {
+        "label": "城市",
+        "description": "用于本地信息和上下文的城市。",
+        "placeholder": "例如 纽约"
+      },
+      "country": {
+        "label": "国家",
+        "description": "用于区域格式和上下文的国家。",
+        "placeholder": "例如 中国"
+      }
+    },
+    "notes": {
+      "title": "备注",
+      "description": "帮助 Craft Agent 理解你的偏好的自由文本。",
+      "placeholder": "任何你希望 Craft Agent 了解的额外信息..."
+    },
+    "actions": {
+      "editFile": "编辑文件"
+    }
+  },
+"navigator": {
+    "items": {
+      "app": {
+        "label": "应用",
+        "description": "通知、API 连接与更新"
+      },
+      "appearance": {
+        "label": "外观",
+        "description": "主题、字体与工具图标"
+      },
+      "input": {
+        "label": "输入",
+        "description": "输入行为与发送方式"
+      },
+      "workspace": {
+        "label": "工作区",
+        "description": "模型、模式切换与高级设置"
+      },
+      "permissions": {
+        "label": "权限",
+        "description": "探索模式允许的命令"
+      },
+      "labels": {
+        "label": "标签",
+        "description": "标签层级与自动应用规则"
+      },
+      "shortcuts": {
+        "label": "快捷键",
+        "description": "键盘快捷键参考"
+      },
+      "preferences": {
+        "label": "偏好设置",
+        "description": "你的个人偏好"
+      }
+    },
+    "openInNewWindow": "在新窗口打开"
+  },
+  "navigatorItems": {
+    "openInNewWindow": "在新窗口打开"
+  },
+  "labels": {
+    "pageTitle": "标签",
+    "about": {
+      "title": "关于标签",
+      "paragraph1": "标签帮助你用彩色标记整理对话。可按项目、主题或优先级分类，方便筛选和查找相关会话。",
+      "paragraph2": {
+        "prefix": "每个标签都可以选择性地包含一个",
+        "valueLabel": "值",
+        "suffix": "，并指定类型（文本、数字或日期）。这让标签成为结构化元数据 — 例如，\"priority\" 标签的值为 3，或 \"due\" 标签设置为日期。"
+      },
+      "paragraph3": {
+        "ruleLabel": "自动应用规则",
+        "suffix": "会在消息匹配正则模式时自动添加标签。例如，粘贴 Linear 任务 URL 就能自动标记项目名称与任务 ID — 无需手动操作。"
+      }
+    },
+    "hierarchy": {
+      "title": "标签层级",
+      "description": "此工作区的全部标签配置。标签可以嵌套形成分组。",
+      "fullscreenTitle": "标签层级",
+      "emptyTitle": "暂无标签配置。",
+      "emptyDescription": {
+        "prefix": "标签可由智能体创建，或在工作区中编辑 ",
+        "suffix": "。"
+      }
+    },
+    "autoRules": {
+      "title": "自动应用规则",
+      "description": "在用户消息中匹配到正则模式时自动应用标签。例如，粘贴 Linear 任务 URL 会自动标记项目名称与任务 ID。",
+      "fullscreenTitle": "自动应用规则"
+    }
+  },
+  "workspace": {
+    "add": {
+      "title": "添加工作区",
+      "description": "让你的想法与实现它们的工具相遇。",
+      "createNew": "新建工作区",
+      "openFolder": "打开文件夹",
+      "openDescription": "选择现有文件夹作为工作区。",
+      "back": "返回",
+      "createTitle": "创建工作区",
+      "createDescription": "输入名称并选择保存位置。",
+      "nameLabel": "工作区名称",
+      "placeholder": "我的工作区",
+      "locationLabel": "位置",
+      "defaultLocationTitle": "默认位置",
+      "defaultLocationSubtitle": "位于 .craft-agent 文件夹下",
+      "customLocationTitle": "选择位置",
+      "customLocationSubtitle": "选择一个位置来存放新工作区。",
+      "browse": "浏览",
+      "createAction": "创建",
+      "creating": "正在创建...",
+      "openTitle": "选择现有文件夹",
+      "openDescriptionTitle": "选择任意文件夹作为工作区。",
+      "openAction": "打开",
+      "opening": "正在打开...",
+      "noFolderSelected": "未选择文件夹",
+      "slugExists": "已存在名为 \"{{slug}}\" 的工作区",
+      "menuAction": "添加工作区...",
+      "selectPlaceholder": "选择工作区",
+      "openInNewWindow": "在新窗口打开",
+      "createdToast": "已创建工作区 \"{{name}}\""
+    },
+    "defaultName": "我的工作区",
+    "pageTitle": "工作区设置",
+    "emptyState": "未选择工作区",
+    "renameDialog": {
+      "title": "重命名工作区",
+      "placeholder": "输入工作区名称..."
+    },
+    "actions": {
+      "edit": "编辑",
+      "change": "更改...",
+      "clear": "清除",
+      "uploading": "正在上传..."
+    },
+    "info": {
+      "title": "工作区信息",
+      "name": {
+        "label": "名称",
+        "description": "未命名"
+      },
+      "icon": {
+        "label": "图标",
+        "changeLabel": "更改"
+      }
+    },
+    "model": {
+      "title": "模型",
+      "defaultModel": {
+        "label": "默认模型",
+        "description": "新聊天使用的 AI 模型",
+        "fixedDescription": "由 API 连接设置",
+        "options": {
+          "opus": {
+            "description": "适合复杂任务的最高能力"
+          },
+          "sonnet": {
+            "description": "适合日常任务"
+          },
+          "haiku": {
+            "description": "最快响应"
+          }
+        }
+      },
+      "thinkingLevel": {
+        "label": "思考级别",
+        "description": "新聊天的推理深度"
+      },
+      "thinkingLevels": {
+        "off": {
+          "label": "不思考",
+          "description": "最快响应，无推理"
+        },
+        "think": {
+          "label": "思考",
+          "description": "速度与推理平衡"
+        },
+        "max": {
+          "label": "深度思考",
+          "description": "复杂任务的最深推理"
+        }
+      }
+    },
+    "permissions": {
+      "title": "权限",
+      "defaultMode": {
+        "label": "默认模式",
+        "description": "控制 AI 可以执行的操作"
+      },
+      "modeOptions": {
+        "safe": {
+          "label": "探索",
+          "shortLabel": "探索",
+          "description": "只读，不允许更改"
+        },
+        "ask": {
+          "label": "询问后编辑",
+          "shortLabel": "询问",
+          "description": "编辑前提示确认"
+        },
+        "allowAll": {
+          "label": "执行",
+          "shortLabel": "执行",
+          "description": "完全自动执行"
+        },
+        "shortcutHint": "SHIFT+TAB"
+      }
+    },
+    "modeCycling": {
+      "title": "模式切换",
+      "description": "选择 Shift+Tab 可循环切换的模式",
+      "error": "至少需要 2 种模式"
+    },
+    "advanced": {
+      "title": "高级",
+      "workingDirectory": {
+        "label": "默认工作目录",
+        "notSet": "未设置（使用会话文件夹）"
+      },
+      "localMcp": {
+        "label": "本地 MCP 服务器",
+        "description": "启用 stdio 子进程服务器"
+      }
+    }
+  }
+}

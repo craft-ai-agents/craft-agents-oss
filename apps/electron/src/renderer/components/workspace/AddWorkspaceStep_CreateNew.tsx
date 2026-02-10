@@ -3,7 +3,7 @@ import { ArrowLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { slugify } from "@/lib/slugify"
 import { Input } from "../ui/input"
-import { Button } from "../ui/button"
+import { useTranslation } from "react-i18next"
 import { AddWorkspaceContainer, AddWorkspaceStepHeader, AddWorkspaceSecondaryButton, AddWorkspacePrimaryButton } from "./primitives"
 import { AddWorkspace_RadioOption } from "./AddWorkspace_RadioOption"
 
@@ -27,6 +27,7 @@ export function AddWorkspaceStep_CreateNew({
   onCreate,
   isCreating
 }: AddWorkspaceStep_CreateNewProps) {
+  const { t } = useTranslation(['settings'])
   const [name, setName] = useState('')
   const [locationOption, setLocationOption] = useState<LocationOption>('default')
   const [customPath, setCustomPath] = useState<string | null>(null)
@@ -92,35 +93,37 @@ export function AddWorkspaceStep_CreateNew({
   return (
     <AddWorkspaceContainer>
       {/* Back button */}
-      <button
-        onClick={onBack}
-        disabled={isCreating}
+          <button
+            type="button"
+            onClick={onBack}
+            disabled={isCreating}
         className={cn(
           "self-start flex items-center gap-1 text-sm text-muted-foreground",
           "hover:text-foreground transition-colors mb-4",
           isCreating && "opacity-50 cursor-not-allowed"
         )}
       >
-        <ArrowLeft className="h-4 w-4" />
-        Back
-      </button>
+            <ArrowLeft className="h-4 w-4" />
+            {t('settings:workspace.add.back')}
+          </button>
 
-      <AddWorkspaceStepHeader
-        title="Create workspace"
-        description="Enter a name and choose where to store your workspace."
-      />
+        <AddWorkspaceStepHeader
+          title={t('settings:workspace.add.createTitle')}
+          description={t('settings:workspace.add.createDescription')}
+        />
 
       <div className="mt-6 w-full space-y-6">
         {/* Workspace name */}
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-foreground mb-2.5">
-            Workspace name
+          <label className="block text-sm font-medium text-foreground mb-2.5" htmlFor="workspace-name">
+            {t('settings:workspace.add.nameLabel')}
           </label>
           <div className="bg-background shadow-minimal rounded-lg">
             <Input
+              id="workspace-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My Workspace"
+              placeholder={t('settings:workspace.add.placeholder')}
               disabled={isCreating}
               autoFocus
               className="border-0 bg-transparent shadow-none"
@@ -133,9 +136,9 @@ export function AddWorkspaceStep_CreateNew({
 
         {/* Location selection */}
         <div className="space-y-3">
-          <label className="block text-sm font-medium text-foreground mb-2.5">
-            Location
-          </label>
+          <div className="block text-sm font-medium text-foreground mb-2.5">
+            {t('settings:workspace.add.locationLabel')}
+          </div>
 
           {/* Default location option */}
           <AddWorkspace_RadioOption
@@ -143,8 +146,8 @@ export function AddWorkspaceStep_CreateNew({
             checked={locationOption === 'default'}
             onChange={() => setLocationOption('default')}
             disabled={isCreating}
-            title="Default location"
-            subtitle="under .craft-agent folder"
+            title={t('settings:workspace.add.defaultLocationTitle')}
+            subtitle={t('settings:workspace.add.defaultLocationSubtitle')}
           />
 
           {/* Custom location option */}
@@ -153,8 +156,8 @@ export function AddWorkspaceStep_CreateNew({
             checked={locationOption === 'custom'}
             onChange={() => setLocationOption('custom')}
             disabled={isCreating}
-            title="Choose a location"
-            subtitle={customPath || "Pick a place to put your new workspace."}
+            title={t('settings:workspace.add.customLocationTitle')}
+            subtitle={customPath || t('settings:workspace.add.customLocationSubtitle')}
             action={locationOption === 'custom' ? (
               <AddWorkspaceSecondaryButton
                 onClick={(e) => {
@@ -163,7 +166,7 @@ export function AddWorkspaceStep_CreateNew({
                 }}
                 disabled={isCreating}
               >
-                Browse
+                {t('settings:workspace.add.browse')}
               </AddWorkspaceSecondaryButton>
             ) : undefined}
           />
@@ -174,9 +177,9 @@ export function AddWorkspaceStep_CreateNew({
           onClick={handleCreate}
           disabled={!canCreate}
           loading={isCreating}
-          loadingText="Creating..."
+          loadingText={t('settings:workspace.add.creating')}
         >
-          Create
+          {t('settings:workspace.add.createAction')}
         </AddWorkspacePrimaryButton>
       </div>
     </AddWorkspaceContainer>

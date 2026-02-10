@@ -1,0 +1,551 @@
+{
+  "edit": "编辑",
+  "closeEsc": "关闭（Esc）",
+  "loading": "加载中...",
+  "open": "打开",
+  "pathCopied": "路径已复制到剪贴板",
+  "unknownError": "未知错误",
+  "undo": "撤销",
+  "clearSearch": "清除搜索",
+  "menu": {
+    "share": "分享",
+    "shared": "已分享",
+    "openInNewWindow": "在新窗口打开",
+    "learnMore": "了解更多",
+    "configureStatuses": "配置状态",
+    "addSource": "添加来源",
+    "addSkill": "添加技能",
+    "addNewLabel": "添加新标签",
+    "editLabels": "编辑标签",
+    "deleteLabel": "删除标签",
+    "editViews": "编辑视图",
+    "deleteView": "删除视图",
+    "learnMoreApis": "了解 API",
+    "learnMoreMcp": "了解 MCP",
+    "learnMoreLocalFolders": "了解本地文件夹",
+    "learnMoreSources": "了解来源",
+    "showInFinder": "在访达中显示",
+    "deleteSource": "删除来源",
+    "deleteSkill": "删除技能",
+    "status": "状态",
+    "labels": "标签",
+    "flag": "标记",
+    "unflag": "取消标记",
+    "markAsUnread": "标记为未读",
+    "rename": "重命名",
+    "regenerateTitle": "重新生成标题",
+    "copyPath": "复制路径",
+    "delete": "删除"
+  },
+  "sources": {
+    "add": "添加来源",
+    "type": {
+      "api": "API",
+      "mcp": "MCP",
+      "local": "本地",
+      "localFolder": "本地文件夹"
+    },
+    "emptyTitle": "暂无来源配置。",
+    "emptyTitleWithType": "暂无 {{type}} 来源配置。",
+    "emptyDescription": "来源将智能体连接到外部数据，例如 MCP 服务、REST API 和本地文件夹。",
+    "learnMore": "了解更多",
+    "addSource": "添加来源",
+    "addApi": {
+      "title": "添加 API",
+      "placeholder": "你想连接哪个 API？",
+      "example": "连接 OpenAI API"
+    },
+    "addMcp": {
+      "title": "添加 MCP 服务",
+      "placeholder": "你想连接哪个 MCP 服务？",
+      "example": "连接 Linear"
+    },
+    "addLocal": {
+      "title": "添加本地文件夹",
+      "placeholder": "你想连接哪个文件夹？",
+      "example": "连接我的 Obsidian 仓库"
+    },
+    "addGeneric": {
+      "title": "添加来源",
+      "placeholder": "你想连接什么？",
+      "example": "连接我的 Craft 空间"
+    },
+    "status": {
+      "needsAuth": "需要认证",
+      "failed": "已断开",
+      "untested": "未测试",
+      "localDisabled": "已禁用"
+    }
+  },
+  "skills": {
+    "emptyTitle": "暂无技能配置",
+    "emptyDescription": "技能是可复用的指令，用于教会智能体特定能力。",
+    "learnMore": "了解更多",
+    "addSkill": "添加技能",
+    "addSkillPlaceholder": "你希望我学会做什么？"
+  },
+  "labels": {
+    "addLabelPlaceholder": "你想创建什么标签？"
+  },
+  "editPopover": {
+    "basePlaceholder": "描述一下你想修改什么...",
+    "placeholderWithExample": "{{placeholder}}，例如：\"{{example}}\"",
+    "compact": {
+      "justTellMe": "直接告诉我改什么",
+      "describeUpdate": "描述你的修改",
+      "whatModify": "你希望我改哪里？"
+    },
+    "examples": {
+      "workspacePermissions": "允许在探索模式运行 'make build'",
+      "defaultPermissions": "允许 git fetch 命令",
+      "skillInstructions": "添加错误处理指南",
+      "skillMetadata": "更新技能描述",
+      "sourceGuide": "补充限流文档",
+      "sourceConfig": "更新显示名称",
+      "sourcePermissions": "在探索模式允许 list 操作",
+      "sourceToolPermissions": "仅允许读操作（list、get、search）",
+      "preferencesNotes": "添加代码风格偏好",
+      "addSkill": "按我们的代码标准审查 PR",
+      "editStatuses": "添加一个 \"阻塞中\" 状态",
+      "editLabels": "添加一个红色 \"Bug\" 标签",
+      "editAutoRules": "添加规则以识别 GitHub issue URL",
+      "addLabel": "一个红色 \"Bug\" 标签",
+      "editViews": "添加 \"Stale\" 视图（7 天未活跃）",
+      "editToolIcons": "给自定义 CLI 工具 \"deploy\" 添加图标"
+    }
+  },
+  "labelsMenu": {
+    "states": "状态"
+  },
+  "navigation": {
+    "newChat": "新建对话",
+    "allChats": "全部对话",
+    "allSkills": "全部技能",
+    "flagged": "已标记",
+    "status": "状态",
+    "labels": "标签",
+    "sources": "来源",
+    "skills": "技能",
+    "settings": "设置",
+    "apis": "API",
+    "mcps": "MCP",
+    "localFolders": "本地文件夹",
+    "helpDocs": "帮助与文档",
+    "allDocumentation": "全部文档",
+    "permissions": "权限",
+    "views": "视图"
+  },
+  "filters": {
+    "filterChats": "筛选对话",
+    "clear": "清除",
+    "searchPlaceholder": "搜索状态与标签...",
+    "statuses": "状态",
+    "labels": "标签",
+    "search": "搜索",
+    "noLabelsConfigured": "暂无标签配置",
+    "noMatchingFilters": "没有匹配的状态或标签"
+  },
+  "filterMode": {
+    "include": "包含",
+    "exclude": "排除",
+    "remove": "清除"
+  },
+  "actions": {
+    "cancel": "取消",
+    "save": "保存",
+    "revert": "撤销",
+    "reset": "重置",
+    "delete": "删除",
+    "remove": "移除",
+    "done": "完成",
+    "editFile": "编辑文件"
+  },
+  "rename": {
+    "title": "重命名",
+    "placeholder": "输入名称..."
+  },
+  "reset": {
+    "title": "重置应用",
+    "description": "这将永久删除：",
+    "warningTitle": "请先备份重要数据！",
+    "warningDescription": "此操作无法撤销。",
+    "confirmationPrompt": "确认请计算：{{a}} + {{b}} =",
+    "placeholder": "输入答案",
+    "confirm": "重置应用",
+    "items": {
+      "workspaces": "所有工作区及其设置",
+      "credentials": "所有凭据与 API Key",
+      "preferences": "所有偏好设置与会话数据"
+    }
+  },
+  "panels": {
+    "filesComingSoon": "文件面板 - 即将推出",
+    "historyComingSoon": "历史面板 - 即将推出"
+  },
+  "fileViewer": {
+    "emptyTitle": "未选择文件",
+    "emptyDescription": "点击聊天中的文件路径在此查看",
+    "loading": "正在加载内容...",
+    "errorTitle": "文件加载失败"
+  },
+  "toc": {
+    "empty": "无目录"
+  },
+  "info": {
+    "errorLoading": "内容加载失败",
+    "authRequired": "请先认证此来源以查看可用数据",
+    "sourceNotFound": "未找到来源",
+    "skillNotFound": "未找到技能"
+  },
+  "sourceInfo": {
+    "disabledTitle": "来源已禁用",
+    "disabledDescription": "设置 > 高级 中已禁用本地 MCP 服务。启用后即可使用该来源。",
+    "deletedToast": "已删除来源：{{name}}",
+    "deleteFailed": "删除来源失败",
+    "connectionTitle": "连接",
+    "connectionLocalCommand": "启动该 MCP 服务的本地命令。",
+    "connectionServerUrl": "服务器 URL 与连接状态。",
+    "connectionApiBaseUrl": "API 请求的基础地址。",
+    "connectionLocalPath": "该来源的本地文件路径。",
+    "connectionDetails": "连接详情。",
+    "permissionsTitle": "权限",
+    "permissionsMcp": "探索模式下允许的工具规则。",
+    "permissionsApi": "探索模式下允许的 API 端点。",
+    "permissionsLocal": "探索模式下的访问规则。",
+    "toolsTitle": "工具",
+    "toolsDescription": "该服务器提供的操作。",
+    "documentationTitle": "文档",
+    "documentationDescription": "智能体的上下文与指南。",
+    "typeLabel": "类型",
+    "urlLabel": "URL",
+    "lastTestedLabel": "上次测试"
+  },
+  "skillInfo": {
+    "metadataTitle": "元数据",
+    "deletedToast": "已删除技能：{{name}}",
+    "deleteFailed": "删除技能失败",
+    "slugLabel": "标识",
+    "nameLabel": "名称",
+    "descriptionLabel": "描述",
+    "locationLabel": "位置",
+    "permissionModesTitle": "权限模式",
+    "permissionModesDescription": "\"始终允许的工具\" 与权限模式的关系：",
+    "permissionModeExplore": "探索",
+    "permissionModeAsk": "编辑前确认",
+    "permissionModeAuto": "自动",
+    "permissionBlocked": "已阻止 — 无论如何都禁止写入工具",
+    "permissionAutoApproved": "自动通过 — 已允许的工具不再提示",
+    "permissionNoEffect": "无影响 — 所有工具已自动批准",
+    "instructionsTitle": "说明",
+    "noInstructions": "暂无说明。"
+  },
+  "table": {
+    "searchPlaceholder": "搜索..."
+  },
+  "permissionsTable": {
+    "access": "权限",
+    "type": "类型",
+    "pattern": "规则",
+    "comment": "备注",
+    "searchPlaceholder": "搜索规则...",
+    "empty": "暂无权限配置",
+    "fullscreen": "全屏查看",
+    "patternCopied": "规则已复制到剪贴板",
+    "patternCopyFailed": "复制规则失败",
+    "ruleCount_one": "{{count}} 条规则",
+    "ruleCount_other": "{{count}} 条规则"
+  },
+  "tables": {
+    "searchPlaceholder": "搜索...",
+    "emptyDefault": "暂无数据",
+    "permissions": {
+      "accessHeader": "权限",
+      "typeHeader": "类型",
+      "patternHeader": "规则",
+      "commentHeader": "备注",
+      "searchPlaceholder": "搜索规则...",
+      "empty": "暂无权限配置",
+      "fullscreen": "全屏查看",
+      "patternCopied": "规则已复制到剪贴板",
+      "patternCopyFailed": "复制规则失败",
+      "subtitle": {
+        "rule": "{{count}} 条规则",
+        "rules": "{{count}} 条规则"
+      }
+    },
+    "labels": {
+      "colorHeader": "颜色",
+      "nameHeader": "名称",
+      "typeHeader": "类型",
+      "searchPlaceholder": "搜索标签...",
+      "empty": "暂无标签配置",
+      "fullscreen": "全屏查看",
+      "subtitle": {
+        "label": "{{count}} 个标签",
+        "labels": "{{count}} 个标签"
+      }
+    },
+    "autoRules": {
+      "labelHeader": "标签",
+      "patternHeader": "规则",
+      "flagsHeader": "标记",
+      "templateHeader": "模板",
+      "descriptionHeader": "说明",
+      "searchPlaceholder": "搜索规则...",
+      "empty": "暂无自动应用规则",
+      "fullscreen": "全屏查看",
+      "subtitle": {
+        "rule": "{{count}} 条规则",
+        "rules": "{{count}} 条规则"
+      },
+      "patternCopied": "规则已复制到剪贴板",
+      "patternCopyFailed": "复制规则失败"
+    },
+    "tools": {
+      "accessHeader": "权限",
+      "toolHeader": "工具",
+      "descriptionHeader": "说明",
+      "empty": "暂无工具权限配置"
+    }
+  },
+  "time": {
+    "never": "从未",
+    "justNow": "刚刚",
+    "minutesAgo_one": "{{count}} 分钟前",
+    "minutesAgo_other": "{{count}} 分钟前",
+    "hoursAgo_one": "{{count}} 小时前",
+    "hoursAgo_other": "{{count}} 小时前",
+    "daysAgo_one": "{{count}} 天前",
+    "daysAgo_other": "{{count}} 天前"
+  },
+  "sessionList": {
+    "date": {
+      "today": "今天",
+      "yesterday": "昨天"
+    },
+    "share": {
+      "openInBrowser": "在浏览器中打开",
+      "copyLink": "复制链接",
+      "updateShare": "更新分享",
+      "stopSharing": "停止分享",
+      "linkCopied": "链接已复制到剪贴板",
+      "updated": "分享已更新",
+      "updateFailed": "更新分享失败",
+      "stopped": "已停止分享",
+      "stopFailed": "停止分享失败"
+    },
+    "search": {
+      "noResultsInCurrentFilter": "当前筛选条件下无结果",
+      "inCurrentView": "当前视图",
+      "otherConversations": "其他对话",
+      "noConversations": "未找到对话",
+      "description": "已搜索标题和消息内容",
+      "clear": "清除搜索",
+      "sessionsAria": "对话"
+    },
+    "empty": {
+      "title": "暂无对话",
+      "description": "与助手的对话会显示在这里，开始一个新的对话吧。",
+      "action": "新建对话"
+    },
+    "rename": {
+      "title": "重命名对话",
+      "placeholder": "输入名称..."
+    }
+  },
+  "skillsList": {
+    "empty": {
+      "title": "暂无技能配置",
+      "description": "技能是可复用的指令，帮助你的助手掌握特定能力。",
+      "learnMore": "了解更多",
+      "addSkill": "添加技能"
+    }
+  },
+  "taskActions": {
+    "title": "点击查看任务操作",
+    "type": {
+      "task": "任务",
+      "shell": "命令"
+    },
+    "viewOutput": "查看输出",
+    "stopTask": "停止任务",
+    "overlayUnavailable": "终端浮层不可用",
+    "outputFallback": "暂无输出",
+    "loadFailed": "加载任务输出失败"
+  },
+  "appMenu": {
+    "aria": {
+      "craftMenu": "Craft 菜单",
+      "goBack": "返回",
+      "goForward": "前进"
+    },
+    "file": {
+      "newChat": "新建对话",
+      "newWindow": "新建窗口"
+    },
+    "settings": {
+      "menu": "设置",
+      "open": "设置..."
+    },
+    "help": {
+      "menu": "帮助",
+      "docs": "帮助与文档",
+      "shortcuts": "快捷键"
+    },
+    "debug": {
+      "menu": "调试",
+      "checkUpdates": "检查更新",
+      "installUpdate": "安装更新",
+      "toggleDevtools": "切换开发者工具"
+    },
+    "schema": {
+      "sections": {
+        "edit": "编辑",
+        "view": "视图",
+        "window": "窗口"
+      },
+      "items": {
+        "undo": "撤销",
+        "redo": "重做",
+        "cut": "剪切",
+        "copy": "复制",
+        "paste": "粘贴",
+        "selectAll": "全选",
+        "zoomIn": "放大",
+        "zoomOut": "缩小",
+        "resetZoom": "重置缩放",
+        "toggleFocusMode": "切换专注模式",
+        "toggleSidebar": "切换侧边栏",
+        "minimize": "最小化",
+        "maximize": "最大化"
+      }
+    },
+    "quit": "退出 Craft Agents"
+  },
+  "chatInput": {
+    "placeholders": {
+      "workOn": "你想先做什么？",
+      "shiftTabMode": "使用 Shift + Tab 在 Explore 与 Execute 之间切换",
+      "mentionHint": "输入 @ 可提及文件、文件夹或技能",
+      "labelHint": "输入 # 可给当前对话添加标签",
+      "newlineHint": "按 Shift + 回车换行",
+      "sidebarToggleHint": "按 ⌘/Ctrl + B 切换侧边栏",
+      "focusModeHint": "按 ⌘/Ctrl + . 切换专注模式"
+    },
+    "actions": {
+      "attachFiles": "附加文件",
+      "attachFilesTooltip": "附加文件",
+      "chooseSources": "选择来源",
+      "noSourcesConfigured": "暂无来源配置。",
+      "sourcesTooltip": "来源",
+      "addSourcesInSettings": "可在设置中添加来源。",
+      "searchSources": "搜索来源...",
+      "workInFolder": "在文件夹中工作",
+      "folderFallback": "文件夹",
+      "filterFolders": "筛选文件夹...",
+      "noFoldersFound": "未找到文件夹",
+      "chooseFolder": "选择文件夹...",
+      "resetFolder": "重置",
+      "gitBranchPrefix": "分支：",
+      "noDetailsProvided": "未提供详细信息"
+    }
+  },
+  "todoFilter": {
+    "placeholder": "筛选状态...",
+    "noResults": "未找到状态"
+  },
+  "slashMenu": {
+    "searchPlaceholder": "搜索命令...",
+    "noResults": "未找到命令",
+    "footerHint": "使用 @ 提及技能和文件",
+    "sections": {
+      "modes": "模式",
+      "features": "功能",
+      "folders": "最近工作目录"
+    },
+    "ultrathink": {
+      "label": "深度思考",
+      "description": "用于复杂问题的扩展推理"
+    }
+  },
+  "rightSidebar": {
+    "files": {
+      "comingSoon": "文件面板 - 即将上线",
+      "title": "文件",
+      "loading": "加载中...",
+      "empty": "此对话中附加或创建的文件会显示在这里。",
+      "directory": "文件夹",
+      "clickExpand": "点击展开",
+      "clickReveal": "点击查看",
+      "doubleClickOpen": "双击打开"
+    },
+    "history": {
+      "comingSoon": "历史面板 - 即将上线"
+    },
+    "metadata": {
+      "title": "对话信息",
+      "noSession": "未选择对话",
+      "loading": "正在加载对话...",
+      "name": "名称",
+      "namePlaceholder": "未命名",
+      "notes": "备注",
+      "notesPlaceholder": "添加备注...",
+      "notesLoading": "加载中..."
+    }
+  },
+  "sessionMenu": {
+    "shareFailed": "分享失败",
+    "titleRefresh": {
+      "success": "标题已刷新",
+      "failed": "刷新标题失败"
+    }
+  },
+  "sessionSearch": {
+    "placeholder": "搜索标题和内容...",
+    "close": "关闭搜索",
+    "loading": "加载中…",
+    "results": "{{count}} 条结果"
+  },
+  "chatDisplay": {
+    "compactEmpty": {
+      "title": "你想改什么？",
+      "description": "直接描述即可——剩下交给我"
+    }
+  },
+  "authBanner": {
+    "title": {
+      "mcpAuth": "需要连接",
+      "apiAuth": "需要 API 凭据",
+      "error": "出现错误"
+    },
+    "description": {
+      "mcpAuth": "请连接所需服务后继续。",
+      "apiAuth": "请输入 API 凭据后继续。",
+      "error": "出现错误，请重试。"
+    },
+    "cta": {
+      "connect": "连接",
+      "addCredentials": "添加凭据",
+      "retry": "重试",
+      "continue": "继续"
+    }
+  },
+  "mainContent": {
+    "empty": {
+      "noSourcesConfigured": "暂无来源配置",
+      "noSkillsConfigured": "暂无技能配置",
+      "noFlaggedConversations": "暂无已标记对话",
+      "noConversationsYet": "暂无对话",
+      "selectConversation": "选择一个对话开始使用"
+    }
+  },
+  "permissionRequest": {
+    "title": "需要权限",
+    "actions": {
+      "allow": "允许",
+      "alwaysAllow": "始终允许",
+      "deny": "拒绝"
+    },
+    "tip": "\"始终允许\"会在当前会话中记住此命令"
+  }
+}

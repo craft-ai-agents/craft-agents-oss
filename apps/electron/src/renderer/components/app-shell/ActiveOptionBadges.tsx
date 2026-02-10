@@ -1,9 +1,10 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { SlashCommandMenu, DEFAULT_SLASH_COMMAND_GROUPS, type SlashCommandId } from '@/components/ui/slash-command-menu'
-import { ChevronDown, X } from 'lucide-react'
-import { PERMISSION_MODE_CONFIG, type PermissionMode } from '@craft-agent/shared/agent/modes'
+import { SlashCommandMenu, type SlashCommandId, type CommandGroup } from '@/components/ui/slash-command-menu'
+import { Brain, ChevronDown, X } from 'lucide-react'
+import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } from '@craft-agent/shared/agent/modes'
 import { ActiveTasksBar, type BackgroundTask } from './ActiveTasksBar'
 import { LabelIcon, LabelValueTypeIcon } from '@/components/ui/label-icon'
 import { LabelValuePopover } from '@/components/ui/label-value-popover'
@@ -15,6 +16,8 @@ import { useDynamicStack } from '@/hooks/useDynamicStack'
 import type { TodoState } from '@/config/todo-states'
 import { getState } from '@/config/todo-states'
 import { TodoStateMenu } from '@/components/ui/todo-filter-menu'
+import { getActiveOptionBadgesLabels } from './active-option-badges-labels'
+import { resolvePermissionModeCopy } from '@/components/ui/slash-command-permission-mode-labels'
 
 // ============================================================================
 // Permission Mode Icon Component
@@ -31,6 +34,8 @@ function PermissionModeIcon({ mode, className }: { mode: PermissionMode; classNa
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
+      aria-hidden="true"
+      focusable="false"
     >
       <path d={config.svgPath} />
     </svg>
@@ -104,6 +109,9 @@ export function ActiveOptionBadges({
   onTodoStateChange,
   className,
 }: ActiveOptionBadgesProps) {
+  const { t } = useTranslation(['common'])
+  const labelsI18n = getActiveOptionBadgesLabels(t)
+
   // Resolve session label entries to their config objects + parsed values.
   // Entries may be bare IDs ("bug") or valued ("priority::3").
   // Preserves the raw value and original index for editing/removal.
@@ -168,7 +176,7 @@ export function ActiveOptionBadges({
           style={{ '--shadow-color': '147, 51, 234' } as React.CSSProperties}
         >
           <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-            Ultrathink
+            {labelsI18n.ultrathink}
           </span>
           <X className="h-3 w-3 text-purple-500 opacity-60 hover:opacity-100 translate-y-px" />
         </button>
@@ -421,6 +429,7 @@ interface PermissionModeDropdownProps {
 }
 
 function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onPermissionModeChange, onUltrathinkChange }: PermissionModeDropdownProps) {
+  const { t } = useTranslation(['common', 'settings'])
   const [open, setOpen] = React.useState(false)
   // Optimistic local state - updates immediately, syncs with prop
   const [optimisticMode, setOptimisticMode] = React.useState(permissionMode)
@@ -437,6 +446,31 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
     return active
   }, [optimisticMode, ultrathinkEnabled])
 
+  const dropdownCommandGroups = React.useMemo((): CommandGroup[] => {
+    const modeCommands = PERMISSION_MODE_ORDER.map((mode) => {
+      const localized = resolvePermissionModeCopy(mode, t)
+      return {
+        id: mode as SlashCommandId,
+        label: localized.label,
+        description: localized.description,
+        icon: <PermissionModeIcon mode={mode} className="h-3.5 w-3.5" />,
+      }
+    })
+
+    return [
+      { id: 'modes', commands: modeCommands },
+      {
+        id: 'features',
+        commands: [{
+          id: 'ultrathink',
+          label: t('common:slashMenu.ultrathink.label'),
+          description: t('common:slashMenu.ultrathink.description'),
+          icon: <Brain className="h-3.5 w-3.5" />,
+        }],
+      },
+    ]
+  }, [t])
+
   // Handle command selection from dropdown
   const handleSelect = React.useCallback((commandId: SlashCommandId) => {
     if (commandId === 'safe' || commandId === 'ask' || commandId === 'allow-all') {
@@ -448,8 +482,7 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
     setOpen(false)
   }, [onPermissionModeChange, onUltrathinkChange, ultrathinkEnabled])
 
-  // Get config for current mode (use optimistic state for instant UI update)
-  const config = PERMISSION_MODE_CONFIG[optimisticMode]
+  const localizedDisplayName = resolvePermissionModeCopy(optimisticMode, t).label
 
   // Mode-specific styling using CSS variables (theme-aware)
   // - safe (Explore): foreground at 60% opacity - subtle, read-only feel
@@ -484,7 +517,7 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
           style={{ '--shadow-color': currentStyle.shadowVar } as React.CSSProperties}
         >
           <PermissionModeIcon mode={optimisticMode} className="h-3.5 w-3.5" />
-          <span>{config.displayName}</span>
+          <span>{localizedDisplayName}</span>
           <ChevronDown className="h-3.5 w-3.5 opacity-60" />
         </button>
       </PopoverTrigger>
@@ -500,7 +533,7 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
         }}
       >
         <SlashCommandMenu
-          commandGroups={DEFAULT_SLASH_COMMAND_GROUPS}
+          commandGroups={dropdownCommandGroups}
           activeCommands={activeCommands}
           onSelect={handleSelect}
           showFilter
@@ -509,4 +542,3 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
     </Popover>
   )
 }
-

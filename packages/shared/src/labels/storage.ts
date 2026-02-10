@@ -29,63 +29,76 @@ const LABEL_CONFIG_FILE = 'labels/config.json';
  *
  * Children use hue-shifted shades of their parent color to show visual hierarchy.
  */
-export function getDefaultLabelConfig(): WorkspaceLabelConfig {
+export function getDefaultLabelConfig(language?: string): WorkspaceLabelConfig {
+  const isChinese = language?.toLowerCase() === 'zh-cn'
+  const names = {
+    development: isChinese ? '开发' : 'Development',
+    code: isChinese ? '代码' : 'Code',
+    bug: isChinese ? '缺陷' : 'Bug',
+    automation: isChinese ? '自动化' : 'Automation',
+    content: isChinese ? '内容' : 'Content',
+    writing: isChinese ? '写作' : 'Writing',
+    research: isChinese ? '研究' : 'Research',
+    design: isChinese ? '设计' : 'Design',
+    priority: isChinese ? '优先级' : 'Priority',
+    project: isChinese ? '项目' : 'Project',
+  }
   return {
     version: 1,
     labels: [
       {
         id: 'development',
-        name: 'Development',
+        name: names.development,
         color: { light: '#3B82F6', dark: '#60A5FA' },
         children: [
           {
             id: 'code',
-            name: 'Code',
+            name: names.code,
             color: { light: '#4F46E5', dark: '#818CF8' }, // indigo shift
           },
           {
             id: 'bug',
-            name: 'Bug',
+            name: names.bug,
             color: { light: '#0EA5E9', dark: '#38BDF8' }, // sky shift
           },
           {
             id: 'automation',
-            name: 'Automation',
+            name: names.automation,
             color: { light: '#06B6D4', dark: '#22D3EE' }, // cyan shift
           },
         ],
       },
       {
         id: 'content',
-        name: 'Content',
+        name: names.content,
         color: { light: '#8B5CF6', dark: '#A78BFA' },
         children: [
           {
             id: 'writing',
-            name: 'Writing',
+            name: names.writing,
             color: { light: '#7C3AED', dark: '#C4B5FD' }, // deeper violet
           },
           {
             id: 'research',
-            name: 'Research',
+            name: names.research,
             color: { light: '#A855F7', dark: '#C084FC' }, // lighter purple
           },
           {
             id: 'design',
-            name: 'Design',
+            name: names.design,
             color: { light: '#D946EF', dark: '#E879F9' }, // fuchsia shift
           },
         ],
       },
       {
         id: 'priority',
-        name: 'Priority',
+        name: names.priority,
         color: { light: '#F59E0B', dark: '#FBBF24' },
         valueType: 'number',
       },
       {
         id: 'project',
-        name: 'Project',
+        name: names.project,
         color: 'foreground/50',
         valueType: 'string',
       },
@@ -101,8 +114,9 @@ export function getDefaultLabelConfig(): WorkspaceLabelConfig {
 export function loadLabelConfig(workspaceRootPath: string): WorkspaceLabelConfig {
   const configPath = join(workspaceRootPath, LABEL_CONFIG_FILE);
 
-  // If no config file exists, seed with defaults and persist to disk.
-  // This ensures existing workspaces (created before default labels existed) get populated.
+  // If no config file exists, seed defaults once and persist to disk.
+  // IMPORTANT: We do not overwrite existing labels/config.json for localization.
+  // Existing workspaces keep their current label names for compatibility.
   if (!existsSync(configPath)) {
     const defaults = getDefaultLabelConfig();
     debug('[loadLabelConfig] No config found, seeding with default labels');
@@ -202,5 +216,3 @@ export function isValidLabelIdFormat(labelId: string): boolean {
   const SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
   return SLUG_PATTERN.test(labelId);
 }
-
-

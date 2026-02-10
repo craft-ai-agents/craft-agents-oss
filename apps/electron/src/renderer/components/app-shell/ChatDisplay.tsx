@@ -52,6 +52,8 @@ import { useTurnCardExpansion } from "@/hooks/useTurnCardExpansion"
 import type { SessionMeta } from "@/atoms/sessions"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { flattenLabels } from "@craft-agent/shared/labels"
+import { useTranslation } from 'react-i18next'
+import { getChatDisplayLabels } from './chat-display-labels'
 
 // ============================================================================
 // Overlay State Types
@@ -429,6 +431,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Connection unavailable
   connectionUnavailable = false,
 }, ref) {
+  const { t } = useTranslation(['common'])
+  const chatLabels = getChatDisplayLabels(t)
+
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
   const isInputDisabled = disabled
@@ -1292,8 +1297,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                   {/* Empty state for compact mode - inviting conversational prompt, centered in full popover */}
                   {compactMode && turns.length === 0 && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center select-none gap-1 pointer-events-none">
-                      <span className="text-sm text-muted-foreground">What would you like to change?</span>
-                      <span className="text-xs text-muted-foreground/50">Just describe it — I'll handle the rest</span>
+                      <span className="text-sm text-muted-foreground">{chatLabels.compactTitle}</span>
+                      <span className="text-xs text-muted-foreground/50">{chatLabels.compactDescription}</span>
                     </div>
                   )}
                   {/* Load more indicator - shown when there are older messages */}

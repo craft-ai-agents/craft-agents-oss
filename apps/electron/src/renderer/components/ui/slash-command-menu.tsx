@@ -4,6 +4,7 @@ import { Brain, Check } from 'lucide-react'
 import { Icon_Folder } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } from '@craft-agent/shared/agent/modes'
+import { useTranslation } from 'react-i18next'
 
 // ============================================================================
 // Types
@@ -89,21 +90,35 @@ const permissionModeCommands: SlashCommand[] = PERMISSION_MODE_ORDER.map(mode =>
   }
 })
 
-const ultrathinkCommand: SlashCommand = {
+const buildUltrathinkCommand = (t: (key: string) => string): SlashCommand => ({
   id: 'ultrathink',
-  label: 'Ultrathink',
-  description: 'Extended reasoning for complex problems',
+  label: t('common:slashMenu.ultrathink.label'),
+  description: t('common:slashMenu.ultrathink.description'),
   icon: <Brain className={MENU_ICON_SIZE} />,
-}
+})
+
+export const getSlashMenuFooterHint = (t: (key: string) => string): string =>
+  t('common:slashMenu.footerHint')
+
+const ultrathinkCommand: SlashCommand = buildUltrathinkCommand((key) => {
+  switch (key) {
+    case 'common:slashMenu.ultrathink.label':
+      return 'Ultrathink'
+    case 'common:slashMenu.ultrathink.description':
+      return 'Extended reasoning for complex problems'
+    default:
+      return key
+  }
+})
 
 export const DEFAULT_SLASH_COMMANDS: SlashCommand[] = [
   ...permissionModeCommands,
-  ultrathinkCommand,
+  buildUltrathinkCommand((key) => key),
 ]
 
 export const DEFAULT_SLASH_COMMAND_GROUPS: CommandGroup[] = [
   { id: 'modes', commands: permissionModeCommands },
-  { id: 'features', commands: [ultrathinkCommand] },
+  { id: 'features', commands: [buildUltrathinkCommand((key) => key)] },
 ]
 
 // ============================================================================
@@ -201,26 +216,52 @@ export function SlashCommandMenu({
   filterPlaceholder = 'Search commands...',
   className,
 }: SlashCommandMenuProps) {
+  const { t } = useTranslation(['common'])
   const [filter, setFilter] = React.useState('')
   const inputRef = React.useRef<HTMLInputElement>(null)
 
+  const translatedCommands = React.useMemo(() => {
+    if (!commands) return null
+    return commands.map((command) =>
+      command.id === 'ultrathink'
+        ? buildUltrathinkCommand(t)
+        : command
+    )
+  }, [commands, t])
+
+  const translatedGroups = React.useMemo(() => {
+    if (!commandGroups) return null
+    return commandGroups.map((group) => ({
+      ...group,
+      commands: group.commands.map((command) =>
+        command.id === 'ultrathink'
+          ? buildUltrathinkCommand(t)
+          : command
+      ),
+    }))
+  }, [commandGroups, t])
+
   // If groups provided, filter within each group; otherwise use flat commands
   const filteredGroups = React.useMemo(() => {
-    if (commandGroups) {
-      return commandGroups.map(group => ({
+    if (translatedGroups) {
+      return translatedGroups.map(group => ({
         ...group,
         commands: filterCommands(group.commands, filter),
       })).filter(group => group.commands.length > 0)
     }
     return null
-  }, [commandGroups, filter])
+  }, [translatedGroups, filter])
 
   const filteredCommands = React.useMemo(() => {
-    if (commands && !commandGroups) {
-      return filterCommands(commands, filter)
+    if (translatedCommands && !translatedGroups) {
+      return filterCommands(translatedCommands, filter)
     }
     return null
-  }, [commands, commandGroups, filter])
+  }, [translatedCommands, translatedGroups, filter])
+
+  const resolvedFilterPlaceholder = filterPlaceholder === 'Search commands...'
+    ? t('common:slashMenu.searchPlaceholder')
+    : filterPlaceholder
 
   // Get all commands for defaultValue calculation
   const allFilteredCommands = filteredGroups
@@ -270,7 +311,7 @@ export function SlashCommandMenu({
             ref={inputRef}
             value={filter}
             onValueChange={setFilter}
-            placeholder={filterPlaceholder}
+            placeholder={resolvedFilterPlaceholder}
             className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
@@ -278,7 +319,7 @@ export function SlashCommandMenu({
       <CommandPrimitive.List className={MENU_LIST_STYLE}>
         {allFilteredCommands.length === 0 ? (
           <CommandPrimitive.Empty className="py-4 text-center text-sm text-muted-foreground">
-            No commands found
+            {t('common:slashMenu.noResults')}
           </CommandPrimitive.Empty>
         ) : filteredGroups ? (
           // Group-based rendering with smart separators
@@ -327,6 +368,7 @@ export function InlineSlashCommand({
   position,
   className,
 }: InlineSlashCommandProps) {
+  const { t } = useTranslation(['common'])
   const menuRef = React.useRef<HTMLDivElement>(null)
   const listRef = React.useRef<HTMLDivElement>(null)
   const [selectedIndex, setSelectedIndex] = React.useState(0)
@@ -482,7 +524,7 @@ export function InlineSlashCommand({
       {/* Always-visible footer hint for @ mentions */}
       <div className="h-px bg-border/50 mx-2" />
       <div className="px-3 py-2.5 select-none text-xs text-muted-foreground">
-        Use @ for skills and files
+        {getSlashMenuFooterHint(t)}
       </div>
     </div>
   )
@@ -547,6 +589,7 @@ export function useInlineSlashCommand({
   recentFolders = [],
   homeDir,
 }: UseInlineSlashCommandOptions): UseInlineSlashCommandReturn {
+  const { t } = useTranslation(['common'])
   const [isOpen, setIsOpen] = React.useState(false)
   const [filter, setFilter] = React.useState('')
   const [position, setPosition] = React.useState({ x: 0, y: 0 })
@@ -561,14 +604,14 @@ export function useInlineSlashCommand({
     // Modes section
     result.push({
       id: 'modes',
-      label: 'Modes',
+      label: t('common:slashMenu.sections.modes'),
       items: permissionModeCommands,
     })
 
     // Features section
     result.push({
       id: 'features',
-      label: 'Features',
+      label: t('common:slashMenu.sections.features'),
       items: [ultrathinkCommand],
     })
 
@@ -583,7 +626,7 @@ export function useInlineSlashCommand({
 
       result.push({
         id: 'folders',
-        label: 'Recent Working Directories',
+        label: t('common:slashMenu.sections.folders'),
         items: sortedFolders.map(path => ({
           id: path,
           type: 'folder' as const,
@@ -595,7 +638,7 @@ export function useInlineSlashCommand({
     }
 
     return result
-  }, [recentFolders, homeDir])
+  }, [recentFolders, homeDir, t])
 
   const handleInputChange = React.useCallback((value: string, cursorPosition: number) => {
     // Store current state for handleSelect

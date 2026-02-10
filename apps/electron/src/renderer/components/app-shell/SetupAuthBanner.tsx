@@ -1,4 +1,6 @@
 import { Button } from "@/components/ui/button"
+import type { TFunction } from "i18next"
+import { useTranslation } from "react-i18next"
 
 export type BannerState =
   | 'hidden'
@@ -12,6 +14,27 @@ interface SetupAuthBannerProps {
   onAction: () => void
   /** Variant: 'banner' for chat list, 'inputAreaCover' matches chat input styling */
   variant?: 'banner' | 'inputAreaCover'
+}
+
+export function getSetupAuthBannerLabels(t: TFunction) {
+  return {
+    title: {
+      mcpAuth: t('common:authBanner.title.mcpAuth'),
+      apiAuth: t('common:authBanner.title.apiAuth'),
+      error: t('common:authBanner.title.error'),
+    },
+    description: {
+      mcpAuth: t('common:authBanner.description.mcpAuth'),
+      apiAuth: t('common:authBanner.description.apiAuth'),
+      error: t('common:authBanner.description.error'),
+    },
+    cta: {
+      connect: t('common:authBanner.cta.connect'),
+      addCredentials: t('common:authBanner.cta.addCredentials'),
+      retry: t('common:authBanner.cta.retry'),
+      continue: t('common:authBanner.cta.continue'),
+    },
+  }
 }
 
 /**
@@ -29,17 +52,19 @@ export function SetupAuthBanner({
   onAction,
   variant = 'banner'
 }: SetupAuthBannerProps) {
+  const { t } = useTranslation(['common'])
+  const labels = getSetupAuthBannerLabels(t)
   if (state === 'hidden') return null
 
   // Get title based on state
   const getTitle = () => {
     switch (state) {
       case 'mcp_auth':
-        return 'Connection required'
+        return labels.title.mcpAuth
       case 'api_auth':
-        return 'API credentials required'
+        return labels.title.apiAuth
       case 'error':
-        return 'Something went wrong'
+        return labels.title.error
       default:
         return ''
     }
@@ -50,11 +75,11 @@ export function SetupAuthBanner({
     if (reason) return reason
     switch (state) {
       case 'mcp_auth':
-        return 'Connect to required services to continue.'
+        return labels.description.mcpAuth
       case 'api_auth':
-        return 'Enter API credentials to continue.'
+        return labels.description.apiAuth
       case 'error':
-        return 'Something went wrong. Tap to retry.'
+        return labels.description.error
       default:
         return ''
     }
@@ -64,13 +89,13 @@ export function SetupAuthBanner({
   const getButtonText = () => {
     switch (state) {
       case 'mcp_auth':
-        return 'Connect'
+        return labels.cta.connect
       case 'api_auth':
-        return 'Add Credentials'
+        return labels.cta.addCredentials
       case 'error':
-        return 'Retry'
+        return labels.cta.retry
       default:
-        return 'Continue'
+        return labels.cta.continue
     }
   }
 

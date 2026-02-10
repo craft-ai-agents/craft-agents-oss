@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import type { TFunction } from 'i18next'
 import { isMac } from "@/lib/platform"
 import { useActionLabel } from "@/actions"
 import {
@@ -26,6 +27,97 @@ import {
 } from "../../shared/menu-schema"
 import type { MenuItem, MenuSection, SettingsMenuItem } from "../../shared/menu-schema"
 import { SETTINGS_ICONS } from "./icons/SettingsIcons"
+import { useTranslation } from 'react-i18next'
+
+export function getAppMenuLabels(t: TFunction) {
+  return {
+    ariaCraftMenu: t('common:appMenu.aria.craftMenu'),
+    ariaGoBack: t('common:appMenu.aria.goBack'),
+    ariaGoForward: t('common:appMenu.aria.goForward'),
+    newChat: t('common:appMenu.file.newChat'),
+    newWindow: t('common:appMenu.file.newWindow'),
+    settingsMenu: t('common:appMenu.settings.menu'),
+    settingsOpen: t('common:appMenu.settings.open'),
+    helpMenu: t('common:appMenu.help.menu'),
+    helpDocs: t('common:appMenu.help.docs'),
+    keyboardShortcuts: t('common:appMenu.help.shortcuts'),
+    debugMenu: t('common:appMenu.debug.menu'),
+    checkUpdates: t('common:appMenu.debug.checkUpdates'),
+    installUpdate: t('common:appMenu.debug.installUpdate'),
+    toggleDevtools: t('common:appMenu.debug.toggleDevtools'),
+    quit: t('common:appMenu.quit'),
+  }
+}
+
+export function getAppMenuSchemaLabels(t: TFunction) {
+  return {
+    sections: {
+      edit: t('common:appMenu.schema.sections.edit'),
+      view: t('common:appMenu.schema.sections.view'),
+      window: t('common:appMenu.schema.sections.window'),
+    },
+    items: {
+      undo: t('common:appMenu.schema.items.undo'),
+      redo: t('common:appMenu.schema.items.redo'),
+      cut: t('common:appMenu.schema.items.cut'),
+      copy: t('common:appMenu.schema.items.copy'),
+      paste: t('common:appMenu.schema.items.paste'),
+      selectAll: t('common:appMenu.schema.items.selectAll'),
+      zoomIn: t('common:appMenu.schema.items.zoomIn'),
+      zoomOut: t('common:appMenu.schema.items.zoomOut'),
+      resetZoom: t('common:appMenu.schema.items.resetZoom'),
+      toggleFocusMode: t('common:appMenu.schema.items.toggleFocusMode'),
+      toggleSidebar: t('common:appMenu.schema.items.toggleSidebar'),
+      minimize: t('common:appMenu.schema.items.minimize'),
+      maximize: t('common:appMenu.schema.items.maximize'),
+    },
+  }
+}
+
+export function getAppMenuSettingsItemLabel(
+  t: TFunction,
+  id: SettingsMenuItem['id']
+): string {
+  const resolved = t(`settings:navigator.items.${id}.label` as never)
+  return typeof resolved === 'string' ? resolved : String(resolved)
+}
+
+function localizeSection(section: MenuSection, labels: ReturnType<typeof getAppMenuSchemaLabels>): MenuSection {
+  const sectionLabelMap: Record<string, string> = {
+    edit: labels.sections.edit,
+    view: labels.sections.view,
+    window: labels.sections.window,
+  }
+
+  const itemLabelMap: Record<string, string> = {
+    undo: labels.items.undo,
+    redo: labels.items.redo,
+    cut: labels.items.cut,
+    copy: labels.items.copy,
+    paste: labels.items.paste,
+    selectAll: labels.items.selectAll,
+    zoomIn: labels.items.zoomIn,
+    zoomOut: labels.items.zoomOut,
+    resetZoom: labels.items.resetZoom,
+    toggleFocusMode: labels.items.toggleFocusMode,
+    toggleSidebar: labels.items.toggleSidebar,
+    minimize: labels.items.minimize,
+    zoom: labels.items.maximize,
+  }
+
+  return {
+    ...section,
+    label: sectionLabelMap[section.id] ?? section.label,
+    items: section.items.map((item) => {
+      if (item.type === 'separator') return item
+      const key = item.type === 'role' ? item.role : item.id
+      return {
+        ...item,
+        label: itemLabelMap[key] ?? item.label,
+      }
+    }),
+  }
+}
 
 // Map of action handlers for menu items that need custom behavior
 type MenuActionHandlers = {
@@ -172,6 +264,9 @@ export function AppMenu({
   onToggleSidebar,
   onToggleFocusMode,
 }: AppMenuProps) {
+  const { t } = useTranslation(['common', 'settings'])
+  const labels = getAppMenuLabels(t)
+  const schemaLabels = getAppMenuSchemaLabels(t)
   const [isDebugMode, setIsDebugMode] = useState(false)
 
   // Get hotkey labels from centralized action registry
@@ -182,6 +277,10 @@ export function AppMenu({
   const quitHotkey = useActionLabel('app.quit').hotkey
   const goBackHotkey = useActionLabel('nav.goBackAlt').hotkey
   const goForwardHotkey = useActionLabel('nav.goForwardAlt').hotkey
+
+  const editMenu = localizeSection(EDIT_MENU, schemaLabels)
+  const viewMenu = localizeSection(VIEW_MENU, schemaLabels)
+  const windowMenu = localizeSection(WINDOW_MENU, schemaLabels)
 
   useEffect(() => {
     window.electronAPI.isDebugMode().then(setIsDebugMode)
@@ -198,7 +297,7 @@ export function AppMenu({
       {/* Craft Logo Menu */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <TopBarButton aria-label="Craft menu">
+          <TopBarButton aria-label={labels.ariaCraftMenu}>
             <CraftAgentsSymbol className="h-4 text-accent" />
           </TopBarButton>
         </DropdownMenuTrigger>
@@ -206,23 +305,23 @@ export function AppMenu({
           {/* File actions at root level */}
           <StyledDropdownMenuItem onClick={onNewChat}>
             <SquarePenRounded className="h-3.5 w-3.5" />
-            New Chat
-            {newChatHotkey && <DropdownMenuShortcut className="pl-6">{newChatHotkey}</DropdownMenuShortcut>}
+            {labels.newChat}
+            <DropdownMenuShortcut className="pl-6">{modKey}N</DropdownMenuShortcut>
           </StyledDropdownMenuItem>
           {onNewWindow && (
             <StyledDropdownMenuItem onClick={onNewWindow}>
               <Icons.AppWindow className="h-3.5 w-3.5" />
-              New Window
-              {newWindowHotkey && <DropdownMenuShortcut className="pl-6">{newWindowHotkey}</DropdownMenuShortcut>}
+              {labels.newWindow}
+              <DropdownMenuShortcut className="pl-6">{modKey}⇧N</DropdownMenuShortcut>
             </StyledDropdownMenuItem>
           )}
 
           <StyledDropdownMenuSeparator />
 
           {/* Edit, View, Window submenus from shared schema */}
-          {renderMenuSection(EDIT_MENU, actionHandlers)}
-          {renderMenuSection(VIEW_MENU, actionHandlers)}
-          {renderMenuSection(WINDOW_MENU, actionHandlers)}
+          {renderMenuSection(editMenu, actionHandlers)}
+          {renderMenuSection(viewMenu, actionHandlers)}
+          {renderMenuSection(windowMenu, actionHandlers)}
 
           <StyledDropdownMenuSeparator />
 
@@ -230,14 +329,14 @@ export function AppMenu({
           <DropdownMenuSub>
             <StyledDropdownMenuSubTrigger>
               <Icons.Settings className="h-3.5 w-3.5" />
-              Settings
+              {labels.settingsMenu}
             </StyledDropdownMenuSubTrigger>
             <StyledDropdownMenuSubContent>
               {/* Main settings entry with keyboard shortcut */}
               <StyledDropdownMenuItem onClick={onOpenSettings}>
                 <Icons.Settings className="h-3.5 w-3.5" />
-                Settings...
-                {settingsHotkey && <DropdownMenuShortcut className="pl-6">{settingsHotkey}</DropdownMenuShortcut>}
+                {labels.settingsOpen}
+                <DropdownMenuShortcut className="pl-6">{modKey},</DropdownMenuShortcut>
               </StyledDropdownMenuItem>
               <StyledDropdownMenuSeparator />
               {/* All settings subpages from shared schema */}
@@ -249,7 +348,7 @@ export function AppMenu({
                     onClick={() => onOpenSettingsSubpage(item.id)}
                   >
                     <Icon className="h-3.5 w-3.5" />
-                    {item.label}
+                    {getAppMenuSettingsItemLabel(t, item.id)}
                   </StyledDropdownMenuItem>
                 )
               })}
@@ -260,18 +359,18 @@ export function AppMenu({
           <DropdownMenuSub>
             <StyledDropdownMenuSubTrigger>
               <Icons.HelpCircle className="h-3.5 w-3.5" />
-              Help
+              {labels.helpMenu}
             </StyledDropdownMenuSubTrigger>
             <StyledDropdownMenuSubContent>
               <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}>
                 <Icons.HelpCircle className="h-3.5 w-3.5" />
-                Help & Documentation
+                {labels.helpDocs}
                 <Icons.ExternalLink className="h-3 w-3 ml-auto text-muted-foreground" />
               </StyledDropdownMenuItem>
               <StyledDropdownMenuItem onClick={onOpenKeyboardShortcuts}>
                 <Icons.Keyboard className="h-3.5 w-3.5" />
-                Keyboard Shortcuts
-                {keyboardShortcutsHotkey && <DropdownMenuShortcut className="pl-6">{keyboardShortcutsHotkey}</DropdownMenuShortcut>}
+                {labels.keyboardShortcuts}
+                <DropdownMenuShortcut className="pl-6">{modKey}/</DropdownMenuShortcut>
               </StyledDropdownMenuItem>
             </StyledDropdownMenuSubContent>
           </DropdownMenuSub>
@@ -282,21 +381,21 @@ export function AppMenu({
               <DropdownMenuSub>
                 <StyledDropdownMenuSubTrigger>
                   <Icons.Bug className="h-3.5 w-3.5" />
-                  Debug
+                  {labels.debugMenu}
                 </StyledDropdownMenuSubTrigger>
                 <StyledDropdownMenuSubContent>
                   <StyledDropdownMenuItem onClick={() => window.electronAPI.checkForUpdates()}>
                     <Icons.Download className="h-3.5 w-3.5" />
-                    Check for Updates
+                    {labels.checkUpdates}
                   </StyledDropdownMenuItem>
                   <StyledDropdownMenuItem onClick={() => window.electronAPI.installUpdate()}>
                     <Icons.Download className="h-3.5 w-3.5" />
-                    Install Update
+                    {labels.installUpdate}
                   </StyledDropdownMenuItem>
                   <StyledDropdownMenuSeparator />
                   <StyledDropdownMenuItem onClick={() => window.electronAPI.menuToggleDevTools()}>
                     <Icons.Bug className="h-3.5 w-3.5" />
-                    Toggle DevTools
+                    {labels.toggleDevtools}
                     <DropdownMenuShortcut className="pl-6">{isMac ? '⌥⌘I' : 'Ctrl+Shift+I'}</DropdownMenuShortcut>
                   </StyledDropdownMenuItem>
                 </StyledDropdownMenuSubContent>
@@ -309,8 +408,8 @@ export function AppMenu({
           {/* Quit */}
           <StyledDropdownMenuItem onClick={() => window.electronAPI.menuQuit()}>
             <Icons.LogOut className="h-3.5 w-3.5" />
-            Quit Craft Agents
-            {quitHotkey && <DropdownMenuShortcut className="pl-6">{quitHotkey}</DropdownMenuShortcut>}
+            {labels.quit}
+            <DropdownMenuShortcut className="pl-6">{modKey}Q</DropdownMenuShortcut>
           </StyledDropdownMenuItem>
         </StyledDropdownMenuContent>
       </DropdownMenu>
@@ -319,32 +418,22 @@ export function AppMenu({
       <div className="flex-1" />
 
       {/* Back Navigation */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <TopBarButton
-            onClick={onBack}
-            disabled={!canGoBack}
-            aria-label="Go back"
-          >
-            <Icons.ChevronLeft className="h-[22px] w-[22px] text-foreground/70" strokeWidth={1.5} />
-          </TopBarButton>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">Back {goBackHotkey}</TooltipContent>
-      </Tooltip>
+      <TopBarButton
+        onClick={onBack}
+        disabled={!canGoBack}
+        aria-label={labels.ariaGoBack}
+      >
+        <Icons.ChevronLeft className="h-[22px] w-[22px] text-foreground/70" strokeWidth={1.5} />
+      </TopBarButton>
 
       {/* Forward Navigation */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <TopBarButton
-            onClick={onForward}
-            disabled={!canGoForward}
-            aria-label="Go forward"
-          >
-            <Icons.ChevronRight className="h-[22px] w-[22px] text-foreground/70" strokeWidth={1.5} />
-          </TopBarButton>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">Forward {goForwardHotkey}</TooltipContent>
-      </Tooltip>
+      <TopBarButton
+        onClick={onForward}
+        disabled={!canGoForward}
+        aria-label={labels.ariaGoForward}
+      >
+        <Icons.ChevronRight className="h-[22px] w-[22px] text-foreground/70" strokeWidth={1.5} />
+      </TopBarButton>
     </div>
   )
 }

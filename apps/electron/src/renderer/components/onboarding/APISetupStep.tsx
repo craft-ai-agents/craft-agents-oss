@@ -2,7 +2,9 @@ import { useState } from "react"
 import { cn } from "@/lib/utils"
 import { Check, CreditCard, Key, Cpu } from "lucide-react"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
-import type { LlmAuthType, LlmProviderType } from "@craft-agent/shared/config/llm-connections"
+import type { TFunction } from "i18next"
+import { useTranslation } from "react-i18next"
+import { getApiSetupLabels } from './labels'
 
 /** Provider segment for the segmented control */
 export type ProviderSegment = 'anthropic' | 'openai' | 'copilot'
@@ -65,43 +67,23 @@ interface ApiSetupOption {
   providerType: LlmProviderType
 }
 
-const API_SETUP_OPTIONS: ApiSetupOption[] = [
-  {
-    id: 'claude_oauth',
-    name: 'Claude Pro/Max',
-    description: 'Use your Claude subscription for unlimited access.',
-    icon: <CreditCard className="size-4" />,
-    providerType: 'anthropic',
-  },
-  {
-    id: 'anthropic_api_key',
-    name: 'Anthropic API Key',
-    description: 'Pay-as-you-go via Anthropic, OpenRouter, or compatible APIs.',
-    icon: <Key className="size-4" />,
-    providerType: 'anthropic',
-  },
-  {
-    id: 'chatgpt_oauth',
-    name: 'Codex · ChatGPT Plus/Pro',
-    description: 'Use your ChatGPT Plus or Pro subscription with Codex.',
-    icon: <Cpu className="size-4" />,
-    providerType: 'openai',
-  },
-  {
-    id: 'openai_api_key',
-    name: 'Codex · OpenAI API Key',
-    description: 'Pay-as-you-go via OpenAI Platform, OpenRouter, or Vercel AI Gateway.',
-    icon: <Key className="size-4" />,
-    providerType: 'openai',
-  },
-  {
-    id: 'copilot_oauth',
-    name: 'Copilot · GitHub',
-    description: 'Use your GitHub Copilot subscription.',
-    icon: <Cpu className="size-4" />,
-    providerType: 'copilot',
-  },
-]
+function getApiSetupOptions(t: TFunction): ApiSetupOption[] {
+  return [
+    {
+      id: 'claude_oauth',
+      name: t('onboarding:apiSetup.options.claude.name'),
+      description: t('onboarding:apiSetup.options.claude.description'),
+      icon: <CreditCard className="size-4" />,
+      recommended: true,
+    },
+    {
+      id: 'api_key',
+      name: t('onboarding:apiSetup.options.apiKey.name'),
+      description: t('onboarding:apiSetup.options.apiKey.description'),
+      icon: <Key className="size-4" />,
+    },
+  ]
+}
 
 interface APISetupStepProps {
   selectedMethod: ApiSetupMethod | null
@@ -218,52 +200,78 @@ export function APISetupStep({
   onBack,
   initialSegment = 'anthropic',
 }: APISetupStepProps) {
-  const [activeSegment, setActiveSegment] = useState<ProviderSegment>(initialSegment)
-
-  // Filter options based on active segment
-  const filteredOptions = API_SETUP_OPTIONS.filter(o => o.providerType === activeSegment)
-
-  // Handle segment change - clear selection if it doesn't belong to new segment
-  const handleSegmentChange = (segment: ProviderSegment) => {
-    setActiveSegment(segment)
-    // If current selection doesn't match the new segment, don't auto-clear
-    // (user might want to keep it and switch back)
-  }
-
+  const { t } = useTranslation(['onboarding'])
+  const options = getApiSetupOptions(t)
+  const labels = getApiSetupLabels(t)
   return (
     <StepFormLayout
-      title="Set up your Agent"
-      description={<>Select how you'd like to power your AI agents.<br />You can add more connections later.</>}
+      title={labels.title}
+      description={labels.description}
       actions={
         <>
-          <BackButton onClick={onBack} />
-          <ContinueButton onClick={onContinue} disabled={!selectedMethod} />
+          <BackButton onClick={onBack}>{labels.back}</BackButton>
+          <ContinueButton onClick={onContinue} disabled={!selectedMethod}>{labels.continue}</ContinueButton>
         </>
       }
     >
-      {/* Provider segmented control */}
-      <ProviderSegmentedControl
-        activeSegment={activeSegment}
-        onSegmentChange={handleSegmentChange}
-      />
+      {/* Options */}
+      <div className="space-y-3">
+        {options.map((option) => {
+          const isSelected = option.id === selectedMethod
 
-      {/* Segment description */}
-      <div className="bg-foreground-2 rounded-[8px] p-4 mb-3">
-        <p className="text-sm text-muted-foreground text-center">
-          {SEGMENT_DESCRIPTIONS[activeSegment]}
-        </p>
-      </div>
+          return (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => onSelect(option.id)}
+              className={cn(
+                "flex w-full items-start gap-4 rounded-xl p-4 text-left transition-all",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "hover:bg-foreground/[0.02] shadow-minimal",
+                isSelected
+                  ? "bg-background"
+                  : "bg-foreground-2"
+              )}
+            >
+              {/* Icon */}
+              <div
+                className={cn(
+                  "flex size-10 shrink-0 items-center justify-center rounded-lg",
+                  isSelected ? "bg-foreground/10 text-foreground" : "bg-muted text-muted-foreground"
+                )}
+              >
+                {option.icon}
+              </div>
 
-      {/* Filtered options for selected provider - min-h keeps size consistent across tabs */}
-      <div className="space-y-3 min-h-[180px]">
-        {filteredOptions.map((option) => (
-          <OptionButton
-            key={option.id}
-            option={option}
-            isSelected={option.id === selectedMethod}
-            onSelect={onSelect}
-          />
-        ))}
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm">{option.name}</span>
+                  {option.recommended && (
+                    <span className="rounded-[4px] bg-background shadow-minimal px-2 py-0.5 text-[11px] font-medium text-foreground/70">
+                      {labels.recommended}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {option.description}
+                </p>
+              </div>
+
+              {/* Check */}
+              <div
+                className={cn(
+                  "flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+                  isSelected
+                    ? "border-foreground bg-foreground text-background"
+                    : "border-muted-foreground/20"
+                )}
+              >
+                {isSelected && <Check className="size-3" strokeWidth={3} />}
+              </div>
+            </button>
+          )
+        })}
       </div>
     </StepFormLayout>
   )

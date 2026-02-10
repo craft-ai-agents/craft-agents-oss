@@ -22,6 +22,8 @@ import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { SettingsSubpage } from '../../../shared/types'
 import { SETTINGS_ITEMS } from '../../../shared/menu-schema'
 import { SETTINGS_ICONS } from '@/components/icons/SettingsIcons'
+import { useTranslation } from 'react-i18next'
+import { getSettingsNavigatorLabels } from './settings-navigator-labels'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -42,26 +44,19 @@ interface SettingsItem {
   description: string
 }
 
-// Derive settings items from shared schema, using shared custom SVG icons
-const settingsItems: SettingsItem[] = SETTINGS_ITEMS.map((item) => ({
-  id: item.id,
-  label: item.label,
-  icon: SETTINGS_ICONS[item.id],
-  description: item.description,
-}))
-
 interface SettingsItemRowProps {
   item: SettingsItem
   isSelected: boolean
   isFirst: boolean
   onSelect: () => void
+  labels: ReturnType<typeof getSettingsNavigatorLabels>
 }
 
 /**
  * SettingsItemRow - Individual settings item with dropdown menu
  * Tracks menu open state to keep "..." button visible when menu is open
  */
-function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRowProps) {
+function SettingsItemRow({ item, isSelected, isFirst, onSelect, labels }: SettingsItemRowProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const Icon = item.icon
 
@@ -137,7 +132,7 @@ function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRo
                 <DropdownMenuProvider>
                   <StyledDropdownMenuItem onClick={handleOpenInNewWindow}>
                     <AppWindow className="h-3.5 w-3.5" />
-                    <span className="flex-1">Open in New Window</span>
+                    <span className="flex-1">{labels.openInNewWindow}</span>
                   </StyledDropdownMenuItem>
                 </DropdownMenuProvider>
               </StyledDropdownMenuContent>
@@ -153,6 +148,15 @@ export default function SettingsNavigator({
   selectedSubpage,
   onSelectSubpage,
 }: SettingsNavigatorProps) {
+  const { t } = useTranslation(['settings'])
+  const labels = getSettingsNavigatorLabels(t)
+  const settingsItems: SettingsItem[] = SETTINGS_ITEMS.map((item) => ({
+    id: item.id,
+    label: labels.getItemLabel(item.id),
+    icon: SETTINGS_ICONS[item.id],
+    description: labels.getItemDescription(item.id),
+  }))
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto">
@@ -164,6 +168,7 @@ export default function SettingsNavigator({
               isSelected={selectedSubpage === item.id}
               isFirst={index === 0}
               onSelect={() => onSelectSubpage(item.id)}
+              labels={labels}
             />
           ))}
         </div>

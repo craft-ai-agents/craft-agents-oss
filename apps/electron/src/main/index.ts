@@ -70,8 +70,7 @@ import { registerIpcHandlers } from './ipc'
 import { createApplicationMenu } from './menu'
 import { WindowManager } from './window-manager'
 import { loadWindowState, saveWindowState } from './window-state'
-import { getWorkspaces, loadStoredConfig, addWorkspace, saveConfig } from '@craft-agent/shared/config'
-import { getDefaultWorkspacesDir } from '@craft-agent/shared/workspaces'
+import { getWorkspaces, loadStoredConfig, getAppLanguage } from '@craft-agent/shared/config'
 import { initializeDocs } from '@craft-agent/shared/docs'
 import { initializeReleaseNotes } from '@craft-agent/shared/release-notes'
 import { ensureDefaultPermissions } from '@craft-agent/shared/agent/permissions-config'
@@ -236,11 +235,8 @@ app.whenReady().then(async () => {
   // Initialize bundled docs
   initializeDocs()
 
-  // Initialize bundled release notes
-  initializeReleaseNotes()
-
-  // Ensure default permissions file exists (copies bundled default.json on first run)
-  ensureDefaultPermissions()
+  // Ensure default permissions file exists (seed once using current app language)
+  ensureDefaultPermissions(getAppLanguage() ?? app.getLocale())
 
   // Seed tool icons to ~/.craft-agent/tool-icons/ (copies bundled SVGs on first run)
   ensureToolIcons()

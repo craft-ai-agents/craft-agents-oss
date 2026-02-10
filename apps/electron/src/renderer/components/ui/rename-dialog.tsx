@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react"
+import type { TFunction } from "i18next"
+import { useTranslation } from "react-i18next"
 import {
   Dialog,
   DialogContent,
@@ -20,6 +22,15 @@ interface RenameDialogProps {
   placeholder?: string
 }
 
+export function getRenameDialogLabels(t: TFunction) {
+  return {
+    title: t('common:rename.title'),
+    placeholder: t('common:rename.placeholder'),
+    cancel: t('common:actions.cancel'),
+    save: t('common:actions.save'),
+  }
+}
+
 export function RenameDialog({
   open,
   onOpenChange,
@@ -27,8 +38,11 @@ export function RenameDialog({
   value,
   onValueChange,
   onSubmit,
-  placeholder = "Enter a name...",
+  placeholder,
 }: RenameDialogProps) {
+  const { t } = useTranslation(['common'])
+  const labels = getRenameDialogLabels(t)
+  const resolvedPlaceholder = placeholder ?? labels.placeholder
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Register with modal context so X button / Cmd+W closes this dialog first
@@ -61,7 +75,7 @@ export function RenameDialog({
             ref={inputRef}
             value={value}
             onChange={(e) => onValueChange(e.target.value)}
-            placeholder={placeholder}
+            placeholder={resolvedPlaceholder}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 handleSubmit()
@@ -71,10 +85,10 @@ export function RenameDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {labels.cancel}
           </Button>
           <Button onClick={handleSubmit} disabled={!value.trim()}>
-            Save
+            {labels.save}
           </Button>
         </DialogFooter>
       </DialogContent>

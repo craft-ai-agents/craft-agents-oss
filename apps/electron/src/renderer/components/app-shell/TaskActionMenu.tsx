@@ -11,6 +11,8 @@ import { Spinner } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { BackgroundTask } from './ActiveTasksBar'
+import { useTranslation } from 'react-i18next'
+import { getTaskActionLabels } from './task-action-labels'
 
 /** Terminal data for overlay display */
 export interface TerminalOverlayData {
@@ -62,6 +64,8 @@ export interface TaskActionMenuProps {
  */
 export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, onShowTerminalOverlay, className }: TaskActionMenuProps) {
   const [open, setOpen] = React.useState(false)
+  const { t } = useTranslation(['common'])
+  const labels = getTaskActionLabels(t)
 
   // Local timer for shell tasks (since they don't get task_progress events)
   // For agent tasks, we use elapsedSeconds from events
@@ -86,7 +90,7 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
 
   const handleViewOutput = async () => {
     if (!onShowTerminalOverlay) {
-      toast.error('Terminal overlay not available')
+      toast.error(labels.overlayUnavailable)
       return
     }
 
@@ -97,13 +101,13 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
       // Show terminal output in overlay
       onShowTerminalOverlay({
         command: task.intent || `${task.type} task`,
-        output: output || 'No output available yet',
+      output: output || labels.outputFallback,
         description: task.intent,
         toolType: 'bash', // Use 'bash' for both shell and agent tasks
       })
       setOpen(false)
     } catch (err) {
-      toast.error('Failed to load task output')
+      toast.error(labels.loadFailed)
     }
   }
 
@@ -128,7 +132,7 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
             "data-[state=open]:bg-white/80 dark:data-[state=open]:bg-white/15",
             className
           )}
-          title="Click for task actions"
+          title={labels.title}
         >
           {/* Spinner */}
           <div className="flex items-center justify-center shrink-0">
@@ -137,7 +141,7 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
 
           {/* Type badge */}
           <span className="opacity-60">
-            {task.type === 'agent' ? 'Task' : 'Shell'}
+            {task.type === 'agent' ? labels.typeTask : labels.typeShell}
           </span>
 
           {/* Task ID (shortened) */}
@@ -158,7 +162,7 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
         {/* View Output - Primary action */}
         <StyledDropdownMenuItem onClick={handleViewOutput}>
           <ArrowUpRight />
-          View Output
+          {labels.viewOutput}
         </StyledDropdownMenuItem>
 
         {/* Stop Task - Only show for shell tasks (inserts kill command into input) */}
@@ -167,7 +171,7 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
             <StyledDropdownMenuSeparator />
             <StyledDropdownMenuItem onClick={handleStopTask}>
               <Square />
-              Stop Task
+              {labels.stopTask}
             </StyledDropdownMenuItem>
           </>
         )}

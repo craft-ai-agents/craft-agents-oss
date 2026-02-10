@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@craft-agent/ui"
 import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
 import { StepFormLayout } from "./primitives"
+import { useTranslation } from "react-i18next"
 
 interface CompletionStepProps {
   status: 'saving' | 'complete'
@@ -21,6 +22,7 @@ export function CompletionStep({
   spaceName,
   onFinish
 }: CompletionStepProps) {
+  const { t } = useTranslation(['onboarding'])
   const isSaving = status === 'saving'
 
   return (
@@ -34,18 +36,18 @@ export function CompletionStep({
           <CraftAgentsSymbol className="size-10 text-accent" />
         </div>
       )}
-      title={isSaving ? 'Setting up...' : "You're all set!"}
+      title={isSaving ? t('onboarding:completion.titleSaving') : t('onboarding:completion.titleComplete')}
       description={
         isSaving ? (
-          'Saving your configuration...'
+          t('onboarding:completion.descriptionSaving')
         ) : (
-          'Just start a chat and get to work.'
+          t('onboarding:completion.descriptionComplete')
         )
       }
       actions={
         status === 'complete' ? (
           <Button onClick={onFinish} className="w-full max-w-[320px] bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg" size="lg">
-            Get Started
+            {t('onboarding:completion.cta')}
           </Button>
         ) : undefined
       }

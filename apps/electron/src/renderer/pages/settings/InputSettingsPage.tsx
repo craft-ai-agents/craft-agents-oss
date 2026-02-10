@@ -23,6 +23,27 @@ import {
   SettingsToggle,
   SettingsMenuSelectRow,
 } from '@/components/settings'
+import { useTranslation } from 'react-i18next'
+
+export function getInputLabels(t: (key: string) => string) {
+  return {
+    pageTitle: t('settings:input.pageTitle'),
+    typingTitle: t('settings:input.typing.title'),
+    typingDescription: t('settings:input.typing.description'),
+    autoCapitalisationLabel: t('settings:input.typing.autoCapitalisation.label'),
+    autoCapitalisationDescription: t('settings:input.typing.autoCapitalisation.description'),
+    spellCheckLabel: t('settings:input.typing.spellCheck.label'),
+    spellCheckDescription: t('settings:input.typing.spellCheck.description'),
+    sendingTitle: t('settings:input.sending.title'),
+    sendingDescription: t('settings:input.sending.description'),
+    sendMessageLabel: t('settings:input.sendMessage.label'),
+    sendMessageDescription: t('settings:input.sendMessage.description'),
+    sendMessageEnterLabel: t('settings:input.sendMessage.options.enter.label'),
+    sendMessageEnterDescription: t('settings:input.sendMessage.options.enter.description'),
+    sendMessageCmdEnterLabel: t('settings:input.sendMessage.options.cmdEnter.label'),
+    sendMessageCmdEnterDescription: t('settings:input.sendMessage.options.cmdEnter.description'),
+  }
+}
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -34,6 +55,8 @@ export const meta: DetailsPageMeta = {
 // ============================================
 
 export default function InputSettingsPage() {
+  const { t } = useTranslation(['settings'])
+  const labels = getInputLabels(t)
   // Auto-capitalisation state
   const [autoCapitalisation, setAutoCapitalisation] = useState(true)
 
@@ -81,23 +104,23 @@ export default function InputSettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Input" actions={<HeaderMenu route={routes.view.settings('input')} />} />
+      <PanelHeader title={labels.pageTitle} actions={<HeaderMenu route={routes.view.settings('input')} />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
             <div className="space-y-8">
               {/* Typing Behavior */}
-              <SettingsSection title="Typing" description="Control how text is entered in the chat input.">
+              <SettingsSection title={labels.typingTitle} description={labels.typingDescription}>
                 <SettingsCard>
                   <SettingsToggle
-                    label="Auto capitalisation"
-                    description="Automatically capitalise the first letter when typing a message."
+                    label={labels.autoCapitalisationLabel}
+                    description={labels.autoCapitalisationDescription}
                     checked={autoCapitalisation}
                     onCheckedChange={handleAutoCapitalisationChange}
                   />
                   <SettingsToggle
-                    label="Spell check"
-                    description="Underline misspelled words while typing."
+                    label={labels.spellCheckLabel}
+                    description={labels.spellCheckDescription}
                     checked={spellCheck}
                     onCheckedChange={handleSpellCheckChange}
                   />
@@ -105,16 +128,16 @@ export default function InputSettingsPage() {
               </SettingsSection>
 
               {/* Send Behavior */}
-              <SettingsSection title="Sending" description="Choose how to send messages.">
+              <SettingsSection title={labels.sendingTitle} description={labels.sendingDescription}>
                 <SettingsCard>
                   <SettingsMenuSelectRow
-                    label="Send message with"
-                    description="Keyboard shortcut for sending messages"
+                    label={labels.sendMessageLabel}
+                    description={labels.sendMessageDescription}
                     value={sendMessageKey}
                     onValueChange={handleSendMessageKeyChange}
                     options={[
-                      { value: 'enter', label: 'Enter', description: 'Use Shift+Enter for new lines' },
-                      { value: 'cmd-enter', label: isMac ? '⌘ Enter' : 'Ctrl+Enter', description: 'Use Enter for new lines' },
+                      { value: 'enter', label: labels.sendMessageEnterLabel, description: labels.sendMessageEnterDescription },
+                      { value: 'cmd-enter', label: labels.sendMessageCmdEnterLabel, description: labels.sendMessageCmdEnterDescription },
                     ]}
                   />
                 </SettingsCard>

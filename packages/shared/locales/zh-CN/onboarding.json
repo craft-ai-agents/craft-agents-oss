@@ -1,0 +1,115 @@
+{
+  "welcome": {
+    "title": "欢迎使用 Craft Agents",
+    "titleExisting": "更新设置",
+    "description": "为智能体提供应有的体验。连接任何服务，整理会话，完成你要做的重要工作！",
+    "descriptionExisting": "更新 API 连接或调整你的设置。",
+    "cta": "开始",
+    "ctaExisting": "继续",
+    "loading": "正在检查..."
+  },
+  "apiSetup": {
+    "title": "设置 API 连接",
+    "description": "选择你希望为智能体提供动力的方式。",
+    "back": "返回",
+    "continue": "继续",
+    "recommended": "推荐",
+    "options": {
+      "claude": {
+        "name": "Claude Pro/Max",
+        "description": "使用你的 Claude 订阅，无限访问。"
+      },
+      "apiKey": {
+        "name": "API 密钥",
+        "description": "Anthropic、OpenRouter、Ollama 或兼容 API。"
+      }
+    }
+  },
+  "credentials": {
+    "oauthCode": {
+      "title": "输入授权码",
+      "description": "从浏览器页面复制授权码并粘贴到下方。",
+      "cancel": "取消",
+      "back": "返回",
+      "continue": "继续",
+      "loading": "正在连接...",
+      "errors": {
+        "emptyCode": "请输入授权码"
+      }
+    },
+    "oauthConnect": {
+      "title": "连接 Claude 账号",
+      "description": "使用你的 Claude 订阅来驱动多智能体工作流。",
+      "button": "使用 Claude 登录",
+      "loading": "正在连接...",
+      "errors": {
+        "startFailed": "启动 OAuth 失败",
+        "failed": "OAuth 失败"
+      }
+    },
+    "apiKey": {
+      "title": "API 配置",
+      "description": "输入你的 API 密钥。可选配置 OpenRouter、Ollama 或兼容 API 的自定义端点。",
+      "loading": "正在验证...",
+      "modelLabel": "模型",
+      "optional": "可选",
+      "presets": {
+        "custom": "自定义"
+      },
+      "errors": {
+        "invalid": "请输入有效的 API Key",
+        "connectionTestFailed": "连接测试失败",
+        "validationFailed": "校验失败"
+      },
+      "modelHelp": {
+        "custom": "留空时默认使用 Anthropic 模型名（Opus、Sonnet、Haiku）",
+        "nonClaude": "Claude 模型请留空，仅在非 Claude 模型时填写。",
+        "formatPrefix": "格式：",
+        "browseModels": "浏览模型",
+        "viewSupportedModels": "查看支持模型",
+        "ollama": "使用通过 ollama pull 拉取的任意模型。无需 API Key。"
+      }
+    },
+    "actions": {
+      "back": "返回",
+      "continue": "继续"
+    }
+  },
+  "completion": {
+    "titleSaving": "正在设置...",
+    "titleComplete": "全部完成！",
+    "descriptionSaving": "正在保存你的配置...",
+    "descriptionComplete": "直接开始聊天，马上开工。",
+    "cta": "开始使用"
+  },
+  "gitBash": {
+    "title": "需要 Git Bash",
+    "description": "Craft Agent 需要 Git Bash 在 Windows 上运行命令，但系统中未找到。",
+    "install": {
+      "title": "安装 Git for Windows",
+      "description": "获取 Git Bash 的最简单方式。免费且包含所需的一切。",
+      "cta": "下载 Git for Windows"
+    },
+    "alreadyInstalled": {
+      "title": "已经安装 Git？",
+      "description": "如果 Git 安装在非标准位置，你可以指定 bash.exe 的路径。",
+      "placeholder": "C:\\Program Files\\Git\\bin\\bash.exe",
+      "usePath": "使用此路径",
+      "recheck": "重新检查",
+      "checking": "正在检查...",
+      "browse": "浏览...",
+      "error": "{{error}}"
+    },
+    "back": "返回"
+  },
+  "reauth": {
+    "title": "会话已过期",
+    "description": "你的 Craft 会话已过期或不可用。",
+    "descriptionSecondary": "请重新登录以继续使用 Craft Agents。",
+    "note": "你的会话与设置已保留。",
+    "login": "使用 Craft 登录",
+    "loggingIn": "正在登录...",
+    "reset": "重置应用并重新开始...",
+    "error": "登录失败"
+  }
+}

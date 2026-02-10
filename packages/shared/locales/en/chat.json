@@ -1,0 +1,140 @@
+{
+  "panel": {
+    "title": "Chat"
+  },
+  "rename": {
+    "title": "Rename Chat",
+    "placeholder": "Enter chat name..."
+  },
+  "session": {
+    "missing": "This session no longer exists"
+  },
+  "toast": {
+    "linkCopied": "Link copied to clipboard",
+    "shareFailed": "Failed to share",
+    "shareUnknownError": "Unknown error",
+    "updateShareFailed": "Failed to update share",
+    "stopShareFailed": "Failed to stop sharing",
+    "shareUpdated": "Share updated",
+    "shareStopped": "Sharing stopped",
+    "titleRefreshed": "Title refreshed",
+    "titleRefreshFailed": "Failed to refresh title"
+  },
+  "actions": {
+    "open": "Open"
+  },
+  "share": {
+    "action": "Share",
+    "shared": "Shared",
+    "openInBrowser": "Open in Browser",
+    "copyLink": "Copy Link",
+    "updateShare": "Update Share",
+    "stopSharing": "Stop Sharing",
+    "learnMore": "Learn More",
+    "shareOnline": "Share Online"
+  },
+  "processing": {
+    "thinking": "Thinking...",
+    "pondering": "Pondering...",
+    "contemplating": "Contemplating...",
+    "reasoning": "Reasoning...",
+    "processing": "Processing...",
+    "computing": "Computing...",
+    "considering": "Considering...",
+    "reflecting": "Reflecting...",
+    "deliberating": "Deliberating...",
+    "cogitating": "Cogitating...",
+    "ruminating": "Ruminating...",
+    "musing": "Musing...",
+    "workingOnIt": "Working on it...",
+    "onIt": "On it...",
+    "crunching": "Crunching...",
+    "brewing": "Brewing...",
+    "connectingDots": "Connecting dots...",
+    "mullingOver": "Mulling it over...",
+    "deepInThought": "Deep in thought...",
+    "hmm": "Hmm...",
+    "letMeSee": "Let me see...",
+    "oneMoment": "One moment...",
+    "holdOn": "Hold on...",
+    "bearWithMe": "Bear with me...",
+    "justASec": "Just a sec...",
+    "hangTight": "Hang tight...",
+    "gettingThere": "Getting there...",
+    "almost": "Almost...",
+    "working": "Working...",
+    "busyBusy": "Busy busy...",
+    "whirring": "Whirring...",
+    "churning": "Churning...",
+    "percolating": "Percolating...",
+    "simmering": "Simmering...",
+    "cooking": "Cooking...",
+    "baking": "Baking...",
+    "stirring": "Stirring...",
+    "spinningUp": "Spinning up...",
+    "warmingUp": "Warming up...",
+    "revving": "Revving...",
+    "buzzing": "Buzzing...",
+    "humming": "Humming...",
+    "ticking": "Ticking...",
+    "clicking": "Clicking...",
+    "whizzing": "Whizzing...",
+    "zooming": "Zooming...",
+    "zipping": "Zipping...",
+    "chugging": "Chugging...",
+    "trucking": "Trucking...",
+    "rolling": "Rolling..."
+  },
+  "compact": {
+    "emptyTitle": "What would you like to change?",
+    "emptySubtitle": "Just describe it — I'll handle the rest"
+  },
+  "loadMore": "↑ Scroll up for earlier messages",
+  "loadMoreCount": "↑ Scroll up for earlier messages ({{count}} more)",
+  "plan": {
+    "approvedMessage": "Plan approved, please execute."
+  },
+  "overlay": {
+    "messagePreview": "Message Preview",
+    "responsePreview": "Response Preview",
+    "turnDetails": "Turn Details"
+  },
+  "input": {
+    "attachSingle": "1 file",
+    "attachMultiple": "{{count}} files",
+    "attachFiles": "Attach Files",
+    "attachTooltip": "Attach files",
+    "chooseSources": "Choose Sources",
+    "sourcesCount": "{{count}} sources",
+    "sourcesTooltip": "Sources",
+    "sourcesEmptyTitle": "No sources configured.",
+    "sourcesEmptyDescription": "Add sources in Settings.",
+    "sourcesSearchPlaceholder": "Search sources...",
+    "modelTooltip": "Model",
+    "customModelDescription": "Custom API connection",
+    "thinkingLevelDescription": "Extended reasoning depth",
+    "contextLabel": "Context",
+    "contextWarningIdle": "{{percent}}% context used — click to compact",
+    "contextWarningBusy": "{{percent}}% context used — wait for current operation",
+    "pathPrefix": "in {{path}}",
+    "folderFallback": "Folder",
+    "workInFolder": "Work in Folder",
+    "workingDirectoryTitle": "Working directory",
+    "workingDirectoryOn": "on",
+    "chooseWorkingDirectory": "Choose working directory",
+    "filterFoldersPlaceholder": "Filter folders...",
+    "noFoldersFound": "No folders found",
+    "chooseFolder": "Choose Folder...",
+    "reset": "Reset",
+    "searchPlaceholder": "Search titles and content...",
+    "placeholder": {
+      "default": "What would you like to work on?",
+      "modeHint": "Use Shift + Tab to switch between Explore and Execute",
+      "mentionsHint": "Type @ to mention files, folders, or skills",
+      "labelsHint": "Type # to apply labels to this conversation",
+      "newLineHint": "Press Shift + Return to add a new line",
+      "toggleSidebar": "Press {{key}} + B to toggle the sidebar",
+      "focusMode": "Press {{key}} + . for focus mode"
+    }
+  }
+}

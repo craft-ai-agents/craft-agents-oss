@@ -39,6 +39,14 @@ const APP_PERMISSIONS_DIR = join(CONFIG_DIR, 'permissions');
 let permissionsInitialized = false;
 
 /**
+ * Test-only reset hook for module-level initialization guard.
+ * Allows deterministic unit tests around first-run seeding behavior.
+ */
+export function __resetPermissionsInitializationForTests(): void {
+  permissionsInitialized = false;
+}
+
+/**
  * Get the app-level permissions directory.
  * Default permissions are stored at ~/.craft-agent/permissions/
  */
@@ -57,7 +65,22 @@ export function getAppPermissionsDir(): string {
  * User customizations in workspace/source permissions.json files
  * are never touched by this function.
  */
-export function ensureDefaultPermissions(): void {
+function resolveDefaultPermissionsTemplate(
+  bundledPermissionsDir: string,
+  language?: string,
+): string {
+  const isZhCN = language?.toLowerCase() === 'zh-cn'
+  const zhTemplate = join(bundledPermissionsDir, 'default.zh-CN.json')
+  const baseTemplate = join(bundledPermissionsDir, 'default.json')
+
+  if (isZhCN && existsSync(zhTemplate)) {
+    return zhTemplate
+  }
+
+  return baseTemplate
+}
+
+export function ensureDefaultPermissions(language?: string): void {
   // Skip if already initialized this session (prevents re-init on hot reload)
   if (permissionsInitialized) {
     return;
@@ -77,21 +100,22 @@ export function ensureDefaultPermissions(): void {
     return;
   }
 
+  // Seed bundled default.json to disk only when missing.
+  // Existing default.json is treated as user-owned and is never overwritten.
+  // This preserves compatibility with user customizations.
   const destPath = join(permissionsDir, 'default.json');
-  const srcPath = join(bundledPermissionsDir, 'default.json');
-
-  if (!existsSync(srcPath)) {
-    return;
+  if (existsSync(destPath)) {
+    return
   }
 
-  // New install or corrupt file - copy fresh from bundle
-  if (!existsSync(destPath) || !isValidPermissionsFile(destPath)) {
+  const srcPath = resolveDefaultPermissionsTemplate(bundledPermissionsDir, language)
+  if (existsSync(srcPath)) {
     try {
       const content = readFileSync(srcPath, 'utf-8');
       writeFileSync(destPath, content, 'utf-8');
-      debug('[Permissions] Installed default.json');
+      debug('[Permissions] Seeded default permissions from template', srcPath, 'to', destPath);
     } catch (error) {
-      debug('[Permissions] Error installing default.json:', error);
+      debug('[Permissions] Error seeding bundled default.json:', error);
     }
     return;
   }

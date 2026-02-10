@@ -609,6 +609,9 @@ export const IPC_CHANNELS = {
   OPEN_SESSION_IN_NEW_WINDOW: 'window:openSessionInNewWindow',
   SWITCH_WORKSPACE: 'window:switchWorkspace',
   CLOSE_WINDOW: 'window:close',
+  // App language
+  GET_APP_LANGUAGE: 'app:getLanguage',
+  SET_APP_LANGUAGE: 'app:setLanguage',
   // Close request events (main → renderer, for intercepting X button / Cmd+W)
   WINDOW_CLOSE_REQUESTED: 'window:closeRequested',
   WINDOW_CONFIRM_CLOSE: 'window:confirmClose',
@@ -916,6 +919,8 @@ export interface ElectronAPI {
   openSessionInNewWindow(workspaceId: string, sessionId: string): Promise<void>
   switchWorkspace(workspaceId: string): Promise<void>
   closeWindow(): Promise<void>
+  getAppLanguage(): Promise<string | null>
+  setAppLanguage(language: string): Promise<void>
   confirmCloseWindow(): Promise<void>
   /** Listen for close requests (X button, Cmd+W). Returns cleanup function. */
   onCloseRequested(callback: () => void): () => void
@@ -1065,7 +1070,7 @@ export interface ElectronAPI {
   onDefaultPermissionsChanged(callback: () => void): () => void
 
   // Skills
-  getSkills(workspaceId: string, workingDirectory?: string): Promise<LoadedSkill[]>
+  getSkills(workspaceId: string): Promise<LoadedSkill[]>
   getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
   deleteSkill(workspaceId: string, skillSlug: string): Promise<void>
   openSkillInEditor(workspaceId: string, skillSlug: string): Promise<void>
@@ -1212,8 +1217,10 @@ export interface UpdateInfo {
   latestVersion: string | null
   /** Download state */
   downloadState: 'idle' | 'downloading' | 'ready' | 'installing' | 'error'
-  /** Download progress (0-100) */
+  /** Download progress (0-100, or -1 for indeterminate on macOS) */
   downloadProgress: number
+  /** Whether this platform supports download progress events (false on macOS) */
+  supportsProgress: boolean
   /** Error message if download/install failed */
   error?: string
 }

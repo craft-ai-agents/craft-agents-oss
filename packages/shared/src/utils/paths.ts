@@ -206,10 +206,12 @@ export function setBundledAssetsRoot(dir: string): void {
  */
 export function getBundledAssetsDir(subfolder: string): string | undefined {
   const candidates = [
-    // Electron packaged app (set via setBundledAssetsRoot at startup)
-    ...(_assetsRoot ? [join(_assetsRoot, 'resources', subfolder)] : []),
-    // Dev: electron app resources folder (when cwd is apps/electron)
-    join(process.cwd(), 'resources', subfolder),
+    // Electron main process (set via setBundledAssetsRoot at startup)
+    ...(_assetsRoot ? [join(_assetsRoot, 'assets', subfolder)] : []),
+    // Dev: Electron resources directory (themes/permissions currently live here)
+    join(process.cwd(), 'apps', 'electron', 'resources', subfolder),
+    // Dev: monorepo source
+    join(process.cwd(), 'packages', 'shared', 'assets', subfolder),
     // Dev: dist output (after build:copy)
     join(process.cwd(), 'dist', 'resources', subfolder),
   ];

@@ -5,6 +5,8 @@ import { existsSync } from 'fs'
 import { release } from 'os'
 import { IPC_CHANNELS } from '../shared/types'
 import type { SavedWindow } from './window-state'
+import { getMainI18n } from './i18n'
+import { getContextMenuI18nLabels } from './i18n-labels'
 
 // Vite dev server URL for hot reload
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
@@ -159,13 +161,15 @@ export class WindowManager {
 
     // Enable right-click context menu in development
     if (!app.isPackaged) {
-      window.webContents.on('context-menu', (_event, params) => {
+      window.webContents.on('context-menu', async (_event, params) => {
+        const { t } = await getMainI18n(['menu'])
+        const labels = getContextMenuI18nLabels(t)
         Menu.buildFromTemplate([
-          { label: 'Inspect Element', click: () => window.webContents.inspectElement(params.x, params.y) },
+          { label: labels.inspectElement, click: () => window.webContents.inspectElement(params.x, params.y) },
           { type: 'separator' },
-          { label: 'Cut', role: 'cut', enabled: params.editFlags.canCut },
-          { label: 'Copy', role: 'copy', enabled: params.editFlags.canCopy },
-          { label: 'Paste', role: 'paste', enabled: params.editFlags.canPaste },
+          { label: labels.cut, role: 'cut', enabled: params.editFlags.canCut },
+          { label: labels.copy, role: 'copy', enabled: params.editFlags.canCopy },
+          { label: labels.paste, role: 'paste', enabled: params.editFlags.canPaste },
         ]).popup()
       })
     }

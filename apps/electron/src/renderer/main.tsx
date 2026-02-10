@@ -8,6 +8,7 @@ import App from './App'
 import { ThemeProvider } from './context/ThemeContext'
 import { windowWorkspaceIdAtom } from './atoms/sessions'
 import { Toaster } from '@/components/ui/sonner'
+import './i18n-init'
 import './index.css'
 
 // Known-harmless console messages that should NOT be sent to Sentry.

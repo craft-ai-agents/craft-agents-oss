@@ -1,4 +1,6 @@
 import { useState, useMemo } from "react"
+import type { TFunction } from "i18next"
+import { useTranslation } from "react-i18next"
 import {
   Dialog,
   DialogContent,
@@ -18,6 +20,24 @@ interface ResetConfirmationDialogProps {
   onCancel: () => void
 }
 
+export function getResetDialogLabels(t: TFunction) {
+  return {
+    title: t('common:reset.title'),
+    description: t('common:reset.description'),
+    warningTitle: t('common:reset.warningTitle'),
+    warningDescription: t('common:reset.warningDescription'),
+    confirmationPrompt: t('common:reset.confirmationPrompt', { a: '{{a}}', b: '{{b}}' }),
+    placeholder: t('common:reset.placeholder'),
+    confirm: t('common:reset.confirm'),
+    cancel: t('common:actions.cancel'),
+    items: [
+      t('common:reset.items.workspaces'),
+      t('common:reset.items.credentials'),
+      t('common:reset.items.preferences'),
+    ],
+  }
+}
+
 /**
  * ResetConfirmationDialog - Destructive action confirmation with math problem
  *
@@ -29,6 +49,8 @@ export function ResetConfirmationDialog({
   onConfirm,
   onCancel,
 }: ResetConfirmationDialogProps) {
+  const { t } = useTranslation(['common'])
+  const labels = getResetDialogLabels(t)
   const [answer, setAnswer] = useState("")
 
   // Register with modal context so X button / Cmd+W closes this dialog first
@@ -36,8 +58,8 @@ export function ResetConfirmationDialog({
 
   // Generate a random math problem when dialog opens
   const problem = useMemo(() => {
-    const a = Math.floor(Math.random() * 50) + 10
-    const b = Math.floor(Math.random() * 50) + 10
+    const a = open ? Math.floor(Math.random() * 50) + 10 : 0
+    const b = open ? Math.floor(Math.random() * 50) + 10 : 0
     return { a, b, sum: a + b }
   }, [open]) // Regenerate when dialog opens
 
@@ -61,35 +83,36 @@ export function ResetConfirmationDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="h-5 w-5" />
-            Reset App
+            {labels.title}
           </DialogTitle>
           <DialogDescription className="text-left pt-2">
-            This will <strong>permanently delete</strong>:
+            {labels.description}
           </DialogDescription>
         </DialogHeader>
 
         <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 pl-2">
-          <li>All workspaces and their settings</li>
-          <li>All credentials and API keys</li>
-          <li>All preferences and session data</li>
+          {labels.items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
         </ul>
 
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-md p-3 text-sm">
-          <strong className="text-amber-600 dark:text-amber-400">Back up any important data first!</strong>
+          <strong className="text-amber-600 dark:text-amber-400">{labels.warningTitle}</strong>
           <p className="text-muted-foreground mt-1">
-            This action cannot be undone.
+            {labels.warningDescription}
           </p>
         </div>
 
         <div className="space-y-2 pt-2">
-          <label className="text-sm font-medium">
-            To confirm, solve: {problem.a} + {problem.b} =
+          <label className="text-sm font-medium" htmlFor="reset-confirmation-answer">
+            {t('common:reset.confirmationPrompt', { a: problem.a, b: problem.b })}
           </label>
           <Input
+            id="reset-confirmation-answer"
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
-            placeholder="Enter answer"
+            placeholder={labels.placeholder}
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
             onKeyDown={(e) => {
@@ -103,14 +126,14 @@ export function ResetConfirmationDialog({
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={handleCancel}>
-            Cancel
+            {labels.cancel}
           </Button>
           <Button
             variant="destructive"
             disabled={!isCorrect}
             onClick={handleConfirm}
           >
-            Reset App
+            {labels.confirm}
           </Button>
         </DialogFooter>
       </DialogContent>

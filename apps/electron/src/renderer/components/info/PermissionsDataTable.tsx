@@ -17,6 +17,9 @@ import { DataTableOverlay } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/hooks/useTheme'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
+import { getTableLabels } from '@/i18n/ui-labels'
+import { getPermissionsTableColumnTitles } from './table-column-labels'
 
 export type PermissionAccess = 'allowed' | 'blocked'
 export type PermissionType = 'tool' | 'bash' | 'api' | 'mcp'
@@ -83,11 +86,11 @@ function PatternBadge({ pattern }: { pattern: string }) {
   return badge
 }
 
-// Column definitions with sorting
-const columnsWithType: ColumnDef<PermissionRow>[] = [
+function getColumnsWithType(headers: ReturnType<typeof getPermissionsTableColumnTitles>): ColumnDef<PermissionRow>[] {
+  return [
   {
     accessorKey: 'access',
-    header: ({ column }) => <SortableHeader column={column} title="Access" />,
+    header: ({ column }) => <SortableHeader column={column} title={headers.access} />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
         <Info_StatusBadge status={row.original.access} className="whitespace-nowrap" />
@@ -97,7 +100,7 @@ const columnsWithType: ColumnDef<PermissionRow>[] = [
   },
   {
     accessorKey: 'type',
-    header: ({ column }) => <SortableHeader column={column} title="Type" />,
+    header: ({ column }) => <SortableHeader column={column} title={headers.type} />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
         <Info_Badge color="muted" className="capitalize whitespace-nowrap">
@@ -109,7 +112,7 @@ const columnsWithType: ColumnDef<PermissionRow>[] = [
   },
   {
     accessorKey: 'pattern',
-    header: ({ column }) => <SortableHeader column={column} title="Pattern" />,
+    header: ({ column }) => <SortableHeader column={column} title={headers.pattern} />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
         <PatternBadge pattern={row.original.pattern} />
@@ -120,7 +123,7 @@ const columnsWithType: ColumnDef<PermissionRow>[] = [
   {
     id: 'comment',
     accessorKey: 'comment',
-    header: () => <span className="p-1.5 pl-2.5">Comment</span>,
+    header: () => <span className="p-1.5 pl-2.5">{headers.comment}</span>,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5 min-w-0">
         <span className="truncate block">
@@ -131,11 +134,13 @@ const columnsWithType: ColumnDef<PermissionRow>[] = [
     meta: { fillWidth: true, truncate: true },
   },
 ]
+}
 
-const columnsWithoutType: ColumnDef<PermissionRow>[] = [
+function getColumnsWithoutType(headers: ReturnType<typeof getPermissionsTableColumnTitles>): ColumnDef<PermissionRow>[] {
+  return [
   {
     accessorKey: 'access',
-    header: ({ column }) => <SortableHeader column={column} title="Access" />,
+    header: ({ column }) => <SortableHeader column={column} title={headers.access} />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
         <Info_StatusBadge status={row.original.access} className="whitespace-nowrap" />
@@ -145,7 +150,7 @@ const columnsWithoutType: ColumnDef<PermissionRow>[] = [
   },
   {
     accessorKey: 'pattern',
-    header: ({ column }) => <SortableHeader column={column} title="Pattern" />,
+    header: ({ column }) => <SortableHeader column={column} title={headers.pattern} />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
         <PatternBadge pattern={row.original.pattern} />
@@ -156,7 +161,7 @@ const columnsWithoutType: ColumnDef<PermissionRow>[] = [
   {
     id: 'comment',
     accessorKey: 'comment',
-    header: () => <span className="p-1.5 pl-2.5">Comment</span>,
+    header: () => <span className="p-1.5 pl-2.5">{headers.comment}</span>,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5 min-w-0">
         <span className="truncate block">
@@ -167,6 +172,7 @@ const columnsWithoutType: ColumnDef<PermissionRow>[] = [
     meta: { fillWidth: true, truncate: true },
   },
 ]
+}
 
 export function PermissionsDataTable({
   data,
@@ -179,11 +185,15 @@ export function PermissionsDataTable({
 }: PermissionsDataTableProps) {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const { isDark } = useTheme()
-  const columns = hideTypeColumn ? columnsWithoutType : columnsWithType
+  const { t } = useTranslation(['common'])
+  const tableLabels = getTableLabels(t)
+  const headers = getPermissionsTableColumnTitles(tableLabels.permissions.headers)
+  const columns = hideTypeColumn ? getColumnsWithoutType(headers) : getColumnsWithType(headers)
 
   // Fullscreen button for toolbar - shown on hover
   const fullscreenButton = fullscreen ? (
     <button
+      type="button"
       onClick={() => setIsFullscreen(true)}
       className={cn(
         'p-1 rounded-[6px] transition-all',

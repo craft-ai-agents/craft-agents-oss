@@ -1,0 +1,35 @@
+{
+  "actions": {
+    "ok": "OK",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "logout": "Log Out"
+  },
+  "logout": {
+    "title": "Log Out",
+    "message": "Are you sure you want to log out?",
+    "detail": "All conversations will be deleted. This action cannot be undone."
+  },
+  "deleteSession": {
+    "title": "Delete Conversation",
+    "message": "Are you sure you want to delete: \"{{name}}\"?",
+    "detail": "This action cannot be undone."
+  },
+  "openFolder": {
+    "title": "Select Working Directory"
+  },
+  "gitBash": {
+    "selectTitle": "Select bash.exe",
+    "executableFilter": "Executable"
+  },
+  "fileDialog": {
+    "allFiles": "All Files",
+    "images": "Images",
+    "documents": "Documents",
+    "code": "Code"
+  },
+  "resetDefaults": {
+    "title": "Reset to Defaults",
+    "detail": "To reset Craft Agent to defaults, quit the app and run:\n\nbun run fresh-start\n\nThis will delete all configuration, credentials, workspaces, and sessions."
+  }
+}

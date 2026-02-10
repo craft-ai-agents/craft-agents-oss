@@ -118,6 +118,8 @@ import { RightSidebar } from "./RightSidebar"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
+import { useTranslation } from 'react-i18next'
+import { getAppShellLabels } from './app-shell-labels'
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -458,6 +460,9 @@ function AppShellContent({
   menuNewChatTrigger,
   isFocusedMode = false,
 }: AppShellProps) {
+  const { t } = useTranslation(['common'])
+  const i18nLabels = getAppShellLabels(t)
+
   // Destructure commonly used values from context
   // Note: sessions is NOT destructured here - we use sessionMetaMapAtom instead
   // to prevent closures from retaining the full messages array
@@ -1197,7 +1202,8 @@ function AppShellContent({
     : undefined
   React.useEffect(() => {
     if (!activeWorkspaceId) return
-    window.electronAPI.getSkills(activeWorkspaceId, activeSessionWorkingDirectory).then((loaded) => {
+    void activeSessionWorkingDirectory
+    window.electronAPI.getSkills(activeWorkspaceId).then((loaded) => {
       setSkills(loaded || [])
     }).catch(err => {
       console.error('[Chat] Failed to load skills:', err)
@@ -1913,35 +1919,35 @@ function AppShellContent({
   const listTitle = React.useMemo(() => {
     // Sources navigator
     if (isSourcesNavigation(navState)) {
-      return 'Sources'
+      return i18nLabels.sources
     }
 
     // Skills navigator
     if (isSkillsNavigation(navState)) {
-      return 'All Skills'
+      return i18nLabels.allSkills
     }
 
     // Settings navigator
-    if (isSettingsNavigation(navState)) return 'Settings'
+    if (isSettingsNavigation(navState)) return i18nLabels.settings
 
-    // Sessions navigator - use sessionFilter
-    if (!sessionFilter) return 'All Sessions'
+    // Chats navigator - use chatFilter
+    if (!chatFilter) return i18nLabels.allChats
 
     switch (sessionFilter.kind) {
       case 'flagged':
-        return 'Flagged'
+        return i18nLabels.flagged
       case 'state': {
-        const state = effectiveTodoStates.find(s => s.id === sessionFilter.stateId)
-        return state?.label || 'All Sessions'
+        const state = effectiveTodoStates.find(s => s.id === chatFilter.stateId)
+        return state?.label || i18nLabels.allChats
       }
       case 'label':
-        return sessionFilter.labelId === '__all__' ? 'Labels' : getLabelDisplayName(labelConfigs, sessionFilter.labelId)
+        return chatFilter.labelId === '__all__' ? i18nLabels.labels : getLabelDisplayName(labelConfigs, chatFilter.labelId)
       case 'view':
-        return sessionFilter.viewId === '__all__' ? 'Views' : viewConfigs.find(v => v.id === sessionFilter.viewId)?.name || 'Views'
+        return chatFilter.viewId === '__all__' ? i18nLabels.views : viewConfigs.find(v => v.id === chatFilter.viewId)?.name || i18nLabels.views
       default:
-        return 'All Sessions'
+        return i18nLabels.allChats
     }
-  }, [navState, sessionFilter, effectiveTodoStates, labelConfigs, viewConfigs])
+  }, [navState, chatFilter, effectiveTodoStates, labelConfigs, viewConfigs, i18nLabels])
 
   // Build recursive sidebar items from label tree.
   // Each node renders with condensed height (compact: true) since many labels expected.
@@ -2078,31 +2084,24 @@ function AppShellContent({
               <div className="flex-1 flex flex-col min-h-0">
                 {/* New Session Button - Gmail-style, with context menu for "Open in New Window" */}
                 <div className="px-2 pt-1 pb-2 shrink-0">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div>
-                        <ContextMenu modal={true}>
-                          <ContextMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              onClick={() => handleNewChat(true)}
-                              className="w-full justify-start gap-2 py-[7px] px-2 text-[13px] font-normal rounded-[6px] shadow-minimal bg-background"
-                              data-tutorial="new-chat-button"
-                            >
-                              <SquarePenRounded className="h-3.5 w-3.5 shrink-0" />
-                              New Session
-                            </Button>
-                          </ContextMenuTrigger>
-                          <StyledContextMenuContent>
-                            <ContextMenuProvider>
-                              <SidebarMenu type="newSession" />
-                            </ContextMenuProvider>
-                          </StyledContextMenuContent>
-                        </ContextMenu>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">{newChatHotkey}</TooltipContent>
-                  </Tooltip>
+                  <ContextMenu modal={true}>
+                    <ContextMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        onClick={() => handleNewChat(true)}
+                        className="w-full justify-start gap-2 py-[7px] px-2 text-[13px] font-normal rounded-[6px] shadow-minimal bg-background"
+                        data-tutorial="new-chat-button"
+                      >
+                        <SquarePenRounded className="h-3.5 w-3.5 shrink-0" />
+                        {i18nLabels.newChat}
+                      </Button>
+                    </ContextMenuTrigger>
+                    <StyledContextMenuContent>
+                      <ContextMenuProvider>
+                        <SidebarMenu type="newChat" />
+                      </ContextMenuProvider>
+                    </StyledContextMenuContent>
+                  </ContextMenu>
                 </div>
                 {/* Primary Nav: All Sessions, Flagged, States, Labels | Sources, Skills | Settings */}
                 {/* pb-4 provides clearance so the last item scrolls above the mask-fade-bottom gradient */}
@@ -2114,8 +2113,8 @@ function AppShellContent({
                   links={[
                     // --- Sessions Section ---
                     {
-                      id: "nav:allSessions",
-                      title: "All Sessions",
+                      id: "nav:allChats",
+                      title: i18nLabels.allChats,
                       label: String(workspaceSessionMetas.length),
                       icon: Inbox,
                       variant: sessionFilter?.kind === 'allSessions' ? "default" : "ghost",
@@ -2123,7 +2122,7 @@ function AppShellContent({
                     },
                     {
                       id: "nav:flagged",
-                      title: "Flagged",
+                      title: i18nLabels.flagged,
                       label: String(flaggedCount),
                       icon: <Flag className="h-3.5 w-3.5" />,
                       variant: sessionFilter?.kind === 'flagged' ? "default" : "ghost",
@@ -2132,7 +2131,7 @@ function AppShellContent({
                     // States: expandable section with status sub-items (drag-and-drop reorder)
                     {
                       id: "nav:states",
-                      title: "Status",
+                      title: i18nLabels.statuses,
                       icon: CheckCircle2,
                       variant: "ghost",
                       onClick: () => toggleExpanded('nav:states'),
@@ -2164,7 +2163,7 @@ function AppShellContent({
                     // Labels: navigable header (shows all labeled sessions) + hierarchical tree (drag-and-drop reorder + re-parent)
                     {
                       id: "nav:labels",
-                      title: "Labels",
+                      title: i18nLabels.labels,
                       icon: Tag,
                       // Only highlighted when "Labels" itself is selected (not sub-labels)
                       variant: (sessionFilter?.kind === 'label' && sessionFilter.labelId === '__all__') ? "default" as const : "ghost" as const,
@@ -2194,7 +2193,7 @@ function AppShellContent({
                     // --- Sources & Skills Section ---
                     {
                       id: "nav:sources",
-                      title: "Sources",
+                      title: i18nLabels.sources,
                       label: String(sources.length),
                       icon: DatabaseZap,
                       variant: (isSourcesNavigation(navState) && !sourceFilter) ? "default" : "ghost",
@@ -2210,7 +2209,7 @@ function AppShellContent({
                       items: [
                         {
                           id: "nav:sources:api",
-                          title: "APIs",
+                          title: i18nLabels.apis,
                           label: String(sourceTypeCounts.api),
                           icon: Globe,
                           variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'api') ? "default" : "ghost",
@@ -2223,7 +2222,7 @@ function AppShellContent({
                         },
                         {
                           id: "nav:sources:mcp",
-                          title: "MCPs",
+                          title: i18nLabels.mcps,
                           label: String(sourceTypeCounts.mcp),
                           icon: <McpIcon className="h-3.5 w-3.5" />,
                           variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'mcp') ? "default" : "ghost",
@@ -2236,7 +2235,7 @@ function AppShellContent({
                         },
                         {
                           id: "nav:sources:local",
-                          title: "Local Folders",
+                          title: i18nLabels.localFolders,
                           label: String(sourceTypeCounts.local),
                           icon: FolderOpen,
                           variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'local') ? "default" : "ghost",
@@ -2251,7 +2250,7 @@ function AppShellContent({
                     },
                     {
                       id: "nav:skills",
-                      title: "Skills",
+                      title: i18nLabels.skills,
                       label: String(skills.length),
                       icon: Zap,
                       variant: isSkillsNavigation(navState) ? "default" : "ghost",
@@ -2266,7 +2265,7 @@ function AppShellContent({
                     // --- Settings ---
                     {
                       id: "nav:settings",
-                      title: "Settings",
+                      title: i18nLabels.settings,
                       icon: Settings,
                       variant: isSettingsNavigation(navState) ? "default" : "ghost",
                       onClick: () => handleSettingsClick('app'),
@@ -2306,43 +2305,45 @@ function AppShellContent({
                   </div>
                   {/* Help button - icon only with tooltip */}
                   <DropdownMenu>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            className="flex items-center justify-center h-7 w-7 rounded-[6px] select-none outline-none hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-                          >
-                            <HelpCircle className="h-4 w-4 text-foreground/60" />
-                          </button>
-                        </DropdownMenuTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">Help & Documentation</TooltipContent>
-                    </Tooltip>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              className="flex items-center justify-center h-7 w-7 rounded-[6px] select-none outline-none hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+                            >
+                              <HelpCircle className="h-4 w-4 text-foreground/60" />
+                            </button>
+                          </DropdownMenuTrigger>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">{i18nLabels.helpDocs}</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                     <StyledDropdownMenuContent align="end" side="top" sideOffset={8}>
                       <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('sources'))}>
                         <DatabaseZap className="h-3.5 w-3.5" />
-                        <span className="flex-1">Sources</span>
+                        <span className="flex-1">{i18nLabels.sources}</span>
                         <ExternalLink className="h-3 w-3 text-muted-foreground" />
                       </StyledDropdownMenuItem>
                       <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('skills'))}>
                         <Zap className="h-3.5 w-3.5" />
-                        <span className="flex-1">Skills</span>
+                        <span className="flex-1">{i18nLabels.skills}</span>
                         <ExternalLink className="h-3 w-3 text-muted-foreground" />
                       </StyledDropdownMenuItem>
                       <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('statuses'))}>
                         <CheckCircle2 className="h-3.5 w-3.5" />
-                        <span className="flex-1">Statuses</span>
+                        <span className="flex-1">{i18nLabels.statuses}</span>
                         <ExternalLink className="h-3 w-3 text-muted-foreground" />
                       </StyledDropdownMenuItem>
                       <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('permissions'))}>
                         <Settings className="h-3.5 w-3.5" />
-                        <span className="flex-1">Permissions</span>
+                        <span className="flex-1">{i18nLabels.permissions}</span>
                         <ExternalLink className="h-3 w-3 text-muted-foreground" />
                       </StyledDropdownMenuItem>
                       <StyledDropdownMenuSeparator />
                       <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}>
                         <ExternalLink className="h-3.5 w-3.5" />
-                        <span className="flex-1">All Documentation</span>
+                        <span className="flex-1">{i18nLabels.allDocumentation}</span>
                       </StyledDropdownMenuItem>
                     </StyledDropdownMenuContent>
                   </DropdownMenu>
@@ -2437,7 +2438,7 @@ function AppShellContent({
                       >
                         {/* Header with title and clear button (only clears user-added filters, never pinned) */}
                         <div className="flex items-center justify-between px-2 py-1.5">
-                          <span className="text-xs font-medium text-muted-foreground">Filter Chats</span>
+                          <span className="text-xs font-medium text-muted-foreground">{i18nLabels.filterChats}</span>
                           {(listFilter.size > 0 || labelFilter.size > 0) && (
                             <button
                               onClick={(e) => {
@@ -2447,7 +2448,7 @@ function AppShellContent({
                               }}
                               className="text-xs text-muted-foreground hover:text-foreground"
                             >
-                              Clear
+                              {i18nLabels.clear}
                             </button>
                           )}
                         </div>
@@ -2516,7 +2517,7 @@ function AppShellContent({
                                   }
                                 }
                               }}
-                              placeholder="Search statuses & labels..."
+                              placeholder={i18nLabels.searchPlaceholder}
                               className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
                               autoFocus
                             />
@@ -2536,7 +2537,7 @@ function AppShellContent({
                                   <StyledDropdownMenuItem disabled>
                                     <FilterMenuRow
                                       icon={<Flag className="h-3.5 w-3.5" />}
-                                      label="Flagged"
+                                      label={i18nLabels.flagged}
                                       accessory={<Check className="h-3 w-3 text-muted-foreground" />}
                                     />
                                   </StyledDropdownMenuItem>
@@ -2645,7 +2646,7 @@ function AppShellContent({
                             <DropdownMenuSub>
                               <StyledDropdownMenuSubTrigger>
                                 <Inbox className="h-3.5 w-3.5" />
-                                <span className="flex-1">Statuses</span>
+                                <span className="flex-1">{i18nLabels.filterStatuses}</span>
                               </StyledDropdownMenuSubTrigger>
                               <StyledDropdownMenuSubContent minWidth="min-w-[180px]">
                                 {effectiveTodoStates.map(state => {
@@ -2717,12 +2718,12 @@ function AppShellContent({
                             <DropdownMenuSub>
                               <StyledDropdownMenuSubTrigger>
                                 <Tag className="h-3.5 w-3.5" />
-                                <span className="flex-1">Labels</span>
+                                <span className="flex-1">{i18nLabels.filterLabels}</span>
                               </StyledDropdownMenuSubTrigger>
                               <StyledDropdownMenuSubContent minWidth="min-w-[180px]">
                                 {labelConfigs.length === 0 ? (
                                   <StyledDropdownMenuItem disabled>
-                                    <span className="text-muted-foreground">No labels configured</span>
+                                    <span className="text-muted-foreground">{i18nLabels.noLabelsConfigured}</span>
                                   </StyledDropdownMenuItem>
                                 ) : (
                                   <FilterLabelItems
@@ -2742,7 +2743,7 @@ function AppShellContent({
                               }}
                             >
                               <Search className="h-3.5 w-3.5" />
-                              <span className="flex-1">Search</span>
+                              <span className="flex-1">{i18nLabels.search}</span>
                             </StyledDropdownMenuItem>
                           </>
                         ) : (
@@ -2753,7 +2754,7 @@ function AppShellContent({
                                 Supports keyboard navigation (ArrowUp/Down/Enter in input). */}
                             {filterDropdownResults.states.length === 0 && filterDropdownResults.labels.length === 0 ? (
                               <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-                                No matching statuses or labels
+                                {i18nLabels.noMatchingFilters}
                               </div>
                             ) : (
                               <div ref={filterDropdownListRef} className="max-h-[240px] overflow-y-auto py-1">
@@ -2761,7 +2762,7 @@ function AppShellContent({
                                 {filterDropdownResults.states.length > 0 && (
                                   <>
                                     <div className="px-3 pt-1.5 pb-1 text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wider">
-                                      Statuses
+                                      {i18nLabels.filterStatuses}
                                     </div>
                                     {filterDropdownResults.states.map((state, index) => {
                                       const applyColor = state.iconColorable
@@ -2848,7 +2849,7 @@ function AppShellContent({
                                 {filterDropdownResults.labels.length > 0 && (
                                   <>
                                     <div className="px-3 pt-1.5 pb-1 text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wider">
-                                      Labels
+                                      {i18nLabels.filterLabels}
                                     </div>
                                     {filterDropdownResults.labels.map((item, index) => {
                                       // Offset by state count for unified index
@@ -2940,7 +2941,7 @@ function AppShellContent({
                       trigger={
                         <HeaderIconButton
                           icon={<Plus className="h-4 w-4" />}
-                          tooltip="Add Source"
+                          tooltip={i18nLabels.addSource}
                           data-tutorial="add-source-button"
                         />
                       }
@@ -2956,7 +2957,7 @@ function AppShellContent({
                       trigger={
                         <HeaderIconButton
                           icon={<Plus className="h-4 w-4" />}
-                          tooltip="Add Skill"
+                          tooltip={i18nLabels.addSkill}
                           data-tutorial="add-skill-button"
                         />
                       }

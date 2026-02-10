@@ -11,6 +11,8 @@
 
 import * as React from 'react'
 import { Trash2, CalendarDays } from 'lucide-react'
+import type { TFunction } from 'i18next'
+import { useTranslation } from 'react-i18next'
 import { Popover, PopoverTrigger, PopoverContent } from './popover'
 import { Calendar } from './calendar'
 import { cn } from '@/lib/utils'
@@ -35,6 +37,12 @@ export interface LabelValuePopoverProps {
   children: React.ReactNode
 }
 
+export function getLabelValuePopoverLabels(t: TFunction) {
+  return {
+    remove: t('common:actions.remove'),
+  }
+}
+
 export function LabelValuePopover({
   label,
   value,
@@ -44,6 +52,9 @@ export function LabelValuePopover({
   onOpenChange,
   children,
 }: LabelValuePopoverProps) {
+  const { t } = useTranslation(['common'])
+  const labels = getLabelValuePopoverLabels(t)
+
   // Local draft value — resets to prop value when popover opens
   const [draft, setDraft] = React.useState(value ?? '')
   // Whether the inline calendar picker is visible (date labels only)
@@ -294,7 +305,7 @@ export function LabelValuePopover({
             )}
           >
             <Trash2 className="w-3.5 h-3.5" />
-            <span>Remove</span>
+            <span>{labels.remove}</span>
           </button>
         </div>
       </PopoverContent>

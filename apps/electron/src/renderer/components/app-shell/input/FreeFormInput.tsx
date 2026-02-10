@@ -69,6 +69,8 @@ import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelName } from '@craf
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { hasOpenOverlay } from '@/lib/overlay-detection'
 import { EscapeInterruptOverlay } from './EscapeInterruptOverlay'
+import { useTranslation } from 'react-i18next'
+import { getFreeFormInputLabels } from './freeform-input-labels'
 
 /**
  * Format token count for display (e.g., 1500 -> "1.5k", 200000 -> "200k")
@@ -83,18 +85,15 @@ function formatTokenCount(tokens: number): string {
   return tokens.toString()
 }
 
-/** Platform-specific modifier key for keyboard shortcuts */
-const cmdKey = isMac ? '⌘' : 'Ctrl'
-
 /** Default rotating placeholders for onboarding/empty state */
 const DEFAULT_PLACEHOLDERS = [
-  'What would you like to work on?',
-  'Use Shift + Tab to switch between Explore and Execute',
-  'Type @ to mention files, folders, or skills',
-  'Type # to apply labels to this conversation',
-  'Press Shift + Return to add a new line',
-  `Press ${cmdKey} + B to toggle the sidebar`,
-  `Press ${cmdKey} + . for focus mode`,
+  'common:chatInput.placeholders.workOn',
+  'common:chatInput.placeholders.shiftTabMode',
+  'common:chatInput.placeholders.mentionHint',
+  'common:chatInput.placeholders.labelHint',
+  'common:chatInput.placeholders.newlineHint',
+  'common:chatInput.placeholders.sidebarToggleHint',
+  'common:chatInput.placeholders.focusModeHint',
 ]
 
 /** Fisher-Yates shuffle — returns a new array in random order */
@@ -252,7 +251,28 @@ export function FreeFormInput({
   onConnectionChange,
   connectionUnavailable = false,
 }: FreeFormInputProps) {
-  // Read connection default model, connections, and workspace info from context.
+  const { t } = useTranslation(['common'])
+  const i18nLabels = getFreeFormInputLabels(t)
+
+  const defaultPlaceholders = React.useMemo(() => [
+    i18nLabels.placeholders.workOn,
+    i18nLabels.placeholders.shiftTabMode,
+    i18nLabels.placeholders.mentionHint,
+    i18nLabels.placeholders.labelHint,
+    i18nLabels.placeholders.newlineHint,
+    i18nLabels.placeholders.sidebarToggleHint,
+    i18nLabels.placeholders.focusModeHint,
+  ], [
+    i18nLabels.placeholders.workOn,
+    i18nLabels.placeholders.shiftTabMode,
+    i18nLabels.placeholders.mentionHint,
+    i18nLabels.placeholders.labelHint,
+    i18nLabels.placeholders.newlineHint,
+    i18nLabels.placeholders.sidebarToggleHint,
+    i18nLabels.placeholders.focusModeHint,
+  ])
+
+  // Read custom model and workspace info from context.
   // Uses optional variant so playground (no provider) doesn't crash.
   const appShellCtx = useOptionalAppShellContext()
   const llmConnections = appShellCtx?.llmConnections ?? []
@@ -367,9 +387,13 @@ export function FreeFormInput({
   }, [workspaceRootPath, workspaceId])
 
   // Shuffle placeholder order once per mount so each session feels fresh
+  const resolvedPlaceholder = placeholder === DEFAULT_PLACEHOLDERS
+    ? defaultPlaceholders
+    : placeholder
+
   const shuffledPlaceholder = React.useMemo(
-    () => Array.isArray(placeholder) ? shuffleArray(placeholder) : placeholder,
-    [] // eslint-disable-line react-hooks/exhaustive-deps -- intentionally shuffle only on mount
+    () => Array.isArray(resolvedPlaceholder) ? shuffleArray(resolvedPlaceholder) : resolvedPlaceholder,
+    [resolvedPlaceholder] // eslint-disable-line react-hooks/exhaustive-deps -- reshuffle when placeholder set changes
   )
 
   // Performance optimization: Always use internal state for typing to avoid parent re-renders
@@ -528,7 +552,7 @@ export function FreeFormInput({
       }
       const text = e.detail?.text
       if (!text) {
-        toast.error('No details provided')
+        toast.error(i18nLabels.actions.noDetailsProvided)
         return
       }
       // Switch to allow-all (Auto) mode if in Explore mode (allow execution without prompts)
@@ -1439,13 +1463,13 @@ export function FreeFormInput({
               ? attachments.length === 1
                 ? "1 file"
                 : `${attachments.length} files`
-              : "Attach Files"
+              : i18nLabels.actions.attachFiles
             }
             isExpanded={isEmptySession}
             hasSelection={attachments.length > 0}
             showChevron={false}
             onClick={handleAttachClick}
-            tooltip="Attach files"
+            tooltip={i18nLabels.actions.attachFilesTooltip}
             disabled={disabled}
           />
 
@@ -1490,7 +1514,7 @@ export function FreeFormInput({
                 }
                 label={
                   optimisticSourceSlugs.length === 0
-                    ? "Choose Sources"
+                    ? i18nLabels.actions.chooseSources
                     : (() => {
                         const enabledSources = sources.filter(s => optimisticSourceSlugs.includes(s.config.slug))
                         if (enabledSources.length === 1) return enabledSources[0].config.name
@@ -1519,7 +1543,7 @@ export function FreeFormInput({
                   }
                   setSourceDropdownOpen(!sourceDropdownOpen)
                 }}
-                tooltip="Sources"
+                tooltip={i18nLabels.actions.sourcesTooltip}
               />
               {sourceDropdownOpen && sourceDropdownPosition && ReactDOM.createPortal(
                 <>
@@ -1540,9 +1564,9 @@ export function FreeFormInput({
                   >
                     {sources.length === 0 ? (
                       <div className="text-xs text-muted-foreground p-3 select-none">
-                        No sources configured.
+                        {i18nLabels.actions.noSourcesConfigured}
                         <br />
-                        Add sources in Settings.
+                        {i18nLabels.actions.addSourcesInSettings}
                       </div>
                     ) : (
                       <CommandPrimitive
@@ -1554,7 +1578,7 @@ export function FreeFormInput({
                             ref={sourceFilterInputRef}
                             value={sourceFilter}
                             onValueChange={setSourceFilter}
-                            placeholder="Search sources..."
+                            placeholder={i18nLabels.actions.searchSources}
                             className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground placeholder:select-none"
                           />
                         </div>
@@ -1969,6 +1993,9 @@ function WorkingDirectoryBadge({
   sessionFolderPath?: string
   isEmptySession?: boolean
 }) {
+  const { t } = useTranslation(['common'])
+  const i18nLabels = getFreeFormInputLabels(t)
+
   const [recentDirs, setRecentDirs] = React.useState<string[]>([])
   const [popoverOpen, setPopoverOpen] = React.useState(false)
   const [homeDir, setHomeDir] = React.useState<string>('')
@@ -2045,7 +2072,7 @@ function WorkingDirectoryBadge({
 
   // Determine label - "Work in Folder" if not set or at session root, otherwise folder name
   const hasFolder = !!workingDirectory && workingDirectory !== sessionFolderPath
-  const folderName = hasFolder ? (getPathBasename(workingDirectory) || 'Folder') : 'Work in Folder'
+  const folderName = hasFolder ? (getPathBasename(workingDirectory) || i18nLabels.actions.folderFallback) : i18nLabels.actions.workInFolder
 
   // Show reset option when a folder is selected and it differs from session folder
   const showReset = hasFolder && sessionFolderPath && sessionFolderPath !== workingDirectory
@@ -2069,11 +2096,11 @@ function WorkingDirectoryBadge({
             tooltip={
               hasFolder ? (
                 <span className="flex flex-col gap-0.5">
-                  <span className="font-medium">Working directory</span>
-                  <span className="text-xs opacity-70">{formatPathForDisplay(workingDirectory, homeDir)}</span>
-                  {gitBranch && <span className="text-xs opacity-70">on {gitBranch}</span>}
+                <span className="font-medium">{i18nLabels.actions.workInFolder}</span>
+                <span className="text-xs opacity-70">{formatPathForDisplay(workingDirectory, homeDir)}</span>
+                {gitBranch && <span className="text-xs opacity-70">{i18nLabels.actions.gitBranchPrefix}{gitBranch}</span>}
                 </span>
-              ) : "Choose working directory"
+              ) : i18nLabels.actions.workInFolder
             }
           />
         </span>
@@ -2087,7 +2114,7 @@ function WorkingDirectoryBadge({
                 ref={inputRef}
                 value={filter}
                 onValueChange={setFilter}
-                placeholder="Filter folders..."
+                placeholder={i18nLabels.actions.filterFolders}
                 className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50 placeholder:select-none"
               />
             </div>
@@ -2117,7 +2144,7 @@ function WorkingDirectoryBadge({
 
             {/* Recent Directories - filterable (current directory already filtered out via filteredRecent) */}
             {filteredRecent.map((path) => {
-              const recentFolderName = getPathBasename(path) || 'Folder'
+              const recentFolderName = getPathBasename(path) || i18nLabels.actions.folderFallback
               return (
                 <CommandPrimitive.Item
                   key={path}
@@ -2137,7 +2164,7 @@ function WorkingDirectoryBadge({
             {/* Empty state when filtering */}
             {showFilter && (
               <CommandPrimitive.Empty className="py-3 text-center text-sm text-muted-foreground">
-                No folders found
+                {i18nLabels.actions.noFoldersFound}
               </CommandPrimitive.Empty>
             )}
           </CommandPrimitive.List>
@@ -2149,7 +2176,7 @@ function WorkingDirectoryBadge({
               onClick={handleChooseFolder}
               className={cn(MENU_ITEM_STYLE, 'w-full hover:bg-foreground/5')}
             >
-              Choose Folder...
+                {i18nLabels.actions.chooseFolder}
             </button>
             {showReset && (
               <button
@@ -2157,7 +2184,7 @@ function WorkingDirectoryBadge({
                 onClick={handleReset}
                 className={cn(MENU_ITEM_STYLE, 'w-full hover:bg-foreground/5')}
               >
-                Reset
+                {i18nLabels.actions.resetFolder}
               </button>
             )}
           </div>

@@ -11,6 +11,7 @@ import { MoreHorizontal, Zap } from 'lucide-react'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from '@/components/ui/empty'
+import { useTranslation } from 'react-i18next'
 import { getDocUrl } from '@craft-agent/shared/docs/doc-links'
 import { Separator } from '@/components/ui/separator'
 import {
@@ -28,6 +29,7 @@ import { SkillMenu } from './SkillMenu'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { cn } from '@/lib/utils'
 import type { LoadedSkill } from '../../../shared/types'
+import { getSkillsListLabels } from './skills-list-labels'
 
 export interface SkillsListPanelProps {
   skills: LoadedSkill[]
@@ -49,6 +51,9 @@ export function SkillsListPanel({
   workspaceRootPath,
   className,
 }: SkillsListPanelProps) {
+  const { t } = useTranslation(['common'])
+  const labels = getSkillsListLabels(t)
+
   // Empty state - rendered outside ScrollArea for proper vertical centering
   if (skills.length === 0) {
     return (
@@ -58,24 +63,28 @@ export function SkillsListPanel({
             <EmptyMedia variant="icon">
               <Zap />
             </EmptyMedia>
-            <EmptyTitle>No skills configured</EmptyTitle>
+            <EmptyTitle>{labels.emptyTitle}</EmptyTitle>
             <EmptyDescription>
-              Skills are reusable instructions that teach your agent specialized behaviors.
+              {labels.emptyDescription}
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <button
+              type="button"
               onClick={() => window.electronAPI.openUrl(getDocUrl('skills'))}
               className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-foreground/[0.02] shadow-minimal hover:bg-foreground/[0.05] transition-colors"
             >
-              Learn more
+              {labels.learnMore}
             </button>
             {workspaceRootPath && (
               <EditPopover
                 align="center"
                 trigger={
-                  <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
-                    Add Skill
+                  <button
+                    type="button"
+                    className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors"
+                  >
+                    {labels.addSkill}
                   </button>
                 }
                 {...getEditConfig('add-skill', workspaceRootPath)}
@@ -141,6 +150,7 @@ function SkillItem({ skill, isSelected, isFirst, workspaceId, onClick, onDelete 
         </div>
         {/* Main content button */}
         <button
+          type="button"
           className={cn(
             "flex w-full items-start gap-2 pl-2 pr-4 py-3 text-left text-sm transition-all outline-none rounded-[8px]",
             isSelected

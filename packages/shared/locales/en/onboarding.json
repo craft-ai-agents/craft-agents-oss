@@ -1,0 +1,115 @@
+{
+  "welcome": {
+    "title": "Welcome to Craft Agents",
+    "titleExisting": "Update Settings",
+    "description": "Agents with the UX they deserve. Connect anything. Organize your sessions. Everything you need to do the work of your life!",
+    "descriptionExisting": "Update your API connection or change your setup.",
+    "cta": "Get Started",
+    "ctaExisting": "Continue",
+    "loading": "Checking..."
+  },
+  "apiSetup": {
+    "title": "Set Up API Connection",
+    "description": "Select how you'd like to power your AI agents.",
+    "back": "Back",
+    "continue": "Continue",
+    "recommended": "Recommended",
+    "options": {
+      "claude": {
+        "name": "Claude Pro/Max",
+        "description": "Use your Claude subscription for unlimited access."
+      },
+      "apiKey": {
+        "name": "API Key",
+        "description": "Anthropic, OpenRouter, Ollama, or compatible APIs."
+      }
+    }
+  },
+  "credentials": {
+    "oauthCode": {
+      "title": "Enter Authorization Code",
+      "description": "Copy the code from the browser page and paste it below.",
+      "cancel": "Cancel",
+      "back": "Back",
+      "continue": "Continue",
+      "loading": "Connecting...",
+      "errors": {
+        "emptyCode": "Please enter the authorization code"
+      }
+    },
+    "oauthConnect": {
+      "title": "Connect Claude Account",
+      "description": "Use your Claude subscription to power multi-agent workflows.",
+      "button": "Sign in with Claude",
+      "loading": "Connecting...",
+      "errors": {
+        "startFailed": "Failed to start OAuth",
+        "failed": "OAuth failed"
+      }
+    },
+    "apiKey": {
+      "title": "API Configuration",
+      "description": "Enter your API key. Optionally configure a custom endpoint for OpenRouter, Ollama, or compatible APIs.",
+      "loading": "Validating...",
+      "modelLabel": "Model",
+      "optional": "optional",
+      "presets": {
+        "custom": "Custom"
+      },
+      "errors": {
+        "invalid": "Please enter a valid API key",
+        "connectionTestFailed": "Connection test failed",
+        "validationFailed": "Validation failed"
+      },
+      "modelHelp": {
+        "custom": "Defaults to Anthropic model names (Opus, Sonnet, Haiku) when empty",
+        "nonClaude": "Leave empty for Claude models. Only set for non-Claude models.",
+        "formatPrefix": "Format:",
+        "browseModels": "Browse models",
+        "viewSupportedModels": "View supported models",
+        "ollama": "Use any model pulled via ollama pull. No API key required."
+      }
+    },
+    "actions": {
+      "back": "Back",
+      "continue": "Continue"
+    }
+  },
+  "completion": {
+    "titleSaving": "Setting up...",
+    "titleComplete": "You're all set!",
+    "descriptionSaving": "Saving your configuration...",
+    "descriptionComplete": "Just start a chat and get to work.",
+    "cta": "Get Started"
+  },
+  "gitBash": {
+    "title": "Git Bash Required",
+    "description": "Craft Agent needs Git Bash to run shell commands on Windows. It was not found on your system.",
+    "install": {
+      "title": "Install Git for Windows",
+      "description": "The easiest way to get Git Bash. It's free and includes everything you need.",
+      "cta": "Download Git for Windows"
+    },
+    "alreadyInstalled": {
+      "title": "Already have Git installed?",
+      "description": "If Git is installed in a non-standard location, you can specify the path to bash.exe.",
+      "placeholder": "C:\\Program Files\\Git\\bin\\bash.exe",
+      "usePath": "Use this path",
+      "recheck": "Re-check",
+      "checking": "Checking...",
+      "browse": "Browse...",
+      "error": "{{error}}"
+    },
+    "back": "Back"
+  },
+  "reauth": {
+    "title": "Session Expired",
+    "description": "Your Craft session has expired or is no longer valid.",
+    "descriptionSecondary": "Please log in again to continue using Craft Agents.",
+    "note": "Your conversations and settings are preserved.",
+    "login": "Log In with Craft",
+    "loggingIn": "Logging in...",
+    "reset": "Reset app and start fresh...",
+    "error": "Login failed"
+  }
+}

@@ -21,6 +21,8 @@ import type { SessionFile } from '../../../shared/types'
 import { cn } from '@/lib/utils'
 import * as storage from '@/lib/local-storage'
 import { useAppShellContext } from '@/context/AppShellContext'
+import { useTranslation } from 'react-i18next'
+import { getSessionFilesLabels } from './session-files-labels'
 
 /**
  * Stagger animation variants for child items - matches LeftSidebar pattern
@@ -136,7 +138,7 @@ const FileThumbnail = memo(function FileThumbnail({ file }: { file: SessionFile 
   useEffect(() => {
     setLoaded(false)
     setFailed(false)
-  }, [file.path])
+  }, [])
 
   const ext = file.name.split('.').pop()?.toLowerCase() || ''
   const canPreview = PREVIEWABLE_EXTENSIONS.has(ext)
@@ -203,6 +205,8 @@ function FileTreeItem({
   const isDirectory = file.type === 'directory'
   const isExpanded = expandedPaths.has(file.path)
   const hasChildren = isDirectory && file.children && file.children.length > 0
+  const { t } = useTranslation(['common'])
+  const labels = getSessionFilesLabels(t)
 
   const handleClick = () => {
     if (isDirectory && hasChildren) {
@@ -227,6 +231,7 @@ function FileTreeItem({
   // The button element for the file/folder item
   const buttonElement = (
     <button
+      type="button"
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       className={cn(
@@ -238,7 +243,7 @@ function FileTreeItem({
         // Same padding for all items - nested indentation handled by container
         "px-2"
       )}
-      title={`${file.path}\n${file.type === 'file' ? formatFileSize(file.size) : 'Directory'}\n\nClick to ${hasChildren ? 'expand' : 'reveal'}, double-click to open`}
+      title={`${file.path}\n${file.type === 'file' ? formatFileSize(file.size) : labels.directory}\n\n${hasChildren ? labels.clickExpand : labels.clickReveal}, ${labels.doubleClickOpen}`}
     >
       {/* Icon container with hover-revealed chevron for expandable items */}
       <span className="relative h-3.5 w-3.5 shrink-0 flex items-center justify-center">
@@ -249,7 +254,8 @@ function FileTreeItem({
               {getFileIcon(file, isExpanded)}
             </span>
             {/* Toggle chevron - shown on hover */}
-            <span
+            <button
+              type="button"
               className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 cursor-pointer"
               onClick={handleChevronClick}
             >
@@ -259,7 +265,7 @@ function FileTreeItem({
                   isExpanded && "rotate-90"
                 )}
               />
-            </span>
+            </button>
           </>
         ) : (
           /* Non-directory files: show thumbnail preview for previewable types,
@@ -333,6 +339,8 @@ function FileTreeItem({
  * Section displaying session files as a tree
  */
 export function SessionFilesSection({ sessionId, className }: SessionFilesSectionProps) {
+  const { t } = useTranslation(['common'])
+  const labels = getSessionFilesLabels(t)
   const [files, setFiles] = useState<SessionFile[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
@@ -454,7 +462,7 @@ export function SessionFilesSection({ sessionId, className }: SessionFilesSectio
     <div className={cn('flex flex-col h-full min-h-0', className)}>
       {/* Header - matches sidebar styling with select-none, extra top padding for visual balance */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0 select-none">
-        <span className="text-xs font-medium text-muted-foreground">Files</span>
+        <span className="text-xs font-medium text-muted-foreground">{labels.title}</span>
       </div>
 
       {/* File tree - px-2 is on nav to match LeftSidebar exactly (constrains grid width) */}
@@ -463,7 +471,7 @@ export function SessionFilesSection({ sessionId, className }: SessionFilesSectio
         {files.length === 0 ? (
           <div className="px-4 text-muted-foreground select-none">
             <p className="text-xs">
-              {isLoading ? 'Loading...' : 'Files attached or created by this chat will appear here.'}
+              {isLoading ? labels.loading : labels.empty}
             </p>
           </div>
         ) : (

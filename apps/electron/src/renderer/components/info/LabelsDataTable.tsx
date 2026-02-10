@@ -17,6 +17,9 @@ import { LabelIcon } from '@/components/ui/label-icon'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/hooks/useTheme'
 import type { LabelConfig } from '@craft-agent/shared/labels'
+import { useTranslation } from 'react-i18next'
+import { getTableLabels } from '@/i18n/ui-labels'
+import { getLabelsTableColumnTitles } from './table-column-labels'
 
 interface LabelsDataTableProps {
   /** Label tree (root-level nodes with nested children) */
@@ -72,11 +75,11 @@ function ExpandableNameCell({ row }: { row: Row<LabelConfig> }) {
   )
 }
 
-// Column definitions for the labels tree table
-const columns: ColumnDef<LabelConfig>[] = [
+function getColumns(headers: ReturnType<typeof getLabelsTableColumnTitles>): ColumnDef<LabelConfig>[] {
+  return [
   {
     id: 'color',
-    header: () => <span className="p-1.5 pl-2.5">Color</span>,
+    header: () => <span className="p-1.5 pl-2.5">{headers.color}</span>,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
         <LabelIcon
@@ -91,14 +94,14 @@ const columns: ColumnDef<LabelConfig>[] = [
   },
   {
     accessorKey: 'name',
-    header: ({ column }) => <SortableHeader column={column} title="Name" />,
+    header: ({ column }) => <SortableHeader column={column} title={headers.name} />,
     cell: ({ row }) => <ExpandableNameCell row={row} />,
     meta: { fillWidth: true },
   },
   {
     id: 'valueType',
     accessorKey: 'valueType',
-    header: ({ column }) => <SortableHeader column={column} title="Type" />,
+    header: ({ column }) => <SortableHeader column={column} title={headers.type} />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
         {row.original.valueType ? (
@@ -113,6 +116,7 @@ const columns: ColumnDef<LabelConfig>[] = [
     minSize: 120,
   },
 ]
+}
 
 /**
  * Extract children from a LabelConfig for tree expansion.
@@ -132,10 +136,15 @@ export function LabelsDataTable({
 }: LabelsDataTableProps) {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const { isDark } = useTheme()
+  const { t } = useTranslation(['common'])
+  const tableLabels = getTableLabels(t)
+  const headers = getLabelsTableColumnTitles(tableLabels.labels.headers)
+  const columns = getColumns(headers)
 
   // Fullscreen button (shown on hover via group class)
   const fullscreenButton = fullscreen ? (
     <button
+      type="button"
       onClick={() => setIsFullscreen(true)}
       className={cn(
         'p-1 rounded-[6px] transition-all',
