@@ -1414,12 +1414,12 @@ function AppShellContent({
         <HeaderIconButton
           icon={<PanelRightRounded className="h-5 w-6" />}
           onClick={() => setIsRightSidebarVisible(true)}
-          tooltip="Open sidebar"
+          tooltip={t('sidebar.open')}
           className="text-foreground"
         />
       </motion.div>
     )
-  }, [navState, isRightSidebarVisible])
+  }, [navState, isRightSidebarVisible, t])
 
   // Right sidebar CLOSE button (shown in sidebar header when open)
   const rightSidebarCloseButton = React.useMemo(() => {
@@ -1429,11 +1429,11 @@ function AppShellContent({
       <HeaderIconButton
         icon={<PanelLeftRounded className="h-5 w-6" />}
         onClick={() => setIsRightSidebarVisible(false)}
-        tooltip="Close sidebar"
+        tooltip={t('sidebar.close')}
         className="text-foreground"
       />
     )
-  }, [isRightSidebarVisible])
+  }, [isRightSidebarVisible, t])
 
   // Extend context value with local overrides (textareaRef, wrapped onDeleteSession, sources, skills, labels, enabledModes, rightSidebarOpenButton, effectiveTodoStates)
   const appShellContextValue = React.useMemo<AppShellContextType>(() => ({

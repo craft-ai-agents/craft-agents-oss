@@ -504,6 +504,41 @@ export const enUS = {
   'settings.shortcuts.sendMessage': 'Send message',
   'settings.shortcuts.newLine': 'New line',
   'settings.shortcuts.closeDialog': 'Close dialog / blur input',
+
+  // Context usage
+  'input.context.percentUsed': '{{percent}}% context used',
+  'input.context.compact': 'Compact',
+
+  // Input placeholders
+  'input.placeholder.whatToWorkOn': 'What would you like to work on?',
+  'input.placeholder.shiftTabMode': 'Use Shift + Tab to switch between Explore and Execute',
+  'input.placeholder.mentionFiles': 'Type @ to mention files, folders, or skills',
+  'input.placeholder.applyLabels': 'Type # to apply labels to this conversation',
+  'input.placeholder.newLine': 'Press Shift + Return to add a new line',
+  'input.placeholder.toggleSidebar': 'Press {{key}} + B to toggle the sidebar',
+  'input.placeholder.focusMode': 'Press {{key}} + . for focus mode',
+
+  // Input tooltips
+  'input.attachFiles': 'Attach files',
+  'input.workingDirectory': 'Working directory',
+  'input.workingDirectory.onBranch': 'on {{branch}}',
+  'input.workingDirectory.choose': 'Choose working directory',
+
+  // Sidebar
+  'sidebar.open': 'Open sidebar',
+  'sidebar.close': 'Close sidebar',
+
+  // Sharing
+  'share.shareOnline': 'Share Online',
+  'share.openInBrowser': 'Open in Browser',
+  'share.copyLink': 'Copy Link',
+  'share.updateShare': 'Update Share',
+  'share.stopSharing': 'Stop Sharing',
+  'share.learnMore': 'Learn More',
+
+  // Header menu
+  'menu.openInNewWindow': 'Open in New Window',
+  'menu.learnMore': 'Learn More',
 } as const satisfies TranslationDictionary
 
 export type TranslationKey = keyof typeof enUS

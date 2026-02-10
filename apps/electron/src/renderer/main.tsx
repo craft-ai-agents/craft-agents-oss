@@ -71,15 +71,17 @@ sentryInit(
  * Sentry.ErrorBoundary captures the error and sends it to Sentry automatically.
  */
 function CrashFallback() {
+  // Detect locale outside React tree (LocaleProvider may have crashed)
+  const isPtBR = navigator.language?.startsWith('pt')
   return (
     <div className="flex flex-col items-center justify-center h-screen font-sans text-foreground/50 gap-3">
-      <p className="text-base font-medium">Something went wrong</p>
-      <p className="text-[13px]">Please restart the app. The error has been reported.</p>
+      <p className="text-base font-medium">{isPtBR ? 'Algo deu errado' : 'Something went wrong'}</p>
+      <p className="text-[13px]">{isPtBR ? 'Por favor, reinicie o app. O erro foi reportado.' : 'Please restart the app. The error has been reported.'}</p>
       <button
         onClick={() => window.location.reload()}
         className="mt-2 px-4 py-1.5 rounded-md bg-background shadow-minimal text-[13px] text-foreground/70 cursor-pointer"
       >
-        Reload
+        {isPtBR ? 'Recarregar' : 'Reload'}
       </button>
     </div>
   )

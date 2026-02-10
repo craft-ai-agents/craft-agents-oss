@@ -10,6 +10,7 @@
 import * as React from 'react'
 import { MoreHorizontal, AppWindow, ExternalLink, BookOpen } from 'lucide-react'
 import { useSetAtom } from 'jotai'
+import { useLocale } from '@/context/LocaleContext'
 import { HeaderIconButton } from './HeaderIconButton'
 import {
   DropdownMenu,
@@ -34,6 +35,7 @@ interface HeaderMenuProps {
 }
 
 export function HeaderMenu({ route, children, helpFeature }: HeaderMenuProps) {
+  const { t } = useLocale()
   const setHelp = useSetAtom(helpDialogAtom)
 
   const handleOpenInNewWindow = async () => {
@@ -68,14 +70,14 @@ export function HeaderMenu({ route, children, helpFeature }: HeaderMenuProps) {
         {children && <StyledDropdownMenuSeparator />}
         <StyledDropdownMenuItem onClick={handleOpenInNewWindow}>
           <AppWindow className="h-3.5 w-3.5" />
-          <span className="flex-1">Open in New Window</span>
+          <span className="flex-1">{t('menu.openInNewWindow')}</span>
         </StyledDropdownMenuItem>
         {helpFeature && (
           <>
             <StyledDropdownMenuSeparator />
             <StyledDropdownMenuItem onClick={handleLearnMore}>
               {learnMoreIcon}
-              <span className="flex-1">Learn More</span>
+              <span className="flex-1">{t('menu.learnMore')}</span>
             </StyledDropdownMenuItem>
           </>
         )}

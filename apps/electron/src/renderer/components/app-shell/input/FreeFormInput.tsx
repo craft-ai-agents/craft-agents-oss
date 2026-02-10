@@ -85,17 +85,6 @@ function formatTokenCount(tokens: number): string {
 /** Platform-specific modifier key for keyboard shortcuts */
 const cmdKey = isMac ? '⌘' : 'Ctrl'
 
-/** Default rotating placeholders for onboarding/empty state */
-const DEFAULT_PLACEHOLDERS = [
-  'What would you like to work on?',
-  'Use Shift + Tab to switch between Explore and Execute',
-  'Type @ to mention files, folders, or skills',
-  'Type # to apply labels to this conversation',
-  'Press Shift + Return to add a new line',
-  `Press ${cmdKey} + B to toggle the sidebar`,
-  `Press ${cmdKey} + . for focus mode`,
-]
-
 /** Fisher-Yates shuffle — returns a new array in random order */
 function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array]
@@ -208,7 +197,7 @@ export interface FreeFormInputProps {
  * - Active option badges
  */
 export function FreeFormInput({
-  placeholder = DEFAULT_PLACEHOLDERS,
+  placeholder: placeholderProp,
   disabled = false,
   isProcessing = false,
   onSubmit,
@@ -338,6 +327,17 @@ export function FreeFormInput({
     if (!appShellCtx || !workspaceId) return null
     return appShellCtx.workspaces.find(w => w.id === workspaceId)?.rootPath ?? null
   }, [appShellCtx, workspaceId])
+
+  // Resolve placeholder: use prop if provided, otherwise use translated defaults
+  const placeholder = placeholderProp ?? [
+    t('input.placeholder.whatToWorkOn'),
+    t('input.placeholder.shiftTabMode'),
+    t('input.placeholder.mentionFiles'),
+    t('input.placeholder.applyLabels'),
+    t('input.placeholder.newLine'),
+    t('input.placeholder.toggleSidebar', { key: cmdKey }),
+    t('input.placeholder.focusMode', { key: cmdKey }),
+  ]
 
   // Shuffle placeholder order once per mount so each session feels fresh
   const shuffledPlaceholder = React.useMemo(
@@ -1417,7 +1417,7 @@ export function FreeFormInput({
             hasSelection={attachments.length > 0}
             showChevron={false}
             onClick={handleAttachClick}
-            tooltip="Attach files"
+            tooltip={t('input.attachFiles')}
             disabled={disabled}
           />
 
@@ -1818,6 +1818,9 @@ export function FreeFormInput({
               }
             }
 
+            // Color coding: gray <50%, royal gold 50-80%, Ground Clay >80%
+            const ringColor = usagePercent! >= 80 ? '#842E20' : usagePercent! >= 50 ? '#C5A24D' : 'var(--muted-foreground)'
+
             return (
               <DropdownMenu>
                 <Tooltip>
@@ -1826,18 +1829,35 @@ export function FreeFormInput({
                       <button
                         type="button"
                         disabled={isProcessing}
-                        className="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-info/10 rounded-[6px] shadow-tinted select-none cursor-pointer hover:bg-info/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{
-                          '--shadow-color': 'var(--info-rgb)',
-                          color: 'color-mix(in oklab, var(--info) 30%, var(--foreground))',
-                        } as React.CSSProperties}
+                        className="inline-flex items-center justify-center h-6 w-6 select-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ color: ringColor }}
                       >
-                        {usagePercent}%
+                        <svg width="20" height="20" viewBox="0 0 20 20" className="transform -rotate-90">
+                          {/* Background ring */}
+                          <circle
+                            cx="10" cy="10" r="8"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            className="opacity-15"
+                          />
+                          {/* Progress ring */}
+                          <circle
+                            cx="10" cy="10" r="8"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeDasharray={2 * Math.PI * 8}
+                            strokeDashoffset={2 * Math.PI * 8 * (1 - usagePercent! / 100)}
+                            strokeLinecap="round"
+                            className="transition-[stroke-dashoffset] duration-500"
+                          />
+                        </svg>
                       </button>
                     </DropdownMenuTrigger>
                   </TooltipTrigger>
                   <TooltipContent side="top">
-                    {usagePercent}% context used
+                    {t('input.context.percentUsed', { percent: String(usagePercent) })}
                   </TooltipContent>
                 </Tooltip>
                 <StyledDropdownMenuContent align="center" side="top" sideOffset={8}>
@@ -1845,7 +1865,7 @@ export function FreeFormInput({
                     onClick={handleCompactClick}
                     disabled={isProcessing}
                   >
-                    Compact
+                    {t('input.context.compact')}
                   </StyledDropdownMenuItem>
                 </StyledDropdownMenuContent>
               </DropdownMenu>
@@ -1925,6 +1945,7 @@ function WorkingDirectoryBadge({
   sessionFolderPath?: string
   isEmptySession?: boolean
 }) {
+  const { t } = useLocale()
   const [recentDirs, setRecentDirs] = React.useState<string[]>([])
   const [popoverOpen, setPopoverOpen] = React.useState(false)
   const [homeDir, setHomeDir] = React.useState<string>('')
@@ -2025,11 +2046,11 @@ function WorkingDirectoryBadge({
             tooltip={
               hasFolder ? (
                 <span className="flex flex-col gap-0.5">
-                  <span className="font-medium">Working directory</span>
+                  <span className="font-medium">{t('input.workingDirectory')}</span>
                   <span className="text-xs opacity-70">{formatPathForDisplay(workingDirectory, homeDir)}</span>
-                  {gitBranch && <span className="text-xs opacity-70">on {gitBranch}</span>}
+                  {gitBranch && <span className="text-xs opacity-70">{t('input.workingDirectory.onBranch', { branch: gitBranch })}</span>}
                 </span>
-              ) : "Choose working directory"
+              ) : t('input.workingDirectory.choose')
             }
           />
         </span>

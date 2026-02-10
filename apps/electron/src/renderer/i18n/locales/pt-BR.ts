@@ -508,4 +508,39 @@ export const ptBR: Record<TranslationKey, TranslationEntry> = {
   'settings.shortcuts.sendMessage': 'Enviar mensagem',
   'settings.shortcuts.newLine': 'Nova linha',
   'settings.shortcuts.closeDialog': 'Fechar diálogo / desfocar campo',
+
+  // Context usage
+  'input.context.percentUsed': '{{percent}}% do contexto usado',
+  'input.context.compact': 'Compactar',
+
+  // Input placeholders
+  'input.placeholder.whatToWorkOn': 'No que gostaria de trabalhar?',
+  'input.placeholder.shiftTabMode': 'Use Shift + Tab para alternar entre Explorar e Executar',
+  'input.placeholder.mentionFiles': 'Digite @ para mencionar arquivos, pastas ou skills',
+  'input.placeholder.applyLabels': 'Digite # para aplicar labels a esta conversa',
+  'input.placeholder.newLine': 'Pressione Shift + Return para adicionar uma nova linha',
+  'input.placeholder.toggleSidebar': 'Pressione {{key}} + B para alternar a barra lateral',
+  'input.placeholder.focusMode': 'Pressione {{key}} + . para o modo foco',
+
+  // Input tooltips
+  'input.attachFiles': 'Anexar arquivos',
+  'input.workingDirectory': 'Diretório de trabalho',
+  'input.workingDirectory.onBranch': 'em {{branch}}',
+  'input.workingDirectory.choose': 'Escolher diretório de trabalho',
+
+  // Sidebar
+  'sidebar.open': 'Abrir barra lateral',
+  'sidebar.close': 'Fechar barra lateral',
+
+  // Sharing
+  'share.shareOnline': 'Compartilhar Online',
+  'share.openInBrowser': 'Abrir no Navegador',
+  'share.copyLink': 'Copiar Link',
+  'share.updateShare': 'Atualizar Compartilhamento',
+  'share.stopSharing': 'Parar de Compartilhar',
+  'share.learnMore': 'Saiba Mais',
+
+  // Header menu
+  'menu.openInNewWindow': 'Abrir em Nova Janela',
+  'menu.learnMore': 'Saiba Mais',
 }
