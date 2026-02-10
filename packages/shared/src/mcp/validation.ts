@@ -461,7 +461,7 @@ export async function validateStdioMcpConnection(
 
       // Create MCP client
       client = new Client(
-        { name: 'craft-agent-validator', version: '1.0.0' },
+        { name: 'g4os-agent-validator', version: '1.0.0' },
         { capabilities: {} }
       );
 

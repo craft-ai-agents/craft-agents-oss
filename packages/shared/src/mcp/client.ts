@@ -64,7 +64,7 @@ export class G4OSMcpClient {
 
   constructor(config: McpClientConfig) {
     this.client = new Client({
-      name: 'craft-agent',
+      name: 'g4os-agent',
       version: '1.0.0',
     });
 

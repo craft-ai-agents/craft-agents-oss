@@ -42,6 +42,7 @@ import {
 import { type PermissionsContext, permissionsConfigCache } from './permissions-config.ts';
 import { getSessionPlansPath, getSessionPath } from '../sessions/storage.ts';
 import { readFileSync } from 'fs';
+import { basename } from 'node:path';
 import { expandPath } from '../utils/paths.ts';
 import {
   ConfigWatcher,
@@ -999,7 +1000,7 @@ export class ClaudeAgent extends BaseAgent {
               if (input.tool_name === 'Skill') {
                 const skillResult = qualifySkillName(
                   modifiedInput || toolInput,
-                  this.config.workspace.id,
+                  `g4os-${basename(this.workspaceRootPath)}`,
                   (msg) => this.onDebug?.(msg)
                 );
                 if (skillResult.modified) {

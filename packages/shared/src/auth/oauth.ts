@@ -256,7 +256,7 @@ export class G4OSOAuth {
       }
     } else {
       // Use a default client ID for public clients
-      clientId = 'craft-agent';
+      clientId = 'g4os-agent';
       this.callbacks.onStatus(`Using default client ID: ${clientId}`);
     }
 

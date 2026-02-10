@@ -16,7 +16,7 @@ import {
   statSync,
   cpSync,
 } from 'fs';
-import { join } from 'path';
+import { basename, join } from 'path';
 import { homedir } from 'os';
 import { randomUUID } from 'crypto';
 import { expandPath, toPortablePath, getBundledAssetsDir } from '../utils/paths.ts';
@@ -556,16 +556,14 @@ export function ensurePluginManifest(rootPath: string, workspaceName: string): v
   const pluginDir = join(rootPath, '.claude-plugin');
   const manifestPath = join(pluginDir, 'plugin.json');
 
-  if (existsSync(manifestPath)) return;
-
   // Create .claude-plugin directory
   if (!existsSync(pluginDir)) {
     mkdirSync(pluginDir, { recursive: true });
   }
 
-  // Create minimal plugin manifest
+  // Create minimal plugin manifest (always regenerate to keep name in sync)
   const manifest = {
-    name: `craft-workspace-${workspaceName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+    name: `g4os-${basename(rootPath)}`,
     version: '1.0.0',
   };
 

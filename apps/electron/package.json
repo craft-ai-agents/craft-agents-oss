@@ -1,6 +1,6 @@
 {
   "name": "@g4os/electron",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "description": "G4 OS desktop application",
   "main": "dist/main.cjs",
   "private": true,
@@ -29,6 +29,7 @@
     "dist:mac": "bash scripts/build-dmg.sh arm64",
     "dist:mac:x64": "bash scripts/build-dmg.sh x64",
     "dist:win": "powershell -ExecutionPolicy Bypass -File scripts/build-win.ps1",
+    "dist:win:cross": "bash scripts/build-win.sh",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix"
   },

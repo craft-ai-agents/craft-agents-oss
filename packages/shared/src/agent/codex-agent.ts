@@ -69,7 +69,7 @@ import { parseError, type AgentError } from './errors.ts';
 import { getSessionPlansPath } from '../sessions/storage.ts';
 
 // Path utilities for cross-platform normalization
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 
 // System prompt for G4 OS context
 import { getSystemPrompt } from '../prompts/system.ts';
@@ -1089,7 +1089,7 @@ export class CodexAgent extends BaseAgent {
     if (sdkToolName === 'Skill') {
       const skillResult = qualifySkillName(
         modifiedInput || inputObj,
-        this.config.workspace.id,
+        `g4os-${basename(this.config.workspace.rootPath)}`,
         (msg) => this.debug(`PreToolUse: ${msg}`)
       );
       if (skillResult.modified) {
