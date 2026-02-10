@@ -53,6 +53,11 @@ Output format:
 - [ ] [Item] — [owner] — [due date]
 - [ ] [Item] — [owner] — [due date]
 
+### Recent Activity (last 3 days)
+- [Key decisions from activity-log.md]
+- [Important insights or flags]
+- [Significant actions taken]
+
 ### Alerts
 - [Any overdue items, stale blockers, or items needing attention]
 
@@ -68,3 +73,10 @@ Output format:
 4. **Dynamic month resolution** — Always compute the current month file dynamically, never hardcode a specific month.
 5. **Dynamic people discovery** — Scan the `people/` directory to find direct reports; never hardcode names.
 6. **Match the user's language** — Respond in the same language the user is using.
+7. **Activity-log is critical** — Include recent decisions, insights, and flags from activity-log.md in the "Recent Activity" section.
+
+## Integration with Other Skills
+
+- **activity-log**: Recent entries provide real-time context that may not be in session-log yet
+- **session-checkpoint**: Last session recap comes from last-session.md (written by checkpoint)
+- **quick-log**: Important items logged during sessions surface here automatically

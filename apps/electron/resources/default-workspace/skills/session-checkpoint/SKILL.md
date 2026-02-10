@@ -17,6 +17,19 @@ Captures the day's progress so the next session can pick up seamlessly.
 
 ## Checkpoint Process
 
+### Step 0: Auto-Log Session Summary (if not already logged)
+
+Before creating the checkpoint, check if this session's main activities are already in `activity-log.md`. If not:
+
+1. **Add activity-log entry** for this session with:
+   - Category: "Action" or "Context"
+   - Summary of key activities completed
+   - Important decisions made
+   - Files modified
+   - Why it matters for future sessions
+
+This ensures even if the user forgets to use `/quick-log`, important context is captured.
+
 ### Step 1: Gather Today's Activity
 
 1. **Recent activities**: Read `activity-log.md` for today's entries
@@ -58,3 +71,10 @@ Structure the daily entry:
 3. **Next Session section is critical** — This is what makes the handoff work. Be specific about what's pending.
 4. **Dynamic timezone** — Use the user's configured timezone for date boundaries, never hardcode a timezone.
 5. **Match the user's language** — Write entries in the same language used during the session.
+6. **Auto-log first** — Before creating the checkpoint, add activity-log entry for this session if not already present.
+
+## Integration with Other Skills
+
+- **quick-log**: If significant activities happened, they should already be in activity-log via quick-log. Checkpoint pulls from there.
+- **session-start**: Next session will read both session-log.md and activity-log.md for full context.
+- **update-tracker**: Files modified during the session should be mentioned in the checkpoint.
