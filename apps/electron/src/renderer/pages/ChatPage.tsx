@@ -422,11 +422,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
               </svg>
               <span className="flex-1">{t('share.shareOnline')}</span>
             </StyledDropdownMenuItem>
-            <StyledDropdownMenuSeparator />
-            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://g4educacao.com/docs/go-further/sharing')}>
-              <Info className="h-3.5 w-3.5" />
-              <span className="flex-1">{t('share.learnMore')}</span>
-            </StyledDropdownMenuItem>
           </>
         )}
       </StyledDropdownMenuContent>
