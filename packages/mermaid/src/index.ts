@@ -28,7 +28,7 @@ export { renderMermaidAscii } from './ascii/index.ts'
 export type { AsciiRenderOptions } from './ascii/index.ts'
 
 import { parseMermaid } from './parser.ts'
-import { layoutGraph } from './layout.ts'
+import { layoutGraph, layoutGraphSync } from './layout.ts'
 import { renderSvg } from './renderer.ts'
 import type { RenderOptions } from './types.ts'
 import type { DiagramColors } from './theme.ts'
@@ -39,10 +39,10 @@ import { parseSequenceDiagram } from './sequence/parser.ts'
 import { layoutSequenceDiagram } from './sequence/layout.ts'
 import { renderSequenceSvg } from './sequence/renderer.ts'
 import { parseClassDiagram } from './class/parser.ts'
-import { layoutClassDiagram } from './class/layout.ts'
+import { layoutClassDiagram, layoutClassDiagramSync } from './class/layout.ts'
 import { renderClassSvg } from './class/renderer.ts'
 import { parseErDiagram } from './er/parser.ts'
-import { layoutErDiagram } from './er/layout.ts'
+import { layoutErDiagram, layoutErDiagramSync } from './er/layout.ts'
 import { renderErSvg } from './er/renderer.ts'
 
 /**
@@ -142,6 +142,51 @@ export async function renderMermaid(
       // Flowchart + state diagram pipeline (original)
       const graph = parseMermaid(text)
       const positioned = await layoutGraph(graph, options)
+      return renderSvg(positioned, colors, font, transparent)
+    }
+  }
+}
+
+/**
+ * Render Mermaid diagram text to an SVG string — synchronously.
+ *
+ * Uses elk.bundled.js with a direct FakeWorker bypass (no setTimeout(0) delay).
+ * The ELK singleton is created eagerly at import time, so there's zero cold start.
+ *
+ * Use this in React components with useMemo() to avoid flash:
+ *   const svg = useMemo(() => renderMermaidSync(code, opts), [code])
+ */
+export function renderMermaidSync(
+  text: string,
+  options: RenderOptions = {}
+): string {
+  const colors = buildColors(options)
+  const font = options.font ?? 'Inter'
+  const transparent = options.transparent ?? false
+  const diagramType = detectDiagramType(text)
+
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('%%'))
+
+  switch (diagramType) {
+    case 'sequence': {
+      const diagram = parseSequenceDiagram(lines)
+      const positioned = layoutSequenceDiagram(diagram, options)
+      return renderSequenceSvg(positioned, colors, font, transparent)
+    }
+    case 'class': {
+      const diagram = parseClassDiagram(lines)
+      const positioned = layoutClassDiagramSync(diagram, options)
+      return renderClassSvg(positioned, colors, font, transparent)
+    }
+    case 'er': {
+      const diagram = parseErDiagram(lines)
+      const positioned = layoutErDiagramSync(diagram, options)
+      return renderErSvg(positioned, colors, font, transparent)
+    }
+    case 'flowchart':
+    default: {
+      const graph = parseMermaid(text)
+      const positioned = layoutGraphSync(graph, options)
       return renderSvg(positioned, colors, font, transparent)
     }
   }

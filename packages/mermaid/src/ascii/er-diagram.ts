@@ -14,6 +14,7 @@ import type { ErDiagram, ErEntity, ErAttribute, Cardinality } from '../er/types.
 import type { Canvas, AsciiConfig } from './types.ts'
 import { mkCanvas, canvasToString, increaseSize } from './canvas.ts'
 import { drawMultiBox } from './draw.ts'
+import { splitLines } from './multiline-utils.ts'
 
 // ============================================================================
 // Entity box content
@@ -27,7 +28,8 @@ function formatAttribute(attr: ErAttribute): string {
 
 /** Build sections for an entity box: [header], [attributes] */
 function buildEntitySections(entity: ErEntity): string[][] {
-  const header = [entity.label]
+  // Support multi-line entity names
+  const header = splitLines(entity.label)
   const attrs = entity.attributes.map(formatAttribute)
   if (attrs.length === 0) return [header]
   return [header, attrs]
@@ -39,28 +41,33 @@ function buildEntitySections(entity: ErEntity): string[][] {
 
 /**
  * Returns the ASCII/Unicode characters for a crow's foot cardinality marker.
- * These are drawn near the endpoint of a relationship line.
+ * Markers are drawn adjacent to entity boxes at relationship endpoints.
  *
- * Cardinality markers (horizontal direction):
- *   one:       ──║──   or  --||--
- *   zero-one:  ──o║──  or  --o|--
- *   many:      ──╢──   or  --<|--  (or }|)
- *   zero-many: ──o╢──  or  --o<--  (or o{)
+ * Standard ER notation:
+ *   one:       ─┤├─   perpendicular line (exactly one)
+ *   zero-one:  ─○┤─   circle + perpendicular (zero or one)
+ *   many:      ─<>─   crow's foot (one or more)
+ *   zero-many: ─○<─   circle + crow's foot (zero or more)
+ *
+ * @param card - The cardinality type
+ * @param useAscii - Use ASCII-only characters
+ * @param isRight - True if this marker is on the right side of the relationship
  */
-function getCrowsFootChars(card: Cardinality, useAscii: boolean): string {
+function getCrowsFootChars(card: Cardinality, useAscii: boolean, isRight = false): string {
   if (useAscii) {
     switch (card) {
-      case 'one':       return '||'
+      case 'one':       return '|'
       case 'zero-one':  return 'o|'
-      case 'many':      return '}|'
-      case 'zero-many': return 'o{'
+      case 'many':      return isRight ? '<' : '>'
+      case 'zero-many': return isRight ? 'o<' : '>o'
     }
   } else {
+    // Use cleaner Unicode characters
     switch (card) {
-      case 'one':       return '║'
-      case 'zero-one':  return 'o║'
-      case 'many':      return '╟'
-      case 'zero-many': return 'o╟'
+      case 'one':       return '│'
+      case 'zero-one':  return '○│'
+      case 'many':      return isRight ? '╟' : '╢'
+      case 'zero-many': return isRight ? '○╟' : '╢○'
     }
   }
 }
@@ -79,13 +86,69 @@ interface PlacedEntity {
 }
 
 // ============================================================================
+// Connected Component Detection
+// ============================================================================
+
+/**
+ * Find connected components in the ER diagram using DFS.
+ * Treats relationships as undirected edges for connectivity.
+ *
+ * Returns an array of entity ID sets, one per connected component.
+ */
+function findConnectedComponents(diagram: ErDiagram): Set<string>[] {
+  const visited = new Set<string>()
+  const components: Set<string>[] = []
+
+  // Build undirected adjacency list from relationships
+  const neighbors = new Map<string, Set<string>>()
+  for (const ent of diagram.entities) {
+    neighbors.set(ent.id, new Set())
+  }
+  for (const rel of diagram.relationships) {
+    neighbors.get(rel.entity1)?.add(rel.entity2)
+    neighbors.get(rel.entity2)?.add(rel.entity1)
+  }
+
+  // DFS to find each component
+  function dfs(startId: string, component: Set<string>): void {
+    const stack = [startId]
+    while (stack.length > 0) {
+      const nodeId = stack.pop()!
+      if (visited.has(nodeId)) continue
+
+      visited.add(nodeId)
+      component.add(nodeId)
+
+      for (const neighbor of neighbors.get(nodeId) ?? []) {
+        if (!visited.has(neighbor)) {
+          stack.push(neighbor)
+        }
+      }
+    }
+  }
+
+  // Find all components
+  for (const ent of diagram.entities) {
+    if (!visited.has(ent.id)) {
+      const component = new Set<string>()
+      dfs(ent.id, component)
+      if (component.size > 0) {
+        components.push(component)
+      }
+    }
+  }
+
+  return components
+}
+
+// ============================================================================
 // Layout and rendering
 // ============================================================================
 
 /**
  * Render a Mermaid ER diagram to ASCII/Unicode text.
  *
- * Pipeline: parse → build boxes → grid layout → draw boxes → draw relationships → string.
+ * Pipeline: parse → build boxes → component-aware layout → draw boxes → draw relationships → string.
  */
 export function renderErAscii(text: string, config: AsciiConfig): string {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('%%'))
@@ -96,13 +159,16 @@ export function renderErAscii(text: string, config: AsciiConfig): string {
   const useAscii = config.useAscii
   const hGap = 6  // horizontal gap between entity boxes
   const vGap = 4  // vertical gap between rows (for relationship lines)
+  const componentGap = 6  // vertical gap between disconnected components
 
   // --- Build entity box dimensions ---
   const entitySections = new Map<string, string[][]>()
   const entityBoxW = new Map<string, number>()
   const entityBoxH = new Map<string, number>()
+  const entityById = new Map<string, ErEntity>()
 
   for (const ent of diagram.entities) {
+    entityById.set(ent.id, ent)
     const sections = buildEntitySections(ent)
     entitySections.set(ent.id, sections)
 
@@ -120,41 +186,54 @@ export function renderErAscii(text: string, config: AsciiConfig): string {
     entityBoxH.set(ent.id, boxH)
   }
 
-  // --- Layout: place entities in rows ---
-  // Use a simple grid: max N entities per row (based on count).
-  // Entities involved in relationships are placed adjacent when possible.
-  const maxPerRow = Math.max(2, Math.ceil(Math.sqrt(diagram.entities.length)))
+  // --- Find connected components ---
+  const components = findConnectedComponents(diagram)
 
+  // --- Layout: place each component, then stack components vertically ---
   const placed = new Map<string, PlacedEntity>()
-  let currentX = 0
   let currentY = 0
-  let maxRowH = 0
-  let colCount = 0
 
-  for (const ent of diagram.entities) {
-    const w = entityBoxW.get(ent.id)!
-    const h = entityBoxH.get(ent.id)!
+  for (const component of components) {
+    // Get entities in this component (preserve original order for consistency)
+    const componentEntities = diagram.entities.filter(e => component.has(e.id))
 
-    if (colCount >= maxPerRow) {
-      // Wrap to next row
-      currentY += maxRowH + vGap
-      currentX = 0
-      maxRowH = 0
-      colCount = 0
+    // Layout entities within this component horizontally
+    // Use sqrt-based row limit for larger components
+    const maxPerRow = Math.max(2, Math.ceil(Math.sqrt(componentEntities.length)))
+
+    let currentX = 0
+    let maxRowH = 0
+    let colCount = 0
+    const componentStartY = currentY
+
+    for (const ent of componentEntities) {
+      const w = entityBoxW.get(ent.id)!
+      const h = entityBoxH.get(ent.id)!
+
+      if (colCount >= maxPerRow) {
+        // Wrap to next row within this component
+        currentY += maxRowH + vGap
+        currentX = 0
+        maxRowH = 0
+        colCount = 0
+      }
+
+      placed.set(ent.id, {
+        entity: ent,
+        sections: entitySections.get(ent.id)!,
+        x: currentX,
+        y: currentY,
+        width: w,
+        height: h,
+      })
+
+      currentX += w + hGap
+      maxRowH = Math.max(maxRowH, h)
+      colCount++
     }
 
-    placed.set(ent.id, {
-      entity: ent,
-      sections: entitySections.get(ent.id)!,
-      x: currentX,
-      y: currentY,
-      width: w,
-      height: h,
-    })
-
-    currentX += w + hGap
-    maxRowH = Math.max(maxRowH, h)
-    colCount++
+    // Move to next component row (add gap between components)
+    currentY += maxRowH + componentGap
   }
 
   // --- Create canvas ---
@@ -228,29 +307,38 @@ export function renderErAscii(text: string, config: AsciiConfig): string {
       }
 
       // Draw crow's foot markers at endpoints
-      const leftChars = getCrowsFootChars(leftCard, useAscii)
+      // Left marker (at left entity's right edge) - isRight=false
+      const leftChars = getCrowsFootChars(leftCard, useAscii, false)
       for (let i = 0; i < leftChars.length; i++) {
         const mx = startX + i
         if (mx < totalW) canvas[mx]![lineY] = leftChars[i]!
       }
 
-      const rightChars = getCrowsFootChars(rightCard, useAscii)
+      // Right marker (at right entity's left edge) - isRight=true
+      const rightChars = getCrowsFootChars(rightCard, useAscii, true)
       for (let i = 0; i < rightChars.length; i++) {
         const mx = endX - rightChars.length + 1 + i
         if (mx >= 0 && mx < totalW) canvas[mx]![lineY] = rightChars[i]!
       }
 
-      // Relationship label centered in the gap between the two entities, above the line.
+      // Relationship label centered in the gap between the two entities, below the line.
       // Clamp label to the gap region [startX, endX] to avoid overwriting box borders.
+      // Supports multi-line labels.
       if (rel.label) {
+        const lines = splitLines(rel.label)
         const gapMid = Math.floor((startX + endX) / 2)
-        const labelStart = Math.max(startX, gapMid - Math.floor(rel.label.length / 2))
-        const labelY = lineY - 1
-        if (labelY >= 0) {
-          for (let i = 0; i < rel.label.length; i++) {
+
+        // Place lines below the relationship line (lineY + 1, lineY + 2, ...)
+        for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+          const line = lines[lineIdx]!
+          const labelStart = Math.max(startX, gapMid - Math.floor(line.length / 2))
+          const labelY = lineY + 1 + lineIdx
+          // Ensure canvas is tall enough
+          increaseSize(canvas, Math.max(labelStart + line.length, 1), Math.max(labelY + 1, 1))
+          for (let i = 0; i < line.length; i++) {
             const lx = labelStart + i
-            if (lx >= startX && lx <= endX && lx < totalW) {
-              canvas[lx]![labelY] = rel.label[i]!
+            if (lx >= startX && lx <= endX && lx < canvas.length) {
+              canvas[lx]![labelY] = line[i]!
             }
           }
         }
@@ -289,7 +377,8 @@ export function renderErAscii(text: string, config: AsciiConfig): string {
 
       // Crow's foot markers (vertical direction)
       // Place markers near the entity connection points
-      const upperChars = getCrowsFootChars(upperCard, useAscii)
+      // Upper marker (at upper entity's bottom edge) - treat as source side (isRight=false)
+      const upperChars = getCrowsFootChars(upperCard, useAscii, false)
       if (startY < totalH) {
         for (let i = 0; i < upperChars.length; i++) {
           const mx = lineX - Math.floor(upperChars.length / 2) + i
@@ -297,8 +386,9 @@ export function renderErAscii(text: string, config: AsciiConfig): string {
         }
       }
 
+      // Lower marker (at lower entity's top edge) - treat as target side (isRight=true)
       const targetX = lineX !== lowerCX ? lowerCX : lineX
-      const lowerChars = getCrowsFootChars(lowerCard, useAscii)
+      const lowerChars = getCrowsFootChars(lowerCard, useAscii, true)
       if (endY >= 0 && endY < totalH) {
         for (let i = 0; i < lowerChars.length; i++) {
           const mx = targetX - Math.floor(lowerChars.length / 2) + i
@@ -308,15 +398,24 @@ export function renderErAscii(text: string, config: AsciiConfig): string {
 
       // Relationship label — placed to the right of the vertical line at the midpoint.
       // We expand the canvas as needed since labels can extend beyond the initial bounds.
+      // Supports multi-line labels.
       if (rel.label) {
+        const lines = splitLines(rel.label)
         const midY = Math.floor((startY + endY) / 2)
-        const labelX = lineX + 2
-        if (midY >= 0) {
-          for (let i = 0; i < rel.label.length; i++) {
-            const lx = labelX + i
-            if (lx >= 0) {
-              increaseSize(canvas, lx + 1, midY + 1)
-              canvas[lx]![midY] = rel.label[i]!
+        // Center lines vertically around midY
+        const startLabelY = midY - Math.floor((lines.length - 1) / 2)
+
+        for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+          const line = lines[lineIdx]!
+          const labelX = lineX + 2
+          const y = startLabelY + lineIdx
+          if (y >= 0) {
+            for (let i = 0; i < line.length; i++) {
+              const lx = labelX + i
+              if (lx >= 0) {
+                increaseSize(canvas, lx + 1, y + 1)
+                canvas[lx]![y] = line[i]!
+              }
             }
           }
         }

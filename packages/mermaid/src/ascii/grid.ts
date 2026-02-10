@@ -11,9 +11,12 @@ import type {
   GridCoord, DrawingCoord, Direction, AsciiGraph, AsciiNode, AsciiSubgraph,
 } from './types.ts'
 import { gridKey } from './types.ts'
-import { mkCanvas, setCanvasSizeToGrid } from './canvas.ts'
+import { mkCanvas, setCanvasSizeToGrid, setRoleCanvasSizeToGrid } from './canvas.ts'
 import { determinePath, determineLabelLine } from './edge-routing.ts'
+import { analyzeEdgeBundles, processBundles } from './edge-bundling.ts'
 import { drawBox } from './draw.ts'
+import { maxLineWidth, lineCount } from './multiline-utils.ts'
+import { getShapeDimensions } from './shapes/index.ts'
 
 // ============================================================================
 // Grid coordinate → drawing coordinate conversion
@@ -63,19 +66,27 @@ export function lineToDrawing(graph: AsciiGraph, line: GridCoord[]): DrawingCoor
 /**
  * Reserve a 3x3 block in the grid for a node.
  * If the requested position is occupied, recursively shift by 4 grid units
- * (in the perpendicular direction based on graph direction) until a free spot is found.
+ * (in the perpendicular direction based on effective direction) until a free spot is found.
+ *
+ * @param effectiveDir - Optional direction override. If not provided, uses the node's
+ *                       effective direction (subgraph direction if in a subgraph with override,
+ *                       otherwise graph direction).
  */
 export function reserveSpotInGrid(
   graph: AsciiGraph,
   node: AsciiNode,
   requested: GridCoord,
+  effectiveDir?: 'LR' | 'TD',
 ): GridCoord {
+  // Determine direction for collision handling
+  const dir = effectiveDir ?? getEffectiveDirection(graph, node)
+
   if (graph.grid.has(gridKey(requested))) {
     // Collision — shift perpendicular to main flow direction
-    if (graph.config.graphDirection === 'LR') {
-      return reserveSpotInGrid(graph, node, { x: requested.x, y: requested.y + 4 })
+    if (dir === 'LR') {
+      return reserveSpotInGrid(graph, node, { x: requested.x, y: requested.y + 4 }, dir)
     } else {
-      return reserveSpotInGrid(graph, node, { x: requested.x + 4, y: requested.y })
+      return reserveSpotInGrid(graph, node, { x: requested.x + 4, y: requested.y }, dir)
     }
   }
 
@@ -98,16 +109,21 @@ export function reserveSpotInGrid(
 /**
  * Set column widths and row heights for a node's 3x3 grid block.
  * Each node occupies 3 columns (border, content, border) and 3 rows.
- * The content column must be wide enough for the node's label.
+ * Uses shape-aware dimensions to properly size non-rectangular shapes.
  */
 export function setColumnWidth(graph: AsciiGraph, node: AsciiNode): void {
   const gc = node.gridCoord!
   const padding = graph.config.boxBorderPadding
 
-  // 3 columns: [border=1] [content=2*padding+labelLen] [border=1]
-  const colWidths = [1, 2 * padding + node.displayLabel.length, 1]
-  // 3 rows: [border=1] [content=1+2*padding] [border=1]
-  const rowHeights = [1, 1 + 2 * padding, 1]
+  // Get shape-aware dimensions
+  const shapeDims = getShapeDimensions(node.shape, node.displayLabel, {
+    useAscii: graph.config.useAscii,
+    padding,
+  })
+
+  // Use shape-provided grid dimensions
+  const colWidths = shapeDims.gridColumns
+  const rowHeights = shapeDims.gridRows
 
   for (let idx = 0; idx < colWidths.length; idx++) {
     const xCoord = gc.x + idx
@@ -159,11 +175,45 @@ function isNodeInAnySubgraph(graph: AsciiGraph, node: AsciiNode): boolean {
   return graph.subgraphs.some(sg => sg.nodes.includes(node))
 }
 
-function getNodeSubgraph(graph: AsciiGraph, node: AsciiNode): AsciiSubgraph | null {
+/**
+ * Get the innermost subgraph that directly contains this node.
+ * Returns null if node is not in any subgraph.
+ */
+export function getNodeSubgraph(graph: AsciiGraph, node: AsciiNode): AsciiSubgraph | null {
+  // Find the innermost (most deeply nested) subgraph containing the node
+  let innermost: AsciiSubgraph | null = null
   for (const sg of graph.subgraphs) {
-    if (sg.nodes.includes(node)) return sg
+    if (sg.nodes.includes(node)) {
+      // Check if this subgraph is deeper (more nested) than current innermost
+      if (!innermost || isAncestorOrSelf(innermost, sg)) {
+        innermost = sg
+      }
+    }
   }
-  return null
+  return innermost
+}
+
+/** Check if `candidate` is the same as or an ancestor of `target`. */
+function isAncestorOrSelf(candidate: AsciiSubgraph, target: AsciiSubgraph): boolean {
+  let current: AsciiSubgraph | null = target
+  while (current !== null) {
+    if (current === candidate) return true
+    current = current.parent
+  }
+  return false
+}
+
+/**
+ * Get the effective direction for a node's layout.
+ * Returns the subgraph's direction override if the node is in a subgraph with one,
+ * otherwise returns the graph-level direction.
+ */
+export function getEffectiveDirection(graph: AsciiGraph, node: AsciiNode): 'LR' | 'TD' {
+  const sg = getNodeSubgraph(graph, node)
+  if (sg?.direction) {
+    return sg.direction
+  }
+  return graph.config.graphDirection
 }
 
 /**
@@ -347,17 +397,36 @@ export function createMapping(graph: AsciiGraph): void {
 
   // Identify root nodes — nodes that aren't the target of any edge
   const nodesFound = new Set<string>()
-  const rootNodes: AsciiNode[] = []
+  const initialRoots: AsciiNode[] = []
 
   for (const node of graph.nodes) {
     if (!nodesFound.has(node.name)) {
-      rootNodes.push(node)
+      initialRoots.push(node)
     }
     nodesFound.add(node.name)
     for (const child of getChildren(graph, node)) {
       nodesFound.add(child.name)
     }
   }
+
+  // Filter out subgraph nodes that have incoming edges from external sources.
+  // This handles the case where subgraph is declared before external nodes
+  // (e.g., `subgraph s; A-->B; end; X-->A` - A shouldn't be a root, X should).
+  const rootNodes = initialRoots.filter(node => {
+    const nodeSg = getNodeSubgraph(graph, node)
+    if (!nodeSg) return true  // external nodes: keep as roots
+
+    // Check if this subgraph node has incoming edges from outside its subgraph
+    for (const edge of graph.edges) {
+      if (edge.to === node) {
+        const sourceSg = getNodeSubgraph(graph, edge.from)
+        if (sourceSg !== nodeSg) {
+          return false  // has external incoming edge → not a root
+        }
+      }
+    }
+    return true
+  })
 
   // In LR mode with both external and subgraph roots, separate them
   // so subgraph roots are placed one level deeper
@@ -404,21 +473,55 @@ export function createMapping(graph: AsciiGraph): void {
   }
 
   // Place child nodes level by level
-  for (const node of graph.nodes) {
-    const gc = node.gridCoord!
-    const childLevel = dir === 'LR' ? gc.x + 4 : gc.y + 4
-    let highestPosition = highestPositionPerLevel[childLevel]!
+  // Use subgraph direction only when both parent and child are in the same subgraph
+  // Multi-pass: iterate until all nodes are placed (handles non-topological node order)
+  // Note: when shouldSeparate, externalRootNodes + subgraphRootNodes = rootNodes
+  //       otherwise, externalRootNodes = rootNodes and subgraphRootNodes is empty
+  let placedCount = externalRootNodes.length + subgraphRootNodes.length
+  while (placedCount < graph.nodes.length) {
+    const prevCount = placedCount
+    for (const node of graph.nodes) {
+      if (node.gridCoord === null) continue  // skip unplaced nodes
+      const gc = node.gridCoord
 
-    for (const child of getChildren(graph, node)) {
-      if (child.gridCoord !== null) continue // already placed
+      for (const child of getChildren(graph, node)) {
+        if (child.gridCoord !== null) continue // already placed
 
-      const requested: GridCoord = dir === 'LR'
-        ? { x: childLevel, y: highestPosition }
-        : { x: highestPosition, y: childLevel }
-      reserveSpotInGrid(graph, graph.nodes[child.index]!, requested)
-      highestPositionPerLevel[childLevel] = highestPosition + 4
-      highestPosition = highestPositionPerLevel[childLevel]!
+        // Determine direction for this edge (parent -> child)
+        // Use subgraph direction only if both are in the same subgraph with override
+        const parentSg = getNodeSubgraph(graph, node)
+        const childSg = getNodeSubgraph(graph, child)
+        const edgeDir = (parentSg && parentSg === childSg && parentSg.direction)
+          ? parentSg.direction
+          : graph.config.graphDirection
+
+        const childLevel = edgeDir === 'LR' ? gc.x + 4 : gc.y + 4
+
+        // Determine position based on direction context
+        let highestPosition: number
+        if (edgeDir !== graph.config.graphDirection) {
+          // Cross-direction: use parent's perpendicular coordinate
+          // This keeps children aligned with parent when direction changes
+          highestPosition = edgeDir === 'LR' ? gc.y : gc.x
+        } else {
+          // Same direction: use level tracker
+          highestPosition = highestPositionPerLevel[childLevel]!
+        }
+
+        const requested: GridCoord = edgeDir === 'LR'
+          ? { x: childLevel, y: highestPosition }
+          : { x: highestPosition, y: childLevel }
+        reserveSpotInGrid(graph, graph.nodes[child.index]!, requested, edgeDir)
+
+        // Only update level tracker for same-direction placements
+        if (edgeDir === graph.config.graphDirection) {
+          highestPositionPerLevel[childLevel] = highestPosition + 4
+        }
+        placedCount++
+      }
     }
+    // Safety: break if no progress made (handles disconnected nodes)
+    if (placedCount === prevCount) break
   }
 
   // Compute column widths and row heights
@@ -426,8 +529,22 @@ export function createMapping(graph: AsciiGraph): void {
     setColumnWidth(graph, node)
   }
 
-  // Route edges via A* and determine label positions
+  // Analyze edges for bundling (parallel links like A & B --> C)
+  // This groups edges that share sources or targets for cleaner visualization
+  graph.bundles = analyzeEdgeBundles(graph)
+
+  // Route bundled edges through junction points
+  processBundles(graph)
+
+  // Route non-bundled edges via A* and determine label positions
   for (const edge of graph.edges) {
+    // Skip edges that were already routed as part of a bundle
+    if (edge.bundle && edge.path.length > 0) {
+      increaseGridSizeForPath(graph, edge.path)
+      determineLabelLine(graph, edge)
+      continue
+    }
+
     determinePath(graph, edge)
     increaseGridSizeForPath(graph, edge.path)
     determineLabelLine(graph, edge)
@@ -441,6 +558,7 @@ export function createMapping(graph: AsciiGraph): void {
 
   // Set canvas size and compute subgraph bounding boxes
   setCanvasSizeToGrid(graph.canvas, graph.columnWidth, graph.rowHeight)
+  setRoleCanvasSizeToGrid(graph.roleCanvas, graph.columnWidth, graph.rowHeight)
   calculateSubgraphBoundingBoxes(graph)
   offsetDrawingForSubgraphs(graph)
 }

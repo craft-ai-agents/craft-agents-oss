@@ -11,7 +11,7 @@ import type {
   AsciiGraph, AsciiNode, AsciiEdge, AsciiSubgraph, AsciiConfig,
 } from './types.ts'
 import { EMPTY_STYLE } from './types.ts'
-import { mkCanvas } from './canvas.ts'
+import { mkCanvas, mkRoleCanvas } from './canvas.ts'
 
 /**
  * Convert a parsed MermaidGraph into an AsciiGraph ready for grid layout.
@@ -34,6 +34,8 @@ export function convertToAsciiGraph(parsed: MermaidGraph, config: AsciiConfig): 
       name: id,
       // The label is used for rendering inside the box.
       displayLabel: mNode.label,
+      // Preserve shape from parser for shape-aware rendering
+      shape: mNode.shape,
       index,
       gridCoord: null,
       drawingCoord: null,
@@ -63,6 +65,9 @@ export function convertToAsciiGraph(parsed: MermaidGraph, config: AsciiConfig): 
       labelLine: [],
       startDir: { x: 0, y: 0 },
       endDir: { x: 0, y: 0 },
+      style: mEdge.style,
+      hasArrowStart: mEdge.hasArrowStart,
+      hasArrowEnd: mEdge.hasArrowEnd,
     })
   }
 
@@ -92,6 +97,7 @@ export function convertToAsciiGraph(parsed: MermaidGraph, config: AsciiConfig): 
     nodes,
     edges,
     canvas: mkCanvas(0, 0),
+    roleCanvas: mkRoleCanvas(0, 0),
     grid: new Map(),
     columnWidth: new Map(),
     rowHeight: new Map(),
@@ -99,6 +105,7 @@ export function convertToAsciiGraph(parsed: MermaidGraph, config: AsciiConfig): 
     config,
     offsetX: 0,
     offsetY: 0,
+    bundles: [], // Populated by analyzeEdgeBundles() during layout
   }
 }
 
@@ -114,12 +121,19 @@ function convertSubgraph(
   nodeMap: Map<string, AsciiNode>,
   allSubgraphs: AsciiSubgraph[],
 ): AsciiSubgraph {
+  // Normalize subgraph direction: BT→TD, RL→LR (same as root graph normalization)
+  let normalizedDirection: 'LR' | 'TD' | undefined
+  if (mSg.direction) {
+    normalizedDirection = (mSg.direction === 'LR' || mSg.direction === 'RL') ? 'LR' : 'TD'
+  }
+
   const sg: AsciiSubgraph = {
     name: mSg.label,
     nodes: [],
     parent,
     children: [],
     minX: 0, minY: 0, maxX: 0, maxY: 0,
+    direction: normalizedDirection,
   }
 
   // Resolve node references

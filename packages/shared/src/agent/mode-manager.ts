@@ -1394,13 +1394,13 @@ export function looksLikePotentialWrite(command: string): boolean {
  * Get a helpful hint based on comparing target path to plans folder path.
  * Detects common mistakes and provides actionable guidance.
  */
-export function getPathHint(targetPath: string, plansFolderPath: string): string | null {
+export function getPathHint(targetPath: string, plansFolderPath: string, dataFolderPath?: string): string | null {
   const normalizedTarget = targetPath.replace(/\\/g, '/').toLowerCase();
   const normalizedPlans = plansFolderPath.replace(/\\/g, '/').toLowerCase();
 
-  // Case: Writing to session folder but missing /plans/
-  if (normalizedTarget.includes('/sessions/') && !normalizedTarget.includes('/plans/')) {
-    return 'Hint: Write to the /plans/ subfolder, not the session folder directly.';
+  // Case: Writing to session folder but missing /plans/ or /data/
+  if (normalizedTarget.includes('/sessions/') && !normalizedTarget.includes('/plans/') && !normalizedTarget.includes('/data/')) {
+    return 'Hint: Write to the /plans/ or /data/ subfolder, not the session folder directly.';
   }
 
   // Case: Wrong session ID (use lowercase for comparison)
@@ -1414,12 +1414,12 @@ export function getPathHint(targetPath: string, plansFolderPath: string): string
 
   // Case: Writing to workspace root instead of session
   if (normalizedTarget.includes('/.craft-agent/workspaces/') && !normalizedTarget.includes('/sessions/')) {
-    return 'Hint: Write to the session plans folder, not the workspace root.';
+    return 'Hint: Write to the session plans or data folder, not the workspace root.';
   }
 
   // Case: Writing outside .craft-agent entirely
   if (!normalizedTarget.includes('/.craft-agent/')) {
-    return 'Hint: Plans must be written to the .craft-agent session plans folder.';
+    return 'Hint: Files must be written to the session plans or data folder. Use plansFolderPath or dataFolderPath from <session_state>.';
   }
 
   return null;
@@ -1516,6 +1516,7 @@ export function shouldAllowToolInMode(
   mode: PermissionMode,
   options?: {
     plansFolderPath?: string;
+    dataFolderPath?: string;
     permissionsContext?: PermissionsContext;
   }
 ): ToolCheckResult {
@@ -1566,39 +1567,58 @@ export function shouldAllowToolInMode(
         return { allowed: true };
       }
 
-      // Plans folder exception for bash/PowerShell writes.
+      // Plans/data folder exception for bash/PowerShell writes.
       // Bash uses redirects: /bin/zsh -lc "cat <<'EOF' > /path/to/plans/file.md..."
       // PowerShell uses: @(...) | Out-File -FilePath 'C:\path\to\plans\file.md'
-      // Allow these if the write target is within the plans folder.
-      if (options?.plansFolderPath) {
+      // Allow these if the write target is within the plans or data folder.
+      if (options?.plansFolderPath || options?.dataFolderPath) {
         const targetPath = extractBashWriteTarget(command) ?? extractPowerShellWriteTarget(command);
         if (targetPath) {
           // Normalize path separators: replace backslashes with forward slashes, then collapse
           // consecutive slashes. Codex JSON-RPC may send paths with \\\\ (double backslash)
           // which becomes \\ in the actual string — each \\ → // → collapsed to /.
           const normalizedTarget = targetPath.replace(/[\\/]+/g, '/');
-          const normalizedPlansDir = options.plansFolderPath.replace(/[\\/]+/g, '/');
-          // Use case-insensitive comparison for Windows path compatibility
-          if (normalizedTarget.toLowerCase().startsWith(normalizedPlansDir.toLowerCase())) {
-            debug(`[Mode] Allowing write to plans folder: ${targetPath}`);
-            return { allowed: true };
+
+          // Check plans folder
+          if (options?.plansFolderPath) {
+            const normalizedPlansDir = options.plansFolderPath.replace(/[\\/]+/g, '/');
+            // Use case-insensitive comparison for Windows path compatibility
+            if (normalizedTarget.toLowerCase().startsWith(normalizedPlansDir.toLowerCase())) {
+              debug(`[Mode] Allowing write to plans folder: ${targetPath}`);
+              return { allowed: true };
+            }
           }
-          // Target path extracted but not in plans folder - give specific error with helpful hint
-          debug(`[Mode] Write target "${targetPath}" is not in plans folder "${options.plansFolderPath}"`);
-          const pathHint = getPathHint(targetPath, options.plansFolderPath);
+
+          // Check data folder
+          if (options?.dataFolderPath) {
+            const normalizedDataDir = options.dataFolderPath.replace(/[\\/]+/g, '/');
+            if (normalizedTarget.toLowerCase().startsWith(normalizedDataDir.toLowerCase())) {
+              debug(`[Mode] Allowing write to data folder: ${targetPath}`);
+              return { allowed: true };
+            }
+          }
+
+          // Target path extracted but not in any allowed folder - give specific error with helpful hint
+          debug(`[Mode] Write target "${targetPath}" is not in plans or data folder`);
+          const pathHint = options?.plansFolderPath ? getPathHint(targetPath, options.plansFolderPath, options?.dataFolderPath) : null;
           const lines = [
-            `Write blocked (Explore mode) - target not in plans folder:`,
+            `Write blocked (Explore mode) - target not in allowed folders:`,
             ``,
             `  Target: ${targetPath}`,
-            `  Plans:  ${options.plansFolderPath}`,
           ];
+          if (options?.plansFolderPath) {
+            lines.push(`  Plans:  ${options.plansFolderPath}`);
+          }
+          if (options?.dataFolderPath) {
+            lines.push(`  Data:   ${options.dataFolderPath}`);
+          }
           if (pathHint) {
             lines.push(``, pathHint);
           }
           lines.push(
             ``,
             `To proceed:`,
-            `• Use the exact plansFolderPath from <session_state>`,
+            `• Use the exact plansFolderPath or dataFolderPath from <session_state>`,
             `• Or switch to Ask mode (${config.shortcutHint}) to enable writes with approval`
           );
           return {
@@ -1609,12 +1629,15 @@ export function shouldAllowToolInMode(
         // Check if this looks like a write attempt but we couldn't extract the path
         if (looksLikePotentialWrite(command)) {
           debug(`[Mode] Bash command looks like a write but path extraction failed`);
+          const plansExample = options?.plansFolderPath
+            ? `  Plans: printf '...' > "${options.plansFolderPath}/plan.md"\n` : '';
+          const dataExample = options?.dataFolderPath
+            ? `  Data:  printf '...' > "${options.dataFolderPath}/output.json"\n` : '';
           return {
             allowed: false,
             reason: `Bash command appears to write files but the target path couldn't be detected.\n\n` +
-                    `If writing to plans folder, use one of these patterns:\n` +
-                    `  Unix:       printf '...' > "${options.plansFolderPath}/plan.md"\n` +
-                    `  PowerShell: @(...) | Out-File -FilePath '${options.plansFolderPath.replace(/\//g, '\\\\')}\\\\plan.md' -Encoding utf8\n\n` +
+                    `If writing to an allowed folder, use one of these patterns:\n` +
+                    plansExample + dataExample + `\n` +
                     `Or switch to Ask or Execute mode (${config.shortcutHint}).`,
           };
         }
@@ -1639,9 +1662,10 @@ export function shouldAllowToolInMode(
     const filePath = (input?.file_path ?? input?.notebook_path) as string | undefined;
 
     if (filePath) {
+      const normalizedPath = filePath.replace(/\\/g, '/');
+
       // Check plans folder exception
       if (options?.plansFolderPath) {
-        const normalizedPath = filePath.replace(/\\/g, '/');
         const normalizedPlansDir = options.plansFolderPath.replace(/\\/g, '/');
         debug(`[Mode] Checking plans folder exception: path="${normalizedPath}", plansDir="${normalizedPlansDir}"`);
 
@@ -1649,6 +1673,15 @@ export function shouldAllowToolInMode(
         // (paths from Codex may have inconsistent casing)
         if (normalizedPath.toLowerCase().startsWith(normalizedPlansDir.toLowerCase())) {
           debug(`[Mode] Allowing ${toolName} to plans folder`);
+          return { allowed: true };
+        }
+      }
+
+      // Check data folder exception
+      if (options?.dataFolderPath) {
+        const normalizedDataDir = options.dataFolderPath.replace(/\\/g, '/');
+        if (normalizedPath.toLowerCase().startsWith(normalizedDataDir.toLowerCase())) {
+          debug(`[Mode] Allowing ${toolName} to data folder`);
           return { allowed: true };
         }
       }
@@ -1661,23 +1694,28 @@ export function shouldAllowToolInMode(
         }
       }
 
-      // Not in plans folder and not in allowedWritePaths - provide detailed rejection
-      if (options?.plansFolderPath) {
-        debug(`[Mode] ${toolName} target "${filePath}" not in plans folder or allowedWritePaths`);
-        const pathHint = getPathHint(filePath, options.plansFolderPath);
+      // Not in plans/data folder and not in allowedWritePaths - provide detailed rejection
+      if (options?.plansFolderPath || options?.dataFolderPath) {
+        debug(`[Mode] ${toolName} target "${filePath}" not in allowed folders or allowedWritePaths`);
+        const pathHint = options?.plansFolderPath ? getPathHint(filePath, options.plansFolderPath, options?.dataFolderPath) : null;
         const lines = [
-          `${toolName} blocked (Explore mode) - target not in plans folder:`,
+          `${toolName} blocked (Explore mode) - target not in allowed folders:`,
           ``,
           `  Target: ${filePath}`,
-          `  Plans:  ${options.plansFolderPath}`,
         ];
+        if (options?.plansFolderPath) {
+          lines.push(`  Plans:  ${options.plansFolderPath}`);
+        }
+        if (options?.dataFolderPath) {
+          lines.push(`  Data:   ${options.dataFolderPath}`);
+        }
         if (pathHint) {
           lines.push(``, pathHint);
         }
         lines.push(
           ``,
           `To proceed:`,
-          `• Use the exact plansFolderPath from <session_state>`,
+          `• Use the exact plansFolderPath or dataFolderPath from <session_state>`,
           `• Or switch to Ask mode (${config.shortcutHint}) to enable writes with approval`
         );
         return {
@@ -1713,6 +1751,7 @@ export function shouldAllowToolInMode(
         'mcp__session__skill_validate',
         'mcp__session__mermaid_validate',
         'mcp__session__source_test',
+        'mcp__session__transform_data',
       ];
       if (readOnlySessionTools.includes(toolName)) {
         return { allowed: true };
@@ -1827,7 +1866,7 @@ export function getSessionState(sessionId: string): { permissionMode: Permission
  */
 export function formatSessionState(
   sessionId: string,
-  options?: { plansFolderPath?: string }
+  options?: { plansFolderPath?: string; dataFolderPath?: string }
 ): string {
   const mode = getPermissionMode(sessionId);
 
@@ -1838,6 +1877,11 @@ export function formatSessionState(
   // Always include plans folder path so agent knows where plans are stored
   if (options?.plansFolderPath) {
     result += `\nplansFolderPath: ${options.plansFolderPath}`;
+  }
+
+  // Include data folder path so agent knows where transform_data output goes
+  if (options?.dataFolderPath) {
+    result += `\ndataFolderPath: ${options.dataFolderPath}`;
   }
 
   result += '\n</session_state>';

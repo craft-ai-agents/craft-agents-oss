@@ -3,6 +3,7 @@ import type { DiagramColors } from '../theme.ts'
 import { svgOpenTag, buildStyleBlock } from '../theme.ts'
 import { FONT_SIZES, FONT_WEIGHTS, STROKE_WIDTHS, estimateTextWidth, TEXT_BASELINE_SHIFT } from '../styles.ts'
 import { CLS } from './layout.ts'
+import { renderMultilineText, escapeXml as escapeXmlUtil } from '../multiline-utils.ts'
 
 // ============================================================================
 // Class diagram SVG renderer
@@ -106,20 +107,32 @@ function relationshipMarkerDefs(): string {
 // Class box rendering
 // ============================================================================
 
-/** Render a class box with 3 compartments: header, attributes, methods */
+/**
+ * Render a class box with 3 compartments: header, attributes, methods.
+ * Wrapped in <g class="class-node"> with semantic data attributes.
+ */
 function renderClassBox(cls: PositionedClassNode): string {
   const { x, y, width, height, headerHeight, attrHeight, methodHeight } = cls
   const parts: string[] = []
 
+  // Semantic wrapper with class metadata
+  // data-id: class identifier
+  // data-label: class name
+  // data-annotation: stereotype (interface, abstract, etc.)
+  const annotationAttr = cls.annotation ? ` data-annotation="${escapeAttr(cls.annotation)}"` : ''
+  parts.push(
+    `<g class="class-node" data-id="${escapeAttr(cls.id)}" data-label="${escapeAttr(cls.label)}"${annotationAttr}>`
+  )
+
   // Outer rectangle (full box)
   parts.push(
-    `<rect x="${x}" y="${y}" width="${width}" height="${height}" ` +
+    `  <rect x="${x}" y="${y}" width="${width}" height="${height}" ` +
     `rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.outerBox}" />`
   )
 
   // Header background
   parts.push(
-    `<rect x="${x}" y="${y}" width="${width}" height="${headerHeight}" ` +
+    `  <rect x="${x}" y="${y}" width="${width}" height="${headerHeight}" ` +
     `rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.outerBox}" />`
   )
 
@@ -128,23 +141,28 @@ function renderClassBox(cls: PositionedClassNode): string {
   if (cls.annotation) {
     const annotY = y + 12
     parts.push(
-      `<text x="${x + width / 2}" y="${annotY}" text-anchor="middle" dy="${TEXT_BASELINE_SHIFT}" ` +
+      `  <text x="${x + width / 2}" y="${annotY}" text-anchor="middle" dy="${TEXT_BASELINE_SHIFT}" ` +
       `font-size="${CLS_FONT.annotationSize}" font-weight="${CLS_FONT.annotationWeight}" ` +
       `font-style="italic" fill="var(--_text-muted)">&lt;&lt;${escapeXml(cls.annotation)}&gt;&gt;</text>`
     )
     nameY = y + headerHeight / 2 + 6
   }
 
-  // Class name
+  // Class name (supports multi-line via <br> tags)
   parts.push(
-    `<text x="${x + width / 2}" y="${nameY}" text-anchor="middle" dy="${TEXT_BASELINE_SHIFT}" ` +
-    `font-size="${FONT_SIZES.nodeLabel}" font-weight="700" fill="var(--_text)">${escapeXml(cls.label)}</text>`
+    '  ' + renderMultilineText(
+      cls.label,
+      x + width / 2,
+      nameY,
+      FONT_SIZES.nodeLabel,
+      `text-anchor="middle" font-size="${FONT_SIZES.nodeLabel}" font-weight="700" fill="var(--_text)"`
+    )
   )
 
   // Divider line between header and attributes
   const attrTop = y + headerHeight
   parts.push(
-    `<line x1="${x}" y1="${attrTop}" x2="${x + width}" y2="${attrTop}" ` +
+    `  <line x1="${x}" y1="${attrTop}" x2="${x + width}" y2="${attrTop}" ` +
     `stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.innerBox}" />`
   )
 
@@ -153,13 +171,13 @@ function renderClassBox(cls: PositionedClassNode): string {
   for (let i = 0; i < cls.attributes.length; i++) {
     const member = cls.attributes[i]!
     const memberY = attrTop + 4 + i * memberRowH + memberRowH / 2
-    parts.push(renderMember(member, x + CLS.boxPadX, memberY))
+    parts.push('  ' + renderMember(member, x + CLS.boxPadX, memberY))
   }
 
   // Divider line between attributes and methods
   const methodTop = attrTop + attrHeight
   parts.push(
-    `<line x1="${x}" y1="${methodTop}" x2="${x + width}" y2="${methodTop}" ` +
+    `  <line x1="${x}" y1="${methodTop}" x2="${x + width}" y2="${methodTop}" ` +
     `stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.innerBox}" />`
   )
 
@@ -167,8 +185,10 @@ function renderClassBox(cls: PositionedClassNode): string {
   for (let i = 0; i < cls.methods.length; i++) {
     const member = cls.methods[i]!
     const memberY = methodTop + 4 + i * memberRowH + memberRowH / 2
-    parts.push(renderMember(member, x + CLS.boxPadX, memberY))
+    parts.push('  ' + renderMember(member, x + CLS.boxPadX, memberY))
   }
+
+  parts.push('</g>')
 
   return parts.join('\n')
 }
@@ -192,7 +212,11 @@ function renderMember(member: ClassMember, x: number, y: number): string {
     spans.push(`<tspan fill="var(--_text-faint)">${escapeXml(member.visibility)} </tspan>`)
   }
 
-  spans.push(`<tspan fill="var(--_text-sec)">${escapeXml(member.name)}</tspan>`)
+  // Add parentheses for methods to distinguish from attributes, including parameters if present
+  const displayName = member.isMethod
+    ? `${member.name}(${member.params || ''})`
+    : member.name
+  spans.push(`<tspan fill="var(--_text-sec)">${escapeXml(displayName)}</tspan>`)
 
   if (member.type) {
     spans.push(`<tspan fill="var(--_text-faint)">: </tspan>`)
@@ -210,7 +234,10 @@ function renderMember(member: ClassMember, x: number, y: number): string {
 // Relationship rendering
 // ============================================================================
 
-/** Render a relationship line with appropriate markers */
+/**
+ * Render a relationship line with appropriate markers and semantic attributes.
+ * Includes data-* attributes for programmatic inspection.
+ */
 function renderRelationship(rel: PositionedClassRelationship): string {
   if (rel.points.length < 2) return ''
 
@@ -221,8 +248,32 @@ function renderRelationship(rel: PositionedClassRelationship): string {
   // Determine markers based on relationship type and which end has the marker
   const markers = getRelationshipMarkers(rel.type, rel.markerAt)
 
+  // Build semantic data attributes for relationship inspection:
+  // - class="class-relationship": CSS targeting
+  // - data-from/data-to: source and target class IDs
+  // - data-type: relationship type (inheritance, composition, etc.)
+  // - data-marker-at: which end has the marker (from/to)
+  // - data-from-cardinality/data-to-cardinality: multiplicity if present
+  // - data-label: relationship label if present
+  const dataAttrs = [
+    'class="class-relationship"',
+    `data-from="${escapeAttr(rel.from)}"`,
+    `data-to="${escapeAttr(rel.to)}"`,
+    `data-type="${rel.type}"`,
+    `data-marker-at="${rel.markerAt}"`,
+  ]
+  if (rel.label) {
+    dataAttrs.push(`data-label="${escapeAttr(rel.label)}"`)
+  }
+  if (rel.fromCardinality) {
+    dataAttrs.push(`data-from-cardinality="${escapeAttr(rel.fromCardinality)}"`)
+  }
+  if (rel.toCardinality) {
+    dataAttrs.push(`data-to-cardinality="${escapeAttr(rel.toCardinality)}"`)
+  }
+
   return (
-    `<polyline points="${pathData}" fill="none" stroke="var(--_line)" ` +
+    `<polyline ${dataAttrs.join(' ')} points="${pathData}" fill="none" stroke="var(--_line)" ` +
     `stroke-width="${STROKE_WIDTHS.connector}"${dashArray}${markers} />`
   )
 }
@@ -262,7 +313,7 @@ function getMarkerDefId(type: RelationshipType): string | null {
   }
 }
 
-/** Render relationship labels and cardinality text */
+/** Render relationship labels and cardinality text (supports multi-line) */
 function renderRelationshipLabels(rel: PositionedClassRelationship): string {
   if (!rel.label && !rel.fromCardinality && !rel.toCardinality) return ''
   if (rel.points.length < 2) return ''
@@ -273,9 +324,8 @@ function renderRelationshipLabels(rel: PositionedClassRelationship): string {
   if (rel.label) {
     const pos = rel.labelPosition ?? midpoint(rel.points)
     parts.push(
-      `<text x="${pos.x}" y="${pos.y - 8}" text-anchor="middle" ` +
-      `font-size="${FONT_SIZES.edgeLabel}" font-weight="${FONT_WEIGHTS.edgeLabel}" ` +
-      `fill="var(--_text-muted)">${escapeXml(rel.label)}</text>`
+      renderMultilineText(rel.label, pos.x, pos.y - 8, FONT_SIZES.edgeLabel,
+        `font-size="${FONT_SIZES.edgeLabel}" text-anchor="middle" font-weight="${FONT_WEIGHTS.edgeLabel}" fill="var(--_text-muted)"`)
     )
   }
 
@@ -285,9 +335,8 @@ function renderRelationshipLabels(rel: PositionedClassRelationship): string {
     const next = rel.points[1]!
     const offset = cardinalityOffset(p, next)
     parts.push(
-      `<text x="${p.x + offset.x}" y="${p.y + offset.y}" text-anchor="middle" ` +
-      `font-size="${FONT_SIZES.edgeLabel}" font-weight="${FONT_WEIGHTS.edgeLabel}" ` +
-      `fill="var(--_text-muted)">${escapeXml(rel.fromCardinality)}</text>`
+      renderMultilineText(rel.fromCardinality, p.x + offset.x, p.y + offset.y, FONT_SIZES.edgeLabel,
+        `font-size="${FONT_SIZES.edgeLabel}" text-anchor="middle" font-weight="${FONT_WEIGHTS.edgeLabel}" fill="var(--_text-muted)"`)
     )
   }
 
@@ -297,9 +346,8 @@ function renderRelationshipLabels(rel: PositionedClassRelationship): string {
     const prev = rel.points[rel.points.length - 2]!
     const offset = cardinalityOffset(p, prev)
     parts.push(
-      `<text x="${p.x + offset.x}" y="${p.y + offset.y}" text-anchor="middle" ` +
-      `font-size="${FONT_SIZES.edgeLabel}" font-weight="${FONT_WEIGHTS.edgeLabel}" ` +
-      `fill="var(--_text-muted)">${escapeXml(rel.toCardinality)}</text>`
+      renderMultilineText(rel.toCardinality, p.x + offset.x, p.y + offset.y, FONT_SIZES.edgeLabel,
+        `font-size="${FONT_SIZES.edgeLabel}" text-anchor="middle" font-weight="${FONT_WEIGHTS.edgeLabel}" fill="var(--_text-muted)"`)
     )
   }
 
@@ -333,11 +381,17 @@ function cardinalityOffset(
 // Utilities
 // ============================================================================
 
-function escapeXml(text: string): string {
-  return text
+// Use shared escapeXml from multiline-utils
+const escapeXml = escapeXmlUtil
+
+/**
+ * Escape a string for use as an XML/HTML attribute value.
+ * Escapes quotes and ampersands to prevent attribute injection.
+ */
+function escapeAttr(value: string): string {
+  return value
     .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
 }

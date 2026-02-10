@@ -18,6 +18,7 @@ export interface ConfigDefaults {
     sendMessageKey: 'enter' | 'cmd-enter';
     spellCheck: boolean;
     keepAwakeWhileRunning: boolean;
+    richToolDescriptions: boolean;
   };
   workspaceDefaults: {
     thinkingLevel: ThinkingLevel;

@@ -12,6 +12,7 @@ import {
   gridCoordDirection,
 } from './types.ts'
 import { getPath, mergePath } from './pathfinder.ts'
+import { getEffectiveDirection, getNodeSubgraph } from './grid.ts'
 
 // ============================================================================
 // Direction utilities
@@ -143,77 +144,133 @@ export function determineStartAndEndDir(
 /**
  * Determine the path for an edge by trying two candidate routes (preferred + alternative)
  * and picking the shorter one. Sets edge.path, edge.startDir, edge.endDir.
+ *
+ * When both A* paths fail (common for edges crossing subgraph boundaries), falls back
+ * to a direct path using the start/end points. This ensures edges always have a path
+ * for arrowhead rendering.
+ *
+ * Uses the effective direction for edge routing, respecting subgraph direction overrides
+ * when both source and target are in the same subgraph.
  */
 export function determinePath(graph: AsciiGraph, edge: AsciiEdge): void {
+  // Determine effective direction for this edge
+  // If both nodes are in the same subgraph with a direction override, use it
+  // Otherwise, use the graph's direction (not source's effective direction)
+  const sourceSg = getNodeSubgraph(graph, edge.from)
+  const targetSg = getNodeSubgraph(graph, edge.to)
+  const effectiveDir = (sourceSg && sourceSg === targetSg && sourceSg.direction)
+    ? sourceSg.direction
+    : graph.config.graphDirection
+
   const [preferredDir, preferredOppositeDir, alternativeDir, alternativeOppositeDir] =
-    determineStartAndEndDir(edge, graph.config.graphDirection)
+    determineStartAndEndDir(edge, effectiveDir)
 
   // Try preferred path
   const prefFrom = gridCoordDirection(edge.from.gridCoord!, preferredDir)
   const prefTo = gridCoordDirection(edge.to.gridCoord!, preferredOppositeDir)
   let preferredPath = getPath(graph.grid, prefFrom, prefTo)
 
-  if (preferredPath === null) {
-    // No preferred path found — use alternative
-    edge.startDir = alternativeDir
-    edge.endDir = alternativeOppositeDir
-    edge.path = []
-    return
-  }
-  preferredPath = mergePath(preferredPath)
-
   // Try alternative path
   const altFrom = gridCoordDirection(edge.from.gridCoord!, alternativeDir)
   const altTo = gridCoordDirection(edge.to.gridCoord!, alternativeOppositeDir)
   let alternativePath = getPath(graph.grid, altFrom, altTo)
 
-  if (alternativePath === null) {
-    // Only preferred path works
-    edge.startDir = preferredDir
-    edge.endDir = preferredOppositeDir
-    edge.path = preferredPath
+  // Case 1: Both paths found — pick the shorter one
+  if (preferredPath !== null && alternativePath !== null) {
+    preferredPath = mergePath(preferredPath)
+    alternativePath = mergePath(alternativePath)
+
+    if (preferredPath.length <= alternativePath.length) {
+      edge.startDir = preferredDir
+      edge.endDir = preferredOppositeDir
+      edge.path = preferredPath
+    } else {
+      edge.startDir = alternativeDir
+      edge.endDir = alternativeOppositeDir
+      edge.path = alternativePath
+    }
     return
   }
-  alternativePath = mergePath(alternativePath)
 
-  // Pick the shorter path
-  if (preferredPath.length <= alternativePath.length) {
+  // Case 2: Only preferred path found
+  if (preferredPath !== null) {
     edge.startDir = preferredDir
     edge.endDir = preferredOppositeDir
-    edge.path = preferredPath
-  } else {
+    edge.path = mergePath(preferredPath)
+    return
+  }
+
+  // Case 3: Only alternative path found
+  if (alternativePath !== null) {
     edge.startDir = alternativeDir
     edge.endDir = alternativeOppositeDir
-    edge.path = alternativePath
+    edge.path = mergePath(alternativePath)
+    return
   }
+
+  // Case 4: Both paths failed — create a direct fallback path
+  // This happens for edges crossing subgraph boundaries where A* can't find
+  // a clear route. We create a direct path from source to target exit points
+  // so arrowheads can still be rendered correctly.
+  edge.startDir = preferredDir
+  edge.endDir = preferredOppositeDir
+  edge.path = [prefFrom, prefTo]
 }
 
 /**
  * Find the best line segment in an edge's path to place a label on.
- * Picks the first segment wide enough for the label, or the widest segment overall.
+ * Prefers vertical segments for TD/BT graphs and horizontal for LR/RL to avoid
+ * label collisions when multiple edges share initial segments.
+ * Falls back to the widest segment if none are suitable.
  * Also increases the column width at the label position to fit the text.
  */
 export function determineLabelLine(graph: AsciiGraph, edge: AsciiEdge): void {
   if (edge.text.length === 0) return
 
   const lenLabel = edge.text.length
-  let prevStep = edge.path[0]!
-  let largestLine: [GridCoord, GridCoord] = [prevStep, edge.path[1]!]
-  let largestLineSize = 0
+  const pathLen = edge.path.length
+  const isVerticalFlow = graph.config.graphDirection === 'TD'
 
-  for (let i = 1; i < edge.path.length; i++) {
-    const step = edge.path[i]!
-    const line: [GridCoord, GridCoord] = [prevStep, step]
-    const lineWidth = calculateLineWidth(graph, line)
+  // Collect all segments with their widths and orientation
+  const segments: {
+    line: [GridCoord, GridCoord]
+    width: number
+    index: number
+    isVertical: boolean
+  }[] = []
 
-    if (lineWidth >= lenLabel) {
-      largestLine = line
-      break
-    } else if (lineWidth > largestLineSize) {
-      largestLineSize = lineWidth
-      largestLine = line
+  for (let i = 1; i < pathLen; i++) {
+    const p1 = edge.path[i - 1]!
+    const p2 = edge.path[i]!
+    const line: [GridCoord, GridCoord] = [p1, p2]
+    const width = calculateLineWidth(graph, line)
+    // A segment is vertical if X coords are same, horizontal if Y coords are same
+    const isVertical = p1.x === p2.x
+    segments.push({ line, width, index: i, isVertical })
+  }
+
+  // Find segments wide enough for the label, excluding the first segment
+  // The first segment is often shared between edges from the same source node
+  const suitableSegments = segments.filter(s => s.width >= lenLabel && s.index > 1)
+
+  let largestLine: [GridCoord, GridCoord]
+
+  if (suitableSegments.length > 0) {
+    // Prefer segments near the end of the path (closer to target)
+    // This avoids the shared initial segments from source
+    suitableSegments.sort((a, b) => b.index - a.index)
+    largestLine = suitableSegments[0]!.line
+  } else {
+    // Fall back to any suitable segment including the first
+    const fallbackSegments = segments.filter(s => s.width >= lenLabel)
+    if (fallbackSegments.length > 0) {
+      fallbackSegments.sort((a, b) => b.index - a.index)
+      largestLine = fallbackSegments[0]!.line
+    } else {
+      // No segment wide enough — use the widest one
+      segments.sort((a, b) => b.width - a.width)
+      largestLine = segments[0]?.line ?? [edge.path[0]!, edge.path[1]!]
     }
-    prevStep = step
   }
 
   // Ensure column at midpoint is wide enough for the label

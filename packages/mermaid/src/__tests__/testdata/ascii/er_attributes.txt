@@ -10,12 +10,10 @@ erDiagram
   }
   CUSTOMER ||--o{ ORDER : places
 ---
-+-----------------+      +------------------+    
-| CUSTOMER        |      | ORDER            |    
-+-----------------+places+------------------+    
-| PK string name  |||--o{| PK int id        |    
-| UK string email |      |    string status |    
-|    int age      |      +------------------+    
-+-----------------+                              
-                                                 
-                                                 
++-----------------+      +------------------+
+| CUSTOMER        |      | ORDER            |
++-----------------+      +------------------+
+| PK string name  ||---o<| PK int id        |
+| UK string email |places|    string status |
+|    int age      |      +------------------+
++-----------------+

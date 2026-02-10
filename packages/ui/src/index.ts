@@ -66,8 +66,12 @@ export {
   InlineCode,
   CollapsibleMarkdownProvider,
   useCollapsibleMarkdown,
+  MarkdownDatatableBlock,
+  MarkdownSpreadsheetBlock,
   type MarkdownProps,
   type RenderMode,
+  type MarkdownDatatableBlockProps,
+  type MarkdownSpreadsheetBlockProps,
 } from './components/markdown'
 
 // UI primitives
@@ -78,6 +82,15 @@ export {
   PreviewHeader,
   PreviewHeaderBadge,
   PREVIEW_BADGE_VARIANTS,
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuShortcut,
+  StyledDropdownMenuContent,
+  StyledDropdownMenuItem,
+  StyledDropdownMenuSeparator,
+  StyledDropdownMenuSubTrigger,
+  StyledDropdownMenuSubContent,
   type SpinnerProps,
   type SimpleDropdownProps,
   type SimpleDropdownItemProps,
@@ -209,6 +222,13 @@ export {
 
 // Turn utilities (pure functions)
 export * from './components/chat/turn-utils'
+
+// Action Cards
+export {
+  ActionCard,
+  type ActionCardProps,
+  type ActionCardAction,
+} from './components/cards/ActionCard'
 
 // Icons
 export {

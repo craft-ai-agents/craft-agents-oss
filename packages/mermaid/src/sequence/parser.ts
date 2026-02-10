@@ -1,4 +1,5 @@
 import type { SequenceDiagram, Actor, Message, Block, Note } from './types.ts'
+import { normalizeBrTags } from '../multiline-utils.ts'
 
 // ============================================================================
 // Sequence diagram parser
@@ -50,7 +51,8 @@ export function parseSequenceDiagram(lines: string[]): SequenceDiagram {
     if (actorMatch) {
       const type = actorMatch[1] as 'participant' | 'actor'
       const id = actorMatch[2]!
-      const label = actorMatch[3]?.trim() ?? id
+      const rawLabel = actorMatch[3]?.trim() ?? id
+      const label = normalizeBrTags(rawLabel)
       if (!actorIds.has(id)) {
         actorIds.add(id)
         diagram.actors.push({ id, label, type })
@@ -64,7 +66,7 @@ export function parseSequenceDiagram(lines: string[]): SequenceDiagram {
     if (noteMatch) {
       const posStr = noteMatch[1]!.toLowerCase()
       const actorsStr = noteMatch[2]!.trim()
-      const text = noteMatch[3]!.trim()
+      const text = normalizeBrTags(noteMatch[3]!.trim())
       const noteActorIds = actorsStr.split(',').map(s => s.trim())
 
       // Ensure actors exist
@@ -89,7 +91,8 @@ export function parseSequenceDiagram(lines: string[]): SequenceDiagram {
     const blockMatch = line.match(/^(loop|alt|opt|par|critical|break|rect)\s*(.*)$/)
     if (blockMatch) {
       const blockType = blockMatch[1] as Block['type']
-      const label = blockMatch[2]?.trim() ?? ''
+      const rawBlockLabel = blockMatch[2]?.trim() ?? ''
+      const label = normalizeBrTags(rawBlockLabel)
       blockStack.push({
         type: blockType,
         label,
@@ -102,7 +105,8 @@ export function parseSequenceDiagram(lines: string[]): SequenceDiagram {
     // --- Block divider: else, and ---
     const dividerMatch = line.match(/^(else|and)\s*(.*)$/)
     if (dividerMatch && blockStack.length > 0) {
-      const label = dividerMatch[2]?.trim() ?? ''
+      const rawDividerLabel = dividerMatch[2]?.trim() ?? ''
+      const label = normalizeBrTags(rawDividerLabel)
       blockStack[blockStack.length - 1]!.dividers.push({
         index: diagram.messages.length,
         label,
@@ -134,7 +138,7 @@ export function parseSequenceDiagram(lines: string[]): SequenceDiagram {
       const arrow = msgMatch[2]!
       const activationMark = msgMatch[3]
       const to = msgMatch[4]!
-      const label = msgMatch[5]!.trim()
+      const label = normalizeBrTags(msgMatch[5]!.trim())
 
       // Ensure both actors exist
       ensureActor(diagram, actorIds, from)
@@ -170,7 +174,7 @@ export function parseSequenceDiagram(lines: string[]): SequenceDiagram {
       const arrow = simpleMsgMatch[2]!
       const activationMark = simpleMsgMatch[3]
       const to = simpleMsgMatch[4]!
-      const label = simpleMsgMatch[5]!.trim()
+      const label = normalizeBrTags(simpleMsgMatch[5]!.trim())
 
       ensureActor(diagram, actorIds, from)
       ensureActor(diagram, actorIds, to)

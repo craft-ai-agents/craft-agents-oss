@@ -356,6 +356,13 @@ export interface BackendConfig {
   copilotCliPath?: string;
 
   /**
+   * Path to the Copilot network interceptor (CopilotAgent only).
+   * Loaded via NODE_OPTIONS="--require ..." into the Copilot CLI subprocess.
+   * Intercepts fetch() to inject tool metadata and capture it from responses.
+   */
+  copilotInterceptorPath?: string;
+
+  /**
    * Per-session config directory for Copilot SDK (CopilotAgent only).
    * When set, the Copilot CLI will use this directory for storing config and state.
    */

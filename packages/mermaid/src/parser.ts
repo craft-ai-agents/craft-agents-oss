@@ -1,4 +1,5 @@
 import type { MermaidGraph, MermaidNode, MermaidEdge, MermaidSubgraph, Direction, NodeShape, EdgeStyle } from './types.ts'
+import { normalizeBrTags } from './multiline-utils.ts'
 
 // ============================================================================
 // Mermaid parser — flowcharts and state diagrams
@@ -113,10 +114,10 @@ function parseFlowchart(lines: string[]): MermaidGraph {
       let label: string
       if (bracketMatch) {
         id = bracketMatch[1]!
-        label = bracketMatch[2]!
+        label = normalizeBrTags(bracketMatch[2]!)
       } else {
         // Use the label text as id (slugified)
-        label = rest
+        label = normalizeBrTags(rest)
         id = rest.replace(/\s+/g, '_').replace(/[^\w]/g, '')
       }
       const sg: MermaidSubgraph = { id, label, nodeIds: [], children: [] }
@@ -172,6 +173,8 @@ function parseStateDiagram(lines: string[]): MermaidGraph {
 
   // Track composite state nesting (like subgraphs)
   const compositeStack: MermaidSubgraph[] = []
+  // Track all composite state IDs to avoid creating duplicate nodes
+  const compositeStateIds = new Set<string>()
   // Counter for unique [*] pseudostate IDs
   let startCount = 0
   let endCount = 0
@@ -197,6 +200,11 @@ function parseStateDiagram(lines: string[]): MermaidGraph {
       const id = compositeMatch[2]!
       const sg: MermaidSubgraph = { id, label, nodeIds: [], children: [] }
       compositeStack.push(sg)
+      // Track this ID to avoid creating a duplicate node for the composite state
+      compositeStateIds.add(id)
+      // Remove any existing node that was created when parsing transitions before
+      // this composite state definition (e.g., "A --> Processing" before "state Processing {")
+      graph.nodes.delete(id)
       continue
     }
 
@@ -216,7 +224,7 @@ function parseStateDiagram(lines: string[]): MermaidGraph {
     // --- state alias: `state "Description" as s1` (without brace) ---
     const stateAliasMatch = line.match(/^state\s+"([^"]+)"\s+as\s+(\w+)\s*$/)
     if (stateAliasMatch) {
-      const label = stateAliasMatch[1]!
+      const label = normalizeBrTags(stateAliasMatch[1]!)
       const id = stateAliasMatch[2]!
       registerStateNode(graph, compositeStack, { id, label, shape: 'rounded' })
       continue
@@ -227,14 +235,16 @@ function parseStateDiagram(lines: string[]): MermaidGraph {
     if (transitionMatch) {
       let sourceId = transitionMatch[1]!
       let targetId = transitionMatch[3]!
-      const edgeLabel = transitionMatch[4]?.trim() || undefined
+      const rawTransitionLabel = transitionMatch[4]?.trim()
+      const edgeLabel = rawTransitionLabel ? normalizeBrTags(rawTransitionLabel) : undefined
 
       // Handle [*] pseudostates — each occurrence gets a unique ID
       if (sourceId === '[*]') {
         startCount++
         sourceId = `_start${startCount > 1 ? startCount : ''}`
         registerStateNode(graph, compositeStack, { id: sourceId, label: '', shape: 'state-start' })
-      } else {
+      } else if (!compositeStateIds.has(sourceId)) {
+        // Only create a node if this isn't a composite state
         ensureStateNode(graph, compositeStack, sourceId)
       }
 
@@ -242,7 +252,8 @@ function parseStateDiagram(lines: string[]): MermaidGraph {
         endCount++
         targetId = `_end${endCount > 1 ? endCount : ''}`
         registerStateNode(graph, compositeStack, { id: targetId, label: '', shape: 'state-end' })
-      } else {
+      } else if (!compositeStateIds.has(targetId)) {
+        // Only create a node if this isn't a composite state
         ensureStateNode(graph, compositeStack, targetId)
       }
 
@@ -261,7 +272,7 @@ function parseStateDiagram(lines: string[]): MermaidGraph {
     const stateDescMatch = line.match(/^([\w-]+)\s*:\s*(.+)$/)
     if (stateDescMatch) {
       const id = stateDescMatch[1]!
-      const label = stateDescMatch[2]!.trim()
+      const label = normalizeBrTags(stateDescMatch[2]!.trim())
       registerStateNode(graph, compositeStack, { id, label, shape: 'rounded' })
       continue
     }
@@ -409,7 +420,8 @@ function parseEdgeLine(
 
     const hasArrowStart = Boolean(arrowMatch[1])
     const arrowOp = arrowMatch[2]!
-    const edgeLabel = arrowMatch[3]?.trim() || undefined
+    const rawEdgeLabel = arrowMatch[3]?.trim()
+    const edgeLabel = rawEdgeLabel ? normalizeBrTags(rawEdgeLabel) : undefined
     remaining = remaining.slice(arrowMatch[0].length).trim()
 
     const style = arrowStyleFromOp(arrowOp)
@@ -495,22 +507,22 @@ function consumeNode(
     const match = text.match(regex)
     if (match) {
       id = match[1]!
-      const label = match[2]!
+      const label = normalizeBrTags(match[2]!)
       registerNode(graph, subgraphStack, { id, label, shape })
       remaining = text.slice(match[0].length)
       break
     }
   }
 
-  // Bare node reference
+  // Bare node reference — only register if node doesn't exist yet.
+  // If it already exists, do NOT track it in the current subgraph;
+  // nodes belong to the subgraph where they're first defined.
   if (id === null) {
     const bareMatch = text.match(BARE_NODE_REGEX)
     if (bareMatch) {
       id = bareMatch[1]!
       if (!graph.nodes.has(id)) {
         registerNode(graph, subgraphStack, { id, label: id, shape: 'rectangle' })
-      } else {
-        trackInSubgraph(subgraphStack, id)
       }
       remaining = text.slice(bareMatch[0].length)
     }

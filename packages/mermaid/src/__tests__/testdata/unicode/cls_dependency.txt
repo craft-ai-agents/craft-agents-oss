@@ -1,14 +1,14 @@
 classDiagram
   Client ..> Server : uses
 ---
-┌────────┐
-│ Client │
-└────────┘
-     ┊
-   uses
-     ▼
-┌────────┐
-│ Server │
-└────────┘
-
-
+┌────────┐    
+│ Client │    
+└────────┘    
+     ┊        
+   uses       
+     ▼        
+┌────────┐    
+│ Server │    
+└────────┘    
+              
+              

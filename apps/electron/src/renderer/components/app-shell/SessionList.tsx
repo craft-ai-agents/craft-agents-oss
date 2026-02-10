@@ -40,6 +40,7 @@ import { SessionMenu } from "./SessionMenu"
 import { SessionSearchHeader } from "./SessionSearchHeader"
 import { ConnectionIcon } from "@/components/icons/ConnectionIcon"
 import { useOptionalAppShellContext } from "@/context/AppShellContext"
+import * as storage from "@/lib/local-storage"
 import {
   Dialog,
   DialogContent,
@@ -399,12 +400,15 @@ function SessionItem({
   // Theme context for resolving label colors (light/dark aware)
   const { isDark } = useTheme()
 
-  // Get connection details for icon display
+  // Get connection details for icon display (only when enabled and multiple connections exist)
   const appShellContext = useOptionalAppShellContext()
+  const showConnectionIcons = storage.get(storage.KEYS.showConnectionIcons, true)
   const connectionDetails = useMemo(() => {
+    if (!showConnectionIcons) return null
     if (!llmConnection || !appShellContext?.llmConnections) return null
+    if (appShellContext.llmConnections.length <= 1) return null
     return appShellContext.llmConnections.find(c => c.slug === llmConnection) ?? null
-  }, [llmConnection, appShellContext?.llmConnections])
+  }, [showConnectionIcons, llmConnection, appShellContext?.llmConnections])
 
   const handleClick = (e: React.MouseEvent) => {
     // Always activate session-list zone for keyboard navigation (arrow keys, Cmd+A, etc.)
@@ -575,7 +579,7 @@ function SessionItem({
                   </span>
                 )}
                 {connectionDetails && (
-                  <ConnectionIcon connection={connectionDetails} size={14} />
+                  <ConnectionIcon connection={connectionDetails} size={14} showTooltip />
                 )}
                 {permissionMode && (
                   <span

@@ -50,6 +50,12 @@ export const KEYS = {
 
   // Settings navigation
   lastSettingsSubpage: 'last-settings-subpage',
+
+  // Appearance
+  showConnectionIcons: 'show-connection-icons',
+
+  // What's New
+  whatsNewLastSeenVersion: 'whats-new-last-seen-version',
 } as const
 
 export type StorageKey = typeof KEYS[keyof typeof KEYS]

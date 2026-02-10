@@ -28,6 +28,30 @@ export const providerIcons = {
 
 export type ProviderIconKey = keyof typeof providerIcons
 
+/** Human-readable provider names */
+const providerDisplayNames: Record<string, string> = {
+  anthropic: 'Anthropic',
+  anthropic_compat: 'Anthropic',
+  openai: 'OpenAI',
+  openai_compat: 'OpenAI',
+  copilot: 'GitHub Copilot',
+  ollama: 'Ollama',
+  openrouter: 'OpenRouter',
+  vercel: 'Vercel',
+}
+
+/** Get a human-readable provider name from provider type and optional base URL */
+export function getProviderDisplayName(providerType: string, baseUrl?: string | null): string {
+  // Try URL detection first for compat providers
+  if (baseUrl) {
+    const url = baseUrl.toLowerCase()
+    if (url.includes('openrouter.ai')) return 'OpenRouter'
+    if (url.includes('ollama')) return 'Ollama'
+    if (url.includes('v0.dev') || url.includes('vercel')) return 'Vercel'
+  }
+  return providerDisplayNames[providerType] || providerType
+}
+
 /**
  * Detect provider from base URL
  */

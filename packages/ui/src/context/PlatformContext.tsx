@@ -77,6 +77,12 @@ export interface PlatformActions {
   onOpenActivityDetails?: (sessionId: string, activityId: string) => void
 
   /**
+   * Read a file's contents as UTF-8 string (Electron: fs.readFile via IPC)
+   * Used by datatable/spreadsheet blocks to load data from `src` field
+   */
+  onReadFile?: (path: string) => Promise<string>
+
+  /**
    * Reveal a file in the system file manager (Electron: shell.showItemInFolder)
    * Web: Not available (menu items hidden when undefined)
    */

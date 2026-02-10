@@ -11,271 +11,30 @@
  *   (extracted into toolMetadataStore for UI consumption by tool-matching.ts)
  */
 
-import { existsSync, readFileSync, writeFileSync, renameSync, unlinkSync, appendFileSync, mkdirSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { isDebugEnabled } from './utils/debug.js';
+// Shared infrastructure (toolMetadataStore, error capture, logging, config)
+import {
+  DEBUG,
+  debugLog,
+  isRichToolDescriptionsEnabled,
+  setStoredError,
+  toolMetadataStore,
+  displayNameSchema,
+  intentSchema,
+} from './interceptor-common.ts';
+
+// Re-export shared types and functions for backward compatibility
+// (existing code imports from this file)
+export {
+  toolMetadataStore,
+  debugLog,
+  isRichToolDescriptionsEnabled,
+} from './interceptor-common.ts';
+export type { LastApiError, ToolMetadata } from './interceptor-common.ts';
+export { getLastApiError, clearLastApiError } from './interceptor-common.ts';
 
 // Type alias for fetch's HeadersInit (not in ESNext lib, but available at runtime via Bun)
 // Using string[][] instead of [string, string][] to match RequestInit.headers type
 type HeadersInitType = Headers | Record<string, string> | string[][];
-
-// Feature flags
-// Enable interceptor logging in dev mode (not packaged), disable in production.
-// Detection: packaged apps run from inside an app.asar archive.
-const IS_PACKAGED = process.argv.some(arg => arg.includes('app.asar'));
-const INTERCEPTOR_LOGGING_ENABLED = !IS_PACKAGED;
-
-const DEBUG = INTERCEPTOR_LOGGING_ENABLED &&
-  (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1');
-
-// Add metadata to all tools only in debug mode (for cache stability testing)
-const TOOL_METADATA_FOR_ALL_TOOLS = isDebugEnabled();
-
-// Log file for debug output (avoids console spam)
-const LOG_DIR = join(homedir(), '.craft-agent', 'logs');
-const LOG_FILE = join(LOG_DIR, 'interceptor.log');
-
-// Ensure log directory exists at module load
-try {
-  if (!existsSync(LOG_DIR)) {
-    mkdirSync(LOG_DIR, { recursive: true });
-  }
-} catch {
-  // Ignore - logging will silently fail if dir can't be created
-}
-
-// Rotate log file if older than 1 day
-const MAX_LOG_AGE_MS = 24 * 60 * 60 * 1000;
-try {
-  if (existsSync(LOG_FILE)) {
-    const stat = statSync(LOG_FILE);
-    if (Date.now() - stat.mtimeMs > MAX_LOG_AGE_MS) {
-      // Keep one previous log for debugging, overwrite any older backup
-      const prevLog = LOG_FILE + '.prev';
-      renameSync(LOG_FILE, prevLog);
-    }
-  }
-} catch {
-  // Ignore — rotation is best-effort
-}
-
-/**
- * Store the last API error for the error handler to access.
- * This allows us to capture the actual HTTP status code (e.g., 402 Payment Required)
- * before the SDK wraps it in a generic error message.
- *
- * Uses file-based storage to reliably share across process boundaries
- * (the SDK may run in a subprocess with separate memory space).
- */
-export interface LastApiError {
-  status: number;
-  statusText: string;
-  message: string;
-  timestamp: number;
-}
-
-// File-based storage for cross-process sharing
-const ERROR_FILE = join(homedir(), '.craft-agent', 'api-error.json');
-const MAX_ERROR_AGE_MS = 5 * 60 * 1000; // 5 minutes
-
-function getStoredError(): LastApiError | null {
-  try {
-    if (!existsSync(ERROR_FILE)) return null;
-    const content = readFileSync(ERROR_FILE, 'utf-8');
-    const error = JSON.parse(content) as LastApiError;
-    // Pop: delete after reading
-    try {
-      unlinkSync(ERROR_FILE);
-      debugLog(`[getStoredError] Popped error file`);
-    } catch {
-      // Ignore delete errors
-    }
-    return error;
-  } catch {
-    return null;
-  }
-}
-
-function setStoredError(error: LastApiError | null): void {
-  try {
-    if (error) {
-      writeFileSync(ERROR_FILE, JSON.stringify(error));
-      debugLog(`[setStoredError] Wrote error to file: ${error.status} ${error.message}`);
-    } else {
-      // Clear the file
-      try {
-        unlinkSync(ERROR_FILE);
-      } catch {
-        // File might not exist
-      }
-    }
-  } catch (e) {
-    debugLog(`[setStoredError] Failed to write: ${e}`);
-  }
-}
-
-export function getLastApiError(): LastApiError | null {
-  const error = getStoredError();
-  if (error) {
-    const age = Date.now() - error.timestamp;
-    if (age < MAX_ERROR_AGE_MS) {
-      debugLog(`[getLastApiError] Found error (age ${age}ms): ${error.status}`);
-      return error;
-    }
-    debugLog(`[getLastApiError] Error too old (${age}ms > ${MAX_ERROR_AGE_MS}ms)`);
-  }
-  return null;
-}
-
-export function clearLastApiError(): void {
-  setStoredError(null);
-}
-
-// ============================================================================
-// TOOL METADATA STORE
-// ============================================================================
-
-/**
- * Metadata extracted from tool_use inputs by the SSE stripping stream.
- * Keyed by tool_use_id, consumed by tool-matching.ts.
- */
-export interface ToolMetadata {
-  intent?: string;
-  displayName?: string;
-  timestamp: number;
-}
-
-/**
- * Session-scoped, file-based metadata store for cross-process sharing.
- *
- * The interceptor runs in the SDK subprocess (via --preload), while
- * tool-matching.ts runs in the Electron main process. These are separate
- * OS processes — globalThis, module-level Maps, etc. are NOT shared.
- *
- * Solution: a single `tool-metadata.json` file in the session directory.
- * - set() writes to both in-memory Map AND merges into {sessionDir}/tool-metadata.json
- * - get() checks in-memory Map first (same-process), then reads from file
- * - No cleanup needed: file lives with the session, deleted when session is deleted
- * - Survives subprocess restarts (session resume) via file persistence
- *
- * The session directory is determined by:
- * - SDK subprocess: CRAFT_SESSION_DIR env var (set by main process before spawn)
- * - Main process: toolMetadataStore.setSessionDir(path) called during agent creation
- */
-
-// Session directory — set by env var (subprocess) or setSessionDir() (main process)
-let _sessionDir: string | null = process.env.CRAFT_SESSION_DIR || null;
-
-function getMetadataFilePath(): string | null {
-  return _sessionDir ? join(_sessionDir, 'tool-metadata.json') : null;
-}
-
-// In-memory Map for same-process lookups (tests, Codex backend, etc.)
-const _metadataMap = new Map<string, ToolMetadata>();
-
-// File cache — shadows what's been written to disk by this process.
-// Avoids redundant readFileSync on every set() call (subprocess is sole writer).
-// Reset on setSessionDir() so the main process loads fresh data per session.
-let _fileCache: Record<string, ToolMetadata> | null = null;
-
-/** Read the entire metadata file from disk, returning a Record keyed by toolUseId */
-function readMetadataFile(): Record<string, ToolMetadata> {
-  const filePath = getMetadataFilePath();
-  if (!filePath) return {};
-  try {
-    const data = readFileSync(filePath, 'utf-8');
-    return JSON.parse(data) as Record<string, ToolMetadata>;
-  } catch {
-    return {};
-  }
-}
-
-/** Write the entire metadata object to the session file (atomic via temp+rename) */
-function writeMetadataFile(allMetadata: Record<string, ToolMetadata>): void {
-  const filePath = getMetadataFilePath();
-  if (!filePath) return;
-  try {
-    const tmpPath = filePath + '.tmp';
-    writeFileSync(tmpPath, JSON.stringify(allMetadata));
-    renameSync(tmpPath, filePath);
-  } catch {
-    // Ignore write errors — in-memory still works for same-process
-  }
-}
-
-export const toolMetadataStore = {
-  /**
-   * Set session directory and pre-populate in-memory map from file.
-   * Called by main process (where set() is never called) so all subsequent
-   * get() calls are O(1) memory lookups instead of file reads.
-   */
-  setSessionDir(dir: string): void {
-    _sessionDir = dir;
-    _fileCache = null; // Reset file cache for new session
-    // Pre-populate in-memory map from file (enables O(1) get() in main process)
-    _metadataMap.clear();
-    const all = readMetadataFile();
-    for (const [id, meta] of Object.entries(all)) {
-      _metadataMap.set(id, meta);
-    }
-  },
-
-  /** Store metadata — writes to in-memory Map + cached file (write-only, no redundant reads) */
-  set(toolUseId: string, metadata: ToolMetadata): void {
-    _metadataMap.set(toolUseId, metadata);
-    // Initialize file cache once (picks up pre-existing data on session resume), then write-only
-    if (!_fileCache) _fileCache = readMetadataFile();
-    _fileCache[toolUseId] = metadata;
-    writeMetadataFile(_fileCache);
-  },
-
-  /** Read metadata — checks in-memory first, then session file. No pop semantics. */
-  get(toolUseId: string): ToolMetadata | undefined {
-    // 1. Same-process: check in-memory Map (always hits after setSessionDir or set)
-    const inMemory = _metadataMap.get(toolUseId);
-    if (inMemory) {
-      return inMemory;
-    }
-
-    // 2. Cross-process fallback: check session file (only needed if setSessionDir wasn't called)
-    const all = readMetadataFile();
-    return all[toolUseId];
-  },
-
-  delete(toolUseId: string): void {
-    _metadataMap.delete(toolUseId);
-    if (!_fileCache) _fileCache = readMetadataFile();
-    delete _fileCache[toolUseId];
-    writeMetadataFile(_fileCache);
-  },
-
-  get size(): number {
-    return _metadataMap.size;
-  },
-};
-
-function debugLog(...args: unknown[]) {
-  if (!DEBUG) return;
-  const timestamp = new Date().toISOString();
-  const message = `${timestamp} [interceptor] ${args.map((a) => {
-    if (typeof a === 'object') {
-      try {
-        return JSON.stringify(a);
-      } catch (e) {
-        const keys = a && typeof a === 'object' ? Object.keys(a as object).join(', ') : 'unknown';
-        return `[CYCLIC STRUCTURE, keys: ${keys}] (error: ${e})`;
-      }
-    }
-    return String(a);
-  }).join(' ')}`;
-  // Write to log file instead of stderr to avoid console spam
-  try {
-    appendFileSync(LOG_FILE, message + '\n');
-  } catch {
-    // Silently fail if can't write to log file
-  }
-}
 
 
 /**
@@ -322,20 +81,12 @@ function addMetadataToAllTools(body: Record<string, unknown>): Record<string, un
     return body;
   }
 
-  const displayNameSchema = {
-    type: 'string',
-    description: 'REQUIRED: Human-friendly name for this action (2-4 words, e.g., "List Folders", "Search Documents", "Create Task")',
-  };
-  const intentSchema = {
-    type: 'string',
-    description: 'REQUIRED: Describe what you are trying to accomplish with this tool call (1-2 sentences)',
-  };
-
+  const richDescriptions = isRichToolDescriptionsEnabled();
   let modifiedCount = 0;
   for (const tool of tools) {
-    // Skip non-MCP tools when feature flag is disabled
+    // Skip non-MCP tools when rich tool descriptions is disabled
     const isMcpTool = tool.name?.startsWith('mcp__');
-    if (!TOOL_METADATA_FOR_ALL_TOOLS && !isMcpTool) {
+    if (!richDescriptions && !isMcpTool) {
       continue;
     }
 
@@ -397,9 +148,6 @@ function injectMetadataIntoHistory(body: Record<string, unknown>): Record<string
   if (!messages) return body;
 
   let injectedCount = 0;
-  // Lazy file read: only load from disk once if any block misses the in-memory map
-  // (normally all entries are in _metadataMap; file fallback only matters on session resume)
-  let fileMetadata: Record<string, ToolMetadata> | null = null;
 
   for (const message of messages) {
     if (message.role !== 'assistant' || !Array.isArray(message.content)) continue;
@@ -410,15 +158,16 @@ function injectMetadataIntoHistory(body: Record<string, unknown>): Record<string
       // Skip if already has metadata (e.g., first few calls before stripping takes effect)
       if ('_intent' in block.input || '_displayName' in block.input) continue;
 
-      // Look up stored metadata: in-memory Map first, then single file read fallback
-      let stored = _metadataMap.get(block.id);
-      if (!stored) {
-        if (!fileMetadata) fileMetadata = readMetadataFile();
-        stored = fileMetadata[block.id];
-      }
+      // Look up stored metadata (in-memory first, then file fallback)
+      const stored = toolMetadataStore.get(block.id);
       if (stored) {
-        if (stored.intent) block.input._intent = stored.intent;
-        if (stored.displayName) block.input._displayName = stored.displayName;
+        // Reconstruct input with metadata FIRST to match schema order (_displayName, _intent, ...rest)
+        // This ensures JSON key order matches what Claude originally generated for cache stability
+        const newInput: Record<string, unknown> = {};
+        if (stored.displayName) newInput._displayName = stored.displayName;
+        if (stored.intent) newInput._intent = stored.intent;
+        Object.assign(newInput, block.input);
+        block.input = newInput;
         injectedCount++;
       }
     }

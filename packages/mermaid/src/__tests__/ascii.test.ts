@@ -9,6 +9,7 @@
  */
 import { describe, it, expect } from 'bun:test'
 import { renderMermaidAscii } from '../ascii/index.ts'
+import { hasDiagonalLines, DIAGONAL_CHARS } from '../ascii/validate.ts'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -185,5 +186,66 @@ describe('Config behavior', () => {
     const output = renderMermaidAscii(mermaidInput, { useAscii: false })
     const hasUnicode = output.includes('┌') || output.includes('─') || output.includes('│')
     expect(hasUnicode).toBe(true)
+  })
+})
+
+// ============================================================================
+// Diagonal validation — ensures all edges use orthogonal Manhattan routing
+// ============================================================================
+
+describe('Diagonal validation', () => {
+  const asciiDir = join(testdataDir, 'ascii')
+  const unicodeDir = join(testdataDir, 'unicode')
+
+  it('ASCII output should never contain diagonal characters', () => {
+    // Test all ASCII golden files
+    const files = readdirSync(asciiDir).filter((f) => f.endsWith('.txt'))
+    for (const file of files) {
+      const content = readFileSync(join(asciiDir, file), 'utf-8')
+      const { mermaid, paddingX, paddingY } = parseTestCase(content)
+      const output = renderMermaidAscii(mermaid, {
+        useAscii: true,
+        boxBorderPadding: paddingX,
+        paddingY: paddingY,
+      })
+
+      // Check for diagonal characters
+      for (const char of DIAGONAL_CHARS.ascii) {
+        expect(output).not.toContain(char)
+      }
+    }
+  })
+
+  it('Unicode output should never contain diagonal characters', () => {
+    // Test all Unicode golden files
+    const files = readdirSync(unicodeDir).filter((f) => f.endsWith('.txt'))
+    for (const file of files) {
+      const content = readFileSync(join(unicodeDir, file), 'utf-8')
+      const { mermaid, paddingX, paddingY } = parseTestCase(content)
+      const output = renderMermaidAscii(mermaid, {
+        useAscii: false,
+        boxBorderPadding: paddingX,
+        paddingY: paddingY,
+      })
+
+      // Check for diagonal characters
+      for (const char of DIAGONAL_CHARS.unicode) {
+        expect(output).not.toContain(char)
+      }
+    }
+  })
+
+  it('hasDiagonalLines utility correctly detects diagonal characters', () => {
+    // Should detect ASCII diagonals
+    expect(hasDiagonalLines('A / B')).toBe(true)
+    expect(hasDiagonalLines('A \\ B')).toBe(true)
+
+    // Should detect Unicode diagonals
+    expect(hasDiagonalLines('A ╱ B')).toBe(true)
+    expect(hasDiagonalLines('A ╲ B')).toBe(true)
+
+    // Should not flag clean output
+    expect(hasDiagonalLines('┌───┐\n│ A │\n└───┘')).toBe(false)
+    expect(hasDiagonalLines('+---+\n| A |\n+---+')).toBe(false)
   })
 })

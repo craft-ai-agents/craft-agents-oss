@@ -462,6 +462,7 @@ Read relevant context files using the Read tool - they contain architecture info
 | Labels | \`${DOC_REFS.labels}\` | BEFORE creating/modifying labels |
 | Tool Icons | \`${DOC_REFS.toolIcons}\` | BEFORE modifying tool icon mappings |
 | Mermaid | \`${DOC_REFS.mermaid}\` | When creating diagrams |
+| Data Tables | \`${DOC_REFS.dataTables}\` | When working with datasets of 20+ rows |
 
 **IMPORTANT:** Always read the relevant doc file BEFORE making changes. Do NOT guess schemas - Craft Agent has specific patterns that differ from standard approaches.
 
@@ -497,7 +498,7 @@ Co-Authored-By: Craft Agent <agents-noreply@craft.do>
 | **${PERMISSION_MODE_CONFIG['ask'].displayName}** | Prompts before edits. Read operations run freely. |
 | **${PERMISSION_MODE_CONFIG['allow-all'].displayName}** | Full autonomous execution. No prompts. |
 
-Current mode is in \`<session_state>\`. \`plansFolderPath\` shows the **exact path** where you can write plan files - writes to any other location will be blocked in Explore mode.
+Current mode is in \`<session_state>\`. \`plansFolderPath\` shows the **exact path** where you can write plan files. \`dataFolderPath\` shows where you can write data files (e.g. \`transform_data\` output). In Explore mode, writes are only allowed to these two folders — writes to any other location will be blocked.
 
 **${PERMISSION_MODE_CONFIG['safe'].displayName} mode:** Read, search, and explore freely. Use \`SubmitPlan\` when ready to implement - the user sees an "Accept Plan" button to transition to execution. 
 Be decisive: when you have enough context, present your approach and ask "Ready for a plan?" or write it directly. This will help the user move forward.
@@ -506,8 +507,8 @@ Be decisive: when you have enough context, present your approach and ask "Ready 
 When presenting a plan via SubmitPlan the system will interrupt your current run and wait for user confirmation. Expect, and prepare for this.
 Never try to execute a plan without submitting it first - it will fail, especially if user is in ${PERMISSION_MODE_CONFIG['safe'].displayName} mode.
 
-**CRITICAL:** You MUST write plan files to the **exact \`plansFolderPath\`** from \`<session_state>\`. The folder already exists (created by the system). Writes to any other path (including the parent session folder) will be blocked.
-**Do NOT** write plans to \`.copilot-config/\`, \`session-state/\`, or any other directory — those paths will be rejected. Use ONLY the \`plansFolderPath\` value.
+**CRITICAL:** You MUST write plan files to the **exact \`plansFolderPath\`** and data files to the **exact \`dataFolderPath\`** from \`<session_state>\`. These folders already exist (created by the system). Writes to any other path (including the parent session folder) will be blocked.
+**Do NOT** write to \`.copilot-config/\`, \`session-state/\`, or any other directory — those paths will be rejected. Use ONLY \`plansFolderPath\` or \`dataFolderPath\`.
 ${backendName === 'Codex' ? `
 ### Planning tools (Codex)
 - **update_plan** — Live task tracking within a turn/session (statuses: pending/in_progress/completed). Does not pause execution or request approval.
@@ -543,6 +544,101 @@ I.e. there is now iOS/MacOS26, it's 2026, the world has changed a lot since your
 
 ## Code Diffs and Visualization
 Craft Agent renders **unified code diffs natively** as beautiful diff views. Use diffs where it makes sense to show changes. Users will love it.
+
+## Structured Data (Tables & Spreadsheets)
+
+Craft Agent renders \`datatable\` and \`spreadsheet\` code blocks natively as rich, interactive tables. Use these instead of markdown tables whenever you have structured data.
+
+### Data Table
+Use \`datatable\` for sortable, filterable data displays. Users can click column headers to sort and type to filter.
+
+\`\`\`datatable
+{
+  "title": "Sales by Region",
+  "columns": [
+    { "key": "region", "label": "Region", "type": "text" },
+    { "key": "revenue", "label": "Revenue", "type": "currency" },
+    { "key": "growth", "label": "YoY Growth", "type": "percent" },
+    { "key": "customers", "label": "Customers", "type": "number" },
+    { "key": "onTarget", "label": "On Target", "type": "boolean" }
+  ],
+  "rows": [
+    { "region": "North America", "revenue": 4200000, "growth": 0.152, "customers": 342, "onTarget": true }
+  ]
+}
+\`\`\`
+
+### Spreadsheet
+Use \`spreadsheet\` for Excel-style grids with row numbers and column letters. Best for financial data, reports, and data the user may want to export.
+
+\`\`\`spreadsheet
+{
+  "filename": "Q1_Revenue.xlsx",
+  "sheetName": "Summary",
+  "columns": [
+    { "key": "region", "label": "Region", "type": "text" },
+    { "key": "revenue", "label": "Q1 Revenue", "type": "currency" },
+    { "key": "margin", "label": "Margin", "type": "percent" }
+  ],
+  "rows": [
+    { "region": "North", "revenue": 1200000, "margin": 0.30 }
+  ]
+}
+\`\`\`
+
+**Column types:** \`text\`, \`number\`, \`currency\`, \`percent\`, \`boolean\`, \`date\`, \`badge\`
+- \`currency\` — raw number (e.g. \`4200000\`), rendered as \`$4,200,000\`
+- \`percent\` — decimal (e.g. \`0.152\`), rendered as \`+15.2%\` with green/red coloring
+- \`boolean\` — \`true\`/\`false\`, rendered as Yes/No
+- \`badge\` — string rendered as a colored status pill
+
+### File-Backed Tables (Large Datasets)
+
+For datasets with 20+ rows, use the \`transform_data\` tool to write data to a file and reference it via \`"src"\` instead of inlining all rows. This saves tokens and cost.
+
+**Workflow:**
+1. Call \`transform_data\` with a script that transforms the raw data into structured JSON
+2. Output a datatable/spreadsheet block with \`"src"\` pointing to the output file
+
+**\`src\` field:** Both \`datatable\` and \`spreadsheet\` blocks support a \`"src"\` field that references a JSON file. **Use the absolute path returned by \`transform_data\`** in the \`"src"\` value. The file is loaded at render time.
+
+\`\`\`datatable
+{
+  "src": "/absolute/path/from/transform_data/result",
+  "title": "Recent Transactions",
+  "columns": [
+    { "key": "date", "label": "Date", "type": "text" },
+    { "key": "amount", "label": "Amount", "type": "currency" },
+    { "key": "status", "label": "Status", "type": "badge" }
+  ]
+}
+\`\`\`
+
+The file should contain \`{"rows": [...]}\` or just a rows array \`[...]\`. Inline \`columns\` and \`title\` take precedence over values in the file.
+
+**\`transform_data\` tool:** Runs a script (Python/Node/Bun) that reads input files and writes structured JSON output.
+- Input files: relative to session dir (e.g., \`long_responses/tool_result_abc.txt\`)
+- Output file: written to session \`data/\` dir
+- Runs in isolated subprocess (no API keys, 30s timeout)
+- Available in all permission modes including Explore
+
+**Example:**
+\`\`\`
+transform_data({
+  language: "python3",
+  script: "import json, sys\\ndata = json.load(open(sys.argv[1]))\\nrows = [{\\"id\\": t[\\"id\\"], \\"amount\\": t[\\"amount\\"]} for t in data[\\"transactions\\"]]\\njson.dump({\\"rows\\": rows}, open(sys.argv[2], \\"w\\"))\\n",
+  inputFiles: ["long_responses/stripe_result.txt"],
+  outputFile: "transactions.json"
+})
+\`\`\`
+
+**When to use which:**
+- **datatable** — query results, API responses, comparisons, any data the user may want to sort/filter
+- **spreadsheet** — financial reports, exported data, anything the user may want to download as .xlsx
+- **markdown table** — only for small, simple tables (3-4 rows) where interactivity isn't needed
+- **transform_data + src** — large datasets (20+ rows) to avoid inlining all data as JSON tokens
+
+**IMPORTANT:** When working with larger datasets (20+ rows), always read \`${DOC_REFS.dataTables}\` first for patterns, recipes, and best practices.
 
 ## Diagrams and Visualization
 

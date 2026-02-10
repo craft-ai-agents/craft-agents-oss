@@ -13,6 +13,7 @@ import { parseSequenceDiagram } from '../sequence/parser.ts'
 import type { SequenceDiagram, Block } from '../sequence/types.ts'
 import type { Canvas, AsciiConfig } from './types.ts'
 import { mkCanvas, canvasToString, increaseSize } from './canvas.ts'
+import { splitLines, maxLineWidth, lineCount } from './multiline-utils.ts'
 
 /**
  * Render a Mermaid sequence diagram to ASCII/Unicode text.
@@ -45,9 +46,12 @@ export function renderSequenceAscii(text: string, config: AsciiConfig): string {
   diagram.actors.forEach((a, i) => actorIdx.set(a.id, i))
 
   const boxPad = 1
-  const actorBoxWidths = diagram.actors.map(a => a.label.length + 2 * boxPad + 2)
+  // Use max line width for multi-line actor labels
+  const actorBoxWidths = diagram.actors.map(a => maxLineWidth(a.label) + 2 * boxPad + 2)
   const halfBox = actorBoxWidths.map(w => Math.ceil(w / 2))
-  const actorBoxH = 3 // top border + label row + bottom border
+  // Calculate actor box heights based on number of lines in label
+  const actorBoxHeights = diagram.actors.map(a => lineCount(a.label) + 2) // lines + top/bottom border
+  const actorBoxH = Math.max(...actorBoxHeights, 3) // Use max height for consistent lifeline positioning
 
   // Compute minimum gap between adjacent lifelines based on message labels.
   // For messages spanning multiple actors, distribute the required width across gaps.
@@ -59,8 +63,8 @@ export function renderSequenceAscii(text: string, config: AsciiConfig): string {
     if (fi === ti) continue // self-messages don't affect spacing
     const lo = Math.min(fi, ti)
     const hi = Math.max(fi, ti)
-    // Required gap per span = (label + arrow decorations) / number of gaps
-    const needed = msg.label.length + 4
+    // Required gap per span = (max line width + arrow decorations) / number of gaps
+    const needed = maxLineWidth(msg.label) + 4
     const numGaps = hi - lo
     const perGap = Math.ceil(needed / numGaps)
     for (let g = lo; g < hi; g++) {
@@ -117,16 +121,19 @@ export function renderSequenceAscii(text: string, config: AsciiConfig): string {
     const msg = diagram.messages[m]!
     const isSelf = msg.from === msg.to
 
+    // Calculate height needed for multi-line message labels
+    const msgLineCount = lineCount(msg.label)
+
     if (isSelf) {
-      // Self-message occupies 3 rows: top-arm, label-col, bottom-arm
+      // Self-message occupies 3+ rows: top-arm, label-col(s), bottom-arm
       msgLabelY[m] = curY + 1
       msgArrowY[m] = curY
-      curY += 3
+      curY += 2 + msgLineCount // top-arm + label lines + bottom-arm
     } else {
-      // Normal message: label row then arrow row
+      // Normal message: label row(s) then arrow row
       msgLabelY[m] = curY
-      msgArrowY[m] = curY + 1
-      curY += 2
+      msgArrowY[m] = curY + msgLineCount  // arrow goes after all label lines
+      curY += msgLineCount + 1  // label lines + arrow row
     }
 
     // Notes after this message
@@ -134,7 +141,7 @@ export function renderSequenceAscii(text: string, config: AsciiConfig): string {
       if (diagram.notes[n]!.afterIndex === m) {
         curY += 1
         const note = diagram.notes[n]!
-        const nLines = note.text.split('\\n')
+        const nLines = splitLines(note.text)
         const nWidth = Math.max(...nLines.map(l => l.length)) + 4
         const nHeight = nLines.length + 2
 
@@ -195,24 +202,38 @@ export function renderSequenceAscii(text: string, config: AsciiConfig): string {
 
   const canvas = mkCanvas(totalW, totalH - 1)
 
-  // ---- DRAW: helper to place a bordered actor box ----
+  // ---- DRAW: helper to place a bordered actor box (supports multi-line labels) ----
 
   function drawActorBox(cx: number, topY: number, label: string): void {
-    const w = label.length + 2 * boxPad + 2
+    const lines = splitLines(label)
+    const maxW = maxLineWidth(label)
+    const w = maxW + 2 * boxPad + 2
+    const h = lines.length + 2  // lines + top/bottom border
     const left = cx - Math.floor(w / 2)
+
     // Top border
     canvas[left]![topY] = TL
     for (let x = 1; x < w - 1; x++) canvas[left + x]![topY] = H
     canvas[left + w - 1]![topY] = TR
-    // Sides + label
-    canvas[left]![topY + 1] = V
-    canvas[left + w - 1]![topY + 1] = V
-    const ls = left + 1 + boxPad
-    for (let i = 0; i < label.length; i++) canvas[ls + i]![topY + 1] = label[i]!
+
+    // Content lines (centered horizontally within the box)
+    for (let i = 0; i < lines.length; i++) {
+      const row = topY + 1 + i
+      canvas[left]![row] = V
+      canvas[left + w - 1]![row] = V
+      // Center this line within the box
+      const line = lines[i]!
+      const ls = left + 1 + boxPad + Math.floor((maxW - line.length) / 2)
+      for (let j = 0; j < line.length; j++) {
+        canvas[ls + j]![row] = line[j]!
+      }
+    }
+
     // Bottom border
-    canvas[left]![topY + 2] = BL
-    for (let x = 1; x < w - 1; x++) canvas[left + x]![topY + 2] = H
-    canvas[left + w - 1]![topY + 2] = BR
+    const bottomY = topY + h - 1
+    canvas[left]![bottomY] = BL
+    for (let x = 1; x < w - 1; x++) canvas[left + x]![bottomY] = H
+    canvas[left + w - 1]![bottomY] = BR
   }
 
   // ---- DRAW: lifelines ----
@@ -284,12 +305,18 @@ export function renderSequenceAscii(text: string, config: AsciiConfig): string {
       const arrowY = msgArrowY[m]!
       const leftToRight = fromX < toX
 
-      // Draw label centered between the two lifelines
+      // Draw label centered between the two lifelines (supports multi-line)
       const midX = Math.floor((fromX + toX) / 2)
-      const labelStart = midX - Math.floor(msg.label.length / 2)
-      for (let i = 0; i < msg.label.length; i++) {
-        const lx = labelStart + i
-        if (lx >= 0 && lx < totalW) canvas[lx]![labelY] = msg.label[i]!
+      const msgLines = splitLines(msg.label)
+
+      for (let lineIdx = 0; lineIdx < msgLines.length; lineIdx++) {
+        const line = msgLines[lineIdx]!
+        const labelStart = midX - Math.floor(line.length / 2)
+        const y = labelY + lineIdx
+        for (let i = 0; i < line.length; i++) {
+          const lx = labelStart + i
+          if (lx >= 0 && lx < totalW) canvas[lx]![y] = line[i]!
+        }
       }
 
       // Draw arrow line
@@ -333,10 +360,15 @@ export function renderSequenceAscii(text: string, config: AsciiConfig): string {
     canvas[bLeft]![topY] = TL
     for (let x = bLeft + 1; x < bRight; x++) canvas[x]![topY] = H
     canvas[bRight]![topY] = TR
-    // Write block header label over the top border
+    // Write block header label over the top border (supports multi-line)
     const hdrLabel = block.label ? `${block.type} [${block.label}]` : block.type
-    for (let i = 0; i < hdrLabel.length && bLeft + 1 + i < bRight; i++) {
-      canvas[bLeft + 1 + i]![topY] = hdrLabel[i]!
+    const hdrLines = splitLines(hdrLabel)
+
+    for (let lineIdx = 0; lineIdx < hdrLines.length && topY + lineIdx < botY; lineIdx++) {
+      const line = hdrLines[lineIdx]!
+      for (let i = 0; i < line.length && bLeft + 1 + i < bRight; i++) {
+        canvas[bLeft + 1 + i]![topY + lineIdx] = line[i]!
+      }
     }
 
     // Bottom border

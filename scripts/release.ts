@@ -19,7 +19,7 @@ import { dirname, join } from 'path';
 
 const scriptDir = dirname(new URL(import.meta.url).pathname);
 const repoRoot = dirname(scriptDir);
-const releaseNotesDir = join(repoRoot, 'docs/release-notes');
+const releaseNotesDir = join(repoRoot, 'apps/electron/resources/release-notes');
 
 type BumpType = 'patch' | 'minor' | 'major';
 
@@ -225,7 +225,7 @@ async function main(): Promise<void> {
   // This ensures the release won't fail in GitHub Actions due to missing notes.
   const releaseNotesPath = getReleaseNotesPath(newVersion);
   if (!releaseNotesPath) {
-    const expectedPath = `docs/release-notes/${newVersion}.md`;
+    const expectedPath = `apps/electron/resources/release-notes/${newVersion}.md`;
     console.error(`\n❌ Missing release notes: ${expectedPath}`);
     console.error(`\nThe release workflow requires this file to exist.`);
     console.error(`Create it with content like:\n`);

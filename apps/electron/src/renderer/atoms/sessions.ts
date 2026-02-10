@@ -130,6 +130,7 @@ export function extractSessionMeta(session: Session): SessionMeta {
     // Fields needed by view expressions (messageCount, model, createdAt, tokenUsage)
     messageCount: session.messageCount ?? session.messages?.length ?? 0,
     model: session.model,
+    llmConnection: session.llmConnection,
     createdAt: session.createdAt,
     tokenUsage: session.tokenUsage,
     // Hidden sessions (e.g., mini edit sessions in EditPopover)

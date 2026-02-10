@@ -16,7 +16,7 @@ import { isLocalMcpEnabled } from '../../workspaces/storage.ts';
 import { formatPreferencesForPrompt } from '../../config/preferences.ts';
 import { formatSessionState } from '../mode-manager.ts';
 import { getDateTimeContext, getWorkingDirectoryContext } from '../../prompts/system.ts';
-import { getSessionPlansPath, getSessionPath } from '../../sessions/storage.ts';
+import { getSessionPlansPath, getSessionDataPath, getSessionPath } from '../../sessions/storage.ts';
 import type {
   PromptBuilderConfig,
   ContextBlockOptions,
@@ -72,11 +72,13 @@ export class PromptBuilder {
     // Add date/time context first (enables prompt caching)
     parts.push(getDateTimeContext());
 
-    // Add session state (permission mode, plans folder path)
+    // Add session state (permission mode, plans folder path, data folder path)
     const sessionId = this.config.session?.id ?? `temp-${Date.now()}`;
     const plansFolderPath = options.plansFolderPath ??
       getSessionPlansPath(this.workspaceRootPath, sessionId);
-    parts.push(formatSessionState(sessionId, { plansFolderPath }));
+    const dataFolderPath = options.dataFolderPath ??
+      getSessionDataPath(this.workspaceRootPath, sessionId);
+    parts.push(formatSessionState(sessionId, { plansFolderPath, dataFolderPath }));
 
     // Add source state if provided
     if (sourceStateBlock) {

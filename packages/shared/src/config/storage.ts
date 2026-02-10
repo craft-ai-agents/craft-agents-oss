@@ -68,6 +68,8 @@ export interface StoredConfig {
   openaiVariant?: 'responses' | 'codex-sdk';
   // Power settings
   keepAwakeWhileRunning?: boolean;  // Prevent screen sleep while sessions are running (default: false)
+  // Tool metadata
+  richToolDescriptions?: boolean;  // Add intent/action metadata to all tool calls (default: true)
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -314,6 +316,29 @@ export function setKeepAwakeWhileRunning(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.keepAwakeWhileRunning = enabled;
+  saveConfig(config);
+}
+
+/**
+ * Get whether rich tool descriptions are enabled.
+ * When enabled, all tool calls include intent and display name metadata.
+ * Defaults to true if not set.
+ */
+export function getRichToolDescriptions(): boolean {
+  const config = loadStoredConfig();
+  if (config?.richToolDescriptions !== undefined) {
+    return config.richToolDescriptions;
+  }
+  return true;
+}
+
+/**
+ * Set whether rich tool descriptions are enabled.
+ */
+export function setRichToolDescriptions(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.richToolDescriptions = enabled;
   saveConfig(config);
 }
 

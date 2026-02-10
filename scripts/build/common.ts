@@ -396,21 +396,46 @@ export function verifySDKCopy(config: BuildConfig): void {
 }
 
 /**
- * Copy network interceptor
+ * Copy network interceptor (Anthropic — runs under Bun via --preload)
  */
 export function copyInterceptor(config: BuildConfig): void {
   const { rootDir, electronDir } = config;
 
-  const interceptorSource = join(rootDir, 'packages', 'shared', 'src', 'network-interceptor.ts');
-  const interceptorDest = join(electronDir, 'packages', 'shared', 'src', 'network-interceptor.ts');
+  const sharedSrcDir = join('packages', 'shared', 'src');
+  const sourceDir = join(rootDir, sharedSrcDir);
+  const destDir = join(electronDir, sharedSrcDir);
 
+  const interceptorSource = join(sourceDir, 'network-interceptor.ts');
   if (!existsSync(interceptorSource)) {
     throw new Error(`Interceptor not found at ${interceptorSource}`);
   }
 
   console.log('Copying interceptor...');
-  mkdirSync(dirname(interceptorDest), { recursive: true });
-  copyFileSync(interceptorSource, interceptorDest);
+  mkdirSync(destDir, { recursive: true });
+  copyFileSync(interceptorSource, join(destDir, 'network-interceptor.ts'));
+
+  // Also copy shared infrastructure (imported by network-interceptor.ts at runtime)
+  const commonSource = join(sourceDir, 'interceptor-common.ts');
+  if (existsSync(commonSource)) {
+    copyFileSync(commonSource, join(destDir, 'interceptor-common.ts'));
+  }
+}
+
+/**
+ * Copy Copilot network interceptor (bundled CJS — runs under Node.js via --require)
+ * Built by `bun run build:copilot-interceptor` into apps/electron/dist/
+ */
+export function copyCopilotInterceptor(config: BuildConfig): void {
+  const { electronDir } = config;
+
+  const source = join(electronDir, 'dist', 'copilot-interceptor.cjs');
+  if (!existsSync(source)) {
+    console.warn('Warning: Copilot interceptor not found at', source, '— tool metadata will be unavailable for Copilot sessions');
+    return;
+  }
+
+  // Already in dist/ which is included in the packaged app — just verify it exists
+  console.log('Copilot interceptor verified at:', source);
 }
 
 /**

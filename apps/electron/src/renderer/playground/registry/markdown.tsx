@@ -1,5 +1,5 @@
 import type { ComponentEntry } from './types'
-import { Markdown, CollapsibleMarkdownProvider, CodeBlock, InlineCode } from '@craft-agent/ui'
+import { Markdown, CollapsibleMarkdownProvider, CodeBlock, InlineCode, MarkdownDatatableBlock, MarkdownSpreadsheetBlock } from '@craft-agent/ui'
 
 const sampleMarkdown = `# Welcome to Markdown
 
@@ -259,6 +259,155 @@ export const markdownComponents: ComponentEntry[] = [
       { name: 'Function', props: { children: 'handleClick()' } },
       { name: 'Type', props: { children: 'React.FC<Props>' } },
       { name: 'Path', props: { children: 'src/components/App.tsx' } },
+    ],
+  },
+  {
+    id: 'datatable-block',
+    name: 'MarkdownDatatableBlock',
+    category: 'Markdown',
+    description: 'Interactive data table with sorting for ```datatable code blocks',
+    component: MarkdownDatatableBlock,
+    props: [
+      {
+        name: 'code',
+        description: 'JSON string with columns and rows',
+        control: { type: 'textarea', rows: 12 },
+        defaultValue: JSON.stringify({
+          title: 'Sales by Region',
+          columns: [
+            { key: 'region', label: 'Region', type: 'text' },
+            { key: 'revenue', label: 'Revenue', type: 'currency' },
+            { key: 'growth', label: 'Growth', type: 'percent' },
+            { key: 'units', label: 'Units Sold', type: 'number' },
+            { key: 'status', label: 'Status', type: 'badge' },
+          ],
+          rows: [
+            { region: 'North America', revenue: 1250000, growth: 0.124, units: 8420, status: 'Active' },
+            { region: 'Europe', revenue: 980000, growth: 0.087, units: 6230, status: 'Active' },
+            { region: 'Asia Pacific', revenue: 1580000, growth: 0.215, units: 12100, status: 'Active' },
+            { region: 'Latin America', revenue: 420000, growth: -0.032, units: 2800, status: 'Revoked' },
+            { region: 'Middle East', revenue: 310000, growth: 0.156, units: 1900, status: 'Active' },
+          ],
+        }, null, 2),
+      },
+    ],
+    variants: [
+      {
+        name: 'Sales Data',
+        props: {
+          code: JSON.stringify({
+            title: 'Sales by Region',
+            columns: [
+              { key: 'region', label: 'Region', type: 'text' },
+              { key: 'revenue', label: 'Revenue', type: 'currency' },
+              { key: 'growth', label: 'Growth', type: 'percent' },
+              { key: 'status', label: 'Status', type: 'badge' },
+            ],
+            rows: [
+              { region: 'North America', revenue: 1250000, growth: 0.124, status: 'Active' },
+              { region: 'Europe', revenue: 980000, growth: 0.087, status: 'Active' },
+              { region: 'Asia Pacific', revenue: 1580000, growth: 0.215, status: 'Active' },
+              { region: 'Latin America', revenue: 420000, growth: -0.032, status: 'Revoked' },
+            ],
+          }),
+        },
+      },
+      {
+        name: 'Boolean & Badge Types',
+        props: {
+          code: JSON.stringify({
+            title: 'API Keys',
+            columns: [
+              { key: 'name', label: 'Name', type: 'text' },
+              { key: 'active', label: 'Active', type: 'boolean' },
+              { key: 'status', label: 'Status', type: 'badge' },
+            ],
+            rows: [
+              { name: 'Production', active: true, status: 'Passing' },
+              { name: 'Staging', active: true, status: 'Passing' },
+              { name: 'Legacy', active: false, status: 'Failed' },
+            ],
+          }),
+        },
+      },
+      {
+        name: 'Invalid JSON (Fallback)',
+        props: { code: '{ invalid json here' },
+      },
+    ],
+  },
+  {
+    id: 'spreadsheet-block',
+    name: 'MarkdownSpreadsheetBlock',
+    category: 'Markdown',
+    description: 'Excel-style grid with column letters and row numbers for ```spreadsheet code blocks',
+    component: MarkdownSpreadsheetBlock,
+    props: [
+      {
+        name: 'code',
+        description: 'JSON string with columns and rows',
+        control: { type: 'textarea', rows: 12 },
+        defaultValue: JSON.stringify({
+          filename: 'Q1_Revenue.xlsx',
+          sheetName: 'Summary',
+          columns: [
+            { key: 'region', label: 'Region', type: 'text' },
+            { key: 'q1', label: 'Q1', type: 'currency' },
+            { key: 'q2', label: 'Q2', type: 'currency' },
+            { key: 'change', label: 'Change', type: 'percent' },
+            { key: 'total', label: 'Total', type: 'formula' },
+          ],
+          rows: [
+            { region: 'North', q1: 500000, q2: 620000, change: 0.24, total: 1120000 },
+            { region: 'South', q1: 340000, q2: 310000, change: -0.088, total: 650000 },
+            { region: 'East', q1: 780000, q2: 850000, change: 0.09, total: 1630000 },
+            { region: 'West', q1: 420000, q2: 480000, change: 0.143, total: 900000 },
+          ],
+        }, null, 2),
+      },
+    ],
+    variants: [
+      {
+        name: 'Revenue Sheet',
+        props: {
+          code: JSON.stringify({
+            filename: 'Q1_Revenue.xlsx',
+            sheetName: 'Summary',
+            columns: [
+              { key: 'region', label: 'Region', type: 'text' },
+              { key: 'q1', label: 'Q1', type: 'currency' },
+              { key: 'q2', label: 'Q2', type: 'currency' },
+              { key: 'change', label: 'Change', type: 'percent' },
+            ],
+            rows: [
+              { region: 'North', q1: 500000, q2: 620000, change: 0.24 },
+              { region: 'South', q1: 340000, q2: 310000, change: -0.088 },
+              { region: 'East', q1: 780000, q2: 850000, change: 0.09 },
+            ],
+          }),
+        },
+      },
+      {
+        name: 'Simple Sheet (No Filename)',
+        props: {
+          code: JSON.stringify({
+            columns: [
+              { key: 'item', label: 'Item', type: 'text' },
+              { key: 'qty', label: 'Quantity', type: 'number' },
+              { key: 'price', label: 'Price', type: 'currency' },
+            ],
+            rows: [
+              { item: 'Widget A', qty: 100, price: 29 },
+              { item: 'Widget B', qty: 250, price: 15 },
+              { item: 'Widget C', qty: 50, price: 89 },
+            ],
+          }),
+        },
+      },
+      {
+        name: 'Invalid JSON (Fallback)',
+        props: { code: '{ invalid json here' },
+      },
     ],
   },
 ]

@@ -832,12 +832,20 @@ export const IPC_CHANNELS = {
   POWER_GET_KEEP_AWAKE: 'power:getKeepAwake',
   POWER_SET_KEEP_AWAKE: 'power:setKeepAwake',
 
+  // Appearance settings
+  APPEARANCE_GET_RICH_TOOL_DESCRIPTIONS: 'appearance:getRichToolDescriptions',
+  APPEARANCE_SET_RICH_TOOL_DESCRIPTIONS: 'appearance:setRichToolDescriptions',
+
   BADGE_UPDATE: 'badge:update',
   BADGE_CLEAR: 'badge:clear',
   BADGE_SET_ICON: 'badge:setIcon',
   BADGE_DRAW: 'badge:draw',  // Broadcast: { count: number, iconDataUrl: string }
   WINDOW_FOCUS_STATE: 'window:focusState',  // Broadcast: boolean (isFocused)
   WINDOW_GET_FOCUS_STATE: 'window:getFocusState',
+
+  // Release notes
+  GET_RELEASE_NOTES: 'releaseNotes:get',
+  GET_LATEST_RELEASE_VERSION: 'releaseNotes:getLatestVersion',
 
   // Git operations
   GET_GIT_BRANCH: 'git:getBranch',
@@ -950,6 +958,10 @@ export interface ElectronAPI {
   getDismissedUpdateVersion(): Promise<string | null>
   onUpdateAvailable(callback: (info: UpdateInfo) => void): () => void
   onUpdateDownloadProgress(callback: (progress: number) => void): () => void
+
+  // Release notes
+  getReleaseNotes(): Promise<string>
+  getLatestReleaseVersion(): Promise<string | undefined>
 
   // Shell operations
   openUrl(url: string): Promise<void>
@@ -1120,6 +1132,10 @@ export interface ElectronAPI {
   // Power settings
   getKeepAwakeWhileRunning(): Promise<boolean>
   setKeepAwakeWhileRunning(enabled: boolean): Promise<void>
+
+  // Appearance settings
+  getRichToolDescriptions(): Promise<boolean>
+  setRichToolDescriptions(enabled: boolean): Promise<void>
 
   updateBadgeCount(count: number): Promise<void>
   clearBadgeCount(): Promise<void>

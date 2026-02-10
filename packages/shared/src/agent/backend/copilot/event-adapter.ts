@@ -12,6 +12,7 @@ import type { SessionEvent } from '@github/copilot-sdk';
 import { parseReadCommand, type ReadCommandInfo } from '../codex/read-patterns.ts';
 import { createLogger } from '../../../utils/debug.ts';
 import { COPILOT_TOOL_NAME_MAP } from '../../copilot-agent.ts';
+import { toolMetadataStore } from '../../../interceptor-common.ts';
 
 /**
  * Maps Copilot SDK session events to AgentEvents for UI compatibility.
@@ -318,8 +319,14 @@ export class CopilotEventAdapter {
           toolName,
           (event.data.arguments ?? {}) as Record<string, unknown>
         );
-        const intent = (event.data as { description?: string }).description || undefined;
-        const displayName = this.getToolDisplayName(toolName);
+
+        // Look up metadata captured by the network interceptor (cross-process via file)
+        const storedMeta = toolMetadataStore.get(toolCallId);
+        const intent = storedMeta?.intent
+          || (event.data as { description?: string }).description
+          || undefined;
+        const displayName = storedMeta?.displayName
+          || this.getToolDisplayName(toolName);
 
         // Classify bash commands that are actually file reads
         if (toolName === 'Bash' && typeof args.command === 'string') {

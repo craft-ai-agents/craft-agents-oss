@@ -66,7 +66,7 @@ jobs:
       - name: Validate release notes
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          NOTES_FILE="docs/release-notes/${VERSION}.md"
+          NOTES_FILE="apps/electron/resources/release-notes/${VERSION}.md"
 
           if [ ! -f "$NOTES_FILE" ]; then
             echo "::error::Missing release notes: $NOTES_FILE"

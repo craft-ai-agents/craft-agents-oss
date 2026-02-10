@@ -967,6 +967,17 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return !app.isPackaged
   })
 
+  // Release notes
+  ipcMain.handle(IPC_CHANNELS.GET_RELEASE_NOTES, () => {
+    const { getCombinedReleaseNotes } = require('@craft-agent/shared/release-notes') as typeof import('@craft-agent/shared/release-notes')
+    return getCombinedReleaseNotes()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GET_LATEST_RELEASE_VERSION, () => {
+    const { getLatestReleaseVersion } = require('@craft-agent/shared/release-notes') as typeof import('@craft-agent/shared/release-notes')
+    return getLatestReleaseVersion()
+  })
+
   // Get git branch for a directory (returns null if not a git repo or git unavailable)
   ipcMain.handle(IPC_CHANNELS.GET_GIT_BRANCH, (_event, dirPath: string) => {
     try {
@@ -3523,6 +3534,18 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     setKeepAwakeWhileRunning(enabled)
     // Update the power manager's cached value and power state
     setKeepAwakeSetting(enabled)
+  })
+
+  // Get rich tool descriptions setting
+  ipcMain.handle(IPC_CHANNELS.APPEARANCE_GET_RICH_TOOL_DESCRIPTIONS, async () => {
+    const { getRichToolDescriptions } = await import('@craft-agent/shared/config/storage')
+    return getRichToolDescriptions()
+  })
+
+  // Set rich tool descriptions setting
+  ipcMain.handle(IPC_CHANNELS.APPEARANCE_SET_RICH_TOOL_DESCRIPTIONS, async (_event, enabled: boolean) => {
+    const { setRichToolDescriptions } = await import('@craft-agent/shared/config/storage')
+    setRichToolDescriptions(enabled)
   })
 
   // Update app badge count

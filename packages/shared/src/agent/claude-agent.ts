@@ -2192,14 +2192,25 @@ export class ClaudeAgent extends BaseAgent {
           }
         }
 
-        events.push(...toolStartEvents);
-
+        // Emit text_complete BEFORE tool starts so the renderer finalizes
+        // the streaming text message before creating tool messages.
+        // We infer isIntermediate from the presence of tool_use blocks
+        // (tool_use blocks ↔ stop_reason=tool_use). This is more reliable
+        // than deferring to message_delta, which arrives BEFORE the assistant
+        // message — causing pendingText to be null when message_delta fires
+        // and the text_complete to be emitted with the wrong turnId.
         if (textContent) {
-          // Don't emit text_complete yet - wait for message_delta to get actual stop_reason
-          // The assistant message arrives with stop_reason: null during streaming
-          // The actual stop_reason comes in the message_delta event
-          setPendingText(textContent);
+          const hasToolUse = (content as ContentBlock[]).some(b => b.type === 'tool_use');
+          events.push({
+            type: 'text_complete',
+            text: textContent,
+            isIntermediate: hasToolUse,
+            turnId: turnId || undefined,
+            parentToolUseId: message.parent_tool_use_id || undefined,
+          });
         }
+
+        events.push(...toolStartEvents);
         break;
       }
 

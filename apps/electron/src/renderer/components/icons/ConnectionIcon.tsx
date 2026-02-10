@@ -12,50 +12,63 @@
  */
 
 import { getProviderIcon } from '@/lib/provider-icons'
+import { getModelDisplayName } from '@config/models'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import type { LlmConnectionWithStatus } from '../../../shared/types'
 
 interface ConnectionIconProps {
   /** The connection to display an icon for */
-  connection: Pick<LlmConnectionWithStatus, 'name' | 'providerType' | 'baseUrl'> & { type?: string }
+  connection: Pick<LlmConnectionWithStatus, 'name' | 'providerType' | 'baseUrl'> & { type?: string; defaultModel?: string }
   /** Size in pixels (default: 16) */
   size?: number
   /** Additional CSS classes */
   className?: string
+  /** Show tooltip with connection name + model on hover (default: false) */
+  showTooltip?: boolean
 }
 
-export function ConnectionIcon({ connection, size = 16, className = '' }: ConnectionIconProps) {
+export function ConnectionIcon({ connection, size = 16, className = '', showTooltip = false }: ConnectionIconProps) {
   const providerIcon = getProviderIcon(
     connection.providerType || connection.type || '',
     connection.baseUrl
   )
 
-  if (providerIcon) {
-    return (
-      <img
-        src={providerIcon}
-        alt=""
-        width={size}
-        height={size}
-        className={`rounded-[3px] flex-shrink-0 ${className}`}
-        style={{ width: size, height: size }}
-      />
-    )
-  }
-
-  // Fallback: first letter of connection name
-  const fontSize = Math.max(8, Math.round(size * 0.6))
-
-  return (
+  const iconElement = providerIcon ? (
+    <img
+      src={providerIcon}
+      alt=""
+      width={size}
+      height={size}
+      className={`rounded-[3px] flex-shrink-0 ${className}`}
+      style={{ width: size, height: size }}
+    />
+  ) : (
     <div
       className={`rounded-[3px] bg-foreground/10 flex items-center justify-center flex-shrink-0 ${className}`}
       style={{ width: size, height: size }}
     >
       <span
         className="font-medium text-foreground/50"
-        style={{ fontSize }}
+        style={{ fontSize: Math.max(8, Math.round(size * 0.6)) }}
       >
         {connection.name?.charAt(0).toUpperCase() || '?'}
       </span>
     </div>
+  )
+
+  if (!showTooltip) return iconElement
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {iconElement}
+      </TooltipTrigger>
+      <TooltipContent side="bottom" sideOffset={4}>
+        <div className="text-center">
+          <div>{connection.name}</div>
+          {connection.defaultModel && <div className="text-[10px] opacity-60">{getModelDisplayName(connection.defaultModel)}</div>}
+        </div>
+      </TooltipContent>
+    </Tooltip>
   )
 }

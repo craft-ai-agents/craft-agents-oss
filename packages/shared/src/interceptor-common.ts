@@ -1,0 +1,301 @@
+/**
+ * Shared infrastructure for network interceptors (Anthropic + Copilot).
+ *
+ * Both interceptors run as preload scripts in separate subprocesses.
+ * This module provides the common pieces:
+ * - toolMetadataStore (file-based cross-process sharing)
+ * - LastApiError (error capture for error handler)
+ * - Logging utilities
+ * - Config reading (richToolDescriptions setting)
+ */
+
+import { existsSync, readFileSync, writeFileSync, renameSync, unlinkSync, appendFileSync, mkdirSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+/** Packaged apps run from inside an app.asar archive */
+export const IS_PACKAGED = process.argv.some(arg => arg.includes('app.asar'));
+
+/** Enable interceptor logging in dev mode (not packaged), disable in production */
+export const INTERCEPTOR_LOGGING_ENABLED = !IS_PACKAGED;
+
+export const DEBUG = INTERCEPTOR_LOGGING_ENABLED &&
+  (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1');
+
+/** Config file path for reading settings in the SDK subprocess */
+export const CONFIG_FILE = join(homedir(), '.craft-agent', 'config.json');
+
+// ============================================================================
+// LOGGING
+// ============================================================================
+
+export const LOG_DIR = join(homedir(), '.craft-agent', 'logs');
+export const LOG_FILE = join(LOG_DIR, 'interceptor.log');
+
+// Ensure log directory exists at module load
+try {
+  if (!existsSync(LOG_DIR)) {
+    mkdirSync(LOG_DIR, { recursive: true });
+  }
+} catch {
+  // Ignore - logging will silently fail if dir can't be created
+}
+
+// Rotate log file if older than 1 day
+const MAX_LOG_AGE_MS = 24 * 60 * 60 * 1000;
+try {
+  if (existsSync(LOG_FILE)) {
+    const stat = statSync(LOG_FILE);
+    if (Date.now() - stat.mtimeMs > MAX_LOG_AGE_MS) {
+      const prevLog = LOG_FILE + '.prev';
+      renameSync(LOG_FILE, prevLog);
+    }
+  }
+} catch {
+  // Ignore — rotation is best-effort
+}
+
+export function debugLog(...args: unknown[]) {
+  if (!DEBUG) return;
+  const timestamp = new Date().toISOString();
+  const message = `${timestamp} [interceptor] ${args.map((a) => {
+    if (typeof a === 'object') {
+      try {
+        return JSON.stringify(a);
+      } catch (e) {
+        const keys = a && typeof a === 'object' ? Object.keys(a as object).join(', ') : 'unknown';
+        return `[CYCLIC STRUCTURE, keys: ${keys}] (error: ${e})`;
+      }
+    }
+    return String(a);
+  }).join(' ')}`;
+  try {
+    appendFileSync(LOG_FILE, message + '\n');
+  } catch {
+    // Silently fail if can't write to log file
+  }
+}
+
+// ============================================================================
+// CONFIG READING
+// ============================================================================
+
+/**
+ * Check if rich tool descriptions are enabled (adds _intent/_displayName to all tools).
+ * Reads from config.json on each call — the file is small and this runs once per API request.
+ * Defaults to true if config is unreadable or field is not set.
+ */
+export function isRichToolDescriptionsEnabled(): boolean {
+  try {
+    const content = readFileSync(CONFIG_FILE, 'utf-8');
+    const config = JSON.parse(content);
+    if (config?.richToolDescriptions !== undefined) {
+      return config.richToolDescriptions;
+    }
+  } catch {
+    // Config unreadable — default to enabled
+  }
+  return true;
+}
+
+// ============================================================================
+// LAST API ERROR
+// ============================================================================
+
+/**
+ * Store the last API error for the error handler to access.
+ * Uses file-based storage to reliably share across process boundaries.
+ */
+export interface LastApiError {
+  status: number;
+  statusText: string;
+  message: string;
+  timestamp: number;
+}
+
+const ERROR_FILE = join(homedir(), '.craft-agent', 'api-error.json');
+const MAX_ERROR_AGE_MS = 5 * 60 * 1000; // 5 minutes
+
+function getStoredError(): LastApiError | null {
+  try {
+    if (!existsSync(ERROR_FILE)) return null;
+    const content = readFileSync(ERROR_FILE, 'utf-8');
+    const error = JSON.parse(content) as LastApiError;
+    try {
+      unlinkSync(ERROR_FILE);
+      debugLog(`[getStoredError] Popped error file`);
+    } catch {
+      // Ignore delete errors
+    }
+    return error;
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredError(error: LastApiError | null): void {
+  try {
+    if (error) {
+      writeFileSync(ERROR_FILE, JSON.stringify(error));
+      debugLog(`[setStoredError] Wrote error to file: ${error.status} ${error.message}`);
+    } else {
+      try {
+        unlinkSync(ERROR_FILE);
+      } catch {
+        // File might not exist
+      }
+    }
+  } catch (e) {
+    debugLog(`[setStoredError] Failed to write: ${e}`);
+  }
+}
+
+export function getLastApiError(): LastApiError | null {
+  const error = getStoredError();
+  if (error) {
+    const age = Date.now() - error.timestamp;
+    if (age < MAX_ERROR_AGE_MS) {
+      debugLog(`[getLastApiError] Found error (age ${age}ms): ${error.status}`);
+      return error;
+    }
+    debugLog(`[getLastApiError] Error too old (${age}ms > ${MAX_ERROR_AGE_MS}ms)`);
+  }
+  return null;
+}
+
+export function clearLastApiError(): void {
+  setStoredError(null);
+}
+
+// ============================================================================
+// TOOL METADATA STORE
+// ============================================================================
+
+/**
+ * Metadata extracted from tool_use inputs by the SSE stripping/capture stream.
+ * Keyed by tool_use_id, consumed by tool-matching.ts / event-adapter.ts.
+ */
+export interface ToolMetadata {
+  intent?: string;
+  displayName?: string;
+  timestamp: number;
+}
+
+/**
+ * Session-scoped, file-based metadata store for cross-process sharing.
+ *
+ * The interceptor runs in the SDK subprocess (via --preload / --require),
+ * while tool-matching.ts / event-adapter.ts run in the Electron main process.
+ * These are separate OS processes — globalThis, module-level Maps, etc. are NOT shared.
+ *
+ * Solution: a single `tool-metadata.json` file in the session directory.
+ * - set() writes to both in-memory Map AND merges into {sessionDir}/tool-metadata.json
+ * - get() checks in-memory Map first (same-process), then reads from file
+ * - No cleanup needed: file lives with the session, deleted when session is deleted
+ * - Survives subprocess restarts (session resume) via file persistence
+ *
+ * The session directory is determined by:
+ * - SDK subprocess: CRAFT_SESSION_DIR env var (set by main process before spawn)
+ * - Main process: toolMetadataStore.setSessionDir(path) called during agent creation
+ */
+
+// Session directory — set by env var (subprocess) or setSessionDir() (main process)
+let _sessionDir: string | null = process.env.CRAFT_SESSION_DIR || null;
+
+function getMetadataFilePath(): string | null {
+  return _sessionDir ? join(_sessionDir, 'tool-metadata.json') : null;
+}
+
+// In-memory Map for same-process lookups
+const _metadataMap = new Map<string, ToolMetadata>();
+
+// File cache — shadows what's been written to disk by this process.
+let _fileCache: Record<string, ToolMetadata> | null = null;
+
+/** Read the entire metadata file from disk */
+function readMetadataFile(): Record<string, ToolMetadata> {
+  const filePath = getMetadataFilePath();
+  if (!filePath) return {};
+  try {
+    const data = readFileSync(filePath, 'utf-8');
+    return JSON.parse(data) as Record<string, ToolMetadata>;
+  } catch {
+    return {};
+  }
+}
+
+/** Write the entire metadata object to the session file (atomic via temp+rename) */
+function writeMetadataFile(allMetadata: Record<string, ToolMetadata>): void {
+  const filePath = getMetadataFilePath();
+  if (!filePath) return;
+  try {
+    const tmpPath = filePath + '.tmp';
+    writeFileSync(tmpPath, JSON.stringify(allMetadata));
+    renameSync(tmpPath, filePath);
+  } catch {
+    // Ignore write errors — in-memory still works for same-process
+  }
+}
+
+export const toolMetadataStore = {
+  /**
+   * Set session directory and pre-populate in-memory map from file.
+   * Called by main process so subsequent get() calls are O(1) memory lookups.
+   */
+  setSessionDir(dir: string): void {
+    _sessionDir = dir;
+    _fileCache = null;
+    _metadataMap.clear();
+    const all = readMetadataFile();
+    for (const [id, meta] of Object.entries(all)) {
+      _metadataMap.set(id, meta);
+    }
+  },
+
+  /** Store metadata — writes to in-memory Map + cached file */
+  set(toolUseId: string, metadata: ToolMetadata): void {
+    _metadataMap.set(toolUseId, metadata);
+    if (!_fileCache) _fileCache = readMetadataFile();
+    _fileCache[toolUseId] = metadata;
+    writeMetadataFile(_fileCache);
+  },
+
+  /** Read metadata — checks in-memory first, then session file. No pop semantics. */
+  get(toolUseId: string): ToolMetadata | undefined {
+    const inMemory = _metadataMap.get(toolUseId);
+    if (inMemory) return inMemory;
+    const all = readMetadataFile();
+    return all[toolUseId];
+  },
+
+  delete(toolUseId: string): void {
+    _metadataMap.delete(toolUseId);
+    if (!_fileCache) _fileCache = readMetadataFile();
+    delete _fileCache[toolUseId];
+    writeMetadataFile(_fileCache);
+  },
+
+  get size(): number {
+    return _metadataMap.size;
+  },
+};
+
+// ============================================================================
+// METADATA SCHEMA DEFINITIONS
+// ============================================================================
+
+/** Schema for _displayName field added to tool definitions */
+export const displayNameSchema = {
+  type: 'string',
+  description: 'REQUIRED: Human-friendly name for this action (2-4 words, e.g., "List Folders", "Search Documents", "Create Task")',
+};
+
+/** Schema for _intent field added to tool definitions */
+export const intentSchema = {
+  type: 'string',
+  description: 'REQUIRED: Describe what you are trying to accomplish with this tool call (1-2 sentences)',
+};

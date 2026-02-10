@@ -51,6 +51,8 @@ export interface PermissionManagerConfig {
   workingDirectory?: string;
   /** Plans folder path (writes to this folder are allowed in Explore mode) */
   plansFolderPath?: string;
+  /** Data folder path (writes to this folder are allowed in Explore mode for transform_data output) */
+  dataFolderPath?: string;
 }
 
 /**
@@ -102,6 +104,8 @@ export interface ContextBlockOptions {
   permissionMode?: string;
   /** Plans folder path */
   plansFolderPath?: string;
+  /** Data folder path (transform_data tool output) */
+  dataFolderPath?: string;
   /** Active source slugs */
   activeSources?: string[];
   /** Inactive source slugs */

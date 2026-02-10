@@ -290,7 +290,8 @@ describe('renderSvg – edges', () => {
     const edge = makeEdge({ style: 'thick' })
     const graph = makeGraph({ edges: [edge] })
     const svg = renderSvg(graph, lightColors)
-    expect(svg).toContain('stroke-width="1.5"')
+    // Base connector stroke is 1px, thick is doubled to 2px
+    expect(svg).toContain('stroke-width="2"')
   })
 
   it('does not add dasharray to solid edges', () => {

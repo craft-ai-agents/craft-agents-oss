@@ -7,12 +7,13 @@
 // contains font metrics, spacing constants, and stroke widths.
 // ============================================================================
 
+import { measureTextWidth } from './text-metrics'
+
 /** Average character width in px at the given font size and weight (proportional font) */
 export function estimateTextWidth(text: string, fontSize: number, fontWeight: number): number {
-  // Inter average character widths as fraction of fontSize, per weight.
-  // Heavier weights are slightly wider.
-  const widthRatio = fontWeight >= 600 ? 0.58 : fontWeight >= 500 ? 0.55 : 0.52
-  return text.length * fontSize * widthRatio
+  // Delegate to variable-width character measurement for better accuracy
+  // with mixed character sets (Latin narrow/wide, CJK, emoji, etc.)
+  return measureTextWidth(text, fontSize, fontWeight)
 }
 
 /** Average character width in px for monospace fonts (uniform glyph width) */
@@ -52,13 +53,14 @@ export const FONT_WEIGHTS = {
 // ============================================================================
 
 /** Vertical gap between a subgraph header band and the content area below it (px).
- * Without this, nested subgraph headers sit flush against their parent's header band. */
-export const GROUP_HEADER_CONTENT_PAD = 8
+ * Without this, nested subgraph headers sit flush against their parent's header band.
+ * Increased from 8 to 12 to provide more clearance for edges routing near headers. */
+export const GROUP_HEADER_CONTENT_PAD = 12
 
 /** Padding inside node shapes */
 export const NODE_PADDING = {
-  /** Horizontal padding inside rectangles/rounded/stadium */
-  horizontal: 16,
+  /** Horizontal padding inside rectangles/rounded/stadium (increased from 16 for better label fit) */
+  horizontal: 20,
   /** Vertical padding inside rectangles/rounded/stadium */
   vertical: 10,
   /** Extra padding for diamond shapes (they need more space due to rotation) */
@@ -69,7 +71,8 @@ export const NODE_PADDING = {
 export const STROKE_WIDTHS = {
   outerBox: 1,
   innerBox: 0.75,
-  connector: 0.75,
+  /** Edge connector stroke (increased from 0.75 for better visibility) */
+  connector: 1,
 } as const
 
 /**
@@ -85,9 +88,9 @@ export const STROKE_WIDTHS = {
  */
 export const TEXT_BASELINE_SHIFT = '0.35em' as const
 
-/** Arrow head dimensions */
+/** Arrow head dimensions — matches spec: 8px wide × ~5px tall */
 export const ARROW_HEAD = {
   width: 8,
-  height: 4.8,
+  height: 5,
 } as const
 

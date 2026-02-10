@@ -100,12 +100,12 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      # Read release notes from docs/release-notes/{version}.md
+      # Read release notes from apps/electron/resources/release-notes/{version}.md
       - name: Read release notes
         id: changelog
         run: |
           VERSION="${{ needs.promote.outputs.version }}"
-          NOTES_FILE="docs/release-notes/${VERSION}.md"
+          NOTES_FILE="apps/electron/resources/release-notes/${VERSION}.md"
 
           if [ ! -f "$NOTES_FILE" ]; then
             echo "::warning::Release notes not found: $NOTES_FILE"

@@ -40,12 +40,15 @@ export function findStreamingMessage(
   turnId?: string
 ): number {
   if (turnId) {
-    const index = messages.findIndex(m =>
+    // Strict: when turnId is known, only match by turnId — no fallback.
+    // Falling back to "last streaming message" caused post-tool text (turnId T2)
+    // to incorrectly update pre-tool text (turnId T1, still streaming),
+    // placing the response above tool calls.
+    return messages.findIndex(m =>
       m.role === 'assistant' && m.turnId === turnId && m.isStreaming
     )
-    if (index !== -1) return index
   }
-  // Fallback: find last streaming assistant message
+  // Fallback only when turnId is unknown: find last streaming assistant message
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === 'assistant' && messages[i].isStreaming) {
       return i
@@ -62,12 +65,12 @@ export function findAssistantMessage(
   turnId?: string
 ): number {
   if (turnId) {
-    const index = messages.findIndex(m =>
+    // Strict: when turnId is known, only match by turnId — no fallback.
+    return messages.findIndex(m =>
       m.role === 'assistant' && m.turnId === turnId
     )
-    if (index !== -1) return index
   }
-  // Fallback: find last streaming assistant message
+  // Fallback only when turnId is unknown: find last streaming assistant message
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === 'assistant' && messages[i].isStreaming) {
       return i

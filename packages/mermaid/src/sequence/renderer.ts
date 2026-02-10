@@ -2,6 +2,7 @@ import type { PositionedSequenceDiagram, PositionedActor, Lifeline, PositionedMe
 import type { DiagramColors } from '../theme.ts'
 import { svgOpenTag, buildStyleBlock } from '../theme.ts'
 import { FONT_SIZES, FONT_WEIGHTS, STROKE_WIDTHS, ARROW_HEAD, estimateTextWidth, TEXT_BASELINE_SHIFT } from '../styles.ts'
+import { renderMultilineText, escapeXml as escapeXmlUtil } from '../multiline-utils.ts'
 
 // ============================================================================
 // Sequence diagram SVG renderer
@@ -97,9 +98,18 @@ function arrowMarkerDefs(): string {
 // Component renderers
 // ============================================================================
 
-/** Render an actor box (participant = rectangle, actor = stick figure) */
+/**
+ * Render an actor box (participant = rectangle, actor = stick figure).
+ * Wrapped in <g class="actor"> with semantic data attributes.
+ */
 function renderActor(actor: PositionedActor): string {
-  const { x, y, width, height, label, type } = actor
+  const { id, x, y, width, height, label, type } = actor
+  const parts: string[] = []
+
+  // Semantic wrapper with actor metadata
+  parts.push(
+    `<g class="actor" data-id="${escapeAttr(id)}" data-label="${escapeAttr(label)}" data-type="${type}">`
+  )
 
   if (type === 'actor') {
     // Circle-person icon: outer circle + head circle + shoulders arc.
@@ -112,136 +122,196 @@ function renderActor(actor: PositionedActor): string {
     const sw = STROKE_WIDTHS.outerBox / s  // compensate for scale transform
     const iconStroke = 'var(--_line)'      // use line color for actor icon strokes
 
-    return (
-      `<g transform="translate(${tx},${ty}) scale(${s})">` +
+    parts.push(
+      `  <g transform="translate(${tx},${ty}) scale(${s})">` +
       // Outer circle
-      `\n  <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" fill="none" stroke="${iconStroke}" stroke-width="${sw}" />` +
+      `\n    <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" fill="none" stroke="${iconStroke}" stroke-width="${sw}" />` +
       // Head
-      `\n  <path d="M15 10C15 11.6569 13.6569 13 12 13C10.3431 13 9 11.6569 9 10C9 8.34315 10.3431 7 12 7C13.6569 7 15 8.34315 15 10Z" fill="none" stroke="${iconStroke}" stroke-width="${sw}" />` +
+      `\n    <path d="M15 10C15 11.6569 13.6569 13 12 13C10.3431 13 9 11.6569 9 10C9 8.34315 10.3431 7 12 7C13.6569 7 15 8.34315 15 10Z" fill="none" stroke="${iconStroke}" stroke-width="${sw}" />` +
       // Shoulders
-      `\n  <path d="M5.62842 18.3563C7.08963 17.0398 9.39997 16 12 16C14.6 16 16.9104 17.0398 18.3716 18.3563" fill="none" stroke="${iconStroke}" stroke-width="${sw}" />` +
-      `\n</g>` +
-      // Label below the icon
-      `\n<text x="${x}" y="${y + height + 14}" text-anchor="middle" font-size="${FONT_SIZES.nodeLabel}" font-weight="${FONT_WEIGHTS.nodeLabel}" fill="var(--_text)">${escapeXml(label)}</text>`
+      `\n    <path d="M5.62842 18.3563C7.08963 17.0398 9.39997 16 12 16C14.6 16 16.9104 17.0398 18.3716 18.3563" fill="none" stroke="${iconStroke}" stroke-width="${sw}" />` +
+      `\n  </g>`
+    )
+    // Label below the icon (supports multi-line)
+    parts.push(
+      '  ' + renderMultilineText(label, x, y + height + 14, FONT_SIZES.nodeLabel,
+        `font-size="${FONT_SIZES.nodeLabel}" text-anchor="middle" font-weight="${FONT_WEIGHTS.nodeLabel}" fill="var(--_text)"`)
+    )
+  } else {
+    // Participant: rectangle box with label (supports multi-line)
+    const boxX = x - width / 2
+    parts.push(
+      `  <rect x="${boxX}" y="${y}" width="${width}" height="${height}" rx="4" ry="4" ` +
+      `fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.outerBox}" />`
+    )
+    parts.push(
+      '  ' + renderMultilineText(label, x, y + height / 2, FONT_SIZES.nodeLabel,
+        `font-size="${FONT_SIZES.nodeLabel}" text-anchor="middle" font-weight="${FONT_WEIGHTS.nodeLabel}" fill="var(--_text)"`)
     )
   }
 
-  // Participant: rectangle box with label
-  const boxX = x - width / 2
-  return (
-    `<rect x="${boxX}" y="${y}" width="${width}" height="${height}" rx="4" ry="4" ` +
-    `fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.outerBox}" />` +
-    `\n<text x="${x}" y="${y + height / 2}" text-anchor="middle" dy="${TEXT_BASELINE_SHIFT}" ` +
-    `font-size="${FONT_SIZES.nodeLabel}" font-weight="${FONT_WEIGHTS.nodeLabel}" fill="var(--_text)">${escapeXml(label)}</text>`
-  )
+  parts.push('</g>')
+  return parts.join('\n')
 }
 
-/** Render a lifeline (dashed vertical line from actor to bottom) */
+/**
+ * Render a lifeline (dashed vertical line from actor to bottom).
+ * Includes data-actor to link to its actor.
+ */
 function renderLifeline(lifeline: Lifeline): string {
   return (
-    `<line x1="${lifeline.x}" y1="${lifeline.topY}" x2="${lifeline.x}" y2="${lifeline.bottomY}" ` +
+    `<line class="lifeline" data-actor="${escapeAttr(lifeline.actorId)}" ` +
+    `x1="${lifeline.x}" y1="${lifeline.topY}" x2="${lifeline.x}" y2="${lifeline.bottomY}" ` +
     `stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />`
   )
 }
 
-/** Render an activation box (narrow filled rectangle on lifeline) */
+/**
+ * Render an activation box (narrow filled rectangle on lifeline).
+ * Includes data-actor to link to its actor.
+ */
 function renderActivation(activation: Activation): string {
   return (
-    `<rect x="${activation.x}" y="${activation.topY}" width="${activation.width}" height="${activation.bottomY - activation.topY}" ` +
+    `<rect class="activation" data-actor="${escapeAttr(activation.actorId)}" ` +
+    `x="${activation.x}" y="${activation.topY}" width="${activation.width}" height="${activation.bottomY - activation.topY}" ` +
     `fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.innerBox}" />`
   )
 }
 
-/** Render a message arrow with label */
+/**
+ * Render a message arrow with label.
+ * Wrapped in <g class="message"> with semantic data attributes.
+ */
 function renderMessage(msg: PositionedMessage): string {
   const parts: string[] = []
   const dashArray = msg.lineStyle === 'dashed' ? ' stroke-dasharray="6 4"' : ''
   const markerId = msg.arrowHead === 'filled' ? 'seq-arrow' : 'seq-arrow-open'
 
+  // Semantic wrapper with message metadata
+  parts.push(
+    `<g class="message" data-from="${escapeAttr(msg.from)}" data-to="${escapeAttr(msg.to)}" ` +
+    `data-label="${escapeAttr(msg.label)}" data-line-style="${msg.lineStyle}" ` +
+    `data-arrow-head="${msg.arrowHead}" data-self="${msg.isSelf}">`
+  )
+
   if (msg.isSelf) {
     // Self-message: curved loop going right and back
+    // Loop dimensions - loopH is fixed, loopW provides minimum clearance
     const loopW = 30
     const loopH = 20
+    const labelPadding = 8 // Space between loop and label
     parts.push(
-      `<polyline points="${msg.x1},${msg.y} ${msg.x1 + loopW},${msg.y} ${msg.x1 + loopW},${msg.y + loopH} ${msg.x2},${msg.y + loopH}" ` +
+      `  <polyline points="${msg.x1},${msg.y} ${msg.x1 + loopW},${msg.y} ${msg.x1 + loopW},${msg.y + loopH} ${msg.x2},${msg.y + loopH}" ` +
       `fill="none" stroke="var(--_line)" stroke-width="${STROKE_WIDTHS.connector}"${dashArray} marker-end="url(#${markerId})" />`
     )
-    // Label to the right of the loop
+    // Label to the right of the loop (supports multi-line)
     parts.push(
-      `<text x="${msg.x1 + loopW + 6}" y="${msg.y + loopH / 2}" dy="${TEXT_BASELINE_SHIFT}" ` +
-      `font-size="${FONT_SIZES.edgeLabel}" font-weight="${FONT_WEIGHTS.edgeLabel}" fill="var(--_text-muted)">${escapeXml(msg.label)}</text>`
+      '  ' + renderMultilineText(msg.label, msg.x1 + loopW + labelPadding, msg.y + loopH / 2, FONT_SIZES.edgeLabel,
+        `font-size="${FONT_SIZES.edgeLabel}" text-anchor="start" font-weight="${FONT_WEIGHTS.edgeLabel}" fill="var(--_text-muted)"`)
     )
   } else {
     // Normal message: horizontal arrow
     parts.push(
-      `<line x1="${msg.x1}" y1="${msg.y}" x2="${msg.x2}" y2="${msg.y}" ` +
+      `  <line x1="${msg.x1}" y1="${msg.y}" x2="${msg.x2}" y2="${msg.y}" ` +
       `stroke="var(--_line)" stroke-width="${STROKE_WIDTHS.connector}"${dashArray} marker-end="url(#${markerId})" />`
     )
-    // Label above the arrow, centered
+    // Label above the arrow, centered (supports multi-line)
     const midX = (msg.x1 + msg.x2) / 2
     parts.push(
-      `<text x="${midX}" y="${msg.y - 6}" text-anchor="middle" ` +
-      `font-size="${FONT_SIZES.edgeLabel}" font-weight="${FONT_WEIGHTS.edgeLabel}" fill="var(--_text-muted)">${escapeXml(msg.label)}</text>`
+      '  ' + renderMultilineText(msg.label, midX, msg.y - 6, FONT_SIZES.edgeLabel,
+        `font-size="${FONT_SIZES.edgeLabel}" text-anchor="middle" font-weight="${FONT_WEIGHTS.edgeLabel}" fill="var(--_text-muted)"`)
     )
   }
 
+  parts.push('</g>')
   return parts.join('\n')
 }
 
-/** Render a block background (loop/alt/opt) */
+/**
+ * Render a block background (loop/alt/opt).
+ * Wrapped in <g class="block"> with semantic data attributes.
+ */
 function renderBlock(block: PositionedBlock): string {
   const parts: string[] = []
 
+  // Semantic wrapper with block metadata
+  const labelAttr = block.label ? ` data-label="${escapeAttr(block.label)}"` : ''
+  parts.push(
+    `<g class="block" data-type="${escapeAttr(block.type)}"${labelAttr}>`
+  )
+
   // Outer rectangle
   parts.push(
-    `<rect x="${block.x}" y="${block.y}" width="${block.width}" height="${block.height}" ` +
+    `  <rect x="${block.x}" y="${block.y}" width="${block.width}" height="${block.height}" ` +
     `rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.outerBox}" />`
   )
 
   // Type label tab (top-left corner)
+  // For multi-line block labels, we use the first line for the tab but show full label
   const labelText = `${block.type}${block.label ? ` [${block.label}]` : ''}`
-  const tabWidth = estimateTextWidth(labelText, FONT_SIZES.edgeLabel, FONT_WEIGHTS.groupHeader) + 16
+  const firstLine = labelText.split('\n')[0]!
+  const tabWidth = estimateTextWidth(firstLine, FONT_SIZES.edgeLabel, FONT_WEIGHTS.groupHeader) + 16
   const tabHeight = 18
 
   parts.push(
-    `<rect x="${block.x}" y="${block.y}" width="${tabWidth}" height="${tabHeight}" ` +
+    `  <rect x="${block.x}" y="${block.y}" width="${tabWidth}" height="${tabHeight}" ` +
     `fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.outerBox}" />`
   )
+  // Block type label (supports multi-line via <br> tags)
   parts.push(
-    `<text x="${block.x + 6}" y="${block.y + tabHeight / 2}" dy="${TEXT_BASELINE_SHIFT}" ` +
-    `font-size="${FONT_SIZES.edgeLabel}" font-weight="${FONT_WEIGHTS.groupHeader}" fill="var(--_text-sec)">${escapeXml(labelText)}</text>`
+    '  ' + renderMultilineText(
+      labelText,
+      block.x + 6,
+      block.y + tabHeight / 2,
+      FONT_SIZES.edgeLabel,
+      `font-size="${FONT_SIZES.edgeLabel}" font-weight="${FONT_WEIGHTS.groupHeader}" fill="var(--_text-sec)"`
+    )
   )
 
   // Divider lines (for alt/else, par/and)
   for (const divider of block.dividers) {
     parts.push(
-      `<line x1="${block.x}" y1="${divider.y}" x2="${block.x + block.width}" y2="${divider.y}" ` +
+      `  <line x1="${block.x}" y1="${divider.y}" x2="${block.x + block.width}" y2="${divider.y}" ` +
       `stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />`
     )
     if (divider.label) {
+      // Divider label supports multi-line
       parts.push(
-        `<text x="${block.x + 8}" y="${divider.y + 14}" font-size="${FONT_SIZES.edgeLabel}" ` +
-        `font-weight="${FONT_WEIGHTS.edgeLabel}" fill="var(--_text-muted)">[${escapeXml(divider.label)}]</text>`
+        '  ' + renderMultilineText(`[${divider.label}]`, block.x + 8, divider.y + 14, FONT_SIZES.edgeLabel,
+          `font-size="${FONT_SIZES.edgeLabel}" text-anchor="start" font-weight="${FONT_WEIGHTS.edgeLabel}" fill="var(--_text-muted)"`)
       )
     }
   }
 
+  parts.push('</g>')
   return parts.join('\n')
 }
 
-/** Render a note box */
+/**
+ * Render a note box.
+ * Wrapped in <g class="note"> with semantic data attributes.
+ */
 function renderNote(note: PositionedNote): string {
   // Folded corner effect: note rectangle + small triangle in top-right
   const foldSize = 6
+
+  // Build actor reference attribute if present
+  const actorsAttr = note.actors && note.actors.length > 0
+    ? ` data-actors="${note.actors.map(escapeAttr).join(',')}"`
+    : ''
+  const positionAttr = note.position ? ` data-position="${escapeAttr(note.position)}"` : ''
+
   return (
-    `<rect x="${note.x}" y="${note.y}" width="${note.width}" height="${note.height}" ` +
+    `<g class="note"${positionAttr}${actorsAttr}>` +
+    `\n  <rect x="${note.x}" y="${note.y}" width="${note.width}" height="${note.height}" ` +
     `fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.innerBox}" />` +
     // Fold triangle
-    `\n<polygon points="${note.x + note.width - foldSize},${note.y} ${note.x + note.width},${note.y + foldSize} ${note.x + note.width - foldSize},${note.y + foldSize}" ` +
+    `\n  <polygon points="${note.x + note.width - foldSize},${note.y} ${note.x + note.width},${note.y + foldSize} ${note.x + note.width - foldSize},${note.y + foldSize}" ` +
     `fill="var(--_inner-stroke)" />` +
-    // Note text
-    `\n<text x="${note.x + note.width / 2}" y="${note.y + note.height / 2}" text-anchor="middle" dy="${TEXT_BASELINE_SHIFT}" ` +
-    `font-size="${FONT_SIZES.edgeLabel}" font-weight="${FONT_WEIGHTS.edgeLabel}" fill="var(--_text-muted)">${escapeXml(note.text)}</text>`
+    // Note text (supports multi-line)
+    `\n  ${renderMultilineText(note.text, note.x + note.width / 2, note.y + note.height / 2, FONT_SIZES.edgeLabel,
+      `font-size="${FONT_SIZES.edgeLabel}" text-anchor="middle" font-weight="${FONT_WEIGHTS.edgeLabel}" fill="var(--_text-muted)"`)}` +
+    `\n</g>`
   )
 }
 
@@ -249,11 +319,16 @@ function renderNote(note: PositionedNote): string {
 // Utilities
 // ============================================================================
 
-function escapeXml(text: string): string {
-  return text
+// Use shared escapeXml from multiline-utils
+const escapeXml = escapeXmlUtil
+
+/**
+ * Escape a string for use as an XML/HTML attribute value.
+ */
+function escapeAttr(value: string): string {
+  return value
     .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
 }

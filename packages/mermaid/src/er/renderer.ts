@@ -2,6 +2,8 @@ import type { PositionedErDiagram, PositionedErEntity, PositionedErRelationship,
 import type { DiagramColors } from '../theme.ts'
 import { svgOpenTag, buildStyleBlock } from '../theme.ts'
 import { FONT_SIZES, FONT_WEIGHTS, STROKE_WIDTHS, estimateTextWidth, TEXT_BASELINE_SHIFT } from '../styles.ts'
+import { renderMultilineText, escapeXml as escapeXmlUtil } from '../multiline-utils.ts'
+import { measureMultilineText } from '../text-metrics.ts'
 
 // ============================================================================
 // ER diagram SVG renderer
@@ -72,33 +74,46 @@ export function renderErSvg(
 // Entity box rendering
 // ============================================================================
 
-/** Render an entity box with header and attribute rows */
+/**
+ * Render an entity box with header and attribute rows.
+ * Wrapped in <g class="entity"> with semantic data attributes.
+ */
 function renderEntityBox(entity: PositionedErEntity): string {
-  const { x, y, width, height, headerHeight, rowHeight, label, attributes } = entity
+  const { id, x, y, width, height, headerHeight, rowHeight, label, attributes } = entity
   const parts: string[] = []
+
+  // Semantic wrapper with entity metadata
+  parts.push(
+    `<g class="entity" data-id="${escapeAttr(id)}" data-label="${escapeAttr(label)}">`
+  )
 
   // Outer rectangle
   parts.push(
-    `<rect x="${x}" y="${y}" width="${width}" height="${height}" ` +
+    `  <rect x="${x}" y="${y}" width="${width}" height="${height}" ` +
     `rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.outerBox}" />`
   )
 
   // Header background
   parts.push(
-    `<rect x="${x}" y="${y}" width="${width}" height="${headerHeight}" ` +
+    `  <rect x="${x}" y="${y}" width="${width}" height="${headerHeight}" ` +
     `rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.outerBox}" />`
   )
 
-  // Entity name
+  // Entity name (supports multi-line via <br> tags)
   parts.push(
-    `<text x="${x + width / 2}" y="${y + headerHeight / 2}" text-anchor="middle" dy="${TEXT_BASELINE_SHIFT}" ` +
-    `font-size="${FONT_SIZES.nodeLabel}" font-weight="700" fill="var(--_text)">${escapeXml(label)}</text>`
+    '  ' + renderMultilineText(
+      label,
+      x + width / 2,
+      y + headerHeight / 2,
+      FONT_SIZES.nodeLabel,
+      `text-anchor="middle" font-size="${FONT_SIZES.nodeLabel}" font-weight="700" fill="var(--_text)"`
+    )
   )
 
   // Divider
   const attrTop = y + headerHeight
   parts.push(
-    `<line x1="${x}" y1="${attrTop}" x2="${x + width}" y2="${attrTop}" ` +
+    `  <line x1="${x}" y1="${attrTop}" x2="${x + width}" y2="${attrTop}" ` +
     `stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.innerBox}" />`
   )
 
@@ -106,17 +121,18 @@ function renderEntityBox(entity: PositionedErEntity): string {
   for (let i = 0; i < attributes.length; i++) {
     const attr = attributes[i]!
     const rowY = attrTop + i * rowHeight + rowHeight / 2
-    parts.push(renderAttribute(attr, x, rowY, width))
+    parts.push('  ' + renderAttribute(attr, x, rowY, width).replace(/\n/g, '\n  '))
   }
 
   // Empty row placeholder when no attributes
   if (attributes.length === 0) {
     parts.push(
-      `<text x="${x + width / 2}" y="${attrTop + rowHeight / 2}" text-anchor="middle" dy="${TEXT_BASELINE_SHIFT}" ` +
+      `  <text x="${x + width / 2}" y="${attrTop + rowHeight / 2}" text-anchor="middle" dy="${TEXT_BASELINE_SHIFT}" ` +
       `font-size="${ER_FONT.attrSize}" fill="var(--_text-faint)" font-style="italic">(no attributes)</text>`
     )
   }
 
+  parts.push('</g>')
   return parts.join('\n')
 }
 
@@ -126,9 +142,18 @@ function renderEntityBox(entity: PositionedErEntity): string {
  * Uses <tspan> elements for per-part coloring, matching the class diagram style.
  *
  * Key badge uses var(--_key-badge) for background tint.
+ * Comments are shown as tooltips via SVG <title> element.
  */
 function renderAttribute(attr: ErAttribute, boxX: number, y: number, boxWidth: number): string {
   const parts: string[] = []
+
+  // Wrap in a group if there's a comment (for tooltip support)
+  const hasComment = attr.comment && attr.comment.length > 0
+  if (hasComment) {
+    // Replace <br> with newlines for tooltip display
+    const tooltipText = attr.comment!.replace(/<br\s*\/?>/gi, '\n')
+    parts.push(`<g><title>${escapeXml(tooltipText)}</title>`)
+  }
 
   // Key badges on the left (keep proportional font — they're visual tags, not code)
   let keyWidth = 0
@@ -161,6 +186,11 @@ function renderAttribute(attr: ErAttribute, boxX: number, y: number, boxWidth: n
     `<tspan fill="var(--_text-sec)">${escapeXml(attr.name)}</tspan></text>`
   )
 
+  // Close the group if we opened one
+  if (hasComment) {
+    parts.push('</g>')
+  }
+
   return parts.join('\n')
 }
 
@@ -168,35 +198,48 @@ function renderAttribute(attr: ErAttribute, boxX: number, y: number, boxWidth: n
 // Relationship rendering
 // ============================================================================
 
-/** Render a relationship line */
+/**
+ * Render a relationship line with semantic data attributes.
+ */
 function renderRelationshipLine(rel: PositionedErRelationship): string {
   if (rel.points.length < 2) return ''
 
   const pathData = rel.points.map(p => `${p.x},${p.y}`).join(' ')
   const dashArray = !rel.identifying ? ' stroke-dasharray="6 4"' : ''
 
+  // Semantic data attributes for relationship inspection
+  const labelAttr = rel.label ? ` data-label="${escapeAttr(rel.label)}"` : ''
+  const dataAttrs = [
+    'class="er-relationship"',
+    `data-entity1="${escapeAttr(rel.entity1)}"`,
+    `data-entity2="${escapeAttr(rel.entity2)}"`,
+    `data-cardinality1="${rel.cardinality1}"`,
+    `data-cardinality2="${rel.cardinality2}"`,
+    `data-identifying="${rel.identifying}"`,
+  ]
+
   return (
-    `<polyline points="${pathData}" fill="none" stroke="var(--_line)" ` +
+    `<polyline ${dataAttrs.join(' ')}${labelAttr} points="${pathData}" fill="none" stroke="var(--_line)" ` +
     `stroke-width="${STROKE_WIDTHS.connector}"${dashArray} />`
   )
 }
 
-/** Render a relationship label at the midpoint */
+/** Render a relationship label at the midpoint (supports multi-line) */
 function renderRelationshipLabel(rel: PositionedErRelationship): string {
   if (!rel.label || rel.points.length < 2) return ''
 
   const mid = midpoint(rel.points)
-  const textWidth = estimateTextWidth(rel.label, FONT_SIZES.edgeLabel, FONT_WEIGHTS.edgeLabel)
+  const metrics = measureMultilineText(rel.label, FONT_SIZES.edgeLabel, FONT_WEIGHTS.edgeLabel)
 
   // Background pill for readability
-  const bgW = textWidth + 8
-  const bgH = FONT_SIZES.edgeLabel + 6
+  const bgW = metrics.width + 8
+  const bgH = metrics.height + 6
 
   return (
     `<rect x="${mid.x - bgW / 2}" y="${mid.y - bgH / 2}" width="${bgW}" height="${bgH}" rx="2" ry="2" ` +
     `fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />` +
-    `\n<text x="${mid.x}" y="${mid.y}" text-anchor="middle" dy="${TEXT_BASELINE_SHIFT}" ` +
-    `font-size="${FONT_SIZES.edgeLabel}" font-weight="${FONT_WEIGHTS.edgeLabel}" fill="var(--_text-muted)">${escapeXml(rel.label)}</text>`
+    `\n${renderMultilineText(rel.label, mid.x, mid.y, FONT_SIZES.edgeLabel,
+      `text-anchor="middle" font-size="${FONT_SIZES.edgeLabel}" font-weight="${FONT_WEIGHTS.edgeLabel}" fill="var(--_text-muted)"`)}`
   )
 }
 
@@ -362,11 +405,16 @@ function midpoint(points: Array<{ x: number; y: number }>): { x: number; y: numb
 // Utilities
 // ============================================================================
 
-function escapeXml(text: string): string {
-  return text
+// Use shared escapeXml from multiline-utils
+const escapeXml = escapeXmlUtil
+
+/**
+ * Escape a string for use as an XML/HTML attribute value.
+ */
+function escapeAttr(value: string): string {
+  return value
     .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
 }

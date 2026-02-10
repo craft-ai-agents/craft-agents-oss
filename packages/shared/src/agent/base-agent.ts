@@ -46,7 +46,7 @@ import { PathProcessor } from './core/path-processor.ts';
 import { ConfigWatcherManager, type ConfigWatcherManagerCallbacks } from './core/config-watcher-manager.ts';
 import { PlanningAdvisor } from './core/planning-advisor.ts';
 import { UsageTracker, type UsageUpdate } from './core/usage-tracker.ts';
-import { getSessionPlansPath } from '../sessions/storage.ts';
+import { getSessionPlansPath, getSessionDataPath } from '../sessions/storage.ts';
 import { getMiniAgentSystemPrompt } from '../prompts/system.ts';
 import { buildTitlePrompt, buildRegenerateTitlePrompt, validateTitle } from '../utils/title-generator.ts';
 
@@ -163,6 +163,7 @@ export abstract class BaseAgent implements AgentBackend {
       sessionId: this._sessionId,
       workingDirectory: this.workingDirectory,
       plansFolderPath: getSessionPlansPath(config.workspace.rootPath, this._sessionId),
+      dataFolderPath: getSessionDataPath(config.workspace.rootPath, this._sessionId),
     });
 
     // SourceManager: tracks active/inactive sources and formats state for context injection

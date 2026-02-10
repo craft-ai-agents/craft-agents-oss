@@ -468,16 +468,53 @@ function resolveToolDisplayMeta(
   workspaceRootPath: string,
   sources: LoadedSource[]
 ): ToolDisplayMeta | undefined {
-  // Check if it's an MCP source tool (format: mcp__<sourceSlug>__<toolName>)
+  // Check if it's an MCP tool (format: mcp__<serverSlug>__<toolName>)
   if (toolName.startsWith('mcp__')) {
     const parts = toolName.split('__')
-    if (parts.length >= 2) {
-      let sourceSlug = parts[1]
+    if (parts.length >= 3) {
+      const serverSlug = parts[1]
+      const toolSlug = parts.slice(2).join('__')
+
+      // Internal MCP server tools (session, preferences, docs)
+      const internalMcpServers: Record<string, Record<string, string>> = {
+        'session': {
+          'SubmitPlan': 'Submit Plan',
+          'config_validate': 'Validate Config',
+          'skill_validate': 'Validate Skill',
+          'mermaid_validate': 'Validate Mermaid',
+          'source_test': 'Test Source',
+          'source_oauth_trigger': 'OAuth',
+          'source_google_oauth_trigger': 'Google Auth',
+          'source_slack_oauth_trigger': 'Slack Auth',
+          'source_microsoft_oauth_trigger': 'Microsoft Auth',
+          'source_credential_prompt': 'Enter Credentials',
+        },
+        'preferences': {
+          'update_user_preferences': 'Update Preferences',
+        },
+        'craft-agents-docs': {
+          'SearchCraftAgents': 'Search Docs',
+        },
+      }
+
+      const internalServer = internalMcpServers[serverSlug]
+      if (internalServer) {
+        const displayName = internalServer[toolSlug]
+        if (displayName) {
+          return {
+            displayName,
+            category: 'native' as const,
+          }
+        }
+      }
+
+      // External source tools
+      let sourceSlug = serverSlug
 
       // Special case: api-bridge server embeds source slug in tool name as "api_{slug}"
       // e.g., mcp__api-bridge__api_stripe → sourceSlug = "stripe"
-      if (sourceSlug === 'api-bridge' && parts[2]?.startsWith('api_')) {
-        sourceSlug = parts[2].slice(4)
+      if (sourceSlug === 'api-bridge' && toolSlug.startsWith('api_')) {
+        sourceSlug = toolSlug.slice(4)
       }
 
       const source = sources.find(s => s.config.slug === sourceSlug)
@@ -836,6 +873,8 @@ export class SessionManager {
   private activeViewingSession: Map<string, string> = new Map()
   /** Resolved path to @github/copilot CLI entry point (for CopilotAgent) */
   copilotCliPath: string | undefined
+  /** Resolved path to Copilot network interceptor (for tool metadata capture) */
+  copilotInterceptorPath: string | undefined
   /** Monotonic clock to ensure strictly increasing message timestamps */
   private lastTimestamp = 0
 
@@ -1240,6 +1279,22 @@ export class SessionManager {
     // Set interceptor path (used for --preload flag with bun)
     sessionLog.info('Setting interceptorPath:', interceptorPath)
     setInterceptorPath(interceptorPath)
+
+    // Resolve Copilot network interceptor (loaded via NODE_OPTIONS="--require ..." into Copilot CLI subprocess)
+    // Must be bundled CJS since it runs under Electron's Node.js, not Bun
+    // Built by `bun run build:copilot-interceptor` → apps/electron/dist/copilot-interceptor.cjs
+    // In dev: basePath is monorepo root, so add apps/electron/ prefix
+    // In packaged: basePath is the app dir, dist/ is directly inside
+    let copilotInterceptorPath = join(basePath, 'dist', 'copilot-interceptor.cjs')
+    if (!existsSync(copilotInterceptorPath) && !app.isPackaged) {
+      copilotInterceptorPath = join(basePath, 'apps', 'electron', 'dist', 'copilot-interceptor.cjs')
+    }
+    if (existsSync(copilotInterceptorPath)) {
+      this.copilotInterceptorPath = copilotInterceptorPath
+      sessionLog.info('Resolved Copilot interceptor path:', copilotInterceptorPath)
+    } else {
+      sessionLog.warn('Copilot network interceptor not found — run `bun run build:copilot-interceptor` in apps/electron/')
+    }
 
     // In packaged app: use bundled Bun binary
     // In development: use system 'bun' command (no need to set executable)
@@ -2373,6 +2428,7 @@ export class SessionManager {
           thinkingLevel: managed.thinkingLevel,
           connectionSlug: connection?.slug,
           copilotCliPath: this.copilotCliPath,
+          copilotInterceptorPath: this.copilotInterceptorPath,
           copilotConfigDir,
           sessionServerPath: copilotSessionServerExists ? copilotSessionServerPath : undefined,
           bridgeServerPath: bridgeServer.exists ? bridgeServer.path : undefined,

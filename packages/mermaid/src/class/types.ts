@@ -37,6 +37,10 @@ export interface ClassMember {
   isStatic?: boolean
   /** Whether the member is abstract (italic in UML) */
   isAbstract?: boolean
+  /** Whether the member is a method (renders with parentheses) */
+  isMethod?: boolean
+  /** Method parameters (e.g., "data", "key, val") — only for methods */
+  params?: string
 }
 
 /** Relationship types following UML conventions */

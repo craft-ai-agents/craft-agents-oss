@@ -10,7 +10,6 @@ import {
   DatabaseZap,
   ChevronDown,
   Loader2,
-  Lock,
   AlertCircle,
 } from 'lucide-react'
 import { Icon_Home, Icon_Folder } from '@craft-agent/ui'
@@ -57,7 +56,7 @@ import { isMac, PATH_SEP, getPathBasename } from '@/lib/platform'
 import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
 import { ANTHROPIC_MODELS, getModelShortName, getModelDisplayName, getModelContextWindow, isCodexModel, isCopilotModel } from '@config/models'
-import { resolveEffectiveConnectionSlug, isCompatProvider, isAnthropicProvider } from '@config/llm-connections'
+import { resolveEffectiveConnectionSlug, isCompatProvider } from '@config/llm-connections'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
@@ -350,23 +349,6 @@ export function FreeFormInput({
     return llmConnections.find(c => c.slug === effectiveConnection) ?? null
   }, [llmConnections, effectiveConnection])
 
-  // Detect provider mismatch: session is locked to one provider (e.g. Anthropic)
-  // but the current default connection is a different provider (e.g. OpenAI).
-  // This warns the user that switching the default doesn't affect this session.
-  const providerMismatch = React.useMemo(() => {
-    if (!currentConnection || isEmptySession || !currentConnectionDetails) return false
-    // Find what the default connection would be (ignoring session lock)
-    const defaultSlug = workspaceDefaultConnection
-      ?? llmConnections.find(c => c.isDefault)?.slug
-      ?? llmConnections[0]?.slug
-    if (!defaultSlug || defaultSlug === currentConnection) return false
-    const defaultConn = llmConnections.find(c => c.slug === defaultSlug)
-    if (!defaultConn) return false
-    // Compare provider families (anthropic/bedrock/vertex vs openai)
-    const lockedIsAnthropic = isAnthropicProvider(currentConnectionDetails.providerType)
-    const defaultIsAnthropic = isAnthropicProvider(defaultConn.providerType)
-    return lockedIsAnthropic !== defaultIsAnthropic
-  }, [currentConnection, isEmptySession, currentConnectionDetails, workspaceDefaultConnection, llmConnections])
 
   // Access todoStates and onTodoStateChange from context for the # menu state picker
   const todoStates = appShellCtx?.todoStates ?? []
@@ -1656,7 +1638,6 @@ export function FreeFormInput({
                       "inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors select-none",
                       modelDropdownOpen && "bg-foreground/5",
                       connectionUnavailable && "text-destructive",
-                      providerMismatch && "text-amber-500"
                     )}
                   >
                     {connectionUnavailable ? (
@@ -1666,8 +1647,7 @@ export function FreeFormInput({
                       </>
                     ) : (
                       <>
-                        {providerMismatch && <Lock className="h-3 w-3 shrink-0" />}
-                        {effectiveConnectionDetails && <ConnectionIcon connection={effectiveConnectionDetails} size={14} />}
+                        {effectiveConnectionDetails && llmConnections.length > 1 && storage.get(storage.KEYS.showConnectionIcons, true) && <ConnectionIcon connection={effectiveConnectionDetails} size={14} showTooltip />}
                         {currentModelDisplayName}
                         {!connectionDefaultModel && <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />}
                       </>
@@ -1676,9 +1656,7 @@ export function FreeFormInput({
                 </DropdownMenuTrigger>
               </TooltipTrigger>
               <TooltipContent side="top">
-                {providerMismatch
-                  ? `Locked to ${currentConnectionDetails?.name ?? 'this connection'} — changing the default provider won't affect this session`
-                  : 'Model'}
+Model
               </TooltipContent>
             </Tooltip>
             <StyledDropdownMenuContent side="top" align="end" sideOffset={8} className="min-w-[260px]">
@@ -1773,19 +1751,11 @@ export function FreeFormInput({
               ) : (
                 /* Flat model list (single connection or session started) */
                 <>
-                  {/* Lock indicator showing which connection is being used */}
+                  {/* Indicator showing which connection is being used */}
                   {!isEmptySession && currentConnectionDetails && llmConnections.length > 1 && (
                     <>
-                      <div className={cn(
-                        "flex items-center gap-2 px-2 py-1.5 text-xs select-none",
-                        providerMismatch ? "text-amber-500" : "text-muted-foreground"
-                      )}>
-                        <Lock className="h-3 w-3" />
-                        <span>
-                          {providerMismatch
-                            ? `Locked to ${currentConnectionDetails.name} — default provider changed`
-                            : `Using ${currentConnectionDetails.name}`}
-                        </span>
+                      <div className="flex items-center gap-2 px-2 py-1.5 text-xs select-none text-muted-foreground">
+                        <span>Using {currentConnectionDetails.name}</span>
                       </div>
                       <StyledDropdownMenuSeparator className="my-1" />
                     </>

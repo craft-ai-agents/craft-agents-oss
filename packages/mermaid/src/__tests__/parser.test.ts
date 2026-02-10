@@ -489,6 +489,51 @@ describe('parseMermaid – subgraphs', () => {
     expect(outer.nodeIds).toContain('C')
     expect(outer.nodeIds).toContain('D')
   })
+
+  it('does NOT track nodes in subgraphs where they are merely referenced (regression)', () => {
+    // This diagram has cross-subgraph edges:
+    // - B is defined in "clients" but referenced in "services"
+    // - D, E, F are defined in "services" but referenced in "data"
+    // Nodes should only belong to the subgraph where they are FIRST DEFINED.
+    const g = parseMermaid(`graph LR
+      subgraph clients [Client Layer]
+        A([Web App]) --> B[API Gateway]
+        C([Mobile App]) --> B
+      end
+      subgraph services [Service Layer]
+        B --> D[Auth Service]
+        B --> E[User Service]
+        B --> F[Order Service]
+      end
+      subgraph data [Data Layer]
+        D --> G[(Auth DB)]
+        E --> H[(User DB)]
+        F --> I[(Order DB)]
+        F --> J([Message Queue])
+      end`)
+
+    const clients = g.subgraphs.find(sg => sg.id === 'clients')!
+    const services = g.subgraphs.find(sg => sg.id === 'services')!
+    const data = g.subgraphs.find(sg => sg.id === 'data')!
+
+    // B should ONLY be in clients (where it's defined), NOT in services
+    expect(clients.nodeIds).toContain('B')
+    expect(services.nodeIds).not.toContain('B')
+
+    // D, E, F should ONLY be in services, NOT in data
+    expect(services.nodeIds).toContain('D')
+    expect(services.nodeIds).toContain('E')
+    expect(services.nodeIds).toContain('F')
+    expect(data.nodeIds).not.toContain('D')
+    expect(data.nodeIds).not.toContain('E')
+    expect(data.nodeIds).not.toContain('F')
+
+    // Data layer should only have its own nodes
+    expect(data.nodeIds).toContain('G')
+    expect(data.nodeIds).toContain('H')
+    expect(data.nodeIds).toContain('I')
+    expect(data.nodeIds).toContain('J')
+  })
 })
 
 // ============================================================================

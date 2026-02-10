@@ -113,6 +113,10 @@ const api: ElectronAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_DOWNLOAD_PROGRESS, handler)
   },
 
+  // Release notes
+  getReleaseNotes: () => ipcRenderer.invoke(IPC_CHANNELS.GET_RELEASE_NOTES) as Promise<string>,
+  getLatestReleaseVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_LATEST_RELEASE_VERSION) as Promise<string | undefined>,
+
   // Shell operations
   openUrl: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_URL, url),
   openFile: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_FILE, path),
@@ -441,6 +445,12 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.POWER_GET_KEEP_AWAKE) as Promise<boolean>,
   setKeepAwakeWhileRunning: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.POWER_SET_KEEP_AWAKE, enabled),
+
+  // Appearance settings
+  getRichToolDescriptions: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.APPEARANCE_GET_RICH_TOOL_DESCRIPTIONS) as Promise<boolean>,
+  setRichToolDescriptions: (enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.APPEARANCE_SET_RICH_TOOL_DESCRIPTIONS, enabled),
 
   updateBadgeCount: (count: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.BADGE_UPDATE, count),

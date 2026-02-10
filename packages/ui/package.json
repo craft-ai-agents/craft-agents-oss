@@ -21,6 +21,8 @@
     "@craft-agent/mermaid": "workspace:*",
     "@types/mdast": "^4.0.0",
     "@uiw/react-json-view": "^2.0.0-alpha.40",
+    "fflate": "^0.8.2",
+    "nice-ticks": "^1.0.2",
     "unified": "^11.0.0",
     "unist-util-visit": "^5.0.0"
   },

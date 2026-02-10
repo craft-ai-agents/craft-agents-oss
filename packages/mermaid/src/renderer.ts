@@ -2,6 +2,8 @@ import type { PositionedGraph, PositionedNode, PositionedEdge, PositionedGroup, 
 import type { DiagramColors } from './theme.ts'
 import { svgOpenTag, buildStyleBlock } from './theme.ts'
 import { FONT_SIZES, FONT_WEIGHTS, STROKE_WIDTHS, ARROW_HEAD, estimateTextWidth, TEXT_BASELINE_SHIFT } from './styles.ts'
+import { measureMultilineText } from './text-metrics.ts'
+import { renderMultilineText, renderMultilineTextWithBackground, escapeXml } from './multiline-utils.ts'
 
 // ============================================================================
 // SVG renderer — converts a PositionedGraph into an SVG string.
@@ -45,31 +47,28 @@ export function renderSvg(
   parts.push(arrowMarkerDefs())
   parts.push('</defs>')
 
-  // 1. Group backgrounds (subgraph rectangles with header bands)
+  // 1. Subgraph backgrounds (group rectangles with header bands)
   for (const group of graph.groups) {
     parts.push(renderGroup(group, font))
   }
 
   // 2. Edges (polylines — rendered behind nodes)
+  // Each edge is a <polyline> with semantic data-* attributes
   for (const edge of graph.edges) {
     parts.push(renderEdge(edge))
   }
 
   // 3. Edge labels (positioned at midpoint of edge)
+  // Each label is wrapped in <g class="edge-label">
   for (const edge of graph.edges) {
     if (edge.label) {
       parts.push(renderEdgeLabel(edge, font))
     }
   }
 
-  // 4. Node shapes
+  // 4. Nodes (shape + label wrapped in <g class="node">)
   for (const node of graph.nodes) {
-    parts.push(renderNodeShape(node))
-  }
-
-  // 5. Node labels
-  for (const node of graph.nodes) {
-    parts.push(renderNodeLabel(node, font))
+    parts.push(renderNode(node, font))
   }
 
   parts.push('</svg>')
@@ -89,14 +88,18 @@ export function renderSvg(
 function arrowMarkerDefs(): string {
   const w = ARROW_HEAD.width
   const h = ARROW_HEAD.height
+  // Arrow polygons have both fill and a thin stroke for better definition at small sizes
+  const arrowStyle = 'fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"'
+  // Pull arrowhead back slightly (refX = w - 1) to prevent clipping at node boundaries
+  const refX = w - 1
   return (
     // Forward arrow (marker-end) — orient="auto" ensures arrow points along line direction
-    `  <marker id="arrowhead" markerWidth="${w}" markerHeight="${h}" refX="${w}" refY="${h / 2}" orient="auto">` +
-    `\n    <polygon points="0 0, ${w} ${h / 2}, 0 ${h}" fill="var(--_arrow)" />` +
+    `  <marker id="arrowhead" markerWidth="${w}" markerHeight="${h}" refX="${refX}" refY="${h / 2}" orient="auto">` +
+    `\n    <polygon points="0 0, ${w} ${h / 2}, 0 ${h}" ${arrowStyle} />` +
     `\n  </marker>` +
-    // Reverse arrow (marker-start) — refX=0 so it sits at the line start, auto-start-reverse flips it
-    `\n  <marker id="arrowhead-start" markerWidth="${w}" markerHeight="${h}" refX="0" refY="${h / 2}" orient="auto-start-reverse">` +
-    `\n    <polygon points="${w} 0, 0 ${h / 2}, ${w} ${h}" fill="var(--_arrow)" />` +
+    // Reverse arrow (marker-start) — refX=1 so it sits at the line start with slight offset, auto-start-reverse flips it
+    `\n  <marker id="arrowhead-start" markerWidth="${w}" markerHeight="${h}" refX="1" refY="${h / 2}" orient="auto-start-reverse">` +
+    `\n    <polygon points="${w} 0, 0 ${h / 2}, ${w} ${h}" ${arrowStyle} />` +
     `\n  </marker>`
   )
 }
@@ -109,29 +112,42 @@ function renderGroup(group: PositionedGroup, font: string): string {
   const headerHeight = FONT_SIZES.groupHeader + 16
   const parts: string[] = []
 
+  // Opening <g> with semantic attributes for subgraph identification
+  // data-id: original Mermaid subgraph ID
+  // data-label: display label (may differ from ID)
+  parts.push(
+    `<g class="subgraph" data-id="${escapeAttr(group.id)}" data-label="${escapeAttr(group.label)}">`
+  )
+
   // Outer rectangle
   parts.push(
-    `<rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" ` +
+    `  <rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" ` +
     `rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.outerBox}" />`
   )
 
   // Header band
   parts.push(
-    `<rect x="${group.x}" y="${group.y}" width="${group.width}" height="${headerHeight}" ` +
+    `  <rect x="${group.x}" y="${group.y}" width="${group.width}" height="${headerHeight}" ` +
     `rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.outerBox}" />`
   )
 
-  // Header label
+  // Header label (supports multi-line via <br> tags)
   parts.push(
-    `<text x="${group.x + 12}" y="${group.y + headerHeight / 2}" ` +
-    `dy="${TEXT_BASELINE_SHIFT}" font-size="${FONT_SIZES.groupHeader}" font-weight="${FONT_WEIGHTS.groupHeader}" ` +
-    `fill="var(--_text-sec)">${escapeXml(group.label)}</text>`
+    '  ' + renderMultilineText(
+      group.label,
+      group.x + 12,
+      group.y + headerHeight / 2,
+      FONT_SIZES.groupHeader,
+      `font-size="${FONT_SIZES.groupHeader}" font-weight="${FONT_WEIGHTS.groupHeader}" fill="var(--_text-sec)"`
+    )
   )
 
-  // Render nested groups recursively
+  // Render nested groups recursively (inside this group)
   for (const child of group.children) {
     parts.push(renderGroup(child, font))
   }
+
+  parts.push('</g>')
 
   return parts.join('\n')
 }
@@ -152,8 +168,26 @@ function renderEdge(edge: PositionedEdge): string {
   if (edge.hasArrowEnd) markers += ' marker-end="url(#arrowhead)"'
   if (edge.hasArrowStart) markers += ' marker-start="url(#arrowhead-start)"'
 
+  // Semantic data attributes for edge identification and inspection:
+  // - class="edge": CSS targeting and type identification
+  // - data-from/data-to: source and target node IDs
+  // - data-style: edge style (solid, dotted, thick)
+  // - data-arrow-start/end: arrow presence flags
+  // - data-label: edge label if present (for quick lookup without traversing DOM)
+  const dataAttrs = [
+    'class="edge"',
+    `data-from="${escapeAttr(edge.source)}"`,
+    `data-to="${escapeAttr(edge.target)}"`,
+    `data-style="${edge.style}"`,
+    `data-arrow-start="${edge.hasArrowStart}"`,
+    `data-arrow-end="${edge.hasArrowEnd}"`,
+  ]
+  if (edge.label) {
+    dataAttrs.push(`data-label="${escapeAttr(edge.label)}"`)
+  }
+
   return (
-    `<polyline points="${pathData}" fill="none" stroke="var(--_line)" ` +
+    `<polyline ${dataAttrs.join(' ')} points="${pathData}" fill="none" stroke="var(--_line)" ` +
     `stroke-width="${strokeWidth}"${dashArray}${markers} />`
   )
 }
@@ -168,20 +202,31 @@ function renderEdgeLabel(edge: PositionedEdge, font: string): string {
   // Fall back to geometric midpoint of the edge polyline.
   const mid = edge.labelPosition ?? edgeMidpoint(edge.points)
   const label = edge.label!
-  const textWidth = estimateTextWidth(label, FONT_SIZES.edgeLabel, FONT_WEIGHTS.edgeLabel)
   const padding = 8
 
-  // Background pill behind text for readability
-  const bgWidth = textWidth + padding * 2
-  const bgHeight = FONT_SIZES.edgeLabel + padding * 2
+  // Measure text (works for both single and multi-line)
+  const metrics = measureMultilineText(label, FONT_SIZES.edgeLabel, FONT_WEIGHTS.edgeLabel)
 
+  // Wrap in <g class="edge-label"> with reference to the edge it belongs to
+  const content = renderMultilineTextWithBackground(
+    label,
+    mid.x,
+    mid.y,
+    metrics.width,
+    metrics.height,
+    FONT_SIZES.edgeLabel,
+    padding,
+    // Use --_text-sec for better contrast (was --_text-muted)
+    `text-anchor="middle" font-size="${FONT_SIZES.edgeLabel}" font-weight="${FONT_WEIGHTS.edgeLabel}" fill="var(--_text-sec)"`,
+    // Increased stroke width from 0.5 to 1 for better label separation from edges
+    `rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1"`
+  )
+
+  // Semantic wrapper: links label to its edge via data-from/data-to
   return (
-    `<rect x="${mid.x - bgWidth / 2}" y="${mid.y - bgHeight / 2}" ` +
-    `width="${bgWidth}" height="${bgHeight}" rx="4" ry="4" ` +
-    `fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />\n` +
-    `<text x="${mid.x}" y="${mid.y}" text-anchor="middle" dy="${TEXT_BASELINE_SHIFT}" ` +
-    `font-size="${FONT_SIZES.edgeLabel}" font-weight="${FONT_WEIGHTS.edgeLabel}" ` +
-    `fill="var(--_text-muted)">${escapeXml(label)}</text>`
+    `<g class="edge-label" data-from="${escapeAttr(edge.source)}" data-to="${escapeAttr(edge.target)}" data-label="${escapeAttr(label)}">\n` +
+    `  ${content.replace(/\n/g, '\n  ')}\n` +
+    `</g>`
   )
 }
 
@@ -220,6 +265,33 @@ function dist(a: Point, b: Point): number {
 // ============================================================================
 // Node rendering
 // ============================================================================
+
+/**
+ * Render a complete node: shape + label wrapped in a semantic <g> element.
+ *
+ * The group includes data attributes for:
+ * - data-id: original Mermaid node ID (for edge matching)
+ * - data-label: display label text
+ * - data-shape: shape type (rectangle, diamond, circle, etc.)
+ */
+function renderNode(node: PositionedNode, font: string): string {
+  const shape = renderNodeShape(node)
+  const label = renderNodeLabel(node, font)
+
+  // Combine shape and label inside a semantic group
+  // This enables reliable node identification without heuristics
+  const parts: string[] = []
+  parts.push(
+    `<g class="node" data-id="${escapeAttr(node.id)}" data-label="${escapeAttr(node.label)}" data-shape="${node.shape}">`
+  )
+  parts.push(`  ${shape.replace(/\n/g, '\n  ')}`)
+  if (label) {
+    parts.push(`  ${label.replace(/\n/g, '\n  ')}`)
+  }
+  parts.push('</g>')
+
+  return parts.join('\n')
+}
 
 function renderNodeShape(node: PositionedNode): string {
   const { x, y, width, height, shape, inlineStyle } = node
@@ -463,10 +535,12 @@ function renderNodeLabel(node: PositionedNode, font: string): string {
   // Resolve text color — inline styles can override the CSS variable default
   const textColor = node.inlineStyle?.color ?? 'var(--_text)'
 
-  return (
-    `<text x="${cx}" y="${cy}" text-anchor="middle" dy="${TEXT_BASELINE_SHIFT}" ` +
-    `font-size="${FONT_SIZES.nodeLabel}" font-weight="${FONT_WEIGHTS.nodeLabel}" ` +
-    `fill="${textColor}">${escapeXml(node.label)}</text>`
+  return renderMultilineText(
+    node.label,
+    cx,
+    cy,
+    FONT_SIZES.nodeLabel,
+    `text-anchor="middle" font-size="${FONT_SIZES.nodeLabel}" font-weight="${FONT_WEIGHTS.nodeLabel}" fill="${textColor}"`
   )
 }
 
@@ -474,12 +548,14 @@ function renderNodeLabel(node: PositionedNode, font: string): string {
 // Utilities
 // ============================================================================
 
-/** Escape special XML characters in text content */
-function escapeXml(text: string): string {
-  return text
+/**
+ * Escape a string for use as an XML/HTML attribute value.
+ * Escapes quotes and ampersands to prevent attribute injection.
+ */
+function escapeAttr(value: string): string {
+  return value
     .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
 }

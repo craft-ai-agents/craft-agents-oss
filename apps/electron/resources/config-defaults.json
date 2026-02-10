@@ -3,7 +3,8 @@
   "description": "Default configuration values for Craft Agents",
   "defaults": {
     "notificationsEnabled": true,
-    "colorTheme": "default"
+    "colorTheme": "default",
+    "richToolDescriptions": true
   },
   "workspaceDefaults": {
     "thinkingLevel": "think",

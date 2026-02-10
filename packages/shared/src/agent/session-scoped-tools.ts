@@ -18,15 +18,19 @@
  * - source_slack_oauth_trigger: Start Slack OAuth authentication
  * - source_microsoft_oauth_trigger: Start Microsoft OAuth authentication
  * - source_credential_prompt: Prompt user for API credentials
+ * - transform_data: Transform data files via script for datatable/spreadsheet blocks
  */
 
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { getSessionPlansPath } from '../sessions/storage.ts';
+import { getSessionPlansPath, getSessionDataPath, getSessionPath } from '../sessions/storage.ts';
 import { debug } from '../utils/debug.ts';
 import { DOC_REFS } from '../docs/index.ts';
 import { createClaudeContext } from './claude-context.ts';
-import { basename } from 'node:path';
+import { basename, join, normalize, resolve } from 'node:path';
+import { spawn } from 'node:child_process';
+import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 // Import handlers from session-tools-core
 import {
@@ -189,6 +193,9 @@ export function cleanupSessionScopedTools(sessionId: string): void {
 // ============================================================
 // Tool Schemas
 // ============================================================
+// Note: _displayName/_intent metadata is injected dynamically by the network
+// interceptor and stripped by pre-tool-use.ts before Zod validation runs.
+// Do NOT add them here — stripping happens first, causing validation failures.
 
 const submitPlanSchema = {
   planPath: z.string().describe('Absolute path to the plan markdown file you wrote'),
@@ -229,6 +236,13 @@ const credentialPromptSchema = {
   hint: z.string().optional().describe('Hint about where to find credentials'),
   headerNames: z.array(z.string()).optional().describe('Header names for multi-header auth (e.g., ["DD-API-KEY", "DD-APPLICATION-KEY"])'),
   passwordRequired: z.boolean().optional().describe('For basic auth: whether password is required'),
+};
+
+const transformDataSchema = {
+  language: z.enum(['python3', 'node', 'bun']).describe('Script runtime to use'),
+  script: z.string().describe('Transform script source code. Receives input file paths as command-line args (sys.argv[1:] or process.argv.slice(2)), last arg is the output file path.'),
+  inputFiles: z.array(z.string()).describe('Input file paths relative to session dir (e.g., "long_responses/stripe_txns.txt")'),
+  outputFile: z.string().describe('Output file name relative to session data/ dir (e.g., "transactions.json")'),
 };
 
 // ============================================================
@@ -329,6 +343,22 @@ Opens a browser window for the user to sign in with their Microsoft account.
 
 **IMPORTANT:** After calling this tool, execution will be paused while OAuth completes.`,
 
+  transform_data: `Transform data files using a script and write structured output for datatable/spreadsheet blocks.
+
+Use this tool when you need to transform large datasets (20+ rows) into structured JSON for display. Instead of outputting all rows inline, write a transform script that reads the input file and produces a JSON output file, then reference it via \`"src"\` in your datatable/spreadsheet block.
+
+**Workflow:**
+1. Call \`transform_data\` with a script that reads input files and writes JSON output
+2. Output a datatable/spreadsheet block with \`"src": "data/output.json"\` referencing the output file
+
+**Script conventions:**
+- Input file paths are passed as command-line arguments (last arg = output file path)
+- Python: \`sys.argv[1:-1]\` = input files, \`sys.argv[-1]\` = output path
+- Node/Bun: \`process.argv.slice(2, -1)\` = input files, \`process.argv.at(-1)\` = output path
+- Output must be valid JSON: \`{"title": "...", "columns": [...], "rows": [...]}\`
+
+**Security:** Runs in an isolated subprocess with no access to API keys or credentials. 30-second timeout.`,
+
   source_credential_prompt: `Prompt the user to enter credentials for a source.
 
 Use this when a source requires authentication that isn't OAuth.
@@ -342,6 +372,156 @@ The user will see a secure input UI with appropriate fields based on the auth mo
 
 **IMPORTANT:** After calling this tool, execution will be paused for user input.`,
 };
+
+// ============================================================
+// Env Vars to Strip from Subprocess
+// ============================================================
+
+const BLOCKED_ENV_VARS = [
+  'ANTHROPIC_API_KEY',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'AWS_ACCESS_KEY_ID',
+  'AWS_SECRET_ACCESS_KEY',
+  'AWS_SESSION_TOKEN',
+  'GITHUB_TOKEN',
+  'GH_TOKEN',
+  'OPENAI_API_KEY',
+  'GOOGLE_API_KEY',
+  'STRIPE_SECRET_KEY',
+  'NPM_TOKEN',
+];
+
+// ============================================================
+// transform_data Handler
+// ============================================================
+
+const TRANSFORM_DATA_TIMEOUT_MS = 30_000;
+
+async function handleTransformData(
+  sessionId: string,
+  workspaceRootPath: string,
+  args: {
+    language: 'python3' | 'node' | 'bun';
+    script: string;
+    inputFiles: string[];
+    outputFile: string;
+  }
+): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
+  const sessionDir = getSessionPath(workspaceRootPath, sessionId);
+  const dataDir = getSessionDataPath(workspaceRootPath, sessionId);
+
+  // Validate outputFile doesn't escape data/ directory
+  const resolvedOutput = resolve(dataDir, args.outputFile);
+  if (!resolvedOutput.startsWith(normalize(dataDir))) {
+    return {
+      content: [{ type: 'text', text: `Error: outputFile must be within the session data directory. Got: ${args.outputFile}` }],
+      isError: true,
+    };
+  }
+
+  // Resolve and validate input files (relative to session dir)
+  const resolvedInputs: string[] = [];
+  for (const inputFile of args.inputFiles) {
+    const resolvedInput = resolve(sessionDir, inputFile);
+    if (!resolvedInput.startsWith(normalize(sessionDir))) {
+      return {
+        content: [{ type: 'text', text: `Error: inputFile must be within the session directory. Got: ${inputFile}` }],
+        isError: true,
+      };
+    }
+    if (!existsSync(resolvedInput)) {
+      return {
+        content: [{ type: 'text', text: `Error: input file not found: ${inputFile}` }],
+        isError: true,
+      };
+    }
+    resolvedInputs.push(resolvedInput);
+  }
+
+  // Ensure data directory exists
+  if (!existsSync(dataDir)) {
+    mkdirSync(dataDir, { recursive: true });
+  }
+
+  // Write script to temp file
+  const ext = args.language === 'python3' ? '.py' : '.js';
+  const tempScript = join(tmpdir(), `craft-transform-${sessionId}-${Date.now()}${ext}`);
+  writeFileSync(tempScript, args.script, 'utf-8');
+
+  try {
+    // Build command
+    const cmd = args.language === 'python3' ? 'python3' : args.language;
+    const spawnArgs = [tempScript, ...resolvedInputs, resolvedOutput];
+
+    // Strip sensitive env vars
+    const env = { ...process.env };
+    for (const key of BLOCKED_ENV_VARS) {
+      delete env[key];
+    }
+
+    // Spawn subprocess
+    const result = await new Promise<{ stdout: string; stderr: string; code: number | null }>((resolvePromise, reject) => {
+      const child = spawn(cmd, spawnArgs, {
+        cwd: dataDir,
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: TRANSFORM_DATA_TIMEOUT_MS,
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
+      child.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+
+      child.on('close', (code) => {
+        resolvePromise({ stdout, stderr, code });
+      });
+
+      child.on('error', (err) => {
+        reject(err);
+      });
+    });
+
+    if (result.code !== 0) {
+      const errorOutput = result.stderr || result.stdout || 'Script exited with non-zero code';
+      return {
+        content: [{ type: 'text', text: `Script failed (exit code ${result.code}):\n${errorOutput.slice(0, 2000)}` }],
+        isError: true,
+      };
+    }
+
+    // Verify output file was created
+    if (!existsSync(resolvedOutput)) {
+      return {
+        content: [{ type: 'text', text: `Script completed but output file was not created: ${args.outputFile}\n\nStdout: ${result.stdout.slice(0, 500)}` }],
+        isError: true,
+      };
+    }
+
+    // Return the absolute path for use in the datatable/spreadsheet "src" field
+    // The UI's file reader requires absolute paths for security validation
+    const lines = [`Output written to: ${resolvedOutput}`];
+    lines.push(`\nUse this absolute path as the "src" value in your datatable or spreadsheet block.`);
+    if (result.stdout.trim()) {
+      lines.push(`\nStdout:\n${result.stdout.slice(0, 500)}`);
+    }
+
+    debug('session-scoped-tools', `transform_data succeeded: ${resolvedOutput}`);
+    return {
+      content: [{ type: 'text', text: lines.join('') }],
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return {
+      content: [{ type: 'text', text: `Error running script: ${msg}` }],
+      isError: true,
+    };
+  } finally {
+    // Clean up temp script
+    try { unlinkSync(tempScript); } catch { /* ignore */ }
+  }
+}
 
 // ============================================================
 // Main Factory Function
@@ -447,6 +627,11 @@ export function getSessionScopedTools(
         passwordRequired?: boolean;
       });
       return convertResult(result);
+    }),
+
+    // transform_data
+    tool('transform_data', TOOL_DESCRIPTIONS.transform_data, transformDataSchema, async (args) => {
+      return handleTransformData(sessionId, workspaceRootPath, args);
     }),
 
   ];

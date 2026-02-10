@@ -1,9 +1,10 @@
 import * as React from 'react'
-import { renderMermaid } from '@craft-agent/mermaid'
+import { renderMermaidSync } from '@craft-agent/mermaid'
 import { Maximize2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { CodeBlock } from './CodeBlock'
 import { MermaidPreviewOverlay } from '../overlay/MermaidPreviewOverlay'
+import { useScrollFade } from './useScrollFade'
 
 // ============================================================================
 // MarkdownMermaidBlock — renders mermaid code fences as SVG diagrams.
@@ -51,72 +52,31 @@ interface MarkdownMermaidBlockProps {
 }
 
 export function MarkdownMermaidBlock({ code, className, showExpandButton = true }: MarkdownMermaidBlockProps) {
-  const [svg, setSvg] = React.useState<string | null>(null)
-  const [error, setError] = React.useState<Error | null>(null)
-  const [isFullscreen, setIsFullscreen] = React.useState(false)
-
-  // Scroll state for fade indicators
-  const scrollRef = React.useRef<HTMLDivElement>(null)
-  const [canScrollLeft, setCanScrollLeft] = React.useState(false)
-  const [canScrollRight, setCanScrollRight] = React.useState(false)
-
-  React.useEffect(() => {
-    let cancelled = false
-
-    // Pass CSS variable references as colors — the SVG sets inline styles like
-    // --bg:var(--background) which the browser resolves via CSS cascade from
-    // the app's theme. All mermaid color slots are mapped to app variables:
-    //   bg/fg      → base colors
-    //   accent     → brand color for arrows and highlights
-    //   line       → edge/connector lines (30% fg mix)
-    //   muted      → secondary text, edge labels
-    //   surface    → node fill tint (3% fg mix)
-    //   border     → node/group stroke (20% fg mix)
-    renderMermaid(code, {
-      bg: 'var(--background)',
-      fg: 'var(--foreground)',
-      accent: 'var(--accent)',
-      line: 'var(--foreground-30)',
-      muted: 'var(--muted-foreground)',
-      surface: 'var(--foreground-3)',
-      border: 'var(--foreground-20)',
-      transparent: true,
-    })
-      .then(result => {
-        if (!cancelled) setSvg(result)
-      })
-      .catch(err => {
-        if (!cancelled) setError(err instanceof Error ? err : new Error(String(err)))
-      })
-
-    return () => { cancelled = true }
+  // Render synchronously — no flash between CodeBlock and SVG.
+  // Colors are CSS variable references so the SVG inherits from the app's theme
+  // via CSS cascade. Theme switches apply automatically without re-rendering.
+  const { svg, error } = React.useMemo(() => {
+    try {
+      return {
+        svg: renderMermaidSync(code, {
+          bg: 'var(--background)',
+          fg: 'var(--foreground)',
+          accent: 'var(--accent)',
+          line: 'var(--foreground-30)',
+          muted: 'var(--muted-foreground)',
+          surface: 'var(--foreground-3)',
+          border: 'var(--foreground-20)',
+          transparent: true,
+        }),
+        error: null,
+      }
+    } catch (err) {
+      return { svg: null, error: err instanceof Error ? err : new Error(String(err)) }
+    }
   }, [code])
 
-  // Track horizontal scroll state for fade indicators.
-  // Updates on scroll events and container resize.
-  React.useEffect(() => {
-    const el = scrollRef.current
-    if (!el || !svg) return
-
-    const updateScrollState = () => {
-      const { scrollLeft, scrollWidth, clientWidth } = el
-      setCanScrollLeft(scrollLeft > 1) // 1px threshold to avoid float rounding
-      setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 1)
-    }
-
-    // Initial check and listeners
-    updateScrollState()
-    el.addEventListener('scroll', updateScrollState, { passive: true })
-
-    // ResizeObserver catches container width changes (e.g., window resize)
-    const resizeObserver = new ResizeObserver(updateScrollState)
-    resizeObserver.observe(el)
-
-    return () => {
-      el.removeEventListener('scroll', updateScrollState)
-      resizeObserver.disconnect()
-    }
-  }, [svg])
+  const [isFullscreen, setIsFullscreen] = React.useState(false)
+  const { scrollRef, maskImage } = useScrollFade(FADE_SIZE)
 
   // Calculate scaled dimensions for wide diagrams.
   // If the natural height at container width would be below MIN_READABLE_HEIGHT,
@@ -179,32 +139,17 @@ export function MarkdownMermaidBlock({ code, className, showExpandButton = true 
     }
   }, [svg])
 
-  // Build CSS mask gradient based on scroll state
-  const getMaskImage = React.useCallback(() => {
-    if (canScrollLeft && canScrollRight) {
-      return `linear-gradient(to right, transparent, black ${FADE_SIZE}px, black calc(100% - ${FADE_SIZE}px), transparent)`
-    }
-    if (canScrollRight) {
-      return `linear-gradient(to right, black calc(100% - ${FADE_SIZE}px), transparent)`
-    }
-    if (canScrollLeft) {
-      return `linear-gradient(to right, transparent, black ${FADE_SIZE}px)`
-    }
-    return undefined
-  }, [canScrollLeft, canScrollRight])
-
   // On error, fall back to a plain code block showing the mermaid source
   if (error) {
     return <CodeBlock code={code} language="mermaid" mode="full" className={className} />
   }
 
-  // Loading state: show the code block until SVG is ready
+  // Fallback: if SVG is null (should be caught by error above, but just in case)
   if (!svg) {
     return <CodeBlock code={code} language="mermaid" mode="full" className={className} />
   }
 
   const scaledDims = getScaledDimensions()
-  const maskImage = getMaskImage()
 
   // Scaling mode: when dimensions are provided OR scale !== 1
   // This is separate from needsScroll — we may scale to fit without scrolling

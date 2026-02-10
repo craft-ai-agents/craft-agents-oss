@@ -139,4 +139,8 @@ export interface PositionedNote {
   y: number
   width: number
   height: number
+  /** Actor IDs this note is attached to (for SVG attribution) */
+  actors?: string[]
+  /** Note position relative to actors (for SVG attribution) */
+  position?: 'left' | 'right' | 'over'
 }

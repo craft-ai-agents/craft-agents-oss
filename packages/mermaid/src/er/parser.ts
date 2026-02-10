@@ -1,4 +1,5 @@
 import type { ErDiagram, ErEntity, ErAttribute, ErRelationship, Cardinality } from './types.ts'
+import { normalizeBrTags } from '../multiline-utils.ts'
 
 // ============================================================================
 // ER diagram parser
@@ -105,10 +106,10 @@ function parseAttribute(line: string): ErAttribute | null {
   const keys: ErAttribute['keys'] = []
   let comment: string | undefined
 
-  // Extract quoted comment first
+  // Extract quoted comment first (supports <br> tags)
   const commentMatch = rest.match(/"([^"]*)"/)
   if (commentMatch) {
-    comment = commentMatch[1]
+    comment = normalizeBrTags(commentMatch[1]!)
   }
 
   // Extract key constraints
@@ -141,7 +142,9 @@ function parseRelationshipLine(line: string): ErRelationship | null {
   const entity1 = match[1]!
   const cardinalityStr = match[2]!
   const entity2 = match[3]!
-  const label = match[4]!.trim()
+  // Strip surrounding quotes if present, then normalize br tags
+  const rawLabel = match[4]!.trim().replace(/^["']|["']$/g, '')
+  const label = normalizeBrTags(rawLabel)
 
   // Split the cardinality string into left side, line style, right side
   const lineMatch = cardinalityStr.match(/^([|o}{]+)(--|\.\.?)([|o}{]+)$/)

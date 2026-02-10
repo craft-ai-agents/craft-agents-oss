@@ -115,9 +115,11 @@ export function layoutSequenceDiagram(
     }
   }
 
-  // Track activation stack per actor: array of start-Y positions
-  const activationStacks = new Map<string, number[]>()
+  // Track activation stack per actor: array of { startY, depth } objects
+  // Depth is used to offset nested activations horizontally for visual clarity
+  const activationStacks = new Map<string, { startY: number; depth: number }[]>()
   const activations: Activation[] = []
+  const nestingOffset = 4 // Horizontal offset per nesting level
 
   for (let msgIdx = 0; msgIdx < diagram.messages.length; msgIdx++) {
     const msg = diagram.messages[msgIdx]!
@@ -143,22 +145,26 @@ export function layoutSequenceDiagram(
       isSelf,
     })
 
-    // Handle activation
+    // Handle activation - track nesting depth for visual offset
     if (msg.activate) {
       if (!activationStacks.has(msg.to)) {
         activationStacks.set(msg.to, [])
       }
-      activationStacks.get(msg.to)!.push(messageY)
+      const stack = activationStacks.get(msg.to)!
+      const depth = stack.length // Current depth before pushing
+      stack.push({ startY: messageY, depth })
     }
 
     if (msg.deactivate) {
       const stack = activationStacks.get(msg.from)
       if (stack && stack.length > 0) {
-        const startY = stack.pop()!
+        const { startY, depth } = stack.pop()!
         const idx = actorIndex.get(msg.from) ?? 0
+        // Offset nested activations to the right for visual distinction
+        const xOffset = depth * nestingOffset
         activations.push({
           actorId: msg.from,
-          x: actorCenterX[idx]! - SEQ.activationWidth / 2,
+          x: actorCenterX[idx]! - SEQ.activationWidth / 2 + xOffset,
           topY: startY,
           bottomY: messageY,
           width: SEQ.activationWidth,
@@ -169,13 +175,14 @@ export function layoutSequenceDiagram(
     messageY += isSelf ? SEQ.selfMessageHeight + SEQ.messageRowHeight : SEQ.messageRowHeight
   }
 
-  // Close any unclosed activations
+  // Close any unclosed activations (preserving depth for offset)
   for (const [actorId, stack] of activationStacks) {
-    for (const startY of stack) {
+    for (const { startY, depth } of stack) {
       const idx = actorIndex.get(actorId) ?? 0
+      const xOffset = depth * nestingOffset
       activations.push({
         actorId,
-        x: actorCenterX[idx]! - SEQ.activationWidth / 2,
+        x: actorCenterX[idx]! - SEQ.activationWidth / 2 + xOffset,
         topY: startY,
         bottomY: messageY - SEQ.messageRowHeight / 2,
         width: SEQ.activationWidth,
@@ -289,7 +296,15 @@ export function layoutSequenceDiagram(
       }
     }
 
-    return { text: note.text, x: noteX, y: noteY, width: noteW, height: noteH }
+    return {
+      text: note.text,
+      x: noteX,
+      y: noteY,
+      width: noteW,
+      height: noteH,
+      position: note.position,
+      actors: note.actorIds,
+    }
   })
 
   // 6. Bounding-box post-processing
@@ -300,9 +315,9 @@ export function layoutSequenceDiagram(
   // extends left of the desired padding margin and expand the width to fit.
   const diagramBottom = messageY + SEQ.padding
 
-  // Find global X extents across actors, blocks, and notes
+  // Find global X extents across actors, blocks, notes, and message labels
   let globalMinX: number = SEQ.padding // actors already start at SEQ.padding
-  let globalMaxX: number = 0
+  let globalMaxX = 0
   for (const a of actors) {
     globalMinX = Math.min(globalMinX, a.x - a.width / 2)
     globalMaxX = Math.max(globalMaxX, a.x + a.width / 2)
@@ -314,6 +329,17 @@ export function layoutSequenceDiagram(
   for (const n of notes) {
     globalMinX = Math.min(globalMinX, n.x)
     globalMaxX = Math.max(globalMaxX, n.x + n.width)
+  }
+  // Include self-message labels in bounding box — they extend to the right of the actor
+  // and could be clipped if not accounted for in the SVG width
+  for (const m of messages) {
+    if (m.isSelf && m.label) {
+      const loopW = 30 // matches renderer loopW
+      const labelPadding = 8
+      const labelLeft = m.x1 + loopW + labelPadding
+      const labelWidth = estimateTextWidth(m.label, FONT_SIZES.edgeLabel, FONT_WEIGHTS.edgeLabel)
+      globalMaxX = Math.max(globalMaxX, labelLeft + labelWidth + 8) // +8 for safety margin
+    }
   }
 
   // If elements extend left of the desired padding, shift everything right

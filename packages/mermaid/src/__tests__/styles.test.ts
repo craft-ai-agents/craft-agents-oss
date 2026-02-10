@@ -115,8 +115,9 @@ describe('estimateTextWidth', () => {
     expect(width).toBeGreaterThan(0)
   })
 
-  it('returns 0 for empty text', () => {
-    expect(estimateTextWidth('', 13, 500)).toBe(0)
+  it('returns minimum padding for empty text', () => {
+    // Empty text still returns minimum padding (fontSize * 0.15) for layout safety
+    expect(estimateTextWidth('', 13, 500)).toBeCloseTo(1.95, 1)
   })
 
   it('scales with text length', () => {
@@ -163,7 +164,7 @@ describe('constants', () => {
   })
 
   it('NODE_PADDING has expected values', () => {
-    expect(NODE_PADDING.horizontal).toBe(16)
+    expect(NODE_PADDING.horizontal).toBe(20)
     expect(NODE_PADDING.vertical).toBe(10)
     expect(NODE_PADDING.diamondExtra).toBe(24)
   })
@@ -171,11 +172,11 @@ describe('constants', () => {
   it('STROKE_WIDTHS has expected values', () => {
     expect(STROKE_WIDTHS.outerBox).toBe(1)
     expect(STROKE_WIDTHS.innerBox).toBe(0.75)
-    expect(STROKE_WIDTHS.connector).toBe(0.75)
+    expect(STROKE_WIDTHS.connector).toBe(1)
   })
 
   it('ARROW_HEAD has expected values', () => {
     expect(ARROW_HEAD.width).toBe(8)
-    expect(ARROW_HEAD.height).toBe(4.8)
+    expect(ARROW_HEAD.height).toBe(5)
   })
 })

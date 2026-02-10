@@ -24,6 +24,8 @@ export interface DataTableOverlayProps {
   theme?: 'light' | 'dark'
   /** Badge variant for the header (default: gray) */
   badgeVariant?: BadgeVariant
+  /** Actions to show in header right side (e.g., copy dropdown) */
+  headerActions?: ReactNode
   /** The data table content to render */
   children: ReactNode
 }
@@ -35,6 +37,7 @@ export function DataTableOverlay({
   subtitle,
   theme,
   badgeVariant = 'gray',
+  headerActions,
   children,
 }: DataTableOverlayProps) {
   return (
@@ -49,6 +52,7 @@ export function DataTableOverlay({
       }}
       title={title}
       subtitle={subtitle}
+      headerActions={headerActions}
     >
       {/* Table content — scrolling is handled by the parent overlay's scroll container */}
       <div>

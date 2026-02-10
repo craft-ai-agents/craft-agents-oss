@@ -276,6 +276,23 @@ export class CopilotAgent extends BaseAgent {
       process.env.COPILOT_GITHUB_TOKEN = githubToken;
     }
 
+    // Build env for Copilot CLI subprocess
+    const clientEnv: Record<string, string | undefined> = { ...process.env };
+
+    // Preload network interceptor for tool metadata capture
+    if (this.config.copilotInterceptorPath) {
+      const existing = clientEnv.NODE_OPTIONS || '';
+      clientEnv.NODE_OPTIONS = `${existing} --require ${this.config.copilotInterceptorPath}`.trim();
+    }
+
+    // Session dir for cross-process toolMetadataStore
+    if (process.env.CRAFT_SESSION_DIR) {
+      clientEnv.CRAFT_SESSION_DIR = process.env.CRAFT_SESSION_DIR;
+    }
+
+    // Propagate debug mode
+    clientEnv.CRAFT_DEBUG = (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0';
+
     this.client = new CopilotClient({
       useStdio: true,
       cwd: this.resolvedCwd(),
@@ -285,6 +302,7 @@ export class CopilotAgent extends BaseAgent {
       // Disable the CLI's native sandboxing — our onPreToolUse hook handles all permission logic.
       // --allow-all = --allow-all-tools --allow-all-paths --allow-all-urls
       cliArgs: ['--allow-all'],
+      env: clientEnv,
       ...(this.config.copilotCliPath ? { cliPath: this.config.copilotCliPath } : {}),
     });
 

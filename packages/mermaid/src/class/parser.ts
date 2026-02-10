@@ -1,4 +1,5 @@
 import type { ClassDiagram, ClassNode, ClassRelationship, ClassMember, RelationshipType, ClassNamespace } from './types.ts'
+import { normalizeBrTags } from '../multiline-utils.ts'
 
 // ============================================================================
 // Class diagram parser
@@ -188,6 +189,7 @@ function parseMember(line: string): { member: ClassMember; isMethod: boolean } |
   const methodMatch = rest.match(/^(.+?)\(([^)]*)\)(?:\s*(.+))?$/)
   if (methodMatch) {
     const name = methodMatch[1]!.trim()
+    const params = methodMatch[2]?.trim() || undefined // Store the parameter string
     const type = methodMatch[3]?.trim()
     // Check for static ($) or abstract (*) markers
     const isStatic = name.endsWith('$') || rest.includes('$')
@@ -199,6 +201,8 @@ function parseMember(line: string): { member: ClassMember; isMethod: boolean } |
         type: type || undefined,
         isStatic,
         isAbstract,
+        isMethod: true,
+        params,
       },
       isMethod: true,
     }
@@ -228,6 +232,7 @@ function parseMember(line: string): { member: ClassMember; isMethod: boolean } |
       type: type || undefined,
       isStatic,
       isAbstract,
+      isMethod: false,
     },
     isMethod: false,
   }
@@ -238,16 +243,19 @@ function parseRelationship(line: string): ClassRelationship | null {
   // Relationship regex — handles all arrow types with optional cardinality and labels
   // Pattern: FROM ["card"] ARROW ["card"] TO [: label]
   const match = line.match(
-    /^(\S+?)\s+(?:"([^"]*?)"\s+)?(<\|--|<\|\.\.|\*--|o--|-->|--\*|--o|--|>\s*|\.\.>|\.\.\|>|--)\s+(?:"([^"]*?)"\s+)?(\S+?)(?:\s*:\s*(.+))?$/
+    /^(\S+?)\s+(?:"([^"]*?)"\s+)?(<\|--|<\|\.\.|\*--|o--|-->|--\*|--o|--\|>|\.\.>|\.\.\|>|<--|<\.\.?|--)\s+(?:"([^"]*?)"\s+)?(\S+?)(?:\s*:\s*(.+))?$/
   )
   if (!match) return null
 
   const from = match[1]!
-  const fromCardinality = match[2] || undefined
+  const rawFromCardinality = match[2]
+  const fromCardinality = rawFromCardinality ? normalizeBrTags(rawFromCardinality) : undefined
   const arrow = match[3]!.trim()
-  const toCardinality = match[4] || undefined
+  const rawToCardinality = match[4]
+  const toCardinality = rawToCardinality ? normalizeBrTags(rawToCardinality) : undefined
   const to = match[5]!
-  const label = match[6]?.trim() || undefined
+  const rawLabel = match[6]?.trim()
+  const label = rawLabel ? normalizeBrTags(rawLabel) : undefined
 
   const parsed = parseArrow(arrow)
   if (!parsed) return null
@@ -261,16 +269,21 @@ function parseRelationship(line: string): ClassRelationship | null {
  * Suffix markers (`..|>`, `-->`, `..>`, `--*`, `--o`) place it at the 'to' end.
  */
 function parseArrow(arrow: string): { type: RelationshipType; markerAt: 'from' | 'to' } | null {
-  switch (arrow) {
+  // Trim whitespace that might be captured by the regex
+  const a = arrow.trim()
+  switch (a) {
     case '<|--': return { type: 'inheritance',  markerAt: 'from' }
+    case '--|>': return { type: 'inheritance',  markerAt: 'to' }
     case '<|..': return { type: 'realization',  markerAt: 'from' }
+    case '..|>': return { type: 'realization',  markerAt: 'to' }
     case '*--':  return { type: 'composition',  markerAt: 'from' }
     case '--*':  return { type: 'composition',  markerAt: 'to' }
     case 'o--':  return { type: 'aggregation',  markerAt: 'from' }
     case '--o':  return { type: 'aggregation',  markerAt: 'to' }
     case '-->':  return { type: 'association',  markerAt: 'to' }
+    case '<--':  return { type: 'association',  markerAt: 'from' }
     case '..>':  return { type: 'dependency',   markerAt: 'to' }
-    case '..|>': return { type: 'realization',  markerAt: 'to' }
+    case '<..':  return { type: 'dependency',   markerAt: 'from' }
     case '--':   return { type: 'association',  markerAt: 'to' }
     default:     return null
   }

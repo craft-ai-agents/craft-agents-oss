@@ -20,3 +20,9 @@ declare module "*.svg" {
   const src: string
   export default src
 }
+
+// PDF imports (used with ?url suffix for react-pdf)
+declare module "*.pdf?url" {
+  const src: string
+  export default src
+}
