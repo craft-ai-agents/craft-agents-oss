@@ -37,7 +37,7 @@ import {
   type TextContent,
 } from '@modelcontextprotocol/sdk/types.js';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, relative } from 'node:path';
 import { homedir } from 'node:os';
 
 // ============================================================
@@ -279,7 +279,7 @@ function saveLargeResponse(
   content: string
 ): string | { error: string } {
   try {
-    const responsesDir = join(sessionPath, 'responses');
+    const responsesDir = join(sessionPath, 'long_responses');
     mkdirSync(responsesDir, { recursive: true });
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 23);
@@ -398,10 +398,11 @@ async function executeApiTool(
       }
 
       const preview = text.slice(0, 2000);
+      const relativePath = relative(sessionPath, saveResult);
       return {
         content: [{
           type: 'text',
-          text: `Response too large (${Math.round(text.length / 1024)}KB). Full response saved to: ${saveResult}\n\nPreview:\n${preview}...`,
+          text: `[Response too large (${Math.round(text.length / 1024)}KB)]\n\nFull data saved to: ${saveResult}\n- Use Read/Grep to access specific content\n- Use transform_data with inputFiles: ["${relativePath}"] for data analysis\n\nPreview:\n${preview}...`,
         }],
       };
     }

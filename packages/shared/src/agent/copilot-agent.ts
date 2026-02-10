@@ -90,8 +90,8 @@ import {
   validateConfigWrite,
 } from './core/pre-tool-use.ts';
 
-// Summarization for large results
-import { summarizeLargeResult, estimateTokens, TOKEN_LIMIT } from '../utils/summarize.ts';
+// Large response handling
+import { handleLargeResponse, estimateTokens, TOKEN_LIMIT } from '../utils/large-response.ts';
 
 // System prompt for Craft Agent context
 import { getSystemPrompt } from '../prompts/system.ts';
@@ -110,7 +110,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 
 // Session storage (plans folder path)
-import { getSessionPlansPath } from '../sessions/storage.ts';
+import { getSessionPlansPath, getSessionPath } from '../sessions/storage.ts';
 
 // Error typing
 import { parseError, type AgentError } from './errors.ts';
@@ -883,35 +883,42 @@ export class CopilotAgent extends BaseAgent {
   }
 
   /**
-   * Post-tool-use hook — large result summarization.
+   * Post-tool-use hook — large result save + summarization.
+   * Saves full result to long_responses/ and replaces with summary + file reference.
    */
   private async onPostToolUse(input: PostToolUseHookInput): Promise<PostToolUseHookOutput | void> {
     const { toolName, toolArgs, toolResult } = input;
     const resultText = toolResult.textResultForLlm || '';
 
-    // Check if result is large enough to summarize
-    const tokenCount = estimateTokens(resultText);
-    if (tokenCount <= TOKEN_LIMIT) return;
+    // Check if result is large enough to handle
+    if (estimateTokens(resultText) <= TOKEN_LIMIT) return;
 
     try {
-      // Parse toolArgs defensively — same as onPreToolUse.
-      // Needed here for summarizeLargeResult() which reads tool-specific
-      // fields (e.g., description/intent) from the args.
       const inputObj = this.parseCopilotToolArgs(toolArgs);
-      const summarized = await summarizeLargeResult(resultText, {
-        toolName,
-        input: inputObj,
-        userRequest: this.currentUserMessage,
+      const sessionPath = getSessionPath(this.config.workspace.rootPath, this._sessionId);
+
+      const result = await handleLargeResponse({
+        text: resultText,
+        sessionPath,
+        context: {
+          toolName,
+          input: inputObj,
+          intent: typeof inputObj._intent === 'string' ? inputObj._intent : undefined,
+          userRequest: this.currentUserMessage,
+        },
+        summarize: this.runMiniCompletion.bind(this),
       });
 
-      return {
-        modifiedResult: {
-          ...toolResult,
-          textResultForLlm: summarized,
-        },
-      };
+      if (result) {
+        return {
+          modifiedResult: {
+            ...toolResult,
+            textResultForLlm: result.message,
+          },
+        };
+      }
     } catch (error) {
-      this.debug(`Summarization failed: ${error instanceof Error ? error.message : String(error)}`);
+      this.debug(`Large response handling failed: ${error instanceof Error ? error.message : String(error)}`);
       // Fall through to return original result
     }
   }

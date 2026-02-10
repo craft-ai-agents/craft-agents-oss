@@ -3,7 +3,7 @@
  *
  * Uses TestAgent (concrete implementation) to verify BaseAgent functionality.
  * Tests model/thinking configuration, permission mode, source management,
- * planning heuristics, and lifecycle management.
+ * and lifecycle management.
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
 import {
@@ -159,29 +159,6 @@ describe('BaseAgent', () => {
     it('should track temporary clarifications', () => {
       agent.setTemporaryClarifications('Test clarification');
       // Clarifications are internal state - verify via PromptBuilder if needed
-    });
-  });
-
-  describe('Planning Heuristics', () => {
-    it('should suggest planning for complex tasks', () => {
-      expect(agent.shouldSuggestPlanning('implement a new user authentication system')).toBe(true);
-      expect(agent.shouldSuggestPlanning('create a REST API with multiple endpoints')).toBe(true);
-      expect(agent.shouldSuggestPlanning('refactor the entire codebase to use TypeScript')).toBe(true);
-    });
-
-    it('should not suggest planning for simple tasks', () => {
-      expect(agent.shouldSuggestPlanning('fix typo')).toBe(false);
-      expect(agent.shouldSuggestPlanning('hello')).toBe(false);
-    });
-
-    it('should analyze planning need with confidence', () => {
-      const analysis = agent.analyzePlanningNeed('implement a new feature with multiple components');
-
-      expect(analysis).toHaveProperty('shouldPlan');
-      expect(analysis).toHaveProperty('confidence');
-      expect(analysis).toHaveProperty('reasons');
-      expect(analysis.confidence).toBeGreaterThanOrEqual(0);
-      expect(analysis.confidence).toBeLessThanOrEqual(1);
     });
   });
 

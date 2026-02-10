@@ -120,6 +120,7 @@ export type ContentBlock = ToolUseBlock | ToolResultBlock | TextBlock | { type: 
  * @param emittedToolStartIds - Set of tool IDs already emitted (for stream/assistant dedup)
  * @param turnId - Current turn correlation ID
  * @param activeParentTools - Set of currently active Task tool IDs (for fallback parent assignment)
+ * @param sessionDir - Session directory for reading tool metadata (prevents race when concurrent sessions clobber singleton)
  * @returns Array of tool_start AgentEvents
  */
 export function extractToolStarts(
@@ -129,6 +130,7 @@ export function extractToolStarts(
   emittedToolStartIds: Set<string>,
   turnId?: string,
   activeParentTools?: Set<string>,
+  sessionDir?: string,
 ): AgentEvent[] {
   const events: AgentEvent[] = [];
 
@@ -163,7 +165,7 @@ export function extractToolStarts(
       const hasNewInput = Object.keys(toolBlock.input).length > 0;
       if (hasNewInput) {
         // Re-emit with complete input (assistant message has full input, stream has {})
-        const { intent, displayName } = extractToolMetadata(toolBlock);
+        const { intent, displayName } = extractToolMetadata(toolBlock, sessionDir);
         events.push({
           type: 'tool_start',
           toolName: toolBlock.name,
@@ -180,7 +182,7 @@ export function extractToolStarts(
 
     emittedToolStartIds.add(toolBlock.id);
 
-    const { intent, displayName } = extractToolMetadata(toolBlock);
+    const { intent, displayName } = extractToolMetadata(toolBlock, sessionDir);
 
     events.push({
       type: 'tool_start',
@@ -305,9 +307,11 @@ export function extractToolResults(
  * 2. toolBlock.input._intent / _displayName — fallback for Codex backend or if SSE interception didn't run
  * 3. Bash description field — fallback for intent on Bash tools
  */
-function extractToolMetadata(toolBlock: ToolUseBlock): { intent?: string; displayName?: string } {
+function extractToolMetadata(toolBlock: ToolUseBlock, sessionDir?: string): { intent?: string; displayName?: string } {
   // 1. Check the metadata store first (populated by SSE interceptor)
-  const stored = toolMetadataStore.get(toolBlock.id);
+  // Pass sessionDir to ensure we read from the correct session's file even when
+  // the singleton _sessionDir has been clobbered by a concurrent session.
+  const stored = toolMetadataStore.get(toolBlock.id, sessionDir);
   if (stored) {
     let intent = stored.intent;
     const displayName = stored.displayName;

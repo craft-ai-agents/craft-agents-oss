@@ -44,11 +44,17 @@ import { SourceManager } from './core/source-manager.ts';
 import { PromptBuilder } from './core/prompt-builder.ts';
 import { PathProcessor } from './core/path-processor.ts';
 import { ConfigWatcherManager, type ConfigWatcherManagerCallbacks } from './core/config-watcher-manager.ts';
-import { PlanningAdvisor } from './core/planning-advisor.ts';
 import { UsageTracker, type UsageUpdate } from './core/usage-tracker.ts';
 import { getSessionPlansPath, getSessionDataPath } from '../sessions/storage.ts';
 import { getMiniAgentSystemPrompt } from '../prompts/system.ts';
 import { buildTitlePrompt, buildRegenerateTitlePrompt, validateTitle } from '../utils/title-generator.ts';
+import {
+  handleLargeResponse,
+  estimateTokens,
+  TOKEN_LIMIT,
+  type SummarizationContext,
+  type HandleLargeResponseResult,
+} from '../utils/large-response.ts';
 
 // Skill extraction for Codex/Copilot backends (Claude uses native SDK Skill tool)
 import { parseMentions, stripAllMentions } from '../mentions/index.ts';
@@ -122,7 +128,6 @@ export abstract class BaseAgent implements AgentBackend {
   protected promptBuilder: PromptBuilder;
   protected pathProcessor: PathProcessor;
   protected configWatcherManager: ConfigWatcherManager | null = null;
-  protected planningAdvisor: PlanningAdvisor;
   protected usageTracker: UsageTracker;
 
   // ============================================================
@@ -182,9 +187,6 @@ export abstract class BaseAgent implements AgentBackend {
 
     // PathProcessor: expands ~ and normalizes paths
     this.pathProcessor = new PathProcessor();
-
-    // PlanningAdvisor: heuristics for planning mode suggestions
-    this.planningAdvisor = new PlanningAdvisor();
 
     // UsageTracker: token usage and context window tracking
     this.usageTracker = new UsageTracker({
@@ -381,26 +383,6 @@ export abstract class BaseAgent implements AgentBackend {
    */
   isInSafeMode(): boolean {
     return this.permissionManager.getPermissionMode() === 'safe';
-  }
-
-  // ============================================================
-  // Planning Heuristics (delegated to PlanningAdvisor)
-  // ============================================================
-
-  /**
-   * Check if a task should trigger planning (heuristic).
-   * Returns true for complex tasks that would benefit from planning mode.
-   */
-  shouldSuggestPlanning(userMessage: string): boolean {
-    return this.planningAdvisor.shouldSuggestPlanning(userMessage);
-  }
-
-  /**
-   * Get detailed planning analysis for a user message.
-   * Returns confidence score and reasons for planning recommendation.
-   */
-  analyzePlanningNeed(userMessage: string): { shouldPlan: boolean; confidence: number; reasons: string[] } {
-    return this.planningAdvisor.analyze(userMessage);
   }
 
   // ============================================================
@@ -842,6 +824,52 @@ Please continue the conversation naturally from where we left off.
       this.debug(`[regenerateTitle] Failed: ${error}`);
       return null;
     }
+  }
+
+  // ============================================================
+  // Large Response Handling (shared implementation using runMiniCompletion)
+  // ============================================================
+
+  /**
+   * Handle a large tool result: save to disk, summarize, and format.
+   * Uses runMiniCompletion with the same auth as the main agent.
+   *
+   * @param text - The large response text
+   * @param sessionPath - Path to the session folder
+   * @param context - Context about the tool call
+   * @returns Result with formatted message + file path, or null if not large enough
+   */
+  async handleLargeToolResult(
+    text: string,
+    sessionPath: string,
+    context: SummarizationContext
+  ): Promise<HandleLargeResponseResult | null> {
+    try {
+      return await handleLargeResponse({
+        text,
+        sessionPath,
+        context,
+        summarize: this.runMiniCompletion.bind(this),
+      });
+    } catch (error) {
+      this.debug(`[handleLargeToolResult] Failed: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Check if a response is large enough to need handling.
+   */
+  isLargeResponse(text: string): boolean {
+    return estimateTokens(text) > TOKEN_LIMIT;
+  }
+
+  /**
+   * Get a bound summarize callback for passing to API tool builders.
+   * This allows MCP servers to summarize using the agent's auth infrastructure.
+   */
+  getSummarizeCallback(): (prompt: string) => Promise<string | null> {
+    return this.runMiniCompletion.bind(this);
   }
 }
 

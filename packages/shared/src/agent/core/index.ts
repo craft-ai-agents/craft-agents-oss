@@ -12,7 +12,6 @@
  * - ConfigValidator: Pre-write configuration validation
  * - ConfigWatcherManager: Hot-reload config file watching
  * - SessionLifecycleManager: Session state and abort handling
- * - PlanningAdvisor: Heuristics for planning mode suggestions
  * - UsageTracker: Token usage and context window tracking
  */
 
@@ -52,12 +51,6 @@ export type {
   SessionLifecycleConfig,
 } from './session-lifecycle.ts';
 export { AbortReason } from './session-lifecycle.ts';
-
-// Planning Advisor types
-export type {
-  PlanningAnalysis,
-  PlanningAdvisorConfig,
-} from './planning-advisor.ts';
 
 // Usage Tracker types
 export type {
@@ -107,13 +100,6 @@ export {
   SessionLifecycleManager,
   createSessionLifecycleManager,
 } from './session-lifecycle.ts';
-
-// Planning Advisor
-export {
-  PlanningAdvisor,
-  createPlanningAdvisor,
-  shouldSuggestPlanning,
-} from './planning-advisor.ts';
 
 // Usage Tracker
 export {

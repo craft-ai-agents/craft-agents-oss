@@ -14,7 +14,7 @@
 import type { LoadedSource, ApiConfig } from './types.ts';
 import type { ApiCredential } from './credential-manager.ts';
 import { isSourceUsable } from './storage.ts';
-import { createApiServer } from './api-tools.ts';
+import { createApiServer, type SummarizeCallback } from './api-tools.ts';
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { debug } from '../utils/debug.ts';
 
@@ -143,7 +143,7 @@ export class SourceServerBuilder {
     credential: ApiCredential | null,
     getToken?: () => Promise<string>,
     sessionPath?: string,
-    summarizationModel?: string
+    summarize?: SummarizeCallback
   ): Promise<ReturnType<typeof createSdkMcpServer> | null> {
     if (source.config.type !== 'api') return null;
     if (!source.config.api) {
@@ -166,7 +166,7 @@ export class SourceServerBuilder {
       const config = this.buildApiConfig(source);
       // Pass the token getter function - it will be called before each request
       // to get a fresh token (with auto-refresh if expired)
-      return createApiServer(config, getToken, sessionPath, summarizationModel);
+      return createApiServer(config, getToken, sessionPath, summarize);
     }
 
     // Slack APIs - use token getter with auto-refresh
@@ -180,14 +180,14 @@ export class SourceServerBuilder {
       const config = this.buildApiConfig(source);
       // Pass the token getter function - it will be called before each request
       // to get a fresh token (with auto-refresh if expired)
-      return createApiServer(config, getToken, sessionPath, summarizationModel);
+      return createApiServer(config, getToken, sessionPath, summarize);
     }
 
     // Public APIs (no auth) can be used immediately
     if (authType === 'none') {
       debug(`[SourceServerBuilder] Building public API server for ${source.config.slug}`);
       const config = this.buildApiConfig(source);
-      return createApiServer(config, '', sessionPath, summarizationModel);
+      return createApiServer(config, '', sessionPath, summarize);
     }
 
     // API key/bearer/header/query/basic auth - use static credential
@@ -198,7 +198,7 @@ export class SourceServerBuilder {
 
     debug(`[SourceServerBuilder] Building API server for ${source.config.slug} (auth: ${authType})`);
     const config = this.buildApiConfig(source);
-    return createApiServer(config, credential, sessionPath, summarizationModel);
+    return createApiServer(config, credential, sessionPath, summarize);
   }
 
   /**
@@ -247,7 +247,7 @@ export class SourceServerBuilder {
     sourcesWithCredentials: SourceWithCredential[],
     getTokenForSource?: (source: LoadedSource) => (() => Promise<string>) | undefined,
     sessionPath?: string,
-    summarizationModel?: string
+    summarize?: SummarizeCallback
   ): Promise<BuiltServers> {
     const mcpServers: Record<string, McpServerConfig> = {};
     const apiServers: Record<string, ReturnType<typeof createSdkMcpServer>> = {};
@@ -273,7 +273,7 @@ export class SourceServerBuilder {
           }
         } else if (source.config.type === 'api') {
           const getToken = getTokenForSource?.(source);
-          const server = await this.buildApiServer(source, credential ?? null, getToken, sessionPath, summarizationModel);
+          const server = await this.buildApiServer(source, credential ?? null, getToken, sessionPath, summarize);
           if (server) {
             apiServers[source.config.slug] = server;
           }

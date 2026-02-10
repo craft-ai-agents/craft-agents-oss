@@ -77,7 +77,8 @@ import { type Session, type Message, type SessionEvent, type FileAttachment, typ
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrl, getEmojiIcon, resetSummarizationClient, resolveToolIcon } from '@craft-agent/shared/utils'
 import { loadWorkspaceSkills, type LoadedSkill } from '@craft-agent/shared/skills'
 import type { ToolDisplayMeta } from '@craft-agent/core/types'
-import { getToolIconsDir, isCodexModel, getMiniModel, getSummarizationModel, DEFAULT_MODEL, DEFAULT_CODEX_MODEL } from '@craft-agent/shared/config'
+import { getToolIconsDir, isCodexModel, getMiniModel, DEFAULT_MODEL, DEFAULT_CODEX_MODEL } from '@craft-agent/shared/config'
+import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels } from '@craft-agent/shared/labels/storage'
@@ -137,7 +138,7 @@ async function buildServersFromSources(
   sources: LoadedSource[],
   sessionPath?: string,
   tokenRefreshManager?: TokenRefreshManager,
-  summarizationModel?: string
+  summarize?: SummarizeCallback
 ) {
   const span = perf.span('sources.buildServers', { count: sources.length })
   const credManager = getSourceCredentialManager()
@@ -168,7 +169,7 @@ async function buildServersFromSources(
   }
 
   // Pass sessionPath to enable saving large API responses to session folder
-  const result = await serverBuilder.buildAll(sourcesWithCreds, getTokenForSource, sessionPath, summarizationModel)
+  const result = await serverBuilder.buildAll(sourcesWithCreds, getTokenForSource, sessionPath, summarize)
   span.mark('servers.built')
   span.setMetadata('mcpCount', Object.keys(result.mcpServers).length)
   span.setMetadata('apiCount', Object.keys(result.apiServers).length)
@@ -247,7 +248,8 @@ async function refreshOAuthTokensIfNeeded(
     const { mcpServers, apiServers } = await buildServersFromSources(
       enabledSources,
       sessionPath,
-      tokenRefreshManager
+      tokenRefreshManager,
+      agent.getSummarizeCallback()
     )
     const intendedSlugs = enabledSources.map(s => s.config.slug)
     agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
@@ -1110,7 +1112,7 @@ export class SessionManager {
     )
     // Pass session path so large API responses can be saved to session folder
     const sessionPath = getSessionStoragePath(workspaceRootPath, managed.id)
-    const { mcpServers, apiServers } = await buildServersFromSources(enabledSources, sessionPath, managed.tokenRefreshManager)
+    const { mcpServers, apiServers } = await buildServersFromSources(enabledSources, sessionPath, managed.tokenRefreshManager, managed.agent?.getSummarizeCallback())
     const intendedSlugs = enabledSources.map(s => s.config.slug)
 
     // For Codex backend, regenerate config.toml and reconnect
@@ -2758,7 +2760,7 @@ export class SessionManager {
         const allEnabledSources = getSourcesBySlugs(workspaceRootPath, managed.enabledSourceSlugs || [])
         // Pass session path so large API responses can be saved to session folder
         const sessionPath = getSessionStoragePath(workspaceRootPath, managed.id)
-        const { mcpServers, apiServers, errors } = await buildServersFromSources(allEnabledSources, sessionPath, managed.tokenRefreshManager)
+        const { mcpServers, apiServers, errors } = await buildServersFromSources(allEnabledSources, sessionPath, managed.tokenRefreshManager, managed.agent?.getSummarizeCallback())
 
         if (errors.length > 0) {
           sessionLog.warn(`Source build errors during auto-enable:`, errors)
@@ -3199,7 +3201,7 @@ export class SessionManager {
       const sources = getSourcesBySlugs(workspaceRootPath, sourceSlugs)
       // Pass session path so large API responses can be saved to session folder
       const sessionPath = getSessionStoragePath(workspaceRootPath, sessionId)
-      const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager)
+      const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager, managed.agent.getSummarizeCallback())
       if (errors.length > 0) {
         sessionLog.warn(`Source build errors:`, errors)
       }
@@ -3815,7 +3817,7 @@ export class SessionManager {
       const sources = getSourcesBySlugs(workspaceRootPath, managed.enabledSourceSlugs)
       // Pass session path so large API responses can be saved to session folder
       const sessionPath = getSessionStoragePath(workspaceRootPath, sessionId)
-      const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager)
+      const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager, agent.getSummarizeCallback())
       if (errors.length > 0) {
         sessionLog.warn(`Source build errors:`, errors)
       }

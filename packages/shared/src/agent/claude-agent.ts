@@ -543,7 +543,6 @@ export class ClaudeAgent extends BaseAgent {
   }
 
   // isInSafeMode() is now inherited from BaseAgent
-  // shouldSuggestPlanning() and analyzePlanningNeed() are now inherited from BaseAgent
 
   /**
    * Check if a tool requires permission and handle it
@@ -1346,6 +1345,9 @@ export class ClaudeAgent extends BaseAgent {
       const toolIndex = new ToolIndex();
       const emittedToolStarts = new Set<string>();
       const activeParentTools = new Set<string>();
+      // Session directory for reading tool metadata — prevents race condition when
+      // concurrent sessions clobber the singleton _sessionDir in toolMetadataStore.
+      const metadataSessionDir = getSessionPath(this.workspaceRootPath, sessionId);
 
       // Process SDK messages and convert to AgentEvents
       let receivedComplete = false;
@@ -1388,7 +1390,8 @@ export class ClaudeAgent extends BaseAgent {
             pendingTextForStopReason,
             (text) => { pendingTextForStopReason = text; },
             currentTurnId,
-            (id) => { currentTurnId = id; }
+            (id) => { currentTurnId = id; },
+            metadataSessionDir,
           );
           for (const event of events) {
             // Check for tool-not-found errors on inactive sources and attempt auto-activation
@@ -2102,7 +2105,8 @@ export class ClaudeAgent extends BaseAgent {
     pendingText: string | null,
     setPendingText: (text: string | null) => void,
     turnId: string | null,
-    setTurnId: (id: string | null) => void
+    setTurnId: (id: string | null) => void,
+    sessionDir?: string,
   ): Promise<AgentEvent[]> {
     const events: AgentEvent[] = [];
 
@@ -2180,6 +2184,7 @@ export class ClaudeAgent extends BaseAgent {
           emittedToolStarts,
           turnId || undefined,
           activeParentTools,
+          sessionDir,
         );
 
         // Track active Task tools for fallback parent assignment.
@@ -2252,6 +2257,7 @@ export class ClaudeAgent extends BaseAgent {
             emittedToolStarts,
             turnId || undefined,
             activeParentTools,
+            sessionDir,
           );
 
           // Track active Task tools for fallback parent assignment
@@ -2350,6 +2356,7 @@ export class ClaudeAgent extends BaseAgent {
             emittedToolStarts,
             turnId || undefined,
             activeParentTools,
+            sessionDir,
           );
 
           // Track active Task tools discovered via progress events

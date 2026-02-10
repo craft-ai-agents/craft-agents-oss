@@ -232,7 +232,6 @@ Abstract base class providing shared functionality for all backends:
 | `PromptBuilder` | `agent/core/` | Context blocks for user messages (session state, sources) |
 | `PathProcessor` | `agent/core/` | Path expansion (~) and normalization |
 | `ConfigWatcherManager` | `agent/core/` | Hot-reload source/config changes |
-| `PlanningAdvisor` | `agent/core/` | Heuristics for planning mode suggestions |
 | `UsageTracker` | `agent/core/` | Token usage and context window tracking |
 
 ### ClaudeAgent (`packages/shared/src/agent/claude-agent.ts`)

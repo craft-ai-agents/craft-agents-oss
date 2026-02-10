@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import type { ApiConfig } from './types.ts';
 import { debug } from '../utils/debug.ts';
-import { estimateTokens, summarizeLargeResult, TOKEN_LIMIT, MAX_SUMMARIZATION_INPUT } from '../utils/summarize.ts';
+import { handleLargeResponse, estimateTokens, TOKEN_LIMIT } from '../utils/large-response.ts';
 import type { ApiCredential, BasicAuthCredential } from './credential-manager.ts';
 import { isMultiHeaderCredential } from './credential-manager.ts';
 
@@ -64,36 +64,8 @@ function isTokenGetter(cred: ApiCredentialSource): cred is () => Promise<string>
   return typeof cred === 'function';
 }
 
-/**
- * Save large API response to session's responses folder.
- * Creates the folder if it doesn't exist.
- * Returns the file path where the response was saved.
- *
- * @param sessionPath - Path to the session folder
- * @param toolName - Name of the API tool (e.g., "gmail")
- * @param apiPath - API endpoint path (e.g., "/users/me/messages")
- * @param content - The full response content to save
- * @returns The absolute path to the saved file
- */
-function saveLargeResponse(
-  sessionPath: string,
-  toolName: string,
-  apiPath: string,
-  content: string
-): string {
-  // Create responses directory under the session folder (mkdirSync with recursive is idempotent)
-  const responsesDir = join(sessionPath, 'responses');
-  mkdirSync(responsesDir, { recursive: true });
-
-  // Generate a filename with timestamp (including ms to avoid collisions) and sanitized path
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 23);
-  const safePath = apiPath.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30);
-  const filename = `${timestamp}_${toolName}_${safePath}.txt`;
-  const filePath = join(responsesDir, filename);
-
-  writeFileSync(filePath, content, 'utf-8');
-  return filePath;
-}
+/** Summarize callback type — typically agent.runMiniCompletion.bind(agent) */
+export type SummarizeCallback = (prompt: string) => Promise<string | null>;
 
 
 // ============================================================
@@ -580,7 +552,7 @@ export function createApiTool(
   config: ApiConfig,
   credential: ApiCredentialSource,
   sessionPath?: string,
-  summarizationModel?: string
+  summarize?: SummarizeCallback
 ) {
   const toolName = `api_${config.name}`;
   debug(`[api-tools] Creating flexible tool: ${toolName}`);
@@ -742,77 +714,23 @@ export function createApiTool(
         // Text Response Handling (existing flow)
         // ============================================================
 
-        // Check if response is too large and needs summarization
-        // TOKEN_LIMIT (~15k tokens / ~60KB) triggers summarization
-        // MAX_SUMMARIZATION_INPUT (~100k tokens / ~400KB) is Haiku's limit
-        const estimatedTokens = estimateTokens(text);
-
-        if (estimatedTokens > TOKEN_LIMIT) {
-          // Log when large response handling is triggered
-          debug(`[api-tools] ${config.name} large response: ${text.length} bytes, ~${estimatedTokens} tokens (limit=${TOKEN_LIMIT}, max=${MAX_SUMMARIZATION_INPUT})`);
-
-          // Always save full response to file first (if sessionPath is available)
-          let filePath: string | undefined;
-          if (sessionPath) {
-            try {
-              filePath = saveLargeResponse(sessionPath, config.name, path, text);
-              debug(`[api-tools] Full response saved to: ${filePath}`);
-            } catch (e) {
-              console.error(`[api-tools] Failed to save response: ${e}`);
-            }
-          }
-
-          // Check if response is too large even for Haiku to summarize
-          if (estimatedTokens > MAX_SUMMARIZATION_INPUT) {
-            debug(`[api-tools] Too large for Haiku summarization, providing file reference + preview...`);
-            const preview = text.substring(0, 2000);
-            const fileRef = filePath
-              ? `Full response saved to: ${filePath}\nUse Read tool to view, or Grep to search.\n\n`
-              : '';
-            return {
-              content: [{
-                type: 'text' as const,
-                text: `[Response too large for summarization (~${estimatedTokens} tokens, max is ~${MAX_SUMMARIZATION_INPUT}). ${fileRef}Preview:\n${preview}...`,
-              }],
-            };
-          }
-
-          if (_intent) {
-            debug(`[api-tools] Using intent for summarization: ${_intent}`);
-          }
-
-          // Try summarization (now works with OAuth via SDK query())
-          try {
-            const summary = await summarizeLargeResult(text, {
+        // Handle large responses: save to disk + summarize + format
+        if (sessionPath && estimateTokens(text) > TOKEN_LIMIT) {
+          const result = await handleLargeResponse({
+            text,
+            sessionPath,
+            context: {
               toolName: `api_${config.name}`,
               path,
               input: params,
-              modelIntent: _intent,
-              modelOverride: summarizationModel,
-            });
+              intent: _intent,
+            },
+            summarize,
+          });
 
-            // Return file path + summary
-            const fileRef = filePath
-              ? `Full response saved to: ${filePath}\nUse Read/Grep to access specific content.\n\n`
-              : '';
+          if (result) {
             return {
-              content: [{
-                type: 'text' as const,
-                text: `[Large response (~${estimatedTokens} tokens) summarized. ${fileRef}]\n\n${summary}`,
-              }],
-            };
-          } catch (summarizeError) {
-            // Fallback: file path + preview (no large truncation in context)
-            console.error(`[api-tools] Summarization failed: ${summarizeError}`);
-            const preview = text.substring(0, 2000);
-            const fileRef = filePath
-              ? `Full response saved to: ${filePath}\nUse Read tool to view, or Grep to search.\n\n`
-              : '';
-            return {
-              content: [{
-                type: 'text' as const,
-                text: `[Response too large (~${estimatedTokens} tokens). Summarization failed. ${fileRef}Preview:\n${preview}...`,
-              }],
+              content: [{ type: 'text' as const, text: result.message }],
             };
           }
         }
@@ -843,11 +761,11 @@ export function createApiServer(
   config: ApiConfig,
   credential: ApiCredentialSource,
   sessionPath?: string,
-  summarizationModel?: string
+  summarize?: SummarizeCallback
 ): ReturnType<typeof createSdkMcpServer> {
   debug(`[api-tools] Creating server for ${config.name}${sessionPath ? ` (session: ${sessionPath})` : ''}`);
 
-  const apiTool = createApiTool(config, credential, sessionPath, summarizationModel);
+  const apiTool = createApiTool(config, credential, sessionPath, summarize);
 
   return createSdkMcpServer({
     name: `api_${config.name}`,

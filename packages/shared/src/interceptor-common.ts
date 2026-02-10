@@ -201,6 +201,12 @@ export interface ToolMetadata {
  * The session directory is determined by:
  * - SDK subprocess: CRAFT_SESSION_DIR env var (set by main process before spawn)
  * - Main process: toolMetadataStore.setSessionDir(path) called during agent creation
+ *
+ * IMPORTANT: Multiple sessions can run concurrently in the main process (parallel chats,
+ * title generation, etc.). The singleton _sessionDir gets clobbered by whichever session
+ * calls setSessionDir() last. To handle this, get() accepts an explicit sessionDir
+ * parameter, and setSessionDir() merges (not replaces) the in-memory map so entries
+ * from all sessions coexist safely (tool_use_ids are globally unique UUIDs).
  */
 
 // Session directory — set by env var (subprocess) or setSessionDir() (main process)
@@ -210,22 +216,27 @@ function getMetadataFilePath(): string | null {
   return _sessionDir ? join(_sessionDir, 'tool-metadata.json') : null;
 }
 
-// In-memory Map for same-process lookups
-const _metadataMap = new Map<string, ToolMetadata>();
-
-// File cache — shadows what's been written to disk by this process.
-let _fileCache: Record<string, ToolMetadata> | null = null;
-
-/** Read the entire metadata file from disk */
-function readMetadataFile(): Record<string, ToolMetadata> {
-  const filePath = getMetadataFilePath();
-  if (!filePath) return {};
+/** Read metadata from a specific session directory's file */
+function readMetadataFileFromDir(dir: string): Record<string, ToolMetadata> {
   try {
+    const filePath = join(dir, 'tool-metadata.json');
     const data = readFileSync(filePath, 'utf-8');
     return JSON.parse(data) as Record<string, ToolMetadata>;
   } catch {
     return {};
   }
+}
+
+// In-memory Map for same-process lookups (accumulates entries across all sessions)
+const _metadataMap = new Map<string, ToolMetadata>();
+
+// File cache — shadows what's been written to disk by this process.
+let _fileCache: Record<string, ToolMetadata> | null = null;
+
+/** Read the entire metadata file from disk (uses current _sessionDir) */
+function readMetadataFile(): Record<string, ToolMetadata> {
+  if (!_sessionDir) return {};
+  return readMetadataFileFromDir(_sessionDir);
 }
 
 /** Write the entire metadata object to the session file (atomic via temp+rename) */
@@ -245,11 +256,14 @@ export const toolMetadataStore = {
   /**
    * Set session directory and pre-populate in-memory map from file.
    * Called by main process so subsequent get() calls are O(1) memory lookups.
+   * Does NOT clear the map — entries from other sessions are preserved since
+   * tool_use_ids are globally unique UUIDs and won't conflict.
    */
   setSessionDir(dir: string): void {
     _sessionDir = dir;
     _fileCache = null;
-    _metadataMap.clear();
+    // Merge, don't clear — concurrent sessions share this singleton and
+    // clearing would discard metadata from other active sessions.
     const all = readMetadataFile();
     for (const [id, meta] of Object.entries(all)) {
       _metadataMap.set(id, meta);
@@ -264,12 +278,26 @@ export const toolMetadataStore = {
     writeMetadataFile(_fileCache);
   },
 
-  /** Read metadata — checks in-memory first, then session file. No pop semantics. */
-  get(toolUseId: string): ToolMetadata | undefined {
+  /**
+   * Read metadata — checks in-memory first, then session file.
+   * Accepts an explicit sessionDir to read from the correct file even when
+   * _sessionDir has been clobbered by a concurrent session's setSessionDir().
+   */
+  get(toolUseId: string, sessionDir?: string): ToolMetadata | undefined {
     const inMemory = _metadataMap.get(toolUseId);
     if (inMemory) return inMemory;
-    const all = readMetadataFile();
-    return all[toolUseId];
+
+    // Read from explicit sessionDir if provided, otherwise fall back to _sessionDir
+    const dir = sessionDir || _sessionDir;
+    if (!dir) return undefined;
+
+    const all = readMetadataFileFromDir(dir);
+    const entry = all[toolUseId];
+    if (entry) {
+      // Cache in memory for O(1) subsequent lookups
+      _metadataMap.set(toolUseId, entry);
+    }
+    return entry;
   },
 
   delete(toolUseId: string): void {

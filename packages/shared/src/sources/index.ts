@@ -92,6 +92,9 @@ export {
   isBuiltinSource,
 } from './builtin-sources.ts';
 
+// API Tools (types)
+export type { SummarizeCallback } from './api-tools.ts';
+
 // Token Refresh Manager (handles OAuth token refresh with rate limiting)
 export {
   TokenRefreshManager,
