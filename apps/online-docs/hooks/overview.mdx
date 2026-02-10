@@ -120,6 +120,10 @@ Triggered by Craft Agent itself. Support both command and prompt hooks.
 | `TodoStateChange` | Todo status changed | New status (e.g., `done`) |
 | `SchedulerTick` | Runs every minute | Uses cron matching |
 
+<Tip>
+**Status changes:** To react to status/workflow state changes (e.g., when a session moves to "done" or "in-progress"), use the `TodoStateChange` event. The match value is the new status name, so you can use a matcher like `"^done$"` to trigger only on specific transitions.
+</Tip>
+
 ### Agent Events
 
 Passed to the Claude SDK. Only command hooks are supported (no prompt hooks).
