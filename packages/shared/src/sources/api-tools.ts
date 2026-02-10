@@ -414,7 +414,7 @@ function isGmailAttachment(json: unknown): json is { size: number; data: string 
 /**
  * Build headers for an API request, injecting authentication and default headers
  */
-function buildHeaders(
+export function buildHeaders(
   auth: ApiConfig['auth'],
   credential: ApiCredential,
   defaultHeaders?: Record<string, string>

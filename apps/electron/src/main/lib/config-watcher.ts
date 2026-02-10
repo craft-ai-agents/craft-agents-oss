@@ -120,6 +120,10 @@ export interface ConfigWatcherCallbacks {
   /** Called when labels config.json changes */
   onLabelConfigChange?: (workspaceId: string) => void;
 
+  // Hooks callbacks
+  /** Called when hooks.json changes */
+  onHooksConfigChange?: (workspaceId: string) => void;
+
   // Theme callbacks (app-level only)
   /** Called when app-level theme.json changes */
   onAppThemeChange?: (theme: ThemeOverrides | null) => void;
@@ -316,8 +320,10 @@ export class ConfigWatcher {
    * Watch workspace directory recursively
    */
   private watchWorkspaceDir(): void {
+    debug('[ConfigWatcher] Setting up workspace watcher for:', this.workspaceDir);
     try {
       const watcher = watch(this.workspaceDir, { recursive: true }, (eventType, filename) => {
+        debug('[ConfigWatcher] RAW FILE EVENT:', eventType, filename);
         if (!filename) return;
 
         // Normalize path separators
@@ -326,7 +332,7 @@ export class ConfigWatcher {
       });
 
       this.watchers.push(watcher);
-      debug('[ConfigWatcher] Watching workspace recursively:', this.workspaceDir);
+      debug('[ConfigWatcher] Watcher created successfully for:', this.workspaceDir);
     } catch (error) {
       debug('[ConfigWatcher] Error watching workspace directory:', error);
     }
@@ -336,11 +342,19 @@ export class ConfigWatcher {
    * Handle a file change within the workspace directory
    */
   private handleWorkspaceFileChange(relativePath: string, eventType: string): void {
+    debug('[ConfigWatcher] File change detected:', relativePath, eventType);
     const parts = relativePath.split('/');
 
     // Workspace-level permissions.json
     if (relativePath === 'permissions.json') {
       this.debounce('workspace-permissions', () => this.handleWorkspacePermissionsChange());
+      return;
+    }
+
+    // Workspace-level hooks.json
+    if (relativePath === 'hooks.json') {
+      debug('[ConfigWatcher] hooks.json change detected - triggering reload');
+      this.debounce('hooks-config', () => this.handleHooksConfigChange());
       return;
     }
 
@@ -849,6 +863,19 @@ export class ConfigWatcher {
   private handleLabelConfigChange(): void {
     debug('[ConfigWatcher] Labels config.json changed:', this.workspaceId);
     this.callbacks.onLabelConfigChange?.(this.workspaceId);
+  }
+
+  // ============================================================
+  // Hooks Handlers
+  // ============================================================
+
+  /**
+   * Handle hooks.json change.
+   * Notifies sessions to reload hook configuration.
+   */
+  private handleHooksConfigChange(): void {
+    debug('[ConfigWatcher] hooks.json changed:', this.workspaceId);
+    this.callbacks.onHooksConfigChange?.(this.workspaceId);
   }
 
   // ============================================================

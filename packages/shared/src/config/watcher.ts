@@ -125,6 +125,10 @@ export interface ConfigWatcherCallbacks {
   /** Called when labels config.json changes */
   onLabelConfigChange?: (workspaceId: string) => void;
 
+  // Hooks callbacks
+  /** Called when hooks.json changes */
+  onHooksConfigChange?: (workspaceId: string) => void;
+
   // Session callbacks
   /** Called when a session's JSONL header is modified externally (labels, name, flags, etc.) */
   onSessionMetadataChange?: (sessionId: string, header: SessionHeader) => void;
@@ -343,8 +347,10 @@ export class ConfigWatcher {
    * Watch workspace directory recursively
    */
   private watchWorkspaceDir(): void {
+    debug('[ConfigWatcher] Setting up workspace watcher for:', this.workspaceDir);
     try {
       const watcher = watch(this.workspaceDir, { recursive: true }, (eventType, filename) => {
+        debug('[ConfigWatcher] RAW FILE EVENT:', eventType, filename);
         if (!filename) return;
 
         // Normalize path separators
@@ -368,6 +374,13 @@ export class ConfigWatcher {
     // Workspace-level permissions.json
     if (relativePath === 'permissions.json') {
       this.debounce('workspace-permissions', () => this.handleWorkspacePermissionsChange());
+      return;
+    }
+
+    // Workspace-level hooks.json
+    if (relativePath === 'hooks.json') {
+      debug('[ConfigWatcher] hooks.json change detected');
+      this.debounce('hooks-config', () => this.handleHooksConfigChange());
       return;
     }
 
@@ -877,6 +890,14 @@ export class ConfigWatcher {
   private handleLabelConfigChange(): void {
     debug('[ConfigWatcher] Labels config.json changed:', this.workspaceId);
     this.callbacks.onLabelConfigChange?.(this.workspaceId);
+  }
+
+  /**
+   * Handle hooks.json change.
+   */
+  private handleHooksConfigChange(): void {
+    debug('[ConfigWatcher] hooks.json changed:', this.workspaceId);
+    this.callbacks.onHooksConfigChange?.(this.workspaceId);
   }
 
   // ============================================================

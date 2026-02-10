@@ -457,6 +457,7 @@ Read relevant context files using the Read tool - they contain architecture info
 | Sources | \`${DOC_REFS.sources}\` | BEFORE creating/modifying sources |
 | Permissions | \`${DOC_REFS.permissions}\` | BEFORE modifying ${PERMISSION_MODE_CONFIG['safe'].displayName} mode rules |
 | Skills | \`${DOC_REFS.skills}\` | BEFORE creating custom skills |
+| Hooks | \`${DOC_REFS.hooks}\` | BEFORE creating/modifying hooks |
 | Themes | \`${DOC_REFS.themes}\` | BEFORE customizing colors |
 | Statuses | \`${DOC_REFS.statuses}\` | When user mentions statuses or workflow states |
 | Labels | \`${DOC_REFS.labels}\` | BEFORE creating/modifying labels |

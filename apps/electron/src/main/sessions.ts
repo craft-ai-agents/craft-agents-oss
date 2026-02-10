@@ -83,6 +83,7 @@ import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels } from '@craft-agent/shared/labels/storage'
 import { extractLabelId } from '@craft-agent/shared/labels'
+import { HookSystem, type HookSystemMetadataSnapshot } from '@craft-agent/shared/hooks-simple'
 
 // Import and re-export (extracted to avoid Electron dependency in tests)
 import { sanitizeForTitle } from './title-sanitizer'
@@ -737,6 +738,8 @@ interface ManagedSession {
   siblingOrder?: number
   // Token refresh manager for OAuth token refresh with rate limiting
   tokenRefreshManager: TokenRefreshManager
+  // Metadata for sessions created by hooks (automation)
+  triggeredBy?: { hookName?: string; event?: string; timestamp?: number }
   // Promise that resolves when the agent instance is ready (for title gen to await)
   agentReady?: Promise<void>
   agentReadyResolve?: () => void
@@ -863,6 +866,8 @@ export class SessionManager {
   private deltaFlushTimers: Map<string, NodeJS.Timeout> = new Map()
   // Config watchers for live updates (sources, etc.) - one per workspace
   private configWatchers: Map<string, ConfigWatcher> = new Map()
+  // Hook systems for workspace event hooks - one per workspace (includes scheduler, diffing, and handlers)
+  private hookSystems: Map<string, HookSystem> = new Map()
   // Pending credential request resolvers (keyed by requestId)
   private pendingCredentialResolvers: Map<string, (response: import('../shared/types').CredentialResponse) => void> = new Map()
   // Promise deduplication for lazy-loading messages (prevents race conditions)
@@ -958,6 +963,26 @@ export class SessionManager {
       onLabelConfigChange: () => {
         sessionLog.info(`Label config changed in ${workspaceId}`)
         this.broadcastLabelsChanged(workspaceId)
+        // Emit LabelConfigChange hook via HookSystem
+        const hookSystem = this.hookSystems.get(workspaceRootPath)
+        if (hookSystem) {
+          hookSystem.emitLabelConfigChange().catch((error) => {
+            sessionLog.error(`[Hooks] Failed to emit LabelConfigChange:`, error)
+          })
+        }
+      },
+      onHooksConfigChange: () => {
+        sessionLog.info(`Hooks config changed in ${workspaceId}`)
+        // Reload hooks config via HookSystem
+        const hookSystem = this.hookSystems.get(workspaceRootPath)
+        if (hookSystem) {
+          const result = hookSystem.reloadConfig()
+          if (result.errors.length === 0) {
+            sessionLog.info(`Reloaded ${result.hookCount} hooks for workspace ${workspaceId}`)
+          } else {
+            sessionLog.error(`Failed to reload hooks for workspace ${workspaceId}:`, result.errors)
+          }
+        }
       },
       onAppThemeChange: (theme) => {
         sessionLog.info(`App theme changed`)
@@ -1027,12 +1052,62 @@ export class SessionManager {
         if (changed) {
           sessionLog.info(`External metadata change detected for session ${sessionId}`)
         }
+
+        // Update session metadata via HookSystem (handles diffing and event emission internally)
+        const hookSystem = this.hookSystems.get(workspaceRootPath)
+        if (hookSystem) {
+          hookSystem.updateSessionMetadata(sessionId, {
+            permissionMode: header.permissionMode,
+            labels: header.labels,
+            isFlagged: header.isFlagged,
+            todoState: header.todoState,
+            sessionName: header.name,
+          }).catch((error) => {
+            sessionLog.error(`[Hooks] Failed to update session metadata:`, error)
+          })
+        }
       },
     }
 
     const watcher = new ConfigWatcher(workspaceRootPath, callbacks)
     watcher.start()
     this.configWatchers.set(workspaceRootPath, watcher)
+
+    // Initialize HookSystem for this workspace (includes scheduler, handlers, and event logging)
+    if (!this.hookSystems.has(workspaceRootPath)) {
+      const hookSystem = new HookSystem({
+        workspaceRootPath,
+        workspaceId,
+        enableScheduler: true,
+        onPromptsReady: async (prompts) => {
+          // Execute prompt hooks by creating new sessions
+          const settled = await Promise.allSettled(
+            prompts.map((pending) =>
+              this.executePromptHook(
+                workspaceId,
+                workspaceRootPath,
+                pending.prompt,
+                pending.labels,
+                pending.permissionMode,
+                pending.mentions,
+              )
+            )
+          )
+          for (const [idx, result] of settled.entries()) {
+            if (result.status === 'rejected') {
+              sessionLog.error(`[Hooks] Failed to execute prompt hook ${idx + 1}:`, result.reason)
+            } else {
+              sessionLog.info(`[Hooks] Created session ${result.value.sessionId} from prompt hook`)
+            }
+          }
+        },
+        onError: (event, error) => {
+          sessionLog.error(`Hook failed for ${event}:`, error.message)
+        },
+      })
+      this.hookSystems.set(workspaceRootPath, hookSystem)
+      sessionLog.info(`Initialized HookSystem for workspace ${workspaceId}`)
+    }
   }
 
   /**
@@ -1402,6 +1477,19 @@ export class SessionManager {
           }
 
           this.sessions.set(meta.id, managed)
+
+          // Initialize session metadata in HookSystem for diffing
+          const hookSystem = this.hookSystems.get(workspaceRootPath)
+          if (hookSystem) {
+            hookSystem.setInitialSessionMetadata(meta.id, {
+              permissionMode: meta.permissionMode,
+              labels: meta.labels,
+              isFlagged: meta.isFlagged,
+              todoState: meta.todoState,
+              sessionName: managed.name,
+            })
+          }
+
           totalSessions++
         }
       }
@@ -2006,6 +2094,18 @@ export class SessionManager {
 
     this.sessions.set(storedSession.id, managed)
 
+    // Initialize session metadata in HookSystem for diffing
+    const hookSystem = this.hookSystems.get(workspaceRootPath)
+    if (hookSystem) {
+      hookSystem.setInitialSessionMetadata(storedSession.id, {
+        permissionMode: storedSession.permissionMode,
+        labels: storedSession.labels,
+        isFlagged: storedSession.isFlagged,
+        todoState: storedSession.todoState,
+        sessionName: managed.name,
+      })
+    }
+
     return {
       id: storedSession.id,
       workspaceId: workspace.id,
@@ -2514,6 +2614,8 @@ export class SessionManager {
           // Initialize thinking level at construction to avoid race conditions
           thinkingLevel: managed.thinkingLevel,
           isHeadless: !AGENT_FLAGS.defaultModesEnabled,
+          // Pass the workspace-level HookSystem so agents reuse the shared instance
+          hookSystem: this.hookSystems.get(managed.workspace.rootPath),
           // System prompt preset for mini agents (focused prompts for quick edits)
           systemPromptPreset: managed.systemPromptPreset,
           // Always pass session object - id is required for plan mode callbacks
@@ -3612,6 +3714,12 @@ export class SessionManager {
     }
 
     this.sessions.delete(sessionId)
+
+    // Clean up session metadata in HookSystem (prevents memory leak)
+    const hookSystem = this.hookSystems.get(workspaceRootPath)
+    if (hookSystem) {
+      hookSystem.removeSessionMetadata(sessionId)
+    }
 
     // Delete from disk too
     deleteStoredSession(workspaceRootPath, sessionId)
@@ -5141,6 +5249,56 @@ To view this task's output:
   }
 
   /**
+   * Execute a prompt hook by creating a new session and sending the prompt
+   */
+  private async executePromptHook(
+    workspaceId: string,
+    workspaceRootPath: string,
+    prompt: string,
+    labels?: string[],
+    permissionMode?: 'safe' | 'ask' | 'allow-all',
+    mentions?: string[],
+  ): Promise<{ sessionId: string }> {
+    // Resolve @mentions to source/skill slugs
+    const resolved = mentions ? this.resolveHookMentions(workspaceRootPath, mentions) : undefined
+
+    // Create a new session for this hook
+    const session = await this.createSession(workspaceId, {
+      name: `Hook: ${prompt.slice(0, 50)}${prompt.length > 50 ? '...' : ''}`,
+      labels,
+      permissionMode: permissionMode || 'safe',
+      enabledSourceSlugs: resolved?.sourceSlugs,
+    })
+
+    // Send the prompt
+    await this.sendMessage(session.id, prompt)
+
+    return { sessionId: session.id }
+  }
+
+  /**
+   * Resolve @mentions in hook prompts to source and skill slugs
+   */
+  private resolveHookMentions(workspaceRootPath: string, mentions: string[]): { sourceSlugs: string[]; skillSlugs: string[] } | undefined {
+    const sources = loadWorkspaceSources(workspaceRootPath)
+    const skills = loadWorkspaceSkills(workspaceRootPath)
+    const sourceSlugs: string[] = []
+    const skillSlugs: string[] = []
+
+    for (const mention of mentions) {
+      if (sources.some(s => s.config.slug === mention)) {
+        sourceSlugs.push(mention)
+      } else if (skills.some(s => s.slug === mention)) {
+        skillSlugs.push(mention)
+      } else {
+        sessionLog.warn(`[Hooks] Unknown mention: @${mention}`)
+      }
+    }
+
+    return (sourceSlugs.length > 0 || skillSlugs.length > 0) ? { sourceSlugs, skillSlugs } : undefined
+  }
+
+  /**
    * Clean up all resources held by the SessionManager.
    * Should be called on app shutdown to prevent resource leaks.
    */
@@ -5153,6 +5311,17 @@ To view this task's output:
       sessionLog.info(`Stopped config watcher for ${path}`)
     }
     this.configWatchers.clear()
+
+    // Dispose all HookSystems (includes scheduler, handlers, and event loggers)
+    for (const [workspacePath, hookSystem] of this.hookSystems) {
+      try {
+        hookSystem.dispose()
+        sessionLog.info(`Disposed HookSystem for ${workspacePath}`)
+      } catch (error) {
+        sessionLog.error(`Failed to dispose HookSystem for ${workspacePath}:`, error)
+      }
+    }
+    this.hookSystems.clear()
 
     // Clear all pending delta flush timers
     for (const [sessionId, timer] of this.deltaFlushTimers) {

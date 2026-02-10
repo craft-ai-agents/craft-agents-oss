@@ -130,6 +130,7 @@ export interface ValidatorInterface {
   validateStatuses(workspaceRootPath: string): import('./types.js').ValidationResult;
   validatePreferences(): import('./types.js').ValidationResult;
   validatePermissions(workspaceRootPath: string, sourceSlug?: string): import('./types.js').ValidationResult;
+  validateHooks(workspaceRootPath: string): import('./types.js').ValidationResult;
   validateToolIcons(): import('./types.js').ValidationResult;
   validateAll(workspaceRootPath: string): import('./types.js').ValidationResult;
   validateSkill(workspaceRootPath: string, skillSlug: string): import('./types.js').ValidationResult;

@@ -26,6 +26,7 @@ import {
   cleanupSessionScopedTools,
   type AuthRequest,
 } from './session-scoped-tools.ts';
+import { type HookSystem, type SdkHookCallbackMatcher } from '../hooks-simple/index.ts';
 import {
   getPermissionMode,
   setPermissionMode,
@@ -121,6 +122,8 @@ export interface ClaudeAgentConfig {
   };
   /** System prompt preset for mini agents ('default' | 'mini' or custom string) */
   systemPromptPreset?: 'default' | 'mini' | string;
+  /** Workspace-level HookSystem instance (shared across all agents in the workspace) */
+  hookSystem?: HookSystem;
 }
 
 // Permission request tracking
@@ -777,8 +780,16 @@ export class ClaudeAgent extends BaseAgent {
         // This allows Safe Mode to properly allow read-only bash commands without SDK interference
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
-        // Use PreToolUse hook to intercept tool calls (plan mode blocking happens here)
-        hooks: {
+        // User hooks from hooks.json are merged with internal hooks
+        hooks: (() => {
+          // Build user-defined hooks from hooks.json using the workspace-level HookSystem
+          const userHooks = this.config.hookSystem?.buildSdkHooks() ?? {};
+          if (Object.keys(userHooks).length > 0) {
+            debug('[CraftAgent] User SDK hooks loaded:', Object.keys(userHooks).join(', '));
+          }
+
+          // Internal hooks for permission handling and logging
+          const internalHooks: Record<string, SdkHookCallbackMatcher[]> = {
           PreToolUse: [{
             hooks: [async (input) => {
               // Only handle PreToolUse events
@@ -1257,7 +1268,23 @@ export class ClaudeAgent extends BaseAgent {
               return { continue: true };
             }],
           }],
-        },
+          };
+
+          // Merge internal hooks with user hooks from hooks.json
+          // Internal hooks run first (permissions), then user hooks
+          const mergedHooks: Record<string, SdkHookCallbackMatcher[]> = { ...internalHooks };
+          for (const [event, matchers] of Object.entries(userHooks)) {
+            if (mergedHooks[event]) {
+              // Append user hooks after internal hooks
+              mergedHooks[event] = [...mergedHooks[event], ...matchers];
+            } else {
+              // Add new event hooks
+              mergedHooks[event] = matchers;
+            }
+          }
+
+          return mergedHooks;
+        })(),
         // Continue from previous session if we have one (enables conversation history & auto compaction)
         // Skip resume on retry (after session expiry) to start fresh
         ...(!_isRetry && this.sessionId ? { resume: this.sessionId } : {}),
