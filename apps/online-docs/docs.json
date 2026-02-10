@@ -79,6 +79,12 @@
             ]
           },
           {
+            "group": "Hooks",
+            "pages": [
+              "hooks/overview"
+            ]
+          },
+          {
             "group": "Customisation",
             "pages": [
               "customisation/themes",

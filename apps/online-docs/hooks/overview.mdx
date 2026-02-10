@@ -1,0 +1,452 @@
+---
+title: "Hooks"
+description: "Automate workflows by triggering actions on app and agent events"
+---
+
+<Tip>
+**Just ask your agent.** Say things like "create a hook that notifies me when a session is flagged" or "set up a daily morning briefing at 9am". The agent will create and validate the configuration for you.
+</Tip>
+
+Hooks let you trigger actions automatically when events happen in Craft Agent. You can run shell commands, send prompts to start new sessions, or schedule recurring automations — all configured in a single JSON file.
+
+## How Hooks Work
+
+When an event fires (e.g., a label is added, a tool runs, or a cron schedule matches), Craft Agent checks your hooks configuration for matching entries and executes them.
+
+There are two types of hooks:
+
+- **Command hooks** — execute shell commands with event data available as environment variables
+- **Prompt hooks** — send a prompt to Craft Agent, creating a new session (App events only)
+
+## Configuration File
+
+Hooks are configured per-workspace in `hooks.json`:
+
+```
+~/.craft-agent/workspaces/{workspaceId}/hooks.json
+```
+
+### Basic Structure
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "EventName": [
+      {
+        "matcher": "regex-pattern",
+        "hooks": [
+          { "type": "command", "command": "echo 'Hello'" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Each event type maps to an array of matchers, and each matcher contains an array of hooks to execute when the matcher's pattern matches the event value.
+
+## Events
+
+### App Events
+
+Triggered by Craft Agent itself. Support both command and prompt hooks.
+
+| Event | Trigger | Match Value |
+|-------|---------|-------------|
+| `LabelAdd` | Label added to session | Label ID (e.g., `urgent`) |
+| `LabelRemove` | Label removed from session | Label ID |
+| `LabelConfigChange` | Label configuration changed | Always matches |
+| `PermissionModeChange` | Permission mode changed | New mode name |
+| `FlagChange` | Session flagged/unflagged | `true` or `false` |
+| `TodoStateChange` | Todo status changed | New status (e.g., `done`) |
+| `SchedulerTick` | Runs every minute | Uses cron matching |
+
+### Agent Events
+
+Passed to the Claude SDK. Only command hooks are supported (no prompt hooks).
+
+| Event | Trigger | Match Value |
+|-------|---------|-------------|
+| `PreToolUse` | Before a tool executes | Tool name |
+| `PostToolUse` | After a tool succeeds | Tool name |
+| `PostToolUseFailure` | After a tool fails | Tool name |
+| `UserPromptSubmit` | User submits a prompt | Event data JSON |
+| `SessionStart` | Session starts | Event data JSON |
+| `SessionEnd` | Session ends | Event data JSON |
+| `Stop` | Agent stops | Event data JSON |
+| `SubagentStart` | Subagent spawned | Event data JSON |
+| `SubagentStop` | Subagent completes | Event data JSON |
+| `Notification` | Notification received | Event data JSON |
+| `PreCompact` | Before context compaction | Event data JSON |
+| `PermissionRequest` | Permission requested | Event data JSON |
+
+## Hook Types
+
+### Command Hooks
+
+Execute a shell command when the event fires. Event data is available through environment variables.
+
+```json
+{
+  "type": "command",
+  "command": "echo \"Label $CRAFT_LABEL was added\" >> ~/hook-log.txt",
+  "timeout": 60000
+}
+```
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `type` | `"command"` | Required | Hook type |
+| `command` | string | Required | Shell command to execute |
+| `timeout` | number | `60000` | Timeout in milliseconds |
+
+### Prompt Hooks
+
+Send a prompt to Craft Agent, creating a new session. Only works with App events.
+
+```json
+{
+  "type": "prompt",
+  "prompt": "Run the @weather skill and summarize today's forecast"
+}
+```
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `type` | `"prompt"` | Required | Hook type |
+| `prompt` | string | Required | Prompt text to send |
+
+**Features:**
+- Use `@mentions` to reference sources or skills (e.g., `@github`, `@linear`)
+- Environment variables are expanded (e.g., `$CRAFT_LABEL`, `${CRAFT_SESSION_NAME}`)
+- Mentioned sources are automatically activated for the new session
+
+## Matchers
+
+### Regex Matching
+
+Most events use regex matching against the event's match value:
+
+```json
+{
+  "matcher": "^urgent$",
+  "hooks": [
+    { "type": "command", "command": "notify-send 'Urgent!'" }
+  ]
+}
+```
+
+Omit the `matcher` field to match all events of that type.
+
+**Examples:**
+
+| Pattern | Matches |
+|---------|---------|
+| `^urgent$` | Exact match for "urgent" |
+| `bug\|feature` | Either "bug" or "feature" |
+| `^prod-` | Any value starting with "prod-" |
+| *(omitted)* | All events of that type |
+
+### Cron Matching
+
+For `SchedulerTick` events, use cron expressions instead of regex:
+
+```json
+{
+  "cron": "0 9 * * 1-5",
+  "timezone": "Europe/Budapest",
+  "hooks": [
+    { "type": "prompt", "prompt": "Give me a morning briefing" }
+  ]
+}
+```
+
+**Cron format:** `minute hour day-of-month month day-of-week`
+
+| Field | Range | Examples |
+|-------|-------|---------|
+| Minute | 0–59 | `0`, `*/15` |
+| Hour | 0–23 | `9`, `14` |
+| Day of month | 1–31 | `1`, `15` |
+| Month | 1–12 | `1`, `*/3` |
+| Day of week | 0–6 (0 = Sunday) | `1-5`, `0,6` |
+
+**Common patterns:**
+
+| Cron | Schedule |
+|------|----------|
+| `*/15 * * * *` | Every 15 minutes |
+| `0 9 * * *` | Daily at 9:00 AM |
+| `0 9 * * 1-5` | Weekdays at 9:00 AM |
+| `30 14 1 * *` | 1st of each month at 2:30 PM |
+| `0 */6 * * *` | Every 6 hours |
+
+**Timezone:** Uses IANA timezone names (e.g., `Europe/Budapest`, `America/New_York`). Defaults to system timezone if not specified. Verify with [crontab.guru](https://crontab.guru/).
+
+## Matcher Options
+
+Each matcher entry supports these optional fields:
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `matcher` | string | Match all | Regex pattern for event filtering |
+| `cron` | string | — | Cron expression (SchedulerTick only) |
+| `timezone` | string | System TZ | IANA timezone for cron |
+| `permissionMode` | string | `"safe"` | Security mode for commands |
+| `labels` | string[] | `[]` | Labels applied to prompt-created sessions |
+| `enabled` | boolean | `true` | Set to `false` to disable without deleting |
+| `hooks` | array | Required | Array of command/prompt hooks |
+
+## Environment Variables
+
+### Common Variables
+
+Available to all command hooks:
+
+| Variable | Description |
+|----------|-------------|
+| `CRAFT_EVENT` | Event name (e.g., `LabelAdd`, `PreToolUse`) |
+| `CRAFT_EVENT_DATA` | Full event payload as JSON |
+| `CRAFT_SESSION_ID` | Current session ID |
+| `CRAFT_SESSION_NAME` | Current session name |
+| `CRAFT_WORKSPACE_ID` | Current workspace ID |
+
+### App Event Variables
+
+Dynamically generated from event payloads:
+
+**Label events** (`LabelAdd`, `LabelRemove`):
+- `CRAFT_LABEL` — Label ID being added/removed
+
+**PermissionModeChange:**
+- `CRAFT_OLD_MODE` — Previous permission mode
+- `CRAFT_NEW_MODE` — New permission mode
+
+**FlagChange:**
+- `CRAFT_IS_FLAGGED` — `true` or `false`
+
+**TodoStateChange:**
+- `CRAFT_OLD_STATE` — Previous todo state
+- `CRAFT_NEW_STATE` — New todo state
+
+**SchedulerTick:**
+- `CRAFT_LOCAL_TIME` — Current time (HH:MM)
+- `CRAFT_LOCAL_DATE` — Current date (YYYY-MM-DD)
+
+### Agent Event Variables
+
+**Tool events** (`PreToolUse`, `PostToolUse`, `PostToolUseFailure`):
+- `CRAFT_TOOL_NAME` — Tool being used
+- `CRAFT_TOOL_INPUT` — Tool parameters as JSON
+- `CRAFT_TOOL_RESPONSE` — Tool output (PostToolUse only)
+- `CRAFT_ERROR` — Error message (PostToolUseFailure only)
+
+**Session events** (`SessionStart`):
+- `CRAFT_SOURCE` — Session source (e.g., `startup`, `resume`)
+- `CRAFT_MODEL` — Model name
+
+**Subagent events** (`SubagentStart`, `SubagentStop`):
+- `CRAFT_AGENT_ID` — Subagent ID
+- `CRAFT_AGENT_TYPE` — Subagent type
+
+## Permission Modes
+
+Command hooks run with security checks by default. You can adjust this per matcher:
+
+| Mode | Behaviour | Use Case |
+|------|-----------|----------|
+| `safe` | Commands checked against allowlist | Default, recommended |
+| `allow-all` | Bypass security checks | Trusted automation only |
+
+<Warning>
+Only use `allow-all` for commands you fully trust. It allows arbitrary shell execution.
+</Warning>
+
+```json
+{
+  "matcher": "^urgent$",
+  "permissionMode": "allow-all",
+  "hooks": [
+    { "type": "command", "command": "osascript -e 'display notification \"Urgent!\" with title \"Craft Agent\"'" }
+  ]
+}
+```
+
+## Labels for Prompt Hooks
+
+Prompt hooks can attach labels to the sessions they create. This makes it easy to filter and organise scheduled sessions:
+
+```json
+{
+  "cron": "0 9 * * *",
+  "labels": ["Scheduled", "morning-briefing"],
+  "hooks": [
+    { "type": "prompt", "prompt": "Give me today's priorities" }
+  ]
+}
+```
+
+Labels also support environment variable expansion: `"priority::${CRAFT_LABEL}"`.
+
+## Rate Limits
+
+To prevent runaway loops (e.g., a hook that indirectly triggers itself), the event bus enforces rate limits:
+
+| Event | Max fires / minute |
+|-------|--------------------|
+| `SchedulerTick` | 60 (1/sec) |
+| All other events | 10 |
+
+Excess events are silently dropped for the remainder of the 60-second window.
+
+## Examples
+
+### Daily Morning Briefing
+
+Schedule a prompt every weekday at 9 AM:
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "SchedulerTick": [
+      {
+        "cron": "0 9 * * 1-5",
+        "timezone": "Europe/Budapest",
+        "labels": ["Scheduled", "briefing"],
+        "hooks": [
+          { "type": "prompt", "prompt": "Run the @daily-standup skill" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Log Label Changes
+
+Track when labels are added or removed:
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "LabelAdd": [
+      {
+        "permissionMode": "allow-all",
+        "hooks": [
+          { "type": "command", "command": "echo \"[$(date)] Added: $CRAFT_LABEL\" >> ~/label-log.txt" }
+        ]
+      }
+    ],
+    "LabelRemove": [
+      {
+        "permissionMode": "allow-all",
+        "hooks": [
+          { "type": "command", "command": "echo \"[$(date)] Removed: $CRAFT_LABEL\" >> ~/label-log.txt" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### macOS Notification on Urgent Label
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "LabelAdd": [
+      {
+        "matcher": "^urgent$",
+        "permissionMode": "allow-all",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "osascript -e 'display notification \"Urgent session flagged\" with title \"Craft Agent\"'"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Audit Permission Mode Changes
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "PermissionModeChange": [
+      {
+        "permissionMode": "allow-all",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"$(date): $CRAFT_OLD_MODE -> $CRAFT_NEW_MODE\" >> ~/mode-audit.log"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+## Validation
+
+Ask Craft Agent to validate your hooks:
+
+```
+Validate my hooks configuration
+```
+
+Or use the `config_validate` tool with `target: "all"`.
+
+The validator checks for:
+- Invalid JSON syntax
+- Unknown event names
+- Empty hooks arrays
+- Invalid cron expressions or timezones
+- Invalid or unsafe regex patterns (ReDoS prevention)
+- References to non-existent labels
+
+## Security
+
+Hooks include several built-in safety measures:
+
+- **Shell injection prevention** — User-controlled values in environment variables (session names, labels, prompts) are automatically escaped
+- **ReDoS protection** — Regex patterns are limited to 500 characters and checked for catastrophic backtracking patterns
+- **Rate limiting** — Prevents infinite loops from hooks that trigger other hooks
+- **Permission modes** — Commands are checked against an allowlist by default
+- **Timeouts** — Commands are killed after their timeout expires (with SIGKILL fallback)
+
+<AccordionGroup>
+  <Accordion title="Best Practices">
+    - **Start simple** — Test with `echo` commands before writing complex scripts
+    - **Use labels** — Tag scheduled sessions for easy filtering
+    - **Set timeouts** — Prevent runaway commands with the `timeout` field
+    - **Log failures** — Redirect stderr to track issues: `command 2>> ~/hook-errors.log`
+    - **Be specific** — Use matchers to avoid triggering on every event
+    - **Test cron** — Use [crontab.guru](https://crontab.guru/) to verify expressions
+  </Accordion>
+  <Accordion title="Troubleshooting: Hook not firing">
+    1. **Check event name** — Must be exact (e.g., `LabelAdd` not `labeladd`)
+    2. **Check matcher** — Regex must match the event's match value
+    3. **Check cron** — For SchedulerTick, verify your cron expression
+    4. **Check enabled** — Ensure the matcher doesn't have `"enabled": false`
+    5. **Check logs** — Look for `[hooks]` in the application logs
+  </Accordion>
+  <Accordion title="Troubleshooting: Command blocked">
+    If you see "Bash command blocked" errors:
+    1. Add `"permissionMode": "allow-all"` to the matcher
+    2. Or simplify the command to avoid shell constructs like `$()`
+  </Accordion>
+  <Accordion title="Troubleshooting: Prompt not creating session">
+    1. Ensure the event is an **App event** (prompt hooks don't work with Agent events)
+    2. Check that the prompt text is not empty
+    3. Verify `@mentions` reference valid sources or skills
+  </Accordion>
+</AccordionGroup>
