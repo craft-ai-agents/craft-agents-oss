@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/styled-dropdown"
 import { cn } from "@/lib/utils"
 import { Check, ChevronDown, Eye, EyeOff } from "lucide-react"
+import { useLocale } from "@/context/LocaleContext"
 
 export type ApiKeyStatus = 'idle' | 'validating' | 'success' | 'error'
 
@@ -89,6 +90,7 @@ export function ApiKeyInput({
   disabled,
   providerType = 'anthropic',
 }: ApiKeyInputProps) {
+  const { t } = useLocale()
   // Get presets based on provider type
   const presets = getPresetsForProvider(providerType)
   const defaultPreset = presets[0]
@@ -146,7 +148,7 @@ export function ApiKeyInput({
     <form id={formId} onSubmit={handleSubmit} className="space-y-6">
       {/* API Key */}
       <div className="space-y-2">
-        <Label htmlFor="api-key">API Key</Label>
+        <Label htmlFor="api-key">{t('apiSetup.apiKey.label')}</Label>
         <div className={cn(
           "relative rounded-md shadow-minimal transition-colors",
           "bg-foreground-2 focus-within:bg-background"
@@ -182,7 +184,7 @@ export function ApiKeyInput({
       {/* Endpoint Preset Selector - always visible to allow switching between providers */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label htmlFor="base-url">Endpoint</Label>
+          <Label htmlFor="base-url">{t('apiSetup.apiKey.endpoint')}</Label>
           <DropdownMenu>
             <DropdownMenuTrigger
               disabled={isDisabled}
@@ -228,7 +230,7 @@ export function ApiKeyInput({
       {!isDefaultProviderPreset && (
         <div className="space-y-2">
           <Label htmlFor="custom-model" className="text-muted-foreground font-normal">
-            Model <span className="text-foreground/30">· optional</span>
+            {t('apiSetup.apiKey.model')} <span className="text-foreground/30">· {t('apiSetup.apiKey.modelOptional')}</span>
           </Label>
           <div className={cn(
             "rounded-md shadow-minimal transition-colors",
@@ -248,37 +250,37 @@ export function ApiKeyInput({
           {activePreset === 'openrouter' && (
             <p className="text-xs text-foreground/30">
               {providerType === 'openai'
-                ? 'Leave empty for GPT models. Only set for non-OpenAI models.'
-                : 'Leave empty for Claude models. Only set for non-Claude models.'}
+                ? t('apiSetup.apiKey.openrouter.hint.openai')
+                : t('apiSetup.apiKey.openrouter.hint.anthropic')}
               <br />
               Format: <code className="text-foreground/40">provider/model-name</code>.{' '}
               <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-foreground/50 underline hover:text-foreground/70">
-                Browse models
+                {t('apiSetup.apiKey.openrouter.browseModels')}
               </a>
             </p>
           )}
           {activePreset === 'vercel' && (
             <p className="text-xs text-foreground/30">
               {providerType === 'openai'
-                ? 'Leave empty for GPT models. Only set for non-OpenAI models.'
-                : 'Leave empty for Claude models. Only set for non-Claude models.'}
+                ? t('apiSetup.apiKey.vercel.hint.openai')
+                : t('apiSetup.apiKey.vercel.hint.anthropic')}
               <br />
               Format: <code className="text-foreground/40">provider/model-name</code>.{' '}
               <a href="https://vercel.com/docs/ai-gateway" target="_blank" rel="noopener noreferrer" className="text-foreground/50 underline hover:text-foreground/70">
-                View supported models
+                {t('apiSetup.apiKey.vercel.viewModels')}
               </a>
             </p>
           )}
           {activePreset === 'ollama' && (
             <p className="text-xs text-foreground/30">
-              Use any model pulled via <code className="text-foreground/40">ollama pull</code>. No API key required.
+              {t('apiSetup.apiKey.ollama.hint')}
             </p>
           )}
           {(activePreset === 'custom' || !activePreset) && (
             <p className="text-xs text-foreground/30">
               {providerType === 'openai'
-                ? 'Defaults to GPT model names when empty'
-                : 'Defaults to Anthropic model names (Opus, Sonnet, Haiku) when empty'}
+                ? t('apiSetup.apiKey.custom.hint.openai')
+                : t('apiSetup.apiKey.custom.hint.anthropic')}
             </p>
           )}
         </div>

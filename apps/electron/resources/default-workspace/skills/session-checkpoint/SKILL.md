@@ -59,7 +59,23 @@ Structure the daily entry:
 - [Pending items to address]
 ```
 
-### Step 3: Save
+### Step 3: Update Workspace Context
+
+Review the current conversation for any new context worth persisting:
+
+1. **New contacts** — Names, roles, or nicknames mentioned for the first time
+2. **New acronyms/terminology** — Domain terms the user explained
+3. **Project status changes** — Significant progress or new projects
+4. **Preferences learned** — Work style, communication preferences, or tooling choices
+
+If any new context was learned:
+1. Read `workspace-context.md`
+2. Add or update the relevant entries
+3. Remove any stale entries noticed during the review
+
+If `workspace-context.md` doesn't exist yet and meaningful context was learned, create it with the standard template (see the `workspace-context` skill for the format).
+
+### Step 4: Save
 
 1. **session-log.md**: Append the entry. One entry per day — if an entry for today already exists, update it (don't duplicate).
 2. **last-session.md**: Overwrite entirely with today's entry. This file is for fast loading at next session start.
@@ -75,6 +91,7 @@ Structure the daily entry:
 
 ## Integration with Other Skills
 
+- **workspace-context**: Step 3 reviews and updates workspace-context.md with any new contacts, acronyms, or project context learned during the session.
 - **quick-log**: If significant activities happened, they should already be in activity-log via quick-log. Checkpoint pulls from there.
-- **session-start**: Next session will read both session-log.md and activity-log.md for full context.
+- **session-start**: Next session will read workspace-context.md, session-log.md, and activity-log.md for full context.
 - **update-tracker**: Files modified during the session should be mentioned in the checkpoint.

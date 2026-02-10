@@ -238,4 +238,274 @@ export const ptBR: Record<TranslationKey, TranslationEntry> = {
   'workspace.open.namePlaceholder': 'Meu Workspace',
   'workspace.open.opening': 'Abrindo...',
   'workspace.open.submit': 'Abrir',
+
+  // =========================================================================
+  // Onboarding
+  // =========================================================================
+
+  // WelcomeStep
+  'onboarding.welcome.title': 'Bem-vindo ao G4 OS',
+  'onboarding.welcome.titleExisting': 'Atualizar configurações',
+  'onboarding.welcome.description': 'Agentes com a UX que eles merecem. Conecte qualquer coisa. Organize suas sessões. Tudo que você precisa para fazer o trabalho da sua vida!',
+  'onboarding.welcome.descriptionExisting': 'Atualize sua conexão de API ou altere sua configuração.',
+  'onboarding.welcome.getStarted': 'Começar',
+  'onboarding.welcome.continue': 'Continuar',
+  'onboarding.welcome.checking': 'Verificando...',
+
+  // APISetupStep
+  'onboarding.apiSetup.title': 'Configurar Conexão de API',
+  'onboarding.apiSetup.description': 'Selecione como você deseja alimentar seus agentes de IA.',
+  'onboarding.apiSetup.providerAnthropic': 'Anthropic',
+  'onboarding.apiSetup.providerOpenAI': 'OpenAI',
+  'onboarding.apiSetup.option.claudeOAuth.name': 'Claude Pro/Max',
+  'onboarding.apiSetup.option.claudeOAuth.description': 'Use sua assinatura Claude para acesso ilimitado.',
+  'onboarding.apiSetup.option.anthropicApiKey.name': 'Chave de API Anthropic',
+  'onboarding.apiSetup.option.anthropicApiKey.description': 'Pague por uso via Anthropic, OpenRouter ou APIs compatíveis.',
+  'onboarding.apiSetup.option.chatgptOAuth.name': 'Codex · ChatGPT Plus/Pro',
+  'onboarding.apiSetup.option.chatgptOAuth.description': 'Use sua assinatura ChatGPT Plus ou Pro com o Codex.',
+  'onboarding.apiSetup.option.openaiApiKey.name': 'Codex · Chave de API OpenAI',
+  'onboarding.apiSetup.option.openaiApiKey.description': 'Pague por uso via OpenAI Platform, OpenRouter ou Vercel AI Gateway.',
+
+  // CredentialsStep
+  'onboarding.credentials.chatgpt.title': 'Conectar ChatGPT',
+  'onboarding.credentials.chatgpt.description': 'Use sua assinatura ChatGPT Plus ou Pro para alimentar o Codex.',
+  'onboarding.credentials.chatgpt.signIn': 'Entrar com ChatGPT',
+  'onboarding.credentials.chatgpt.connecting': 'Conectando...',
+  'onboarding.credentials.chatgpt.info': 'Clique no botão acima para entrar com sua conta OpenAI. Uma janela do navegador será aberta para autenticação.',
+  'onboarding.credentials.chatgpt.success': 'Conectado! Sua assinatura ChatGPT está pronta.',
+  'onboarding.credentials.claude.title': 'Conectar Conta Claude',
+  'onboarding.credentials.claude.description': 'Use sua assinatura Claude para alimentar fluxos de trabalho multi-agente.',
+  'onboarding.credentials.claude.signIn': 'Entrar com Claude',
+  'onboarding.credentials.claude.connecting': 'Conectando...',
+  'onboarding.credentials.authCode.title': 'Inserir Código de Autorização',
+  'onboarding.credentials.authCode.description': 'Copie o código da página do navegador e cole abaixo.',
+  'onboarding.credentials.authCode.cancel': 'Cancelar',
+  'onboarding.credentials.apiKey.title': 'Configuração de API',
+  'onboarding.credentials.apiKey.descriptionOpenAI': 'Insira sua chave de API OpenAI. Opcionalmente configure OpenRouter ou Vercel AI Gateway.',
+  'onboarding.credentials.apiKey.descriptionAnthropic': 'Insira sua chave de API. Opcionalmente configure um endpoint personalizado para OpenRouter, Ollama ou APIs compatíveis.',
+  'onboarding.credentials.apiKey.validating': 'Validando...',
+
+  // CompletionStep
+  'onboarding.completion.settingUp': 'Configurando...',
+  'onboarding.completion.allSet': 'Tudo pronto!',
+  'onboarding.completion.saving': 'Salvando sua configuração...',
+  'onboarding.completion.startChat': 'Basta iniciar um chat e começar a trabalhar.',
+  'onboarding.completion.getStarted': 'Começar',
+
+  // GitBashWarning
+  'onboarding.gitBash.title': 'Git Bash Necessário',
+  'onboarding.gitBash.description': 'O G4 OS precisa do Git Bash para executar comandos shell no Windows. Ele não foi encontrado no seu sistema.',
+  'onboarding.gitBash.installTitle': 'Instalar Git para Windows',
+  'onboarding.gitBash.installDescription': 'A maneira mais fácil de obter o Git Bash. É gratuito e inclui tudo que você precisa.',
+  'onboarding.gitBash.downloadButton': 'Baixar Git para Windows',
+  'onboarding.gitBash.alreadyInstalledTitle': 'Já tem o Git instalado?',
+  'onboarding.gitBash.alreadyInstalledDescription': 'Se o Git está instalado em um local não padrão, você pode especificar o caminho para o bash.exe.',
+  'onboarding.gitBash.useThisPath': 'Usar este caminho',
+  'onboarding.gitBash.recheck': 'Verificar novamente',
+  'onboarding.gitBash.rechecking': 'Verificando...',
+  'onboarding.gitBash.browse': 'Procurar...',
+
+  // ReauthScreen
+  'onboarding.reauth.title': 'Sessão Expirada',
+  'onboarding.reauth.description': 'Sua sessão do G4 OS expirou ou não é mais válida.',
+  'onboarding.reauth.pleaseLogin': 'Faça login novamente para continuar usando o G4 OS.',
+  'onboarding.reauth.preserved': 'Suas conversas e configurações foram preservadas.',
+  'onboarding.reauth.loginButton': 'Entrar com G4 OS',
+  'onboarding.reauth.loggingIn': 'Entrando...',
+  'onboarding.reauth.resetButton': 'Redefinir app e começar do zero...',
+  'onboarding.reauth.loginFailed': 'Falha no login',
+
+  // Primitives (BackButton, ContinueButton defaults)
+  'onboarding.button.back': 'Voltar',
+  'onboarding.button.continue': 'Continuar',
+  'onboarding.button.loading': 'Carregando...',
+
+  // =========================================================================
+  // API Setup shared components
+  // =========================================================================
+
+  'apiSetup.apiKey.label': 'Chave de API',
+  'apiSetup.apiKey.endpoint': 'Endpoint',
+  'apiSetup.apiKey.model': 'Modelo',
+  'apiSetup.apiKey.modelOptional': 'opcional',
+  'apiSetup.apiKey.openrouter.hint.openai': 'Deixe vazio para modelos GPT. Só defina para modelos que não são da OpenAI.',
+  'apiSetup.apiKey.openrouter.hint.anthropic': 'Deixe vazio para modelos Claude. Só defina para modelos que não são da Claude.',
+  'apiSetup.apiKey.openrouter.browseModels': 'Explorar modelos',
+  'apiSetup.apiKey.vercel.hint.openai': 'Deixe vazio para modelos GPT. Só defina para modelos que não são da OpenAI.',
+  'apiSetup.apiKey.vercel.hint.anthropic': 'Deixe vazio para modelos Claude. Só defina para modelos que não são da Claude.',
+  'apiSetup.apiKey.vercel.viewModels': 'Ver modelos suportados',
+  'apiSetup.apiKey.ollama.hint': 'Use qualquer modelo baixado via ollama pull. Nenhuma chave de API necessária.',
+  'apiSetup.apiKey.custom.hint.openai': 'Usa nomes de modelos GPT quando vazio',
+  'apiSetup.apiKey.custom.hint.anthropic': 'Usa nomes de modelos Anthropic (Opus, Sonnet, Haiku) quando vazio',
+
+  'apiSetup.oauth.authCodeLabel': 'Código de Autorização',
+  'apiSetup.oauth.authCodePlaceholder': 'Cole seu código de autorização aqui',
+
+  // =========================================================================
+  // Settings: AI
+  // =========================================================================
+
+  'settings.ai.title': 'IA',
+  'settings.ai.credentialIssue': 'Problema de Credencial Detectado',
+  'settings.ai.healthFileCorrupted': 'O arquivo de credenciais está corrompido. Por favor, autentique-se novamente.',
+  'settings.ai.healthDecryptionFailed': 'Credenciais de outra máquina detectadas. Por favor, autentique-se novamente neste dispositivo.',
+  'settings.ai.healthNoDefault': 'Nenhuma credencial encontrada para sua conexão padrão.',
+  'settings.ai.healthGeneric': 'Problema de credencial detectado.',
+  'settings.ai.reauthenticate': 'Reautenticar',
+  'settings.ai.validating': 'Validando...',
+  'settings.ai.connectionValid': 'Conexão válida',
+  'settings.ai.validationFailed': 'Falha na validação',
+  'settings.ai.notAuthenticated': 'Não autenticado',
+  'settings.ai.menuEdit': 'Editar',
+  'settings.ai.menuSetDefault': 'Definir como padrão',
+  'settings.ai.menuReauthenticate': 'Reautenticar',
+  'settings.ai.menuValidate': 'Validar Conexão',
+  'settings.ai.menuDelete': 'Excluir',
+  'settings.ai.section.default': 'Padrão',
+  'settings.ai.section.default.description': 'Configurações para novos chats quando nenhuma substituição de workspace está definida.',
+  'settings.ai.connection': 'Conexão',
+  'settings.ai.connectionDescription': 'Conexão de API para novos chats',
+  'settings.ai.model': 'Modelo',
+  'settings.ai.modelDescription': 'Modelo de IA para novos chats',
+  'settings.ai.modelSetViaConnection': 'Definido via conexão de API',
+  'settings.ai.thinking': 'Raciocínio',
+  'settings.ai.thinkingDescription': 'Profundidade de raciocínio para novos chats',
+  'settings.ai.section.workspaceOverrides': 'Substituições por Workspace',
+  'settings.ai.section.workspaceOverrides.description': 'Substituir configurações padrão por workspace.',
+  'settings.ai.useDefault': 'Usar padrão',
+  'settings.ai.inheritFromApp': 'Herdar das configurações do app',
+  'settings.ai.usingDefaults': 'Usando padrões',
+  'settings.ai.section.connections': 'Conexões',
+  'settings.ai.section.connections.description': 'Gerencie suas conexões de provedores de IA.',
+  'settings.ai.noConnections': 'Nenhuma conexão configurada. Adicione uma conexão para começar.',
+  'settings.ai.addConnection': '+ Adicionar Conexão',
+  'settings.ai.closeEsc': 'Fechar (Esc)',
+  'settings.ai.badgeDefault': 'Padrão',
+  'settings.ai.loading': 'Carregando...',
+
+  // =========================================================================
+  // Settings: Cloud Sync
+  // =========================================================================
+
+  'settings.sync.title': 'Cloud Sync',
+  'settings.sync.noWorkspace': 'Nenhum workspace selecionado',
+  'settings.sync.section.yourToken': 'Seu Token de Sincronização',
+  'settings.sync.tokenWarning': 'Salve este token agora — ele não pode ser exibido novamente.',
+  'settings.sync.tokenHint': 'Cole este token no seu outro dispositivo para sincronizar este workspace.',
+  'settings.sync.copied': 'Copiado',
+  'settings.sync.copy': 'Copiar',
+  'settings.sync.dismiss': 'Dispensar',
+  'settings.sync.syncing': 'Sincronizando...',
+  'settings.sync.files': 'arquivos',
+  'settings.sync.syncComplete': 'Sincronização Completa',
+  'settings.sync.syncFailed': 'Falha na Sincronização',
+  'settings.sync.pullPreview': 'Prévia do Pull',
+  'settings.sync.newFiles': 'arquivos novos',
+  'settings.sync.modifiedFiles': 'arquivos modificados',
+  'settings.sync.filesToDelete': 'arquivos para excluir',
+  'settings.sync.upToDate': 'Tudo está atualizado.',
+  'settings.sync.overwriteWarning': 'Isso substituirá os dados locais.',
+  'settings.sync.confirmPull': 'Confirmar Pull',
+  'settings.sync.cancel': 'Cancelar',
+  'settings.sync.loading': 'Carregando...',
+  'settings.sync.section.connect': 'Conectar',
+  'settings.sync.section.connect.description': 'Gere um token para sincronizar este workspace entre dispositivos.',
+  'settings.sync.generateToken': 'Gerar Token',
+  'settings.sync.importHint': 'Ou importe um token de outro dispositivo:',
+  'settings.sync.import': 'Importar',
+  'settings.sync.section.status': 'Status',
+  'settings.sync.token': 'Token',
+  'settings.sync.lastPushed': 'Último push',
+  'settings.sync.lastPulled': 'Último pull',
+  'settings.sync.never': 'Nunca',
+  'settings.sync.section.actions': 'Ações',
+  'settings.sync.pushToCloud': 'Enviar para Nuvem',
+  'settings.sync.pullFromCloud': 'Baixar da Nuvem',
+  'settings.sync.disconnect': 'Desconectar',
+  'settings.sync.section.about': 'Sobre Cloud Sync',
+  'settings.sync.aboutLine1': 'Sincronize sessões, configurações de fontes, skills, temas e permissões entre dispositivos.',
+  'settings.sync.aboutLine2': 'Credenciais nunca são sincronizadas. Arquivos acima de 10MB e dados totais acima de 500MB são ignorados.',
+  'settings.sync.aboutLine3': 'Push e pull são manuais — nada é sincronizado automaticamente.',
+
+  // =========================================================================
+  // Settings: Workspace
+  // =========================================================================
+
+  'settings.workspace.title': 'Configurações do Workspace',
+  'settings.workspace.noWorkspace': 'Nenhum workspace selecionado',
+  'settings.workspace.section.info': 'Informações do Workspace',
+  'settings.workspace.name': 'Nome',
+  'settings.workspace.icon': 'Ícone',
+  'settings.workspace.edit': 'Editar',
+  'settings.workspace.change': 'Alterar',
+  'settings.workspace.uploading': 'Enviando...',
+  'settings.workspace.renameTitle': 'Renomear workspace',
+  'settings.workspace.renamePlaceholder': 'Digite o nome do workspace...',
+  'settings.workspace.section.permissions': 'Permissões',
+  'settings.workspace.defaultMode': 'Modo padrão',
+  'settings.workspace.defaultModeDescription': 'Controle o que a IA pode fazer',
+  'settings.workspace.modeSafeDescription': 'Somente leitura, nenhuma alteração permitida',
+  'settings.workspace.modeAskDescription': 'Solicita antes de fazer edições',
+  'settings.workspace.modeAllowAllDescription': 'Execução autônoma completa',
+  'settings.workspace.section.modeCycling': 'Ciclo de Modos',
+  'settings.workspace.section.modeCycling.description': 'Selecione quais modos alternar com Shift+Tab',
+  'settings.workspace.modeCyclingError': 'Pelo menos 2 modos são necessários',
+  'settings.workspace.section.advanced': 'Avançado',
+  'settings.workspace.workingDirectory': 'Diretório de Trabalho Padrão',
+  'settings.workspace.workingDirectoryNotSet': 'Não definido (usa pasta da sessão)',
+  'settings.workspace.clear': 'Limpar',
+  'settings.workspace.changePath': 'Alterar...',
+  'settings.workspace.localMcpServers': 'Servidores MCP Locais',
+  'settings.workspace.localMcpDescription': 'Habilitar servidores de subprocesso stdio',
+
+  // =========================================================================
+  // Settings: Permissions
+  // =========================================================================
+
+  'settings.permissions.title': 'Permissões',
+  'settings.permissions.section.about': 'Sobre Permissões',
+  'settings.permissions.aboutP1': 'Permissões controlam quanta autonomia seu agente tem. No modo <explore>Explore</explore>, o agente só pode ler e pesquisar — perfeito para entender um problema antes de se comprometer com mudanças. Quando estiver pronto, mude para o modo <execute>Execute</execute> para deixar o agente implementar o plano de forma autônoma.',
+  'settings.permissions.aboutP2': 'Um bom fluxo de trabalho: comece no Explore para deixar o agente investigar, revise o plano proposto e então execute com confiança.',
+  'settings.permissions.learnMore': 'Saiba mais',
+  'settings.permissions.section.default': 'Permissões Padrão',
+  'settings.permissions.section.default.description': 'Padrões em nível de app permitidos no modo Explore. Comandos fora desta lista são bloqueados.',
+  'settings.permissions.noDefaults': 'Nenhuma permissão padrão encontrada.',
+  'settings.permissions.noDefaultsHint': 'As permissões padrão devem estar em ~/.g4os/permissions/default.json',
+  'settings.permissions.section.custom': 'Personalizações do Workspace',
+  'settings.permissions.section.custom.description': 'Padrões em nível de workspace que estendem os padrões do app acima.',
+  'settings.permissions.noCustom': 'Nenhuma permissão personalizada configurada.',
+  'settings.permissions.noCustomHint': 'Crie um arquivo permissions.json no seu workspace para adicionar regras personalizadas.',
+
+  // =========================================================================
+  // Settings: Labels
+  // =========================================================================
+
+  'settings.labels.section.about': 'Sobre Tags',
+  'settings.labels.aboutP1': 'Tags ajudam a organizar sessões com etiquetas coloridas. Use-as para categorizar conversas por projeto, tópico ou prioridade — facilitando filtrar e encontrar sessões relacionadas depois.',
+  'settings.labels.aboutP2': 'Cada tag pode opcionalmente ter um <bold>valor</bold> com um tipo específico (texto, número ou data). Isso transforma tags em metadados estruturados — por exemplo, uma tag "prioridade" com valor 3, ou uma tag "prazo" com uma data.',
+  'settings.labels.aboutP3': '<bold>Regras de aplicação automática</bold> atribuem tags automaticamente quando uma mensagem corresponde a um padrão regex. Por exemplo, colar uma URL de issue do Linear pode auto-etiquetar a sessão com o nome do projeto e ID da issue — sem necessidade de marcação manual.',
+  'settings.labels.learnMore': 'Saiba mais',
+  'settings.labels.section.hierarchy': 'Hierarquia de Tags',
+  'settings.labels.section.hierarchy.description': 'Todas as tags configuradas para este workspace. Tags podem ser aninhadas para formar grupos.',
+  'settings.labels.noTags': 'Nenhuma tag configurada.',
+  'settings.labels.noTagsHint': 'Tags podem ser criadas pelo agente ou editando labels/config.json no seu workspace.',
+  'settings.labels.section.autoRules': 'Regras de Aplicação Automática',
+  'settings.labels.section.autoRules.description': 'Padrões regex que aplicam tags automaticamente quando encontrados em mensagens do usuário. Por exemplo, cole uma URL de issue do Linear e automaticamente etiquete a sessão com o nome do projeto e ID da issue.',
+
+  // =========================================================================
+  // Settings: Shortcuts
+  // =========================================================================
+
+  'settings.shortcuts.title': 'Atalhos',
+  'settings.shortcuts.section.listNavigation': 'Navegação em Lista',
+  'settings.shortcuts.navigateItems': 'Navegar itens na lista',
+  'settings.shortcuts.goToFirst': 'Ir para o primeiro item',
+  'settings.shortcuts.goToLast': 'Ir para o último item',
+  'settings.shortcuts.section.sessionList': 'Lista de Sessões',
+  'settings.shortcuts.focusChatInput': 'Focar campo de chat',
+  'settings.shortcuts.openContextMenu': 'Abrir menu de contexto',
+  'settings.shortcuts.section.chatInput': 'Campo de Chat',
+  'settings.shortcuts.sendMessage': 'Enviar mensagem',
+  'settings.shortcuts.newLine': 'Nova linha',
+  'settings.shortcuts.closeDialog': 'Fechar diálogo / desfocar campo',
 }

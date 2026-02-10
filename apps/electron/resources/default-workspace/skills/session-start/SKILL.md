@@ -16,6 +16,12 @@ Solves the "cold start" problem. Delivers a focused brief so the user is up to s
 
 ## Briefing Process
 
+### Step 0: Load Workspace Context
+
+Read `workspace-context.md` first. This is the workspace's curated "brain" — key contacts, acronyms, active projects, and preferences. It gives you immediate context before any other tool calls.
+
+If the file doesn't exist yet, skip this step and note it in the brief: suggest the user run `/workspace-context` to set it up.
+
 ### Step 1: Gather Context (parallel reads)
 
 Read the following files to build the brief:
@@ -77,6 +83,7 @@ Output format:
 
 ## Integration with Other Skills
 
+- **workspace-context**: Loaded as Step 0 — provides instant context (contacts, acronyms, projects, preferences)
 - **activity-log**: Recent entries provide real-time context that may not be in session-log yet
 - **session-checkpoint**: Last session recap comes from last-session.md (written by checkpoint)
 - **quick-log**: Important items logged during sessions surface here automatically

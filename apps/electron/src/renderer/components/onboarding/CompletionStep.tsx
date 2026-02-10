@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@g4os/ui"
 import { G4OSSymbol } from "@/components/icons/G4OSSymbol"
 import { StepFormLayout } from "./primitives"
+import { useLocale } from "@/context/LocaleContext"
 
 interface CompletionStepProps {
   status: 'saving' | 'complete'
@@ -21,6 +22,7 @@ export function CompletionStep({
   spaceName,
   onFinish
 }: CompletionStepProps) {
+  const { t } = useLocale()
   const isSaving = status === 'saving'
 
   return (
@@ -34,18 +36,18 @@ export function CompletionStep({
           <G4OSSymbol className="size-10 text-accent" />
         </div>
       )}
-      title={isSaving ? 'Setting up...' : "You're all set!"}
+      title={isSaving ? t('onboarding.completion.settingUp') : t('onboarding.completion.allSet')}
       description={
         isSaving ? (
-          'Saving your configuration...'
+          t('onboarding.completion.saving')
         ) : (
-          'Just start a chat and get to work.'
+          t('onboarding.completion.startChat')
         )
       }
       actions={
         status === 'complete' ? (
           <Button onClick={onFinish} className="w-full max-w-[320px] bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg" size="lg">
-            Get Started
+            {t('onboarding.completion.getStarted')}
           </Button>
         ) : undefined
       }

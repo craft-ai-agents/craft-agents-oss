@@ -2,6 +2,8 @@ import { cn } from "@/lib/utils"
 import { Check, CreditCard, Key, Cpu } from "lucide-react"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
 import type { LlmAuthType, LlmProviderType } from "@g4os/shared/config/llm-connections"
+import { useLocale } from "@/context/LocaleContext"
+import type { TranslationKey } from "@/i18n/locales/en-US"
 
 /**
  * API setup method for onboarding.
@@ -35,8 +37,8 @@ export function apiSetupMethodToConnectionTypes(method: ApiSetupMethod): {
 
 interface ApiSetupOption {
   id: ApiSetupMethod
-  name: string
-  description: string
+  nameKey: TranslationKey
+  descriptionKey: TranslationKey
   icon: React.ReactNode
   providerType: LlmProviderType
 }
@@ -44,29 +46,29 @@ interface ApiSetupOption {
 const API_SETUP_OPTIONS: ApiSetupOption[] = [
   {
     id: 'claude_oauth',
-    name: 'Claude Pro/Max',
-    description: 'Use your Claude subscription for unlimited access.',
+    nameKey: 'onboarding.apiSetup.option.claudeOAuth.name',
+    descriptionKey: 'onboarding.apiSetup.option.claudeOAuth.description',
     icon: <CreditCard className="size-4" />,
     providerType: 'anthropic',
   },
   {
     id: 'anthropic_api_key',
-    name: 'Anthropic API Key',
-    description: 'Pay-as-you-go via Anthropic, OpenRouter, or compatible APIs.',
+    nameKey: 'onboarding.apiSetup.option.anthropicApiKey.name',
+    descriptionKey: 'onboarding.apiSetup.option.anthropicApiKey.description',
     icon: <Key className="size-4" />,
     providerType: 'anthropic',
   },
   {
     id: 'chatgpt_oauth',
-    name: 'Codex · ChatGPT Plus/Pro',
-    description: 'Use your ChatGPT Plus or Pro subscription with Codex.',
+    nameKey: 'onboarding.apiSetup.option.chatgptOAuth.name',
+    descriptionKey: 'onboarding.apiSetup.option.chatgptOAuth.description',
     icon: <Cpu className="size-4" />,
     providerType: 'openai',
   },
   {
     id: 'openai_api_key',
-    name: 'Codex · OpenAI API Key',
-    description: 'Pay-as-you-go via OpenAI Platform, OpenRouter, or Vercel AI Gateway.',
+    nameKey: 'onboarding.apiSetup.option.openaiApiKey.name',
+    descriptionKey: 'onboarding.apiSetup.option.openaiApiKey.description',
     icon: <Key className="size-4" />,
     providerType: 'openai',
   },
@@ -91,6 +93,7 @@ function OptionButton({
   isSelected: boolean
   onSelect: (method: ApiSetupMethod) => void
 }) {
+  const { t } = useLocale()
   return (
     <button
       onClick={() => onSelect(option.id)}
@@ -116,10 +119,10 @@ function OptionButton({
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-sm">{option.name}</span>
+          <span className="font-medium text-sm">{t(option.nameKey)}</span>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          {option.description}
+          {t(option.descriptionKey)}
         </p>
       </div>
 
@@ -151,10 +154,11 @@ export function APISetupStep({
   onContinue,
   onBack
 }: APISetupStepProps) {
+  const { t } = useLocale()
   return (
     <StepFormLayout
-      title="Set Up API Connection"
-      description="Select how you'd like to power your AI agents."
+      title={t('onboarding.apiSetup.title')}
+      description={t('onboarding.apiSetup.description')}
       actions={
         <>
           <BackButton onClick={onBack} />
@@ -166,7 +170,7 @@ export function APISetupStep({
       <div className="space-y-4">
         {/* Anthropic section */}
         <div>
-          <div className="text-xs font-medium text-muted-foreground mb-2 py-2.5 text-center">Anthropic</div>
+          <div className="text-xs font-medium text-muted-foreground mb-2 py-2.5 text-center">{t('onboarding.apiSetup.providerAnthropic')}</div>
           <div className="space-y-3">
             {API_SETUP_OPTIONS.filter(o => o.providerType === 'anthropic').map((option) => (
               <OptionButton
@@ -181,7 +185,7 @@ export function APISetupStep({
 
         {/* OpenAI section */}
         <div>
-          <div className="text-xs font-medium text-muted-foreground mb-2 py-2.5 text-center">OpenAI</div>
+          <div className="text-xs font-medium text-muted-foreground mb-2 py-2.5 text-center">{t('onboarding.apiSetup.providerOpenAI')}</div>
           <div className="space-y-3">
             {API_SETUP_OPTIONS.filter(o => o.providerType === 'openai').map((option) => (
               <OptionButton

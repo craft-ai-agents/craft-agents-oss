@@ -234,6 +234,276 @@ export const enUS = {
   'workspace.open.namePlaceholder': 'My Workspace',
   'workspace.open.opening': 'Opening...',
   'workspace.open.submit': 'Open',
+
+  // =========================================================================
+  // Onboarding
+  // =========================================================================
+
+  // WelcomeStep
+  'onboarding.welcome.title': 'Welcome to G4 OS',
+  'onboarding.welcome.titleExisting': 'Update Settings',
+  'onboarding.welcome.description': 'Agents with the UX they deserve. Connect anything. Organize your sessions. Everything you need to do the work of your life!',
+  'onboarding.welcome.descriptionExisting': 'Update your API connection or change your setup.',
+  'onboarding.welcome.getStarted': 'Get Started',
+  'onboarding.welcome.continue': 'Continue',
+  'onboarding.welcome.checking': 'Checking...',
+
+  // APISetupStep
+  'onboarding.apiSetup.title': 'Set Up API Connection',
+  'onboarding.apiSetup.description': "Select how you'd like to power your AI agents.",
+  'onboarding.apiSetup.providerAnthropic': 'Anthropic',
+  'onboarding.apiSetup.providerOpenAI': 'OpenAI',
+  'onboarding.apiSetup.option.claudeOAuth.name': 'Claude Pro/Max',
+  'onboarding.apiSetup.option.claudeOAuth.description': 'Use your Claude subscription for unlimited access.',
+  'onboarding.apiSetup.option.anthropicApiKey.name': 'Anthropic API Key',
+  'onboarding.apiSetup.option.anthropicApiKey.description': 'Pay-as-you-go via Anthropic, OpenRouter, or compatible APIs.',
+  'onboarding.apiSetup.option.chatgptOAuth.name': 'Codex · ChatGPT Plus/Pro',
+  'onboarding.apiSetup.option.chatgptOAuth.description': 'Use your ChatGPT Plus or Pro subscription with Codex.',
+  'onboarding.apiSetup.option.openaiApiKey.name': 'Codex · OpenAI API Key',
+  'onboarding.apiSetup.option.openaiApiKey.description': 'Pay-as-you-go via OpenAI Platform, OpenRouter, or Vercel AI Gateway.',
+
+  // CredentialsStep
+  'onboarding.credentials.chatgpt.title': 'Connect ChatGPT',
+  'onboarding.credentials.chatgpt.description': 'Use your ChatGPT Plus or Pro subscription to power Codex.',
+  'onboarding.credentials.chatgpt.signIn': 'Sign in with ChatGPT',
+  'onboarding.credentials.chatgpt.connecting': 'Connecting...',
+  'onboarding.credentials.chatgpt.info': 'Click the button above to sign in with your OpenAI account. A browser window will open for authentication.',
+  'onboarding.credentials.chatgpt.success': 'Connected! Your ChatGPT subscription is ready.',
+  'onboarding.credentials.claude.title': 'Connect Claude Account',
+  'onboarding.credentials.claude.description': 'Use your Claude subscription to power multi-agent workflows.',
+  'onboarding.credentials.claude.signIn': 'Sign in with Claude',
+  'onboarding.credentials.claude.connecting': 'Connecting...',
+  'onboarding.credentials.authCode.title': 'Enter Authorization Code',
+  'onboarding.credentials.authCode.description': 'Copy the code from the browser page and paste it below.',
+  'onboarding.credentials.authCode.cancel': 'Cancel',
+  'onboarding.credentials.apiKey.title': 'API Configuration',
+  'onboarding.credentials.apiKey.descriptionOpenAI': 'Enter your OpenAI API key. Optionally configure OpenRouter or Vercel AI Gateway.',
+  'onboarding.credentials.apiKey.descriptionAnthropic': 'Enter your API key. Optionally configure a custom endpoint for OpenRouter, Ollama, or compatible APIs.',
+  'onboarding.credentials.apiKey.validating': 'Validating...',
+
+  // CompletionStep
+  'onboarding.completion.settingUp': 'Setting up...',
+  'onboarding.completion.allSet': "You're all set!",
+  'onboarding.completion.saving': 'Saving your configuration...',
+  'onboarding.completion.startChat': 'Just start a chat and get to work.',
+  'onboarding.completion.getStarted': 'Get Started',
+
+  // GitBashWarning
+  'onboarding.gitBash.title': 'Git Bash Required',
+  'onboarding.gitBash.description': 'G4 OS needs Git Bash to run shell commands on Windows. It was not found on your system.',
+  'onboarding.gitBash.installTitle': 'Install Git for Windows',
+  'onboarding.gitBash.installDescription': "The easiest way to get Git Bash. It's free and includes everything you need.",
+  'onboarding.gitBash.downloadButton': 'Download Git for Windows',
+  'onboarding.gitBash.alreadyInstalledTitle': 'Already have Git installed?',
+  'onboarding.gitBash.alreadyInstalledDescription': 'If Git is installed in a non-standard location, you can specify the path to bash.exe.',
+  'onboarding.gitBash.useThisPath': 'Use this path',
+  'onboarding.gitBash.recheck': 'Re-check',
+  'onboarding.gitBash.rechecking': 'Checking...',
+  'onboarding.gitBash.browse': 'Browse...',
+
+  // ReauthScreen
+  'onboarding.reauth.title': 'Session Expired',
+  'onboarding.reauth.description': 'Your G4 OS session has expired or is no longer valid.',
+  'onboarding.reauth.pleaseLogin': 'Please log in again to continue using G4 OS.',
+  'onboarding.reauth.preserved': 'Your conversations and settings are preserved.',
+  'onboarding.reauth.loginButton': 'Log In with G4 OS',
+  'onboarding.reauth.loggingIn': 'Logging in...',
+  'onboarding.reauth.resetButton': 'Reset app and start fresh...',
+  'onboarding.reauth.loginFailed': 'Login failed',
+
+  // Primitives (BackButton, ContinueButton defaults)
+  'onboarding.button.back': 'Back',
+  'onboarding.button.continue': 'Continue',
+  'onboarding.button.loading': 'Loading...',
+
+  // =========================================================================
+  // API Setup shared components
+  // =========================================================================
+
+  'apiSetup.apiKey.label': 'API Key',
+  'apiSetup.apiKey.endpoint': 'Endpoint',
+  'apiSetup.apiKey.model': 'Model',
+  'apiSetup.apiKey.modelOptional': 'optional',
+  'apiSetup.apiKey.openrouter.hint.openai': 'Leave empty for GPT models. Only set for non-OpenAI models.',
+  'apiSetup.apiKey.openrouter.hint.anthropic': 'Leave empty for Claude models. Only set for non-Claude models.',
+  'apiSetup.apiKey.openrouter.browseModels': 'Browse models',
+  'apiSetup.apiKey.vercel.hint.openai': 'Leave empty for GPT models. Only set for non-OpenAI models.',
+  'apiSetup.apiKey.vercel.hint.anthropic': 'Leave empty for Claude models. Only set for non-Claude models.',
+  'apiSetup.apiKey.vercel.viewModels': 'View supported models',
+  'apiSetup.apiKey.ollama.hint': 'Use any model pulled via ollama pull. No API key required.',
+  'apiSetup.apiKey.custom.hint.openai': 'Defaults to GPT model names when empty',
+  'apiSetup.apiKey.custom.hint.anthropic': 'Defaults to Anthropic model names (Opus, Sonnet, Haiku) when empty',
+
+  'apiSetup.oauth.authCodeLabel': 'Authorization Code',
+  'apiSetup.oauth.authCodePlaceholder': 'Paste your authorization code here',
+
+  // =========================================================================
+  // Settings: AI
+  // =========================================================================
+
+  'settings.ai.title': 'AI',
+  'settings.ai.credentialIssue': 'Credential Issue Detected',
+  'settings.ai.healthFileCorrupted': 'Credential file is corrupted. Please re-authenticate.',
+  'settings.ai.healthDecryptionFailed': 'Credentials from another machine detected. Please re-authenticate on this device.',
+  'settings.ai.healthNoDefault': 'No credentials found for your default connection.',
+  'settings.ai.healthGeneric': 'Credential issue detected.',
+  'settings.ai.reauthenticate': 'Re-authenticate',
+  'settings.ai.validating': 'Validating...',
+  'settings.ai.connectionValid': 'Connection valid',
+  'settings.ai.validationFailed': 'Validation failed',
+  'settings.ai.notAuthenticated': 'Not authenticated',
+  'settings.ai.menuEdit': 'Edit',
+  'settings.ai.menuSetDefault': 'Set as default',
+  'settings.ai.menuReauthenticate': 'Re-authenticate',
+  'settings.ai.menuValidate': 'Validate Connection',
+  'settings.ai.menuDelete': 'Delete',
+  'settings.ai.section.default': 'Default',
+  'settings.ai.section.default.description': 'Settings for new chats when no workspace override is set.',
+  'settings.ai.connection': 'Connection',
+  'settings.ai.connectionDescription': 'API connection for new chats',
+  'settings.ai.model': 'Model',
+  'settings.ai.modelDescription': 'AI model for new chats',
+  'settings.ai.modelSetViaConnection': 'Set via API connection',
+  'settings.ai.thinking': 'Thinking',
+  'settings.ai.thinkingDescription': 'Reasoning depth for new chats',
+  'settings.ai.section.workspaceOverrides': 'Workspace Overrides',
+  'settings.ai.section.workspaceOverrides.description': 'Override default settings per workspace.',
+  'settings.ai.useDefault': 'Use default',
+  'settings.ai.inheritFromApp': 'Inherit from app settings',
+  'settings.ai.usingDefaults': 'Using defaults',
+  'settings.ai.section.connections': 'Connections',
+  'settings.ai.section.connections.description': 'Manage your AI provider connections.',
+  'settings.ai.noConnections': 'No connections configured. Add a connection to get started.',
+  'settings.ai.addConnection': '+ Add Connection',
+  'settings.ai.closeEsc': 'Close (Esc)',
+  'settings.ai.badgeDefault': 'Default',
+  'settings.ai.loading': 'Loading...',
+
+  // =========================================================================
+  // Settings: Cloud Sync
+  // =========================================================================
+
+  'settings.sync.title': 'Cloud Sync',
+  'settings.sync.noWorkspace': 'No workspace selected',
+  'settings.sync.section.yourToken': 'Your Sync Token',
+  'settings.sync.tokenWarning': 'Save this token now — it cannot be shown again.',
+  'settings.sync.tokenHint': 'Paste this token on your other device to sync this workspace.',
+  'settings.sync.copied': 'Copied',
+  'settings.sync.copy': 'Copy',
+  'settings.sync.dismiss': 'Dismiss',
+  'settings.sync.syncing': 'Syncing...',
+  'settings.sync.files': 'files',
+  'settings.sync.syncComplete': 'Sync Complete',
+  'settings.sync.syncFailed': 'Sync Failed',
+  'settings.sync.pullPreview': 'Pull Preview',
+  'settings.sync.newFiles': 'new files',
+  'settings.sync.modifiedFiles': 'modified files',
+  'settings.sync.filesToDelete': 'files to delete',
+  'settings.sync.upToDate': 'Everything is up to date.',
+  'settings.sync.overwriteWarning': 'This will overwrite local data.',
+  'settings.sync.confirmPull': 'Confirm Pull',
+  'settings.sync.cancel': 'Cancel',
+  'settings.sync.loading': 'Loading...',
+  'settings.sync.section.connect': 'Connect',
+  'settings.sync.section.connect.description': 'Generate a token to sync this workspace across devices.',
+  'settings.sync.generateToken': 'Generate Token',
+  'settings.sync.importHint': 'Or import a token from another device:',
+  'settings.sync.import': 'Import',
+  'settings.sync.section.status': 'Status',
+  'settings.sync.token': 'Token',
+  'settings.sync.lastPushed': 'Last pushed',
+  'settings.sync.lastPulled': 'Last pulled',
+  'settings.sync.never': 'Never',
+  'settings.sync.section.actions': 'Actions',
+  'settings.sync.pushToCloud': 'Push to Cloud',
+  'settings.sync.pullFromCloud': 'Pull from Cloud',
+  'settings.sync.disconnect': 'Disconnect',
+  'settings.sync.section.about': 'About Cloud Sync',
+  'settings.sync.aboutLine1': 'Sync sessions, sources config, skills, themes, and permissions across devices.',
+  'settings.sync.aboutLine2': 'Credentials are never synced. Files over 10MB and total data over 500MB are skipped.',
+  'settings.sync.aboutLine3': 'Push and pull are manual — nothing syncs automatically.',
+
+  // =========================================================================
+  // Settings: Workspace
+  // =========================================================================
+
+  'settings.workspace.title': 'Workspace Settings',
+  'settings.workspace.noWorkspace': 'No workspace selected',
+  'settings.workspace.section.info': 'Workspace Info',
+  'settings.workspace.name': 'Name',
+  'settings.workspace.icon': 'Icon',
+  'settings.workspace.edit': 'Edit',
+  'settings.workspace.change': 'Change',
+  'settings.workspace.uploading': 'Uploading...',
+  'settings.workspace.renameTitle': 'Rename workspace',
+  'settings.workspace.renamePlaceholder': 'Enter workspace name...',
+  'settings.workspace.section.permissions': 'Permissions',
+  'settings.workspace.defaultMode': 'Default mode',
+  'settings.workspace.defaultModeDescription': 'Control what AI can do',
+  'settings.workspace.modeSafeDescription': 'Read-only, no changes allowed',
+  'settings.workspace.modeAskDescription': 'Prompts before making edits',
+  'settings.workspace.modeAllowAllDescription': 'Full autonomous execution',
+  'settings.workspace.section.modeCycling': 'Mode Cycling',
+  'settings.workspace.section.modeCycling.description': 'Select which modes to cycle through with Shift+Tab',
+  'settings.workspace.modeCyclingError': 'At least 2 modes required',
+  'settings.workspace.section.advanced': 'Advanced',
+  'settings.workspace.workingDirectory': 'Default Working Directory',
+  'settings.workspace.workingDirectoryNotSet': 'Not set (uses session folder)',
+  'settings.workspace.clear': 'Clear',
+  'settings.workspace.changePath': 'Change...',
+  'settings.workspace.localMcpServers': 'Local MCP Servers',
+  'settings.workspace.localMcpDescription': 'Enable stdio subprocess servers',
+
+  // =========================================================================
+  // Settings: Permissions
+  // =========================================================================
+
+  'settings.permissions.title': 'Permissions',
+  'settings.permissions.section.about': 'About Permissions',
+  'settings.permissions.aboutP1': 'Permissions control how much autonomy your agent has. In <explore>Explore</explore> mode, the agent can only read and research — perfect for understanding a problem before committing to changes. When you\'re ready, switch to <execute>Execute</execute> mode to let the agent implement the plan autonomously.',
+  'settings.permissions.aboutP2': 'A good workflow: start in Explore to let the agent investigate, review the proposed plan, then execute with confidence.',
+  'settings.permissions.learnMore': 'Learn more',
+  'settings.permissions.section.default': 'Default Permissions',
+  'settings.permissions.section.default.description': 'App-level patterns allowed in Explore mode. Commands not on this list are blocked.',
+  'settings.permissions.noDefaults': 'No default permissions found.',
+  'settings.permissions.noDefaultsHint': 'Default permissions should be at ~/.g4os/permissions/default.json',
+  'settings.permissions.section.custom': 'Workspace Customizations',
+  'settings.permissions.section.custom.description': 'Workspace-level patterns that extend the app defaults above.',
+  'settings.permissions.noCustom': 'No custom permissions configured.',
+  'settings.permissions.noCustomHint': 'Create a permissions.json file in your workspace to add custom rules.',
+
+  // =========================================================================
+  // Settings: Labels
+  // =========================================================================
+
+  'settings.labels.section.about': 'About Tags',
+  'settings.labels.aboutP1': 'Tags help you organize sessions with colored tags. Use them to categorize conversations by project, topic, or priority — making it easy to filter and find related sessions later.',
+  'settings.labels.aboutP2': 'Each tag can optionally carry a <bold>value</bold> with a specific type (text, number, or date). This turns tags into structured metadata — for example, a "priority" tag with value 3, or a "due" tag with a date.',
+  'settings.labels.aboutP3': '<bold>Auto-apply rules</bold> assign tags automatically when a message matches a regex pattern. For example, pasting a Linear issue URL can auto-tag the session with the project name and issue ID — no manual tagging needed.',
+  'settings.labels.learnMore': 'Learn more',
+  'settings.labels.section.hierarchy': 'Tag Hierarchy',
+  'settings.labels.section.hierarchy.description': 'All tags configured for this workspace. Tags can be nested to form groups.',
+  'settings.labels.noTags': 'No tags configured.',
+  'settings.labels.noTagsHint': 'Tags can be created by the agent or by editing labels/config.json in your workspace.',
+  'settings.labels.section.autoRules': 'Auto-Apply Rules',
+  'settings.labels.section.autoRules.description': 'Regex patterns that automatically apply tags when matched in user messages. For example, paste a Linear issue URL and automatically tag the session with the project name and issue ID.',
+
+  // =========================================================================
+  // Settings: Shortcuts
+  // =========================================================================
+
+  'settings.shortcuts.title': 'Shortcuts',
+  'settings.shortcuts.section.listNavigation': 'List Navigation',
+  'settings.shortcuts.navigateItems': 'Navigate items in list',
+  'settings.shortcuts.goToFirst': 'Go to first item',
+  'settings.shortcuts.goToLast': 'Go to last item',
+  'settings.shortcuts.section.sessionList': 'Session List',
+  'settings.shortcuts.focusChatInput': 'Focus chat input',
+  'settings.shortcuts.openContextMenu': 'Open context menu',
+  'settings.shortcuts.section.chatInput': 'Chat Input',
+  'settings.shortcuts.sendMessage': 'Send message',
+  'settings.shortcuts.newLine': 'New line',
+  'settings.shortcuts.closeDialog': 'Close dialog / blur input',
 } as const satisfies TranslationDictionary
 
 export type TranslationKey = keyof typeof enUS

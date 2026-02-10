@@ -68,17 +68,21 @@ export default function LabelsSettingsPage() {
               ) : (
                 <>
                   {/* About Section */}
-                  <SettingsSection title="About Tags">
+                  <SettingsSection title={t('settings.labels.section.about')}>
                     <SettingsCard className="px-4 py-3.5">
                       <div className="text-sm text-muted-foreground leading-relaxed space-y-1.5">
+                        <p>{t('settings.labels.aboutP1')}</p>
                         <p>
-                          Tags help you organize sessions with colored tags. Use them to categorize conversations by project, topic, or priority — making it easy to filter and find related sessions later.
+                          {t('settings.labels.aboutP2').split(/<bold>|<\/bold>/).map((part, i) =>
+                            i % 2 === 1 ? <span key={i} className="text-foreground/80 font-medium">{part}</span> :
+                            <span key={i}>{part}</span>
+                          )}
                         </p>
                         <p>
-                          Each tag can optionally carry a <span className="text-foreground/80 font-medium">value</span> with a specific type (text, number, or date). This turns tags into structured metadata — for example, a "priority" tag with value 3, or a "due" tag with a date.
-                        </p>
-                        <p>
-                          <span className="text-foreground/80 font-medium">Auto-apply rules</span> assign tags automatically when a message matches a regex pattern. For example, pasting a Linear issue URL can auto-tag the session with the project name and issue ID — no manual tagging needed.
+                          {t('settings.labels.aboutP3').split(/<bold>|<\/bold>/).map((part, i) =>
+                            i % 2 === 1 ? <span key={i} className="text-foreground/80 font-medium">{part}</span> :
+                            <span key={i}>{part}</span>
+                          )}
                         </p>
                         <p>
                           <button
@@ -86,7 +90,7 @@ export default function LabelsSettingsPage() {
                             onClick={() => window.electronAPI?.openUrl(getDocUrl('labels'))}
                             className="text-foreground/70 hover:text-foreground underline underline-offset-2"
                           >
-                            Learn more
+                            {t('settings.labels.learnMore')}
                           </button>
                         </p>
                       </div>
@@ -95,8 +99,8 @@ export default function LabelsSettingsPage() {
 
                   {/* Tag Hierarchy Section */}
                   <SettingsSection
-                    title="Tag Hierarchy"
-                    description="All tags configured for this workspace. Tags can be nested to form groups."
+                    title={t('settings.labels.section.hierarchy')}
+                    description={t('settings.labels.section.hierarchy.description')}
                     action={
                       <EditPopover
                         trigger={<EditButton />}
@@ -119,9 +123,9 @@ export default function LabelsSettingsPage() {
                         />
                       ) : (
                         <div className="p-8 text-center text-muted-foreground">
-                          <p className="text-sm">No tags configured.</p>
+                          <p className="text-sm">{t('settings.labels.noTags')}</p>
                           <p className="text-xs mt-1 text-foreground/40">
-                            Tags can be created by the agent or by editing <code className="bg-foreground/5 px-1 rounded">labels/config.json</code> in your workspace.
+                            {t('settings.labels.noTagsHint')}
                           </p>
                         </div>
                       )}
@@ -130,8 +134,8 @@ export default function LabelsSettingsPage() {
 
                   {/* Auto-Apply Rules Section */}
                   <SettingsSection
-                    title="Auto-Apply Rules"
-                    description="Regex patterns that automatically apply tags when matched in user messages. For example, paste a Linear issue URL and automatically tag the session with the project name and issue ID."
+                    title={t('settings.labels.section.autoRules')}
+                    description={t('settings.labels.section.autoRules.description')}
                     action={
                       <EditPopover
                         trigger={<EditButton />}

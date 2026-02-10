@@ -15,6 +15,7 @@ import {
   OAuthConnect,
   type OAuthStatus,
 } from "../apisetup"
+import { useLocale } from "@/context/LocaleContext"
 
 export type CredentialStatus = ApiKeyStatus | OAuthStatus
 
@@ -42,6 +43,7 @@ export function CredentialsStep({
   onSubmitAuthCode,
   onCancelOAuth,
 }: CredentialsStepProps) {
+  const { t } = useLocale()
   const isClaudeOAuth = apiSetupMethod === 'claude_oauth'
   const isChatGptOAuth = apiSetupMethod === 'chatgpt_oauth'
   const isAnthropicApiKey = apiSetupMethod === 'anthropic_api_key'
@@ -52,8 +54,8 @@ export function CredentialsStep({
   if (isChatGptOAuth) {
     return (
       <StepFormLayout
-        title="Connect ChatGPT"
-        description="Use your ChatGPT Plus or Pro subscription to power Codex."
+        title={t('onboarding.credentials.chatgpt.title')}
+        description={t('onboarding.credentials.chatgpt.description')}
         actions={
           <>
             <BackButton onClick={onBack} disabled={status === 'validating'} />
@@ -61,17 +63,17 @@ export function CredentialsStep({
               onClick={() => onStartOAuth?.()}
               className="gap-2"
               loading={status === 'validating'}
-              loadingText="Connecting..."
+              loadingText={t('onboarding.credentials.chatgpt.connecting')}
             >
               <ExternalLink className="size-4" />
-              Sign in with ChatGPT
+              {t('onboarding.credentials.chatgpt.signIn')}
             </ContinueButton>
           </>
         }
       >
         <div className="space-y-4">
           <div className="rounded-xl bg-foreground-2 p-4 text-sm text-muted-foreground">
-            <p>Click the button above to sign in with your OpenAI account. A browser window will open for authentication.</p>
+            <p>{t('onboarding.credentials.chatgpt.info')}</p>
           </div>
           {status === 'error' && errorMessage && (
             <div className="rounded-lg bg-destructive/10 text-destructive text-sm p-3">
@@ -80,7 +82,7 @@ export function CredentialsStep({
           )}
           {status === 'success' && (
             <div className="rounded-lg bg-success/10 text-success text-sm p-3">
-              Connected! Your ChatGPT subscription is ready.
+              {t('onboarding.credentials.chatgpt.success')}
             </div>
           )}
         </div>
@@ -94,17 +96,17 @@ export function CredentialsStep({
     if (isWaitingForCode) {
       return (
         <StepFormLayout
-          title="Enter Authorization Code"
-          description="Copy the code from the browser page and paste it below."
+          title={t('onboarding.credentials.authCode.title')}
+          description={t('onboarding.credentials.authCode.description')}
           actions={
             <>
-              <BackButton onClick={onCancelOAuth} disabled={status === 'validating'}>Cancel</BackButton>
+              <BackButton onClick={onCancelOAuth} disabled={status === 'validating'}>{t('onboarding.credentials.authCode.cancel')}</BackButton>
               <ContinueButton
                 type="submit"
                 form="auth-code-form"
                 disabled={false}
                 loading={status === 'validating'}
-                loadingText="Connecting..."
+                loadingText={t('onboarding.credentials.claude.connecting')}
               />
             </>
           }
@@ -123,8 +125,8 @@ export function CredentialsStep({
 
     return (
       <StepFormLayout
-        title="Connect Claude Account"
-        description="Use your Claude subscription to power multi-agent workflows."
+        title={t('onboarding.credentials.claude.title')}
+        description={t('onboarding.credentials.claude.description')}
         actions={
           <>
             <BackButton onClick={onBack} disabled={status === 'validating'} />
@@ -132,10 +134,10 @@ export function CredentialsStep({
               onClick={() => onStartOAuth?.()}
               className="gap-2"
               loading={status === 'validating'}
-              loadingText="Connecting..."
+              loadingText={t('onboarding.credentials.claude.connecting')}
             >
               <ExternalLink className="size-4" />
-              Sign in with Claude
+              {t('onboarding.credentials.claude.signIn')}
             </ContinueButton>
           </>
         }
@@ -156,12 +158,12 @@ export function CredentialsStep({
   // Determine provider type and description based on selected method
   const providerType = isOpenAiApiKey ? 'openai' : 'anthropic'
   const apiKeyDescription = isOpenAiApiKey
-    ? "Enter your OpenAI API key. Optionally configure OpenRouter or Vercel AI Gateway."
-    : "Enter your API key. Optionally configure a custom endpoint for OpenRouter, Ollama, or compatible APIs."
+    ? t('onboarding.credentials.apiKey.descriptionOpenAI')
+    : t('onboarding.credentials.apiKey.descriptionAnthropic')
 
   return (
     <StepFormLayout
-      title="API Configuration"
+      title={t('onboarding.credentials.apiKey.title')}
       description={apiKeyDescription}
       actions={
         <>
@@ -171,7 +173,7 @@ export function CredentialsStep({
             form="api-key-form"
             disabled={false}
             loading={status === 'validating'}
-            loadingText="Validating..."
+            loadingText={t('onboarding.credentials.apiKey.validating')}
           />
         </>
       }

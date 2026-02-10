@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
 import { useAppShellContext } from '@/context/AppShellContext'
+import { useLocale } from '@/context/LocaleContext'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { SyncStatus, SyncProgress, SyncResult, PullPreview } from '@g4os/shared/cloud-sync'
 
@@ -31,8 +32,8 @@ export const meta: DetailsPageMeta = {
   slug: 'sync',
 }
 
-function formatDate(ts: number | null): string {
-  if (!ts) return 'Never'
+function formatDate(ts: number | null, neverLabel: string = 'Never'): string {
+  if (!ts) return neverLabel
   return new Date(ts).toLocaleString()
 }
 
@@ -44,6 +45,7 @@ function formatBytes(bytes: number): string {
 
 export default function CloudSyncSettingsPage() {
   const appShellContext = useAppShellContext()
+  const { t } = useLocale()
   const activeWorkspaceId = appShellContext.activeWorkspaceId
 
   // State
@@ -187,9 +189,9 @@ export default function CloudSyncSettingsPage() {
   if (!activeWorkspaceId) {
     return (
       <div className="flex flex-col h-full">
-        <PanelHeader title="Cloud Sync" actions={<HeaderMenu route={routes.view.settings('sync')} />} />
+        <PanelHeader title={t('settings.sync.title')} actions={<HeaderMenu route={routes.view.settings('sync')} />} />
         <div className="flex items-center justify-center flex-1">
-          <p className="text-sm text-muted-foreground">No workspace selected</p>
+          <p className="text-sm text-muted-foreground">{t('settings.sync.noWorkspace')}</p>
         </div>
       </div>
     )
@@ -199,17 +201,17 @@ export default function CloudSyncSettingsPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <PanelHeader title="Cloud Sync" actions={<HeaderMenu route={routes.view.settings('sync')} />} />
+      <PanelHeader title={t('settings.sync.title')} actions={<HeaderMenu route={routes.view.settings('sync')} />} />
       <ScrollArea className="flex-1">
         <div className="p-6 space-y-6 max-w-xl">
 
           {/* Token just generated - show it */}
           {newToken && (
-            <SettingsSection title="Your Sync Token">
+            <SettingsSection title={t('settings.sync.section.yourToken')}>
               <SettingsCard>
                 <div className="p-4 space-y-3">
                   <p className="text-xs text-amber-500 font-medium">
-                    Save this token now — it cannot be shown again.
+                    {t('settings.sync.tokenWarning')}
                   </p>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono break-all select-all">
@@ -220,14 +222,14 @@ export default function CloudSyncSettingsPage() {
                       variant="outline"
                       onClick={handleCopy}
                     >
-                      {copied ? 'Copied' : 'Copy'}
+                      {copied ? t('settings.sync.copied') : t('settings.sync.copy')}
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Paste this token on your other device to sync this workspace.
+                    {t('settings.sync.tokenHint')}
                   </p>
                   <Button size="sm" variant="ghost" onClick={() => setNewToken(null)}>
-                    Dismiss
+                    {t('settings.sync.dismiss')}
                   </Button>
                 </div>
               </SettingsCard>
@@ -236,7 +238,7 @@ export default function CloudSyncSettingsPage() {
 
           {/* Progress indicator */}
           {isSyncing && progress && (
-            <SettingsSection title="Syncing...">
+            <SettingsSection title={t('settings.sync.syncing')}>
               <SettingsCard>
                 <div className="p-4 space-y-2">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -265,7 +267,7 @@ export default function CloudSyncSettingsPage() {
 
           {/* Result toast */}
           {lastResult && (
-            <SettingsSection title={lastResult.success ? 'Sync Complete' : 'Sync Failed'}>
+            <SettingsSection title={lastResult.success ? t('settings.sync.syncComplete') : t('settings.sync.syncFailed')}>
               <SettingsCard>
                 <div className="p-4">
                   {lastResult.success ? (
@@ -284,29 +286,29 @@ export default function CloudSyncSettingsPage() {
 
           {/* Pull preview confirmation */}
           {pullPreview && (
-            <SettingsSection title="Pull Preview">
+            <SettingsSection title={t('settings.sync.pullPreview')}>
               <SettingsCard>
                 <div className="p-4 space-y-3">
                   <p className="text-xs text-muted-foreground">
-                    From <strong>{pullPreview.remotePushedFrom}</strong> on {formatDate(pullPreview.remotePushedAt)}
+                    From <strong>{pullPreview.remotePushedFrom}</strong> on {formatDate(pullPreview.remotePushedAt, t('settings.sync.never'))}
                   </p>
                   <div className="text-xs space-y-1">
-                    {pullPreview.added > 0 && <p className="text-green-500">{pullPreview.added} new files</p>}
-                    {pullPreview.modified > 0 && <p className="text-amber-500">{pullPreview.modified} modified files</p>}
-                    {pullPreview.deleted > 0 && <p className="text-destructive">{pullPreview.deleted} files to delete</p>}
+                    {pullPreview.added > 0 && <p className="text-green-500">{pullPreview.added} {t('settings.sync.newFiles')}</p>}
+                    {pullPreview.modified > 0 && <p className="text-amber-500">{pullPreview.modified} {t('settings.sync.modifiedFiles')}</p>}
+                    {pullPreview.deleted > 0 && <p className="text-destructive">{pullPreview.deleted} {t('settings.sync.filesToDelete')}</p>}
                     {pullPreview.added === 0 && pullPreview.modified === 0 && pullPreview.deleted === 0 && (
-                      <p>Everything is up to date.</p>
+                      <p>{t('settings.sync.upToDate')}</p>
                     )}
                   </div>
                   {(pullPreview.added > 0 || pullPreview.modified > 0 || pullPreview.deleted > 0) && (
                     <>
-                      <p className="text-xs text-amber-500">This will overwrite local data.</p>
+                      <p className="text-xs text-amber-500">{t('settings.sync.overwriteWarning')}</p>
                       <div className="flex gap-2">
                         <Button size="sm" variant="default" onClick={handlePull} disabled={!!isSyncing}>
-                          Confirm Pull
+                          {t('settings.sync.confirmPull')}
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => setPullPreview(null)}>
-                          Cancel
+                          {t('settings.sync.cancel')}
                         </Button>
                       </div>
                     </>
@@ -319,19 +321,19 @@ export default function CloudSyncSettingsPage() {
           {/* Main section: Disconnected or Connected */}
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <p className="text-sm text-muted-foreground">Loading...</p>
+              <p className="text-sm text-muted-foreground">{t('settings.sync.loading')}</p>
             </div>
           ) : !status?.connected ? (
             // Disconnected state
-            <SettingsSection title="Connect" description="Generate a token to sync this workspace across devices.">
+            <SettingsSection title={t('settings.sync.section.connect')} description={t('settings.sync.section.connect.description')}>
               <SettingsCard>
                 <div className="p-4 space-y-4">
                   <Button onClick={handleGenerateToken} size="sm" variant="default">
-                    Generate Token
+                    {t('settings.sync.generateToken')}
                   </Button>
 
                   <div className="border-t border-border pt-4 space-y-2">
-                    <p className="text-xs text-muted-foreground">Or import a token from another device:</p>
+                    <p className="text-xs text-muted-foreground">{t('settings.sync.importHint')}</p>
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
@@ -346,7 +348,7 @@ export default function CloudSyncSettingsPage() {
                         onClick={handleImportToken}
                         disabled={!importToken.trim()}
                       >
-                        Import
+                        {t('settings.sync.import')}
                       </Button>
                     </div>
                     {importError && (
@@ -359,19 +361,19 @@ export default function CloudSyncSettingsPage() {
           ) : (
             // Connected state
             <>
-              <SettingsSection title="Status">
+              <SettingsSection title={t('settings.sync.section.status')}>
                 <SettingsCard>
-                  <SettingsRow label="Token" description={`g4sync_${'*'.repeat(28)}`} />
-                  <SettingsRow label="Last pushed">
-                    <span className="text-xs">{formatDate(status.lastPushedAt)}</span>
+                  <SettingsRow label={t('settings.sync.token')} description={`g4sync_${'*'.repeat(28)}`} />
+                  <SettingsRow label={t('settings.sync.lastPushed')}>
+                    <span className="text-xs">{formatDate(status.lastPushedAt, t('settings.sync.never'))}</span>
                   </SettingsRow>
-                  <SettingsRow label="Last pulled">
-                    <span className="text-xs">{formatDate(status.lastPulledAt)}</span>
+                  <SettingsRow label={t('settings.sync.lastPulled')}>
+                    <span className="text-xs">{formatDate(status.lastPulledAt, t('settings.sync.never'))}</span>
                   </SettingsRow>
                 </SettingsCard>
               </SettingsSection>
 
-              <SettingsSection title="Actions">
+              <SettingsSection title={t('settings.sync.section.actions')}>
                 <SettingsCard>
                   <div className="p-4 flex flex-wrap gap-2">
                     <Button
@@ -380,7 +382,7 @@ export default function CloudSyncSettingsPage() {
                       onClick={handlePush}
                       disabled={!!isSyncing}
                     >
-                      Push to Cloud
+                      {t('settings.sync.pushToCloud')}
                     </Button>
                     <Button
                       size="sm"
@@ -388,7 +390,7 @@ export default function CloudSyncSettingsPage() {
                       onClick={handlePullPreview}
                       disabled={!!isSyncing}
                     >
-                      Pull from Cloud
+                      {t('settings.sync.pullFromCloud')}
                     </Button>
                     <Button
                       size="sm"
@@ -397,7 +399,7 @@ export default function CloudSyncSettingsPage() {
                       onClick={handleDisconnect}
                       disabled={!!isSyncing}
                     >
-                      Disconnect
+                      {t('settings.sync.disconnect')}
                     </Button>
                   </div>
                 </SettingsCard>
@@ -406,12 +408,12 @@ export default function CloudSyncSettingsPage() {
           )}
 
           {/* Info section */}
-          <SettingsSection title="About Cloud Sync">
+          <SettingsSection title={t('settings.sync.section.about')}>
             <SettingsCard>
               <div className="p-4 space-y-2 text-xs text-muted-foreground">
-                <p>Sync sessions, sources config, skills, themes, and permissions across devices.</p>
-                <p>Credentials are never synced. Files over 10MB and total data over 500MB are skipped.</p>
-                <p>Push and pull are manual — nothing syncs automatically.</p>
+                <p>{t('settings.sync.aboutLine1')}</p>
+                <p>{t('settings.sync.aboutLine2')}</p>
+                <p>{t('settings.sync.aboutLine3')}</p>
               </div>
             </SettingsCard>
           </SettingsSection>

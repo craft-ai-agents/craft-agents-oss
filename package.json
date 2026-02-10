@@ -1,6 +1,6 @@
 {
   "name": "g4os",
-  "version": "0.5.3",
+  "version": "0.5.6",
   "description": "G4 OS - Multi-session AI agent management desktop app",
   "type": "module",
   "private": true,

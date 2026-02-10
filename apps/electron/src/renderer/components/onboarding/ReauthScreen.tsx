@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@g4os/ui"
 import { G4OSSymbol } from "@/components/icons/G4OSSymbol"
 import { StepFormLayout } from "./primitives"
+import { useLocale } from "@/context/LocaleContext"
 
 interface ReauthScreenProps {
   onLogin: () => Promise<void>
@@ -17,6 +18,7 @@ interface ReauthScreenProps {
  * is missing or expired. Much simpler than full onboarding - just re-authenticate.
  */
 export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
+  const { t } = useLocale()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -26,7 +28,7 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
     try {
       await onLogin()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      setError(err instanceof Error ? err.message : t('onboarding.reauth.loginFailed'))
       setIsLoading(false)
     }
   }
@@ -44,15 +46,15 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
               <AlertCircle className="size-8 text-info" />
             </div>
           }
-          title="Session Expired"
+          title={t('onboarding.reauth.title')}
           description={
             <>
-              Your G4 OS session has expired or is no longer valid.
+              {t('onboarding.reauth.description')}
               <br />
-              Please log in again to continue using G4 OS.
+              {t('onboarding.reauth.pleaseLogin')}
               <br />
               <span className="text-muted-foreground/70 text-xs mt-2 block">
-                Your conversations and settings are preserved.
+                {t('onboarding.reauth.preserved')}
               </span>
             </>
           }
@@ -67,12 +69,12 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
                 {isLoading ? (
                   <>
                     <Spinner className="mr-2" />
-                    Logging in...
+                    {t('onboarding.reauth.loggingIn')}
                   </>
                 ) : (
                   <>
                     <RefreshCw className="mr-2 size-4" />
-                    Log In with G4 OS
+                    {t('onboarding.reauth.loginButton')}
                   </>
                 )}
               </Button>
@@ -83,7 +85,7 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
                 className="w-full max-w-[320px] bg-foreground-2 shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
                 size="sm"
               >
-                Reset app and start fresh...
+                {t('onboarding.reauth.resetButton')}
               </Button>
             </div>
           }
