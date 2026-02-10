@@ -62,8 +62,8 @@ export function getBunDownloadName(platform: Platform, arch: Arch): string {
   const bunArch = archMap[arch];
   const bunPlatform = platformMap[platform];
 
-  // Windows uses baseline build for broader CPU compatibility
-  if (platform === 'win32') {
+  // Windows and Linux x64 use baseline build for broader CPU compatibility (no AVX2 requirement)
+  if ((platform === 'win32' || platform === 'linux') && arch === 'x64') {
     return `bun-${bunPlatform}-x64-baseline`;
   }
 
