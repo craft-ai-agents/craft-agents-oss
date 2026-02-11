@@ -1948,6 +1948,12 @@ export class SessionManager {
 
     this.sessions.set(storedSession.id, managed)
 
+    // Notify all windows about the new session (for scheduler/programmatic creation)
+    this.sendEvent({
+      type: 'session_created',
+      sessionId: storedSession.id,
+    }, workspace.id)
+
     // Initialize hook system snapshot for this new session
     const hookSystem = this.getHookSystem(workspaceRootPath)
     if (hookSystem) {

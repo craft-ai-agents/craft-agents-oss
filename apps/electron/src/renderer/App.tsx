@@ -645,6 +645,19 @@ export default function App() {
         window.electronAPI.getBackendCapabilities(sessionId).then(setCapabilities)
       }
 
+      // Handle session_created: fetch full session from backend (scheduler, hooks, etc.)
+      if (event.type === 'session_created') {
+        window.electronAPI.getSession(sessionId).then(fullSession => {
+          if (!fullSession) return
+          updateSessionDirect(sessionId, () => fullSession)
+          const metaMap = store.get(sessionMetaMapAtom)
+          const newMetaMap = new Map(metaMap)
+          newMetaMap.set(sessionId, extractSessionMeta(fullSession))
+          store.set(sessionMetaMapAtom, newMetaMap)
+        })
+        return
+      }
+
       // Check if session is currently streaming (atom is source of truth)
       const atomSession = store.get(sessionAtomFamily(sessionId))
       const isStreaming = atomSession?.isProcessing === true
