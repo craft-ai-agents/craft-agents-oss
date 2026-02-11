@@ -1652,6 +1652,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       workingDirectory: config?.defaults?.workingDirectory,
       localMcpEnabled: config?.localMcpServers?.enabled ?? true,
       defaultLlmConnection: config?.defaults?.defaultLlmConnection,
+      enabledSourceSlugs: config?.defaults?.enabledSourceSlugs,
     }
   })
 

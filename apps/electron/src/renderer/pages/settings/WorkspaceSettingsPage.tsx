@@ -22,6 +22,8 @@ import { cn } from '@/lib/utils'
 import { routes } from '@/lib/navigate'
 import { Spinner } from '@g4os/ui'
 import { RenameDialog } from '@/components/ui/rename-dialog'
+import { useAtomValue } from 'jotai'
+import { sourcesAtom } from '@/atoms/sources'
 import type { PermissionMode, WorkspaceSettings } from '../../../shared/types'
 import { PERMISSION_MODE_CONFIG } from '@g4os/shared/agent/mode-types'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
@@ -62,6 +64,10 @@ export default function WorkspaceSettingsPage() {
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true)
 
+  // Default sources state
+  const sources = useAtomValue(sourcesAtom)
+  const [defaultSourceSlugs, setDefaultSourceSlugs] = useState<string[]>([])
+
   // Mode cycling state
   const [enabledModes, setEnabledModes] = useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
   const [modeCyclingError, setModeCyclingError] = useState<string | null>(null)
@@ -83,6 +89,7 @@ export default function WorkspaceSettingsPage() {
           setPermissionMode(settings.permissionMode || 'ask')
           setWorkingDirectory(settings.workingDirectory || '')
           setLocalMcpEnabled(settings.localMcpEnabled ?? true)
+          setDefaultSourceSlugs(settings.enabledSourceSlugs || [])
           // Load cyclable permission modes from workspace settings
           if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
             setEnabledModes(settings.cyclablePermissionModes)
@@ -265,6 +272,21 @@ export default function WorkspaceSettingsPage() {
     [enabledModes, updateWorkspaceSetting]
   )
 
+  const handleDefaultSourceToggle = useCallback(
+    async (slug: string, checked: boolean) => {
+      const newSlugs = checked
+        ? [...defaultSourceSlugs, slug]
+        : defaultSourceSlugs.filter((s) => s !== slug)
+      setDefaultSourceSlugs(newSlugs)
+      try {
+        await updateWorkspaceSetting('enabledSourceSlugs', newSlugs.length > 0 ? newSlugs : undefined)
+      } catch (error) {
+        console.error('Failed to save default sources:', error)
+      }
+    },
+    [defaultSourceSlugs, updateWorkspaceSetting]
+  )
+
   // Show empty state if no workspace is active
   if (!activeWorkspaceId) {
     return (
@@ -384,6 +406,30 @@ export default function WorkspaceSettingsPage() {
                     { value: 'allow-all', label: PERMISSION_MODE_CONFIG['allow-all'].shortName, description: t('settings.workspace.modeAllowAllDescription') },
                   ]}
                 />
+              </SettingsCard>
+            </SettingsSection>
+
+            {/* Default Sources */}
+            <SettingsSection
+              title={t('settings.workspace.section.defaultSources')}
+              description={t('settings.workspace.section.defaultSources.description')}
+            >
+              <SettingsCard>
+                {sources.length === 0 ? (
+                  <SettingsRow
+                    label={t('settings.workspace.noSources')}
+                  />
+                ) : (
+                  sources.map((source) => (
+                    <SettingsToggle
+                      key={source.config.slug}
+                      label={source.config.name}
+                      description={`${source.config.provider} · ${source.config.type}`}
+                      checked={defaultSourceSlugs.includes(source.config.slug)}
+                      onCheckedChange={(checked) => handleDefaultSourceToggle(source.config.slug, checked)}
+                    />
+                  ))
+                )}
               </SettingsCard>
             </SettingsSection>
 

@@ -1874,6 +1874,9 @@ export class SessionManager {
       resolvedWorkingDir = options.workingDirectory
     }
 
+    // Resolve enabled sources: explicit option > workspace default
+    const resolvedEnabledSourceSlugs = options?.enabledSourceSlugs ?? wsConfig?.defaults?.enabledSourceSlugs
+
     // Use storage layer to create and persist the session
     const storedSession = await createStoredSession(workspaceRootPath, {
       permissionMode: defaultPermissionMode,
@@ -1882,7 +1885,7 @@ export class SessionManager {
       todoState: options?.todoState,
       labels: options?.labels,
       isFlagged: options?.isFlagged,
-      enabledSourceSlugs: options?.enabledSourceSlugs,
+      enabledSourceSlugs: resolvedEnabledSourceSlugs,
     })
 
     // Resolve connection to determine provider for model compatibility check
@@ -1936,7 +1939,7 @@ export class SessionManager {
       backgroundShellCommands: new Map(),
       messagesLoaded: true,  // New sessions don't need to load messages from disk
       hidden: options?.hidden,
-      enabledSourceSlugs: options?.enabledSourceSlugs,
+      enabledSourceSlugs: resolvedEnabledSourceSlugs,
       // Initialize TokenRefreshManager for this session (handles OAuth token refresh with rate limiting)
       tokenRefreshManager: new TokenRefreshManager(getSourceCredentialManager(), {
         log: (msg) => sessionLog.debug(msg),
@@ -1972,7 +1975,7 @@ export class SessionManager {
       thinkingLevel: defaultThinkingLevel,
       sessionFolderPath: getSessionStoragePath(workspaceRootPath, storedSession.id),
       hidden: options?.hidden,
-      enabledSourceSlugs: options?.enabledSourceSlugs,
+      enabledSourceSlugs: resolvedEnabledSourceSlugs,
     }
   }
 

@@ -1289,6 +1289,8 @@ export interface WorkspaceSettings {
   localMcpEnabled?: boolean
   /** Default LLM connection slug for new sessions in this workspace */
   defaultLlmConnection?: string
+  /** Source slugs to enable by default in new sessions */
+  enabledSourceSlugs?: string[]
 }
 
 /**
