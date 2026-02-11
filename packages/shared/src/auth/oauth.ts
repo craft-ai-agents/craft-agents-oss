@@ -131,10 +131,15 @@ export class CraftOAuth {
       token_type?: string;
     };
 
+    // Default to 3600s (1 hour) if server doesn't return expires_in.
+    // Most OAuth access tokens expire in 1 hour per RFC 6749.
+    // Without this, tokens with no expiresAt are never detected as needing refresh.
+    const expiresIn = data.expires_in ?? 3600;
+
     return {
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
-      expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
+      expiresAt: Date.now() + expiresIn * 1000,
       tokenType: data.token_type || 'Bearer',
     };
   }
@@ -169,10 +174,12 @@ export class CraftOAuth {
       token_type?: string;
     };
 
+    const expiresIn = data.expires_in ?? 3600;
+
     return {
       accessToken: data.access_token,
       refreshToken: data.refresh_token || refreshToken,
-      expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
+      expiresAt: Date.now() + expiresIn * 1000,
       tokenType: data.token_type || 'Bearer',
     };
   }

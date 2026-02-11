@@ -87,6 +87,10 @@ export class TokenRefreshManager {
   async needsRefresh(source: LoadedSource): Promise<boolean> {
     const cred = await this.credManager.load(source);
     if (!cred) return false;
+    // If no expiresAt, we can't determine token lifetime — proactively refresh.
+    // This handles credentials stored before expiresAt defaulting was added.
+    // After refresh, the new credential will have expiresAt set, preventing refresh every turn.
+    if (!cred.expiresAt) return true;
     return this.credManager.isExpired(cred) || this.credManager.needsRefresh(cred);
   }
 

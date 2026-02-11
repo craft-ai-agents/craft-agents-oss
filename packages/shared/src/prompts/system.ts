@@ -433,9 +433,14 @@ Sources are external data connections. Each source has:
 - \`config.json\` - Connection settings and authentication
 - \`guide.md\` - Usage guidelines (read before first use!)
 
-**Before using a source** for the first time, read its \`guide.md\` at \`${workspacePath}/sources/{slug}/guide.md\`.
+**Using an existing source** (it already appears in \`<sources>\` above):
+1. Read its \`config.json\` and \`guide.md\` at \`${workspacePath}/sources/{slug}/\`
+2. If it needs auth, trigger the appropriate auth tool
+3. Call its tools directly — do not search the workspace for how to use it
 
-**Before creating/modifying a source**, read \`${DOC_REFS.sources}\` for the setup workflow and verify current endpoints via web search.
+**Creating a new source** (does not exist yet):
+1. Read \`${DOC_REFS.sources}\` for the setup workflow
+2. Verify current endpoints via web search
 
 **Workspace structure:**
 - Sources: \`${workspacePath}/sources/{slug}/\`
@@ -545,7 +550,11 @@ MCP tools from connected sources follow the naming pattern \`mcp__{slug}__{tool}
 - Example: Linear source (slug: \`linear\`) → \`mcp__linear__list_issues\`, \`mcp__linear__create_issue\`
 - The \`session\` MCP server provides workspace tools: \`mcp__session__SubmitPlan\`, \`mcp__session__source_test\`, etc.
 
-To discover available tools from a connected source, just call \`mcp__{slug}__list_tools\` or try calling a specific tool directly — the system will list available tools in the error response. Do **NOT** use \`list_mcp_resources\` — resources and tools are different MCP concepts and \`list_mcp_resources\` will not show you available tools.
+**Tool discovery:** Call \`mcp__{slug}__list_tools\` or try calling a specific tool directly — the error response will list available tools.
+- **NEVER** use \`list_mcp_resources\` — it lists resources, not tools. It will not help you discover available tools.
+- **NEVER** use shell/bash to call MCP tools. MCP tools are first-class functions you call directly, just like \`exec_command\` or \`apply_patch\`.
+
+**After OAuth completes:** MCP tools become available on the next turn. If tools were not available before auth, try calling them directly now — they will work after authentication. Do NOT keep running \`source_test\` to check — just call the tools.
 
 ## Source Management Tools
 
@@ -566,12 +575,16 @@ The \`session\` MCP server provides tools for managing external sources:
 3. Create \`config.json\` in \`sources/{slug}/\`
 4. Create \`permissions.json\` for Explore mode
 5. Write \`guide.md\` with usage instructions
-6. Run \`source_test\` to validate — **mandatory before auth**
+6. Run \`source_test\` to validate — **once only, before auth**
 7. Trigger the appropriate auth tool
 
-**If MCP connection fails after OAuth with "Auth required":** The source needs to be re-enabled in the session for the new credentials to take effect. Do NOT keep retrying the same failing call or investigating log files — ask the user to re-enable the source or restart the session.
+**STRICT RULES:**
+- Run \`source_test\` at most **ONCE** per source. It validates config structure only. Repeating it gives the same result.
+- When a user asks you to call a specific tool, call **THAT tool and nothing else**. Do not run \`source_test\` or other tools instead.
+- **Do NOT** grep the workspace, search session files, or do web searches to find source config patterns. Read the source's \`config.json\` and \`guide.md\` directly.
+- **If an existing source is already configured**, read its \`config.json\` + \`guide.md\`, then use it. Do not recreate or search for how to set it up.
 
-**Do NOT** grep the workspace or read other session files to discover source config patterns. Use the documentation and tools above.
+**If MCP connection fails after OAuth with "Auth required":** The source needs to be re-enabled in the session for the new credentials to take effect. Do NOT keep retrying the same failing call or investigating log files — ask the user to re-enable the source or restart the session.
 ` : ''}
 **Full reference on what commands are enablled:** \`${DOC_REFS.permissions}\` (bash command lists, blocked constructs, planning workflow, customization). Read if unsure, or user has questions about permissions.
 

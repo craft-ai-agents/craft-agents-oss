@@ -220,7 +220,8 @@ async function refreshOAuthTokensIfNeeded(
   agent: AgentInstance,
   sources: LoadedSource[],
   sessionPath: string,
-  tokenRefreshManager: TokenRefreshManager
+  tokenRefreshManager: TokenRefreshManager,
+  options?: { sessionId?: string; workspaceRootPath?: string }
 ): Promise<OAuthTokenRefreshResult> {
   sessionLog.debug('[OAuth] Checking if any OAuth tokens need refresh')
 
@@ -254,6 +255,22 @@ async function refreshOAuthTokensIfNeeded(
     )
     const intendedSlugs = enabledSources.map(s => s.config.slug)
     agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
+
+    // For Codex backend: write fresh tokens to config.toml and reconnect.
+    // setSourceServers is a no-op for Codex — the app-server reads config.toml,
+    // so we must regenerate it and restart the app-server to pick up fresh tokens.
+    if (agent instanceof CodexBackend && options?.sessionId && options?.workspaceRootPath) {
+      try {
+        await setupCodexSessionConfig(
+          sessionPath, enabledSources, mcpServers, options.sessionId, options.workspaceRootPath
+        )
+        await agent.queueReconnect()
+        sessionLog.info(`[OAuth] Codex config regenerated after token refresh`)
+      } catch (err) {
+        sessionLog.error(`[OAuth] Failed to regenerate Codex config after token refresh: ${err}`)
+      }
+    }
+
     return { tokensRefreshed: true, failedSources }
   }
 
@@ -3989,7 +4006,8 @@ export class SessionManager {
           agent,
           sources,
           sessionPath,
-          managed.tokenRefreshManager
+          managed.tokenRefreshManager,
+          { sessionId, workspaceRootPath }
         )
         if (refreshResult.failedSources.length > 0) {
           sessionLog.warn('[OAuth] Some sources failed token refresh:', refreshResult.failedSources.map(f => f.slug))
