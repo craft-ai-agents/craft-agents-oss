@@ -88,6 +88,13 @@ export interface PlatformActions {
    * No-op on non-macOS platforms or in web viewer.
    */
   onSetTrafficLightsVisible?: (visible: boolean) => void
+
+  /**
+   * Read a local file as a data URL (e.g., "data:image/png;base64,...").
+   * Used by MarkdownImage to display inline images from local file paths.
+   * Electron: wraps IPC READ_FILE_DATA_URL. Web viewer: undefined (images degrade to alt text).
+   */
+  onReadFileAsDataUrl?: (path: string) => Promise<string>
 }
 
 const PlatformContext = createContext<PlatformActions>({})

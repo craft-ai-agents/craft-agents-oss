@@ -339,6 +339,24 @@ function extractToolMetadata(toolBlock: ToolUseBlock): { intent?: string; displa
 export function serializeResult(value: unknown): string {
   if (typeof value === 'string') return value;
   if (value === undefined || value === null) return '';
+
+  // Handle SDK content block arrays containing image blocks —
+  // convert base64 image blocks to inline markdown instead of JSON-stringifying
+  if (Array.isArray(value)) {
+    const parts: string[] = [];
+    let hasImageBlock = false;
+    for (const block of value) {
+      if (block?.type === 'image' && block.source?.type === 'base64') {
+        hasImageBlock = true;
+        const mediaType = block.source.media_type || 'image/png';
+        parts.push(`![image](data:${mediaType};base64,${block.source.data})`);
+      } else if (block?.type === 'text' && typeof block.text === 'string') {
+        parts.push(block.text);
+      }
+    }
+    if (hasImageBlock && parts.length > 0) return parts.join('\n\n');
+  }
+
   try {
     return JSON.stringify(value, null, 2);
   } catch {

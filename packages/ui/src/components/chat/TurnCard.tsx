@@ -68,6 +68,27 @@ function stripMarkdown(text: string): string {
     .trim()
 }
 
+/** Regex to extract markdown image data URLs from tool result content */
+const IMAGE_DATA_URL_REGEX = /!\[([^\]]*)\]\((data:image\/[^)]+)\)/g
+
+/**
+ * Extract inline image entries from activity contents.
+ * Returns array of { alt, src } for activities whose content contains
+ * `![alt](data:image/...)` markdown (produced by serializeResult for SDK image blocks).
+ */
+function extractActivityImages(activities: ActivityItem[]): { alt: string; src: string; activityId: string }[] {
+  const images: { alt: string; src: string; activityId: string }[] = []
+  for (const activity of activities) {
+    if (!activity.content || activity.type !== 'tool') continue
+    IMAGE_DATA_URL_REGEX.lastIndex = 0
+    let match
+    while ((match = IMAGE_DATA_URL_REGEX.exec(activity.content)) !== null) {
+      images.push({ alt: match[1] || 'image', src: match[2], activityId: activity.id })
+    }
+  }
+  return images
+}
+
 /**
  * Compute diff stats for Edit/Write tool inputs.
  * Uses @pierre/diffs for accurate line-by-line diff calculation.
@@ -1796,6 +1817,14 @@ export const TurnCard = React.memo(function TurnCard({
     [sortedActivities, hasTaskSubagents]
   )
 
+  // Extract inline images from tool results (e.g., Read tool on PNG files).
+  // These get prepended to the response text so they render inside the ResponseCard.
+  const activityImageMarkdown = useMemo(() => {
+    const images = extractActivityImages(allSortedActivities)
+    if (images.length === 0) return ''
+    return images.map(img => `![${img.alt}](${img.src})`).join('\n\n') + '\n\n'
+  }, [allSortedActivities])
+
   // Don't render if nothing to show and turn is complete
   if (activities.length === 0 && !response && isComplete) {
     return null
@@ -2041,7 +2070,7 @@ export const TurnCard = React.memo(function TurnCard({
               className={cn("select-text", hasActivities && "mt-2")}
             >
               <ResponseCard
-                text={response.text}
+                text={activityImageMarkdown + response.text}
                 isStreaming={response.isStreaming}
                 streamStartTime={response.streamStartTime}
                 onOpenFile={onOpenFile}
@@ -2061,7 +2090,7 @@ export const TurnCard = React.memo(function TurnCard({
       {!animateResponse && response && !isBuffering && (
         <div className={cn("select-text", hasActivities && "mt-2")}>
           <ResponseCard
-            text={response.text}
+            text={activityImageMarkdown + response.text}
             isStreaming={response.isStreaming}
             streamStartTime={response.streamStartTime}
             onOpenFile={onOpenFile}

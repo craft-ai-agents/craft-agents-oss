@@ -12,7 +12,7 @@ const linkify = new LinkifyIt()
 
 // File path regex - detects /path, ~/path, ./path with common extensions
 // Matches paths that start with /, ~/, or ./ followed by path chars and a file extension
-const FILE_PATH_REGEX = /(?:^|[\s([\{<])((\/|~\/|\.\/)[\w\-./@]+\.(?:ts|tsx|js|jsx|mjs|cjs|md|json|yaml|yml|py|go|rs|css|scss|less|html|htm|txt|log|sh|bash|zsh|swift|kt|java|c|cpp|h|hpp|rb|php|xml|toml|ini|cfg|conf|env|sql|graphql|vue|svelte|astro|prisma|dockerfile|makefile|gitignore))(?=[\s)\]}\.,;:!?>]|$)/gi
+const FILE_PATH_REGEX = /(?:^|[\s([\{<])((\/|~\/|\.\/)[\w\-./@]+\.(?:ts|tsx|js|jsx|mjs|cjs|md|json|yaml|yml|py|go|rs|css|scss|less|html|htm|txt|log|sh|bash|zsh|swift|kt|java|c|cpp|h|hpp|rb|php|xml|toml|ini|cfg|conf|env|sql|graphql|vue|svelte|astro|prisma|dockerfile|makefile|gitignore|png|jpg|jpeg|gif|webp|svg|bmp|ico|avif|pdf))(?=[\s)\]}\.,;:!?>]|$)/gi
 
 interface DetectedLink {
   type: 'url' | 'email' | 'file'

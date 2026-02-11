@@ -1,5 +1,5 @@
 import * as React from 'react'
-import ReactMarkdown, { type Components } from 'react-markdown'
+import ReactMarkdown, { type Components, defaultUrlTransform } from 'react-markdown'
 import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
 import { cn } from '../../lib/utils'
@@ -9,6 +9,7 @@ import { MarkdownJsonBlock } from './MarkdownJsonBlock'
 import { MarkdownMermaidBlock } from './MarkdownMermaidBlock'
 import { MarkdownDataTableBlock } from './MarkdownDataTableBlock'
 import { MarkdownSpreadsheetBlock } from './MarkdownSpreadsheetBlock'
+import { MarkdownImage } from './MarkdownImage'
 import { preprocessLinks } from './linkify'
 import remarkCollapsibleSections from './remarkCollapsibleSections'
 import { CollapsibleSection } from './CollapsibleSection'
@@ -70,8 +71,18 @@ interface CollapsibleContext {
   toggleSection: (id: string) => void
 }
 
+/**
+ * Custom URL transform that extends react-markdown's default to also allow data: URLs.
+ * The default `defaultUrlTransform` only allows http(s), ircs, mailto, xmpp protocols,
+ * blocking data: URLs which are needed for inline base64 images from tool results.
+ */
+function urlTransform(url: string): string {
+  if (url.startsWith('data:')) return url
+  return defaultUrlTransform(url)
+}
+
 // File path detection regex - matches paths starting with /, ~/, or ./
-const FILE_PATH_REGEX = /^(?:\/|~\/|\.\/)[\w\-./@]+\.(?:ts|tsx|js|jsx|mjs|cjs|md|json|yaml|yml|py|go|rs|css|scss|less|html|htm|txt|log|sh|bash|zsh|swift|kt|java|c|cpp|h|hpp|rb|php|xml|toml|ini|cfg|conf|env|sql|graphql|vue|svelte|astro|prisma)$/i
+const FILE_PATH_REGEX = /^(?:\/|~\/|\.\/)[\w\-./@]+\.(?:ts|tsx|js|jsx|mjs|cjs|md|json|yaml|yml|py|go|rs|css|scss|less|html|htm|txt|log|sh|bash|zsh|swift|kt|java|c|cpp|h|hpp|rb|php|xml|toml|ini|cfg|conf|env|sql|graphql|vue|svelte|astro|prisma|png|jpg|jpeg|gif|webp|svg|bmp|ico|avif|pdf)$/i
 
 /**
  * Create custom components based on render mode.
@@ -140,6 +151,10 @@ function createComponents(
         </a>
       )
     },
+    // Images: Render inline with local file path support via PlatformContext
+    img: ({ src, alt }) => (
+      <MarkdownImage src={src} alt={alt} onFileClick={onFileClick} />
+    ),
   }
 
   // Terminal mode: minimal formatting
@@ -430,6 +445,7 @@ export function Markdown({
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={[rehypeRaw]}
+        urlTransform={urlTransform}
         components={components}
       >
         {processedContent}

@@ -1439,6 +1439,8 @@ export default function App() {
     // Bypass link interceptor — opens file directly in system editor.
     // Used by overlay header badges (when already viewing a file, "Open" should launch editor).
     onOpenFileExternal: linkInterceptor.openFileExternal,
+    // Read local files as data URLs — used by MarkdownImage for inline image rendering.
+    onReadFileAsDataUrl: linkInterceptor.readFileDataUrl,
     // Reveal a file in the system file manager (Finder on macOS, Explorer on Windows)
     onRevealInFinder: (path: string) => {
       window.electronAPI.showInFolder(path).catch(() => {})
@@ -1447,7 +1449,7 @@ export default function App() {
     onSetTrafficLightsVisible: (visible: boolean) => {
       window.electronAPI.setTrafficLightsVisible(visible)
     },
-  }), [handleOpenFile, handleOpenUrl, linkInterceptor.openFileExternal])
+  }), [handleOpenFile, handleOpenUrl, linkInterceptor.openFileExternal, linkInterceptor.readFileDataUrl])
 
   // Loading state - show splash screen
   if (appState === 'loading') {
@@ -1486,6 +1488,7 @@ export default function App() {
           onBack={onboarding.handleBack}
           onSelectApiSetupMethod={onboarding.handleSelectApiSetupMethod}
           onSubmitCredential={onboarding.handleSubmitCredential}
+          onSubmitBedrockCredential={onboarding.handleSubmitBedrockCredential}
           onStartOAuth={onboarding.handleStartOAuth}
           onFinish={onboarding.handleFinish}
           isWaitingForCode={onboarding.isWaitingForCode}
