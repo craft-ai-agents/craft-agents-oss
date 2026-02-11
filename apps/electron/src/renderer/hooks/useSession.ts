@@ -121,6 +121,27 @@ export function useSessionSelection() {
 }
 
 /**
+ * Explicit select mode atom — toggled via UI button.
+ * When true, checkboxes appear on all sessions.
+ */
+const selectModeAtom = atom(false)
+
+/**
+ * Hook for managing explicit select mode (checkbox UI).
+ * Separate from multi-select state — select mode shows checkboxes,
+ * while multi-select tracks actual selections.
+ */
+export function useSelectMode() {
+  const [selectMode, setSelectMode] = useAtom(selectModeAtom)
+  return {
+    selectMode,
+    enterSelectMode: useCallback(() => setSelectMode(true), [setSelectMode]),
+    exitSelectMode: useCallback(() => setSelectMode(false), [setSelectMode]),
+    toggleSelectMode: useCallback(() => setSelectMode(p => !p), [setSelectMode]),
+  }
+}
+
+/**
  * Read-only hook for checking if multi-select is active
  */
 export function useIsMultiSelectActive(): boolean {

@@ -1,6 +1,6 @@
 {
   "name": "@g4os/electron",
-  "version": "0.5.8",
+  "version": "0.5.11",
   "description": "G4 OS desktop application",
   "main": "dist/main.cjs",
   "private": true,

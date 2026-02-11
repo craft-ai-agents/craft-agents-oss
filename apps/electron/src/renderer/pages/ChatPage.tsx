@@ -91,11 +91,15 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
   const sessionMeta = sessionMetaMap.get(sessionId)
 
-  // Fallback: ensure messages are loaded when session is viewed
+  // Fallback: ensure messages are loaded when session is viewed.
+  // messagesLoaded in deps re-triggers loading when loadedSessionsAtom resets
+  // (e.g., after cloud sync via onSessionsRefreshed).
   const ensureMessagesLoaded = useSetAtom(ensureSessionMessagesLoadedAtom)
   React.useEffect(() => {
-    ensureMessagesLoaded(sessionId)
-  }, [sessionId, ensureMessagesLoaded])
+    if (!messagesLoaded) {
+      ensureMessagesLoaded(sessionId)
+    }
+  }, [sessionId, messagesLoaded, ensureMessagesLoaded])
 
   // Perf: Mark when session data is available
   const sessionLoadedMarkedRef = React.useRef<string | null>(null)

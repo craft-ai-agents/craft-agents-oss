@@ -26,6 +26,7 @@ import {
   HelpCircle,
   ExternalLink,
   BookOpen,
+  Clock,
 } from "lucide-react"
 import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
@@ -70,7 +71,7 @@ import { SessionList } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
 import type { ChatDisplayHandle } from "./ChatDisplay"
 import { LeftSidebar } from "./LeftSidebar"
-import { useSession } from "@/hooks/useSession"
+import { useSession, useSessionSelection, useSelectMode } from "@/hooks/useSession"
 import { ensureSessionMessagesLoadedAtom } from "@/atoms/sessions"
 import { AppShellProvider, type AppShellContextType } from "@/context/AppShellContext"
 import { EscapeInterruptProvider, useEscapeInterrupt } from "@/context/EscapeInterruptContext"
@@ -105,6 +106,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isSchedulerNavigation,
   type NavigationState,
   type SessionFilter,
 } from "@/contexts/NavigationContext"
@@ -537,6 +539,8 @@ function AppShellContent({
   const sessionListHandleRef = React.useRef<HTMLDivElement>(null)
   const rightSidebarHandleRef = React.useRef<HTMLDivElement>(null)
   const [session, setSession] = useSession()
+  const sessionSelection = useSessionSelection()
+  const { selectMode, toggleSelectMode, exitSelectMode } = useSelectMode()
   const { resolvedMode, isDark, setMode } = useTheme()
   const { t } = useLocale()
   const { canGoBack, canGoForward, goBack, goForward, navigateToSource, navigateToSession } = useNavigation()
@@ -1561,6 +1565,11 @@ function AppShellContent({
     navigate(routes.view.skills())
   }, [])
 
+  // Handler for scheduler view
+  const handleSchedulerClick = useCallback(() => {
+    navigate(routes.view.scheduler())
+  }, [])
+
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
     navigate(routes.view.settings(subpage))
@@ -1768,10 +1777,11 @@ function AppShellContent({
     // 3. Sources, Skills, Settings
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
+    result.push({ id: 'nav:scheduler', type: 'nav', action: handleSchedulerClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleTodoStateClick, effectiveTodoStates, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleSettingsClick])
+  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleTodoStateClick, effectiveTodoStates, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleSchedulerClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -2230,6 +2240,14 @@ function AppShellContent({
                         onAddSkill: openAddSkill,
                       },
                     },
+                    // --- Scheduler ---
+                    {
+                      id: "nav:scheduler",
+                      title: t('sidebar.nav.scheduler'),
+                      icon: Clock,
+                      variant: isSchedulerNavigation(navState) ? "default" : "ghost",
+                      onClick: handleSchedulerClick,
+                    },
                     // --- Separator ---
                     { id: "separator:skills-settings", type: "separator" },
                     // --- Settings ---
@@ -2347,8 +2365,8 @@ function AppShellContent({
           <motion.div
             initial={false}
             animate={{
-              width: effectiveFocusMode ? 0 : sessionListWidth,
-              opacity: effectiveFocusMode ? 0 : 1,
+              width: (effectiveFocusMode || isSchedulerNavigation(navState)) ? 0 : sessionListWidth,
+              opacity: (effectiveFocusMode || isSchedulerNavigation(navState)) ? 0 : 1,
             }}
             transition={isResizing ? { duration: 0 } : springTransition}
             className="h-full shrink-0 overflow-hidden bg-background shadow-middle rounded-l-[14px] rounded-r-[10px]"
@@ -3000,14 +3018,25 @@ function AppShellContent({
                   workspaceId={activeWorkspaceId ?? undefined}
                   statusFilter={listFilter}
                   labelFilterMap={labelFilter}
+                  onSearchActivate={() => setSearchActive(true)}
+                  selectMode={selectMode}
+                  onToggleSelectMode={toggleSelectMode}
+                  onSelectAll={() => {
+                    const visibleItems = searchActive ? workspaceSessionMetas : filteredSessionMetas
+                    sessionSelection.selectAll(visibleItems.map(s => s.id))
+                  }}
+                  onExitSelectMode={() => {
+                    exitSelectMode()
+                    sessionSelection.clearMultiSelect()
+                  }}
                 />
               </>
             )}
             </div>
           </motion.div>
 
-          {/* Session List Resize Handle (hidden in focused mode) */}
-          {!effectiveFocusMode && (
+          {/* Session List Resize Handle (hidden in focused mode and scheduler) */}
+          {!effectiveFocusMode && !isSchedulerNavigation(navState) && (
           <div
             ref={sessionListHandleRef}
             onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}

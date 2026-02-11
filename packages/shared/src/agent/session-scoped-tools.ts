@@ -197,7 +197,7 @@ const submitPlanSchema = {
 };
 
 const configValidateSchema = {
-  target: z.enum(['config', 'sources', 'statuses', 'preferences', 'permissions', 'tool-icons', 'all'])
+  target: z.enum(['config', 'sources', 'statuses', 'preferences', 'permissions', 'tool-icons', 'hooks', 'all'])
     .describe('Which config file(s) to validate'),
   sourceSlug: z.string().optional().describe('Validate a specific source by slug'),
 };
@@ -261,6 +261,7 @@ Returns structured validation results with errors, warnings, and suggestions.
 - \`preferences\`: Validates ~/.g4os/preferences.json
 - \`permissions\`: Validates permissions.json files
 - \`tool-icons\`: Validates ~/.g4os/tool-icons/tool-icons.json
+- \`hooks\`: Validates ~/.g4os/workspaces/{workspace}/hooks.json (event-driven automation)
 - \`all\`: Validates all configuration files
 
 **Reference:** ${DOC_REFS.sources}`,
@@ -392,7 +393,7 @@ export function getSessionScopedTools(
 
     // config_validate
     tool('config_validate', TOOL_DESCRIPTIONS.config_validate, configValidateSchema, async (args) => {
-      const result = await handleConfigValidate(ctx, args as { target: 'config' | 'sources' | 'statuses' | 'preferences' | 'permissions' | 'tool-icons' | 'all'; sourceSlug?: string });
+      const result = await handleConfigValidate(ctx, args as { target: 'config' | 'sources' | 'statuses' | 'preferences' | 'permissions' | 'tool-icons' | 'hooks' | 'all'; sourceSlug?: string });
       return convertResult(result);
     }),
 

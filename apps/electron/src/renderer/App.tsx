@@ -37,6 +37,7 @@ import {
   sessionIdsAtom,
   backgroundTasksAtomFamily,
   extractSessionMeta,
+  loadedSessionsAtom,
   type SessionMeta,
 } from '@/atoms/sessions'
 import { sourcesAtom } from '@/atoms/sources'
@@ -711,10 +712,15 @@ export default function App() {
       // Handle background task events
       handleBackgroundTaskEvent(store, sessionId, event, agentEvent)
 
-      // Update per-session atom
-      updateSessionDirect(sessionId, () => updatedSession)
+      // Only update the full session atom if messages have been lazy-loaded.
+      // Writing to an unloaded session's atom would overwrite it with empty/partial
+      // messages, causing a blank screen when the user opens it.
+      const loadedSessions = store.get(loadedSessionsAtom)
+      if (loadedSessions.has(sessionId)) {
+        updateSessionDirect(sessionId, () => updatedSession)
+      }
 
-      // Update metadata map
+      // Metadata always updates (for sidebar display)
       const metaMap = store.get(sessionMetaMapAtom)
       const newMetaMap = new Map(metaMap)
       newMetaMap.set(sessionId, extractSessionMeta(updatedSession))

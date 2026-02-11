@@ -34,7 +34,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'settings' | 'scheduler'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -58,7 +58,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'settings'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'settings', 'scheduler'
 ]
 
 /**
@@ -135,6 +135,11 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     }
 
     return null
+  }
+
+  // Scheduler navigator
+  if (first === 'scheduler') {
+    return { navigator: 'scheduler' as NavigatorType, details: null }
   }
 
   // Skills navigator
@@ -234,6 +239,10 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   if (parsed.navigator === 'skills') {
     if (!parsed.details) return 'skills'
     return `skills/skill/${parsed.details.id}`
+  }
+
+  if (parsed.navigator === 'scheduler') {
+    return 'scheduler'
   }
 
   // Sessions navigator
@@ -349,6 +358,11 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
       return { type: 'view', name: 'skills', params: {} }
     }
     return { type: 'view', name: 'skill-info', id: compound.details.id, params: {} }
+  }
+
+  // Scheduler
+  if (compound.navigator === 'scheduler') {
+    return { type: 'view', name: 'scheduler', params: {} }
   }
 
   // Sessions
@@ -468,6 +482,11 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
+  // Scheduler
+  if (compound.navigator === 'scheduler') {
+    return { navigator: 'scheduler' }
+  }
+
   // Sessions
   const filter = compound.sessionFilter || { kind: 'allSessions' as const }
   if (compound.details) {
@@ -519,6 +538,8 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
         }
       }
       return { navigator: 'sources', details: null }
+    case 'scheduler':
+      return { navigator: 'scheduler' }
     case 'skills':
       return { navigator: 'skills', details: null }
     case 'skill-info':
@@ -628,6 +649,10 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'
+  }
+
+  if (state.navigator === 'scheduler') {
+    return 'scheduler'
   }
 
   // Sessions

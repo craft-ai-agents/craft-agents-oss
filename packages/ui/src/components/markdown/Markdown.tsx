@@ -7,6 +7,8 @@ import { CodeBlock, InlineCode } from './CodeBlock'
 import { MarkdownDiffBlock } from './MarkdownDiffBlock'
 import { MarkdownJsonBlock } from './MarkdownJsonBlock'
 import { MarkdownMermaidBlock } from './MarkdownMermaidBlock'
+import { MarkdownDataTableBlock } from './MarkdownDataTableBlock'
+import { MarkdownSpreadsheetBlock } from './MarkdownSpreadsheetBlock'
 import { preprocessLinks } from './linkify'
 import remarkCollapsibleSections from './remarkCollapsibleSections'
 import { CollapsibleSection } from './CollapsibleSection'
@@ -198,6 +200,14 @@ function createComponents(
                                 code === firstMermaidCodeRef.current
             return <MarkdownMermaidBlock code={code} className="my-1" showExpandButton={!isFirstBlock} />
           }
+          // Data table code blocks → interactive sortable table
+          if (match?.[1] === 'datatable') {
+            return <MarkdownDataTableBlock code={code} className="my-1" />
+          }
+          // Spreadsheet code blocks → table with row numbers + export
+          if (match?.[1] === 'spreadsheet') {
+            return <MarkdownSpreadsheetBlock code={code} className="my-1" />
+          }
           return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
         }
 
@@ -273,6 +283,14 @@ function createComponents(
                               firstMermaidCodeRef?.current != null &&
                               code === firstMermaidCodeRef.current
           return <MarkdownMermaidBlock code={code} className="my-1" showExpandButton={!isFirstBlock} />
+        }
+        // Data table code blocks → interactive sortable table
+        if (match?.[1] === 'datatable') {
+          return <MarkdownDataTableBlock code={code} className="my-1" />
+        }
+        // Spreadsheet code blocks → table with row numbers + export
+        if (match?.[1] === 'spreadsheet') {
+          return <MarkdownSpreadsheetBlock code={code} className="my-1" />
         }
         return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
       }

@@ -1,0 +1,17 @@
+version: 0.4.4
+files:
+  - url: G4OS-arm64.zip
+    sha512: YFdCdf3rDmC1oSef4vBTPH5/DYhB3T9ZsxID+akLA/482LSrVVUyAWt6qZifjk52pw1YChUEei1tW//I+tXSAg==
+    size: 198970620
+  - url: G4OS-x64.zip
+    sha512: NYt2agNvZkipVxrLXYhr6E6pz1JziLKFHiSUbcU0gAQSgK6Uu67ob9W8PIOJlo/2r8voh0Wa3ZiwmbTabxcWoA==
+    size: 206598156
+  - url: G4OS-arm64.dmg
+    sha512: j7DrbS+OoCim00aF5RAMlfPjCyHu1HrE/96fIGf86ojL8kcvWNC50Ohw4D3GtuAOIlWdRhEErqv6h6ipCzhx4A==
+    size: 207830662
+  - url: G4OS-x64.dmg
+    sha512: swJqG1n8DiOfEWpsiN33qQPIp7srkrgLxt58AhyxM23f1XkKbHvskVgyZx8tZJIYSbMKId8TruI8eTkcsxzFAw==
+    size: 215505424
+path: G4OS-arm64.zip
+sha512: YFdCdf3rDmC1oSef4vBTPH5/DYhB3T9ZsxID+akLA/482LSrVVUyAWt6qZifjk52pw1YChUEei1tW//I+tXSAg==
+releaseDate: '2026-02-09T15:58:02.664Z'

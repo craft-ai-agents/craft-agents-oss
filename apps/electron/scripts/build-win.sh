@@ -77,8 +77,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Configuration
-BUN_VERSION="bun-v1.3.5"  # Pinned version for reproducible builds
+# Configuration — pinned versions for reproducible builds
+BUN_VERSION="bun-v1.3.5"
+GIT_VERSION="v2.47.1"       # MinGit version for Windows
+NODE_VERSION="v22.11.0"
+UV_VERSION="0.5.14"
 ARCH="x64"                # Windows ARM not supported
 
 echo "=== Cross-compiling G4 OS Windows Installer (${ARCH}) from macOS ==="
@@ -130,7 +133,73 @@ else
     cp "$TEMP_DIR/${BUN_DOWNLOAD}/bun.exe" "$ELECTRON_DIR/vendor/bun/"
 fi
 
-# 4. Copy SDK from root node_modules (monorepo hoisting)
+# 4. Download MinGit for Windows (skip if already cached)
+if [ -f "$ELECTRON_DIR/vendor/git/cmd/git.exe" ]; then
+    echo "Git Windows binary already cached, skipping download"
+else
+    MINGIT_DOWNLOAD="MinGit-${GIT_VERSION#v}-64-bit.zip"
+    MINGIT_URL="https://github.com/git-for-windows/git/releases/download/${GIT_VERSION}.windows.1/${MINGIT_DOWNLOAD}"
+    echo "Downloading MinGit ${GIT_VERSION} for Windows x64..."
+    mkdir -p "$ELECTRON_DIR/vendor/git"
+
+    GIT_TEMP=$(mktemp -d)
+    curl -fSL "$MINGIT_URL" -o "$GIT_TEMP/${MINGIT_DOWNLOAD}"
+    unzip -o "$GIT_TEMP/${MINGIT_DOWNLOAD}" -d "$ELECTRON_DIR/vendor/git"
+    rm -rf "$GIT_TEMP"
+    echo "MinGit extracted to vendor/git/"
+fi
+
+# 5. Download Node.js for Windows (skip if already cached)
+if [ -f "$ELECTRON_DIR/vendor/node/node.exe" ]; then
+    echo "Node.js Windows binary already cached, skipping download"
+else
+    NODE_DOWNLOAD="node-${NODE_VERSION}-win-x64"
+    NODE_URL="https://nodejs.org/dist/${NODE_VERSION}/${NODE_DOWNLOAD}.zip"
+    echo "Downloading Node.js ${NODE_VERSION} for Windows x64..."
+    mkdir -p "$ELECTRON_DIR/vendor/node"
+
+    NODE_TEMP=$(mktemp -d)
+    curl -fSL "$NODE_URL" -o "$NODE_TEMP/${NODE_DOWNLOAD}.zip"
+
+    # Verify checksum
+    curl -fSL "https://nodejs.org/dist/${NODE_VERSION}/SHASUMS256.txt" -o "$NODE_TEMP/SHASUMS256.txt"
+    echo "Verifying Node.js checksum..."
+    cd "$NODE_TEMP"
+    grep "${NODE_DOWNLOAD}.zip" SHASUMS256.txt | shasum -a 256 -c -
+    cd - > /dev/null
+
+    unzip -o "$NODE_TEMP/${NODE_DOWNLOAD}.zip" -d "$NODE_TEMP"
+    cp "$NODE_TEMP/${NODE_DOWNLOAD}/node.exe" "$ELECTRON_DIR/vendor/node/"
+    rm -rf "$NODE_TEMP"
+    echo "Node.js extracted to vendor/node/"
+fi
+
+# 6. Download uv for Windows (skip if already cached)
+if [ -f "$ELECTRON_DIR/vendor/uv/uv.exe" ]; then
+    echo "uv Windows binary already cached, skipping download"
+else
+    UV_DOWNLOAD="uv-x86_64-pc-windows-msvc.zip"
+    UV_URL="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${UV_DOWNLOAD}"
+    echo "Downloading uv ${UV_VERSION} for Windows x64..."
+    mkdir -p "$ELECTRON_DIR/vendor/uv"
+
+    UV_TEMP=$(mktemp -d)
+    curl -fSL "$UV_URL" -o "$UV_TEMP/${UV_DOWNLOAD}"
+
+    # Verify checksum (sha256 file already contains "hash  filename" format)
+    curl -fSL "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${UV_DOWNLOAD}.sha256" -o "$UV_TEMP/uv.sha256"
+    echo "Verifying uv checksum..."
+    cd "$UV_TEMP"
+    shasum -a 256 -c uv.sha256
+    cd - > /dev/null
+
+    unzip -o "$UV_TEMP/${UV_DOWNLOAD}" -d "$UV_TEMP"
+    cp "$UV_TEMP/uv.exe" "$ELECTRON_DIR/vendor/uv/"
+    rm -rf "$UV_TEMP"
+    echo "uv extracted to vendor/uv/"
+fi
+
+# 7. Copy SDK from root node_modules (monorepo hoisting)
 SDK_SOURCE="$ROOT_DIR/node_modules/@anthropic-ai/claude-agent-sdk"
 require_path "$SDK_SOURCE" "SDK" "Run 'bun install' from the repository root first."
 if [ -d "$ELECTRON_DIR/node_modules/@anthropic-ai/claude-agent-sdk" ]; then
@@ -141,7 +210,7 @@ else
     cp -r "$SDK_SOURCE" "$ELECTRON_DIR/node_modules/@anthropic-ai/"
 fi
 
-# 5. Copy interceptor
+# 8. Copy interceptor
 INTERCEPTOR_SOURCE="$ROOT_DIR/packages/shared/src/network-interceptor.ts"
 require_path "$INTERCEPTOR_SOURCE" "Interceptor" "Ensure packages/shared/src/network-interceptor.ts exists."
 if [ -f "$ELECTRON_DIR/packages/shared/src/network-interceptor.ts" ]; then
@@ -152,12 +221,12 @@ else
     cp "$INTERCEPTOR_SOURCE" "$ELECTRON_DIR/packages/shared/src/"
 fi
 
-# 6. Build Electron app
+# 9. Build Electron app
 echo "Building Electron app..."
 cd "$ROOT_DIR"
 bun run electron:build
 
-# 7. Package with electron-builder (cross-compile for Windows)
+# 10. Package with electron-builder (cross-compile for Windows)
 echo "Packaging app with electron-builder (cross-compile)..."
 cd "$ELECTRON_DIR"
 
@@ -166,7 +235,7 @@ export CSC_IDENTITY_AUTO_DISCOVERY=false
 
 npx electron-builder --win --x64
 
-# 8. Verify the installer was built
+# 11. Verify the installer was built
 EXE_NAME="G4OS-${ARCH}.exe"
 EXE_PATH="$ELECTRON_DIR/release/$EXE_NAME"
 
@@ -182,13 +251,13 @@ echo "=== Build Complete ==="
 echo "Installer: $ELECTRON_DIR/release/${EXE_NAME}"
 echo "Size: $(du -h "$ELECTRON_DIR/release/${EXE_NAME}" | cut -f1)"
 
-# 9. Create manifest.json for upload script
+# 12. Create manifest.json for upload script
 ELECTRON_VERSION=$(cat "$ELECTRON_DIR/package.json" | grep '"version"' | head -1 | sed 's/.*"version": *"\([^"]*\)".*/\1/')
 echo "Creating manifest.json (version: $ELECTRON_VERSION)..."
 mkdir -p "$ROOT_DIR/.build/upload"
 echo "{\"version\": \"$ELECTRON_VERSION\"}" > "$ROOT_DIR/.build/upload/manifest.json"
 
-# 10. Upload (if --upload flag is set)
+# 13. Upload (if --upload flag is set)
 if [ "$UPLOAD" = true ]; then
     echo ""
     echo "=== Uploading ==="

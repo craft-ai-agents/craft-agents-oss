@@ -485,6 +485,11 @@ export const ensureSessionMessagesLoadedAtom = atom(
       // Fetch messages from main process
       const loadedSession = await window.electronAPI.getSessionMessages(sessionId)
       if (!loadedSession) {
+        // Mark as loaded even on failure (corrupted JSONL, missing file) to avoid
+        // infinite spinner — the effect won't retry since loadedSessions.has() is true.
+        const newLoadedSessions = new Set(get(loadedSessionsAtom))
+        newLoadedSessions.add(sessionId)
+        set(loadedSessionsAtom, newLoadedSessions)
         return get(sessionAtomFamily(sessionId))
       }
 

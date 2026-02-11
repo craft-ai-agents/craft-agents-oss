@@ -5,7 +5,11 @@
     "authType": "api_key",
     "notificationsEnabled": true,
     "colorTheme": "default",
-    "uiLocale": "pt-BR"
+    "uiLocale": "pt-BR",
+    "autoCapitalisation": true,
+    "sendMessageKey": "enter",
+    "spellCheck": false,
+    "keepAwakeWhileRunning": false
   },
   "workspaceDefaults": {
     "thinkingLevel": "think",

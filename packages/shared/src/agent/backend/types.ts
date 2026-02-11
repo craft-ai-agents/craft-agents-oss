@@ -401,4 +401,7 @@ export interface BackendConfig {
 
   /** Callback to get recent messages for recovery context */
   getRecoveryMessages?: () => RecoveryMessage[];
+
+  /** Hook system for event-driven automation (PreToolUse, PostToolUse, SessionStart/End, etc.) */
+  hookSystem?: import('../../hooks-simple/hook-system.ts').HookSystem;
 }

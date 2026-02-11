@@ -1,6 +1,6 @@
 {
   "name": "@g4os/shared",
-  "version": "0.5.8",
+  "version": "0.5.11",
   "codexVersion": "craft-v0.4.0",
   "license": "Apache-2.0",
   "description": "Shared business logic for G4 OS - agent, auth, config, credentials, MCP integration",
@@ -52,7 +52,11 @@
     "./network-interceptor": "./src/network-interceptor.ts",
     "./search": "./src/search/index.ts",
     "./tools": "./src/tools/index.ts",
-    "./codex": "./src/codex/index.ts"
+    "./codex": "./src/codex/index.ts",
+    "./scheduler": "./src/scheduler/index.ts",
+    "./scheduler/storage": "./src/scheduler/storage.ts",
+    "./scheduler/cron": "./src/scheduler/cron.ts",
+    "./hooks": "./src/hooks-simple/index.ts"
   },
   "dependencies": {
     "@g4os/codex-types": "workspace:*",
@@ -61,6 +65,7 @@
     "@isaacs/ttlcache": "^2.1.4",
     "@leeoniya/ufuzzy": "^1.0.19",
     "bash-parser": "^0.5.0",
+    "croner": "^10.0.1",
     "filtrex": "^3.1.0",
     "incr-regex-package": "^1.0.4",
     "shell-quote": "^1.8.3"

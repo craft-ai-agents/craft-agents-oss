@@ -513,6 +513,25 @@ const api: ElectronAPI = {
   menuPaste: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_PASTE),
   menuSelectAll: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_SELECT_ALL),
 
+  // Scheduled Jobs
+  getScheduledJobs: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULER_LIST_JOBS, workspaceId),
+  createScheduledJob: (workspaceId: string, input: import('../shared/types').CreateScheduledJobInput) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULER_CREATE_JOB, workspaceId, input),
+  updateScheduledJob: (workspaceId: string, jobId: string, input: import('../shared/types').UpdateScheduledJobInput) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULER_UPDATE_JOB, workspaceId, jobId, input),
+  deleteScheduledJob: (workspaceId: string, jobId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULER_DELETE_JOB, workspaceId, jobId),
+  runScheduledJobNow: (workspaceId: string, jobId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULER_RUN_NOW, workspaceId, jobId),
+  getScheduledJobHistory: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULER_GET_HISTORY),
+  onScheduledJobsChanged: (callback: (workspaceId: string) => void) => {
+    const handler = (_event: unknown, workspaceId: string) => callback(workspaceId)
+    ipcRenderer.on(IPC_CHANNELS.SCHEDULER_JOBS_CHANGED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.SCHEDULER_JOBS_CHANGED, handler)
+  },
+
   // Cloud Sync
   getSyncStatus: (workspaceId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SYNC_GET_STATUS, workspaceId),

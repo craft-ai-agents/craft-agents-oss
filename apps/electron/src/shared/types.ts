@@ -54,6 +54,10 @@ export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 import type { LoadedSkill, SkillMetadata } from '@g4os/shared/skills/types';
 export type { LoadedSkill, SkillMetadata };
 
+// Import scheduler types
+import type { ScheduledJob, CreateScheduledJobInput, UpdateScheduledJobInput, JobExecution, JobAction } from '@g4os/shared/scheduler';
+export type { ScheduledJob, CreateScheduledJobInput, UpdateScheduledJobInput, JobExecution, JobAction };
+
 // Import session types from shared (for SessionFamily - different from core SessionMetadata)
 import type { SessionMetadata as SharedSessionMetadata } from '@g4os/shared/sessions/types';
 
@@ -856,6 +860,15 @@ export const IPC_CHANNELS = {
   GITBASH_BROWSE: 'gitbash:browse',
   GITBASH_SET_PATH: 'gitbash:setPath',
 
+  // Scheduled Jobs (workspace-scoped)
+  SCHEDULER_LIST_JOBS: 'scheduler:listJobs',
+  SCHEDULER_CREATE_JOB: 'scheduler:createJob',
+  SCHEDULER_UPDATE_JOB: 'scheduler:updateJob',
+  SCHEDULER_DELETE_JOB: 'scheduler:deleteJob',
+  SCHEDULER_RUN_NOW: 'scheduler:runNow',
+  SCHEDULER_GET_HISTORY: 'scheduler:getHistory',
+  SCHEDULER_JOBS_CHANGED: 'scheduler:jobsChanged',
+
   // Cloud Sync
   SYNC_GET_STATUS: 'sync:getStatus',
   SYNC_GENERATE_TOKEN: 'sync:generateToken',
@@ -1190,6 +1203,15 @@ export interface ElectronAPI {
   menuPaste(): Promise<void>
   menuSelectAll(): Promise<void>
 
+  // Scheduled Jobs
+  getScheduledJobs(workspaceId: string): Promise<ScheduledJob[]>
+  createScheduledJob(workspaceId: string, input: CreateScheduledJobInput): Promise<ScheduledJob>
+  updateScheduledJob(workspaceId: string, jobId: string, input: UpdateScheduledJobInput): Promise<ScheduledJob | null>
+  deleteScheduledJob(workspaceId: string, jobId: string): Promise<boolean>
+  runScheduledJobNow(workspaceId: string, jobId: string): Promise<void>
+  getScheduledJobHistory(): Promise<JobExecution[]>
+  onScheduledJobsChanged(callback: (workspaceId: string) => void): () => void
+
   // Cloud Sync
   getSyncStatus(workspaceId: string): Promise<import('@g4os/shared/cloud-sync').SyncStatus>
   generateSyncToken(workspaceId: string): Promise<string>
@@ -1374,6 +1396,15 @@ export interface SkillsNavigationState {
 }
 
 /**
+ * Scheduler navigation state - shows ScheduledJobsPage as main content
+ */
+export interface SchedulerNavigationState {
+  navigator: 'scheduler'
+  /** Optional right sidebar panel state */
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Unified navigation state - single source of truth for all 3 panels
  *
  * From this state we can derive:
@@ -1386,6 +1417,7 @@ export type NavigationState =
   | SourcesNavigationState
   | SettingsNavigationState
   | SkillsNavigationState
+  | SchedulerNavigationState
 
 /**
  * Type guard to check if state is sessions navigation
@@ -1416,6 +1448,13 @@ export const isSkillsNavigation = (
 ): state is SkillsNavigationState => state.navigator === 'skills'
 
 /**
+ * Type guard to check if state is scheduler navigation
+ */
+export const isSchedulerNavigation = (
+  state: NavigationState
+): state is SchedulerNavigationState => state.navigator === 'scheduler'
+
+/**
  * Default navigation state - allSessions with no selection
  */
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
@@ -1439,6 +1478,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'
+  }
+  if (state.navigator === 'scheduler') {
+    return 'scheduler'
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
@@ -1480,6 +1522,9 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
     }
     return { navigator: 'skills', details: null }
   }
+
+  // Handle scheduler
+  if (key === 'scheduler') return { navigator: 'scheduler' }
 
   // Handle settings
   if (key === 'settings') return { navigator: 'settings', subpage: 'app' }

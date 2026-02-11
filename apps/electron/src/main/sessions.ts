@@ -20,7 +20,7 @@ import {
   getCredentialCachePath,
   type CredentialCacheEntry,
 } from '@g4os/shared/codex'
-import { getLlmConnection, getDefaultLlmConnection } from '@g4os/shared/config'
+import { getLlmConnection, getDefaultLlmConnection, loadPreferences, getUiLocale } from '@g4os/shared/config'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import type { WindowManager } from './window-manager'
@@ -79,18 +79,8 @@ import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@g4os/shared/agent/t
 import { evaluateAutoLabels } from '@g4os/shared/labels/auto'
 import { listLabels } from '@g4os/shared/labels/storage'
 import { extractLabelId } from '@g4os/shared/labels'
-
-/**
- * Sanitize message content for use as session title.
- * Strips XML blocks (e.g. <edit_request>) and normalizes whitespace.
- */
-function sanitizeForTitle(content: string): string {
-  return content
-    .replace(/<edit_request>[\s\S]*?<\/edit_request>/g, '') // Strip entire edit_request blocks
-    .replace(/<[^>]+>/g, '')     // Strip remaining XML/HTML tags
-    .replace(/\s+/g, ' ')        // Collapse whitespace
-    .trim()
-}
+import { HookSystem, type SessionMetadataSnapshot } from '@g4os/shared/hooks'
+import { sanitizeForTitle } from './title-sanitizer'
 
 /**
  * Get the path to the bundled Bun executable.
@@ -647,6 +637,9 @@ interface ManagedSession {
   siblingOrder?: number
   // Token refresh manager for OAuth token refresh with rate limiting
   tokenRefreshManager: TokenRefreshManager
+  // Deferred title generation: wait for more context before generating AI title
+  pendingTitleGeneration?: boolean
+  titleGenerationTimer?: ReturnType<typeof setTimeout>
 }
 
 // Convert runtime Message to StoredMessage for persistence
@@ -770,6 +763,8 @@ export class SessionManager {
   private deltaFlushTimers: Map<string, NodeJS.Timeout> = new Map()
   // Config watchers for live updates (sources, etc.) - one per workspace
   private configWatchers: Map<string, ConfigWatcher> = new Map()
+  // Hook systems for event-driven automation - one per workspace
+  private hookSystems: Map<string, HookSystem> = new Map()
   // Pending credential request resolvers (keyed by requestId)
   private pendingCredentialResolvers: Map<string, (response: import('../shared/types').CredentialResponse) => void> = new Map()
   // Promise deduplication for lazy-loading messages (prevents race conditions)
@@ -921,11 +916,86 @@ export class SessionManager {
           sessionLog.info(`External metadata change detected for session ${sessionId}`)
         }
       },
+
+      // Hooks config change: reload hook system when hooks.json is modified
+      onHooksConfigChange: (_wsId: string) => {
+        const hookSystem = this.hookSystems.get(workspaceRootPath)
+        if (hookSystem) {
+          sessionLog.info(`[hooks] hooks.json changed, reloading config for workspace ${workspaceId}`)
+          hookSystem.reloadConfig()
+        }
+      },
     }
 
     const watcher = new ConfigWatcher(workspaceRootPath, callbacks)
     watcher.start()
     this.configWatchers.set(workspaceRootPath, watcher)
+
+    // Initialize HookSystem for this workspace (event-driven automation)
+    if (!this.hookSystems.has(workspaceRootPath)) {
+      const hookSystem = new HookSystem(workspaceRootPath, workspaceId)
+
+      // Register prompt callback: when a prompt hook fires, create a new session
+      hookSystem.onPromptsReady(({ prompt, workspaceId: wsId, permissionMode, model, labels, enabledSourceSlugs }) => {
+        sessionLog.info(`[hooks] Prompt hook fired, creating session in workspace ${wsId}`)
+        // Create session and send the prompt message
+        // This is fire-and-forget since hooks are async
+        const workspace = getWorkspaceByNameOrId(wsId)
+        if (!workspace) {
+          sessionLog.warn(`[hooks] Cannot create prompt session: workspace ${wsId} not found`)
+          return
+        }
+        this.createSession(workspace.id, {
+          permissionMode: permissionMode || 'ask',
+          model,
+          labels,
+          enabledSourceSlugs,
+        }).then((session) => {
+          if (session && prompt) {
+            this.sendMessage(session.id, prompt)
+          }
+        }).catch((err) => {
+          sessionLog.error(`[hooks] Failed to create prompt session:`, err)
+        })
+      })
+
+      // Initialize snapshots for all existing sessions in this workspace
+      for (const [sessionId, managed] of this.sessions) {
+        if (managed.workspace.rootPath === workspaceRootPath) {
+          hookSystem.initSessionSnapshot(sessionId, {
+            labels: managed.labels ?? [],
+            isFlagged: managed.isFlagged ?? false,
+            todoState: managed.todoState,
+            permissionMode: managed.permissionMode,
+          })
+        }
+      }
+
+      this.hookSystems.set(workspaceRootPath, hookSystem)
+      sessionLog.info(`[hooks] HookSystem initialized for workspace: ${workspaceId}`)
+    }
+  }
+
+  /**
+   * Get the HookSystem for a workspace by its root path.
+   */
+  private getHookSystem(workspaceRootPath: string): HookSystem | undefined {
+    return this.hookSystems.get(workspaceRootPath)
+  }
+
+  /**
+   * Helper to update hook system session metadata and auto-emit diff events.
+   */
+  private updateHookSessionMetadata(managed: ManagedSession): void {
+    const hookSystem = this.getHookSystem(managed.workspace.rootPath)
+    if (hookSystem) {
+      hookSystem.updateSessionMetadata(managed.id, {
+        labels: managed.labels ?? [],
+        isFlagged: managed.isFlagged ?? false,
+        todoState: managed.todoState,
+        permissionMode: managed.permissionMode,
+      })
+    }
   }
 
   /**
@@ -1276,6 +1346,32 @@ export class SessionManager {
   // Persist a session to disk (async with debouncing)
   private persistSession(managed: ManagedSession): void {
     try {
+      // CRITICAL: If messages haven't been loaded from disk yet, the in-memory
+      // managed.messages is empty ([]). Writing this to disk would destroy the
+      // session's message history. Use header-only metadata update instead.
+      if (!managed.messagesLoaded) {
+        sessionLog.debug(`persistSession: messages not loaded for ${managed.id}, using metadata-only update`)
+        updateSessionMetadata(managed.workspace.rootPath, managed.id, {
+          name: managed.name,
+          isFlagged: managed.isFlagged,
+          isArchived: managed.isArchived,
+          archivedAt: managed.archivedAt,
+          todoState: managed.todoState,
+          labels: managed.labels,
+          enabledSourceSlugs: managed.enabledSourceSlugs,
+          workingDirectory: managed.workingDirectory,
+          sdkCwd: managed.sdkCwd,
+          permissionMode: managed.permissionMode,
+          hasUnread: managed.hasUnread,
+          lastReadMessageId: managed.lastReadMessageId,
+          sharedUrl: managed.sharedUrl,
+          sharedId: managed.sharedId,
+          model: managed.model,
+          llmConnection: managed.llmConnection,
+        })
+        return
+      }
+
       // Filter out transient status messages (progress indicators like "Compacting...")
       // Error messages are now persisted with rich fields for diagnostics
       const persistableMessages = managed.messages.filter(m =>
@@ -1786,6 +1882,7 @@ export class SessionManager {
       todoState: options?.todoState,
       labels: options?.labels,
       isFlagged: options?.isFlagged,
+      enabledSourceSlugs: options?.enabledSourceSlugs,
     })
 
     // Resolve connection to determine provider for model compatibility check
@@ -1839,6 +1936,7 @@ export class SessionManager {
       backgroundShellCommands: new Map(),
       messagesLoaded: true,  // New sessions don't need to load messages from disk
       hidden: options?.hidden,
+      enabledSourceSlugs: options?.enabledSourceSlugs,
       // Initialize TokenRefreshManager for this session (handles OAuth token refresh with rate limiting)
       tokenRefreshManager: new TokenRefreshManager(getSourceCredentialManager(), {
         log: (msg) => sessionLog.debug(msg),
@@ -1846,6 +1944,17 @@ export class SessionManager {
     }
 
     this.sessions.set(storedSession.id, managed)
+
+    // Initialize hook system snapshot for this new session
+    const hookSystem = this.getHookSystem(workspaceRootPath)
+    if (hookSystem) {
+      hookSystem.initSessionSnapshot(storedSession.id, {
+        labels: managed.labels ?? [],
+        isFlagged: managed.isFlagged ?? false,
+        todoState: managed.todoState,
+        permissionMode: managed.permissionMode,
+      })
+    }
 
     return {
       id: storedSession.id,
@@ -1863,6 +1972,7 @@ export class SessionManager {
       thinkingLevel: defaultThinkingLevel,
       sessionFolderPath: getSessionStoragePath(workspaceRootPath, storedSession.id),
       hidden: options?.hidden,
+      enabledSourceSlugs: options?.enabledSourceSlugs,
     }
   }
 
@@ -2229,6 +2339,8 @@ export class SessionManager {
           isHeadless: !AGENT_FLAGS.defaultModesEnabled,
           // System prompt preset for mini agents (focused prompts for quick edits)
           systemPromptPreset: managed.systemPromptPreset,
+          // Hook system for event-driven automation (PreToolUse, PostToolUse, SessionStart/End, etc.)
+          hookSystem: this.getHookSystem(managed.workspace.rootPath),
           // Always pass session object - id is required for plan mode callbacks
           // sdkSessionId is optional and used for conversation resumption
           session: {
@@ -2280,6 +2392,12 @@ export class SessionManager {
           } : undefined,
         })
         sessionLog.info(`Created Claude agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
+
+        // Emit SessionStart event to hook system
+        const hookSystem = this.getHookSystem(managed.workspace.rootPath)
+        if (hookSystem) {
+          hookSystem.emit('SessionStart', { sessionId: managed.id }).catch(() => {})
+        }
       }
 
       // Set up permission handler to forward requests to renderer
@@ -2309,6 +2427,8 @@ export class SessionManager {
           sessionId: managed.id,
           permissionMode: managed.permissionMode,
         }, managed.workspace.id)
+        // Emit hook events for permission mode change
+        this.updateHookSessionMetadata(managed)
       }
 
       // Wire up onPlanSubmitted to add plan message to conversation
@@ -2547,6 +2667,8 @@ export class SessionManager {
       await this.flushSession(managed.id)
       // Notify all windows for this workspace
       this.sendEvent({ type: 'session_flagged', sessionId }, managed.workspace.id)
+      // Emit hook events for flag change
+      this.updateHookSessionMetadata(managed)
     }
   }
 
@@ -2559,6 +2681,8 @@ export class SessionManager {
       await this.flushSession(managed.id)
       // Notify all windows for this workspace
       this.sendEvent({ type: 'session_unflagged', sessionId }, managed.workspace.id)
+      // Emit hook events for flag change
+      this.updateHookSessionMetadata(managed)
     }
   }
 
@@ -2597,6 +2721,8 @@ export class SessionManager {
       await this.flushSession(managed.id)
       // Notify all windows for this workspace
       this.sendEvent({ type: 'todo_state_changed', sessionId, todoState }, managed.workspace.id)
+      // Emit hook events for todo state change
+      this.updateHookSessionMetadata(managed)
     }
   }
 
@@ -3140,6 +3266,10 @@ export class SessionManager {
     this.sendEvent({ type: 'title_regenerating', sessionId, isRegenerating: true }, managed.workspace.id)
 
     try {
+      const language = this.resolveLanguagePreference()
+      if (language) {
+        titleOptions = { ...titleOptions, language }
+      }
       const title = await regenerateSessionTitle(userMessages, assistantResponse, titleOptions)
       sessionLog.info(`refreshTitle: regenerateSessionTitle returned: ${title ? `"${title}"` : 'null'}`)
       if (title) {
@@ -3293,6 +3423,12 @@ export class SessionManager {
     // Cancel any pending persistence write (session is being deleted, no need to save)
     sessionPersistenceQueue.cancel(sessionId)
 
+    // Clean up deferred title generation timer
+    if (managed.titleGenerationTimer) {
+      clearTimeout(managed.titleGenerationTimer)
+      managed.titleGenerationTimer = undefined
+    }
+
     // Clean up session-scoped tool callbacks to prevent memory accumulation
     unregisterSessionScopedToolCallbacks(sessionId)
 
@@ -3399,8 +3535,9 @@ export class SessionManager {
       }, managed.workspace.id)
 
       // If this is the first user message and no title exists, set one immediately
-      // AI generation will enhance it later, but we always have a title from the start
-      const isFirstUserMessage = managed.messages.filter(m => m.role === 'user').length === 1
+      // AI generation is deferred until more context exists (2nd message or 90s idle)
+      const userMessageCount = managed.messages.filter(m => m.role === 'user').length
+      const isFirstUserMessage = userMessageCount === 1
       if (isFirstUserMessage && !managed.name) {
         // Sanitize message to remove XML blocks (e.g. <edit_request>) before using as title
         const sanitized = sanitizeForTitle(message)
@@ -3415,8 +3552,18 @@ export class SessionManager {
           title: initialTitle,
         }, managed.workspace.id)
 
-        // Generate AI title asynchronously (will update the initial title)
-        this.generateTitle(managed, message)
+        // Defer AI title generation — will trigger on 2nd user message or 90s idle
+        managed.pendingTitleGeneration = true
+      }
+
+      // On second user message, trigger deferred title generation immediately
+      if (userMessageCount === 2 && managed.pendingTitleGeneration) {
+        if (managed.titleGenerationTimer) {
+          clearTimeout(managed.titleGenerationTimer)
+          managed.titleGenerationTimer = undefined
+        }
+        managed.pendingTitleGeneration = false
+        this.generateTitleDeferred(managed)
       }
     }
 
@@ -3441,6 +3588,8 @@ export class SessionManager {
             sessionId,
             labels: managed.labels,
           }, managed.workspace.id)
+          // Emit hook events for auto-applied label changes
+          this.updateHookSessionMetadata(managed)
         }
       }
     } catch (e) {
@@ -3781,7 +3930,18 @@ export class SessionManager {
       await this.setTodoState(sessionId, 'done')
     }
 
-    // 4. Check queue and process or complete
+    // 4. Deferred title generation: start 90s idle timer after first turn completes
+    if (reason === 'complete' && managed.pendingTitleGeneration && !managed.titleGenerationTimer) {
+      managed.titleGenerationTimer = setTimeout(() => {
+        managed.titleGenerationTimer = undefined
+        if (managed.pendingTitleGeneration) {
+          managed.pendingTitleGeneration = false
+          this.generateTitleDeferred(managed)
+        }
+      }, 90_000) // 90 seconds
+    }
+
+    // 5. Check queue and process or complete
     if (managed.messageQueue.length > 0) {
       // Has queued messages - process next
       this.processNextQueuedMessage(sessionId)
@@ -3795,7 +3955,7 @@ export class SessionManager {
       }, managed.workspace.id)
     }
 
-    // 5. Always persist
+    // 6. Always persist
     this.persistSession(managed)
   }
 
@@ -4039,6 +4199,8 @@ To view this task's output:
       }, managed.workspace.id)
       // Persist to disk
       this.persistSession(managed)
+      // Emit hook events for label changes (auto-diffs with previous snapshot)
+      this.updateHookSessionMetadata(managed)
     }
   }
 
@@ -4087,6 +4249,91 @@ To view this task's output:
     } catch (error) {
       sessionLog.error(`Failed to generate title for session ${managed.id}:`, error)
     }
+  }
+
+  /**
+   * Generate an AI title using recent conversation context (deferred).
+   * Collects last 2 user messages + last assistant response for richer context.
+   * Resolves language preference and provider from session config.
+   */
+  private async generateTitleDeferred(managed: ManagedSession): Promise<void> {
+    sessionLog.info(`Starting deferred title generation for session ${managed.id}`)
+    try {
+      // Collect recent user messages (last 2) for context
+      const userMessages = managed.messages
+        .filter(m => m.role === 'user')
+        .slice(-2)
+        .map(m => m.content)
+
+      if (userMessages.length === 0) {
+        sessionLog.warn(`generateTitleDeferred: No user messages found for session ${managed.id}`)
+        return
+      }
+
+      // Get the most recent assistant response
+      const lastAssistantMsg = managed.messages
+        .filter(m => m.role === 'assistant' && !m.isIntermediate)
+        .slice(-1)[0]
+
+      const assistantResponse = lastAssistantMsg?.content ?? ''
+
+      // Resolve language preference
+      const language = this.resolveLanguagePreference()
+
+      // Resolve provider and credentials (same logic as refreshTitle)
+      let titleOptions: TitleGeneratorOptions | undefined
+      if (managed.llmConnection) {
+        const connection = getLlmConnection(managed.llmConnection)
+        if (connection?.providerType === 'openai') {
+          const credentialManager = getCredentialManager()
+          let apiKey: string | undefined
+          let accessToken: string | undefined
+
+          if (connection.authType === 'api_key') {
+            apiKey = await credentialManager.getLlmApiKey(managed.llmConnection) ?? undefined
+          } else if (connection.authType === 'oauth') {
+            const oauth = await credentialManager.getLlmOAuth(managed.llmConnection)
+            accessToken = oauth?.accessToken
+          }
+
+          if (apiKey || accessToken) {
+            titleOptions = {
+              provider: 'openai',
+              credentials: { apiKey, accessToken },
+            }
+          }
+        }
+      }
+
+      if (language) {
+        titleOptions = { ...titleOptions, language }
+      }
+
+      const title = await regenerateSessionTitle(userMessages, assistantResponse, titleOptions)
+      if (title) {
+        managed.name = title
+        this.persistSession(managed)
+        await this.flushSession(managed.id)
+        this.sendEvent({ type: 'title_generated', sessionId: managed.id, title }, managed.workspace.id)
+        sessionLog.info(`Deferred title generated for session ${managed.id}: "${title}"`)
+      } else {
+        sessionLog.warn(`Deferred title generation returned null for session ${managed.id}`)
+      }
+    } catch (error) {
+      sessionLog.error(`Failed deferred title generation for session ${managed.id}:`, error)
+    }
+  }
+
+  /**
+   * Resolve the user's language preference for title generation.
+   * Returns the language string or undefined if English (no translation needed).
+   */
+  private resolveLanguagePreference(): string | undefined {
+    const prefs = loadPreferences()
+    if (prefs?.language) return prefs.language
+    const locale = getUiLocale()
+    if (locale && locale !== 'en-US') return locale
+    return undefined
   }
 
   private processEvent(managed: ManagedSession, event: AgentEvent): void {
@@ -4775,6 +5022,13 @@ To view this task's output:
       sessionLog.info(`Stopped config watcher for ${path}`)
     }
     this.configWatchers.clear()
+
+    // Dispose all HookSystems (event-driven automation)
+    for (const [path, hookSystem] of this.hookSystems) {
+      hookSystem.dispose()
+      sessionLog.info(`Disposed hook system for ${path}`)
+    }
+    this.hookSystems.clear()
 
     // Clear all pending delta flush timers
     for (const [sessionId, timer] of this.deltaFlushTimers) {

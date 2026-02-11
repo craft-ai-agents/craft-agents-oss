@@ -3,6 +3,11 @@
 import { loadShellEnv } from './shell-env'
 loadShellEnv()
 
+// Add bundled developer tools (git, node, uv) to PATH as fallbacks.
+// Must run after loadShellEnv() so user installations take priority.
+import { initBundledTools } from './bundled-tools'
+initBundledTools()
+
 import { app, BrowserWindow } from 'electron'
 import { createHash } from 'crypto'
 import { hostname, homedir } from 'os'
@@ -83,6 +88,7 @@ import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
 import { setPerfEnabled, enableDebug } from '@g4os/shared/utils'
 import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBadge } from './notifications'
 import { checkForUpdatesOnLaunch, setWindowManager as setAutoUpdateWindowManager, isUpdating } from './auto-update'
+import { ScheduleManager } from './scheduler'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -100,6 +106,7 @@ const DEEPLINK_SCHEME = process.env.G4OS_DEEPLINK_SCHEME || 'g4os'
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
+let scheduleManager: ScheduleManager | null = null
 
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
@@ -320,11 +327,16 @@ app.whenReady().then(async () => {
     sessionManager = new SessionManager()
     sessionManager.setWindowManager(windowManager)
 
+    // Initialize scheduler
+    scheduleManager = new ScheduleManager()
+    scheduleManager.setSessionManager(sessionManager)
+    scheduleManager.setWindowManager(windowManager)
+
     // Initialize notification service
     initNotificationService(windowManager)
 
     // Register IPC handlers (must happen before window creation)
-    registerIpcHandlers(sessionManager, windowManager)
+    registerIpcHandlers(sessionManager, windowManager, scheduleManager)
 
     // Create initial windows (restores from saved state or opens first workspace)
     await createInitialWindows()
@@ -344,6 +356,12 @@ app.whenReady().then(async () => {
       }
     } catch (err) {
       mainLog.error('Credential health check error:', err)
+    }
+
+    // Initialize scheduler (start timers, check for missed jobs)
+    if (scheduleManager) {
+      await scheduleManager.initialize()
+      await scheduleManager.checkMissedJobs()
     }
 
     // Initialize power manager (loads setting, must happen after config is available)
@@ -460,6 +478,11 @@ app.on('before-quit', async (event) => {
     }
     // Clean up SessionManager resources (file watchers, timers, etc.)
     sessionManager.cleanup()
+
+    // Clean up scheduler timers
+    if (scheduleManager) {
+      scheduleManager.destroy()
+    }
 
     // Clean up power manager (release power blocker)
     const { cleanup: cleanupPowerManager } = await import('./power-manager')

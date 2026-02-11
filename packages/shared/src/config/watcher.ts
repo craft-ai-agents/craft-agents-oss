@@ -125,6 +125,10 @@ export interface ConfigWatcherCallbacks {
   /** Called when labels config.json changes */
   onLabelConfigChange?: (workspaceId: string) => void;
 
+  // Hooks callbacks
+  /** Called when hooks.json changes */
+  onHooksConfigChange?: (workspaceId: string) => void;
+
   // Session callbacks
   /** Called when a session's JSONL header is modified externally (labels, name, flags, etc.) */
   onSessionMetadataChange?: (sessionId: string, header: SessionHeader) => void;
@@ -460,6 +464,12 @@ export class ConfigWatcher {
         return;
       }
 
+    }
+
+    // Workspace-level hooks.json
+    if (relativePath === 'hooks.json') {
+      this.debounce('hooks-config', () => this.handleHooksConfigChange());
+      return;
     }
   }
 
@@ -877,6 +887,14 @@ export class ConfigWatcher {
   private handleLabelConfigChange(): void {
     debug('[ConfigWatcher] Labels config.json changed:', this.workspaceId);
     this.callbacks.onLabelConfigChange?.(this.workspaceId);
+  }
+
+  /**
+   * Handle hooks.json change.
+   */
+  private handleHooksConfigChange(): void {
+    debug('[ConfigWatcher] hooks.json changed:', this.workspaceId);
+    this.callbacks.onHooksConfigChange?.(this.workspaceId);
   }
 
   // ============================================================

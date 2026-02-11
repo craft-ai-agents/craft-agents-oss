@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { useAction, useActionLabel } from "@/actions"
 import { formatDistanceToNow, formatDistanceToNowStrict, isToday, isYesterday, format, startOfDay } from "date-fns"
 import type { Locale } from "date-fns"
-import { MoreHorizontal, Flag, Copy, Link2Off, CloudUpload, Globe, RefreshCw, Inbox, Check, Archive } from "lucide-react"
+import { MoreHorizontal, Flag, Copy, Link2Off, CloudUpload, Globe, RefreshCw, Inbox, Check, Archive, Search, CheckSquare } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -468,7 +468,18 @@ function SessionItem({
         {isInMultiSelect && (
           <div className="absolute left-0 inset-y-0 w-[2px] bg-accent" />
         )}
-        {/* Todo State Icon - positioned absolutely, outside the button */}
+        {/* Todo State Icon or Multi-Select Checkbox */}
+        {isMultiSelectActive ? (
+          <div className="absolute left-4 top-3.5 z-10 cursor-pointer"
+            onClick={(e) => { e.stopPropagation(); onToggleSelect?.() }}>
+            <div className={cn(
+              "w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors",
+              isInMultiSelect ? "bg-accent border-accent text-white" : "border-muted-foreground/40 hover:border-accent"
+            )}>
+              {isInMultiSelect && <Check className="w-2.5 h-2.5" />}
+            </div>
+          </div>
+        ) : (
         <Popover modal={true} open={todoMenuOpen} onOpenChange={setTodoMenuOpen}>
           <PopoverTrigger asChild>
             <div className="absolute left-4 top-3.5 z-10">
@@ -513,6 +524,7 @@ function SessionItem({
             />
           </PopoverContent>
         </Popover>
+        )}
         {/* Main content button */}
         <button
           {...itemProps}
@@ -883,6 +895,16 @@ interface SessionListProps {
   statusFilter?: Map<string, FilterMode>
   /** Secondary label filter (label chips) - for search result grouping */
   labelFilterMap?: Map<string, FilterMode>
+  /** Called when the search icon button is clicked to activate search */
+  onSearchActivate?: () => void
+  /** Whether explicit select mode is active (shows checkboxes on all items) */
+  selectMode?: boolean
+  /** Called when the select mode toggle button is clicked */
+  onToggleSelectMode?: () => void
+  /** Called to select all visible sessions */
+  onSelectAll?: () => void
+  /** Called to exit select mode */
+  onExitSelectMode?: () => void
 }
 
 // Re-export TodoStateId for use by parent components
@@ -923,6 +945,11 @@ export function SessionList({
   workspaceId,
   statusFilter,
   labelFilterMap,
+  onSearchActivate,
+  selectMode,
+  onToggleSelectMode,
+  onSelectAll,
+  onExitSelectMode,
 }: SessionListProps) {
   const { t, dateFnsLocale } = useLocale()
   const {
@@ -933,8 +960,12 @@ export function SessionList({
     selectAll: selectAllSessions,
     clearMultiSelect,
     isMultiSelectActive,
+    selectionCount,
     isSelected: isSessionSelected,
   } = useSessionSelection()
+  // Effective multi-select: active when either explicit select mode or keyboard multi-select
+  const effectiveMultiSelectActive = selectMode || isMultiSelectActive
+
   const { navigate, navigateToSession } = useNavigation()
   const navState = useNavigationState()
   const { showEscapeOverlay } = useEscapeInterrupt()
@@ -1340,13 +1371,14 @@ export function SessionList({
     // Get the session that will remain selected after clearing
     const selectedId = selectionState.selected
     clearMultiSelect()
+    onExitSelectMode?.()
     // Navigate to sync sidebar and main content
     if (selectedId) {
       navigateToSession(selectedId)
     }
   }, {
-    enabled: () => isMultiSelectActive && !showEscapeOverlay,
-  }, [isMultiSelectActive, showEscapeOverlay, clearMultiSelect, selectionState.selected, navigateToSession])
+    enabled: () => (isMultiSelectActive || !!selectMode) && !showEscapeOverlay,
+  }, [isMultiSelectActive, selectMode, showEscapeOverlay, clearMultiSelect, onExitSelectMode, selectionState.selected, navigateToSession])
 
   // Roving tabindex enabled when keyboard-eligible (see isKeyboardEligible comment above)
   // moveFocus=false during search so DOM focus stays on input while activeIndex changes
@@ -1495,9 +1527,9 @@ export function SessionList({
   }
 
   return (
-    <div className="flex flex-col h-screen">
-      {/* Search header - input + status row (shared with playground) */}
-      {searchActive && (
+    <div className="relative flex flex-col h-screen">
+      {/* Search header or compact toolbar */}
+      {searchActive ? (
         <SessionSearchHeader
           searchQuery={searchQuery}
           onSearchChange={onSearchChange}
@@ -1510,6 +1542,34 @@ export function SessionList({
           exceededLimit={exceededSearchLimit}
           inputRef={searchInputRef}
         />
+      ) : (
+        <div className="shrink-0 px-3 pt-2 pb-1 flex justify-end gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => onSearchActivate?.()}
+                className="p-1.5 rounded-md hover:bg-foreground/5 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Search className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t('search')}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => onToggleSelectMode?.()}
+                className={cn(
+                  "p-1.5 rounded-md transition-colors",
+                  selectMode ? "bg-accent/10 text-accent" : "hover:bg-foreground/5 text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <CheckSquare className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{selectMode ? t('session.action.exitSelectMode') : t('session.action.selectMode')}</TooltipContent>
+          </Tooltip>
+        </div>
       )}
       {/* ScrollArea with mask-fade-top-short - shorter fade to avoid header overlap */}
       <ScrollArea className="flex-1 select-none mask-fade-top-short">
@@ -1580,7 +1640,7 @@ export function SessionList({
                         labels={labels}
                         onLabelsChange={onLabelsChange}
                         chatMatchCount={isSearchMode ? contentSearchResults.get(item.id)?.matchCount : undefined}
-                        isMultiSelectActive={isMultiSelectActive}
+                        isMultiSelectActive={effectiveMultiSelectActive}
                         isInMultiSelect={isSessionSelected(item.id)}
                         onToggleSelect={() => handleToggleSelect(item, flatIndex)}
                         onRangeSelect={() => handleRangeSelect(flatIndex)}
@@ -1625,7 +1685,7 @@ export function SessionList({
                         labels={labels}
                         onLabelsChange={onLabelsChange}
                         chatMatchCount={isSearchMode ? contentSearchResults.get(item.id)?.matchCount : undefined}
-                        isMultiSelectActive={isMultiSelectActive}
+                        isMultiSelectActive={effectiveMultiSelectActive}
                         isInMultiSelect={isSessionSelected(item.id)}
                         onToggleSelect={() => handleToggleSelect(item, flatIndex)}
                         onRangeSelect={() => handleRangeSelect(flatIndex)}
@@ -1671,7 +1731,7 @@ export function SessionList({
                       labels={labels}
                       onLabelsChange={onLabelsChange}
                       chatMatchCount={contentSearchResults.get(item.id)?.matchCount}
-                      isMultiSelectActive={isMultiSelectActive}
+                      isMultiSelectActive={effectiveMultiSelectActive}
                       isInMultiSelect={isSessionSelected(item.id)}
                       onToggleSelect={() => handleToggleSelect(item, flatIndex)}
                       onRangeSelect={() => handleRangeSelect(flatIndex)}
@@ -1690,6 +1750,23 @@ export function SessionList({
           )}
         </div>
       </ScrollArea>
+
+      {/* Select mode floating action bar */}
+      {selectMode && (
+        <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2 px-3 py-2
+          bg-background/95 backdrop-blur-sm border border-border/50 rounded-xl shadow-lg z-20">
+          <span className="text-xs text-muted-foreground font-medium">
+            {selectionCount} {t('session.selected')}
+          </span>
+          <div className="flex-1" />
+          <button onClick={onSelectAll} className="text-xs text-foreground hover:underline">
+            {t('session.action.selectAll')}
+          </button>
+          <button onClick={onExitSelectMode} className="text-xs text-muted-foreground hover:text-foreground">
+            {t('session.action.done')}
+          </button>
+        </div>
+      )}
 
       {/* Rename Dialog */}
       <RenameDialog

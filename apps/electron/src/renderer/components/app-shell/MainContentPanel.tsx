@@ -29,12 +29,14 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isSchedulerNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { extractLabelId } from '@g4os/shared/labels'
 import type { TodoStateId } from '@/config/todo-states'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
+import ScheduledJobsPage from '@/pages/settings/ScheduledJobsPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { useLocale } from '@/context/LocaleContext'
 
@@ -134,6 +136,15 @@ export function MainContentPanel({
       {content}
     </StoplightProvider>
   )
+
+  // Scheduler navigator - full-width scheduled jobs page
+  if (isSchedulerNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <ScheduledJobsPage />
+      </Panel>
+    )
+  }
 
   // Settings navigator - uses component map from settings-pages.ts
   if (isSettingsNavigation(navState)) {

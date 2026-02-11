@@ -7,8 +7,11 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ElectronDir = Split-Path -Parent $ScriptDir
 $RootDir = Split-Path -Parent (Split-Path -Parent $ElectronDir)
 
-# Configuration
-$BunVersion = "bun-v1.3.5"  # Pinned version for reproducible builds
+# Configuration — pinned versions for reproducible builds
+$BunVersion = "bun-v1.3.5"
+$GitVersion = "v2.47.1"       # MinGit version for Windows
+$NodeVersion = "v22.11.0"
+$UvVersion = "0.5.14"
 
 Write-Host "=== Building G4 OS Windows Installer using electron-builder ===" -ForegroundColor Cyan
 
@@ -154,7 +157,92 @@ try {
     Remove-Item -Recurse -Force $TempDir -ErrorAction SilentlyContinue
 }
 
-# 4. Copy SDK from root node_modules (monorepo hoisting)
+# 4. Download MinGit for Windows
+if (Test-Path "$ElectronDir\vendor\git\cmd\git.exe") {
+    Write-Host "Git Windows binary already present, skipping download"
+} else {
+    $MinGitVersion = $GitVersion.TrimStart('v')
+    $MinGitDownload = "MinGit-$MinGitVersion-64-bit.zip"
+    $MinGitUrl = "https://github.com/git-for-windows/git/releases/download/$GitVersion.windows.1/$MinGitDownload"
+    Write-Host "Downloading MinGit $GitVersion for Windows x64..."
+    New-Item -ItemType Directory -Force -Path "$ElectronDir\vendor\git" | Out-Null
+
+    $GitTemp = Join-Path $env:TEMP "git-download-$(Get-Random)"
+    New-Item -ItemType Directory -Force -Path $GitTemp | Out-Null
+    try {
+        Invoke-WebRequest -Uri $MinGitUrl -OutFile "$GitTemp\$MinGitDownload"
+        Expand-Archive -Path "$GitTemp\$MinGitDownload" -DestinationPath "$ElectronDir\vendor\git" -Force
+        Write-Host "MinGit extracted to vendor/git/" -ForegroundColor Green
+    } finally {
+        Remove-Item -Recurse -Force $GitTemp -ErrorAction SilentlyContinue
+    }
+}
+
+# 5. Download Node.js for Windows
+if (Test-Path "$ElectronDir\vendor\node\node.exe") {
+    Write-Host "Node.js Windows binary already present, skipping download"
+} else {
+    $NodeDownload = "node-$NodeVersion-win-x64"
+    $NodeUrl = "https://nodejs.org/dist/$NodeVersion/$NodeDownload.zip"
+    Write-Host "Downloading Node.js $NodeVersion for Windows x64..."
+    New-Item -ItemType Directory -Force -Path "$ElectronDir\vendor\node" | Out-Null
+
+    $NodeTemp = Join-Path $env:TEMP "node-download-$(Get-Random)"
+    New-Item -ItemType Directory -Force -Path $NodeTemp | Out-Null
+    try {
+        Invoke-WebRequest -Uri $NodeUrl -OutFile "$NodeTemp\$NodeDownload.zip"
+
+        # Verify checksum
+        Invoke-WebRequest -Uri "https://nodejs.org/dist/$NodeVersion/SHASUMS256.txt" -OutFile "$NodeTemp\SHASUMS256.txt"
+        Write-Host "Verifying Node.js checksum..."
+        $ExpectedNodeHash = (Get-Content "$NodeTemp\SHASUMS256.txt" | Select-String "$NodeDownload.zip").ToString().Split(" ")[0]
+        $ActualNodeHash = (Get-FileHash "$NodeTemp\$NodeDownload.zip" -Algorithm SHA256).Hash.ToLower()
+        if ($ActualNodeHash -ne $ExpectedNodeHash) {
+            throw "Node.js checksum verification failed! Expected: $ExpectedNodeHash, Got: $ActualNodeHash"
+        }
+        Write-Host "Node.js checksum verified" -ForegroundColor Green
+
+        Expand-Archive -Path "$NodeTemp\$NodeDownload.zip" -DestinationPath $NodeTemp -Force
+        Copy-Item "$NodeTemp\$NodeDownload\node.exe" "$ElectronDir\vendor\node\"
+        Write-Host "Node.js extracted to vendor/node/" -ForegroundColor Green
+    } finally {
+        Remove-Item -Recurse -Force $NodeTemp -ErrorAction SilentlyContinue
+    }
+}
+
+# 6. Download uv for Windows
+if (Test-Path "$ElectronDir\vendor\uv\uv.exe") {
+    Write-Host "uv Windows binary already present, skipping download"
+} else {
+    $UvDownload = "uv-x86_64-pc-windows-msvc.zip"
+    $UvUrl = "https://github.com/astral-sh/uv/releases/download/$UvVersion/$UvDownload"
+    Write-Host "Downloading uv $UvVersion for Windows x64..."
+    New-Item -ItemType Directory -Force -Path "$ElectronDir\vendor\uv" | Out-Null
+
+    $UvTemp = Join-Path $env:TEMP "uv-download-$(Get-Random)"
+    New-Item -ItemType Directory -Force -Path $UvTemp | Out-Null
+    try {
+        Invoke-WebRequest -Uri $UvUrl -OutFile "$UvTemp\$UvDownload"
+
+        # Verify checksum (sha256 file contains "hash *filename" format)
+        Invoke-WebRequest -Uri "https://github.com/astral-sh/uv/releases/download/$UvVersion/$UvDownload.sha256" -OutFile "$UvTemp\uv.sha256"
+        Write-Host "Verifying uv checksum..."
+        $ExpectedUvHash = (Get-Content "$UvTemp\uv.sha256").Trim().Split(" ")[0]
+        $ActualUvHash = (Get-FileHash "$UvTemp\$UvDownload" -Algorithm SHA256).Hash.ToLower()
+        if ($ActualUvHash -ne $ExpectedUvHash) {
+            throw "uv checksum verification failed! Expected: $ExpectedUvHash, Got: $ActualUvHash"
+        }
+        Write-Host "uv checksum verified" -ForegroundColor Green
+
+        Expand-Archive -Path "$UvTemp\$UvDownload" -DestinationPath $UvTemp -Force
+        Copy-Item "$UvTemp\uv.exe" "$ElectronDir\vendor\uv\"
+        Write-Host "uv extracted to vendor/uv/" -ForegroundColor Green
+    } finally {
+        Remove-Item -Recurse -Force $UvTemp -ErrorAction SilentlyContinue
+    }
+}
+
+# 7. Copy SDK from root node_modules (monorepo hoisting)
 $SdkSource = "$RootDir\node_modules\@anthropic-ai\claude-agent-sdk"
 if (-not (Test-Path $SdkSource)) {
     Write-Host "ERROR: SDK not found at $SdkSource" -ForegroundColor Red
@@ -165,7 +253,7 @@ Write-Host "Copying SDK..."
 New-Item -ItemType Directory -Force -Path "$ElectronDir\node_modules\@anthropic-ai" | Out-Null
 Copy-Item -Recurse -Force $SdkSource "$ElectronDir\node_modules\@anthropic-ai\"
 
-# 5. Copy interceptor
+# 8. Copy interceptor
 $InterceptorSource = "$RootDir\packages\shared\src\network-interceptor.ts"
 if (-not (Test-Path $InterceptorSource)) {
     Write-Host "ERROR: Interceptor not found at $InterceptorSource" -ForegroundColor Red
@@ -175,7 +263,7 @@ Write-Host "Copying interceptor..."
 New-Item -ItemType Directory -Force -Path "$ElectronDir\packages\shared\src" | Out-Null
 Copy-Item $InterceptorSource "$ElectronDir\packages\shared\src\"
 
-# 6. Build Electron app
+# 9. Build Electron app
 Write-Host "Building Electron app..."
 
 # Build main process with OAuth credentials
@@ -255,7 +343,7 @@ try {
     Pop-Location
 }
 
-# 7. Package with electron-builder
+# 10. Package with electron-builder
 Write-Host "Packaging app with electron-builder..."
 
 # Debug: Show bun.exe file info
@@ -383,7 +471,7 @@ if (-not $builderSuccess) {
     throw "electron-builder failed after $maxBuilderRetries attempts"
 }
 
-# 8. Verify the installer was built
+# 11. Verify the installer was built
 $InstallerPath = Get-ChildItem -Path "$ElectronDir\release" -Filter "*.exe" | Select-Object -First 1
 
 if (-not $InstallerPath) {

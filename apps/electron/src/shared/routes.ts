@@ -156,6 +156,9 @@ export const routes = {
       return `skills/skill/${skillSlug}` as const
     },
 
+    /** Scheduler view (scheduler navigator) - scheduled jobs management */
+    scheduler: () => 'scheduler' as const,
+
     /** Settings view (settings navigator) - uses SettingsSubpage from registry */
     settings: (subpage?: SettingsSubpage) =>
       subpage && subpage !== 'app'

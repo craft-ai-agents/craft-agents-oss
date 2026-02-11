@@ -33,6 +33,8 @@ export interface TitleGeneratorOptions {
   provider?: TitleProvider;
   /** Credentials for OpenAI (required when provider is 'openai') */
   credentials?: OpenAICredentials;
+  /** Language for the generated title (e.g. 'Portuguese', 'pt-BR') */
+  language?: string;
 }
 
 /**
@@ -104,31 +106,45 @@ async function generateTitleWithOpenAI(
 }
 
 /**
- * Generate a task-focused title (2-5 words) from the user's first message.
+ * Generate a task-focused title (3-7 words) from the user's first message.
  * Extracts what the user is trying to accomplish, framing conversations as tasks.
- * Uses SDK query() which handles all auth types via getDefaultOptions().
+ * Supports both Claude (via SDK query()) and OpenAI (via direct API call).
  *
  * @param userMessage - The user's first message
+ * @param options - Optional provider, credentials, and language
  * @returns Generated task title, or null if generation fails
  */
 export async function generateSessionTitle(
-  userMessage: string
+  userMessage: string,
+  options?: TitleGeneratorOptions
 ): Promise<string | null> {
   try {
     const userSnippet = userMessage.slice(0, 500);
+    const languageInstruction = options?.language ? `Reply in ${options.language}.` : '';
 
     const prompt = [
-      'What is the user trying to do? Reply with ONLY a short task description (2-5 words).',
-      'Start with a verb. Use plain text only - no markdown.',
-      'Examples: "Fix authentication bug", "Add dark mode", "Refactor API layer", "Explain codebase structure"',
+      'What is the user trying to do? Reply with ONLY a short task description (3-7 words).',
+      'Start with a verb. Be specific about what is being worked on. Use plain text only - no markdown, no quotes.',
+      languageInstruction,
+      'Examples: "Fix JWT token refresh in auth middleware", "Add dark mode toggle to settings", "Refactor user service API layer", "Debug failing checkout tests"',
       '',
       'User: ' + userSnippet,
       '',
       'Task:',
-    ].join('\n');
+    ].filter(Boolean).join('\n');
 
+    // Route to appropriate provider
+    const provider = options?.provider ?? 'anthropic';
+
+    if (provider === 'openai' && options?.credentials) {
+      debug('[title-generator] Using OpenAI for title generation');
+      return await generateTitleWithOpenAI(prompt, options.credentials);
+    }
+
+    // Default: Use Claude SDK (works with API key or OAuth)
+    debug('[title-generator] Using Claude for title generation');
     const defaultOptions = getDefaultOptions();
-    const options = {
+    const sdkOptions = {
       ...defaultOptions,
       model: resolveModelId(SUMMARIZATION_MODEL),
       maxTurns: 1,
@@ -136,7 +152,7 @@ export async function generateSessionTitle(
 
     let title = '';
 
-    for await (const message of query({ prompt, options })) {
+    for await (const message of query({ prompt, options: sdkOptions })) {
       if (message.type === 'assistant') {
         for (const block of message.message.content) {
           if (block.type === 'text') {
@@ -185,11 +201,14 @@ export async function regenerateSessionTitle(
       .join('\n\n');
     const assistantSnippet = lastAssistantResponse.slice(0, 500);
 
+    const languageInstruction = options?.language ? `Reply in ${options.language}.` : '';
+
     const prompt = [
       'Based on these recent messages, what is the current focus of this conversation?',
-      'Reply with ONLY a short task description (2-5 words).',
-      'Start with a verb. Use plain text only - no markdown.',
-      'Examples: "Fix authentication bug", "Add dark mode", "Refactor API layer", "Explain codebase structure"',
+      'Reply with ONLY a short task description (3-7 words).',
+      'Start with a verb. Be specific about what is being worked on. Use plain text only - no markdown, no quotes.',
+      languageInstruction,
+      'Examples: "Fix JWT token refresh in auth middleware", "Add dark mode toggle to settings", "Refactor user service API layer", "Debug failing checkout tests"',
       '',
       'Recent user messages:',
       userContext,
@@ -198,7 +217,7 @@ export async function regenerateSessionTitle(
       assistantSnippet,
       '',
       'Current focus:',
-    ].join('\n');
+    ].filter(Boolean).join('\n');
 
     // Route to appropriate provider
     const provider = options?.provider ?? 'anthropic';

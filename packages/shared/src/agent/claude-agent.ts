@@ -141,6 +141,8 @@ export interface ClaudeAgentConfig {
   };
   /** System prompt preset for mini agents ('default' | 'mini' or custom string) */
   systemPromptPreset?: 'default' | 'mini' | string;
+  /** Hook system for emitting agent events (PreToolUse, PostToolUse, SessionStart/End, etc.) */
+  hookSystem?: import('../hooks-simple/hook-system.ts').HookSystem;
 }
 
 // Permission request tracking
@@ -1252,6 +1254,15 @@ export class ClaudeAgent extends BaseAgent {
                 }
               }
 
+              // Emit PreToolUse event to hook system (fire-and-forget, after all permission checks pass)
+              if (this.config.hookSystem) {
+                this.config.hookSystem.emit('PreToolUse', {
+                  sessionId,
+                  toolName: input.tool_name,
+                  input: (input.tool_input as Record<string, unknown>) ?? {},
+                }).catch(() => {});
+              }
+
               return { continue: true };
             }],
           }],
@@ -1267,6 +1278,13 @@ export class ClaudeAgent extends BaseAgent {
             hooks: [async (input, _hookToolUseID) => {
               const typedInput = input as { agent_id?: string; agent_type?: string };
               debug(`[ClaudeAgent] SubagentStart: agent_id=${typedInput.agent_id}, type=${typedInput.agent_type}`);
+              if (this.config.hookSystem) {
+                this.config.hookSystem.emit('SubagentStart', {
+                  sessionId,
+                  agentId: typedInput.agent_id,
+                  agentType: typedInput.agent_type,
+                }).catch(() => {});
+              }
               return { continue: true };
             }],
           }],
@@ -1274,6 +1292,12 @@ export class ClaudeAgent extends BaseAgent {
             hooks: [async (input, _toolUseID) => {
               const typedInput = input as { agent_id?: string };
               debug(`[ClaudeAgent] SubagentStop: agent_id=${typedInput.agent_id}`);
+              if (this.config.hookSystem) {
+                this.config.hookSystem.emit('SubagentStop', {
+                  sessionId,
+                  agentId: typedInput.agent_id,
+                }).catch(() => {});
+              }
               return { continue: true };
             }],
           }],
@@ -2736,6 +2760,12 @@ export class ClaudeAgent extends BaseAgent {
    * Calls super.destroy() for base cleanup, then Claude-specific cleanup.
    */
   destroy(): void {
+    // Emit SessionEnd event to hook system before cleanup
+    const hookSessionId = this.config.session?.id;
+    if (this.config.hookSystem && hookSessionId) {
+      this.config.hookSystem.emit('SessionEnd', { sessionId: hookSessionId }).catch(() => {});
+    }
+
     // Claude-specific cleanup first
     this.currentQueryAbortController?.abort();
     this.pendingPermissions.clear();

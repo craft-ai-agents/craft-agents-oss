@@ -18,7 +18,7 @@ import {
 import { getSourceConfigPath } from '../source-helpers.ts';
 
 export interface ConfigValidateArgs {
-  target: 'config' | 'sources' | 'statuses' | 'preferences' | 'permissions' | 'tool-icons' | 'all';
+  target: 'config' | 'sources' | 'statuses' | 'preferences' | 'permissions' | 'tool-icons' | 'hooks' | 'all';
   sourceSlug?: string;
 }
 
@@ -62,6 +62,13 @@ export async function handleConfigValidate(
           break;
         case 'tool-icons':
           result = ctx.validators.validateToolIcons();
+          break;
+        case 'hooks':
+          if (ctx.validators.validateHooks) {
+            result = ctx.validators.validateHooks(ctx.workspacePath);
+          } else {
+            return successResponse('✓ hooks validation not available (use basic validation)');
+          }
           break;
         case 'all':
           result = ctx.validators.validateAll(ctx.workspacePath);
@@ -157,6 +164,15 @@ export async function handleConfigValidate(
       return successResponse(formatValidationResult(result));
     }
 
+    case 'hooks': {
+      const hooksPath = join(ctx.workspacePath, 'hooks.json');
+      if (!ctx.fs.exists(hooksPath)) {
+        return successResponse('✓ No hooks.json (no hooks configured)');
+      }
+      const result = validateJsonFileHasFields(hooksPath, ['version', 'hooks']);
+      return successResponse(formatValidationResult(result));
+    }
+
     case 'all': {
       const configResult = validateJsonFileHasFields(
         join(craftAgentRoot, 'config.json'),
@@ -172,7 +188,7 @@ export async function handleConfigValidate(
 
     default:
       return errorResponse(
-        `Unknown validation target: ${target}. Valid targets: config, sources, statuses, preferences, permissions, tool-icons, all`
+        `Unknown validation target: ${target}. Valid targets: config, sources, statuses, preferences, permissions, tool-icons, hooks, all`
       );
   }
 }

@@ -34,6 +34,7 @@ import {
   StyledDropdownMenuSeparator,
 } from '@/components/ui/styled-dropdown'
 import { cn } from '@/lib/utils'
+import { getProviderIcon, getProviderDisplayName } from '@/lib/provider-icons'
 
 import {
   SettingsSection,
@@ -139,14 +140,10 @@ function ConnectionRow({ connection, isLastConnection, onEdit, onDelete, onSetDe
 
     // Provider type (fall back to legacy 'type' field if providerType missing)
     const provider = connection.providerType || connection.type
-    switch (provider) {
-      case 'anthropic': parts.push('Anthropic API'); break
-      case 'anthropic_compat': parts.push('Anthropic Compatible'); break
-      case 'openai': parts.push('OpenAI API'); break
-      case 'openai_compat': parts.push('OpenAI Compatible'); break
-      case 'bedrock': parts.push('AWS Bedrock'); break
-      case 'vertex': parts.push('Google Vertex'); break
-      default: parts.push(provider || 'Unknown')
+    if (provider) {
+      parts.push(getProviderDisplayName(provider, connection.baseUrl))
+    } else {
+      parts.push('Unknown')
     }
 
     // Auth status
@@ -155,10 +152,16 @@ function ConnectionRow({ connection, isLastConnection, onEdit, onDelete, onSetDe
     return parts.join(' · ')
   }
 
+  const providerType = connection.providerType || connection.type
+  const iconUrl = providerType ? getProviderIcon(providerType, connection.baseUrl) : undefined
+
   return (
     <SettingsRow
       label={(
         <div className="flex items-center gap-1.5">
+          {iconUrl && (
+            <img src={iconUrl} alt="" className="h-4 w-4 opacity-60 dark:invert" />
+          )}
           <span>{connection.name}</span>
           {connection.isDefault && (
             <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-background shadow-minimal text-foreground/60">

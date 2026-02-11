@@ -39,6 +39,7 @@ import {
   validateAllPermissions,
   validateToolIcons,
 } from '../config/validators.ts';
+import { validateHooksConfig as validateHooksConfigImpl } from '../hooks-simple/validation.ts';
 import {
   validateMcpConnection as validateMcpConnectionImpl,
   validateStdioMcpConnection as validateStdioMcpConnectionImpl,
@@ -135,6 +136,14 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
       return validateAllPermissions(wsPath);
     },
     validateToolIcons: () => validateToolIcons(),
+    validateHooks: (wsPath: string) => {
+      const result = validateHooksConfigImpl(wsPath);
+      return {
+        valid: result.valid,
+        errors: result.errors.map(e => ({ path: e.path, message: e.message })),
+        warnings: result.warnings.map(w => ({ path: w.path, message: w.message })),
+      };
+    },
     validateAll: (wsPath: string) => validateAll(wsPath),
     validateSkill: (wsPath: string, slug: string) => validateSkill(wsPath, slug),
   };

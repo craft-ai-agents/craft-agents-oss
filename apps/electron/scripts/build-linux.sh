@@ -62,8 +62,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Configuration
-BUN_VERSION="bun-v1.3.5"  # Pinned version for reproducible builds
+# Configuration — pinned versions for reproducible builds
+BUN_VERSION="bun-v1.3.5"
+DUGITE_TAG="v2.47.3-1"                                   # Git portable (dugite-native release tag)
+DUGITE_PREFIX="dugite-native-v2.47.3-b6d6cfa"            # Filename prefix (includes commit hash)
+NODE_VERSION="v22.11.0"
+UV_VERSION="0.5.14"
 
 echo "=== Building G4 OS AppImage (${ARCH}) using electron-builder ==="
 if [ "$UPLOAD" = true ]; then
@@ -113,7 +117,86 @@ unzip -o "$TEMP_DIR/${BUN_DOWNLOAD}.zip" -d "$TEMP_DIR"
 cp "$TEMP_DIR/${BUN_DOWNLOAD}/bun" "$ELECTRON_DIR/vendor/bun/"
 chmod +x "$ELECTRON_DIR/vendor/bun/bun"
 
-# 4. Copy SDK from root node_modules (monorepo hoisting)
+# 4. Download portable Git (dugite-native) for Linux
+GIT_ARCH=$([[ "$ARCH" == "arm64" ]] && echo "arm64" || echo "x64")
+GIT_DOWNLOAD="${DUGITE_PREFIX}-ubuntu-${GIT_ARCH}.tar.gz"
+GIT_URL="https://github.com/desktop/dugite-native/releases/download/${DUGITE_TAG}/${GIT_DOWNLOAD}"
+echo "Downloading portable Git (${DUGITE_TAG}) for linux-${GIT_ARCH}..."
+mkdir -p "$ELECTRON_DIR/vendor/git"
+
+GIT_TEMP=$(mktemp -d)
+curl -fSL "$GIT_URL" -o "$GIT_TEMP/${GIT_DOWNLOAD}"
+tar -xzf "$GIT_TEMP/${GIT_DOWNLOAD}" -C "$ELECTRON_DIR/vendor/git"
+chmod +x "$ELECTRON_DIR/vendor/git/bin/git"
+
+# Replace symlinks in libexec/git-core with hard links to the main git binary.
+# dugite-native uses relative symlinks (e.g., git-fetch → git) which break
+# when electron-builder copies files into the AppImage.
+GIT_CORE_DIR="$ELECTRON_DIR/vendor/git/libexec/git-core"
+if [ -d "$GIT_CORE_DIR" ]; then
+    GIT_MAIN="$GIT_CORE_DIR/git"
+    if [ -L "$GIT_MAIN" ]; then
+        REAL_GIT="$ELECTRON_DIR/vendor/git/bin/git"
+        cp "$REAL_GIT" "$GIT_MAIN.tmp" && mv "$GIT_MAIN.tmp" "$GIT_MAIN"
+    fi
+    find "$GIT_CORE_DIR" -type l | while read link; do
+        rm "$link"
+        ln "$GIT_MAIN" "$link"
+    done
+fi
+
+rm -rf "$GIT_TEMP"
+echo "Git extracted to vendor/git/"
+
+# 5. Download portable Node.js for Linux
+NODE_ARCH=$([[ "$ARCH" == "arm64" ]] && echo "arm64" || echo "x64")
+NODE_DOWNLOAD="node-${NODE_VERSION}-linux-${NODE_ARCH}"
+NODE_URL="https://nodejs.org/dist/${NODE_VERSION}/${NODE_DOWNLOAD}.tar.xz"
+echo "Downloading Node.js ${NODE_VERSION} for linux-${NODE_ARCH}..."
+mkdir -p "$ELECTRON_DIR/vendor/node"
+
+NODE_TEMP=$(mktemp -d)
+curl -fSL "$NODE_URL" -o "$NODE_TEMP/${NODE_DOWNLOAD}.tar.xz"
+
+# Verify checksum
+curl -fSL "https://nodejs.org/dist/${NODE_VERSION}/SHASUMS256.txt" -o "$NODE_TEMP/SHASUMS256.txt"
+echo "Verifying Node.js checksum..."
+cd "$NODE_TEMP"
+grep "${NODE_DOWNLOAD}.tar.xz" SHASUMS256.txt | sha256sum -c -
+cd - > /dev/null
+
+tar -xJf "$NODE_TEMP/${NODE_DOWNLOAD}.tar.xz" -C "$NODE_TEMP"
+cp -r "$NODE_TEMP/${NODE_DOWNLOAD}/bin" "$ELECTRON_DIR/vendor/node/"
+cp -r "$NODE_TEMP/${NODE_DOWNLOAD}/lib" "$ELECTRON_DIR/vendor/node/"
+chmod +x "$ELECTRON_DIR/vendor/node/bin/node"
+rm -rf "$NODE_TEMP"
+echo "Node.js extracted to vendor/node/"
+
+# 6. Download uv for Linux
+UV_ARCH=$([[ "$ARCH" == "arm64" ]] && echo "aarch64" || echo "x86_64")
+UV_DOWNLOAD="uv-${UV_ARCH}-unknown-linux-gnu.tar.gz"
+UV_URL="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${UV_DOWNLOAD}"
+echo "Downloading uv ${UV_VERSION} for ${UV_ARCH}-linux..."
+mkdir -p "$ELECTRON_DIR/vendor/uv"
+
+UV_TEMP=$(mktemp -d)
+curl -fSL "$UV_URL" -o "$UV_TEMP/${UV_DOWNLOAD}"
+
+# Verify checksum (sha256 file already contains "hash  filename" format)
+curl -fSL "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${UV_DOWNLOAD}.sha256" -o "$UV_TEMP/uv.sha256"
+echo "Verifying uv checksum..."
+cd "$UV_TEMP"
+sha256sum -c uv.sha256
+cd - > /dev/null
+
+tar -xzf "$UV_TEMP/${UV_DOWNLOAD}" -C "$UV_TEMP"
+UV_EXTRACTED="uv-${UV_ARCH}-unknown-linux-gnu"
+cp "$UV_TEMP/${UV_EXTRACTED}/uv" "$ELECTRON_DIR/vendor/uv/"
+chmod +x "$ELECTRON_DIR/vendor/uv/uv"
+rm -rf "$UV_TEMP"
+echo "uv extracted to vendor/uv/"
+
+# 7. Copy SDK from root node_modules (monorepo hoisting)
 # Note: The SDK is hoisted to root node_modules by the package manager.
 # We copy it here because electron-builder only sees apps/electron/.
 SDK_SOURCE="$ROOT_DIR/node_modules/@anthropic-ai/claude-agent-sdk"
@@ -122,19 +205,19 @@ echo "Copying SDK..."
 mkdir -p "$ELECTRON_DIR/node_modules/@anthropic-ai"
 cp -r "$SDK_SOURCE" "$ELECTRON_DIR/node_modules/@anthropic-ai/"
 
-# 5. Copy interceptor
+# 8. Copy interceptor
 INTERCEPTOR_SOURCE="$ROOT_DIR/packages/shared/src/network-interceptor.ts"
 require_path "$INTERCEPTOR_SOURCE" "Interceptor" "Ensure packages/shared/src/network-interceptor.ts exists."
 echo "Copying interceptor..."
 mkdir -p "$ELECTRON_DIR/packages/shared/src"
 cp "$INTERCEPTOR_SOURCE" "$ELECTRON_DIR/packages/shared/src/"
 
-# 6. Build Electron app
+# 9. Build Electron app
 echo "Building Electron app..."
 cd "$ROOT_DIR"
 bun run electron:build
 
-# 7. Package with electron-builder
+# 10. Package with electron-builder
 echo "Packaging app with electron-builder..."
 cd "$ELECTRON_DIR"
 
@@ -142,7 +225,7 @@ cd "$ELECTRON_DIR"
 # Note: electron-builder may build both archs due to config, but we only use the requested one
 npx electron-builder --linux --${ARCH}
 
-# 8. Verify the AppImage was built
+# 11. Verify the AppImage was built
 # electron-builder uses Linux-style arch names: x86_64 for x64, aarch64 for arm64
 if [ "$ARCH" = "x64" ]; then
     LINUX_ARCH="x86_64"
@@ -172,14 +255,14 @@ echo "=== Build Complete ==="
 echo "AppImage: $ELECTRON_DIR/release/${APPIMAGE_NAME}"
 echo "Size: $(du -h "$ELECTRON_DIR/release/${APPIMAGE_NAME}" | cut -f1)"
 
-# 9. Create manifest.json for upload script
+# 12. Create manifest.json for upload script
 # Read version from package.json
 ELECTRON_VERSION=$(cat "$ELECTRON_DIR/package.json" | grep '"version"' | head -1 | sed 's/.*"version": *"\([^"]*\)".*/\1/')
 echo "Creating manifest.json (version: $ELECTRON_VERSION)..."
 mkdir -p "$ROOT_DIR/.build/upload"
 echo "{\"version\": \"$ELECTRON_VERSION\"}" > "$ROOT_DIR/.build/upload/manifest.json"
 
-# 10. Upload to S3 (if --upload flag is set)
+# 13. Upload to S3 (if --upload flag is set)
 if [ "$UPLOAD" = true ]; then
     echo ""
     echo "=== Uploading to S3 ==="

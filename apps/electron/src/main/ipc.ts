@@ -6,6 +6,7 @@ import { homedir, tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { execSync } from 'child_process'
 import { SessionManager } from './sessions'
+import type { ScheduleManager } from './scheduler'
 import { ipcLog, windowLog, searchLog } from './logger'
 import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
@@ -162,7 +163,7 @@ async function validateFilePath(filePath: string): Promise<string> {
   return realPath
 }
 
-export function registerIpcHandlers(sessionManager: SessionManager, windowManager: WindowManager): void {
+export function registerIpcHandlers(sessionManager: SessionManager, windowManager: WindowManager, scheduleManager?: ScheduleManager): void {
   // Get all sessions
   ipcMain.handle(IPC_CHANNELS.GET_SESSIONS, async () => {
     const end = perf.start('ipc.getSessions')
@@ -2819,6 +2820,54 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     saveViews(workspace.rootPath, views)
     // Broadcast labels changed since views are used alongside labels in sidebar
     windowManager.broadcastToAll(IPC_CHANNELS.LABELS_CHANGED, workspaceId)
+  })
+
+  // ============================================
+  // Scheduled Jobs
+  // ============================================
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULER_LIST_JOBS, async (_event, workspaceId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { loadScheduledJobs } = await import('@g4os/shared/scheduler/storage')
+    return loadScheduledJobs(workspace.rootPath)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULER_CREATE_JOB, async (_event, workspaceId: string, input: import('../shared/types').CreateScheduledJobInput) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { createScheduledJob } = await import('@g4os/shared/scheduler/storage')
+    const job = createScheduledJob(workspace.rootPath, workspaceId, input)
+    if (scheduleManager) await scheduleManager.refresh(workspaceId)
+    windowManager.broadcastToAll(IPC_CHANNELS.SCHEDULER_JOBS_CHANGED, workspaceId)
+    return job
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULER_UPDATE_JOB, async (_event, workspaceId: string, jobId: string, input: import('../shared/types').UpdateScheduledJobInput) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { updateScheduledJob } = await import('@g4os/shared/scheduler/storage')
+    const job = updateScheduledJob(workspace.rootPath, jobId, input)
+    if (scheduleManager) await scheduleManager.refresh(workspaceId)
+    windowManager.broadcastToAll(IPC_CHANNELS.SCHEDULER_JOBS_CHANGED, workspaceId)
+    return job
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULER_DELETE_JOB, async (_event, workspaceId: string, jobId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { deleteScheduledJob } = await import('@g4os/shared/scheduler/storage')
+    const result = deleteScheduledJob(workspace.rootPath, jobId)
+    if (scheduleManager) await scheduleManager.refresh(workspaceId)
+    windowManager.broadcastToAll(IPC_CHANNELS.SCHEDULER_JOBS_CHANGED, workspaceId)
+    return result
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULER_RUN_NOW, async (_event, workspaceId: string, jobId: string) => {
+    if (!scheduleManager) throw new Error('Scheduler not initialized')
+    await scheduleManager.runJobNow(jobId, workspaceId)
+    windowManager.broadcastToAll(IPC_CHANNELS.SCHEDULER_JOBS_CHANGED, workspaceId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULER_GET_HISTORY, async () => {
+    if (!scheduleManager) return []
+    return scheduleManager.getExecutions()
   })
 
   // Generic workspace image loading (for source icons, status icons, etc.)
