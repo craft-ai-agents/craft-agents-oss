@@ -5,7 +5,32 @@ description: "Maintains a curated workspace-context.md — the 'workspace brain'
 
 # Workspace Context Skill
 
-Maintains a curated `workspace-context.md` file that acts as the workspace's persistent memory — a quick-reference "brain" loaded at session start to eliminate cold starts.
+Manages TWO context files with distinct purposes to avoid duplication and keep context functional.
+
+## Two Context Files
+
+### workspace-context.md (global — in workspace)
+
+**Location:** `~/.g4os/workspaces/{workspace}/workspace-context.md`
+
+The user's persistent identity context — follows them regardless of which project/directory they're working in.
+
+**Contains:**
+- Key Contacts (names, roles, emails)
+- Terminology & Acronyms
+- User Preferences & Work Style
+- Important Recurring Items (meetings, deadlines)
+
+### local-context.md (project — in working directory)
+
+**Location:** `./local-context.md` (relative to current working directory)
+
+Project-specific context — unique to each working directory.
+
+**Contains:**
+- Active Projects and their status
+- Frequently Referenced Paths (for this project)
+- Project-specific notes, conventions, or reminders
 
 ## When This Skill Applies
 
@@ -13,45 +38,67 @@ Maintains a curated `workspace-context.md` file that acts as the workspace's per
 - "Who is [nickname]?" / "What does [acronym] mean?"
 - "Update my workspace context"
 - `/workspace-context`
-- Automatically invoked by `session-start` (Step 0) and `session-checkpoint`
+- Automatically invoked by `session-start` (Step 1) and `session-checkpoint` (Step 3)
 
-## What workspace-context.md Contains
+## Templates
 
-Keep it curated and concise (~50-80 lines). It should contain the **most frequently needed** context:
+### workspace-context.md template
 
 ```markdown
 # Workspace Context
 
 ## Key Contacts
-- [Name] ([Role]) — [nickname/handle], [email or channel]
+- [Name] ([Role]) — [email or channel]
 
 ## Terminology & Acronyms
 - [ACRONYM] — [definition]
 
-## Active Projects
-- [Project name] — [one-line status], [key files or links]
-
 ## User Preferences & Work Style
-- [Preferred communication style, review habits, etc.]
+- [Preferred language, communication style, etc.]
 
 ## Important Recurring Items
 - [Weekly meetings, deadlines, recurring tasks]
+```
+
+### local-context.md template
+
+```markdown
+# Local Context
+
+## Active Projects
+- [Project name] — [one-line status]
 
 ## Frequently Referenced Paths
-- [Key files, repos, or directories the user works with often]
+- [Key files, repos, or directories]
+
+## Project Notes
+- [Conventions, reminders, or context specific to this directory]
 ```
+
+## Where to Store What
+
+| Information | Goes in | Why |
+|---|---|---|
+| Contact name/role/email | `workspace-context.md` | Global — same person across projects |
+| Acronym/terminology | `workspace-context.md` | Global — same meaning everywhere |
+| User preferences | `workspace-context.md` | Global — doesn't change per project |
+| Recurring meetings | `workspace-context.md` | Global — calendar is calendar |
+| Project status | `local-context.md` | Local — specific to this directory |
+| File paths | `local-context.md` | Local — paths are project-specific |
+| Project conventions | `local-context.md` | Local — each project has its own rules |
 
 ## Lookup Flow
 
 When you need context about a contact, acronym, project, or preference:
 
-1. **workspace-context.md** — Check here first (instant, no tool calls needed if loaded at session start)
-2. **activity-log.md** — Search recent entries for context
-3. **session-log.md** — Search historical sessions
-4. **Ask the user** — If not found anywhere
-5. **Update workspace-context.md** — Save the answer for future sessions
+1. **workspace-context.md** (workspace) — Global context first
+2. **local-context.md** (working directory) — Project context
+3. **activity-log.md** (working directory) — Recent entries
+4. **session-log.md** (working directory) — Historical sessions
+5. **Ask the user** — If not found anywhere
+6. **Save the answer** — To the appropriate file based on the table above
 
-## Updating workspace-context.md
+## Updating
 
 ### When to Update
 
@@ -63,29 +110,33 @@ When you need context about a contact, acronym, project, or preference:
 
 ### How to Update
 
-1. Read the current `workspace-context.md`
-2. Add, update, or remove the relevant entry in the appropriate section
-3. Keep the file concise — remove stale entries, merge duplicates
-4. Never exceed ~80 lines — if it's growing too large, archive less-used items
+1. Determine which file the information belongs in (see table above)
+2. Read that file (create with template if it doesn't exist)
+3. Add, update, or remove the relevant entry
+4. Keep files concise — remove stale entries, merge duplicates
+5. `workspace-context.md`: ~50-80 lines max
+6. `local-context.md`: ~30-50 lines max
 
 ### What NOT to Store
 
 - Temporary or one-off information
-- Full meeting notes (those belong in `people/*/1-1s/`)
-- Detailed project plans (those belong in `goals/`)
+- Full meeting notes (those belong in dedicated files)
+- Detailed project plans (those belong in their own documents)
 - Sensitive credentials or API keys
+- Logs or session data (those belong in their own files)
 
 ## Rules
 
-1. **Curate ruthlessly** — This is a quick-reference, not a knowledge base. Only store what's needed frequently.
-2. **Keep it current** — Remove outdated entries. A stale context file is worse than none.
+1. **Curate ruthlessly** — Quick-reference, not a knowledge base.
+2. **Keep it current** — Remove outdated entries. Stale context is worse than none.
 3. **One line per item** — Each entry should be scannable in a glance.
 4. **Match the user's language** — Write entries in the language the user prefers.
-5. **Don't duplicate** — If information belongs in another file (goals, people, session-log), reference it instead of copying.
-6. **Proactive updates** — When you learn something new during a conversation, offer to save it: "Want me to add [X] to your workspace context?"
+5. **Don't duplicate** — Each piece of info lives in ONE place. Reference instead of copying.
+6. **Proactive updates** — When you learn something new, offer to save it: "Want me to add [X] to your context?"
+7. **Auto-create** — If either file doesn't exist and you need it, create it with the template. Never error.
 
 ## Integration with Other Skills
 
-- **session-start**: Reads `workspace-context.md` as Step 0 for instant context
-- **session-checkpoint**: Reviews and updates `workspace-context.md` with any new context learned during the session
-- **quick-log**: Important context from quick-log entries may warrant a workspace-context update
+- **session-start**: Reads both files in Step 1 for instant context
+- **session-checkpoint**: Reviews and updates both files with new context learned during the session
+- **quick-log**: Important context from quick-log entries may warrant a context update

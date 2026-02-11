@@ -7,6 +7,24 @@ description: "Quick catch-up brief for new sessions — surfaces priorities, pen
 
 Solves the "cold start" problem. Delivers a focused brief so the user is up to speed in seconds.
 
+## File Location Convention
+
+Two types of context, each in its own place:
+
+**Global (workspace `~/.g4os/workspaces/{workspace}/`):**
+- `workspace-context.md` — "Who I am": contacts, acronyms, preferences, recurring items
+
+**Local (working directory):**
+- `local-context.md` — "What's here": active projects, paths, project-specific notes
+- `activity-log.md` — Recent activities and decisions
+- `session-log.md` — Full session history
+- `last-session.md` — Previous session summary (fast-load)
+
+**Path rules:**
+- Never hardcode absolute paths for working directory files
+- Working directory = current session's working directory (dynamic)
+- If a file doesn't exist, create it automatically (don't error)
+
 ## When This Skill Applies
 
 - Start of any new conversation
@@ -16,24 +34,40 @@ Solves the "cold start" problem. Delivers a focused brief so the user is up to s
 
 ## Briefing Process
 
-### Step 0: Load Workspace Context
+### Step 0: Get Current Date and Day of Week
 
-Read `workspace-context.md` first. This is the workspace's curated "brain" — key contacts, acronyms, active projects, and preferences. It gives you immediate context before any other tool calls.
+**CRITICAL**: Always run bash to get the current date and day of week in the user's timezone before anything else:
 
-If the file doesn't exist yet, skip this step and note it in the brief: suggest the user run `/workspace-context` to set it up.
+```bash
+date +"%A, %d %b %Y"
+```
 
-### Step 1: Gather Context (parallel reads)
+This ensures you never make mistakes with the day of the week in the brief header.
 
-Read the following files to build the brief:
+### Step 1: Load Context (parallel reads)
+
+Read BOTH context files in parallel:
+
+1. **Global context**: `workspace-context.md` from workspace (`~/.g4os/workspaces/{workspace}/workspace-context.md`)
+2. **Local context**: `local-context.md` from working directory
+
+If `workspace-context.md` doesn't exist in workspace, create it with the basic template (see `workspace-context` skill).
+If `local-context.md` doesn't exist in working directory, create it with a basic template.
+
+### Step 2: Gather Project Data (parallel reads)
+
+All from working directory:
 
 1. **Current priorities**: `goals/current.md` — focus on HIGH items
-2. **Monthly tracker**: `goals/[current-month]-[current-year].md` (e.g., `goals/february-2026.md`) — check bets, decisions, action items
+2. **Monthly tracker**: `goals/[current-month]-[current-year].md` — check bets, decisions, action items
 3. **Recent 1:1s**: Scan `people/*/1-1s/` for files from the last 3 days
-4. **Session log**: Read `last-session.md` for the previous session's context
-5. **Recent activity**: Read `activity-log.md` for entries from the last 3 days
+4. **Session log**: `last-session.md` — previous session's context
+5. **Recent activity**: `activity-log.md` — entries from the last 3 days
 6. **Calendar**: If a calendar source is active, fetch today's events using the user's timezone
 
-### Step 2: Identify Alerts
+If any file doesn't exist, skip it gracefully (don't error).
+
+### Step 3: Identify Alerts
 
 Proactively flag:
 - **Overdue items**: Action items past their due date
@@ -41,7 +75,7 @@ Proactively flag:
 - **Stale blockers**: Blockers that haven't been updated in >5 days
 - **Upcoming meetings**: Meetings today that may need preparation
 
-### Step 3: Deliver the Brief
+### Step 4: Deliver the Brief
 
 Output format:
 
@@ -83,7 +117,7 @@ Output format:
 
 ## Integration with Other Skills
 
-- **workspace-context**: Loaded as Step 0 — provides instant context (contacts, acronyms, projects, preferences)
+- **workspace-context**: Global context loaded in Step 1 (contacts, acronyms, preferences)
 - **activity-log**: Recent entries provide real-time context that may not be in session-log yet
 - **session-checkpoint**: Last session recap comes from last-session.md (written by checkpoint)
 - **quick-log**: Important items logged during sessions surface here automatically
