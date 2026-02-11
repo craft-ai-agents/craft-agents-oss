@@ -42,10 +42,11 @@ fi
 UPLOAD=false
 UPLOAD_LATEST=false
 CLEAN=false
+LIGHT=false
 
 show_help() {
     cat << EOF
-Usage: build-win.sh [--upload] [--latest] [--clean]
+Usage: build-win.sh [--upload] [--latest] [--clean] [--light]
 
 Cross-compiles a Windows NSIS installer from macOS using electron-builder.
 
@@ -53,6 +54,7 @@ Arguments:
   --upload     Upload installer after building
   --latest     Also update electron/latest (requires --upload)
   --clean      Full clean rebuild (delete cached Bun binary and SDK)
+  --light      Light build: skip bundling git, node, and uv (smaller installer)
 
 Environment variables (from .env or environment):
   S3_VERSIONS_BUCKET_*      - S3 credentials (for --upload)
@@ -68,6 +70,7 @@ while [[ $# -gt 0 ]]; do
         --upload)      UPLOAD=true; shift ;;
         --latest)      UPLOAD_LATEST=true; shift ;;
         --clean)       CLEAN=true; shift ;;
+        --light)       LIGHT=true; shift ;;
         -h|--help)     show_help ;;
         *)
             echo "Unknown option: $1"
@@ -85,6 +88,9 @@ UV_VERSION="0.5.14"
 ARCH="x64"                # Windows ARM not supported
 
 echo "=== Cross-compiling G4 OS Windows Installer (${ARCH}) from macOS ==="
+if [ "$LIGHT" = true ]; then
+    echo "LIGHT BUILD: skipping git, node, uv (smaller installer)"
+fi
 if [ "$UPLOAD" = true ]; then
     echo "Will upload after build"
 fi
@@ -134,69 +140,84 @@ else
 fi
 
 # 4. Download MinGit for Windows (skip if already cached)
-if [ -f "$ELECTRON_DIR/vendor/git/cmd/git.exe" ]; then
-    echo "Git Windows binary already cached, skipping download"
+if [ "$LIGHT" = true ]; then
+    echo "Light build: skipping Git, removing cached copy..."
+    rm -rf "$ELECTRON_DIR/vendor/git"
 else
-    MINGIT_DOWNLOAD="MinGit-${GIT_VERSION#v}-64-bit.zip"
-    MINGIT_URL="https://github.com/git-for-windows/git/releases/download/${GIT_VERSION}.windows.1/${MINGIT_DOWNLOAD}"
-    echo "Downloading MinGit ${GIT_VERSION} for Windows x64..."
-    mkdir -p "$ELECTRON_DIR/vendor/git"
+    if [ -f "$ELECTRON_DIR/vendor/git/cmd/git.exe" ]; then
+        echo "Git Windows binary already cached, skipping download"
+    else
+        MINGIT_DOWNLOAD="MinGit-${GIT_VERSION#v}-64-bit.zip"
+        MINGIT_URL="https://github.com/git-for-windows/git/releases/download/${GIT_VERSION}.windows.1/${MINGIT_DOWNLOAD}"
+        echo "Downloading MinGit ${GIT_VERSION} for Windows x64..."
+        mkdir -p "$ELECTRON_DIR/vendor/git"
 
-    GIT_TEMP=$(mktemp -d)
-    curl -fSL "$MINGIT_URL" -o "$GIT_TEMP/${MINGIT_DOWNLOAD}"
-    unzip -o "$GIT_TEMP/${MINGIT_DOWNLOAD}" -d "$ELECTRON_DIR/vendor/git"
-    rm -rf "$GIT_TEMP"
-    echo "MinGit extracted to vendor/git/"
+        GIT_TEMP=$(mktemp -d)
+        curl -fSL "$MINGIT_URL" -o "$GIT_TEMP/${MINGIT_DOWNLOAD}"
+        unzip -o "$GIT_TEMP/${MINGIT_DOWNLOAD}" -d "$ELECTRON_DIR/vendor/git"
+        rm -rf "$GIT_TEMP"
+        echo "MinGit extracted to vendor/git/"
+    fi
 fi
 
 # 5. Download Node.js for Windows (skip if already cached)
-if [ -f "$ELECTRON_DIR/vendor/node/node.exe" ]; then
-    echo "Node.js Windows binary already cached, skipping download"
+if [ "$LIGHT" = true ]; then
+    echo "Light build: skipping Node.js, removing cached copy..."
+    rm -rf "$ELECTRON_DIR/vendor/node"
 else
-    NODE_DOWNLOAD="node-${NODE_VERSION}-win-x64"
-    NODE_URL="https://nodejs.org/dist/${NODE_VERSION}/${NODE_DOWNLOAD}.zip"
-    echo "Downloading Node.js ${NODE_VERSION} for Windows x64..."
-    mkdir -p "$ELECTRON_DIR/vendor/node"
+    if [ -f "$ELECTRON_DIR/vendor/node/node.exe" ]; then
+        echo "Node.js Windows binary already cached, skipping download"
+    else
+        NODE_DOWNLOAD="node-${NODE_VERSION}-win-x64"
+        NODE_URL="https://nodejs.org/dist/${NODE_VERSION}/${NODE_DOWNLOAD}.zip"
+        echo "Downloading Node.js ${NODE_VERSION} for Windows x64..."
+        mkdir -p "$ELECTRON_DIR/vendor/node"
 
-    NODE_TEMP=$(mktemp -d)
-    curl -fSL "$NODE_URL" -o "$NODE_TEMP/${NODE_DOWNLOAD}.zip"
+        NODE_TEMP=$(mktemp -d)
+        curl -fSL "$NODE_URL" -o "$NODE_TEMP/${NODE_DOWNLOAD}.zip"
 
-    # Verify checksum
-    curl -fSL "https://nodejs.org/dist/${NODE_VERSION}/SHASUMS256.txt" -o "$NODE_TEMP/SHASUMS256.txt"
-    echo "Verifying Node.js checksum..."
-    cd "$NODE_TEMP"
-    grep "${NODE_DOWNLOAD}.zip" SHASUMS256.txt | shasum -a 256 -c -
-    cd - > /dev/null
+        # Verify checksum
+        curl -fSL "https://nodejs.org/dist/${NODE_VERSION}/SHASUMS256.txt" -o "$NODE_TEMP/SHASUMS256.txt"
+        echo "Verifying Node.js checksum..."
+        cd "$NODE_TEMP"
+        grep "${NODE_DOWNLOAD}.zip" SHASUMS256.txt | shasum -a 256 -c -
+        cd - > /dev/null
 
-    unzip -o "$NODE_TEMP/${NODE_DOWNLOAD}.zip" -d "$NODE_TEMP"
-    cp "$NODE_TEMP/${NODE_DOWNLOAD}/node.exe" "$ELECTRON_DIR/vendor/node/"
-    rm -rf "$NODE_TEMP"
-    echo "Node.js extracted to vendor/node/"
+        unzip -o "$NODE_TEMP/${NODE_DOWNLOAD}.zip" -d "$NODE_TEMP"
+        cp "$NODE_TEMP/${NODE_DOWNLOAD}/node.exe" "$ELECTRON_DIR/vendor/node/"
+        rm -rf "$NODE_TEMP"
+        echo "Node.js extracted to vendor/node/"
+    fi
 fi
 
 # 6. Download uv for Windows (skip if already cached)
-if [ -f "$ELECTRON_DIR/vendor/uv/uv.exe" ]; then
-    echo "uv Windows binary already cached, skipping download"
+if [ "$LIGHT" = true ]; then
+    echo "Light build: skipping uv, removing cached copy..."
+    rm -rf "$ELECTRON_DIR/vendor/uv"
 else
-    UV_DOWNLOAD="uv-x86_64-pc-windows-msvc.zip"
-    UV_URL="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${UV_DOWNLOAD}"
-    echo "Downloading uv ${UV_VERSION} for Windows x64..."
-    mkdir -p "$ELECTRON_DIR/vendor/uv"
+    if [ -f "$ELECTRON_DIR/vendor/uv/uv.exe" ]; then
+        echo "uv Windows binary already cached, skipping download"
+    else
+        UV_DOWNLOAD="uv-x86_64-pc-windows-msvc.zip"
+        UV_URL="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${UV_DOWNLOAD}"
+        echo "Downloading uv ${UV_VERSION} for Windows x64..."
+        mkdir -p "$ELECTRON_DIR/vendor/uv"
 
-    UV_TEMP=$(mktemp -d)
-    curl -fSL "$UV_URL" -o "$UV_TEMP/${UV_DOWNLOAD}"
+        UV_TEMP=$(mktemp -d)
+        curl -fSL "$UV_URL" -o "$UV_TEMP/${UV_DOWNLOAD}"
 
-    # Verify checksum (sha256 file already contains "hash  filename" format)
-    curl -fSL "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${UV_DOWNLOAD}.sha256" -o "$UV_TEMP/uv.sha256"
-    echo "Verifying uv checksum..."
-    cd "$UV_TEMP"
-    shasum -a 256 -c uv.sha256
-    cd - > /dev/null
+        # Verify checksum (sha256 file already contains "hash  filename" format)
+        curl -fSL "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${UV_DOWNLOAD}.sha256" -o "$UV_TEMP/uv.sha256"
+        echo "Verifying uv checksum..."
+        cd "$UV_TEMP"
+        shasum -a 256 -c uv.sha256
+        cd - > /dev/null
 
-    unzip -o "$UV_TEMP/${UV_DOWNLOAD}" -d "$UV_TEMP"
-    cp "$UV_TEMP/uv.exe" "$ELECTRON_DIR/vendor/uv/"
-    rm -rf "$UV_TEMP"
-    echo "uv extracted to vendor/uv/"
+        unzip -o "$UV_TEMP/${UV_DOWNLOAD}" -d "$UV_TEMP"
+        cp "$UV_TEMP/uv.exe" "$ELECTRON_DIR/vendor/uv/"
+        rm -rf "$UV_TEMP"
+        echo "uv extracted to vendor/uv/"
+    fi
 fi
 
 # 7. Copy SDK from root node_modules (monorepo hoisting)

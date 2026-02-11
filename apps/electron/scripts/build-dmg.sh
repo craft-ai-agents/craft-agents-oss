@@ -42,10 +42,11 @@ UPLOAD=false
 UPLOAD_LATEST=false
 UPLOAD_SCRIPT=false
 CLEAN=false
+LIGHT=false
 
 show_help() {
     cat << EOF
-Usage: build-dmg.sh [arm64|x64] [--upload] [--latest] [--script] [--clean]
+Usage: build-dmg.sh [arm64|x64] [--upload] [--latest] [--script] [--clean] [--light]
 
 Arguments:
   arm64|x64    Target architecture (default: arm64)
@@ -53,6 +54,7 @@ Arguments:
   --latest     Also update electron/latest (requires --upload)
   --script     Also upload install-app.sh (requires --upload)
   --clean      Full clean rebuild (delete cached Bun binary and SDK)
+  --light      Light build: skip bundling git, node, and uv (smaller installer)
 
 Environment variables (from .env or environment):
   APPLE_SIGNING_IDENTITY    - Code signing identity
@@ -71,6 +73,7 @@ while [[ $# -gt 0 ]]; do
         --latest)      UPLOAD_LATEST=true; shift ;;
         --script)      UPLOAD_SCRIPT=true; shift ;;
         --clean)       CLEAN=true; shift ;;
+        --light)       LIGHT=true; shift ;;
         -h|--help)     show_help ;;
         *)
             echo "Unknown option: $1"
@@ -88,6 +91,9 @@ NODE_VERSION="v22.11.0"
 UV_VERSION="0.5.14"
 
 echo "=== Building G4 OS DMG (${ARCH}) using electron-builder ==="
+if [ "$LIGHT" = true ]; then
+    echo "LIGHT BUILD: skipping git, node, uv (smaller installer)"
+fi
 if [ "$UPLOAD" = true ]; then
     echo "Will upload to S3 after build"
 fi
@@ -146,7 +152,10 @@ else
 fi
 
 # 4. Download portable Git (dugite-native) — skip if already cached and matches arch
-if [ -x "$ELECTRON_DIR/vendor/git/bin/git" ]; then
+if [ "$LIGHT" = true ]; then
+    echo "Light build: skipping Git, removing cached copy..."
+    rm -rf "$ELECTRON_DIR/vendor/git"
+elif [ -x "$ELECTRON_DIR/vendor/git/bin/git" ]; then
     CACHED_GIT_ARCH=$(file "$ELECTRON_DIR/vendor/git/bin/git" | grep -o 'arm64\|x86_64')
     TARGET_GIT_CHECK=$([ "$ARCH" = "arm64" ] && echo "arm64" || echo "x86_64")
     if [ "$CACHED_GIT_ARCH" != "$TARGET_GIT_CHECK" ]; then
@@ -155,116 +164,128 @@ if [ -x "$ELECTRON_DIR/vendor/git/bin/git" ]; then
     fi
 fi
 
-if [ -x "$ELECTRON_DIR/vendor/git/bin/git" ]; then
-    echo "Git binary already cached, skipping download"
-else
-    GIT_ARCH=$([[ "$ARCH" == "arm64" ]] && echo "arm64" || echo "x64")
-    GIT_DOWNLOAD="${DUGITE_PREFIX}-macOS-${GIT_ARCH}.tar.gz"
-    GIT_URL="https://github.com/desktop/dugite-native/releases/download/${DUGITE_TAG}/${GIT_DOWNLOAD}"
-    echo "Downloading portable Git (${DUGITE_TAG}) for macOS-${GIT_ARCH}..."
-    mkdir -p "$ELECTRON_DIR/vendor/git"
+if [ "$LIGHT" != true ]; then
+    if [ -x "$ELECTRON_DIR/vendor/git/bin/git" ]; then
+        echo "Git binary already cached, skipping download"
+    else
+        GIT_ARCH=$([[ "$ARCH" == "arm64" ]] && echo "arm64" || echo "x64")
+        GIT_DOWNLOAD="${DUGITE_PREFIX}-macOS-${GIT_ARCH}.tar.gz"
+        GIT_URL="https://github.com/desktop/dugite-native/releases/download/${DUGITE_TAG}/${GIT_DOWNLOAD}"
+        echo "Downloading portable Git (${DUGITE_TAG}) for macOS-${GIT_ARCH}..."
+        mkdir -p "$ELECTRON_DIR/vendor/git"
 
-    GIT_TEMP=$(mktemp -d)
-    curl -fSL "$GIT_URL" -o "$GIT_TEMP/${GIT_DOWNLOAD}"
-    tar -xzf "$GIT_TEMP/${GIT_DOWNLOAD}" -C "$ELECTRON_DIR/vendor/git"
-    chmod +x "$ELECTRON_DIR/vendor/git/bin/git"
+        GIT_TEMP=$(mktemp -d)
+        curl -fSL "$GIT_URL" -o "$GIT_TEMP/${GIT_DOWNLOAD}"
+        tar -xzf "$GIT_TEMP/${GIT_DOWNLOAD}" -C "$ELECTRON_DIR/vendor/git"
+        chmod +x "$ELECTRON_DIR/vendor/git/bin/git"
 
-    # Replace symlinks in libexec/git-core with copies of the main git binary.
-    # dugite-native uses relative symlinks (e.g., git-fetch → git) which break
-    # when electron-builder copies files into the .app bundle.
-    GIT_CORE_DIR="$ELECTRON_DIR/vendor/git/libexec/git-core"
-    if [ -d "$GIT_CORE_DIR" ]; then
-        GIT_MAIN="$GIT_CORE_DIR/git"
-        # If the main git binary is also a symlink, resolve it first
-        if [ -L "$GIT_MAIN" ]; then
-            REAL_GIT="$ELECTRON_DIR/vendor/git/bin/git"
-            cp "$REAL_GIT" "$GIT_MAIN.tmp" && mv "$GIT_MAIN.tmp" "$GIT_MAIN"
+        # Replace symlinks in libexec/git-core with copies of the main git binary.
+        # dugite-native uses relative symlinks (e.g., git-fetch → git) which break
+        # when electron-builder copies files into the .app bundle.
+        GIT_CORE_DIR="$ELECTRON_DIR/vendor/git/libexec/git-core"
+        if [ -d "$GIT_CORE_DIR" ]; then
+            GIT_MAIN="$GIT_CORE_DIR/git"
+            # If the main git binary is also a symlink, resolve it first
+            if [ -L "$GIT_MAIN" ]; then
+                REAL_GIT="$ELECTRON_DIR/vendor/git/bin/git"
+                cp "$REAL_GIT" "$GIT_MAIN.tmp" && mv "$GIT_MAIN.tmp" "$GIT_MAIN"
+            fi
+            # Replace all remaining symlinks with hard links to the main binary
+            find "$GIT_CORE_DIR" -type l | while read link; do
+                rm "$link"
+                ln "$GIT_MAIN" "$link"
+            done
         fi
-        # Replace all remaining symlinks with hard links to the main binary
-        find "$GIT_CORE_DIR" -type l | while read link; do
-            rm "$link"
-            ln "$GIT_MAIN" "$link"
-        done
-    fi
 
-    rm -rf "$GIT_TEMP"
-    echo "Git extracted to vendor/git/"
+        rm -rf "$GIT_TEMP"
+        echo "Git extracted to vendor/git/"
+    fi
 fi
 
 # 5. Download portable Node.js — skip if already cached and matches arch
-if [ -x "$ELECTRON_DIR/vendor/node/bin/node" ]; then
-    CACHED_NODE_ARCH=$(file "$ELECTRON_DIR/vendor/node/bin/node" | grep -o 'arm64\|x86_64')
-    TARGET_NODE_CHECK=$([ "$ARCH" = "arm64" ] && echo "arm64" || echo "x86_64")
-    if [ "$CACHED_NODE_ARCH" != "$TARGET_NODE_CHECK" ]; then
-        echo "Cached Node.js is $CACHED_NODE_ARCH but target is $ARCH, re-downloading..."
-        rm -rf "$ELECTRON_DIR/vendor/node"
-    fi
-fi
-
-if [ -x "$ELECTRON_DIR/vendor/node/bin/node" ]; then
-    echo "Node.js binary already cached, skipping download"
+if [ "$LIGHT" = true ]; then
+    echo "Light build: skipping Node.js, removing cached copy..."
+    rm -rf "$ELECTRON_DIR/vendor/node"
 else
-    NODE_ARCH=$([[ "$ARCH" == "arm64" ]] && echo "arm64" || echo "x64")
-    NODE_DOWNLOAD="node-${NODE_VERSION}-darwin-${NODE_ARCH}"
-    NODE_URL="https://nodejs.org/dist/${NODE_VERSION}/${NODE_DOWNLOAD}.tar.gz"
-    echo "Downloading Node.js ${NODE_VERSION} for darwin-${NODE_ARCH}..."
-    mkdir -p "$ELECTRON_DIR/vendor/node"
+    if [ -x "$ELECTRON_DIR/vendor/node/bin/node" ]; then
+        CACHED_NODE_ARCH=$(file "$ELECTRON_DIR/vendor/node/bin/node" | grep -o 'arm64\|x86_64')
+        TARGET_NODE_CHECK=$([ "$ARCH" = "arm64" ] && echo "arm64" || echo "x86_64")
+        if [ "$CACHED_NODE_ARCH" != "$TARGET_NODE_CHECK" ]; then
+            echo "Cached Node.js is $CACHED_NODE_ARCH but target is $ARCH, re-downloading..."
+            rm -rf "$ELECTRON_DIR/vendor/node"
+        fi
+    fi
 
-    NODE_TEMP=$(mktemp -d)
-    curl -fSL "$NODE_URL" -o "$NODE_TEMP/${NODE_DOWNLOAD}.tar.gz"
+    if [ -x "$ELECTRON_DIR/vendor/node/bin/node" ]; then
+        echo "Node.js binary already cached, skipping download"
+    else
+        NODE_ARCH=$([[ "$ARCH" == "arm64" ]] && echo "arm64" || echo "x64")
+        NODE_DOWNLOAD="node-${NODE_VERSION}-darwin-${NODE_ARCH}"
+        NODE_URL="https://nodejs.org/dist/${NODE_VERSION}/${NODE_DOWNLOAD}.tar.gz"
+        echo "Downloading Node.js ${NODE_VERSION} for darwin-${NODE_ARCH}..."
+        mkdir -p "$ELECTRON_DIR/vendor/node"
 
-    # Verify checksum
-    curl -fSL "https://nodejs.org/dist/${NODE_VERSION}/SHASUMS256.txt" -o "$NODE_TEMP/SHASUMS256.txt"
-    echo "Verifying Node.js checksum..."
-    cd "$NODE_TEMP"
-    grep "${NODE_DOWNLOAD}.tar.gz" SHASUMS256.txt | shasum -a 256 -c -
-    cd - > /dev/null
+        NODE_TEMP=$(mktemp -d)
+        curl -fSL "$NODE_URL" -o "$NODE_TEMP/${NODE_DOWNLOAD}.tar.gz"
 
-    tar -xzf "$NODE_TEMP/${NODE_DOWNLOAD}.tar.gz" -C "$NODE_TEMP"
-    # Copy bin/node and lib/ (includes npm)
-    cp -r "$NODE_TEMP/${NODE_DOWNLOAD}/bin" "$ELECTRON_DIR/vendor/node/"
-    cp -r "$NODE_TEMP/${NODE_DOWNLOAD}/lib" "$ELECTRON_DIR/vendor/node/"
-    chmod +x "$ELECTRON_DIR/vendor/node/bin/node"
-    rm -rf "$NODE_TEMP"
-    echo "Node.js extracted to vendor/node/"
+        # Verify checksum
+        curl -fSL "https://nodejs.org/dist/${NODE_VERSION}/SHASUMS256.txt" -o "$NODE_TEMP/SHASUMS256.txt"
+        echo "Verifying Node.js checksum..."
+        cd "$NODE_TEMP"
+        grep "${NODE_DOWNLOAD}.tar.gz" SHASUMS256.txt | shasum -a 256 -c -
+        cd - > /dev/null
+
+        tar -xzf "$NODE_TEMP/${NODE_DOWNLOAD}.tar.gz" -C "$NODE_TEMP"
+        # Copy bin/node and lib/ (includes npm)
+        cp -r "$NODE_TEMP/${NODE_DOWNLOAD}/bin" "$ELECTRON_DIR/vendor/node/"
+        cp -r "$NODE_TEMP/${NODE_DOWNLOAD}/lib" "$ELECTRON_DIR/vendor/node/"
+        chmod +x "$ELECTRON_DIR/vendor/node/bin/node"
+        rm -rf "$NODE_TEMP"
+        echo "Node.js extracted to vendor/node/"
+    fi
 fi
 
 # 6. Download uv — skip if already cached and matches arch
-if [ -x "$ELECTRON_DIR/vendor/uv/uv" ]; then
-    CACHED_UV_ARCH=$(file "$ELECTRON_DIR/vendor/uv/uv" | grep -o 'arm64\|x86_64')
-    TARGET_UV_CHECK=$([ "$ARCH" = "arm64" ] && echo "arm64" || echo "x86_64")
-    if [ "$CACHED_UV_ARCH" != "$TARGET_UV_CHECK" ]; then
-        echo "Cached uv is $CACHED_UV_ARCH but target is $ARCH, re-downloading..."
-        rm -rf "$ELECTRON_DIR/vendor/uv"
-    fi
-fi
-
-if [ -x "$ELECTRON_DIR/vendor/uv/uv" ]; then
-    echo "uv binary already cached, skipping download"
+if [ "$LIGHT" = true ]; then
+    echo "Light build: skipping uv, removing cached copy..."
+    rm -rf "$ELECTRON_DIR/vendor/uv"
 else
-    UV_ARCH=$([[ "$ARCH" == "arm64" ]] && echo "aarch64" || echo "x86_64")
-    UV_DOWNLOAD="uv-${UV_ARCH}-apple-darwin.tar.gz"
-    UV_URL="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${UV_DOWNLOAD}"
-    echo "Downloading uv ${UV_VERSION} for ${UV_ARCH}-apple-darwin..."
-    mkdir -p "$ELECTRON_DIR/vendor/uv"
+    if [ -x "$ELECTRON_DIR/vendor/uv/uv" ]; then
+        CACHED_UV_ARCH=$(file "$ELECTRON_DIR/vendor/uv/uv" | grep -o 'arm64\|x86_64')
+        TARGET_UV_CHECK=$([ "$ARCH" = "arm64" ] && echo "arm64" || echo "x86_64")
+        if [ "$CACHED_UV_ARCH" != "$TARGET_UV_CHECK" ]; then
+            echo "Cached uv is $CACHED_UV_ARCH but target is $ARCH, re-downloading..."
+            rm -rf "$ELECTRON_DIR/vendor/uv"
+        fi
+    fi
 
-    UV_TEMP=$(mktemp -d)
-    curl -fSL "$UV_URL" -o "$UV_TEMP/${UV_DOWNLOAD}"
+    if [ -x "$ELECTRON_DIR/vendor/uv/uv" ]; then
+        echo "uv binary already cached, skipping download"
+    else
+        UV_ARCH=$([[ "$ARCH" == "arm64" ]] && echo "aarch64" || echo "x86_64")
+        UV_DOWNLOAD="uv-${UV_ARCH}-apple-darwin.tar.gz"
+        UV_URL="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${UV_DOWNLOAD}"
+        echo "Downloading uv ${UV_VERSION} for ${UV_ARCH}-apple-darwin..."
+        mkdir -p "$ELECTRON_DIR/vendor/uv"
 
-    # Verify checksum (sha256 file already contains "hash  filename" format)
-    curl -fSL "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${UV_DOWNLOAD}.sha256" -o "$UV_TEMP/uv.sha256"
-    echo "Verifying uv checksum..."
-    cd "$UV_TEMP"
-    shasum -a 256 -c uv.sha256
-    cd - > /dev/null
+        UV_TEMP=$(mktemp -d)
+        curl -fSL "$UV_URL" -o "$UV_TEMP/${UV_DOWNLOAD}"
 
-    tar -xzf "$UV_TEMP/${UV_DOWNLOAD}" -C "$UV_TEMP"
-    # uv tarball extracts to a subdirectory with same name (minus .tar.gz)
-    UV_EXTRACTED="uv-${UV_ARCH}-apple-darwin"
-    cp "$UV_TEMP/${UV_EXTRACTED}/uv" "$ELECTRON_DIR/vendor/uv/"
-    chmod +x "$ELECTRON_DIR/vendor/uv/uv"
-    rm -rf "$UV_TEMP"
-    echo "uv extracted to vendor/uv/"
+        # Verify checksum (sha256 file already contains "hash  filename" format)
+        curl -fSL "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${UV_DOWNLOAD}.sha256" -o "$UV_TEMP/uv.sha256"
+        echo "Verifying uv checksum..."
+        cd "$UV_TEMP"
+        shasum -a 256 -c uv.sha256
+        cd - > /dev/null
+
+        tar -xzf "$UV_TEMP/${UV_DOWNLOAD}" -C "$UV_TEMP"
+        # uv tarball extracts to a subdirectory with same name (minus .tar.gz)
+        UV_EXTRACTED="uv-${UV_ARCH}-apple-darwin"
+        cp "$UV_TEMP/${UV_EXTRACTED}/uv" "$ELECTRON_DIR/vendor/uv/"
+        chmod +x "$ELECTRON_DIR/vendor/uv/uv"
+        rm -rf "$UV_TEMP"
+        echo "uv extracted to vendor/uv/"
+    fi
 fi
 
 # 7. Copy SDK from root node_modules (monorepo hoisting)
