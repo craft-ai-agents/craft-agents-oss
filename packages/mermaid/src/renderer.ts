@@ -463,10 +463,31 @@ function renderNodeLabel(node: PositionedNode, font: string): string {
   // Resolve text color — inline styles can override the CSS variable default
   const textColor = node.inlineStyle?.color ?? 'var(--_text)'
 
+  // Split on <br/>, <br>, <br /> for multi-line labels (standard Mermaid syntax)
+  const lines = node.label.split(/<br\s*\/?>/i)
+
+  if (lines.length === 1) {
+    return (
+      `<text x="${cx}" y="${cy}" text-anchor="middle" dy="${TEXT_BASELINE_SHIFT}" ` +
+      `font-size="${FONT_SIZES.nodeLabel}" font-weight="${FONT_WEIGHTS.nodeLabel}" ` +
+      `fill="${textColor}">${escapeXml(node.label)}</text>`
+    )
+  }
+
+  // Multi-line: use <tspan> elements for each line, centered vertically in the node
+  const lineHeight = Math.round(FONT_SIZES.nodeLabel * 1.3)
+  const firstLineY = cy - (lineHeight * (lines.length - 1)) / 2
+  const tspans = lines.map((line, i) => {
+    if (i === 0) {
+      return `<tspan x="${cx}" dy="${TEXT_BASELINE_SHIFT}">${escapeXml(line.trim())}</tspan>`
+    }
+    return `<tspan x="${cx}" dy="${lineHeight}">${escapeXml(line.trim())}</tspan>`
+  }).join('')
+
   return (
-    `<text x="${cx}" y="${cy}" text-anchor="middle" dy="${TEXT_BASELINE_SHIFT}" ` +
+    `<text x="${cx}" y="${firstLineY}" text-anchor="middle" ` +
     `font-size="${FONT_SIZES.nodeLabel}" font-weight="${FONT_WEIGHTS.nodeLabel}" ` +
-    `fill="${textColor}">${escapeXml(node.label)}</text>`
+    `fill="${textColor}">${tspans}</text>`
   )
 }
 

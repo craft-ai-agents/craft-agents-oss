@@ -403,10 +403,18 @@ function directionToDagre(dir: MermaidGraph['direction']): string {
 
 /** Estimate node size based on label text + shape padding */
 function estimateNodeSize(id: string, label: string, shape: string): { width: number; height: number } {
-  const textWidth = estimateTextWidth(label, FONT_SIZES.nodeLabel, FONT_WEIGHTS.nodeLabel)
+  // Split on <br/>, <br>, <br /> for multi-line labels (standard Mermaid syntax)
+  const lines = label.split(/<br\s*\/?>/i)
+  const maxLineWidth = Math.max(...lines.map(line =>
+    estimateTextWidth(line.trim(), FONT_SIZES.nodeLabel, FONT_WEIGHTS.nodeLabel)
+  ))
 
-  let width = textWidth + NODE_PADDING.horizontal * 2
-  let height = FONT_SIZES.nodeLabel + NODE_PADDING.vertical * 2
+  let width = maxLineWidth + NODE_PADDING.horizontal * 2
+  const lineHeight = Math.round(FONT_SIZES.nodeLabel * 1.3)
+  const textHeight = lines.length === 1
+    ? FONT_SIZES.nodeLabel
+    : FONT_SIZES.nodeLabel + lineHeight * (lines.length - 1)
+  let height = textHeight + NODE_PADDING.vertical * 2
 
   // Diamonds need extra space because text is inside a rotated square
   if (shape === 'diamond') {

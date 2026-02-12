@@ -109,6 +109,11 @@ export function handleTextComplete(
       isIntermediate: event.isIntermediate,
       turnId: event.turnId,
       parentToolUseId: event.parentToolUseId,
+      // Update the message's own timestamp for non-intermediate (final response) messages.
+      // The original timestamp was set when text_delta first arrived (before tool messages).
+      // Without this, groupMessagesByTurn sorts the response before tool messages,
+      // splitting them into separate turns (activities appear below response instead of above).
+      ...(!event.isIntermediate ? { timestamp: Date.now() } : {}),
     }, shouldUpdateTimestamp)
     return { session: updatedSession, streaming: null }
   }

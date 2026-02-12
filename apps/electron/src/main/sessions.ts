@@ -3776,9 +3776,25 @@ export class SessionManager {
           const lastUserMsg = [...managed.messages].reverse().find(m => m.role === 'user')
 
           // If the last user message is newer than any assistant response, we got no reply
-          // This can happen due to context overflow or API issues - log for debugging but don't show UI warning
+          // This can happen due to context overflow or API issues
           if (lastUserMsg && (!lastAssistantMsg || lastUserMsg.timestamp > lastAssistantMsg.timestamp)) {
             sessionLog.warn(`Session ${sessionId} completed without assistant response - possible context overflow or API issue`)
+
+            // Show a visible warning to the user
+            const warningMessage: Message = {
+              id: generateMessageId(),
+              role: 'info',
+              content: 'No response received — the conversation may be too long. Try starting a new session.',
+              timestamp: Date.now(),
+              infoLevel: 'warning',
+            }
+            managed.messages.push(warningMessage)
+            this.sendEvent({
+              type: 'info',
+              sessionId,
+              message: warningMessage.content,
+              level: 'warning',
+            }, managed.workspace.id)
           }
 
           sendSpan.mark('chat.complete')

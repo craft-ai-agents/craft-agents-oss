@@ -23,9 +23,8 @@ import { CodeBlock } from './CodeBlock'
 // Beyond that, the iframe scrolls internally.
 // ============================================================================
 
-/** Max height before the iframe gets internal scrolling */
+/** Max height before the iframe shows expand bar */
 const MAX_COLLAPSED_HEIGHT = 600
-const MAX_EXPANDED_HEIGHT = 2000
 
 /** Error boundary for iframe rendering failures */
 class HtmlBlockErrorBoundary extends React.Component<
@@ -84,32 +83,91 @@ function buildBaseStyles(isDark: boolean): string {
       }
       img { max-width: 100%; height: auto; }
       a { color: ${linkColor}; }
+      a:visited { color: ${linkColor}; }
       table { border-collapse: collapse; max-width: 100%; }
       td, th { border-color: ${borderColor}; }
       pre { overflow-x: auto; }
       hr { border-color: ${borderColor}; }
+      button, input[type="submit"], input[type="button"] {
+        padding: 8px 16px;
+        border: 1px solid ${borderColor};
+        border-radius: 6px;
+        background: ${isDark ? '#2a2a3e' : '#f8f9fa'};
+        color: ${fg};
+        font-size: 14px;
+        cursor: pointer;
+      }
+      button:hover, input[type="submit"]:hover, input[type="button"]:hover {
+        background: ${isDark ? '#3a3a4e' : '#f1f3f4'};
+        border-color: ${isDark ? '#4a4a5e' : '#dadce0'};
+      }
     </style>
   `
 }
 
 /**
+ * Extract a base URL from the HTML content.
+ * Looks for existing <base href> or common URL patterns in links/images
+ * to determine the origin for resolving relative URLs in srcdoc iframes.
+ */
+function extractBaseUrl(html: string): string | null {
+  // Check for existing <base href>
+  const baseMatch = html.match(/<base\s+href=["']([^"']+)["']/i)
+  if (baseMatch?.[1]) return baseMatch[1]
+
+  // Look for absolute URLs in common attributes to infer origin
+  const urlMatch = html.match(/(?:href|src|action)=["'](https?:\/\/[^/"']+)/i)
+  if (urlMatch?.[1]) return urlMatch[1]
+
+  return null
+}
+
+/**
+ * Build override styles injected at the END of the document.
+ * Uses low-specificity selectors so the content's own CSS wins.
+ * Only provides fallback link colors for content that doesn't style its own links.
+ */
+function buildOverrideStyles(_isDark: boolean): string {
+  // No overrides needed — base styles in <head> provide sensible defaults.
+  // Content's own CSS (emails, web pages) takes precedence naturally.
+  return ''
+}
+
+/**
  * Build a complete HTML document with a base stylesheet injected.
+ * Also injects a <base> tag for resolving relative URLs when possible.
+ * Override styles are appended at the END so they win the CSS cascade.
  */
 function buildSrcDoc(html: string, isDark: boolean): string {
   const baseStyles = buildBaseStyles(isDark)
+  const overrideStyles = buildOverrideStyles(isDark)
+  const baseUrl = extractBaseUrl(html)
+  const baseTag = baseUrl ? `<base href="${baseUrl}" target="_blank">` : ''
+  const headInjection = `${baseTag}${baseStyles}`
 
-  // If the HTML already has a <head>, inject styles into it
+  // If the HTML already has a <head>, inject into it
   const lowerHtml = html.toLowerCase()
 
+  if (lowerHtml.includes('</body>')) {
+    // Inject base styles in head, override styles at end of body
+    let result = html
+    if (lowerHtml.includes('<head>')) {
+      result = result.replace(/<head>/i, `<head>${headInjection}`)
+    } else if (lowerHtml.includes('<html')) {
+      result = result.replace(/<html[^>]*>/i, (match) => `${match}<head>${headInjection}</head>`)
+    }
+    return result.replace(/<\/body>/i, `${overrideStyles}</body>`)
+  }
+
   if (lowerHtml.includes('<head>')) {
-    return html.replace(/<head>/i, `<head>${baseStyles}`)
+    return html.replace(/<head>/i, `<head>${headInjection}`) + overrideStyles
   }
   if (lowerHtml.includes('<html')) {
-    return html.replace(/<html[^>]*>/i, (match) => `${match}<head>${baseStyles}</head>`)
+    return html.replace(/<html[^>]*>/i, (match) => `${match}<head>${headInjection}</head>`) + overrideStyles
   }
 
   // No document structure — wrap content with styles
-  return `<!DOCTYPE html><html><head><meta charset="utf-8">${baseStyles}</head><body>${html}</body></html>`
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">${headInjection}</head><body>${html}${overrideStyles}</body></html>`
 }
 
 export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
@@ -133,14 +191,25 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
 
   const srcDoc = React.useMemo(() => buildSrcDoc(code, isDarkMode), [code, isDarkMode])
 
-  const maxHeight = isExpanded ? MAX_EXPANDED_HEIGHT : MAX_COLLAPSED_HEIGHT
-  const displayHeight = Math.min(contentHeight, maxHeight)
-  const isOverflowing = contentHeight > maxHeight
+  const displayHeight = isExpanded ? contentHeight : Math.min(contentHeight, MAX_COLLAPSED_HEIGHT)
+  const isOverflowing = contentHeight > MAX_COLLAPSED_HEIGHT
 
-  // Auto-resize iframe to match content height
+  // Auto-resize iframe to match content height.
+  // Uses a ref to store the ResizeObserver so we can clean it up properly.
+  const observerRef = React.useRef<ResizeObserver | null>(null)
+
+  React.useEffect(() => {
+    return () => {
+      observerRef.current?.disconnect()
+    }
+  }, [])
+
   const handleLoad = React.useCallback(() => {
     const iframe = iframeRef.current
     if (!iframe) return
+
+    // Clean up previous observer
+    observerRef.current?.disconnect()
 
     try {
       const doc = iframe.contentDocument
@@ -153,23 +222,25 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
         }
       }
 
+      // Initial measurement
       measure()
 
-      // Observe for dynamic content changes (images loading, etc.)
+      // Re-measure after a short delay (CSS reflows, fonts loading)
+      setTimeout(measure, 100)
+      setTimeout(measure, 500)
+
+      // Observe for dynamic content changes (images loading, layout shifts)
       const observer = new ResizeObserver(measure)
       observer.observe(doc.body)
+      observerRef.current = observer
 
-      // Also listen for image load events
+      // Listen for image load events
       const images = doc.querySelectorAll('img')
       images.forEach((img) => {
         if (!img.complete) {
           img.addEventListener('load', measure, { once: true })
         }
       })
-
-      return () => {
-        observer.disconnect()
-      }
     } catch {
       // Cross-origin restrictions — shouldn't happen with srcdoc but be safe
       setContentHeight(400)
@@ -259,17 +330,49 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
             height: `${displayHeight}px`,
             border: 'none',
             display: 'block',
-            overflow: isOverflowing ? 'auto' : 'hidden',
+            overflow: 'hidden',
           }}
           title="HTML content"
         />
 
-        {/* Overflow fade indicator at bottom */}
+        {/* Overflow fade + clickable expand bar at bottom */}
         {isOverflowing && !isExpanded && (
-          <div
-            className="absolute bottom-0 left-0 right-0 h-12 pointer-events-none"
-            style={{ background: fadeBg }}
-          />
+          <>
+            <div
+              className="absolute bottom-8 left-0 right-0 h-16 pointer-events-none"
+              style={{ background: fadeBg }}
+            />
+            <button
+              onClick={() => setIsExpanded(true)}
+              className={cn(
+                'w-full h-8 flex items-center justify-center gap-1.5',
+                'text-xs font-medium',
+                'text-muted-foreground hover:text-foreground',
+                'bg-muted/50 hover:bg-muted/80',
+                'border-t transition-colors cursor-pointer',
+              )}
+            >
+              <Maximize2 className="w-3 h-3" />
+              Click to expand
+            </button>
+          </>
+        )}
+
+        {/* Collapse bar when expanded */}
+        {isExpanded && (
+          <button
+            onClick={() => setIsExpanded(false)}
+            className={cn(
+              'w-full h-8 flex items-center justify-center gap-1.5',
+              'text-xs font-medium',
+              'text-muted-foreground hover:text-foreground',
+              'bg-muted/50 hover:bg-muted/80',
+              'border-t transition-colors cursor-pointer',
+            )}
+          >
+            <Minimize2 className="w-3 h-3" />
+            Click to collapse
+          </button>
         )}
       </div>
     </HtmlBlockErrorBoundary>

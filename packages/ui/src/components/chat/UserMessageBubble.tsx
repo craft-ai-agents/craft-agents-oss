@@ -129,6 +129,11 @@ function ContextBadge({ badge }: { badge: ContentBadge }) {
   )
 }
 
+/** Convert single newlines to markdown paragraph breaks for user messages */
+function preserveUserNewlines(content: string): string {
+  return content.replace(/\n/g, '\n\n')
+}
+
 /** Known code file extensions for picking the code file icon */
 const CODE_EXTENSIONS = new Set([
   'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs',
@@ -246,7 +251,7 @@ function renderContentWithBadges(
         onFileClick={onFileClick}
         className="text-sm [&_a]:underline [&_code]:bg-foreground/10"
       >
-        {content}
+        {preserveUserNewlines(content)}
       </Markdown>
     )
   }
@@ -448,7 +453,7 @@ export function UserMessageBubble({
               onFileClick={onFileClick}
               className="text-sm [&_a]:underline [&_code]:bg-foreground/10"
             >
-              {displayContent}
+              {preserveUserNewlines(displayContent)}
             </Markdown>
           )
         }
