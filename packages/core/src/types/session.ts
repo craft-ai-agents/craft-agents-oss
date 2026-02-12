@@ -27,6 +27,8 @@ export interface Session {
   isArchived?: boolean;          // Whether this session is archived
   isFlagged?: boolean;           // Whether this session is flagged
   status?: SessionStatus;        // Workflow status (todo, in_progress, needs_review, done, cancelled)
+  // Project association
+  projectId?: string;             // ID of the project this session belongs to (undefined = unorganized)
   // Read/unread tracking
   lastReadMessageId?: string;    // ID of the last message the user has read
   // Sub-session hierarchy (1 level max)
@@ -59,6 +61,7 @@ export interface SessionMetadata {
   isArchived?: boolean;    // Whether this session is archived
   isFlagged?: boolean;     // Whether this session is flagged
   status?: SessionStatus;  // Workflow status
+  projectId?: string;      // Project this session belongs to
   hidden?: boolean;        // Whether this session is hidden from session list
   // Sub-session hierarchy (1 level max)
   parentSessionId?: string;  // Parent session ID (if this is a sub-session)

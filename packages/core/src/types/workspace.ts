@@ -46,6 +46,7 @@ export interface StoredConfig {
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   activeSessionId: string | null;  // Currently active session (primary scope)
+  activeProjectSlug?: string | null;  // Currently active project slug (for restoring last-viewed project)
   model?: string;
 }
 

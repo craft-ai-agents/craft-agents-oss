@@ -85,6 +85,14 @@ export const routes = {
     /** Copy text to clipboard */
     copyToClipboard: (text: string) =>
       `action/copy?text=${encodeURIComponent(text)}` as const,
+
+    /** Create a new project */
+    newProject: (params?: { name?: string }) =>
+      `action/new-project${toQueryString(params)}` as const,
+
+    /** Delete a project */
+    deleteProject: (projectSlug: string) =>
+      `action/delete-project/${projectSlug}` as const,
   },
 
   // ============================================
@@ -161,6 +169,20 @@ export const routes = {
       subpage
         ? `settings/${subpage}` as const
         : 'settings' as const,
+
+    /** Projects list view (projects navigator) */
+    projects: (projectSlug?: string) =>
+      projectSlug ? `projects/project/${projectSlug}` as const : 'projects' as const,
+
+    /** Single project view (project navigator) */
+    project: (projectSlug: string, sessionId?: string) =>
+      sessionId
+        ? `project/${projectSlug}/chat/${sessionId}` as const
+        : `project/${projectSlug}` as const,
+
+    /** File within a project */
+    projectFile: (projectSlug: string, filePath: string) =>
+      `project/${projectSlug}/file/${encodeURIComponent(filePath)}` as const,
   },
 } as const
 

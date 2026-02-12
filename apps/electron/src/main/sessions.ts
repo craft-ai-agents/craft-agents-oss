@@ -768,6 +768,8 @@ interface ManagedSession {
   authRetryInProgress?: boolean
   // Whether this session is hidden from session list (e.g., mini edit sessions)
   hidden?: boolean
+  // ID of the project this session belongs to (undefined = unorganized/inbox)
+  projectId?: string
   // Sub-session hierarchy (1 level max)
   parentSessionId?: string
   siblingOrder?: number
@@ -1499,6 +1501,7 @@ export class SessionManager {
             sharedUrl: meta.sharedUrl,
             sharedId: meta.sharedId,
             hidden: meta.hidden,
+            projectId: meta.projectId,
             // Initialize TokenRefreshManager for this session
             tokenRefreshManager: new TokenRefreshManager(getSourceCredentialManager(), {
               log: (msg) => sessionLog.debug(msg),
@@ -1581,6 +1584,7 @@ export class SessionManager {
           costUsd: 0,
         },
         hidden: managed.hidden,
+        projectId: managed.projectId,
       }
 
       // Queue for async persistence with debouncing
@@ -1931,6 +1935,8 @@ export class SessionManager {
         lastMessageRole: m.lastMessageRole,
         tokenUsage: m.tokenUsage,
         messageCount: m.messageCount,
+        hidden: m.hidden,
+        projectId: m.projectId,
         lastFinalMessageId: m.lastFinalMessageId,
         // Runtime-only fields
         workspaceId: m.workspace.id,
@@ -1960,6 +1966,8 @@ export class SessionManager {
       preview: m.preview,  // Include preview for title fallback consistency with getSessions()
       lastMessageRole: m.lastMessageRole,
       tokenUsage: m.tokenUsage,
+      hidden: m.hidden,
+      projectId: m.projectId,
       lastFinalMessageId: m.lastFinalMessageId,
       // Runtime-only fields
       workspaceId: m.workspace.id,
@@ -2098,6 +2106,7 @@ export class SessionManager {
       permissionMode: defaultPermissionMode,
       workingDirectory: resolvedWorkingDir,
       hidden: options?.hidden,
+      projectId: options?.projectId,
       todoState: options?.todoState,
       labels: options?.labels,
       isFlagged: options?.isFlagged,
@@ -2156,6 +2165,7 @@ export class SessionManager {
       enabledSourceSlugs: defaultEnabledSourceSlugs,
       messagesLoaded: true,  // New sessions don't need to load messages from disk
       hidden: options?.hidden,
+      projectId: options?.projectId,
       // Initialize TokenRefreshManager for this session (handles OAuth token refresh with rate limiting)
       tokenRefreshManager: new TokenRefreshManager(getSourceCredentialManager(), {
         log: (msg) => sessionLog.debug(msg),
@@ -2193,6 +2203,7 @@ export class SessionManager {
       thinkingLevel: defaultThinkingLevel,
       sessionFolderPath: getSessionStoragePath(workspaceRootPath, storedSession.id),
       hidden: options?.hidden,
+      projectId: options?.projectId,
     }
   }
 

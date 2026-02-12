@@ -14,6 +14,8 @@ import type {
   SessionFilter,
   SourceFilter,
   RightSidebarPanel,
+  ProjectsNavigationState,
+  ProjectNavigationState,
 } from './types'
 import { isValidSettingsSubpage, type SettingsSubpage } from './settings-registry'
 
@@ -34,7 +36,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'settings' | 'projects' | 'project'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -58,7 +60,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'settings'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'settings', 'projects', 'project'
 ]
 
 /**
@@ -90,6 +92,52 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   if (segments.length === 0) return null
 
   const first = segments[0]
+
+  // Projects navigator (list view)
+  if (first === 'projects') {
+    if (segments.length === 1) {
+      return { navigator: 'projects', details: null }
+    }
+    // projects/project/{projectSlug}
+    if (segments[1] === 'project' && segments[2]) {
+      return {
+        navigator: 'projects',
+        details: { type: 'project', id: segments[2] },
+      }
+    }
+    return null
+  }
+
+  // Single project navigator
+  if (first === 'project') {
+    if (!segments[1]) return null
+    const projectSlug = segments[1]
+
+    if (segments.length === 2) {
+      return { navigator: 'project' as NavigatorType, details: null, sessionFilter: { kind: 'allSessions' as const } }
+    }
+
+    // project/{slug}/chat/{sessionId}
+    if (segments[2] === 'chat' && segments[3]) {
+      return {
+        navigator: 'project' as NavigatorType,
+        details: { type: 'chat', id: segments[3] },
+        sessionFilter: { kind: 'allSessions' as const },
+      }
+    }
+
+    // project/{slug}/file/{filePath...}
+    if (segments[2] === 'file' && segments[3]) {
+      const filePath = decodeURIComponent(segments.slice(3).join('/'))
+      return {
+        navigator: 'project' as NavigatorType,
+        details: { type: 'file', id: filePath },
+        sessionFilter: { kind: 'allSessions' as const },
+      }
+    }
+
+    return null
+  }
 
   // Settings navigator
   if (first === 'settings') {
@@ -235,6 +283,14 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
     if (!parsed.details) return 'skills'
     return `skills/skill/${parsed.details.id}`
   }
+
+  if (parsed.navigator === 'projects') {
+    if (!parsed.details) return 'projects'
+    return `projects/project/${parsed.details.id}`
+  }
+
+  // Note: 'project' navigator routes are built by buildRouteFromNavigationState directly
+  // since they need projectSlug which isn't in ParsedCompoundRoute
 
   // Sessions navigator
   let base: string
@@ -398,6 +454,41 @@ export function parseRouteToNavigationState(
   route: string,
   sidebarParam?: string
 ): NavigationState | null {
+  // Handle project routes directly (they need special projectSlug extraction)
+  const segments = route.split('/').filter(Boolean)
+  if (segments[0] === 'project' && segments[1]) {
+    const projectSlug = segments[1]
+    const rightSidebar = parseRightSidebarParam(sidebarParam)
+    let state: NavigationState
+
+    if (segments[2] === 'chat' && segments[3]) {
+      state = {
+        navigator: 'project',
+        projectSlug,
+        filter: { kind: 'allSessions' },
+        details: { type: 'chat', sessionId: segments[3] },
+      }
+    } else if (segments[2] === 'file' && segments[3]) {
+      const filePath = decodeURIComponent(segments.slice(3).join('/'))
+      state = {
+        navigator: 'project',
+        projectSlug,
+        filter: { kind: 'allSessions' },
+        details: { type: 'file', filePath },
+      }
+    } else {
+      state = {
+        navigator: 'project',
+        projectSlug,
+        filter: { kind: 'allSessions' },
+        details: null,
+      }
+    }
+
+    if (rightSidebar) return { ...state, rightSidebar }
+    return state
+  }
+
   // Parse compound routes
   if (isCompoundRoute(route)) {
     const compound = parseCompoundRoute(route)
@@ -435,6 +526,48 @@ export function parseRouteToNavigationState(
  * Convert a ParsedCompoundRoute to NavigationState
  */
 function convertCompoundToNavigationState(compound: ParsedCompoundRoute): NavigationState {
+  // Projects list
+  if (compound.navigator === 'projects') {
+    if (!compound.details) {
+      return { navigator: 'projects', details: null }
+    }
+    return {
+      navigator: 'projects',
+      details: { type: 'project', projectSlug: compound.details.id },
+    }
+  }
+
+  // Single project
+  if (compound.navigator === 'project') {
+    // Extract projectSlug from the route - we need a different approach
+    // The parsed compound stores the slug in sessionFilter context or details
+    const filter = compound.sessionFilter || { kind: 'allSessions' as const }
+    if (compound.details) {
+      if (compound.details.type === 'chat') {
+        return {
+          navigator: 'project',
+          projectSlug: '', // Will be set by the route parser
+          filter,
+          details: { type: 'chat', sessionId: compound.details.id },
+        }
+      }
+      if (compound.details.type === 'file') {
+        return {
+          navigator: 'project',
+          projectSlug: '',
+          filter,
+          details: { type: 'file', filePath: compound.details.id },
+        }
+      }
+    }
+    return {
+      navigator: 'project',
+      projectSlug: '',
+      filter,
+      details: null,
+    }
+  }
+
   // Settings
   if (compound.navigator === 'settings') {
     const subpage = (compound.details?.type || 'app') as SettingsSubpage
@@ -628,6 +761,26 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'
+  }
+
+  if (state.navigator === 'projects') {
+    if (state.details) {
+      return `projects/project/${state.details.projectSlug}`
+    }
+    return 'projects'
+  }
+
+  if (state.navigator === 'project') {
+    const base = `project/${state.projectSlug}`
+    if (state.details) {
+      if (state.details.type === 'chat') {
+        return `${base}/chat/${state.details.sessionId}`
+      }
+      if (state.details.type === 'file') {
+        return `${base}/file/${encodeURIComponent(state.details.filePath)}`
+      }
+    }
+    return base
   }
 
   // Sessions

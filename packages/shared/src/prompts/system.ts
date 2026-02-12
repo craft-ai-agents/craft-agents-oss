@@ -312,6 +312,7 @@ export function getSystemPrompt(
   workspaceRootPath?: string,
   workingDirectory?: string,
   preset?: SystemPromptPreset | string,
+  projectGuidelines?: string,
   backendName?: string
 ): string {
   // Use mini agent prompt for quick edits (pass workspace root for config paths)
@@ -327,11 +328,16 @@ export function getSystemPrompt(
   // Get project context files for monorepo support (lives in system prompt for persistence across compaction)
   const projectContextFiles = getProjectContextFilesPrompt(workingDirectory);
 
+  // Format project guidelines if provided
+  const guidelinesContext = projectGuidelines
+    ? `\n\n## Project Guidelines\n\nThe user has provided the following guidelines for this project. Follow these instructions:\n\n${projectGuidelines}`
+    : '';
+
   // Note: Date/time context is now added to user messages instead of system prompt
   // to enable prompt caching. The system prompt stays static and cacheable.
   // Safe Mode context is also in user messages for the same reason.
   const basePrompt = getCraftAssistantPrompt(workspaceRootPath, backendName);
-  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}`;
+  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}${guidelinesContext}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
 

@@ -3590,4 +3590,132 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Note: Permission mode cycling settings (cyclablePermissionModes) are now workspace-level
   // and managed via WORKSPACE_SETTINGS_GET/UPDATE channels
 
+  // ============================================================
+  // Project Management
+  // ============================================================
+
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_LIST, async (_event, workspaceId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { listProjects } = await import('@craft-agent/shared/projects')
+    return listProjects(workspace.rootPath)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_CREATE, async (_event, workspaceId: string, input: import('@craft-agent/shared/projects').CreateProjectInput) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { createProject } = await import('@craft-agent/shared/projects')
+    return createProject(workspace.rootPath, input)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_GET, async (_event, workspaceId: string, projectSlug: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { loadProject } = await import('@craft-agent/shared/projects')
+    return loadProject(workspace.rootPath, projectSlug)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_UPDATE, async (_event, workspaceId: string, projectSlug: string, updates: Partial<import('@craft-agent/shared/projects').ProjectConfig>) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { updateProject } = await import('@craft-agent/shared/projects')
+    return updateProject(workspace.rootPath, projectSlug, updates)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_DELETE, async (_event, workspaceId: string, projectSlug: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { deleteProject } = await import('@craft-agent/shared/projects')
+    return deleteProject(workspace.rootPath, projectSlug)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_GET_FILES, async (_event, workspaceId: string, projectSlug: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { listProjectFiles } = await import('@craft-agent/shared/projects')
+    return listProjectFiles(workspace.rootPath, projectSlug)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_READ_FILE, async (_event, workspaceId: string, projectSlug: string, filePath: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { readProjectFile } = await import('@craft-agent/shared/projects')
+    return readProjectFile(workspace.rootPath, projectSlug, filePath)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_WRITE_FILE, async (_event, workspaceId: string, projectSlug: string, filePath: string, content: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { writeProjectFile } = await import('@craft-agent/shared/projects')
+    return writeProjectFile(workspace.rootPath, projectSlug, filePath, content)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_CREATE_FILE, async (_event, workspaceId: string, projectSlug: string, filePath: string, content?: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { createProjectFile } = await import('@craft-agent/shared/projects')
+    return createProjectFile(workspace.rootPath, projectSlug, filePath, content)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_DELETE_FILE, async (_event, workspaceId: string, projectSlug: string, filePath: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { deleteProjectFile } = await import('@craft-agent/shared/projects')
+    return deleteProjectFile(workspace.rootPath, projectSlug, filePath)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_RENAME_FILE, async (_event, workspaceId: string, projectSlug: string, oldPath: string, newPath: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { renameProjectFile } = await import('@craft-agent/shared/projects')
+    return renameProjectFile(workspace.rootPath, projectSlug, oldPath, newPath)
+  })
+
+  // Project file watcher state
+  let projectFileWatcher: import('fs').FSWatcher | null = null
+  let watchedProjectKey: string | null = null
+  let projectFileChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_WATCH_FILES, async (_event, workspaceId: string, projectSlug: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { getProjectFilesPath } = await import('@craft-agent/shared/projects')
+    const filesPath = getProjectFilesPath(workspace.rootPath, projectSlug)
+
+    // Close existing watcher if watching a different project
+    if (projectFileWatcher) {
+      projectFileWatcher.close()
+      projectFileWatcher = null
+    }
+    if (projectFileChangeDebounceTimer) {
+      clearTimeout(projectFileChangeDebounceTimer)
+      projectFileChangeDebounceTimer = null
+    }
+
+    const key = `${workspaceId}:${projectSlug}`
+    watchedProjectKey = key
+
+    try {
+      // Ensure directory exists
+      await mkdir(filesPath, { recursive: true })
+      const { watch } = await import('fs')
+      projectFileWatcher = watch(filesPath, { recursive: true }, () => {
+        if (projectFileChangeDebounceTimer) {
+          clearTimeout(projectFileChangeDebounceTimer)
+        }
+        projectFileChangeDebounceTimer = setTimeout(() => {
+          for (const win of BrowserWindow.getAllWindows()) {
+            win.webContents.send(IPC_CHANNELS.PROJECTS_FILES_CHANGED, workspaceId, projectSlug)
+          }
+        }, 100)
+      })
+      ipcLog.info(`Watching project files: ${projectSlug}`)
+    } catch (error) {
+      ipcLog.error('Failed to start project file watcher:', error)
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_UNWATCH_FILES, async (_event, _workspaceId: string, _projectSlug: string) => {
+    if (projectFileWatcher) {
+      projectFileWatcher.close()
+      projectFileWatcher = null
+    }
+    if (projectFileChangeDebounceTimer) {
+      clearTimeout(projectFileChangeDebounceTimer)
+      projectFileChangeDebounceTimer = null
+    }
+    if (watchedProjectKey) {
+      ipcLog.info(`Stopped watching project files: ${watchedProjectKey}`)
+      watchedProjectKey = null
+    }
+  })
+
 }

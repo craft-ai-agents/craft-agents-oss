@@ -54,6 +54,14 @@ export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 import type { LoadedSkill, SkillMetadata } from '@craft-agent/shared/skills/types';
 export type { LoadedSkill, SkillMetadata };
 
+// Import project types
+import type { ProjectConfig, ProjectSummary, CreateProjectInput } from '@craft-agent/shared/projects/types';
+export type { ProjectConfig, ProjectSummary, CreateProjectInput };
+
+// Import project file types
+import type { ProjectFile } from '@craft-agent/shared/projects';
+export type { ProjectFile };
+
 // Import session types from shared (for SessionFamily - different from core SessionMetadata)
 import type { SessionMetadata as SharedSessionMetadata } from '@craft-agent/shared/sessions/types';
 
@@ -385,6 +393,8 @@ export interface Session {
   }
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean
+  /** ID of the project this session belongs to (undefined = unorganized/inbox) */
+  projectId?: string
   /** Whether this session is archived */
   isArchived?: boolean
   /** Timestamp when session was archived (for retention policy) */
@@ -420,6 +430,8 @@ export interface CreateSessionOptions {
   systemPromptPreset?: 'default' | 'mini' | string
   /** When true, session won't appear in session list (e.g., mini edit sessions) */
   hidden?: boolean
+  /** ID of the project to associate this session with */
+  projectId?: string
   /** Initial todo state (status) for the session */
   todoState?: TodoState
   /** Initial labels for the session */
@@ -869,6 +881,22 @@ export const IPC_CHANNELS = {
   MENU_COPY: 'menu:copy',
   MENU_PASTE: 'menu:paste',
   MENU_SELECT_ALL: 'menu:selectAll',
+
+  // Project management (workspace-scoped)
+  PROJECTS_LIST: 'projects:list',
+  PROJECTS_CREATE: 'projects:create',
+  PROJECTS_GET: 'projects:get',
+  PROJECTS_UPDATE: 'projects:update',
+  PROJECTS_DELETE: 'projects:delete',
+  PROJECTS_GET_FILES: 'projects:getFiles',
+  PROJECTS_READ_FILE: 'projects:readFile',
+  PROJECTS_WRITE_FILE: 'projects:writeFile',
+  PROJECTS_CREATE_FILE: 'projects:createFile',
+  PROJECTS_DELETE_FILE: 'projects:deleteFile',
+  PROJECTS_RENAME_FILE: 'projects:renameFile',
+  PROJECTS_WATCH_FILES: 'projects:watchFiles',
+  PROJECTS_UNWATCH_FILES: 'projects:unwatchFiles',
+  PROJECTS_FILES_CHANGED: 'projects:filesChanged',
 } as const
 
 // Re-import types for ElectronAPI
@@ -1177,6 +1205,22 @@ export interface ElectronAPI {
   menuPaste(): Promise<void>
   menuSelectAll(): Promise<void>
 
+  // Project management
+  listProjects(workspaceId: string): Promise<ProjectSummary[]>
+  createProject(workspaceId: string, input: CreateProjectInput): Promise<ProjectConfig>
+  getProject(workspaceId: string, projectSlug: string): Promise<ProjectConfig | null>
+  updateProject(workspaceId: string, projectSlug: string, updates: Partial<Pick<ProjectConfig, 'name' | 'description' | 'guidelines' | 'enabledSourceSlugs'>>): Promise<ProjectConfig | null>
+  deleteProject(workspaceId: string, projectSlug: string): Promise<boolean>
+  getProjectFiles(workspaceId: string, projectSlug: string): Promise<ProjectFile[]>
+  readProjectFile(workspaceId: string, projectSlug: string, filePath: string): Promise<string | null>
+  writeProjectFile(workspaceId: string, projectSlug: string, filePath: string, content: string): Promise<void>
+  createProjectFile(workspaceId: string, projectSlug: string, filePath: string, content?: string): Promise<boolean>
+  deleteProjectFile(workspaceId: string, projectSlug: string, filePath: string): Promise<boolean>
+  renameProjectFile(workspaceId: string, projectSlug: string, oldPath: string, newPath: string): Promise<boolean>
+  watchProjectFiles(workspaceId: string, projectSlug: string): Promise<void>
+  unwatchProjectFiles(workspaceId: string, projectSlug: string): Promise<void>
+  onProjectFilesChanged(callback: (workspaceId: string, projectSlug: string) => void): () => void
+
   // LLM Connections (provider configurations)
   listLlmConnections(): Promise<LlmConnection[]>
   listLlmConnectionsWithStatus(): Promise<LlmConnectionWithStatus[]>
@@ -1343,6 +1387,33 @@ export interface SkillsNavigationState {
 }
 
 /**
+ * Projects navigation state - shows ProjectsListPanel in navigator
+ */
+export interface ProjectsNavigationState {
+  navigator: 'projects'
+  /** Selected project details, or null for project list view */
+  details: { type: 'project'; projectSlug: string } | null
+  /** Optional right sidebar panel state */
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
+ * Single project navigation state - shows project contents (sessions + files)
+ */
+export interface ProjectNavigationState {
+  navigator: 'project'
+  projectSlug: string
+  filter: SessionFilter
+  /** Selected content within project */
+  details:
+    | { type: 'chat'; sessionId: string }
+    | { type: 'file'; filePath: string }
+    | null
+  /** Optional right sidebar panel state */
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Unified navigation state - single source of truth for all 3 panels
  *
  * From this state we can derive:
@@ -1355,6 +1426,8 @@ export type NavigationState =
   | SourcesNavigationState
   | SettingsNavigationState
   | SkillsNavigationState
+  | ProjectsNavigationState
+  | ProjectNavigationState
 
 /**
  * Type guard to check if state is sessions navigation
@@ -1385,6 +1458,20 @@ export const isSkillsNavigation = (
 ): state is SkillsNavigationState => state.navigator === 'skills'
 
 /**
+ * Type guard to check if state is projects list navigation
+ */
+export const isProjectsNavigation = (
+  state: NavigationState
+): state is ProjectsNavigationState => state.navigator === 'projects'
+
+/**
+ * Type guard to check if state is single project navigation
+ */
+export const isProjectNavigation = (
+  state: NavigationState
+): state is ProjectNavigationState => state.navigator === 'project'
+
+/**
  * Default navigation state - allSessions with no selection
  */
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
@@ -1397,6 +1484,22 @@ export const DEFAULT_NAVIGATION_STATE: NavigationState = {
  * Get a persistence key for localStorage from NavigationState
  */
 export const getNavigationStateKey = (state: NavigationState): string => {
+  if (state.navigator === 'projects') {
+    if (state.details) {
+      return `projects/project/${state.details.projectSlug}`
+    }
+    return 'projects'
+  }
+  if (state.navigator === 'project') {
+    const base = `project/${state.projectSlug}`
+    if (state.details?.type === 'chat') {
+      return `${base}/chat/${state.details.sessionId}`
+    }
+    if (state.details?.type === 'file') {
+      return `${base}/file/${state.details.filePath}`
+    }
+    return base
+  }
   if (state.navigator === 'sources') {
     if (state.details) {
       return `sources/source/${state.details.sourceSlug}`
@@ -1430,6 +1533,30 @@ export const getNavigationStateKey = (state: NavigationState): string => {
  * Returns null if the key is invalid
  */
 export const parseNavigationStateKey = (key: string): NavigationState | null => {
+  // Handle projects
+  if (key === 'projects') return { navigator: 'projects', details: null }
+  if (key.startsWith('projects/project/')) {
+    const projectSlug = key.slice(17)
+    if (projectSlug) {
+      return { navigator: 'projects', details: { type: 'project', projectSlug } }
+    }
+    return { navigator: 'projects', details: null }
+  }
+  if (key.startsWith('project/')) {
+    const rest = key.slice(8)
+    const parts = rest.split('/')
+    const projectSlug = parts[0]
+    if (projectSlug) {
+      if (parts[1] === 'chat' && parts[2]) {
+        return { navigator: 'project', projectSlug, filter: { kind: 'allSessions' }, details: { type: 'chat', sessionId: parts[2] } }
+      }
+      if (parts[1] === 'file' && parts.slice(2).join('/')) {
+        return { navigator: 'project', projectSlug, filter: { kind: 'allSessions' }, details: { type: 'file', filePath: parts.slice(2).join('/') } }
+      }
+      return { navigator: 'project', projectSlug, filter: { kind: 'allSessions' }, details: null }
+    }
+  }
+
   // Handle sources
   if (key === 'sources') return { navigator: 'sources', details: null }
   if (key.startsWith('sources/source/')) {

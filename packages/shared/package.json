@@ -30,6 +30,8 @@
     "./sessions": "./src/sessions/index.ts",
     "./sources": "./src/sources/index.ts",
     "./sources/types": "./src/sources/types.ts",
+    "./projects": "./src/projects/index.ts",
+    "./projects/types": "./src/projects/types.ts",
     "./workspaces": "./src/workspaces/index.ts",
     "./utils": "./src/utils/index.ts",
     "./utils/toolNames": "./src/utils/toolNames.ts",

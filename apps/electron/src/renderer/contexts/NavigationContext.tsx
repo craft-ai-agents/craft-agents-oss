@@ -58,6 +58,8 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isProjectsNavigation,
+  isProjectNavigation,
   DEFAULT_NAVIGATION_STATE,
 } from '../../shared/types'
 import { isValidSettingsSubpage, type SettingsSubpage } from '../../shared/settings-registry'
@@ -71,7 +73,7 @@ export type { Route }
 
 // Re-export navigation state types for consumers
 export type { NavigationState, SessionFilter }
-export { isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation }
+export { isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isProjectsNavigation, isProjectNavigation }
 
 interface NavigationContextValue {
   /** Navigate to a route */
@@ -397,6 +399,29 @@ export function NavigationProvider({
         case 'copy':
           if (parsed.params.text) {
             await navigator.clipboard.writeText(parsed.params.text)
+          }
+          break
+
+        case 'new-project': {
+          const name = parsed.params.name || 'New Project'
+          const project = await window.electronAPI.createProject(workspaceId, { name })
+          setNavigationState({
+            navigator: 'project',
+            projectSlug: project.slug,
+            filter: { kind: 'allSessions' },
+            details: null,
+          })
+          break
+        }
+
+        case 'delete-project':
+          if (parsed.id) {
+            await window.electronAPI.deleteProject(workspaceId, parsed.id)
+            // Navigate back to projects list
+            setNavigationState({
+              navigator: 'projects',
+              details: null,
+            })
           }
           break
 

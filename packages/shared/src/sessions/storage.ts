@@ -183,6 +183,7 @@ export async function createSession(
     enabledSourceSlugs?: string[];
     model?: string;
     hidden?: boolean;
+    projectId?: string;
     todoState?: SessionConfig['todoState'];
     labels?: string[];
     isFlagged?: boolean;
@@ -213,6 +214,7 @@ export async function createSession(
     enabledSourceSlugs: options?.enabledSourceSlugs,
     model: options?.model,
     hidden: options?.hidden,
+    projectId: options?.projectId,
     todoState: options?.todoState,
     labels: options?.labels,
     isFlagged: options?.isFlagged,

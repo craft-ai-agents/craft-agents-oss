@@ -495,6 +495,39 @@ const api: ElectronAPI = {
   browseForGitBash: () => ipcRenderer.invoke(IPC_CHANNELS.GITBASH_BROWSE),
   setGitBashPath: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.GITBASH_SET_PATH, path),
 
+  // Project management
+  listProjects: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_LIST, workspaceId),
+  createProject: (workspaceId: string, input: import('../shared/types').CreateProjectInput) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_CREATE, workspaceId, input),
+  getProject: (workspaceId: string, projectSlug: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_GET, workspaceId, projectSlug),
+  updateProject: (workspaceId: string, projectSlug: string, updates: Partial<Pick<import('../shared/types').ProjectConfig, 'name' | 'description' | 'guidelines' | 'enabledSourceSlugs'>>) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_UPDATE, workspaceId, projectSlug, updates),
+  deleteProject: (workspaceId: string, projectSlug: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_DELETE, workspaceId, projectSlug),
+  getProjectFiles: (workspaceId: string, projectSlug: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_GET_FILES, workspaceId, projectSlug),
+  readProjectFile: (workspaceId: string, projectSlug: string, filePath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_READ_FILE, workspaceId, projectSlug, filePath),
+  writeProjectFile: (workspaceId: string, projectSlug: string, filePath: string, content: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_WRITE_FILE, workspaceId, projectSlug, filePath, content),
+  createProjectFile: (workspaceId: string, projectSlug: string, filePath: string, content?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_CREATE_FILE, workspaceId, projectSlug, filePath, content),
+  deleteProjectFile: (workspaceId: string, projectSlug: string, filePath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_DELETE_FILE, workspaceId, projectSlug, filePath),
+  renameProjectFile: (workspaceId: string, projectSlug: string, oldPath: string, newPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_RENAME_FILE, workspaceId, projectSlug, oldPath, newPath),
+  watchProjectFiles: (workspaceId: string, projectSlug: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_WATCH_FILES, workspaceId, projectSlug),
+  unwatchProjectFiles: (workspaceId: string, projectSlug: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_UNWATCH_FILES, workspaceId, projectSlug),
+  onProjectFilesChanged: (callback: (workspaceId: string, projectSlug: string) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, workspaceId: string, projectSlug: string) => callback(workspaceId, projectSlug)
+    ipcRenderer.on(IPC_CHANNELS.PROJECTS_FILES_CHANGED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.PROJECTS_FILES_CHANGED, handler)
+  },
+
   // Menu actions (for unified Craft menu)
   menuQuit: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_QUIT),
   menuNewWindow: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_NEW_WINDOW),

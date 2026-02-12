@@ -29,12 +29,16 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isProjectsNavigation,
+  isProjectNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { extractLabelId } from '@craft-agent/shared/labels'
 import type { TodoStateId } from '@/config/todo-states'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
+import { ProjectHomePage } from '../project/ProjectHomePage'
+import { FileViewer } from '../project/FileViewer'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 
 export interface MainContentPanelProps {
@@ -187,7 +191,59 @@ export function MainContentPanel({
     )
   }
 
-  // Chats navigator - show chat, multi-select panel, or empty state
+  // Projects list navigator - show project info or empty state
+  if (isProjectsNavigation(navState)) {
+    if (navState.details) {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <ProjectHomePage
+            projectSlug={navState.details.projectSlug}
+            workspaceId={activeWorkspaceId || ''}
+          />
+        </Panel>
+      )
+    }
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <div className="flex items-center justify-center h-full text-muted-foreground">
+          <p className="text-sm">Select a project or create a new one</p>
+        </div>
+      </Panel>
+    )
+  }
+
+  // Single project navigator - show chat, file, or project home
+  if (isProjectNavigation(navState)) {
+    if (navState.details?.type === 'chat') {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <ChatPage sessionId={navState.details.sessionId} />
+        </Panel>
+      )
+    }
+    if (navState.details?.type === 'file') {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <FileViewer
+            workspaceId={activeWorkspaceId || ''}
+            projectSlug={navState.projectSlug}
+            filePath={navState.details.filePath}
+          />
+        </Panel>
+      )
+    }
+    // Default: show project home page
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <ProjectHomePage
+          projectSlug={navState.projectSlug}
+          workspaceId={activeWorkspaceId || ''}
+        />
+      </Panel>
+    )
+  }
+
+  // Sessions navigator - show chat, multi-select panel, or empty state
   if (isSessionsNavigation(navState)) {
     // Multi-select mode: show batch actions panel
     if (isMultiSelectActive) {

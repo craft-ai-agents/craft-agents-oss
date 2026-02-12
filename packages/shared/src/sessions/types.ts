@@ -40,6 +40,8 @@ export const SESSION_PERSISTENT_FIELDS = [
   'sharedUrl', 'sharedId',
   // Plan execution
   'pendingPlanExecution',
+  // Project
+  'projectId',
   // Archive
   'isArchived', 'archivedAt',
   // Hierarchy
@@ -147,6 +149,8 @@ export interface SessionConfig {
   };
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean;
+  /** ID of the project this session belongs to (undefined = unorganized/inbox) */
+  projectId?: string;
   /** Whether this session is archived */
   isArchived?: boolean;
   /** Timestamp when session was archived (for retention policy) */
@@ -231,6 +235,8 @@ export interface SessionHeader {
   };
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean;
+  /** ID of the project this session belongs to (undefined = unorganized/inbox) */
+  projectId?: string;
   /** Whether this session is archived */
   isArchived?: boolean;
   /** Timestamp when session was archived (for retention policy) */
@@ -310,6 +316,8 @@ export interface SessionMetadata {
   tokenUsage?: SessionTokenUsage;
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean;
+  /** ID of the project this session belongs to (undefined = unorganized/inbox) */
+  projectId?: string;
   /** Whether this session is archived */
   isArchived?: boolean;
   /** Timestamp when session was archived (for retention policy) */
