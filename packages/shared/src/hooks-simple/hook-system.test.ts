@@ -2,7 +2,7 @@
  * Tests for HookSystem facade
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -186,7 +186,7 @@ describe('HookSystem', () => {
         workspaceId: 'test-workspace',
       });
 
-      const emitSpy = vi.spyOn(system.eventBus, 'emit');
+      const emitSpy = spyOn(system.eventBus, 'emit');
 
       const events = await system.updateSessionMetadata('session-1', {
         permissionMode: 'execute',
@@ -208,7 +208,7 @@ describe('HookSystem', () => {
         workspaceId: 'test-workspace',
       });
 
-      const emitSpy = vi.spyOn(system.eventBus, 'emit');
+      const emitSpy = spyOn(system.eventBus, 'emit');
 
       const events = await system.updateSessionMetadata('session-1', {
         labels: ['label-1', 'label-2'],
@@ -236,7 +236,7 @@ describe('HookSystem', () => {
         labels: ['label-1', 'label-2'],
       });
 
-      const emitSpy = vi.spyOn(system.eventBus, 'emit');
+      const emitSpy = spyOn(system.eventBus, 'emit');
 
       const events = await system.updateSessionMetadata('session-1', {
         labels: ['label-1'], // label-2 removed
@@ -256,7 +256,7 @@ describe('HookSystem', () => {
         workspaceId: 'test-workspace',
       });
 
-      const emitSpy = vi.spyOn(system.eventBus, 'emit');
+      const emitSpy = spyOn(system.eventBus, 'emit');
 
       const events = await system.updateSessionMetadata('session-1', {
         isFlagged: true,
@@ -280,7 +280,7 @@ describe('HookSystem', () => {
         todoState: 'todo',
       });
 
-      const emitSpy = vi.spyOn(system.eventBus, 'emit');
+      const emitSpy = spyOn(system.eventBus, 'emit');
 
       const events = await system.updateSessionMetadata('session-1', {
         todoState: 'done',
@@ -307,7 +307,7 @@ describe('HookSystem', () => {
         isFlagged: false,
       });
 
-      const emitSpy = vi.spyOn(system.eventBus, 'emit');
+      const emitSpy = spyOn(system.eventBus, 'emit');
 
       const events = await system.updateSessionMetadata('session-1', {
         permissionMode: 'explore',
@@ -368,7 +368,7 @@ describe('HookSystem', () => {
         workspaceId: 'test-workspace',
       });
 
-      const emitSpy = vi.spyOn(system.eventBus, 'emit');
+      const emitSpy = spyOn(system.eventBus, 'emit');
 
       await system.emitLabelConfigChange();
 

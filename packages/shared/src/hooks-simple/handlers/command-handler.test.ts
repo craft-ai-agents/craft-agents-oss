@@ -2,20 +2,20 @@
  * Tests for CommandHandler
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, jest, mock } from 'bun:test';
 import { WorkspaceEventBus } from '../event-bus.ts';
 import { CommandHandler } from './command-handler.ts';
 import type { HooksConfigProvider, CommandHandlerOptions } from './types.ts';
 import type { HookMatcher, HookEvent } from '../index.ts';
 
 // Mock command-executor to avoid real shell execution
-vi.mock('../command-executor.ts', () => ({
-  executeCommand: vi.fn().mockResolvedValue({ success: true, stdout: 'ok', stderr: '', blocked: false }),
+mock.module('../command-executor.ts', () => ({
+  executeCommand: jest.fn().mockResolvedValue({ success: true, stdout: 'ok', stderr: '', blocked: false }),
 }));
 
 import { executeCommand } from '../command-executor.ts';
 
-const mockedExecuteCommand = vi.mocked(executeCommand);
+const mockedExecuteCommand = executeCommand as jest.Mock;
 
 // Helper to create a mock HooksConfigProvider
 function createMockConfigProvider(matchersByEvent: Partial<Record<HookEvent, HookMatcher[]>> = {}): HooksConfigProvider {
@@ -40,7 +40,7 @@ describe('CommandHandler', () => {
 
   beforeEach(() => {
     bus = new WorkspaceEventBus('test-workspace');
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   afterEach(() => {
@@ -276,7 +276,7 @@ describe('CommandHandler', () => {
       const error = new Error('execution failed');
       mockedExecuteCommand.mockRejectedValueOnce(error);
 
-      const onError = vi.fn();
+      const onError = jest.fn();
       const configProvider = createMockConfigProvider({
         LabelAdd: [{
           hooks: [{ type: 'command', command: 'failing-command' }],

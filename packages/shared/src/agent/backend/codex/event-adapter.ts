@@ -13,6 +13,9 @@ import { createLogger } from '../../../utils/debug.ts';
 
 import { parseReadCommand, type ReadCommandInfo } from './read-patterns';
 
+/** Max chars for command/MCP tool output before truncation (~25K tokens, matches Claude SDK behavior) */
+const MAX_COMMAND_OUTPUT_CHARS = 100_000;
+
 // Import v2 types from generated codex-types
 import type {
   ThreadItem,
@@ -341,11 +344,19 @@ export class EventAdapter {
 
   /**
    * Adapt item/commandExecution/outputDelta - accumulate for tool result.
+   * Caps accumulation at MAX_COMMAND_OUTPUT_CHARS to prevent OOM from unbounded growth
+   * (e.g., rg matching inside large session JSONL files).
    */
   adaptCommandOutputDelta(notification: OutputDeltaNotification): void {
     const { itemId, delta } = notification;
     const current = this.commandOutput.get(itemId) || '';
-    this.commandOutput.set(itemId, current + delta);
+    // Stop accumulating once we've hit the limit — further deltas are silently dropped.
+    // The truncation message is added in createCommandResult when the result is emitted.
+    if (current.length >= MAX_COMMAND_OUTPUT_CHARS) return;
+    const next = current + delta;
+    this.commandOutput.set(itemId, next.length > MAX_COMMAND_OUTPUT_CHARS
+      ? next.slice(0, MAX_COMMAND_OUTPUT_CHARS)
+      : next);
   }
 
   /**
@@ -472,7 +483,14 @@ export class EventAdapter {
       item.status === 'failed' || isDeclined || (item.exitCode != null && item.exitCode !== 0);
 
     // Use accumulated output from deltas, or fallback to item output
-    const output = this.commandOutput.get(item.id) || item.aggregatedOutput || '';
+    const rawOutput = this.commandOutput.get(item.id) || item.aggregatedOutput || '';
+    this.commandOutput.delete(item.id); // Clean up accumulated deltas
+
+    // Truncate massive output to prevent OOM (e.g., rg matching inside session JSONL files)
+    const output = rawOutput.length > MAX_COMMAND_OUTPUT_CHARS
+      ? rawOutput.slice(0, MAX_COMMAND_OUTPUT_CHARS) +
+        `\n\n[Output truncated: ${rawOutput.length.toLocaleString()} chars total, showing first ${MAX_COMMAND_OUTPUT_CHARS.toLocaleString()}]`
+      : rawOutput;
 
     // Get stored block reason if available (set by PreToolUse handler)
     const blockReason = this.blockReasons.get(item.id);
@@ -554,7 +572,12 @@ export class EventAdapter {
     } else if (item.result) {
       // Extract text from MCP result
       // The v2 McpToolCallResult has a different structure
-      result = typeof item.result === 'string' ? item.result : JSON.stringify(item.result);
+      const rawResult = typeof item.result === 'string' ? item.result : JSON.stringify(item.result);
+      // Truncate massive MCP results to prevent OOM
+      result = rawResult.length > MAX_COMMAND_OUTPUT_CHARS
+        ? rawResult.slice(0, MAX_COMMAND_OUTPUT_CHARS) +
+          `\n\n[Output truncated: ${rawResult.length.toLocaleString()} chars total, showing first ${MAX_COMMAND_OUTPUT_CHARS.toLocaleString()}]`
+        : rawResult;
     } else {
       result = 'Success';
     }

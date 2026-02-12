@@ -30,6 +30,7 @@ import type { ModelProvider } from '../../config/models.ts';
 // Import LLM connection types for auth
 import type { LlmAuthType, LlmProviderType } from '../../config/llm-connections.ts';
 export type { LlmAuthType, LlmProviderType } from '../../config/llm-connections.ts';
+import type { HookSystem } from '../../hooks-simple/index.ts';
 
 /**
  * Provider identifier for AI backends.
@@ -409,4 +410,7 @@ export interface BackendConfig {
    * Used to read/write credentials under the correct key.
    */
   connectionSlug?: string;
+
+  /** Workspace-level hook system for user-defined SDK hooks (hooks.json) */
+  hookSystem?: HookSystem;
 }

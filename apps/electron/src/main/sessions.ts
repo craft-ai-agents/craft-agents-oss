@@ -220,7 +220,8 @@ async function refreshOAuthTokensIfNeeded(
   agent: AgentInstance,
   sources: LoadedSource[],
   sessionPath: string,
-  tokenRefreshManager: TokenRefreshManager
+  tokenRefreshManager: TokenRefreshManager,
+  options?: { sessionId?: string; workspaceRootPath?: string }
 ): Promise<OAuthTokenRefreshResult> {
   sessionLog.debug('[OAuth] Checking if any OAuth tokens need refresh')
 
@@ -254,6 +255,17 @@ async function refreshOAuthTokensIfNeeded(
     )
     const intendedSlugs = enabledSources.map(s => s.config.slug)
     agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
+
+    // For Codex backend: write fresh tokens to config.toml and reconnect.
+    // setSourceServers is a no-op for Codex — the app-server reads config.toml,
+    // so we must regenerate it and restart the app-server to pick up fresh tokens.
+    if (agent instanceof CodexBackend && options?.sessionId && options?.workspaceRootPath) {
+      await regenCodexConfigAndReconnect(
+        agent, sessionPath, enabledSources, mcpServers,
+        options.sessionId, options.workspaceRootPath, 'token refresh'
+      )
+    }
+
     return { tokensRefreshed: true, failedSources }
   }
 
@@ -403,6 +415,29 @@ async function setupCodexSessionConfig(
   }
 
   return codexHome
+}
+
+/**
+ * Regenerate Codex config.toml and queue a reconnect.
+ * Centralised helper for the pattern that was previously duplicated across
+ * token refresh, auth completion, source enable, and source config change.
+ */
+async function regenCodexConfigAndReconnect(
+  agent: CodexBackend,
+  sessionPath: string,
+  enabledSources: LoadedSource[],
+  mcpServers: Record<string, import('@craft-agent/shared/agent/backend').SdkMcpServerConfig>,
+  sessionId: string,
+  workspaceRootPath: string,
+  context: string
+): Promise<void> {
+  try {
+    await setupCodexSessionConfig(sessionPath, enabledSources, mcpServers, sessionId, workspaceRootPath)
+    await agent.queueReconnect()
+    sessionLog.info(`Codex config regenerated after ${context} for session ${sessionId}`)
+  } catch (err) {
+    sessionLog.error(`Failed to regenerate Codex config after ${context}: ${err instanceof Error ? err.stack ?? err.message : err}`)
+  }
 }
 
 /**
@@ -1192,10 +1227,10 @@ export class SessionManager {
 
     // For Codex backend, regenerate config.toml and reconnect
     if (managed.agent instanceof CodexBackend) {
-      await setupCodexSessionConfig(sessionPath, enabledSources, mcpServers, managed.id, workspaceRootPath)
-      // Reconnect to pick up the new config
-      await managed.agent.reconnect()
-      sessionLog.info(`Codex config regenerated and reconnected for session ${managed.id}`)
+      await regenCodexConfigAndReconnect(
+        managed.agent, sessionPath, enabledSources, mcpServers,
+        managed.id, workspaceRootPath, 'source reload'
+      )
     }
 
     // For Copilot backend, write bridge config for API sources
@@ -1733,8 +1768,36 @@ export class SessionManager {
     managed.pendingAuthRequestId = undefined
     managed.pendingAuthRequest = undefined
 
-    // Persist session with updated auth message
+    // Auto-enable the source in the session after successful auth
+    if (result.success && result.sourceSlug) {
+      const slugSet = new Set(managed.enabledSourceSlugs || [])
+      if (!slugSet.has(result.sourceSlug)) {
+        slugSet.add(result.sourceSlug)
+        managed.enabledSourceSlugs = Array.from(slugSet)
+        sessionLog.info(`Auto-enabled source ${result.sourceSlug} in session ${sessionId} after auth`)
+      }
+    }
+
+    // Persist session with updated auth message and enabled sources
     this.persistSession(managed)
+
+    // For Codex backend: regenerate config.toml with new credentials and reconnect
+    if (result.success && result.sourceSlug && managed.agent instanceof CodexBackend) {
+      const workspaceRootPath = managed.workspace.rootPath
+      const sessionPath = getSessionStoragePath(workspaceRootPath, managed.id)
+      const enabledSlugs = managed.enabledSourceSlugs || []
+      const allSources = loadAllSources(workspaceRootPath)
+      const enabledSources = allSources.filter(s =>
+        enabledSlugs.includes(s.config.slug) && isSourceUsable(s)
+      )
+      const { mcpServers } = await buildServersFromSources(
+        enabledSources, sessionPath, managed.tokenRefreshManager
+      )
+      await regenCodexConfigAndReconnect(
+        managed.agent, sessionPath, enabledSources, mcpServers,
+        managed.id, workspaceRootPath, 'source auth'
+      )
+    }
 
     // Send the result as a new message to resume conversation
     // Use empty arrays for attachments since this is a system-generated message
@@ -2888,15 +2951,10 @@ export class SessionManager {
         // For Codex backend, regenerate config.toml and reconnect to pick up new sources
         // (Codex reads MCP config from file at startup, unlike Claude which has runtime injection)
         if (managed.agent instanceof CodexBackend) {
-          await setupCodexSessionConfig(
-            sessionPath,
-            allEnabledSources,
-            mcpServers,
-            managed.id,
-            workspaceRootPath
+          await regenCodexConfigAndReconnect(
+            managed.agent, sessionPath, allEnabledSources, mcpServers,
+            managed.id, workspaceRootPath, 'source enable'
           )
-          await managed.agent.reconnect()
-          sessionLog.info(`Codex config regenerated and reconnected for source enable in session ${managed.id}`)
         }
 
         // For Copilot backend, write bridge config for API sources
@@ -3326,9 +3384,10 @@ export class SessionManager {
       // For Codex backend, regenerate config.toml and reconnect to pick up new sources
       // (Codex reads MCP config from file at startup, unlike Claude which has runtime injection)
       if (managed.agent instanceof CodexBackend) {
-        await setupCodexSessionConfig(sessionPath, sources, mcpServers, managed.id, workspaceRootPath)
-        await managed.agent.reconnect()
-        sessionLog.info(`Codex config regenerated and reconnected for session ${managed.id}`)
+        await regenCodexConfigAndReconnect(
+          managed.agent, sessionPath, sources, mcpServers,
+          managed.id, workspaceRootPath, 'source config change'
+        )
       }
 
       sessionLog.info(`Applied ${Object.keys(mcpServers).length} MCP + ${Object.keys(apiServers).length} API sources to active agent (${allSources.length} total)`)
@@ -3956,7 +4015,8 @@ export class SessionManager {
           agent,
           sources,
           sessionPath,
-          managed.tokenRefreshManager
+          managed.tokenRefreshManager,
+          { sessionId, workspaceRootPath }
         )
         if (refreshResult.failedSources.length > 0) {
           sessionLog.warn('[OAuth] Some sources failed token refresh:', refreshResult.failedSources.map(f => f.slug))
@@ -4754,7 +4814,14 @@ To view this task's output:
         const toolName = event.toolName || 'unknown'
 
         // Format absolute paths to relative paths for better readability
-        const formattedResult = event.result ? formatPathsToRelative(event.result) : ''
+        const rawFormattedResult = event.result ? formatPathsToRelative(event.result) : ''
+
+        // Safety net: prevent massive tool results from bloating session JSONL (protects all backends)
+        const MAX_PERSISTED_RESULT_CHARS = 200_000 // ~50K tokens
+        const formattedResult = rawFormattedResult.length > MAX_PERSISTED_RESULT_CHARS
+          ? rawFormattedResult.slice(0, MAX_PERSISTED_RESULT_CHARS) +
+            `\n\n[Truncated for storage: ${rawFormattedResult.length.toLocaleString()} chars total]`
+          : rawFormattedResult
 
         // Update existing tool message (created on tool_start) instead of creating new one
         const existingToolMsg = managed.messages.find(m => m.toolUseId === event.toolUseId)

@@ -155,6 +155,7 @@ export function generateRequestId(prefix: string = 'req'): string {
 // ============================================================
 
 import type { CredentialInputMode } from './types.ts';
+export type { CredentialInputMode } from './types.ts';
 
 /**
  * Detect the effective credential input mode based on source config and requested mode.

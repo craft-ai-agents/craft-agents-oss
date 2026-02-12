@@ -2,7 +2,7 @@
  * Tests for PromptHandler
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, jest } from 'bun:test';
 import { WorkspaceEventBus } from '../event-bus.ts';
 import { PromptHandler } from './prompt-handler.ts';
 import type { HooksConfigProvider, PromptHandlerOptions } from './types.ts';
@@ -38,7 +38,7 @@ describe('PromptHandler', () => {
 
   describe('matcher matching for app events', () => {
     it('should process prompt hooks for matching LabelAdd event', async () => {
-      const onPromptsReady = vi.fn();
+      const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({
         LabelAdd: [{
           matcher: 'bug',
@@ -65,7 +65,7 @@ describe('PromptHandler', () => {
     });
 
     it('should process prompt hooks for PermissionModeChange', async () => {
-      const onPromptsReady = vi.fn();
+      const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({
         PermissionModeChange: [{
           matcher: 'safe',
@@ -89,7 +89,7 @@ describe('PromptHandler', () => {
     });
 
     it('should not call onPromptsReady for non-matching events', async () => {
-      const onPromptsReady = vi.fn();
+      const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({
         LabelAdd: [{
           matcher: 'bug',
@@ -114,7 +114,7 @@ describe('PromptHandler', () => {
 
   describe('agent events are ignored', () => {
     it('should not process prompts for PreToolUse (agent event)', async () => {
-      const onPromptsReady = vi.fn();
+      const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({
         PreToolUse: [{
           hooks: [{ type: 'prompt', prompt: 'Should not fire' }],
@@ -136,7 +136,7 @@ describe('PromptHandler', () => {
     });
 
     it('should not process prompts for SessionStart (agent event)', async () => {
-      const onPromptsReady = vi.fn();
+      const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({
         SessionStart: [{
           hooks: [{ type: 'prompt', prompt: 'Should not fire' }],
@@ -158,7 +158,7 @@ describe('PromptHandler', () => {
     });
 
     it('should not process prompts for PostToolUse (agent event)', async () => {
-      const onPromptsReady = vi.fn();
+      const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({
         PostToolUse: [{
           hooks: [{ type: 'prompt', prompt: 'Should not fire' }],
@@ -182,7 +182,7 @@ describe('PromptHandler', () => {
 
   describe('environment variable expansion', () => {
     it('should expand $VAR syntax in prompt text', async () => {
-      const onPromptsReady = vi.fn();
+      const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({
         LabelAdd: [{
           hooks: [{ type: 'prompt', prompt: 'Label $CRAFT_LABEL was added' }],
@@ -206,7 +206,7 @@ describe('PromptHandler', () => {
     });
 
     it('should expand ${VAR} syntax in prompt text', async () => {
-      const onPromptsReady = vi.fn();
+      const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({
         LabelAdd: [{
           hooks: [{ type: 'prompt', prompt: 'Label ${CRAFT_LABEL} was added to ${CRAFT_WORKSPACE_ID}' }],
@@ -233,7 +233,7 @@ describe('PromptHandler', () => {
 
   describe('@mention parsing and deduplication', () => {
     it('should parse @mentions from prompt text', async () => {
-      const onPromptsReady = vi.fn();
+      const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({
         LabelAdd: [{
           hooks: [{ type: 'prompt', prompt: 'Please @linear check for issues and @github create a PR' }],
@@ -258,7 +258,7 @@ describe('PromptHandler', () => {
     });
 
     it('should deduplicate @mentions', async () => {
-      const onPromptsReady = vi.fn();
+      const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({
         LabelAdd: [{
           hooks: [{ type: 'prompt', prompt: '@linear do X then @linear do Y' }],
@@ -285,7 +285,7 @@ describe('PromptHandler', () => {
 
   describe('onPromptsReady callback', () => {
     it('should deliver multiple prompts from a single event', async () => {
-      const onPromptsReady = vi.fn();
+      const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({
         LabelAdd: [
           {
@@ -316,7 +316,7 @@ describe('PromptHandler', () => {
     });
 
     it('should not call onPromptsReady if no prompt hooks match', async () => {
-      const onPromptsReady = vi.fn();
+      const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({
         LabelAdd: [{
           hooks: [{ type: 'command', command: 'echo hello' }],
@@ -338,7 +338,7 @@ describe('PromptHandler', () => {
     });
 
     it('should pass labels from matcher to pending prompts', async () => {
-      const onPromptsReady = vi.fn();
+      const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({
         LabelAdd: [{
           labels: ['auto-created', 'from-hook'],
@@ -376,7 +376,7 @@ describe('PromptHandler', () => {
     });
 
     it('should not process events after disposal', async () => {
-      const onPromptsReady = vi.fn();
+      const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({
         LabelAdd: [{
           hooks: [{ type: 'prompt', prompt: 'Should not fire' }],

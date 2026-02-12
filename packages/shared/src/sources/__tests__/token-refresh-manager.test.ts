@@ -6,8 +6,16 @@
  * - API OAuth sources (Google, Slack, Microsoft)
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect, mock, beforeEach } from 'bun:test';
 import { isOAuthSource, type LoadedSource, type FolderSourceConfig } from '../types.ts';
+import { TokenRefreshManager } from '../token-refresh-manager.ts';
+import type { SourceCredentialManager } from '../credential-manager.ts';
+
+// Mock storage module to prevent disk I/O
+const mockMarkSourceAuthenticated = mock(() => true);
+mock.module('../storage.ts', () => ({
+  markSourceAuthenticated: mockMarkSourceAuthenticated,
+}));
 
 /**
  * Helper to create a mock LoadedSource for testing
@@ -170,7 +178,7 @@ describe('isOAuthSource', () => {
   });
 
   describe('Authentication state', () => {
-    test('returns false if source is not authenticated (MCP OAuth)', () => {
+    test('returns true for unauthenticated MCP OAuth source (type check only)', () => {
       const source = createMockSource({
         type: 'mcp',
         provider: 'linear',
@@ -181,10 +189,10 @@ describe('isOAuthSource', () => {
         isAuthenticated: false,
       });
 
-      expect(isOAuthSource(source)).toBe(false);
+      expect(isOAuthSource(source)).toBe(true);
     });
 
-    test('returns false if source is not authenticated (Google)', () => {
+    test('returns true for unauthenticated Google source (type check only)', () => {
       const source = createMockSource({
         type: 'api',
         provider: 'google',
@@ -195,10 +203,10 @@ describe('isOAuthSource', () => {
         isAuthenticated: false,
       });
 
-      expect(isOAuthSource(source)).toBe(false);
+      expect(isOAuthSource(source)).toBe(true);
     });
 
-    test('returns false if isAuthenticated is undefined', () => {
+    test('returns true even if isAuthenticated is undefined (type check only)', () => {
       const source = createMockSource({
         type: 'api',
         provider: 'google',
@@ -210,7 +218,7 @@ describe('isOAuthSource', () => {
       // Remove isAuthenticated to simulate undefined
       delete (source.config as Partial<FolderSourceConfig>).isAuthenticated;
 
-      expect(isOAuthSource(source)).toBe(false);
+      expect(isOAuthSource(source)).toBe(true);
     });
   });
 
@@ -273,7 +281,7 @@ describe('OAuth source filtering', () => {
         api: { baseUrl: 'https://slack.com/api', authType: 'bearer' },
         isAuthenticated: true,
       }),
-      // Unauthenticated Google - should NOT be included
+      // Unauthenticated Google - should be included (isOAuthSource is a type check)
       createMockSource({
         slug: 'google-calendar',
         type: 'api',
@@ -285,7 +293,221 @@ describe('OAuth source filtering', () => {
 
     const oauthSources = sources.filter(isOAuthSource);
 
-    expect(oauthSources.length).toBe(3);
-    expect(oauthSources.map(s => s.config.slug)).toEqual(['linear', 'gmail', 'slack']);
+    expect(oauthSources.length).toBe(4);
+    expect(oauthSources.map(s => s.config.slug)).toEqual(['linear', 'gmail', 'slack', 'google-calendar']);
+  });
+});
+
+// --- TokenRefreshManager tests ---
+
+function createMockCredManager(overrides: Partial<SourceCredentialManager> = {}): SourceCredentialManager {
+  return {
+    load: mock(() => Promise.resolve(null)),
+    refresh: mock(() => Promise.resolve(null)),
+    isExpired: mock(() => true),
+    needsRefresh: mock(() => true),
+    markSourceNeedsReauth: mock(() => {}),
+    ...overrides,
+  } as unknown as SourceCredentialManager;
+}
+
+describe('TokenRefreshManager', () => {
+  beforeEach(() => {
+    mockMarkSourceAuthenticated.mockClear();
+  });
+
+  describe('needsRefresh', () => {
+    test('returns false when credential has no refreshToken', async () => {
+      const credManager = createMockCredManager({
+        load: mock(() => Promise.resolve({
+          value: 'expired-token',
+          expiresAt: Date.now() - 60_000, // expired
+          // no refreshToken
+        })),
+      });
+
+      const manager = new TokenRefreshManager(credManager);
+      const source = createMockSource({
+        type: 'mcp',
+        provider: 'linear',
+        mcp: { url: 'https://linear.example.com', authType: 'oauth' },
+        isAuthenticated: false,
+      });
+
+      expect(await manager.needsRefresh(source)).toBe(false);
+    });
+
+    test('returns true when credential has refreshToken and is expired', async () => {
+      const credManager = createMockCredManager({
+        load: mock(() => Promise.resolve({
+          value: 'expired-token',
+          refreshToken: 'refresh-token-123',
+          expiresAt: Date.now() - 60_000,
+        })),
+        isExpired: mock(() => true),
+      });
+
+      const manager = new TokenRefreshManager(credManager);
+      const source = createMockSource({
+        type: 'api',
+        provider: 'google',
+        api: { baseUrl: 'https://gmail.googleapis.com', authType: 'bearer' },
+        isAuthenticated: true,
+      });
+
+      expect(await manager.needsRefresh(source)).toBe(true);
+    });
+  });
+
+  describe('getSourcesNeedingRefresh', () => {
+    test('includes isAuthenticated: false source with refresh token', async () => {
+      const credManager = createMockCredManager({
+        load: mock(() => Promise.resolve({
+          value: 'expired-token',
+          refreshToken: 'refresh-123',
+          expiresAt: Date.now() - 60_000,
+        })),
+        isExpired: mock(() => true),
+      });
+
+      const manager = new TokenRefreshManager(credManager);
+      const source = createMockSource({
+        slug: 'craft-mcp',
+        type: 'mcp',
+        provider: 'craft',
+        mcp: { url: 'https://mcp.craft.do/my/mcp', authType: 'oauth' },
+        isAuthenticated: false,
+      });
+
+      const result = await manager.getSourcesNeedingRefresh([source]);
+      expect(result.length).toBe(1);
+      expect(result[0]!.config.slug).toBe('craft-mcp');
+    });
+
+    test('excludes source without refresh token', async () => {
+      const credManager = createMockCredManager({
+        load: mock(() => Promise.resolve({
+          value: 'expired-token',
+          expiresAt: Date.now() - 60_000,
+          // no refreshToken
+        })),
+        isExpired: mock(() => true),
+      });
+
+      const manager = new TokenRefreshManager(credManager);
+      const source = createMockSource({
+        slug: 'craft-mcp',
+        type: 'mcp',
+        provider: 'craft',
+        mcp: { url: 'https://mcp.craft.do/my/mcp', authType: 'oauth' },
+        isAuthenticated: false,
+      });
+
+      const result = await manager.getSourcesNeedingRefresh([source]);
+      expect(result.length).toBe(0);
+    });
+  });
+
+  describe('ensureFreshToken', () => {
+    test('restores isAuthenticated on successful refresh', async () => {
+      const credManager = createMockCredManager({
+        load: mock(() => Promise.resolve({
+          value: 'expired-token',
+          refreshToken: 'refresh-123',
+          expiresAt: Date.now() - 60_000,
+        })),
+        isExpired: mock(() => true),
+        refresh: mock(() => Promise.resolve('new-fresh-token')),
+      });
+
+      const manager = new TokenRefreshManager(credManager);
+      const source = createMockSource({
+        slug: 'craft-mcp',
+        type: 'mcp',
+        provider: 'craft',
+        mcp: { url: 'https://mcp.craft.do/my/mcp', authType: 'oauth' },
+        isAuthenticated: false,
+        connectionStatus: 'needs_auth',
+        connectionError: 'Token expired',
+      });
+
+      const result = await manager.ensureFreshToken(source);
+
+      expect(result.success).toBe(true);
+      expect(result.token).toBe('new-fresh-token');
+      expect(source.config.isAuthenticated).toBe(true);
+      expect(source.config.connectionStatus).toBe('connected');
+      expect(source.config.connectionError).toBeUndefined();
+      expect(mockMarkSourceAuthenticated).toHaveBeenCalledWith('/mock/workspace', 'craft-mcp');
+    });
+
+    test('does NOT restore auth on failed refresh', async () => {
+      const credManager = createMockCredManager({
+        load: mock(() => Promise.resolve({
+          value: 'expired-token',
+          refreshToken: 'refresh-123',
+          expiresAt: Date.now() - 60_000,
+        })),
+        isExpired: mock(() => true),
+        refresh: mock(() => Promise.resolve(null)),
+      });
+
+      const manager = new TokenRefreshManager(credManager);
+      const source = createMockSource({
+        slug: 'craft-mcp',
+        type: 'mcp',
+        provider: 'craft',
+        mcp: { url: 'https://mcp.craft.do/my/mcp', authType: 'oauth' },
+        isAuthenticated: false,
+        connectionStatus: 'needs_auth',
+      });
+
+      const result = await manager.ensureFreshToken(source);
+
+      expect(result.success).toBe(false);
+      expect(source.config.isAuthenticated).toBe(false);
+      expect(mockMarkSourceAuthenticated).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('end-to-end', () => {
+    test('expired source recovered without re-auth', async () => {
+      const credManager = createMockCredManager({
+        load: mock(() => Promise.resolve({
+          value: 'expired-token',
+          refreshToken: 'refresh-123',
+          expiresAt: Date.now() - 60_000,
+        })),
+        isExpired: mock(() => true),
+        needsRefresh: mock(() => true),
+        refresh: mock(() => Promise.resolve('fresh-token')),
+      });
+
+      const manager = new TokenRefreshManager(credManager);
+      const source = createMockSource({
+        slug: 'craft-mcp',
+        type: 'mcp',
+        provider: 'craft',
+        mcp: { url: 'https://mcp.craft.do/my/mcp', authType: 'oauth' },
+        isAuthenticated: false,
+        connectionStatus: 'needs_auth',
+        connectionError: 'Token expired',
+      });
+
+      // Step 1: getSourcesNeedingRefresh includes the expired source
+      const needingRefresh = await manager.getSourcesNeedingRefresh([source]);
+      expect(needingRefresh.length).toBe(1);
+
+      // Step 2: refreshSources refreshes and restores auth state
+      const { refreshed, failed } = await manager.refreshSources(needingRefresh);
+      expect(refreshed.length).toBe(1);
+      expect(failed.length).toBe(0);
+
+      // Step 3: Verify auth state is restored
+      expect(source.config.isAuthenticated).toBe(true);
+      expect(source.config.connectionStatus).toBe('connected');
+      expect(source.config.connectionError).toBeUndefined();
+      expect(mockMarkSourceAuthenticated).toHaveBeenCalledWith('/mock/workspace', 'craft-mcp');
+    });
   });
 });

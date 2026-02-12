@@ -291,7 +291,7 @@ function generateMcpServerSection(
     lines.push(`url = ${formatTomlValue(config.url)}`);
 
     if (config.headers && Object.keys(config.headers).length > 0) {
-      lines.push(`headers = ${formatTomlValue(config.headers)}`);
+      lines.push(`http_headers = ${formatTomlValue(config.headers)}`);
     }
 
     // Add bearer token env var if present (Codex-specific auth pattern)
@@ -552,6 +552,16 @@ export function generateCodexConfig(options: CodexConfigGeneratorOptions): Codex
     ));
     sections.push('');
   }
+
+  // Craft Agents documentation - public Mintlify MCP server, no auth needed.
+  // Provides SearchCraftAgents tool for finding source setup guides.
+  // This matches the craft-agents-docs server in Claude's SDK options.
+  sections.push('# Craft Agents documentation (source setup guides, API references)');
+  sections.push('[mcp_servers.craft-agents-docs]');
+  sections.push('url = "https://agents.craft.do/docs/mcp"');
+  sections.push('startup_timeout_sec = 10');
+  sections.push('tool_timeout_sec = 30');
+  sections.push('');
 
   return {
     toml: sections.join('\n'),

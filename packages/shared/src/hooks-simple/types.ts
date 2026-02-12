@@ -171,6 +171,7 @@ export interface SdkHookInput {
   tool_name?: string;
   tool_input?: Record<string, unknown>;
   tool_response?: string;
+  tool_use_id?: string;
   // Session events
   source?: string;  // startup, resume, clear, compact
   model?: string;

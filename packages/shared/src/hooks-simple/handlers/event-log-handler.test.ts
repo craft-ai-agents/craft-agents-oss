@@ -2,25 +2,25 @@
  * Tests for EventLogHandler
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, jest, mock } from 'bun:test';
 import { WorkspaceEventBus } from '../event-bus.ts';
 import { EventLogHandler } from './event-log-handler.ts';
 import type { EventLogHandlerOptions } from './types.ts';
 
 // Track mock logger instances for assertions
 let mockLoggerInstances: Array<{
-  log: ReturnType<typeof vi.fn>;
-  getLogPath: ReturnType<typeof vi.fn>;
-  dispose: ReturnType<typeof vi.fn>;
+  log: jest.Mock;
+  getLogPath: jest.Mock;
+  dispose: jest.Mock;
   onEventLost?: (events: string[], error: Error) => void;
 }> = [];
 
 // Mock the event logger to avoid real file I/O
-vi.mock('../event-logger.ts', () => {
+mock.module('../event-logger.ts', () => {
   class MockHookEventLogger {
-    log = vi.fn();
-    getLogPath = vi.fn().mockReturnValue('/tmp/test-workspace/events.jsonl');
-    dispose = vi.fn().mockResolvedValue(undefined);
+    log = jest.fn();
+    getLogPath = jest.fn().mockReturnValue('/tmp/test-workspace/events.jsonl');
+    dispose = jest.fn().mockResolvedValue(undefined);
     onEventLost?: (events: string[], error: Error) => void;
 
     constructor(_workspaceRootPath: string) {
@@ -45,7 +45,7 @@ describe('EventLogHandler', () => {
   beforeEach(() => {
     bus = new WorkspaceEventBus('test-workspace');
     mockLoggerInstances = [];
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   afterEach(() => {
@@ -149,7 +149,7 @@ describe('EventLogHandler', () => {
 
   describe('onEventLost callback', () => {
     it('should forward onEventLost callback to the logger', () => {
-      const onEventLost = vi.fn();
+      const onEventLost = jest.fn();
       const handler = new EventLogHandler(createOptions({ onEventLost }));
 
       const loggerInstance = mockLoggerInstances[0]!;

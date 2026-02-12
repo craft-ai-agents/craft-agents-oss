@@ -2,7 +2,7 @@
  * Tests for sanitizeForShell() security utility
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { sanitizeForShell } from './security.ts';
 
 describe('sanitizeForShell', () => {

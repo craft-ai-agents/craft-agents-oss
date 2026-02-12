@@ -5,7 +5,7 @@
  * including the fail-closed behavior when no permissions config is provided.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, spyOn } from 'bun:test';
 import {
   isCommandAllowed,
   executeCommand,
@@ -105,7 +105,7 @@ describe('command-executor', () => {
     });
 
     it('should bypass permission checks in allow-all mode', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
       const result = await executeCommand('echo bypassed', {
         env: { ...process.env as Record<string, string> },
         permissionMode: 'allow-all',
@@ -120,7 +120,7 @@ describe('command-executor', () => {
     });
 
     it('should log a warning when allow-all mode is used', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
       await executeCommand('echo test', {
         env: { ...process.env as Record<string, string> },
         permissionMode: 'allow-all',
@@ -133,7 +133,7 @@ describe('command-executor', () => {
     });
 
     it('should handle command failure (non-zero exit)', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
       const result = await executeCommand('exit 1', {
         env: { ...process.env as Record<string, string> },
         permissionMode: 'allow-all',
@@ -143,7 +143,7 @@ describe('command-executor', () => {
     });
 
     it('should respect the cwd option', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
       const result = await executeCommand('pwd', {
         env: { ...process.env as Record<string, string> },
         cwd: '/tmp',
@@ -155,7 +155,7 @@ describe('command-executor', () => {
     });
 
     it('should respect the timeout option', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
       const result = await executeCommand('sleep 10', {
         env: { ...process.env as Record<string, string> },
         timeout: 100,
@@ -166,7 +166,7 @@ describe('command-executor', () => {
     });
 
     it('should pass environment variables to the command', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
       const result = await executeCommand('echo $MY_TEST_VAR', {
         env: { ...process.env as Record<string, string>, MY_TEST_VAR: 'test_value_123' },
         permissionMode: 'allow-all',
@@ -177,7 +177,7 @@ describe('command-executor', () => {
     });
 
     it('should trim stdout and stderr', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
       const result = await executeCommand('echo "  hello  "', {
         env: { ...process.env as Record<string, string> },
         permissionMode: 'allow-all',

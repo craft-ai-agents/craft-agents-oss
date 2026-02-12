@@ -101,7 +101,7 @@ describe('generateCodexConfig', () => {
       expect(result.needsBridge).toBe(false);
       expect(result.toml).toContain('[mcp_servers.my-mcp]');
       expect(result.toml).toContain('url = "https://mcp.example.com"');
-      expect(result.toml).toContain('headers = { Authorization = "Bearer test-token" }');
+      expect(result.toml).toContain('http_headers = { Authorization = "Bearer test-token" }');
     });
 
     it('should include timeouts in config', () => {

@@ -2,7 +2,7 @@
  * Tests for WorkspaceEventBus
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, jest, spyOn } from 'bun:test';
 import { WorkspaceEventBus, type EventHandler, type AnyEventHandler } from './event-bus.ts';
 
 describe('WorkspaceEventBus', () => {
@@ -25,7 +25,7 @@ describe('WorkspaceEventBus', () => {
 
   describe('emit', () => {
     it('should emit events to registered handlers', async () => {
-      const handler = vi.fn();
+      const handler = jest.fn();
       bus.on('LabelAdd', handler);
 
       await bus.emit('LabelAdd', {
@@ -42,8 +42,8 @@ describe('WorkspaceEventBus', () => {
     });
 
     it('should emit to multiple handlers for the same event', async () => {
-      const handler1 = vi.fn();
-      const handler2 = vi.fn();
+      const handler1 = jest.fn();
+      const handler2 = jest.fn();
       bus.on('LabelAdd', handler1);
       bus.on('LabelAdd', handler2);
 
@@ -59,8 +59,8 @@ describe('WorkspaceEventBus', () => {
     });
 
     it('should not emit to handlers for different events', async () => {
-      const labelHandler = vi.fn();
-      const flagHandler = vi.fn();
+      const labelHandler = jest.fn();
+      const flagHandler = jest.fn();
       bus.on('LabelAdd', labelHandler);
       bus.on('FlagChange', flagHandler);
 
@@ -76,8 +76,8 @@ describe('WorkspaceEventBus', () => {
     });
 
     it('should catch and log handler errors without stopping other handlers', async () => {
-      const errorHandler = vi.fn().mockRejectedValue(new Error('Test error'));
-      const successHandler = vi.fn();
+      const errorHandler = jest.fn().mockRejectedValue(new Error('Test error'));
+      const successHandler = jest.fn();
       bus.on('LabelAdd', errorHandler);
       bus.on('LabelAdd', successHandler);
 
@@ -94,7 +94,7 @@ describe('WorkspaceEventBus', () => {
     });
 
     it('should not emit after disposal', async () => {
-      const handler = vi.fn();
+      const handler = jest.fn();
       bus.on('LabelAdd', handler);
       bus.dispose();
 
@@ -111,13 +111,13 @@ describe('WorkspaceEventBus', () => {
 
   describe('on/off', () => {
     it('should register handlers', () => {
-      const handler = vi.fn();
+      const handler = jest.fn();
       bus.on('LabelAdd', handler);
       expect(bus.getHandlerCount('LabelAdd')).toBe(1);
     });
 
     it('should unregister handlers', async () => {
-      const handler = vi.fn();
+      const handler = jest.fn();
       bus.on('LabelAdd', handler);
       bus.off('LabelAdd', handler);
 
@@ -133,7 +133,7 @@ describe('WorkspaceEventBus', () => {
 
     it('should not register handlers after disposal', () => {
       bus.dispose();
-      const handler = vi.fn();
+      const handler = jest.fn();
       bus.on('LabelAdd', handler);
       expect(bus.getHandlerCount('LabelAdd')).toBe(0);
     });
@@ -141,7 +141,7 @@ describe('WorkspaceEventBus', () => {
 
   describe('onAny/offAny', () => {
     it('should receive all events', async () => {
-      const anyHandler = vi.fn();
+      const anyHandler = jest.fn();
       bus.onAny(anyHandler);
 
       await bus.emit('LabelAdd', {
@@ -164,7 +164,7 @@ describe('WorkspaceEventBus', () => {
     });
 
     it('should unregister any-handlers', async () => {
-      const anyHandler = vi.fn();
+      const anyHandler = jest.fn();
       bus.onAny(anyHandler);
       bus.offAny(anyHandler);
 
@@ -181,9 +181,9 @@ describe('WorkspaceEventBus', () => {
 
   describe('dispose', () => {
     it('should clear all handlers', () => {
-      bus.on('LabelAdd', vi.fn());
-      bus.on('FlagChange', vi.fn());
-      bus.onAny(vi.fn());
+      bus.on('LabelAdd', jest.fn());
+      bus.on('FlagChange', jest.fn());
+      bus.onAny(jest.fn());
 
       expect(bus.getHandlerCount()).toBeGreaterThan(0);
 
@@ -216,7 +216,7 @@ describe('WorkspaceEventBus', () => {
     });
 
     it('should drop events exceeding rate limit (10/min for normal events)', async () => {
-      const handler = vi.fn();
+      const handler = jest.fn();
       bus.on('LabelAdd', handler);
 
       for (let i = 0; i < 15; i++) {
@@ -227,7 +227,7 @@ describe('WorkspaceEventBus', () => {
     });
 
     it('should allow SchedulerTick up to 60/min', async () => {
-      const handler = vi.fn();
+      const handler = jest.fn();
       bus.on('SchedulerTick', handler);
 
       for (let i = 0; i < 65; i++) {
@@ -238,9 +238,9 @@ describe('WorkspaceEventBus', () => {
     });
 
     it('should reset rate window after 60s', async () => {
-      vi.useFakeTimers();
+      jest.useFakeTimers();
       try {
-        const handler = vi.fn();
+        const handler = jest.fn();
         bus.on('LabelAdd', handler);
 
         // Exhaust the limit
@@ -254,19 +254,19 @@ describe('WorkspaceEventBus', () => {
         expect(handler).toHaveBeenCalledTimes(10);
 
         // Advance past the window
-        vi.advanceTimersByTime(61_000);
+        jest.advanceTimersByTime(61_000);
 
         // Should fire again
         await bus.emit('LabelAdd', labelPayload());
         expect(handler).toHaveBeenCalledTimes(11);
       } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
       }
     });
 
     it('should rate limit per-event-type independently', async () => {
-      const labelHandler = vi.fn();
-      const flagHandler = vi.fn();
+      const labelHandler = jest.fn();
+      const flagHandler = jest.fn();
       bus.on('LabelAdd', labelHandler);
       bus.on('FlagChange', flagHandler);
 
@@ -288,8 +288,8 @@ describe('WorkspaceEventBus', () => {
     });
 
     it('should log warning when rate limited', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const handler = vi.fn();
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+      const handler = jest.fn();
       bus.on('LabelAdd', handler);
 
       for (let i = 0; i < 11; i++) {
@@ -305,9 +305,9 @@ describe('WorkspaceEventBus', () => {
 
   describe('getHandlerCount', () => {
     it('should return count for specific event', () => {
-      bus.on('LabelAdd', vi.fn());
-      bus.on('LabelAdd', vi.fn());
-      bus.on('FlagChange', vi.fn());
+      bus.on('LabelAdd', jest.fn());
+      bus.on('LabelAdd', jest.fn());
+      bus.on('FlagChange', jest.fn());
 
       expect(bus.getHandlerCount('LabelAdd')).toBe(2);
       expect(bus.getHandlerCount('FlagChange')).toBe(1);
@@ -315,9 +315,9 @@ describe('WorkspaceEventBus', () => {
     });
 
     it('should return total count without argument', () => {
-      bus.on('LabelAdd', vi.fn());
-      bus.on('FlagChange', vi.fn());
-      bus.onAny(vi.fn());
+      bus.on('LabelAdd', jest.fn());
+      bus.on('FlagChange', jest.fn());
+      bus.onAny(jest.fn());
 
       expect(bus.getHandlerCount()).toBe(3);
     });

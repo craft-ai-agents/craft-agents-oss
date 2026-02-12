@@ -2,7 +2,7 @@
  * Tests for sdk-bridge.ts
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { buildEnvFromSdkInput } from './sdk-bridge.ts';
 import type { SdkHookInput } from './types.ts';
 

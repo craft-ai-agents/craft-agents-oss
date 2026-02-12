@@ -177,6 +177,11 @@ export class CodexAgent extends BaseAgent {
 
   // State
   private _isProcessing: boolean = false;
+  private _pendingReconnect: boolean = false;
+  /** Resolves when the deferred reconnect completes. Multiple queueReconnect() calls
+   *  reuse the same promise so no resolver is orphaned. */
+  private _reconnectPromise: Promise<void> | null = null;
+  private _resolveReconnectPromise: (() => void) | null = null;
   private abortReason?: AbortReason;
   private codexThreadId: string | null = null; // For session resume
   private currentTurnId: string | null = null;
@@ -1649,6 +1654,26 @@ export class CodexAgent extends BaseAgent {
     attachments?: FileAttachment[],
     _options?: ChatOptions
   ): AsyncGenerator<AgentEvent> {
+    // Wait for any in-flight reconnect to complete before starting the new turn.
+    // This prevents the race where auth completes mid-turn, queueReconnect defers,
+    // and the next turn starts before the reconnect finishes.
+    // Timeout after 30s to avoid deadlocking the session if reconnect hangs.
+    if (this._reconnectPromise) {
+      this.debug('Waiting for pending reconnect before starting turn...');
+      const timeout = new Promise<void>(resolve =>
+        setTimeout(() => {
+          this.debug('Pending reconnect timed out after 30s, proceeding anyway');
+          resolve();
+        }, 30_000)
+      );
+      await Promise.race([this._reconnectPromise, timeout]);
+      // Clean up stale state in case timeout won
+      this._reconnectPromise = null;
+      this._resolveReconnectPromise = null;
+      this._pendingReconnect = false;
+      this.debug('Pending reconnect resolved, proceeding with turn');
+    }
+
     this._isProcessing = true;
     this.abortReason = undefined;
     this.turnComplete = false;
@@ -1842,6 +1867,23 @@ export class CodexAgent extends BaseAgent {
       yield { type: 'complete' };
     } finally {
       this._isProcessing = false;
+
+      // Execute deferred reconnect if one was queued during this turn
+      if (this._pendingReconnect) {
+        this._pendingReconnect = false;
+        this.debug('Executing deferred reconnect...');
+        try {
+          await this.reconnect();
+          this.debug('Deferred reconnect completed');
+        } catch (err) {
+          this.debug(`Deferred reconnect failed: ${err instanceof Error ? err.stack ?? err.message : err}`);
+        } finally {
+          // Resolve the promise so waiters (next chat() turn) can proceed
+          this._resolveReconnectPromise?.();
+          this._reconnectPromise = null;
+          this._resolveReconnectPromise = null;
+        }
+      }
     }
   }
 
@@ -2275,6 +2317,29 @@ export class CodexAgent extends BaseAgent {
         this.config.onSdkSessionIdCleared?.();
       }
     }
+  }
+
+  /**
+   * Queue a reconnect. If not processing, reconnects immediately.
+   * If processing, defers until the current turn completes.
+   * Safe to call multiple times — reuses the same deferred promise.
+   */
+  async queueReconnect(): Promise<void> {
+    if (this._isProcessing) {
+      this._pendingReconnect = true;
+      // Reuse the existing promise if one is already queued, so multiple callers
+      // all wait on the same reconnect and no resolver is orphaned.
+      if (!this._reconnectPromise) {
+        this._reconnectPromise = new Promise(resolve => {
+          this._resolveReconnectPromise = resolve;
+        });
+        this.debug('Reconnect queued (will execute after turn completes)');
+      } else {
+        this.debug('Reconnect already queued, reusing existing promise');
+      }
+      return;
+    }
+    await this.reconnect();
   }
 
   // ============================================================

@@ -786,11 +786,16 @@ export class ClaudeAgent extends BaseAgent {
           // Internal hooks for permission handling and logging
           const internalHooks: Record<string, SdkHookCallbackMatcher[]> = {
           PreToolUse: [{
-            hooks: [async (input) => {
+            hooks: [async (_hookInput) => {
               // Only handle PreToolUse events
-              if (input.hook_event_name !== 'PreToolUse') {
+              if (_hookInput.hook_event_name !== 'PreToolUse') {
                 return { continue: true };
               }
+              // Validate the fields we depend on are actually present
+              if (!_hookInput.tool_name || !_hookInput.tool_use_id) {
+                return { continue: true };
+              }
+              const input = _hookInput as Required<Pick<typeof _hookInput, 'tool_name' | 'tool_use_id'>> & typeof _hookInput;
 
               // Get current permission mode (single source of truth)
               const permissionMode = getPermissionMode(sessionId);
@@ -1268,10 +1273,10 @@ export class ClaudeAgent extends BaseAgent {
           // Merge internal hooks with user hooks from hooks.json
           // Internal hooks run first (permissions), then user hooks
           const mergedHooks: Record<string, SdkHookCallbackMatcher[]> = { ...internalHooks };
-          for (const [event, matchers] of Object.entries(userHooks)) {
+          for (const [event, matchers] of Object.entries(userHooks) as [string, SdkHookCallbackMatcher[]][]) {
             if (mergedHooks[event]) {
               // Append user hooks after internal hooks
-              mergedHooks[event] = [...mergedHooks[event], ...matchers];
+              mergedHooks[event] = [...mergedHooks[event]!, ...matchers];
             } else {
               // Add new event hooks
               mergedHooks[event] = matchers;
