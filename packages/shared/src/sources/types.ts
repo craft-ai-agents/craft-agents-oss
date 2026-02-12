@@ -183,12 +183,8 @@ export function isApiOAuthProvider(provider: string | undefined): provider is Ap
  * Returns true for:
  * - MCP sources with authType: 'oauth'
  * - API sources with OAuth providers (google, slack, microsoft)
- *
- * Only returns true if the source is authenticated (has tokens to refresh).
  */
 export function isOAuthSource(source: LoadedSource): boolean {
-  if (!source.config.isAuthenticated) return false;
-
   // MCP OAuth sources
   if (source.config.type === 'mcp') {
     return source.config.mcp?.authType === 'oauth';

@@ -13,6 +13,7 @@
 
 import { isOAuthSource, type LoadedSource } from './types.ts';
 import type { SourceCredentialManager } from './credential-manager.ts';
+import { markSourceAuthenticated } from './storage.ts';
 
 /** Default cooldown after failed refresh (5 minutes) */
 const DEFAULT_COOLDOWN_MS = 5 * 60 * 1000;
@@ -87,6 +88,7 @@ export class TokenRefreshManager {
   async needsRefresh(source: LoadedSource): Promise<boolean> {
     const cred = await this.credManager.load(source);
     if (!cred) return false;
+    if (!cred.refreshToken) return false;
     // If no expiresAt, we can't determine token lifetime — proactively refresh.
     // This handles credentials stored before expiresAt defaulting was added.
     // After refresh, the new credential will have expiresAt set, preventing refresh every turn.
@@ -136,6 +138,13 @@ export class TokenRefreshManager {
       if (token) {
         this.log(`[TokenRefresh] Successfully refreshed token for ${slug}`);
         this.clearFailure(slug);
+
+        // Restore auth state — undoes markSourceNeedsReauth() from startup
+        markSourceAuthenticated(source.workspaceRootPath, source.config.slug);
+        source.config.isAuthenticated = true;
+        source.config.connectionStatus = 'connected';
+        source.config.connectionError = undefined;
+
         return { success: true, token };
       } else {
         const reason = 'Refresh returned null';
