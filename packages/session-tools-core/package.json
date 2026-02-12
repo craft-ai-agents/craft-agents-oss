@@ -1,6 +1,6 @@
 {
   "name": "@g4os/session-tools-core",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "Shared utilities for session-scoped tools (Claude and Codex)",
   "type": "module",
   "main": "src/index.ts",

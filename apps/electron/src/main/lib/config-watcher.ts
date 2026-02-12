@@ -37,9 +37,11 @@ import {
   downloadSourceIcon,
 } from '@g4os/shared/sources';
 import { permissionsConfigCache, getAppPermissionsDir } from '@g4os/shared/agent';
-import { getWorkspacePath, getWorkspaceSourcesPath, getWorkspaceSkillsPath } from '@g4os/shared/workspaces';
+import { getWorkspacePath, getWorkspaceSourcesPath, getWorkspaceSkillsPath, getWorkspaceWorkflowsPath } from '@g4os/shared/workspaces';
 import type { LoadedSkill } from '@g4os/shared/skills';
 import { loadSkill, loadWorkspaceSkills, skillNeedsIconDownload, downloadSkillIcon } from '@g4os/shared/skills';
+import type { LoadedWorkflow } from '@g4os/shared/workflows';
+import { loadWorkflow, loadWorkspaceWorkflows, workflowNeedsIconDownload, downloadWorkflowIcon } from '@g4os/shared/workflows';
 import {
   loadStatusConfig,
   statusNeedsIconDownload,
@@ -101,6 +103,12 @@ export interface ConfigWatcherCallbacks {
   onSkillChange?: (slug: string, skill: LoadedSkill | null) => void;
   /** Called when the skills list changes (add/remove folders) */
   onSkillsListChange?: (skills: LoadedSkill[]) => void;
+
+  // Workflow callbacks
+  /** Called when a specific workflow changes (null if deleted) */
+  onWorkflowChange?: (slug: string, workflow: LoadedWorkflow | null) => void;
+  /** Called when the workflows list changes (add/remove folders) */
+  onWorkflowsListChange?: (workflows: LoadedWorkflow[]) => void;
 
   // Permissions callbacks
   /** Called when app-level default permissions change (~/.g4os/permissions/default.json) */
@@ -173,12 +181,14 @@ export class ConfigWatcher {
   // Track known items for detecting adds/removes
   private knownSources: Set<string> = new Set();
   private knownSkills: Set<string> = new Set();
+  private knownWorkflows: Set<string> = new Set();
   private knownThemes: Set<string> = new Set();
 
   // Computed paths
   private workspaceDir: string;
   private sourcesDir: string;
   private skillsDir: string;
+  private workflowsDir: string;
 
   constructor(workspaceIdOrPath: string, callbacks: ConfigWatcherCallbacks) {
     this.callbacks = callbacks;
@@ -195,6 +205,7 @@ export class ConfigWatcher {
     }
     this.sourcesDir = getWorkspaceSourcesPath(this.workspaceDir);
     this.skillsDir = getWorkspaceSkillsPath(this.workspaceDir);
+    this.workflowsDir = getWorkspaceWorkflowsPath(this.workspaceDir);
   }
 
   /**
@@ -246,6 +257,9 @@ export class ConfigWatcher {
     this.scanSkills();
     span.mark('scanSkills');
 
+    this.scanWorkflows();
+    span.mark('scanWorkflows');
+
     this.scanAppThemes();
     span.mark('scanAppThemes');
 
@@ -277,6 +291,7 @@ export class ConfigWatcher {
 
     this.knownSources.clear();
     this.knownSkills.clear();
+    this.knownWorkflows.clear();
     this.knownThemes.clear();
 
     debug('[ConfigWatcher] Stopped');
@@ -386,6 +401,29 @@ export class ConfigWatcher {
       } else if (file && /^icon\.(svg|png|jpg|jpeg)$/i.test(file)) {
         // Icon file changes also trigger a skill change (to update iconPath)
         this.debounce(`skill-icon:${slug}`, () => this.handleSkillChange(slug));
+      }
+      return;
+    }
+
+    // Workflows changes: workflows/{slug}/...
+    if (parts[0] === 'workflows' && parts.length >= 2) {
+      const slug = parts[1]!;  // Safe: checked parts.length >= 2
+      const file = parts[2];
+
+      // Directory-level changes (new/removed workflow folders)
+      if (parts.length === 2) {
+        this.debounce('workflows-dir', () => this.handleWorkflowsDirChange());
+        return;
+      }
+
+      // File-level changes
+      if (file === 'WORKFLOW.md') {
+        this.debounce(`workflow:${slug}`, () => this.handleWorkflowChange(slug));
+      } else if (file && /^icon\.(svg|png|jpg|jpeg)$/i.test(file)) {
+        this.debounce(`workflow-icon:${slug}`, () => this.handleWorkflowChange(slug));
+      } else if (parts[2] === 'knowledge') {
+        // Knowledge file changes trigger a workflow reload
+        this.debounce(`workflow-knowledge:${slug}`, () => this.handleWorkflowChange(slug));
       }
       return;
     }
@@ -736,6 +774,123 @@ export class ConfigWatcher {
         })
         .catch((error) => {
           debug('[ConfigWatcher] Icon download failed for skill:', slug, error);
+        });
+    }
+  }
+
+  // ============================================================
+  // Workflows Handlers
+  // ============================================================
+
+  /**
+   * Scan workflows directory to populate known workflows
+   */
+  private scanWorkflows(): void {
+    if (!existsSync(this.workflowsDir)) {
+      mkdirSync(this.workflowsDir, { recursive: true });
+      return;
+    }
+
+    try {
+      const entries = readdirSync(this.workflowsDir);
+
+      for (const entry of entries) {
+        const entryPath = join(this.workflowsDir, entry);
+        if (statSync(entryPath).isDirectory()) {
+          this.knownWorkflows.add(entry);
+        }
+      }
+
+      debug('[ConfigWatcher] Known workflows:', Array.from(this.knownWorkflows));
+    } catch (error) {
+      debug('[ConfigWatcher] Error scanning workflows:', error);
+    }
+  }
+
+  /**
+   * Handle workflows directory change (add/remove folders)
+   */
+  private handleWorkflowsDirChange(): void {
+    debug('[ConfigWatcher] Workflows directory changed');
+
+    if (!existsSync(this.workflowsDir)) {
+      // Directory was deleted
+      const removed = Array.from(this.knownWorkflows);
+      this.knownWorkflows.clear();
+
+      for (const slug of removed) {
+        this.callbacks.onWorkflowChange?.(slug, null);
+      }
+
+      this.callbacks.onWorkflowsListChange?.([]);
+      return;
+    }
+
+    try {
+      const entries = readdirSync(this.workflowsDir);
+      const currentFolders = new Set<string>();
+
+      for (const entry of entries) {
+        const entryPath = join(this.workflowsDir, entry);
+        if (statSync(entryPath).isDirectory()) {
+          currentFolders.add(entry);
+        }
+      }
+
+      // Find added folders
+      for (const folder of currentFolders) {
+        if (!this.knownWorkflows.has(folder)) {
+          debug('[ConfigWatcher] New workflow folder:', folder);
+          this.knownWorkflows.add(folder);
+
+          const workflow = loadWorkflow(this.workspaceDir, folder);
+          if (workflow) {
+            this.callbacks.onWorkflowChange?.(folder, workflow);
+          }
+        }
+      }
+
+      // Find removed folders
+      for (const folder of this.knownWorkflows) {
+        if (!currentFolders.has(folder)) {
+          debug('[ConfigWatcher] Removed workflow folder:', folder);
+          this.knownWorkflows.delete(folder);
+          this.callbacks.onWorkflowChange?.(folder, null);
+        }
+      }
+
+      // Notify list change
+      const allWorkflows = loadWorkspaceWorkflows(this.workspaceDir);
+      this.callbacks.onWorkflowsListChange?.(allWorkflows);
+    } catch (error) {
+      debug('[ConfigWatcher] Error handling workflows dir change:', error);
+      this.callbacks.onError?.('workflows/', error as Error);
+    }
+  }
+
+  /**
+   * Handle workflow WORKFLOW.md, icon, or knowledge file change.
+   */
+  private handleWorkflowChange(slug: string): void {
+    debug('[ConfigWatcher] Workflow changed:', slug);
+
+    const workflow = loadWorkflow(this.workspaceDir, slug);
+    this.callbacks.onWorkflowChange?.(slug, workflow);
+
+    // Check if we need to download an icon from URL
+    if (workflow && workflowNeedsIconDownload(workflow)) {
+      debug('[ConfigWatcher] Workflow needs icon download:', slug, workflow.metadata.icon);
+
+      downloadWorkflowIcon(workflow.path, workflow.metadata.icon!)
+        .then((iconPath) => {
+          if (iconPath) {
+            const updatedWorkflow = loadWorkflow(this.workspaceDir, slug);
+            debug('[ConfigWatcher] Icon downloaded, emitting updated workflow:', slug);
+            this.callbacks.onWorkflowChange?.(slug, updatedWorkflow);
+          }
+        })
+        .catch((error) => {
+          debug('[ConfigWatcher] Icon download failed for workflow:', slug, error);
         });
     }
   }

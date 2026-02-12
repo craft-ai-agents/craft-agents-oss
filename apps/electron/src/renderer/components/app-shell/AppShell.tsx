@@ -27,6 +27,7 @@ import {
   ExternalLink,
   BookOpen,
   Clock,
+  Workflow,
 } from "lucide-react"
 import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
@@ -83,10 +84,11 @@ import { useFocusZone } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useSetAtom } from "jotai"
-import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter } from "../../../shared/types"
+import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, LoadedWorkflow, PermissionMode, SourceFilter } from "../../../shared/types"
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
+import { workflowsAtom } from "@/atoms/workflows"
 import { type TodoStateId, type TodoState, statusConfigsToTodoStates } from "@/config/todo-states"
 import { useStatuses } from "@/hooks/useStatuses"
 import { useLabels } from "@/hooks/useLabels"
@@ -106,6 +108,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isWorkflowsNavigation,
   isSchedulerNavigation,
   type NavigationState,
   type SessionFilter,
@@ -113,6 +116,7 @@ import {
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
+import { WorkflowsListPanel } from "./WorkflowsListPanel"
 import { PanelHeader } from "./PanelHeader"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import { getDocUrl } from "@g4os/shared/docs/doc-links"
@@ -748,6 +752,15 @@ function AppShellContent({
   React.useEffect(() => {
     setSkillsAtom(skills)
   }, [skills, setSkillsAtom])
+
+  // Workflows state (workspace-scoped)
+  const [workflows, setWorkflows] = React.useState<LoadedWorkflow[]>([])
+  // Sync workflows to atom for NavigationContext auto-selection
+  const setWorkflowsAtom = useSetAtom(workflowsAtom)
+  React.useEffect(() => {
+    setWorkflowsAtom(workflows)
+  }, [workflows, setWorkflowsAtom])
+
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
 
@@ -842,6 +855,24 @@ function AppShellContent({
   React.useEffect(() => {
     const cleanup = window.electronAPI.onSkillsChanged?.((updatedSkills) => {
       setSkills(updatedSkills || [])
+    })
+    return cleanup
+  }, [])
+
+  // Load workflows from backend on mount
+  React.useEffect(() => {
+    if (!activeWorkspaceId) return
+    window.electronAPI.getWorkflows(activeWorkspaceId).then((loaded) => {
+      setWorkflows(loaded || [])
+    }).catch(err => {
+      console.error('[Chat] Failed to load workflows:', err)
+    })
+  }, [activeWorkspaceId])
+
+  // Subscribe to live workflow updates (when workflows are added/removed dynamically)
+  React.useEffect(() => {
+    const cleanup = window.electronAPI.onWorkflowsChanged?.((updatedWorkflows) => {
+      setWorkflows(updatedWorkflows || [])
     })
     return cleanup
   }, [])
@@ -983,6 +1014,12 @@ function AppShellContent({
   const handleSkillSelect = React.useCallback((skill: LoadedSkill) => {
     if (!activeWorkspaceId) return
     navigate(routes.view.skills(skill.slug))
+  }, [activeWorkspaceId, navigate])
+
+  // Handle selecting a workflow from the list
+  const handleWorkflowSelect = React.useCallback((workflow: LoadedWorkflow) => {
+    if (!activeWorkspaceId) return
+    navigate(routes.view.workflows(workflow.slug))
   }, [activeWorkspaceId, navigate])
 
   // Focus zone management
@@ -1565,6 +1602,11 @@ function AppShellContent({
     navigate(routes.view.skills())
   }, [])
 
+  // Handler for workflows view
+  const handleWorkflowsClick = useCallback(() => {
+    navigate(routes.view.workflows())
+  }, [])
+
   // Handler for scheduler view
   const handleSchedulerClick = useCallback(() => {
     navigate(routes.view.scheduler())
@@ -1731,6 +1773,18 @@ function AppShellContent({
     }
   }, [activeWorkspace])
 
+  // Delete Workflow
+  const handleDeleteWorkflow = useCallback(async (workflowSlug: string) => {
+    if (!activeWorkspace) return
+    try {
+      await window.electronAPI.deleteWorkflow(activeWorkspace.id, workflowSlug)
+      toast.success(`Deleted workflow: ${workflowSlug}`)
+    } catch (error) {
+      console.error('[Chat] Failed to delete workflow:', error)
+      toast.error('Failed to delete workflow')
+    }
+  }, [activeWorkspace])
+
   // Respond to menu bar "New Chat" trigger
   const menuTriggerRef = useRef(menuNewChatTrigger)
   useEffect(() => {
@@ -1777,11 +1831,12 @@ function AppShellContent({
     // 3. Sources, Skills, Settings
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
+    result.push({ id: 'nav:workflows', type: 'nav', action: handleWorkflowsClick })
     result.push({ id: 'nav:scheduler', type: 'nav', action: handleSchedulerClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleTodoStateClick, effectiveTodoStates, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleSchedulerClick, handleSettingsClick])
+  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleTodoStateClick, effectiveTodoStates, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleWorkflowsClick, handleSchedulerClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1898,6 +1953,10 @@ function AppShellContent({
     // Skills navigator
     if (isSkillsNavigation(navState)) {
       return 'All Skills'
+    }
+
+    if (isWorkflowsNavigation(navState)) {
+      return t('sidebar.nav.workflows')
     }
 
     // Settings navigator
@@ -2239,6 +2298,14 @@ function AppShellContent({
                         type: 'skills',
                         onAddSkill: openAddSkill,
                       },
+                    },
+                    {
+                      id: "nav:workflows",
+                      title: t('sidebar.nav.workflows'),
+                      label: String(workflows.length),
+                      icon: Workflow,
+                      variant: isWorkflowsNavigation(navState) ? "default" : "ghost",
+                      onClick: handleWorkflowsClick,
                     },
                     // --- Scheduler ---
                     {
@@ -2962,6 +3029,17 @@ function AppShellContent({
                 onSkillClick={handleSkillSelect}
                 onDeleteSkill={handleDeleteSkill}
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
+              />
+            )}
+            {isWorkflowsNavigation(navState) && activeWorkspaceId && (
+              /* Workflows List */
+              <WorkflowsListPanel
+                workflows={workflows}
+                workspaceId={activeWorkspaceId}
+                workspaceRootPath={activeWorkspace?.rootPath}
+                onWorkflowClick={handleWorkflowSelect}
+                onDeleteWorkflow={handleDeleteWorkflow}
+                selectedWorkflowSlug={isWorkflowsNavigation(navState) && navState.details?.type === 'workflow' ? navState.details.workflowSlug : null}
               />
             )}
             {isSettingsNavigation(navState) && (

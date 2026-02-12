@@ -87,6 +87,14 @@ export function getWorkspaceSkillsPath(rootPath: string): string {
   return join(rootPath, 'skills');
 }
 
+/**
+ * Get path to workspace workflows directory
+ * @param rootPath - Absolute path to workspace root folder
+ */
+export function getWorkspaceWorkflowsPath(rootPath: string): string {
+  return join(rootPath, 'workflows');
+}
+
 // ============================================================
 // Config Operations
 // ============================================================
@@ -184,6 +192,12 @@ export function loadWorkspace(rootPath: string): LoadedWorkspace | null {
   const skillsPath = getWorkspaceSkillsPath(rootPath);
   if (!existsSync(skillsPath)) {
     mkdirSync(skillsPath, { recursive: true });
+  }
+
+  // Ensure workflows directory exists (migration for existing workspaces)
+  const workflowsPath = getWorkspaceWorkflowsPath(rootPath);
+  if (!existsSync(workflowsPath)) {
+    mkdirSync(workflowsPath, { recursive: true });
   }
 
   return {
@@ -306,6 +320,19 @@ function copyBundledWorkspaceDefaults(rootPath: string): void {
             sourceConfig.id = `${dir.name}_${randomUUID().slice(0, 8)}`;
             sourceConfig.createdAt = now;
             sourceConfig.updatedAt = now;
+
+            // Resolve path placeholders in MCP config
+            if (sourceConfig.mcp?.args) {
+              sourceConfig.mcp.args = sourceConfig.mcp.args.map((arg: string) =>
+                arg.replace(/\{\{SOURCE_DIR\}\}/g, target)
+              );
+            }
+            if (sourceConfig.mcp?.command) {
+              sourceConfig.mcp.command = sourceConfig.mcp.command.replace(
+                /\{\{SOURCE_DIR\}\}/g, target
+              );
+            }
+
             writeFileSync(configPath, JSON.stringify(sourceConfig, null, 2));
           } catch {
             // Non-fatal: source config stays as template
@@ -365,6 +392,7 @@ export function createWorkspaceAtPath(
   mkdirSync(getWorkspaceSourcesPath(rootPath), { recursive: true });
   mkdirSync(getWorkspaceSessionsPath(rootPath), { recursive: true });
   mkdirSync(getWorkspaceSkillsPath(rootPath), { recursive: true });
+  mkdirSync(getWorkspaceWorkflowsPath(rootPath), { recursive: true });
 
   // Save config
   saveWorkspaceConfig(rootPath, config);

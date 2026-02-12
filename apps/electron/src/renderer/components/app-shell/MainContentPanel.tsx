@@ -29,6 +29,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isWorkflowsNavigation,
   isSchedulerNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
@@ -36,6 +37,7 @@ import { extractLabelId } from '@g4os/shared/labels'
 import type { TodoStateId } from '@/config/todo-states'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
+import WorkflowInfoPage from '@/pages/WorkflowInfoPage'
 import ScheduledJobsPage from '@/pages/settings/ScheduledJobsPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { useLocale } from '@/context/LocaleContext'
@@ -195,6 +197,28 @@ export function MainContentPanel({
       <Panel variant="grow" className={className}>
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">{t('content.empty.noSkillsConfigured_feature')}</p>
+        </div>
+      </Panel>
+    )
+  }
+
+  // Workflows navigator - show workflow info or empty state
+  if (isWorkflowsNavigation(navState)) {
+    if (navState.details?.type === 'workflow') {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <WorkflowInfoPage
+            workflowSlug={navState.details.workflowSlug}
+            workspaceId={activeWorkspaceId || ''}
+          />
+        </Panel>
+      )
+    }
+    // No workflow selected - empty state
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <div className="flex items-center justify-center h-full text-muted-foreground">
+          <p className="text-sm">No workflows configured</p>
         </div>
       </Panel>
     )

@@ -5,7 +5,7 @@
   "enabled": false,
   "provider": "notion",
   "type": "mcp",
-  "icon": "https://upload.wikimedia.org/wikipedia/commons/4/45/Notion_app_logo.png",
+  "icon": "https://www.svgrepo.com/show/361558/notion-logo.svg",
   "tagline": "Access your Notion workspace — pages, databases, and more",
   "mcp": {
     "transport": "stdio",

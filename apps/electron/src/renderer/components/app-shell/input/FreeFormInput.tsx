@@ -60,7 +60,7 @@ import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
-import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
+import type { FileAttachment, LoadedSource, LoadedSkill, LoadedWorkflow } from '../../../../shared/types'
 import type { PermissionMode } from '@g4os/shared/agent/modes'
 import { PERMISSION_MODE_ORDER } from '@g4os/shared/agent/modes'
 import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelName } from '@g4os/shared/agent/thinking-levels'
@@ -145,6 +145,8 @@ export interface FreeFormInputProps {
   // Skill selection (for @mentions)
   /** Available skills for @mention autocomplete */
   skills?: LoadedSkill[]
+  /** Available workflows for / autocomplete */
+  workflows?: LoadedWorkflow[]
   // Label selection (for #labels)
   /** Available labels for #label autocomplete */
   labels?: LabelConfig[]
@@ -221,6 +223,7 @@ export function FreeFormInput({
   enabledSourceSlugs = [],
   onSourcesChange,
   skills = [],
+  workflows = [],
   labels = [],
   sessionLabels = [],
   onLabelAdd,
@@ -736,7 +739,7 @@ export function FreeFormInput({
     })
   }, [])
 
-  // Inline slash command hook (modes, features, and folders)
+  // Inline slash command hook (modes, features, workflows, and folders)
   const inlineSlash = useInlineSlashCommand({
     inputRef: richInputRef,
     onSelectCommand: handleSlashCommand,
@@ -744,6 +747,7 @@ export function FreeFormInput({
     activeCommands,
     recentFolders,
     homeDir,
+    workflows,
   })
 
   // Handle mention selection (sources, skills, files)
@@ -1241,6 +1245,14 @@ export function FreeFormInput({
     richInputRef.current?.focus()
   }, [inlineSlash, syncToParent])
 
+  // Handle inline slash workflow selection (inserts /slug into input)
+  const handleInlineSlashWorkflowSelect = React.useCallback((slug: string) => {
+    const newValue = inlineSlash.handleSelectWorkflow(slug)
+    setInput(newValue)
+    syncToParent(newValue)
+    richInputRef.current?.focus()
+  }, [inlineSlash, syncToParent])
+
   // Handle inline mention selection (inserts appropriate mention text)
   const handleInlineMentionSelect = React.useCallback((item: MentionItem) => {
     const { value: newValue, cursorPosition } = inlineMention.handleSelect(item)
@@ -1298,6 +1310,7 @@ export function FreeFormInput({
           activeCommands={activeCommands}
           onSelectCommand={handleInlineSlashCommandSelect}
           onSelectFolder={handleInlineSlashFolderSelect}
+          onSelectWorkflow={handleInlineSlashWorkflowSelect}
           filter={inlineSlash.filter}
           position={inlineSlash.position}
         />

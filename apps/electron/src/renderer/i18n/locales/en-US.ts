@@ -150,6 +150,7 @@ export const enUS = {
     note: 'MCP is a technical acronym and should not be translated.',
   },
   'sidebar.nav.sources.localFolders': 'Local Folders',
+  'sidebar.nav.workflows': 'All Workflows',
   'sidebar.nav.skills_feature': {
     value: 'Skills',
     note: 'Feature name for LLM Skills. Do not translate.',

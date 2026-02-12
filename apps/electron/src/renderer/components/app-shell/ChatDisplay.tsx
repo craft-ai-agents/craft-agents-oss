@@ -36,10 +36,14 @@ import {
   type OverlayData,
   type FileChange,
   type DiffViewerSettings,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
 } from "@g4os/ui"
 import { useFocusZone } from "@/hooks/keyboard"
 import { useTheme } from "@/hooks/useTheme"
-import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
+import { useLocale } from "@/context/LocaleContext"
+import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill, LoadedWorkflow } from "../../../shared/types"
 import type { PermissionMode } from "@g4os/shared/agent/modes"
 import type { ThinkingLevel } from "@g4os/shared/agent/thinking-levels"
 import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn } from "@g4os/ui"
@@ -141,6 +145,8 @@ interface ChatDisplayProps {
   // Skill selection (for @mentions)
   /** Available skills for @mention autocomplete */
   skills?: LoadedSkill[]
+  /** Available workflows for / autocomplete */
+  workflows?: LoadedWorkflow[]
   // Label selection (for #labels)
   /** Available label configs (tree) for label menu and badge display */
   labels?: import('@g4os/shared/labels').LabelConfig[]
@@ -400,6 +406,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   onSourcesChange,
   // Skills (for @mentions)
   skills,
+  // Workflows (for / autocomplete)
+  workflows,
   // Labels (for #labels)
   labels,
   onLabelsChange,
@@ -444,6 +452,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Get isDark from useTheme hook for overlay theme
   // This accounts for scenic themes (like Haze) that force dark mode
   const { isDark } = useTheme()
+  const { locale } = useLocale()
 
   // Register as focus zone - when zone gains focus, focus the textarea
   const { zoneRef, isFocused } = useFocusZone({
@@ -1384,112 +1393,114 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                     const isLastResponse = index === turns.length - 1 || !turns.slice(index + 1).some(t => t.type === 'user')
 
                     // Assistant turns - render with TurnCard (buffered streaming)
+                    const turnTooltipText = getTimestampLabelFromNumber(turn.timestamp, locale)
                     return (
-                      <div
-                        key={turnKey}
-                        ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
-                        className={cn(
-                          "rounded-lg transition-all duration-200",
-                          isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
-                          isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
-                        )}
-                      >
-                      <TurnCard
-                        sessionId={session.id}
-                        sessionFolderPath={session.sessionFolderPath}
-                        turnId={turn.turnId}
-                        activities={turn.activities}
-                        response={turn.response}
-                        intent={turn.intent}
-                        isStreaming={turn.isStreaming}
-                        isComplete={turn.isComplete}
-                        isExpanded={expandedTurns.has(turn.turnId)}
-                        onExpandedChange={(expanded) => toggleTurn(turn.turnId, expanded)}
-                        expandedActivityGroups={expandedActivityGroups}
-                        onExpandedActivityGroupsChange={setExpandedActivityGroups}
-                        todos={turn.todos}
-                        onOpenFile={onOpenFile}
-                        onOpenUrl={onOpenUrl}
-                        isLastResponse={isLastResponse}
-                        compactMode={compactMode}
-                        onAcceptPlan={() => {
-                          window.dispatchEvent(new CustomEvent('craft:approve-plan', {
-                            detail: { text: 'Plan approved, please execute.', sessionId: session?.id }
-                          }))
-                        }}
-                        onAcceptPlanWithCompact={() => {
-                          // Find the most recent plan message to get its path
-                          // After compaction, Claude needs to know which plan file to read
-                          const planMessage = session?.messages.findLast(m => m.role === 'plan')
-                          const planPath = planMessage?.planPath
+                      <MessageBubbleTooltip key={turnKey} tooltipText={turnTooltipText}>
+                        <div
+                          ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
+                          className={cn(
+                            "rounded-lg transition-all duration-200",
+                            isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
+                            isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
+                          )}
+                        >
+                          <TurnCard
+                            sessionId={session.id}
+                            sessionFolderPath={session.sessionFolderPath}
+                            turnId={turn.turnId}
+                            activities={turn.activities}
+                            response={turn.response}
+                            intent={turn.intent}
+                            isStreaming={turn.isStreaming}
+                            isComplete={turn.isComplete}
+                            isExpanded={expandedTurns.has(turn.turnId)}
+                            onExpandedChange={(expanded) => toggleTurn(turn.turnId, expanded)}
+                            expandedActivityGroups={expandedActivityGroups}
+                            onExpandedActivityGroupsChange={setExpandedActivityGroups}
+                            todos={turn.todos}
+                            onOpenFile={onOpenFile}
+                            onOpenUrl={onOpenUrl}
+                            isLastResponse={isLastResponse}
+                            compactMode={compactMode}
+                            onAcceptPlan={() => {
+                              window.dispatchEvent(new CustomEvent('craft:approve-plan', {
+                                detail: { text: 'Plan approved, please execute.', sessionId: session?.id }
+                              }))
+                            }}
+                            onAcceptPlanWithCompact={() => {
+                              // Find the most recent plan message to get its path
+                              // After compaction, Claude needs to know which plan file to read
+                              const planMessage = session?.messages.findLast(m => m.role === 'plan')
+                              const planPath = planMessage?.planPath
 
-                          // Dispatch event to compact conversation first, then execute plan
-                          // FreeFormInput handles this by sending /compact, waiting for completion,
-                          // then sending a message with the plan path for Claude to read and execute
-                          window.dispatchEvent(new CustomEvent('craft:approve-plan-with-compact', {
-                            detail: { sessionId: session?.id, planPath }
-                          }))
-                        }}
-                        onPopOut={(text) => {
-                          // Open raw markdown source in code viewer
-                          setOverlayState({
-                            type: 'markdown',
-                            content: text,
-                            title: 'Response Preview',
-                            forceCodeView: true,
-                          })
-                        }}
-                        onOpenDetails={() => {
-                          // Open turn details in markdown overlay
-                          const markdown = formatTurnAsMarkdown(turn)
-                          setOverlayState({
-                            type: 'markdown',
-                            content: markdown,
-                            title: 'Turn Details',
-                          })
-                        }}
-                        onOpenActivityDetails={(activity) => {
-                          // Write tool for .md/.txt → Document overlay (rendered markdown)
-                          // rather than multi-diff, since these are better viewed as formatted documents
-                          const isDocumentWrite = activity.toolName === 'Write' && (() => {
-                            const actInput = activity.toolInput as Record<string, unknown> | undefined
-                            const fp = (actInput?.file_path as string) || ''
-                            const ext = fp.split('.').pop()?.toLowerCase()
-                            return ext === 'md' || ext === 'txt'
-                          })()
-
-                          // Edit/Write tool → Multi-file diff overlay (ungrouped, focused on this change)
-                          // Exception: Write to .md/.txt files goes to document overlay instead
-                          if ((activity.toolName === 'Edit' || activity.toolName === 'Write') && !isDocumentWrite) {
-                            const changes = collectFileChanges(turn.activities)
-                            if (changes.length > 0) {
+                              // Dispatch event to compact conversation first, then execute plan
+                              // FreeFormInput handles this by sending /compact, waiting for completion,
+                              // then sending a message with the plan path for Claude to read and execute
+                              window.dispatchEvent(new CustomEvent('craft:approve-plan-with-compact', {
+                                detail: { sessionId: session?.id, planPath }
+                              }))
+                            }}
+                            onPopOut={(text) => {
+                              // Open raw markdown source in code viewer
                               setOverlayState({
-                                type: 'multi-diff',
-                                changes,
-                                consolidated: false, // Ungrouped mode - show individual changes
-                                focusedChangeId: activity.id, // Focus on clicked activity
+                                type: 'markdown',
+                                content: text,
+                                title: 'Response Preview',
+                                forceCodeView: true,
                               })
-                            }
-                          } else {
-                            // All other tools → Use extractOverlayData for appropriate overlay
-                            setOverlayState({ type: 'activity', activity })
-                          }
-                        }}
-                        hasEditOrWriteActivities={turn.activities.some(a =>
-                          a.toolName === 'Edit' || a.toolName === 'Write'
-                        )}
-                        onOpenMultiFileDiff={() => {
-                          const changes = collectFileChanges(turn.activities)
-                          if (changes.length > 0) {
-                            setOverlayState({
-                              type: 'multi-diff',
-                              changes,
-                              consolidated: true, // Consolidated mode - group by file
-                            })
-                          }
-                        }}
-                      />
-                      </div>
+                            }}
+                            onOpenDetails={() => {
+                              // Open turn details in markdown overlay
+                              const markdown = formatTurnAsMarkdown(turn)
+                              setOverlayState({
+                                type: 'markdown',
+                                content: markdown,
+                                title: 'Turn Details',
+                              })
+                            }}
+                            onOpenActivityDetails={(activity) => {
+                              // Write tool for .md/.txt → Document overlay (rendered markdown)
+                              // rather than multi-diff, since these are better viewed as formatted documents
+                              const isDocumentWrite = activity.toolName === 'Write' && (() => {
+                                const actInput = activity.toolInput as Record<string, unknown> | undefined
+                                const fp = (actInput?.file_path as string) || ''
+                                const ext = fp.split('.').pop()?.toLowerCase()
+                                return ext === 'md' || ext === 'txt'
+                              })()
+
+                              // Edit/Write tool → Multi-file diff overlay (ungrouped, focused on this change)
+                              // Exception: Write to .md/.txt files goes to document overlay instead
+                              if ((activity.toolName === 'Edit' || activity.toolName === 'Write') && !isDocumentWrite) {
+                                const changes = collectFileChanges(turn.activities)
+                                if (changes.length > 0) {
+                                  setOverlayState({
+                                    type: 'multi-diff',
+                                    changes,
+                                    consolidated: false, // Ungrouped mode - show individual changes
+                                    focusedChangeId: activity.id, // Focus on clicked activity
+                                  })
+                                }
+                              } else {
+                                // All other tools → Use extractOverlayData for appropriate overlay
+                                setOverlayState({ type: 'activity', activity })
+                              }
+                            }}
+                            hasEditOrWriteActivities={turn.activities.some(a =>
+                              a.toolName === 'Edit' || a.toolName === 'Write'
+                            )}
+                            onOpenMultiFileDiff={() => {
+                              const changes = collectFileChanges(turn.activities)
+                              if (changes.length > 0) {
+                                setOverlayState({
+                                  type: 'multi-diff',
+                                  changes,
+                                  consolidated: true, // Consolidated mode - group by file
+                                })
+                              }
+                            }}
+                          />
+                        </div>
+                      </MessageBubbleTooltip>
                     )
                   })}
                     </motion.div>
@@ -1573,6 +1584,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               enabledSourceSlugs={session.enabledSourceSlugs}
               onSourcesChange={onSourcesChange}
               skills={skills}
+              workflows={workflows}
               labels={labels}
               sessionLabels={session.labels}
               onLabelAdd={(labelId) => {
@@ -1816,6 +1828,59 @@ function ErrorMessage({ message }: { message: Message }) {
   )
 }
 
+function getMessageTimestampLabel(message: Message, localeCode: string): string | undefined {
+  const createdAt = (message as { createdAt?: unknown }).createdAt
+  const fallback = typeof createdAt === 'number' && Number.isFinite(createdAt) ? createdAt : undefined
+  return getTimestampLabel(message.timestamp, fallback, localeCode)
+}
+
+function getTimestampLabel(messageTimestamp: number | undefined, fallbackTimestamp: number | undefined, localeCode: string): string | undefined {
+  const timestamp = typeof messageTimestamp === 'number' && Number.isFinite(messageTimestamp)
+    ? messageTimestamp
+    : fallbackTimestamp
+
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return undefined
+
+  const timestampDate = new Date(timestamp)
+  if (Number.isNaN(timestampDate.getTime())) return undefined
+
+  try {
+    return new Intl.DateTimeFormat(localeCode, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(timestampDate)
+  } catch {
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(timestampDate)
+  }
+}
+
+function getTimestampLabelFromNumber(timestamp: number | undefined, localeCode: string): string | undefined {
+  return getTimestampLabel(timestamp, undefined, localeCode)
+}
+
+function MessageBubbleTooltip({
+  tooltipText,
+  children,
+}: {
+  tooltipText?: string
+  children: React.ReactElement
+}) {
+  if (!tooltipText) return children
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {children}
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {tooltipText}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
 function MessageBubble({
   message,
   onOpenFile,
@@ -1824,81 +1889,94 @@ function MessageBubble({
   onPopOut,
   compactMode,
 }: MessageBubbleProps) {
+  const { locale } = useLocale()
+  const tooltipText = getMessageTimestampLabel(message, locale)
+
   // === USER MESSAGE: Right-aligned bubble with attachments above ===
   if (message.role === 'user') {
     return (
-      <UserMessageBubble
-        content={message.content}
-        attachments={message.attachments}
-        badges={message.badges}
-        isPending={message.isPending}
-        isQueued={message.isQueued}
-        ultrathink={message.ultrathink}
-        onUrlClick={onOpenUrl}
-        onFileClick={onOpenFile}
-        compactMode={compactMode}
-      />
+      <MessageBubbleTooltip tooltipText={tooltipText}>
+        <UserMessageBubble
+          content={message.content}
+          attachments={message.attachments}
+          badges={message.badges}
+          isPending={message.isPending}
+          isQueued={message.isQueued}
+          ultrathink={message.ultrathink}
+          onUrlClick={onOpenUrl}
+          onFileClick={onOpenFile}
+          compactMode={compactMode}
+        />
+      </MessageBubbleTooltip>
     )
   }
 
   // === ASSISTANT MESSAGE: Left-aligned gray bubble with markdown rendering ===
   if (message.role === 'assistant') {
     return (
-      <div className="flex justify-start group">
-        <div className="relative max-w-[90%] bg-background shadow-minimal rounded-[8px] pl-6 pr-4 py-3 break-words min-w-0 select-text">
-          {/* Pop-out button - visible on hover */}
-          {onPopOut && !message.isStreaming && (
-            <button
-              onClick={() => onPopOut(message)}
-              className="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-foreground/5"
-              title="Open in new window"
-            >
-              <ExternalLink className="w-4 h-4 text-muted-foreground hover:text-foreground" />
-            </button>
-          )}
-          {/* Use StreamingMarkdown for block-level memoization during streaming */}
-          {message.isStreaming ? (
-            <StreamingMarkdown
-              content={message.content}
-              isStreaming={true}
-              mode={renderMode}
-              onUrlClick={onOpenUrl}
-              onFileClick={onOpenFile}
-            />
-          ) : (
-            <CollapsibleMarkdownProvider>
-              <Markdown
+      <MessageBubbleTooltip tooltipText={tooltipText}>
+        <div className="flex justify-start group">
+          <div className="relative max-w-[90%] bg-background shadow-minimal rounded-[8px] pl-6 pr-4 py-3 break-words min-w-0 select-text">
+            {/* Pop-out button - visible on hover */}
+            {onPopOut && !message.isStreaming && (
+              <button
+                onClick={() => onPopOut(message)}
+                className="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-foreground/5"
+                title="Open in new window"
+              >
+                <ExternalLink className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+              </button>
+            )}
+            {/* Use StreamingMarkdown for block-level memoization during streaming */}
+            {message.isStreaming ? (
+              <StreamingMarkdown
+                content={message.content}
+                isStreaming={true}
                 mode={renderMode}
                 onUrlClick={onOpenUrl}
                 onFileClick={onOpenFile}
-                id={message.id}
-                className="text-sm"
-                collapsible
-              >
-                {message.content}
-              </Markdown>
-            </CollapsibleMarkdownProvider>
-          )}
+              />
+            ) : (
+              <CollapsibleMarkdownProvider>
+                <Markdown
+                  mode={renderMode}
+                  onUrlClick={onOpenUrl}
+                  onFileClick={onOpenFile}
+                  id={message.id}
+                  className="text-sm"
+                  collapsible
+                >
+                  {message.content}
+                </Markdown>
+              </CollapsibleMarkdownProvider>
+            )}
+          </div>
         </div>
-      </div>
+      </MessageBubbleTooltip>
     )
   }
 
   // === ERROR MESSAGE: Red bordered bubble with warning icon and collapsible details ===
   if (message.role === 'error') {
-    return <ErrorMessage message={message} />
+    return (
+      <MessageBubbleTooltip tooltipText={tooltipText}>
+        <ErrorMessage message={message} />
+      </MessageBubbleTooltip>
+    )
   }
 
   // === STATUS MESSAGE: Matches ProcessingIndicator layout for visual consistency ===
   if (message.role === 'status') {
     return (
-      <div className="flex items-center gap-2 px-3 py-1 -mb-1 text-[13px] text-muted-foreground">
-        {/* Spinner in same location as TurnCard chevron */}
-        <div className="w-3 h-3 flex items-center justify-center shrink-0">
-          <Spinner className="text-[10px]" />
+      <MessageBubbleTooltip tooltipText={tooltipText}>
+        <div className="flex items-center gap-2 px-3 py-1 -mb-1 text-[13px] text-muted-foreground">
+          {/* Spinner in same location as TurnCard chevron */}
+          <div className="w-3 h-3 flex items-center justify-center shrink-0">
+            <Spinner className="text-[10px]" />
+          </div>
+          <span>{message.content}</span>
         </div>
-        <span>{message.content}</span>
-      </div>
+      </MessageBubbleTooltip>
     )
   }
 
@@ -1908,13 +1986,15 @@ function MessageBubble({
     // This persists after reload to show where context was compacted
     if (message.statusType === 'compaction_complete') {
       return (
-        <div className="flex items-center gap-3 my-12 px-3">
-          <div className="flex-1 h-px bg-border" />
-          <span className="text-sm text-muted-foreground/70 select-none">
-            Conversation Compacted
-          </span>
-          <div className="flex-1 h-px bg-border" />
-        </div>
+        <MessageBubbleTooltip tooltipText={tooltipText}>
+          <div className="flex items-center gap-3 my-12 px-3">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-sm text-muted-foreground/70 select-none">
+              Conversation Compacted
+            </span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+        </MessageBubbleTooltip>
       )
     }
 
@@ -1928,26 +2008,30 @@ function MessageBubble({
     const Icon = config.icon
 
     return (
-      <div className={cn('flex items-center gap-2 px-3 py-1 text-[13px] select-none', config.className)}>
-        <div className="w-3 h-3 flex items-center justify-center shrink-0">
-          <Icon className="w-3 h-3" />
+      <MessageBubbleTooltip tooltipText={tooltipText}>
+        <div className={cn('flex items-center gap-2 px-3 py-1 text-[13px] select-none', config.className)}>
+          <div className="w-3 h-3 flex items-center justify-center shrink-0">
+            <Icon className="w-3 h-3" />
+          </div>
+          <span>{message.content}</span>
         </div>
-        <span>{message.content}</span>
-      </div>
+      </MessageBubbleTooltip>
     )
   }
 
   // === WARNING MESSAGE: Info themed bubble ===
   if (message.role === 'warning') {
     return (
-      <div className="flex justify-start">
-        <div className="max-w-[80%] bg-info/10 rounded-[8px] pl-5 pr-4 pt-2 pb-2.5 break-words select-none">
-          <div className="text-xs text-info/50 mb-0.5 font-semibold">
-            Warning
+      <MessageBubbleTooltip tooltipText={tooltipText}>
+        <div className="flex justify-start">
+          <div className="max-w-[80%] bg-info/10 rounded-[8px] pl-5 pr-4 pt-2 pb-2.5 break-words select-none">
+            <div className="text-xs text-info/50 mb-0.5 font-semibold">
+              Warning
+            </div>
+            <p className="text-sm text-info">{message.content}</p>
           </div>
-          <p className="text-sm text-info">{message.content}</p>
         </div>
-      </div>
+      </MessageBubbleTooltip>
     )
   }
 

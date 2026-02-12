@@ -1,0 +1,21 @@
+{
+  "id": "slack_default",
+  "name": "Slack",
+  "slug": "slack",
+  "enabled": false,
+  "provider": "slack",
+  "type": "mcp",
+  "icon": "https://a.slack-edge.com/80588/marketing/img/meta/slack_hash_128.png",
+  "tagline": "Team communication — read channels, search messages, send messages",
+  "mcp": {
+    "transport": "stdio",
+    "command": "node",
+    "args": ["{{SOURCE_DIR}}/slack-mcp.mjs"],
+    "env": {},
+    "authType": "none"
+  },
+  "isAuthenticated": false,
+  "connectionStatus": "needs_auth",
+  "createdAt": 0,
+  "updatedAt": 0
+}

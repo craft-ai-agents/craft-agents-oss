@@ -57,12 +57,14 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isWorkflowsNavigation,
   isSchedulerNavigation,
   DEFAULT_NAVIGATION_STATE,
 } from '../../shared/types'
 import { sessionMetaMapAtom, updateSessionMetaAtom, type SessionMeta } from '@/atoms/sessions'
 import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
+import { workflowsAtom } from '@/atoms/workflows'
 
 // Re-export routes for convenience
 export { routes }
@@ -70,7 +72,7 @@ export type { Route }
 
 // Re-export navigation state types for consumers
 export type { NavigationState, SessionFilter }
-export { isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isSchedulerNavigation }
+export { isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isWorkflowsNavigation, isSchedulerNavigation }
 
 interface NavigationContextValue {
   /** Navigate to a route */
@@ -130,6 +132,9 @@ export function NavigationProvider({
 
   // Read skills from atom (populated by AppShell)
   const skills = useAtomValue(skillsAtom)
+
+  // Read workflows from atom (populated by AppShell)
+  const workflows = useAtomValue(workflowsAtom)
 
   // UNIFIED NAVIGATION STATE - single source of truth for all 3 panels
   const [navigationState, setNavigationState] = useState<NavigationState>(DEFAULT_NAVIGATION_STATE)
@@ -227,6 +232,14 @@ export function NavigationProvider({
       return skills[0]?.slug ?? null
     },
     [skills]
+  )
+
+  // Helper: Get first workflow slug
+  const getFirstWorkflowSlug = useCallback(
+    (): string | null => {
+      return workflows[0]?.slug ?? null
+    },
+    [workflows]
   )
 
   // Handle action navigation (side effects that don't change navigation state)
@@ -448,6 +461,22 @@ export function NavigationProvider({
         }
       }
 
+      // For workflows: auto-select first workflow if no details provided
+      if (isWorkflowsNavigation(newState) && !newState.details) {
+        const firstWorkflowSlug = getFirstWorkflowSlug()
+        if (firstWorkflowSlug) {
+          const stateWithSelection: NavigationState = {
+            ...newState,
+            details: { type: 'workflow', workflowSlug: firstWorkflowSlug },
+          }
+          setNavigationState(stateWithSelection)
+          return stateWithSelection
+        } else {
+          setNavigationState(newState)
+          return newState
+        }
+      }
+
       // For chats with explicit session: update session selection
       if (isSessionsNavigation(newState) && newState.details) {
         setSession({ selected: newState.details.sessionId })
@@ -457,7 +486,7 @@ export function NavigationProvider({
       setNavigationState(newState)
       return newState
     },
-    [getFirstSessionId, getFirstSourceSlug, getFirstSkillSlug, setSession]
+    [getFirstSessionId, getFirstSourceSlug, getFirstSkillSlug, getFirstWorkflowSlug, setSession]
   )
 
   // Main navigate function - unified approach using NavigationState
@@ -559,8 +588,16 @@ export function NavigationProvider({
       return true
     }
 
+    if (isWorkflowsNavigation(navState) && navState.details) {
+      if (navState.details.type === 'workflow') {
+        const { workflowSlug } = navState.details
+        return workflows.some(w => w.slug === workflowSlug)
+      }
+      return true
+    }
+
     return true // Routes without details are always valid
-  }, [sessionMetaMap, sources, skills])
+  }, [sessionMetaMap, sources, skills, workflows])
 
   // Go back in history (using our custom stack)
   // When encountering invalid entries (deleted sessions/sources), remove them from the stack

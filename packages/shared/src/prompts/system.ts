@@ -312,7 +312,8 @@ export function getSystemPrompt(
   workspaceRootPath?: string,
   workingDirectory?: string,
   preset?: SystemPromptPreset | string,
-  backendName?: string
+  backendName?: string,
+  workflows?: { slug: string; metadata: { name: string; description: string } }[]
 ): string {
   // Use mini agent prompt for quick edits (pass workspace root for config paths)
   if (preset === 'mini') {
@@ -330,8 +331,13 @@ export function getSystemPrompt(
   // Note: Date/time context is now added to user messages instead of system prompt
   // to enable prompt caching. The system prompt stays static and cacheable.
   // Safe Mode context is also in user messages for the same reason.
+  // Build available workflows section
+  const workflowsSection = workflows && workflows.length > 0
+    ? `\n\n## Available Workflows\n\nThe user can trigger these workflows by typing \`/slug\` in the chat input:\n\n${workflows.map(w => `- \`/${w.slug}\`: ${w.metadata.description}`).join('\n')}\n\nWhen the user types a workflow slash command, the workflow instructions and knowledge files are automatically injected. You can also suggest relevant workflows proactively.`
+    : '';
+
   const basePrompt = getG4CoSSystemPrompt(workspaceRootPath, backendName);
-  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}`;
+  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}${workflowsSection}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
 

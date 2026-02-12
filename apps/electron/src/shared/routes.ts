@@ -156,6 +156,12 @@ export const routes = {
       return `skills/skill/${skillSlug}` as const
     },
 
+    /** Workflows view (workflows navigator). Pass a slug string for a workflow detail view. */
+    workflows: (workflowSlug?: string) => {
+      if (!workflowSlug) return 'workflows' as const
+      return `workflows/workflow/${workflowSlug}` as const
+    },
+
     /** Scheduler view (scheduler navigator) - scheduled jobs management */
     scheduler: () => 'scheduler' as const,
 

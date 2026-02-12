@@ -54,6 +54,10 @@ export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 import type { LoadedSkill, SkillMetadata } from '@g4os/shared/skills/types';
 export type { LoadedSkill, SkillMetadata };
 
+// Import workflow types
+import type { LoadedWorkflow, WorkflowMetadata, WorkflowKnowledgeFile } from '@g4os/shared/workflows';
+export type { LoadedWorkflow, WorkflowMetadata, WorkflowKnowledgeFile };
+
 // Import scheduler types
 import type { ScheduledJob, CreateScheduledJobInput, UpdateScheduledJobInput, JobExecution, JobAction } from '@g4os/shared/scheduler';
 export type { ScheduledJob, CreateScheduledJobInput, UpdateScheduledJobInput, JobExecution, JobAction };
@@ -778,6 +782,13 @@ export const IPC_CHANNELS = {
   SKILLS_OPEN_FINDER: 'skills:openFinder',
   SKILLS_CHANGED: 'skills:changed',
 
+  // Workflows (workspace-scoped)
+  WORKFLOWS_GET: 'workflows:get',
+  WORKFLOWS_DELETE: 'workflows:delete',
+  WORKFLOWS_OPEN_EDITOR: 'workflows:openEditor',
+  WORKFLOWS_OPEN_FINDER: 'workflows:openFinder',
+  WORKFLOWS_CHANGED: 'workflows:changed',
+
   // Status management (workspace-scoped)
   STATUSES_LIST: 'statuses:list',
   STATUSES_REORDER: 'statuses:reorder',  // Reorder statuses (drag-and-drop)
@@ -1103,6 +1114,15 @@ export interface ElectronAPI {
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (skills: LoadedSkill[]) => void): () => void
 
+  // Workflows
+  getWorkflows(workspaceId: string): Promise<LoadedWorkflow[]>
+  deleteWorkflow(workspaceId: string, workflowSlug: string): Promise<void>
+  openWorkflowInEditor(workspaceId: string, workflowSlug: string): Promise<void>
+  openWorkflowInFinder(workspaceId: string, workflowSlug: string): Promise<void>
+
+  // Workflows change listener (live updates when workflows are added/removed/modified)
+  onWorkflowsChanged(callback: (workflows: LoadedWorkflow[]) => void): () => void
+
   // Statuses (workspace-scoped)
   listStatuses(workspaceId: string): Promise<import('@g4os/shared/statuses').StatusConfig[]>
   reorderStatuses(workspaceId: string, orderedIds: string[]): Promise<void>
@@ -1402,6 +1422,17 @@ export interface SkillsNavigationState {
 }
 
 /**
+ * Workflows navigation state - shows WorkflowsListPanel in navigator
+ */
+export interface WorkflowsNavigationState {
+  navigator: 'workflows'
+  /** Selected workflow details or null for empty state */
+  details: { type: 'workflow'; workflowSlug: string } | null
+  /** Optional right sidebar panel state */
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Scheduler navigation state - shows ScheduledJobsPage as main content
  */
 export interface SchedulerNavigationState {
@@ -1423,6 +1454,7 @@ export type NavigationState =
   | SourcesNavigationState
   | SettingsNavigationState
   | SkillsNavigationState
+  | WorkflowsNavigationState
   | SchedulerNavigationState
 
 /**
@@ -1452,6 +1484,13 @@ export const isSettingsNavigation = (
 export const isSkillsNavigation = (
   state: NavigationState
 ): state is SkillsNavigationState => state.navigator === 'skills'
+
+/**
+ * Type guard to check if state is workflows navigation
+ */
+export const isWorkflowsNavigation = (
+  state: NavigationState
+): state is WorkflowsNavigationState => state.navigator === 'workflows'
 
 /**
  * Type guard to check if state is scheduler navigation
@@ -1484,6 +1523,12 @@ export const getNavigationStateKey = (state: NavigationState): string => {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'
+  }
+  if (state.navigator === 'workflows') {
+    if (state.details?.type === 'workflow') {
+      return `workflows/workflow/${state.details.workflowSlug}`
+    }
+    return 'workflows'
   }
   if (state.navigator === 'scheduler') {
     return 'scheduler'
@@ -1527,6 +1572,16 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
       return { navigator: 'skills', details: { type: 'skill', skillSlug } }
     }
     return { navigator: 'skills', details: null }
+  }
+
+  // Handle workflows
+  if (key === 'workflows') return { navigator: 'workflows', details: null }
+  if (key.startsWith('workflows/workflow/')) {
+    const workflowSlug = key.slice(19)
+    if (workflowSlug) {
+      return { navigator: 'workflows', details: { type: 'workflow', workflowSlug } }
+    }
+    return { navigator: 'workflows', details: null }
   }
 
   // Handle scheduler

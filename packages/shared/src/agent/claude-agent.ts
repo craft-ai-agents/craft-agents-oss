@@ -446,6 +446,8 @@ export class ClaudeAgent extends BaseAgent {
   // Cached context window size from modelUsage (for real-time usage_update events)
   // This is captured from the first result message and reused for subsequent usage updates
   private cachedContextWindow?: number;
+  // Loaded workflows for slash command invocation
+  private workflows: import('../workflows/types.ts').LoadedWorkflow[] = [];
 
   /**
    * Get the session ID for mode operations.
@@ -815,7 +817,10 @@ export class ClaudeAgent extends BaseAgent {
                 this.pinnedPreferencesPrompt ?? undefined,
                 this.config.debugMode,
                 this.workspaceRootPath,
-                this.config.session?.workingDirectory
+                this.config.session?.workingDirectory,
+                undefined, // preset
+                undefined, // backendName
+                this.workflows
               ),
             },
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
@@ -1382,9 +1387,21 @@ export class ClaudeAgent extends BaseAgent {
       // Detect SDK slash commands - must be sent directly without context wrapping.
       // Pattern: /command or /command <instructions>
       const trimmedMessage = userMessage.trim();
-      const commandMatch = trimmedMessage.match(/^\/([a-z]+)(\s|$)/i);
+      const commandMatch = trimmedMessage.match(/^\/([a-z-]+)(\s|$)/i);
       const commandName = commandMatch?.[1]?.toLowerCase();
-      const isSlashCommand = commandName &&
+
+      // Check for workflow commands first: /slug or /slug <args>
+      const matchedWorkflow = commandName
+        ? this.workflows.find(w => w.slug === commandName)
+        : null;
+
+      if (matchedWorkflow && !attachments?.length) {
+        const userArgs = trimmedMessage.slice(commandMatch![0].length).trim();
+        userMessage = this.buildWorkflowPrompt(matchedWorkflow, userArgs);
+        debug(`[chat] Detected workflow command: /${matchedWorkflow.slug}`);
+      }
+
+      const isSlashCommand = !matchedWorkflow && commandName &&
         SDK_SLASH_COMMANDS.includes(commandName as typeof SDK_SLASH_COMMANDS[number]) &&
         !attachments?.length;
 
@@ -1900,6 +1917,37 @@ export class ClaudeAgent extends BaseAgent {
     }
 
     return parts.join('\n\n');
+  }
+
+  /**
+   * Build a prompt from a workflow invocation.
+   * Wraps workflow instructions and knowledge files as structured context.
+   */
+  private buildWorkflowPrompt(
+    workflow: import('../workflows/types.ts').LoadedWorkflow,
+    userArgs: string
+  ): string {
+    const parts: string[] = [];
+
+    parts.push(`<workflow name="${workflow.metadata.name}" slug="${workflow.slug}">`);
+    parts.push(workflow.content.trim());
+    parts.push('</workflow>');
+
+    // Include knowledge files
+    for (const kf of workflow.knowledgeFiles) {
+      parts.push(`<knowledge file="${kf.name}">`);
+      parts.push(kf.content.trim());
+      parts.push('</knowledge>');
+    }
+
+    // Append user arguments or default trigger
+    if (userArgs) {
+      parts.push(`\nUser instructions: ${userArgs}`);
+    } else {
+      parts.push(`\nPlease execute this workflow.`);
+    }
+
+    return parts.join('\n');
   }
 
   /**
@@ -2778,6 +2826,13 @@ export class ClaudeAgent extends BaseAgent {
 
   // isSourceServerActive, getActiveSourceServerNames, setAllSources, getAllSources, markSourceUnseen
   // are now inherited from BaseAgent and delegate to this.sourceManager
+
+  /**
+   * Update loaded workflows for slash command invocation.
+   */
+  setWorkflows(workflows: import('../workflows/types.ts').LoadedWorkflow[]): void {
+    this.workflows = workflows;
+  }
 
   // setTemporaryClarifications is now inherited from BaseAgent
 

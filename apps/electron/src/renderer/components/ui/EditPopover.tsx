@@ -78,6 +78,9 @@ export type EditContextKey =
   | 'add-source-mcp'   // Filter-specific: user is viewing MCPs
   | 'add-source-local' // Filter-specific: user is viewing Local Folders
   | 'add-skill'
+  | 'add-workflow'
+  | 'workflow-instructions'
+  | 'workflow-metadata'
   | 'edit-statuses'
   | 'edit-labels'
   | 'edit-auto-rules'
@@ -354,6 +357,56 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     },
     example: 'Review PRs following our code standards',
     overridePlaceholder: 'What should I learn to do?',
+  }),
+
+  'add-workflow': (location) => ({
+    context: {
+      label: 'Add Workflow',
+      filePath: `${location}/workflows/`,
+      context:
+        'The user wants to add a new workflow to their workspace. ' +
+        'Workflows are reusable instruction sets invoked via /slug in the chat. ' +
+        'Each workflow lives in workflows/{slug}/ with a WORKFLOW.md file containing YAML frontmatter (name, description) and markdown instructions. ' +
+        'Optionally, include knowledge files in a knowledge/ subdirectory. ' +
+        'Ask clarifying questions if needed: What should the workflow do? What knowledge does it need? ' +
+        'Create the workflow folder, WORKFLOW.md, and any knowledge/*.md files. ' +
+        'Confirm clearly when done.',
+    },
+    example: 'Review contracts against our playbook',
+    overridePlaceholder: 'What should this workflow do?',
+  }),
+
+  'workflow-instructions': (location) => ({
+    context: {
+      label: 'Workflow Instructions',
+      filePath: `${location}/WORKFLOW.md`,
+      context:
+        'The user is editing workflow instructions in WORKFLOW.md. ' +
+        'IMPORTANT: Preserve the YAML frontmatter (between --- markers) at the top of the file. ' +
+        'Focus on editing the markdown content after the frontmatter. ' +
+        'The workflow instructions guide the AI when the user triggers this workflow via /slug. ' +
+        'Confirm clearly when done.',
+    },
+    example: 'Add a step to check for compliance issues',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
+  }),
+
+  'workflow-metadata': (location) => ({
+    context: {
+      label: 'Workflow Metadata',
+      filePath: `${location}/WORKFLOW.md`,
+      context:
+        'The user is editing workflow metadata in the YAML frontmatter of WORKFLOW.md. ' +
+        'Frontmatter fields: name (required), description (required), icon (optional emoji or URL). ' +
+        'Keep the content after the frontmatter unchanged unless specifically requested. ' +
+        'Confirm clearly when done.',
+    },
+    example: 'Update the workflow description',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   // Status configuration context

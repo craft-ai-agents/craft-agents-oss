@@ -154,6 +154,7 @@ export const ptBR: Record<TranslationKey, TranslationEntry> = {
     note: 'MCP is a technical acronym and should not be translated.',
   },
   'sidebar.nav.sources.localFolders': 'Pastas locais',
+  'sidebar.nav.workflows': 'Todos os Workflows',
   'sidebar.nav.skills_feature': {
     value: 'Skills',
     note: 'Feature name for LLM Skills. Do not translate.',

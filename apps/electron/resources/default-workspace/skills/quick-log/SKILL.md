@@ -6,7 +6,7 @@ alwaysAllow: ["Read", "Edit"]
 
 # Quick Log Skill
 
-Captura rápida de informações importantes durante a conversa para garantir continuidade entre sessões.
+Quickly capture important information during conversation to ensure continuity between sessions.
 
 ## When This Skill Applies
 
@@ -65,41 +65,41 @@ Use this skill proactively when:
 
 ### Example 1: Decision
 ```markdown
-### 18:15 - Decision: G4 Tools Automation Strategy
-**Context:** Cunha efficiency interview revealed operations are still "artesanal" phase.
+### 18:15 - Decision: Database Migration Strategy
+**Context:** Team review revealed the current schema won't scale past 10K users.
 
 **Decision:**
-- NOT automating G4 Tools processes yet (premature)
-- Focus on intelligence tools instead (call intel, portfolio scraping)
-- Wait for operations to stabilize before process automation
+- Moving to PostgreSQL with partitioned tables
+- Phased migration: read replicas first, then full cutover
+- Targeting completion before Q3 launch
 
-**Why it matters:** Prevents premature optimization and keeps team focused on high-value intelligence tooling.
+**Why it matters:** Locks in the database strategy and unblocks the backend team's sprint planning.
 ```
 
 ### Example 2: Insight
 ```markdown
-### 14:30 - Insight: Leo Binda Interest Pattern
-**Context:** Gabriel mentioned Jon/David showed interest in Leo Binda.
+### 14:30 - Insight: User Retention Pattern
+**Context:** Analytics review showed a drop-off at day 7 for free-tier users.
 
 **Details:**
-- Leo Binda score: 8.6 (R:8, C:9, S:9)
-- Jon/David interest = potential retention risk
-- Similar pattern happened with other high performers
+- Day-7 retention: 23% (down from 31% last quarter)
+- Users who complete onboarding checklist retain at 2x rate
+- Similar pattern seen in competitor benchmarks
 
-**Why it matters:** Early warning signal for retention conversation. Need to clarify situation with Gabriel in next 1:1.
+**Why it matters:** Onboarding completion is the strongest lever for retention. Prioritize onboarding UX improvements.
 ```
 
 ### Example 3: Action
 ```markdown
-### 16:45 - Action: Processed Weekly BizOps Review
-**Context:** Updated tracking files from Notion weekly review.
+### 16:45 - Action: Processed Quarterly Review Notes
+**Context:** Updated tracking files from quarterly business review.
 
 **Files updated:**
-- `goals/current.md` - Suporte restructuring now "On track"
-- `people/gabriel/profile.md` - Team scores, Heitor → Tools move
-- `projects/active/efficiency-interviews-priority.md` - Tier 1 complete (4/4)
+- `goals/current.md` - Infrastructure migration now "On track"
+- `people/team-leads/profile.md` - Updated team capacity numbers
+- `projects/active/api-redesign.md` - Phase 1 complete (4/4 milestones)
 
-**Why it matters:** Captures state before Weekly Intelligence meeting (Monday 15:00). Gabriel's first weekly report baseline.
+**Why it matters:** Captures state before next planning cycle. Baseline for team capacity discussions.
 ```
 
 ## When NOT to Use This Skill
@@ -113,8 +113,6 @@ Use this skill proactively when:
 
 - **session-checkpoint**: Reads activity-log to build comprehensive end-of-session summary
 - **session-start**: Shows recent activity-log entries in catch-up brief
-- **update-tracker**: May create activity-log entry after significant updates
-- **decision-logging**: For formal decisions, use decision-logging; quick-log is for informal capture
 
 ---
 

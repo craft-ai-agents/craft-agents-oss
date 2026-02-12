@@ -20,6 +20,7 @@ import { useAppShellContext, usePendingPermission, usePendingCredential, useSess
 import { rendererPerf } from '@/lib/perf'
 import { routes } from '@/lib/navigate'
 import { ensureSessionMessagesLoadedAtom, loadedSessionsAtom, sessionMetaMapAtom } from '@/atoms/sessions'
+import { workflowsAtom } from '@/atoms/workflows'
 import { getSessionTitle } from '@/utils/session'
 import { getDefaultModelForProvider, type ModelProvider } from '@config/models'
 import { useLocale } from '@/context/LocaleContext'
@@ -82,6 +83,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
 
   // Use per-session atom for isolated updates
   const session = useSessionData(sessionId)
+
+  // Workflows for / autocomplete
+  const workflows = useAtomValue(workflowsAtom)
 
   // Track if messages are loaded for this session (for lazy loading)
   const loadedSessions = useAtomValue(loadedSessionsAtom)
@@ -530,6 +534,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 onInputChange={handleInputChange}
                 sources={enabledSources}
                 skills={skills}
+                workflows={workflows}
                 todoStates={todoStates}
                 onTodoStateChange={handleTodoStateChange}
                 workspaceId={activeWorkspaceId || undefined}
@@ -602,6 +607,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             onInputChange={handleInputChange}
             sources={enabledSources}
             skills={skills}
+            workflows={workflows}
             labels={labels}
             onLabelsChange={(newLabels) => onSessionLabelsChange?.(sessionId, newLabels)}
             todoStates={todoStates}

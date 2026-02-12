@@ -34,7 +34,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'settings' | 'scheduler'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'workflows' | 'settings' | 'scheduler'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -58,7 +58,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'settings', 'scheduler'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'workflows', 'settings', 'scheduler'
 ]
 
 /**
@@ -153,6 +153,23 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
       return {
         navigator: 'skills',
         details: { type: 'skill', id: segments[2] },
+      }
+    }
+
+    return null
+  }
+
+  // Workflows navigator
+  if (first === 'workflows') {
+    if (segments.length === 1) {
+      return { navigator: 'workflows', details: null }
+    }
+
+    // workflows/workflow/{workflowSlug}
+    if (segments[1] === 'workflow' && segments[2]) {
+      return {
+        navigator: 'workflows',
+        details: { type: 'workflow', id: segments[2] },
       }
     }
 
@@ -360,6 +377,14 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
     return { type: 'view', name: 'skill-info', id: compound.details.id, params: {} }
   }
 
+  // Workflows
+  if (compound.navigator === 'workflows') {
+    if (!compound.details) {
+      return { type: 'view', name: 'workflows', params: {} }
+    }
+    return { type: 'view', name: 'workflow-info', id: compound.details.id, params: {} }
+  }
+
   // Scheduler
   if (compound.navigator === 'scheduler') {
     return { type: 'view', name: 'scheduler', params: {} }
@@ -482,6 +507,17 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
+  // Workflows
+  if (compound.navigator === 'workflows') {
+    if (!compound.details) {
+      return { navigator: 'workflows', details: null }
+    }
+    return {
+      navigator: 'workflows',
+      details: { type: 'workflow', workflowSlug: compound.details.id },
+    }
+  }
+
   // Scheduler
   if (compound.navigator === 'scheduler') {
     return { navigator: 'scheduler' }
@@ -553,6 +589,19 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
         }
       }
       return { navigator: 'skills', details: null }
+    case 'workflows':
+      return { navigator: 'workflows', details: null }
+    case 'workflow-info':
+      if (parsed.id) {
+        return {
+          navigator: 'workflows',
+          details: {
+            type: 'workflow',
+            workflowSlug: parsed.id,
+          },
+        }
+      }
+      return { navigator: 'workflows', details: null }
     case 'session':
       if (parsed.id) {
         // Reconstruct filter from params
@@ -649,6 +698,13 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'
+  }
+
+  if (state.navigator === 'workflows') {
+    if (state.details?.type === 'workflow') {
+      return `workflows/workflow/${state.details.workflowSlug}`
+    }
+    return 'workflows'
   }
 
   if (state.navigator === 'scheduler') {

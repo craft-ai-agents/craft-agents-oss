@@ -73,6 +73,7 @@ import { G4OSMcpClient } from '@g4os/shared/mcp'
 import { type Session, type Message, type SessionEvent, type FileAttachment, type StoredAttachment, type SendMessageOptions, IPC_CHANNELS, generateMessageId } from '../shared/types'
 import { generateSessionTitle, regenerateSessionTitle, formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrl, getEmojiIcon, resetSummarizationClient, resolveToolIcon, type TitleGeneratorOptions } from '@g4os/shared/utils'
 import { loadWorkspaceSkills, type LoadedSkill } from '@g4os/shared/skills'
+import { loadWorkspaceWorkflows } from '@g4os/shared/workflows'
 import type { ToolDisplayMeta } from '@g4os/core/types'
 import { DEFAULT_MODEL, DEFAULT_CODEX_MODEL, getToolIconsDir, isCodexModel } from '@g4os/shared/config'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@g4os/shared/agent/thinking-levels'
@@ -866,6 +867,28 @@ export class SessionManager {
         const skills = loadWorkspaceSkills(workspaceRootPath)
         this.broadcastSkillsChanged(skills)
       },
+      onWorkflowsListChange: async (workflows) => {
+        sessionLog.info(`Workflows list changed in ${workspaceRootPath} (${workflows.length} workflows)`)
+        this.broadcastWorkflowsChanged(workflows)
+        // Update all active agents in this workspace
+        for (const [, session] of this.sessions) {
+          if (session.workspace.rootPath === workspaceRootPath && session.agent instanceof G4Agent) {
+            session.agent.setWorkflows(workflows)
+          }
+        }
+      },
+      onWorkflowChange: async (slug, workflow) => {
+        sessionLog.info(`Workflow '${slug}' changed:`, workflow ? 'updated' : 'deleted')
+        const { loadWorkspaceWorkflows } = await import('@g4os/shared/workflows')
+        const workflows = loadWorkspaceWorkflows(workspaceRootPath)
+        this.broadcastWorkflowsChanged(workflows)
+        // Update all active agents in this workspace
+        for (const [, session] of this.sessions) {
+          if (session.workspace.rootPath === workspaceRootPath && session.agent instanceof G4Agent) {
+            session.agent.setWorkflows(workflows)
+          }
+        }
+      },
 
       // Session metadata changes (external edits to session.jsonl headers).
       // Detects label/flag/name/todoState changes made by other instances or scripts.
@@ -1041,6 +1064,15 @@ export class SessionManager {
     if (!this.windowManager) return
     sessionLog.info(`Broadcasting skills changed (${skills.length} skills)`)
     this.windowManager.broadcastToAll(IPC_CHANNELS.SKILLS_CHANGED, skills)
+  }
+
+  /**
+   * Broadcast workflows changed event to all windows
+   */
+  private broadcastWorkflowsChanged(workflows: import('@g4os/shared/workflows').LoadedWorkflow[]): void {
+    if (!this.windowManager) return
+    sessionLog.info(`Broadcasting workflows changed (${workflows.length} workflows)`)
+    this.windowManager.broadcastToAll(IPC_CHANNELS.WORKFLOWS_CHANGED, workflows)
   }
 
   /**
@@ -2674,6 +2706,12 @@ export class SessionManager {
       // NOTE: Source reloading is now handled by ConfigWatcher callbacks
       // which detect filesystem changes and update all affected sessions.
       // See setupConfigWatcher() for the full reload logic.
+
+      // Load and apply workflows for slash command invocation
+      if (managed.agent instanceof G4Agent) {
+        const workflows = loadWorkspaceWorkflows(managed.workspace.rootPath)
+        managed.agent.setWorkflows(workflows)
+      }
 
       // Apply session-scoped permission mode to the newly created agent
       // This ensures the UI toggle state is reflected in the agent before first message

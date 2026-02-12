@@ -1,0 +1,21 @@
+{
+  "id": "google-workspace_default",
+  "name": "Google Workspace",
+  "slug": "google-workspace",
+  "enabled": false,
+  "provider": "google",
+  "type": "mcp",
+  "icon": "https://fonts.gstatic.com/s/i/productlogos/admin_2020q4/v6/192px.svg",
+  "tagline": "Full Google Workspace — Calendar, Drive, Docs, Gmail, Sheets, Contacts, Tasks",
+  "mcp": {
+    "transport": "stdio",
+    "command": "uvx",
+    "args": ["workspace-mcp", "--single-user"],
+    "env": {},
+    "authType": "none"
+  },
+  "isAuthenticated": false,
+  "connectionStatus": "needs_auth",
+  "createdAt": 0,
+  "updatedAt": 0
+}

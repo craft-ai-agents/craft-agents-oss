@@ -2772,6 +2772,59 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // ============================================================
+  // Workflows (Workspace-scoped)
+  // ============================================================
+
+  // Get all workflows for a workspace
+  ipcMain.handle(IPC_CHANNELS.WORKFLOWS_GET, async (_event, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) {
+      ipcLog.error(`WORKFLOWS_GET: Workspace not found: ${workspaceId}`)
+      return []
+    }
+    const { loadWorkspaceWorkflows } = await import('@g4os/shared/workflows')
+    return loadWorkspaceWorkflows(workspace.rootPath)
+  })
+
+  // Delete a workflow from a workspace
+  ipcMain.handle(IPC_CHANNELS.WORKFLOWS_DELETE, async (_event, workspaceId: string, workflowSlug: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { deleteWorkflow } = await import('@g4os/shared/workflows')
+    deleteWorkflow(workspace.rootPath, workflowSlug)
+    ipcLog.info(`Deleted workflow: ${workflowSlug}`)
+  })
+
+  // Open workflow WORKFLOW.md in editor
+  ipcMain.handle(IPC_CHANNELS.WORKFLOWS_OPEN_EDITOR, async (_event, workspaceId: string, workflowSlug: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { join } = await import('path')
+    const { shell } = await import('electron')
+    const { getWorkspaceWorkflowsPath } = await import('@g4os/shared/workspaces')
+
+    const workflowsDir = getWorkspaceWorkflowsPath(workspace.rootPath)
+    const workflowFile = join(workflowsDir, workflowSlug, 'WORKFLOW.md')
+    await shell.openPath(workflowFile)
+  })
+
+  // Open workflow folder in Finder/Explorer
+  ipcMain.handle(IPC_CHANNELS.WORKFLOWS_OPEN_FINDER, async (_event, workspaceId: string, workflowSlug: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { join } = await import('path')
+    const { shell } = await import('electron')
+    const { getWorkspaceWorkflowsPath } = await import('@g4os/shared/workspaces')
+
+    const workflowsDir = getWorkspaceWorkflowsPath(workspace.rootPath)
+    const workflowDir = join(workflowsDir, workflowSlug)
+    await shell.showItemInFolder(workflowDir)
+  })
+
+  // ============================================================
   // Status Management (Workspace-scoped)
   // ============================================================
 

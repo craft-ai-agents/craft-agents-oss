@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Command as CommandPrimitive } from 'cmdk'
-import { Brain, Check } from 'lucide-react'
+import { Brain, Check, Workflow } from 'lucide-react'
 import { Icon_Folder } from '@g4os/ui'
 import { cn } from '@/lib/utils'
 import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } from '@g4os/shared/agent/modes'
@@ -12,7 +12,7 @@ import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } fr
 export type SlashCommandId = 'safe' | 'ask' | 'allow-all' | 'ultrathink'
 
 /** Union type for all item types in the slash menu */
-export type SlashItemType = 'command' | 'folder'
+export type SlashItemType = 'command' | 'folder' | 'workflow'
 
 export interface SlashCommand {
   id: SlashCommandId
@@ -33,11 +33,20 @@ export interface SlashFolderItem {
   path: string
 }
 
+/** Workflow item for the slash menu */
+export interface SlashWorkflowItem {
+  id: string
+  type: 'workflow'
+  label: string
+  description: string
+  slug: string
+}
+
 /** Section with header for the inline slash menu */
 export interface SlashSection {
   id: string
   label: string
-  items: (SlashCommand | SlashFolderItem)[]
+  items: (SlashCommand | SlashFolderItem | SlashWorkflowItem)[]
 }
 
 export interface CommandGroup {
@@ -131,8 +140,13 @@ function filterCommands(commands: SlashCommand[], filter: string): SlashCommand[
 }
 
 /** Check if an item is a folder */
-function isFolder(item: SlashCommand | SlashFolderItem): item is SlashFolderItem {
+function isFolder(item: SlashCommand | SlashFolderItem | SlashWorkflowItem): item is SlashFolderItem {
   return 'type' in item && item.type === 'folder'
+}
+
+/** Check if an item is a workflow */
+function isWorkflow(item: SlashCommand | SlashFolderItem | SlashWorkflowItem): item is SlashWorkflowItem {
+  return 'type' in item && item.type === 'workflow'
 }
 
 /** Filter sections by label/id, keeping sections grouped */
@@ -154,7 +168,7 @@ function filterSections(sections: SlashSection[], filter: string): SlashSection[
 }
 
 /** Flatten sections into a single array of items */
-function flattenSections(sections: SlashSection[]): (SlashCommand | SlashFolderItem)[] {
+function flattenSections(sections: SlashSection[]): (SlashCommand | SlashFolderItem | SlashWorkflowItem)[] {
   return sections.flatMap(section => section.items)
 }
 
@@ -311,6 +325,7 @@ export interface InlineSlashCommandProps {
   activeCommands?: SlashCommandId[]
   onSelectCommand: (commandId: SlashCommandId) => void
   onSelectFolder: (path: string) => void
+  onSelectWorkflow?: (slug: string) => void
   filter?: string
   position: { x: number; y: number }
   className?: string
@@ -323,6 +338,7 @@ export function InlineSlashCommand({
   activeCommands = [],
   onSelectCommand,
   onSelectFolder,
+  onSelectWorkflow,
   filter = '',
   position,
   className,
@@ -348,14 +364,16 @@ export function InlineSlashCommand({
   }, [selectedIndex])
 
   // Handle item selection
-  const handleSelect = React.useCallback((item: SlashCommand | SlashFolderItem) => {
+  const handleSelect = React.useCallback((item: SlashCommand | SlashFolderItem | SlashWorkflowItem) => {
     if (isFolder(item)) {
       onSelectFolder(item.path)
+    } else if (isWorkflow(item)) {
+      onSelectWorkflow?.(item.slug)
     } else {
       onSelectCommand(item.id)
     }
     onOpenChange(false)
-  }, [onSelectCommand, onSelectFolder, onOpenChange])
+  }, [onSelectCommand, onSelectFolder, onSelectWorkflow, onOpenChange])
 
   // Keyboard navigation
   // Don't attach listener when no items - allows Enter to propagate to input handler
@@ -456,6 +474,28 @@ export function InlineSlashCommand({
                     </div>
                   </div>
                 )
+              } else if (isWorkflow(item)) {
+                // Workflow item - name with description
+                return (
+                  <div
+                    key={`${section.id}-${item.id}`}
+                    data-selected={isSelected}
+                    onClick={() => handleSelect(item)}
+                    onMouseEnter={() => setSelectedIndex(itemIndex)}
+                    className={cn(
+                      MENU_ITEM_STYLE,
+                      isSelected && MENU_ITEM_SELECTED
+                    )}
+                  >
+                    <div className="shrink-0 text-muted-foreground">
+                      <Workflow className={MENU_ICON_SIZE} strokeWidth={1.75} />
+                    </div>
+                    <div className="flex-1 min-w-0 truncate">
+                      <span>/{item.slug}</span>
+                      <span className="text-muted-foreground ml-1.5">{item.description}</span>
+                    </div>
+                  </div>
+                )
               } else {
                 // Command item
                 const isActive = activeCommands.includes(item.id)
@@ -482,7 +522,7 @@ export function InlineSlashCommand({
       {/* Always-visible footer hint for @ mentions */}
       <div className="h-px bg-border/50 mx-2" />
       <div className="px-3 py-2.5 select-none text-xs text-muted-foreground">
-        Use @ for skills and files
+        Use @ for skills and files. Use / for workflows.
       </div>
     </div>
   )
@@ -522,9 +562,12 @@ export interface UseInlineSlashCommandOptions {
   inputRef: React.RefObject<SlashCommandInputElement | null>
   onSelectCommand: (commandId: SlashCommandId) => void
   onSelectFolder: (path: string) => void
+  onSelectWorkflow?: (slug: string) => void
   activeCommands?: SlashCommandId[]
   recentFolders?: string[]
   homeDir?: string
+  /** Available workflows for slash command autocomplete */
+  workflows?: { slug: string; metadata: { name: string; description: string } }[]
 }
 
 export interface UseInlineSlashCommandReturn {
@@ -537,15 +580,18 @@ export interface UseInlineSlashCommandReturn {
   activeCommands: SlashCommandId[]
   handleSelectCommand: (commandId: SlashCommandId) => string
   handleSelectFolder: (path: string) => string
+  handleSelectWorkflow: (slug: string) => string
 }
 
 export function useInlineSlashCommand({
   inputRef,
   onSelectCommand,
   onSelectFolder,
+  onSelectWorkflow,
   activeCommands = [],
   recentFolders = [],
   homeDir,
+  workflows = [],
 }: UseInlineSlashCommandOptions): UseInlineSlashCommandReturn {
   const [isOpen, setIsOpen] = React.useState(false)
   const [filter, setFilter] = React.useState('')
@@ -572,6 +618,21 @@ export function useInlineSlashCommand({
       items: [ultrathinkCommand],
     })
 
+    // Workflows section
+    if (workflows.length > 0) {
+      result.push({
+        id: 'workflows',
+        label: 'Workflows',
+        items: workflows.map(w => ({
+          id: w.slug,
+          type: 'workflow' as const,
+          label: w.metadata.name,
+          description: w.metadata.description,
+          slug: w.slug,
+        })),
+      })
+    }
+
     // Recent folders section - sorted alphabetically by folder name, show all
     if (recentFolders.length > 0) {
       const sortedFolders = [...recentFolders]
@@ -595,14 +656,14 @@ export function useInlineSlashCommand({
     }
 
     return result
-  }, [recentFolders, homeDir])
+  }, [recentFolders, homeDir, workflows])
 
   const handleInputChange = React.useCallback((value: string, cursorPosition: number) => {
     // Store current state for handleSelect
     currentInputRef.current = { value, cursorPosition }
 
     const textBeforeCursor = value.slice(0, cursorPosition)
-    const slashMatch = textBeforeCursor.match(/(?:^|\s)\/(\w*)$/)
+    const slashMatch = textBeforeCursor.match(/(?:^|\s)\/([\w-]*)$/)
 
     // Only show menu if we have sections with items
     const hasItems = sections.some(s => s.items.length > 0)
@@ -692,6 +753,24 @@ export function useInlineSlashCommand({
     return result
   }, [onSelectFolder, slashStart])
 
+  const handleSelectWorkflow = React.useCallback((slug: string): string => {
+    // Replace the partial /text with the full /slug and a trailing space
+    let result = ''
+    if (slashStart >= 0) {
+      const { value: currentValue, cursorPosition } = currentInputRef.current
+      const before = currentValue.slice(0, slashStart)
+      const after = currentValue.slice(cursorPosition)
+      result = `${before}/${slug} ${after}`.trimEnd()
+    } else {
+      result = `/${slug} `
+    }
+
+    onSelectWorkflow?.(slug)
+    setIsOpen(false)
+
+    return result
+  }, [onSelectWorkflow, slashStart])
+
   const close = React.useCallback(() => {
     setIsOpen(false)
     setFilter('')
@@ -708,5 +787,6 @@ export function useInlineSlashCommand({
     activeCommands,
     handleSelectCommand,
     handleSelectFolder,
+    handleSelectWorkflow,
   }
 }

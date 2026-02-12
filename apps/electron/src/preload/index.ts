@@ -317,6 +317,27 @@ const api: ElectronAPI = {
     }
   },
 
+  // Workflows
+  getWorkflows: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.WORKFLOWS_GET, workspaceId),
+  deleteWorkflow: (workspaceId: string, workflowSlug: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.WORKFLOWS_DELETE, workspaceId, workflowSlug),
+  openWorkflowInEditor: (workspaceId: string, workflowSlug: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.WORKFLOWS_OPEN_EDITOR, workspaceId, workflowSlug),
+  openWorkflowInFinder: (workspaceId: string, workflowSlug: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.WORKFLOWS_OPEN_FINDER, workspaceId, workflowSlug),
+
+  // Workflows change listener (live updates when workflows are added/removed/modified)
+  onWorkflowsChanged: (callback: (workflows: import('@g4os/shared/workflows').LoadedWorkflow[]) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, workflows: import('@g4os/shared/workflows').LoadedWorkflow[]) => {
+      callback(workflows)
+    }
+    ipcRenderer.on(IPC_CHANNELS.WORKFLOWS_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.WORKFLOWS_CHANGED, handler)
+    }
+  },
+
   // Statuses change listener (live updates when statuses config or icon files change)
   onStatusesChanged: (callback: (workspaceId: string) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, workspaceId: string) => {
