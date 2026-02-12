@@ -4,7 +4,7 @@ import { APISetupStep, type ApiSetupMethod } from "./APISetupStep"
 import { CredentialsStep, type CredentialStatus } from "./CredentialsStep"
 import { CompletionStep } from "./CompletionStep"
 import { GitBashWarning, type GitBashStatus } from "./GitBashWarning"
-import type { ApiKeySubmitData } from "../apisetup"
+import type { ApiKeySubmitData, BedrockIamSubmitData } from "../apisetup"
 
 export type OnboardingStep =
   | 'welcome'
@@ -37,6 +37,7 @@ interface OnboardingWizardProps {
   onBack: () => void
   onSelectApiSetupMethod: (method: ApiSetupMethod) => void
   onSubmitCredential: (data: ApiKeySubmitData) => void
+  onSubmitBedrockCredential?: (data: BedrockIamSubmitData) => void
   onStartOAuth?: (methodOverride?: ApiSetupMethod) => void
   onFinish: () => void
 
@@ -69,6 +70,7 @@ export function OnboardingWizard({
   onBack,
   onSelectApiSetupMethod,
   onSubmitCredential,
+  onSubmitBedrockCredential,
   onStartOAuth,
   onFinish,
   // Two-step OAuth flow
@@ -124,6 +126,7 @@ export function OnboardingWizard({
             status={state.credentialStatus}
             errorMessage={state.errorMessage}
             onSubmit={onSubmitCredential}
+            onSubmitBedrock={onSubmitBedrockCredential}
             onStartOAuth={onStartOAuth}
             onBack={onBack}
             isWaitingForCode={isWaitingForCode}

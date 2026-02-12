@@ -94,6 +94,14 @@ function createConnectionFromSlug(slug: string, baseUrl?: string | null): LlmCon
         authType: hasCustomEndpoint ? 'api_key_with_endpoint' : 'api_key',
         createdAt: Date.now(),
       }
+    case 'bedrock-iam':
+      return {
+        slug: 'bedrock-iam',
+        name: 'AWS Bedrock',
+        providerType: 'bedrock',
+        authType: 'iam_credentials',
+        createdAt: Date.now(),
+      }
     default:
       throw new Error(`Unknown connection slug: ${slug}`)
   }
@@ -1357,7 +1365,20 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       }
 
       // Store credential if provided
-      if (setup.credential) {
+      if (setup.awsAccessKeyId && setup.credential) {
+        // AWS IAM credentials: credential is the secret access key
+        await manager.setLlmIamCredentials(setup.slug, {
+          accessKeyId: setup.awsAccessKeyId,
+          secretAccessKey: setup.credential,
+          region: setup.awsRegion,
+          sessionToken: setup.awsSessionToken,
+        })
+        // Store awsRegion on the connection object
+        if (setup.awsRegion) {
+          updateLlmConnection(setup.slug, { awsRegion: setup.awsRegion })
+        }
+        ipcLog.info('Saved AWS IAM credentials to LLM connection')
+      } else if (setup.credential) {
         const authType = connection.authType
         if (authType === 'oauth') {
           await manager.setLlmOAuth(setup.slug, { accessToken: setup.credential })
@@ -1910,9 +1931,14 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
                                connection.providerType === 'bedrock' ||
                                connection.providerType === 'vertex'
       if (usesAnthropicSdk) {
-        // Skip validation for auth types that require cloud SDK integration (not yet implemented)
+        // AWS Bedrock IAM credentials — verify credentials are stored
+        // Full API validation happens when the SDK CLI subprocess starts with CLAUDE_CODE_USE_BEDROCK=1
         if (connection.authType === 'iam_credentials') {
-          ipcLog.info(`LLM connection skipped validation (AWS IAM not implemented): ${slug}`)
+          const iamCreds = await credentialManager.getLlmIamCredentials(slug)
+          if (!iamCreds) {
+            return { success: false, error: 'No IAM credentials configured' }
+          }
+          ipcLog.info(`LLM connection validated (AWS Bedrock IAM credentials present): ${slug}`)
           touchLlmConnection(slug)
           return { success: true }
         }

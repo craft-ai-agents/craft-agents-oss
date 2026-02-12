@@ -780,6 +780,7 @@ export default function AiSettingsPage() {
                   onBack={apiSetupOnboarding.handleBack}
                   onSelectApiSetupMethod={apiSetupOnboarding.handleSelectApiSetupMethod}
                   onSubmitCredential={apiSetupOnboarding.handleSubmitCredential}
+                  onSubmitBedrockCredential={apiSetupOnboarding.handleSubmitBedrockCredential}
                   onStartOAuth={apiSetupOnboarding.handleStartOAuth}
                   onFinish={handleApiSetupFinish}
                   isWaitingForCode={apiSetupOnboarding.isWaitingForCode}

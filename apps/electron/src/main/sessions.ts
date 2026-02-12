@@ -1124,6 +1124,11 @@ export class SessionManager {
       delete process.env.ANTHROPIC_API_KEY
       delete process.env.CLAUDE_CODE_OAUTH_TOKEN
       delete process.env.ANTHROPIC_BASE_URL
+      delete process.env.CLAUDE_CODE_USE_BEDROCK
+      delete process.env.AWS_ACCESS_KEY_ID
+      delete process.env.AWS_SECRET_ACCESS_KEY
+      delete process.env.AWS_REGION
+      delete process.env.AWS_SESSION_TOKEN
 
       if (!connection) {
         // Fallback to legacy behavior via getAuthState
@@ -1190,6 +1195,20 @@ export class SessionManager {
             } else {
               sessionLog.error(`No OAuth token found for connection: ${slug}`)
             }
+          }
+        } else if (connection.authType === 'iam_credentials') {
+          const iamCreds = await manager.getLlmIamCredentials(slug!)
+          if (iamCreds) {
+            process.env.CLAUDE_CODE_USE_BEDROCK = '1'
+            process.env.AWS_ACCESS_KEY_ID = iamCreds.accessKeyId
+            process.env.AWS_SECRET_ACCESS_KEY = iamCreds.secretAccessKey
+            process.env.AWS_REGION = iamCreds.region || connection.awsRegion || 'us-east-1'
+            if (iamCreds.sessionToken) {
+              process.env.AWS_SESSION_TOKEN = iamCreds.sessionToken
+            }
+            sessionLog.info(`Set AWS IAM credentials for Bedrock connection: ${slug}`)
+          } else {
+            sessionLog.error(`No IAM credentials found for connection: ${slug}`)
           }
         }
         // OpenAI OAuth doesn't use env vars - handled by CodexAgent via tryInjectStoredChatGptTokens

@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils"
-import { Check, CreditCard, Key, Cpu } from "lucide-react"
+import { Check, CreditCard, Key, Cpu, Cloud } from "lucide-react"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
 import type { LlmAuthType, LlmProviderType } from "@g4os/shared/config/llm-connections"
 import { useLocale } from "@/context/LocaleContext"
@@ -14,7 +14,7 @@ import type { TranslationKey } from "@/i18n/locales/en-US"
  * - 'chatgpt_oauth' → openai + oauth
  * - 'openai_api_key' → openai + api_key
  */
-export type ApiSetupMethod = 'anthropic_api_key' | 'claude_oauth' | 'chatgpt_oauth' | 'openai_api_key'
+export type ApiSetupMethod = 'anthropic_api_key' | 'claude_oauth' | 'chatgpt_oauth' | 'openai_api_key' | 'bedrock_iam'
 
 /**
  * Map ApiSetupMethod to the underlying LLM connection types.
@@ -32,6 +32,8 @@ export function apiSetupMethodToConnectionTypes(method: ApiSetupMethod): {
       return { providerType: 'openai', authType: 'oauth' };
     case 'openai_api_key':
       return { providerType: 'openai', authType: 'api_key' };
+    case 'bedrock_iam':
+      return { providerType: 'bedrock', authType: 'iam_credentials' };
   }
 }
 
@@ -71,6 +73,13 @@ const API_SETUP_OPTIONS: ApiSetupOption[] = [
     descriptionKey: 'onboarding.apiSetup.option.openaiApiKey.description',
     icon: <Key className="size-4" />,
     providerType: 'openai',
+  },
+  {
+    id: 'bedrock_iam',
+    nameKey: 'onboarding.apiSetup.option.bedrockIam.name',
+    descriptionKey: 'onboarding.apiSetup.option.bedrockIam.description',
+    icon: <Cloud className="size-4" />,
+    providerType: 'bedrock',
   },
 ]
 
@@ -188,6 +197,21 @@ export function APISetupStep({
           <div className="text-xs font-medium text-muted-foreground mb-2 py-2.5 text-center">{t('onboarding.apiSetup.providerOpenAI')}</div>
           <div className="space-y-3">
             {API_SETUP_OPTIONS.filter(o => o.providerType === 'openai').map((option) => (
+              <OptionButton
+                key={option.id}
+                option={option}
+                isSelected={option.id === selectedMethod}
+                onSelect={onSelect}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* AWS Bedrock section */}
+        <div>
+          <div className="text-xs font-medium text-muted-foreground mb-2 py-2.5 text-center">{t('onboarding.apiSetup.providerAWS')}</div>
+          <div className="space-y-3">
+            {API_SETUP_OPTIONS.filter(o => o.providerType === 'bedrock').map((option) => (
               <OptionButton
                 key={option.id}
                 option={option}

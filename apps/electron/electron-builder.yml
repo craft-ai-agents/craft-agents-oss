@@ -134,6 +134,7 @@ win:
     # Moving to extraResources avoids this by copying before the collector runs.
     # See: https://github.com/electron-userland/electron-builder/issues/8250
     - "!vendor/bun/**/*"
+    - "!vendor/codex/**/*"
     - "!vendor/git/**/*"
     - "!vendor/node/**/*"
     - "!vendor/uv/**/*"
@@ -141,6 +142,8 @@ win:
   extraResources:
     - from: vendor/bun/bun.exe
       to: vendor/bun/bun.exe
+    - from: vendor/codex
+      to: vendor/codex
     - from: vendor/git/cmd
       to: vendor/git/cmd
     - from: vendor/git/mingw64

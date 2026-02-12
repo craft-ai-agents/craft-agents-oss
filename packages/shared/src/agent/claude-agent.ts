@@ -16,6 +16,7 @@ import { getCredentialManager } from '../credentials/index.ts';
 import { updatePreferences, loadPreferences, formatPreferencesForPrompt, type UserPreferences } from '../config/preferences.ts';
 import type { FileAttachment } from '../utils/files.ts';
 import { debug } from '../utils/debug.ts';
+import { getLastApiError } from '../network-interceptor.ts';
 import {
   getSessionPlansDir,
   getLastPlanFilePath,
@@ -373,6 +374,41 @@ function buildWindowsSkillsDirError(errorText: string): { type: 'typed_error'; e
   };
 }
 
+/**
+ * Sanitize MCP server configs for debug logging by redacting env values and auth headers.
+ * Preserves env key names and structure, but replaces values with '[REDACTED]'.
+ */
+function sanitizeMcpServersForLog(servers: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!servers) return servers;
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, serverConfig] of Object.entries(servers)) {
+    if (typeof serverConfig !== 'object' || serverConfig === null) {
+      sanitized[key] = serverConfig;
+      continue;
+    }
+    const config = serverConfig as Record<string, unknown>;
+    const cleanConfig = { ...config };
+    // Redact env values (contain API keys, OAuth tokens, secrets)
+    if (cleanConfig.env && typeof cleanConfig.env === 'object') {
+      const redactedEnv: Record<string, string> = {};
+      for (const envKey of Object.keys(cleanConfig.env as Record<string, string>)) {
+        redactedEnv[envKey] = '[REDACTED]';
+      }
+      cleanConfig.env = redactedEnv;
+    }
+    // Redact headers (contain Authorization tokens)
+    if (cleanConfig.headers && typeof cleanConfig.headers === 'object') {
+      const redactedHeaders: Record<string, string> = {};
+      for (const headerKey of Object.keys(cleanConfig.headers as Record<string, string>)) {
+        redactedHeaders[headerKey] = '[REDACTED]';
+      }
+      cleanConfig.headers = redactedHeaders;
+    }
+    sanitized[key] = cleanConfig;
+  }
+  return sanitized;
+}
+
 export class ClaudeAgent extends BaseAgent {
   // Note: ClaudeAgentConfig is compatible with BackendConfig, so we use the inherited this.config
   private currentQuery: Query | null = null;
@@ -679,8 +715,9 @@ export class ClaudeAgent extends BaseAgent {
       // Regular agents: full set including preferences, docs, and user sources
       const sourceMcpResult = this.getSourceMcpServersFiltered();
 
-      debug('[chat] sourceMcpServers:', sourceMcpResult.servers);
-      debug('[chat] sourceApiServers:', this.sourceApiServers);
+      // Sanitize server configs before logging to avoid leaking credentials in env/headers
+      debug('[chat] sourceMcpServers:', sanitizeMcpServersForLog(sourceMcpResult.servers));
+      debug('[chat] sourceApiServers:', sanitizeMcpServersForLog(this.sourceApiServers));
 
       // Build full MCP servers set first, then filter for mini agents
       const fullMcpServers: Options['mcpServers'] = {
@@ -2035,12 +2072,41 @@ export class ClaudeAgent extends BaseAgent {
   /**
    * Map SDK assistant message error codes to typed error events with user-friendly messages.
    * Reads from SDK debug log file to extract actual API error details.
+   * Also checks api-error.json (written by network-interceptor) as a fallback
+   * to detect auth errors the SDK misclassifies as invalid_request.
    */
   private async mapSDKErrorToTypedError(
     errorCode: SDKAssistantMessageError
   ): Promise<{ type: 'typed_error'; error: AgentError }> {
     // Try to extract actual error message from SDK debug log file
     const actualError = await this.parseApiErrorFromDebugLog();
+
+    // Fallback: check api-error.json written by network-interceptor.
+    // The SDK sometimes classifies 401 OAuth expired errors as 'invalid_request'.
+    // The network interceptor captures the actual HTTP status before the SDK wraps it.
+    if (errorCode === 'invalid_request') {
+      const apiError = getLastApiError();
+      if (apiError && apiError.status === 401) {
+        debug('[mapSDKErrorToTypedError] SDK reported invalid_request but api-error.json has 401 — reclassifying as expired_oauth_token');
+        return {
+          type: 'typed_error',
+          error: {
+            code: 'expired_oauth_token',
+            title: 'Session Expired',
+            message: 'Your Claude Max session has expired.',
+            details: [
+              `Error: ${apiError.message}`,
+            ],
+            actions: [
+              { key: 'r', label: 'Re-authenticate', action: 'reauth' },
+              { key: 's', label: 'Switch API setup', action: 'settings' },
+            ],
+            canRetry: false,
+          },
+        };
+      }
+    }
+
     const errorMap: Record<SDKAssistantMessageError, AgentError> = {
       'authentication_failed': {
         code: 'invalid_api_key',
@@ -2127,6 +2193,20 @@ export class ClaudeAgent extends BaseAgent {
         ],
         canRetry: true,
         retryDelayMs: 2000,
+      },
+      'max_output_tokens': {
+        code: 'max_output_tokens',
+        title: 'Output Limit Reached',
+        message: 'The response exceeded the maximum output token limit.',
+        details: [
+          'The model generated more output than allowed',
+          'Try breaking your request into smaller parts',
+        ],
+        actions: [
+          { key: 'r', label: 'Retry', action: 'retry' },
+        ],
+        canRetry: true,
+        retryDelayMs: 1000,
       },
     };
 

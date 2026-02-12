@@ -1,6 +1,6 @@
 {
   "name": "@g4os/viewer",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Web viewer for G4 OS sessions - upload and share session transcripts",
   "private": true,
   "type": "module",

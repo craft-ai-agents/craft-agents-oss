@@ -21,6 +21,7 @@ export type ErrorCode =
   | 'invalid_model'          // Model ID not found
   | 'data_policy_error'      // OpenRouter data policy restriction
   | 'invalid_request'        // API rejected the request (e.g., bad image, invalid content)
+  | 'max_output_tokens'     // Response exceeded max output token limit
   | 'unknown_error';
 
 export interface RecoveryAction {
@@ -182,6 +183,15 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
       { key: 'r', label: 'Retry', action: 'retry' },
     ],
     canRetry: true,
+  },
+  max_output_tokens: {
+    title: 'Output Limit Reached',
+    message: 'The response exceeded the maximum output token limit.',
+    actions: [
+      { key: 'r', label: 'Retry', action: 'retry' },
+    ],
+    canRetry: true,
+    retryDelayMs: 1000,
   },
   unknown_error: {
     title: 'Error',

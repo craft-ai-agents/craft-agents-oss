@@ -260,6 +260,7 @@ export const enUS = {
   'onboarding.apiSetup.description': "Select how you'd like to power your AI agents.",
   'onboarding.apiSetup.providerAnthropic': 'Anthropic',
   'onboarding.apiSetup.providerOpenAI': 'OpenAI',
+  'onboarding.apiSetup.providerAWS': 'AWS',
   'onboarding.apiSetup.option.claudeOAuth.name': 'Claude Pro/Max',
   'onboarding.apiSetup.option.claudeOAuth.description': 'Use your Claude subscription for unlimited access.',
   'onboarding.apiSetup.option.anthropicApiKey.name': 'Anthropic API Key',
@@ -268,6 +269,8 @@ export const enUS = {
   'onboarding.apiSetup.option.chatgptOAuth.description': 'Use your ChatGPT Plus or Pro subscription with Codex.',
   'onboarding.apiSetup.option.openaiApiKey.name': 'Codex · OpenAI API Key',
   'onboarding.apiSetup.option.openaiApiKey.description': 'Pay-as-you-go via OpenAI Platform, OpenRouter, or Vercel AI Gateway.',
+  'onboarding.apiSetup.option.bedrockIam.name': 'AWS Bedrock',
+  'onboarding.apiSetup.option.bedrockIam.description': 'Use Claude via AWS Bedrock with IAM credentials.',
 
   // CredentialsStep
   'onboarding.credentials.chatgpt.title': 'Connect ChatGPT',
@@ -283,6 +286,9 @@ export const enUS = {
   'onboarding.credentials.authCode.title': 'Enter Authorization Code',
   'onboarding.credentials.authCode.description': 'Copy the code from the browser page and paste it below.',
   'onboarding.credentials.authCode.cancel': 'Cancel',
+  'onboarding.credentials.bedrock.title': 'AWS Bedrock Configuration',
+  'onboarding.credentials.bedrock.description': 'Enter your AWS IAM credentials for Bedrock access.',
+  'onboarding.credentials.bedrock.saving': 'Saving...',
   'onboarding.credentials.apiKey.title': 'API Configuration',
   'onboarding.credentials.apiKey.descriptionOpenAI': 'Enter your OpenAI API key. Optionally configure OpenRouter or Vercel AI Gateway.',
   'onboarding.credentials.apiKey.descriptionAnthropic': 'Enter your API key. Optionally configure a custom endpoint for OpenRouter, Ollama, or compatible APIs.',
@@ -340,6 +346,13 @@ export const enUS = {
   'apiSetup.apiKey.ollama.hint': 'Use any model pulled via ollama pull. No API key required.',
   'apiSetup.apiKey.custom.hint.openai': 'Defaults to GPT model names when empty',
   'apiSetup.apiKey.custom.hint.anthropic': 'Defaults to Anthropic model names (Opus, Sonnet, Haiku) when empty',
+
+  'apiSetup.bedrock.accessKeyId': 'AWS Access Key ID',
+  'apiSetup.bedrock.secretAccessKey': 'AWS Secret Access Key',
+  'apiSetup.bedrock.region': 'AWS Region',
+  'apiSetup.bedrock.sessionToken': 'Session Token',
+  'apiSetup.bedrock.optional': 'optional',
+  'apiSetup.bedrock.sessionTokenPlaceholder': 'For temporary credentials only',
 
   'apiSetup.oauth.authCodeLabel': 'Authorization Code',
   'apiSetup.oauth.authCodePlaceholder': 'Paste your authorization code here',

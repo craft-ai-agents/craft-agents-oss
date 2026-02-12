@@ -264,6 +264,7 @@ export const ptBR: Record<TranslationKey, TranslationEntry> = {
   'onboarding.apiSetup.description': 'Selecione como você deseja alimentar seus agentes de IA.',
   'onboarding.apiSetup.providerAnthropic': 'Anthropic',
   'onboarding.apiSetup.providerOpenAI': 'OpenAI',
+  'onboarding.apiSetup.providerAWS': 'AWS',
   'onboarding.apiSetup.option.claudeOAuth.name': 'Claude Pro/Max',
   'onboarding.apiSetup.option.claudeOAuth.description': 'Use sua assinatura Claude para acesso ilimitado.',
   'onboarding.apiSetup.option.anthropicApiKey.name': 'Chave de API Anthropic',
@@ -272,6 +273,8 @@ export const ptBR: Record<TranslationKey, TranslationEntry> = {
   'onboarding.apiSetup.option.chatgptOAuth.description': 'Use sua assinatura ChatGPT Plus ou Pro com o Codex.',
   'onboarding.apiSetup.option.openaiApiKey.name': 'Codex · Chave de API OpenAI',
   'onboarding.apiSetup.option.openaiApiKey.description': 'Pague por uso via OpenAI Platform, OpenRouter ou Vercel AI Gateway.',
+  'onboarding.apiSetup.option.bedrockIam.name': 'AWS Bedrock',
+  'onboarding.apiSetup.option.bedrockIam.description': 'Use o Claude via AWS Bedrock com credenciais IAM.',
 
   // CredentialsStep
   'onboarding.credentials.chatgpt.title': 'Conectar ChatGPT',
@@ -287,6 +290,9 @@ export const ptBR: Record<TranslationKey, TranslationEntry> = {
   'onboarding.credentials.authCode.title': 'Inserir Código de Autorização',
   'onboarding.credentials.authCode.description': 'Copie o código da página do navegador e cole abaixo.',
   'onboarding.credentials.authCode.cancel': 'Cancelar',
+  'onboarding.credentials.bedrock.title': 'Configuração do AWS Bedrock',
+  'onboarding.credentials.bedrock.description': 'Insira suas credenciais IAM da AWS para acesso ao Bedrock.',
+  'onboarding.credentials.bedrock.saving': 'Salvando...',
   'onboarding.credentials.apiKey.title': 'Configuração de API',
   'onboarding.credentials.apiKey.descriptionOpenAI': 'Insira sua chave de API OpenAI. Opcionalmente configure OpenRouter ou Vercel AI Gateway.',
   'onboarding.credentials.apiKey.descriptionAnthropic': 'Insira sua chave de API. Opcionalmente configure um endpoint personalizado para OpenRouter, Ollama ou APIs compatíveis.',
@@ -344,6 +350,13 @@ export const ptBR: Record<TranslationKey, TranslationEntry> = {
   'apiSetup.apiKey.ollama.hint': 'Use qualquer modelo baixado via ollama pull. Nenhuma chave de API necessária.',
   'apiSetup.apiKey.custom.hint.openai': 'Usa nomes de modelos GPT quando vazio',
   'apiSetup.apiKey.custom.hint.anthropic': 'Usa nomes de modelos Anthropic (Opus, Sonnet, Haiku) quando vazio',
+
+  'apiSetup.bedrock.accessKeyId': 'AWS Access Key ID',
+  'apiSetup.bedrock.secretAccessKey': 'AWS Secret Access Key',
+  'apiSetup.bedrock.region': 'Região AWS',
+  'apiSetup.bedrock.sessionToken': 'Token de Sessão',
+  'apiSetup.bedrock.optional': 'opcional',
+  'apiSetup.bedrock.sessionTokenPlaceholder': 'Apenas para credenciais temporárias',
 
   'apiSetup.oauth.authCodeLabel': 'Código de Autorização',
   'apiSetup.oauth.authCodePlaceholder': 'Cole seu código de autorização aqui',

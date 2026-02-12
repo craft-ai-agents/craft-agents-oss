@@ -320,6 +320,7 @@ export type ErrorCode =
   | 'invalid_model'          // Model ID not found
   | 'data_policy_error'      // OpenRouter data policy restriction
   | 'invalid_request'        // API rejected the request (e.g., bad image, invalid content)
+  | 'max_output_tokens'     // Response exceeded max output token limit
   | 'unknown_error';
 
 /**

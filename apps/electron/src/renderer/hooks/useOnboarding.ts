@@ -17,7 +17,7 @@ import type {
   CredentialStatus,
   ApiSetupMethod,
 } from '@/components/onboarding'
-import type { ApiKeySubmitData } from '@/components/apisetup'
+import type { ApiKeySubmitData, BedrockIamSubmitData } from '@/components/apisetup'
 import type { SetupNeeds, GitBashStatus, LlmConnectionSetup } from '../../shared/types'
 
 interface UseOnboardingOptions {
@@ -47,6 +47,7 @@ interface UseOnboardingReturn {
 
   // Credentials
   handleSubmitCredential: (data: ApiKeySubmitData) => void
+  handleSubmitBedrockCredential: (data: BedrockIamSubmitData) => void
   handleStartOAuth: (methodOverride?: ApiSetupMethod) => void
 
   // Claude OAuth (two-step flow)
@@ -71,7 +72,7 @@ interface UseOnboardingReturn {
 // Map ApiSetupMethod to LlmConnectionSetup for the new unified connection system
 function apiSetupMethodToConnectionSetup(
   method: ApiSetupMethod,
-  options: { credential?: string; baseUrl?: string; customModel?: string }
+  options: { credential?: string; baseUrl?: string; customModel?: string; awsAccessKeyId?: string; awsRegion?: string; awsSessionToken?: string }
 ): LlmConnectionSetup {
   switch (method) {
     case 'anthropic_api_key':
@@ -96,6 +97,14 @@ function apiSetupMethodToConnectionSetup(
         slug: 'codex-api',
         credential: options.credential,
         baseUrl: options.baseUrl,
+      }
+    case 'bedrock_iam':
+      return {
+        slug: 'bedrock-iam',
+        credential: options.credential,        // AWS Secret Access Key
+        awsAccessKeyId: options.awsAccessKeyId,
+        awsRegion: options.awsRegion,
+        awsSessionToken: options.awsSessionToken,
       }
   }
 }
@@ -136,7 +145,7 @@ export function useOnboarding({
   }, [])
 
   // Save configuration using the new unified LLM connection API
-  const handleSaveConfig = useCallback(async (credential?: string, options?: { baseUrl?: string; customModel?: string }) => {
+  const handleSaveConfig = useCallback(async (credential?: string, options?: { baseUrl?: string; customModel?: string; awsAccessKeyId?: string; awsRegion?: string; awsSessionToken?: string }) => {
     if (!state.apiSetupMethod) {
       return
     }
@@ -149,6 +158,9 @@ export function useOnboarding({
         credential,
         baseUrl: options?.baseUrl,
         customModel: options?.customModel,
+        awsAccessKeyId: options?.awsAccessKeyId,
+        awsRegion: options?.awsRegion,
+        awsSessionToken: options?.awsSessionToken,
       })
       // Use new unified API
       const result = await window.electronAPI.setupLlmConnection(setup)
@@ -307,6 +319,41 @@ export function useOnboarding({
       }))
     }
   }, [handleSaveConfig, state.apiSetupMethod])
+
+  // Submit Bedrock IAM credentials
+  const handleSubmitBedrockCredential = useCallback(async (data: BedrockIamSubmitData) => {
+    setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
+
+    try {
+      if (!data.accessKeyId.trim() || !data.secretAccessKey.trim()) {
+        setState(s => ({
+          ...s,
+          credentialStatus: 'error',
+          errorMessage: 'Access Key ID and Secret Access Key are required',
+        }))
+        return
+      }
+
+      // Save config — credential is the secret access key, AWS fields passed via options
+      await handleSaveConfig(data.secretAccessKey, {
+        awsAccessKeyId: data.accessKeyId,
+        awsRegion: data.region,
+        awsSessionToken: data.sessionToken,
+      })
+
+      setState(s => ({
+        ...s,
+        credentialStatus: 'success',
+        step: 'complete',
+      }))
+    } catch (error) {
+      setState(s => ({
+        ...s,
+        credentialStatus: 'error',
+        errorMessage: error instanceof Error ? error.message : 'Failed to save credentials',
+      }))
+    }
+  }, [handleSaveConfig])
 
   // Two-step OAuth flow state
   const [isWaitingForCode, setIsWaitingForCode] = useState(false)
@@ -517,6 +564,7 @@ export function useOnboarding({
     handleBack,
     handleSelectApiSetupMethod,
     handleSubmitCredential,
+    handleSubmitBedrockCredential,
     handleStartOAuth,
     // Two-step OAuth flow
     isWaitingForCode,

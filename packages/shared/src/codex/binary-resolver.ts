@@ -116,9 +116,15 @@ export function resolveCodexBinary(): { path: string; source: string } {
   }
 
   // 2. Check bundled binary in app vendor directory (packaged app)
+  // On Windows, vendor binaries are in extraResources (process.resourcesPath) to avoid
+  // EBUSY errors from electron-builder's npm module collector. On macOS/Linux, they're
+  // in the app files (_vendorRoot / __dirname). See electron-builder.yml for details.
   if (_vendorRoot) {
     const platformArch = getPlatformArch();
-    const bundledPath = join(_vendorRoot, 'vendor', 'codex', platformArch, binaryName);
+    const vendorBase = platform() === 'win32' && (process as { resourcesPath?: string }).resourcesPath
+      ? (process as { resourcesPath?: string }).resourcesPath!
+      : _vendorRoot;
+    const bundledPath = join(vendorBase, 'vendor', 'codex', platformArch, binaryName);
     if (existsSync(bundledPath)) {
       return { path: bundledPath, source: 'bundled binary' };
     }

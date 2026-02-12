@@ -74,10 +74,14 @@ export type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderTy
  * Combines connection identity with credential (which isn't stored in config).
  */
 export interface LlmConnectionSetup {
-  slug: string              // Connection slug: 'anthropic-api', 'claude-max', 'codex', 'codex-api'
+  slug: string              // Connection slug: 'anthropic-api', 'claude-max', 'codex', 'codex-api', 'bedrock-iam'
   credential?: string       // API key or OAuth token (stored in credential manager, not config)
   baseUrl?: string | null   // Custom API endpoint (null to clear)
   defaultModel?: string | null  // Custom model override (null to clear)
+  // AWS Bedrock IAM credentials
+  awsAccessKeyId?: string
+  awsRegion?: string
+  awsSessionToken?: string
 }
 
 

@@ -14,6 +14,8 @@ import {
   type ApiKeySubmitData,
   OAuthConnect,
   type OAuthStatus,
+  BedrockIamInput,
+  type BedrockIamSubmitData,
 } from "../apisetup"
 import { useLocale } from "@/context/LocaleContext"
 
@@ -24,6 +26,7 @@ interface CredentialsStepProps {
   status: CredentialStatus
   errorMessage?: string
   onSubmit: (data: ApiKeySubmitData) => void
+  onSubmitBedrock?: (data: BedrockIamSubmitData) => void
   onStartOAuth?: (methodOverride?: ApiSetupMethod) => void
   onBack: () => void
   // Two-step OAuth flow
@@ -37,6 +40,7 @@ export function CredentialsStep({
   status,
   errorMessage,
   onSubmit,
+  onSubmitBedrock,
   onStartOAuth,
   onBack,
   isWaitingForCode,
@@ -48,7 +52,36 @@ export function CredentialsStep({
   const isChatGptOAuth = apiSetupMethod === 'chatgpt_oauth'
   const isAnthropicApiKey = apiSetupMethod === 'anthropic_api_key'
   const isOpenAiApiKey = apiSetupMethod === 'openai_api_key'
+  const isBedrockIam = apiSetupMethod === 'bedrock_iam'
   const isApiKey = isAnthropicApiKey || isOpenAiApiKey
+
+  // --- AWS Bedrock IAM flow ---
+  if (isBedrockIam) {
+    return (
+      <StepFormLayout
+        title={t('onboarding.credentials.bedrock.title')}
+        description={t('onboarding.credentials.bedrock.description')}
+        actions={
+          <>
+            <BackButton onClick={onBack} disabled={status === 'validating'} />
+            <ContinueButton
+              type="submit"
+              form="bedrock-iam-form"
+              disabled={false}
+              loading={status === 'validating'}
+              loadingText={t('onboarding.credentials.bedrock.saving')}
+            />
+          </>
+        }
+      >
+        <BedrockIamInput
+          status={status as 'idle' | 'validating' | 'success' | 'error'}
+          errorMessage={errorMessage}
+          onSubmit={(data) => onSubmitBedrock?.(data)}
+        />
+      </StepFormLayout>
+    )
+  }
 
   // --- ChatGPT OAuth flow (native browser OAuth) ---
   if (isChatGptOAuth) {

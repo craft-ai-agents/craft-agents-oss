@@ -1,6 +1,6 @@
 {
   "name": "g4os",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "G4 OS - Multi-session AI agent management desktop app",
   "type": "module",
   "private": true,
@@ -84,7 +84,7 @@
     "vite": "^6.2.4"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.19",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.37",
     "@anthropic-ai/sdk": "^0.71.1",
     "@modelcontextprotocol/sdk": "^1.24.3",
     "@radix-ui/react-avatar": "^1.1.11",
