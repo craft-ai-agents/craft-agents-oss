@@ -335,9 +335,54 @@ function extractToolMetadata(toolBlock: ToolUseBlock): { intent?: string; displa
   return { intent, displayName };
 }
 
+/**
+ * Detect whether a string contains substantial HTML that should be rendered
+ * in a sandboxed iframe rather than as markdown.
+ *
+ * Returns true for structured HTML documents (emails, reports, web pages)
+ * but NOT for simple inline HTML tags that react-markdown / rehype-raw
+ * can already handle (e.g., `<b>bold</b>` or `<br/>`).
+ */
+function looksLikeRichHtml(text: string): boolean {
+  const lower = text.trimStart().toLowerCase();
+
+  // Document-level indicators — these are full HTML documents regardless of length
+  if (lower.startsWith('<!doctype html') || lower.startsWith('<html')) return true;
+
+  // Quick length check — very short strings can't be rich HTML
+  // (only applies to the structural-tag heuristic below)
+  if (text.length < 80) return false;
+
+  // Count structural HTML tags — if multiple are present it's rich HTML
+  const structuralTags = [
+    /<head[\s>]/i,
+    /<body[\s>]/i,
+    /<style[\s>]/i,
+    /<table[\s>]/i,
+    /<div[\s>]/i,
+  ];
+  let matches = 0;
+  for (const pattern of structuralTags) {
+    if (pattern.test(text)) matches++;
+    if (matches >= 2) return true;
+  }
+
+  // Check for <style> or inline CSS-heavy content (common in emails)
+  if (/<style[\s>]/i.test(text) && /<\/style>/i.test(text)) return true;
+
+  return false;
+}
+
 /** Serialize a tool result value to string, handling circular references */
 export function serializeResult(value: unknown): string {
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') {
+    // Wrap rich HTML content in ```html fences so the markdown renderer
+    // routes it to the sandboxed iframe component (MarkdownHtmlBlock)
+    if (looksLikeRichHtml(value)) {
+      return '```html\n' + value + '\n```';
+    }
+    return value;
+  }
   if (value === undefined || value === null) return '';
 
   // Handle SDK content block arrays containing image blocks —
@@ -345,16 +390,23 @@ export function serializeResult(value: unknown): string {
   if (Array.isArray(value)) {
     const parts: string[] = [];
     let hasImageBlock = false;
+    let hasHtmlBlock = false;
     for (const block of value) {
       if (block?.type === 'image' && block.source?.type === 'base64') {
         hasImageBlock = true;
         const mediaType = block.source.media_type || 'image/png';
         parts.push(`![image](data:${mediaType};base64,${block.source.data})`);
       } else if (block?.type === 'text' && typeof block.text === 'string') {
-        parts.push(block.text);
+        // Check if text block contains rich HTML
+        if (looksLikeRichHtml(block.text)) {
+          hasHtmlBlock = true;
+          parts.push('```html\n' + block.text + '\n```');
+        } else {
+          parts.push(block.text);
+        }
       }
     }
-    if (hasImageBlock && parts.length > 0) return parts.join('\n\n');
+    if ((hasImageBlock || hasHtmlBlock) && parts.length > 0) return parts.join('\n\n');
   }
 
   try {

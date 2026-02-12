@@ -788,7 +788,7 @@ describe('Determinism property', () => {
 // ============================================================================
 
 describe('serializeResult', () => {
-  it('passes through strings', () => {
+  it('passes through plain strings', () => {
     expect(serializeResult('hello')).toBe('hello')
   })
 
@@ -799,6 +799,70 @@ describe('serializeResult', () => {
   it('returns empty string for null/undefined', () => {
     expect(serializeResult(null)).toBe('')
     expect(serializeResult(undefined)).toBe('')
+  })
+
+  // --- Rich HTML detection ---
+
+  it('wraps full HTML documents in ```html fences', () => {
+    const html = '<!DOCTYPE html><html><head><style>body{color:red}</style></head><body><h1>Hello</h1></body></html>'
+    const result = serializeResult(html)
+    expect(result).toBe('```html\n' + html + '\n```')
+  })
+
+  it('wraps HTML starting with <html> tag', () => {
+    const html = '<html><body><div class="email"><table><tr><td>Content</td></tr></table></div></body></html>'
+    const result = serializeResult(html)
+    expect(result).toBe('```html\n' + html + '\n```')
+  })
+
+  it('wraps HTML with multiple structural tags (div + style)', () => {
+    const html = '<div><style>.header { color: blue; }</style><div class="content"><p>Email body</p></div></div>'
+    const result = serializeResult(html)
+    expect(result).toBe('```html\n' + html + '\n```')
+  })
+
+  it('wraps HTML with table + style tags (common in emails)', () => {
+    const html = '<style>td { padding: 10px; }</style><table><tr><td>Newsletter content here with enough length</td></tr></table>'
+    const result = serializeResult(html)
+    expect(result).toBe('```html\n' + html + '\n```')
+  })
+
+  it('does NOT wrap short/simple HTML strings', () => {
+    expect(serializeResult('<b>bold</b>')).toBe('<b>bold</b>')
+    expect(serializeResult('<br/>')).toBe('<br/>')
+    expect(serializeResult('Some text with <em>emphasis</em>')).toBe('Some text with <em>emphasis</em>')
+  })
+
+  it('does NOT wrap plain text or markdown', () => {
+    const markdown = '# Hello World\n\nThis is **bold** and *italic* text.\n\n- item 1\n- item 2'
+    expect(serializeResult(markdown)).toBe(markdown)
+  })
+
+  it('does NOT wrap strings with only one structural tag', () => {
+    // A single <div> is not enough to classify as rich HTML
+    expect(serializeResult('<div>Just a simple wrapper with some content in it for good measure</div>')).toBe(
+      '<div>Just a simple wrapper with some content in it for good measure</div>'
+    )
+  })
+
+  it('wraps rich HTML in content block arrays', () => {
+    const html = '<!DOCTYPE html><html><body><p>Email</p></body></html>'
+    const blocks = [
+      { type: 'text', text: html },
+    ]
+    const result = serializeResult(blocks)
+    expect(result).toBe('```html\n' + html + '\n```')
+  })
+
+  it('handles mixed content block arrays with HTML and images', () => {
+    const html = '<html><head><style>h1{color:red}</style></head><body><h1>Title</h1></body></html>'
+    const blocks = [
+      { type: 'text', text: html },
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'abc123' } },
+    ]
+    const result = serializeResult(blocks)
+    expect(result).toContain('```html\n' + html + '\n```')
+    expect(result).toContain('![image](data:image/png;base64,abc123)')
   })
 })
 

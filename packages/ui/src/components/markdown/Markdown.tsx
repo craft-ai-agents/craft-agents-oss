@@ -9,6 +9,7 @@ import { MarkdownJsonBlock } from './MarkdownJsonBlock'
 import { MarkdownMermaidBlock } from './MarkdownMermaidBlock'
 import { MarkdownDataTableBlock } from './MarkdownDataTableBlock'
 import { MarkdownSpreadsheetBlock } from './MarkdownSpreadsheetBlock'
+import { MarkdownHtmlBlock } from './MarkdownHtmlBlock'
 import { MarkdownImage } from './MarkdownImage'
 import { preprocessLinks } from './linkify'
 import remarkCollapsibleSections from './remarkCollapsibleSections'
@@ -223,6 +224,10 @@ function createComponents(
           if (match?.[1] === 'spreadsheet') {
             return <MarkdownSpreadsheetBlock code={code} className="my-1" />
           }
+          // HTML code blocks → sandboxed iframe for rich HTML content (emails, pages)
+          if (match?.[1] === 'html') {
+            return <MarkdownHtmlBlock code={code} className="my-1" />
+          }
           return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
         }
 
@@ -306,6 +311,10 @@ function createComponents(
         // Spreadsheet code blocks → table with row numbers + export
         if (match?.[1] === 'spreadsheet') {
           return <MarkdownSpreadsheetBlock code={code} className="my-1" />
+        }
+        // HTML code blocks → sandboxed iframe for rich HTML content (emails, pages)
+        if (match?.[1] === 'html') {
+          return <MarkdownHtmlBlock code={code} className="my-1" />
         }
         return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
       }

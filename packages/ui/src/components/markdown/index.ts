@@ -10,3 +10,4 @@ export { CollapsibleMarkdownProvider, useCollapsibleMarkdown } from './Collapsib
 export { MarkdownDataTableBlock, type DataTableColumn, type DataTableData } from './MarkdownDataTableBlock'
 export { MarkdownSpreadsheetBlock } from './MarkdownSpreadsheetBlock'
 export { MarkdownImage } from './MarkdownImage'
+export { MarkdownHtmlBlock } from './MarkdownHtmlBlock'
