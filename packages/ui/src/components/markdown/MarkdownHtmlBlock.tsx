@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Maximize2, Minimize2, ExternalLink, Code2 } from 'lucide-react'
+import { Maximize2, Minimize2, Code2, Globe } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { CodeBlock } from './CodeBlock'
 
@@ -14,8 +14,9 @@ import { CodeBlock } from './CodeBlock'
 // so embedded HTML cannot execute JavaScript. The srcdoc attribute injects
 // the HTML directly, avoiding network requests.
 //
-// Theming: Injects a minimal base stylesheet that inherits the app's
-// background color for a seamless look, and sets a default sans-serif font.
+// Theming: Detects the app's dark/light mode and adjusts the iframe's base
+// stylesheet accordingly. Most rich HTML (emails, etc.) defines its own
+// colors, so the base styles serve as sensible defaults for minimal HTML.
 //
 // Auto-sizing: A ResizeObserver monitors the iframe content's body height
 // and adjusts the iframe element to match, up to a configurable max height.
@@ -55,16 +56,20 @@ interface MarkdownHtmlBlockProps {
 }
 
 /**
- * Build a complete HTML document with a base stylesheet injected.
- * The base stylesheet:
- * - Resets margin/padding on body
- * - Sets a transparent background (so the card wrapper's bg shows through)
- * - Uses system sans-serif font as default
- * - Ensures images don't overflow
+ * Build base styles for the iframe document.
+ * Adapts to the app's current theme (dark/light).
+ *
+ * Most rich HTML (emails, newsletters) defines its own colors and layout.
+ * These base styles only apply as defaults for content that doesn't set its own.
  */
-function buildSrcDoc(html: string): string {
-  const baseStyles = `
-    <style>
+function buildBaseStyles(isDark: boolean): string {
+  const bg = isDark ? '#1a1a2e' : '#ffffff'
+  const fg = isDark ? '#e2e8f0' : '#1a1a1a'
+  const linkColor = isDark ? '#60a5fa' : '#2563eb'
+  const borderColor = isDark ? '#334155' : '#e2e8f0'
+
+  return `
+    <style data-g4os-base>
       * { box-sizing: border-box; }
       body {
         margin: 0;
@@ -72,28 +77,34 @@ function buildSrcDoc(html: string): string {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         font-size: 14px;
         line-height: 1.5;
-        color: #1a1a1a;
-        background: transparent;
+        color: ${fg};
+        background: ${bg};
         overflow-wrap: break-word;
         word-wrap: break-word;
       }
       img { max-width: 100%; height: auto; }
-      a { color: #2563eb; }
+      a { color: ${linkColor}; }
       table { border-collapse: collapse; max-width: 100%; }
+      td, th { border-color: ${borderColor}; }
       pre { overflow-x: auto; }
+      hr { border-color: ${borderColor}; }
     </style>
   `
+}
 
-  // If the HTML already has a <head>, inject styles into it.
-  // Otherwise, if it has <html>, inject before </html>.
-  // Otherwise, prepend the styles.
+/**
+ * Build a complete HTML document with a base stylesheet injected.
+ */
+function buildSrcDoc(html: string, isDark: boolean): string {
+  const baseStyles = buildBaseStyles(isDark)
+
+  // If the HTML already has a <head>, inject styles into it
   const lowerHtml = html.toLowerCase()
 
   if (lowerHtml.includes('<head>')) {
     return html.replace(/<head>/i, `<head>${baseStyles}`)
   }
   if (lowerHtml.includes('<html')) {
-    // Insert <head> with styles after <html...>
     return html.replace(/<html[^>]*>/i, (match) => `${match}<head>${baseStyles}</head>`)
   }
 
@@ -106,8 +117,21 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
   const [contentHeight, setContentHeight] = React.useState<number>(200)
   const [isExpanded, setIsExpanded] = React.useState(false)
   const [showSource, setShowSource] = React.useState(false)
+  const [isDarkMode, setIsDarkMode] = React.useState(false)
 
-  const srcDoc = React.useMemo(() => buildSrcDoc(code), [code])
+  // Detect dark mode and listen for changes
+  React.useEffect(() => {
+    const checkDarkMode = () => {
+      setIsDarkMode(document.documentElement.classList.contains('dark'))
+    }
+    checkDarkMode()
+
+    const observer = new MutationObserver(checkDarkMode)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    return () => observer.disconnect()
+  }, [])
+
+  const srcDoc = React.useMemo(() => buildSrcDoc(code, isDarkMode), [code, isDarkMode])
 
   const maxHeight = isExpanded ? MAX_EXPANDED_HEIGHT : MAX_COLLAPSED_HEIGHT
   const displayHeight = Math.min(contentHeight, maxHeight)
@@ -122,7 +146,6 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
       const doc = iframe.contentDocument
       if (!doc?.body) return
 
-      // Initial measurement
       const measure = () => {
         const height = doc.body.scrollHeight
         if (height > 0) {
@@ -144,7 +167,6 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
         }
       })
 
-      // Cleanup on next load or unmount
       return () => {
         observer.disconnect()
       }
@@ -168,7 +190,7 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
           )}
           title="View rendered HTML"
         >
-          <ExternalLink className="w-3.5 h-3.5" />
+          <Globe className="w-3.5 h-3.5" />
         </button>
         <CodeBlock code={code} language="html" mode="full" className="my-0" />
       </div>
@@ -177,9 +199,15 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
 
   const fallback = <CodeBlock code={code} language="html" mode="full" className={className} />
 
+  // Theme-aware container and fade colors
+  const containerBg = isDarkMode ? 'bg-[#1a1a2e]' : 'bg-white'
+  const fadeBg = isDarkMode
+    ? 'linear-gradient(to bottom, transparent, #1a1a2e)'
+    : 'linear-gradient(to bottom, transparent, white)'
+
   return (
     <HtmlBlockErrorBoundary fallback={fallback}>
-      <div className={cn('relative group rounded-[8px] overflow-hidden border bg-white', className)}>
+      <div className={cn('relative group rounded-[8px] overflow-hidden border', containerBg, className)}>
         {/* Toolbar — visible on hover */}
         <div className={cn(
           'absolute top-2 right-2 z-10 flex items-center gap-1',
@@ -240,9 +268,7 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
         {isOverflowing && !isExpanded && (
           <div
             className="absolute bottom-0 left-0 right-0 h-12 pointer-events-none"
-            style={{
-              background: 'linear-gradient(to bottom, transparent, white)',
-            }}
+            style={{ background: fadeBg }}
           />
         )}
       </div>

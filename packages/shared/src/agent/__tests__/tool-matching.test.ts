@@ -864,6 +864,47 @@ describe('serializeResult', () => {
     expect(result).toContain('```html\n' + html + '\n```')
     expect(result).toContain('![image](data:image/png;base64,abc123)')
   })
+
+  // --- File download card ---
+
+  it('wraps file_download objects in ```filecard fences', () => {
+    const meta = {
+      type: 'file_download',
+      path: '/tmp/downloads/report.pdf',
+      filename: 'report.pdf',
+      mimeType: 'application/pdf',
+      size: 12345,
+      sizeHuman: '12.1 KB',
+    }
+    const result = serializeResult(meta)
+    expect(result).toBe('```filecard\n' + JSON.stringify(meta) + '\n```')
+  })
+
+  it('does NOT wrap non-file_download objects in filecard fences', () => {
+    const obj = { type: 'other', data: 'hello' }
+    const result = serializeResult(obj)
+    expect(result).toBe(JSON.stringify(obj, null, 2))
+  })
+
+  // --- EmbeddedResource handling ---
+
+  it('wraps EmbeddedResource with HTML content in ```html fences', () => {
+    const html = '<!DOCTYPE html><html><body><p>Embedded page</p></body></html>'
+    const blocks = [
+      { type: 'resource', resource: { text: html, mimeType: 'text/html', uri: 'https://example.com' } },
+    ]
+    const result = serializeResult(blocks)
+    expect(result).toBe('```html\n' + html + '\n```')
+  })
+
+  it('wraps EmbeddedResource with HTML mimeType even for short content', () => {
+    const html = '<p>Short HTML</p>'
+    const blocks = [
+      { type: 'resource', resource: { text: html, mimeType: 'text/html', uri: 'urn:test' } },
+    ]
+    const result = serializeResult(blocks)
+    expect(result).toBe('```html\n' + html + '\n```')
+  })
 })
 
 describe('isToolResultError', () => {

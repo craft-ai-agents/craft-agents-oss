@@ -11,3 +11,4 @@ export { MarkdownDataTableBlock, type DataTableColumn, type DataTableData } from
 export { MarkdownSpreadsheetBlock } from './MarkdownSpreadsheetBlock'
 export { MarkdownImage } from './MarkdownImage'
 export { MarkdownHtmlBlock } from './MarkdownHtmlBlock'
+export { MarkdownFileCard, isFileDownload, type FileDownloadMeta } from './MarkdownFileCard'

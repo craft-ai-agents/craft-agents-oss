@@ -10,6 +10,7 @@ import { MarkdownMermaidBlock } from './MarkdownMermaidBlock'
 import { MarkdownDataTableBlock } from './MarkdownDataTableBlock'
 import { MarkdownSpreadsheetBlock } from './MarkdownSpreadsheetBlock'
 import { MarkdownHtmlBlock } from './MarkdownHtmlBlock'
+import { MarkdownFileCard, isFileDownload } from './MarkdownFileCard'
 import { MarkdownImage } from './MarkdownImage'
 import { preprocessLinks } from './linkify'
 import remarkCollapsibleSections from './remarkCollapsibleSections'
@@ -228,6 +229,15 @@ function createComponents(
           if (match?.[1] === 'html') {
             return <MarkdownHtmlBlock code={code} className="my-1" />
           }
+          // File card blocks → rich file download card (PDFs, images, archives)
+          if (match?.[1] === 'filecard') {
+            try {
+              const meta = JSON.parse(code)
+              if (isFileDownload(meta)) {
+                return <MarkdownFileCard meta={meta} className="my-1" />
+              }
+            } catch { /* fall through to CodeBlock */ }
+          }
           return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
         }
 
@@ -315,6 +325,15 @@ function createComponents(
         // HTML code blocks → sandboxed iframe for rich HTML content (emails, pages)
         if (match?.[1] === 'html') {
           return <MarkdownHtmlBlock code={code} className="my-1" />
+        }
+        // File card blocks → rich file download card (PDFs, images, archives)
+        if (match?.[1] === 'filecard') {
+          try {
+            const meta = JSON.parse(code)
+            if (isFileDownload(meta)) {
+              return <MarkdownFileCard meta={meta} className="my-1" />
+            }
+          } catch { /* fall through to CodeBlock */ }
         }
         return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
       }

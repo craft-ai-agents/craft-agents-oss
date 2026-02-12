@@ -373,6 +373,35 @@ function looksLikeRichHtml(text: string): boolean {
   return false;
 }
 
+/**
+ * Check if a value is a file_download result from api-tools.
+ * These have a specific shape: { type: 'file_download', path, filename, mimeType, size, sizeHuman }
+ */
+function isFileDownloadResult(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    obj.type === 'file_download' &&
+    typeof obj.path === 'string' &&
+    typeof obj.filename === 'string' &&
+    typeof obj.sizeHuman === 'string'
+  );
+}
+
+/**
+ * Check if a content block is an MCP EmbeddedResource with HTML content.
+ * EmbeddedResource blocks have: { type: 'resource', resource: { text, mimeType?, uri } }
+ */
+function isHtmlEmbeddedResource(block: Record<string, unknown>): boolean {
+  if (block.type !== 'resource' || !block.resource) return false;
+  const resource = block.resource as Record<string, unknown>;
+  // Explicit HTML mimeType
+  if (typeof resource.mimeType === 'string' && resource.mimeType.includes('html')) return true;
+  // Text content that looks like HTML
+  if (typeof resource.text === 'string' && looksLikeRichHtml(resource.text)) return true;
+  return false;
+}
+
 /** Serialize a tool result value to string, handling circular references */
 export function serializeResult(value: unknown): string {
   if (typeof value === 'string') {
@@ -385,32 +414,44 @@ export function serializeResult(value: unknown): string {
   }
   if (value === undefined || value === null) return '';
 
-  // Handle SDK content block arrays containing image blocks —
-  // convert base64 image blocks to inline markdown instead of JSON-stringifying
+  // Handle file_download results — wrap in ```filecard fence for rich card display
+  if (isFileDownloadResult(value)) {
+    return '```filecard\n' + JSON.stringify(value) + '\n```';
+  }
+
+  // Handle SDK content block arrays containing image blocks, HTML, or embedded resources
   if (Array.isArray(value)) {
     const parts: string[] = [];
-    let hasImageBlock = false;
-    let hasHtmlBlock = false;
+    let hasSpecialBlock = false;
     for (const block of value) {
       if (block?.type === 'image' && block.source?.type === 'base64') {
-        hasImageBlock = true;
+        hasSpecialBlock = true;
         const mediaType = block.source.media_type || 'image/png';
         parts.push(`![image](data:${mediaType};base64,${block.source.data})`);
+      } else if (block?.type === 'resource' && isHtmlEmbeddedResource(block)) {
+        // MCP EmbeddedResource with HTML content → render in iframe
+        hasSpecialBlock = true;
+        const resource = block.resource as Record<string, unknown>;
+        const html = resource.text as string;
+        parts.push('```html\n' + html + '\n```');
       } else if (block?.type === 'text' && typeof block.text === 'string') {
         // Check if text block contains rich HTML
         if (looksLikeRichHtml(block.text)) {
-          hasHtmlBlock = true;
+          hasSpecialBlock = true;
           parts.push('```html\n' + block.text + '\n```');
         } else {
           parts.push(block.text);
         }
       }
     }
-    if ((hasImageBlock || hasHtmlBlock) && parts.length > 0) return parts.join('\n\n');
+    if (hasSpecialBlock && parts.length > 0) return parts.join('\n\n');
   }
 
   try {
-    return JSON.stringify(value, null, 2);
+    const json = JSON.stringify(value, null, 2);
+    // Check if the stringified result is a file_download (object was already checked above,
+    // but arrays containing file_downloads in text blocks pass through)
+    return json;
   } catch {
     return '[Result contains non-serializable data]';
   }
