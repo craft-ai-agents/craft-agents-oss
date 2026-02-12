@@ -1396,7 +1396,13 @@ export class SessionManager {
 
           // Force-abort execution - plan presentation is a stopping point
           // The user needs to review and respond before continuing
-          if (managed.isProcessing && managed.agent) {
+          // Skip force-abort for messaging sessions (Telegram/WhatsApp/Slack) where there's
+          // no plan UI — let the agent continue and produce a text summary for delivery
+          const isMessagingSession = managed.id.startsWith('telegram_') ||
+            managed.id.startsWith('whatsapp_') ||
+            managed.id.startsWith('slack_')
+
+          if (managed.isProcessing && managed.agent && !isMessagingSession) {
             sessionLog.info(`Force-aborting after plan submission for session ${managed.id}`)
             managed.agent.forceAbort(AbortReason.PlanSubmitted)
             managed.isProcessing = false
@@ -1412,6 +1418,8 @@ export class SessionManager {
 
             // Persist session state
             this.persistSession(managed)
+          } else if (isMessagingSession) {
+            sessionLog.info(`Skipping force-abort for messaging session ${managed.id} — agent will continue to produce response`)
           }
         } catch (error) {
           sessionLog.error(`Failed to read plan file:`, error)
