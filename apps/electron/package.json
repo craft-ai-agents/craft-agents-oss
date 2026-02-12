@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/electron",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Electron desktop app for Craft Agents",
   "main": "dist/main.cjs",
   "private": true,

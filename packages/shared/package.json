@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/shared",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "codexVersion": "craft-v0.4.1",
   "license": "Apache-2.0",
   "description": "Shared business logic for Craft Agents - agent, auth, config, credentials, MCP integration",
