@@ -1780,6 +1780,9 @@ export class SessionManager {
         managed.enabledSourceSlugs = Array.from(slugSet)
         sessionLog.info(`Auto-enabled source ${result.sourceSlug} in session ${sessionId} after auth`)
       }
+
+      // Clear any refresh cooldown so the source is immediately usable
+      managed.tokenRefreshManager.clearCooldown(result.sourceSlug)
     }
 
     // Persist session with updated auth message and enabled sources

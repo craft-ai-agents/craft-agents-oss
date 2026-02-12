@@ -75,6 +75,13 @@ export class TokenRefreshManager {
   }
 
   /**
+   * Clear cooldown for a source (e.g. after successful re-authentication).
+   */
+  clearCooldown(sourceSlug: string): void {
+    this.failedAttempts.delete(sourceSlug);
+  }
+
+  /**
    * Reset all rate limiting state (useful for testing).
    */
   reset(): void {
@@ -118,6 +125,12 @@ export class TokenRefreshManager {
 
     // Load credential and check if refresh needed
     const cred = await this.credManager.load(source);
+
+    // Non-refreshable tokens (e.g. Slack) — return as-is.
+    // Consistent with needsRefresh() which returns false when !refreshToken.
+    if (cred && !cred.refreshToken) {
+      return { success: true, token: cred.value };
+    }
 
     // If credential exists, has a known expiry, and isn't near expiry, return it as-is.
     // Missing expiresAt means we can't determine lifetime — fall through to refresh
