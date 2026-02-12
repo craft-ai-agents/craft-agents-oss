@@ -52,6 +52,7 @@ import { useTurnCardExpansion } from "@/hooks/useTurnCardExpansion"
 import type { SessionMeta } from "@/atoms/sessions"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { flattenLabels } from "@craft-agent/shared/labels"
+import { McpAppWidgetStack } from "@craft-agent/ui/mcp-apps"
 
 // ============================================================================
 // Overlay State Types
@@ -1492,6 +1493,26 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                               consolidated: true, // Consolidated mode - group by file
                             })
                           }
+                        }}
+                      />
+                      <McpAppWidgetStack
+                        activities={turn.activities}
+                        onCallTool={(serverId, name, args) => {
+                          // Derive sourceSlug from serverId (same as the server name from mcp__{serverName}__{tool})
+                          return window.electronAPI.mcpWidgetCallTool(workspaceId || '', serverId, name, args)
+                        }}
+                        onReadResource={(serverId, uri) => {
+                          return window.electronAPI.mcpWidgetReadResource(workspaceId || '', serverId, uri)
+                        }}
+                        onListResources={(serverId) => {
+                          return window.electronAPI.mcpWidgetListResources(workspaceId || '', serverId)
+                        }}
+                        onSendFollowUp={(text) => {
+                          // Insert the follow-up text into the input
+                          // Use the same dispatch mechanism as other follow-up patterns
+                          window.dispatchEvent(new CustomEvent('craft:approve-plan', {
+                            detail: { text, sessionId: session?.id }
+                          }))
                         }}
                       />
                       </div>

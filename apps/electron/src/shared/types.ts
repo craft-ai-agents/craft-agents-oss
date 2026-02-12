@@ -850,6 +850,11 @@ export const IPC_CHANNELS = {
   // Git operations
   GET_GIT_BRANCH: 'git:getBranch',
 
+  // MCP Widget tool/resource access
+  MCP_WIDGET_CALL_TOOL: 'mcp:widget:callTool',
+  MCP_WIDGET_READ_RESOURCE: 'mcp:widget:readResource',
+  MCP_WIDGET_LIST_RESOURCES: 'mcp:widget:listResources',
+
   // Git Bash (Windows)
   GITBASH_CHECK: 'gitbash:check',
   GITBASH_BROWSE: 'gitbash:browse',
@@ -1155,6 +1160,11 @@ export interface ElectronAPI {
 
   // Git operations
   getGitBranch(dirPath: string): Promise<string | null>
+
+  // MCP Widget tool/resource access
+  mcpWidgetCallTool(workspaceId: string, sourceSlug: string, name: string, args: Record<string, unknown>): Promise<unknown>
+  mcpWidgetReadResource(workspaceId: string, sourceSlug: string, uri: string): Promise<unknown>
+  mcpWidgetListResources(workspaceId: string, sourceSlug: string): Promise<{ resources: unknown[] }>
 
   // Git Bash (Windows)
   checkGitBash(): Promise<GitBashStatus>

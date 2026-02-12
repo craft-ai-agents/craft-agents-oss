@@ -2879,6 +2879,145 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // ============================================================
+  // MCP Widget Tool/Resource Access
+  // ============================================================
+
+  /**
+   * Helper: create an MCP client for a given source
+   */
+  /**
+   * Helper: resolve access token for an MCP source
+   */
+  async function resolveMcpAccessToken(source: LoadedSource, sourceSlug: string): Promise<string | undefined> {
+    if (source.config.mcp?.authType === 'oauth' || source.config.mcp?.authType === 'bearer') {
+      const credentialManager = getCredentialManager()
+      const credentialId = source.config.mcp.authType === 'oauth'
+        ? { type: 'source_oauth' as const, workspaceId: source.workspaceId, sourceId: sourceSlug }
+        : { type: 'source_bearer' as const, workspaceId: source.workspaceId, sourceId: sourceSlug }
+      const credential = await credentialManager.get(credentialId)
+      return credential?.value
+    }
+    return undefined
+  }
+
+  // NOTE: Creates a new MCP connection per request — no pooling or caching.
+  // Client reuse / connection pooling is tracked in:
+  // https://github.com/lukilabs/craft-agents-oss/issues/84
+  async function createMcpClientForSource(workspaceId: string, sourceSlug: string) {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const sources = await loadWorkspaceSources(workspace.rootPath)
+    const source = sources.find(s => s.config.slug === sourceSlug)
+    if (!source) throw new Error('Source not found')
+    if (source.config.type !== 'mcp' || !source.config.mcp) throw new Error('Source is not an MCP server')
+
+    const { CraftMcpClient } = await import('@craft-agent/shared/mcp')
+
+    if (source.config.mcp.transport === 'stdio') {
+      if (!source.config.mcp.command) throw new Error('Stdio MCP source missing command')
+      return new CraftMcpClient({
+        transport: 'stdio',
+        command: source.config.mcp.command,
+        args: source.config.mcp.args,
+        env: source.config.mcp.env,
+      })
+    } else {
+      const accessToken = await resolveMcpAccessToken(source, sourceSlug)
+      return new CraftMcpClient({
+        transport: 'http',
+        url: source.config.mcp.url!,
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      })
+    }
+  }
+
+  // Widget: call a tool on an MCP server
+  ipcMain.handle(IPC_CHANNELS.MCP_WIDGET_CALL_TOOL, async (_event, workspaceId: string, sourceSlug: string, name: string, args: Record<string, unknown>) => {
+    try {
+      const client = await createMcpClientForSource(workspaceId, sourceSlug)
+      try {
+        const result = await client.callTool(name, args)
+        return result
+      } finally {
+        await client.close()
+      }
+    } catch (error) {
+      ipcLog.error('MCP widget callTool failed:', error)
+      throw error
+    }
+  })
+
+  // NOTE: Duplicates source resolution from createMcpClientForSource because
+  // CraftMcpClient doesn't expose readResource/listResources. Should be unified
+  // when CraftMcpClient adds resource support.
+  // Tracked: https://github.com/lukilabs/craft-agents-oss/issues/84
+  async function createRawMcpClientForSource(workspaceId: string, sourceSlug: string) {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const sources = await loadWorkspaceSources(workspace.rootPath)
+    const source = sources.find(s => s.config.slug === sourceSlug)
+    if (!source || source.config.type !== 'mcp' || !source.config.mcp) throw new Error('Source not found or not MCP')
+
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
+    const client = new Client({ name: 'craft-agent-widget', version: '1.0.0' }, { capabilities: {} })
+
+    let transport
+    if (source.config.mcp.transport === 'stdio') {
+      const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js')
+      if (!source.config.mcp.command) throw new Error('Stdio MCP source missing command')
+      transport = new StdioClientTransport({
+        command: source.config.mcp.command,
+        args: source.config.mcp.args,
+        env: source.config.mcp.env as Record<string, string>,
+      })
+    } else {
+      const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js')
+      const accessToken = await resolveMcpAccessToken(source, sourceSlug)
+      transport = new StreamableHTTPClientTransport(
+        new URL(source.config.mcp.url!),
+        { requestInit: { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined } }
+      )
+    }
+
+    await client.connect(transport)
+    return client
+  }
+
+  // Widget: read a resource from an MCP server
+  ipcMain.handle(IPC_CHANNELS.MCP_WIDGET_READ_RESOURCE, async (_event, workspaceId: string, sourceSlug: string, uri: string) => {
+    try {
+      const client = await createRawMcpClientForSource(workspaceId, sourceSlug)
+      try {
+        const result = await client.readResource({ uri })
+        return result
+      } finally {
+        await client.close()
+      }
+    } catch (error) {
+      ipcLog.error('MCP widget readResource failed:', error)
+      throw error
+    }
+  })
+
+  // Widget: list resources from an MCP server
+  ipcMain.handle(IPC_CHANNELS.MCP_WIDGET_LIST_RESOURCES, async (_event, workspaceId: string, sourceSlug: string) => {
+    try {
+      const client = await createRawMcpClientForSource(workspaceId, sourceSlug)
+      try {
+        const result = await client.listResources()
+        return result
+      } finally {
+        await client.close()
+      }
+    } catch (error) {
+      ipcLog.error('MCP widget listResources failed:', error)
+      throw error
+    }
+  })
+
   // Get MCP tools for a source with permission status
   ipcMain.handle(IPC_CHANNELS.SOURCES_GET_MCP_TOOLS, async (_event, workspaceId: string, sourceSlug: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)

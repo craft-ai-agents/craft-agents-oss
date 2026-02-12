@@ -13,6 +13,7 @@
     "./chat/TurnCard": "./src/components/chat/TurnCard.tsx",
     "./chat/turn-utils": "./src/components/chat/turn-utils.ts",
     "./markdown": "./src/components/markdown/index.ts",
+    "./mcp-apps": "./src/components/mcp-apps/index.ts",
     "./context": "./src/context/index.ts",
     "./styles": "./src/styles/index.css"
   },

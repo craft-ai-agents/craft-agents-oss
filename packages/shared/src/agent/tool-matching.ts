@@ -224,6 +224,13 @@ export function extractToolResults(
 ): AgentEvent[] {
   const events: AgentEvent[] = [];
 
+  // Extract _meta from the SDK's tool_use_result convenience field.
+  // MCP servers return _meta on CallToolResult (e.g., widget metadata).
+  // The SDK preserves _meta on tool_use_result but strips it from the
+  // ToolResultBlock content blocks. We capture it here and merge it
+  // into the serialized result so downstream consumers can access it.
+  const mcpMeta = extractMcpMeta(toolUseResultValue);
+
   // Primary path: extract tool_use_id directly from content blocks
   const toolResultBlocks = contentBlocks.filter(
     (b): b is ToolResultBlock => b.type === 'tool_result'
@@ -235,7 +242,14 @@ export function extractToolResults(
       const toolUseId = block.tool_use_id;
       const entry = toolIndex.getEntry(toolUseId);
 
-      const resultStr = serializeResult(block.content);
+      let resultStr = serializeResult(block.content);
+      // Only merge _meta for MCP tools. toolUseResultValue carries a single _meta
+      // for the entire message — safe to apply when there's one MCP result block.
+      // If multiple tool_result blocks arrive, _meta only applies to the MCP tool.
+      // See: extractMcpAppWidget() in mcp-app-utils.ts for the downstream consumer.
+      if (mcpMeta && entry?.name?.startsWith('mcp__')) {
+        resultStr = mergeMetaIntoResult(resultStr, mcpMeta);
+      }
       const isError = block.is_error ?? isToolResultError(block.content);
 
       events.push({
@@ -272,7 +286,11 @@ export function extractToolResults(
     const toolUseId = sdkParentToolUseId ?? `fallback-${turnId ?? 'unknown'}`;
     const entry = toolIndex.getEntry(toolUseId);
 
-    const resultStr = serializeResult(toolUseResultValue);
+    let resultStr = serializeResult(toolUseResultValue);
+    // Only merge _meta for MCP tools (same rationale as primary path above).
+    if (mcpMeta && entry?.name?.startsWith('mcp__')) {
+      resultStr = mergeMetaIntoResult(resultStr, mcpMeta);
+    }
     const isError = isToolResultError(toolUseResultValue);
 
     events.push({
@@ -362,6 +380,42 @@ export function isToolResultError(result: unknown): boolean {
     if ('error' in result) return true;
   }
   return false;
+}
+
+/**
+ * Extract _meta from the SDK's tool_use_result value.
+ * MCP servers include _meta on CallToolResult; the SDK preserves it on the
+ * convenience field but strips it from ToolResultBlock content blocks.
+ */
+function extractMcpMeta(toolUseResultValue: unknown): Record<string, unknown> | null {
+  if (
+    toolUseResultValue &&
+    typeof toolUseResultValue === 'object' &&
+    '_meta' in toolUseResultValue &&
+    toolUseResultValue._meta &&
+    typeof toolUseResultValue._meta === 'object'
+  ) {
+    return toolUseResultValue._meta as Record<string, unknown>;
+  }
+  return null;
+}
+
+/**
+ * Merge _meta into a serialized result string so downstream consumers
+ * (e.g., extractMcpAppWidget) can find it via JSON.parse(result)._meta.
+ */
+function mergeMetaIntoResult(resultStr: string, meta: Record<string, unknown>): string {
+  try {
+    const parsed = JSON.parse(resultStr);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      parsed._meta = meta;
+      return JSON.stringify(parsed, null, 2);
+    }
+    // Array or primitive — wrap in object with content + _meta
+    return JSON.stringify({ content: parsed, _meta: meta }, null, 2);
+  } catch {
+    return JSON.stringify({ content: resultStr, _meta: meta }, null, 2);
+  }
 }
 
 /** Detect background task/shell events from tool results */

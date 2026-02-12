@@ -487,6 +487,14 @@ const api: ElectronAPI = {
       ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_NAVIGATE, handler)
     }
   },
+  // MCP Widget tool/resource access
+  mcpWidgetCallTool: (workspaceId: string, sourceSlug: string, name: string, args: Record<string, unknown>) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MCP_WIDGET_CALL_TOOL, workspaceId, sourceSlug, name, args),
+  mcpWidgetReadResource: (workspaceId: string, sourceSlug: string, uri: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MCP_WIDGET_READ_RESOURCE, workspaceId, sourceSlug, uri),
+  mcpWidgetListResources: (workspaceId: string, sourceSlug: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MCP_WIDGET_LIST_RESOURCES, workspaceId, sourceSlug),
+
   getGitBranch: (dirPath: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.GET_GIT_BRANCH, dirPath),
 
