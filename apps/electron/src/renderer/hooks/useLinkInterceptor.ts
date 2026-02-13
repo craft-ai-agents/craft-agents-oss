@@ -138,6 +138,13 @@ export function useLinkInterceptor(options: LinkInterceptorOptions): LinkInterce
    * (e.g., @uiw/react-json-view crashes on null value).
    */
   const handleOpenFile = useCallback(async (path: string) => {
+    // HTML files → open in default browser (not code preview)
+    const ext = path.split('.').pop()?.toLowerCase()
+    if (ext === 'html' || ext === 'htm') {
+      optionsRef.current.openFileExternal(path)
+      return
+    }
+
     const classification = classifyFile(path)
 
     if (!classification.canPreview || !classification.type) {

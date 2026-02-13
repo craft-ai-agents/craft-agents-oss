@@ -10,17 +10,19 @@ import { CodeBlock } from './CodeBlock'
 // that should preserve their original CSS layout, images, and typography
 // rather than being rendered as markdown.
 //
-// Security: Uses <iframe sandbox="allow-same-origin"> with no allow-scripts,
-// so embedded HTML cannot execute JavaScript. The srcdoc attribute injects
-// the HTML directly, avoiding network requests.
+// Security: Uses <iframe sandbox="allow-scripts"> (no allow-same-origin),
+// so embedded HTML can run JavaScript but gets an opaque origin — it cannot
+// access the parent document or escape the sandbox. The srcdoc attribute
+// injects the HTML directly, avoiding network requests.
 //
 // Theming: Detects the app's dark/light mode and adjusts the iframe's base
 // stylesheet accordingly. Most rich HTML (emails, etc.) defines its own
 // colors, so the base styles serve as sensible defaults for minimal HTML.
 //
-// Auto-sizing: A ResizeObserver monitors the iframe content's body height
-// and adjusts the iframe element to match, up to a configurable max height.
-// Beyond that, the iframe scrolls internally.
+// Auto-sizing: An injected script inside the iframe uses ResizeObserver and
+// postMessage to report its content height to the parent. The parent listens
+// for these messages and adjusts the iframe element to match, up to a
+// configurable max height. Beyond that, the iframe scrolls internally.
 // ============================================================================
 
 /** Max height before the iframe shows expand bar */
@@ -133,10 +135,54 @@ function buildOverrideStyles(_isDark: boolean): string {
   return ''
 }
 
+/** Script injected into the iframe to report height and proxy fullscreen via postMessage */
+const IFRAME_BRIDGE_SCRIPT = `<script>
+(function(){
+  // --- Height reporting ---
+  function send(){
+    var h = document.documentElement.scrollHeight || document.body.scrollHeight;
+    if(h > 0) parent.postMessage({type:'g4os-iframe-height', height:h},'*');
+  }
+  send();
+  setTimeout(send, 100);
+  setTimeout(send, 500);
+  if(window.ResizeObserver){
+    new ResizeObserver(send).observe(document.body);
+  }
+  document.querySelectorAll('img').forEach(function(img){
+    if(!img.complete) img.addEventListener('load', send, {once:true});
+  });
+
+  // --- Fullscreen proxy ---
+  // The Fullscreen API is blocked inside a sandboxed iframe with an opaque
+  // origin. Override it to delegate to the parent, which calls
+  // requestFullscreen() on the iframe element itself.
+  Element.prototype.requestFullscreen = function(){
+    parent.postMessage({type:'g4os-iframe-fullscreen', action:'enter'},'*');
+    return Promise.resolve();
+  };
+  if(Element.prototype.webkitRequestFullscreen){
+    Element.prototype.webkitRequestFullscreen = function(){
+      parent.postMessage({type:'g4os-iframe-fullscreen', action:'enter'},'*');
+    };
+  }
+  document.exitFullscreen = function(){
+    parent.postMessage({type:'g4os-iframe-fullscreen', action:'exit'},'*');
+    return Promise.resolve();
+  };
+  if(document.webkitExitFullscreen){
+    document.webkitExitFullscreen = function(){
+      parent.postMessage({type:'g4os-iframe-fullscreen', action:'exit'},'*');
+    };
+  }
+})();
+</script>`
+
 /**
  * Build a complete HTML document with a base stylesheet injected.
  * Also injects a <base> tag for resolving relative URLs when possible.
  * Override styles are appended at the END so they win the CSS cascade.
+ * A height-reporting script is injected at the end of the body.
  */
 function buildSrcDoc(html: string, isDark: boolean): string {
   const baseStyles = buildBaseStyles(isDark)
@@ -149,25 +195,25 @@ function buildSrcDoc(html: string, isDark: boolean): string {
   const lowerHtml = html.toLowerCase()
 
   if (lowerHtml.includes('</body>')) {
-    // Inject base styles in head, override styles at end of body
+    // Inject base styles in head, override styles + height script at end of body
     let result = html
     if (lowerHtml.includes('<head>')) {
       result = result.replace(/<head>/i, `<head>${headInjection}`)
     } else if (lowerHtml.includes('<html')) {
       result = result.replace(/<html[^>]*>/i, (match) => `${match}<head>${headInjection}</head>`)
     }
-    return result.replace(/<\/body>/i, `${overrideStyles}</body>`)
+    return result.replace(/<\/body>/i, `${overrideStyles}${IFRAME_BRIDGE_SCRIPT}</body>`)
   }
 
   if (lowerHtml.includes('<head>')) {
-    return html.replace(/<head>/i, `<head>${headInjection}`) + overrideStyles
+    return html.replace(/<head>/i, `<head>${headInjection}`) + overrideStyles + IFRAME_BRIDGE_SCRIPT
   }
   if (lowerHtml.includes('<html')) {
-    return html.replace(/<html[^>]*>/i, (match) => `${match}<head>${headInjection}</head>`) + overrideStyles
+    return html.replace(/<html[^>]*>/i, (match) => `${match}<head>${headInjection}</head>`) + overrideStyles + IFRAME_BRIDGE_SCRIPT
   }
 
   // No document structure — wrap content with styles
-  return `<!DOCTYPE html><html><head><meta charset="utf-8">${headInjection}</head><body>${html}${overrideStyles}</body></html>`
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">${headInjection}</head><body>${html}${overrideStyles}${IFRAME_BRIDGE_SCRIPT}</body></html>`
 }
 
 export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
@@ -194,57 +240,27 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
   const displayHeight = isExpanded ? contentHeight : Math.min(contentHeight, MAX_COLLAPSED_HEIGHT)
   const isOverflowing = contentHeight > MAX_COLLAPSED_HEIGHT
 
-  // Auto-resize iframe to match content height.
-  // Uses a ref to store the ResizeObserver so we can clean it up properly.
-  const observerRef = React.useRef<ResizeObserver | null>(null)
-
+  // Listen for messages from the iframe via postMessage.
+  // Handles height reporting and fullscreen proxy requests.
   React.useEffect(() => {
-    return () => {
-      observerRef.current?.disconnect()
-    }
-  }, [])
+    const handleMessage = (event: MessageEvent) => {
+      if (event.source !== iframeRef.current?.contentWindow) return
 
-  const handleLoad = React.useCallback(() => {
-    const iframe = iframeRef.current
-    if (!iframe) return
-
-    // Clean up previous observer
-    observerRef.current?.disconnect()
-
-    try {
-      const doc = iframe.contentDocument
-      if (!doc?.body) return
-
-      const measure = () => {
-        const height = doc.body.scrollHeight
-        if (height > 0) {
-          setContentHeight(height)
+      if (
+        event.data?.type === 'g4os-iframe-height' &&
+        typeof event.data.height === 'number'
+      ) {
+        setContentHeight(event.data.height)
+      } else if (event.data?.type === 'g4os-iframe-fullscreen') {
+        if (event.data.action === 'enter') {
+          iframeRef.current?.requestFullscreen?.()
+        } else if (event.data.action === 'exit') {
+          if (document.fullscreenElement) document.exitFullscreen()
         }
       }
-
-      // Initial measurement
-      measure()
-
-      // Re-measure after a short delay (CSS reflows, fonts loading)
-      setTimeout(measure, 100)
-      setTimeout(measure, 500)
-
-      // Observe for dynamic content changes (images loading, layout shifts)
-      const observer = new ResizeObserver(measure)
-      observer.observe(doc.body)
-      observerRef.current = observer
-
-      // Listen for image load events
-      const images = doc.querySelectorAll('img')
-      images.forEach((img) => {
-        if (!img.complete) {
-          img.addEventListener('load', measure, { once: true })
-        }
-      })
-    } catch {
-      // Cross-origin restrictions — shouldn't happen with srcdoc but be safe
-      setContentHeight(400)
     }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
   }, [])
 
   // Toggle between rendered HTML and source code
@@ -319,12 +335,13 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
           )}
         </div>
 
-        {/* Sandboxed iframe */}
+        {/* Sandboxed iframe — allow-scripts (no allow-same-origin) for safe JS execution */}
         <iframe
           ref={iframeRef}
           srcDoc={srcDoc}
-          sandbox="allow-same-origin"
-          onLoad={handleLoad}
+          sandbox="allow-scripts"
+          allow="fullscreen"
+          allowFullScreen
           style={{
             width: '100%',
             height: `${displayHeight}px`,
