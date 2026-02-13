@@ -229,6 +229,8 @@ export interface ResponseContent {
   streamStartTime?: number
   /** Whether this response is a plan (renders with plan variant) */
   isPlan?: boolean
+  /** Intermediate thinking text — will be replaced by the final response */
+  isIntermediate?: boolean
 }
 
 // ============================================================================
@@ -2067,7 +2069,7 @@ export const TurnCard = React.memo(function TurnCard({
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, ease: "easeOut" }}
-              className={cn("select-text", hasActivities && "mt-2")}
+              className={cn("select-text", hasActivities && "mt-2", response.isIntermediate && "opacity-70")}
             >
               <ResponseCard
                 text={activityImageMarkdown + response.text}
@@ -2088,7 +2090,7 @@ export const TurnCard = React.memo(function TurnCard({
       )}
       {/* Non-animated version for regular app use */}
       {!animateResponse && response && !isBuffering && (
-        <div className={cn("select-text", hasActivities && "mt-2")}>
+        <div className={cn("select-text", hasActivities && "mt-2", response.isIntermediate && "opacity-70")}>
           <ResponseCard
             text={activityImageMarkdown + response.text}
             isStreaming={response.isStreaming}

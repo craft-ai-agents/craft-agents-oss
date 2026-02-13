@@ -572,10 +572,8 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
 
     // Assistant messages are the response part of a turn
     if (message.role === 'assistant') {
-      // Intermediate messages OR pending messages (don't know yet) are activities, not responses
-      // Pending: streaming text where we don't yet know if it's intermediate - treat as intermediate
-      // until text_complete arrives with the definitive isIntermediate flag
-      if (message.isIntermediate || message.isPending) {
+      // Intermediate messages are activities, not responses
+      if (message.isIntermediate) {
         if (!currentTurn) {
           // Start a new turn for this intermediate message
           currentTurn = {
@@ -608,6 +606,17 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
           intermediateActivity.depth = 0
         }
         currentTurn.activities.push(intermediateActivity)
+
+        // Persist completed intermediate text as the response, so the response
+        // area stays visible until replaced by the next streaming message.
+        // This prevents the "flickering" where response appears → disappears → reappears.
+        if (!message.isPending) {
+          currentTurn.response = {
+            text: message.content,
+            isStreaming: false,
+            isIntermediate: true,
+          }
+        }
 
         // Update turn streaming state based on this message
         // If message is no longer pending/streaming, update turn state accordingly
