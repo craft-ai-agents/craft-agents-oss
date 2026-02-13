@@ -1,6 +1,6 @@
 {
   "name": "@g4os/mermaid",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "license": "Apache-2.0",
   "description": "Mermaid flowchart to styled SVG renderer with zinc monochrome palette",
   "type": "module",
