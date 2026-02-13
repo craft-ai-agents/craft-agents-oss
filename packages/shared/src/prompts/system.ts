@@ -333,7 +333,10 @@ export function getSystemPrompt(
   // Safe Mode context is also in user messages for the same reason.
   // Build available workflows section
   const workflowsSection = workflows && workflows.length > 0
-    ? `\n\n## Available Workflows\n\nThe user can trigger these workflows by typing \`/slug\` in the chat input:\n\n${workflows.map(w => `- \`/${w.slug}\`: ${w.metadata.description}`).join('\n')}\n\nWhen the user types a workflow slash command, the workflow instructions and knowledge files are automatically injected. You can also suggest relevant workflows proactively.`
+    ? `\n\n## Available Workflows\n\nThe user can trigger these workflows by typing \`/slug\` in the chat input:\n\n${workflows.map(w => {
+      const workflowPath = workspaceRootPath ? ` — \`${workspaceRootPath}/workflows/${w.slug}/WORKFLOW.md\`` : '';
+      return `- \`/${w.slug}\`: ${w.metadata.description}${workflowPath}`;
+    }).join('\n')}\n\nWhen the user types a workflow slash command, the workflow instructions and knowledge files are automatically injected. If you need to access a workflow manually, read its WORKFLOW.md and any files in its knowledge/ subdirectory. You can also suggest relevant workflows proactively.`
     : '';
 
   const basePrompt = getG4CoSSystemPrompt(workspaceRootPath, backendName);

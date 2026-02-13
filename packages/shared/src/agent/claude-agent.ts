@@ -1391,12 +1391,28 @@ export class ClaudeAgent extends BaseAgent {
       const commandName = commandMatch?.[1]?.toLowerCase();
 
       // Check for workflow commands first: /slug or /slug <args>
-      const matchedWorkflow = commandName
+      // Primary: /slug at start of message
+      let matchedWorkflow = commandName
         ? this.workflows.find(w => w.slug === commandName)
         : null;
 
+      // Fallback: /slug mentioned anywhere in the message
+      // Only if we didn't already match at the start and workflows are loaded
+      if (!matchedWorkflow && this.workflows.length > 0) {
+        const mentioned = this.workflows.filter(w =>
+          trimmedMessage.includes(`/${w.slug}`)
+        );
+        if (mentioned.length === 1) {
+          matchedWorkflow = mentioned[0];
+        }
+      }
+
       if (matchedWorkflow && !attachments?.length) {
-        const userArgs = trimmedMessage.slice(commandMatch![0].length).trim();
+        // When matched at start, strip the /slug prefix to get user args
+        // When matched via fallback (anywhere in message), use the full message as context
+        const userArgs = commandMatch && commandName === matchedWorkflow.slug
+          ? trimmedMessage.slice(commandMatch[0].length).trim()
+          : trimmedMessage;
         userMessage = this.buildWorkflowPrompt(matchedWorkflow, userArgs);
         debug(`[chat] Detected workflow command: /${matchedWorkflow.slug}`);
       }
