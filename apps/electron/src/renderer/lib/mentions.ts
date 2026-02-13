@@ -26,6 +26,8 @@ export interface ParsedMentions {
   files: string[]
   /** Folder paths mentioned via [folder:path] */
   folders: string[]
+  /** Session references mentioned via [session:workspaceId:sessionId] */
+  sessions: { workspaceId: string; sessionId: string }[]
 }
 
 export interface MentionMatch {
@@ -63,6 +65,7 @@ export function parseMentions(
     sources: [],
     files: [],
     folders: [],
+    sessions: [],
   }
 
   // Match source mentions: [source:slug]
@@ -100,6 +103,16 @@ export function parseMentions(
     const folderPath = match[1]
     if (!result.folders.includes(folderPath)) {
       result.folders.push(folderPath)
+    }
+  }
+
+  // Match session mentions: [session:workspaceId:sessionId]
+  const sessionPattern = /\[session:([\w-]+):([\w-]+)\]/g
+  while ((match = sessionPattern.exec(text)) !== null) {
+    const wsId = match[1]
+    const sessId = match[2]
+    if (!result.sessions.some(s => s.workspaceId === wsId && s.sessionId === sessId)) {
+      result.sessions.push({ workspaceId: wsId, sessionId: sessId })
     }
   }
 
@@ -173,6 +186,17 @@ export function findMentionMatches(
     })
   }
 
+  // Match session mentions: [session:workspaceId:sessionId]
+  const sessionPattern = /(\[session:([\w-]+):([\w-]+)\])/g
+  while ((match = sessionPattern.exec(text)) !== null) {
+    matches.push({
+      type: 'session',
+      id: `${match[2]}:${match[3]}`,
+      fullMatch: match[1],
+      startIndex: match.index,
+    })
+  }
+
   // Sort by position
   return matches.sort((a, b) => a.startIndex - b.startIndex)
 }
@@ -197,6 +221,10 @@ export function removeMention(text: string, type: MentionItemType, id: string): 
       break
     case 'folder':
       pattern = new RegExp(`\\[folder:${escapeRegExp(id)}\\]`, 'g')
+      break
+    case 'session':
+      // Match [session:workspaceId:sessionId] — id is "workspaceId:sessionId"
+      pattern = new RegExp(`\\[session:${escapeRegExp(id)}\\]`, 'g')
       break
     case 'skill':
     default:
@@ -227,6 +255,8 @@ export function stripAllMentions(text: string): string {
     .replace(/\[file:[^\]]+\]/g, '')
     // Remove [folder:path]
     .replace(/\[folder:[^\]]+\]/g, '')
+    // Remove [session:workspaceId:sessionId]
+    .replace(/\[session:[\w-]+:[\w-]+\]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -240,7 +270,7 @@ export function hasMentions(
   availableSourceSlugs: string[]
 ): boolean {
   const mentions = parseMentions(text, availableSkillSlugs, availableSourceSlugs)
-  return mentions.skills.length > 0 || mentions.sources.length > 0 || mentions.files.length > 0 || mentions.folders.length > 0
+  return mentions.skills.length > 0 || mentions.sources.length > 0 || mentions.files.length > 0 || mentions.folders.length > 0 || mentions.sessions.length > 0
 }
 
 // ============================================================================
@@ -316,6 +346,9 @@ export function extractBadges(
       // Show folder name as label, full relative path stored for tooltip
       label = match.id.split('/').pop() || match.id
       filePath = match.id
+    } else if (match.type === 'session') {
+      // Session reference — label is the session ID (caller may enrich with title)
+      label = match.id
     }
 
     // For skills, create fully-qualified rawText (workspaceId:slug) so the agent
@@ -327,7 +360,7 @@ export function extractBadges(
     }
 
     return {
-      type: match.type as 'source' | 'skill' | 'file' | 'folder',
+      type: match.type as 'source' | 'skill' | 'file' | 'folder' | 'session',
       label,
       rawText,
       iconDataUrl,

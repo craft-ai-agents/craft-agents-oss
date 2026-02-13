@@ -32,6 +32,13 @@ import {
   InlineLabelMenu,
   useInlineLabelMenu,
 } from '@/components/ui/label-menu'
+import {
+  InlineSessionReferenceMenu,
+  useInlineSessionReference,
+  type SessionReferenceCandidate,
+} from '@/components/ui/session-reference-menu'
+import { useAtomValue } from 'jotai'
+import { sessionMetaMapAtom } from '@/atoms/sessions'
 import type { LabelConfig } from '@g4os/shared/labels'
 import { parseMentions } from '@/lib/mentions'
 import { RichTextInput, type RichTextInputHandle } from '@/components/ui/rich-text-input'
@@ -776,6 +783,32 @@ export function FreeFormInput({
     workspaceId,
   })
 
+  // Inline session reference hook (for > trigger)
+  const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
+  const sessionCandidates = React.useMemo((): SessionReferenceCandidate[] => {
+    const candidates: SessionReferenceCandidate[] = []
+    for (const [id, meta] of sessionMetaMap) {
+      if (id === sessionId) continue // Exclude current session
+      candidates.push({
+        id,
+        workspaceId: meta.workspaceId,
+        title: meta.name || meta.preview || id,
+        lastMessageAt: meta.lastMessageAt,
+      })
+    }
+    return candidates
+  }, [sessionMetaMap, sessionId])
+
+  const handleSessionReferenceSelect = React.useCallback((_item: SessionReferenceCandidate) => {
+    // Selection is handled by the hook's handleSelect which inserts [session:...] text
+  }, [])
+
+  const inlineSessionRef = useInlineSessionReference({
+    inputRef: richInputRef,
+    sessions: sessionCandidates,
+    onSelect: handleSessionReferenceSelect,
+  })
+
   // Inline label menu hook (for #labels)
   const handleLabelSelect = React.useCallback((labelId: string) => {
     onLabelAdd?.(labelId)
@@ -1096,6 +1129,18 @@ export function FreeFormInput({
       return
     }
 
+    // Don't submit when session reference menu is open
+    if (inlineSessionRef.isOpen) {
+      if (inlineSessionRef.hasMatches && (e.key === 'Enter' || e.key === 'Tab' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        inlineSessionRef.close()
+        return
+      }
+    }
+
     // Don't submit when mention menu is open AND has visible content
     if (inlineMention.isOpen) {
       // Only intercept navigation/selection keys if menu actually shows items or is loading
@@ -1203,10 +1248,13 @@ export function FreeFormInput({
     // Update inline label state (for #labels)
     inlineLabel.handleInputChange(value, cursorPosition)
 
+    // Update inline session reference state (for > trigger)
+    inlineSessionRef.handleInputChange(value, cursorPosition)
+
     // Auto-capitalize first letter (but not for slash commands, @mentions, or #labels)
     // Only if autoCapitalisation setting is enabled
     let newValue = value
-    if (autoCapitalisation && value.length > 0 && value.charAt(0) !== '/' && value.charAt(0) !== '@' && value.charAt(0) !== '#') {
+    if (autoCapitalisation && value.length > 0 && value.charAt(0) !== '/' && value.charAt(0) !== '@' && value.charAt(0) !== '#' && value.charAt(0) !== '>') {
       const capitalizedFirst = value.charAt(0).toUpperCase()
       if (capitalizedFirst !== value.charAt(0)) {
         newValue = capitalizedFirst + value.slice(1)
@@ -1264,6 +1312,17 @@ export function FreeFormInput({
       richInputRef.current?.setSelectionRange(cursorPosition, cursorPosition)
     }, 0)
   }, [inlineMention, syncToParent])
+
+  // Handle inline session reference selection (inserts [session:...] text)
+  const handleInlineSessionRefSelect = React.useCallback((item: SessionReferenceCandidate) => {
+    const { value: newValue, cursorPosition } = inlineSessionRef.handleSelect(item)
+    setInput(newValue)
+    syncToParent(newValue)
+    setTimeout(() => {
+      richInputRef.current?.focus()
+      richInputRef.current?.setSelectionRange(cursorPosition, cursorPosition)
+    }, 0)
+  }, [inlineSessionRef, syncToParent])
 
   // Handle inline label selection (removes the #label text from input)
   const handleInlineLabelSelect = React.useCallback((labelId: string) => {
@@ -1326,6 +1385,17 @@ export function FreeFormInput({
           workspaceId={workspaceId}
           maxWidth={280}
           isSearching={inlineMention.isSearching}
+        />
+
+        {/* Inline Session Reference Autocomplete (> trigger) */}
+        <InlineSessionReferenceMenu
+          open={inlineSessionRef.isOpen}
+          onOpenChange={(open) => !open && inlineSessionRef.close()}
+          items={inlineSessionRef.items}
+          onSelect={handleInlineSessionRefSelect}
+          filter={inlineSessionRef.filter}
+          position={inlineSessionRef.position}
+          maxWidth={320}
         />
 
         {/* Inline Label & State Autocomplete (#labels / #states) */}
