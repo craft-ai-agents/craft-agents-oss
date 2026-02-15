@@ -218,7 +218,14 @@ export function loadStoredConfig(): StoredConfig | null {
  */
 export async function getAnthropicApiKey(): Promise<string | null> {
   const manager = getCredentialManager();
-  return manager.getLlmApiKey('anthropic-api');
+  const defaultSlug = getDefaultLlmConnection();
+  if (defaultSlug) {
+    const key = await manager.getLlmApiKey(defaultSlug);
+    if (key) return key;
+  }
+  // Fallback for backwards compatibility (e.g., when default is OAuth but
+  // user also has an 'anthropic-api' key configured for call_llm)
+  return manager.getLlmApiKey(DEFAULT_LLM_CONNECTION);
 }
 
 /**
