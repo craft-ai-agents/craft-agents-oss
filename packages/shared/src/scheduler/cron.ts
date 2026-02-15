@@ -142,8 +142,35 @@ export function describeSchedule(schedule: string): string {
         const minutes = ms / (60 * 1000);
         return `Every ${minutes} minute${minutes === 1 ? '' : 's'}`;
       }
-      case 'cron':
+      case 'cron': {
+        const c = parsed.cron!;
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+        // Detect "specific days + single time" pattern
+        const isSimpleDayTime =
+          c.minutes.length === 1 &&
+          c.hours.length === 1 &&
+          c.daysOfMonth.length === 31 &&
+          c.months.length === 12;
+
+        if (isSimpleDayTime) {
+          const timeStr = `${pad(c.hours[0]!)}:${pad(c.minutes[0]!)}`;
+          const dow = c.daysOfWeek;
+
+          if (dow.length === 7) return `Every day at ${timeStr}`;
+          if (dow.length === 5 && [1, 2, 3, 4, 5].every(d => dow.includes(d)) && !dow.includes(0) && !dow.includes(6)) {
+            return `Weekdays at ${timeStr}`;
+          }
+          if (dow.length === 2 && dow.includes(0) && dow.includes(6)) {
+            return `Weekends at ${timeStr}`;
+          }
+
+          const dayList = dow.map(d => dayNames[d]!).join(', ');
+          return `${dayList} at ${timeStr}`;
+        }
+
         return `Cron: ${schedule}`;
+      }
     }
   } catch {
     return schedule;

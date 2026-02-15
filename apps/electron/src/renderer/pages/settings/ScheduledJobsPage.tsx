@@ -20,13 +20,153 @@ import {
   SettingsRow,
   SettingsToggle,
   SettingsMenuSelectRow,
+  SettingsSegmentedControl,
 } from '@/components/settings'
 import { Play, Trash2, Plus, Check } from 'lucide-react'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
 import type { ScheduledJob, CreateScheduledJobInput, UpdateScheduledJobInput, JobAction, LoadedSource, LoadedSkill } from '../../../shared/types'
-import { describeSchedule } from '@g4os/shared/scheduler/cron'
+import { describeSchedule, parseSchedule } from '@g4os/shared/scheduler/cron'
+import { cn } from '@/lib/utils'
+
+// ============================================
+// Schedule Editor
+// ============================================
+
+type ScheduleMode = 'time-and-days' | 'interval' | 'advanced'
+
+interface ScheduleEditorState {
+  mode: ScheduleMode
+  time: string            // "HH:MM" format
+  days: boolean[]         // [Sun, Mon, Tue, Wed, Thu, Fri, Sat] — index matches JS getDay()
+  intervalValue: string
+  intervalUnit: 'h' | 'm'
+  rawText: string         // for advanced mode
+}
+
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
+const ALL_DAYS: boolean[] = [true, true, true, true, true, true, true]
+const WEEKDAYS: boolean[] = [false, true, true, true, true, true, false]
+const WEEKENDS: boolean[] = [true, false, false, false, false, false, true]
+
+function arraysEqual(a: boolean[], b: boolean[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i])
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0')
+
+function parseScheduleToEditorState(schedule: string): ScheduleEditorState {
+  try {
+    const parsed = parseSchedule(schedule)
+
+    switch (parsed.type) {
+      case 'daily':
+        return {
+          mode: 'time-and-days',
+          time: `${pad2(parsed.hour!)}:${pad2(parsed.minute!)}`,
+          days: [...ALL_DAYS],
+          intervalValue: '2', intervalUnit: 'h', rawText: schedule,
+        }
+      case 'weekdays':
+        return {
+          mode: 'time-and-days',
+          time: `${pad2(parsed.hour!)}:${pad2(parsed.minute!)}`,
+          days: [...WEEKDAYS],
+          intervalValue: '2', intervalUnit: 'h', rawText: schedule,
+        }
+      case 'weekends':
+        return {
+          mode: 'time-and-days',
+          time: `${pad2(parsed.hour!)}:${pad2(parsed.minute!)}`,
+          days: [...WEEKENDS],
+          intervalValue: '2', intervalUnit: 'h', rawText: schedule,
+        }
+      case 'interval': {
+        const ms = parsed.intervalMs!
+        const isHours = ms >= 60 * 60 * 1000 && ms % (60 * 60 * 1000) === 0
+        return {
+          mode: 'interval',
+          time: '08:00', days: [...ALL_DAYS],
+          intervalValue: isHours ? String(ms / (60 * 60 * 1000)) : String(ms / (60 * 1000)),
+          intervalUnit: isHours ? 'h' : 'm',
+          rawText: schedule,
+        }
+      }
+      case 'cron': {
+        const cron = parsed.cron!
+        const isSimpleDayCron =
+          cron.minutes.length === 1 &&
+          cron.hours.length === 1 &&
+          cron.daysOfMonth.length === 31 &&
+          cron.months.length === 12
+
+        if (isSimpleDayCron) {
+          const days = [false, false, false, false, false, false, false]
+          for (const d of cron.daysOfWeek) days[d] = true
+          return {
+            mode: 'time-and-days',
+            time: `${pad2(cron.hours[0]!)}:${pad2(cron.minutes[0]!)}`,
+            days,
+            intervalValue: '2', intervalUnit: 'h', rawText: schedule,
+          }
+        }
+
+        return {
+          mode: 'advanced',
+          time: '08:00', days: [...ALL_DAYS],
+          intervalValue: '2', intervalUnit: 'h', rawText: schedule,
+        }
+      }
+    }
+  } catch {
+    return {
+      mode: 'advanced',
+      time: '08:00', days: [...ALL_DAYS],
+      intervalValue: '2', intervalUnit: 'h', rawText: schedule,
+    }
+  }
+}
+
+function editorStateToScheduleString(state: ScheduleEditorState): string {
+  switch (state.mode) {
+    case 'advanced':
+      return state.rawText
+
+    case 'interval': {
+      const val = parseInt(state.intervalValue, 10)
+      if (isNaN(val) || val <= 0) return `*/1${state.intervalUnit}`
+      return `*/${val}${state.intervalUnit}`
+    }
+
+    case 'time-and-days': {
+      const selectedDays = state.days
+        .map((checked, i) => (checked ? i : -1))
+        .filter(i => i >= 0)
+
+      if (selectedDays.length === 0) return state.time
+
+      const isAllDays = selectedDays.length === 7
+      const isWeekdays =
+        selectedDays.length === 5 &&
+        [1, 2, 3, 4, 5].every(d => selectedDays.includes(d))
+      const isWeekends =
+        selectedDays.length === 2 &&
+        selectedDays.includes(0) &&
+        selectedDays.includes(6)
+
+      if (isAllDays) return state.time
+      if (isWeekdays) return `weekdays ${state.time}`
+      if (isWeekends) return `weekends ${state.time}`
+
+      const [hourStr, minStr] = state.time.split(':')
+      const hour = parseInt(hourStr!, 10)
+      const minute = parseInt(minStr!, 10)
+      const dowField = selectedDays.join(',')
+      return `${minute} ${hour} * * ${dowField}`
+    }
+  }
+}
 
 // ============================================
 // Job Form
@@ -113,6 +253,157 @@ function jobToForm(job: ScheduledJob): JobFormData {
   }
 }
 
+function ScheduleEditor({
+  state,
+  onChange,
+}: {
+  state: ScheduleEditorState
+  onChange: (state: ScheduleEditorState) => void
+}) {
+  const toggleDay = (index: number) => {
+    const newDays = [...state.days]
+    newDays[index] = !newDays[index]
+    onChange({ ...state, days: newDays })
+  }
+
+  const handleModeChange = (newMode: string) => {
+    const mode = newMode as ScheduleMode
+    if (mode === 'advanced') {
+      onChange({ ...state, mode, rawText: editorStateToScheduleString(state) })
+    } else {
+      onChange({ ...state, mode })
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <SettingsSegmentedControl
+        value={state.mode}
+        onValueChange={handleModeChange}
+        options={[
+          { value: 'time-and-days', label: 'Schedule' },
+          { value: 'interval', label: 'Interval' },
+          { value: 'advanced', label: 'Advanced' },
+        ]}
+        size="sm"
+      />
+
+      {state.mode === 'time-and-days' && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">At</span>
+            <input
+              type="time"
+              className="rounded-md border border-border bg-background px-3 py-1.5 text-sm font-mono"
+              value={state.time}
+              onChange={e => onChange({ ...state, time: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex gap-1">
+              {DAY_LABELS.map((label, i) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => toggleDay(i)}
+                  className={cn(
+                    'w-9 h-8 rounded-md text-xs font-medium transition-colors',
+                    state.days[i]
+                      ? 'bg-accent text-accent-foreground'
+                      : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1.5">
+              {([
+                { label: 'Every day', preset: ALL_DAYS },
+                { label: 'Weekdays', preset: WEEKDAYS },
+                { label: 'Weekends', preset: WEEKENDS },
+              ] as const).map(({ label, preset }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => onChange({ ...state, days: [...preset] })}
+                  className={cn(
+                    'px-2 py-0.5 rounded text-xs transition-colors',
+                    arraysEqual(state.days, preset)
+                      ? 'bg-foreground/10 text-foreground font-medium'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <span className="text-xs text-muted-foreground block">
+            {(() => {
+              try { return describeSchedule(editorStateToScheduleString(state)) }
+              catch { return 'Select at least one day' }
+            })()}
+          </span>
+        </div>
+      )}
+
+      {state.mode === 'interval' && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Every</span>
+            <input
+              type="number"
+              min="1"
+              className="w-20 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-mono"
+              value={state.intervalValue}
+              onChange={e => onChange({ ...state, intervalValue: e.target.value })}
+            />
+            <select
+              className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+              value={state.intervalUnit}
+              onChange={e => onChange({ ...state, intervalUnit: e.target.value as 'h' | 'm' })}
+            >
+              <option value="h">hours</option>
+              <option value="m">minutes</option>
+            </select>
+          </div>
+          <span className="text-xs text-muted-foreground block">
+            {(() => {
+              try { return describeSchedule(editorStateToScheduleString(state)) }
+              catch { return 'Enter a valid interval' }
+            })()}
+          </span>
+        </div>
+      )}
+
+      {state.mode === 'advanced' && (
+        <div className="space-y-1">
+          <input
+            type="text"
+            className="w-64 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-mono"
+            placeholder="0 8 * * 1-5"
+            value={state.rawText}
+            onChange={e => onChange({ ...state, rawText: e.target.value })}
+          />
+          <span className="text-xs text-muted-foreground block">
+            {(() => {
+              try { return describeSchedule(state.rawText) }
+              catch { return 'Formats: HH:MM, weekdays HH:MM, weekends HH:MM, */2h, or 5-field cron' }
+            })()}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================
+// Job Form
+// ============================================
+
 function JobForm({
   initial,
   sources,
@@ -129,6 +420,9 @@ function JobForm({
   submitLabel: string
 }) {
   const [form, setForm] = useState<JobFormData>(initial)
+  const [scheduleState, setScheduleState] = useState<ScheduleEditorState>(
+    () => parseScheduleToEditorState(initial.schedule)
+  )
 
   const update = <K extends keyof JobFormData>(key: K, value: JobFormData[K]) => {
     setForm(prev => ({ ...prev, [key]: value }))
@@ -152,7 +446,11 @@ function JobForm({
     })
   }
 
-  const isValid = form.name.trim() && form.schedule.trim()
+  const scheduleString = editorStateToScheduleString(scheduleState)
+  const isScheduleValid = (() => {
+    try { parseSchedule(scheduleString); return true } catch { return false }
+  })()
+  const isValid = form.name.trim() && isScheduleValid
 
   return (
     <div className="space-y-6">
@@ -167,22 +465,10 @@ function JobForm({
               onChange={e => update('name', e.target.value)}
             />
           </SettingsRow>
-          <SettingsRow label="Schedule">
-            <div className="flex flex-col gap-1">
-              <input
-                type="text"
-                className="w-64 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-mono"
-                placeholder="08:00"
-                value={form.schedule}
-                onChange={e => update('schedule', e.target.value)}
-              />
-              <span className="text-xs text-muted-foreground">
-                {(() => {
-                  try { return describeSchedule(form.schedule) } catch { return 'Examples: 08:00, weekdays 09:30, */2h, 0 8 * * 1-5' }
-                })()}
-              </span>
-            </div>
-          </SettingsRow>
+          <div className="px-4 py-3.5">
+            <div className="text-sm font-medium mb-2">Schedule</div>
+            <ScheduleEditor state={scheduleState} onChange={setScheduleState} />
+          </div>
         </SettingsCard>
       </SettingsSection>
 
@@ -383,7 +669,7 @@ function JobForm({
         <Button variant="outline" size="sm" onClick={onCancel}>
           Cancel
         </Button>
-        <Button size="sm" disabled={!isValid} onClick={() => onSubmit(form)}>
+        <Button size="sm" disabled={!isValid} onClick={() => onSubmit({ ...form, schedule: scheduleString })}>
           {submitLabel}
         </Button>
       </div>
