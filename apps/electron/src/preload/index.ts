@@ -195,6 +195,9 @@ const api: ElectronAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.COPILOT_DEVICE_CODE, handler)
   },
 
+  // Amp CLI
+  checkAmpInstalled: () => ipcRenderer.invoke(IPC_CHANNELS.CHECK_AMP_INSTALLED),
+
   // Settings - API Setup
   setupLlmConnection: (setup: LlmConnectionSetup) =>
     ipcRenderer.invoke(IPC_CHANNELS.SETUP_LLM_CONNECTION, setup),

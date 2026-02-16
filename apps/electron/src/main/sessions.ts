@@ -8,6 +8,7 @@ import {
   CodexBackend,
   CodexAgent,
   CopilotAgent,
+  AmpAgent,
   detectProvider,
   resolveSessionConnection,
   providerTypeToAgentProvider,
@@ -2461,7 +2462,7 @@ export class SessionManager {
       }
 
       // Determine provider from connection or fall back to legacy authType
-      let provider: 'anthropic' | 'openai' | 'copilot'
+      let provider: 'anthropic' | 'openai' | 'copilot' | 'amp'
       let authType: LlmAuthType | undefined
 
       if (connection) {
@@ -2726,6 +2727,62 @@ export class SessionManager {
           await setupCopilotBridgeConfig(copilotConfigDir, enabledSources)
           copilotAgent.setSourceServers(mcpServers, apiServers, enabledSlugs)
         }
+      } else if (provider === 'amp') {
+        // Amp CLI backend - uses external Amp CLI process
+        const rawAmpModel = managed.model || connection?.defaultModel || 'amp-smart'
+        const ampModel = rawAmpModel
+
+        // Create per-session config directory for Amp
+        const sessionPath = getSessionStoragePath(managed.workspace.rootPath, managed.id)
+        const ampConfigDir = join(sessionPath, '.amp-config')
+        await mkdir(ampConfigDir, { recursive: true })
+
+        managed.agent = new AmpAgent({
+          provider: 'amp',
+          authType: authType || 'external_cli',
+          workspace: managed.workspace,
+          model: ampModel,
+          thinkingLevel: managed.thinkingLevel,
+          connectionSlug: connection?.slug,
+          session: {
+            id: managed.id,
+            workspaceRootPath: managed.workspace.rootPath,
+            sdkSessionId: managed.sdkSessionId,
+            createdAt: managed.lastMessageAt,
+            lastUsedAt: managed.lastMessageAt,
+            workingDirectory: managed.workingDirectory,
+            sdkCwd: managed.sdkCwd,
+            model: managed.model,
+            llmConnection: managed.llmConnection,
+          },
+          onSdkSessionIdUpdate: (sdkSessionId: string) => {
+            managed.sdkSessionId = sdkSessionId
+            sessionLog.info(`SDK session ID captured for ${managed.id}: ${sdkSessionId}`)
+            this.persistSession(managed)
+            sessionPersistenceQueue.flush(managed.id)
+          },
+          onSdkSessionIdCleared: () => {
+            managed.sdkSessionId = undefined
+            sessionLog.info(`SDK session ID cleared for ${managed.id} (resume recovery)`)
+            this.persistSession(managed)
+            sessionPersistenceQueue.flush(managed.id)
+          },
+          getRecoveryMessages: () => {
+            const relevantMessages = managed.messages
+              .filter(m => m.role === 'user' || m.role === 'assistant')
+              .filter(m => !m.isIntermediate)
+              .slice(-6)
+            return relevantMessages.map(m => ({
+              type: m.role as 'user' | 'assistant',
+              content: m.content,
+            }))
+          },
+        })
+        sessionLog.info(`Created Amp agent for session ${managed.id} (model: ${ampModel})${managed.sdkSessionId ? ' (resuming)' : ''}`)
+
+        // Wire up debug callback for Amp agent logging
+        const ampAgent = managed.agent as AmpAgent
+        ampAgent.onDebug = (msg: string) => sessionLog.info(msg)
       } else {
         // Claude backend - uses Anthropic SDK
         // Set auth credentials for this session's connection BEFORE creating the agent.

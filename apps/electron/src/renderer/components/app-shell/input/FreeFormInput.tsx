@@ -316,6 +316,7 @@ export function FreeFormInput({
       'Anthropic': [],
       'OpenAI': [],
       'GitHub Copilot': [],
+      'Amp': [],
     }
     for (const conn of llmConnections) {
       const provider = conn.providerType || 'anthropic'
@@ -326,6 +327,8 @@ export function FreeFormInput({
         groups['OpenAI'].push(conn)
       } else if (provider === 'copilot') {
         groups['GitHub Copilot'].push(conn)
+      } else if (provider === 'amp') {
+        groups['Amp'].push(conn)
       }
     }
     // Return only non-empty groups

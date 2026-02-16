@@ -178,6 +178,7 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
       case 'openai_compat': parts.push('OpenAI Compatible'); break
       case 'bedrock': parts.push('AWS Bedrock'); break
       case 'vertex': parts.push('Google Vertex'); break
+      case 'amp': parts.push('Amp CLI'); break
       default: parts.push(provider || 'Unknown')
     }
 
@@ -426,6 +427,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
                     description: conn.providerType === 'anthropic' ? 'Anthropic' :
                                  conn.providerType === 'openai' ? 'OpenAI' :
                                  conn.providerType === 'copilot' ? 'GitHub Copilot' :
+                                 conn.providerType === 'amp' ? 'Amp CLI' :
                                  conn.providerType || 'Unknown',
                   })),
                 ]}
@@ -747,6 +749,7 @@ export default function AiSettingsPage() {
                                    conn.providerType === 'openai_compat' ? 'OpenAI Compatible' :
                                    conn.providerType === 'bedrock' ? 'AWS Bedrock' :
                                    conn.providerType === 'vertex' ? 'Google Vertex' :
+                                   conn.providerType === 'amp' ? 'Amp CLI' :
                                    conn.providerType || 'Unknown',
                     }))}
                   />

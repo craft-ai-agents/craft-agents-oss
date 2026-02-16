@@ -84,6 +84,7 @@ const BASE_SLUG_FOR_METHOD: Record<ApiSetupMethod, string> = {
   chatgpt_oauth: 'codex',
   openai_api_key: 'codex-api',
   copilot_oauth: 'copilot',
+  amp_cli: 'amp',
 }
 
 /**
@@ -147,6 +148,11 @@ function apiSetupMethodToConnectionSetup(
       return {
         slug,
         credential: options.credential,
+      }
+    case 'amp_cli':
+      return {
+        slug,
+        // Amp CLI doesn't need credentials - auth is handled by the CLI itself
       }
   }
 }
@@ -216,7 +222,8 @@ export function useOnboarding({
         console.error('[Onboarding] Save failed:', result.error)
         setState(s => ({
           ...s,
-          completionStatus: 'saving',
+          step: 'credentials',
+          credentialStatus: 'error',
           errorMessage: result.error || 'Failed to save configuration',
         }))
       }
@@ -224,6 +231,8 @@ export function useOnboarding({
       console.error('[Onboarding] handleSaveConfig error:', error)
       setState(s => ({
         ...s,
+        step: 'credentials',
+        credentialStatus: 'error',
         errorMessage: error instanceof Error ? error.message : 'Failed to save configuration',
       }))
     }
@@ -294,8 +303,20 @@ export function useOnboarding({
     setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
 
     const isOpenAiFlow = state.apiSetupMethod === 'openai_api_key'
+    const isAmpFlow = state.apiSetupMethod === 'amp_cli'
 
     try {
+      // Amp CLI flow - no credentials needed, just save the connection config
+      if (isAmpFlow) {
+        await handleSaveConfig('', {})
+        setState(s => ({
+          ...s,
+          credentialStatus: 'success',
+          step: 'complete',
+        }))
+        return
+      }
+
       // API key validation differs by provider:
       // - OpenAI flow: API key is always required
       // - Anthropic flow: API key required for hosted providers, optional for Ollama/local

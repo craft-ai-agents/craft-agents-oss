@@ -455,6 +455,7 @@ export class CredentialManager {
       // No credentials needed
       case 'none':
       case 'environment':
+      case 'external_cli':
         return true;
 
       // API key variants - all use the same storage

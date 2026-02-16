@@ -90,6 +90,11 @@ const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
     providerType: 'copilot',
     authType: 'oauth',
   },
+  'amp': {
+    name: 'Amp CLI',
+    providerType: 'amp',
+    authType: 'external_cli',
+  },
 }
 
 /**
@@ -2764,6 +2769,24 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     } catch (error) {
       ipcLog.error('Failed to clear Copilot credentials:', error)
       return { success: false }
+    }
+  })
+
+  // ============================================================
+  // Amp CLI
+  // ============================================================
+
+  // Check if Amp CLI is installed
+  ipcMain.handle(IPC_CHANNELS.CHECK_AMP_INSTALLED, async (): Promise<boolean> => {
+    try {
+      ipcLog.info('Checking if Amp CLI is installed...')
+      const { isAmpInstalled } = await import('@craft-agent/shared/agent/amp-agent')
+      const installed = await isAmpInstalled()
+      ipcLog.info(`Amp CLI installed: ${installed}`)
+      return installed
+    } catch (error) {
+      ipcLog.error('Failed to check Amp installation:', error)
+      return false
     }
   })
 

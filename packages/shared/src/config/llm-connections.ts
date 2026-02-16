@@ -11,6 +11,7 @@ import {
   type ModelDefinition,
   ANTHROPIC_MODELS,
   OPENAI_MODELS,
+  AMP_MODELS,
 } from './models';
 
 // ============================================================
@@ -28,6 +29,7 @@ import {
  * - 'bedrock': AWS Bedrock (Claude models via AWS)
  * - 'vertex': Google Vertex AI (Claude models via GCP)
  * - 'copilot': GitHub Copilot (via @github/copilot-sdk)
+ * - 'amp': Amp CLI (ampcode.com)
  */
 export type LlmProviderType =
   | 'anthropic'
@@ -36,7 +38,8 @@ export type LlmProviderType =
   | 'openai_compat'
   | 'bedrock'
   | 'vertex'
-  | 'copilot';
+  | 'copilot'
+  | 'amp';
 
 /**
  * @deprecated Use LlmProviderType instead. Kept for migration compatibility.
@@ -60,6 +63,9 @@ export type LlmConnectionType = 'anthropic' | 'openai' | 'openai-compat';
  * - 'service_account_file': GCP-style JSON file upload
  * - 'environment': Auto-detect from environment variables
  *
+ * External CLI auth:
+ * - 'external_cli': Auth managed by external CLI tool (e.g., Amp)
+ *
  * No auth:
  * - 'none': No authentication required (local models like Ollama)
  */
@@ -71,6 +77,7 @@ export type LlmAuthType =
   | 'bearer_token'
   | 'service_account_file'
   | 'environment'
+  | 'external_cli'
   | 'none';
 
 /**
@@ -276,6 +283,7 @@ export function authTypeToCredentialStorageType(authType: LlmAuthType): LlmCrede
       return 'service_account';
     case 'environment':
     case 'none':
+    case 'external_cli':
       return null;
   }
 }
@@ -366,6 +374,10 @@ export function getModelsForProviderType(providerType: LlmProviderType): ModelDe
     return []; // Copilot models are dynamic — fetched via listModels(), no hardcoded fallbacks
   }
 
+  if (providerType === 'amp') {
+    return AMP_MODELS;
+  }
+
   // Anthropic, Bedrock, Vertex all use Claude models
   return ANTHROPIC_MODELS;
 }
@@ -387,6 +399,7 @@ export function getDefaultModelsForConnection(providerType: LlmProviderType): Ar
   ];
   if (providerType === 'openai') return OPENAI_MODELS;
   if (providerType === 'copilot') return []; // Dynamic — fetched via listModels()
+  if (providerType === 'amp') return AMP_MODELS;
   if (providerType === 'anthropic_compat') return [
     'anthropic/claude-opus-4.6',
     'anthropic/claude-sonnet-4.5',
@@ -482,6 +495,7 @@ export function isValidProviderAuthCombination(
     bedrock: ['bearer_token', 'iam_credentials', 'environment'],
     vertex: ['oauth', 'service_account_file', 'environment'],
     copilot: ['oauth'],
+    amp: ['external_cli'],
   };
 
   return validCombinations[providerType]?.includes(authType) ?? false;

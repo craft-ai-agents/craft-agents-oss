@@ -1,16 +1,17 @@
 import { useState } from "react"
 import { cn } from "@/lib/utils"
-import { Check, CreditCard, Key, Cpu } from "lucide-react"
+import { Check, CreditCard, Key, Cpu, Terminal } from "lucide-react"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
 import type { LlmAuthType, LlmProviderType } from "@craft-agent/shared/config/llm-connections"
 
 /** Provider segment for the segmented control */
-export type ProviderSegment = 'anthropic' | 'openai' | 'copilot'
+export type ProviderSegment = 'anthropic' | 'openai' | 'copilot' | 'amp'
 
 const SEGMENT_LABELS: Record<ProviderSegment, string> = {
   anthropic: 'Claude',
   openai: 'Codex',
   copilot: 'GitHub Copilot',
+  amp: 'Amp',
 }
 
 const BetaBadge = () => (
@@ -21,8 +22,9 @@ const BetaBadge = () => (
 
 const SEGMENT_DESCRIPTIONS: Record<ProviderSegment, React.ReactNode> = {
   anthropic: <>Use Claude Agent SDK as the main agent.<br />Configure with your Claude subscription or API key.</>,
-  openai: <>Use Codex CLI as the main agent.<BetaBadge /><br />Configure with your ChatGPT subscription or OpenAI API key.</>,
+  openai: <>Use Codex CLI as the main agent.<BetaBadge /><br />Configure with your ChatGPT Plus subscription or OpenAI API key.</>,
   copilot: <>Use Copilot Agent as the main agent.<BetaBadge /><br />Configure with your GitHub Copilot subscription.</>,
+  amp: <>Use Amp CLI as the main agent.<BetaBadge /><br />Multi-model frontier agent with Oracle and subagents.</>,
 }
 
 /**
@@ -41,6 +43,7 @@ export type ApiSetupMethod =
   | 'chatgpt_oauth'
   | 'openai_api_key'
   | 'copilot_oauth'
+  | 'amp_cli'
 
 /**
  * Map ApiSetupMethod to the underlying LLM connection types.
@@ -60,6 +63,8 @@ export function apiSetupMethodToConnectionTypes(method: ApiSetupMethod): {
       return { providerType: 'openai', authType: 'api_key' };
     case 'copilot_oauth':
       return { providerType: 'copilot', authType: 'oauth' };
+    case 'amp_cli':
+      return { providerType: 'amp', authType: 'external_cli' };
   }
 }
 
@@ -106,6 +111,13 @@ const API_SETUP_OPTIONS: ApiSetupOption[] = [
     description: 'Use your GitHub Copilot subscription.',
     icon: <Cpu className="size-4" />,
     providerType: 'copilot',
+  },
+  {
+    id: 'amp_cli',
+    name: 'Amp CLI',
+    description: 'Multi-model frontier coding agent. Install from ampcode.com',
+    icon: <Terminal className="size-4" />,
+    providerType: 'amp',
   },
 ]
 
@@ -187,7 +199,7 @@ function ProviderSegmentedControl({
   activeSegment: ProviderSegment
   onSegmentChange: (segment: ProviderSegment) => void
 }) {
-  const segments: ProviderSegment[] = ['anthropic', 'openai', 'copilot']
+  const segments: ProviderSegment[] = ['anthropic', 'openai', 'copilot', 'amp']
 
   return (
     <div className="flex rounded-xl bg-foreground/[0.03] p-1 mb-4">

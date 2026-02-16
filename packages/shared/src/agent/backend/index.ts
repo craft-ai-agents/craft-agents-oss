@@ -70,9 +70,11 @@ export { EventQueue } from './event-queue.ts';
 export { ClaudeEventAdapter } from './claude/event-adapter.ts';
 export { CodexEventAdapter } from './codex/event-adapter.ts';
 export { CopilotEventAdapter } from './copilot/event-adapter.ts';
+export { AmpEventAdapter } from './amp/event-adapter.ts';
 
 // Agent implementations
 // All agents implement AgentBackend directly
 export { ClaudeAgent } from '../claude-agent.ts';
 export { CodexAgent, CodexBackend } from '../codex-agent.ts';
 export { CopilotAgent, CopilotBackend } from '../copilot-agent.ts';
+export { AmpAgent, AmpBackend, resolveAmpBinary, isAmpInstalled, getAmpVersion } from '../amp-agent.ts';

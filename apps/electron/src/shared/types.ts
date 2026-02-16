@@ -704,6 +704,9 @@ export const IPC_CHANNELS = {
   COPILOT_LOGOUT: 'copilot:logout',
   COPILOT_DEVICE_CODE: 'copilot:deviceCode',
 
+  // Amp CLI
+  CHECK_AMP_INSTALLED: 'amp:checkInstalled',
+
   // Settings - API Setup
   SETUP_LLM_CONNECTION: 'settings:setupLlmConnection',
   SETTINGS_TEST_API_CONNECTION: 'settings:testApiConnection',
@@ -999,6 +1002,9 @@ export interface ElectronAPI {
   getCopilotAuthStatus(connectionSlug: string): Promise<{ authenticated: boolean }>
   copilotLogout(connectionSlug: string): Promise<{ success: boolean }>
   onCopilotDeviceCode(callback: (data: { userCode: string; verificationUri: string }) => void): () => void
+
+  // Amp CLI
+  checkAmpInstalled(): Promise<boolean>
 
   /** Unified LLM connection setup */
   setupLlmConnection(setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }>

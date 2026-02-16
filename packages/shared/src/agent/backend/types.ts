@@ -421,4 +421,10 @@ export interface BackendConfig {
    * would otherwise be clobbered by concurrent sessions mutating process.env.
    */
   envOverrides?: Record<string, string>;
+
+  /**
+   * Path to the Amp CLI binary (AmpAgent only).
+   * If not set, defaults to searching common paths and then 'amp' in PATH.
+   */
+  ampPath?: string;
 }

@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from "react"
-import { Check, ExternalLink } from "lucide-react"
+import { Check, ExternalLink, Terminal, CheckCircle2, XCircle, Loader2 } from "lucide-react"
 import type { ApiSetupMethod } from "./APISetupStep"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
 import {
@@ -51,10 +51,25 @@ export function CredentialsStep({
   const isCopilotOAuth = apiSetupMethod === 'copilot_oauth'
   const isAnthropicApiKey = apiSetupMethod === 'anthropic_api_key'
   const isOpenAiApiKey = apiSetupMethod === 'openai_api_key'
+  const isAmpCli = apiSetupMethod === 'amp_cli'
   const isApiKey = isAnthropicApiKey || isOpenAiApiKey
 
   // Copilot device code clipboard handling
   const [copiedCode, setCopiedCode] = useState(false)
+
+  // Amp CLI installation status
+  const [ampStatus, setAmpStatus] = useState<'checking' | 'installed' | 'not_installed'>('checking')
+
+  // Check Amp installation on mount (only when Amp is selected)
+  useEffect(() => {
+    if (isAmpCli) {
+      window.electronAPI.checkAmpInstalled().then((installed: boolean) => {
+        setAmpStatus(installed ? 'installed' : 'not_installed')
+      }).catch(() => {
+        setAmpStatus('not_installed')
+      })
+    }
+  }, [isAmpCli])
 
   // Auto-copy device code to clipboard when it appears
   useEffect(() => {
@@ -75,6 +90,107 @@ export function CredentialsStep({
         setTimeout(() => setCopiedCode(false), 2000)
       })
     }
+  }
+
+  // --- Amp CLI flow (external CLI auth) ---
+  if (isAmpCli) {
+    const handleOpenAmpInstall = () => {
+      window.electronAPI.openUrl('https://ampcode.com/install')
+    }
+
+    const handleRefreshCheck = () => {
+      setAmpStatus('checking')
+      window.electronAPI.checkAmpInstalled().then((installed: boolean) => {
+        setAmpStatus(installed ? 'installed' : 'not_installed')
+      }).catch(() => {
+        setAmpStatus('not_installed')
+      })
+    }
+
+    return (
+      <StepFormLayout
+        title="Set up Amp CLI"
+        description="Amp is a frontier coding agent with multi-model support."
+        actions={
+          <>
+            <BackButton onClick={onBack} />
+            <ContinueButton
+              onClick={() => onSubmit({ apiKey: '' })}
+              disabled={ampStatus !== 'installed'}
+            >
+              Continue
+            </ContinueButton>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {/* Status indicator */}
+          <div className="rounded-xl bg-foreground-2 p-4">
+            <div className="flex items-center gap-3">
+              {ampStatus === 'checking' && (
+                <>
+                  <Loader2 className="size-5 text-muted-foreground animate-spin" />
+                  <span className="text-sm text-muted-foreground">Checking for Amp CLI...</span>
+                </>
+              )}
+              {ampStatus === 'installed' && (
+                <>
+                  <CheckCircle2 className="size-5 text-success" />
+                  <span className="text-sm text-success">Amp CLI is installed and ready!</span>
+                </>
+              )}
+              {ampStatus === 'not_installed' && (
+                <>
+                  <XCircle className="size-5 text-destructive" />
+                  <span className="text-sm text-destructive">Amp CLI not found</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Installation instructions */}
+          {ampStatus === 'not_installed' && (
+            <div className="rounded-xl border border-border p-4 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Install Amp CLI by running this command in your terminal:
+              </p>
+              <code className="block bg-background rounded-lg p-3 text-sm font-mono text-foreground">
+                curl -fsSL https://ampcode.com/install.sh | bash
+              </code>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenAmpInstall}
+                  className="flex items-center gap-2 text-sm text-primary hover:underline"
+                >
+                  <ExternalLink className="size-3" />
+                  Open ampcode.com/install
+                </button>
+                <span className="text-muted-foreground">·</span>
+                <button
+                  type="button"
+                  onClick={handleRefreshCheck}
+                  className="text-sm text-primary hover:underline"
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Features list */}
+          <div className="rounded-xl bg-foreground-2 p-4">
+            <p className="text-xs text-muted-foreground mb-2 font-medium">Amp features:</p>
+            <ul className="text-xs text-muted-foreground space-y-1">
+              <li>• Multi-model: Opus 4.6, GPT-5.2 Codex, and more</li>
+              <li>• Three modes: Smart, Rush, and Deep reasoning</li>
+              <li>• Oracle for complex analysis and review</li>
+              <li>• Subagents for parallel task execution</li>
+            </ul>
+          </div>
+        </div>
+      </StepFormLayout>
+    )
   }
 
   // --- ChatGPT OAuth flow (native browser OAuth) ---

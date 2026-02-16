@@ -17,7 +17,7 @@
 /**
  * Provider identifier for AI backends.
  */
-export type ModelProvider = 'anthropic' | 'openai' | 'copilot';
+export type ModelProvider = 'anthropic' | 'openai' | 'copilot' | 'amp';
 
 /**
  * Full model definition with capabilities and costs.
@@ -115,6 +115,36 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
   // No hardcoded entries — models are discovered at runtime via client.listModels()
   // and stored on the connection. See fetchAndStoreCopilotModels() in ipc.ts.
   // ----------------------------------------
+
+  // ----------------------------------------
+  // Amp Models (via Amp CLI)
+  // Amp auto-selects models based on mode (smart, rush, deep).
+  // These entries represent the modes as pseudo-models for UI consistency.
+  // ----------------------------------------
+  {
+    id: 'amp-smart',
+    name: 'Amp Smart',
+    shortName: 'Smart',
+    description: 'Best models for maximum capability (Opus 4.6)',
+    provider: 'amp',
+    contextWindow: 200_000,
+  },
+  {
+    id: 'amp-rush',
+    name: 'Amp Rush',
+    shortName: 'Rush',
+    description: 'Fast mode for small tasks',
+    provider: 'amp',
+    contextWindow: 200_000,
+  },
+  {
+    id: 'amp-deep',
+    name: 'Amp Deep',
+    shortName: 'Deep',
+    description: 'Deep reasoning with GPT-5.2 Codex',
+    provider: 'amp',
+    contextWindow: 256_000,
+  },
 ];
 
 // ============================================
@@ -136,6 +166,9 @@ export const OPENAI_MODELS = getModelsByProvider('openai');
 
 /** All GitHub Copilot models */
 export const COPILOT_MODELS = getModelsByProvider('copilot');
+
+/** All Amp models */
+export const AMP_MODELS = getModelsByProvider('amp');
 
 /**
  * Legacy compatibility export.
@@ -173,6 +206,9 @@ export const DEFAULT_CODEX_MODEL = getModelIdByShortName('Codex');
 
 /** Default model for Copilot connections — no hardcoded default; models come from listModels() */
 export const DEFAULT_COPILOT_MODEL: string | undefined = undefined;
+
+/** Default model for Amp connections (Smart mode is the default) */
+export const DEFAULT_AMP_MODEL = 'amp-smart';
 
 // ============================================
 // UTILITY MODELS
