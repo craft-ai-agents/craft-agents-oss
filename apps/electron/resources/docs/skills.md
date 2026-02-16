@@ -17,7 +17,7 @@ Skills are specialized instructions that extend Claude's capabilities for specif
 Craft Agent uses **the identical SKILL.md format** as the Claude Code SDK. This means:
 
 1. **Format compatibility**: Any skill written for Claude Code works in Craft Agent
-2. **Same frontmatter fields**: `name`, `description`, `globs`, `alwaysAllow`
+2. **Same frontmatter fields**: `name`, `description`, `globs`, `alwaysAllow`, `requiredSources`
 3. **Same content structure**: Markdown body with instructions for Claude
 
 **What Craft Agent adds:**
@@ -58,6 +58,8 @@ name: "Skill Display Name"
 description: "Brief description shown in skill list"
 globs: ["*.ts", "*.tsx"]     # Optional: file patterns that trigger skill
 alwaysAllow: ["Bash"]        # Optional: tools to always allow
+requiredSources:             # Optional: sources to auto-enable on invocation
+  - linear
 ---
 
 # Skill Instructions
@@ -103,6 +105,21 @@ Useful for skills that require specific tools without prompting.
 alwaysAllow:
   - "Bash"                # Allow bash commands
   - "Write"               # Allow file writes
+```
+
+### requiredSources (optional)
+Array of source slugs to auto-enable when this skill is invoked.
+When a user mentions the skill, the listed sources are enabled for the session
+before the agent starts — so tools from those sources are available from the first turn.
+
+Sources must exist in the workspace and be authenticated. Unauthenticated or
+missing sources are silently skipped (the existing runtime auto-enable handles them
+as a fallback).
+
+```yaml
+requiredSources:
+  - linear               # Auto-enable Linear source
+  - github               # Auto-enable GitHub source
 ```
 
 ## Creating a Skill
@@ -247,6 +264,29 @@ globs: ["src/**/*.ts", "src/**/*.tsx"]
 ```
 
 **Recommended icon**: Clipboard list or checklist icon
+
+### Skill with Required Sources
+
+```yaml
+---
+name: "Linear Triage"
+description: "Triage and prioritize Linear issues"
+requiredSources:
+  - linear
+---
+
+# Linear Triage
+
+When triaging issues:
+1. List unassigned issues from the current sprint
+2. Categorize by severity
+3. Suggest assignees based on expertise
+```
+
+**Recommended icon**: Kanban board or list icon
+
+When this skill is invoked, the `linear` source is automatically enabled for the
+session — no manual toggle needed.
 
 ## Overriding SDK Skills
 

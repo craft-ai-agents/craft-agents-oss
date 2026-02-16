@@ -75,7 +75,7 @@ import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { CraftMcpClient } from '@craft-agent/shared/mcp'
 import { type Session, type Message, type SessionEvent, type FileAttachment, type StoredAttachment, type SendMessageOptions, IPC_CHANNELS, generateMessageId } from '../shared/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrl, getEmojiIcon, resetSummarizationClient, resolveToolIcon } from '@craft-agent/shared/utils'
-import { loadWorkspaceSkills, type LoadedSkill } from '@craft-agent/shared/skills'
+import { loadWorkspaceSkills, loadAllSkills, type LoadedSkill } from '@craft-agent/shared/skills'
 import type { ToolDisplayMeta } from '@craft-agent/core/types'
 import { getToolIconsDir, isCodexModel, getMiniModel, isAnthropicProvider, DEFAULT_MODEL, DEFAULT_CODEX_MODEL } from '@craft-agent/shared/config'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
@@ -944,8 +944,24 @@ export class SessionManager {
   copilotCliPath: string | undefined
   /** Resolved path to Copilot network interceptor (for tool metadata capture) */
   copilotInterceptorPath: string | undefined
+  /** Promise that resolves once initialize() completes (sessions loaded from disk).
+   *  IPC handlers await this to avoid returning empty results during startup. */
+  private initPromise: Promise<void>
+  private resolveInit!: () => void
   /** Monotonic clock to ensure strictly increasing message timestamps */
   private lastTimestamp = 0
+
+  constructor() {
+    this.initPromise = new Promise<void>(resolve => {
+      this.resolveInit = resolve
+    })
+  }
+
+  /** Wait until initialize() has completed (sessions loaded from disk).
+   *  Resolves immediately if already initialized. */
+  waitForInit(): Promise<void> {
+    return this.initPromise
+  }
 
   setWindowManager(wm: WindowManager): void {
     this.windowManager = wm
@@ -1480,6 +1496,9 @@ export class SessionManager {
 
     // Load existing sessions from disk
     this.loadSessionsFromDisk()
+
+    // Signal that initialization is complete — IPC handlers waiting on initPromise will proceed
+    this.resolveInit()
   }
 
   // Load all existing sessions from disk into memory (metadata only - messages are lazy-loaded)
@@ -4036,6 +4055,53 @@ export class SessionManager {
     // Capture the generation to detect if a new request supersedes this one.
     // This prevents the finally block from clobbering state when a follow-up message arrives.
     const myGeneration = managed.processingGeneration
+
+    // Pre-enable sources required by invoked skills (Issue #249)
+    // This eliminates the two-turn penalty where the agent discovers missing sources at runtime.
+    if (options?.skillSlugs?.length) {
+      try {
+        const workspaceRoot = managed.workspace.rootPath
+        const allSkills = loadAllSkills(workspaceRoot, managed.workingDirectory)
+        const skillsBySlug = new Map(allSkills.map(s => [s.slug, s]))
+
+        const requiredSources = new Set<string>()
+        for (const slug of options.skillSlugs) {
+          const skill = skillsBySlug.get(slug)
+          if (skill?.metadata.requiredSources) {
+            for (const src of skill.metadata.requiredSources) {
+              requiredSources.add(src)
+            }
+          }
+        }
+
+        if (requiredSources.size > 0) {
+          const currentSlugs = new Set(managed.enabledSourceSlugs || [])
+          const toEnable: string[] = []
+
+          for (const srcSlug of requiredSources) {
+            if (currentSlugs.has(srcSlug)) continue
+            // Only pre-enable sources that exist and are usable (authenticated)
+            const sources = getSourcesBySlugs(workspaceRoot, [srcSlug])
+            if (sources.length > 0 && isSourceUsable(sources[0])) {
+              toEnable.push(srcSlug)
+            }
+          }
+
+          if (toEnable.length > 0) {
+            managed.enabledSourceSlugs = [...(managed.enabledSourceSlugs || []), ...toEnable]
+            sessionLog.info(`Pre-enabled sources for skill invocation: ${toEnable.join(', ')}`)
+            this.persistSession(managed)
+            this.sendEvent({
+              type: 'sources_changed',
+              sessionId,
+              enabledSourceSlugs: managed.enabledSourceSlugs,
+            }, managed.workspace.id)
+          }
+        }
+      } catch (e) {
+        sessionLog.warn(`Failed to pre-enable skill sources for session ${sessionId}:`, e)
+      }
+    }
 
     // Start perf span for entire sendMessage flow
     const sendSpan = perf.span('session.sendMessage', { sessionId })

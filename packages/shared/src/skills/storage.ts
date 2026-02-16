@@ -62,6 +62,7 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
         globs: parsed.data.globs as string[] | undefined,
         alwaysAllow: parsed.data.alwaysAllow as string[] | undefined,
         icon,
+        requiredSources: parsed.data.requiredSources as string[] | undefined,
       },
       body: parsed.content,
     };

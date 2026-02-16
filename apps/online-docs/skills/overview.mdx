@@ -39,6 +39,8 @@ globs:
 alwaysAllow:
   - Bash(git status)
   - Bash(git diff)
+requiredSources:
+  - github
 ---
 
 When creating commits:
@@ -58,6 +60,11 @@ The frontmatter tells Craft Agents when to use the skill. The body contains inst
 | `icon` | No | Emoji (e.g., `🔧`) or URL. Relative paths are not supported. |
 | `globs` | No | File patterns that auto-trigger this skill (e.g., `["**/*.test.ts"]`) |
 | `alwaysAllow` | No | Tools to auto-allow when skill is active (e.g., `["Bash(npm test)"]`) |
+| `requiredSources` | No | Source slugs to auto-enable when skill is invoked (e.g., `["linear"]`) |
+
+<Info>
+When a skill declares `requiredSources`, those sources are automatically enabled for the session when the skill is invoked — so the agent has access to their tools from the first turn. Sources must be configured in the workspace and authenticated; unauthenticated sources are skipped and handled at runtime.
+</Info>
 
 <Info>
 For the full SKILL.md schema including advanced fields like `allowed-tools`, `context`, and `agent`, see the [Claude Code skills documentation](https://code.claude.com/docs/en/skills).

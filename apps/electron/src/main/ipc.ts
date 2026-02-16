@@ -12,7 +12,7 @@ import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type SendMessageOptions, type LlmConnectionSetup } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
 import { safeJsonParse } from '@craft-agent/shared/utils/files'
-import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, loadStoredConfig, saveConfig, type Workspace, getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, isOpenAIProvider, isCopilotProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus } from '@craft-agent/shared/config'
+import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, loadStoredConfig, saveConfig, type Workspace, getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, isOpenAIProvider, isCopilotProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, getGitBashPath, setGitBashPath } from '@craft-agent/shared/config'
 import { getSessionAttachmentsPath, validateSessionId } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@craft-agent/shared/sources'
 import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
@@ -454,7 +454,9 @@ async function validateFilePath(filePath: string): Promise<string> {
 
 export function registerIpcHandlers(sessionManager: SessionManager, windowManager: WindowManager): void {
   // Get all sessions for the calling window's workspace
+  // Waits for initialization to complete so sessions are never returned empty during startup
   ipcMain.handle(IPC_CHANNELS.GET_SESSIONS, async (event) => {
+    await sessionManager.waitForInit()
     const end = perf.start('ipc.getSessions')
     const workspaceId = windowManager.getWorkspaceForWindow(event.sender.id)
     const sessions = sessionManager.getSessions(workspaceId ?? undefined)
@@ -1171,9 +1173,23 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       join(process.env.PROGRAMFILES || '', 'Git', 'bin', 'bash.exe'),
     ]
 
+    // Check if we have a persisted path from a previous session
+    const persistedPath = getGitBashPath()
+    if (persistedPath) {
+      try {
+        await stat(persistedPath)
+        process.env.CLAUDE_CODE_GIT_BASH_PATH = persistedPath
+        return { found: true, path: persistedPath, platform }
+      } catch {
+        // Persisted path no longer valid, fall through to detection
+      }
+    }
+
     for (const bashPath of commonPaths) {
       try {
         await stat(bashPath)
+        process.env.CLAUDE_CODE_GIT_BASH_PATH = bashPath
+        setGitBashPath(bashPath)
         return { found: true, path: bashPath, platform }
       } catch {
         // Path doesn't exist, try next
@@ -1189,6 +1205,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       }).trim()
       const firstPath = result.split('\n')[0]?.trim()
       if (firstPath && firstPath.toLowerCase().includes('git')) {
+        process.env.CLAUDE_CODE_GIT_BASH_PATH = firstPath
+        setGitBashPath(firstPath)
         return { found: true, path: firstPath, platform }
       }
     } catch {
@@ -1226,8 +1244,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         return { success: false, error: 'Path must be an executable (.exe) file' }
       }
 
-      // TODO: Persist this path to config if needed
-      // For now, we just validate it exists
+      // Persist to config and set env var so SDK subprocess can find Git Bash
+      setGitBashPath(bashPath)
+      process.env.CLAUDE_CODE_GIT_BASH_PATH = bashPath
       return { success: true }
     } catch {
       return { success: false, error: 'File does not exist at the specified path' }

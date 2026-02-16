@@ -295,6 +295,15 @@ app.whenReady().then(async () => {
     // Initialize notification service
     initNotificationService(windowManager)
 
+    // Restore persisted Git Bash path on Windows (must happen before any SDK subprocess spawn)
+    if (process.platform === 'win32') {
+      const { getGitBashPath } = await import('@craft-agent/shared/config')
+      const gitBashPath = getGitBashPath()
+      if (gitBashPath) {
+        process.env.CLAUDE_CODE_GIT_BASH_PATH = gitBashPath
+      }
+    }
+
     // Register IPC handlers (must happen before window creation)
     registerIpcHandlers(sessionManager, windowManager)
 
