@@ -795,9 +795,18 @@ async function checkAuthStatus(
         if (token) {
           lines.push('✓ Source is authenticated (token valid)');
         } else {
-          hasWarning = true;
-          lines.push('⚠ Source marked authenticated but token missing/expired');
-          lines.push('  Re-authenticate to refresh credentials');
+          // Token missing or expired — attempt refresh before reporting failure.
+          // OAuth tokens are short-lived (typically 1h) and frequently expired in the
+          // credential store between uses. The normal connection pipeline refreshes
+          // them proactively, so source_test should too.
+          const refreshed = await ctx.credentialManager.refresh(loadedSource);
+          if (refreshed) {
+            lines.push('✓ Source is authenticated (token refreshed)');
+          } else {
+            hasWarning = true;
+            lines.push('⚠ Source marked authenticated but token missing or refresh failed');
+            lines.push('  Re-authenticate to refresh credentials');
+          }
         }
       } catch {
         lines.push('✓ Source is authenticated');
