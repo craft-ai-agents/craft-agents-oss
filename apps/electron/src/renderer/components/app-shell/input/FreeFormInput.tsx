@@ -174,8 +174,8 @@ export interface FreeFormInputProps {
   sessionFolderPath?: string
   /** Session ID for scoping events like approve-plan */
   sessionId?: string
-  /** Current todo state of the session (for # menu state selection) */
-  currentTodoState?: string
+  /** Current session status of the session (for # menu state selection) */
+  currentSessionStatus?: string
   /** Disable send action (for tutorial guidance) */
   disableSend?: boolean
   /** Whether the session is empty (no messages yet) - affects context badge prominence */
@@ -243,7 +243,7 @@ export function FreeFormInput({
   onWorkingDirectoryChange,
   sessionFolderPath,
   sessionId,
-  currentTodoState,
+  currentSessionStatus,
   disableSend = false,
   isEmptySession = false,
   contextStatus,
@@ -350,9 +350,9 @@ export function FreeFormInput({
   }, [llmConnections, effectiveConnection])
 
 
-  // Access todoStates and onTodoStateChange from context for the # menu state picker
-  const todoStates = appShellCtx?.todoStates ?? []
-  const onTodoStateChange = appShellCtx?.onTodoStateChange
+  // Access sessionStatuses and onSessionStatusChange from context for the # menu state picker
+  const sessionStatuses = appShellCtx?.sessionStatuses ?? []
+  const onSessionStatusChange = appShellCtx?.onSessionStatusChange
   // Resolve workspace rootPath for "Add New Label" deep link
   const workspaceRootPath = React.useMemo(() => {
     if (!appShellCtx || !workspaceId) return null
@@ -810,8 +810,8 @@ export function FreeFormInput({
     labels,
     sessionLabels,
     onSelect: handleLabelSelect,
-    todoStates,
-    activeStateId: currentTodoState,
+    sessionStatuses,
+    activeStateId: currentSessionStatus,
   })
 
   // "Add New Label" handler: cleans up the #trigger text and opens a controlled
@@ -1299,10 +1299,10 @@ export function FreeFormInput({
     setInput(newValue)
     syncToParent(newValue)
     if (sessionId) {
-      onTodoStateChange?.(sessionId, stateId)
+      onSessionStatusChange?.(sessionId, stateId)
     }
     richInputRef.current?.focus()
-  }, [inlineLabel, syncToParent, sessionId, onTodoStateChange])
+  }, [inlineLabel, syncToParent, sessionId, onSessionStatusChange])
 
   const hasContent = input.trim() || attachments.length > 0
 

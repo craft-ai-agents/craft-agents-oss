@@ -18,11 +18,11 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyCont
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { TodoStateMenu } from "@/components/ui/todo-filter-menu"
+import { SessionStatusMenu } from "@/components/ui/session-status-menu"
 import { LabelValuePopover } from "@/components/ui/label-value-popover"
 import { LabelValueTypeIcon } from "@/components/ui/label-icon"
-import { getStateColor, getStateIcon, getStateLabel, type TodoStateId } from "@/config/todo-states"
-import type { TodoState } from "@/config/todo-states"
+import { getStateColor, getStateIcon, getStateLabel, type SessionStatusId } from "@/config/session-status-config"
+import type { SessionStatus } from "@/config/session-status-config"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -122,13 +122,13 @@ function groupSessionsByDate(sessions: SessionMeta[]): Array<{ date: Date; label
 }
 
 /**
- * Get the current todo state of a session
+ * Get the current session status of a session
  * States are user-controlled, never automatic
  */
-function getSessionTodoState(session: SessionMeta): TodoStateId {
-  // Read from session.todoState (user-controlled)
+function getSessionSessionStatus(session: SessionMeta): SessionStatusId {
+  // Read from session.sessionStatus (user-controlled)
   // Falls back to 'todo' if not set
-  return (session.todoState as TodoStateId) || 'todo'
+  return (session.sessionStatus as SessionStatusId) || 'todo'
 }
 
 /**
@@ -176,7 +176,7 @@ function sessionMatchesCurrentFilter(
   // Helper: Check if session passes secondary status filter
   const passesStatusFilter = (): boolean => {
     if (!statusFilter || statusFilter.size === 0) return true
-    const sessionState = (session.todoState || 'todo') as string
+    const sessionState = (session.sessionStatus || 'todo') as string
 
     let hasIncludes = false
     let matchesInclude = false
@@ -227,9 +227,9 @@ function sessionMatchesCurrentFilter(
       return session.isArchived === true
 
     case 'state':
-      // Default to 'todo' for sessions without explicit todoState (matches getSessionTodoState logic)
+      // Default to 'todo' for sessions without explicit sessionStatus (matches getSessionSessionStatus logic)
       // Exclude archived sessions from state views
-      return (session.todoState || 'todo') === currentFilter.stateId && session.isArchived !== true
+      return (session.sessionStatus || 'todo') === currentFilter.stateId && session.isArchived !== true
 
     case 'label': {
       if (!session.labels?.length) return false
@@ -298,7 +298,7 @@ interface SessionItemProps {
   isFirstInGroup: boolean
   onKeyDown: (e: React.KeyboardEvent, item: SessionMeta) => void
   onRenameClick: (sessionId: string, currentName: string) => void
-  onTodoStateChange: (sessionId: string, state: TodoStateId) => void
+  onSessionStatusChange: (sessionId: string, state: SessionStatusId) => void
   onFlag?: (sessionId: string) => void
   onUnflag?: (sessionId: string) => void
   onArchive?: (sessionId: string) => void
@@ -314,7 +314,7 @@ interface SessionItemProps {
   /** Current search query for highlighting matches */
   searchQuery?: string
   /** Dynamic todo states from workspace config */
-  todoStates: TodoState[]
+  sessionStatuses: SessionStatus[]
   /** Pre-flattened label configs for resolving session label IDs to display info */
   flatLabels: LabelConfig[]
   /** Full label tree (for labels submenu in SessionMenu) */
@@ -348,7 +348,7 @@ function SessionItem({
   isFirstInGroup,
   onKeyDown,
   onRenameClick,
-  onTodoStateChange,
+  onSessionStatusChange,
   onFlag,
   onUnflag,
   onArchive,
@@ -360,7 +360,7 @@ function SessionItem({
   permissionMode,
   llmConnection,
   searchQuery,
-  todoStates,
+  sessionStatuses,
   flatLabels,
   labels,
   onLabelsChange,
@@ -382,7 +382,7 @@ function SessionItem({
   const prevMatchHotkey = useActionLabel('chat.prevSearchMatch').hotkey
 
   // Get current todo state from session properties
-  const currentTodoState = getSessionTodoState(item)
+  const currentSessionStatus = getSessionSessionStatus(item)
 
   // Resolve session label entries (e.g. "bug", "priority::3") to config + optional value
   const resolvedLabels = useMemo(() => {
@@ -449,9 +449,9 @@ function SessionItem({
     onSelect()
   }
 
-  const handleTodoStateSelect = (state: TodoStateId) => {
+  const handleSessionStatusSelect = (state: SessionStatusId) => {
     setTodoMenuOpen(false)
-    onTodoStateChange(item.id, state)
+    onSessionStatusChange(item.id, state)
   }
 
   const handleArchiveFromMenu = () => {
@@ -493,7 +493,7 @@ function SessionItem({
                   "w-4 h-4 flex items-center justify-center rounded-full transition-colors cursor-pointer",
                   "hover:bg-foreground/5",
                 )}
-                style={{ color: getStateColor(currentTodoState, todoStates) ?? 'var(--foreground)' }}
+                style={{ color: getStateColor(currentSessionStatus, sessionStatuses) ?? 'var(--foreground)' }}
                 role="button"
                 aria-haspopup="menu"
                 aria-expanded={todoMenuOpen}
@@ -504,7 +504,7 @@ function SessionItem({
                 }}
               >
                 <div className="w-4 h-4 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>img]:w-full [&>img]:h-full [&>span]:text-base">
-                  {getStateIcon(currentTodoState, todoStates)}
+                  {getStateIcon(currentSessionStatus, sessionStatuses)}
                 </div>
               </div>
             </div>
@@ -519,10 +519,10 @@ function SessionItem({
               e.stopPropagation()
             }}
           >
-            <TodoStateMenu
-              activeState={currentTodoState}
-              onSelect={handleTodoStateSelect}
-              states={todoStates}
+            <SessionStatusMenu
+              activeState={currentSessionStatus}
+              onSelect={handleSessionStatusSelect}
+              states={sessionStatuses}
               isArchived={item.isArchived}
               onArchive={handleArchiveFromMenu}
               onUnarchive={handleUnarchiveFromMenu}
@@ -787,8 +787,8 @@ function SessionItem({
                     sharedUrl={item.sharedUrl}
                     hasMessages={hasMessages(item)}
                     hasUnreadMessages={hasUnreadMessages(item)}
-                    currentTodoState={currentTodoState}
-                    todoStates={todoStates}
+                    currentSessionStatus={currentSessionStatus}
+                    sessionStatuses={sessionStatuses}
                     sessionLabels={item.labels ?? []}
                     labels={labels}
                     onLabelsChange={onLabelsChange ? (newLabels) => onLabelsChange(item.id, newLabels) : undefined}
@@ -798,7 +798,7 @@ function SessionItem({
                     onArchive={() => onArchive?.(item.id)}
                     onUnarchive={() => onUnarchive?.(item.id)}
                     onMarkUnread={() => onMarkUnread(item.id)}
-                    onTodoStateChange={(state) => onTodoStateChange(item.id, state)}
+                    onSessionStatusChange={(state) => onSessionStatusChange(item.id, state)}
                     onOpenInNewWindow={onOpenInNewWindow}
                     onDelete={() => onDelete(item.id)}
                   />
@@ -824,8 +824,8 @@ function SessionItem({
                 sharedUrl={item.sharedUrl}
                 hasMessages={hasMessages(item)}
                 hasUnreadMessages={hasUnreadMessages(item)}
-                currentTodoState={currentTodoState}
-                todoStates={todoStates}
+                currentSessionStatus={currentSessionStatus}
+                sessionStatuses={sessionStatuses}
                 sessionLabels={item.labels ?? []}
                 labels={labels}
                 onLabelsChange={onLabelsChange ? (newLabels) => onLabelsChange(item.id, newLabels) : undefined}
@@ -835,7 +835,7 @@ function SessionItem({
                 onArchive={() => onArchive?.(item.id)}
                 onUnarchive={() => onUnarchive?.(item.id)}
                 onMarkUnread={() => onMarkUnread(item.id)}
-                onTodoStateChange={(state) => onTodoStateChange(item.id, state)}
+                onSessionStatusChange={(state) => onSessionStatusChange(item.id, state)}
                 onOpenInNewWindow={onOpenInNewWindow}
                 onDelete={() => onDelete(item.id)}
               />
@@ -872,7 +872,7 @@ interface SessionListProps {
   onArchive?: (sessionId: string) => void
   onUnarchive?: (sessionId: string) => void
   onMarkUnread: (sessionId: string) => void
-  onTodoStateChange: (sessionId: string, state: TodoStateId) => void
+  onSessionStatusChange: (sessionId: string, state: SessionStatusId) => void
   onRename: (sessionId: string, name: string) => void
   /** Called when Enter is pressed to focus chat input */
   onFocusChatInput?: () => void
@@ -893,7 +893,7 @@ interface SessionListProps {
   /** Called when search is closed */
   onSearchClose?: () => void
   /** Dynamic todo states from workspace config */
-  todoStates?: TodoState[]
+  sessionStatuses?: SessionStatus[]
   /** View evaluator — evaluates a session and returns matching view configs */
   evaluateViews?: (meta: SessionMeta) => ViewConfig[]
   /** Label configs for resolving session label IDs to display info */
@@ -908,8 +908,8 @@ interface SessionListProps {
   labelFilterMap?: Map<string, FilterMode>
 }
 
-// Re-export TodoStateId for use by parent components
-export type { TodoStateId }
+// Re-export SessionStatusId for use by parent components
+export type { SessionStatusId }
 
 /**
  * SessionList - Scrollable list of session cards with keyboard navigation
@@ -928,7 +928,7 @@ export function SessionList({
   onArchive,
   onUnarchive,
   onMarkUnread,
-  onTodoStateChange,
+  onSessionStatusChange,
   onRename,
   onFocusChatInput,
   onSessionSelect,
@@ -939,7 +939,7 @@ export function SessionList({
   searchQuery = '',
   onSearchChange,
   onSearchClose,
-  todoStates = [],
+  sessionStatuses = [],
   evaluateViews,
   labels = [],
   onLabelsChange,
@@ -1586,7 +1586,7 @@ export function SessionList({
                         isFirstInGroup={index === 0}
                         onKeyDown={handleKeyDown}
                         onRenameClick={handleRenameClick}
-                        onTodoStateChange={onTodoStateChange}
+                        onSessionStatusChange={onSessionStatusChange}
                         onFlag={onFlag ? handleFlagWithToast : undefined}
                         onUnflag={onUnflag ? handleUnflagWithToast : undefined}
                         onArchive={onArchive ? handleArchiveWithToast : undefined}
@@ -1598,7 +1598,7 @@ export function SessionList({
                         permissionMode={sessionOptions?.get(item.id)?.permissionMode}
                         llmConnection={item.llmConnection}
                         searchQuery={highlightQuery}
-                        todoStates={todoStates}
+                        sessionStatuses={sessionStatuses}
                         flatLabels={flatLabels}
                         labels={labels}
                         onLabelsChange={onLabelsChange}
@@ -1632,7 +1632,7 @@ export function SessionList({
                         isFirstInGroup={index === 0}
                         onKeyDown={handleKeyDown}
                         onRenameClick={handleRenameClick}
-                        onTodoStateChange={onTodoStateChange}
+                        onSessionStatusChange={onSessionStatusChange}
                         onFlag={onFlag ? handleFlagWithToast : undefined}
                         onUnflag={onUnflag ? handleUnflagWithToast : undefined}
                         onArchive={onArchive ? handleArchiveWithToast : undefined}
@@ -1644,7 +1644,7 @@ export function SessionList({
                         permissionMode={sessionOptions?.get(item.id)?.permissionMode}
                         llmConnection={item.llmConnection}
                         searchQuery={highlightQuery}
-                        todoStates={todoStates}
+                        sessionStatuses={sessionStatuses}
                         flatLabels={flatLabels}
                         labels={labels}
                         onLabelsChange={onLabelsChange}
@@ -1679,7 +1679,7 @@ export function SessionList({
                       isFirstInGroup={indexInGroup === 0}
                       onKeyDown={handleKeyDown}
                       onRenameClick={handleRenameClick}
-                      onTodoStateChange={onTodoStateChange}
+                      onSessionStatusChange={onSessionStatusChange}
                       onFlag={onFlag ? handleFlagWithToast : undefined}
                       onUnflag={onUnflag ? handleUnflagWithToast : undefined}
                       onArchive={onArchive ? handleArchiveWithToast : undefined}
@@ -1691,7 +1691,7 @@ export function SessionList({
                       permissionMode={sessionOptions?.get(item.id)?.permissionMode}
                         llmConnection={item.llmConnection}
                       searchQuery={searchQuery}
-                      todoStates={todoStates}
+                      sessionStatuses={sessionStatuses}
                       flatLabels={flatLabels}
                       labels={labels}
                       onLabelsChange={onLabelsChange}

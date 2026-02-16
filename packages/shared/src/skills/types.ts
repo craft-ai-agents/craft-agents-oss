@@ -24,6 +24,8 @@ export interface SkillMetadata {
    * Note: Relative paths and inline SVG are NOT supported.
    */
   icon?: string;
+  /** Optional source slugs to auto-enable when this skill is invoked */
+  requiredSources?: string[];
 }
 
 /** Source of a loaded skill */

@@ -38,9 +38,20 @@ export const HookMatcherSchema = z.object({
   hooks: z.array(HookDefinitionSchema).min(1, 'At least one hook required'),
 });
 
+/**
+ * Deprecated event name aliases.
+ * Old names are accepted during schema validation and silently rewritten to canonical names.
+ * A console.warn() is emitted at runtime so users know to update their configs.
+ */
+export const DEPRECATED_EVENT_ALIASES: Record<string, string> = {
+  'TodoStateChange': 'SessionStatusChange',
+};
+
 export const VALID_EVENTS = [
   // App events
-  'LabelAdd', 'LabelRemove', 'LabelConfigChange', 'PermissionModeChange', 'FlagChange', 'TodoStateChange', 'SchedulerTick',
+  'LabelAdd', 'LabelRemove', 'LabelConfigChange', 'PermissionModeChange', 'FlagChange', 'SessionStatusChange', 'SchedulerTick',
+  // Deprecated aliases (still accepted, rewritten in transform)
+  'TodoStateChange',
   // Agent/SDK events
   'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'Notification',
   'UserPromptSubmit', 'SessionStart', 'SessionEnd', 'Stop',
@@ -51,13 +62,21 @@ export const HooksConfigSchema = z.object({
   version: z.number().optional(),
   hooks: z.record(z.string(), z.array(HookMatcherSchema)).optional().default({}),
 }).transform((data) => {
-  // Filter out invalid event names and warn
+  // Filter out invalid event names, rewrite deprecated aliases, and warn
   const validHooks: Record<string, z.infer<typeof HookMatcherSchema>[]> = {};
   const invalidEvents: string[] = [];
 
   for (const [event, matchers] of Object.entries(data.hooks)) {
     if (VALID_EVENTS.includes(event as (typeof VALID_EVENTS)[number])) {
-      validHooks[event] = matchers;
+      // Rewrite deprecated aliases to canonical names
+      const canonical = DEPRECATED_EVENT_ALIASES[event];
+      if (canonical) {
+        console.warn(`[hooks] Deprecated event name "${event}" — use "${canonical}" instead`);
+        // Merge with existing matchers for the canonical name if any
+        validHooks[canonical] = [...(validHooks[canonical] ?? []), ...matchers];
+      } else {
+        validHooks[event] = [...(validHooks[event] ?? []), ...matchers];
+      }
     } else {
       invalidEvents.push(event);
     }

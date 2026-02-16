@@ -11,15 +11,15 @@ import { iconCache } from '@/lib/icon-cache'
 // ============================================================================
 
 // Dynamic status ID (any string now)
-export type TodoStateId = string
+export type SessionStatusId = string
 
-export interface TodoStateConfig {
+export interface SessionStatusConfig {
   id: string
   label: string
   color?: EntityColor
 }
 
-export interface TodoState extends TodoStateConfig {
+export interface SessionStatus extends SessionStatusConfig {
   /**
    * Resolved CSS color string for inline style application.
    * System colors resolve to var(--name) or color-mix(...).
@@ -39,11 +39,11 @@ export interface TodoState extends TodoStateConfig {
 }
 
 // ============================================================================
-// Status → TodoState Conversion
+// Status → SessionStatus Conversion
 // ============================================================================
 
 /**
- * Convert StatusConfig to TodoState.
+ * Convert StatusConfig to SessionStatus.
  * Resolves EntityColor to a CSS color string for inline style use.
  * System colors (e.g., "accent") resolve to CSS variable references that
  * auto-adapt to light/dark theme. Custom colors use isDark to pick the right value.
@@ -52,11 +52,11 @@ export interface TodoState extends TodoStateConfig {
  * - Emoji icons → not colorable (they have their own colors)
  * - Everything else (SVGs, fallback) → colorable (uses currentColor)
  */
-export function statusConfigToTodoState(
+export function statusConfigToSessionStatus(
   config: StatusConfig,
   workspaceId: string,
   isDark: boolean
-): TodoState {
+): SessionStatus {
   // Emojis have their own colors and don't respond to CSS color inheritance.
   // SVGs with currentColor and the fallback Circle icon are colorable.
   const iconColorable = !isEmoji(config.icon)
@@ -87,14 +87,14 @@ export function statusConfigToTodoState(
 }
 
 /**
- * Convert array of StatusConfig to TodoState[]
+ * Convert array of StatusConfig to SessionStatus[]
  */
-export function statusConfigsToTodoStates(
+export function statusConfigsToSessionStatuses(
   configs: StatusConfig[],
   workspaceId: string,
   isDark: boolean
-): TodoState[] {
-  return configs.map(c => statusConfigToTodoState(c, workspaceId, isDark))
+): SessionStatus[] {
+  return configs.map(c => statusConfigToSessionStatus(c, workspaceId, isDark))
 }
 
 // ============================================================================
@@ -106,7 +106,7 @@ export function statusConfigsToTodoStates(
  */
 export function getStateIcon(
   stateId: string,
-  states: TodoState[]
+  states: SessionStatus[]
 ): React.ReactNode {
   const state = states.find(s => s.id === stateId)
   return state?.icon ?? <span className="h-3.5 w-3.5">●</span>
@@ -117,7 +117,7 @@ export function getStateIcon(
  */
 export function getStateColor(
   stateId: string,
-  states: TodoState[]
+  states: SessionStatus[]
 ): string | undefined {
   return states.find(s => s.id === stateId)?.resolvedColor
 }
@@ -127,7 +127,7 @@ export function getStateColor(
  */
 export function getStateLabel(
   stateId: string,
-  states: TodoState[]
+  states: SessionStatus[]
 ): string {
   const state = states.find(s => s.id === stateId)
   return state?.label ?? stateId
@@ -138,8 +138,8 @@ export function getStateLabel(
  */
 export function getState(
   stateId: string,
-  states: TodoState[]
-): TodoState | undefined {
+  states: SessionStatus[]
+): SessionStatus | undefined {
   return states.find(s => s.id === stateId)
 }
 

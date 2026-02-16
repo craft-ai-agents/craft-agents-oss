@@ -92,7 +92,7 @@ export function useViews(workspaceId: string | null): UseViewsResult {
     const context: ViewEvaluationContext = buildViewContext({
       name: meta.name,
       preview: meta.preview,
-      todoState: meta.todoState,
+      sessionStatus: meta.sessionStatus,
       permissionMode: meta.permissionMode,
       model: meta.model,
       lastMessageRole: meta.lastMessageRole,

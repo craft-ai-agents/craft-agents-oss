@@ -4,13 +4,14 @@
 
 import { describe, it, expect } from 'bun:test';
 import { validateHooksConfig, validateHooksContent } from './validation.ts';
+import { HooksConfigSchema } from './schemas.ts';
 
 describe('validation', () => {
   describe('validateHooksConfig', () => {
     it('should accept a valid config', () => {
       const config = {
         hooks: {
-          TodoStateChange: [{
+          SessionStatusChange: [{
             matcher: 'done',
             hooks: [{ type: 'command', command: 'echo done' }],
           }],
@@ -245,6 +246,43 @@ describe('validation', () => {
       });
       const result = validateHooksContent(json);
       expect(result.valid).toBe(true);
+    });
+  });
+
+  describe('deprecated event aliases', () => {
+    it('should accept TodoStateChange as deprecated alias', () => {
+      const config = JSON.stringify({
+        hooks: {
+          TodoStateChange: [{
+            hooks: [{ type: 'command', command: 'echo test' }],
+          }],
+        },
+      });
+      const result = validateHooksContent(config);
+      expect(result.valid).toBe(true);
+      expect(result.warnings).toContainEqual(
+        expect.objectContaining({
+          path: 'hooks.TodoStateChange',
+          severity: 'warning',
+          suggestion: expect.stringContaining('SessionStatusChange'),
+        })
+      );
+    });
+
+    it('should rewrite TodoStateChange to SessionStatusChange in schema transform', () => {
+      const raw = {
+        hooks: {
+          TodoStateChange: [{
+            hooks: [{ type: 'command', command: 'echo test' }],
+          }],
+        },
+      };
+      const result = HooksConfigSchema.safeParse(raw);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.hooks['SessionStatusChange']).toBeDefined();
+        expect(result.data.hooks['TodoStateChange']).toBeUndefined();
+      }
     });
   });
 });

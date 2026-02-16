@@ -165,8 +165,8 @@ export function resetToDefaults(workspaceRootPath: string): void {
   const sessions = listSessions(workspaceRootPath);
 
   for (const session of sessions) {
-    if (session.todoState && !validIds.has(session.todoState)) {
-      updateSessionMetadata(workspaceRootPath, session.id, { todoState: 'todo' });
+    if (session.sessionStatus && !validIds.has(session.sessionStatus)) {
+      updateSessionMetadata(workspaceRootPath, session.id, { sessionStatus: 'todo' });
     }
   }
 }
@@ -186,8 +186,8 @@ function migrateSessionsFromDeletedStatus(
   let migratedCount = 0;
 
   for (const session of sessions) {
-    if (session.todoState === deletedStatusId) {
-      updateSessionMetadata(workspaceRootPath, session.id, { todoState: 'todo' });
+    if (session.sessionStatus === deletedStatusId) {
+      updateSessionMetadata(workspaceRootPath, session.id, { sessionStatus: 'todo' });
       migratedCount++;
     }
   }

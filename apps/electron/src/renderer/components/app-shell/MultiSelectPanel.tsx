@@ -15,7 +15,7 @@ import { Kbd, KbdGroup } from '@/components/ui/kbd'
 import { cn } from '@/lib/utils'
 import { isMac } from '@/lib/platform'
 import { DropdownMenu, DropdownMenuTrigger, StyledDropdownMenuContent, StyledDropdownMenuItem, StyledDropdownMenuSeparator, StyledDropdownMenuSubContent, StyledDropdownMenuSubTrigger, DropdownMenuSub } from '@/components/ui/styled-dropdown'
-import type { TodoStateId, TodoState } from '@/config/todo-states'
+import type { SessionStatusId, SessionStatus } from '@/config/session-status-config'
 import type { LabelConfig } from '@craft-agent/shared/labels'
 import { LabelMenuItems, StatusMenuItems } from './SessionMenuParts'
 
@@ -23,11 +23,11 @@ export interface MultiSelectPanelProps {
   /** Number of selected sessions */
   count: number
   /** Available todo states */
-  todoStates?: TodoState[]
+  sessionStatuses?: SessionStatus[]
   /** Active status if all selected share the same state */
-  activeStatusId?: TodoStateId | null
+  activeStatusId?: SessionStatusId | null
   /** Callback when setting status for all selected */
-  onSetStatus?: (status: TodoStateId) => void
+  onSetStatus?: (status: SessionStatusId) => void
   /** Available label configs (tree) */
   labels?: LabelConfig[]
   /** Labels applied to all selected sessions */
@@ -44,7 +44,7 @@ export interface MultiSelectPanelProps {
 
 export function MultiSelectPanel({
   count,
-  todoStates = [],
+  sessionStatuses = [],
   activeStatusId,
   onSetStatus,
   labels = [],
@@ -105,7 +105,7 @@ export function MultiSelectPanel({
             </DropdownMenuTrigger>
             <StyledDropdownMenuContent align="center">
               <StatusMenuItems
-                todoStates={todoStates}
+                sessionStatuses={sessionStatuses}
                 activeStateId={activeStatusId ?? undefined}
                 onSelect={onSetStatus}
                 menu={{ MenuItem: StyledDropdownMenuItem }}

@@ -70,6 +70,8 @@ export interface StoredConfig {
   keepAwakeWhileRunning?: boolean;  // Prevent screen sleep while sessions are running (default: false)
   // Tool metadata
   richToolDescriptions?: boolean;  // Add intent/action metadata to all tool calls (default: true)
+  // Windows: path to Git Bash (bash.exe) for the SDK subprocess
+  gitBashPath?: string;
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -339,6 +341,42 @@ export function setRichToolDescriptions(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.richToolDescriptions = enabled;
+  saveConfig(config);
+}
+
+/**
+ * Get persisted Git Bash path (Windows only).
+ * Used to set CLAUDE_CODE_GIT_BASH_PATH for the SDK subprocess.
+ */
+export function getGitBashPath(): string | undefined {
+  const config = loadStoredConfig();
+  return config?.gitBashPath;
+}
+
+/**
+ * Set Git Bash path (Windows only).
+ * Persists to config so it survives app restarts.
+ * Returns false if the config could not be loaded (path not persisted).
+ */
+export function setGitBashPath(path: string): boolean {
+  const config = loadStoredConfig();
+  if (!config) {
+    console.warn('[storage] Failed to persist Git Bash path: config could not be loaded');
+    return false;
+  }
+  config.gitBashPath = path;
+  saveConfig(config);
+  return true;
+}
+
+/**
+ * Clear persisted Git Bash path (Windows only).
+ * Used when the stored path is stale or invalid.
+ */
+export function clearGitBashPath(): void {
+  const config = loadStoredConfig();
+  if (!config || !config.gitBashPath) return;
+  delete config.gitBashPath;
   saveConfig(config);
 }
 

@@ -47,7 +47,7 @@ The file format is:
 - **Lines 2+**: Messages (one per line)
 
 ```jsonl
-{"id":"260121-swift-falcon","workspaceRootPath":"~/.craft-agent/workspaces/ws-abc123","createdAt":1737451800000,"lastUsedAt":1737451900000,"todoState":"todo","permissionMode":"ask"}
+{"id":"260121-swift-falcon","workspaceRootPath":"~/.craft-agent/workspaces/ws-abc123","createdAt":1737451800000,"lastUsedAt":1737451900000,"sessionStatus":"todo","permissionMode":"ask"}
 {"id":"msg_1","type":"human","content":"Find my project planning document","timestamp":1737451800000}
 {"id":"msg_2","type":"assistant","content":"Found \"Project Planning Q4\"...","timestamp":1737451802000}
 ```
@@ -60,7 +60,7 @@ The file format is:
 | `workspaceRootPath` | Path to workspace (portable format) |
 | `createdAt` | Creation timestamp (ms) |
 | `lastUsedAt` | Last activity timestamp (ms) |
-| `todoState` | Status ID (e.g., "todo", "done") |
+| `sessionStatus` | Status ID (e.g., "todo", "done") |
 | `permissionMode` | Current mode: "safe", "ask", "allow-all" |
 | `name` | Optional user-defined name |
 | `isFlagged` | Whether session is flagged |

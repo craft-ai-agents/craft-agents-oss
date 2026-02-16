@@ -7,7 +7,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { HooksConfigSchema, zodErrorToIssues } from './schemas.ts';
+import { HooksConfigSchema, zodErrorToIssues, DEPRECATED_EVENT_ALIASES } from './schemas.ts';
 import { isValidLabelId } from '../labels/storage.ts';
 import { extractLabelId } from '../labels/values.ts';
 import { Cron } from 'croner';
@@ -82,6 +82,27 @@ export function validateHooksContent(jsonString: string): ValidationResult {
       severity: 'warning',
       suggestion: 'Add hook definitions under event names like StatusChange, LabelAdd, etc.',
     });
+  }
+
+  // Check for deprecated event aliases in the raw JSON (before transform rewrites them)
+  try {
+    const rawConfig = JSON.parse(jsonString) as { hooks?: Record<string, unknown> };
+    if (rawConfig.hooks) {
+      for (const event of Object.keys(rawConfig.hooks)) {
+        const canonical = DEPRECATED_EVENT_ALIASES[event];
+        if (canonical) {
+          warnings.push({
+            file,
+            path: `hooks.${event}`,
+            message: `Event '${event}' has been renamed to '${canonical}'. The old name still works but is deprecated.`,
+            severity: 'warning',
+            suggestion: `Rename '${event}' to '${canonical}' in your hooks.json`,
+          });
+        }
+      }
+    }
+  } catch {
+    // JSON already validated above, this shouldn't happen
   }
 
   // Validate regex patterns, cron expressions, and timezones in matchers

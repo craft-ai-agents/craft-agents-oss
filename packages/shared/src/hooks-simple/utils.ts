@@ -94,7 +94,7 @@ export function getMatchValue(event: HookEvent, data: Record<string, unknown>): 
       return String(data.newMode ?? '');
     case 'FlagChange':
       return String(data.isFlagged ?? false);
-    case 'TodoStateChange':
+    case 'SessionStatusChange':
       return String(data.newStatus ?? data.newState ?? '');
     case 'PreToolUse':
     case 'PostToolUse':

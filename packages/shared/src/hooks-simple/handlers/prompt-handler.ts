@@ -16,7 +16,7 @@ const log = createLogger('prompt-handler');
 // App events that support prompt hooks
 const APP_EVENTS: AppEvent[] = [
   'LabelAdd', 'LabelRemove', 'LabelConfigChange',
-  'PermissionModeChange', 'FlagChange', 'TodoStateChange',
+  'PermissionModeChange', 'FlagChange', 'SessionStatusChange',
   'SchedulerTick'
 ];
 

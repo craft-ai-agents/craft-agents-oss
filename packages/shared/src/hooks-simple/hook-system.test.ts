@@ -270,24 +270,24 @@ describe('HookSystem', () => {
       await system.dispose();
     });
 
-    it('should emit TodoStateChange event', async () => {
+    it('should emit SessionStatusChange event', async () => {
       const system = new HookSystem({
         workspaceRootPath: tempDir,
         workspaceId: 'test-workspace',
       });
 
       system.setInitialSessionMetadata('session-1', {
-        todoState: 'todo',
+        sessionStatus: 'todo',
       });
 
       const emitSpy = spyOn(system.eventBus, 'emit');
 
       const events = await system.updateSessionMetadata('session-1', {
-        todoState: 'done',
+        sessionStatus: 'done',
       });
 
-      expect(events).toContain('TodoStateChange');
-      expect(emitSpy).toHaveBeenCalledWith('TodoStateChange', expect.objectContaining({
+      expect(events).toContain('SessionStatusChange');
+      expect(emitSpy).toHaveBeenCalledWith('SessionStatusChange', expect.objectContaining({
         oldState: 'todo',
         newState: 'done',
       }));

@@ -95,7 +95,7 @@ export {
   type LabelEventPayload,
   type PermissionModeChangePayload,
   type FlagChangePayload,
-  type TodoStateChangePayload,
+  type SessionStatusChangePayload,
   type SchedulerTickPayload,
   type LabelConfigChangePayload,
   type GenericEventPayload,

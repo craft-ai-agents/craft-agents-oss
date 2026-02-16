@@ -8,30 +8,30 @@
 import { isValidStatusId } from './storage.ts';
 
 /**
- * Validate and normalize a session's todoState
+ * Validate and normalize a session's status
  * If invalid or undefined, returns 'todo' as fallback
  *
  * @param workspaceRootPath - Workspace root path
- * @param todoState - Status ID to validate
+ * @param sessionStatus - Status ID to validate
  * @returns Valid status ID (or 'todo' fallback)
  */
 export function validateSessionStatus(
   workspaceRootPath: string,
-  todoState: string | undefined
+  sessionStatus: string | undefined
 ): string {
   // Default to 'todo' if undefined
-  if (!todoState) {
+  if (!sessionStatus) {
     return 'todo';
   }
 
   // Check if status exists in workspace config
-  if (isValidStatusId(workspaceRootPath, todoState)) {
-    return todoState;
+  if (isValidStatusId(workspaceRootPath, sessionStatus)) {
+    return sessionStatus;
   }
 
   // Invalid status - log warning and fallback to 'todo'
   console.warn(
-    `[validateSessionStatus] Invalid status '${todoState}' for workspace, ` +
+    `[validateSessionStatus] Invalid status '${sessionStatus}' for workspace, ` +
     `falling back to 'todo'. The status may have been deleted.`
   );
 

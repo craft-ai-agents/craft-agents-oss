@@ -3,14 +3,14 @@ import { Command as CommandPrimitive } from 'cmdk'
 import { Archive, ArchiveRestore } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
-  type TodoStateId,
-  type TodoState,
+  type SessionStatusId,
+  type SessionStatus,
   getStateIcon,
   getStateColor,
-} from '@/config/todo-states'
+} from '@/config/session-status-config'
 
 // Re-export types for backwards compatibility
-export { type TodoStateId, type TodoState, getStateIcon, getStateColor }
+export { type SessionStatusId, type SessionStatus, getStateIcon, getStateColor }
 
 // ============================================================================
 // Shared Styles (matching slash-command-menu)
@@ -24,7 +24,7 @@ const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-3 roun
 // StateItemContent - Shared item rendering
 // ============================================================================
 
-function StateItemContent({ state }: { state: TodoState }) {
+function StateItemContent({ state }: { state: SessionStatus }) {
   // Only apply color styling if the icon is colorable (uses currentColor)
   // Emojis and images should render at full opacity with their own colors
   const applyColor = state.iconColorable
@@ -43,13 +43,13 @@ function StateItemContent({ state }: { state: TodoState }) {
 }
 
 // ============================================================================
-// TodoStateMenu Component - For selecting/changing a session's state
+// SessionStatusMenu Component - For selecting/changing a session's state
 // ============================================================================
 
-export interface TodoStateMenuProps {
-  states?: TodoState[]
-  activeState: TodoStateId
-  onSelect: (stateId: TodoStateId) => void
+export interface SessionStatusMenuProps {
+  states?: SessionStatus[]
+  activeState: SessionStatusId
+  onSelect: (stateId: SessionStatusId) => void
   /** Whether the session is currently archived */
   isArchived?: boolean
   /** Archive action - shows Archive item at bottom when provided and not archived */
@@ -59,7 +59,7 @@ export interface TodoStateMenuProps {
   className?: string
 }
 
-export function TodoStateMenu({
+export function SessionStatusMenu({
   states = [],
   activeState,
   onSelect,
@@ -67,7 +67,7 @@ export function TodoStateMenu({
   onArchive,
   onUnarchive,
   className,
-}: TodoStateMenuProps) {
+}: SessionStatusMenuProps) {
   const [filter, setFilter] = React.useState('')
   const inputRef = React.useRef<HTMLInputElement>(null)
 

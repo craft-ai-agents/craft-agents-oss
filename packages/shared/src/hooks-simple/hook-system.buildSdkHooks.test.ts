@@ -50,13 +50,13 @@ describe('HookSystem.buildSdkHooks', () => {
 
   it('should return empty object when no agent event hooks exist', () => {
     const system = createSystem({
-      TodoStateChange: [{
+      SessionStatusChange: [{
         matcher: 'done',
         hooks: [{ type: 'command', command: 'echo done' }],
       }],
     });
     const result = system.buildSdkHooks();
-    // TodoStateChange is an app event, not an agent event
+    // SessionStatusChange is an app event, not an agent event
     expect(result).toEqual({});
     system.dispose();
   });

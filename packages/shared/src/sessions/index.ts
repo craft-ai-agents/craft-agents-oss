@@ -10,7 +10,7 @@
 
 // Types
 export type {
-  TodoState,
+  SessionStatus,
   SessionTokenUsage,
   StoredMessage,
   SessionConfig,
@@ -50,7 +50,7 @@ export {
   canUpdateSdkCwd,
   flagSession,
   unflagSession,
-  setSessionTodoState,
+  setSessionStatus,
   // Pending plan execution (Accept & Compact flow)
   setPendingPlanExecution,
   markCompactionComplete,

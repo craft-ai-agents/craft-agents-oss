@@ -2,7 +2,7 @@
  * PanelHeader - Standardized header component for panels
  *
  * Provides consistent header styling with:
- * - Fixed 40px height
+ * - Fixed 50px height
  * - Title with optional badge
  * - Optional action buttons
  * - Optional title dropdown menu (renders chevron and makes title interactive)
@@ -155,7 +155,7 @@ export function PanelHeader({
   const basePadding = 16
 
   const baseClassName = cn(
-    'flex shrink-0 items-center pr-2 min-w-0 gap-1 relative z-panel h-[40px]',
+    'flex shrink-0 items-center pr-2 min-w-0 gap-1 relative z-panel h-[50px]',
     // Only use static paddingLeft class when not animating
     !shouldCompensate && (paddingLeft || 'pl-4'),
     className

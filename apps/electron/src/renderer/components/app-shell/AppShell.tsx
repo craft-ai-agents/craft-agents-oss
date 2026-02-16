@@ -29,7 +29,7 @@ import {
 } from "lucide-react"
 import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
-// TodoStateIcons no longer used - icons come from dynamic todoStates
+// SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
 import { AppMenu } from "../AppMenu"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
@@ -85,12 +85,12 @@ import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSourc
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
-import { type TodoStateId, type TodoState, statusConfigsToTodoStates } from "@/config/todo-states"
+import { type SessionStatusId, type SessionStatus, statusConfigsToSessionStatuses } from "@/config/session-status-config"
 import { useStatuses } from "@/hooks/useStatuses"
 import { useLabels } from "@/hooks/useLabels"
 import { useViews } from "@/hooks/useViews"
 import { LabelIcon, LabelValueTypeIcon } from "@/components/ui/label-icon"
-import { filterItems as filterLabelMenuItems, filterStates as filterLabelMenuStates, type LabelMenuItem } from "@/components/ui/label-menu"
+import { filterItems as filterLabelMenuItems, filterSessionStatuses as filterLabelMenuStates, type LabelMenuItem } from "@/components/ui/label-menu"
 import { buildLabelTree, getDescendantIds, getLabelDisplayName, flattenLabels, extractLabelId, findLabelById } from "@craft-agent/shared/labels"
 import type { LabelConfig, LabelTreeNode } from "@craft-agent/shared/labels"
 import { resolveEntityColor } from "@craft-agent/shared/colors"
@@ -475,7 +475,7 @@ function AppShellContent({
     onUnarchiveSession,
     onMarkSessionRead,
     onMarkSessionUnread,
-    onTodoStateChange,
+    onSessionStatusChange,
     onRenameSession,
     onOpenSettings,
     onOpenKeyboardShortcuts,
@@ -603,7 +603,7 @@ function AppShellContent({
     }
     // Also migrate legacy global filters if no allSessions entry exists
     if (!saved.allSessions) {
-      const oldStatuses = storage.get<TodoStateId[]>(storage.KEYS.listFilter, [])
+      const oldStatuses = storage.get<SessionStatusId[]>(storage.KEYS.listFilter, [])
       const oldLabels = storage.get<string[]>(storage.KEYS.labelFilter, [])
       if (oldStatuses.length > 0 || oldLabels.length > 0) {
         const statuses: FilterEntry = {}
@@ -616,11 +616,11 @@ function AppShellContent({
     return saved
   })
 
-  // Derive current view's status filter as a Map<TodoStateId, FilterMode>
+  // Derive current view's status filter as a Map<SessionStatusId, FilterMode>
   const listFilter = useMemo(() => {
-    if (!sessionFilterKey) return new Map<TodoStateId, FilterMode>()
+    if (!sessionFilterKey) return new Map<SessionStatusId, FilterMode>()
     const entry = viewFiltersMap[sessionFilterKey]?.statuses ?? {}
-    return new Map<TodoStateId, FilterMode>(Object.entries(entry) as [TodoStateId, FilterMode][])
+    return new Map<SessionStatusId, FilterMode>(Object.entries(entry) as [SessionStatusId, FilterMode][])
   }, [viewFiltersMap, sessionFilterKey])
 
   // Derive current view's label filter as a Map<string, FilterMode>
@@ -631,10 +631,10 @@ function AppShellContent({
   }, [viewFiltersMap, sessionFilterKey])
 
   // Setter for status filter — updates only the current view's entry in the map
-  const setListFilter = useCallback((updater: Map<TodoStateId, FilterMode> | ((prev: Map<TodoStateId, FilterMode>) => Map<TodoStateId, FilterMode>)) => {
+  const setListFilter = useCallback((updater: Map<SessionStatusId, FilterMode> | ((prev: Map<SessionStatusId, FilterMode>) => Map<SessionStatusId, FilterMode>)) => {
     setViewFiltersMap(prev => {
       if (!sessionFilterKey) return prev
-      const current = new Map<TodoStateId, FilterMode>(Object.entries(prev[sessionFilterKey]?.statuses ?? {}) as [TodoStateId, FilterMode][])
+      const current = new Map<SessionStatusId, FilterMode>(Object.entries(prev[sessionFilterKey]?.statuses ?? {}) as [SessionStatusId, FilterMode][])
       const next = typeof updater === 'function' ? updater(current) : updater
       return {
         ...prev,
@@ -866,16 +866,16 @@ function AppShellContent({
 
   // Load dynamic statuses from workspace config
   const { statuses: statusConfigs, isLoading: isLoadingStatuses } = useStatuses(activeWorkspace?.id || null)
-  const [todoStates, setTodoStates] = React.useState<TodoState[]>([])
+  const [sessionStatuses, setSessionStatuses] = React.useState<SessionStatus[]>([])
 
-  // Convert StatusConfig to TodoState with resolved icons
+  // Convert StatusConfig to SessionStatus with resolved icons
   React.useEffect(() => {
     if (!activeWorkspace?.id || statusConfigs.length === 0) {
-      setTodoStates([])
+      setSessionStatuses([])
       return
     }
 
-    setTodoStates(statusConfigsToTodoStates(statusConfigs, activeWorkspace.id, isDark))
+    setSessionStatuses(statusConfigsToSessionStatuses(statusConfigs, activeWorkspace.id, isDark))
   }, [statusConfigs, activeWorkspace?.id, isDark])
 
   // Optimistic status order: immediately reflects drag-drop order while IPC propagates.
@@ -888,21 +888,21 @@ function AppShellContent({
   }, [statusConfigs])
 
   // Derive effective todo states: apply optimistic reorder if active, otherwise use canonical order
-  const effectiveTodoStates = React.useMemo(() => {
-    if (!optimisticStatusOrder) return todoStates
-    // Reorder todoStates array to match optimistic order
-    const stateMap = new Map(todoStates.map(s => [s.id, s]))
-    const reordered: TodoState[] = []
+  const effectiveSessionStatuses = React.useMemo(() => {
+    if (!optimisticStatusOrder) return sessionStatuses
+    // Reorder sessionStatuses array to match optimistic order
+    const stateMap = new Map(sessionStatuses.map(s => [s.id, s]))
+    const reordered: SessionStatus[] = []
     for (const id of optimisticStatusOrder) {
       const state = stateMap.get(id)
       if (state) reordered.push(state)
     }
     // Append any states not in the optimistic order (shouldn't happen, but defensive)
-    for (const state of todoStates) {
+    for (const state of sessionStatuses) {
       if (!optimisticStatusOrder.includes(state.id)) reordered.push(state)
     }
     return reordered
-  }, [todoStates, optimisticStatusOrder])
+  }, [sessionStatuses, optimisticStatusOrder])
 
   // Load labels from workspace config
   const { labels: labelConfigs } = useLabels(activeWorkspace?.id || null)
@@ -947,12 +947,12 @@ function AppShellContent({
   // Compute filtered results for the dropdown's search mode (memoized for use in both
   // the keyboard handler and the JSX render).
   const filterDropdownResults = useMemo(() => {
-    if (!filterDropdownQuery.trim()) return { states: [] as TodoState[], labels: [] as LabelMenuItem[] }
+    if (!filterDropdownQuery.trim()) return { states: [] as SessionStatus[], labels: [] as LabelMenuItem[] }
     return {
-      states: filterLabelMenuStates(effectiveTodoStates, filterDropdownQuery),
+      states: filterLabelMenuStates(effectiveSessionStatuses, filterDropdownQuery),
       labels: filterLabelMenuItems(flatLabelMenuItems, filterDropdownQuery),
     }
-  }, [filterDropdownQuery, effectiveTodoStates, flatLabelMenuItems])
+  }, [filterDropdownQuery, effectiveSessionStatuses, flatLabelMenuItems])
 
   // Reset selected index when query changes
   React.useEffect(() => {
@@ -1219,7 +1219,7 @@ function AppShellContent({
   }, [workspaceSessionMetas])
 
   // Count sessions by todo state (scoped to workspace)
-  const isMetaDone = (s: SessionMeta) => s.todoState === 'done' || s.todoState === 'cancelled'
+  const isMetaDone = (s: SessionMeta) => s.sessionStatus === 'done' || s.sessionStatus === 'cancelled'
   const flaggedCount = activeSessionMetas.filter(s => s.isFlagged).length
   const archivedCount = workspaceSessionMetas.filter(s => s.isArchived).length
 
@@ -1249,22 +1249,22 @@ function AppShellContent({
     return counts
   }, [activeSessionMetas, labelConfigs])
 
-  // Count sessions by individual todo state (dynamic based on effectiveTodoStates)
+  // Count sessions by individual todo state (dynamic based on effectiveSessionStatuses)
   // Uses activeSessionMetas to exclude archived sessions from counts.
-  const todoStateCounts = useMemo(() => {
-    const counts: Record<TodoStateId, number> = {}
+  const sessionStatusCounts = useMemo(() => {
+    const counts: Record<SessionStatusId, number> = {}
     // Initialize counts for all dynamic statuses
-    for (const state of effectiveTodoStates) {
+    for (const state of effectiveSessionStatuses) {
       counts[state.id] = 0
     }
     // Count sessions
     for (const s of activeSessionMetas) {
-      const state = (s.todoState || 'todo') as TodoStateId
-      // Increment count (initialize to 0 if status not in effectiveTodoStates yet)
+      const state = (s.sessionStatus || 'todo') as SessionStatusId
+      // Increment count (initialize to 0 if status not in effectiveSessionStatuses yet)
       counts[state] = (counts[state] || 0) + 1
     }
     return counts
-  }, [activeSessionMetas, effectiveTodoStates])
+  }, [activeSessionMetas, effectiveSessionStatuses])
 
   // Count sources by type for the Sources dropdown subcategories
   const sourceTypeCounts = useMemo(() => {
@@ -1301,7 +1301,7 @@ function AppShellContent({
         break
       case 'state':
         // Filter by specific todo state (excludes archived)
-        result = activeSessionMetas.filter(s => (s.todoState || 'todo') === sessionFilter.stateId)
+        result = activeSessionMetas.filter(s => (s.sessionStatus || 'todo') === sessionFilter.stateId)
         break
       case 'label': {
         if (sessionFilter.labelId === '__all__') {
@@ -1339,17 +1339,17 @@ function AppShellContent({
     //   - Includes: if any exist, only matching items pass
     //   - Excludes: matching items are removed (applied after includes)
     if (listFilter.size > 0) {
-      const statusIncludes = new Set<TodoStateId>()
-      const statusExcludes = new Set<TodoStateId>()
+      const statusIncludes = new Set<SessionStatusId>()
+      const statusExcludes = new Set<SessionStatusId>()
       for (const [id, mode] of listFilter) {
         if (mode === 'include') statusIncludes.add(id)
         else statusExcludes.add(id)
       }
       if (statusIncludes.size > 0) {
-        result = result.filter(s => statusIncludes.has((s.todoState || 'todo') as TodoStateId))
+        result = result.filter(s => statusIncludes.has((s.sessionStatus || 'todo') as SessionStatusId))
       }
       if (statusExcludes.size > 0) {
-        result = result.filter(s => !statusExcludes.has((s.todoState || 'todo') as TodoStateId))
+        result = result.filter(s => !statusExcludes.has((s.sessionStatus || 'todo') as SessionStatusId))
       }
     }
     // Filter by labels — supports include/exclude with descendant expansion
@@ -1449,7 +1449,7 @@ function AppShellContent({
     )
   }, [isRightSidebarVisible])
 
-  // Extend context value with local overrides (textareaRef, wrapped onDeleteSession, sources, skills, labels, enabledModes, rightSidebarOpenButton, effectiveTodoStates)
+  // Extend context value with local overrides (textareaRef, wrapped onDeleteSession, sources, skills, labels, enabledModes, rightSidebarOpenButton, effectiveSessionStatuses)
   const appShellContextValue = React.useMemo<AppShellContextType>(() => ({
     ...contextValue,
     onDeleteSession: handleDeleteSession,
@@ -1459,7 +1459,7 @@ function AppShellContent({
     labels: labelConfigs,
     onSessionLabelsChange: handleSessionLabelsChange,
     enabledModes,
-    todoStates: effectiveTodoStates,
+    sessionStatuses: effectiveSessionStatuses,
     onSessionSourcesChange: handleSessionSourcesChange,
     rightSidebarButton: rightSidebarOpenButton,
     // Search state for ChatDisplay highlighting
@@ -1467,7 +1467,7 @@ function AppShellContent({
     isSearchModeActive: searchActive,
     chatDisplayRef,
     onChatMatchInfoChange: handleChatMatchInfoChange,
-  }), [contextValue, handleDeleteSession, sources, skills, labelConfigs, handleSessionLabelsChange, enabledModes, effectiveTodoStates, handleSessionSourcesChange, rightSidebarOpenButton, searchActive, searchQuery, handleChatMatchInfoChange])
+  }), [contextValue, handleDeleteSession, sources, skills, labelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, rightSidebarOpenButton, searchActive, searchQuery, handleChatMatchInfoChange])
 
   // Persist expanded folders to localStorage (workspace-scoped)
   React.useEffect(() => {
@@ -1531,7 +1531,7 @@ function AppShellContent({
   }, [])
 
   // Handler for individual todo state views
-  const handleTodoStateClick = useCallback((stateId: TodoStateId) => {
+  const handleSessionStatusClick = useCallback((stateId: SessionStatusId) => {
     navigate(routes.view.state(stateId))
   }, [])
 
@@ -1775,8 +1775,8 @@ function AppShellContent({
     result.push({ id: 'nav:allSessions', type: 'nav', action: handleAllSessionsClick })
     result.push({ id: 'nav:flagged', type: 'nav', action: handleFlaggedClick })
     result.push({ id: 'nav:states', type: 'nav', action: handleAllSessionsClick })
-    for (const state of effectiveTodoStates) {
-      result.push({ id: `nav:state:${state.id}`, type: 'nav', action: () => handleTodoStateClick(state.id) })
+    for (const state of effectiveSessionStatuses) {
+      result.push({ id: `nav:state:${state.id}`, type: 'nav', action: () => handleSessionStatusClick(state.id) })
     }
 
     // 2. Labels section header + regular label tree for keyboard nav
@@ -1802,7 +1802,7 @@ function AppShellContent({
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
 
     return result
-  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleTodoStateClick, effectiveTodoStates, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleSettingsClick, handleWhatsNewClick])
+  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleSessionStatusClick, effectiveSessionStatuses, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleSettingsClick, handleWhatsNewClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1931,7 +1931,7 @@ function AppShellContent({
       case 'flagged':
         return 'Flagged'
       case 'state': {
-        const state = effectiveTodoStates.find(s => s.id === sessionFilter.stateId)
+        const state = effectiveSessionStatuses.find(s => s.id === sessionFilter.stateId)
         return state?.label || 'All Sessions'
       }
       case 'label':
@@ -1941,7 +1941,7 @@ function AppShellContent({
       default:
         return 'All Sessions'
     }
-  }, [navState, sessionFilter, effectiveTodoStates, labelConfigs, viewConfigs])
+  }, [navState, sessionFilter, effectiveSessionStatuses, labelConfigs, viewConfigs])
 
   // Build recursive sidebar items from label tree.
   // Each node renders with condensed height (compact: true) since many labels expected.
@@ -2027,7 +2027,7 @@ function AppShellContent({
             animate={{ opacity: effectiveFocusMode ? 0 : 1 }}
             transition={springTransition}
             className={cn(
-              "fixed top-0 h-[50px] z-overlay flex items-center titlebar-no-drag pr-2",
+              "fixed top-0 h-[50px] z-overlay flex items-center pointer-events-none pr-2",
               effectiveFocusMode && "pointer-events-none"
             )}
             style={{ left: menuLeftOffset, width: sidebarWidth - menuLeftOffset }}
@@ -2145,15 +2145,15 @@ function AppShellContent({
                       },
                       // Enable flat DnD reorder for status items
                       sortable: { onReorder: handleStatusReorder },
-                      items: effectiveTodoStates.map(state => ({
+                      items: effectiveSessionStatuses.map(state => ({
                         id: `nav:state:${state.id}`,
                         title: state.label,
-                        label: String(todoStateCounts[state.id] || 0),
+                        label: String(sessionStatusCounts[state.id] || 0),
                         icon: state.icon,
                         iconColor: state.resolvedColor,
                         iconColorable: state.iconColorable,
                         variant: (sessionFilter?.kind === 'state' && sessionFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
-                        onClick: () => handleTodoStateClick(state.id),
+                        onClick: () => handleSessionStatusClick(state.id),
                         contextMenu: {
                           type: 'status' as const,
                           statusId: state.id,
@@ -2399,7 +2399,7 @@ function AppShellContent({
           >
             <div
               style={{ width: sessionListWidth }}
-              className="h-full flex flex-col min-w-0 titlebar-no-drag relative z-panel"
+              className="h-full flex flex-col min-w-0 relative z-panel"
             >
             <PanelHeader
               title={isSidebarVisible ? listTitle : undefined}
@@ -2544,7 +2544,7 @@ function AppShellContent({
                                 {/* Pinned: status from state view */}
                                 {(() => {
                                   if (!pinnedFilters.pinnedStatusId) return null
-                                  const state = effectiveTodoStates.find(s => s.id === pinnedFilters.pinnedStatusId)
+                                  const state = effectiveSessionStatuses.find(s => s.id === pinnedFilters.pinnedStatusId)
                                   if (!state) return null
                                   return (
                                     <StyledDropdownMenuItem disabled key={`pinned-status-${state.id}`}>
@@ -2574,7 +2574,7 @@ function AppShellContent({
                                   )
                                 })()}
                                 {/* User-added: selected statuses with mode pill (include/exclude) */}
-                                {effectiveTodoStates.filter(s => listFilter.has(s.id)).map(state => {
+                                {effectiveSessionStatuses.filter(s => listFilter.has(s.id)).map(state => {
                                   const applyColor = state.iconColorable
                                   const mode = listFilter.get(state.id)!
                                   return (
@@ -2648,7 +2648,7 @@ function AppShellContent({
                                 <span className="flex-1">Statuses</span>
                               </StyledDropdownMenuSubTrigger>
                               <StyledDropdownMenuSubContent minWidth="min-w-[180px]">
-                                {effectiveTodoStates.map(state => {
+                                {effectiveSessionStatuses.map(state => {
                                   const applyColor = state.iconColorable
                                   const isPinned = state.id === pinnedFilters.pinnedStatusId
                                   const currentMode = listFilter.get(state.id)
@@ -3011,7 +3011,7 @@ function AppShellContent({
                   onArchive={onArchiveSession}
                   onUnarchive={onUnarchiveSession}
                   onMarkUnread={onMarkSessionUnread}
-                  onTodoStateChange={onTodoStateChange}
+                  onSessionStatusChange={onSessionStatusChange}
                   onRename={onRenameSession}
                   onFocusChatInput={focusChatInput}
                   onSessionSelect={(selectedMeta) => {
@@ -3037,7 +3037,7 @@ function AppShellContent({
                     setSearchActive(false)
                     setSearchQuery('')
                   }}
-                  todoStates={effectiveTodoStates}
+                  sessionStatuses={effectiveSessionStatuses}
                   evaluateViews={evaluateViews}
                   labels={labelConfigs}
                   onLabelsChange={handleSessionLabelsChange}

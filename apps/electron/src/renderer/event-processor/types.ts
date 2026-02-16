@@ -5,7 +5,7 @@
  * All agent events flow through a single pure function for consistent state transitions.
  */
 
-import type { Session, Message, PermissionRequest, CredentialRequest, TypedError, PermissionMode, TodoState, AuthRequest, ToolDisplayMeta } from '../../shared/types'
+import type { Session, Message, PermissionRequest, CredentialRequest, TypedError, PermissionMode, SessionStatus, AuthRequest, ToolDisplayMeta } from '../../shared/types'
 
 /**
  * Streaming state for a session - replaces streamingTextRef
@@ -141,10 +141,10 @@ export interface LabelsChangedEvent {
 /**
  * Todo state changed event (external metadata change or agent tool)
  */
-export interface TodoStateChangedEvent {
-  type: 'todo_state_changed'
+export interface SessionStatusChangedEvent {
+  type: 'session_status_changed'
   sessionId: string
-  todoState?: string
+  sessionStatus?: string
 }
 
 /**
@@ -441,7 +441,7 @@ export type AgentEvent =
   | CredentialRequestEvent
   | SourcesChangedEvent
   | LabelsChangedEvent
-  | TodoStateChangedEvent
+  | SessionStatusChangedEvent
   | SessionFlaggedEvent
   | SessionUnflaggedEvent
   | SessionArchivedEvent

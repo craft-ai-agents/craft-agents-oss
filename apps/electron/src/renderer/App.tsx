@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useTheme } from '@/hooks/useTheme'
 import type { ThemeOverrides } from '@config/theme'
 import { useSetAtom, useStore, useAtomValue, useAtom } from 'jotai'
-import type { Session, Workspace, SessionEvent, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SetupNeeds, TodoState, NewChatActionParams, ContentBadge, LlmConnectionWithStatus } from '../shared/types'
+import type { Session, Workspace, SessionEvent, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SetupNeeds, SessionStatus, NewChatActionParams, ContentBadge, LlmConnectionWithStatus } from '../shared/types'
 import type { SessionOptions, SessionOptionUpdates } from './hooks/useSessionOptions'
 import { defaultSessionOptions, mergeSessionOptions } from './hooks/useSessionOptions'
 import { generateMessageId } from '../shared/types'
@@ -468,7 +468,7 @@ export default function App() {
     // Handoff events signal end of streaming - need to sync back to React state
     // Also includes todo_state_changed so status updates immediately reflect in sidebar
     // async_operation included so shimmer effect on session titles updates in real-time
-    const handoffEventTypes = new Set(['complete', 'error', 'interrupted', 'typed_error', 'todo_state_changed', 'session_flagged', 'session_unflagged', 'name_changed', 'labels_changed', 'title_generated', 'async_operation'])
+    const handoffEventTypes = new Set(['complete', 'error', 'interrupted', 'typed_error', 'session_status_changed', 'session_flagged', 'session_unflagged', 'name_changed', 'labels_changed', 'title_generated', 'async_operation'])
 
     // Helper to handle side effects (same logic for both paths)
     const handleEffects = (effects: Effect[], sessionId: string, eventType: string) => {
@@ -752,9 +752,9 @@ export default function App() {
     window.electronAPI.sessionCommand(sessionId, { type: 'markUnread' })
   }, [updateSessionById])
 
-  const handleTodoStateChange = useCallback((sessionId: string, state: TodoState) => {
-    updateSessionById(sessionId, { todoState: state })
-    window.electronAPI.sessionCommand(sessionId, { type: 'setTodoState', state })
+  const handleSessionStatusChange = useCallback((sessionId: string, state: SessionStatus) => {
+    updateSessionById(sessionId, { sessionStatus: state })
+    window.electronAPI.sessionCommand(sessionId, { type: 'setSessionStatus', state })
   }, [updateSessionById])
 
   const handleRenameSession = useCallback((sessionId: string, name: string) => {
@@ -1239,7 +1239,7 @@ export default function App() {
     onMarkSessionRead: handleMarkSessionRead,
     onMarkSessionUnread: handleMarkSessionUnread,
     onSetActiveViewingSession: handleSetActiveViewingSession,
-    onTodoStateChange: handleTodoStateChange,
+    onSessionStatusChange: handleSessionStatusChange,
     onDeleteSession: handleDeleteSession,
     onRespondToPermission: handleRespondToPermission,
     onRespondToCredential: handleRespondToCredential,
@@ -1281,7 +1281,7 @@ export default function App() {
     handleMarkSessionRead,
     handleMarkSessionUnread,
     handleSetActiveViewingSession,
-    handleTodoStateChange,
+    handleSessionStatusChange,
     handleDeleteSession,
     handleRespondToPermission,
     handleRespondToCredential,

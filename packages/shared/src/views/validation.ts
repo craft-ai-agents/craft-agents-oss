@@ -16,7 +16,8 @@ export const AVAILABLE_FIELDS: Array<{ name: string; type: string; description: 
   // Strings
   { name: 'name', type: 'string', description: 'Session name' },
   { name: 'preview', type: 'string', description: 'Preview text of first user message' },
-  { name: 'todoState', type: 'string', description: 'Status ID (e.g. "todo", "in-progress", "done")' },
+  { name: 'sessionStatus', type: 'string', description: 'Status ID (e.g. "todo", "in-progress", "done")' },
+  { name: 'todoState', type: 'string', description: '(Deprecated — use sessionStatus) Status ID alias for backward compatibility' },
   { name: 'permissionMode', type: 'string', description: 'Permission mode ("safe", "ask", "allow-all")' },
   { name: 'model', type: 'string', description: 'Model override string' },
   { name: 'lastMessageRole', type: 'string', description: 'Last message role ("user", "assistant", "plan", "tool", "error")' },

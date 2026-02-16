@@ -290,7 +290,7 @@ const mockAppShellContext = {
   onMarkSessionRead: () => {},
   onMarkSessionUnread: () => {},
   onSetActiveViewingSession: () => {},
-  onTodoStateChange: () => {},
+  onSessionStatusChange: () => {},
   onDeleteSession: async () => true,
 }
 

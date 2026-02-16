@@ -19,7 +19,7 @@ import { useSelectedIds } from '@/hooks/useSession'
 import { useSessionSelection } from '@/hooks/useSession'
 import { sessionMetaMapAtom, type SessionMeta } from '@/atoms/sessions'
 import { useAppShellContext } from '@/context/AppShellContext'
-import { getStateColor, getStateIcon, type TodoStateId } from '@/config/todo-states'
+import { getStateColor, getStateIcon, type SessionStatusId } from '@/config/session-status-config'
 import { extractLabelId } from '@craft-agent/shared/labels'
 import { LabelMenuItems, StatusMenuItems } from './SessionMenuParts'
 
@@ -31,14 +31,14 @@ export function BatchSessionMenu() {
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
 
   const {
-    onTodoStateChange,
+    onSessionStatusChange,
     onArchiveSession,
     onUnarchiveSession,
     onFlagSession,
     onUnflagSession,
     onSessionLabelsChange,
     onDeleteSession,
-    todoStates = [],
+    sessionStatuses = [],
     labels = [],
   } = useAppShellContext()
 
@@ -53,10 +53,10 @@ export function BatchSessionMenu() {
   }, [selectedIds, sessionMetaMap])
 
   // Compute shared status (if all selected have the same status)
-  const activeStatusId = useMemo((): TodoStateId | null => {
+  const activeStatusId = useMemo((): SessionStatusId | null => {
     if (selectedMetas.length === 0) return null
-    const first = (selectedMetas[0].todoState || 'todo') as TodoStateId
-    const allSame = selectedMetas.every(meta => (meta.todoState || 'todo') === first)
+    const first = (selectedMetas[0].sessionStatus || 'todo') as SessionStatusId
+    const allSame = selectedMetas.every(meta => (meta.sessionStatus || 'todo') === first)
     return allSame ? first : null
   }, [selectedMetas])
 
@@ -82,11 +82,11 @@ export function BatchSessionMenu() {
   )
 
   // Batch status change
-  const handleBatchSetStatus = useCallback((status: TodoStateId) => {
+  const handleBatchSetStatus = useCallback((status: SessionStatusId) => {
     selectedIds.forEach(sessionId => {
-      onTodoStateChange(sessionId, status)
+      onSessionStatusChange(sessionId, status)
     })
-  }, [selectedIds, onTodoStateChange])
+  }, [selectedIds, onSessionStatusChange])
 
   // Batch label toggle (all-or-nothing semantics, same as MainContentPanel)
   const handleBatchToggleLabel = useCallback((labelId: string) => {
@@ -140,7 +140,7 @@ export function BatchSessionMenu() {
   // Resolve current status icon for the submenu trigger
   const statusIcon = activeStatusId
     ? (() => {
-        const icon = getStateIcon(activeStatusId, todoStates)
+        const icon = getStateIcon(activeStatusId, sessionStatuses)
         return React.isValidElement(icon)
           ? React.cloneElement(icon as React.ReactElement<{ bare?: boolean }>, { bare: true })
           : icon
@@ -161,7 +161,7 @@ export function BatchSessionMenu() {
       <Sub>
         <SubTrigger className="pr-2">
           {statusIcon ? (
-            <span style={{ color: getStateColor(activeStatusId!, todoStates) ?? 'var(--foreground)' }}>
+            <span style={{ color: getStateColor(activeStatusId!, sessionStatuses) ?? 'var(--foreground)' }}>
               {statusIcon}
             </span>
           ) : (
@@ -171,7 +171,7 @@ export function BatchSessionMenu() {
         </SubTrigger>
         <SubContent>
           <StatusMenuItems
-            todoStates={todoStates}
+            sessionStatuses={sessionStatuses}
             activeStateId={activeStatusId ?? undefined}
             onSelect={handleBatchSetStatus}
             menu={{ MenuItem }}

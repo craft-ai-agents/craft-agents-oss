@@ -447,7 +447,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'The user wants to edit views (dynamic, expression-based filters). ' +
         'Views are stored in views.json at the workspace root under a "views" array. ' +
         'Each view has: id (unique slug), name (display text), description (optional), color (optional EntityColor), expression (Filtrex string). ' +
-        'Expressions are evaluated against session context fields: name, preview, todoState, permissionMode, model, lastMessageRole, ' +
+        'Expressions are evaluated against session context fields: name, preview, sessionStatus (also available as deprecated alias todoState), permissionMode, model, lastMessageRole, ' +
         'lastUsedAt, createdAt, messageCount, labelCount, isFlagged, hasUnread, isProcessing, hasPendingPlan, tokenUsage.*, labels. ' +
         'Available functions: daysSince(timestamp), contains(array, value). ' +
         'Colors use EntityColor format: string shorthand (e.g. "orange") or { light, dark } object. ' +

@@ -342,7 +342,7 @@ Or configure manually in `~/.craft-agent/workspaces/{id}/hooks.json`:
 - **Command hooks** — run shell commands with event data as environment variables (`$CRAFT_LABEL`, `$CRAFT_SESSION_ID`, etc.)
 - **Prompt hooks** — create a new agent session with a prompt (supports `@mentions` for sources and skills)
 
-**Supported events:** `LabelAdd`, `LabelRemove`, `PermissionModeChange`, `FlagChange`, `TodoStateChange`, `SchedulerTick`, `PreToolUse`, `PostToolUse`, `SessionStart`, `SessionEnd`, and more.
+**Supported events:** `LabelAdd`, `LabelRemove`, `PermissionModeChange`, `FlagChange`, `SessionStatusChange`, `SchedulerTick`, `PreToolUse`, `PostToolUse`, `SessionStart`, `SessionEnd`, and more.
 
 See the [Hooks documentation](https://agents.craft.do/docs/hooks/overview) for the full reference.
 

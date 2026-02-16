@@ -19,13 +19,13 @@ import type {
   CredentialRequest,
   CredentialResponse,
   PermissionMode,
-  TodoState,
+  SessionStatus,
   LoadedSource,
   LoadedSkill,
   NewChatActionParams,
   LlmConnectionWithStatus,
 } from '../../shared/types'
-import type { TodoState as TodoStateConfig } from '@/config/todo-states'
+import type { SessionStatus as SessionStatusConfig } from '@/config/session-status-config'
 import type { SessionOptions, SessionOptionUpdates } from '../hooks/useSessionOptions'
 import { defaultSessionOptions } from '../hooks/useSessionOptions'
 import { sessionAtomFamily } from '../atoms/sessions'
@@ -60,7 +60,7 @@ export interface AppShellContextType {
   /** Enabled permission modes for Shift+Tab cycling */
   enabledModes?: PermissionMode[]
   /** Dynamic todo states from workspace config (provided by AppShell, defaults to empty) */
-  todoStates?: TodoStateConfig[]
+  sessionStatuses?: SessionStatusConfig[]
 
   // Unified session options (replaces ultrathinkSessions and sessionModes)
   /** All session-scoped options in one map. Use useSessionOptionsFor() hook for easy access. */
@@ -78,7 +78,7 @@ export interface AppShellContextType {
   onMarkSessionUnread: (sessionId: string) => void
   /** Track which session user is viewing (for unread state machine) */
   onSetActiveViewingSession: (sessionId: string) => void
-  onTodoStateChange: (sessionId: string, state: TodoState) => void
+  onSessionStatusChange: (sessionId: string, state: SessionStatus) => void
   onDeleteSession: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
 
   // Permission handling

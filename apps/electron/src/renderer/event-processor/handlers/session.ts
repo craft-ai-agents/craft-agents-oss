@@ -13,7 +13,7 @@ import type {
   TypedErrorEvent,
   SourcesChangedEvent,
   LabelsChangedEvent,
-  TodoStateChangedEvent,
+  SessionStatusChangedEvent,
   SessionFlaggedEvent,
   SessionUnflaggedEvent,
   SessionArchivedEvent,
@@ -555,16 +555,16 @@ export function handleLabelsChanged(
 }
 
 /**
- * Handle todo_state_changed - update session's todoState (external metadata change or agent tool)
+ * Handle session_status_changed - update session's sessionStatus (external metadata change or agent tool)
  */
-export function handleTodoStateChanged(
+export function handleSessionStatusChanged(
   state: SessionState,
-  event: TodoStateChangedEvent
+  event: SessionStatusChangedEvent
 ): ProcessResult {
   const { session, streaming } = state
   return {
     state: {
-      session: { ...session, todoState: event.todoState },
+      session: { ...session, sessionStatus: event.sessionStatus },
       streaming,
     },
     effects: [],

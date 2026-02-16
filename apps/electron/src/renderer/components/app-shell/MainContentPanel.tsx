@@ -32,7 +32,7 @@ import {
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { extractLabelId } from '@craft-agent/shared/labels'
-import type { TodoStateId } from '@/config/todo-states'
+import type { SessionStatusId } from '@/config/session-status-config'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
@@ -51,10 +51,10 @@ export function MainContentPanel({
   const navState = useNavigationState()
   const {
     activeWorkspaceId,
-    onTodoStateChange,
+    onSessionStatusChange,
     onArchiveSession,
     onSessionLabelsChange,
-    todoStates,
+    sessionStatuses,
     labels,
   } = useAppShellContext()
 
@@ -74,10 +74,10 @@ export function MainContentPanel({
     return metas
   }, [selectedIds, sessionMetaMap])
 
-  const activeStatusId = useMemo((): TodoStateId | null => {
+  const activeStatusId = useMemo((): SessionStatusId | null => {
     if (selectedMetas.length === 0) return null
-    const first = (selectedMetas[0].todoState || 'todo') as TodoStateId
-    const allSame = selectedMetas.every(meta => (meta.todoState || 'todo') === first)
+    const first = (selectedMetas[0].sessionStatus || 'todo') as SessionStatusId
+    const allSame = selectedMetas.every(meta => (meta.sessionStatus || 'todo') === first)
     return allSame ? first : null
   }, [selectedMetas])
 
@@ -96,11 +96,11 @@ export function MainContentPanel({
   }, [selectedMetas])
 
   // Batch operations for multi-select
-  const handleBatchSetStatus = useCallback((status: TodoStateId) => {
+  const handleBatchSetStatus = useCallback((status: SessionStatusId) => {
     selectedIds.forEach(sessionId => {
-      onTodoStateChange(sessionId, status)
+      onSessionStatusChange(sessionId, status)
     })
-  }, [selectedIds, onTodoStateChange])
+  }, [selectedIds, onSessionStatusChange])
 
   const handleBatchArchive = useCallback(() => {
     selectedIds.forEach(sessionId => {
@@ -195,7 +195,7 @@ export function MainContentPanel({
         <Panel variant="grow" className={className}>
           <MultiSelectPanel
             count={selectionCount}
-            todoStates={todoStates}
+            sessionStatuses={sessionStatuses}
             activeStatusId={activeStatusId}
             onSetStatus={handleBatchSetStatus}
             labels={labels}

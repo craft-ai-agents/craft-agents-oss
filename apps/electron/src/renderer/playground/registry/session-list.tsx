@@ -1,7 +1,7 @@
 import * as React from 'react'
 import type { ComponentEntry } from './types'
 import type { SessionMeta } from '@/atoms/sessions'
-import type { TodoState } from '@/config/todo-states'
+import type { SessionStatus } from '@/config/session-status-config'
 import { Circle, Flag } from 'lucide-react'
 import { Spinner } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
@@ -12,7 +12,7 @@ import { SessionSearchHeader } from '@/components/app-shell/SessionSearchHeader'
 // Mock Todo States (minimal set for playground)
 // ============================================================================
 
-const mockTodoStates: TodoState[] = [
+const mockSessionStatuses: SessionStatus[] = [
   {
     id: 'todo',
     label: 'Todo',
@@ -75,7 +75,7 @@ const sampleSessions: SessionMeta[] = [
     name: 'Fix authentication bug in login flow',
     workspaceId: 'workspace-1',
     lastMessageAt: Date.now() - 1000 * 60 * 5, // 5 min ago
-    todoState: 'in-progress',
+    sessionStatus: 'in-progress',
     hasUnread: true,
     isFlagged: true,
   },
@@ -84,7 +84,7 @@ const sampleSessions: SessionMeta[] = [
     name: 'Implement search functionality',
     workspaceId: 'workspace-1',
     lastMessageAt: Date.now() - 1000 * 60 * 30, // 30 min ago
-    todoState: 'todo',
+    sessionStatus: 'todo',
     labels: ['feature', 'priority::high'],
   },
   {
@@ -92,7 +92,7 @@ const sampleSessions: SessionMeta[] = [
     name: 'Review pull request #42',
     workspaceId: 'workspace-1',
     lastMessageAt: Date.now() - 1000 * 60 * 60, // 1 hour ago
-    todoState: 'done',
+    sessionStatus: 'done',
     isProcessing: true,
   },
   {
@@ -100,7 +100,7 @@ const sampleSessions: SessionMeta[] = [
     name: 'Debug API response handling',
     workspaceId: 'workspace-1',
     lastMessageAt: Date.now() - 1000 * 60 * 60 * 2, // 2 hours ago
-    todoState: 'todo',
+    sessionStatus: 'todo',
   },
 ]
 
@@ -115,7 +115,7 @@ interface SessionItemPreviewProps {
   searchQuery?: string
   /** Number of matches in ChatDisplay (for match badge) */
   chatMatchCount?: number
-  todoStates?: TodoState[]
+  sessionStatuses?: SessionStatus[]
 }
 
 function SessionItemPreview({
@@ -123,9 +123,9 @@ function SessionItemPreview({
   isSelected = false,
   searchQuery = '',
   chatMatchCount,
-  todoStates = mockTodoStates,
+  sessionStatuses = mockSessionStatuses,
 }: SessionItemPreviewProps) {
-  const currentTodoState = todoStates.find(s => s.id === item.todoState) ?? todoStates[0]
+  const currentSessionStatus = sessionStatuses.find(s => s.id === item.sessionStatus) ?? sessionStatuses[0]
   const title = item.name || item.preview || 'Untitled conversation'
 
   return (
@@ -142,10 +142,10 @@ function SessionItemPreview({
               "w-4 h-4 flex items-center justify-center rounded-full transition-colors cursor-pointer",
               "hover:bg-foreground/5",
             )}
-            style={{ color: currentTodoState.resolvedColor }}
+            style={{ color: currentSessionStatus.resolvedColor }}
           >
             <div className="w-4 h-4 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full">
-              {currentTodoState.icon}
+              {currentSessionStatus.icon}
             </div>
           </div>
         </div>

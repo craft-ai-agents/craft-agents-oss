@@ -305,7 +305,7 @@ import type { Message } from '@craft-agent/core/types';
  * - 'done': Completed successfully
  * - 'cancelled': Cancelled/abandoned
  */
-export type TodoState = string
+export type SessionStatus = string
 
 // Helper type for TypeScript consumers
 export type BuiltInStatusId = 'todo' | 'in-progress' | 'needs-review' | 'done' | 'cancelled'
@@ -325,8 +325,8 @@ export interface Session {
   // Advanced options (persisted per session)
   /** Permission mode for this session ('safe', 'ask', 'allow-all') */
   permissionMode?: PermissionMode
-  // Todo state (user-controlled) - determines open vs closed
-  todoState?: TodoState
+  // Session status (user-controlled) - determines open vs closed
+  sessionStatus?: SessionStatus
   // Labels (additive tags, many-per-session — bare IDs or "id::value" entries)
   labels?: string[]
   // Read/unread tracking - ID of last message user has read
@@ -420,8 +420,8 @@ export interface CreateSessionOptions {
   systemPromptPreset?: 'default' | 'mini' | string
   /** When true, session won't appear in session list (e.g., mini edit sessions) */
   hidden?: boolean
-  /** Initial todo state (status) for the session */
-  todoState?: TodoState
+  /** Initial session status for the session */
+  sessionStatus?: SessionStatus
   /** Initial labels for the session */
   labels?: string[]
   /** Whether the session should be flagged */
@@ -434,15 +434,15 @@ export interface CreateSessionOptions {
 // turnId: Correlation ID from the API's message.id, groups all events in an assistant turn
 export type SessionEvent =
   | { type: 'text_delta'; sessionId: string; delta: string; turnId?: string }
-  | { type: 'text_complete'; sessionId: string; text: string; isIntermediate?: boolean; turnId?: string; parentToolUseId?: string }
+  | { type: 'text_complete'; sessionId: string; text: string; isIntermediate?: boolean; turnId?: string; parentToolUseId?: string; timestamp?: number }
   | { type: 'tool_start'; sessionId: string; toolName: string; toolUseId: string; toolInput: Record<string, unknown>; toolIntent?: string; toolDisplayName?: string; toolDisplayMeta?: import('@craft-agent/core').ToolDisplayMeta; turnId?: string; parentToolUseId?: string; timestamp?: number }
-  | { type: 'tool_result'; sessionId: string; toolUseId: string; toolName: string; result: string; turnId?: string; parentToolUseId?: string; isError?: boolean }
-  | { type: 'error'; sessionId: string; error: string }
-  | { type: 'typed_error'; sessionId: string; error: TypedError }
+  | { type: 'tool_result'; sessionId: string; toolUseId: string; toolName: string; result: string; turnId?: string; parentToolUseId?: string; isError?: boolean; timestamp?: number }
+  | { type: 'error'; sessionId: string; error: string; timestamp?: number }
+  | { type: 'typed_error'; sessionId: string; error: TypedError; timestamp?: number }
   | { type: 'complete'; sessionId: string; tokenUsage?: Session['tokenUsage']; hasUnread?: boolean }
   | { type: 'interrupted'; sessionId: string; message?: Message }
   | { type: 'status'; sessionId: string; message: string; statusType?: 'compacting' }
-  | { type: 'info'; sessionId: string; message: string; statusType?: 'compaction_complete'; level?: 'info' | 'warning' | 'error' | 'success' }
+  | { type: 'info'; sessionId: string; message: string; statusType?: 'compaction_complete'; level?: 'info' | 'warning' | 'error' | 'success'; timestamp?: number }
   | { type: 'title_generated'; sessionId: string; title: string }
   | { type: 'title_regenerating'; sessionId: string; isRegenerating: boolean }
   // Generic async operation state (sharing, updating share, revoking, title regeneration)
@@ -472,7 +472,7 @@ export type SessionEvent =
   | { type: 'session_unarchived'; sessionId: string }
   | { type: 'name_changed'; sessionId: string; name?: string }
   | { type: 'session_model_changed'; sessionId: string; model: string | null }
-  | { type: 'todo_state_changed'; sessionId: string; todoState: TodoState }
+  | { type: 'session_status_changed'; sessionId: string; sessionStatus: SessionStatus }
   | { type: 'session_deleted'; sessionId: string }
   // Sub-session events
   | { type: 'session_created'; sessionId: string; parentSessionId?: string }
@@ -507,7 +507,7 @@ export interface SendMessageOptions {
 
 /**
  * SessionCommand - Consolidated session operations
- * Replaces individual IPC calls: flag, unflag, rename, setTodoState, etc.
+ * Replaces individual IPC calls: flag, unflag, rename, setSessionStatus, etc.
  */
 export type SessionCommand =
   | { type: 'flag' }
@@ -515,7 +515,7 @@ export type SessionCommand =
   | { type: 'archive' }
   | { type: 'unarchive' }
   | { type: 'rename'; name: string }
-  | { type: 'setTodoState'; state: TodoState }
+  | { type: 'setSessionStatus'; state: SessionStatus }
   | { type: 'markRead' }
   | { type: 'markUnread' }
   /** Track which session user is actively viewing (for unread state machine) */

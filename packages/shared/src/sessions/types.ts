@@ -29,7 +29,7 @@ export const SESSION_PERSISTENT_FIELDS = [
   // Timestamps
   'createdAt', 'lastUsedAt', 'lastMessageAt',
   // Display
-  'name', 'isFlagged', 'todoState', 'labels', 'hidden',
+  'name', 'isFlagged', 'sessionStatus', 'labels', 'hidden',
   // Read tracking
   'lastReadMessageId', 'hasUnread',
   // Config
@@ -49,13 +49,13 @@ export const SESSION_PERSISTENT_FIELDS = [
 export type SessionPersistentField = typeof SESSION_PERSISTENT_FIELDS[number];
 
 /**
- * Todo state for sessions (user-controlled, never automatic)
+ * Session status (user-controlled, never automatic)
  *
  * Dynamic status ID referencing workspace status config.
  * Validated at runtime via validateSessionStatus().
  * Falls back to 'todo' if status doesn't exist.
  */
-export type TodoState = string;
+export type SessionStatus = string;
 
 /**
  * Built-in status IDs (for TypeScript consumers)
@@ -104,8 +104,8 @@ export interface SessionConfig {
   isFlagged?: boolean;
   /** Permission mode for this session ('safe', 'ask', 'allow-all') */
   permissionMode?: PermissionMode;
-  /** User-controlled todo state - determines inbox vs completed */
-  todoState?: TodoState;
+  /** User-controlled session status - determines inbox vs completed */
+  sessionStatus?: SessionStatus;
   /** Labels applied to this session (bare IDs or "id::value" entries) */
   labels?: string[];
   /** ID of last message user has read */
@@ -188,8 +188,8 @@ export interface SessionHeader {
   isFlagged?: boolean;
   /** Permission mode for this session ('safe', 'ask', 'allow-all') */
   permissionMode?: PermissionMode;
-  /** User-controlled todo state - determines inbox vs completed */
-  todoState?: TodoState;
+  /** User-controlled session status - determines inbox vs completed */
+  sessionStatus?: SessionStatus;
   /** Labels applied to this session (bare IDs or "id::value" entries) */
   labels?: string[];
   /** ID of last message user has read */
@@ -270,8 +270,8 @@ export interface SessionMetadata {
   sdkSessionId?: string;
   /** Whether this session is flagged */
   isFlagged?: boolean;
-  /** User-controlled todo state */
-  todoState?: TodoState;
+  /** User-controlled session status */
+  sessionStatus?: SessionStatus;
   /** Labels applied to this session (bare IDs or "id::value" entries) */
   labels?: string[];
   /** Permission mode for this session */

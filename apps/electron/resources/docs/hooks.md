@@ -7,7 +7,7 @@ This guide explains how to configure hooks in Craft Agent to automate workflows 
 Hooks allow you to trigger actions automatically when specific events occur in Craft Agent. You can:
 - Run shell commands when labels are added/removed
 - Execute prompts on a schedule using cron expressions
-- Automate workflows based on permission mode changes, flags, or todo state changes
+- Automate workflows based on permission mode changes, flags, or session status changes
 
 ## hooks.json Location
 
@@ -46,8 +46,10 @@ Hooks are configured in `hooks.json` at the root of your workspace:
 | `LabelConfigChange` | Label configuration changed | Always matches |
 | `PermissionModeChange` | Permission mode changed | New mode name |
 | `FlagChange` | Session flagged/unflagged | `true` or `false` |
-| `TodoStateChange` | Todo status changed | New status (e.g., `done`, `in_progress`) |
+| `SessionStatusChange` | Session status changed | New status (e.g., `done`, `in_progress`) |
 | `SchedulerTick` | Runs every minute | Uses cron matching |
+
+> **Note:** `TodoStateChange` is a deprecated alias for `SessionStatusChange`. Existing configs using the old name will continue to work but will show a deprecation warning during validation.
 
 ### Agent Events (passed to Claude SDK)
 

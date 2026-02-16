@@ -21,7 +21,7 @@ import {
   handleTypedError,
   handleSourcesChanged,
   handleLabelsChanged,
-  handleTodoStateChanged,
+  handleSessionStatusChanged,
   handleSessionFlagged,
   handleSessionUnflagged,
   handleSessionArchived,
@@ -143,8 +143,8 @@ export function processEvent(
     case 'labels_changed':
       return handleLabelsChanged(state, event)
 
-    case 'todo_state_changed':
-      return handleTodoStateChanged(state, event)
+    case 'session_status_changed':
+      return handleSessionStatusChanged(state, event)
 
     case 'session_flagged':
       return handleSessionFlagged(state, event)

@@ -1,20 +1,20 @@
 import * as React from 'react'
 import { Check } from 'lucide-react'
 import type { MenuComponents } from '@/components/ui/menu-context'
-import type { TodoStateId } from '@/config/todo-states'
-import type { TodoState } from '@/config/todo-states'
+import type { SessionStatusId } from '@/config/session-status-config'
+import type { SessionStatus } from '@/config/session-status-config'
 import type { LabelConfig } from '@craft-agent/shared/labels'
 import { LabelIcon } from '@/components/ui/label-icon'
 
 export interface StatusMenuItemsProps {
-  todoStates: TodoState[]
-  activeStateId?: TodoStateId | null
-  onSelect: (stateId: TodoStateId) => void
+  sessionStatuses: SessionStatus[]
+  activeStateId?: SessionStatusId | null
+  onSelect: (stateId: SessionStatusId) => void
   menu: Pick<MenuComponents, 'MenuItem'>
 }
 
 export function StatusMenuItems({
-  todoStates,
+  sessionStatuses,
   activeStateId,
   onSelect,
   menu,
@@ -23,7 +23,7 @@ export function StatusMenuItems({
 
   return (
     <>
-      {todoStates.map((state) => {
+      {sessionStatuses.map((state) => {
         const applyColor = state.iconColorable
         const bareIcon = React.isValidElement(state.icon)
           ? React.cloneElement(state.icon as React.ReactElement<{ bare?: boolean }>, { bare: true })

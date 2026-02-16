@@ -117,11 +117,15 @@ Triggered by Craft Agent itself. Support both command and prompt hooks.
 | `LabelConfigChange` | Label configuration changed | Always matches |
 | `PermissionModeChange` | Permission mode changed | New mode name |
 | `FlagChange` | Session flagged/unflagged | `true` or `false` |
-| `TodoStateChange` | Todo status changed | New status (e.g., `done`) |
+| `SessionStatusChange` | Session status changed | New status (e.g., `done`) |
 | `SchedulerTick` | Runs every minute | Uses cron matching |
 
+<Info>
+**Renamed:** `TodoStateChange` was renamed to `SessionStatusChange`. The old name still works as a deprecated alias but will show a validation warning. Update your hooks to use `SessionStatusChange`.
+</Info>
+
 <Tip>
-**Status changes:** To react to status/workflow state changes (e.g., when a session moves to "done" or "in-progress"), use the `TodoStateChange` event. The match value is the new status name, so you can use a matcher like `"^done$"` to trigger only on specific transitions.
+**Status changes:** To react to status/workflow state changes (e.g., when a session moves to "done" or "in-progress"), use the `SessionStatusChange` event. The match value is the new status name, so you can use a matcher like `"^done$"` to trigger only on specific transitions.
 </Tip>
 
 ### Agent Events
@@ -302,9 +306,9 @@ Dynamically generated from event payloads:
 **FlagChange:**
 - `CRAFT_IS_FLAGGED` — `true` or `false`
 
-**TodoStateChange:**
-- `CRAFT_OLD_STATE` — Previous todo state
-- `CRAFT_NEW_STATE` — New todo state
+**SessionStatusChange:**
+- `CRAFT_OLD_STATE` — Previous session status
+- `CRAFT_NEW_STATE` — New session status
 
 **SchedulerTick:**
 - `CRAFT_LOCAL_TIME` — Current time (HH:MM)

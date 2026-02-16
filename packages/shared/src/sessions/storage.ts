@@ -34,7 +34,7 @@ import type {
   SessionMetadata,
   SessionTokenUsage,
   SessionHeader,
-  TodoState,
+  SessionStatus,
 } from './types.ts';
 import type { Plan } from '../agent/plan-types.ts';
 import { validateSessionStatus } from '../statuses/validation.ts';
@@ -183,7 +183,7 @@ export async function createSession(
     enabledSourceSlugs?: string[];
     model?: string;
     hidden?: boolean;
-    todoState?: SessionConfig['todoState'];
+    sessionStatus?: SessionConfig['sessionStatus'];
     labels?: string[];
     isFlagged?: boolean;
   }
@@ -213,7 +213,7 @@ export async function createSession(
     enabledSourceSlugs: options?.enabledSourceSlugs,
     model: options?.model,
     hidden: options?.hidden,
-    todoState: options?.todoState,
+    sessionStatus: options?.sessionStatus,
     labels: options?.labels,
     isFlagged: options?.isFlagged,
   };
@@ -387,8 +387,10 @@ export function listSessions(workspaceRootPath: string): SessionMetadata[] {
  */
 function headerToMetadata(header: SessionHeader, workspaceRootPath: string): SessionMetadata | null {
   try {
-    // Validate todoState against workspace status config
-    const validatedTodoState = validateSessionStatus(workspaceRootPath, header.todoState);
+    // Migration: accept old 'todoState' field from pre-rename session files
+    const rawStatus = header.sessionStatus ?? (header as unknown as { todoState?: string }).todoState;
+    // Validate sessionStatus against workspace status config
+    const validatedStatus = validateSessionStatus(workspaceRootPath, rawStatus);
 
     // Count plan files for this session
     const planCount = listPlanFiles(workspaceRootPath, header.id).length;
@@ -408,7 +410,7 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
       preview: header.preview,
       sdkSessionId: header.sdkSessionId,
       isFlagged: header.isFlagged,
-      todoState: validatedTodoState,
+      sessionStatus: validatedStatus,
       labels: header.labels,
       permissionMode: header.permissionMode,
       planCount: planCount > 0 ? planCount : undefined,
@@ -549,7 +551,7 @@ export async function updateSessionMetadata(
   updates: Partial<Pick<SessionConfig,
     | 'isFlagged'
     | 'name'
-    | 'todoState'
+    | 'sessionStatus'
     | 'labels'
     | 'lastReadMessageId'
     | 'hasUnread'
@@ -570,7 +572,7 @@ export async function updateSessionMetadata(
 
   if (updates.isFlagged !== undefined) session.isFlagged = updates.isFlagged;
   if (updates.name !== undefined) session.name = updates.name;
-  if (updates.todoState !== undefined) session.todoState = updates.todoState;
+  if (updates.sessionStatus !== undefined) session.sessionStatus = updates.sessionStatus;
   if (updates.labels !== undefined) session.labels = updates.labels;
   if (updates.enabledSourceSlugs !== undefined) session.enabledSourceSlugs = updates.enabledSourceSlugs;
   if (updates.workingDirectory !== undefined) session.workingDirectory = updates.workingDirectory;
@@ -603,14 +605,14 @@ export async function unflagSession(workspaceRootPath: string, sessionId: string
 }
 
 /**
- * Set todo state for a session
+ * Set session status
  */
-export async function setSessionTodoState(
+export async function setSessionStatus(
   workspaceRootPath: string,
   sessionId: string,
-  todoState: TodoState
+  sessionStatus: SessionStatus
 ): Promise<void> {
-  await updateSessionMetadata(workspaceRootPath, sessionId, { todoState });
+  await updateSessionMetadata(workspaceRootPath, sessionId, { sessionStatus });
 }
 
 /**
@@ -730,7 +732,7 @@ export function listFlaggedSessions(workspaceRootPath: string): SessionMetadata[
  */
 export function listCompletedSessions(workspaceRootPath: string): SessionMetadata[] {
   return listActiveSessions(workspaceRootPath).filter(s => {
-    const category = getStatusCategory(workspaceRootPath, s.todoState || 'todo');
+    const category = getStatusCategory(workspaceRootPath, s.sessionStatus || 'todo');
     return category === 'closed';
   });
 }
@@ -742,7 +744,7 @@ export function listCompletedSessions(workspaceRootPath: string): SessionMetadat
  */
 export function listInboxSessions(workspaceRootPath: string): SessionMetadata[] {
   return listActiveSessions(workspaceRootPath).filter(s => {
-    const category = getStatusCategory(workspaceRootPath, s.todoState || 'todo');
+    const category = getStatusCategory(workspaceRootPath, s.sessionStatus || 'todo');
     return category === 'open';
   });
 }
@@ -817,7 +819,7 @@ export async function createSubSession(
     permissionMode?: SessionConfig['permissionMode'];
     enabledSourceSlugs?: string[];
     model?: string;
-    todoState?: SessionConfig['todoState'];
+    sessionStatus?: SessionConfig['sessionStatus'];
     labels?: string[];
   }
 ): Promise<SessionConfig> {
@@ -839,7 +841,7 @@ export async function createSubSession(
     permissionMode: options?.permissionMode ?? parent.permissionMode,
     enabledSourceSlugs: options?.enabledSourceSlugs ?? parent.enabledSourceSlugs,
     model: options?.model ?? parent.model,
-    todoState: options?.todoState,
+    sessionStatus: options?.sessionStatus,
     labels: options?.labels,
   });
 

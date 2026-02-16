@@ -12,9 +12,9 @@ import { flattenLabels, parseLabelEntry, formatLabelEntry } from '@craft-agent/s
 import { resolveEntityColor } from '@craft-agent/shared/colors'
 import { useTheme } from '@/context/ThemeContext'
 import { useDynamicStack } from '@/hooks/useDynamicStack'
-import type { TodoState } from '@/config/todo-states'
-import { getState } from '@/config/todo-states'
-import { TodoStateMenu } from '@/components/ui/todo-filter-menu'
+import type { SessionStatus } from '@/config/session-status-config'
+import { getState } from '@/config/session-status-config'
+import { SessionStatusMenu } from '@/components/ui/session-status-menu'
 
 // ============================================================================
 // Permission Mode Icon Component
@@ -68,11 +68,11 @@ export interface ActiveOptionBadgesProps {
   onAutoOpenConsumed?: () => void
   // ── State/status badge (in dynamic stack) ──
   /** Available workflow states */
-  todoStates?: TodoState[]
+  sessionStatuses?: SessionStatus[]
   /** Current session state ID */
-  currentTodoState?: string
+  currentSessionStatus?: string
   /** Callback when state changes */
-  onTodoStateChange?: (stateId: string) => void
+  onSessionStatusChange?: (stateId: string) => void
   /** Additional CSS classes */
   className?: string
 }
@@ -99,9 +99,9 @@ export function ActiveOptionBadges({
   onLabelsChange,
   autoOpenLabelId,
   onAutoOpenConsumed,
-  todoStates = [],
-  currentTodoState,
-  onTodoStateChange,
+  sessionStatuses = [],
+  currentSessionStatus,
+  onSessionStatusChange,
   className,
 }: ActiveOptionBadgesProps) {
   // Resolve session label entries to their config objects + parsed values.
@@ -123,11 +123,11 @@ export function ActiveOptionBadges({
 
   const hasLabels = resolvedLabels.length > 0
 
-  // Resolve the current state from todoStates for the badge display.
+  // Resolve the current state from sessionStatuses for the badge display.
   // Every session always has a state — fall back to the default state (or 'todo')
-  // when currentTodoState isn't explicitly set, matching SessionList's behavior.
-  const effectiveStateId = currentTodoState || 'todo'
-  const resolvedState = todoStates.length > 0 ? getState(effectiveStateId, todoStates) : undefined
+  // when currentSessionStatus isn't explicitly set, matching SessionList's behavior.
+  const effectiveStateId = currentSessionStatus || 'todo'
+  const resolvedState = sessionStatuses.length > 0 ? getState(effectiveStateId, sessionStatuses) : undefined
   const hasState = !!resolvedState
 
   // Show the stacking container when there are labels (state badge is now rendered standalone on the left)
@@ -164,8 +164,8 @@ export function ActiveOptionBadges({
         <div className="shrink-0">
           <StateBadge
             state={resolvedState}
-            todoStates={todoStates}
-            onTodoStateChange={onTodoStateChange}
+            sessionStatuses={sessionStatuses}
+            onSessionStatusChange={onSessionStatusChange}
           />
         </div>
       )}
@@ -346,24 +346,24 @@ function LabelBadge({
 
 /**
  * Renders the current workflow state as a badge in the dynamic stacking container.
- * Click opens a TodoStateMenu popover for changing the state.
+ * Click opens a SessionStatusMenu popover for changing the state.
  * Styled consistently with label badges (h-[30px], rounded-[8px], color-mix tinting).
  */
 function StateBadge({
   state,
-  todoStates,
-  onTodoStateChange,
+  sessionStatuses,
+  onSessionStatusChange,
 }: {
-  state: TodoState
-  todoStates: TodoState[]
-  onTodoStateChange?: (stateId: string) => void
+  state: SessionStatus
+  sessionStatuses: SessionStatus[]
+  onSessionStatusChange?: (stateId: string) => void
 }) {
   const [open, setOpen] = React.useState(false)
 
   const handleSelect = React.useCallback((stateId: string) => {
     setOpen(false)
-    onTodoStateChange?.(stateId)
-  }, [onTodoStateChange])
+    onSessionStatusChange?.(stateId)
+  }, [onSessionStatusChange])
 
   // Use the state's resolved color for tinting (same color-mix pattern as labels)
   const badgeColor = state.resolvedColor || 'var(--foreground)'
@@ -404,10 +404,10 @@ function StateBadge({
           window.dispatchEvent(new CustomEvent('craft:focus-input'))
         }}
       >
-        <TodoStateMenu
+        <SessionStatusMenu
           activeState={state.id}
           onSelect={handleSelect}
-          states={todoStates}
+          states={sessionStatuses}
         />
       </PopoverContent>
     </Popover>

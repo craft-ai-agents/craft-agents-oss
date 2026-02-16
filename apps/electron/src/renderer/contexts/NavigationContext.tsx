@@ -157,7 +157,7 @@ export function NavigationProvider({
 
   // Helper: Check if a session is "done" (completed or cancelled)
   const isSessionDone = useCallback((session: SessionMeta): boolean => {
-    return session.todoState === 'done' || session.todoState === 'cancelled'
+    return session.sessionStatus === 'done' || session.sessionStatus === 'cancelled'
   }, [])
 
   // Helper: Filter sessions by SessionFilter
@@ -181,7 +181,7 @@ export function NavigationProvider({
             return session.isArchived === true
           case 'state':
             // Exclude archived sessions from state views
-            return session.todoState === filter.stateId && session.isArchived !== true
+            return session.sessionStatus === filter.stateId && session.isArchived !== true
           case 'label': {
             // Exclude archived sessions from label views
             if (session.isArchived === true) return false
@@ -285,7 +285,7 @@ export function NavigationProvider({
           // Optimistically update session meta so it matches the filter immediately
           // (avoids flicker while waiting for the event round-trip from main process)
           if (parsed.params.status) {
-            updateSessionMeta(session.id, { todoState: parsed.params.status })
+            updateSessionMeta(session.id, { sessionStatus: parsed.params.status })
           }
           if (parsed.params.label) {
             updateSessionMeta(session.id, { labels: [parsed.params.label] })
@@ -293,7 +293,7 @@ export function NavigationProvider({
 
           // Apply status (todo state) to new session if specified
           if (parsed.params.status) {
-            await window.electronAPI.sessionCommand(session.id, { type: 'setTodoState', state: parsed.params.status })
+            await window.electronAPI.sessionCommand(session.id, { type: 'setSessionStatus', state: parsed.params.status })
           }
 
           // Apply label to new session if specified
