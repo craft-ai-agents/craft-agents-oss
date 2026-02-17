@@ -11,6 +11,6 @@
  * Returns the last path component, or the fallback ID if the path has no components.
  */
 export function extractWorkspaceSlugFromPath(rootPath: string, fallbackId: string): string {
-  const pathParts = rootPath.split('/').filter(Boolean);
+  const pathParts = rootPath.split(/[\\/]/).filter(Boolean);
   return pathParts[pathParts.length - 1] || fallbackId;
 }

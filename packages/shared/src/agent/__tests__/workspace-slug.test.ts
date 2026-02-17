@@ -99,8 +99,15 @@ describe('workspace slug extraction', () => {
   })
 
   it('handles Windows-style paths with forward slashes', () => {
-    // In practice the code splits on '/' which works if paths are normalized
     expect(extractWorkspaceSlug('C:/Users/foo/workspace', fallback)).toBe('workspace')
+  })
+
+  it('handles Windows-style paths with backslashes', () => {
+    expect(extractWorkspaceSlug('C:\\Users\\ghalmos\\.craft-agent\\workspaces\\my-workspace', fallback)).toBe('my-workspace')
+  })
+
+  it('handles Windows paths with tilde and backslashes', () => {
+    expect(extractWorkspaceSlug('~\\.craft-agent\\workspaces\\my-workspace', fallback)).toBe('my-workspace')
   })
 
   it('handles hyphenated workspace names', () => {

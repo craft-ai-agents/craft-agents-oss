@@ -39,6 +39,6 @@ export function extractWorkspaceSlug(rootPath: string, fallbackId: string): stri
   if (pluginName) return pluginName;
 
   // Fallback to last path component (legacy behavior)
-  const pathParts = rootPath.split('/').filter(Boolean);
+  const pathParts = rootPath.split(/[\\/]/).filter(Boolean);
   return pathParts[pathParts.length - 1] || fallbackId;
 }
