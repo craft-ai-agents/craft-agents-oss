@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/codex-types",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "description": "Generated TypeScript types for Codex app-server protocol",
   "type": "module",
   "main": "./src/index.ts",

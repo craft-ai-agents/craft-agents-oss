@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/viewer",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "description": "Web viewer for Craft Agents sessions - upload and share session transcripts",
   "private": true,
   "type": "module",

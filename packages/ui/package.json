@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/ui",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "license": "Apache-2.0",
   "description": "Shared React UI components for Craft Agents - session viewer, chat display, markdown rendering",
   "type": "module",
