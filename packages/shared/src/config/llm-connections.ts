@@ -189,6 +189,7 @@ export function getSummarizationModel(connection: Pick<LlmConnection, 'models' |
  *
  *   - Anthropic (incl. bedrock/vertex/compat): find "haiku"
  *   - OpenAI (incl. compat): find "mini"
+ *   - Copilot: find "mini" (matches gpt-5-mini, etc.)
  *   - Otherwise: last model in the list
  */
 function findSmallModel(connection: Pick<LlmConnection, 'models' | 'providerType'>): string | undefined {
@@ -201,6 +202,7 @@ function findSmallModel(connection: Pick<LlmConnection, 'models' | 'providerType
   // Provider-aware keyword search
   const keyword = isAnthropicProvider(connection.providerType) ? 'haiku'
     : isOpenAIProvider(connection.providerType) ? 'mini'
+    : isCopilotProvider(connection.providerType) ? 'mini'
     : undefined;
 
   if (keyword) {

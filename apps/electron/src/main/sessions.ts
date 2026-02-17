@@ -518,6 +518,7 @@ function resolveToolDisplayMeta(
       const internalMcpServers: Record<string, Record<string, string>> = {
         'session': {
           'SubmitPlan': 'Submit Plan',
+          'call_llm': 'LLM Query',
           'config_validate': 'Validate Config',
           'skill_validate': 'Validate Skill',
           'mermaid_validate': 'Validate Mermaid',

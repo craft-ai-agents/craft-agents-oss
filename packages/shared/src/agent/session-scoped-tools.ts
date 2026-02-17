@@ -56,6 +56,7 @@ import {
   type ToolResult,
   type AuthRequest,
 } from '@craft-agent/session-tools-core';
+import { createLLMTool, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
 
 // Re-export types for backward compatibility
 export type {
@@ -92,6 +93,12 @@ export interface SessionScopedToolCallbacks {
    * The auth UI should be shown and execution paused.
    */
   onAuthRequest?: (request: AuthRequest) => void;
+
+  /**
+   * Agent-native LLM query callback for call_llm tool (OAuth path).
+   * Each agent backend sets this to its own queryLlm implementation.
+   */
+  queryFn?: (request: LLMQueryRequest) => Promise<LLMQueryResult>;
 }
 
 // Registry of callbacks keyed by sessionId
@@ -761,6 +768,15 @@ export function getSessionScopedTools(
         return handleRenderTemplate(sessionId, workspaceRootPath, args);
       }),
     ] : []),
+
+    // call_llm — secondary LLM calls for subtasks
+    createLLMTool({
+      sessionId,
+      getQueryFn: () => {
+        const callbacks = getSessionScopedToolCallbacks(sessionId);
+        return callbacks?.queryFn;
+      },
+    }),
 
   ];
 

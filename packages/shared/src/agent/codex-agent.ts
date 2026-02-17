@@ -31,7 +31,10 @@ import { AbortReason } from './backend/types.ts';
 import type { Workspace } from '../config/storage.ts';
 
 // Import models from centralized registry
-import { DEFAULT_CODEX_MODEL, getModelById, getModelIdByShortName } from '../config/models.ts';
+import { DEFAULT_CODEX_MODEL, getModelById, getModelIdByShortName, getModelProvider, MODEL_REGISTRY, getDefaultSummarizationModel } from '../config/models.ts';
+
+// LLM tool types and helpers for call_llm PreToolUse intercept
+import { buildCallLlmRequest, withTimeout, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
 
 // BaseAgent provides common functionality
 import { BaseAgent } from './base-agent.ts';
@@ -186,6 +189,20 @@ export class CodexAgent extends BaseAgent {
 
   // Event queue for streaming (AsyncGenerator pattern)
   private eventQueue = new EventQueue();
+
+  // Track in-flight async item/completed handlers to prevent race with turn/completed.
+  // turn/completed is sync and calls eventQueue.complete() immediately, but item/completed
+  // is async (may await source activation). If turn/completed fires before all item/completed
+  // handlers finish, their events are enqueued into a dead queue.
+  private inflightItemHandlers = 0;
+  private turnCompletedPending = false;
+
+  // Ephemeral thread isolation — queryLlm, generateTitle, and runMiniCompletion start
+  // ephemeral threads on the same AppServerClient. Without filtering, ALL event handlers
+  // process their events too: polluting the main event queue, overwriting codexThreadId,
+  // and calling eventQueue.complete() prematurely.
+  private _ephemeralThreadIds = new Set<string>();
+  private _startingEphemeralThread = false;
 
   // Pending approval requests (legacy approval handlers)
   private pendingApprovals: Map<string, {
@@ -395,8 +412,9 @@ export class CodexAgent extends BaseAgent {
   private setupClientEventHandlers(): void {
     if (!this.client) return;
 
-    // Thread started - capture thread ID
+    // Thread started - capture thread ID (skip ephemeral threads from queryLlm etc.)
     this.client.on('thread/started', (notification) => {
+      if (this._startingEphemeralThread) return;
       const threadId = notification.thread?.id;
       if (threadId && threadId !== this.codexThreadId) {
         this.codexThreadId = threadId;
@@ -405,20 +423,30 @@ export class CodexAgent extends BaseAgent {
       }
     });
 
-    // Turn started
+    // Turn started (skip ephemeral threads)
     this.client.on('turn/started', (notification) => {
+      if (this._ephemeralThreadIds.has(notification.threadId)) return;
       this.currentTurnId = notification.turn?.id || null;
       for (const event of this.adapter.adaptTurnStarted(notification)) {
         this.eventQueue.enqueue(event);
       }
     });
 
-    // Turn completed
+    // Turn completed (skip ephemeral threads)
+    // IMPORTANT: Defer eventQueue.complete() if async item/completed handlers are still in flight.
+    // Without this, tool_result and text_complete events from item/completed can be enqueued
+    // after complete(), causing lost tool results and truncated assistant messages.
     this.client.on('turn/completed', (notification) => {
+      if (this._ephemeralThreadIds.has(notification.threadId)) return;
       for (const event of this.adapter.adaptTurnCompleted(notification)) {
         this.eventQueue.enqueue(event);
       }
-      this.eventQueue.complete();
+      if (this.inflightItemHandlers > 0) {
+        this.debug(`turn/completed: deferring complete() — ${this.inflightItemHandlers} item handlers in flight`);
+        this.turnCompletedPending = true;
+      } else {
+        this.eventQueue.complete();
+      }
     });
 
     // Turn plan updated - Codex's native task list
@@ -429,77 +457,95 @@ export class CodexAgent extends BaseAgent {
       }
     });
 
-    // Item started
+    // Item started (skip ephemeral threads)
     this.client.on('item/started', (notification) => {
+      if (this._ephemeralThreadIds.has(notification.threadId)) return;
       for (const event of this.adapter.adaptItemStarted(notification)) {
         this.eventQueue.enqueue(event);
       }
     });
 
-    // Item completed
+    // Item completed (skip ephemeral threads)
+    // NOTE: This handler is async (may await source activation). We track in-flight
+    // handlers so turn/completed can defer eventQueue.complete() until they finish.
     this.client.on('item/completed', async (notification) => {
-      const events = this.adapter.adaptItemCompleted(notification);
-      for (const event of events) {
-        // Check for session MCP tool completions that need callbacks.
-        // Session MCP tools run in an external subprocess that can't trigger
-        // callbacks cross-process. Detect from events and use the centralized
-        // BaseAgent.handleSessionMcpToolCompletion() to fire them.
-        if (event.type === 'tool_result' && !event.isError) {
-          const item = notification.item;
-          if (item?.type === 'mcpToolCall' && item.server === 'session') {
-            const args = (item.arguments ?? {}) as Record<string, unknown>;
-            this.handleSessionMcpToolCompletion(item.tool, args);
-          }
-        }
-
-        // Check for inactive source tool errors and attempt auto-activation
-        if (event.type === 'tool_result' && event.isError) {
-          const inactiveSourceError = this.detectInactiveSourceToolError(event);
-          if (inactiveSourceError && this.onSourceActivationRequest) {
-            const { sourceSlug, toolName } = inactiveSourceError;
-
-            this.debug(`Detected tool call to inactive source "${sourceSlug}", attempting activation...`);
-
-            try {
-              const activated = await this.onSourceActivationRequest(sourceSlug);
-
-              if (activated) {
-                this.debug(`Source "${sourceSlug}" activated successfully`);
-
-                // Emit source_activated event for UI to auto-retry
-                this.eventQueue.enqueue({
-                  type: 'source_activated' as const,
-                  sourceSlug,
-                  originalMessage: this.currentUserMessage,
-                });
-              } else {
-                this.debug(`Failed to activate source "${sourceSlug}"`);
-              }
-            } catch (err) {
-              this.debug(`Error activating source "${sourceSlug}": ${err}`);
+      if (this._ephemeralThreadIds.has(notification.threadId)) return;
+      this.inflightItemHandlers++;
+      try {
+        const events = this.adapter.adaptItemCompleted(notification);
+        for (const event of events) {
+          // Check for session MCP tool completions that need callbacks.
+          // Session MCP tools run in an external subprocess that can't trigger
+          // callbacks cross-process. Detect from events and use the centralized
+          // BaseAgent.handleSessionMcpToolCompletion() to fire them.
+          if (event.type === 'tool_result' && !event.isError) {
+            const item = notification.item;
+            if (item?.type === 'mcpToolCall' && item.server === 'session') {
+              const args = (item.arguments ?? {}) as Record<string, unknown>;
+              this.handleSessionMcpToolCompletion(item.tool, args);
             }
           }
+
+          // Check for inactive source tool errors and attempt auto-activation
+          if (event.type === 'tool_result' && event.isError) {
+            const inactiveSourceError = this.detectInactiveSourceToolError(event);
+            if (inactiveSourceError && this.onSourceActivationRequest) {
+              const { sourceSlug, toolName } = inactiveSourceError;
+
+              this.debug(`Detected tool call to inactive source "${sourceSlug}", attempting activation...`);
+
+              try {
+                const activated = await this.onSourceActivationRequest(sourceSlug);
+
+                if (activated) {
+                  this.debug(`Source "${sourceSlug}" activated successfully`);
+
+                  // Emit source_activated event for UI to auto-retry
+                  this.eventQueue.enqueue({
+                    type: 'source_activated' as const,
+                    sourceSlug,
+                    originalMessage: this.currentUserMessage,
+                  });
+                } else {
+                  this.debug(`Failed to activate source "${sourceSlug}"`);
+                }
+              } catch (err) {
+                this.debug(`Error activating source "${sourceSlug}": ${err}`);
+              }
+            }
+          }
+          this.eventQueue.enqueue(event);
         }
-        this.eventQueue.enqueue(event);
+      } finally {
+        this.inflightItemHandlers--;
+        // If turn/completed arrived while we were processing, complete now
+        if (this.turnCompletedPending && this.inflightItemHandlers === 0) {
+          this.debug('item/completed: last handler done, firing deferred complete()');
+          this.turnCompletedPending = false;
+          this.eventQueue.complete();
+        }
       }
     });
 
-    // Agent message delta (streaming text)
+    // Agent message delta (streaming text, skip ephemeral threads)
     this.client.on('item/agentMessage/delta', (notification) => {
+      if (this._ephemeralThreadIds.has(notification.threadId)) return;
       for (const event of this.adapter.adaptAgentMessageDelta(notification)) {
         this.eventQueue.enqueue(event);
       }
     });
 
-    // Reasoning delta (streaming thinking)
+    // Reasoning delta (streaming thinking, skip ephemeral threads)
     this.client.on('item/reasoning/textDelta', (notification) => {
+      if (this._ephemeralThreadIds.has(notification.threadId)) return;
       for (const event of this.adapter.adaptReasoningDelta(notification)) {
         this.eventQueue.enqueue(event);
       }
     });
 
-    // Command output delta (accumulate for tool result)
+    // Command output delta (accumulate for tool result, skip ephemeral threads)
     this.client.on('item/commandExecution/outputDelta', (notification) => {
+      if (this._ephemeralThreadIds.has(notification.threadId)) return;
       this.adapter.adaptCommandOutputDelta(notification);
     });
 
@@ -516,6 +562,7 @@ export class CodexAgent extends BaseAgent {
     // CRAFT AGENTS: PreToolUse hook - intercept ALL tools before execution
     // This is the unified permission checking for Codex backend (requires fork)
     this.client.on('item/toolCall/preExecute', async (params) => {
+      this.debug(`[PreToolUse EVENT] Received: toolName=${params.toolName} toolType=${params.toolType} mcpServer=${params.mcpServer} mcpTool=${params.mcpTool}`);
       await this.handleToolCallPreExecute(params);
     });
 
@@ -866,10 +913,11 @@ export class CodexAgent extends BaseAgent {
     const permissionMode = this.permissionManager.getPermissionMode();
     const { toolType, toolName, input, mcpServer, mcpTool, requestId, itemId } = params;
 
-    this.debug(`PreToolUse: ${toolName} (${toolType}) - mode: ${permissionMode}`);
+    this.debug(`PreToolUse: ${toolName} (${toolType}) - mode: ${permissionMode} | mcpServer=${mcpServer} mcpTool=${mcpTool}`);
 
     // Map tool type to SDK tool name for shouldAllowToolInMode
     const sdkToolName = this.mapToolTypeToSdkName(toolType, toolName, mcpServer, mcpTool);
+    this.debug(`PreToolUse: mapped sdkToolName="${sdkToolName}" (from toolType=${toolType}, toolName=${toolName})`);
 
     // Build permissions context for loading custom permissions.json files
     const permissionsContext = {
@@ -1030,6 +1078,35 @@ export class CodexAgent extends BaseAgent {
           }
         }
       }
+    }
+
+    // ============================================================
+    // CALL_LLM INTERCEPT: Pre-execute LLM request and inject result
+    // The session-mcp-server can't access Codex auth, so we execute
+    // the LLM call here via ephemeral thread and inject the result
+    // into the tool input as _precomputedResult.
+    // ============================================================
+    this.debug(`PreToolUse: call_llm check — sdkToolName="${sdkToolName}" === "mcp__session__call_llm" → ${sdkToolName === 'mcp__session__call_llm'}`);
+    if (sdkToolName === 'mcp__session__call_llm') {
+      const inputObj = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>;
+      this.debug('PreToolUse: Intercepting call_llm for pre-execution');
+      try {
+        const result = await this.preExecuteCallLlm(inputObj);
+        const decision: ToolCallPreExecuteDecision = {
+          type: 'modify',
+          input: { ...inputObj, model: result.model ?? inputObj.model, _precomputedResult: JSON.stringify(result) },
+        };
+        await this.safeRespondToPreToolUse(requestId, decision);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        this.debug(`PreToolUse: call_llm pre-execution failed: ${errorMsg}`);
+        const decision: ToolCallPreExecuteDecision = {
+          type: 'modify',
+          input: { ...inputObj, _precomputedResult: JSON.stringify({ error: errorMsg }) },
+        };
+        await this.safeRespondToPreToolUse(requestId, decision);
+      }
+      return;
     }
 
     // Track modifications to input
@@ -1521,7 +1598,9 @@ export class CodexAgent extends BaseAgent {
 
     this.debug(`[generateTitle] Starting ephemeral thread with model=${model}`);
 
-    // Start an ephemeral thread (not persisted, no tools)
+    // Start an ephemeral thread (not persisted, no tools).
+    // Mark as ephemeral so main event handlers ignore its events.
+    this._startingEphemeralThread = true;
     const response = await client.threadStart({
       model,
       ephemeral: true,
@@ -1529,7 +1608,9 @@ export class CodexAgent extends BaseAgent {
       sandbox: 'danger-full-access',
       baseInstructions: 'Reply with ONLY the requested text. No explanation.',
     });
+    this._startingEphemeralThread = false;
     const threadId = response.thread.id;
+    this._ephemeralThreadIds.add(threadId);
 
     this.debug(`[generateTitle] Thread started: ${threadId}`);
 
@@ -1600,6 +1681,8 @@ export class CodexAgent extends BaseAgent {
       client.on('error', onProcessError);
     });
 
+    this._ephemeralThreadIds.delete(threadId);
+
     const trimmed = result.trim();
     this.debug(`[generateTitle] Result: "${trimmed}"`);
     return (trimmed.length > 0 && trimmed.length < 100) ? trimmed : null;
@@ -1640,6 +1723,10 @@ export class CodexAgent extends BaseAgent {
     this._isProcessing = true;
     this.abortReason = undefined;
     this.eventQueue.reset();
+    this.inflightItemHandlers = 0;
+    this.turnCompletedPending = false;
+    this._ephemeralThreadIds.clear();
+    this._startingEphemeralThread = false;
     this.adapter.startTurn();
     this.currentUserMessage = message; // Store for source_activated events
 
@@ -2431,6 +2518,105 @@ export class CodexAgent extends BaseAgent {
   }
 
   // ============================================================
+  // LLM Tool Pre-Execution (call_llm via PreToolUse intercept)
+  // ============================================================
+
+  /**
+   * Pre-execute a call_llm request: process attachments, resolve model,
+   * build prompt with structured output injection, and run via ephemeral thread.
+   */
+  private async preExecuteCallLlm(input: Record<string, unknown>): Promise<LLMQueryResult> {
+    const request = await buildCallLlmRequest(input, {
+      backendName: 'Codex',
+      validateModel: (modelId) => {
+        const provider = getModelProvider(modelId);
+        if (provider && provider !== 'openai') {
+          this.debug(`preExecuteCallLlm: model "${modelId}" is ${provider}, falling back to miniModel`);
+          return undefined;
+        }
+        return modelId;
+      },
+    });
+    return this.queryLlm(request);
+  }
+
+  /**
+   * Execute an LLM query via ephemeral thread.
+   * Same pattern as runMiniCompletion but with configurable system prompt and model.
+   */
+  async queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
+    this.debug('[CodexAgent.queryLlm] Starting');
+
+    const client = await this.ensureClient();
+    const rawModel = request.model ?? this.config.miniModel ?? getDefaultSummarizationModel();
+    const model = resolveCodexModelId(rawModel, this.config.authType);
+
+    this.debug(`[CodexAgent.queryLlm] Using model: ${model}`);
+
+    // Start an ephemeral thread with the system prompt.
+    // Mark as ephemeral so main event handlers ignore its events.
+    this._startingEphemeralThread = true;
+    const threadResponse = await client.threadStart({
+      model,
+      cwd: this.workingDirectory,
+      baseInstructions: request.systemPrompt ?? 'Reply with ONLY the requested text. No explanation.',
+      ephemeral: true,
+    });
+    this._startingEphemeralThread = false;
+    const threadId = threadResponse.thread.id;
+    this._ephemeralThreadIds.add(threadId);
+    this.debug(`[CodexAgent.queryLlm] Started ephemeral thread: ${threadId}`);
+
+    // Collect response text from deltas
+    let result = '';
+    let completionResolve: () => void;
+    const completionPromise = new Promise<void>((resolve) => {
+      completionResolve = resolve;
+    });
+
+    const textHandler = (notification: { threadId: string; delta?: string }) => {
+      if (notification.threadId === threadId && notification.delta) {
+        result += notification.delta;
+      }
+    };
+
+    const completionHandler = (notification: { threadId: string }) => {
+      if (notification.threadId === threadId) {
+        completionResolve();
+      }
+    };
+
+    client.on('item/agentMessage/delta', textHandler);
+    client.on('turn/completed', completionHandler);
+
+    try {
+      await client.turnStart({
+        threadId,
+        input: [{ type: 'text', text: request.prompt, text_elements: [] }],
+        cwd: null,
+        approvalPolicy: null,
+        sandboxPolicy: null,
+        model: null,
+        effort: null,
+        summary: null,
+        personality: null,
+        outputSchema: null,
+        collaborationMode: null,
+      });
+
+      // 30s timeout matching runMiniCompletion
+      await withTimeout(completionPromise, 30000, 'call_llm timed out after 30s');
+
+      this.debug(`[CodexAgent.queryLlm] Result length: ${result.trim().length}`);
+      return { text: result.trim(), model };
+    } finally {
+      client.off('item/agentMessage/delta', textHandler);
+      client.off('turn/completed', completionHandler);
+      this._ephemeralThreadIds.delete(threadId);
+    }
+  }
+
+  // ============================================================
   // Mini Completion (for title generation and other quick tasks)
   // ============================================================
 
@@ -2443,30 +2629,33 @@ export class CodexAgent extends BaseAgent {
    * interfere with the main conversation thread.
    */
   async runMiniCompletion(prompt: string): Promise<string | null> {
-    // Use direct debug() for logging since temporary agents don't have onDebug set
-    debug(`[CodexAgent.runMiniCompletion] Starting`);
+    this.debug(`[runMiniCompletion] Starting`);
 
     try {
       // Ensure client is connected (includes auth injection)
       const client = await this.ensureClient();
-      debug(`[CodexAgent.runMiniCompletion] Client connected`);
+      this.debug(`[runMiniCompletion] Client connected`);
 
       if (!this.config.miniModel) {
         throw new Error('CodexAgent.runMiniCompletion: config.miniModel is required');
       }
       const model = this.config.miniModel;
-      debug(`[CodexAgent.runMiniCompletion] Using model: ${model}`);
+      this.debug(`[runMiniCompletion] Using model: ${model}`);
 
-      // Start an ephemeral thread with no system prompt
-      debug(`[CodexAgent.runMiniCompletion] Starting ephemeral thread...`);
+      // Start an ephemeral thread with no system prompt.
+      // Mark as ephemeral so main event handlers ignore its events.
+      this.debug(`[runMiniCompletion] Starting ephemeral thread...`);
+      this._startingEphemeralThread = true;
       const threadResponse = await client.threadStart({
         model,
         cwd: this.workingDirectory,
         baseInstructions: '', // Empty - no system prompt
         ephemeral: true, // Don't persist this thread
       });
+      this._startingEphemeralThread = false;
       const threadId = threadResponse.thread.id;
-      debug(`[CodexAgent.runMiniCompletion] Started ephemeral thread: ${threadId}`);
+      this._ephemeralThreadIds.add(threadId);
+      this.debug(`[runMiniCompletion] Started ephemeral thread: ${threadId}`);
 
       // Set up Promise-based completion tracking
       let result = '';
@@ -2479,14 +2668,14 @@ export class CodexAgent extends BaseAgent {
       const textHandler = (notification: { threadId: string; delta?: string }) => {
         if (notification.threadId === threadId && notification.delta) {
           result += notification.delta;
-          debug(`[CodexAgent.runMiniCompletion] Delta: ${notification.delta}`);
+          this.debug(`[runMiniCompletion] Delta: ${notification.delta}`);
         }
       };
 
       // Resolve when turn completes
       const completionHandler = (notification: { threadId: string }) => {
         if (notification.threadId === threadId) {
-          debug(`[CodexAgent.runMiniCompletion] Turn completed`);
+          this.debug(`[runMiniCompletion] Turn completed`);
           completionResolve();
         }
       };
@@ -2497,7 +2686,7 @@ export class CodexAgent extends BaseAgent {
 
       try {
         // Start the turn with our prompt
-        debug(`[CodexAgent.runMiniCompletion] Starting turn...`);
+        this.debug(`[runMiniCompletion] Starting turn...`);
         await client.turnStart({
           threadId,
           input: [{ type: 'text', text: prompt, text_elements: [] }],
@@ -2511,28 +2700,26 @@ export class CodexAgent extends BaseAgent {
           outputSchema: null,
           collaborationMode: null,
         });
-        debug(`[CodexAgent.runMiniCompletion] Turn started`);
+        this.debug(`[runMiniCompletion] Turn started`);
 
         // Wait for turn completion with timeout
-        const timeoutPromise = new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 30000)
-        );
-
         try {
-          await Promise.race([completionPromise, timeoutPromise]);
+          await withTimeout(completionPromise, 30000, 'runMiniCompletion timed out after 30s');
         } catch (e) {
-          debug(`[CodexAgent.runMiniCompletion] Timeout waiting for completion`);
+          this.debug(`[runMiniCompletion] Timeout waiting for completion`);
         }
 
-        debug(`[CodexAgent.runMiniCompletion] Result: "${result.trim()}"`);
-        return result.trim() || null;
+        const text = result.trim() || null;
+        this.debug(`[runMiniCompletion] Result: ${text ? `"${text.slice(0, 200)}"` : 'null'}`);
+        return text;
       } finally {
-        // Clean up listeners
+        // Clean up listeners and ephemeral thread tracking
         client.off('item/agentMessage/delta', textHandler);
         client.off('turn/completed', completionHandler);
+        this._ephemeralThreadIds.delete(threadId);
       }
     } catch (error) {
-      debug(`[CodexAgent.runMiniCompletion] Failed: ${error}`);
+      this.debug(`[runMiniCompletion] Failed: ${error}`);
       return null;
     }
   }

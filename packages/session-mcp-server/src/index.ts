@@ -62,6 +62,7 @@ interface SessionConfig {
   sessionId: string;
   workspaceRootPath: string;
   plansFolderPath: string;
+  callbackPort?: string;
 }
 
 // ============================================================
@@ -438,6 +439,72 @@ Uses @craft-agent/mermaid parser for accurate validation.`,
         required: ['sourceSlug'],
       },
     },
+    {
+      name: 'call_llm',
+      description: `Invoke a secondary LLM for focused subtasks. Use for:
+- Cost optimization: use a smaller model for simple tasks (summarization, classification)
+- Structured output: JSON schema compliance
+- Parallel processing: call multiple times in one message - all run simultaneously
+- Context isolation: process content without polluting main context
+
+Pass file paths via 'attachments' - the tool loads content automatically.
+For large files (>2000 lines), use {path, startLine, endLine} to select a portion.`,
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          prompt: {
+            type: 'string',
+            description: 'Instructions for the LLM',
+          },
+          attachments: {
+            type: 'array',
+            description: 'File paths to include as context',
+            items: {
+              oneOf: [
+                { type: 'string' },
+                {
+                  type: 'object',
+                  properties: {
+                    path: { type: 'string' },
+                    startLine: { type: 'number' },
+                    endLine: { type: 'number' },
+                  },
+                  required: ['path'],
+                },
+              ],
+            },
+          },
+          model: {
+            type: 'string',
+            description: 'Model ID or short name (e.g., "haiku", "sonnet"). Defaults to Haiku.',
+          },
+          systemPrompt: {
+            type: 'string',
+            description: 'Optional system prompt',
+          },
+          maxTokens: {
+            type: 'number',
+            description: 'Max output tokens (1-64000). Defaults to 4096',
+          },
+          temperature: {
+            type: 'number',
+            description: 'Sampling temperature 0-1',
+          },
+          outputFormat: {
+            type: 'string',
+            enum: ['summary', 'classification', 'extraction', 'analysis', 'comparison', 'validation'],
+            description: 'Predefined output format',
+          },
+          outputSchema: {
+            type: 'object',
+            description: 'Custom JSON Schema for structured output',
+          },
+          // _precomputedResult is injected at runtime by PreToolUse intercept
+          // and intentionally NOT in the schema (hidden from the AI)
+        },
+        required: ['prompt'],
+      },
+    },
   ];
 }
 
@@ -467,6 +534,7 @@ async function main() {
   let sessionId: string | undefined;
   let workspaceRootPath: string | undefined;
   let plansFolderPath: string | undefined;
+  let callbackPort: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--session-id' && args[i + 1]) {
@@ -477,6 +545,9 @@ async function main() {
       i++;
     } else if (args[i] === '--plans-folder' && args[i + 1]) {
       plansFolderPath = args[i + 1];
+      i++;
+    } else if (args[i] === '--callback-port' && args[i + 1]) {
+      callbackPort = args[i + 1];
       i++;
     }
   }
@@ -490,6 +561,8 @@ async function main() {
     sessionId,
     workspaceRootPath,
     plansFolderPath,
+    // CLI arg takes priority, env var as fallback (Copilot CLI may not forward env to subprocesses)
+    callbackPort: callbackPort || process.env.CRAFT_LLM_CALLBACK_PORT,
   };
 
   // Create the Codex context
@@ -555,6 +628,56 @@ async function main() {
 
         case 'source_test':
           return await handleSourceTest(ctx, toolArgs as { sourceSlug: string });
+
+        case 'call_llm': {
+          // Primary path: PreToolUse intercept injects _precomputedResult (works on Codex).
+          const args = toolArgs as Record<string, unknown>;
+          const precomputed = args?._precomputedResult as string | undefined;
+
+          if (precomputed) {
+            try {
+              const parsed = JSON.parse(precomputed);
+              if (parsed.error) {
+                return errorResponse(`call_llm failed: ${parsed.error}`);
+              }
+              if (parsed.text !== undefined) {
+                return {
+                  content: [{ type: 'text' as const, text: parsed.text || '(Model returned empty response)' }],
+                };
+              }
+              return errorResponse('call_llm: _precomputedResult has unexpected format (missing text field).');
+            } catch {
+              return errorResponse(`call_llm: Failed to parse _precomputedResult: ${precomputed.slice(0, 200)}`);
+            }
+          }
+
+          // Fallback path: HTTP callback to agent (for Copilot where PreToolUse doesn't fire for MCP tools).
+          // Uses callbackPort from CLI arg (--callback-port) or env var (CRAFT_LLM_CALLBACK_PORT).
+          if (config.callbackPort) {
+            try {
+              const resp = await fetch(`http://127.0.0.1:${config.callbackPort}/call-llm`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(args),
+                signal: AbortSignal.timeout(30000),
+              });
+              const result = await resp.json() as { text?: string; model?: string; error?: string };
+              if (result.error) {
+                return errorResponse(`call_llm failed: ${result.error}`);
+              }
+              return {
+                content: [{ type: 'text' as const, text: result.text || '(Model returned empty response)' }],
+              };
+            } catch (err) {
+              return errorResponse(`call_llm callback failed: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+
+          return errorResponse(
+            'call_llm requires either PreToolUse intercept (_precomputedResult) or ' +
+            'HTTP callback (CRAFT_LLM_CALLBACK_PORT). Neither is available.'
+          );
+        }
 
         default:
           return errorResponse(`Unknown tool: ${name}`);

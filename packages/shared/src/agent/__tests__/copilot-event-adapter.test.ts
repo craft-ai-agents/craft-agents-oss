@@ -223,7 +223,8 @@ describe('CopilotEventAdapter', () => {
         data: { deltaContent: 'hello' },
       } as any));
 
-      expect(events[0]).toMatchObject({ turnId: 'turn-abc' });
+      // Sub-turnId includes __m0 suffix for message-block isolation
+      expect(events[0]).toMatchObject({ turnId: 'turn-abc__m0' });
     });
 
     it('should emit text_delta for assistant.message_delta', () => {
@@ -329,44 +330,31 @@ describe('CopilotEventAdapter', () => {
       expect(events2).toHaveLength(0);
     });
 
-    it('should emit text_delta for assistant.reasoning_delta', () => {
+    it('should suppress assistant.reasoning_delta', () => {
       const events = collect(adapter.adaptEvent({
         type: 'assistant.reasoning_delta',
         data: { deltaContent: 'I need to think...' },
       } as any));
 
-      expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({
-        type: 'text_delta',
-        text: 'I need to think...',
-      });
+      expect(events).toHaveLength(0);
     });
 
-    it('should emit intermediate text_complete for assistant.reasoning', () => {
+    it('should suppress assistant.reasoning', () => {
       const events = collect(adapter.adaptEvent({
         type: 'assistant.reasoning',
         data: { content: 'Full reasoning block' },
       } as any));
 
-      expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({
-        type: 'text_complete',
-        text: 'Full reasoning block',
-        isIntermediate: true,
-      });
+      expect(events).toHaveLength(0);
     });
 
-    it('should emit intermediate text_complete for assistant.intent', () => {
+    it('should suppress assistant.intent', () => {
       const events = collect(adapter.adaptEvent({
         type: 'assistant.intent',
         data: { intent: 'I will read the file' },
       } as any));
 
-      expect(events[0]).toMatchObject({
-        type: 'text_complete',
-        text: 'I will read the file',
-        isIntermediate: true,
-      });
+      expect(events).toHaveLength(0);
     });
 
     it('should emit usage_update for assistant.usage', () => {
@@ -406,12 +394,12 @@ describe('CopilotEventAdapter', () => {
         data: {},
       } as any));
 
-      // Next message_delta should have no turnId (it was cleared)
+      // Next message_delta should have fallback turnId (currentTurnId was cleared to null)
       const events = collect(adapter.adaptEvent({
         type: 'assistant.message_delta',
         data: { deltaContent: 'new turn' },
       } as any));
-      expect(events[0].turnId).toBeUndefined();
+      expect(events[0].turnId).toBe('unknown__m0');
     });
   });
 

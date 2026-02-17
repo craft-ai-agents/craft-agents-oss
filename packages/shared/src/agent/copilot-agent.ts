@@ -8,6 +8,7 @@
  * Auth is GitHub OAuth. Tokens stored at `llm_oauth::copilot`.
  */
 
+import http from 'node:http';
 import type { AgentEvent } from '@craft-agent/core/types';
 import type { FileAttachment } from '../utils/files.ts';
 import type { ThinkingLevel } from './thinking-levels.ts';
@@ -21,7 +22,7 @@ import type {
 import { AbortReason } from './backend/types.ts';
 
 // Import models from centralized registry
-import { getModelById } from '../config/models.ts';
+import { getModelById, getDefaultSummarizationModel } from '../config/models.ts';
 
 /**
  * Validate that a model ID is a known Copilot model.
@@ -115,6 +116,9 @@ import { getSessionPlansPath, getSessionPath } from '../sessions/storage.ts';
 
 // Error typing
 import { parseError, type AgentError } from './errors.ts';
+
+// LLM tool types and helpers for call_llm PreToolUse intercept
+import { buildCallLlmRequest, withTimeout, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
 
 // GitHub OAuth types
 import type { GithubTokens } from '../auth/github-oauth.ts';
@@ -232,6 +236,13 @@ export class CopilotAgent extends BaseAgent {
   // current value — stale handlers become no-ops.
   private handlerGeneration: number = 0;
 
+  // HTTP callback server for call_llm — the Copilot CLI doesn't fire
+  // onPreToolUse/onPostToolUse for MCP tools, so the session MCP server
+  // can't get _precomputedResult injected. Instead, it calls back to this
+  // localhost HTTP server to execute the LLM query with full Copilot auth.
+  private _callbackServer: http.Server | null = null;
+  private _callbackPort: number = 0;
+
   // ============================================================
   // Copilot-specific Callbacks
   // ============================================================
@@ -253,6 +264,62 @@ export class CopilotAgent extends BaseAgent {
 
     if (!config.isHeadless) {
       this.startConfigWatcher();
+    }
+  }
+
+  // ============================================================
+  // LLM Callback Server
+  // ============================================================
+
+  /**
+   * Start the localhost HTTP callback server for call_llm.
+   * The session MCP server POSTs to this when no _precomputedResult is available
+   * (i.e., when PreToolUse hooks didn't fire — which is always for MCP tools on Copilot).
+   */
+  private async startCallbackServer(): Promise<void> {
+    if (this._callbackServer) return;
+
+    const server = http.createServer(async (req, res) => {
+      if (req.method !== 'POST' || req.url !== '/call-llm') {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      try {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        const body = JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>;
+
+        this.debug(`[CallbackServer] Received call_llm request`);
+        const result = await this.preExecuteCallLlm(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.debug(`[CallbackServer] call_llm failed: ${msg}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: msg }));
+      }
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.listen(0, '127.0.0.1', () => {
+        const addr = server.address();
+        this._callbackPort = typeof addr === 'object' && addr ? addr.port : 0;
+        this.debug(`[CallbackServer] Listening on 127.0.0.1:${this._callbackPort}`);
+        resolve();
+      });
+      server.on('error', reject);
+    });
+
+    this._callbackServer = server;
+  }
+
+  private stopCallbackServer(): void {
+    if (this._callbackServer) {
+      this._callbackServer.close();
+      this._callbackServer = null;
+      this._callbackPort = 0;
     }
   }
 
@@ -347,10 +414,14 @@ export class CopilotAgent extends BaseAgent {
       registerSessionScopedToolCallbacks(sessionId, {
         onPlanSubmitted: (planPath) => this.onPlanSubmitted?.(planPath),
         onAuthRequest: (request) => this.onAuthRequest?.(request),
+        queryFn: (request) => this.queryLlm(request),
       });
     }
 
     try {
+      // Start callback server for call_llm (Copilot CLI doesn't fire PreToolUse for MCP tools)
+      await this.startCallbackServer();
+
       // Ensure client is connected
       const client = await this.ensureClient();
 
@@ -674,6 +745,31 @@ export class CopilotAgent extends BaseAgent {
     // expects PascalCase (e.g., "Bash"). See COPILOT_TOOL_NAME_MAP.
     const sdkToolName = this.mapCopilotToolName(toolName, inputObj);
 
+    // ============================================================
+    // CALL_LLM INTERCEPT: Pre-execute LLM request and inject result.
+    // The session-mcp-server runs as a subprocess and can't access
+    // Copilot auth, so we execute the LLM call here via ephemeral
+    // session and inject the result into _precomputedResult.
+    // Same pattern as CodexAgent (codex-agent.ts ~line 1044).
+    // ============================================================
+    if (sdkToolName === 'mcp__session__call_llm') {
+      this.debug('PreToolUse: Intercepting call_llm for pre-execution');
+      try {
+        const result = await this.preExecuteCallLlm(inputObj);
+        return {
+          permissionDecision: 'allow',
+          modifiedArgs: { ...inputObj, model: result.model ?? inputObj.model, _precomputedResult: JSON.stringify(result) },
+        };
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        this.debug(`PreToolUse: call_llm pre-execution failed: ${errorMsg}`);
+        return {
+          permissionDecision: 'allow',
+          modifiedArgs: { ...inputObj, _precomputedResult: JSON.stringify({ error: errorMsg }) },
+        };
+      }
+    }
+
     // Normalize Copilot-native arg names before permission check.
     //
     // WHY: Copilot CLI's native tools (str_replace_editor subcommands like
@@ -958,15 +1054,23 @@ export class CopilotAgent extends BaseAgent {
       if (sessionId && workspaceRootPath) {
         const nodePath = this.config.nodePath || 'bun';
         const plansFolderPath = join(workspaceRootPath, 'sessions', sessionId, 'plans');
+        const sessionArgs = [
+          this.config.sessionServerPath,
+          '--session-id', sessionId,
+          '--workspace-root', workspaceRootPath,
+          '--plans-folder', plansFolderPath,
+        ];
+        // Pass callback port as CLI arg (more reliable than env — the Copilot CLI
+        // spawns MCP servers and may not forward the env field to subprocesses).
+        if (this._callbackPort) {
+          sessionArgs.push('--callback-port', String(this._callbackPort));
+        }
         config['session'] = {
           type: 'local',
           command: nodePath,
-          args: [
-            this.config.sessionServerPath,
-            '--session-id', sessionId,
-            '--workspace-root', workspaceRootPath,
-            '--plans-folder', plansFolderPath,
-          ],
+          args: sessionArgs,
+          // Also pass via env as secondary path (in case CLI does forward it)
+          env: this._callbackPort ? { CRAFT_LLM_CALLBACK_PORT: String(this._callbackPort) } : undefined,
           tools: ['*'],
         };
       }
@@ -1154,6 +1258,7 @@ export class CopilotAgent extends BaseAgent {
       this.client = null;
     }
 
+    this.stopCallbackServer();
     this.debug('CopilotAgent destroyed');
   }
 
@@ -1396,17 +1501,106 @@ export class CopilotAgent extends BaseAgent {
   }
 
   // ============================================================
-  // Mini Completion (for title generation)
+  // LLM Tool Pre-Execution (call_llm via PreToolUse intercept)
   // ============================================================
 
   /**
-   * Run a simple text completion for title generation and other quick tasks.
-   * Copilot SDK doesn't expose a simple completion API, so this returns null
-   * to fall back to other providers for title generation.
+   * Pre-execute a call_llm request: process attachments, resolve model,
+   * build prompt with structured output injection, and run via ephemeral session.
    */
-  async runMiniCompletion(_prompt: string): Promise<string | null> {
-    this.debug(`[runMiniCompletion] Not supported by Copilot SDK - falling back`);
-    return null;
+  private async preExecuteCallLlm(input: Record<string, unknown>): Promise<LLMQueryResult> {
+    const request = await buildCallLlmRequest(input, { backendName: 'Copilot' });
+    return this.queryLlm(request);
+  }
+
+  // ============================================================
+  // LLM Query (ephemeral session for call_llm + runMiniCompletion)
+  // ============================================================
+
+  /**
+   * Execute an LLM query via an ephemeral CopilotSession.
+   *
+   * Creates a minimal session (no MCP servers, no hooks, no permission handler)
+   * for one-turn completions. Collects text from `assistant.message_delta` events,
+   * waits for `session.idle`, returns the accumulated result.
+   *
+   * Used by:
+   * - call_llm tool (via queryFn callback in session-scoped-tools)
+   * - runMiniCompletion (title generation, large response summarization)
+   */
+  async queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
+    this.debug('[CopilotAgent.queryLlm] Starting');
+
+    const client = await this.ensureClient();
+    const model = request.model ?? this.config.miniModel ?? getDefaultSummarizationModel();
+
+    this.debug(`[CopilotAgent.queryLlm] Using model: ${model}`);
+
+    // Create a minimal ephemeral session — no MCP servers, no hooks, no permissions
+    const ephemeralConfig: CopilotSessionConfig = {
+      model,
+      systemMessage: request.systemPrompt
+        ? { mode: 'replace', content: request.systemPrompt }
+        : { mode: 'replace', content: 'Reply with ONLY the requested text. No explanation.' },
+      onPermissionRequest: async () => ({ kind: 'approved' as const }),
+      workingDirectory: this.resolvedCwd(),
+      streaming: true,
+    };
+
+    const ephemeralSession = await client.createSession(ephemeralConfig);
+    this.debug(`[CopilotAgent.queryLlm] Created ephemeral session: ${ephemeralSession.sessionId}`);
+
+    // Collect response text from delta events
+    let result = '';
+    let completionResolve: () => void;
+    const completionPromise = new Promise<void>((resolve) => {
+      completionResolve = resolve;
+    });
+
+    const unsubscribe = ephemeralSession.on((event: SessionEvent) => {
+      if (event.type === 'assistant.message_delta') {
+        const data = event.data as { deltaContent?: string };
+        if (data.deltaContent) {
+          result += data.deltaContent;
+        }
+      }
+      if (event.type === 'session.idle') {
+        completionResolve();
+      }
+    });
+
+    try {
+      await ephemeralSession.send({ prompt: request.prompt });
+
+      // 30s timeout
+      await withTimeout(completionPromise, 30000, 'queryLlm timed out after 30s');
+
+      this.debug(`[CopilotAgent.queryLlm] Result length: ${result.trim().length}`);
+      return { text: result.trim(), model };
+    } finally {
+      unsubscribe();
+      ephemeralSession.destroy().catch(() => {});
+    }
+  }
+
+  // ============================================================
+  // Mini Completion (for title generation + summarization)
+  // ============================================================
+
+  /**
+   * Run a simple text completion for title generation and large response summarization.
+   * Delegates to queryLlm() which uses an ephemeral CopilotSession.
+   */
+  async runMiniCompletion(prompt: string): Promise<string | null> {
+    try {
+      const result = await this.queryLlm({ prompt });
+      const text = result.text || null;
+      this.debug(`[runMiniCompletion] Result: ${text ? `"${text.slice(0, 200)}"` : 'null'}`);
+      return text;
+    } catch (error) {
+      this.debug(`[runMiniCompletion] Failed: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
   }
 
   // ============================================================

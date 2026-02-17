@@ -1742,6 +1742,7 @@ export function shouldAllowToolInMode(
         'mcp__session__mermaid_validate',
         'mcp__session__source_test',
         'mcp__session__transform_data',
+        'mcp__session__call_llm',
         ...(FEATURE_FLAGS.sourceTemplates ? ['mcp__session__render_template'] : []),
       ];
       if (readOnlySessionTools.includes(toolName)) {

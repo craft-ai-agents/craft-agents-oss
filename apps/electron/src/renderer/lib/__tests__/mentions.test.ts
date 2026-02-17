@@ -207,8 +207,8 @@ describe('stripAllMentions - skill pattern with workspace IDs', () => {
 
 describe('extractBadges - skill qualification with workspace slug', () => {
   const mockSkills = [
-    { slug: 'commit', metadata: { name: 'Commit' } },
-    { slug: 'review-pr', metadata: { name: 'Review PR' } },
+    { slug: 'commit', metadata: { name: 'Commit' }, source: 'workspace' },
+    { slug: 'review-pr', metadata: { name: 'Review PR' }, source: 'workspace' },
   ] as any[]
   const mockSources = [] as any[]
 

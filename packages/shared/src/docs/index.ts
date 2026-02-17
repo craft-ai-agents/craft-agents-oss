@@ -112,6 +112,7 @@ export const DOC_REFS = {
   dataTables: `${APP_ROOT}/docs/data-tables.md`,
   htmlPreview: `${APP_ROOT}/docs/html-preview.md`,
   pdfPreview: `${APP_ROOT}/docs/pdf-preview.md`,
+  llmTool: `${APP_ROOT}/docs/llm-tool.md`,
   docsDir: `${APP_ROOT}/docs/`,
 } as const;
 

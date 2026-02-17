@@ -149,6 +149,10 @@ export class TestAgent extends BaseAgent {
     return 'Test Response';
   }
 
+  async queryLlm(_request: import('../llm-tool.ts').LLMQueryRequest): Promise<import('../llm-tool.ts').LLMQueryResult> {
+    return { text: 'Test LLM Response' };
+  }
+
   // Helper to reset tracking
   resetTracking(): void {
     this.chatCalls = [];

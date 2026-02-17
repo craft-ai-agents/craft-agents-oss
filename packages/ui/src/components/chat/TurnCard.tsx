@@ -471,6 +471,10 @@ function formatToolInput(
   sessionFolderPath?: string
 ): string {
   if (!input || Object.keys(input).length === 0) return ''
+
+  // For call_llm: model shown as badge, prompt duplicates intent
+  if (toolName === 'mcp__session__call_llm') return ''
+
   const parts: string[] = []
 
   // For Edit/Write tools, only show file_path (skip old_string, new_string, replace_all, content)
@@ -945,6 +949,12 @@ function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, 
                   {activity.error}
                 </TooltipContent>
               </Tooltip>
+            )}
+            {/* Model badge for LLM Query */}
+            {activity.toolName === 'mcp__session__call_llm' && activity.toolInput?.model && (
+              <span className="px-1.5 py-0.5 bg-background shadow-minimal rounded-[4px] text-[10px] text-foreground/60 shrink-0">
+                {String(activity.toolInput.model)}
+              </span>
             )}
             {(intentOrDescription || (displayMode === 'detailed' && (toolSlug || inputSummary))) && (
               <span className={cn("truncate flex-1 min-w-0", onOpenDetails && isComplete && "group-hover/row:underline")}>
