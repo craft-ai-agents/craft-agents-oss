@@ -35,6 +35,7 @@ import {
   migrateLegacyCredentials,
   migrateLegacyLlmConnectionsConfig,
   migrateOrphanedDefaultConnections,
+  MODEL_REGISTRY,
   type Workspace,
 } from '@craft-agent/shared/config'
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
@@ -4889,6 +4890,18 @@ To view this task's output:
       case 'tool_start': {
         // Format tool input paths to relative for better readability
         const formattedToolInput = formatToolInputPaths(event.input)
+
+        // Resolve call_llm model short name (e.g., "haiku") to full ID (e.g., "claude-haiku-4-5-20251001")
+        // for TurnCard badge display. The LLM sends short names but we want the resolved model shown.
+        if (event.toolName === 'mcp__session__call_llm' && formattedToolInput?.model) {
+          const shortName = String(formattedToolInput.model)
+          const modelDef = MODEL_REGISTRY.find(m => m.id === shortName)
+            || MODEL_REGISTRY.find(m => m.shortName.toLowerCase() === shortName.toLowerCase())
+            || MODEL_REGISTRY.find(m => m.name.toLowerCase() === shortName.toLowerCase())
+          if (modelDef) {
+            formattedToolInput.model = modelDef.id
+          }
+        }
 
         // Resolve tool display metadata (icon, displayName) for skills/sources
         // Only resolve when we have input (second event for SDK dual-event pattern)
