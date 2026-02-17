@@ -7,9 +7,10 @@
 
 import * as React from 'react'
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Terminal, MessageSquare } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { HookAvatar } from './HookAvatar'
+import { HookActionPreview } from './HookActionPreview'
 import { Switch } from '@/components/ui/switch'
 import { getEventDisplayName, type HookListItem } from './types'
 
@@ -92,23 +93,7 @@ export function HookCard({
           {/* Actions */}
           <div className="space-y-1">
             <h5 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Then</h5>
-            <div className="space-y-1.5">
-              {hook.hooks.map((action, i) => (
-                <div key={i} className="flex items-start gap-2 text-xs">
-                  {action.type === 'command' ? (
-                    <>
-                      <Terminal className="h-3 w-3 text-foreground/50 mt-0.5 shrink-0" />
-                      <code className="font-mono text-foreground/70 break-all">{action.command}</code>
-                    </>
-                  ) : (
-                    <>
-                      <MessageSquare className="h-3 w-3 text-foreground/50 mt-0.5 shrink-0" />
-                      <span className="text-foreground/70 break-words">{action.prompt}</span>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
+            <HookActionPreview actions={hook.hooks} />
           </div>
 
           {/* Actions bar */}

@@ -117,8 +117,9 @@ import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
 import { HooksListPanel } from "../hooks/HooksListPanel"
-import { parseHooksConfig, APP_EVENTS, AGENT_EVENTS, type HookFilterKind } from "../hooks/types"
-import { hooksAtom } from "@/atoms/hooks"
+import { APP_EVENTS, AGENT_EVENTS, type HookFilterKind, TASK_TYPE_TO_FILTER_KIND } from "../hooks/types"
+import { useHooks } from "@/hooks/useHooks"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { PanelHeader } from "./PanelHeader"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
@@ -766,77 +767,14 @@ function AppShellContent({
   React.useEffect(() => {
     setSkillsAtom(skills)
   }, [skills, setSkillsAtom])
-  // Hooks state (workspace-scoped) — parsed from hooks.json
-  const [hooks, setHooks] = React.useState<import('../hooks/types').HookListItem[]>([])
-  // Sync hooks to atom for MainContentPanel access
-  const setHooksAtom = useSetAtom(hooksAtom)
-  React.useEffect(() => {
-    setHooksAtom(hooks)
-  }, [hooks, setHooksAtom])
-
-  // Hook test results (per-hook, keyed by hook ID)
-  const [hookTestResults, setHookTestResults] = React.useState<Record<string, import('../hooks/types').TestResult>>({})
-
-  const handleTestHook = React.useCallback((hookId: string) => {
-    const hook = hooks.find(h => h.id === hookId)
-    if (!hook || !activeWorkspaceId) return
-
-    // Set running state
-    setHookTestResults(prev => ({ ...prev, [hookId]: { state: 'running' } }))
-
-    window.electronAPI.testHook({
-      workspaceId: activeWorkspaceId,
-      hooks: hook.hooks,
-      permissionMode: hook.permissionMode,
-      labels: hook.labels,
-    }).then((result) => {
-      const first = result.actions[0]
-      if (!first) {
-        setHookTestResults(prev => ({ ...prev, [hookId]: { state: 'error', stderr: 'No actions to execute' } }))
-        return
-      }
-      setHookTestResults(prev => ({
-        ...prev,
-        [hookId]: {
-          state: first.blocked ? 'blocked' : first.success ? 'success' : 'error',
-          stdout: first.stdout,
-          stderr: first.stderr,
-          exitCode: first.exitCode,
-          duration: first.duration,
-          blockedReason: first.blockedReason,
-        },
-      }))
-    }).catch((err: Error) => {
-      setHookTestResults(prev => ({ ...prev, [hookId]: { state: 'error', stderr: err.message } }))
-    })
-  }, [hooks, activeWorkspaceId])
-
-  const handleToggleHook = React.useCallback((hookId: string) => {
-    const hook = hooks.find(h => h.id === hookId)
-    if (!hook || !activeWorkspaceId) return
-    window.electronAPI.setHookEnabled(
-      activeWorkspaceId,
-      hook.event,
-      hook.matcherIndex,
-      !hook.enabled,
-    ).catch((err: Error) => {
-      console.error('Failed to toggle hook:', err)
-    })
-  }, [hooks, activeWorkspaceId])
-
-  const handleDuplicateHook = React.useCallback((hookId: string) => {
-    const hook = hooks.find(h => h.id === hookId)
-    if (!hook || !activeWorkspaceId) return
-    window.electronAPI.duplicateHook(activeWorkspaceId, hook.event, hook.matcherIndex)
-      .catch((err: Error) => console.error('Failed to duplicate hook:', err))
-  }, [hooks, activeWorkspaceId])
-
-  const handleDeleteHook = React.useCallback((hookId: string) => {
-    const hook = hooks.find(h => h.id === hookId)
-    if (!hook || !activeWorkspaceId) return
-    window.electronAPI.deleteHook(activeWorkspaceId, hook.event, hook.matcherIndex)
-      .catch((err: Error) => console.error('Failed to delete hook:', err))
-  }, [hooks, activeWorkspaceId])
+  // Hooks (tasks) — state, handlers, loading, subscriptions
+  const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
+  const {
+    hooks, hookTestResults,
+    hookPendingDelete, pendingDeleteHook, setHookPendingDelete,
+    handleTestHook, handleToggleHook, handleDuplicateHook, handleDeleteHook, confirmDeleteHook,
+    getHookHistory,
+  } = useHooks(activeWorkspaceId, activeWorkspace?.rootPath)
 
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
@@ -946,44 +884,6 @@ function AppShellContent({
     }
   }, [])
 
-  const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
-
-  // Load hooks from workspace hooks.json
-  React.useEffect(() => {
-    if (!activeWorkspace?.rootPath) return
-    const hooksPath = `${activeWorkspace.rootPath}/hooks.json`
-    window.electronAPI.readFile(hooksPath).then((content) => {
-      try {
-        const parsed = JSON.parse(content)
-        setHooks(parseHooksConfig(parsed))
-      } catch {
-        setHooks([])
-      }
-    }).catch(() => {
-      // No hooks.json or read error — empty list
-      setHooks([])
-    })
-  }, [activeWorkspace?.rootPath])
-
-  // Subscribe to live hooks updates (when hooks.json changes on disk)
-  React.useEffect(() => {
-    const rootPath = activeWorkspace?.rootPath
-    if (!rootPath) return
-    const cleanup = window.electronAPI.onHooksChanged(() => {
-      const hooksPath = `${rootPath}/hooks.json`
-      window.electronAPI.readFile(hooksPath).then((content) => {
-        try {
-          const parsed = JSON.parse(content)
-          setHooks(parseHooksConfig(parsed))
-        } catch {
-          setHooks([])
-        }
-      }).catch(() => {
-        setHooks([])
-      })
-    })
-    return cleanup
-  }, [activeWorkspace?.rootPath])
 
   // Load dynamic statuses from workspace config
   const { statuses: statusConfigs, isLoading: isLoadingStatuses } = useStatuses(activeWorkspace?.id || null)
@@ -1611,7 +1511,8 @@ function AppShellContent({
     onDuplicateHook: handleDuplicateHook,
     onDeleteHook: handleDeleteHook,
     hookTestResults,
-  }), [contextValue, handleDeleteSession, sources, skills, labelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, rightSidebarOpenButton, searchActive, searchQuery, handleChatMatchInfoChange, handleTestHook, handleToggleHook, handleDuplicateHook, handleDeleteHook, hookTestResults])
+    getHookHistory,
+  }), [contextValue, handleDeleteSession, sources, skills, labelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, rightSidebarOpenButton, searchActive, searchQuery, handleChatMatchInfoChange, handleTestHook, handleToggleHook, handleDuplicateHook, handleDeleteHook, hookTestResults, getHookHistory])
 
   // Persist expanded folders to localStorage (workspace-scoped)
   React.useEffect(() => {
@@ -3242,7 +3143,7 @@ function AppShellContent({
               /* Tasks List (hooks) - filtered by type if taskFilter is active */
               <HooksListPanel
                 hooks={hooks}
-                hookFilter={taskFilter ? { kind: ({ scheduled: 'scheduled', event: 'app', agentic: 'agent' } as const)[taskFilter.taskType] as HookFilterKind } : undefined}
+                hookFilter={taskFilter ? { kind: TASK_TYPE_TO_FILTER_KIND[taskFilter.taskType] ?? 'all' } : undefined}
                 onHookClick={handleTaskSelect}
                 onTestHook={handleTestHook}
                 onToggleHook={handleToggleHook}
@@ -3624,6 +3525,22 @@ function AppShellContent({
         content={releaseNotesContent}
         onOpenUrl={(url) => window.electronAPI.openUrl(url)}
       />
+
+      {/* Delete hook confirmation dialog */}
+      <Dialog open={!!hookPendingDelete} onOpenChange={(open) => { if (!open) setHookPendingDelete(null) }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Delete Task</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{pendingDeleteHook?.name}</strong>? This will remove the task from your tasks.json configuration.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHookPendingDelete(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmDeleteHook}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </AppShellProvider>
   )

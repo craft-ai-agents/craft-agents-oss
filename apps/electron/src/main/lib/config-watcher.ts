@@ -351,9 +351,9 @@ export class ConfigWatcher {
       return;
     }
 
-    // Workspace-level hooks.json
-    if (relativePath === 'hooks.json') {
-      debug('[ConfigWatcher] hooks.json change detected - triggering reload');
+    // Workspace-level tasks.json or hooks.json (legacy)
+    if (relativePath === 'tasks.json' || relativePath === 'hooks.json') {
+      debug('[ConfigWatcher] tasks config change detected:', relativePath, '- triggering reload');
       this.debounce('hooks-config', () => this.handleHooksConfigChange());
       return;
     }

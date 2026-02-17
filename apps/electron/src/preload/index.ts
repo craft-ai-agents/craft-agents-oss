@@ -543,6 +543,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.HOOKS_DUPLICATE, workspaceId, eventName, matcherIndex),
   deleteHook: (workspaceId: string, eventName: string, matcherIndex: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.HOOKS_DELETE, workspaceId, eventName, matcherIndex),
+  getHookHistory: (workspaceId: string, hookId: string, limit?: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.HOOKS_GET_HISTORY, workspaceId, hookId, limit),
 
   // Hooks change listener (live updates when hooks.json changes on disk)
   onHooksChanged: (callback: (workspaceId: string) => void) => {

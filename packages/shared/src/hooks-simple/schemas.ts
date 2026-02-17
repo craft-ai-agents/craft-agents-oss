@@ -29,6 +29,7 @@ export const HookDefinitionSchema = z.discriminatedUnion('type', [
 ]);
 
 export const HookMatcherSchema = z.object({
+  id: z.string().optional(),
   name: z.string().optional(),
   matcher: z.string().optional(),
   cron: z.string().optional(),
@@ -36,7 +37,17 @@ export const HookMatcherSchema = z.object({
   permissionMode: z.enum(['safe', 'ask', 'allow-all']).optional(),
   labels: z.array(z.string()).optional(),
   enabled: z.boolean().optional(),
-  hooks: z.array(HookDefinitionSchema).min(1, 'At least one hook required'),
+  // Accept both "actions" (v2) and "hooks" (v1) — normalized to "hooks" internally
+  hooks: z.array(HookDefinitionSchema).optional(),
+  actions: z.array(HookDefinitionSchema).optional(),
+}).refine(
+  (data) => (data.hooks?.length ?? 0) + (data.actions?.length ?? 0) > 0,
+  { message: 'At least one action required (in "actions" or "hooks" array)' },
+).transform((data) => {
+  // Normalize: merge actions into hooks, drop actions key
+  const merged = [...(data.hooks ?? []), ...(data.actions ?? [])];
+  const { actions: _actions, ...rest } = data;
+  return { ...rest, hooks: merged };
 });
 
 /**
@@ -61,8 +72,14 @@ export const VALID_EVENTS = [
 
 export const HooksConfigSchema = z.object({
   version: z.number().optional(),
-  hooks: z.record(z.string(), z.array(HookMatcherSchema)).optional().default({}),
+  // Accept both "tasks" (v2) and "hooks" (v1) top-level keys
+  hooks: z.record(z.string(), z.array(HookMatcherSchema)).optional(),
+  tasks: z.record(z.string(), z.array(HookMatcherSchema)).optional(),
 }).transform((data) => {
+  // Normalize: merge tasks into hooks, use hooks as canonical internal key
+  const merged = { ...(data.hooks ?? {}), ...(data.tasks ?? {}) };
+  data.hooks = Object.keys(merged).length > 0 ? merged : {};
+  delete (data as Record<string, unknown>).tasks;
   // Filter out invalid event names, rewrite deprecated aliases, and warn
   const validHooks: Record<string, z.infer<typeof HookMatcherSchema>[]> = {};
   const invalidEvents: string[] = [];

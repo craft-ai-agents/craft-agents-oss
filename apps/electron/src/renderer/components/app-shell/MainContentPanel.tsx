@@ -16,7 +16,7 @@
  */
 
 import * as React from 'react'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAtomValue } from 'jotai'
 import { Panel } from './Panel'
 import { MultiSelectPanel } from './MultiSelectPanel'
@@ -38,6 +38,7 @@ import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { HookInfoPage } from '../hooks/HookInfoPage'
+import type { ExecutionEntry } from '../hooks/types'
 import { hooksAtom } from '@/atoms/hooks'
 
 export interface MainContentPanelProps {
@@ -64,6 +65,7 @@ export function MainContentPanel({
     onDuplicateHook,
     onDeleteHook,
     hookTestResults,
+    getHookHistory,
   } = useAppShellContext()
 
   // Multi-select state
@@ -73,6 +75,22 @@ export function MainContentPanel({
   const { clearMultiSelect } = useSessionSelection()
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
   const hooks = useAtomValue(hooksAtom)
+
+  // Execution history for the selected hook
+  const selectedHookId = isTasksNavigation(navState) ? navState.details?.taskId : undefined
+  const [executions, setExecutions] = useState<ExecutionEntry[]>([])
+
+  useEffect(() => {
+    if (!selectedHookId || !getHookHistory) {
+      setExecutions([])
+      return
+    }
+    let stale = false
+    getHookHistory(selectedHookId).then(entries => {
+      if (!stale) setExecutions(entries)
+    })
+    return () => { stale = true }
+  }, [selectedHookId, getHookHistory])
 
   const selectedMetas = useMemo(() => {
     const metas: SessionMeta[] = []
@@ -205,6 +223,7 @@ export function MainContentPanel({
           <Panel variant="grow" className={className}>
             <HookInfoPage
               hook={hook}
+              executions={executions}
               testResult={hookTestResults?.[hook.id]}
               onTest={onTestHook ? () => onTestHook(hook.id) : undefined}
               onToggleEnabled={onToggleHook ? () => onToggleHook(hook.id) : undefined}

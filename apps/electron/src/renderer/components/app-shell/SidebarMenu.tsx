@@ -210,7 +210,7 @@ export function SidebarMenu({
           </MenuItem>
         )}
         <Separator />
-        <MenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('sources'))}>
+        <MenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('tasks'))}>
           <ExternalLink className="h-3.5 w-3.5" />
           <span className="flex-1">Learn More about Tasks</span>
         </MenuItem>

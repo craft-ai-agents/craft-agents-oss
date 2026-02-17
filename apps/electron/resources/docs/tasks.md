@@ -1,33 +1,35 @@
-# Hooks Configuration Guide
+# Tasks Configuration Guide
 
-This guide explains how to configure hooks in Craft Agent to automate workflows based on events.
+This guide explains how to configure tasks in Craft Agent to automate workflows based on events.
 
-## What Are Hooks?
+## What Are Tasks?
 
-Hooks allow you to trigger actions automatically when specific events occur in Craft Agent. You can:
+Tasks allow you to trigger actions automatically when specific events occur in Craft Agent. You can:
 - Run shell commands when labels are added/removed
 - Execute prompts on a schedule using cron expressions
 - Automate workflows based on permission mode changes, flags, or session status changes
 
-## hooks.json Location
+> **Note:** Tasks were previously called "Hooks". If you have an existing `hooks.json` file, it will be automatically migrated to `tasks.json` on workspace load. A backup is kept at `hooks.json.old`.
 
-Hooks are configured in `hooks.json` at the root of your workspace:
+## tasks.json Location
+
+Tasks are configured in `tasks.json` at the root of your workspace:
 
 ```
-~/.craft-agent/workspaces/{workspaceId}/hooks.json
+~/.craft-agent/workspaces/{workspaceId}/tasks.json
 ```
 
 ## Basic Structure
 
 ```json
 {
-  "version": 1,
-  "hooks": {
+  "version": 2,
+  "tasks": {
     "EventName": [
       {
         "name": "Optional display name",
         "matcher": "regex-pattern",
-        "hooks": [
+        "actions": [
           { "type": "command", "command": "echo 'Hello'" }
         ]
       }
@@ -70,9 +72,9 @@ Hooks are configured in `hooks.json` at the root of your workspace:
 | `PermissionRequest` | Permission requested | - |
 | `Setup` | Initial setup | - |
 
-## Hook Types
+## Action Types
 
-### Command Hooks
+### Command Actions
 
 Execute a shell command when the event fires.
 
@@ -92,7 +94,7 @@ Execute a shell command when the event fires.
 - `CRAFT_WORKING_DIR` - Current working directory
 - Event-specific variables (e.g., `CRAFT_LABEL` for label events)
 
-### Prompt Hooks
+### Prompt Actions
 
 Send a prompt to Craft Agent (creates a new session for scheduled prompts).
 
@@ -112,13 +114,13 @@ Send a prompt to Craft Agent (creates a new session for scheduled prompts).
 
 ### Display Name
 
-Use the optional `name` field to give a hook a human-readable display name. If omitted, the name is automatically derived from the first action.
+Use the optional `name` field to give a task a human-readable display name. If omitted, the name is automatically derived from the first action.
 
 ```json
 {
   "name": "Morning Weather Report",
   "cron": "0 8 * * *",
-  "hooks": [
+  "actions": [
     { "type": "prompt", "prompt": "Run the @weather skill" }
   ]
 }
@@ -126,18 +128,18 @@ Use the optional `name` field to give a hook a human-readable display name. If o
 
 ### Regex Matching (for most events)
 
-Use the `matcher` field to filter which events trigger your hooks:
+Use the `matcher` field to filter which events trigger your tasks:
 
 ```json
 {
   "matcher": "^urgent$",
-  "hooks": [
+  "actions": [
     { "type": "command", "command": "notify-send 'Urgent label added!'" }
   ]
 }
 ```
 
-If `matcher` is omitted, the hook triggers for all events of that type.
+If `matcher` is omitted, the task triggers for all events of that type.
 
 ### Cron Matching (for SchedulerTick)
 
@@ -147,7 +149,7 @@ For `SchedulerTick` events, use cron expressions instead of regex:
 {
   "cron": "0 9 * * 1-5",
   "timezone": "America/New_York",
-  "hooks": [
+  "actions": [
     { "type": "prompt", "prompt": "Give me a morning briefing" }
   ]
 }
@@ -173,13 +175,13 @@ For `SchedulerTick` events, use cron expressions instead of regex:
 
 ## Permission Mode
 
-By default, command hooks are subject to the same security rules as bash commands in Explore mode. To bypass these checks for trusted automation:
+By default, command actions are subject to the same security rules as bash commands in Explore mode. To bypass these checks for trusted automation:
 
 ```json
 {
   "cron": "*/10 * * * *",
   "permissionMode": "allow-all",
-  "hooks": [
+  "actions": [
     { "type": "command", "command": "echo \"$(date)\" >> /tmp/log.txt" }
   ]
 }
@@ -187,20 +189,20 @@ By default, command hooks are subject to the same security rules as bash command
 
 **Permission modes:**
 - `safe` - Commands are checked against allowlist (default)
-- `ask` - Not currently used for hooks
+- `ask` - Not currently used for tasks
 - `allow-all` - Bypass security checks (use with caution!)
 
 **Warning:** Only use `allow-all` for commands you fully trust. It allows arbitrary shell execution.
 
-## Labels for Prompt Hooks
+## Labels for Prompt Actions
 
-Prompt hooks can specify labels that will be applied to the session they create:
+Prompt actions can specify labels that will be applied to the session they create:
 
 ```json
 {
   "cron": "0 9 * * *",
   "labels": ["Scheduled", "morning-briefing"],
-  "hooks": [
+  "actions": [
     { "type": "prompt", "prompt": "Give me today's priorities" }
   ]
 }
@@ -214,15 +216,15 @@ This creates a session with the "Scheduled" and "morning-briefing" labels applie
 
 ```json
 {
-  "version": 1,
-  "hooks": {
+  "version": 2,
+  "tasks": {
     "SchedulerTick": [
       {
         "name": "Daily Weather Report",
         "cron": "0 8 * * *",
         "timezone": "Europe/Budapest",
         "labels": ["Scheduled", "weather"],
-        "hooks": [
+        "actions": [
           { "type": "prompt", "prompt": "Run the @weather skill and give me today's forecast" }
         ]
       }
@@ -235,12 +237,12 @@ This creates a session with the "Scheduled" and "morning-briefing" labels applie
 
 ```json
 {
-  "version": 1,
-  "hooks": {
+  "version": 2,
+  "tasks": {
     "LabelAdd": [
       {
         "permissionMode": "allow-all",
-        "hooks": [
+        "actions": [
           { "type": "command", "command": "echo \"[$(date)] Added: $CRAFT_LABEL\" >> ~/label-log.txt" }
         ]
       }
@@ -248,7 +250,7 @@ This creates a session with the "Scheduled" and "morning-briefing" labels applie
     "LabelRemove": [
       {
         "permissionMode": "allow-all",
-        "hooks": [
+        "actions": [
           { "type": "command", "command": "echo \"[$(date)] Removed: $CRAFT_LABEL\" >> ~/label-log.txt" }
         ]
       }
@@ -261,13 +263,13 @@ This creates a session with the "Scheduled" and "morning-briefing" labels applie
 
 ```json
 {
-  "version": 1,
-  "hooks": {
+  "version": 2,
+  "tasks": {
     "LabelAdd": [
       {
         "matcher": "^urgent$",
         "permissionMode": "allow-all",
-        "hooks": [
+        "actions": [
           { "type": "command", "command": "osascript -e 'display notification \"Urgent session flagged\" with title \"Craft Agent\"'" }
         ]
       }
@@ -280,13 +282,13 @@ This creates a session with the "Scheduled" and "morning-briefing" labels applie
 
 ```json
 {
-  "version": 1,
-  "hooks": {
+  "version": 2,
+  "tasks": {
     "PermissionModeChange": [
       {
         "matcher": "allow-all",
         "permissionMode": "allow-all",
-        "hooks": [
+        "actions": [
           { "type": "command", "command": "echo \"$(date): Execute mode enabled\" >> ~/mode-changes.log" }
         ]
       }
@@ -295,19 +297,30 @@ This creates a session with the "Scheduled" and "morning-briefing" labels applie
 }
 ```
 
+## Migration from hooks.json
+
+If you have an existing `hooks.json` file, it will be automatically migrated to `tasks.json` when the workspace loads:
+
+1. The `"hooks"` top-level key is renamed to `"tasks"`
+2. Inner `"hooks"` arrays are renamed to `"actions"`
+3. The version is set to `2`
+4. The original `hooks.json` is renamed to `hooks.json.old` as a backup
+
+Both the old format (`hooks.json` with `"hooks"` keys) and the new format (`tasks.json` with `"tasks"` and `"actions"` keys) are supported during the transition.
+
 ## Validation
 
-Hooks are validated when:
+Tasks are validated when:
 1. The workspace is loaded
-2. You edit hooks.json (via PreToolUse hook)
+2. You edit tasks.json (via PreToolUse hook)
 3. You run `config_validate` with target `hooks` or `all`
 
 **Using config_validate:**
 
-Ask Craft Agent to validate your hooks configuration:
+Ask Craft Agent to validate your tasks configuration:
 
 ```
-Validate my hooks configuration
+Validate my tasks configuration
 ```
 
 Or use the `config_validate` tool directly with `target: "hooks"`.
@@ -315,7 +328,7 @@ Or use the `config_validate` tool directly with `target: "hooks"`.
 **Common validation errors:**
 - Invalid JSON syntax
 - Unknown event names
-- Empty hooks array
+- Empty actions array
 - Invalid cron expression
 - Invalid timezone
 - Invalid regex pattern
@@ -324,13 +337,13 @@ Or use the `config_validate` tool directly with `target: "hooks"`.
 **To validate manually:**
 
 ```bash
-# Check hooks.json syntax
-cat hooks.json | jq .
+# Check tasks.json syntax
+cat tasks.json | jq .
 ```
 
 ## Rate Limits
 
-To protect against runaway hooks (e.g., a hook that indirectly triggers itself in a loop), the event bus enforces per-event-type rate limits:
+To protect against runaway tasks (e.g., a task that indirectly triggers itself in a loop), the event bus enforces per-event-type rate limits:
 
 | Event | Max fires / minute |
 |-------|--------------------|
@@ -339,21 +352,21 @@ To protect against runaway hooks (e.g., a hook that indirectly triggers itself i
 
 When a limit is hit, further events of that type are **silently dropped** for the remainder of the 60-second window. A warning is logged. The window resets automatically.
 
-**Example:** If you have a `LabelAdd` hook that triggers a prompt which adds a label back to a session, it will fire at most 10 times before being rate-limited — preventing infinite session creation.
+**Example:** If you have a `LabelAdd` task that triggers a prompt which adds a label back to a session, it will fire at most 10 times before being rate-limited — preventing infinite session creation.
 
 ## Troubleshooting
 
-### Hook not firing
+### Task not firing
 
 1. **Check event name** - Must be exact (e.g., `LabelAdd` not `labeladd`)
 2. **Check matcher** - Regex must match the event value
 3. **Check cron** - For SchedulerTick, verify cron expression with an online tool
-4. **Check logs** - Look for `[hooks]` or `[Scheduler]` in the logs
+4. **Check logs** - Look for `[tasks]` or `[Scheduler]` in the logs
 
 ### Command blocked
 
 If you see "Bash command blocked" errors:
-1. Add `"permissionMode": "allow-all"` to the hook matcher
+1. Add `"permissionMode": "allow-all"` to the task matcher
 2. Or simplify the command to avoid shell constructs like `$()`
 
 ### Prompt not creating session
@@ -367,6 +380,6 @@ If you see "Bash command blocked" errors:
 1. **Start simple** - Test with echo commands before complex scripts
 2. **Use labels** - Tag scheduled sessions for easy filtering
 3. **Set timeouts** - Prevent runaway commands with the `timeout` field
-4. **Log failures** - Redirect stderr to track issues: `command 2>> ~/hook-errors.log`
+4. **Log failures** - Redirect stderr to track issues: `command 2>> ~/task-errors.log`
 5. **Be specific** - Use matchers to avoid triggering on every event
 6. **Test cron** - Use [crontab.guru](https://crontab.guru/) to verify expressions

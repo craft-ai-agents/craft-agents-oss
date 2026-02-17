@@ -483,13 +483,13 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
 
   'hook-config': (location) => ({
     context: {
-      label: 'Hook Configuration',
-      filePath: `${location}/hooks.json`,
+      label: 'Task Configuration',
+      filePath: `${location}/tasks.json`,
       context:
-        'The user is editing hooks.json which configures automation hooks. ' +
-        'Structure: { version: 1, hooks: { EventName: [{ name?, matcher?, cron?, timezone?, permissionMode?, labels?, hooks: [...] }] } }. ' +
-        'Each event maps to an array of matcher entries. Each matcher has a hooks array of actions ({ type: "command", command } or { type: "prompt", prompt }). ' +
-        'Read ~/.craft-agent/docs/hooks.md for full format reference. ' +
+        'The user is editing tasks.json which configures automation tasks. ' +
+        'Structure: { version: 2, tasks: { EventName: [{ name?, matcher?, cron?, timezone?, permissionMode?, labels?, actions: [...] }] } }. ' +
+        'Each event maps to an array of matcher entries. Each matcher has an actions array ({ type: "command", command } or { type: "prompt", prompt }). ' +
+        'Read ~/.craft-agent/docs/tasks.md for full format reference. ' +
         'After editing, confirm clearly what changed.',
     },
     example: 'Change the cron schedule to every 30 minutes',

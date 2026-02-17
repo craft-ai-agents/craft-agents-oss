@@ -13,6 +13,7 @@ import * as React from 'react'
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { Clock, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { describeCron as describeCronExpression, computeNextRuns } from './utils'
 
 // ============================================================================
 // Presets
@@ -66,29 +67,6 @@ const FIELDS: FieldDef[] = [
 // Helpers
 // ============================================================================
 
-function describeCronExpression(cron: string): string {
-  const parts = cron.trim().split(/\s+/)
-  if (parts.length !== 5) return 'Invalid schedule'
-
-  const [minute, hour, dom, month, dow] = parts
-
-  if (cron === '* * * * *') return 'Every minute'
-  if (minute.startsWith('*/')) return `Every ${minute.slice(2)} minutes`
-  if (hour === '*' && minute !== '*') return `Every hour at :${minute.padStart(2, '0')}`
-  if (dom === '*' && month === '*') {
-    const time = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`
-    if (dow === '*') return `Daily at ${time}`
-    if (dow === '1-5') return `Weekdays at ${time}`
-    if (dow === '0,6') return `Weekends at ${time}`
-    return `At ${time} (weekday: ${dow})`
-  }
-  if (month === '*' && dow === '*') {
-    const time = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`
-    return `Monthly on day ${dom} at ${time}`
-  }
-  return cron
-}
-
 function validateCron(cron: string): string | null {
   const parts = cron.trim().split(/\s+/)
   if (parts.length !== 5) return 'Schedule needs 5 parts: minute, hour, day, month, and weekday'
@@ -102,28 +80,6 @@ function validateCron(cron: string): string | null {
     return `Invalid value in ${FIELDS[i]?.label ?? `field ${i + 1}`}: "${part}"`
   }
   return null
-}
-
-function computeNextRuns(cron: string, count: number = 3): Date[] {
-  // Simplified next-run computation for the playground
-  const parts = cron.trim().split(/\s+/)
-  if (parts.length !== 5) return []
-
-  const [minute, hour] = parts
-  const h = hour === '*' ? new Date().getHours() : parseInt(hour, 10)
-  const m = minute.startsWith('*/') ? 0 : (minute === '*' ? 0 : parseInt(minute, 10))
-
-  const now = new Date()
-  const runs: Date[] = []
-
-  for (let i = 0; i < count; i++) {
-    const d = new Date(now)
-    d.setDate(d.getDate() + i + 1)
-    d.setHours(isNaN(h) ? 0 : h, isNaN(m) ? 0 : m, 0, 0)
-    runs.push(d)
-  }
-
-  return runs
 }
 
 // ============================================================================

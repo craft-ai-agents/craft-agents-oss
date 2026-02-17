@@ -15,8 +15,9 @@
  * - SessionManager uses ~30 lines instead of ~300
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { resolveTasksConfigPath, migrateHooksToTasks, generateShortId } from './resolve-config-path.ts';
 import { createLogger } from '../utils/debug.ts';
 import { WorkspaceEventBus, type EventPayloadMap } from './event-bus.ts';
 import { CommandHandler, PromptHandler, EventLogHandler, type HooksConfigProvider } from './handlers/index.ts';
@@ -96,13 +97,17 @@ export class HookSystem implements HooksConfigProvider {
   // ============================================================================
 
   /**
-   * Load hooks configuration from hooks.json.
+   * Load tasks configuration from tasks.json (or hooks.json fallback).
+   * Runs one-time migration from hooks.json → tasks.json if needed.
    */
   private loadConfig(): void {
-    const configPath = join(this.options.workspaceRootPath, 'hooks.json');
+    // Migrate hooks.json → tasks.json if needed (one-time, idempotent)
+    migrateHooksToTasks(this.options.workspaceRootPath);
+
+    const configPath = resolveTasksConfigPath(this.options.workspaceRootPath);
 
     if (!existsSync(configPath)) {
-      log.debug(`[HookSystem] No hooks.json found at ${configPath}`);
+      log.debug(`[HookSystem] No tasks config found at ${configPath}`);
       this.config = { hooks: {} };
       return;
     }
@@ -112,27 +117,29 @@ export class HookSystem implements HooksConfigProvider {
       const validation = validateHooksConfig(raw);
 
       if (!validation.valid) {
-        console.warn('[HookSystem] Invalid hooks.json:', validation.errors);
+        console.warn('[HookSystem] Invalid tasks config:', validation.errors);
         this.config = { hooks: {} };
         return;
       }
 
       this.config = validation.config;
+      this.backfillIds(configPath);
+      this.rotateHistory();
       const hookCount = this.getHookCount();
-      log.debug(`[HookSystem] Loaded ${hookCount} hooks from ${configPath}`);
+      log.debug(`[HookSystem] Loaded ${hookCount} tasks from ${configPath}`);
     } catch (e) {
       const error = e instanceof Error ? e.message : 'Unknown error';
-      console.warn('[HookSystem] Failed to load hooks.json:', error);
+      console.warn('[HookSystem] Failed to load tasks config:', error);
       this.config = { hooks: {} };
     }
   }
 
   /**
-   * Reload hooks configuration.
-   * Call this when hooks.json changes.
+   * Reload tasks configuration.
+   * Call this when tasks.json (or hooks.json) changes.
    */
   reloadConfig(): { success: boolean; hookCount: number; errors: string[] } {
-    const configPath = join(this.options.workspaceRootPath, 'hooks.json');
+    const configPath = resolveTasksConfigPath(this.options.workspaceRootPath);
 
     if (!existsSync(configPath)) {
       this.config = { hooks: {} };
@@ -148,12 +155,61 @@ export class HookSystem implements HooksConfigProvider {
       }
 
       this.config = validation.config;
+      this.backfillIds(configPath);
       const hookCount = this.getHookCount();
-      log.debug(`[HookSystem] Reloaded ${hookCount} hooks`);
+      log.debug(`[HookSystem] Reloaded ${hookCount} tasks`);
       return { success: true, hookCount, errors: [] };
     } catch (e) {
       const error = e instanceof Error ? e.message : 'Unknown error';
       return { success: false, hookCount: 0, errors: [`Failed to parse JSON: ${error}`] };
+    }
+  }
+
+  /**
+   * Backfill missing IDs on matchers in the raw config file.
+   * Re-reads the file to preserve original structure (doesn't use Zod-normalized data).
+   * Only writes if IDs were actually missing — no-op on subsequent loads.
+   */
+  private backfillIds(configPath: string): void {
+    try {
+      const raw = JSON.parse(readFileSync(configPath, 'utf-8'));
+      const eventMap = raw.tasks ?? raw.hooks;
+      if (!eventMap) return;
+
+      let changed = false;
+      for (const matchers of Object.values(eventMap)) {
+        if (!Array.isArray(matchers)) continue;
+        for (const m of matchers as Record<string, unknown>[]) {
+          if (!m.id) { m.id = generateShortId(); changed = true; }
+        }
+      }
+
+      if (changed) {
+        writeFileSync(configPath, JSON.stringify(raw, null, 2) + '\n', 'utf-8');
+        log.debug('[HookSystem] Backfilled missing matcher IDs');
+      }
+    } catch {
+      // Non-critical — IDs will be backfilled on next mutation via IPC
+    }
+  }
+
+  /**
+   * Rotate tasks-history.jsonl on startup: keep only the last 1000 entries.
+   * Runs synchronously during init — single-threaded, no race with concurrent appends.
+   */
+  private rotateHistory(maxEntries = 1000): void {
+    const historyPath = join(this.options.workspaceRootPath, 'tasks-history.jsonl');
+    try {
+      if (!existsSync(historyPath)) return;
+      const content = readFileSync(historyPath, 'utf-8');
+      const lines = content.trim().split('\n').filter(Boolean);
+      if (lines.length <= maxEntries) return;
+
+      const trimmed = lines.slice(-maxEntries).join('\n') + '\n';
+      writeFileSync(historyPath, trimmed, 'utf-8');
+      log.debug(`[HookSystem] Rotated tasks-history.jsonl: ${lines.length} → ${maxEntries} entries`);
+    } catch {
+      // Non-critical — rotation failure doesn't affect functionality
     }
   }
 
@@ -204,6 +260,7 @@ export class HookSystem implements HooksConfigProvider {
     this.promptHandler = new PromptHandler(
       {
         workspaceId: this.options.workspaceId,
+        workspaceRootPath: this.options.workspaceRootPath,
         onPromptsReady: this.options.onPromptsReady,
         onError: this.options.onError,
       },

@@ -5,6 +5,8 @@
  * Uses the existing command-executor for permission checking and execution.
  */
 
+import { appendFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createLogger } from '../../utils/debug.ts';
 import type { EventBus, BaseEventPayload } from '../event-bus.ts';
 import type { HookHandler, CommandHandlerOptions, HooksConfigProvider } from './types.ts';
@@ -52,56 +54,84 @@ export class CommandHandler implements HookHandler {
     const matchers = this.configProvider.getMatchersForEvent(event);
     if (matchers.length === 0) return;
 
-    // Find matching command hooks
-    const commandHooks: Array<{ command: CommandHookDefinition; permissionMode?: 'safe' | 'ask' | 'allow-all' }> = [];
+    // Group command hooks by matcher (so we can record per-matcher history)
+    const matcherCommands: Array<{
+      matcherId: string | undefined;
+      commands: Array<{ command: CommandHookDefinition; permissionMode?: 'safe' | 'ask' | 'allow-all' }>;
+    }> = [];
 
     for (const matcher of matchers) {
       if (!matcherMatches(matcher, event, payload as unknown as Record<string, unknown>)) continue;
 
+      const commands: Array<{ command: CommandHookDefinition; permissionMode?: 'safe' | 'ask' | 'allow-all' }> = [];
       for (const hook of matcher.hooks) {
         if (hook.type === 'command') {
-          commandHooks.push({ command: hook, permissionMode: matcher.permissionMode });
+          commands.push({ command: hook, permissionMode: matcher.permissionMode });
         }
+      }
+      if (commands.length > 0) {
+        matcherCommands.push({ matcherId: matcher.id, commands });
       }
     }
 
-    if (commandHooks.length === 0) return;
+    if (matcherCommands.length === 0) return;
 
-    log.debug(`[CommandHandler] Executing ${commandHooks.length} commands for ${event}`);
+    const totalCommands = matcherCommands.reduce((s, m) => s + m.commands.length, 0);
+    log.debug(`[CommandHandler] Executing ${totalCommands} commands for ${event}`);
 
     // Build environment variables
     const env = buildEnvFromPayload(event, payload);
 
-    // Execute commands in parallel
-    await Promise.all(
-      commandHooks.map(async ({ command, permissionMode }) => {
-        const startTime = Date.now();
+    // Execute commands per matcher
+    for (const { matcherId, commands } of matcherCommands) {
+      let allOk = true;
 
-        try {
-          const result = await executeCommand(command.command, {
-            env,
-            timeout: command.timeout ?? 60000,
-            cwd: this.options.workingDir,
-            permissionMode,
-            permissionsContext: this.permissionsContext,
-          });
+      await Promise.all(
+        commands.map(async ({ command, permissionMode }) => {
+          const startTime = Date.now();
 
-          const durationMs = Date.now() - startTime;
+          try {
+            const result = await executeCommand(command.command, {
+              env,
+              timeout: command.timeout ?? 60000,
+              cwd: this.options.workingDir,
+              permissionMode,
+              permissionsContext: this.permissionsContext,
+            });
 
-          if (result.blocked) {
-            log.warn(`[CommandHandler] Blocked: ${command.command} - ${result.stderr}`);
-          } else if (!result.success) {
-            log.warn(`[CommandHandler] Failed: ${command.command}`, result.stderr);
-          } else {
-            log.debug(`[CommandHandler] Success: ${command.command} (${durationMs}ms)`);
+            const durationMs = Date.now() - startTime;
+
+            if (result.blocked) {
+              log.warn(`[CommandHandler] Blocked: ${command.command} - ${result.stderr}`);
+              allOk = false;
+            } else if (!result.success) {
+              log.warn(`[CommandHandler] Failed: ${command.command}`, result.stderr);
+              allOk = false;
+            } else {
+              log.debug(`[CommandHandler] Success: ${command.command} (${durationMs}ms)`);
+            }
+          } catch (error) {
+            allOk = false;
+            const err = error instanceof Error ? error : new Error(String(error));
+            log.error(`[CommandHandler] Error executing ${command.command}:`, err);
+            this.options.onError?.(event, err);
           }
-        } catch (error) {
-          const err = error instanceof Error ? error : new Error(String(error));
-          log.error(`[CommandHandler] Error executing ${command.command}:`, err);
-          this.options.onError?.(event, err);
-        }
-      })
-    );
+        })
+      );
+
+      this.appendHistory(matcherId, allOk);
+    }
+  }
+
+  /**
+   * Append a single execution record to tasks-history.jsonl.
+   * Fire-and-forget — failures are silently ignored.
+   */
+  private appendHistory(matcherId: string | undefined, ok: boolean): void {
+    if (!matcherId) return;
+    const line = JSON.stringify({ id: matcherId, ts: Date.now(), ok }) + '\n';
+    appendFile(join(this.options.workspaceRootPath, 'tasks-history.jsonl'), line, 'utf-8')
+      .catch(() => {}); // fire-and-forget, non-critical
   }
 
   /**

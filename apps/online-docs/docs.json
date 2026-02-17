@@ -79,9 +79,9 @@
             ]
           },
           {
-            "group": "Hooks",
+            "group": "Tasks",
             "pages": [
-              "hooks/overview"
+              "tasks/overview"
             ]
           },
           {

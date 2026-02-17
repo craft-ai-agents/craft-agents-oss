@@ -3491,26 +3491,36 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return { actions: results } satisfies import('../shared/types').TestHookResult
   })
 
-  // Shared helper: resolve workspace, read hooks.json, validate matcher, mutate, write back
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async function withHookMatcher(workspaceId: string, eventName: string, matcherIndex: number, mutate: (matchers: any[], index: number, config: any) => void) {
+  // Shared helper: resolve workspace, read tasks.json (or hooks.json), validate matcher, mutate, write back
+  interface HooksConfigJson { hooks?: Record<string, Record<string, unknown>[]>; tasks?: Record<string, Record<string, unknown>[]>; [key: string]: unknown }
+  async function withHookMatcher(workspaceId: string, eventName: string, matcherIndex: number, mutate: (matchers: Record<string, unknown>[], index: number, config: HooksConfigJson, genId: () => string) => void) {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { join } = await import('path')
-    const hooksPath = join(workspace.rootPath, 'hooks.json')
+    const { resolveTasksConfigPath, generateShortId } = await import('@craft-agent/shared/hooks-simple/resolve-config-path')
+    const configPath = resolveTasksConfigPath(workspace.rootPath)
 
-    const raw = await readFile(hooksPath, 'utf-8')
+    const raw = await readFile(configPath, 'utf-8')
     const config = JSON.parse(raw)
 
-    const matchers = config.hooks?.[eventName]
+    // Support both "tasks" (v2) and "hooks" (v1) top-level keys
+    const eventMap = config.tasks ?? config.hooks ?? {}
+    const matchers = eventMap[eventName]
     if (!Array.isArray(matchers) || matcherIndex < 0 || matcherIndex >= matchers.length) {
-      throw new Error(`Invalid hook reference: ${eventName}[${matcherIndex}]`)
+      throw new Error(`Invalid task reference: ${eventName}[${matcherIndex}]`)
     }
 
-    mutate(matchers, matcherIndex, config)
+    mutate(matchers, matcherIndex, config, generateShortId)
 
-    await writeFile(hooksPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+    // Backfill missing IDs on all matchers before writing
+    for (const eventMatchers of Object.values(eventMap)) {
+      if (!Array.isArray(eventMatchers)) continue
+      for (const m of eventMatchers as Record<string, unknown>[]) {
+        if (!m.id) m.id = generateShortId()
+      }
+    }
+
+    await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
   }
 
   // Hook enabled state management (toggle enabled/disabled in hooks.json)
@@ -3525,10 +3535,11 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     })
   })
 
-  // Duplicate a hook matcher (deep-clone, append " Copy" to name, insert after original)
+  // Duplicate a hook matcher (deep-clone, new ID, append " Copy" to name, insert after original)
   ipcMain.handle(IPC_CHANNELS.HOOKS_DUPLICATE, async (_event, workspaceId: string, eventName: string, matcherIndex: number) => {
-    await withHookMatcher(workspaceId, eventName, matcherIndex, (matchers, idx) => {
+    await withHookMatcher(workspaceId, eventName, matcherIndex, (matchers, idx, _config, genId) => {
       const clone = JSON.parse(JSON.stringify(matchers[idx]))
+      clone.id = genId()
       clone.name = clone.name ? `${clone.name} Copy` : 'Untitled Copy'
       matchers.splice(idx + 1, 0, clone)
     })
@@ -3538,8 +3549,30 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   ipcMain.handle(IPC_CHANNELS.HOOKS_DELETE, async (_event, workspaceId: string, eventName: string, matcherIndex: number) => {
     await withHookMatcher(workspaceId, eventName, matcherIndex, (matchers, idx, config) => {
       matchers.splice(idx, 1)
-      if (matchers.length === 0) delete config.hooks[eventName]
+      if (matchers.length === 0) {
+        const eventMap = config.tasks ?? config.hooks
+        if (eventMap) delete eventMap[eventName]
+      }
     })
+  })
+
+  // Read execution history for a specific hook
+  ipcMain.handle(IPC_CHANNELS.HOOKS_GET_HISTORY, async (_event, workspaceId: string, hookId: string, limit = 20) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const historyPath = join(workspace.rootPath, 'tasks-history.jsonl')
+    try {
+      const content = await readFile(historyPath, 'utf-8')
+      const lines = content.trim().split('\n').filter(Boolean)
+
+      return lines
+        .map(line => { try { return JSON.parse(line) } catch { return null } })
+        .filter((e): e is { id: string; ts: number; ok: boolean } => e?.id === hookId)
+        .slice(-limit)
+    } catch {
+      return [] // File doesn't exist yet
+    }
   })
 
   // Generic workspace image loading (for source icons, status icons, etc.)

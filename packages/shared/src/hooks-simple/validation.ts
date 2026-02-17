@@ -7,6 +7,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { resolveTasksConfigPath } from './resolve-config-path.ts';
 import { HooksConfigSchema, zodErrorToIssues, DEPRECATED_EVENT_ALIASES } from './schemas.ts';
 import { isValidLabelId } from '../labels/storage.ts';
 import { extractLabelId } from '../labels/values.ts';
@@ -37,8 +38,8 @@ export function validateHooksConfig(content: unknown): HooksValidationResult {
  * Used by PreToolUse hook to validate before writing to disk.
  * Follows the same pattern as other config validators in validators.ts.
  */
-export function validateHooksContent(jsonString: string): ValidationResult {
-  const file = 'hooks.json';
+export function validateHooksContent(jsonString: string, fileName?: string): ValidationResult {
+  const file = fileName ?? 'tasks.json';
   const errors: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
 
@@ -69,7 +70,7 @@ export function validateHooksContent(jsonString: string): ValidationResult {
   // Semantic validations
   const config = result.data;
 
-  // Check for empty hooks array
+  // Check for empty tasks
   const hookCount = Object.values(config.hooks).reduce(
     (sum, matchers) => sum + (matchers?.length ?? 0),
     0
@@ -77,26 +78,28 @@ export function validateHooksContent(jsonString: string): ValidationResult {
   if (hookCount === 0) {
     warnings.push({
       file,
-      path: 'hooks',
-      message: 'No hooks configured',
+      path: 'tasks',
+      message: 'No tasks configured',
       severity: 'warning',
-      suggestion: 'Add hook definitions under event names like StatusChange, LabelAdd, etc.',
+      suggestion: 'Add task definitions under event names like SessionStatusChange, LabelAdd, etc.',
     });
   }
 
   // Check for deprecated event aliases in the raw JSON (before transform rewrites them)
   try {
-    const rawConfig = JSON.parse(jsonString) as { hooks?: Record<string, unknown> };
-    if (rawConfig.hooks) {
-      for (const event of Object.keys(rawConfig.hooks)) {
+    const rawConfig = JSON.parse(jsonString) as { hooks?: Record<string, unknown>; tasks?: Record<string, unknown> };
+    const events = rawConfig.tasks ?? rawConfig.hooks;
+    if (events) {
+      for (const event of Object.keys(events)) {
         const canonical = DEPRECATED_EVENT_ALIASES[event];
         if (canonical) {
+          const keyName = rawConfig.tasks ? 'tasks' : 'hooks';
           warnings.push({
             file,
-            path: `hooks.${event}`,
+            path: `${keyName}.${event}`,
             message: `Event '${event}' has been renamed to '${canonical}'. The old name still works but is deprecated.`,
             severity: 'warning',
-            suggestion: `Rename '${event}' to '${canonical}' in your hooks.json`,
+            suggestion: `Rename '${event}' to '${canonical}' in your config`,
           });
         }
       }
@@ -219,10 +222,10 @@ export function validateHooksContent(jsonString: string): ValidationResult {
  * Follows the same pattern as other validators in validators.ts.
  */
 export function validateHooks(workspaceRoot: string): ValidationResult {
-  const configPath = join(workspaceRoot, 'hooks.json');
-  const file = 'hooks.json';
+  const configPath = resolveTasksConfigPath(workspaceRoot);
+  const file = configPath.endsWith('tasks.json') ? 'tasks.json' : 'hooks.json';
 
-  // Hooks config is optional - no config means no hooks (valid state)
+  // Tasks config is optional - no config means no tasks (valid state)
   if (!existsSync(configPath)) {
     return {
       valid: true,
@@ -230,7 +233,7 @@ export function validateHooks(workspaceRoot: string): ValidationResult {
       warnings: [{
         file,
         path: '',
-        message: 'hooks.json does not exist (no hooks configured)',
+        message: 'No tasks configuration found (no tasks configured)',
         severity: 'warning',
       }],
     };

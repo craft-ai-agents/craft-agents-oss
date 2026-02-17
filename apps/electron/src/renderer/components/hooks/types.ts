@@ -2,8 +2,12 @@
  * Hook UI Types
  *
  * UI-specific types for the hooks playground components.
- * Hook system types are defined locally since packages/shared doesn't
- * export hooks-simple/* as a package entry point.
+ *
+ * ARCHITECTURE NOTE: These types are mirrored from packages/shared/src/hooks-simple/types.ts.
+ * The renderer runs in a browser context and CANNOT import from @craft-agent/shared,
+ * which uses Node.js APIs (crypto, fs, etc.). Additionally, hooks-simple is not
+ * exported as a package entry point. These types must be manually kept in sync.
+ * See apps/electron/CLAUDE.md "Common Mistake: Node.js APIs in Renderer".
  */
 
 // ============================================================================
@@ -66,7 +70,7 @@ export type HookDefinition = CommandHookDefinition | PromptHookDefinition
 // ============================================================================
 
 export interface HookListItem {
-  /** Unique ID for the UI (not in hooks.json — derived from event + index) */
+  /** Stable 6-char hex ID from tasks.json, with fallback to event+index for legacy configs */
   id: string
   /** The event this hook listens to */
   event: HookEvent
@@ -102,6 +106,13 @@ export type HookFilterKind = 'all' | 'app' | 'agent' | 'scheduled'
 
 export interface HookFilter {
   kind: HookFilterKind
+}
+
+/** Maps task type (from route) to HookFilterKind for the list panel */
+export const TASK_TYPE_TO_FILTER_KIND: Record<string, HookFilterKind> = {
+  scheduled: 'scheduled',
+  event: 'app',
+  agentic: 'agent',
 }
 
 // ============================================================================
@@ -208,13 +219,16 @@ export type EventCategory =
 // hooks.json Parser
 // ============================================================================
 
-/** Raw hooks.json file structure */
+/** Raw tasks.json / hooks.json file structure */
 interface HooksConfigFile {
   version: number
-  hooks: Record<string, HooksConfigMatcher[]>
+  // Accept both "tasks" (v2) and "hooks" (v1) top-level keys
+  hooks?: Record<string, HooksConfigMatcher[]>
+  tasks?: Record<string, HooksConfigMatcher[]>
 }
 
 interface HooksConfigMatcher {
+  id?: string
   name?: string
   matcher?: string
   cron?: string
@@ -222,13 +236,16 @@ interface HooksConfigMatcher {
   permissionMode?: 'safe' | 'ask' | 'allow-all'
   labels?: string[]
   enabled?: boolean
-  hooks: { type: 'command'; command: string; timeout?: number }[] | { type: 'prompt'; prompt: string }[]
+  // Accept both "actions" (v2) and "hooks" (v1) inner arrays
+  hooks?: ({ type: 'command'; command: string; timeout?: number } | { type: 'prompt'; prompt: string })[]
+  actions?: ({ type: 'command'; command: string; timeout?: number } | { type: 'prompt'; prompt: string })[]
 }
 
-/** Derive a human-readable name from hook actions and event */
+/** Derive a human-readable name from task actions and event */
 function deriveHookName(event: string, matcher: HooksConfigMatcher): string {
   if (matcher.name) return matcher.name
-  const firstAction = matcher.hooks[0]
+  const allActions = matcher.actions ?? matcher.hooks ?? []
+  const firstAction = allActions[0]
   if (!firstAction) return getEventDisplayName(event as HookEvent)
 
   if (firstAction.type === 'prompt') {
@@ -266,22 +283,26 @@ function deriveHookSummary(event: string, matcher: HooksConfigMatcher): string {
 export function parseHooksConfig(json: unknown): HookListItem[] {
   if (!json || typeof json !== 'object') return []
   const config = json as HooksConfigFile
-  if (!config.hooks || typeof config.hooks !== 'object') return []
+  // Support both "tasks" (v2) and "hooks" (v1) top-level keys
+  const eventMap = config.tasks ?? config.hooks
+  if (!eventMap || typeof eventMap !== 'object') return []
 
   const allEvents = [...APP_EVENTS, ...AGENT_EVENTS] as string[]
   const items: HookListItem[] = []
   let index = 0
 
-  for (const [eventName, matchers] of Object.entries(config.hooks)) {
+  for (const [eventName, matchers] of Object.entries(eventMap)) {
     if (!Array.isArray(matchers)) continue
     const event = (allEvents.includes(eventName) ? eventName : eventName) as HookEvent
 
     for (let matcherIdx = 0; matcherIdx < matchers.length; matcherIdx++) {
       const matcher = matchers[matcherIdx]
-      if (!matcher.hooks || !Array.isArray(matcher.hooks) || matcher.hooks.length === 0) continue
+      // Support both "actions" (v2) and "hooks" (v1) inner arrays
+      const actions = matcher.actions ?? matcher.hooks
+      if (!actions || !Array.isArray(actions) || actions.length === 0) continue
 
       items.push({
-        id: `${eventName}-${index}`,
+        id: matcher.id ?? `${eventName}-${index}`,
         event,
         matcherIndex: matcherIdx,
         name: deriveHookName(eventName, matcher),
@@ -292,7 +313,7 @@ export function parseHooksConfig(json: unknown): HookListItem[] {
         timezone: matcher.timezone,
         permissionMode: matcher.permissionMode,
         labels: matcher.labels,
-        hooks: matcher.hooks as HookDefinition[],
+        hooks: actions as HookDefinition[],
       })
       index++
     }

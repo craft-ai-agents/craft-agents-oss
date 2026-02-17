@@ -47,6 +47,8 @@ export interface CommandHandlerOptions {
 export interface PromptHandlerOptions {
   /** Workspace ID */
   workspaceId: string;
+  /** Workspace root path for history file location */
+  workspaceRootPath: string;
   /** Session ID (if executing in a session context) */
   sessionId?: string;
   /** Called when prompts are ready to be executed */

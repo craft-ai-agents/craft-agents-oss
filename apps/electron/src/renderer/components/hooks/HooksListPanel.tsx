@@ -8,7 +8,7 @@
 
 import * as React from 'react'
 import { useState } from 'react'
-import { MoreHorizontal, Webhook, ChevronDown, ChevronRight, Terminal, MessageSquare } from 'lucide-react'
+import { MoreHorizontal, Webhook, ChevronDown, ChevronRight } from 'lucide-react'
 import { formatDistanceToNowStrict } from 'date-fns'
 import type { Locale } from 'date-fns'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
@@ -29,6 +29,7 @@ import { DropdownMenuProvider, ContextMenuProvider } from '@/components/ui/menu-
 import { SessionSearchHeader } from '@/components/app-shell/SessionSearchHeader'
 import { HookMenu } from './HookMenu'
 import { HookAvatar } from './HookAvatar'
+import { HookActionPreview } from './HookActionPreview'
 import { cn } from '@/lib/utils'
 import { APP_EVENTS, AGENT_EVENTS, getEventDisplayName, type HookListItem, type HookFilter } from './types'
 
@@ -207,23 +208,7 @@ function HookItem({
                   {/* Then */}
                   <div className="space-y-0.5">
                     <h5 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Then</h5>
-                    <div className="space-y-1">
-                      {hook.hooks.map((action, i) => (
-                        <div key={i} className="flex items-start gap-2 text-xs">
-                          {action.type === 'command' ? (
-                            <>
-                              <Terminal className="h-3 w-3 text-foreground/50 mt-0.5 shrink-0" />
-                              <code className="font-mono text-foreground/70 break-all line-clamp-2">{action.command}</code>
-                            </>
-                          ) : (
-                            <>
-                              <MessageSquare className="h-3 w-3 text-foreground/50 mt-0.5 shrink-0" />
-                              <span className="text-foreground/70 break-words line-clamp-2">{action.prompt}</span>
-                            </>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    <HookActionPreview actions={hook.hooks} />
                   </div>
                 </div>
               )}

@@ -24,62 +24,7 @@ import { HookTestPanel } from './HookTestPanel'
 import { HookEventTimeline } from './HookEventTimeline'
 import { PhaseBadge } from './PhaseBadge'
 import { getEventDisplayName, getPermissionDisplayName, type HookListItem, type ExecutionEntry, type TestResult } from './types'
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-/**
- * Describe a cron expression in human-readable form (simplified)
- */
-function describeCron(cron: string): string {
-  const parts = cron.split(' ')
-  if (parts.length !== 5) return cron
-
-  const [minute, hour, dom, month, dow] = parts
-
-  // Common patterns
-  if (cron === '* * * * *') return 'Every minute'
-  if (minute.startsWith('*/')) return `Every ${minute.slice(2)} minutes`
-  if (hour === '*' && minute !== '*') return `Every hour at :${minute.padStart(2, '0')}`
-  if (dom === '*' && month === '*') {
-    const time = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`
-    if (dow === '*') return `Daily at ${time}`
-    if (dow === '1-5') return `Weekdays at ${time}`
-    if (dow === '0,6') return `Weekends at ${time}`
-    return `${time} on day-of-week ${dow}`
-  }
-  if (month === '*' && dow === '*') {
-    const time = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`
-    return `Monthly on day ${dom} at ${time}`
-  }
-
-  return cron
-}
-
-/**
- * Compute next N run times for a cron expression (mock for playground)
- */
-function getNextRuns(cron: string, timezone?: string, count: number = 3): string[] {
-  // Simplified: for playground, generate plausible next times
-  const now = new Date()
-  const runs: string[] = []
-  const parts = cron.split(' ')
-  if (parts.length !== 5) return []
-
-  const [minute, hour] = parts
-  const h = hour === '*' ? now.getHours() : parseInt(hour, 10)
-  const m = minute.startsWith('*/') ? 0 : (minute === '*' ? 0 : parseInt(minute, 10))
-
-  for (let i = 0; i < count; i++) {
-    const d = new Date(now)
-    d.setDate(d.getDate() + i + 1)
-    d.setHours(h, m, 0, 0)
-    runs.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ` ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
-  }
-
-  return runs
-}
+import { describeCron, computeNextRuns } from './utils'
 
 // ============================================================================
 // Component
@@ -107,13 +52,13 @@ export function HookInfoPage({
   className,
 }: HookInfoPageProps) {
   const workspace = useActiveWorkspace()
-  const nextRuns = hook.cron ? getNextRuns(hook.cron, hook.timezone) : []
+  const nextRuns = hook.cron ? computeNextRuns(hook.cron) : []
 
   const editActions = workspace?.rootPath ? (
     <EditPopover
       trigger={<EditButton />}
       {...getEditConfig('hook-config', workspace.rootPath)}
-      secondaryAction={{ label: 'Edit File', filePath: `${workspace.rootPath}/hooks.json` }}
+      secondaryAction={{ label: 'Edit File', filePath: `${workspace.rootPath}/tasks.json` }}
     />
   ) : undefined
 
@@ -186,8 +131,11 @@ export function HookInfoPage({
                 {nextRuns.length > 0 && (
                   <Info_Table.Row label="Next runs">
                     <div className="flex flex-col gap-0.5">
-                      {nextRuns.map((run, i) => (
-                        <span key={i} className="text-sm text-foreground/70">{run}</span>
+                      {nextRuns.map((date, i) => (
+                        <span key={i} className="text-sm text-foreground/70">
+                          {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{' '}
+                          {date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                        </span>
                       ))}
                     </div>
                   </Info_Table.Row>

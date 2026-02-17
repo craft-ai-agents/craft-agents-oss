@@ -152,6 +152,8 @@ export interface AppShellContextType {
   onDeleteHook?: (hookId: string) => void
   /** Map of hookId → last test result */
   hookTestResults?: Record<string, import('../components/hooks/types').TestResult>
+  /** Fetch execution history for a hook by ID */
+  getHookHistory?: (hookId: string) => Promise<import('../components/hooks/types').ExecutionEntry[]>
 }
 
 const AppShellContext = createContext<AppShellContextType | null>(null)

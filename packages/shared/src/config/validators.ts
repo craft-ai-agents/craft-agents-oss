@@ -1910,7 +1910,10 @@ export function detectConfigFileType(filePath: string, workspaceRootPath: string
     return { type: 'labels', displayFile: 'labels/config.json' };
   }
 
-  // Match: hooks.json (workspace-level)
+  // Match: tasks.json or hooks.json (workspace-level)
+  if (relativePath === 'tasks.json') {
+    return { type: 'hooks', displayFile: 'tasks.json' };
+  }
   if (relativePath === 'hooks.json') {
     return { type: 'hooks', displayFile: 'hooks.json' };
   }
@@ -1975,7 +1978,7 @@ export function validateConfigFileContent(
     case 'labels':
       return validateLabelsContent(content);
     case 'hooks':
-      return validateHooksContent(content);
+      return validateHooksContent(content, detection.displayFile);
     case 'permissions':
       return validatePermissionsContent(content, detection.displayFile);
     case 'tool-icons':

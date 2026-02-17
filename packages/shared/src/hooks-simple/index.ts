@@ -74,6 +74,9 @@ export { HooksConfigSchema, zodErrorToIssues, VALID_EVENTS } from './schemas.ts'
 // Security utilities
 export { sanitizeForShell } from './security.ts';
 
+// Config path resolution & migration
+export { resolveTasksConfigPath, migrateHooksToTasks, generateShortId } from './resolve-config-path.ts';
+
 // Cron matching
 export { matchesCron } from './cron-matcher.ts';
 

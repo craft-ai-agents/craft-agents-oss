@@ -5,6 +5,8 @@
  * Prompts are queued and delivered via callback for the caller to execute.
  */
 
+import { appendFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createLogger } from '../../utils/debug.ts';
 import type { EventBus, BaseEventPayload } from '../event-bus.ts';
 import type { HookHandler, PromptHandlerOptions, HooksConfigProvider } from './types.ts';
@@ -57,46 +59,59 @@ export class PromptHandler implements HookHandler {
     const matchers = this.configProvider.getMatchersForEvent(event);
     if (matchers.length === 0) return;
 
-    // Find matching prompt hooks
-    const promptHooks: Array<{ prompt: PromptHookDefinition; labels?: string[]; permissionMode?: 'safe' | 'ask' | 'allow-all' }> = [];
+    // Group prompt hooks by matcher for per-matcher history
+    const matcherPrompts: Array<{
+      matcherId: string | undefined;
+      prompts: Array<{ prompt: PromptHookDefinition; labels?: string[]; permissionMode?: 'safe' | 'ask' | 'allow-all' }>;
+    }> = [];
 
     for (const matcher of matchers) {
       if (!matcherMatches(matcher, event, payload as unknown as Record<string, unknown>)) continue;
 
+      const prompts: Array<{ prompt: PromptHookDefinition; labels?: string[]; permissionMode?: 'safe' | 'ask' | 'allow-all' }> = [];
       for (const hook of matcher.hooks) {
         if (hook.type === 'prompt') {
-          promptHooks.push({ prompt: hook, labels: matcher.labels, permissionMode: matcher.permissionMode });
+          prompts.push({ prompt: hook, labels: matcher.labels, permissionMode: matcher.permissionMode });
         }
+      }
+      if (prompts.length > 0) {
+        matcherPrompts.push({ matcherId: matcher.id, prompts });
       }
     }
 
-    if (promptHooks.length === 0) return;
+    if (matcherPrompts.length === 0) return;
 
-    log.debug(`[PromptHandler] Processing ${promptHooks.length} prompts for ${event}`);
+    const totalPrompts = matcherPrompts.reduce((s, m) => s + m.prompts.length, 0);
+    log.debug(`[PromptHandler] Processing ${totalPrompts} prompts for ${event}`);
 
     // Build environment variables
     const env = buildEnvFromPayload(event, payload);
 
-    // Process prompts
+    // Process prompts per matcher
     const pendingPrompts: PendingPrompt[] = [];
 
-    for (const { prompt, labels, permissionMode } of promptHooks) {
-      // Expand environment variables in the prompt
-      const expandedPrompt = expandEnvVars(prompt.prompt, env);
+    for (const { matcherId, prompts } of matcherPrompts) {
+      for (const { prompt, labels, permissionMode } of prompts) {
+        // Expand environment variables in the prompt
+        const expandedPrompt = expandEnvVars(prompt.prompt, env);
 
-      // Parse references
-      const references = parsePromptReferences(expandedPrompt);
+        // Parse references
+        const references = parsePromptReferences(expandedPrompt);
 
-      // Expand labels
-      const expandedLabels = labels?.map(label => expandEnvVars(label, env));
+        // Expand labels
+        const expandedLabels = labels?.map(label => expandEnvVars(label, env));
 
-      pendingPrompts.push({
-        sessionId: this.options.sessionId,
-        prompt: expandedPrompt,
-        mentions: references.mentions,
-        labels: expandedLabels,
-        permissionMode,
-      });
+        pendingPrompts.push({
+          sessionId: this.options.sessionId,
+          prompt: expandedPrompt,
+          mentions: references.mentions,
+          labels: expandedLabels,
+          permissionMode,
+        });
+      }
+
+      // Record prompt queuing as successful execution
+      this.appendHistory(matcherId, true);
     }
 
     // Deliver prompts via callback
@@ -104,6 +119,17 @@ export class PromptHandler implements HookHandler {
       log.debug(`[PromptHandler] Delivering ${pendingPrompts.length} prompts`);
       this.options.onPromptsReady(pendingPrompts);
     }
+  }
+
+  /**
+   * Append a single execution record to tasks-history.jsonl.
+   * Fire-and-forget — failures are silently ignored.
+   */
+  private appendHistory(matcherId: string | undefined, ok: boolean): void {
+    if (!matcherId) return;
+    const line = JSON.stringify({ id: matcherId, ts: Date.now(), ok }) + '\n';
+    appendFile(join(this.options.workspaceRootPath, 'tasks-history.jsonl'), line, 'utf-8')
+      .catch(() => {}); // fire-and-forget, non-critical
   }
 
   /**
