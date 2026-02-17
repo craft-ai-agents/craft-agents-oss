@@ -56,8 +56,8 @@ export function HookActionRow({ action, index, className }: HookActionRowProps) 
 
   return (
     <div className={cn('flex items-start gap-3 px-4 py-3', className)}>
-      {/* Index + icon */}
-      <div className="flex items-center gap-2 shrink-0 mt-0.5">
+      {/* Index + icon — h-5 matches the first line height of text-sm content */}
+      <div className="flex items-center gap-2 shrink-0 h-5 mt-[3px]">
         <span className="text-xs text-muted-foreground tabular-nums w-4 text-right">
           {index + 1}.
         </span>
