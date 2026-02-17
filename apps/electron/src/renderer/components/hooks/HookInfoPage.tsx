@@ -136,11 +136,14 @@ export function HookInfoPage({
 
       <Info_Page.Content>
         {/* Hero */}
-        <Info_Page.Hero
-          avatar={<HookAvatar event={hook.event} fluid />}
-          title={hook.name}
-          tagline={hook.summary}
-        />
+        <div className="flex items-start justify-between">
+          <Info_Page.Hero
+            avatar={<HookAvatar event={hook.event} fluid />}
+            title={hook.name}
+            tagline={hook.summary}
+          />
+          {editActions}
+        </div>
 
         {/* Disabled warning */}
         {!hook.enabled && (
