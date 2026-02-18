@@ -61,7 +61,7 @@ export const StyledContextMenuItem = React.forwardRef<
     ref={ref}
     className={cn(
       "gap-3 pr-4 rounded-[4px] hover:bg-foreground/[0.03] focus:bg-foreground/[0.03]",
-      "[&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0",
+      "[&_svg]:size-auto [&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0",
       variant === "destructive" && "text-destructive focus:text-destructive hover:text-destructive [&_svg]:!text-destructive",
       className
     )}
