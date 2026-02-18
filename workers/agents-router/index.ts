@@ -7,6 +7,7 @@
  * - /codex-beta/* → R2 bucket (Codex beta builds)
  * - /install-app.sh → R2 bucket (macOS/Linux install script)
  * - /install-app.ps1 → R2 bucket (Windows install script)
+ * - /auth/slack/callback → OAuth callback relay (redirects to localhost)
  * - /docs/* → Mintlify documentation site
  * - /s/* → Session viewer Pages site
  * - /mermaid/* → Mermaid visual test suite Pages site
@@ -69,6 +70,18 @@ export default {
     if (path === '/mermaid' || path.startsWith('/mermaid/')) {
       const mermaidPath = path === '/mermaid' ? '/' : path.slice('/mermaid'.length);
       return fetch(`https://craft-agents-mermaid.pages.dev${mermaidPath}${url.search}`);
+    }
+
+    // Auth callback relay: /auth/slack/callback
+    if (path === '/auth/slack/callback') {
+      const port = url.searchParams.get('port') || '6477';
+      const portNum = parseInt(port, 10);
+      if (isNaN(portNum) || portNum < 1024 || portNum > 65535) {
+        return new Response('Invalid port', { status: 400 });
+      }
+      const params = new URLSearchParams(url.search);
+      params.delete('port');
+      return Response.redirect(`http://localhost:${portNum}/callback?${params.toString()}`, 302);
     }
 
     // Everything else → Pages marketing site

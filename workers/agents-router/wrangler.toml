@@ -6,6 +6,7 @@
 #   /s/* → Session viewer Pages site
 #   /* → Proxy to Pages marketing site
 
+account_id = "9f3399617ee46dd586bd107a96b014db"
 name = "agents-router"
 main = "index.ts"
 compatibility_date = "2024-01-01"
@@ -13,7 +14,7 @@ compatibility_date = "2024-01-01"
 # Route all agents.craft.do traffic through this Worker
 # R2 paths go to bucket, everything else proxies to Pages
 routes = [
-  { pattern = "agents.craft.do/*", zone_name = "craftdocs-edge.com" }
+  { pattern = "agents.craft.do/*", zone_name = "craftdocs-cf-t1.com" }
 ]
 
 # R2 bucket binding for downloads
