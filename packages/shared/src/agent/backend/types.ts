@@ -419,6 +419,13 @@ export interface BackendConfig {
    */
   connectionSlug?: string;
 
+  /**
+   * Pi auth provider name (e.g., 'anthropic', 'openai', 'github-copilot').
+   * Passed to the Pi subprocess so it knows which provider credential to use.
+   * Only relevant for 'pi' provider backends.
+   */
+  piAuthProvider?: string;
+
   /** Workspace-level hook system for user-defined SDK hooks (hooks.json) */
   hookSystem?: HookSystem;
 

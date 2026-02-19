@@ -48,7 +48,24 @@ import { getCredentialManager } from '../credentials/manager.ts';
 import {
   registerSessionScopedToolCallbacks,
   unregisterSessionScopedToolCallbacks,
+  setLastPlanFilePath,
 } from './session-scoped-tools.ts';
+
+// Session tool proxy definitions (for registering with subprocess)
+import { getSessionToolProxyDefs, SESSION_TOOL_NAMES } from './backend/pi/session-tool-defs.ts';
+
+// Session tool registry (for executing proxy tool calls)
+import {
+  SESSION_TOOL_REGISTRY,
+  type ToolResult as SessionToolResult,
+} from '@craft-agent/session-tools-core';
+import { createClaudeContext, type SessionToolContext } from './claude-context.ts';
+
+// call_llm pre-execution pipeline
+import { buildCallLlmRequest } from './llm-tool.ts';
+
+// MCP client for source tool proxying
+import { CraftMcpClient, type McpClientConfig } from '../mcp/client.ts';
 
 // Path utilities
 import { join } from 'path';
@@ -124,6 +141,18 @@ export class PiAgent extends BaseAgent {
   // Source server configs for proxy tool routing
   private sourceMcpServers: Record<string, SdkMcpServerConfig> = {};
   private sourceApiServers: Record<string, unknown> = {};
+
+  // MCP clients for source tool execution (slug -> client)
+  private mcpClients: Map<string, CraftMcpClient> = new Map();
+  // MCP tool name -> source slug mapping (e.g., "linear__get_viewer" -> "linear")
+  private mcpToolToSlug: Map<string, string> = new Map();
+  // MCP tool name -> original tool name (e.g., "linear__get_viewer" -> "get_viewer")
+  private mcpToolToOriginal: Map<string, string> = new Map();
+  // Cached MCP proxy tool defs (for re-registration when subprocess respawns)
+  private mcpProxyDefs: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [];
+
+  // Cached session tool context (lazy-created on first session tool call)
+  private _sessionToolContext: SessionToolContext | null = null;
 
   // RPC request counter for unique IDs
   private rpcIdCounter: number = 0;
@@ -222,8 +251,9 @@ export class PiAgent extends BaseAgent {
       this.eventQueue.complete();
     });
 
-    // Retrieve API key for the subprocess
-    const apiKey = await this.getApiKey();
+    // Retrieve auth credentials for the subprocess
+    const piAuth = await this.getPiAuth();
+    const legacyApiKey = piAuth ? undefined : await this.getApiKey();
 
     // Build session path for the subprocess
     const sessionId = this.config.session?.id || `agent-${Date.now()}`;
@@ -236,7 +266,7 @@ export class PiAgent extends BaseAgent {
     // Send init command (flat structure matching subprocess InboundMessage type)
     this.send({
       type: 'init',
-      apiKey: apiKey || '',
+      apiKey: legacyApiKey || '',
       model: this._model,
       cwd,
       thinkingLevel: this._thinkingLevel,
@@ -251,15 +281,95 @@ export class PiAgent extends BaseAgent {
       providerType: this.config.providerType,
       authType: this.config.authType,
       workspaceId: this.config.workspace.id,
+      piAuth,
     });
 
     // Wait for subprocess to report ready
     await this.subprocessReady;
     this.debug('Pi subprocess is ready');
+
+    // Register session-scoped tools as proxy tools in the subprocess.
+    // These tools (SubmitPlan, config_validate, source auth, call_llm, etc.)
+    // are executed in the main process when the LLM calls them.
+    const sessionToolDefs = getSessionToolProxyDefs();
+    this.send({
+      type: 'register_tools',
+      tools: sessionToolDefs,
+    });
+    this.debug(`Registered ${sessionToolDefs.length} session tools with subprocess`);
+
+    // If MCP sources were set before subprocess was spawned, register their tools now.
+    if (this.mcpProxyDefs.length > 0) {
+      this.registerMcpToolsWithSubprocess();
+    }
+  }
+
+  /**
+   * Send cached MCP source tool defs to subprocess as proxy tools.
+   */
+  private registerMcpToolsWithSubprocess(): void {
+    if (this.mcpProxyDefs.length > 0) {
+      this.send({
+        type: 'register_tools',
+        tools: this.mcpProxyDefs,
+      });
+      this.debug(`Re-registered ${this.mcpProxyDefs.length} MCP source tools with new subprocess`);
+    }
+  }
+
+  /**
+   * Build structured Pi auth from connection config.
+   * Returns a provider-aware credential object for the subprocess,
+   * or null if no piAuthProvider is configured (falls back to legacy getApiKey).
+   *
+   * OAuth tokens from Craft (Claude Max, ChatGPT Plus, Copilot) are passed as
+   * api_key type because they function as bearer tokens that the Pi SDK's provider
+   * modules use directly. The OAuth exchange happens on the Craft side; by the time
+   * it reaches Pi, it's just an access token.
+   */
+  private async getPiAuth(): Promise<{ provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } | null> {
+    const piAuthProvider = this.config.piAuthProvider;
+    if (!piAuthProvider) return null;
+
+    try {
+      const credentialManager = getCredentialManager();
+      const slug = this.config.connectionSlug || 'pi';
+
+      if (this.config.authType === 'oauth') {
+        // OAuth-based connections: the OAuth exchange already happened on the Craft side.
+        // Pass the resulting access token as api_key — Pi SDK providers use it as a
+        // bearer token directly (same as the legacy getApiKey() behavior).
+        const oauth = await credentialManager.getLlmOAuth(slug);
+        if (oauth?.accessToken) {
+          this.debug(`Retrieved OAuth access token for Pi provider: ${piAuthProvider}`);
+          return {
+            provider: piAuthProvider,
+            credential: { type: 'api_key', key: oauth.accessToken },
+          };
+        }
+      } else {
+        // API key-based connections
+        const apiKey = await credentialManager.getLlmApiKey(slug);
+        if (apiKey) {
+          this.debug(`Retrieved API key credential for Pi provider: ${piAuthProvider}`);
+          return {
+            provider: piAuthProvider,
+            credential: { type: 'api_key', key: apiKey },
+          };
+        }
+      }
+
+      this.debug(`No credentials found for Pi provider: ${piAuthProvider}`);
+      return null;
+    } catch (error) {
+      this.debug(`Failed to retrieve Pi auth: ${error}`);
+      return null;
+    }
   }
 
   /**
    * Retrieve API key from the credential manager for subprocess injection.
+   * Legacy fallback when piAuthProvider is not set.
    * The subprocess expects a single API key string (passed via init.apiKey).
    */
   private async getApiKey(): Promise<string | null> {
@@ -472,11 +582,12 @@ export class PiAgent extends BaseAgent {
   }
 
   /**
-   * Route a proxy tool call to the appropriate handler based on tool name prefix.
+   * Route a proxy tool call to the appropriate handler based on tool name.
    *
-   * - session__* tools -> session-scoped tool callbacks (SubmitPlan, auth, etc.)
-   * - mcp__* tools -> MCP server proxy (TODO: requires MCP client infrastructure)
-   * - api_* tools -> API source proxy (TODO: requires bridge MCP infrastructure)
+   * - Session tools (SubmitPlan, config_validate, etc.) -> session-tools-core handlers
+   * - call_llm -> buildCallLlmRequest + queryLlm
+   * - mcp__* tools -> MCP server proxy (TODO)
+   * - api_* tools -> API source proxy (TODO)
    *
    * Returns { content: string; isError: boolean } matching subprocess protocol.
    */
@@ -484,25 +595,20 @@ export class PiAgent extends BaseAgent {
     toolName: string,
     args: Record<string, unknown>
   ): Promise<{ content: string; isError: boolean }> {
-    // Session-scoped tools are handled by the session MCP server subprocess,
-    // not directly routed here. The subprocess should be handling these
-    // through its own session server. If we get a request here, it means
-    // something unexpected happened.
-    if (toolName.startsWith('session__') || toolName.startsWith('mcp__session__')) {
-      return {
-        content: `Session tool ${toolName} should be handled by session MCP server`,
-        isError: true,
-      };
+    // Session-scoped tools — strip mcp__session__ prefix added by the Pi SDK
+    // registration (tools are registered as mcp__session__SubmitPlan, etc.)
+    const strippedName = toolName.startsWith('mcp__session__')
+      ? toolName.slice('mcp__session__'.length)
+      : toolName;
+
+    if (SESSION_TOOL_NAMES.has(strippedName)) {
+      return this.executeSessionTool(strippedName, args);
     }
 
-    // MCP source tools
-    if (toolName.startsWith('mcp__')) {
-      const sourceName = toolName.split('__')[1] || 'unknown';
-      return {
-        content: `MCP tool proxy for source "${sourceName}" is not yet connected. ` +
-                 `The Pi backend does not yet support MCP source tool proxying.`,
-        isError: true,
-      };
+    // MCP source tools — route to connected MCP client
+    const sourceSlug = this.mcpToolToSlug.get(toolName);
+    if (sourceSlug) {
+      return this.executeMcpTool(toolName, sourceSlug, args);
     }
 
     // API source tools
@@ -522,18 +628,145 @@ export class PiAgent extends BaseAgent {
   }
 
   /**
+   * Execute an MCP source tool via the connected MCP client.
+   */
+  private async executeMcpTool(
+    proxyName: string,
+    sourceSlug: string,
+    args: Record<string, unknown>
+  ): Promise<{ content: string; isError: boolean }> {
+    const client = this.mcpClients.get(sourceSlug);
+    if (!client) {
+      return {
+        content: `MCP client for source "${sourceSlug}" is not connected.`,
+        isError: true,
+      };
+    }
+
+    const originalToolName = this.mcpToolToOriginal.get(proxyName);
+    if (!originalToolName) {
+      return {
+        content: `Unknown MCP tool mapping: ${proxyName}`,
+        isError: true,
+      };
+    }
+
+    try {
+      const result = await client.callTool(originalToolName, args) as {
+        content?: Array<{ type: string; text?: string }>;
+        isError?: boolean;
+      };
+
+      // Extract text from MCP result
+      const textParts = (result.content || [])
+        .filter((c: { type: string }) => c.type === 'text')
+        .map((c: { text?: string }) => c.text || '');
+      const text = textParts.join('\n') || JSON.stringify(result);
+
+      return {
+        content: text,
+        isError: !!result.isError,
+      };
+    } catch (err) {
+      return {
+        content: `MCP tool "${originalToolName}" failed: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
+  }
+
+  /**
+   * Get or create a SessionToolContext for executing session-scoped tools.
+   * Cached per agent instance since the workspace/session don't change.
+   */
+  private getSessionToolContext(): SessionToolContext {
+    if (this._sessionToolContext) return this._sessionToolContext;
+
+    const sessionId = this.config.session?.id || '';
+    const workspacePath = this.config.workspace.rootPath;
+    const workspaceId = this.config.workspace.id;
+
+    this._sessionToolContext = createClaudeContext({
+      sessionId,
+      workspacePath,
+      workspaceId,
+      onPlanSubmitted: (planPath: string) => {
+        setLastPlanFilePath(sessionId, planPath);
+        this.onPlanSubmitted?.(planPath);
+      },
+      onAuthRequest: (request: unknown) => {
+        this.onAuthRequest?.(request as any);
+      },
+    });
+
+    return this._sessionToolContext;
+  }
+
+  /**
+   * Execute a session-scoped tool by name.
+   * Uses the canonical registry from @craft-agent/session-tools-core.
+   */
+  private async executeSessionTool(
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<{ content: string; isError: boolean }> {
+    try {
+      // call_llm uses a different execution path (backend-specific)
+      if (toolName === 'call_llm') {
+        return this.executeCallLlm(args);
+      }
+
+      const def = SESSION_TOOL_REGISTRY.get(toolName);
+      if (!def?.handler) {
+        return { content: `Unknown session tool: ${toolName}`, isError: true };
+      }
+
+      const ctx = this.getSessionToolContext();
+      const result: SessionToolResult = await def.handler(ctx, args);
+
+      // Convert ToolResult to subprocess response format
+      const text = result.content.map(c => c.text).join('\n');
+      return { content: text, isError: !!result.isError };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.debug(`Session tool ${toolName} failed: ${msg}`);
+      return { content: `Session tool error: ${msg}`, isError: true };
+    }
+  }
+
+  /**
+   * Execute call_llm by validating input, then routing through queryLlm.
+   */
+  private async executeCallLlm(
+    args: Record<string, unknown>,
+  ): Promise<{ content: string; isError: boolean }> {
+    try {
+      const request = await buildCallLlmRequest(args, { backendName: 'Pi' });
+      const result = await this.queryLlm(request);
+      return {
+        content: result.text || '(Model returned empty response)',
+        isError: false,
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return { content: `call_llm failed: ${msg}`, isError: true };
+    }
+  }
+
+  /**
    * Handle session_tool_completed from subprocess.
-   * Fires the appropriate BaseAgent callback (SubmitPlan, auth, etc.).
+   *
+   * NOTE: For proxy-executed session tools, callbacks (onPlanSubmitted, etc.)
+   * are already fired by executeSessionTool() via the SessionToolContext.
+   * The subprocess sends this event because handleSessionEvent() detects the
+   * mcp__session__ prefix, but we intentionally skip handleSessionMcpToolCompletion()
+   * here to avoid double-firing callbacks.
    */
   private handleSessionToolCompleted(msg: Record<string, unknown>): void {
     const toolName = msg.toolName as string;
-    const args = (msg.args || {}) as Record<string, unknown>;
     const isError = msg.isError as boolean;
-
-    // Only fire callbacks on success (same as in-process logic)
-    if (!isError) {
-      this.handleSessionMcpToolCompletion(toolName, args);
-    }
+    this.debug(`Session tool completed: ${toolName} (isError=${isError})`);
+    // Callbacks already handled by executeSessionTool() — no-op.
   }
 
   /**
@@ -681,22 +914,29 @@ export class PiAgent extends BaseAgent {
         }
       }
 
-      // Combine: skills + context + attachments + user message
-      const messageParts = [
+      // For Pi, context parts go into the system prompt (not the user message).
+      // Unlike Claude, other LLMs behind Pi don't know to ignore inline context
+      // blocks and will echo <session_state>, <sources>, etc. back in their response.
+      const fullSystemPrompt = [
+        systemPrompt,
         ...skillContents,
         ...contextParts,
+      ].filter(Boolean).join('\n\n');
+
+      // User message: only attachments + the actual message
+      const userParts = [
         ...attachmentParts,
         effectiveMessage,
       ].filter(Boolean);
-      const fullMessage = messageParts.join('\n\n');
+      const userMessage = userParts.join('\n\n');
 
       // Send prompt to subprocess
       const turnId = `turn-${++this.rpcIdCounter}`;
       this.send({
         type: 'prompt',
         id: turnId,
-        message: fullMessage,
-        systemPrompt,
+        message: userMessage,
+        systemPrompt: fullSystemPrompt,
         images: images.length > 0 ? images : undefined,
       });
 
@@ -760,7 +1000,10 @@ export class PiAgent extends BaseAgent {
     super.setPermissionMode(mode);
     // Forward to subprocess so it enforces the updated mode
     if (this.subprocess) {
+      this.debug(`Forwarding permission mode to subprocess: ${mode}`);
       this.send({ type: 'set_permission_mode', mode });
+    } else {
+      this.debug(`Permission mode set to ${mode} (subprocess not spawned — will be sent on init)`);
     }
   }
 
@@ -777,15 +1020,115 @@ export class PiAgent extends BaseAgent {
     this.sourceMcpServers = mcpServers;
     this.sourceApiServers = apiServers;
 
-    // Notify subprocess of active source changes
+    // Notify subprocess of active source changes.
     if (this.subprocess) {
       this.send({
         type: 'set_active_sources',
         slugs: Array.from(this.sourceManager.getActiveSlugs()),
       });
-      // Source changes require subprocess recreation to rebuild proxy tools
-      this.reconnect().catch(err => this.debug(`Reconnect after source change failed: ${err}`));
     }
+
+    // Connect to MCP servers and register their tools as proxy tools.
+    // This runs async — tools become available once connection completes.
+    this.connectMcpSources(mcpServers).catch(err => {
+      this.debug(`Failed to connect MCP sources: ${err instanceof Error ? err.message : String(err)}`);
+    });
+  }
+
+  /**
+   * Connect to MCP servers, list their tools, and register as proxy tools
+   * in the subprocess so the model can call them.
+   */
+  private async connectMcpSources(
+    mcpServers: Record<string, SdkMcpServerConfig>
+  ): Promise<void> {
+    // Close stale clients for removed servers
+    for (const [slug, client] of this.mcpClients) {
+      if (!(slug in mcpServers)) {
+        await client.close().catch(() => {});
+        this.mcpClients.delete(slug);
+      }
+    }
+
+    // Clear tool mappings — we'll rebuild them
+    this.mcpToolToSlug.clear();
+    this.mcpToolToOriginal.clear();
+
+    const allProxyDefs: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [];
+
+    for (const [slug, serverConfig] of Object.entries(mcpServers)) {
+      // Skip session MCP server (handled separately via session tools)
+      if (slug === 'session') continue;
+
+      try {
+        // Reuse existing client if still connected, or create new one
+        let client = this.mcpClients.get(slug);
+        if (!client) {
+          const clientConfig = this.sdkConfigToClientConfig(slug, serverConfig);
+          if (!clientConfig) continue;
+          client = new CraftMcpClient(clientConfig);
+          await client.connect();
+          this.mcpClients.set(slug, client);
+          this.debug(`Connected MCP client for source: ${slug}`);
+        }
+
+        // List tools from the MCP server
+        const tools = await client.listTools();
+        this.debug(`Source ${slug}: ${tools.length} tools available`);
+
+        for (const tool of tools) {
+          const proxyName = `${slug}__${tool.name}`;
+          this.mcpToolToSlug.set(proxyName, slug);
+          this.mcpToolToOriginal.set(proxyName, tool.name);
+
+          allProxyDefs.push({
+            name: proxyName,
+            description: tool.description || `Tool from ${slug}`,
+            inputSchema: (tool.inputSchema as Record<string, unknown>) || { type: 'object', properties: {} },
+          });
+        }
+      } catch (err) {
+        this.debug(`Failed to connect MCP source ${slug}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    // Cache for re-registration when subprocess respawns
+    this.mcpProxyDefs = allProxyDefs;
+
+    // Register MCP source tools with subprocess
+    if (allProxyDefs.length > 0 && this.subprocess) {
+      this.send({
+        type: 'register_tools',
+        tools: allProxyDefs,
+      });
+      this.debug(`Registered ${allProxyDefs.length} MCP source tools with subprocess`);
+    }
+  }
+
+  /**
+   * Convert SdkMcpServerConfig to CraftMcpClient config format.
+   */
+  private sdkConfigToClientConfig(
+    slug: string,
+    config: SdkMcpServerConfig
+  ): McpClientConfig | null {
+    if (config.type === 'http' || config.type === 'sse') {
+      return {
+        transport: 'http',
+        url: config.url,
+        headers: config.headers,
+      };
+    }
+    if (config.type === 'stdio') {
+      return {
+        transport: 'stdio',
+        command: config.command,
+        args: config.args,
+        env: config.env,
+      };
+    }
+    this.debug(`Unknown MCP server type for ${slug}: ${(config as { type: string }).type}`);
+    return null;
   }
 
   // ============================================================
@@ -851,6 +1194,7 @@ export class PiAgent extends BaseAgent {
   override setWorkspace(workspace: Workspace): void {
     super.setWorkspace(workspace);
     this.piSessionId = null;
+    this._sessionToolContext = null;
     this.killSubprocess();
   }
 
@@ -869,8 +1213,23 @@ export class PiAgent extends BaseAgent {
       unregisterSessionScopedToolCallbacks(this.config.session.id);
     }
 
+    this._sessionToolContext = null;
+    this.closeMcpClients();
     this.killSubprocess();
     this.debug('PiAgent destroyed');
+  }
+
+  /**
+   * Close all MCP clients and clear tool mappings.
+   */
+  private closeMcpClients(): void {
+    for (const [, client] of this.mcpClients) {
+      client.close().catch(() => {});
+    }
+    this.mcpClients.clear();
+    this.mcpToolToSlug.clear();
+    this.mcpToolToOriginal.clear();
+    this.mcpProxyDefs = [];
   }
 
   /**

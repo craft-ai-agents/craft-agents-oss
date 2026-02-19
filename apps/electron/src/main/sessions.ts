@@ -2767,6 +2767,7 @@ export class SessionManager {
           miniModel: connection ? (getMiniModel(connection) ?? connection.defaultModel) : undefined,
           thinkingLevel: managed.thinkingLevel,
           connectionSlug: connection?.slug,
+          piAuthProvider: connection?.piAuthProvider,
           piServerPath: piServer.exists ? piServer.path : undefined,
           sessionServerPath: piSessionServerExists ? piSessionServerPath : undefined,
           bridgeServerPath: bridgeServer.exists ? bridgeServer.path : undefined,
@@ -2805,6 +2806,8 @@ export class SessionManager {
             }))
           },
         })
+        const piAgent = managed.agent as PiAgent
+        piAgent.onDebug = (msg: string) => sessionLog.info(msg)
         sessionLog.info(`Created Pi agent for session ${managed.id} (model: ${piModel})${managed.sdkSessionId ? ' (resuming)' : ''}`)
       } else {
         // Claude backend - uses Anthropic SDK
@@ -3148,6 +3151,7 @@ export class SessionManager {
       // This ensures the UI toggle state is reflected in the agent before first message
       if (managed.permissionMode) {
         setPermissionMode(managed.id, managed.permissionMode)
+        managed.agent!.setPermissionMode(managed.permissionMode)
         sessionLog.info(`Applied permission mode '${managed.permissionMode}' to agent for session ${managed.id}`)
       }
       end()
@@ -4771,6 +4775,12 @@ To view this task's output:
 
       // Update the mode state for this specific session via mode manager
       setPermissionMode(sessionId, mode)
+
+      // Forward to the agent instance so backends (e.g. PiAgent) can
+      // propagate the mode change to their subprocess
+      if (managed.agent) {
+        managed.agent.setPermissionMode(mode)
+      }
 
       this.sendEvent({
         type: 'permission_mode_changed',

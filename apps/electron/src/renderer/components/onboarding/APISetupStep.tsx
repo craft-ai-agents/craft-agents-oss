@@ -24,7 +24,7 @@ const SEGMENT_DESCRIPTIONS: Record<ProviderSegment, React.ReactNode> = {
   anthropic: <>Use Claude Agent SDK as the main agent.<br />Configure with your Claude subscription or API key.</>,
   openai: <>Use Codex CLI as the main agent.<BetaBadge /><br />Configure with your ChatGPT subscription or OpenAI API key.</>,
   copilot: <>Use Copilot Agent as the main agent.<BetaBadge /><br />Configure with your GitHub Copilot subscription.</>,
-  pi: <>Use Pi as the main agent.<BetaBadge /><br />Configure with your API key for 20+ LLM providers.</>,
+  pi: <>Use Pi as the main agent.<BetaBadge /><br />Configure with your API key, OAuth subscription, or custom endpoint.</>,
 }
 
 /**
@@ -44,6 +44,9 @@ export type ApiSetupMethod =
   | 'openai_api_key'
   | 'copilot_oauth'
   | 'pi_api_key'
+  | 'pi_claude_oauth'
+  | 'pi_chatgpt_oauth'
+  | 'pi_copilot_oauth'
 
 /**
  * Map ApiSetupMethod to the underlying LLM connection types.
@@ -65,6 +68,12 @@ export function apiSetupMethodToConnectionTypes(method: ApiSetupMethod): {
       return { providerType: 'copilot', authType: 'oauth' };
     case 'pi_api_key':
       return { providerType: 'pi', authType: 'api_key' };
+    case 'pi_claude_oauth':
+      return { providerType: 'pi', authType: 'oauth' };
+    case 'pi_chatgpt_oauth':
+      return { providerType: 'pi', authType: 'oauth' };
+    case 'pi_copilot_oauth':
+      return { providerType: 'pi', authType: 'oauth' };
   }
 }
 
@@ -117,6 +126,27 @@ const API_SETUP_OPTIONS: ApiSetupOption[] = [
     name: 'Pi · API Key',
     description: 'Use your API key for 20+ LLM providers via Pi.',
     icon: <Key className="size-4" />,
+    providerType: 'pi',
+  },
+  {
+    id: 'pi_claude_oauth',
+    name: 'Pi + Claude Max',
+    description: 'Use your Claude subscription with Pi as the agent.',
+    icon: <CreditCard className="size-4" />,
+    providerType: 'pi',
+  },
+  {
+    id: 'pi_chatgpt_oauth',
+    name: 'Pi + ChatGPT Plus',
+    description: 'Use your ChatGPT subscription with Pi as the agent.',
+    icon: <Cpu className="size-4" />,
+    providerType: 'pi',
+  },
+  {
+    id: 'pi_copilot_oauth',
+    name: 'Pi + GitHub Copilot',
+    description: 'Use your GitHub Copilot subscription with Pi as the agent.',
+    icon: <Cpu className="size-4" />,
     providerType: 'pi',
   },
 ]

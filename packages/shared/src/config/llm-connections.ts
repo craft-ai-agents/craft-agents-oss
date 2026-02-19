@@ -119,6 +119,13 @@ export interface LlmConnection {
    */
   codexPath?: string;
 
+  /**
+   * Pi auth provider name (e.g., 'anthropic', 'openai', 'github-copilot').
+   * Determines which provider credential Pi SDK uses for LLM calls.
+   * Only relevant for 'pi' providerType connections.
+   */
+  piAuthProvider?: string;
+
   // --- Cloud provider specific fields ---
 
   /** AWS region (for 'bedrock' provider) */

@@ -310,12 +310,13 @@ export function FreeFormInput({
   }, [availableModels, currentModel, connectionDefaultModel])
 
   // Group connections by provider type for hierarchical dropdown
-  // Each provider (Anthropic, OpenAI) can have multiple connections (API Key, Claude Max, etc.)
+  // Each provider (Anthropic, OpenAI, Pi) can have multiple connections (API Key, OAuth, etc.)
   const connectionsByProvider = React.useMemo(() => {
     const groups: Record<string, typeof llmConnections> = {
       'Anthropic': [],
       'OpenAI': [],
       'GitHub Copilot': [],
+      'Pi': [],
     }
     for (const conn of llmConnections) {
       const provider = conn.providerType || 'anthropic'
@@ -326,6 +327,8 @@ export function FreeFormInput({
         groups['OpenAI'].push(conn)
       } else if (provider === 'copilot') {
         groups['GitHub Copilot'].push(conn)
+      } else if (provider === 'pi' || provider === 'pi_compat') {
+        groups['Pi'].push(conn)
       }
     }
     // Return only non-empty groups

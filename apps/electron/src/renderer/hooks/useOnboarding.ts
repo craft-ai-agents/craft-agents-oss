@@ -85,6 +85,9 @@ const BASE_SLUG_FOR_METHOD: Record<ApiSetupMethod, string> = {
   openai_api_key: 'codex-api',
   copilot_oauth: 'copilot',
   pi_api_key: 'pi-api',
+  pi_claude_oauth: 'pi-claude-max',
+  pi_chatgpt_oauth: 'pi-codex',
+  pi_copilot_oauth: 'pi-copilot',
 }
 
 /**
@@ -156,6 +159,21 @@ function apiSetupMethodToConnectionSetup(
         baseUrl: options.baseUrl,
         defaultModel: options.connectionDefaultModel,
         models: options.models,
+      }
+    case 'pi_claude_oauth':
+      return {
+        slug,
+        credential: options.credential,
+      }
+    case 'pi_chatgpt_oauth':
+      return {
+        slug,
+        credential: options.credential,
+      }
+    case 'pi_copilot_oauth':
+      return {
+        slug,
+        credential: options.credential,
       }
   }
 }
@@ -424,7 +442,8 @@ export function useOnboarding({
 
     try {
       // ChatGPT OAuth (single-step flow - opens browser, captures tokens automatically)
-      if (effectiveMethod === 'chatgpt_oauth') {
+      // Also handles Pi + ChatGPT Plus variant
+      if (effectiveMethod === 'chatgpt_oauth' || effectiveMethod === 'pi_chatgpt_oauth') {
         const connectionSlug = apiSetupMethodToConnectionSetup(effectiveMethod, {}, editingSlug, existingSlugs).slug
         const result = await window.electronAPI.startChatGptOAuth(connectionSlug)
 
@@ -447,7 +466,8 @@ export function useOnboarding({
       }
 
       // Copilot OAuth (device flow — polls for token after user enters code on GitHub)
-      if (effectiveMethod === 'copilot_oauth') {
+      // Also handles Pi + GitHub Copilot variant
+      if (effectiveMethod === 'copilot_oauth' || effectiveMethod === 'pi_copilot_oauth') {
         const connectionSlug = apiSetupMethodToConnectionSetup(effectiveMethod, {}, editingSlug, existingSlugs).slug
 
         // Subscribe to device code event before starting the flow
@@ -481,7 +501,8 @@ export function useOnboarding({
       }
 
       // Claude OAuth (two-step flow - opens browser, user copies code)
-      if (effectiveMethod !== 'claude_oauth') {
+      // Also handles Pi + Claude Max variant
+      if (effectiveMethod !== 'claude_oauth' && effectiveMethod !== 'pi_claude_oauth') {
         setState(s => ({
           ...s,
           credentialStatus: 'error',
@@ -526,8 +547,9 @@ export function useOnboarding({
     setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
 
     try {
-      // claude_oauth is the only method that uses the code exchange flow
-      const connectionSlug = apiSetupMethodToConnectionSetup('claude_oauth', {}, editingSlug, existingSlugs).slug
+      // claude_oauth and pi_claude_oauth use the code exchange flow
+      const codeExchangeMethod = state.apiSetupMethod === 'pi_claude_oauth' ? 'pi_claude_oauth' : 'claude_oauth'
+      const connectionSlug = apiSetupMethodToConnectionSetup(codeExchangeMethod, {}, editingSlug, existingSlugs).slug
       const result = await window.electronAPI.exchangeClaudeCode(code.trim(), connectionSlug)
 
       if (result.success && result.token) {

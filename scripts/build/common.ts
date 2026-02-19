@@ -534,8 +534,10 @@ export function buildMcpServers(config: BuildConfig): void {
     { cwd: rootDir, stdio: 'inherit', shell: true }
   );
 
+  // Pi agent server uses --target=bun --format=esm because its Pi SDK deps are ESM-only.
+  // --target=node --format=cjs leaves ESM deps as external require() calls that fail at runtime.
   execSync(
-    `bun build ${join(piDir, 'src', 'index.ts')} --outfile ${piOut} --target node --format cjs`,
+    `bun build ${join(piDir, 'src', 'index.ts')} --outfile ${piOut} --target bun --format esm`,
     { cwd: rootDir, stdio: 'inherit', shell: true }
   );
 

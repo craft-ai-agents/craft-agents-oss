@@ -101,12 +101,14 @@ export class PiEventAdapter extends BaseEventAdapter {
       // ============================================================
 
       case 'turn_start':
-        // Reset turn-level state; currentTurnId is set by caller via startTurn()
+        // Pi SDK turn_start has no ID, so generate one for event correlation
+        this.currentTurnId = `pi-turn-${this.turnIndex}`;
         break;
 
       case 'turn_end':
         // Don't emit 'complete' here — agent_end handles it.
         // Emitting from both causes duplicate messages in session persistence.
+        this.currentTurnId = null;
         this.hasStreamedDeltas = false;
         this.hasEmittedFinalText = false;
         this.lastIntermediateText = null;
@@ -119,11 +121,11 @@ export class PiEventAdapter extends BaseEventAdapter {
       // ============================================================
 
       case 'message_start':
-        // Internal — a new assistant message is starting
+        // Pi SDK emits message_start for user messages too — skip non-assistant
         break;
 
       case 'message_update': {
-        // Pi wraps the streaming event from pi-ai in assistantMessageEvent
+        // Pi SDK emits message_update only for assistant messages (streaming deltas)
         const amEvent: AssistantMessageEvent = event.assistantMessageEvent;
         if (amEvent.type === 'text_delta' && amEvent.delta) {
           this.hasStreamedDeltas = true;
@@ -140,7 +142,12 @@ export class PiEventAdapter extends BaseEventAdapter {
       }
 
       case 'message_end': {
-        // Extract text content from the final message
+        // Pi SDK emits message_end for ALL messages (user, assistant, toolResult).
+        // Only process assistant messages — skip user prompts and tool results.
+        const msg = event.message as { role?: string } | undefined;
+        if (msg?.role !== 'assistant') break;
+
+        // Extract text content from the final assistant message
         const textContent = this.extractTextFromMessage(event.message);
         if (textContent && !this.hasEmittedFinalText) {
           this.hasEmittedFinalText = true;

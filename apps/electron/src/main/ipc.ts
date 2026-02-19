@@ -64,6 +64,7 @@ const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
   name: string | ((hasCustomEndpoint: boolean) => string)
   providerType: LlmConnection['providerType'] | ((hasCustomEndpoint: boolean) => LlmConnection['providerType'])
   authType: LlmConnection['authType'] | ((hasCustomEndpoint: boolean) => LlmConnection['authType'])
+  piAuthProvider?: string
 }> = {
   'anthropic-api': {
     name: (h) => h ? 'Custom Anthropic-Compatible' : 'Anthropic (API Key)',
@@ -99,6 +100,24 @@ const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
     name: (h) => h ? 'Pi (Custom Endpoint)' : 'Pi (Local / Ollama)',
     providerType: (h) => h ? 'pi_compat' : 'pi',
     authType: (h) => h ? 'api_key_with_endpoint' : 'none',
+  },
+  'pi-claude-max': {
+    name: 'Pi + Claude Max',
+    providerType: 'pi',
+    authType: 'oauth',
+    piAuthProvider: 'anthropic',
+  },
+  'pi-codex': {
+    name: 'Pi + ChatGPT Plus',
+    providerType: 'pi',
+    authType: 'oauth',
+    piAuthProvider: 'openai',
+  },
+  'pi-copilot': {
+    name: 'Pi + GitHub Copilot',
+    providerType: 'pi',
+    authType: 'oauth',
+    piAuthProvider: 'github-copilot',
   },
 }
 
@@ -139,6 +158,7 @@ function createBuiltInConnection(slug: string, baseUrl?: string | null): LlmConn
     authType,
     models: getDefaultModelsForConnection(providerType),
     defaultModel: getDefaultModelForConnection(providerType),
+    piAuthProvider: template.piAuthProvider,
     createdAt: Date.now(),
   }
 }

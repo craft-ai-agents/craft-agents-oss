@@ -66,7 +66,7 @@ import { getDefaultSummarizationModel } from '../../shared/src/config/models.ts'
 
 /** Messages from main process (stdin) */
 type InboundMessage =
-  | { type: 'init'; apiKey: string; model: string; cwd: string; thinkingLevel: string; workspaceRootPath: string; sessionId: string; sessionPath: string; workingDirectory: string; permissionMode: PermissionMode; plansFolderPath: string; activeSourceSlugs: string[]; miniModel?: string; agentDir?: string; providerType?: string; authType?: string; workspaceId?: string }
+  | { type: 'init'; apiKey: string; model: string; cwd: string; thinkingLevel: string; workspaceRootPath: string; sessionId: string; sessionPath: string; workingDirectory: string; permissionMode: PermissionMode; plansFolderPath: string; activeSourceSlugs: string[]; miniModel?: string; agentDir?: string; providerType?: string; authType?: string; workspaceId?: string; piAuth?: { provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } }
   | { type: 'prompt'; id: string; message: string; systemPrompt: string; images?: Array<{ type: 'image'; data: string; mimeType: string }> }
   | { type: 'register_tools'; tools: ProxyToolDef[] }
   | { type: 'unregister_tools'; toolNames: string[] }
@@ -214,15 +214,18 @@ function resolvePiModel(
   modelRegistry: PiModelRegistry,
   modelId: string,
 ): PiModel<any> | undefined {
+  // Strip Craft's pi/ prefix — Pi SDK uses bare model IDs (e.g. "claude-sonnet-4-5")
+  const bareId = modelId.startsWith('pi/') ? modelId.slice(3) : modelId;
+
   // First, try to find in all available models
   const allModels = modelRegistry.getAll();
-  const match = allModels.find(m => m.id === modelId || m.name === modelId);
+  const match = allModels.find(m => m.id === bareId || m.name === bareId);
   if (match) return match;
 
   // Try common providers with the model ID
   const providers = ['anthropic', 'openai', 'google'];
   for (const provider of providers) {
-    const model = modelRegistry.find(provider, modelId);
+    const model = modelRegistry.find(provider, bareId);
     if (model) return model;
   }
 
@@ -235,11 +238,15 @@ async function ensureSession(): Promise<AgentSession> {
 
   const cwd = resolvedCwd();
 
-  // Create in-memory auth storage and inject API key
+  // Create in-memory auth storage and inject credentials
   const authStorage = PiAuthStorage.inMemory();
-  if (initConfig.apiKey) {
+  if (initConfig.piAuth) {
+    const { provider, credential } = initConfig.piAuth;
+    authStorage.set(provider, credential);
+    debugLog(`Injected ${credential.type} credential for provider: ${provider}`);
+  } else if (initConfig.apiKey) {
     authStorage.set('anthropic', { type: 'api_key', key: initConfig.apiKey });
-    debugLog('Injected API key into auth storage');
+    debugLog('Injected API key into auth storage (legacy fallback)');
   }
 
   // Create model registry
@@ -249,6 +256,7 @@ async function ensureSession(): Promise<AgentSession> {
   const wrappedCodingTools = wrapToolsWithHooks(codingTools);
   const proxyTools = buildProxyTools();
   const allTools = [...wrappedCodingTools, ...proxyTools];
+  debugLog(`Session tools: ${wrappedCodingTools.length} coding + ${proxyTools.length} proxy = ${allTools.length} total`);
 
   // Build session options
   const sessionOptions: CreateAgentSessionOptions = {
@@ -286,6 +294,26 @@ async function ensureSession(): Promise<AgentSession> {
 
   // Create the session
   const { session } = await createAgentSession(sessionOptions);
+
+  // CRITICAL: Pi SDK's createAgentSession ignores our wrapped tool objects.
+  // It extracts only tool names from options.tools and creates its own internal
+  // tool instances via createAllTools(). Our wrapSingleTool permission enforcement
+  // is silently discarded. To fix this, we inject our wrapped tools via the
+  // session's baseToolsOverride mechanism and rebuild the runtime.
+  const baseToolsOverride: Record<string, AgentTool<any>> = {};
+  for (const tool of wrappedCodingTools) {
+    baseToolsOverride[tool.name] = tool;
+  }
+  for (const tool of proxyTools) {
+    baseToolsOverride[tool.name] = tool;
+  }
+  const sessionInternal = session as any;
+  sessionInternal._baseToolsOverride = baseToolsOverride;
+  sessionInternal._buildRuntime({
+    activeToolNames: Object.keys(baseToolsOverride),
+    includeAllExtensionTools: true,
+  });
+  debugLog(`Injected ${Object.keys(baseToolsOverride).length} wrapped tools via baseToolsOverride`);
 
   piSession = session;
   debugLog(`Created Pi session: ${session.sessionId}`);
@@ -386,11 +414,18 @@ function wrapSingleTool(tool: AgentTool<any>): AgentTool<any> {
 
     // --- Pre-execute: permission mode enforcement ---
 
+    // Normalize Pi SDK parameter names for shouldAllowToolInMode compatibility.
+    // Pi SDK tools use 'path' but mode-manager checks 'file_path'.
+    const permissionInput = (sdkToolName === 'Write' || sdkToolName === 'Edit' || sdkToolName === 'MultiEdit' || sdkToolName === 'NotebookEdit')
+      && typeof inputObj.path === 'string' && !inputObj.file_path
+      ? { ...inputObj, file_path: inputObj.path }
+      : inputObj;
+
     const plansFolderPath = initConfig
       ? getSessionPlansPath(initConfig.workspaceRootPath, initConfig.sessionId)
       : undefined;
 
-    const check = shouldAllowToolInMode(sdkToolName, inputObj, permissionMode, {
+    const check = shouldAllowToolInMode(sdkToolName, permissionInput, permissionMode, {
       plansFolderPath,
       permissionsContext: {
         workspaceRootPath: initConfig?.workspaceRootPath || resolvedCwd(),
@@ -400,7 +435,8 @@ function wrapSingleTool(tool: AgentTool<any>): AgentTool<any> {
 
     if (!check.allowed) {
       debugLog(`Tool blocked by ${permissionMode} mode: ${sdkToolName} — ${check.reason}`);
-      return makeErrorResult(
+      // Throw so Pi SDK's agent-loop sets isError: true on the tool_execution_end event
+      throw new Error(
         `Tool "${sdkToolName}" is not allowed in ${permissionMode} mode: ${check.reason}`,
       );
     }
@@ -434,7 +470,7 @@ function wrapSingleTool(tool: AgentTool<any>): AgentTool<any> {
 
       if (!allowed) {
         debugLog(`Tool denied by user: ${sdkToolName}`);
-        return makeErrorResult(`Tool "${sdkToolName}" was denied by the user.`);
+        throw new Error(`Tool "${sdkToolName}" was denied by the user.`);
       }
     }
 
@@ -495,14 +531,68 @@ function wrapSingleTool(tool: AgentTool<any>): AgentTool<any> {
 // ============================================================
 
 function buildProxyTools(): AgentTool<any>[] {
+  debugLog(`Building proxy tools from ${proxyToolDefs.length} definitions: ${proxyToolDefs.map(t => t.name).join(', ')}`);
+
   return proxyToolDefs.map(def => ({
     name: def.name,
+    // Pi SDK's AgentTool requires `label` (human-readable name for UI).
+    // Derive from tool name: 'mcp__session__SubmitPlan' → 'Submit Plan'
+    label: def.name
+      .replace(/^mcp__session__/, '')
+      .replace(/_/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2'),
     description: def.description,
     parameters: def.inputSchema,
     execute: async (
       toolCallId: string,
       params: any,
     ): Promise<AgentToolResult<any>> => {
+      // --- Permission mode enforcement ---
+      // Proxy tools (session tools, MCP sources) must respect Explore mode.
+      // Use the full prefixed name (e.g., 'mcp__session__SubmitPlan') so
+      // shouldAllowToolInMode() matches the mcp__session__ rules.
+      const plansFolderPath = initConfig
+        ? getSessionPlansPath(initConfig.workspaceRootPath, initConfig.sessionId)
+        : undefined;
+
+      const check = shouldAllowToolInMode(def.name, params, permissionMode, {
+        plansFolderPath,
+        permissionsContext: {
+          workspaceRootPath: initConfig?.workspaceRootPath || resolvedCwd(),
+          activeSourceSlugs,
+        },
+      });
+
+      if (!check.allowed) {
+        debugLog(`Proxy tool blocked by ${permissionMode} mode: ${def.name} — ${check.reason}`);
+        throw new Error(
+          `Tool "${def.name}" is not allowed in ${permissionMode} mode: ${check.reason}`,
+        );
+      }
+
+      if (check.requiresPermission) {
+        const requestId = `pi-perm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        debugLog(`Prompting user for proxy tool ${def.name} — ${check.description}`);
+
+        send({
+          type: 'permission_request',
+          requestId,
+          toolName: def.name,
+          description: check.description,
+          permissionType: 'mcp_mutation',
+        });
+
+        const allowed = await new Promise<boolean>((resolve) => {
+          pendingPermissions.set(requestId, { resolve, toolName: def.name });
+        });
+
+        if (!allowed) {
+          debugLog(`Proxy tool denied by user: ${def.name}`);
+          throw new Error(`Tool "${def.name}" was denied by the user.`);
+        }
+      }
+
+      // --- Execute via main process ---
       const requestId = `proxy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const args = params as Record<string, unknown>;
 
@@ -535,12 +625,35 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
 
   debugLog('[queryLlm] Starting');
 
-  const model = request.model ?? initConfig.miniModel ?? getDefaultSummarizationModel();
+  // Pick mini model. If the configured miniModel uses a different provider than
+  // what the user authenticated with (e.g. gemini-2.5-pro when only anthropic
+  // credentials exist), fall back to the default summarization model which uses
+  // the same provider family.
+  let model = request.model ?? initConfig.miniModel ?? getDefaultSummarizationModel();
+
+  // If piAuth is set, ensure the mini model uses the same provider.
+  // Pi SDK will fail with "No API key found" if the model requires a different provider.
+  if (initConfig.piAuth) {
+    const authProvider = initConfig.piAuth.provider;
+    const bareModel = model.startsWith('pi/') ? model.slice(3) : model;
+    // Check if the model belongs to the authenticated provider
+    const modelRegistry = new PiModelRegistry(PiAuthStorage.inMemory());
+    const resolved = resolvePiModel(modelRegistry, bareModel);
+    if (resolved && (resolved as any).provider !== authProvider) {
+      // Model is for a different provider — fall back to default for the auth provider
+      debugLog(`[queryLlm] Mini model ${bareModel} uses provider ${(resolved as any).provider}, but auth is ${authProvider}. Falling back.`);
+      model = getDefaultSummarizationModel();
+    }
+  }
+
   debugLog(`[queryLlm] Using model: ${model}`);
 
-  // Create in-memory auth storage and inject key
+  // Create in-memory auth storage and inject credentials
   const authStorage = PiAuthStorage.inMemory();
-  if (initConfig.apiKey) {
+  if (initConfig.piAuth) {
+    const { provider, credential } = initConfig.piAuth;
+    authStorage.set(provider, credential);
+  } else if (initConfig.apiKey) {
     authStorage.set('anthropic', { type: 'api_key', key: initConfig.apiKey });
   }
 
@@ -584,9 +697,13 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
 
   const unsub = ephemeralSession.subscribe((event: AgentSessionEvent) => {
     if (event.type === 'message_end') {
+      // Only capture assistant messages — Pi SDK emits message_end for user messages too
       const msg = event.message as {
+        role?: string;
         content?: string | Array<{ type: string; text?: string }>;
       };
+      if (msg.role !== 'assistant') return;
+
       if (typeof msg.content === 'string') {
         result = msg.content;
       } else if (Array.isArray(msg.content)) {
@@ -724,8 +841,13 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
 }
 
 function handleRegisterTools(msg: Extract<InboundMessage, { type: 'register_tools' }>): void {
-  proxyToolDefs = msg.tools;
-  debugLog(`Registered ${msg.tools.length} proxy tools: ${msg.tools.map(t => t.name).join(', ')}`);
+  // Merge: replace existing tools by name, add new ones
+  const incoming = new Map(msg.tools.map(t => [t.name, t]));
+  proxyToolDefs = [
+    ...proxyToolDefs.filter(t => !incoming.has(t.name)),
+    ...msg.tools,
+  ];
+  debugLog(`Registered ${msg.tools.length} proxy tools (total: ${proxyToolDefs.length}): ${msg.tools.map(t => t.name).join(', ')}`);
 
   // If session exists, we need to recreate it with new tools
   if (piSession) {

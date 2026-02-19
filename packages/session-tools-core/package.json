@@ -14,6 +14,7 @@
   "dependencies": {
     "@craft-agent/mermaid": "workspace:*",
     "zod": "^3.23.0",
+    "zod-to-json-schema": "^3.25.0",
     "gray-matter": "^4.0.3"
   },
   "devDependencies": {

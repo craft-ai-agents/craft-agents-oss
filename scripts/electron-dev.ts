@@ -162,8 +162,8 @@ async function buildMcpServers(): Promise<void> {
   if (!existsSync(bridgeDistDir)) mkdirSync(bridgeDistDir, { recursive: true });
   if (!existsSync(piDistDir)) mkdirSync(piDistDir, { recursive: true });
 
-  // Build all servers in parallel
-  const [sessionResult, bridgeResult, piResult] = await Promise.all([
+  // Build MCP servers (esbuild, packages external — deps resolve from root node_modules)
+  const [sessionResult, bridgeResult] = await Promise.all([
     runEsbuild(
       "packages/session-mcp-server/src/index.ts",
       "packages/session-mcp-server/dist/index.js",
@@ -173,12 +173,6 @@ async function buildMcpServers(): Promise<void> {
     runEsbuild(
       "packages/bridge-mcp-server/src/index.ts",
       "packages/bridge-mcp-server/dist/index.js",
-      {},
-      { packagesExternal: true }
-    ),
-    runEsbuild(
-      "packages/pi-agent-server/src/index.ts",
-      "packages/pi-agent-server/dist/index.js",
       {},
       { packagesExternal: true }
     ),
@@ -196,6 +190,9 @@ async function buildMcpServers(): Promise<void> {
   }
   console.log("✅ Bridge MCP server built");
 
+  // Build Pi agent server with bun (not esbuild) because its Pi SDK deps are ESM-only.
+  // esbuild with packages:external leaves them as require() calls which fail at runtime.
+  const piResult = await buildPiAgentServer();
   if (!piResult.success) {
     console.error("❌ Pi agent server build failed:", piResult.error);
     process.exit(1);
@@ -259,6 +256,29 @@ async function runEsbuild(
       define: defines,
       logLevel: "warning",
     });
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: String(err) };
+  }
+}
+
+// Build Pi agent server using bun instead of esbuild.
+// The Pi SDK (@mariozechner/pi-coding-agent) is ESM-only, and esbuild with
+// packages:external leaves ESM imports as require() calls that fail at runtime.
+// Bun's bundler handles ESM→ESM bundling correctly.
+async function buildPiAgentServer(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const proc = spawn({
+      cmd: ["bun", "build", "src/index.ts", "--outdir=dist", "--target=bun", "--format=esm"],
+      cwd: PI_AGENT_SERVER_DIR,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stderr = await new Response(proc.stderr).text();
+    const exitCode = await proc.exited;
+    if (exitCode !== 0) {
+      return { success: false, error: stderr };
+    }
     return { success: true };
   } catch (err) {
     return { success: false, error: String(err) };

@@ -73,7 +73,10 @@ const OPENAI_PRESETS: Preset[] = [
 
 // Pi provider presets - unified API for 20+ LLM providers
 const PI_PRESETS: Preset[] = [
-  { key: 'pi', label: 'Pi', url: '' },
+  { key: 'pi', label: 'Pi (Direct)', url: '' },
+  { key: 'openrouter', label: 'OpenRouter', url: 'https://openrouter.ai/api' },
+  { key: 'ollama', label: 'Ollama', url: 'http://localhost:11434' },
+  { key: 'custom', label: 'Custom', url: '' },
 ]
 
 const COMPAT_ANTHROPIC_DEFAULTS = 'anthropic/claude-opus-4.6, anthropic/claude-sonnet-4.5, anthropic/claude-haiku-4.5'
