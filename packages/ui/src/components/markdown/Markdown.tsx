@@ -1,7 +1,10 @@
 import * as React from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
+import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import 'katex/dist/katex.min.css'
 import { cn } from '../../lib/utils'
 import { FILE_EXTENSIONS_PATTERN } from '../../lib/file-classification'
 import { CodeBlock, InlineCode } from './CodeBlock'
@@ -441,7 +444,7 @@ export function Markdown({
 
   // Conditionally include the collapsible sections plugin
   const remarkPlugins = React.useMemo(
-    () => collapsible ? [remarkGfm, remarkCollapsibleSections] : [remarkGfm],
+    () => collapsible ? [remarkGfm, remarkMath, remarkCollapsibleSections] : [remarkGfm, remarkMath],
     [collapsible]
   )
 
@@ -449,7 +452,10 @@ export function Markdown({
     <div className={cn('markdown-content', className)}>
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
-        rehypePlugins={[rehypeRaw]}
+        rehypePlugins={[
+          [rehypeRaw, { passThrough: ['math', 'inlineMath'] }],
+          rehypeKatex,
+        ]}
         components={components}
       >
         {processedContent}
