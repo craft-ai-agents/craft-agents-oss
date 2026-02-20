@@ -44,6 +44,9 @@ import { getSystemPrompt } from '../prompts/system.ts';
 // Credential manager for token storage
 import { getCredentialManager } from '../credentials/manager.ts';
 
+// ChatGPT OAuth token refresh (shared with CodexAgent)
+import { refreshChatGptTokens } from '../auth/chatgpt-oauth.ts';
+
 // Session-scoped tool callbacks (for SubmitPlan, source auth, etc.)
 import {
   registerSessionScopedToolCallbacks,
@@ -156,6 +159,10 @@ export class PiAgent extends BaseAgent {
 
   // RPC request counter for unique IDs
   private rpcIdCounter: number = 0;
+
+  // OAuth token refresh (ChatGPT Plus)
+  onChatGptAuthRequired: ((reason: string) => void) | null = null;
+  private tokenRefreshInProgress: Promise<void> | null = null;
 
   // ============================================================
   // Constructor
@@ -377,6 +384,63 @@ export class PiAgent extends BaseAgent {
   }
 
   /**
+   * Refresh OAuth tokens and push updated credentials to the running subprocess.
+   * Uses the same refreshChatGptTokens() utility that CodexAgent uses.
+   * Only relevant for ChatGPT Plus OAuth connections (authType === 'oauth').
+   */
+  private async refreshAndPushTokens(): Promise<void> {
+    if (this.config.authType !== 'oauth') return;
+
+    // Mutex — don't stack concurrent refreshes
+    if (this.tokenRefreshInProgress) {
+      await this.tokenRefreshInProgress;
+      return;
+    }
+
+    this.tokenRefreshInProgress = (async () => {
+      const slug = this.config.connectionSlug || 'pi';
+      const credentialManager = getCredentialManager();
+      const stored = await credentialManager.getLlmOAuth(slug);
+
+      if (!stored?.refreshToken) {
+        this.debug('No refresh token available — re-auth required');
+        this.onChatGptAuthRequired?.('No refresh token — please sign in again');
+        return;
+      }
+
+      try {
+        const newTokens = await refreshChatGptTokens(stored.refreshToken);
+        await credentialManager.setLlmOAuth(slug, {
+          accessToken: newTokens.accessToken,
+          idToken: newTokens.idToken,
+          refreshToken: newTokens.refreshToken,
+          expiresAt: newTokens.expiresAt,
+        });
+        this.debug('Token refresh successful');
+
+        // Push refreshed credentials to running subprocess
+        if (this.subprocess) {
+          const piAuth = await this.getPiAuth();
+          if (piAuth) {
+            this.send({ type: 'token_update', piAuth });
+            this.debug('Pushed refreshed credentials to subprocess');
+          }
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.debug(`Token refresh failed: ${msg}`);
+        this.onChatGptAuthRequired?.(`Token refresh failed: ${msg}`);
+      }
+    })();
+
+    try {
+      await this.tokenRefreshInProgress;
+    } finally {
+      this.tokenRefreshInProgress = null;
+    }
+  }
+
+  /**
    * Retrieve API key from the credential manager for subprocess injection.
    * Legacy fallback when piAuthProvider is not set.
    * The subprocess expects a single API key string (passed via init.apiKey).
@@ -484,8 +548,23 @@ export class PiAgent extends BaseAgent {
         }
         break;
 
-      case 'error':
+      case 'error': {
         this.debug(`Subprocess error: ${msg.message}`);
+        const errorMsg = String(msg.message || '').toLowerCase();
+
+        // Detect auth errors and attempt token refresh for OAuth connections
+        if (this.config.authType === 'oauth' && (
+          errorMsg.includes('401') ||
+          errorMsg.includes('unauthorized') ||
+          errorMsg.includes('token') && errorMsg.includes('expired') ||
+          errorMsg.includes('authentication')
+        )) {
+          this.debug('Auth error detected from subprocess, attempting token refresh');
+          this.refreshAndPushTokens().catch(err => {
+            this.debug(`Token refresh after auth error failed: ${err}`);
+          });
+        }
+
         this.eventQueue.enqueue({
           type: 'error',
           message: `Pi subprocess error: ${msg.message}`,
@@ -494,6 +573,7 @@ export class PiAgent extends BaseAgent {
         // which will call eventQueue.complete(). If it doesn't, handleSubprocessExit()
         // will complete the queue when the process exits.
         break;
+      }
 
       default:
         this.debug(`Unknown subprocess message type: ${type}`);
@@ -1382,6 +1462,13 @@ export class PiAgent extends BaseAgent {
       errorMessage.includes('401') ||
       errorMessage.includes('authentication')
     ) {
+      // For OAuth connections, attempt token refresh before giving up
+      if (this.config.authType === 'oauth') {
+        this.refreshAndPushTokens().catch(err => {
+          this.debug(`Token refresh from parsePiError failed: ${err}`);
+        });
+      }
+
       return {
         code: 'invalid_api_key',
         title: 'Invalid API Key',
@@ -1389,7 +1476,7 @@ export class PiAgent extends BaseAgent {
         actions: [
           { key: 's', label: 'Update API key', command: '/settings', action: 'settings' },
         ],
-        canRetry: false,
+        canRetry: true,
         originalError: error.message,
       };
     }

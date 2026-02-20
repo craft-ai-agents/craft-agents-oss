@@ -2808,6 +2808,20 @@ export class SessionManager {
         })
         const piAgent = managed.agent as PiAgent
         piAgent.onDebug = (msg: string) => sessionLog.info(msg)
+
+        // Wire up auth callback for OAuth connections (ChatGPT Plus)
+        if (authType === 'oauth') {
+          piAgent.onChatGptAuthRequired = (reason: string) => {
+            sessionLog.warn(`ChatGPT auth required for Pi session ${managed.id}: ${reason}`)
+            this.sendEvent({
+              type: 'info',
+              sessionId: managed.id,
+              message: `ChatGPT authentication required: ${reason}. Please check your login.`,
+              level: 'error',
+            })
+          }
+        }
+
         sessionLog.info(`Created Pi agent for session ${managed.id} (model: ${piModel})${managed.sdkSessionId ? ' (resuming)' : ''}`)
       } else {
         // Claude backend - uses Anthropic SDK

@@ -79,6 +79,7 @@ type InboundMessage =
   | { type: 'set_active_sources'; slugs: string[] }
   | { type: 'mini_completion'; id: string; prompt: string }
   | { type: 'set_model'; model: string }
+  | { type: 'token_update'; piAuth: { provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } }
   | { type: 'shutdown' };
 
 /** Proxy tool definition from main process */
@@ -114,6 +115,7 @@ type OutboundMessage =
 
 let piSession: AgentSession | null = null;
 let piModelRegistry: PiModelRegistry | null = null;
+let moduleAuthStorage: PiAuthStorage | null = null;
 let unsubscribeEvents: (() => void) | null = null;
 
 // Init config (set on 'init' message)
@@ -256,7 +258,12 @@ function createAuthenticatedRegistry(): {
   authStorage: PiAuthStorage;
   modelRegistry: PiModelRegistry;
 } {
-  const authStorage = PiAuthStorage.inMemory();
+  // Reuse module-level authStorage if already created (allows token_update to mutate it).
+  // Only create a new one on first call or after re-init.
+  if (!moduleAuthStorage) {
+    moduleAuthStorage = PiAuthStorage.inMemory();
+  }
+  const authStorage = moduleAuthStorage;
   if (initConfig?.piAuth) {
     const { provider, credential } = initConfig.piAuth;
     authStorage.set(provider, credential);
@@ -831,6 +838,7 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
     }
     piSession.dispose();
     piSession = null;
+    moduleAuthStorage = null; // Reset so createAuthenticatedRegistry() creates fresh storage
     debugLog('Cleaned up existing session for re-init');
   }
 
@@ -1030,6 +1038,16 @@ async function processMessage(msg: InboundMessage): Promise<void> {
 
     case 'set_model':
       await handleSetModel(msg);
+      break;
+
+    case 'token_update':
+      if (moduleAuthStorage) {
+        const { provider, credential } = msg.piAuth;
+        moduleAuthStorage.set(provider, credential);
+        debugLog(`Updated ${credential.type} credential for provider: ${provider}`);
+      } else {
+        debugLog('token_update received but no authStorage initialized');
+      }
       break;
 
     case 'shutdown':
