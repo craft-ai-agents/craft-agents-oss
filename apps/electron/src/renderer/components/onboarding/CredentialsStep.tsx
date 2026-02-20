@@ -46,7 +46,7 @@ export function CredentialsStep({
   onCancelOAuth,
   copilotDeviceCode,
 }: CredentialsStepProps) {
-  const isClaudeOAuth = apiSetupMethod === 'claude_oauth' || apiSetupMethod === 'pi_claude_oauth'
+  const isClaudeOAuth = apiSetupMethod === 'claude_oauth'
   const isChatGptOAuth = apiSetupMethod === 'chatgpt_oauth' || apiSetupMethod === 'pi_chatgpt_oauth'
   const isCopilotOAuth = apiSetupMethod === 'copilot_oauth' || apiSetupMethod === 'pi_copilot_oauth'
   const isAnthropicApiKey = apiSetupMethod === 'anthropic_api_key'
@@ -55,7 +55,7 @@ export function CredentialsStep({
   const isApiKey = isAnthropicApiKey || isOpenAiApiKey || isPiGoogleApiKey
 
   // Pi OAuth variants use the same UI with Pi-specific titles
-  const isPiOAuth = apiSetupMethod === 'pi_claude_oauth' || apiSetupMethod === 'pi_chatgpt_oauth' || apiSetupMethod === 'pi_copilot_oauth'
+  const isPiOAuth = apiSetupMethod === 'pi_chatgpt_oauth' || apiSetupMethod === 'pi_copilot_oauth'
 
   // Copilot device code clipboard handling
   const [copiedCode, setCopiedCode] = useState(false)

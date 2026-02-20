@@ -43,7 +43,6 @@ export type ApiSetupMethod =
   | 'chatgpt_oauth'
   | 'openai_api_key'
   | 'copilot_oauth'
-  | 'pi_claude_oauth'
   | 'pi_chatgpt_oauth'
   | 'pi_copilot_oauth'
   | 'pi_google_api_key'
@@ -66,8 +65,6 @@ export function apiSetupMethodToConnectionTypes(method: ApiSetupMethod): {
       return { providerType: 'openai', authType: 'api_key' };
     case 'copilot_oauth':
       return { providerType: 'copilot', authType: 'oauth' };
-    case 'pi_claude_oauth':
-      return { providerType: 'pi', authType: 'oauth' };
     case 'pi_chatgpt_oauth':
       return { providerType: 'pi', authType: 'oauth' };
     case 'pi_copilot_oauth':
@@ -120,13 +117,6 @@ const API_SETUP_OPTIONS: ApiSetupOption[] = [
     description: 'Use your GitHub Copilot subscription.',
     icon: <Cpu className="size-4" />,
     providerType: 'copilot',
-  },
-  {
-    id: 'pi_claude_oauth',
-    name: 'Pi + Claude Max',
-    description: 'Use your Claude subscription with Pi as the agent.',
-    icon: <CreditCard className="size-4" />,
-    providerType: 'pi',
   },
   {
     id: 'pi_chatgpt_oauth',

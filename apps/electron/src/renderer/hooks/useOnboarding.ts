@@ -84,7 +84,6 @@ const BASE_SLUG_FOR_METHOD: Record<ApiSetupMethod, string> = {
   chatgpt_oauth: 'codex',
   openai_api_key: 'codex-api',
   copilot_oauth: 'copilot',
-  pi_claude_oauth: 'pi-claude-max',
   pi_chatgpt_oauth: 'pi-codex',
   pi_copilot_oauth: 'pi-copilot',
   pi_google_api_key: 'pi-google',
@@ -148,11 +147,6 @@ function apiSetupMethodToConnectionSetup(
         models: options.models,
       }
     case 'copilot_oauth':
-      return {
-        slug,
-        credential: options.credential,
-      }
-    case 'pi_claude_oauth':
       return {
         slug,
         credential: options.credential,
@@ -499,7 +493,7 @@ export function useOnboarding({
 
       // Claude OAuth (two-step flow - opens browser, user copies code)
       // Also handles Pi + Claude Max variant
-      if (effectiveMethod !== 'claude_oauth' && effectiveMethod !== 'pi_claude_oauth') {
+      if (effectiveMethod !== 'claude_oauth') {
         setState(s => ({
           ...s,
           credentialStatus: 'error',
@@ -544,9 +538,7 @@ export function useOnboarding({
     setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
 
     try {
-      // claude_oauth and pi_claude_oauth use the code exchange flow
-      const codeExchangeMethod = state.apiSetupMethod === 'pi_claude_oauth' ? 'pi_claude_oauth' : 'claude_oauth'
-      const connectionSlug = apiSetupMethodToConnectionSetup(codeExchangeMethod, {}, editingSlug, existingSlugs).slug
+      const connectionSlug = apiSetupMethodToConnectionSetup('claude_oauth', {}, editingSlug, existingSlugs).slug
       const result = await window.electronAPI.exchangeClaudeCode(code.trim(), connectionSlug)
 
       if (result.success && result.token) {

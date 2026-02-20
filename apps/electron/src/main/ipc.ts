@@ -101,12 +101,6 @@ const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
     providerType: (h) => h ? 'pi_compat' : 'pi',
     authType: (h) => h ? 'api_key_with_endpoint' : 'none',
   },
-  'pi-claude-max': {
-    name: 'Pi + Claude Max',
-    providerType: 'pi',
-    authType: 'oauth',
-    piAuthProvider: 'anthropic',
-  },
   'pi-codex': {
     name: 'Pi + ChatGPT Plus',
     providerType: 'pi',
