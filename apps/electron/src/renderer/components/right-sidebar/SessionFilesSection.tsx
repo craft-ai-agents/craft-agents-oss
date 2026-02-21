@@ -4,7 +4,8 @@
  * Features:
  * - Recursive tree view with expandable folders (matches sidebar styling)
  * - File watcher for auto-refresh when files change
- * - Click to reveal in Finder, double-click to open
+ * - Click to preview in-app, double-click to open
+ * - Right-click context menu with "Open" / "Show in {file manager}" actions
  * - Persisted expanded folder state per session
  *
  * Styling matches LeftSidebar patterns:
@@ -16,11 +17,18 @@
 import * as React from 'react'
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
-import { File, Folder, FolderOpen, FileText, Image, FileCode, ChevronRight } from 'lucide-react'
+import { File, Folder, FolderOpen, FileText, Image, FileCode, ChevronRight, ExternalLink } from 'lucide-react'
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  StyledContextMenuContent,
+  StyledContextMenuItem,
+} from '@/components/ui/styled-context-menu'
 import type { SessionFile } from '../../../shared/types'
 import { cn } from '@/lib/utils'
 import * as storage from '@/lib/local-storage'
 import { useAppShellContext } from '@/context/AppShellContext'
+import { getFileManagerName } from '@/lib/platform'
 
 /**
  * Stagger animation variants for child items - matches LeftSidebar pattern
@@ -180,6 +188,7 @@ interface FileTreeItemProps {
   onToggleExpand: (path: string) => void
   onFileClick: (file: SessionFile) => void
   onFileDoubleClick: (file: SessionFile) => void
+  onRevealInFileManager: (path: string) => void
   /** Whether this item is inside an expanded folder (for stagger animation) */
   isNested?: boolean
 }
@@ -198,6 +207,7 @@ function FileTreeItem({
   onToggleExpand,
   onFileClick,
   onFileDoubleClick,
+  onRevealInFileManager,
   isNested,
 }: FileTreeItemProps) {
   const isDirectory = file.type === 'directory'
@@ -273,10 +283,32 @@ function FileTreeItem({
     </button>
   )
 
+  const fileManagerName = getFileManagerName()
+
   // Inner content: button and expandable children (wrapped in group/section like LeftSidebar)
   const innerContent = (
     <div className="group/section min-w-0">
-      {buttonElement}
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          {buttonElement}
+        </ContextMenuTrigger>
+        <StyledContextMenuContent>
+          {/* Open — files only (folders just show "Show in file manager") */}
+          {file.type !== 'directory' && (
+            <StyledContextMenuItem onSelect={() => onFileClick(file)}>
+              <ExternalLink className="h-3.5 w-3.5" />
+              Open
+            </StyledContextMenuItem>
+          )}
+          {/* Show in file manager */}
+          <StyledContextMenuItem
+            onSelect={() => onRevealInFileManager(file.path)}
+          >
+            <FolderOpen className="h-3.5 w-3.5" />
+            {`Show in ${fileManagerName}`}
+          </StyledContextMenuItem>
+        </StyledContextMenuContent>
+      </ContextMenu>
       {/* Expandable children with framer-motion animation - matches LeftSidebar exactly */}
       {hasChildren && (
         <AnimatePresence initial={false}>
@@ -311,6 +343,7 @@ function FileTreeItem({
                         onToggleExpand={onToggleExpand}
                         onFileClick={onFileClick}
                         onFileDoubleClick={onFileDoubleClick}
+                        onRevealInFileManager={onRevealInFileManager}
                         isNested={true}
                       />
                     </motion.div>
@@ -409,10 +442,15 @@ export function SessionFilesSection({ sessionId, className }: SessionFilesSectio
   }, [sessionId, loadFiles])
 
   // Use the link interceptor (via context) so file clicks show in-app previews
-  // instead of always opening in Finder / default app.
+  // instead of always opening in the file manager / default app.
   const { onOpenFile } = useAppShellContext()
 
-  // Handle file click — preview in-app if possible, open directory in Finder
+  // Reveal a file/folder in the system file manager
+  const handleRevealInFileManager = useCallback((path: string) => {
+    window.electronAPI.showInFolder(path)
+  }, [])
+
+  // Handle file click — preview in-app if possible, open directory in file manager
   const handleFileClick = useCallback((file: SessionFile) => {
     if (file.type === 'directory') {
       // eslint-disable-next-line craft-links/no-direct-file-open -- directories can't be previewed in-app
@@ -478,6 +516,7 @@ export function SessionFilesSection({ sessionId, className }: SessionFilesSectio
                 onToggleExpand={handleToggleExpand}
                 onFileClick={handleFileClick}
                 onFileDoubleClick={handleFileDoubleClick}
+                onRevealInFileManager={handleRevealInFileManager}
               />
             ))}
           </nav>

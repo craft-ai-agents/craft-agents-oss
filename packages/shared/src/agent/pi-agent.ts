@@ -24,6 +24,7 @@ import type {
   SdkMcpServerConfig,
 } from './backend/types.ts';
 import { AbortReason } from './backend/types.ts';
+import { getBackendRuntime } from './backend/internal/driver-types.ts';
 
 import type { PermissionMode } from './mode-manager.ts';
 
@@ -43,6 +44,9 @@ import { getSystemPrompt } from '../prompts/system.ts';
 
 // Credential manager for token storage
 import { getCredentialManager } from '../credentials/manager.ts';
+
+// ChatGPT OAuth token refresh (shared with CodexAgent)
+import { refreshChatGptTokens } from '../auth/chatgpt-oauth.ts';
 
 // Session-scoped tool callbacks (for SubmitPlan, source auth, etc.)
 import {
@@ -83,7 +87,7 @@ import { runPreToolUseChecks, type PreToolUseCheckResult } from './core/pre-tool
 import { extractWorkspaceSlug } from '../utils/workspace.ts';
 
 // LLM tool types
-import type { LLMQueryRequest, LLMQueryResult } from './llm-tool.ts';
+import { LLM_QUERY_TIMEOUT_MS, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
 
 // ============================================================
 // PiAgent Implementation
@@ -155,6 +159,19 @@ export class PiAgent extends BaseAgent {
   // RPC request counter for unique IDs
   private rpcIdCounter: number = 0;
 
+  // OAuth token refresh (ChatGPT Plus)
+  /**
+   * @deprecated Use onBackendAuthRequired (inherited from BaseAgent) instead.
+   * Kept as a getter/setter alias for backward compatibility.
+   */
+  get onChatGptAuthRequired(): ((reason: string) => void) | null {
+    return this.onBackendAuthRequired;
+  }
+  set onChatGptAuthRequired(cb: ((reason: string) => void) | null) {
+    this.onBackendAuthRequired = cb;
+  }
+  private tokenRefreshInProgress: Promise<void> | null = null;
+
   // ============================================================
   // Constructor
   // ============================================================
@@ -166,6 +183,12 @@ export class PiAgent extends BaseAgent {
 
     this.piSessionId = config.session?.sdkSessionId || null;
     this.adapter = new PiEventAdapter();
+    if (modelDef?.contextWindow) {
+      this.adapter.setContextWindow(modelDef.contextWindow);
+    }
+    if (config.miniModel) {
+      this.adapter.setMiniModel(config.miniModel);
+    }
 
     // Set session dir on adapter for concurrent-safe toolMetadataStore lookups
     if (config.session?.id && config.workspace.rootPath) {
@@ -198,12 +221,13 @@ export class PiAgent extends BaseAgent {
    * Spawn the pi-agent-server subprocess and set up JSONL communication.
    */
   private async spawnSubprocess(): Promise<void> {
-    const piServerPath = this.config.piServerPath;
+    const runtime = getBackendRuntime(this.config);
+    const piServerPath = runtime.paths?.piServer;
     if (!piServerPath) {
       throw new Error('piServerPath not configured. Cannot spawn Pi subprocess.');
     }
 
-    const nodePath = this.config.nodePath || process.execPath;
+    const nodePath = runtime.paths?.node || process.execPath;
     const cwd = this.resolvedCwd();
 
     this.debug(`Spawning Pi subprocess: ${nodePath} ${piServerPath}`);
@@ -222,8 +246,9 @@ export class PiAgent extends BaseAgent {
     // Build spawn args — optionally preload the network interceptor
     // for tool metadata injection/capture across all API formats.
     const args = [piServerPath];
-    if (this.config.interceptorPath) {
-      args.unshift('--require', this.config.interceptorPath);
+    const interceptorPath = runtime.paths?.interceptor;
+    if (interceptorPath) {
+      args.unshift('--require', interceptorPath);
     }
 
     // Spawn the subprocess
@@ -352,7 +377,7 @@ export class PiAgent extends BaseAgent {
    * it reaches Pi, it's just an access token.
    */
   private async getPiAuth(): Promise<{ provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } | null> {
-    const piAuthProvider = this.config.piAuthProvider;
+    const piAuthProvider = getBackendRuntime(this.config).piAuthProvider;
     if (!piAuthProvider) return null;
 
     try {
@@ -388,6 +413,63 @@ export class PiAgent extends BaseAgent {
     } catch (error) {
       this.debug(`Failed to retrieve Pi auth: ${error}`);
       return null;
+    }
+  }
+
+  /**
+   * Refresh OAuth tokens and push updated credentials to the running subprocess.
+   * Uses the same refreshChatGptTokens() utility that CodexAgent uses.
+   * Only relevant for ChatGPT Plus OAuth connections (authType === 'oauth').
+   */
+  private async refreshAndPushTokens(): Promise<void> {
+    if (this.config.authType !== 'oauth') return;
+
+    // Mutex — don't stack concurrent refreshes
+    if (this.tokenRefreshInProgress) {
+      await this.tokenRefreshInProgress;
+      return;
+    }
+
+    this.tokenRefreshInProgress = (async () => {
+      const slug = this.config.connectionSlug || 'pi';
+      const credentialManager = getCredentialManager();
+      const stored = await credentialManager.getLlmOAuth(slug);
+
+      if (!stored?.refreshToken) {
+        this.debug('No refresh token available — re-auth required');
+        this.onBackendAuthRequired?.('No refresh token — please sign in again');
+        return;
+      }
+
+      try {
+        const newTokens = await refreshChatGptTokens(stored.refreshToken);
+        await credentialManager.setLlmOAuth(slug, {
+          accessToken: newTokens.accessToken,
+          idToken: newTokens.idToken,
+          refreshToken: newTokens.refreshToken,
+          expiresAt: newTokens.expiresAt,
+        });
+        this.debug('Token refresh successful');
+
+        // Push refreshed credentials to running subprocess
+        if (this.subprocess) {
+          const piAuth = await this.getPiAuth();
+          if (piAuth) {
+            this.send({ type: 'token_update', piAuth });
+            this.debug('Pushed refreshed credentials to subprocess');
+          }
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.debug(`Token refresh failed: ${msg}`);
+        this.onBackendAuthRequired?.(`Token refresh failed: ${msg}`);
+      }
+    })();
+
+    try {
+      await this.tokenRefreshInProgress;
+    } finally {
+      this.tokenRefreshInProgress = null;
     }
   }
 
@@ -503,8 +585,23 @@ export class PiAgent extends BaseAgent {
         }
         break;
 
-      case 'error':
+      case 'error': {
         this.debug(`Subprocess error: ${msg.message}`);
+        const errorMsg = String(msg.message || '').toLowerCase();
+
+        // Detect auth errors and attempt token refresh for OAuth connections
+        if (this.config.authType === 'oauth' && (
+          errorMsg.includes('401') ||
+          errorMsg.includes('unauthorized') ||
+          (errorMsg.includes('token') && errorMsg.includes('expired')) ||
+          errorMsg.includes('authentication')
+        )) {
+          this.debug('Auth error detected from subprocess, attempting token refresh');
+          this.refreshAndPushTokens().catch(err => {
+            this.debug(`Token refresh after auth error failed: ${err}`);
+          });
+        }
+
         // Reject any pending mini completions so errors propagate immediately
         for (const [id, pending] of this.pendingMiniCompletions) {
           pending.reject(new Error(String(msg.message)));
@@ -518,6 +615,7 @@ export class PiAgent extends BaseAgent {
         // which will call eventQueue.complete(). If it doesn't, handleSubprocessExit()
         // will complete the queue when the process exits.
         break;
+      }
 
       default:
         this.debug(`Unknown subprocess message type: ${type}`);
@@ -554,6 +652,20 @@ export class PiAgent extends BaseAgent {
       if (agentEvent.type === 'info' && typeof agentEvent.message === 'string' && agentEvent.message.startsWith('Compacted')) {
         this.resetPrerequisiteState();
       }
+
+      // Fire PostToolUse / PostToolUseFailure hook events (fire-and-forget)
+      if (agentEvent.type === 'tool_result') {
+        const hookEvent = agentEvent.isError ? 'PostToolUseFailure' : 'PostToolUse';
+        this.emitHookEvent(hookEvent, {
+          hook_event_name: hookEvent,
+          tool_name: agentEvent.toolName ?? (event.toolName as string) ?? 'unknown',
+          tool_input: agentEvent.input,
+          ...(agentEvent.isError
+            ? { error: typeof agentEvent.result === 'string' ? agentEvent.result : undefined }
+            : { tool_response: typeof agentEvent.result === 'string' ? agentEvent.result : undefined }),
+        });
+      }
+
       this.eventQueue.enqueue(agentEvent);
     }
 
@@ -574,6 +686,13 @@ export class PiAgent extends BaseAgent {
   }): Promise<void> {
     const { requestId, toolName, input } = req;
     this.debug(`PreToolUse request from subprocess: ${toolName} (${requestId})`);
+
+    // Fire PreToolUse hook event (hooks.json) — await so hooks run before tool executes
+    await this.emitHookEvent('PreToolUse', {
+      hook_event_name: 'PreToolUse',
+      tool_name: toolName,
+      tool_input: input,
+    });
 
     const rootPath = this.config.workspace.rootPath ?? this.workingDirectory;
     const workspaceSlug = extractWorkspaceSlug(rootPath, this.config.workspace.id);
@@ -668,7 +787,8 @@ export class PiAgent extends BaseAgent {
       }
 
       case 'call_llm_intercept':
-        // call_llm tools are proxy tools handled via tool_execute_request — just allow
+      case 'spawn_session_intercept':
+        // These tools are proxy tools handled via tool_execute_request — just allow
         this.send({ type: 'pre_tool_use_response', requestId, action: 'allow' });
         return;
 
@@ -845,6 +965,17 @@ export class PiAgent extends BaseAgent {
         }
       }
 
+      // spawn_session uses the shared pre-execution pipeline from BaseAgent
+      if (toolName === 'spawn_session') {
+        try {
+          const result = await this.preExecuteSpawnSession(args);
+          return { content: JSON.stringify(result, null, 2), isError: false };
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return { content: `spawn_session failed: ${msg}`, isError: true };
+        }
+      }
+
       const def = SESSION_TOOL_REGISTRY.get(toolName);
       if (!def?.handler) {
         return { content: `Unknown session tool: ${toolName}`, isError: true };
@@ -946,6 +1077,12 @@ export class PiAgent extends BaseAgent {
     this.eventQueue.reset();
     this.currentUserMessage = message;
     this.adapter.startTurn();
+
+    // Fire UserPromptSubmit hook event (fire-and-forget)
+    this.emitHookEvent('UserPromptSubmit', {
+      hook_event_name: 'UserPromptSubmit',
+      prompt: message,
+    });
 
     // Register session-scoped tool callbacks (for SubmitPlan, source auth, etc.)
     const sessionId = this.config.session?.id;
@@ -1141,6 +1278,9 @@ export class PiAgent extends BaseAgent {
   }
 
   async abort(reason?: string): Promise<void> {
+    // Fire Stop hook event (fire-and-forget)
+    this.emitHookEvent('Stop', { hook_event_name: 'Stop' });
+
     // Deny all pending permissions
     for (const [, pending] of this.pendingPermissions) {
       pending.resolve(false);
@@ -1153,6 +1293,9 @@ export class PiAgent extends BaseAgent {
   }
 
   forceAbort(reason: AbortReason): void {
+    // Fire Stop hook event (fire-and-forget)
+    this.emitHookEvent('Stop', { hook_event_name: 'Stop' });
+
     this.abortReason = reason;
     this._isProcessing = false;
 
@@ -1289,15 +1432,15 @@ export class PiAgent extends BaseAgent {
 
     this.send({ type: 'mini_completion', id, prompt });
 
-    // 30s timeout
+    // Keep this aligned with the subprocess-side queryLlm timeout.
     const timeout = new Promise<string | null>((resolve) => {
       setTimeout(() => {
         if (this.pendingMiniCompletions.has(id)) {
           this.pendingMiniCompletions.delete(id);
-          this.debug('[runMiniCompletion] Timed out after 30s');
+          this.debug(`[runMiniCompletion] Timed out after ${LLM_QUERY_TIMEOUT_MS / 1000}s`);
           resolve(null);
         }
-      }, 30000);
+      }, LLM_QUERY_TIMEOUT_MS);
     });
 
     const text = await Promise.race([resultPromise, timeout]);
@@ -1351,6 +1494,13 @@ export class PiAgent extends BaseAgent {
       errorMessage.includes('401') ||
       errorMessage.includes('authentication')
     ) {
+      // For OAuth connections, attempt token refresh before giving up
+      if (this.config.authType === 'oauth') {
+        this.refreshAndPushTokens().catch(err => {
+          this.debug(`Token refresh from parsePiError failed: ${err}`);
+        });
+      }
+
       return {
         code: 'invalid_api_key',
         title: 'Invalid API Key',
@@ -1358,7 +1508,7 @@ export class PiAgent extends BaseAgent {
         actions: [
           { key: 's', label: 'Update API key', command: '/settings', action: 'settings' },
         ],
-        canRetry: false,
+        canRetry: this.config.authType === 'oauth',
         originalError: error.message,
       };
     }

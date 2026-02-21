@@ -201,6 +201,12 @@ const api: ElectronAPI = {
   testLlmConnectionSetup: (params: TestLlmConnectionParams) =>
     ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_TEST_LLM_CONNECTION_SETUP, params),
 
+  // Pi provider discovery (main process only — Pi SDK can't run in renderer)
+  getPiApiKeyProviders: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.PI_GET_API_KEY_PROVIDERS),
+  getPiProviderBaseUrl: (provider: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PI_GET_PROVIDER_BASE_URL, provider),
+
   // Session-specific model (overrides global)
   getSessionModel: (sessionId: string, workspaceId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_GET_MODEL, sessionId, workspaceId),
@@ -522,6 +528,7 @@ const api: ElectronAPI = {
   listLlmConnections: () => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_LIST),
   listLlmConnectionsWithStatus: () => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_LIST_WITH_STATUS),
   getLlmConnection: (slug: string) => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_GET, slug),
+  getLlmConnectionApiKey: (slug: string) => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_GET_API_KEY, slug),
   saveLlmConnection: (connection: import('../shared/types').LlmConnection) =>
     ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_SAVE, connection),
   deleteLlmConnection: (slug: string) => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_DELETE, slug),

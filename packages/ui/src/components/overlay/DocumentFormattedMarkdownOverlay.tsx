@@ -5,7 +5,7 @@
  * - Centered content card with max-width
  * - Copy button via FullscreenOverlayBase's built-in copyContent prop
  * - Optional "Plan" header variant
- * - Optional filePath badge with dual-trigger menu (Open / Reveal in Finder)
+ * - Optional filePath badge with dual-trigger menu (Open / Reveal in {file manager})
  *
  * Background and scenic blur are provided by FullscreenOverlayBase.
  * Uses FullscreenOverlayBase for portal, traffic lights, ESC handling, and header.
@@ -29,7 +29,7 @@ export interface DocumentFormattedMarkdownOverlayProps {
   onOpenUrl?: (url: string) => void
   /** Callback for file path clicks */
   onOpenFile?: (path: string) => void
-  /** Optional file path — shows badge with "Open" / "Reveal in Finder" menu */
+  /** Optional file path — shows badge with "Open" / "Reveal in {file manager}" menu */
   filePath?: string
   /** Optional type badge — tool/format indicator (e.g. "Write") shown in header */
   typeBadge?: OverlayTypeBadge

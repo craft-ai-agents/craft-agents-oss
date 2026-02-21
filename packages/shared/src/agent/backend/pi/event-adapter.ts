@@ -55,8 +55,33 @@ export class PiEventAdapter extends BaseEventAdapter {
   private subTurnCounter: number = 0;
   private messageSubTurnId: string | null = null;
 
+  // Model context window for usage_update events
+  private contextWindow: number | undefined;
+
+  // Mini model ID for call_llm display override (Pi ignores model param, always uses miniModel)
+  private miniModel: string | undefined;
+
+  // Track last usage for emitting with complete event
+  private lastUsage: { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number; cost: { total: number } } | undefined;
+
   constructor() {
     super('pi-event');
+  }
+
+  /**
+   * Set the model's context window size for usage reporting.
+   */
+  setContextWindow(cw: number): void {
+    this.contextWindow = cw;
+  }
+
+  /**
+   * Set the mini model ID for call_llm display override.
+   * Pi ignores the model param in call_llm — always uses miniModel.
+   * This ensures the UI shows the actual model used.
+   */
+  setMiniModel(model: string | undefined): void {
+    this.miniModel = model;
   }
 
   /**
@@ -90,7 +115,22 @@ export class PiEventAdapter extends BaseEventAdapter {
         break;
 
       case 'agent_end':
-        yield { type: 'complete' };
+        if (this.lastUsage) {
+          const inputTokens = this.lastUsage.input + (this.lastUsage.cacheRead || 0);
+          yield {
+            type: 'complete',
+            usage: {
+              inputTokens,
+              outputTokens: this.lastUsage.output,
+              cacheReadTokens: this.lastUsage.cacheRead,
+              cacheCreationTokens: this.lastUsage.cacheWrite,
+              costUsd: this.lastUsage.cost.total,
+              contextWindow: this.contextWindow,
+            },
+          };
+        } else {
+          yield { type: 'complete' };
+        }
         break;
 
       // ============================================================
@@ -140,7 +180,7 @@ export class PiEventAdapter extends BaseEventAdapter {
       case 'message_end': {
         // Pi SDK emits message_end for ALL messages (user, assistant, toolResult).
         // Only process assistant messages — skip user prompts and tool results.
-        const msg = event.message as { role?: string; stopReason?: string; errorMessage?: string } | undefined;
+        const msg = event.message as { role?: string; stopReason?: string; errorMessage?: string; usage?: { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number; cost: { total: number } } } | undefined;
         if (msg?.role !== 'assistant') break;
 
         // Surface API errors — Pi SDK sets stopReason: 'error' and errorMessage on failures
@@ -168,6 +208,19 @@ export class PiEventAdapter extends BaseEventAdapter {
           };
           this.hasStreamedDeltas = false;
         }
+
+        // Emit usage_update if the assistant message includes token usage
+        if (msg.usage && typeof msg.usage.input === 'number') {
+          this.lastUsage = msg.usage;
+          const inputTokens = msg.usage.input + (msg.usage.cacheRead || 0);
+          yield {
+            type: 'usage_update',
+            usage: {
+              inputTokens,
+              contextWindow: this.contextWindow,
+            },
+          };
+        }
         break;
       }
 
@@ -180,7 +233,15 @@ export class PiEventAdapter extends BaseEventAdapter {
         const toolName = this.resolveToolName(event.toolName);
         this.toolNames.set(toolCallId, toolName);
 
-        const args = (event.args ?? {}) as Record<string, unknown>;
+        // Normalize Pi field names to Claude Code format for UI compatibility
+        // (diff stats, diff overlay, document routing all expect Claude Code format)
+        const args = this.normalizeToolInput(toolName, (event.args ?? {}) as Record<string, unknown>);
+
+        // For call_llm, Pi ignores the model param and always uses miniModel.
+        // Override the displayed model so the UI shows the actual model used.
+        if (toolName.includes('call_llm') && this.miniModel) {
+          args.model = this.miniModel;
+        }
 
         // Look up metadata from the store (populated by the interceptor in the Pi subprocess)
         const storedMeta = toolMetadataStore.get(toolCallId, this.sessionDir);
@@ -310,6 +371,55 @@ export class PiEventAdapter extends BaseEventAdapter {
   // ============================================================
   // Helpers
   // ============================================================
+
+  /**
+   * Normalize Pi SDK tool input field names to Claude Code format.
+   * Pi uses camelCase (oldText, newText, path) while Claude Code uses
+   * snake_case (old_string, new_string, file_path). The UI pipeline expects
+   * Claude Code format for diff computation, overlay rendering, and
+   * document type detection.
+   */
+  private normalizeToolInput(
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Record<string, unknown> {
+    if (toolName === 'Edit') {
+      const normalized = { ...args };
+      if ('path' in normalized && !('file_path' in normalized)) {
+        normalized.file_path = normalized.path;
+        delete normalized.path;
+      }
+      if ('oldText' in normalized && !('old_string' in normalized)) {
+        normalized.old_string = normalized.oldText;
+        delete normalized.oldText;
+      }
+      if ('newText' in normalized && !('new_string' in normalized)) {
+        normalized.new_string = normalized.newText;
+        delete normalized.newText;
+      }
+      return normalized;
+    }
+
+    if (toolName === 'Write') {
+      const normalized = { ...args };
+      if ('path' in normalized && !('file_path' in normalized)) {
+        normalized.file_path = normalized.path;
+        delete normalized.path;
+      }
+      return normalized;
+    }
+
+    if (toolName === 'Read' || toolName === 'Glob' || toolName === 'Grep') {
+      const normalized = { ...args };
+      if ('path' in normalized && !('file_path' in normalized)) {
+        normalized.file_path = normalized.path;
+        delete normalized.path;
+      }
+      return normalized;
+    }
+
+    return args;
+  }
 
   /**
    * Resolve Pi tool name to PascalCase for UI consistency.

@@ -48,6 +48,8 @@ export interface ModelFetchResult {
 export interface ModelFetcherCredentials {
   apiKey?: string;
   oauthAccessToken?: string;
+  oauthRefreshToken?: string;
+  oauthIdToken?: string;
 }
 
 /**

@@ -408,6 +408,77 @@ export class HookSystem implements HooksConfigProvider {
   }
 
   // ============================================================================
+  // Agent Event Execution (Backend-Agnostic)
+  // ============================================================================
+
+  /**
+   * Execute agent event hooks directly (without going through the Claude SDK).
+   * This is the backend-agnostic entry point for non-Claude backends (Codex, Copilot, Pi)
+   * to fire agent events from hooks.json.
+   *
+   * For each matching hook matcher, builds env vars and executes command hooks.
+   * Catches all errors — hooks must never break the agent flow.
+   *
+   * @param signal - Optional AbortSignal for cancelling hook execution on abort
+   */
+  async executeAgentEvent(event: AgentEvent, input: SdkHookInput, signal?: AbortSignal): Promise<void> {
+    if (!this.config) return;
+
+    const matchers = this.config.hooks[event];
+    if (!matchers?.length) return;
+
+    const matchValue = this.getMatchValueForSdkInput(event, input);
+
+    for (const matcher of matchers) {
+      if (matcher.enabled === false) continue;
+
+      // Check regex matcher against the match value
+      if (matcher.matcher) {
+        try {
+          const regex = new RegExp(matcher.matcher);
+          if (!regex.test(matchValue)) continue;
+        } catch {
+          // Invalid regex — skip this matcher
+          continue;
+        }
+      }
+
+      try {
+        const env = buildEnvFromSdkInput(event, input);
+        await this.executeHooksForSdkMatcher(matcher, event, env, signal);
+      } catch (err) {
+        log.debug(`[HookSystem] Error executing ${event} hook: ${err}`);
+      }
+    }
+  }
+
+  /**
+   * Extract the regex match target from SdkHookInput based on the event type.
+   * Mirrors the Claude SDK's `fieldToMatch` per event — each event type matches
+   * against a specific field from the input.
+   */
+  private getMatchValueForSdkInput(event: AgentEvent, input: SdkHookInput): string {
+    switch (event) {
+      case 'PreToolUse':
+      case 'PostToolUse':
+      case 'PostToolUseFailure':
+      case 'PermissionRequest':
+        return input.tool_name ?? '';
+      case 'Notification':
+        // SDK matches against notification_type (not available in SdkHookInput — use message as fallback)
+        return input.message ?? '';
+      case 'SessionStart':
+        return input.source ?? '';
+      case 'SubagentStart':
+      case 'SubagentStop':
+        return input.agent_type ?? '';
+      default:
+        // UserPromptSubmit, Stop, SessionEnd — no meaningful match field
+        return '';
+    }
+  }
+
+  // ============================================================================
   // SDK Hook Integration
   // ============================================================================
 

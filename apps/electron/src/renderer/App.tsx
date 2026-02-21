@@ -53,6 +53,7 @@ import {
   JSONPreviewOverlay,
 } from '@craft-agent/ui'
 import { useLinkInterceptor, type FilePreviewState } from '@/hooks/useLinkInterceptor'
+import { getFileManagerName } from '@/lib/platform'
 import { ActionRegistryProvider } from '@/actions'
 
 type AppState = 'loading' | 'onboarding' | 'reauth' | 'ready'
@@ -511,6 +512,21 @@ export default function App() {
             }, 100)
             break
           }
+          case 'restore_input': {
+            // Queued messages were removed from chat on abort — restore their text to the input field.
+            // Append to existing draft (user may have started typing) rather than overwrite.
+            const existingDraft = sessionDraftsRef.current.get(sessionId) ?? ''
+            const restored = existingDraft
+              ? `${existingDraft}\n\n${effect.text}`
+              : effect.text
+            handleInputChange(sessionId, restored)
+            // handleInputChange updates the ref but ChatPage has local state.
+            // Dispatch a custom event so ChatPage re-reads the draft.
+            window.dispatchEvent(new CustomEvent('craft:restore-input', {
+              detail: { sessionId, text: restored },
+            }))
+            break
+          }
         }
       }
 
@@ -536,11 +552,54 @@ export default function App() {
     }
 
     const cleanup = window.electronAPI.onSessionEvent((event: SessionEvent) => {
-      // Some events don't have sessionId (e.g., sessions_reordered)
+      // Events without sessionId require full metadata refresh.
+      if (event.type === 'sessions_reordered') {
+        window.electronAPI.getSessions()
+          .then(initializeSessions)
+          .catch(error => console.error('Failed to refresh sessions after reorder event:', error))
+        return
+      }
+
       if (!('sessionId' in event)) return
 
       const sessionId = event.sessionId
       const workspaceId = windowWorkspaceId ?? ''
+
+      // Session lifecycle events are handled explicitly (not by the agent event processor).
+      if (event.type === 'session_created') {
+        window.electronAPI.getSessionMessages(sessionId)
+          .then((createdSession: Session | null) => {
+            if (createdSession) {
+              const existingMeta = store.get(sessionMetaMapAtom).has(sessionId)
+              if (existingMeta) {
+                updateSessionDirect(sessionId, () => createdSession)
+                const metaMap = store.get(sessionMetaMapAtom)
+                const nextMetaMap = new Map(metaMap)
+                nextMetaMap.set(sessionId, extractSessionMeta(createdSession))
+                store.set(sessionMetaMapAtom, nextMetaMap)
+              } else {
+                addSession(createdSession)
+              }
+              return
+            }
+            return window.electronAPI.getSessions().then(initializeSessions)
+          })
+          .catch((error: unknown) => console.error('Failed to handle session_created event:', error))
+        return
+      }
+
+      if (event.type === 'session_deleted') {
+        removeSession(sessionId)
+        return
+      }
+
+      if (event.type === 'session_deleted_cascade' || event.type === 'session_archived_cascade') {
+        window.electronAPI.getSessions()
+          .then(initializeSessions)
+          .catch(error => console.error(`Failed to refresh sessions after ${event.type}:`, error))
+        return
+      }
+
       const agentEvent = event as unknown as AgentEvent
 
       // Dispatch window event when compaction completes
@@ -631,7 +690,7 @@ export default function App() {
     })
 
     return cleanup
-  }, [processAgentEvent, windowWorkspaceId, store, updateSessionDirect, showSessionNotification])
+  }, [processAgentEvent, windowWorkspaceId, store, updateSessionDirect, showSessionNotification, initializeSessions, addSession, removeSession])
 
   // Listen for menu bar events
   useEffect(() => {
@@ -1311,10 +1370,12 @@ export default function App() {
     onReadFile: (path: string) => window.electronAPI.readFile(path),
     // Read file as binary Uint8Array (used by PDF preview blocks)
     onReadFileBinary: (path: string) => window.electronAPI.readFileBinary(path),
-    // Reveal a file in the system file manager (Finder on macOS, Explorer on Windows)
+    // Reveal a file in the system file manager (Finder on macOS, Explorer on Windows, etc.)
     onRevealInFinder: (path: string) => {
       window.electronAPI.showInFolder(path).catch(() => {})
     },
+    // Platform-specific file manager name for UI labels
+    fileManagerName: getFileManagerName(),
     // Hide/show macOS traffic lights when fullscreen overlays are open
     onSetTrafficLightsVisible: (visible: boolean) => {
       window.electronAPI.setTrafficLightsVisible(visible)
@@ -1457,7 +1518,7 @@ function WindowCloseHandler() {
  * - markdown → DocumentFormattedMarkdownOverlay
  * - json → JSONPreviewOverlay
  *
- * File path badges with "Open" / "Reveal in Finder" menus are provided
+ * File path badges with "Open" / "Reveal in {file manager}" menus are provided
  * automatically by PlatformContext — no per-overlay callback props needed.
  */
 function FilePreviewRenderer({

@@ -66,7 +66,7 @@ export interface JSONPreviewOverlayProps {
   onClose: () => void
   /** Parsed JSON data to display */
   data: unknown
-  /** File path — shows dual-trigger menu badge with "Open" + "Reveal in Finder" */
+  /** File path — shows dual-trigger menu badge with "Open" + "Reveal in {file manager}" */
   filePath?: string
   /** Title to display in header (fallback when no filePath) */
   title?: string

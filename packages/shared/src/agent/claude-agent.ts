@@ -1,14 +1,21 @@
-import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
+import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKUserMessage, type SDKAssistantMessageError, type Options, type SDKResultSuccess } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions, resetClaudeConfigCheck } from './options.ts';
-import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
+// Local type for SDK user message content blocks (text, image, document)
+// Replaces import from @anthropic-ai/sdk/resources — keeps SDK as agent-only dependency
+type ContentBlockParam =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+  | { type: 'document'; source: { type: 'base64'; media_type: string; data: string } };
 import { z } from 'zod';
 import { getSystemPrompt } from '../prompts/system.ts';
 import { BaseAgent, type MiniAgentConfig, MINI_AGENT_TOOLS, MINI_AGENT_MCP_KEYS } from './base-agent.ts';
-import type { BackendConfig, PermissionRequestType, SdkMcpServerConfig } from './backend/types.ts';
+import type { BackendConfig, PostInitResult, PermissionRequestType, SdkMcpServerConfig } from './backend/types.ts';
 // Plan types are used by UI components; not needed in craft-agent.ts since Safe Mode is user-controlled
 import { parseError, type AgentError } from './errors.ts';
 import { runErrorDiagnostics } from './diagnostics.ts';
 import { loadStoredConfig, loadConfigDefaults, type Workspace, type AuthType, getDefaultLlmConnection, getLlmConnection } from '../config/storage.ts';
+import { getValidClaudeOAuthToken } from '../auth/state.ts';
+import { resolveAuthEnvVars } from '../config/llm-connections.ts';
 import type { McpClientPool } from '../mcp/mcp-pool.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
 import { DEFAULT_MODEL, isClaudeModel, getDefaultSummarizationModel } from '../config/models.ts';
@@ -132,6 +139,8 @@ export interface ClaudeAgentConfig {
   miniModel?: string;
   /** Centralized MCP client pool for source tool execution. */
   mcpPool?: McpClientPool;
+  /** LLM connection slug for credential lookup in postInit(). */
+  connectionSlug?: string;
 }
 
 // Permission request tracking
@@ -305,7 +314,7 @@ const buildWindowsSkillsDirError = buildWindowsSkillsDirErrorFn;
 export class ClaudeAgent extends BaseAgent {
   protected backendName = 'Claude';
   // Note: ClaudeAgentConfig is compatible with BackendConfig, so we use the inherited this.config
-  private hookSystem?: HookSystem;
+  // hookSystem is inherited from BaseAgent (protected)
   private currentQuery: Query | null = null;
   private currentQueryAbortController: AbortController | null = null;
   private lastAbortReason: AbortReason | null = null;
@@ -329,6 +338,8 @@ export class ClaudeAgent extends BaseAgent {
   private preferencesDriftNotified: boolean = false;
   // Captured stderr from SDK subprocess (for error diagnostics when process exits with code 1)
   private lastStderrOutput: string[] = [];
+  /** Pending steer message — injected via additionalContext on next PreToolUse */
+  private pendingSteerMessage: string | null = null;
 
   /**
    * Get the session ID for mode operations.
@@ -398,6 +409,8 @@ export class ClaudeAgent extends BaseAgent {
       envOverrides: config.envOverrides,
       miniModel: config.miniModel,
       mcpPool: config.mcpPool,
+      connectionSlug: config.connectionSlug,
+      hookSystem: config.hookSystem,
     };
 
     // Call BaseAgent constructor - initializes model, thinkingLevel, permissionManager, sourceManager, etc.
@@ -405,7 +418,6 @@ export class ClaudeAgent extends BaseAgent {
     super(backendConfig, DEFAULT_MODEL, CLAUDE_CONTEXT_WINDOW);
 
     this.isHeadless = config.isHeadless ?? false;
-    this.hookSystem = config.hookSystem;
 
     // Initialize event adapter for SDK message → AgentEvent conversion
     this.eventAdapter = new ClaudeEventAdapter({
@@ -447,6 +459,7 @@ export class ClaudeAgent extends BaseAgent {
         this.onAuthRequest?.(request);
       },
       queryFn: (request) => this.queryLlm(request),
+      spawnSessionFn: (input) => this.preExecuteSpawnSession(input),
     });
 
     // Start config watcher for hot-reloading source changes
@@ -454,6 +467,43 @@ export class ClaudeAgent extends BaseAgent {
     if (!this.isHeadless) {
       this.startConfigWatcher();
     }
+  }
+
+  /**
+   * Post-construction auth setup.
+   * Fetches credentials and sets process.env before the SDK subprocess spawns.
+   * The subprocess spawns lazily on first chat(), so postInit() is early enough.
+   */
+  override async postInit(): Promise<PostInitResult> {
+    const slug = this.config.connectionSlug;
+    if (!slug) {
+      return { authInjected: false, authWarning: 'No connection slug available', authWarningLevel: 'error' };
+    }
+
+    const connection = getLlmConnection(slug);
+    if (!connection) {
+      return { authInjected: false, authWarning: `Connection not found: ${slug}`, authWarningLevel: 'error' };
+    }
+
+    // Clear all auth env vars first for clean state
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    delete process.env.ANTHROPIC_BASE_URL;
+
+    // Resolve auth env vars via shared utility
+    const manager = getCredentialManager();
+    const result = await resolveAuthEnvVars(connection, slug, manager, getValidClaudeOAuthToken);
+
+    if (!result.success) {
+      return { authInjected: false, authWarning: result.warning, authWarningLevel: 'error' };
+    }
+
+    // Apply env vars to process.env (for SDK subprocess) and envOverrides (per-session isolation)
+    for (const [key, value] of Object.entries(result.envVars)) {
+      process.env[key] = value;
+    }
+
+    return { authInjected: true };
   }
 
   // Config watcher methods (startConfigWatcher, stopConfigWatcher) are now inherited from BaseAgent
@@ -557,6 +607,9 @@ export class ClaudeAgent extends BaseAgent {
   ): AsyncGenerator<AgentEvent> {
     // Extract options (ChatOptions interface from AgentBackend)
     const _isRetry = options?.isRetry ?? false;
+
+    // Clear any leftover steer from a previous turn (safety net — should already be null)
+    this.pendingSteerMessage = null;
 
     try {
       const sessionId = this.config.session?.id || `temp-${Date.now()}`;
@@ -784,9 +837,25 @@ export class ClaudeAgent extends BaseAgent {
                 onDebug: (msg) => this.onDebug?.(msg),
               });
 
+              // Consume pending steer message (if any) — will be injected via additionalContext
+              const steerMsg = this.pendingSteerMessage;
+              if (steerMsg) {
+                this.pendingSteerMessage = null;
+                this.debug(`Injecting steer via additionalContext on ${input.tool_name}`);
+              }
+
               // Translate result to SDK format
               switch (checkResult.type) {
                 case 'allow':
+                  if (steerMsg) {
+                    return {
+                      continue: true,
+                      hookSpecificOutput: {
+                        hookEventName: 'PreToolUse' as const,
+                        additionalContext: `The user just sent a new message while you were working. Stop what you are currently doing and address their message instead:\n\n${steerMsg}`,
+                      },
+                    };
+                  }
                   return { continue: true };
 
                 case 'modify':
@@ -795,6 +864,7 @@ export class ClaudeAgent extends BaseAgent {
                     hookSpecificOutput: {
                       hookEventName: 'PreToolUse' as const,
                       updatedInput: checkResult.input,
+                      ...(steerMsg ? { additionalContext: `The user just sent a new message while you were working. Stop what you are currently doing and address their message instead:\n\n${steerMsg}` } : {}),
                     },
                   };
 
@@ -844,6 +914,7 @@ export class ClaudeAgent extends BaseAgent {
                 }
 
                 case 'call_llm_intercept':
+                case 'spawn_session_intercept':
                   // Claude's session tools run in-process via SDK — just allow
                   return { continue: true };
 
@@ -1346,6 +1417,8 @@ export class ClaudeAgent extends BaseAgent {
             authType: diagnosticAuthType,
             workspaceId: this.config.workspace?.id,
             rawError: stderrContext || rawErrorMsg,
+            providerType: this.config.providerType || connection?.providerType,
+            baseUrl: connection?.baseUrl,
           });
 
           debug('[SESSION_DEBUG] diagnostics.code:', diagnostics.code);
@@ -1447,6 +1520,15 @@ export class ClaudeAgent extends BaseAgent {
       // Reset ultrathink override after query completes (single-shot per-message boost)
       // Note: thinkingLevel is NOT reset - it's sticky for the session
       this._ultrathinkOverride = false;
+
+      // If a steer message was never delivered (no PreToolUse fired), notify the session
+      // layer so it can re-queue the message for the next turn.
+      const undeliveredSteer = this.pendingSteerMessage;
+      if (undeliveredSteer) {
+        this.pendingSteerMessage = null;
+        this.debug(`Steer message was not delivered (no tool call fired) — emitting steer_undelivered`);
+        yield { type: 'steer_undelivered' as const, message: undeliveredSteer };
+      }
     }
   }
 
@@ -1844,6 +1926,23 @@ export class ClaudeAgent extends BaseAgent {
   }
 
   /**
+   * Redirect mid-stream via additionalContext injection.
+   * Stores the message; the next PreToolUse hook injects it into the conversation.
+   * If no tool call fires before the turn ends, yields steer_undelivered so the
+   * session layer can re-queue the message.
+   */
+  override redirect(message: string): boolean {
+    if (!this.currentQuery || !this.currentQueryAbortController) {
+      // Not actively streaming — fall back to abort + queue
+      this.forceAbort(AbortReason.Redirect);
+      return false;
+    }
+    this.debug(`Steering mid-stream: "${message.slice(0, 100)}"`);
+    this.pendingSteerMessage = message;
+    return true;
+  }
+
+  /**
    * Force-abort the current query using the SDK's AbortController.
    * This immediately stops processing (SIGTERM/SIGKILL) without waiting for graceful shutdown.
    * Use this when you need instant termination (e.g., queuing a new message).
@@ -1852,6 +1951,7 @@ export class ClaudeAgent extends BaseAgent {
    */
   forceAbort(reason: AbortReason = AbortReason.UserStop): void {
     this.lastAbortReason = reason;
+    this.pendingSteerMessage = null; // Clear any undelivered steer
     if (this.currentQueryAbortController) {
       this.currentQueryAbortController.abort(reason);
       this.currentQueryAbortController = null;
@@ -2087,9 +2187,14 @@ export class ClaudeAgent extends BaseAgent {
       systemPrompt: request.systemPrompt ?? 'Reply with ONLY the requested text. No explanation.',
       ...(request.maxTokens ? { maxTokens: request.maxTokens } : {}),
       ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+      ...(request.outputSchema ? {
+        outputFormat: { type: 'json_schema' as const, schema: request.outputSchema },
+      } : {}),
     };
 
     let result = '';
+    let structuredOutput: unknown = undefined;
+
     for await (const msg of query({ prompt: request.prompt, options })) {
       if (msg.type === 'assistant') {
         for (const block of msg.message.content) {
@@ -2098,8 +2203,16 @@ export class ClaudeAgent extends BaseAgent {
           }
         }
       }
+      // Extract structured output from SDK result message
+      if (msg.type === 'result' && (msg as SDKResultSuccess).subtype === 'success') {
+        structuredOutput = (msg as SDKResultSuccess).structured_output;
+      }
     }
 
+    // Prefer structured output when available
+    if (structuredOutput !== undefined) {
+      return { text: JSON.stringify(structuredOutput, null, 2) };
+    }
     return { text: result.trim() };
   }
 

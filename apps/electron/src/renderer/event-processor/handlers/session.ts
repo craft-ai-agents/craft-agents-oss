@@ -38,6 +38,7 @@ import type {
   AuthRequestEvent,
   AuthCompletedEvent,
   UsageUpdateEvent,
+  Effect,
 } from '../types'
 import type { Message } from '../../../shared/types'
 import { generateMessageId, appendMessage } from '../helpers'
@@ -256,19 +257,24 @@ export function handleInfo(
  * Handle interrupted - agent was interrupted
  * When message is provided, it's a user-initiated stop (shows "Response interrupted")
  * When message is omitted, it's a silent redirect (user sent new message while processing)
+ * When queuedMessages is provided, those messages were waiting to be processed and should
+ * be restored to the input field (the corresponding user bubbles are removed from the chat).
  */
 export function handleInterrupted(
   state: SessionState,
   event: InterruptedEvent
 ): ProcessResult {
   const { session } = state
+  const effects: Effect[] = []
 
   // Clear transient streaming state (isPending, isStreaming) and mark running tools as interrupted
   // These fields are not persisted, so this matches the state after a reload
   // Also filter out status messages - they are transient UI state that shouldn't persist after interruption
   // (similar to isPending/isStreaming, and they're not persisted to disk anyway)
+  // Also remove queued user messages — they are being restored to the input field
   const updatedMessages = session.messages
     .filter(m => m.role !== 'status')  // Remove transient status messages
+    .filter(m => !m.isQueued)          // Remove queued user messages (restored to input)
     .map(m => {
       // Mark running tools as interrupted
       if (m.role === 'tool' && m.toolResult === undefined && m.toolStatus !== 'completed' && m.toolStatus !== 'error') {
@@ -286,6 +292,14 @@ export function handleInterrupted(
     ? [...updatedMessages, event.message]
     : updatedMessages
 
+  // Restore queued message text to the input field
+  if (event.queuedMessages && event.queuedMessages.length > 0) {
+    effects.push({
+      type: 'restore_input',
+      text: event.queuedMessages.join('\n\n'),
+    })
+  }
+
   return {
     state: {
       session: {
@@ -296,7 +310,7 @@ export function handleInterrupted(
       },
       streaming: null,
     },
-    effects: [],
+    effects,
   }
 }
 

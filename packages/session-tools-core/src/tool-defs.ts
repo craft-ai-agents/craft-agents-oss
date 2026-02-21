@@ -126,6 +126,22 @@ export const RenderTemplateSchema = z.object({
   data: z.record(z.string(), z.unknown()).describe('JSON data to render into the template'),
 });
 
+export const SpawnSessionSchema = z.object({
+  help: z.boolean().optional().describe('If true, returns available connections, models, and sources instead of creating a session'),
+  prompt: z.string().optional().describe('Instructions for the new session (required when not in help mode)'),
+  name: z.string().optional().describe('Session name'),
+  llmConnection: z.string().optional().describe('Connection slug (e.g., "anthropic-api", "codex")'),
+  model: z.string().optional().describe('Model ID override'),
+  enabledSourceSlugs: z.array(z.string()).optional().describe('Source slugs to enable in the new session'),
+  permissionMode: z.enum(['safe', 'ask', 'allow-all']).optional().describe('Permission mode for the new session'),
+  labels: z.array(z.string()).optional().describe('Labels for the new session'),
+  workingDirectory: z.string().optional().describe('Working directory for the new session'),
+  attachments: z.array(z.object({
+    path: z.string().describe('Absolute file path on disk'),
+    name: z.string().optional().describe('Display name (defaults to file basename)'),
+  })).optional().describe('Files to include with the prompt'),
+});
+
 // ============================================================
 // Canonical Tool Descriptions (base — no DOC_REFS)
 // ============================================================
@@ -272,6 +288,16 @@ Templates use Mustache syntax — the tool handles rendering and writes the outp
 Put text/content directly in the 'prompt' parameter. Do NOT pass inline text via attachments.
 Only use 'attachments' for existing file paths on disk - the tool loads file content automatically.
 For large files (>2000 lines), use {path, startLine, endLine} to select a portion.`,
+
+  spawn_session: `Create a new sub-session that runs independently with its own prompt, connection, model, and sources.
+
+Use this to delegate tasks to parallel sessions — research, analysis, drafts, or any work that benefits from separate context.
+
+Call with help=true first to discover available connections, models, and sources.
+When spawning, the 'prompt' parameter is required.
+
+The spawned session appears in the session list and runs fire-and-forget.
+Only use 'attachments' for existing file paths on disk — the tool reads them automatically.`,
 } as const;
 
 // ============================================================
@@ -309,6 +335,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'transform_data', description: TOOL_DESCRIPTIONS.transform_data, inputSchema: TransformDataSchema, handler: handleTransformData },
   { name: 'render_template', description: TOOL_DESCRIPTIONS.render_template, inputSchema: RenderTemplateSchema, handler: handleRenderTemplate },
   { name: 'call_llm', description: TOOL_DESCRIPTIONS.call_llm, inputSchema: CallLlmSchema, handler: null },
+  { name: 'spawn_session', description: TOOL_DESCRIPTIONS.spawn_session, inputSchema: SpawnSessionSchema, handler: null },
 ];
 
 // ============================================================

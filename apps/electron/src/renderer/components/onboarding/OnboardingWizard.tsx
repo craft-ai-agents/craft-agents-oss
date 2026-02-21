@@ -54,6 +54,14 @@ interface OnboardingWizardProps {
   onRecheckGitBash?: () => void
   onClearError?: () => void
 
+  // Edit mode (pre-fill existing connection values)
+  editInitialValues?: {
+    apiKey?: string
+    baseUrl?: string
+    connectionDefaultModel?: string
+    activePreset?: string
+  }
+
   className?: string
 }
 
@@ -85,6 +93,8 @@ export function OnboardingWizard({
   onUseGitBashPath,
   onRecheckGitBash,
   onClearError,
+  // Edit mode
+  editInitialValues,
   className
 }: OnboardingWizardProps) {
   const renderStep = () => {
@@ -133,6 +143,7 @@ export function OnboardingWizard({
             onBack={onBack}
             isWaitingForCode={isWaitingForCode}
             onSubmitAuthCode={onSubmitAuthCode}
+            editInitialValues={editInitialValues}
             onCancelOAuth={onCancelOAuth}
             copilotDeviceCode={copilotDeviceCode}
           />

@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { useAction, useActionLabel } from "@/actions"
 import { formatDistanceToNow, formatDistanceToNowStrict, isToday, isYesterday, format, startOfDay } from "date-fns"
 import type { Locale } from "date-fns"
-import { MoreHorizontal, Flag, Copy, Link2Off, CloudUpload, Globe, RefreshCw, Inbox, Check, Archive } from "lucide-react"
+import { MoreHorizontal, Flag, Copy, Link2Off, CloudUpload, Globe, RefreshCw, Inbox, Check, Archive, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -145,6 +145,21 @@ function hasUnreadMessages(session: SessionMeta): boolean {
  */
 function hasMessages(session: SessionMeta): boolean {
   return session.lastFinalMessageId !== undefined
+}
+
+/**
+ * Sort child sessions by explicit sibling order when present, otherwise by creation time.
+ * Matches storage-layer behavior so dropdown order stays consistent with persisted hierarchy.
+ */
+function sortChildSessions(children: SessionMeta[]): SessionMeta[] {
+  const hasExplicitOrder = children.some(s => s.siblingOrder !== undefined)
+
+  return [...children].sort((a, b) => {
+    if (hasExplicitOrder) {
+      return (a.siblingOrder ?? Number.POSITIVE_INFINITY) - (b.siblingOrder ?? Number.POSITIVE_INFINITY)
+    }
+    return (a.createdAt || 0) - (b.createdAt || 0)
+  })
 }
 
 /** Options for sessionMatchesCurrentFilter including secondary filters */
@@ -333,6 +348,12 @@ interface SessionItemProps {
   onRangeSelect?: () => void
   /** Callback to focus the session-list zone (enables keyboard shortcuts) */
   onFocusZone?: () => void
+  /** Child sessions of this session (for parent rows) */
+  childSessions?: SessionMeta[]
+  /** Currently selected session ID (used to highlight selected child) */
+  selectedSessionId?: string | null
+  /** Select and navigate to a specific session ID */
+  onSelectSessionById?: (sessionId: string) => void
 }
 
 /**
@@ -370,12 +391,16 @@ function SessionItem({
   onToggleSelect,
   onRangeSelect,
   onFocusZone,
+  childSessions = [],
+  selectedSessionId,
+  onSelectSessionById,
 }: SessionItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
   const [todoMenuOpen, setTodoMenuOpen] = useState(false)
   // Tracks which label badge's LabelValuePopover is open (by index), null = all closed
   const [openLabelIndex, setOpenLabelIndex] = useState<number | null>(null)
+  const [childrenOpen, setChildrenOpen] = useState(false)
 
   // Get hotkey labels from centralized action registry
   const nextMatchHotkey = useActionLabel('chat.nextSearchMatch').hotkey
@@ -396,6 +421,16 @@ function SessionItem({
       })
       .filter((l): l is { config: LabelConfig; rawValue: string | undefined } => l != null)
   }, [item.labels, flatLabels])
+
+  const hasChildSessions = childSessions.length > 0
+
+  // Auto-expand child list when the selected session is one of this parent's children.
+  useEffect(() => {
+    if (!hasChildSessions || !selectedSessionId) return
+    if (childSessions.some(child => child.id === selectedSessionId)) {
+      setChildrenOpen(true)
+    }
+  }, [hasChildSessions, childSessions, selectedSessionId])
 
 
   // Theme context for resolving label colors (light/dark aware)
@@ -725,23 +760,79 @@ function SessionItem({
                   </DropdownMenu>
                 )}
               </div>
-              {/* Timestamp — outside stacking container so it never overlaps badges.
-                  shrink-0 keeps it fixed-width; the badges container clips instead. */}
-              {item.lastMessageAt && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="shrink-0 text-[11px] text-foreground/40 whitespace-nowrap cursor-default">
-                      {formatDistanceToNowStrict(new Date(item.lastMessageAt), { locale: shortTimeLocale as Locale, roundingMethod: 'floor' })}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" sideOffset={4}>
-                    {formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true })}
-                  </TooltipContent>
-                </Tooltip>
-              )}
+              {/* Timestamp + child count controls on the right side */}
+              <div className="shrink-0 flex items-center gap-1">
+                {item.lastMessageAt && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="shrink-0 text-[11px] text-foreground/40 whitespace-nowrap cursor-default">
+                        {formatDistanceToNowStrict(new Date(item.lastMessageAt), { locale: shortTimeLocale as Locale, roundingMethod: 'floor' })}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" sideOffset={4}>
+                      {formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true })}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+                {hasChildSessions && (
+                  <span
+                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-[4px] bg-background shadow-minimal text-[10px] text-foreground/70 font-medium tabular-nums hover:text-foreground transition-colors"
+                    title={`${childrenOpen ? 'Hide' : 'Show'} child sessions`}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                    }}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setChildrenOpen(prev => !prev)
+                    }}
+                  >
+                    {childSessions.length}
+                    <ChevronRight className={cn("h-2.5 w-2.5 transition-transform", childrenOpen && "rotate-90")} />
+                  </span>
+                )}
+              </div>
             </div>
+
           </div>
         </button>
+
+        {hasChildSessions && childrenOpen && (
+          <div className="relative mt-0.5 ml-12 mr-4 pl-3">
+            <div className="absolute left-0 top-0 bottom-0 w-px bg-foreground/15" />
+            <div className="space-y-1 pl-2">
+              {childSessions.map((child) => (
+                <div
+                  key={child.id}
+                  className={cn(
+                    "w-full flex items-center justify-between gap-2 px-2 py-1 rounded-[6px] text-left text-xs transition-colors cursor-pointer",
+                    selectedSessionId === child.id
+                      ? "bg-foreground/6 text-foreground"
+                      : "text-foreground/70 hover:bg-foreground/3 hover:text-foreground"
+                  )}
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    onFocusZone?.()
+                    onSelectSessionById?.(child.id)
+                  }}
+                >
+                  <span className="truncate min-w-0">{getSessionTitle(child)}</span>
+                  {child.lastMessageAt && (
+                    <span className="shrink-0 text-[10px] text-foreground/40 whitespace-nowrap">
+                      {formatDistanceToNowStrict(new Date(child.lastMessageAt), { locale: shortTimeLocale as Locale, roundingMethod: 'floor' })}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Match count badge - shown on right side for all items with matches */}
         {chatMatchCount != null && chatMatchCount > 0 && (
@@ -1066,6 +1157,24 @@ export function SessionList({
     (b.lastMessageAt || 0) - (a.lastMessageAt || 0)
   )
 
+  // Map parent session ID -> sorted child sessions.
+  // Uses all visible sessions so parent dropdowns can always show complete child lists.
+  const childSessionsByParent = useMemo(() => {
+    const byParent = new Map<string, SessionMeta[]>()
+    for (const session of visibleItems) {
+      if (!session.parentSessionId) continue
+      const current = byParent.get(session.parentSessionId) ?? []
+      current.push(session)
+      byParent.set(session.parentSessionId, current)
+    }
+
+    for (const [parentId, children] of byParent) {
+      byParent.set(parentId, sortChildSessions(children))
+    }
+
+    return byParent
+  }, [visibleItems])
+
   // Filter items by search query — ripgrep content search only for consistent results
   // When not in search mode, apply current filter to maintain filtered view
   const searchFilteredItems = useMemo(() => {
@@ -1095,6 +1204,18 @@ export function SessionList({
         return countB - countA
       })
   }, [sortedItems, isSearchMode, searchQuery, contentSearchResults, currentFilter, evaluateViews, statusFilter, labelFilterMap])
+
+  // In normal mode, show child sessions via parent dropdowns (not as duplicate top-level rows).
+  // Keep child as top-level only when parent is not part of the current filtered set.
+  const normalModeTopLevelItems = useMemo(() => {
+    if (isSearchMode) return searchFilteredItems
+
+    const presentIds = new Set(searchFilteredItems.map(item => item.id))
+    return searchFilteredItems.filter(item => {
+      if (!item.parentSessionId) return true
+      return !presentIds.has(item.parentSessionId)
+    })
+  }, [isSearchMode, searchFilteredItems])
 
   // Split search results: sessions matching current filter vs all others
   // Also limits total results to MAX_SEARCH_RESULTS (100)
@@ -1153,7 +1274,7 @@ export function SessionList({
     }
 
     return { matchingFilterItems: matching, otherResultItems: others, exceededSearchLimit: exceeded }
-  }, [searchFilteredItems, currentFilter, evaluateViews, isSearchMode, statusFilter, labelFilterMap])
+  }, [searchFilteredItems, currentFilter, evaluateViews, isSearchMode, statusFilter, labelFilterMap, searchQuery])
 
   // Reset display limit when search query changes
   useEffect(() => {
@@ -1162,16 +1283,18 @@ export function SessionList({
 
   // Paginate items - only show up to displayLimit
   const paginatedItems = useMemo(() => {
-    return searchFilteredItems.slice(0, displayLimit)
-  }, [searchFilteredItems, displayLimit])
+    const source = isSearchMode ? searchFilteredItems : normalModeTopLevelItems
+    return source.slice(0, displayLimit)
+  }, [isSearchMode, searchFilteredItems, normalModeTopLevelItems, displayLimit])
 
   // Check if there are more items to load
-  const hasMore = displayLimit < searchFilteredItems.length
+  const hasMore = displayLimit < (isSearchMode ? searchFilteredItems.length : normalModeTopLevelItems.length)
 
   // Load more items callback
   const loadMore = useCallback(() => {
-    setDisplayLimit(prev => Math.min(prev + BATCH_SIZE, searchFilteredItems.length))
-  }, [searchFilteredItems.length])
+    const total = isSearchMode ? searchFilteredItems.length : normalModeTopLevelItems.length
+    setDisplayLimit(prev => Math.min(prev + BATCH_SIZE, total))
+  }, [isSearchMode, searchFilteredItems.length, normalModeTopLevelItems.length])
 
   // Intersection observer for infinite scroll
   useEffect(() => {
@@ -1244,6 +1367,17 @@ export function SessionList({
     selectSession(item.id, index)
     navigateToSession(item.id)
   }, [selectSession, navigateToSession])
+
+  const handleSelectSessionById = useCallback((sessionId: string) => {
+    const index = sessionIndexMap.get(sessionId) ?? -1
+    if (index >= 0) {
+      selectSession(sessionId, index)
+    } else {
+      // Child rows may be hidden from flat keyboard list; still navigate and select logically.
+      selectSession(sessionId, 0)
+    }
+    navigateToSession(sessionId)
+  }, [sessionIndexMap, selectSession, navigateToSession])
 
   // Handle toggle select (cmd/ctrl+click)
   const handleToggleSelect = useCallback((item: SessionMeta, index: number) => {
@@ -1608,6 +1742,9 @@ export function SessionList({
                         onToggleSelect={() => handleToggleSelect(item, flatIndex)}
                         onRangeSelect={() => handleRangeSelect(flatIndex)}
                         onFocusZone={() => focusZone('session-list', { intent: 'click', moveFocus: false })}
+                        childSessions={[]}
+                        selectedSessionId={selectionState.selected}
+                        onSelectSessionById={handleSelectSessionById}
                       />
                     )
                   })}
@@ -1654,6 +1791,9 @@ export function SessionList({
                         onToggleSelect={() => handleToggleSelect(item, flatIndex)}
                         onRangeSelect={() => handleRangeSelect(flatIndex)}
                         onFocusZone={() => focusZone('session-list', { intent: 'click', moveFocus: false })}
+                        childSessions={[]}
+                        selectedSessionId={selectionState.selected}
+                        onSelectSessionById={handleSelectSessionById}
                       />
                     )
                   })}
@@ -1701,6 +1841,9 @@ export function SessionList({
                       onToggleSelect={() => handleToggleSelect(item, flatIndex)}
                       onRangeSelect={() => handleRangeSelect(flatIndex)}
                       onFocusZone={() => focusZone('session-list', { intent: 'click', moveFocus: false })}
+                      childSessions={childSessionsByParent.get(item.id) ?? []}
+                      selectedSessionId={selectionState.selected}
+                      onSelectSessionById={handleSelectSessionById}
                     />
                   )
                 })}
@@ -1729,4 +1872,3 @@ export function SessionList({
     </div>
   )
 }
-

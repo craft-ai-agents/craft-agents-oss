@@ -56,20 +56,6 @@ describe('buildCallLlmRequest()', () => {
     ).rejects.toThrow('Prompt is required');
   });
 
-  // --- Thinking rejection ---
-
-  it('throws on thinking=true with backend name in message', async () => {
-    await expect(
-      buildCallLlmRequest({ prompt: 'test', thinking: true }, { backendName: 'Codex' })
-    ).rejects.toThrow('Codex mode');
-  });
-
-  it('includes correct backend name for Copilot', async () => {
-    await expect(
-      buildCallLlmRequest({ prompt: 'test', thinking: true }, { backendName: 'Copilot' })
-    ).rejects.toThrow('Copilot mode');
-  });
-
   // --- Basic request ---
 
   it('builds request from prompt-only input', async () => {
@@ -162,6 +148,36 @@ describe('buildCallLlmRequest()', () => {
     );
     expect(result.systemPrompt).toContain('Custom instructions');
     expect(result.systemPrompt).toContain('category');
+  });
+
+  it('includes outputSchema in returned request from outputFormat', async () => {
+    const result = await buildCallLlmRequest(
+      { prompt: 'test', outputFormat: 'summary' },
+      { backendName: 'Test' }
+    );
+    expect(result.outputSchema).toBeDefined();
+    expect((result.outputSchema as Record<string, unknown>).type).toBe('object');
+  });
+
+  it('includes custom outputSchema in returned request', async () => {
+    const schema = {
+      type: 'object',
+      properties: { name: { type: 'string' } },
+      required: ['name'],
+    };
+    const result = await buildCallLlmRequest(
+      { prompt: 'test', outputSchema: schema },
+      { backendName: 'Test' }
+    );
+    expect(result.outputSchema).toEqual(schema);
+  });
+
+  it('does not include outputSchema when no schema specified', async () => {
+    const result = await buildCallLlmRequest(
+      { prompt: 'test' },
+      { backendName: 'Test' }
+    );
+    expect(result.outputSchema).toBeUndefined();
   });
 
   // --- validateModel callback ---

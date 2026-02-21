@@ -67,7 +67,7 @@ export interface FullscreenOverlayBaseProps {
 
   /** Type badge — tool/format indicator (e.g. "Read", "Image", "Bash") */
   typeBadge?: OverlayTypeBadge
-  /** File path — shows dual-trigger menu badge with "Open" + "Reveal in Finder" */
+  /** File path — shows dual-trigger menu badge with "Open" + "Reveal in {file manager}" */
   filePath?: string
   /** Title — displayed as a badge when no filePath */
   title?: string

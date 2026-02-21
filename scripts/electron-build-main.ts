@@ -265,6 +265,7 @@ async function buildPiAgentServer(): Promise<void> {
       "--outfile", PI_AGENT_SERVER_OUTPUT,
       "--target", "bun",
       "--format", "esm",
+      "--external", "koffi",
     ],
     cwd: ROOT_DIR,
     stdout: "inherit",

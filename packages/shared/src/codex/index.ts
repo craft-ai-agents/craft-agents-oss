@@ -22,3 +22,7 @@ export {
   setVendorRoot,
   getVendorRoot,
 } from './binary-resolver.ts';
+export {
+  writeBridgeSourceFiles,
+  writeFileSecure,
+} from './bridge-utils.ts';

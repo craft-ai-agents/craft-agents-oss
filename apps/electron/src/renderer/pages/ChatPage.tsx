@@ -160,6 +160,19 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     return () => clearInterval(interval)
   }, [sessionId, getDraft])
 
+  // Listen for restore-input events (queued messages restored to input on abort)
+  React.useEffect(() => {
+    const handler = (e: Event) => {
+      const { sessionId: targetId, text } = (e as CustomEvent).detail
+      if (targetId === sessionId) {
+        setInputValue(text)
+        inputValueRef.current = text
+      }
+    }
+    window.addEventListener('craft:restore-input', handler)
+    return () => window.removeEventListener('craft:restore-input', handler)
+  }, [sessionId])
+
   const handleInputChange = React.useCallback((value: string) => {
     setInputValue(value)
     inputValueRef.current = value

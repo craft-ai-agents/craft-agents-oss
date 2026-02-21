@@ -20,6 +20,7 @@ import type {
   SdkMcpServerConfig,
 } from './backend/types.ts';
 import { AbortReason } from './backend/types.ts';
+import { getBackendRuntime } from './backend/internal/driver-types.ts';
 
 // Import models from centralized registry
 import { getModelById, getDefaultSummarizationModel } from '../config/models.ts';
@@ -113,16 +114,26 @@ import { toolMetadataStore } from '../interceptor-common.ts';
 
 // Path utilities
 import { join } from 'path';
+import { mkdir, stat } from 'node:fs/promises';
 import { homedir } from 'os';
 
 // Session storage (plans folder path)
 import { getSessionPlansPath, getSessionPath } from '../sessions/storage.ts';
 
+// Bridge utilities for API source config
+import { writeBridgeSourceFiles } from '../codex/bridge-utils.ts';
+import type { PostInitResult, BridgeUpdateContext } from './backend/types.ts';
+
 // Error typing
 import { parseError, type AgentError } from './errors.ts';
 
 // LLM tool types and helpers for call_llm PreToolUse intercept
-import { withTimeout, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
+import {
+  withTimeout,
+  LLM_QUERY_TIMEOUT_MS,
+  type LLMQueryRequest,
+  type LLMQueryResult,
+} from './llm-tool.ts';
 
 // GitHub OAuth types
 import type { GithubTokens } from '../auth/github-oauth.ts';
@@ -139,6 +150,16 @@ const THINKING_TO_EFFORT: Record<ThinkingLevel, ReasoningEffort> = {
   think: 'medium',
   max: 'high',
 };
+
+/**
+ * Guardrails against indefinite Copilot hangs.
+ * Uses the same 2-minute timeout as call_llm/mini-completion for consistency.
+ * - send timeout: message never gets accepted by the SDK/CLI
+ * - turn timeout: turn never reaches session.idle (missing terminal event)
+ */
+const COPILOT_SESSION_TIMEOUT_MS = LLM_QUERY_TIMEOUT_MS;
+const COPILOT_SEND_TIMEOUT_MS = LLM_QUERY_TIMEOUT_MS;
+const COPILOT_TURN_TIMEOUT_MS = LLM_QUERY_TIMEOUT_MS;
 
 /**
  * Map Copilot CLI lowercase tool names to PascalCase names used by our permission system.
@@ -217,6 +238,9 @@ export class CopilotAgent extends BaseAgent {
   // Pool server URL (HTTP MCP server in main process exposing all source tools)
   private poolServerUrl?: string;
 
+  // Per-session config directory (set in postInit, used by session creation/resume)
+  private copilotConfigDir: string | undefined;
+
   // Session event unsubscribe function
   private unsubscribeEvents: (() => void) | null = null;
 
@@ -252,8 +276,16 @@ export class CopilotAgent extends BaseAgent {
   // Copilot-specific Callbacks
   // ============================================================
 
-  /** Called when GitHub auth is required (token expired, not authenticated) */
-  onGithubAuthRequired: ((reason: string) => void) | null = null;
+  /**
+   * @deprecated Use onBackendAuthRequired (inherited from BaseAgent) instead.
+   * Kept as a getter/setter alias for backward compatibility.
+   */
+  get onGithubAuthRequired(): ((reason: string) => void) | null {
+    return this.onBackendAuthRequired;
+  }
+  set onGithubAuthRequired(cb: ((reason: string) => void) | null) {
+    this.onBackendAuthRequired = cb;
+  }
 
   // ============================================================
   // Constructor
@@ -278,6 +310,66 @@ export class CopilotAgent extends BaseAgent {
     }
   }
 
+  /**
+   * Post-construction initialization.
+   * 1. Create per-session config directory
+   * 2. Inject stored GitHub token
+   * 3. Set up initial sources (bridge config + setSourceServers)
+   */
+  override async postInit(): Promise<PostInitResult> {
+    // Step 1: Create per-session config directory
+    const sessionPath = this.getSessionStoragePath();
+    if (sessionPath) {
+      this.copilotConfigDir = join(sessionPath, '.copilot-config');
+      await mkdir(this.copilotConfigDir, { recursive: true });
+    }
+
+    // Step 2: Auth injection
+    const injected = await this.tryInjectStoredGithubToken();
+
+    // Step 3: Initial source setup (if sources were provided)
+    const initial = this.config.initialSources;
+    if (initial && sessionPath) {
+      const hasSources = Object.keys(initial.mcpServers).length > 0
+                      || Object.keys(initial.apiServers).length > 0;
+      if (hasSources) {
+        if (this.copilotConfigDir) {
+          await this.applyBridgeUpdates({
+            sessionPath,
+            enabledSources: initial.enabledSources,
+            mcpServers: initial.mcpServers,
+            sessionId: this.config.session?.id ?? '',
+            workspaceRootPath: this.config.workspace.rootPath,
+            context: 'initial setup',
+            poolServerUrl: this.config.poolServerUrl,
+          });
+        }
+        await this.setSourceServers(initial.mcpServers, initial.apiServers, initial.enabledSlugs);
+      }
+    }
+
+    return {
+      authInjected: injected,
+      authWarning: injected ? undefined : 'No GitHub token available. Please authenticate with GitHub Copilot.',
+      authWarningLevel: 'warning',
+    };
+  }
+
+  /**
+   * Apply bridge/config updates mid-session.
+   * Writes bridge-config.json and credential cache files for API sources.
+   */
+  override async applyBridgeUpdates(ctx: BridgeUpdateContext): Promise<void> {
+    const configDir = this.copilotConfigDir;
+    if (!configDir) return;
+    try {
+      await writeBridgeSourceFiles(configDir, ctx.enabledSources);
+      this.debug(`Copilot bridge config updated after ${ctx.context}`);
+    } catch (err) {
+      this.debug(`Failed to update Copilot bridge config after ${ctx.context}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   // ============================================================
   // LLM Callback Server
   // ============================================================
@@ -291,7 +383,7 @@ export class CopilotAgent extends BaseAgent {
     if (this._callbackServer) return;
 
     const server = http.createServer(async (req, res) => {
-      if (req.method !== 'POST' || req.url !== '/call-llm') {
+      if (req.method !== 'POST' || (req.url !== '/call-llm' && req.url !== '/spawn-session')) {
         res.writeHead(404);
         res.end();
         return;
@@ -301,13 +393,20 @@ export class CopilotAgent extends BaseAgent {
         for await (const chunk of req) chunks.push(chunk as Buffer);
         const body = JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>;
 
-        this.debug(`[CallbackServer] Received call_llm request`);
-        const result = await this.preExecuteCallLlm(body);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(result));
+        if (req.url === '/call-llm') {
+          this.debug(`[CallbackServer] Received call_llm request`);
+          const result = await this.preExecuteCallLlm(body);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(result));
+        } else {
+          this.debug(`[CallbackServer] Received spawn_session request`);
+          const result = await this.preExecuteSpawnSession(body);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(result));
+        }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        this.debug(`[CallbackServer] call_llm failed: ${msg}`);
+        this.debug(`[CallbackServer] ${req.url} failed: ${msg}`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: msg }));
       }
@@ -357,9 +456,11 @@ export class CopilotAgent extends BaseAgent {
     const clientEnv: Record<string, string | undefined> = { ...process.env };
 
     // Preload network interceptor for tool metadata capture
-    if (this.config.interceptorPath) {
+    const runtime = getBackendRuntime(this.config);
+    const interceptorPath = runtime.paths?.interceptor;
+    if (interceptorPath) {
       const existing = clientEnv.NODE_OPTIONS || '';
-      clientEnv.NODE_OPTIONS = `${existing} --require ${this.config.interceptorPath}`.trim();
+      clientEnv.NODE_OPTIONS = `${existing} --require ${interceptorPath}`.trim();
     }
 
     // Session dir for cross-process toolMetadataStore
@@ -371,6 +472,8 @@ export class CopilotAgent extends BaseAgent {
     // Propagate debug mode
     clientEnv.CRAFT_DEBUG = (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0';
 
+    const copilotCliPath = runtime.paths?.copilotCli;
+
     this.client = new CopilotClient({
       useStdio: true,
       cwd: this.resolvedCwd(),
@@ -381,15 +484,23 @@ export class CopilotAgent extends BaseAgent {
       // --allow-all = --allow-all-tools --allow-all-paths --allow-all-urls
       cliArgs: ['--allow-all'],
       env: clientEnv,
-      ...(this.config.copilotCliPath ? { cliPath: this.config.copilotCliPath } : {}),
+      ...(copilotCliPath ? { cliPath: copilotCliPath } : {}),
     });
 
-    await this.client.start();
+    await withTimeout(
+      this.client.start(),
+      COPILOT_SESSION_TIMEOUT_MS,
+      `Copilot client start timed out after ${Math.floor(COPILOT_SESSION_TIMEOUT_MS / 1000)}s`
+    );
     this.debug('Copilot client started');
 
     // Cache which models support reasoning effort
     try {
-      const models = await this.client.listModels();
+      const models = await withTimeout(
+        this.client.listModels(),
+        COPILOT_SESSION_TIMEOUT_MS,
+        `Copilot listModels timed out after ${Math.floor(COPILOT_SESSION_TIMEOUT_MS / 1000)}s`
+      );
       this.modelsWithReasoning = new Set(
         models
           .filter(m => m.supportedReasoningEfforts && m.supportedReasoningEfforts.length > 0)
@@ -401,6 +512,21 @@ export class CopilotAgent extends BaseAgent {
     }
 
     return this.client;
+  }
+
+  /**
+   * Resume is only safe when Copilot persisted the session event log.
+   * Missing/empty events.jsonl indicates an incomplete prior startup that can hang on resume.
+   */
+  private async hasResumableSessionState(sessionId: string): Promise<boolean> {
+    if (!this.copilotConfigDir) return false;
+    const eventsPath = join(this.copilotConfigDir, 'session-state', sessionId, 'events.jsonl');
+    try {
+      const file = await stat(eventsPath);
+      return file.isFile() && file.size > 0;
+    } catch {
+      return false;
+    }
   }
 
   // ============================================================
@@ -419,6 +545,12 @@ export class CopilotAgent extends BaseAgent {
     this.eventQueue.reset();
     this.currentUserMessage = message;
     this.adapter.startTurn();
+
+    // Fire UserPromptSubmit hook event (fire-and-forget)
+    this.emitHookEvent('UserPromptSubmit', {
+      hook_event_name: 'UserPromptSubmit',
+      prompt: message,
+    });
 
     // Register session-scoped tool callbacks (for SubmitPlan, source auth, etc.)
     const sessionId = this.config.session?.id;
@@ -459,6 +591,22 @@ export class CopilotAgent extends BaseAgent {
         ? THINKING_TO_EFFORT[thinkingLevel]
         : undefined;
 
+      // If the persisted Copilot state is incomplete, skip resume to avoid hang.
+      if (this.copilotSessionId && !options?.isRetry) {
+        const resumable = await this.hasResumableSessionState(this.copilotSessionId);
+        if (!resumable) {
+          this.debug(`Skipping resume for ${this.copilotSessionId}: missing/empty events.jsonl`);
+          this.copilotSessionId = null;
+          this.clearSessionForRecovery();
+
+          const recoveryContext = this.buildRecoveryContext();
+          if (recoveryContext) {
+            message = recoveryContext + message;
+            this.debug('Injected recovery context into message');
+          }
+        }
+      }
+
       // Create or resume session
       if (this.copilotSessionId && !options?.isRetry) {
         // Resume existing session
@@ -471,10 +619,14 @@ export class CopilotAgent extends BaseAgent {
             onPermissionRequest: (request, invocation) => this.handlePermissionRequest(request, invocation.sessionId),
             hooks: this.buildHooks(),
             workingDirectory: this.resolvedCwd(),
-            configDir: this.config.copilotConfigDir,
+            configDir: this.copilotConfigDir,
             streaming: true,
           };
-          this.session = await client.resumeSession(this.copilotSessionId, resumeConfig);
+          this.session = await withTimeout(
+            client.resumeSession(this.copilotSessionId, resumeConfig),
+            COPILOT_SESSION_TIMEOUT_MS,
+            `Copilot session resume timed out after ${Math.floor(COPILOT_SESSION_TIMEOUT_MS / 1000)}s`
+          );
           this.debug(`Resumed Copilot session: ${this.copilotSessionId}`);
         } catch (resumeError) {
           this.debug(`Failed to resume session ${this.copilotSessionId}, creating new`);
@@ -500,10 +652,14 @@ export class CopilotAgent extends BaseAgent {
           onPermissionRequest: (request, invocation) => this.handlePermissionRequest(request, invocation.sessionId),
           hooks: this.buildHooks(),
           workingDirectory: this.resolvedCwd(),
-          configDir: this.config.copilotConfigDir,
+          configDir: this.copilotConfigDir,
           streaming: true,
         };
-        this.session = await client.createSession(sessionConfig);
+        this.session = await withTimeout(
+          client.createSession(sessionConfig),
+          COPILOT_SESSION_TIMEOUT_MS,
+          `Copilot session creation timed out after ${Math.floor(COPILOT_SESSION_TIMEOUT_MS / 1000)}s`
+        );
         this.copilotSessionId = this.session.sessionId;
         this.config.onSdkSessionIdUpdate?.(this.session.sessionId);
         this.debug(`Created new Copilot session: ${this.session.sessionId}`);
@@ -560,11 +716,38 @@ export class CopilotAgent extends BaseAgent {
       ].filter(Boolean);
       const fullMessage = messageParts.join('\n\n');
 
-      // Send message
-      await this.session.send({ prompt: fullMessage });
+      // Send message (bounded) so we fail fast instead of hanging indefinitely
+      await withTimeout(
+        this.session.send({ prompt: fullMessage }),
+        COPILOT_SEND_TIMEOUT_MS,
+        `Copilot send timed out after ${Math.floor(COPILOT_SEND_TIMEOUT_MS / 1000)}s`
+      );
 
-      // Yield events from queue until turn completes
-      yield* this.eventQueue.drain();
+      // If Copilot never reaches session.idle, force-complete with a typed timeout error.
+      const turnTimeout = setTimeout(() => {
+        if (this.eventQueue.isComplete) return;
+        this.debug(`Turn timed out after ${Math.floor(COPILOT_TURN_TIMEOUT_MS / 1000)}s without completion`);
+        this.eventQueue.enqueue({
+          type: 'typed_error',
+          error: {
+            code: 'network_error',
+            title: 'Copilot Response Timeout',
+            message: 'Copilot did not complete this request in time. The turn may be stuck; retry the prompt.',
+            actions: [{ key: 'r', label: 'Retry', action: 'retry' }],
+            canRetry: true,
+            retryDelayMs: 1000,
+          },
+        });
+        this.eventQueue.complete();
+        this.session?.abort().catch(() => {});
+      }, COPILOT_TURN_TIMEOUT_MS);
+
+      try {
+        // Yield events from queue until turn completes
+        yield* this.eventQueue.drain();
+      } finally {
+        clearTimeout(turnTimeout);
+      }
     } catch (error) {
       if (error instanceof Error && error.message.includes('abort')) {
         if (this.abortReason === AbortReason.PlanSubmitted) {
@@ -581,7 +764,7 @@ export class CopilotAgent extends BaseAgent {
 
       // Trigger auth callback for auth errors
       if (typedError.code === 'invalid_credentials') {
-        this.onGithubAuthRequired?.(`Authentication failed: ${errorObj.message}`);
+        this.onBackendAuthRequired?.(`Authentication failed: ${errorObj.message}`);
       }
 
       if (typedError.code !== 'unknown_error') {
@@ -604,6 +787,8 @@ export class CopilotAgent extends BaseAgent {
    * Handle a Copilot SDK session event.
    */
   private handleSessionEvent(event: SessionEvent): void {
+    const isSessionError = event.type === 'session.error';
+
     // Track usage from assistant.usage events
     if (event.type === 'assistant.usage') {
       const data = event.data as Record<string, unknown>;
@@ -663,7 +848,7 @@ export class CopilotAgent extends BaseAgent {
         data.statusCode === 401 || data.statusCode === 403 ||
         data.errorType === 'authentication' || data.errorType === 'authorization'
       ) {
-        this.onGithubAuthRequired?.(`Authentication failed: ${data.message}`);
+        this.onBackendAuthRequired?.(`Authentication failed: ${data.message}`);
       }
     }
 
@@ -718,6 +903,12 @@ export class CopilotAgent extends BaseAgent {
       this.eventQueue.enqueue(agentEvent);
     }
 
+    // session.error can be terminal without a follow-up session.idle.
+    // Force completion so the UI doesn't stay in a perpetual "processing" state.
+    if (isSessionError) {
+      this.eventQueue.complete();
+    }
+
     // Check for session idle (turn complete)
     if (event.type === 'session.idle') {
       this.eventQueue.complete();
@@ -761,6 +952,13 @@ export class CopilotAgent extends BaseAgent {
 
     // Map Copilot tool names to SDK tool names (lowercase → PascalCase)
     const sdkToolName = this.mapCopilotToolName(toolName, inputObj);
+
+    // Fire PreToolUse hook event (hooks.json) — await so hooks run before tool executes
+    await this.emitHookEvent('PreToolUse', {
+      hook_event_name: 'PreToolUse',
+      tool_name: sdkToolName,
+      tool_input: inputObj,
+    });
 
     // Normalize Copilot-native arg names: `path` → `file_path`
     // Copilot CLI's native tools use `path` but our permission system expects `file_path`.
@@ -899,6 +1097,24 @@ export class CopilotAgent extends BaseAgent {
         }
       }
 
+      case 'spawn_session_intercept': {
+        this.debug('PreToolUse: Intercepting spawn_session for pre-execution');
+        try {
+          const result = await this.preExecuteSpawnSession(inputObj);
+          return {
+            permissionDecision: 'allow',
+            modifiedArgs: { ...inputObj, _precomputedResult: JSON.stringify(result) },
+          };
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          this.debug(`PreToolUse: spawn_session pre-execution failed: ${errorMsg}`);
+          return {
+            permissionDecision: 'allow',
+            modifiedArgs: { ...inputObj, _precomputedResult: JSON.stringify({ error: errorMsg }) },
+          };
+        }
+      }
+
       case 'prompt': {
         if (!this.onPermissionRequest) {
           return {
@@ -946,6 +1162,20 @@ export class CopilotAgent extends BaseAgent {
   private async onPostToolUse(input: PostToolUseHookInput): Promise<PostToolUseHookOutput | void> {
     const { toolName, toolArgs, toolResult } = input;
     const resultText = toolResult.textResultForLlm || '';
+
+    // Fire PostToolUse / PostToolUseFailure hook event (fire-and-forget)
+    // ToolResultObject has resultType: "success" | "failure" | "rejected" | "denied"
+    const isError = toolResult.resultType !== 'success';
+    const hookEvent = isError ? 'PostToolUseFailure' : 'PostToolUse';
+    const hookInput = this.parseCopilotToolArgs(toolArgs);
+    this.emitHookEvent(hookEvent, {
+      hook_event_name: hookEvent,
+      tool_name: toolName,
+      tool_input: hookInput,
+      ...(isError
+        ? { error: toolResult.error || resultText }
+        : { tool_response: resultText }),
+    });
 
     // Check if result is large enough to handle
     if (estimateTokens(resultText) <= TOKEN_LIMIT) return;
@@ -1044,21 +1274,23 @@ export class CopilotAgent extends BaseAgent {
     // The McpPoolServer in the main process manages all source connections.
     if (this.poolServerUrl) {
       config['sources'] = {
-        type: 'sse',
+        type: 'http',
         url: this.poolServerUrl,
         tools: ['*'],
       };
     }
 
     // Add session-scoped MCP server (provides SubmitPlan, config_validate, source_test, etc.)
-    if (this.config.sessionServerPath) {
+    const runtime = getBackendRuntime(this.config);
+    const sessionServerPath = runtime.paths?.sessionServer;
+    if (sessionServerPath) {
       const sessionId = this.config.session?.id;
       const workspaceRootPath = this.config.workspace.rootPath;
       if (sessionId && workspaceRootPath) {
-        const nodePath = this.config.nodePath || 'bun';
+        const nodePath = runtime.paths?.node || 'bun';
         const plansFolderPath = join(workspaceRootPath, 'sessions', sessionId, 'plans');
         const sessionArgs = [
-          this.config.sessionServerPath,
+          sessionServerPath,
           '--session-id', sessionId,
           '--workspace-root', workspaceRootPath,
           '--plans-folder', plansFolderPath,
@@ -1145,6 +1377,9 @@ export class CopilotAgent extends BaseAgent {
   }
 
   async abort(reason?: string): Promise<void> {
+    // Fire Stop hook event (fire-and-forget)
+    this.emitHookEvent('Stop', { hook_event_name: 'Stop' });
+
     if (this.session) {
       try {
         await this.session.abort();
@@ -1156,6 +1391,9 @@ export class CopilotAgent extends BaseAgent {
   }
 
   forceAbort(reason: AbortReason): void {
+    // Fire Stop hook event (fire-and-forget)
+    this.emitHookEvent('Stop', { hook_event_name: 'Stop' });
+
     this.abortReason = reason;
     this._isProcessing = false;
 
@@ -1493,8 +1731,11 @@ export class CopilotAgent extends BaseAgent {
     try {
       await ephemeralSession.send({ prompt: request.prompt });
 
-      // 30s timeout
-      await withTimeout(completionPromise, 30000, 'queryLlm timed out after 30s');
+      await withTimeout(
+        completionPromise,
+        LLM_QUERY_TIMEOUT_MS,
+        `queryLlm timed out after ${LLM_QUERY_TIMEOUT_MS / 1000}s`
+      );
 
       this.debug(`[CopilotAgent.queryLlm] Result length: ${result.trim().length}`);
       return { text: result.trim(), model };

@@ -233,7 +233,9 @@ export interface InfoEvent {
 export interface InterruptedEvent {
   type: 'interrupted'
   sessionId: string
-  message: Message
+  message?: Message
+  /** Messages that were queued but not processed — should be restored to input field */
+  queuedMessages?: string[]
 }
 
 /**
@@ -478,6 +480,7 @@ export type Effect =
   | { type: 'generate_title'; sessionId: string; userMessage: string }
   | { type: 'permission_mode_changed'; sessionId: string; permissionMode: PermissionMode }
   | { type: 'auto_retry'; sessionId: string; originalMessage: string; sourceSlug: string }
+  | { type: 'restore_input'; text: string }
 
 /**
  * Result of processing an event

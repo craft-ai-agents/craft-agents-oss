@@ -6,10 +6,9 @@
  */
 
 import { spawn, ChildProcess } from 'child_process';
-import { join, dirname, basename } from 'path';
-import { platform, arch } from 'os';
 import { app } from 'electron';
 import { existsSync } from 'fs';
+import { resolveBackendHostTooling } from '@craft-agent/shared/agent/backend';
 import { ipcLog, searchLog } from './logger';
 
 // Track current search process to cancel on new search
@@ -58,45 +57,17 @@ export interface SearchOptions {
 
 /**
  * Get the path to the ripgrep binary.
- * In development, uses the SDK's vendor folder.
- * In packaged app, uses the bundled binary.
+ * Path discovery is delegated to backend runtime tooling resolvers.
  */
-function getRipgrepPath(): string {
-  const platformKey = platform();
-  const archKey = arch();
-
-  // Map Node.js arch to ripgrep folder names
-  let platformFolder: string;
-  if (platformKey === 'darwin') {
-    platformFolder = archKey === 'arm64' ? 'arm64-darwin' : 'x64-darwin';
-  } else if (platformKey === 'win32') {
-    platformFolder = 'x64-win32';
-  } else {
-    // Linux
-    platformFolder = archKey === 'arm64' ? 'arm64-linux' : 'x64-linux';
-  }
-
-  const binaryName = platformKey === 'win32' ? 'rg.exe' : 'rg';
-
-  // In packaged app, use bundled SDK
-  if (app.isPackaged) {
-    const appPath = app.getAppPath();
-    return join(appPath, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', platformFolder, binaryName);
-  }
-
-  // In development, find the SDK in node_modules
-  // Walk up from this file to find the project root
-  let searchPath = __dirname;
-  for (let i = 0; i < 10; i++) {
-    const candidate = join(searchPath, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', platformFolder, binaryName);
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-    searchPath = dirname(searchPath);
-  }
-
-  // Fallback: try process.cwd() based path
-  return join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', platformFolder, binaryName);
+function getRipgrepPath(): string | undefined {
+  const { ripgrepPath } = resolveBackendHostTooling({
+    hostRuntime: {
+      appRootPath: app.isPackaged ? app.getAppPath() : process.cwd(),
+      resourcesPath: process.resourcesPath,
+      isPackaged: app.isPackaged,
+    },
+  });
+  return ripgrepPath;
 }
 
 /**
@@ -211,7 +182,7 @@ export async function searchSessions(
 
   const rgPath = getRipgrepPath();
   ipcLog.debug('[search] Ripgrep path:', rgPath);
-  if (!existsSync(rgPath)) {
+  if (!rgPath || !existsSync(rgPath)) {
     ipcLog.error('[search] ripgrep binary not found:', rgPath);
     return [];
   }

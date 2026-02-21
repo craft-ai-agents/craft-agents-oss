@@ -30,7 +30,9 @@
 export type {
   AgentBackend,
   AgentProvider,
+  CoreBackendConfig,
   BackendConfig,
+  BackendHostRuntimeContext,
   PermissionCallback,
   PlanCallback,
   AuthCallback,
@@ -41,6 +43,8 @@ export type {
   SdkMcpServerConfig,
   LlmAuthType,
   LlmProviderType,
+  PostInitResult,
+  BridgeUpdateContext,
 } from './types.ts';
 
 // Enums need to be exported as values, not just types
@@ -57,9 +61,24 @@ export {
   connectionTypeToProvider,
   connectionAuthTypeToBackendAuthType,
   resolveSessionConnection,
+  resolveBackendContext,
+  resolveSetupTestConnectionHint,
   createConfigFromConnection,
   createBackendFromConnection,
+  createBackendFromResolvedContext,
+  initializeBackendHostRuntime,
+  resolveBackendHostTooling,
+  fetchBackendModels,
+  validateStoredBackendConnection,
   providerTypeToAgentProvider,
+  // Capabilities and utilities
+  BACKEND_CAPABILITIES,
+  resolveModelForProvider,
+  getDefaultAuthType,
+  cleanupSourceRuntimeArtifacts,
+  testBackendConnection,
+  // Connection validation
+  validateConnection,
 } from './factory.ts';
 
 // Shared infrastructure
@@ -72,9 +91,5 @@ export { CodexEventAdapter } from './codex/event-adapter.ts';
 export { CopilotEventAdapter } from './copilot/event-adapter.ts';
 export { PiEventAdapter } from './pi/event-adapter.ts';
 
-// Agent implementations
-// All agents implement AgentBackend directly
-export { ClaudeAgent } from '../claude-agent.ts';
-export { CodexAgent, CodexBackend } from '../codex-agent.ts';
-export { CopilotAgent, CopilotBackend } from '../copilot-agent.ts';
-export { PiAgent, PiBackend } from '../pi-agent.ts';
+// Agent implementations are imported directly by factory.ts
+// Consumers should use createAgent() / createBackend() instead of concrete classes

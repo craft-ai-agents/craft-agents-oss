@@ -8,16 +8,22 @@
  * - Available providers list
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
+import { join } from 'node:path';
 import {
   detectProvider,
   createBackend,
   createAgent,
+  fetchBackendModels,
   getAvailableProviders,
+  initializeBackendHostRuntime,
   isProviderAvailable,
   connectionTypeToProvider,
   connectionAuthTypeToBackendAuthType,
   providerTypeToAgentProvider,
+  resolveSetupTestConnectionHint,
   createBackendFromConnection,
+  testBackendConnection,
+  validateStoredBackendConnection,
 } from '../factory.ts';
 import type { BackendConfig } from '../types.ts';
 import type { Workspace, LlmConnection } from '../../../config/storage.ts';
@@ -111,13 +117,14 @@ describe('createBackend / createAgent', () => {
 });
 
 describe('getAvailableProviders', () => {
-  it('should return anthropic, openai and copilot', () => {
+  it('should return anthropic, openai, copilot, and pi', () => {
     const providers = getAvailableProviders();
 
     expect(providers).toContain('anthropic');
     expect(providers).toContain('openai');
     expect(providers).toContain('copilot');
-    expect(providers).toHaveLength(3);
+    expect(providers).toContain('pi');
+    expect(providers).toHaveLength(4);
   });
 });
 
@@ -325,5 +332,110 @@ describe('validateCodexPath', () => {
       expect(result.error).toContain('Codex binary not found');
       expect(result.error).toContain('/non/existent/path/to/codex');
     });
+  });
+});
+
+describe('phase4 backend abstraction APIs', () => {
+  it('initializeBackendHostRuntime bootstraps without throwing in dev runtime', () => {
+    expect(() => initializeBackendHostRuntime({
+      hostRuntime: {
+        appRootPath: process.cwd(),
+        isPackaged: false,
+      },
+    })).not.toThrow();
+  });
+
+  it('initializeBackendHostRuntime throws for dist-style host root in dev', () => {
+    expect(() => initializeBackendHostRuntime({
+      hostRuntime: {
+        appRootPath: join(process.cwd(), 'apps', 'electron', 'dist'),
+        isPackaged: false,
+      },
+    })).toThrow('Claude Code SDK not found');
+  });
+
+  it('resolveSetupTestConnectionHint maps provider/baseUrl/piAuthProvider correctly', () => {
+    expect(resolveSetupTestConnectionHint({
+      provider: 'openai',
+      baseUrl: 'https://api.example.com',
+    })).toEqual({ providerType: 'openai_compat' });
+
+    expect(resolveSetupTestConnectionHint({
+      provider: 'anthropic',
+      baseUrl: '',
+    })).toEqual({ providerType: 'anthropic' });
+
+    expect(resolveSetupTestConnectionHint({
+      provider: 'pi',
+      piAuthProvider: 'openai-codex',
+    })).toEqual({ providerType: 'pi', piAuthProvider: 'openai-codex' });
+  });
+
+  it('fetchBackendModels dispatches for pi provider', async () => {
+    const connection: LlmConnection = {
+      slug: 'pi-test',
+      name: 'Pi Test',
+      providerType: 'pi',
+      authType: 'none',
+      createdAt: Date.now(),
+    };
+
+    const result = await fetchBackendModels({
+      connection,
+      credentials: {},
+      hostRuntime: {
+        appRootPath: process.cwd(),
+        isPackaged: false,
+      },
+    });
+
+    expect(result.models.length).toBeGreaterThan(0);
+  });
+
+  it('fetchBackendModels short-circuits unsupported anthropic discovery auth modes', async () => {
+    const connection: LlmConnection = {
+      slug: 'bedrock-test',
+      name: 'Bedrock Test',
+      providerType: 'bedrock',
+      authType: 'iam_credentials',
+      createdAt: Date.now(),
+    };
+
+    await expect(fetchBackendModels({
+      connection,
+      credentials: {},
+      hostRuntime: {
+        appRootPath: process.cwd(),
+        isPackaged: false,
+      },
+    })).rejects.toThrow('Dynamic model discovery not available for Bedrock/Vertex connections');
+  });
+
+  it('validateStoredBackendConnection returns not found for unknown slug', async () => {
+    const result = await validateStoredBackendConnection({
+      slug: '__missing-connection__',
+      hostRuntime: {
+        appRootPath: process.cwd(),
+        isPackaged: false,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Connection not found');
+  });
+
+  it('testBackendConnection keeps required model argument and validates key presence', async () => {
+    const result = await testBackendConnection({
+      provider: 'anthropic',
+      apiKey: '   ',
+      model: 'claude-sonnet-4-5-20250929',
+      hostRuntime: {
+        appRootPath: process.cwd(),
+        isPackaged: false,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('API key is required');
   });
 });

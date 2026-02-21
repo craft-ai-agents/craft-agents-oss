@@ -32,6 +32,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate backend import boundary
+        run: bash scripts/check-main-backend-boundary.sh
+
       - name: Get version
         id: version
         run: |

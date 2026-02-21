@@ -29,6 +29,16 @@ export const isLinux =
   typeof navigator !== 'undefined' &&
   navigator.platform.toLowerCase().includes('linux')
 
+/**
+ * Get the platform-specific file manager name.
+ * macOS → "Finder", Windows → "Explorer", Linux → "File Manager"
+ */
+export function getFileManagerName(): string {
+  if (isMac) return 'Finder'
+  if (isWindows) return 'Explorer'
+  return 'File Manager'
+}
+
 /** Native path separator for current OS */
 export const PATH_SEP = isWindows ? '\\' : '/'
 

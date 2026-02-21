@@ -32,6 +32,13 @@ interface CredentialsStepProps {
   onCancelOAuth?: () => void
   // Device flow (Copilot)
   copilotDeviceCode?: { userCode: string; verificationUri: string }
+  // Edit mode (pre-fill existing connection values)
+  editInitialValues?: {
+    apiKey?: string
+    baseUrl?: string
+    connectionDefaultModel?: string
+    activePreset?: string
+  }
 }
 
 export function CredentialsStep({
@@ -45,6 +52,7 @@ export function CredentialsStep({
   onSubmitAuthCode,
   onCancelOAuth,
   copilotDeviceCode,
+  editInitialValues,
 }: CredentialsStepProps) {
   const isClaudeOAuth = apiSetupMethod === 'claude_oauth'
   const isChatGptOAuth = apiSetupMethod === 'chatgpt_oauth' || apiSetupMethod === 'pi_chatgpt_oauth'
@@ -253,7 +261,7 @@ export function CredentialsStep({
   // Determine provider type and description based on selected method
   const providerType = isPiApiKey ? 'pi_api_key' : isOpenAiApiKey ? 'openai' : 'anthropic'
   const apiKeyDescription = isPiApiKey
-    ? "Select your LLM provider and enter the API key."
+    ? "Select your LLM provider and enter the API key. Optionally configure a custom endpoint."
     : isOpenAiApiKey
     ? "Enter your OpenAI API key."
     : "Enter your API key. Optionally configure a custom endpoint for OpenRouter, Ollama, or compatible APIs."
@@ -280,6 +288,7 @@ export function CredentialsStep({
         errorMessage={errorMessage}
         onSubmit={onSubmit}
         providerType={providerType}
+        initialValues={editInitialValues}
       />
     </StepFormLayout>
   )

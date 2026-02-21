@@ -138,7 +138,7 @@ function createComponents(
         <a
           href={href}
           onClick={handleClick}
-          className="text-foreground hover:underline cursor-pointer"
+          className="text-accent hover:underline cursor-pointer"
         >
           {children}
         </a>

@@ -10,7 +10,7 @@
  *
  * Provides consistent skill actions:
  * - Open in New Window
- * - Show in Finder
+ * - Show in file manager
  * - Delete
  */
 
@@ -21,6 +21,7 @@ import {
   AppWindow,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
+import { getFileManagerName } from '@/lib/platform'
 
 export interface SkillMenuProps {
   /** Skill slug */
@@ -55,10 +56,10 @@ export function SkillMenu({
         <span className="flex-1">Open in New Window</span>
       </MenuItem>
 
-      {/* Show in Finder */}
+      {/* Show in file manager */}
       <MenuItem onClick={onShowInFinder}>
         <FolderOpen className="h-3.5 w-3.5" />
-        <span className="flex-1">Show in Finder</span>
+        <span className="flex-1">{`Show in ${getFileManagerName()}`}</span>
       </MenuItem>
 
       <Separator />

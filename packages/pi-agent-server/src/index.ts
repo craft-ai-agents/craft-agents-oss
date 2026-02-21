@@ -47,12 +47,12 @@ import type { TextContent as PiTextContent } from '@mariozechner/pi-ai';
 // Direct source imports from shared (bundled by bun build)
 import { handleLargeResponse, estimateTokens, TOKEN_LIMIT } from '../../shared/src/utils/large-response.ts';
 import { getSessionPlansPath, getSessionPath } from '../../shared/src/sessions/storage.ts';
-import { buildCallLlmRequest, withTimeout } from '../../shared/src/agent/llm-tool.ts';
+import { buildCallLlmRequest, withTimeout, LLM_QUERY_TIMEOUT_MS } from '../../shared/src/agent/llm-tool.ts';
 import type { LLMQueryRequest, LLMQueryResult } from '../../shared/src/agent/llm-tool.ts';
 import { PI_TOOL_NAME_MAP, THINKING_TO_PI } from '../../shared/src/agent/backend/pi/constants.ts';
 import { getDefaultSummarizationModel } from '../../shared/src/config/models.ts';
 import { webSearchTool } from './tools/web-search.ts';
-import { webFetchTool } from './tools/web-fetch.ts';
+import { createWebFetchTool } from './tools/web-fetch.ts';
 import { createGoogleSearchTool } from './tools/google-search.ts';
 
 // ============================================================
@@ -70,6 +70,7 @@ type InboundMessage =
   | { type: 'mini_completion'; id: string; prompt: string }
   | { type: 'set_model'; model: string }
   | { type: 'steer'; message: string }
+  | { type: 'token_update'; piAuth: { provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } }
   | { type: 'shutdown' };
 
 /** Proxy tool definition from main process */
@@ -105,6 +106,7 @@ type OutboundMessage =
 
 let piSession: AgentSession | null = null;
 let piModelRegistry: PiModelRegistry | null = null;
+let moduleAuthStorage: PiAuthStorage | null = null;
 let unsubscribeEvents: (() => void) | null = null;
 
 // Init config (set on 'init' message)
@@ -248,7 +250,12 @@ function createAuthenticatedRegistry(): {
   authStorage: PiAuthStorage;
   modelRegistry: PiModelRegistry;
 } {
-  const authStorage = PiAuthStorage.inMemory();
+  // Reuse module-level authStorage if already created (allows token_update to mutate it).
+  // Only create a new one on first call or after re-init.
+  if (!moduleAuthStorage) {
+    moduleAuthStorage = PiAuthStorage.inMemory();
+  }
+  const authStorage = moduleAuthStorage;
   if (initConfig?.piAuth) {
     const { provider, credential } = initConfig.piAuth;
     authStorage.set(provider, credential);
@@ -280,6 +287,9 @@ async function ensureSession(): Promise<AgentSession> {
   const searchTool = isGoogleProvider && googleApiKey
     ? createGoogleSearchTool(googleApiKey)
     : webSearchTool;
+  const webFetchTool = createWebFetchTool(() =>
+    initConfig ? getSessionPath(initConfig.workspaceRootPath, initConfig.sessionId) : null
+  );
   const webTools = [searchTool, webFetchTool];
   const wrappedCodingTools = wrapToolsWithHooks([...codingTools, ...webTools]);
   const proxyTools = buildProxyTools();
@@ -644,7 +654,11 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
 
   try {
     await ephemeralSession.prompt(request.prompt);
-    await withTimeout(completionPromise, 30000, 'queryLlm timed out after 30s');
+    await withTimeout(
+      completionPromise,
+      LLM_QUERY_TIMEOUT_MS,
+      `queryLlm timed out after ${LLM_QUERY_TIMEOUT_MS / 1000}s`
+    );
     debugLog(`[queryLlm] Result length: ${result.trim().length}`);
 
     // If we got no text but captured an error, throw so callers see the real issue
@@ -734,6 +748,7 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
     }
     piSession.dispose();
     piSession = null;
+    moduleAuthStorage = null; // Reset so createAuthenticatedRegistry() creates fresh storage
     debugLog('Cleaned up existing session for re-init');
   }
 
@@ -955,6 +970,16 @@ async function processMessage(msg: InboundMessage): Promise<void> {
         await piSession.steer(msg.message);
       } else {
         debugLog('Steer ignored — no active session');
+      }
+      break;
+
+    case 'token_update':
+      if (moduleAuthStorage) {
+        const { provider, credential } = msg.piAuth;
+        moduleAuthStorage.set(provider, credential);
+        debugLog(`Updated ${credential.type} credential for provider: ${provider}`);
+      } else {
+        debugLog('token_update received but no authStorage initialized');
       }
       break;
 

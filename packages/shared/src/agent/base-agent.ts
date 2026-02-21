@@ -23,6 +23,8 @@ import { DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
 import type { PermissionMode } from './mode-manager.ts';
 import type { LoadedSource } from '../sources/types.ts';
 import { buildCallLlmRequest, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
+import { getLlmConnections, getDefaultLlmConnection } from '../config/storage.ts';
+import { loadAllSources } from '../sources/storage.ts';
 
 import type {
   AgentBackend,
@@ -34,6 +36,8 @@ import type {
   SourceActivationCallback,
   SdkMcpServerConfig,
   BackendConfig,
+  PostInitResult,
+  BridgeUpdateContext,
 } from './backend/types.ts';
 import { AbortReason } from './backend/types.ts';
 import type { AuthRequest } from './session-scoped-tools.ts';
@@ -47,6 +51,10 @@ import { PathProcessor } from './core/path-processor.ts';
 import { ConfigWatcherManager, type ConfigWatcherManagerCallbacks } from './core/config-watcher-manager.ts';
 import { UsageTracker, type UsageUpdate } from './core/usage-tracker.ts';
 import { PrerequisiteManager } from './core/prerequisite-manager.ts';
+
+// Hook system for agent events
+import type { HookSystem } from '../hooks-simple/hook-system.ts';
+import type { AgentEvent as HookAgentEvent, SdkHookInput } from '../hooks-simple/types.ts';
 import { getSessionPlansPath, getSessionDataPath, getSessionPath } from '../sessions/storage.ts';
 import { getMiniAgentSystemPrompt } from '../prompts/system.ts';
 import { buildTitlePrompt, buildRegenerateTitlePrompt, validateTitle } from '../utils/title-generator.ts';
@@ -72,6 +80,51 @@ export interface MiniAgentConfig {
   mcpServerKeys: readonly string[];
   /** Thinking/reasoning should be minimized */
   minimizeThinking: boolean;
+}
+
+// ============================================================
+// Spawn Session Types
+// ============================================================
+
+export interface SpawnSessionRequest {
+  prompt: string;
+  name?: string;
+  llmConnection?: string;
+  model?: string;
+  enabledSourceSlugs?: string[];
+  permissionMode?: 'safe' | 'ask' | 'allow-all';
+  labels?: string[];
+  workingDirectory?: string;
+  attachments?: Array<{ path: string; name?: string }>;
+}
+
+export interface SpawnSessionResult {
+  sessionId: string;
+  name: string;
+  status: 'started';
+  connection?: string;
+  model?: string;
+}
+
+export interface SpawnSessionHelpResult {
+  connections: Array<{
+    slug: string;
+    name: string;
+    isDefault: boolean;
+    providerType: string;
+    models: string[];
+    defaultModel?: string;
+  }>;
+  sources: Array<{
+    slug: string;
+    name: string;
+    type: string;
+    enabled: boolean;
+  }>;
+  defaults: {
+    defaultConnection: string | null;
+    permissionMode: string;
+  };
 }
 
 /** Tool list for mini agents - quick config edits only */
@@ -131,6 +184,7 @@ export abstract class BaseAgent implements AgentBackend {
   protected configWatcherManager: ConfigWatcherManager | null = null;
   protected usageTracker: UsageTracker;
   protected prerequisiteManager: PrerequisiteManager;
+  protected hookSystem?: HookSystem;
 
   // ============================================================
   // Additional State (protected for subclass access)
@@ -150,6 +204,8 @@ export abstract class BaseAgent implements AgentBackend {
   onDebug: ((message: string) => void) | null = null;
   onSourceActivationRequest: SourceActivationCallback | null = null;
   onUsageUpdate: ((update: UsageUpdate) => void) | null = null;
+  onBackendAuthRequired: ((reason: string) => void) | null = null;
+  onSpawnSession: ((request: SpawnSessionRequest) => Promise<SpawnSessionResult>) | null = null;
 
   // ============================================================
   // Constructor
@@ -202,6 +258,9 @@ export abstract class BaseAgent implements AgentBackend {
       workspaceRootPath: config.workspace.rootPath,
       onDebug: (msg) => this.debug(msg),
     });
+
+    // HookSystem: workspace-level user hooks from hooks.json
+    this.hookSystem = config.hookSystem;
   }
 
   // ============================================================
@@ -264,6 +323,22 @@ export abstract class BaseAgent implements AgentBackend {
    */
   protected debug(message: string): void {
     this.onDebug?.(message);
+  }
+
+  /**
+   * Fire a hook agent event (from hooks.json) via HookSystem.
+   * Catches all errors — hooks must never break the agent flow.
+   *
+   * Non-Claude backends call this directly. ClaudeAgent uses SDK's buildSdkHooks() instead.
+   *
+   * @param signal - Optional AbortSignal for cancelling hook execution on abort
+   */
+  protected async emitHookEvent(event: HookAgentEvent, input: SdkHookInput, signal?: AbortSignal): Promise<void> {
+    try {
+      await this.hookSystem?.executeAgentEvent(event, input, signal);
+    } catch (err) {
+      this.debug(`Hook event ${event} failed: ${err}`);
+    }
   }
 
   // ============================================================
@@ -677,6 +752,43 @@ Please continue the conversation naturally from where we left off.
   }
 
   // ============================================================
+  // Path Helpers
+  // ============================================================
+
+  /**
+   * Get the session storage path for this agent's session.
+   * Convenience wrapper around getSessionPath() with null-checking.
+   *
+   * @returns Session path, or undefined if session/workspace not configured
+   */
+  protected getSessionStoragePath(): string | undefined {
+    if (!this.config.session?.id || !this.config.workspace.rootPath) return undefined;
+    return getSessionPath(this.config.workspace.rootPath, this.config.session.id);
+  }
+
+  // ============================================================
+  // Lifecycle (postInit, applyBridgeUpdates)
+  // ============================================================
+
+  /**
+   * Post-construction initialization.
+   * Default: no-op (auth already handled for Claude/Pi API-key).
+   * Override in backends that need post-construction auth injection.
+   */
+  async postInit(): Promise<PostInitResult> {
+    return { authInjected: true };
+  }
+
+  /**
+   * Apply bridge/config updates mid-session.
+   * Default: no-op for backends that don't use bridge-mcp-server (Claude, Pi).
+   * Override in Codex/Copilot to regenerate config or write bridge files.
+   */
+  async applyBridgeUpdates(_context: BridgeUpdateContext): Promise<void> {
+    // No-op by default
+  }
+
+  // ============================================================
   // Cleanup (common base, subclasses extend)
   // ============================================================
 
@@ -866,6 +978,74 @@ Please continue the conversation naturally from where we left off.
    * Return undefined to fall back to miniModel.
    */
   protected validateCallLlmModel?(modelId: string): string | undefined;
+
+  /**
+   * Pre-execute a spawn_session request: handle help mode or delegate to onSpawnSession.
+   * Shared across all backends.
+   */
+  protected async preExecuteSpawnSession(
+    input: Record<string, unknown>
+  ): Promise<SpawnSessionResult | SpawnSessionHelpResult> {
+    // Help mode — return available config info
+    if (input.help) {
+      return this.getSpawnSessionHelp();
+    }
+
+    // Spawn mode — validate and delegate
+    const prompt = input.prompt as string | undefined;
+    if (!prompt?.trim()) {
+      throw new Error('prompt is required when not in help mode. Call with help=true to see available options.');
+    }
+
+    if (!this.onSpawnSession) {
+      throw new Error('spawn_session is not available in this context.');
+    }
+
+    const request: SpawnSessionRequest = {
+      prompt,
+      name: input.name as string | undefined,
+      llmConnection: input.llmConnection as string | undefined,
+      model: input.model as string | undefined,
+      enabledSourceSlugs: input.enabledSourceSlugs as string[] | undefined,
+      permissionMode: input.permissionMode as SpawnSessionRequest['permissionMode'],
+      labels: input.labels as string[] | undefined,
+      workingDirectory: input.workingDirectory as string | undefined,
+      attachments: input.attachments as SpawnSessionRequest['attachments'],
+    };
+
+    return this.onSpawnSession(request);
+  }
+
+  /**
+   * Get available connections, models, and sources for spawn_session help mode.
+   */
+  protected getSpawnSessionHelp(): SpawnSessionHelpResult {
+    const connections = getLlmConnections();
+    const defaultConnectionSlug = getDefaultLlmConnection();
+    const allSources = loadAllSources(this.config.workspace.rootPath);
+    const activeSlugs = this.sourceManager.getActiveSlugs();
+
+    return {
+      connections: connections.map(c => ({
+        slug: c.slug,
+        name: c.name,
+        isDefault: c.slug === defaultConnectionSlug,
+        providerType: c.providerType,
+        models: (c.models || []).map(m => typeof m === 'string' ? m : m.id),
+        defaultModel: c.defaultModel,
+      })),
+      sources: allSources.map(s => ({
+        slug: s.config.slug,
+        name: s.config.name,
+        type: s.config.type,
+        enabled: activeSlugs.has(s.config.slug),
+      })),
+      defaults: {
+        defaultConnection: defaultConnectionSlug,
+        permissionMode: this.permissionManager.getPermissionMode(),
+      },
+    };
+  }
 
   // ============================================================
   // Title Generation (shared implementation using runMiniCompletion)

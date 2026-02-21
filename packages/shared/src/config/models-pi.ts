@@ -1,0 +1,155 @@
+/**
+ * Pi Model & Provider Discovery (from SDK)
+ *
+ * Separated from models.ts because @mariozechner/pi-ai transitively pulls in
+ * @aws-sdk/client-bedrock-runtime → @smithy/node-http-handler → Node.js `stream`,
+ * which breaks the Vite renderer build (browser context, no Node.js modules).
+ *
+ * This file should ONLY be imported from:
+ *   - Main process code (Electron main, IPC handlers)
+ *   - Server-side code (build scripts, CLI)
+ *   - Registration calls (e.g., registerPiModelResolver)
+ *
+ * NEVER import this file from renderer components or from files that the renderer imports.
+ */
+
+import { getProviders, getModels } from '@mariozechner/pi-ai';
+import type { KnownProvider, Model, Api } from '@mariozechner/pi-ai';
+import type { ModelDefinition } from './models.ts';
+
+// ============================================
+// PI MODEL DISCOVERY
+// ============================================
+
+/**
+ * Convert a Pi SDK Model to our ModelDefinition format.
+ */
+function piModelToDefinition(m: Model<Api>): ModelDefinition {
+  const lastPart = m.name.split(/[\s-]/).pop() ?? m.name;
+  const shortName = m.name.length > 20
+    ? lastPart + ' (Pi)'
+    : m.name + ' (Pi)';
+
+  return {
+    id: `pi/${m.id}`,
+    name: `${m.name} (Pi)`,
+    shortName,
+    description: `${m.provider} model via Pi unified API`,
+    provider: 'pi',
+    contextWindow: m.contextWindow,
+    supportsThinking: m.reasoning,
+  };
+}
+
+/**
+ * Get Pi models for a specific auth provider directly from the Pi SDK.
+ */
+export function getPiModelsForAuthProvider(piAuthProvider: string): ModelDefinition[] {
+  try {
+    const models = getModels(piAuthProvider as KnownProvider);
+    if (models.length > 0) {
+      return models.map(piModelToDefinition);
+    }
+  } catch {
+    // Provider not recognized by SDK — fall through
+  }
+  return [];
+}
+
+/**
+ * Get all Pi models across all providers from the SDK.
+ */
+export function getAllPiModels(): ModelDefinition[] {
+  const allModels: ModelDefinition[] = [];
+  for (const provider of getProviders()) {
+    try {
+      const models = getModels(provider);
+      allModels.push(...models.map(piModelToDefinition));
+    } catch {
+      // Skip providers that fail
+    }
+  }
+  return allModels;
+}
+
+// ============================================
+// PI PROVIDER DISCOVERY
+// ============================================
+
+/**
+ * Display metadata for Pi SDK providers.
+ */
+const PI_PROVIDER_DISPLAY: Partial<Record<KnownProvider, { label: string; placeholder: string }>> = {
+  'anthropic':              { label: 'Anthropic',          placeholder: 'sk-ant-...' },
+  'google':                 { label: 'Google AI Studio',   placeholder: 'AIza...' },
+  'openai':                 { label: 'OpenAI',             placeholder: 'sk-...' },
+  'openrouter':             { label: 'OpenRouter',         placeholder: 'sk-or-...' },
+  'groq':                   { label: 'Groq',               placeholder: 'gsk_...' },
+  'mistral':                { label: 'Mistral',            placeholder: 'sk-...' },
+  'xai':                    { label: 'xAI (Grok)',         placeholder: 'xai-...' },
+  'cerebras':               { label: 'Cerebras',           placeholder: 'csk-...' },
+  'amazon-bedrock':         { label: 'Amazon Bedrock',     placeholder: 'AKIA...' },
+  'azure-openai-responses': { label: 'Azure OpenAI',       placeholder: 'sk-...' },
+  'vercel-ai-gateway':      { label: 'Vercel AI Gateway',  placeholder: 'sk-...' },
+  'huggingface':            { label: 'Hugging Face',       placeholder: 'hf_...' },
+};
+
+/**
+ * Providers to EXCLUDE from the Pi API key dropdown.
+ */
+const PI_EXCLUDED_PROVIDERS: Set<string> = new Set([
+  'github-copilot',
+  'openai-codex',
+  'google-vertex',
+  'google-gemini-cli',
+  'google-antigravity',
+]);
+
+/** Info for a Pi provider available in the API key flow. */
+export interface PiProviderInfo {
+  key: string;
+  label: string;
+  placeholder: string;
+}
+
+/** Convert 'vercel-ai-gateway' → 'Vercel Ai Gateway' etc. */
+function formatProviderName(key: string): string {
+  return key.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+/**
+ * Get all Pi providers available for API key authentication.
+ */
+export function getPiApiKeyProviders(): PiProviderInfo[] {
+  return getProviders()
+    .filter(p => !PI_EXCLUDED_PROVIDERS.has(p))
+    .map(p => {
+      const display = PI_PROVIDER_DISPLAY[p];
+      return {
+        key: p,
+        label: display?.label ?? formatProviderName(p),
+        placeholder: display?.placeholder ?? 'sk-...',
+      };
+    })
+    .sort((a, b) => {
+      const priority = ['anthropic', 'google', 'openai'];
+      const ai = priority.indexOf(a.key);
+      const bi = priority.indexOf(b.key);
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      return a.label.localeCompare(b.label);
+    });
+}
+
+/**
+ * Get the base URL for a Pi SDK provider (e.g. 'anthropic' → 'https://api.anthropic.com').
+ */
+export function getPiProviderBaseUrl(provider: string): string | undefined {
+  try {
+    const models = getModels(provider as Parameters<typeof getModels>[0]);
+    return models[0]?.baseUrl || undefined;
+  } catch {
+    return undefined;
+  }
+}

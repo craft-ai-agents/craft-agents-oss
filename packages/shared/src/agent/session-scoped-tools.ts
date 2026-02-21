@@ -32,6 +32,7 @@ import {
   type AuthRequest,
 } from '@craft-agent/session-tools-core';
 import { createLLMTool, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
+import { createSpawnSessionTool, type SpawnSessionFn } from './spawn-session-tool.ts';
 
 // Re-export types for backward compatibility
 export type {
@@ -74,6 +75,12 @@ export interface SessionScopedToolCallbacks {
    * Each agent backend sets this to its own queryLlm implementation.
    */
   queryFn?: (request: LLMQueryRequest) => Promise<LLMQueryResult>;
+
+  /**
+   * Callback for spawn_session tool — creates a sub-session and sends initial prompt.
+   * Each agent backend delegates to its onSpawnSession callback.
+   */
+  spawnSessionFn?: SpawnSessionFn;
 }
 
 // Registry of callbacks keyed by sessionId
@@ -177,7 +184,12 @@ const sessionScopedToolsCache = new Map<string, ReturnType<typeof createSdkMcpSe
  * Clean up cached tools for a session
  */
 export function cleanupSessionScopedTools(sessionId: string): void {
-  sessionScopedToolsCache.delete(sessionId);
+  const prefix = `${sessionId}::`;
+  for (const key of sessionScopedToolsCache.keys()) {
+    if (key.startsWith(prefix)) {
+      sessionScopedToolsCache.delete(key);
+    }
+  }
 }
 
 // ============================================================
@@ -259,6 +271,17 @@ export function getSessionScopedTools(
       getQueryFn: () => {
         const callbacks = getSessionScopedToolCallbacks(sessionId);
         return callbacks?.queryFn;
+      },
+    }),
+  );
+
+  // Add spawn_session — backend-specific (not in registry handler)
+  tools.push(
+    createSpawnSessionTool({
+      sessionId,
+      getSpawnSessionFn: () => {
+        const callbacks = getSessionScopedToolCallbacks(sessionId);
+        return callbacks?.spawnSessionFn;
       },
     }),
   );

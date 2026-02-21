@@ -10,9 +10,6 @@
  * 3. Update llm-connections.ts if adding a new built-in connection
  */
 
-import { getProviders, getModels } from '@mariozechner/pi-ai';
-import type { KnownProvider, Model, Api } from '@mariozechner/pi-ai';
-
 // ============================================
 // TYPES
 // ============================================
@@ -92,10 +89,9 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
   // OpenAI Codex Models — FALLBACK entries only.
   // At runtime, models are discovered dynamically via model/list from the Codex app-server.
   // See ModelRefreshService in apps/electron/src/main/model-fetchers/.
-  // These entries are used as layer 4 (last resort) when:
+  // These entries are used as layer 3 (last resort) when:
   //   - App-server is not running (e.g., first launch before auth)
   //   - model/list call fails (network, timeout)
-  //   - Cloudflare JSON also unavailable
   // ----------------------------------------
   {
     id: 'gpt-5.3-codex',
@@ -140,144 +136,6 @@ export const ANTHROPIC_MODELS = getModelsByProvider('anthropic');
 /** All OpenAI/Codex models */
 export const OPENAI_MODELS = getModelsByProvider('openai');
 
-
-// ============================================
-// PI MODEL DISCOVERY (from SDK)
-// ============================================
-
-/**
- * Convert a Pi SDK Model to our ModelDefinition format.
- */
-function piModelToDefinition(m: Model<Api>): ModelDefinition {
-  // Derive a short display name: "Claude 4.5 Sonnet" → "Sonnet (Pi)"
-  // Just use the name as-is with " (Pi)" suffix for shortName
-  const lastPart = m.name.split(/[\s-]/).pop() ?? m.name;
-  const shortName = m.name.length > 20
-    ? lastPart + ' (Pi)'
-    : m.name + ' (Pi)';
-
-  return {
-    id: `pi/${m.id}`,
-    name: `${m.name} (Pi)`,
-    shortName,
-    description: `${m.provider} model via Pi unified API`,
-    provider: 'pi',
-    contextWindow: m.contextWindow,
-    supportsThinking: m.reasoning,
-  };
-}
-
-/**
- * Get Pi models for a specific auth provider directly from the Pi SDK.
- * The SDK's getModels() already filters by provider — no manual prefix matching needed.
- *
- * @param piAuthProvider - The Pi auth provider name (e.g., 'anthropic', 'openai', 'google')
- * @returns Pi models for that provider, mapped to ModelDefinition format
- */
-export function getPiModelsForAuthProvider(piAuthProvider: string): ModelDefinition[] {
-  try {
-    const models = getModels(piAuthProvider as KnownProvider);
-    if (models.length > 0) {
-      return models.map(piModelToDefinition);
-    }
-  } catch {
-    // Provider not recognized by SDK — fall through
-  }
-  return [];
-}
-
-/**
- * Get all Pi models across all providers from the SDK.
- * Used as fallback when no specific piAuthProvider is set.
- *
- * @returns All Pi models from all known providers
- */
-export function getAllPiModels(): ModelDefinition[] {
-  const allModels: ModelDefinition[] = [];
-  for (const provider of getProviders()) {
-    try {
-      const models = getModels(provider);
-      allModels.push(...models.map(piModelToDefinition));
-    } catch {
-      // Skip providers that fail
-    }
-  }
-  return allModels;
-}
-
-// ============================================
-// PI PROVIDER DISCOVERY (from SDK)
-// ============================================
-
-/**
- * Display metadata for Pi SDK providers.
- * Providers not in this map use a derived display name (e.g., 'xai' → 'Xai').
- */
-const PI_PROVIDER_DISPLAY: Partial<Record<KnownProvider, { label: string; placeholder: string }>> = {
-  'anthropic':              { label: 'Anthropic',          placeholder: 'sk-ant-...' },
-  'google':                 { label: 'Google AI Studio',   placeholder: 'AIza...' },
-  'openai':                 { label: 'OpenAI',             placeholder: 'sk-...' },
-  'openrouter':             { label: 'OpenRouter',         placeholder: 'sk-or-...' },
-  'groq':                   { label: 'Groq',               placeholder: 'gsk_...' },
-  'mistral':                { label: 'Mistral',            placeholder: 'sk-...' },
-  'xai':                    { label: 'xAI (Grok)',         placeholder: 'xai-...' },
-  'cerebras':               { label: 'Cerebras',           placeholder: 'csk-...' },
-  'amazon-bedrock':         { label: 'Amazon Bedrock',     placeholder: 'AKIA...' },
-  'azure-openai-responses': { label: 'Azure OpenAI',       placeholder: 'sk-...' },
-  'vercel-ai-gateway':      { label: 'Vercel AI Gateway',  placeholder: 'sk-...' },
-  'huggingface':            { label: 'Hugging Face',       placeholder: 'hf_...' },
-};
-
-/**
- * Providers to EXCLUDE from the Pi API key dropdown.
- * These use OAuth, device flows, or other non-API-key auth.
- */
-const PI_EXCLUDED_PROVIDERS: Set<string> = new Set([
-  'github-copilot',      // Uses OAuth device flow (separate onboarding card)
-  'openai-codex',        // Uses ChatGPT OAuth (separate onboarding card)
-  'google-vertex',       // Requires service account / gcloud auth
-  'google-gemini-cli',   // Internal Google CLI variant
-  'google-antigravity',  // Internal Google variant
-]);
-
-/** Info for a Pi provider available in the API key flow. */
-export interface PiProviderInfo {
-  key: string;
-  label: string;
-  placeholder: string;
-}
-
-/** Convert 'vercel-ai-gateway' → 'Vercel Ai Gateway' etc. */
-function formatProviderName(key: string): string {
-  return key.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-}
-
-/**
- * Get all Pi providers available for API key authentication.
- * Dynamically loaded from the Pi SDK — updates automatically when SDK adds providers.
- */
-export function getPiApiKeyProviders(): PiProviderInfo[] {
-  return getProviders()
-    .filter(p => !PI_EXCLUDED_PROVIDERS.has(p))
-    .map(p => {
-      const display = PI_PROVIDER_DISPLAY[p];
-      return {
-        key: p,
-        label: display?.label ?? formatProviderName(p),
-        placeholder: display?.placeholder ?? 'sk-...',
-      };
-    })
-    .sort((a, b) => {
-      // Pin the big 3 at top, rest alphabetical
-      const priority = ['anthropic', 'google', 'openai'];
-      const ai = priority.indexOf(a.key);
-      const bi = priority.indexOf(b.key);
-      if (ai !== -1 && bi !== -1) return ai - bi;
-      if (ai !== -1) return -1;
-      if (bi !== -1) return 1;
-      return a.label.localeCompare(b.label);
-    });
-}
 
 /**
  * Legacy compatibility export.
@@ -439,4 +297,3 @@ export function isCopilotModel(modelId: string, connectionModels?: ModelDefiniti
 export function getModelProvider(modelId: string): ModelProvider | undefined {
   return getModelById(modelId)?.provider;
 }
-

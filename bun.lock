@@ -6,7 +6,6 @@
       "name": "craft-agent",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.2.37",
-        "@anthropic-ai/sdk": "^0.71.1",
         "@github/copilot-sdk": "^0.1.23",
         "@mariozechner/pi-coding-agent": "^0.53.0",
         "@modelcontextprotocol/sdk": "^1.24.3",
@@ -194,7 +193,6 @@
       },
       "peerDependencies": {
         "@anthropic-ai/claude-agent-sdk": ">=0.2.19",
-        "@anthropic-ai/sdk": ">=0.70.0",
         "@modelcontextprotocol/sdk": ">=1.0.0",
       },
     },
@@ -274,7 +272,6 @@
       },
       "peerDependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.2.19",
-        "@anthropic-ai/sdk": ">=0.70.0",
         "@modelcontextprotocol/sdk": ">=1.0.0",
         "zod": ">=3.0.0",
       },
@@ -325,7 +322,7 @@
 
     "@anthropic-ai/claude-agent-sdk": ["@anthropic-ai/claude-agent-sdk@0.2.37", "", { "optionalDependencies": { "@img/sharp-darwin-arm64": "^0.33.5", "@img/sharp-darwin-x64": "^0.33.5", "@img/sharp-linux-arm": "^0.33.5", "@img/sharp-linux-arm64": "^0.33.5", "@img/sharp-linux-x64": "^0.33.5", "@img/sharp-linuxmusl-arm64": "^0.33.5", "@img/sharp-linuxmusl-x64": "^0.33.5", "@img/sharp-win32-x64": "^0.33.5" }, "peerDependencies": { "zod": "^4.0.0" } }, "sha512-0TCAUuGXiWYV2JK+j2SiakGzPA7aoR5DNRxZ0EA571loGIqN3FRfiO1kipeBpEc+cRQ03a/4Kt5YAjMx0KBW+A=="],
 
-    "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.71.2", "", { "dependencies": { "json-schema-to-ts": "^3.1.1" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-TGNDEUuEstk/DKu0/TflXAEt+p+p/WhTlFzEnoosvbaDU2LTjm42igSdlL0VijrKpWejtOKxX0b8A7uc+XiSAQ=="],
+    "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.73.0", "", { "dependencies": { "json-schema-to-ts": "^3.1.1" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-URURVzhxXGJDGUGFunIOtBlSl7KWvZiAAKY/ttTkZAkXT9bTPqdk2eK0b8qqSxXpikh3QKPnPYpiyX98zf5ebw=="],
 
     "@apm-js-collab/code-transformer": ["@apm-js-collab/code-transformer@0.8.2", "", {}, "sha512-YRjJjNq5KFSjDUoqu5pFUWrrsvGOxl6c3bu+uMFc9HNNptZ2rNU/TI2nLw4jnhQNtka972Ee2m3uqbvDQtPeCA=="],
 
@@ -3288,8 +3285,6 @@
     "@isaacs/cliui/wrap-ansi": ["wrap-ansi@8.1.0", "", { "dependencies": { "ansi-styles": "^6.1.0", "string-width": "^5.0.1", "strip-ansi": "^7.0.1" } }, "sha512-si7QWI6zUMq56bESFvagtmzMdGOtoxfR+Sez11Mobfc7tm+VkUckk9bW2UeffTGVUbOksxmSw0AA2gs8g71NCQ=="],
 
     "@malept/flatpak-bundler/fs-extra": ["fs-extra@9.1.0", "", { "dependencies": { "at-least-node": "^1.0.0", "graceful-fs": "^4.2.0", "jsonfile": "^6.0.1", "universalify": "^2.0.0" } }, "sha512-hcg3ZmepS30/7BSFqRvoo3DOMQu7IjqxO5nCDt+zM9XWjb33Wg7ziNT+Qvqbuc3+gWpzO02JubVyk2G4Zvo1OQ=="],
-
-    "@mariozechner/pi-ai/@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.73.0", "", { "dependencies": { "json-schema-to-ts": "^3.1.1" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-URURVzhxXGJDGUGFunIOtBlSl7KWvZiAAKY/ttTkZAkXT9bTPqdk2eK0b8qqSxXpikh3QKPnPYpiyX98zf5ebw=="],
 
     "@mariozechner/pi-ai/ajv": ["ajv@8.17.1", "", { "dependencies": { "fast-deep-equal": "^3.1.3", "fast-uri": "^3.0.1", "json-schema-traverse": "^1.0.0", "require-from-string": "^2.0.2" } }, "sha512-B/gBuNg5SiMTrPkC+A2+cW0RszwxYmn6VYxB/inlBStS5nx6xHIt/ehKRhIMhqusl7a8LjQoZnjCs5vhwxOQ1g=="],
 

@@ -1,18 +1,23 @@
 /**
  * Error diagnostics - runs quick checks to identify the specific cause
  * of a generic "process exited" error from the SDK.
+ *
+ * Provider-aware: routes checks based on providerType so non-Anthropic
+ * sessions don't run Anthropic-specific credential/endpoint checks.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import { getLastApiError } from '../interceptor-common.ts';
 import { type AuthType, getDefaultLlmConnection, getLlmConnection } from '../config/storage.ts';
 import { getCredentialManager } from '../credentials/index.ts';
+import { validateAnthropicConnection } from '../config/llm-validation.ts';
+import type { LlmProviderType } from '../config/llm-connections.ts';
+import { isAnthropicProvider } from '../config/llm-connections.ts';
 
 export type DiagnosticCode =
-  | 'billing_error'         // HTTP 402 from Anthropic API
+  | 'billing_error'         // HTTP 402 from API
   | 'token_expired'
   | 'invalid_credentials'
-  | 'rate_limited'          // HTTP 429 from Anthropic API
+  | 'rate_limited'          // HTTP 429 from API
   | 'mcp_unreachable'
   | 'service_unavailable'
   | 'unknown_error';
@@ -29,6 +34,10 @@ interface DiagnosticConfig {
   authType?: AuthType;
   workspaceId?: string;
   rawError: string;
+  /** Provider type for routing provider-specific checks */
+  providerType?: LlmProviderType;
+  /** Base URL override (uses this instead of process.env.ANTHROPIC_BASE_URL) */
+  baseUrl?: string;
 }
 
 interface CheckResult {
@@ -49,8 +58,10 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, defaultVal
  * Check if a recent API error was captured during the failed request.
  * This is the most accurate source of truth for API failures since it
  * captures the actual HTTP status code before the SDK wraps it.
+ *
+ * Provider-agnostic: HTTP status codes are universal.
  */
-async function checkCapturedApiError(): Promise<CheckResult> {
+async function checkCapturedApiError(providerLabel: string): Promise<CheckResult> {
   const apiError = getLastApiError();
 
   if (!apiError) {
@@ -64,7 +75,7 @@ async function checkCapturedApiError(): Promise<CheckResult> {
       detail: `✗ API error: 402 ${apiError.message}`,
       failCode: 'billing_error',
       failTitle: 'Payment Required',
-      failMessage: apiError.message || 'Your Anthropic API account has a billing issue.',
+      failMessage: apiError.message || `Your ${providerLabel} account has a billing issue.`,
     };
   }
 
@@ -96,8 +107,8 @@ async function checkCapturedApiError(): Promise<CheckResult> {
       ok: false,
       detail: `✗ API error: ${apiError.status} ${apiError.message}`,
       failCode: 'service_unavailable',
-      failTitle: 'Anthropic Service Error',
-      failMessage: `The Anthropic API returned an error (${apiError.status}). This is usually temporary.`,
+      failTitle: `${providerLabel} Service Error`,
+      failMessage: `The ${providerLabel} API returned an error (${apiError.status}). This is usually temporary.`,
     };
   }
 
@@ -117,13 +128,35 @@ function getProviderLabel(baseUrl: string): string {
 }
 
 /**
+ * Derive a user-facing label from the provider type.
+ * Falls back to URL-based detection for base URL overrides.
+ */
+function getProviderLabelFromType(providerType?: LlmProviderType, baseUrl?: string): string {
+  if (providerType) {
+    switch (providerType) {
+      case 'anthropic': return 'Anthropic';
+      case 'anthropic_compat': return baseUrl ? getProviderLabel(baseUrl) : 'API endpoint';
+      case 'openai':
+      case 'openai_compat': return 'OpenAI';
+      case 'bedrock': return 'AWS Bedrock';
+      case 'vertex': return 'Google Vertex AI';
+      case 'copilot': return 'GitHub Copilot';
+      case 'pi':
+      case 'pi_compat': return 'Pi';
+    }
+  }
+  // Fallback: derive from base URL or default
+  const resolvedUrl = baseUrl || process.env.ANTHROPIC_BASE_URL?.trim() || 'https://api.anthropic.com';
+  return getProviderLabel(resolvedUrl);
+}
+
+/**
  * Check if the configured API endpoint is reachable.
  * Uses a simple HEAD request to check connectivity without authentication.
- * Respects ANTHROPIC_BASE_URL so diagnostics are meaningful for all providers.
+ * Uses explicit baseUrl if provided, otherwise falls back to env var.
  */
-async function checkApiAvailability(): Promise<CheckResult> {
-  // Use the same base URL resolution as unified-network-interceptor.ts
-  const baseUrl = process.env.ANTHROPIC_BASE_URL?.trim() || 'https://api.anthropic.com';
+async function checkApiAvailability(explicitBaseUrl?: string): Promise<CheckResult> {
+  const baseUrl = explicitBaseUrl || process.env.ANTHROPIC_BASE_URL?.trim() || 'https://api.anthropic.com';
   const label = getProviderLabel(baseUrl);
 
   try {
@@ -192,47 +225,59 @@ async function checkWorkspaceToken(_workspaceId: string): Promise<CheckResult> {
 }
 
 /**
- * Validate an API key by making a test request to Anthropic.
- * Uses models.list() which is lightweight and doesn't incur AI costs.
+ * Validate an API key by making a minimal query through the Claude Agent SDK.
+ * Uses validateAnthropicConnection() which runs query() with maxTurns:1.
  */
-async function validateApiKeyWithAnthropic(apiKey: string, baseUrl?: string | null): Promise<CheckResult> {
+async function validateApiKeyWithAnthropic(apiKey: string, baseUrl?: string | null, providerLabel: string = 'Anthropic'): Promise<CheckResult> {
   try {
-    const client = new Anthropic({
+    const { getDefaultSummarizationModel } = await import('../config/models.ts');
+    const model = getDefaultSummarizationModel();
+
+    const result = await validateAnthropicConnection({
+      model,
       apiKey,
-      ...(baseUrl ? { baseURL: baseUrl } : {})
+      baseUrl: baseUrl || undefined,
     });
-    const result = await client.models.list();
-    const modelCount = result.data?.length ?? 0;
-    return {
-      ok: true,
-      detail: `✓ API key: Valid (${modelCount} models available)`,
-    };
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+
+    if (result.success) {
+      return {
+        ok: true,
+        detail: '✓ API key: Valid',
+      };
+    }
+
+    const errorMsg = result.error || 'Unknown error';
+    const lowerMsg = errorMsg.toLowerCase();
 
     // 401 = Invalid key
-    if (msg.includes('401') || msg.includes('invalid') || msg.includes('Unauthorized') || msg.includes('authentication')) {
+    if (lowerMsg.includes('401') || lowerMsg.includes('authentication') || lowerMsg.includes('unauthorized')) {
       return {
         ok: false,
         detail: '✗ API key: Invalid or expired',
         failCode: 'invalid_credentials',
         failTitle: 'Invalid API Key',
-        failMessage: 'Your Anthropic API key is invalid or has expired. Please update it in settings.',
+        failMessage: `Your ${providerLabel} API key is invalid or has expired. Please update it in settings.`,
       };
     }
 
     // 403 = Key valid but no permission
-    if (msg.includes('403') || msg.includes('permission') || msg.includes('Forbidden')) {
+    if (lowerMsg.includes('403') || lowerMsg.includes('permission') || lowerMsg.includes('forbidden')) {
       return {
         ok: false,
         detail: '✗ API key: Insufficient permissions',
         failCode: 'invalid_credentials',
         failTitle: 'API Key Permission Error',
-        failMessage: 'Your API key does not have permission to access the API. Check your Anthropic dashboard.',
+        failMessage: `Your API key does not have permission to access the ${providerLabel} API. Check your dashboard.`,
       };
     }
 
-    // Network/other errors - don't fail on these, just note them
+    // Other errors - don't fail diagnostics, just note them
+    return {
+      ok: true,
+      detail: `✓ API key: Validation skipped (${errorMsg.slice(0, 50)})`,
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
     return {
       ok: true,
       detail: `✓ API key: Validation skipped (${msg.slice(0, 50)})`,
@@ -241,7 +286,7 @@ async function validateApiKeyWithAnthropic(apiKey: string, baseUrl?: string | nu
 }
 
 /** Check API key presence and validity */
-async function checkApiKey(): Promise<CheckResult> {
+async function checkApiKey(providerLabel: string = 'Anthropic'): Promise<CheckResult> {
   try {
     // Resolve API key from the default LLM connection
     const defaultConnSlug = getDefaultLlmConnection();
@@ -256,12 +301,12 @@ async function checkApiKey(): Promise<CheckResult> {
         detail: '✗ API key: Not found',
         failCode: 'invalid_credentials',
         failTitle: 'API Key Missing',
-        failMessage: 'Your Anthropic API key is missing. Please add it in settings.',
+        failMessage: `Your ${providerLabel} API key is missing. Please add it in settings.`,
       };
     }
 
     // Actually validate the key works
-    return await validateApiKeyWithAnthropic(apiKey, baseUrl);
+    return await validateApiKeyWithAnthropic(apiKey, baseUrl, providerLabel);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     return { ok: true, detail: `✓ API key: Check failed (${msg})` };
@@ -269,7 +314,7 @@ async function checkApiKey(): Promise<CheckResult> {
 }
 
 /** Check OAuth token presence */
-async function checkOAuthToken(): Promise<CheckResult> {
+async function checkOAuthToken(providerLabel: string = 'Anthropic'): Promise<CheckResult> {
   try {
     // Resolve OAuth token from the default LLM connection
     const defaultConnSlug = getDefaultLlmConnection();
@@ -285,7 +330,7 @@ async function checkOAuthToken(): Promise<CheckResult> {
         detail: '✗ OAuth token: Not found',
         failCode: 'invalid_credentials',
         failTitle: 'OAuth Token Missing',
-        failMessage: 'Your Claude Max OAuth token is missing. Please re-authenticate.',
+        failMessage: `Your ${providerLabel} OAuth token is missing. Please re-authenticate.`,
       };
     }
     return { ok: true, detail: '✓ OAuth token: Present' };
@@ -348,9 +393,14 @@ async function checkMcpConnectivity(mcpUrl: string): Promise<CheckResult> {
 /**
  * Run error diagnostics to identify the specific cause of a failure.
  * All checks run in parallel with 5s timeouts.
+ *
+ * Provider-aware: only runs Anthropic-specific checks (API key validation,
+ * endpoint availability) for Anthropic-based providers. Non-Anthropic
+ * providers get the captured API error check plus the raw error details.
  */
 export async function runErrorDiagnostics(config: DiagnosticConfig): Promise<DiagnosticResult> {
-  const { authType, workspaceId, rawError } = config;
+  const { authType, workspaceId, rawError, providerType, baseUrl } = config;
+  const providerLabel = getProviderLabelFromType(providerType, baseUrl);
   const details: string[] = [];
   const defaultResult: CheckResult = { ok: true, detail: '? Check: Timeout' };
 
@@ -358,20 +408,26 @@ export async function runErrorDiagnostics(config: DiagnosticConfig): Promise<Dia
   const checks: Promise<CheckResult>[] = [];
 
   // 0. FIRST: Check captured API error (most accurate source of truth)
-  // This captures the actual HTTP status code from the failed request
-  checks.push(withTimeout(checkCapturedApiError(), 1000, defaultResult));
+  // This is provider-agnostic — HTTP status codes are universal.
+  checks.push(withTimeout(checkCapturedApiError(providerLabel), 1000, defaultResult));
 
-  // 1. API endpoint availability check (uses configured base URL)
-  checks.push(withTimeout(checkApiAvailability(), 4000, defaultResult));
+  // Provider-specific checks: only run for Anthropic-based providers
+  // Codex, Copilot, and Pi handle auth internally — no env-var-based checks apply.
+  const isAnthropic = !providerType || isAnthropicProvider(providerType);
 
-  // 2. API key check with validation (only for api_key auth)
-  if (authType === 'api_key') {
-    checks.push(withTimeout(checkApiKey(), 5000, defaultResult));
-  }
+  if (isAnthropic) {
+    // 1. API endpoint availability check (uses explicit baseUrl or env var)
+    checks.push(withTimeout(checkApiAvailability(baseUrl), 4000, defaultResult));
 
-  // 3. OAuth token check (only for oauth_token auth)
-  if (authType === 'oauth_token') {
-    checks.push(withTimeout(checkOAuthToken(), 5000, defaultResult));
+    // 2. API key check with validation (only for api_key auth)
+    if (authType === 'api_key') {
+      checks.push(withTimeout(checkApiKey(providerLabel), 5000, defaultResult));
+    }
+
+    // 3. OAuth token check (only for oauth_token auth)
+    if (authType === 'oauth_token') {
+      checks.push(withTimeout(checkOAuthToken(providerLabel), 5000, defaultResult));
+    }
   }
 
   // Run all checks in parallel
@@ -399,11 +455,11 @@ export async function runErrorDiagnostics(config: DiagnosticConfig): Promise<Dia
     };
   }
 
-  // All checks passed but still failed - likely Anthropic service issue
+  // All checks passed but still failed - likely service issue
   return {
     code: 'service_unavailable',
     title: 'Service Unavailable',
-    message: 'The AI service is experiencing issues. All credentials appear valid. Try again in a moment.',
+    message: `The ${providerLabel} service is experiencing issues. All credentials appear valid. Try again in a moment.`,
     details,
   };
 }

@@ -5,8 +5,8 @@
  * This allows the session viewer (web) to display icons without filesystem access.
  */
 
-import { readFileSync, existsSync } from 'fs';
-import { extname } from 'path';
+import { readFileSync, writeFileSync, existsSync, statSync } from 'fs';
+import { extname, dirname, basename, join } from 'path';
 import { isEmoji } from './icon-constants.ts';
 
 /**
@@ -23,24 +23,62 @@ const EXT_TO_MIME: Record<string, string> = {
 };
 
 /**
- * Maximum file size for encoding (50KB)
- * Larger files are skipped to avoid bloating session storage
+ * Target size for icon thumbnails (px).
+ * Icons are displayed at 20x20 in the UI, so 32x32 provides good quality at 2x.
+ */
+const ICON_TARGET_SIZE = 32;
+
+/**
+ * Maximum file size for direct encoding without resize (50KB).
+ * Files under this size are encoded as-is when no resize callback is provided.
  */
 const MAX_FILE_SIZE = 50 * 1024;
+
+/** Raster extensions that support resize (SVGs are vector, skip resize) */
+const RASTER_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.ico', '.webp', '.gif']);
+
+export interface EncodeIconOptions {
+  /** Resize raster icons to 32x32. Takes (buffer, targetSize), returns PNG buffer. */
+  resize?: (buffer: Buffer, targetSize: number) => Buffer | undefined;
+}
+
+/**
+ * Get the thumbnail cache path for an icon file.
+ * e.g., /path/to/icon.png → /path/to/icon.thumb.png
+ */
+function getThumbPath(iconPath: string): string {
+  const dir = dirname(iconPath);
+  const ext = extname(iconPath);
+  const name = basename(iconPath, ext);
+  return join(dir, `${name}.thumb.png`);
+}
+
+/**
+ * Check if a cached thumbnail is still valid (exists and newer than original).
+ */
+function isThumbValid(iconPath: string, thumbPath: string): boolean {
+  if (!existsSync(thumbPath)) return false;
+  try {
+    const originalMtime = statSync(iconPath).mtimeMs;
+    const thumbMtime = statSync(thumbPath).mtimeMs;
+    return thumbMtime >= originalMtime;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Encode an icon file to a base64 data URL.
  *
- * @param iconPath - Absolute path to the icon file
- * @returns Base64 data URL (e.g., "data:image/png;base64,...") or undefined if encoding fails
+ * When a `resize` callback is provided (via options), raster images are resized
+ * to 32x32 and cached as `{name}.thumb.png` next to the original. SVGs are
+ * always encoded directly (vector = resolution-independent).
  *
- * Handles:
- * - PNG, JPG, JPEG, SVG image files
- * - Existing data URLs (pass through)
- * - File paths that don't exist (returns undefined)
- * - Files larger than 50KB (returns undefined)
+ * @param iconPath - Absolute path to the icon file
+ * @param options - Optional resize callback for raster images
+ * @returns Base64 data URL (e.g., "data:image/png;base64,...") or undefined if encoding fails
  */
-export function encodeIconToDataUrl(iconPath: string | undefined): string | undefined {
+export function encodeIconToDataUrl(iconPath: string | undefined, options?: EncodeIconOptions): string | undefined {
   if (!iconPath) {
     return undefined;
   }
@@ -67,14 +105,44 @@ export function encodeIconToDataUrl(iconPath: string | undefined): string | unde
     return undefined;
   }
 
+  const isRaster = RASTER_EXTENSIONS.has(ext);
+
+  // For raster images with a resize callback, always use 32x32 thumbnail
+  if (isRaster && options?.resize) {
+    const thumbPath = getThumbPath(iconPath);
+
+    // Check for valid cached thumbnail
+    if (isThumbValid(iconPath, thumbPath)) {
+      try {
+        const thumbBuffer = readFileSync(thumbPath);
+        const base64 = thumbBuffer.toString('base64');
+        return `data:image/png;base64,${base64}`;
+      } catch {
+        // Cache read failed, fall through to regenerate
+      }
+    }
+
+    // Generate thumbnail
+    try {
+      const buffer = readFileSync(iconPath);
+      const resized = options.resize(buffer, ICON_TARGET_SIZE);
+      if (resized) {
+        // Cache the thumbnail for next time
+        try { writeFileSync(thumbPath, resized); } catch { /* cache write is best-effort */ }
+        const base64 = resized.toString('base64');
+        return `data:image/png;base64,${base64}`;
+      }
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Fallback: encode directly (SVGs, or raster without resize callback)
   try {
-    // Read file and check size
     const buffer = readFileSync(iconPath);
     if (buffer.length > MAX_FILE_SIZE) {
       return undefined;
     }
-
-    // Encode to base64 data URL
     const base64 = buffer.toString('base64');
     return `data:${mimeType};base64,${base64}`;
   } catch {

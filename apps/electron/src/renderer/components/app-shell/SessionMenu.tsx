@@ -15,7 +15,7 @@
  * - Mark as Unread
  * - Rename
  * - Open in New Window
- * - View in Finder
+ * - Show in file manager
  * - Delete
  */
 
@@ -44,6 +44,7 @@ import type { SessionStatus } from '@/config/session-status-config'
 import type { LabelConfig } from '@craft-agent/shared/labels'
 import { extractLabelId } from '@craft-agent/shared/labels'
 import { LabelMenuItems, StatusMenuItems } from './SessionMenuParts'
+import { getFileManagerName } from '@/lib/platform'
 
 export interface SessionMenuProps {
   /** Session ID */
@@ -339,10 +340,10 @@ export function SessionMenu({
         <span className="flex-1">Open in New Window</span>
       </MenuItem>
 
-      {/* View in Finder */}
+      {/* Show in file manager */}
       <MenuItem onClick={handleShowInFinder}>
         <FolderOpen className="h-3.5 w-3.5" />
-        <span className="flex-1">View in Finder</span>
+        <span className="flex-1">{`Show in ${getFileManagerName()}`}</span>
       </MenuItem>
 
       {/* Copy Path */}

@@ -1,0 +1,96 @@
+/**
+ * Spawn Session Tool (spawn_session)
+ *
+ * Session-scoped tool that enables the main agent to create sub-sessions
+ * with configurable connection, model, sources, and an initial prompt.
+ *
+ * Two modes:
+ * - help=true: Returns available connections, models, and sources
+ * - Default: Creates a sub-session and sends the prompt (fire-and-forget)
+ */
+
+import { tool } from '@anthropic-ai/claude-agent-sdk';
+import { z } from 'zod';
+import type { SpawnSessionResult, SpawnSessionHelpResult } from './base-agent.ts';
+
+export type SpawnSessionFn = (input: Record<string, unknown>) => Promise<SpawnSessionResult | SpawnSessionHelpResult>;
+
+// Tool result type - matches what the SDK expects
+type ToolResult = {
+  content: Array<{ type: 'text'; text: string }>;
+  isError?: boolean;
+};
+
+function errorResponse(message: string): ToolResult {
+  return {
+    content: [{ type: 'text', text: `Error: ${message}` }],
+    isError: true,
+  };
+}
+
+export interface SpawnSessionToolOptions {
+  sessionId: string;
+  /**
+   * Lazy resolver for the spawn session callback.
+   * Called at execution time to get the current callback from the session registry.
+   */
+  getSpawnSessionFn: () => SpawnSessionFn | undefined;
+}
+
+export function createSpawnSessionTool(options: SpawnSessionToolOptions) {
+  return tool(
+    'spawn_session',
+    `Create a new sub-session that runs independently with its own prompt, connection, model, and sources.
+
+Use this to delegate tasks to parallel sessions — research, analysis, drafts, or any work that benefits from separate context.
+
+Call with help=true first to discover available connections, models, and sources.
+When spawning, the 'prompt' parameter is required.
+
+The spawned session appears in the session list and runs fire-and-forget.
+Only use 'attachments' for existing file paths on disk — the tool reads them automatically.`,
+    {
+      help: z.boolean().optional()
+        .describe('If true, returns available connections, models, and sources instead of creating a session'),
+      prompt: z.string().optional()
+        .describe('Instructions for the new session (required when not in help mode)'),
+      name: z.string().optional()
+        .describe('Session name'),
+      llmConnection: z.string().optional()
+        .describe('Connection slug (e.g., "anthropic-api", "codex")'),
+      model: z.string().optional()
+        .describe('Model ID override'),
+      enabledSourceSlugs: z.array(z.string()).optional()
+        .describe('Source slugs to enable in the new session'),
+      permissionMode: z.enum(['safe', 'ask', 'allow-all']).optional()
+        .describe('Permission mode for the new session'),
+      labels: z.array(z.string()).optional()
+        .describe('Labels for the new session'),
+      workingDirectory: z.string().optional()
+        .describe('Working directory for the new session'),
+      attachments: z.array(z.object({
+        path: z.string().describe('Absolute file path on disk'),
+        name: z.string().optional().describe('Display name (defaults to file basename)'),
+      })).optional()
+        .describe('Files to include with the prompt'),
+    },
+    async (args) => {
+      const spawnFn = options.getSpawnSessionFn();
+      if (!spawnFn) {
+        return errorResponse('spawn_session is not available in this context.');
+      }
+
+      try {
+        const result = await spawnFn(args as Record<string, unknown>);
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error) {
+        if (error instanceof Error) {
+          return errorResponse(`spawn_session failed: ${error.message}`);
+        }
+        throw error;
+      }
+    }
+  );
+}

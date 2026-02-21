@@ -182,6 +182,7 @@ export async function createSession(
     permissionMode?: SessionConfig['permissionMode'];
     enabledSourceSlugs?: string[];
     model?: string;
+    llmConnection?: string;
     hidden?: boolean;
     sessionStatus?: SessionConfig['sessionStatus'];
     labels?: string[];
@@ -212,6 +213,7 @@ export async function createSession(
     permissionMode: options?.permissionMode,
     enabledSourceSlugs: options?.enabledSourceSlugs,
     model: options?.model,
+    llmConnection: options?.llmConnection,
     hidden: options?.hidden,
     sessionStatus: options?.sessionStatus,
     labels: options?.labels,
@@ -819,6 +821,7 @@ export async function createSubSession(
     permissionMode?: SessionConfig['permissionMode'];
     enabledSourceSlugs?: string[];
     model?: string;
+    llmConnection?: string;
     sessionStatus?: SessionConfig['sessionStatus'];
     labels?: string[];
   }
@@ -841,6 +844,7 @@ export async function createSubSession(
     permissionMode: options?.permissionMode ?? parent.permissionMode,
     enabledSourceSlugs: options?.enabledSourceSlugs ?? parent.enabledSourceSlugs,
     model: options?.model ?? parent.model,
+    llmConnection: options?.llmConnection ?? parent.llmConnection,
     sessionStatus: options?.sessionStatus,
     labels: options?.labels,
   });

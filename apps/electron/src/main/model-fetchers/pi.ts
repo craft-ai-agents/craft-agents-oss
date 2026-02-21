@@ -1,13 +1,13 @@
 /**
  * Pi Model Fetcher
  *
- * Uses the Pi SDK's built-in model registry (getModels) to discover available models.
- * No network call needed — models are compiled into the SDK and update when it's bumped.
+ * Provider-agnostic wrapper that delegates model discovery to backend drivers.
  */
 
+import { app } from 'electron'
 import type { ModelFetcher, ModelFetchResult, ModelFetcherCredentials } from '@craft-agent/shared/config'
 import type { LlmConnection } from '@craft-agent/shared/config'
-import { getPiModelsForAuthProvider, getAllPiModels } from '@craft-agent/shared/config'
+import { fetchBackendModels } from '@craft-agent/shared/agent/backend'
 
 export class PiModelFetcher implements ModelFetcher {
   /** No periodic refresh — SDK models are static, updated on app upgrade */
@@ -15,18 +15,17 @@ export class PiModelFetcher implements ModelFetcher {
 
   async fetchModels(
     connection: LlmConnection,
-    _credentials: ModelFetcherCredentials,
+    credentials: ModelFetcherCredentials,
   ): Promise<ModelFetchResult> {
-    const models = connection.piAuthProvider
-      ? getPiModelsForAuthProvider(connection.piAuthProvider)
-      : getAllPiModels()
-
-    if (models.length === 0) {
-      throw new Error(
-        `No Pi models found for provider: ${connection.piAuthProvider ?? 'all'}`,
-      )
-    }
-
-    return { models }
+    return fetchBackendModels({
+      connection,
+      credentials,
+      timeoutMs: 15_000,
+      hostRuntime: {
+        appRootPath: app.isPackaged ? app.getAppPath() : process.cwd(),
+        resourcesPath: process.resourcesPath,
+        isPackaged: app.isPackaged,
+      },
+    })
   }
 }

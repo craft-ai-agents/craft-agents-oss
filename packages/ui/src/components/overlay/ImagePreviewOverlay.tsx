@@ -3,7 +3,7 @@
  *
  * Loads an image via data URL (from READ_FILE_DATA_URL IPC) and displays it
  * with fit-to-container sizing. File path badge provides "Open" and
- * "Reveal in Finder" via PlatformContext (dual-trigger menu).
+ * "Reveal in {file manager}" via PlatformContext (dual-trigger menu).
  */
 
 import * as React from 'react'

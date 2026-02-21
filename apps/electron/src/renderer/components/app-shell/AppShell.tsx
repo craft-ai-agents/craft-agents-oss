@@ -320,7 +320,7 @@ function FilterLabelItems({
             <DropdownMenuSub key={label.id}>
               <StyledDropdownMenuSubTrigger>
                 <FilterMenuRow
-                  icon={<LabelIcon label={label} size="sm" hasChildren />}
+                  icon={<LabelIcon label={label} size="lg" hasChildren />}
                   label={label.name}
                   accessory={
                     showIndicator ? <Check className="h-3 w-3 text-muted-foreground" /> : undefined
@@ -335,7 +335,7 @@ function FilterLabelItems({
                       {/* Click the group title to clear, hover to open mode submenu */}
                       <StyledDropdownMenuSubTrigger onClick={(e) => { e.preventDefault(); toggleLabel(label.id) }}>
                         <FilterMenuRow
-                          icon={<LabelIcon label={label} size="sm" hasChildren />}
+                          icon={<LabelIcon label={label} size="lg" hasChildren />}
                           label={label.name}
                           accessory={<FilterModeBadge mode={mode} />}
                         />
@@ -364,7 +364,7 @@ function FilterLabelItems({
                       }}
                     >
                       <FilterMenuRow
-                        icon={<LabelIcon label={label} size="sm" hasChildren />}
+                        icon={<LabelIcon label={label} size="lg" hasChildren />}
                         label={label.name}
                         accessory={isPinned ? <Check className="h-3 w-3 text-muted-foreground" /> : undefined}
                       />
@@ -390,7 +390,7 @@ function FilterLabelItems({
               {/* Click the item itself to clear, hover to open mode submenu */}
               <StyledDropdownMenuSubTrigger onClick={(e) => { e.preventDefault(); toggleLabel(label.id) }}>
                 <FilterMenuRow
-                  icon={<LabelIcon label={label} size="sm" />}
+                  icon={<LabelIcon label={label} size="lg" />}
                   label={label.name}
                   accessory={<FilterModeBadge mode={mode} />}
                 />
@@ -414,7 +414,7 @@ function FilterLabelItems({
             }}
           >
             <FilterMenuRow
-              icon={<LabelIcon label={label} size="sm" />}
+              icon={<LabelIcon label={label} size="lg" />}
               label={label.name}
               accessory={isPinned ? <Check className="h-3 w-3 text-muted-foreground" /> : undefined}
             />
@@ -2566,7 +2566,7 @@ function AppShellContent({
                                   return (
                                     <StyledDropdownMenuItem disabled key={`pinned-label-${label.id}`}>
                                       <FilterMenuRow
-                                        icon={<LabelIcon label={label} size="sm" />}
+                                        icon={<LabelIcon label={label} size="lg" />}
                                         label={label.name}
                                         accessory={<Check className="h-3 w-3 text-muted-foreground" />}
                                       />
@@ -2614,7 +2614,7 @@ function AppShellContent({
                                     <DropdownMenuSub key={`sel-label-${labelId}`}>
                                       <StyledDropdownMenuSubTrigger onClick={(e) => { e.preventDefault(); setLabelFilter(prev => { const next = new Map(prev); next.delete(labelId); return next }) }}>
                                         <FilterMenuRow
-                                          icon={<LabelIcon label={label} size="sm" />}
+                                          icon={<LabelIcon label={label} size="lg" />}
                                           label={label.name}
                                           accessory={<FilterModeBadge mode={mode} />}
                                         />
@@ -2871,7 +2871,7 @@ function AppShellContent({
                                               onClick={(e) => { e.preventDefault(); setLabelFilter(prev => { const next = new Map(prev); next.delete(item.id); return next }) }}
                                             >
                                               <FilterMenuRow
-                                                icon={<LabelIcon label={item.config} size="sm" />}
+                                                icon={<LabelIcon label={item.config} size="lg" />}
                                                 label={labelDisplay}
                                                 accessory={<FilterModeBadge mode={currentMode} />}
                                               />
@@ -2918,7 +2918,7 @@ function AppShellContent({
                                           )}
                                         >
                                           <FilterMenuRow
-                                            icon={<LabelIcon label={item.config} size="sm" />}
+                                            icon={<LabelIcon label={item.config} size="lg" />}
                                             label={labelDisplay}
                                             accessory={isPinned ? <Check className="h-3 w-3 text-muted-foreground" /> : null}
                                           />

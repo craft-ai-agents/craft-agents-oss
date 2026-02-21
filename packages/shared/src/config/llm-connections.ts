@@ -7,13 +7,32 @@
  */
 
 // Import model types and lists from centralized registry
+// NOTE: Pi SDK functions (getPiModelsForAuthProvider, getAllPiModels) are NOT imported
+// here because @mariozechner/pi-ai transitively pulls in @aws-sdk which uses Node.js
+// `stream` module — breaking the Vite renderer build. Instead, Pi model resolution is
+// injected at app startup via registerPiModelResolver().
 import {
   type ModelDefinition,
   ANTHROPIC_MODELS,
   OPENAI_MODELS,
-  getPiModelsForAuthProvider,
-  getAllPiModels,
 } from './models';
+import type { CredentialManager } from '../credentials/manager.ts';
+
+// ============================================================
+// Pi Model Resolver (dependency injection to avoid Pi SDK in renderer)
+// ============================================================
+
+type PiModelResolver = (piAuthProvider?: string) => ModelDefinition[];
+let _piModelResolver: PiModelResolver = () => [];
+
+/**
+ * Register the Pi model resolver function.
+ * Must be called from main process at app startup (before any Pi connections are used).
+ * This avoids pulling @mariozechner/pi-ai into the renderer bundle.
+ */
+export function registerPiModelResolver(resolver: PiModelResolver): void {
+  _piModelResolver = resolver;
+}
 
 // ============================================================
 // Types
@@ -392,9 +411,9 @@ export function getModelsForProviderType(providerType: LlmProviderType, piAuthPr
     return []; // Copilot models are dynamic — fetched via listModels(), no hardcoded fallbacks
   }
 
-  // Pi: fetch models from SDK, filtered by auth provider if known
+  // Pi: fetch models via registered resolver (avoids Pi SDK import in renderer)
   if (providerType === 'pi') {
-    return piAuthProvider ? getPiModelsForAuthProvider(piAuthProvider) : getAllPiModels();
+    return _piModelResolver(piAuthProvider);
   }
 
   // Anthropic, Bedrock, Vertex all use Claude models
@@ -434,7 +453,7 @@ export function getDefaultModelsForConnection(providerType: LlmProviderType, piA
   if (providerType === 'openai') return OPENAI_MODELS;
   if (providerType === 'copilot') return []; // Dynamic — fetched via listModels()
   if (providerType === 'pi') {
-    const models = piAuthProvider ? getPiModelsForAuthProvider(piAuthProvider) : getAllPiModels();
+    const models = _piModelResolver(piAuthProvider);
     // Sort preferred defaults first so getDefaultModelForConnection picks a modern model
     const preferred = (piAuthProvider && PI_PREFERRED_DEFAULTS[piAuthProvider]) || [];
     if (preferred.length > 0) {
@@ -633,6 +652,96 @@ export function migrateAuthType(
     case 'none':
       return 'none';
   }
+}
+
+// ============================================================
+// Auth Environment Variable Resolution
+// ============================================================
+
+/**
+ * Result of resolving auth env vars for an LLM connection.
+ */
+export interface ResolvedAuthEnvVars {
+  /** Environment variables to set (e.g., ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN) */
+  envVars: Record<string, string>;
+  /** Whether credentials were successfully resolved */
+  success: boolean;
+  /** Warning message if auth resolution encountered issues */
+  warning?: string;
+}
+
+/**
+ * Resolve authentication environment variables for an LLM connection.
+ *
+ * Provider-agnostic: switches on providerType to determine which env vars
+ * to set and how to retrieve credentials. Shared by:
+ * - `SessionManager.reinitializeAuth()` (applies to process.env)
+ * - `ClaudeAgent.postInit()` (applies to process.env + envOverrides)
+ *
+ * Providers that handle auth internally (openai, copilot, pi) return
+ * empty envVars — their auth is managed in postInit() via native mechanisms.
+ *
+ * @param connection - The LLM connection config
+ * @param connectionSlug - Connection slug for credential lookup
+ * @param credentialManager - Credential manager instance
+ * @param getValidOAuthToken - Function to get a valid (refreshed) OAuth token
+ * @returns Resolved env vars and status
+ */
+export async function resolveAuthEnvVars(
+  connection: LlmConnection,
+  connectionSlug: string,
+  credentialManager: CredentialManager,
+  getValidOAuthToken: (slug: string) => Promise<{ accessToken?: string | null }>,
+): Promise<ResolvedAuthEnvVars> {
+  const envVars: Record<string, string> = {};
+
+  // Only Anthropic-SDK-based providers use env var auth
+  // OpenAI (Codex), Copilot, and Pi handle auth internally in their postInit()
+  if (!isAnthropicProvider(connection.providerType)) {
+    return { envVars, success: true };
+  }
+
+  // Set base URL if configured
+  if (connection.baseUrl) {
+    envVars.ANTHROPIC_BASE_URL = connection.baseUrl;
+  }
+
+  const authType = connection.authType;
+
+  if (authType === 'api_key' || authType === 'api_key_with_endpoint' || authType === 'bearer_token') {
+    const apiKey = await credentialManager.getLlmApiKey(connectionSlug);
+    if (apiKey) {
+      envVars.ANTHROPIC_API_KEY = apiKey;
+    } else if (connection.baseUrl) {
+      // Keyless provider (e.g. Ollama)
+      envVars.ANTHROPIC_API_KEY = 'not-needed';
+    } else {
+      return { envVars, success: false, warning: `No API key found for: ${connectionSlug}` };
+    }
+  } else if (authType === 'oauth') {
+    if (connection.providerType === 'anthropic') {
+      // Anthropic OAuth uses getValidClaudeOAuthToken which handles token refresh
+      const tokenResult = await getValidOAuthToken(connectionSlug);
+      if (tokenResult.accessToken) {
+        envVars.CLAUDE_CODE_OAUTH_TOKEN = tokenResult.accessToken;
+      } else {
+        return { envVars, success: false, warning: `Failed to get OAuth token for: ${connectionSlug}` };
+      }
+    } else {
+      // Non-Anthropic OAuth (e.g. anthropic_compat with OAuth)
+      const llmOAuth = await credentialManager.getLlmOAuth(connectionSlug);
+      if (llmOAuth?.accessToken) {
+        envVars.CLAUDE_CODE_OAUTH_TOKEN = llmOAuth.accessToken;
+      } else {
+        return { envVars, success: false, warning: `No OAuth token found for: ${connectionSlug}` };
+      }
+    }
+  } else if (authType === 'environment') {
+    // Environment auth — credentials come from process.env, nothing to inject
+    return { envVars, success: true };
+  }
+
+  return { envVars, success: true };
 }
 
 /**

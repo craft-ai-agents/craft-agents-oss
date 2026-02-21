@@ -71,6 +71,9 @@ interface UseOnboardingReturn {
   handleFinish: () => void
   handleCancel: () => void
 
+  // Direct edit (skip method selection, jump to credentials)
+  jumpToCredentials: (method: ApiSetupMethod) => void
+
   // Reset
   reset: () => void
 }
@@ -155,6 +158,9 @@ export function apiSetupMethodToConnectionSetup(
       return {
         slug,
         credential: options.credential,
+        baseUrl: options.baseUrl,
+        defaultModel: options.connectionDefaultModel,
+        models: options.models,
         piAuthProvider: options.piAuthProvider,
       }
   }
@@ -311,6 +317,22 @@ export function useOnboarding({
     const isPiApiKeyFlow = state.apiSetupMethod === 'pi_api_key'
 
     try {
+      // When editing an existing connection, API key is optional (empty = keep existing credential)
+      if (!data.apiKey.trim() && editingSlug) {
+        const saved = await handleSaveConfig(undefined, {
+          baseUrl: data.baseUrl,
+          connectionDefaultModel: data.connectionDefaultModel,
+          models: data.models,
+          piAuthProvider: data.piAuthProvider,
+        })
+        if (saved) {
+          setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
+        } else {
+          setState(s => ({ ...s, credentialStatus: 'error' }))
+        }
+        return
+      }
+
       // API key validation differs by provider:
       // - OpenAI flow: API key is always required
       // - Pi flow: API key is always required
@@ -325,7 +347,9 @@ export function useOnboarding({
           return
         }
       } else if (isPiApiKeyFlow) {
-        if (!data.apiKey.trim()) {
+        // Pi: API key required for known providers, optional for Custom endpoints (Ollama, local)
+        const isPiCustom = !data.piAuthProvider
+        if (!data.apiKey.trim() && !isPiCustom) {
           setState(s => ({
             ...s,
             credentialStatus: 'error',
@@ -616,6 +640,17 @@ export function useOnboarding({
     setState(s => ({ ...s, step: 'welcome' }))
   }, [])
 
+  // Jump directly to credentials step with a pre-set method (for editing existing connections)
+  const jumpToCredentials = useCallback((method: ApiSetupMethod) => {
+    setState(s => ({
+      ...s,
+      step: 'credentials' as const,
+      apiSetupMethod: method,
+      credentialStatus: 'idle' as const,
+      errorMessage: undefined,
+    }))
+  }, [])
+
   // Reset onboarding to initial state (used after logout or modal close)
   const reset = useCallback(() => {
     setState({
@@ -654,6 +689,7 @@ export function useOnboarding({
     handleClearError,
     handleFinish,
     handleCancel,
+    jumpToCredentials,
     reset,
   }
 }

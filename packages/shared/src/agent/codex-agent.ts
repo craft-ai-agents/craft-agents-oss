@@ -28,13 +28,19 @@ import type {
   SdkMcpServerConfig,
 } from './backend/types.ts';
 import { AbortReason } from './backend/types.ts';
+import { getBackendRuntime } from './backend/internal/driver-types.ts';
 import type { Workspace } from '../config/storage.ts';
 
 // Import models from centralized registry
 import { DEFAULT_CODEX_MODEL, getModelById, getModelIdByShortName, getModelProvider, MODEL_REGISTRY, getDefaultSummarizationModel } from '../config/models.ts';
 
 // LLM tool types and helpers for call_llm PreToolUse intercept
-import { withTimeout, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
+import {
+  withTimeout,
+  LLM_QUERY_TIMEOUT_MS,
+  type LLMQueryRequest,
+  type LLMQueryResult,
+} from './llm-tool.ts';
 
 // BaseAgent provides common functionality
 import { BaseAgent } from './base-agent.ts';
@@ -52,7 +58,9 @@ import {
 
 // Codex binary resolver
 import { resolveCodexBinary } from '../codex/binary-resolver.ts';
-import { POOL_SERVER_MCP_NAME } from '../codex/config-generator.ts';
+import { POOL_SERVER_MCP_NAME, generateCodexConfig } from '../codex/config-generator.ts';
+import { writeBridgeSourceFiles } from '../codex/bridge-utils.ts';
+import type { PostInitResult, BridgeUpdateContext } from './backend/types.ts';
 
 // ChatGPT OAuth for token refresh and API key exchange
 import { refreshChatGptTokens, type ChatGptTokens } from '../auth/chatgpt-oauth.ts';
@@ -68,15 +76,13 @@ import { EventQueue } from './backend/event-queue.ts';
 // Error parsing for typed errors
 import { parseError, type AgentError } from './errors.ts';
 
-// Debug logging
-import { debug } from '../utils/debug.ts';
-
 // Session storage for plans folder path
 import { getSessionPlansPath } from '../sessions/storage.ts';
 
 // Path utilities for cross-platform normalization
 import { join, resolve } from 'node:path';
 import { readFileSync, existsSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 
 // System prompt for Craft Agent context
 import { getSystemPrompt } from '../prompts/system.ts';
@@ -175,6 +181,9 @@ export class CodexAgent extends BaseAgent {
   // injected after ensureClient() connects (avoids 30s timeout during agent creation)
   private _pendingChatGptTokens: { idToken: string; accessToken: string } | null = null;
 
+  // Per-session CODEX_HOME directory (set in postInit, used by ensureClient)
+  private codexHome: string | undefined;
+
   // State
   private _isProcessing: boolean = false;
   private _pendingReconnect: boolean = false;
@@ -185,6 +194,8 @@ export class CodexAgent extends BaseAgent {
   private abortReason?: AbortReason;
   private codexThreadId: string | null = null; // For session resume
   private currentTurnId: string | null = null;
+  private pendingSteerFromTurnId: string | null = null;
+  private staleTurnIds = new Set<string>();
 
   // Event adapter
   private adapter: CodexEventAdapter;
@@ -231,15 +242,15 @@ export class CodexAgent extends BaseAgent {
   // ============================================================
 
   /**
-   * Callback for when ChatGPT authentication is required.
-   * Called when:
-   * 1. No stored ChatGPT tokens exist and they're needed
-   * 2. Token refresh fails (refresh token expired)
-   *
-   * The UI should trigger the ChatGPT OAuth flow and then call
-   * `injectChatGptTokens()` with the new tokens.
+   * @deprecated Use onBackendAuthRequired (inherited from BaseAgent) instead.
+   * Kept as a getter/setter alias for backward compatibility.
    */
-  onChatGptAuthRequired: ((reason: string) => void) | null = null;
+  get onChatGptAuthRequired(): ((reason: string) => void) | null {
+    return this.onBackendAuthRequired;
+  }
+  set onChatGptAuthRequired(cb: ((reason: string) => void) | null) {
+    this.onBackendAuthRequired = cb;
+  }
 
   /**
    * Callback when a plan is submitted via SubmitPlan MCP tool.
@@ -301,6 +312,115 @@ export class CodexAgent extends BaseAgent {
   }
 
   /**
+   * Post-construction initialization.
+   * 1. Generate initial config.toml (must happen before first chat)
+   * 2. Inject stored credentials (OAuth tokens or API key)
+   */
+  override async postInit(): Promise<PostInitResult> {
+    // Step 1: Generate initial config.toml with sources
+    await this.generateInitialConfig();
+
+    // Step 2: Auth injection
+    const codexAuthType = this.config.authType;
+    const useApiKey = codexAuthType === 'api_key' || codexAuthType === 'api_key_with_endpoint';
+
+    if (useApiKey) {
+      const injected = await this.tryInjectStoredApiKey();
+      return {
+        authInjected: injected,
+        authWarning: injected ? undefined : 'No OpenAI API key available. Please configure your API key in Settings → AI.',
+        authWarningLevel: 'error',
+      };
+    } else {
+      const injected = await this.tryInjectStoredChatGptTokens();
+      return {
+        authInjected: injected,
+        authWarning: injected ? undefined : 'No ChatGPT tokens available. Please check your Codex login in Settings → AI.',
+        authWarningLevel: 'error',
+      };
+    }
+  }
+
+  /**
+   * Generate initial .codex-home directory and config.toml.
+   * Called from postInit() before auth injection.
+   * Reuses applyBridgeUpdates() which already handles config.toml + bridge files.
+   */
+  private async generateInitialConfig(): Promise<void> {
+    const sessionPath = this.getSessionStoragePath();
+    if (!sessionPath) return;
+
+    const codexHome = join(sessionPath, '.codex-home');
+    await mkdir(codexHome, { recursive: true });
+    this.codexHome = codexHome;
+
+    // Generate config.toml with initial sources (same logic as mid-session updates)
+    const initial = this.config.initialSources;
+    await this.applyBridgeUpdates({
+      sessionPath,
+      enabledSources: initial?.enabledSources ?? [],
+      mcpServers: initial?.mcpServers ?? {},
+      sessionId: this.config.session?.id ?? '',
+      workspaceRootPath: this.config.workspace.rootPath,
+      context: 'initial setup',
+      poolServerUrl: this.config.poolServerUrl,
+    });
+  }
+
+  /**
+   * Apply bridge/config updates mid-session.
+   * Regenerates config.toml with current sources and queues a reconnect.
+   */
+  override async applyBridgeUpdates(ctx: BridgeUpdateContext): Promise<void> {
+    try {
+      const codexHome = join(ctx.sessionPath, '.codex-home');
+      await mkdir(codexHome, { recursive: true });
+
+      // Resolve paths from config (set at construction time)
+      const runtime = getBackendRuntime(this.config);
+      const bridgeServerPath = runtime.paths?.bridgeServer;
+      const bridgeConfigPath = bridgeServerPath ? join(codexHome, 'bridge-config.json') : undefined;
+      const sessionServerPath = runtime.paths?.sessionServer;
+      const nodePath = runtime.paths?.node ?? 'bun';
+
+      // Extract workspaceId from first source
+      const workspaceId = ctx.enabledSources[0]?.workspaceId;
+
+      // Plans folder path for SubmitPlan tool
+      const plansFolderPath = ctx.sessionId && ctx.workspaceRootPath
+        ? join(ctx.workspaceRootPath, 'sessions', ctx.sessionId, 'plans')
+        : undefined;
+
+      const configResult = generateCodexConfig({
+        sources: ctx.enabledSources,
+        mcpServerConfigs: ctx.mcpServers,
+        sessionPath: ctx.sessionPath,
+        bridgeServerPath,
+        bridgeConfigPath,
+        workspaceId,
+        sessionServerPath: sessionServerPath && ctx.sessionId && ctx.workspaceRootPath ? sessionServerPath : undefined,
+        sessionId: ctx.sessionId,
+        workspaceRootPath: ctx.workspaceRootPath,
+        plansFolderPath,
+        poolServerUrl: ctx.poolServerUrl,
+        nodePath,
+      });
+
+      await writeFile(join(codexHome, 'config.toml'), configResult.toml, 'utf-8');
+
+      // Write bridge files for API sources if needed
+      if (configResult.needsBridge) {
+        await writeBridgeSourceFiles(codexHome, ctx.enabledSources);
+      }
+
+      await this.queueReconnect();
+      this.debug(`Codex config regenerated after ${ctx.context}`);
+    } catch (err) {
+      this.debug(`Failed to regenerate Codex config after ${ctx.context}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /**
    * Override debug to add Codex prefix.
    */
   protected override debug(message: string): void {
@@ -351,9 +471,9 @@ export class CodexAgent extends BaseAgent {
     // Build environment variables for the Codex process
     // CODEX_HOME enables per-session configuration (MCP servers, etc.)
     const env: Record<string, string> = {};
-    if (this.config.codexHome) {
-      env.CODEX_HOME = this.config.codexHome;
-      this.debug(`Using custom CODEX_HOME: ${this.config.codexHome}`);
+    if (this.codexHome) {
+      env.CODEX_HOME = this.codexHome;
+      this.debug(`Using custom CODEX_HOME: ${this.codexHome}`);
     }
 
     const options: AppServerOptions = {
@@ -425,6 +545,15 @@ export class CodexAgent extends BaseAgent {
   private setupClientEventHandlers(): void {
     if (!this.client) return;
 
+    const isStaleTurnEvent = (turnId?: string | null): boolean => {
+      // When steering starts a replacement turn mid-stream, late events from the
+      // replaced turn can still arrive. Filter only known stale turn IDs.
+      if (!turnId) return false;
+      if (this.staleTurnIds.has(turnId)) return true;
+      if (this.pendingSteerFromTurnId && turnId === this.pendingSteerFromTurnId) return true;
+      return false;
+    };
+
     // Thread started - capture thread ID (skip ephemeral threads from queryLlm etc.)
     this.client.on('thread/started', (notification) => {
       if (this._startingEphemeralThread) return;
@@ -451,6 +580,15 @@ export class CodexAgent extends BaseAgent {
     // after complete(), causing lost tool results and truncated assistant messages.
     this.client.on('turn/completed', (notification) => {
       if (this._ephemeralThreadIds.has(notification.threadId)) return;
+      const completedTurnId = notification.turn?.id ?? null;
+      if (!completedTurnId && this.pendingSteerFromTurnId) {
+        this.debug(`Ignoring turn/completed without turn id during steer transition (replacing=${this.pendingSteerFromTurnId})`);
+        return;
+      }
+      if (isStaleTurnEvent(completedTurnId)) {
+        this.debug(`Ignoring stale turn/completed for replaced turn ${completedTurnId} (active=${this.currentTurnId})`);
+        return;
+      }
       for (const event of this.adapter.adaptTurnCompleted(notification)) {
         this.eventQueue.enqueue(event);
       }
@@ -465,6 +603,7 @@ export class CodexAgent extends BaseAgent {
     // Turn plan updated - Codex's native task list
     // Emits synthetic TodoWrite tool events (tool_start + tool_result) for TurnCard
     this.client.on('turn/plan/updated', (notification) => {
+      if (isStaleTurnEvent(notification.turnId)) return;
       for (const event of this.adapter.adaptTurnPlanUpdated(notification)) {
         this.eventQueue.enqueue(event);
       }
@@ -473,6 +612,7 @@ export class CodexAgent extends BaseAgent {
     // Item started (skip ephemeral threads)
     this.client.on('item/started', (notification) => {
       if (this._ephemeralThreadIds.has(notification.threadId)) return;
+      if (isStaleTurnEvent(notification.turnId)) return;
       for (const event of this.adapter.adaptItemStarted(notification)) {
         // Track Read tool calls (including bash/PS commands classified as reads)
         if (event.type === 'tool_start' && event.toolName === 'Read') {
@@ -487,6 +627,7 @@ export class CodexAgent extends BaseAgent {
     // handlers so turn/completed can defer eventQueue.complete() until they finish.
     this.client.on('item/completed', async (notification) => {
       if (this._ephemeralThreadIds.has(notification.threadId)) return;
+      if (isStaleTurnEvent(notification.turnId)) return;
       this.inflightItemHandlers++;
       try {
         const events = this.adapter.adaptItemCompleted(notification);
@@ -531,6 +672,23 @@ export class CodexAgent extends BaseAgent {
               }
             }
           }
+          // Fire PostToolUse / PostToolUseFailure hook events (fire-and-forget)
+          if (event.type === 'tool_result') {
+            const item = notification.item;
+            const hookToolName = item?.type === 'mcpToolCall' && item.server && item.tool
+              ? `mcp__${item.server}__${item.tool}`
+              : (event.toolName ?? 'unknown');
+            const hookEvent = event.isError ? 'PostToolUseFailure' : 'PostToolUse';
+            this.emitHookEvent(hookEvent, {
+              hook_event_name: hookEvent,
+              tool_name: hookToolName,
+              tool_input: event.input,
+              ...(event.isError
+                ? { error: typeof event.result === 'string' ? event.result : undefined }
+                : { tool_response: typeof event.result === 'string' ? event.result : undefined }),
+            });
+          }
+
           this.eventQueue.enqueue(event);
         }
       } finally {
@@ -547,6 +705,7 @@ export class CodexAgent extends BaseAgent {
     // Agent message delta (streaming text, skip ephemeral threads)
     this.client.on('item/agentMessage/delta', (notification) => {
       if (this._ephemeralThreadIds.has(notification.threadId)) return;
+      if (isStaleTurnEvent(notification.turnId)) return;
       for (const event of this.adapter.adaptAgentMessageDelta(notification)) {
         this.eventQueue.enqueue(event);
       }
@@ -555,6 +714,7 @@ export class CodexAgent extends BaseAgent {
     // Reasoning delta (streaming thinking, skip ephemeral threads)
     this.client.on('item/reasoning/textDelta', (notification) => {
       if (this._ephemeralThreadIds.has(notification.threadId)) return;
+      if (isStaleTurnEvent(notification.turnId)) return;
       for (const event of this.adapter.adaptReasoningDelta(notification)) {
         this.eventQueue.enqueue(event);
       }
@@ -563,6 +723,7 @@ export class CodexAgent extends BaseAgent {
     // Command output delta (accumulate for tool result, skip ephemeral threads)
     this.client.on('item/commandExecution/outputDelta', (notification) => {
       if (this._ephemeralThreadIds.has(notification.threadId)) return;
+      if (isStaleTurnEvent(notification.turnId)) return;
       this.adapter.adaptCommandOutputDelta(notification);
     });
 
@@ -934,6 +1095,13 @@ export class CodexAgent extends BaseAgent {
 
     const inputObj = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>;
 
+    // Fire PreToolUse hook event (hooks.json) — await so hooks run before tool executes
+    await this.emitHookEvent('PreToolUse', {
+      hook_event_name: 'PreToolUse',
+      tool_name: sdkToolName,
+      tool_input: inputObj,
+    });
+
     // Extract tool metadata before the pipeline strips _intent/_displayName
     // Codex fork provides metadata via params.metadata; also check input fields
     {
@@ -1062,6 +1230,25 @@ export class CodexAgent extends BaseAgent {
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
           this.debug(`PreToolUse: call_llm pre-execution failed: ${errorMsg}`);
+          await this.safeRespondToPreToolUse(requestId, {
+            type: 'modify',
+            input: { ...inputObj, _precomputedResult: JSON.stringify({ error: errorMsg }) },
+          });
+        }
+        return;
+      }
+
+      case 'spawn_session_intercept': {
+        this.debug('PreToolUse: Intercepting spawn_session for pre-execution');
+        try {
+          const result = await this.preExecuteSpawnSession(inputObj);
+          await this.safeRespondToPreToolUse(requestId, {
+            type: 'modify',
+            input: { ...inputObj, _precomputedResult: JSON.stringify(result) },
+          });
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          this.debug(`PreToolUse: spawn_session pre-execution failed: ${errorMsg}`);
           await this.safeRespondToPreToolUse(requestId, {
             type: 'modify',
             input: { ...inputObj, _precomputedResult: JSON.stringify({ error: errorMsg }) },
@@ -1236,7 +1423,7 @@ export class CodexAgent extends BaseAgent {
       if (!storedCreds?.refreshToken) {
         this.debug('No refresh token available, requesting re-authentication');
         this.client?.respondToTokenRefreshError(params.requestId, 'No refresh token available');
-        this.onChatGptAuthRequired?.('No refresh token - please sign in again');
+        this.onBackendAuthRequired?.('No refresh token - please sign in again');
         return;
       }
 
@@ -1268,7 +1455,7 @@ export class CodexAgent extends BaseAgent {
       this.client?.respondToTokenRefreshError(params.requestId, message);
 
       // Notify UI that re-authentication is required
-      this.onChatGptAuthRequired?.(`Token refresh failed: ${message}`);
+      this.onBackendAuthRequired?.(`Token refresh failed: ${message}`);
     }
   }
 
@@ -1595,6 +1782,12 @@ export class CodexAgent extends BaseAgent {
     this._startingEphemeralThread = false;
     this.adapter.startTurn();
     this.currentUserMessage = message; // Store for source_activated events
+
+    // Fire UserPromptSubmit hook event (fire-and-forget)
+    this.emitHookEvent('UserPromptSubmit', {
+      hook_event_name: 'UserPromptSubmit',
+      prompt: message,
+    });
 
     // Get centralized mini agent configuration (from BaseAgent)
     // This ensures Claude and Codex agents use the same detection and constants
@@ -2044,6 +2237,9 @@ export class CodexAgent extends BaseAgent {
   // ============================================================
 
   async abort(reason?: string): Promise<void> {
+    // Fire Stop hook event (fire-and-forget)
+    this.emitHookEvent('Stop', { hook_event_name: 'Stop' });
+
     if (this.client?.isConnected() && this.codexThreadId && this.currentTurnId) {
       try {
         await this.client.turnInterrupt({
@@ -2059,6 +2255,9 @@ export class CodexAgent extends BaseAgent {
   }
 
   forceAbort(reason: AbortReason): void {
+    // Fire Stop hook event (fire-and-forget)
+    this.emitHookEvent('Stop', { hook_event_name: 'Stop' });
+
     this.abortReason = reason;
     this.eventQueue.complete();
     this.debug(`Force aborting: ${reason}`);
@@ -2108,6 +2307,72 @@ export class CodexAgent extends BaseAgent {
 
     // Base cleanup (stops config watcher, clears whitelists, resets trackers)
     super.destroy();
+  }
+
+  /**
+   * Redirect mid-stream by starting a replacement turn on the same thread.
+   *
+   * Codex app-server supports turn replacement semantics ("replaced" abort reason).
+   * We keep the existing event stream alive and ask app-server to start a new turn.
+   * If replacement fails, emit steer_undelivered so the session layer re-queues.
+   */
+  override redirect(message: string): boolean {
+    if (!this._isProcessing || !this.client?.isConnected() || !this.codexThreadId || !this.currentTurnId) {
+      this.forceAbort(AbortReason.Redirect);
+      return false;
+    }
+
+    const client = this.client;
+    const threadId = this.codexThreadId;
+    const replacedTurnId = this.currentTurnId;
+    this.pendingSteerFromTurnId = replacedTurnId;
+
+    this.debug(`Steering mid-stream (Codex replace): "${message.slice(0, 100)}"`);
+
+    void (async () => {
+      try {
+        const response = await client.turnStart({
+          threadId,
+          input: this.buildUserInput(message),
+          cwd: null,
+          approvalPolicy: null,
+          sandboxPolicy: null,
+          model: null,
+          effort: this.getReasoningEffort(),
+          summary: null,
+          personality: null,
+          outputSchema: null,
+          collaborationMode: null,
+        });
+
+        this.currentUserMessage = message;
+        const newTurnId = response.turn?.id ?? null;
+        if (newTurnId) {
+          this.staleTurnIds.add(replacedTurnId);
+          this.pendingSteerFromTurnId = null;
+          // Set immediately so late events from the replaced turn are ignored.
+          this.currentTurnId = newTurnId;
+          this.adapter.startTurn();
+          for (const event of this.adapter.adaptTurnStarted({
+            threadId,
+            turn: { id: newTurnId, items: [], status: 'inProgress', error: null },
+          })) {
+            this.eventQueue.enqueue(event);
+          }
+          this.debug(`Steer accepted: replaced turn ${replacedTurnId} -> ${newTurnId}`);
+        } else {
+          this.pendingSteerFromTurnId = null;
+          this.debug('Steer started replacement turn, but response had no turn id');
+        }
+      } catch (err) {
+        this.pendingSteerFromTurnId = null;
+        const msg = err instanceof Error ? err.message : String(err);
+        this.debug(`Steer failed, re-queuing message: ${msg}`);
+        this.eventQueue.enqueue({ type: 'steer_undelivered', message });
+      }
+    })();
+
+    return true;
   }
 
   isProcessing(): boolean {
@@ -2165,7 +2430,7 @@ export class CodexAgent extends BaseAgent {
           const injected = await this.tryInjectStoredChatGptTokens();
           if (!injected) {
             this.debug('ChatGPT token injection failed after reconnect; skipping thread resume');
-            this.onChatGptAuthRequired?.('Missing or expired ChatGPT tokens after reconnect');
+            this.onBackendAuthRequired?.('Missing or expired ChatGPT tokens after reconnect');
             return;
           }
           this.debug('ChatGPT token injection succeeded before thread resume');
@@ -2430,12 +2695,15 @@ export class CodexAgent extends BaseAgent {
         effort: null,
         summary: null,
         personality: null,
-        outputSchema: null,
+        outputSchema: (request.outputSchema as Parameters<typeof client.turnStart>[0]['outputSchema']) ?? null,
         collaborationMode: null,
       });
 
-      // 30s timeout matching runMiniCompletion
-      await withTimeout(completionPromise, 30000, 'call_llm timed out after 30s');
+      await withTimeout(
+        completionPromise,
+        LLM_QUERY_TIMEOUT_MS,
+        `call_llm timed out after ${LLM_QUERY_TIMEOUT_MS / 1000}s`
+      );
 
       this.debug(`[CodexAgent.queryLlm] Result length: ${result.trim().length}`);
       return { text: result.trim(), model };
@@ -2533,7 +2801,11 @@ export class CodexAgent extends BaseAgent {
 
       // Wait for turn completion with timeout
       try {
-        await withTimeout(completionPromise, 30000, 'runMiniCompletion timed out after 30s');
+        await withTimeout(
+          completionPromise,
+          LLM_QUERY_TIMEOUT_MS,
+          `runMiniCompletion timed out after ${LLM_QUERY_TIMEOUT_MS / 1000}s`
+        );
       } catch (e) {
         this.debug(`[runMiniCompletion] Timeout waiting for completion`);
         throw e;

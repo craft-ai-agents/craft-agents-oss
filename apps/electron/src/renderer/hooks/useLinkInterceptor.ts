@@ -78,7 +78,7 @@ interface LinkInterceptorOptions {
   openFileExternal: (path: string) => Promise<void>
   /** Open URL in default browser */
   openUrl: (url: string) => Promise<void>
-  /** Reveal file in Finder / file manager */
+  /** Reveal file in system file manager */
   showInFolder: (path: string) => Promise<void>
   /** Read file as UTF-8 text (for code, markdown, json, text previews) */
   readFile: (path: string) => Promise<string>
@@ -103,7 +103,7 @@ interface LinkInterceptorResult {
   closePreview: () => void
   /** Open the currently previewed file in external app */
   openCurrentExternal: () => void
-  /** Reveal the currently previewed file in Finder */
+  /** Reveal the currently previewed file in system file manager */
   revealCurrentInFinder: () => void
   /** Read file as data URL — passed to image overlays as their loader */
   readFileDataUrl: (path: string) => Promise<string>
@@ -190,7 +190,7 @@ export function useLinkInterceptor(options: LinkInterceptorOptions): LinkInterce
     }
   }, []) // Stable: uses refs
 
-  /** Reveal the currently previewed file in Finder (from overlay header) */
+  /** Reveal the currently previewed file in system file manager (from overlay header) */
   const revealCurrentInFinder = useCallback(() => {
     const state = previewStateRef.current
     if (state) {

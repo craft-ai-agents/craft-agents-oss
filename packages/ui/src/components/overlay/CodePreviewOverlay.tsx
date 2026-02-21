@@ -2,7 +2,7 @@
  * CodePreviewOverlay - Overlay for code file preview (Read/Write tools)
  *
  * Uses PreviewOverlay for presentation and ShikiCodeViewer for syntax highlighting.
- * File path badge provides "Open" / "Reveal in Finder" via PlatformContext.
+ * File path badge provides "Open" / "Reveal in {file manager}" via PlatformContext.
  */
 
 import * as React from 'react'

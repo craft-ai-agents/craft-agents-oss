@@ -5,10 +5,9 @@
  * Replaces the scattered fetchAndStore*Models() functions and startCodexModelRefresh().
  *
  * Fallback chain (same for every provider):
- * 1. Provider API/SDK (Anthropic /v1/models, Codex model/list, Copilot listModels, Pi SDK)
- * 2. Cloudflare JSON (models.craft.do/v1/{key}.json) — public, no auth
- * 3. Persisted connection.models — previously fetched, survives offline/restart
- * 4. MODEL_REGISTRY — hardcoded offline seed data, last resort
+ * 1. Provider runtime discovery via backend driver dispatch
+ * 2. Persisted connection.models — previously fetched, survives offline/restart
+ * 3. MODEL_REGISTRY — hardcoded offline seed data, last resort
  */
 
 import type { ModelFetcherMap, ModelFetcherCredentials, FetchableProvider } from '@craft-agent/shared/config'
@@ -21,22 +20,7 @@ import {
   getModelsForProviderType,
 } from '@craft-agent/shared/config'
 import { MODEL_FETCHERS } from './registry'
-import { fetchFromCloudflare } from './cloudflare'
 import { ipcLog } from '../logger'
-
-// ============================================================
-// Cloudflare provider key mapping
-// ============================================================
-
-/** Map provider types to Cloudflare JSON filenames */
-const CLOUDFLARE_KEYS: Partial<Record<FetchableProvider, string>> = {
-  anthropic: 'anthropic',
-  openai:    'openai',
-  copilot:   'copilot',
-  bedrock:   'anthropic',  // same models
-  vertex:    'anthropic',  // same models
-  // Pi: no Cloudflare entry — SDK is the source of truth
-}
 
 // ============================================================
 // Types
@@ -58,7 +42,7 @@ class ModelRefreshService {
   ) {}
 
   /**
-   * Fetch models for a connection through the 4-layer fallback chain.
+   * Fetch models for a connection through the fallback chain.
    * Deduplicates concurrent calls for the same slug — if a refresh is already
    * in progress, callers share the same promise instead of racing.
    */
@@ -74,7 +58,7 @@ class ModelRefreshService {
   }
 
   /**
-   * Internal: actual refresh logic with 4-layer fallback chain.
+   * Internal: actual refresh logic with fallback chain.
    * Skips compat providers (not in fetcher map).
    * Preserves user's defaultModel if still valid.
    * Updates connection.models in storage on success.
@@ -113,31 +97,13 @@ class ModelRefreshService {
       ipcLog.info(`Model refresh [${slug}]: provider fetch failed: ${msg}`)
     }
 
-    // Layer 2: Cloudflare JSON fallback
-    if (!newModels) {
-      const cfKey = CLOUDFLARE_KEYS[providerType]
-      if (cfKey) {
-        try {
-          const result = await fetchFromCloudflare(cfKey)
-          if (result) {
-            newModels = result.models
-            serverDefault = result.serverDefault
-            ipcLog.info(`Model refresh [${slug}]: fetched ${newModels.length} models from Cloudflare`)
-          }
-        } catch (error) {
-          const msg = error instanceof Error ? error.message : String(error)
-          ipcLog.info(`Model refresh [${slug}]: Cloudflare fallback failed: ${msg}`)
-        }
-      }
-    }
-
-    // Layer 3: Persisted connection.models (keep what we have)
+    // Layer 2: Persisted connection.models (keep what we have)
     if (!newModels && connection.models && connection.models.length > 0) {
       ipcLog.info(`Model refresh [${slug}]: keeping ${connection.models.length} persisted models`)
       return // Nothing to update
     }
 
-    // Layer 4: MODEL_REGISTRY hardcoded fallback
+    // Layer 3: MODEL_REGISTRY hardcoded fallback
     if (!newModels) {
       const registryModels = getModelsForProviderType(providerType, connection.piAuthProvider)
       if (registryModels.length > 0) {
@@ -273,4 +239,3 @@ export function initModelRefreshService(getCredentials: CredentialResolver): Mod
   _service = new ModelRefreshService(MODEL_FETCHERS, getCredentials)
   return _service
 }
-

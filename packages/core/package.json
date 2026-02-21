@@ -13,7 +13,6 @@
   },
   "peerDependencies": {
     "@anthropic-ai/claude-agent-sdk": ">=0.2.19",
-    "@anthropic-ai/sdk": ">=0.70.0",
     "@modelcontextprotocol/sdk": ">=1.0.0"
   },
   "devDependencies": {

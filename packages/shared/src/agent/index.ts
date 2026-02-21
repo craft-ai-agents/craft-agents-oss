@@ -128,9 +128,6 @@ export {
   createAgent,
   detectProvider,
   getAvailableProviders,
-  // Agent implementations (both implement AgentBackend directly)
-  ClaudeAgent as BackendClaudeAgent, // Alias to avoid conflict with direct export
-  CodexAgent as BackendCodexAgent, // Avoid conflict with direct export above
   // Types
   type AgentBackend,
   type AgentProvider,
