@@ -226,9 +226,15 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
 
   const handleOpenFile = React.useCallback(
     (path: string) => {
-      onOpenFile(path)
+      // Resolve bare relative paths against the session working directory
+      const resolved = (path.startsWith('/') || path.startsWith('~/'))
+        ? path
+        : workingDirectory
+          ? `${workingDirectory}/${path}`
+          : path
+      onOpenFile(resolved)
     },
-    [onOpenFile]
+    [onOpenFile, workingDirectory]
   )
 
   const handleOpenUrl = React.useCallback(

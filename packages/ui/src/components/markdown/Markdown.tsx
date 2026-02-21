@@ -73,9 +73,9 @@ interface CollapsibleContext {
   toggleSection: (id: string) => void
 }
 
-// File path detection regex - matches paths starting with /, ~/, or ./
-// Extensions derived from file-classification.ts to stay in sync with preview support
-const FILE_PATH_REGEX = new RegExp(`^(?:/|~/|./)[\\w\\-./@]+\\.(?:${FILE_EXTENSIONS_PATTERN})$`, 'i')
+// File path detection regex - matches absolute, home-relative, explicit-relative, and bare relative paths.
+// Excludes URLs (http://, mailto:, etc.). Extensions derived from file-classification.ts to stay in sync.
+const FILE_PATH_REGEX = new RegExp(`^(?!https?://|mailto:|ftp://|data:)(?:[\\w~]|\\./)[\\w\\-./@]*\\.(?:${FILE_EXTENSIONS_PATTERN})$`, 'i')
 
 /**
  * Create custom components based on render mode.
