@@ -70,6 +70,8 @@ export interface StoredConfig {
   keepAwakeWhileRunning?: boolean;  // Prevent screen sleep while sessions are running (default: false)
   // Tool metadata
   richToolDescriptions?: boolean;  // Add intent/action metadata to all tool calls (default: true)
+  // Default editor for "Open in Editor" actions (default: 'vscode')
+  defaultEditor?: string;
   // Windows: path to Git Bash (bash.exe) for the SDK subprocess
   gitBashPath?: string;
 }
@@ -341,6 +343,29 @@ export function setRichToolDescriptions(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.richToolDescriptions = enabled;
+  saveConfig(config);
+}
+
+/**
+ * Get the default editor for "Open in Editor" actions.
+ * Defaults to 'vscode' if not set.
+ */
+export function getDefaultEditor(): string {
+  const config = loadStoredConfig();
+  if (config?.defaultEditor !== undefined) {
+    return config.defaultEditor;
+  }
+  const defaults = loadConfigDefaults();
+  return defaults.defaults.defaultEditor;
+}
+
+/**
+ * Set the default editor for "Open in Editor" actions.
+ */
+export function setDefaultEditor(editor: string): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.defaultEditor = editor;
   saveConfig(config);
 }
 
