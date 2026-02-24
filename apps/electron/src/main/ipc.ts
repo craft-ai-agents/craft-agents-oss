@@ -90,6 +90,11 @@ const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
     providerType: 'copilot',
     authType: 'oauth',
   },
+  'openai-direct': {
+    name: (h) => h ? 'OpenAI-Compatible (Custom Endpoint)' : 'OpenAI (API Key)',
+    providerType: 'openai_direct',
+    authType: (h) => h ? 'api_key_with_endpoint' : 'api_key',
+  },
 }
 
 /**

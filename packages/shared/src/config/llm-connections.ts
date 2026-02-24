@@ -11,6 +11,7 @@ import {
   type ModelDefinition,
   ANTHROPIC_MODELS,
   OPENAI_MODELS,
+  OPENAI_DIRECT_MODELS,
 } from './models';
 
 // ============================================================
@@ -25,6 +26,7 @@ import {
  * - 'anthropic_compat': Anthropic-format compatible endpoints (OpenRouter, etc.)
  * - 'openai': Direct OpenAI API (Codex via app-server)
  * - 'openai_compat': OpenAI-format compatible endpoints (Ollama, OpenRouter, etc.)
+ * - 'openai_direct': Native OpenAI API via openai npm package (no Codex binary required)
  * - 'bedrock': AWS Bedrock (Claude models via AWS)
  * - 'vertex': Google Vertex AI (Claude models via GCP)
  * - 'copilot': GitHub Copilot (via @github/copilot-sdk)
@@ -34,6 +36,7 @@ export type LlmProviderType =
   | 'anthropic_compat'
   | 'openai'
   | 'openai_compat'
+  | 'openai_direct'
   | 'bedrock'
   | 'vertex'
   | 'copilot';
@@ -329,12 +332,12 @@ export function isAnthropicProvider(providerType: LlmProviderType): boolean {
 }
 
 /**
- * Check if a provider type uses OpenAI models (Codex).
+ * Check if a provider type uses OpenAI models (Codex or direct).
  * @param providerType - Provider type to check
  * @returns true if this provider uses OpenAI/Codex models
  */
 export function isOpenAIProvider(providerType: LlmProviderType): boolean {
-  return providerType === 'openai' || providerType === 'openai_compat';
+  return providerType === 'openai' || providerType === 'openai_compat' || providerType === 'openai_direct';
 }
 
 /**
@@ -364,6 +367,11 @@ export function getModelsForProviderType(providerType: LlmProviderType): ModelDe
     return OPENAI_MODELS;
   }
 
+  // OpenAI Direct: standard GPT models via openai npm package
+  if (providerType === 'openai_direct') {
+    return OPENAI_DIRECT_MODELS;
+  }
+
   if (providerType === 'copilot') {
     return []; // Copilot models are dynamic — fetched via listModels(), no hardcoded fallbacks
   }
@@ -388,6 +396,7 @@ export function getDefaultModelsForConnection(providerType: LlmProviderType): Ar
     'openai/gpt-5.1-codex-mini',
   ];
   if (providerType === 'openai') return OPENAI_MODELS;
+  if (providerType === 'openai_direct') return OPENAI_DIRECT_MODELS;
   if (providerType === 'copilot') return []; // Dynamic — fetched via listModels()
   if (providerType === 'anthropic_compat') return [
     'anthropic/claude-opus-4.6',
@@ -481,6 +490,7 @@ export function isValidProviderAuthCombination(
     anthropic_compat: ['api_key_with_endpoint'],
     openai: ['api_key', 'oauth'],
     openai_compat: ['api_key_with_endpoint', 'none'],
+    openai_direct: ['api_key', 'api_key_with_endpoint'],
     bedrock: ['bearer_token', 'iam_credentials', 'environment'],
     vertex: ['oauth', 'service_account_file', 'environment'],
     copilot: ['oauth'],

@@ -17,7 +17,7 @@
 /**
  * Provider identifier for AI backends.
  */
-export type ModelProvider = 'anthropic' | 'openai' | 'copilot';
+export type ModelProvider = 'anthropic' | 'openai' | 'openai_direct' | 'copilot';
 
 /**
  * Full model definition with capabilities and costs.
@@ -111,6 +111,45 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
   },
 
   // ----------------------------------------
+  // OpenAI Direct Models (via openai npm package, no Codex binary needed)
+  // Used when provider type is 'openai_direct'.
+  // ----------------------------------------
+  {
+    id: 'gpt-4o',
+    name: 'GPT-4o',
+    shortName: 'GPT-4o',
+    description: 'Flagship multimodal model for complex tasks',
+    provider: 'openai_direct',
+    contextWindow: 128_000,
+  },
+  {
+    id: 'gpt-4o-mini',
+    name: 'GPT-4o Mini',
+    shortName: 'GPT-4o Mini',
+    description: 'Fast and affordable for focused tasks',
+    provider: 'openai_direct',
+    contextWindow: 128_000,
+  },
+  {
+    id: 'o3',
+    name: 'o3',
+    shortName: 'o3',
+    description: 'Advanced reasoning for hard problems',
+    provider: 'openai_direct',
+    contextWindow: 200_000,
+    supportsThinking: true,
+  },
+  {
+    id: 'o4-mini',
+    name: 'o4-mini',
+    shortName: 'o4-mini',
+    description: 'Fast reasoning at lower cost',
+    provider: 'openai_direct',
+    contextWindow: 200_000,
+    supportsThinking: true,
+  },
+
+  // ----------------------------------------
   // GitHub Copilot Models (via Copilot SDK)
   // No hardcoded entries — models are discovered at runtime via client.listModels()
   // and stored on the connection. See fetchAndStoreCopilotModels() in ipc.ts.
@@ -133,6 +172,9 @@ export const ANTHROPIC_MODELS = getModelsByProvider('anthropic');
 
 /** All OpenAI/Codex models */
 export const OPENAI_MODELS = getModelsByProvider('openai');
+
+/** All direct OpenAI API models (gpt-4o, o3, etc.) */
+export const OPENAI_DIRECT_MODELS = getModelsByProvider('openai_direct');
 
 /** All GitHub Copilot models */
 export const COPILOT_MODELS = getModelsByProvider('copilot');
@@ -267,6 +309,15 @@ export function isClaudeModel(modelId: string): boolean {
 export function isCodexModel(modelId: string): boolean {
   const lower = modelId.toLowerCase();
   return lower.includes('codex');
+}
+
+/**
+ * Check if a model ID refers to a native OpenAI API model (gpt-4o, o3, etc.).
+ * These are direct OpenAI API models, distinct from Codex app-server models.
+ */
+export function isOpenAIDirectModel(modelId: string): boolean {
+  const model = getModelById(modelId);
+  return model?.provider === 'openai_direct';
 }
 
 /**

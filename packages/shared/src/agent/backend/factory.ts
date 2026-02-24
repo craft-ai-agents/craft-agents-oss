@@ -18,6 +18,7 @@ import type { AgentBackend, BackendConfig, AgentProvider, LlmProviderType, LlmAu
 import { ClaudeAgent } from '../claude-agent.ts';
 import { CodexAgent } from '../codex-agent.ts';
 import { CopilotAgent } from '../copilot-agent.ts';
+import { OpenAIAgent } from '../openai-agent.ts';
 import {
   getLlmConnection,
   getDefaultLlmConnection,
@@ -86,6 +87,10 @@ export function createBackend(config: BackendConfig): AgentBackend {
       // Auth is handled via ChatGPT Plus OAuth (native flow)
       return new CodexAgent(config);
 
+    case 'openai_direct':
+      // OpenAIAgent: native OpenAI API via openai npm package, no Codex binary required
+      return new OpenAIAgent(config);
+
     case 'copilot':
       // CopilotAgent implements AgentBackend directly
       // Auth is handled via GitHub OAuth
@@ -108,7 +113,7 @@ export const createAgent = createBackend;
  * @returns Array of provider identifiers that have working implementations
  */
 export function getAvailableProviders(): AgentProvider[] {
-  return ['anthropic', 'openai', 'copilot'];
+  return ['anthropic', 'openai', 'openai_direct', 'copilot'];
 }
 
 /**
@@ -144,10 +149,14 @@ export function providerTypeToAgentProvider(providerType: LlmProviderType): Agen
     case 'vertex':     // Vertex uses Anthropic SDK with different auth
       return 'anthropic';
 
-    // OpenAI/Codex backends
+    // OpenAI/Codex backends (require Codex binary)
     case 'openai':
     case 'openai_compat':
       return 'openai';
+
+    // Native OpenAI API backend (no Codex binary required)
+    case 'openai_direct':
+      return 'openai_direct';
 
     // GitHub Copilot backend
     case 'copilot':
