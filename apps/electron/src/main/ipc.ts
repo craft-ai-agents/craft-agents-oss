@@ -12,7 +12,7 @@ import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type SendMessageOptions, type LlmConnectionSetup } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
 import { safeJsonParse } from '@craft-agent/shared/utils/files'
-import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, loadStoredConfig, saveConfig, type Workspace, getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, isOpenAIProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, getGitBashPath, setGitBashPath, clearGitBashPath } from '@craft-agent/shared/config'
+import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, loadStoredConfig, saveConfig, type Workspace, getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, getGitBashPath, setGitBashPath, clearGitBashPath } from '@craft-agent/shared/config'
 import { getSessionAttachmentsPath, validateSessionId } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@craft-agent/shared/sources'
 import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
@@ -25,7 +25,7 @@ import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { MarkItDown } from 'markitdown-js'
 import { isUsableGitBashPath, validateGitBashPath } from './git-bash'
 import { getModelRefreshService } from './model-fetchers'
-import { parseTestConnectionError, createBuiltInConnection, validateModelList } from './connection-setup-logic'
+import { parseTestConnectionError, createBuiltInConnection, validateModelList, piAuthProviderDisplayName } from './connection-setup-logic'
 
 /**
  * Sanitizes a filename to prevent path traversal and filesystem issues.
@@ -1288,16 +1288,6 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
           }
         }
 
-        if (isOpenAIProvider(connection.providerType) && connection.authType !== 'oauth') {
-          const pt = hasCustomEndpoint ? 'openai_compat' as const : 'openai' as const
-          updates.providerType = pt
-          updates.authType = hasCustomEndpoint ? 'api_key_with_endpoint' : 'api_key'
-          if (!hasCustomEndpoint) {
-            updates.models = getDefaultModelsForConnection(pt)
-            updates.defaultModel = getDefaultModelForConnection(pt)
-          }
-        }
-
         // Pi API key flow: store baseUrl on the connection (Pi SDK doesn't use it yet,
         // but it's persisted for future backend support)
 
@@ -1312,6 +1302,11 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       // Pi API key flow: set piAuthProvider from setup data (e.g. 'anthropic', 'google', 'openai')
       if (setup.piAuthProvider) {
         updates.piAuthProvider = setup.piAuthProvider
+        // Update connection name to show the actual provider (e.g. "Craft Agents Backend (Google AI Studio)")
+        const providerName = piAuthProviderDisplayName(setup.piAuthProvider)
+        if (providerName) {
+          updates.name = `Craft Agents Backend (${providerName})`
+        }
         // Only set default models when using standard Pi provider (not custom endpoint)
         if (!hasCustomEndpoint) {
           updates.models = getDefaultModelsForConnection('pi', setup.piAuthProvider)
@@ -1438,6 +1433,37 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   ipcMain.handle(IPC_CHANNELS.PI_GET_PROVIDER_BASE_URL, async (_event, provider: string) => {
     const { getPiProviderBaseUrl } = await import('@craft-agent/shared/config')
     return getPiProviderBaseUrl(provider)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PI_GET_PROVIDER_MODELS, async (_event, provider: string) => {
+    const { getModels } = await import('@mariozechner/pi-ai')
+    const TIER_SIZE = 10
+    try {
+      const models = getModels(provider as Parameters<typeof getModels>[0])
+      const sorted = [...models].sort((a, b) => b.cost.output - a.cost.output || b.cost.input - a.cost.input)
+      // Top 10 most expensive + bottom 10 cheapest, deduplicated — covers all tier dropdowns
+      const topExpensive = sorted.slice(0, TIER_SIZE)
+      const topCheap = sorted.slice(-TIER_SIZE)
+      const seen = new Set<string>()
+      const capped = [...topExpensive, ...topCheap].filter(m => {
+        if (seen.has(m.id)) return false
+        seen.add(m.id)
+        return true
+      })
+      return {
+        models: capped.map(m => ({
+          id: m.id,
+          name: m.name,
+          costInput: m.cost.input,
+          costOutput: m.cost.output,
+          contextWindow: m.contextWindow,
+          reasoning: m.reasoning,
+        })),
+        totalCount: models.length,
+      }
+    } catch {
+      return { models: [], totalCount: 0 }
+    }
   })
 
   // ============================================================

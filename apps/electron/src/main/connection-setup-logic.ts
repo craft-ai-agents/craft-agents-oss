@@ -68,39 +68,50 @@ export const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
     providerType: 'anthropic',
     authType: 'oauth',
   },
-  'codex': {
-    name: 'Codex (ChatGPT Plus)',
-    providerType: 'openai',
-    authType: 'oauth',
-  },
-  'codex-api': {
-    name: (h) => h ? 'Codex (Custom Endpoint)' : 'Codex (OpenAI API Key)',
-    providerType: 'openai_compat', // Always use compat for API key (5.3 is OAuth-only)
-    authType: (h) => h ? 'api_key_with_endpoint' : 'api_key',
-  },
-  'copilot': {
-    name: 'GitHub Copilot',
-    providerType: 'copilot',
-    authType: 'oauth',
-  },
-  'pi-codex': {
-    name: 'Pi + ChatGPT Plus',
+  'chatgpt-plus': {
+    name: 'ChatGPT Plus',
     providerType: 'pi',
     authType: 'oauth',
     piAuthProvider: 'openai-codex',
   },
-  'pi-copilot': {
-    name: 'Pi + GitHub Copilot',
+  'github-copilot': {
+    name: 'GitHub Copilot',
     providerType: 'pi',
     authType: 'oauth',
     piAuthProvider: 'github-copilot',
   },
   'pi-api-key': {
-    name: 'Pi (API Key)',
+    name: 'Craft Agents Backend (API Key)',
     providerType: 'pi',
     authType: 'api_key',
     // piAuthProvider set dynamically from setup.piAuthProvider
   },
+}
+
+// ============================================================
+// Pi Auth Provider Display Names
+// ============================================================
+
+const PI_AUTH_PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+  anthropic: 'Anthropic',
+  openai: 'OpenAI',
+  'openai-codex': 'OpenAI',
+  google: 'Google AI Studio',
+  openrouter: 'OpenRouter',
+  'azure-openai-responses': 'Azure OpenAI',
+  'amazon-bedrock': 'Amazon Bedrock',
+  groq: 'Groq',
+  mistral: 'Mistral',
+  xai: 'xAI',
+  cerebras: 'Cerebras',
+  zai: 'z.ai',
+  huggingface: 'Hugging Face',
+  'vercel-ai-gateway': 'Vercel AI Gateway',
+}
+
+/** Get a human-readable display name for a Pi auth provider key */
+export function piAuthProviderDisplayName(piAuthProvider: string): string | null {
+  return PI_AUTH_PROVIDER_DISPLAY_NAMES[piAuthProvider] ?? null
 }
 
 // ============================================================

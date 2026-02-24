@@ -5,8 +5,13 @@
  * Used in AI Settings page and anywhere connection logos are needed.
  */
 
+import awsIcon from '@/assets/provider-icons/aws.svg'
+import azureIcon from '@/assets/provider-icons/azure.svg'
 import claudeIcon from '@/assets/provider-icons/claude.svg'
 import copilotIcon from '@/assets/provider-icons/copilot.svg'
+import googleIcon from '@/assets/provider-icons/google.svg'
+import huggingfaceIcon from '@/assets/provider-icons/huggingface.svg'
+import mistralIcon from '@/assets/provider-icons/mistral.svg'
 import ollamaIcon from '@/assets/provider-icons/ollama.svg'
 import openaiIcon from '@/assets/provider-icons/openai.svg'
 import openrouterIcon from '@/assets/provider-icons/openrouter.svg'
@@ -20,9 +25,14 @@ import type { LlmProviderType } from '@craft-agent/shared/config/llm-connections
  */
 export const providerIcons = {
   anthropic: claudeIcon,
-  openai: openaiIcon,
+  aws: awsIcon,
+  azure: azureIcon,
   copilot: copilotIcon,
+  google: googleIcon,
+  huggingface: huggingfaceIcon,
+  mistral: mistralIcon,
   ollama: ollamaIcon,
+  openai: openaiIcon,
   openrouter: openrouterIcon,
   pi: piIcon,
   vercel: vercelIcon,
@@ -39,8 +49,8 @@ const providerDisplayNames: Record<string, string> = {
   copilot: 'GitHub Copilot',
   ollama: 'Ollama',
   openrouter: 'OpenRouter',
-  pi: 'Pi',
-  pi_compat: 'Pi',
+  pi: 'Craft Agents Backend',
+  pi_compat: 'Craft Agents Backend',
   vercel: 'Vercel',
 }
 
@@ -67,21 +77,72 @@ function detectProviderFromUrl(baseUrl: string): ProviderIconKey | null {
   if (url.includes('api.anthropic.com')) return 'anthropic'
   if (url.includes('api.openai.com')) return 'openai'
   if (url.includes('v0.dev') || url.includes('vercel')) return 'vercel'
+  if (url.includes('generativelanguage.googleapis.com') || url.includes('ai.google')) return 'google'
+  if (url.includes('mistral.ai')) return 'mistral'
+  if (url.includes('bedrock')) return 'aws'
+  if (url.includes('huggingface.co')) return 'huggingface'
 
   return null
 }
 
 /**
+ * Map Pi SDK auth provider names to icon keys.
+ * For Pi connections, we show the actual upstream provider's icon
+ * instead of the generic Pi logo.
+ */
+function piAuthProviderToIcon(piAuthProvider: string): ProviderIconKey | null {
+  switch (piAuthProvider) {
+    case 'openai':
+    case 'openai-codex':
+      return 'openai'
+    case 'anthropic':
+      return 'anthropic'
+    case 'github-copilot':
+      return 'copilot'
+    case 'openrouter':
+      return 'openrouter'
+    case 'google':
+      return 'google'
+    case 'mistral':
+      return 'mistral'
+    case 'amazon-bedrock':
+      return 'aws'
+    case 'azure-openai-responses':
+      return 'azure'
+    case 'huggingface':
+      return 'huggingface'
+    case 'vercel-ai-gateway':
+      return 'vercel'
+    default:
+      return null
+  }
+}
+
+/**
+ * Domain map for providers without static SVG icons.
+ * Used to generate Google Favicon V2 URLs as fallback.
+ */
+const PI_AUTH_PROVIDER_DOMAINS: Record<string, string> = {
+  groq: 'groq.com',
+  xai: 'x.ai',
+  cerebras: 'cerebras.ai',
+  zai: 'z.ai',
+}
+
+/**
  * Get provider icon URL for a given provider type and optional base URL.
  * Base URL detection takes precedence for compatible providers (openai_compat, anthropic_compat).
+ * For Pi connections, resolves to the upstream provider's icon via piAuthProvider.
  *
  * @param providerType - The LLM provider type
  * @param baseUrl - Optional custom base URL for detection
+ * @param piAuthProvider - Optional Pi SDK auth provider (e.g. 'openai-codex', 'github-copilot')
  * @returns Icon URL string or null if no matching icon
  */
 export function getProviderIcon(
   providerType: LlmProviderType | string,
-  baseUrl?: string | null
+  baseUrl?: string | null,
+  piAuthProvider?: string | null
 ): string | null {
   // For compatible providers, try to detect from URL first
   if (baseUrl && (providerType === 'openai_compat' || providerType === 'anthropic_compat')) {
@@ -102,8 +163,19 @@ export function getProviderIcon(
     case 'copilot':
       return providerIcons.copilot
     case 'pi':
-    case 'pi_compat':
-      return providerIcons.pi
+    case 'pi_compat': {
+      // Resolve to actual upstream provider icon
+      if (piAuthProvider) {
+        const iconKey = piAuthProviderToIcon(piAuthProvider)
+        if (iconKey) return providerIcons[iconKey]
+        // Favicon fallback for providers without static SVGs
+        const domain = PI_AUTH_PROVIDER_DOMAINS[piAuthProvider]
+        if (domain) {
+          return `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&size=128&url=https://${domain}`
+        }
+      }
+      return null  // Unknown/custom Pi provider — caller shows brain icon
+    }
     default:
       // Try URL detection as fallback
       if (baseUrl) {

@@ -137,6 +137,28 @@ function CredentialHealthBanner({ issues, onReauthenticate }: CredentialHealthBa
 }
 
 // ============================================
+// Pi Auth Provider Display Names
+// ============================================
+
+const PI_AUTH_PROVIDER_LABELS: Record<string, string> = {
+  anthropic: 'Anthropic API',
+  openai: 'OpenAI API',
+  'openai-codex': 'OpenAI API',
+  google: 'Google AI Studio',
+  openrouter: 'OpenRouter',
+  'azure-openai-responses': 'Azure OpenAI',
+  'amazon-bedrock': 'Amazon Bedrock',
+  groq: 'Groq',
+  mistral: 'Mistral',
+  xai: 'xAI',
+  cerebras: 'Cerebras',
+  zai: 'z.ai',
+  huggingface: 'Hugging Face',
+  'vercel-ai-gateway': 'Vercel AI Gateway',
+  'github-copilot': 'GitHub Copilot',
+}
+
+// ============================================
 // Connection Row Component
 // ============================================
 
@@ -183,13 +205,17 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
     switch (provider) {
       case 'anthropic': parts.push(isSubscription ? 'Anthropic Subscription' : 'Anthropic API'); break
       case 'anthropic_compat': parts.push('Anthropic Compatible'); break
-      case 'openai': parts.push(isSubscription ? 'OpenAI Subscription' : 'OpenAI API'); break
-      case 'copilot': parts.push('GitHub Copilot'); break
-      case 'openai_compat': parts.push('OpenAI Compatible'); break
       case 'bedrock': parts.push('AWS Bedrock'); break
       case 'vertex': parts.push('Google Vertex'); break
-      case 'pi': parts.push('Pi API'); break
-      case 'pi_compat': parts.push('Pi Compatible'); break
+      case 'pi': {
+        // Show upstream provider name for API key connections (e.g. "Google AI Studio")
+        const piLabel = !isSubscription && connection.piAuthProvider
+          ? PI_AUTH_PROVIDER_LABELS[connection.piAuthProvider]
+          : null
+        parts.push(piLabel ?? 'Craft Agents Backend')
+        break
+      }
+      case 'pi_compat': parts.push('Craft Agents Backend Compatible'); break
       default: parts.push(provider || 'Unknown')
     }
 
@@ -199,7 +225,6 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
       // Use default endpoints for standard providers if no custom baseUrl
       if (!endpoint) {
         if (provider === 'anthropic') endpoint = 'https://api.anthropic.com'
-        else if (provider === 'openai') endpoint = 'https://api.openai.com'
         else if (provider === 'pi' && connection.piAuthProvider) {
           endpoint = piBaseUrl
         }
@@ -444,9 +469,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
                     value: conn.slug,
                     label: conn.name,
                     description: conn.providerType === 'anthropic' ? 'Anthropic' :
-                                 conn.providerType === 'openai' ? 'OpenAI' :
-                                 conn.providerType === 'copilot' ? 'GitHub Copilot' :
-                                 conn.providerType === 'pi' ? 'Pi' :
+                                 conn.providerType === 'pi' ? 'Craft Agents Backend' :
                                  conn.providerType || 'Unknown',
                   })),
                 ]}
@@ -491,7 +514,6 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
 function getApiKeyMethodForConnection(conn: LlmConnectionWithStatus): ApiSetupMethod {
   const provider = conn.providerType || conn.type
   if (provider === 'pi' || provider === 'pi_compat') return 'pi_api_key'
-  if (provider === 'openai' || provider === 'openai_compat') return 'openai_api_key'
   return 'anthropic_api_key'
 }
 
@@ -575,7 +597,7 @@ export default function AiSettingsPage() {
 
   // OnboardingWizard hook for editing API connection
   const apiSetupOnboarding = useOnboarding({
-    initialStep: 'api-setup',
+    initialStep: 'provider-select',
     onConfigSaved: refreshLlmConnections,
     onComplete: () => {
       closeApiSetup()
@@ -660,8 +682,8 @@ export default function AiSettingsPage() {
     apiSetupOnboarding.reset()
 
     if (connection.authType === 'oauth') {
-      const method = connection.providerType === 'openai' ? 'chatgpt_oauth'
-                   : connection.providerType === 'copilot' ? 'copilot_oauth'
+      const method = connection.providerType === 'pi'
+                   ? (connection.piAuthProvider === 'github-copilot' ? 'pi_copilot_oauth' : 'pi_chatgpt_oauth')
                    : 'claude_oauth'
       apiSetupOnboarding.handleStartOAuth(method)
     }
@@ -815,13 +837,10 @@ export default function AiSettingsPage() {
                       value: conn.slug,
                       label: conn.name,
                       description: conn.providerType === 'anthropic' ? 'Anthropic API' :
-                                   conn.providerType === 'openai' ? 'OpenAI API' :
-                                   conn.providerType === 'copilot' ? 'GitHub Copilot' :
-                                   conn.providerType === 'openai_compat' ? 'OpenAI Compatible' :
                                    conn.providerType === 'bedrock' ? 'AWS Bedrock' :
                                    conn.providerType === 'vertex' ? 'Google Vertex' :
-                                   conn.providerType === 'pi' ? 'Pi API' :
-                                   conn.providerType === 'pi_compat' ? 'Pi Compatible' :
+                                   conn.providerType === 'pi' ? 'Craft Agents Backend' :
+                                   conn.providerType === 'pi_compat' ? 'Craft Agents Backend Compatible' :
                                    conn.providerType || 'Unknown',
                     }))}
                   />
@@ -914,8 +933,10 @@ export default function AiSettingsPage() {
                   state={apiSetupOnboarding.state}
                   onContinue={apiSetupOnboarding.handleContinue}
                   onBack={isDirectEdit ? handleCloseApiSetup : apiSetupOnboarding.handleBack}
+                  onSelectProvider={apiSetupOnboarding.handleSelectProvider}
                   onSelectApiSetupMethod={apiSetupOnboarding.handleSelectApiSetupMethod}
                   onSubmitCredential={apiSetupOnboarding.handleSubmitCredential}
+                  onSubmitLocalModel={apiSetupOnboarding.handleSubmitLocalModel}
                   onStartOAuth={apiSetupOnboarding.handleStartOAuth}
                   onFinish={handleApiSetupFinish}
                   isWaitingForCode={apiSetupOnboarding.isWaitingForCode}
