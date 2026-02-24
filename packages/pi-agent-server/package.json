@@ -9,7 +9,7 @@
     "pi-agent-server": "./dist/index.js"
   },
   "scripts": {
-    "build": "bun build src/index.ts --outdir=dist --target=bun --format=esm"
+    "build": "bun build src/index.ts --outdir=dist --target=bun --format=esm --external koffi"
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "0.53.0",
