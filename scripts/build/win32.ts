@@ -176,7 +176,7 @@ export async function buildElectronAppWindows(config: BuildConfig): Promise<void
   if (existsSync(rendererDir)) {
     rmSync(rendererDir, { recursive: true, force: true });
   }
-  run('node ./node_modules/vite/bin/vite.js build --config apps/electron/vite.config.ts', rootDir);
+  run('node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build --config apps/electron/vite.config.ts', rootDir);
 
   // Verify renderer was built
   if (!existsSync(join(rendererDir, 'index.html'))) {
