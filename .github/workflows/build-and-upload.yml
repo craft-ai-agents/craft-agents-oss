@@ -57,7 +57,7 @@ jobs:
           fi
 
           if [[ "$TARGETS" == "all" || "$TARGETS" == *"windows"* ]]; then
-            add_target '{"os":"windows-runner","platform":"win32","arch":"x64","ext":"exe"}'
+            add_target '{"os":"windows-latest","platform":"win32","arch":"x64","ext":"exe"}'
           fi
 
           if [[ "$TARGETS" == "all" || "$TARGETS" == *"linux"* ]]; then

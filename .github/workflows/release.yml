@@ -115,7 +115,7 @@ jobs:
           # Windows
           if [[ "$PLATFORMS" == "all" || "$PLATFORMS" == *"win32"* ]]; then
             if [ "$FIRST" = true ]; then FIRST=false; else MATRIX+=','; fi
-            MATRIX+='{"os":"windows-runner","platform":"win32","arch":"x64","ext":"exe"}'
+            MATRIX+='{"os":"windows-latest","platform":"win32","arch":"x64","ext":"exe"}'
           fi
 
           # Linux
