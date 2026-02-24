@@ -3422,92 +3422,63 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // ============================================================
-  // Hook Testing (manual trigger from UI)
+  // Automation Testing (manual trigger from UI)
   // ============================================================
 
-  ipcMain.handle(IPC_CHANNELS.TEST_HOOK, async (_event, payload: import('../shared/types').TestHookPayload) => {
+  ipcMain.handle(IPC_CHANNELS.TEST_AUTOMATION, async (_event, payload: import('../shared/types').TestAutomationPayload) => {
     const workspace = getWorkspaceByNameOrId(payload.workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { executeCommand } = await import('@craft-agent/shared/hooks-simple/command-executor')
-    const results: import('../shared/types').TestHookActionResult[] = []
+    const results: import('../shared/types').TestAutomationActionResult[] = []
 
-    for (const action of payload.hooks) {
+    for (const action of payload.actions) {
       const start = Date.now()
 
-      if (action.type === 'command') {
-        try {
-          const result = await executeCommand(action.command, {
-            env: { CRAFT_EVENT: 'ManualTest', CRAFT_WORKSPACE_ID: payload.workspaceId },
-            timeout: action.timeout ?? 60000,
-            cwd: workspace.rootPath,
-            permissionMode: payload.permissionMode ?? 'safe',
-          })
-
-          results.push({
-            type: 'command',
-            success: result.success,
-            stdout: result.stdout,
-            stderr: result.stderr,
-            blocked: result.blocked,
-            blockedReason: result.blocked ? result.stderr : undefined,
-            duration: Date.now() - start,
-          })
-        } catch (err: unknown) {
-          results.push({
-            type: 'command',
-            success: false,
-            stderr: (err as Error).message,
-            duration: Date.now() - start,
-          })
+      // Prompt actions create a new session
+      try {
+        const session = await sessionManager.createSession(payload.workspaceId, {
+          name: `Test: ${action.prompt.slice(0, 50)}`,
+          labels: payload.labels,
+        })
+        if (session) {
+          await sessionManager.sendMessage(session.id, action.prompt)
         }
-      } else if (action.type === 'prompt') {
-        // Prompt hooks create a new session
-        try {
-          const session = await sessionManager.createSession(payload.workspaceId, {
-            name: `Test: ${action.prompt.slice(0, 50)}`,
-            labels: payload.labels,
-          })
-          if (session) {
-            await sessionManager.sendMessage(session.id, action.prompt)
-          }
-          results.push({
-            type: 'prompt',
-            success: true,
-            sessionId: session?.id,
-            duration: Date.now() - start,
-          })
-        } catch (err: unknown) {
-          results.push({
-            type: 'prompt',
-            success: false,
-            stderr: (err as Error).message,
-            duration: Date.now() - start,
-          })
-        }
+        results.push({
+          type: 'prompt',
+          success: true,
+          sessionId: session?.id,
+          duration: Date.now() - start,
+        })
+      } catch (err: unknown) {
+        results.push({
+          type: 'prompt',
+          success: false,
+          stderr: (err as Error).message,
+          duration: Date.now() - start,
+        })
       }
     }
 
-    return { actions: results } satisfies import('../shared/types').TestHookResult
+    return { actions: results } satisfies import('../shared/types').TestAutomationResult
   })
 
-  // Shared helper: resolve workspace, read tasks.json (or hooks.json), validate matcher, mutate, write back
-  interface HooksConfigJson { hooks?: Record<string, Record<string, unknown>[]>; tasks?: Record<string, Record<string, unknown>[]>; [key: string]: unknown }
-  async function withHookMatcher(workspaceId: string, eventName: string, matcherIndex: number, mutate: (matchers: Record<string, unknown>[], index: number, config: HooksConfigJson, genId: () => string) => void) {
+  // Shared helper: resolve workspace, read automations.json (or hooks.json), validate matcher, mutate, write back
+  interface AutomationsConfigJson { automations?: Record<string, Record<string, unknown>[]>; tasks?: Record<string, Record<string, unknown>[]>; hooks?: Record<string, Record<string, unknown>[]>; [key: string]: unknown }
+  async function withAutomationMatcher(workspaceId: string, eventName: string, matcherIndex: number, mutate: (matchers: Record<string, unknown>[], index: number, config: AutomationsConfigJson, genId: () => string) => void) {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { resolveTasksConfigPath, generateShortId } = await import('@craft-agent/shared/hooks-simple/resolve-config-path')
-    const configPath = resolveTasksConfigPath(workspace.rootPath)
+    const { resolveAutomationsConfigPath, generateShortId } = await import('@craft-agent/shared/automations/resolve-config-path')
+    const configPath = resolveAutomationsConfigPath(workspace.rootPath)
 
     const raw = await readFile(configPath, 'utf-8')
     const config = JSON.parse(raw)
 
-    // Support both "tasks" (v2) and "hooks" (v1) top-level keys
-    const eventMap = config.tasks ?? config.hooks ?? {}
+    // Support "automations" (v3), "tasks" (v2), and "hooks" (v1) top-level keys
+    const eventMap = config.automations ?? config.tasks ?? config.hooks ?? {}
     const matchers = eventMap[eventName]
     if (!Array.isArray(matchers) || matcherIndex < 0 || matcherIndex >= matchers.length) {
-      throw new Error(`Invalid task reference: ${eventName}[${matcherIndex}]`)
+      throw new Error(`Invalid automation reference: ${eventName}[${matcherIndex}]`)
     }
 
     mutate(matchers, matcherIndex, config, generateShortId)
@@ -3523,9 +3494,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
   }
 
-  // Hook enabled state management (toggle enabled/disabled in hooks.json)
-  ipcMain.handle(IPC_CHANNELS.HOOKS_SET_ENABLED, async (_event, workspaceId: string, eventName: string, matcherIndex: number, enabled: boolean) => {
-    await withHookMatcher(workspaceId, eventName, matcherIndex, (matchers, idx) => {
+  // Automation enabled state management (toggle enabled/disabled in automations.json)
+  ipcMain.handle(IPC_CHANNELS.AUTOMATIONS_SET_ENABLED, async (_event, workspaceId: string, eventName: string, matcherIndex: number, enabled: boolean) => {
+    await withAutomationMatcher(workspaceId, eventName, matcherIndex, (matchers, idx) => {
       if (enabled) {
         // Remove the enabled field entirely (defaults to true) to keep JSON clean
         delete matchers[idx].enabled
@@ -3535,9 +3506,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     })
   })
 
-  // Duplicate a hook matcher (deep-clone, new ID, append " Copy" to name, insert after original)
-  ipcMain.handle(IPC_CHANNELS.HOOKS_DUPLICATE, async (_event, workspaceId: string, eventName: string, matcherIndex: number) => {
-    await withHookMatcher(workspaceId, eventName, matcherIndex, (matchers, idx, _config, genId) => {
+  // Duplicate an automation matcher (deep-clone, new ID, append " Copy" to name, insert after original)
+  ipcMain.handle(IPC_CHANNELS.AUTOMATIONS_DUPLICATE, async (_event, workspaceId: string, eventName: string, matcherIndex: number) => {
+    await withAutomationMatcher(workspaceId, eventName, matcherIndex, (matchers, idx, _config, genId) => {
       const clone = JSON.parse(JSON.stringify(matchers[idx]))
       clone.id = genId()
       clone.name = clone.name ? `${clone.name} Copy` : 'Untitled Copy'
@@ -3545,30 +3516,30 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     })
   })
 
-  // Delete a hook matcher (remove from array, clean up empty event key)
-  ipcMain.handle(IPC_CHANNELS.HOOKS_DELETE, async (_event, workspaceId: string, eventName: string, matcherIndex: number) => {
-    await withHookMatcher(workspaceId, eventName, matcherIndex, (matchers, idx, config) => {
+  // Delete an automation matcher (remove from array, clean up empty event key)
+  ipcMain.handle(IPC_CHANNELS.AUTOMATIONS_DELETE, async (_event, workspaceId: string, eventName: string, matcherIndex: number) => {
+    await withAutomationMatcher(workspaceId, eventName, matcherIndex, (matchers, idx, config) => {
       matchers.splice(idx, 1)
       if (matchers.length === 0) {
-        const eventMap = config.tasks ?? config.hooks
+        const eventMap = config.automations ?? config.tasks ?? config.hooks
         if (eventMap) delete eventMap[eventName]
       }
     })
   })
 
-  // Read execution history for a specific hook
-  ipcMain.handle(IPC_CHANNELS.HOOKS_GET_HISTORY, async (_event, workspaceId: string, hookId: string, limit = 20) => {
+  // Read execution history for a specific automation
+  ipcMain.handle(IPC_CHANNELS.AUTOMATIONS_GET_HISTORY, async (_event, workspaceId: string, automationId: string, limit = 20) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const historyPath = join(workspace.rootPath, 'tasks-history.jsonl')
+    const historyPath = join(workspace.rootPath, 'automations-history.jsonl')
     try {
       const content = await readFile(historyPath, 'utf-8')
       const lines = content.trim().split('\n').filter(Boolean)
 
       return lines
         .map(line => { try { return JSON.parse(line) } catch { return null } })
-        .filter((e): e is { id: string; ts: number; ok: boolean } => e?.id === hookId)
+        .filter((e): e is { id: string; ts: number; ok: boolean } => e?.id === automationId)
         .slice(-limit)
     } catch {
       return [] // File doesn't exist yet

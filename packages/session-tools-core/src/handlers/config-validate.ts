@@ -7,6 +7,7 @@
 
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { AUTOMATIONS_CONFIG_FILE, LEGACY_CONFIG_FILES } from '@craft-agent/shared/automations';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
@@ -18,7 +19,7 @@ import {
 import { getSourceConfigPath } from '../source-helpers.ts';
 
 export interface ConfigValidateArgs {
-  target: 'config' | 'sources' | 'statuses' | 'preferences' | 'permissions' | 'hooks' | 'tool-icons' | 'all';
+  target: 'config' | 'sources' | 'statuses' | 'preferences' | 'permissions' | 'automations' | 'tool-icons' | 'all';
   sourceSlug?: string;
 }
 
@@ -60,8 +61,8 @@ export async function handleConfigValidate(
         case 'permissions':
           result = ctx.validators.validatePermissions(ctx.workspacePath, sourceSlug);
           break;
-        case 'hooks':
-          result = ctx.validators.validateHooks(ctx.workspacePath);
+        case 'automations':
+          result = ctx.validators.validateAutomations(ctx.workspacePath);
           break;
         case 'tool-icons':
           result = ctx.validators.validateToolIcons();
@@ -71,7 +72,7 @@ export async function handleConfigValidate(
           break;
       }
 
-      return successResponse(formatValidationResult(result));
+      return successResponse(formatValidationResult(result!));
     } catch (error) {
       return errorResponse(
         `Config validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -152,20 +153,22 @@ export async function handleConfigValidate(
       return successResponse(formatValidationResult(result));
     }
 
-    case 'hooks': {
-      const tasksPath = join(ctx.workspacePath, 'tasks.json');
-      const hooksPath = join(ctx.workspacePath, 'hooks.json');
-      if (ctx.fs.exists(tasksPath)) {
-        const result = validateJsonFileHasFields(tasksPath, []);
+    case 'automations': {
+      const automationsPath = join(ctx.workspacePath, AUTOMATIONS_CONFIG_FILE);
+      // Check canonical file first
+      if (ctx.fs.exists(automationsPath)) {
+        const result = validateJsonFileHasFields(automationsPath, []);
         return successResponse(formatValidationResult(result));
       }
-
-      if (!ctx.fs.exists(hooksPath)) {
-        return successResponse('✓ No tasks.json or hooks.json (no tasks configured)');
+      // Fall back to legacy config files
+      for (const legacyFile of LEGACY_CONFIG_FILES) {
+        const legacyPath = join(ctx.workspacePath, legacyFile);
+        if (ctx.fs.exists(legacyPath)) {
+          const result = validateJsonFileHasFields(legacyPath, []);
+          return successResponse(formatValidationResult(result));
+        }
       }
-
-      const result = validateJsonFileHasFields(hooksPath, []);
-      return successResponse(formatValidationResult(result));
+      return successResponse(`✓ No ${AUTOMATIONS_CONFIG_FILE} (no automations configured)`);
     }
 
     case 'tool-icons': {
@@ -191,7 +194,7 @@ export async function handleConfigValidate(
 
     default:
       return errorResponse(
-        `Unknown validation target: ${target}. Valid targets: config, sources, statuses, preferences, permissions, hooks, tool-icons, all`
+        `Unknown validation target: ${target}. Valid targets: config, sources, statuses, preferences, permissions, automations, tool-icons, all`
       );
   }
 }

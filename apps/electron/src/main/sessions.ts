@@ -85,7 +85,7 @@ import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels } from '@craft-agent/shared/labels/storage'
 import { extractLabelId } from '@craft-agent/shared/labels'
-import { HookSystem, type HookSystemMetadataSnapshot } from '@craft-agent/shared/hooks-simple'
+import { AutomationSystem, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
 
 // Import and re-export (extracted to avoid Electron dependency in tests)
 import { sanitizeForTitle } from './title-sanitizer'
@@ -782,8 +782,8 @@ interface ManagedSession {
   siblingOrder?: number
   // Token refresh manager for OAuth token refresh with rate limiting
   tokenRefreshManager: TokenRefreshManager
-  // Metadata for sessions created by hooks (automation)
-  triggeredBy?: { hookName?: string; event?: string; timestamp?: number }
+  // Metadata for sessions created by automations
+  triggeredBy?: { automationName?: string; event?: string; timestamp?: number }
   // Promise that resolves when the agent instance is ready (for title gen to await)
   agentReady?: Promise<void>
   agentReadyResolve?: () => void
@@ -934,8 +934,8 @@ export class SessionManager {
   private deltaFlushTimers: Map<string, NodeJS.Timeout> = new Map()
   // Config watchers for live updates (sources, etc.) - one per workspace
   private configWatchers: Map<string, ConfigWatcher> = new Map()
-  // Hook systems for workspace event hooks - one per workspace (includes scheduler, diffing, and handlers)
-  private hookSystems: Map<string, HookSystem> = new Map()
+  // Automation systems for workspace event automations - one per workspace (includes scheduler, diffing, and handlers)
+  private automationSystems: Map<string, AutomationSystem> = new Map()
   // Pending credential request resolvers (keyed by requestId)
   private pendingCredentialResolvers: Map<string, (response: import('../shared/types').CredentialResponse) => void> = new Map()
   // Promise deduplication for lazy-loading messages (prevents race conditions)
@@ -1039,28 +1039,28 @@ export class SessionManager {
       onLabelConfigChange: () => {
         sessionLog.info(`Label config changed in ${workspaceId}`)
         this.broadcastLabelsChanged(workspaceId)
-        // Emit LabelConfigChange hook via HookSystem
-        const hookSystem = this.hookSystems.get(workspaceRootPath)
-        if (hookSystem) {
-          hookSystem.emitLabelConfigChange().catch((error) => {
-            sessionLog.error(`[Hooks] Failed to emit LabelConfigChange:`, error)
+        // Emit LabelConfigChange event via AutomationSystem
+        const automationSystem = this.automationSystems.get(workspaceRootPath)
+        if (automationSystem) {
+          automationSystem.emitLabelConfigChange().catch((error) => {
+            sessionLog.error(`[Automations] Failed to emit LabelConfigChange:`, error)
           })
         }
       },
-      onHooksConfigChange: () => {
-        sessionLog.info(`Hooks config changed in ${workspaceId}`)
-        // Reload hooks config via HookSystem
-        const hookSystem = this.hookSystems.get(workspaceRootPath)
-        if (hookSystem) {
-          const result = hookSystem.reloadConfig()
+      onAutomationsConfigChange: () => {
+        sessionLog.info(`Automations config changed in ${workspaceId}`)
+        // Reload automations config via AutomationSystem
+        const automationSystem = this.automationSystems.get(workspaceRootPath)
+        if (automationSystem) {
+          const result = automationSystem.reloadConfig()
           if (result.errors.length === 0) {
-            sessionLog.info(`Reloaded ${result.hookCount} hooks for workspace ${workspaceId}`)
+            sessionLog.info(`Reloaded ${result.automationCount} automations for workspace ${workspaceId}`)
           } else {
-            sessionLog.error(`Failed to reload hooks for workspace ${workspaceId}:`, result.errors)
+            sessionLog.error(`Failed to reload automations for workspace ${workspaceId}:`, result.errors)
           }
         }
-        // Notify renderer to re-read hooks.json
-        this.broadcastHooksChanged(workspaceId)
+        // Notify renderer to re-read automations.json
+        this.broadcastAutomationsChanged(workspaceId)
       },
       onLlmConnectionsChange: () => {
         sessionLog.info(`LLM connections changed in ${workspaceId}`)
@@ -1135,17 +1135,17 @@ export class SessionManager {
           sessionLog.info(`External metadata change detected for session ${sessionId}`)
         }
 
-        // Update session metadata via HookSystem (handles diffing and event emission internally)
-        const hookSystem = this.hookSystems.get(workspaceRootPath)
-        if (hookSystem) {
-          hookSystem.updateSessionMetadata(sessionId, {
+        // Update session metadata via AutomationSystem (handles diffing and event emission internally)
+        const automationSystem = this.automationSystems.get(workspaceRootPath)
+        if (automationSystem) {
+          automationSystem.updateSessionMetadata(sessionId, {
             permissionMode: header.permissionMode,
             labels: header.labels,
             isFlagged: header.isFlagged,
             sessionStatus: header.sessionStatus,
             sessionName: header.name,
           }).catch((error) => {
-            sessionLog.error(`[Hooks] Failed to update session metadata:`, error)
+            sessionLog.error(`[Automations] Failed to update session metadata:`, error)
           })
         }
       },
@@ -1155,17 +1155,17 @@ export class SessionManager {
     watcher.start()
     this.configWatchers.set(workspaceRootPath, watcher)
 
-    // Initialize HookSystem for this workspace (includes scheduler, handlers, and event logging)
-    if (!this.hookSystems.has(workspaceRootPath)) {
-      const hookSystem = new HookSystem({
+    // Initialize AutomationSystem for this workspace (includes scheduler, handlers, and event logging)
+    if (!this.automationSystems.has(workspaceRootPath)) {
+      const automationSystem = new AutomationSystem({
         workspaceRootPath,
         workspaceId,
         enableScheduler: true,
         onPromptsReady: async (prompts) => {
-          // Execute prompt hooks by creating new sessions
+          // Execute prompt automations by creating new sessions
           const settled = await Promise.allSettled(
             prompts.map((pending) =>
-              this.executePromptHook(
+              this.executePromptAutomation(
                 workspaceId,
                 workspaceRootPath,
                 pending.prompt,
@@ -1177,18 +1177,18 @@ export class SessionManager {
           )
           for (const [idx, result] of settled.entries()) {
             if (result.status === 'rejected') {
-              sessionLog.error(`[Hooks] Failed to execute prompt hook ${idx + 1}:`, result.reason)
+              sessionLog.error(`[Automations] Failed to execute prompt action ${idx + 1}:`, result.reason)
             } else {
-              sessionLog.info(`[Hooks] Created session ${result.value.sessionId} from prompt hook`)
+              sessionLog.info(`[Automations] Created session ${result.value.sessionId} from prompt action`)
             }
           }
         },
         onError: (event, error) => {
-          sessionLog.error(`Hook failed for ${event}:`, error.message)
+          sessionLog.error(`Automation failed for ${event}:`, error.message)
         },
       })
-      this.hookSystems.set(workspaceRootPath, hookSystem)
-      sessionLog.info(`Initialized HookSystem for workspace ${workspaceId}`)
+      this.automationSystems.set(workspaceRootPath, automationSystem)
+      sessionLog.info(`Initialized AutomationSystem for workspace ${workspaceId}`)
     }
   }
 
@@ -1220,12 +1220,12 @@ export class SessionManager {
   }
 
   /**
-   * Broadcast hooks changed event to all windows
+   * Broadcast automations changed event to all windows
    */
-  private broadcastHooksChanged(workspaceId: string): void {
+  private broadcastAutomationsChanged(workspaceId: string): void {
     if (!this.windowManager) return
-    sessionLog.info(`Broadcasting hooks changed for ${workspaceId}`)
-    this.windowManager.broadcastToAll(IPC_CHANNELS.HOOKS_CHANGED, workspaceId)
+    sessionLog.info(`Broadcasting automations changed for ${workspaceId}`)
+    this.windowManager.broadcastToAll(IPC_CHANNELS.AUTOMATIONS_CHANGED, workspaceId)
   }
 
   /**
@@ -1590,10 +1590,10 @@ export class SessionManager {
 
           this.sessions.set(meta.id, managed)
 
-          // Initialize session metadata in HookSystem for diffing
-          const hookSystem = this.hookSystems.get(workspaceRootPath)
-          if (hookSystem) {
-            hookSystem.setInitialSessionMetadata(meta.id, {
+          // Initialize session metadata in AutomationSystem for diffing
+          const automationSystem = this.automationSystems.get(workspaceRootPath)
+          if (automationSystem) {
+            automationSystem.setInitialSessionMetadata(meta.id, {
               permissionMode: meta.permissionMode,
               labels: meta.labels,
               isFlagged: meta.isFlagged,
@@ -2237,10 +2237,10 @@ export class SessionManager {
 
     this.sessions.set(storedSession.id, managed)
 
-    // Initialize session metadata in HookSystem for diffing
-    const hookSystem = this.hookSystems.get(workspaceRootPath)
-    if (hookSystem) {
-      hookSystem.setInitialSessionMetadata(storedSession.id, {
+    // Initialize session metadata in AutomationSystem for diffing
+    const automationSystem = this.automationSystems.get(workspaceRootPath)
+    if (automationSystem) {
+      automationSystem.setInitialSessionMetadata(storedSession.id, {
         permissionMode: storedSession.permissionMode,
         labels: storedSession.labels,
         isFlagged: storedSession.isFlagged,
@@ -2767,8 +2767,8 @@ export class SessionManager {
           // Initialize thinking level at construction to avoid race conditions
           thinkingLevel: managed.thinkingLevel,
           isHeadless: !AGENT_FLAGS.defaultModesEnabled,
-          // Pass the workspace-level HookSystem so agents reuse the shared instance
-          hookSystem: this.hookSystems.get(managed.workspace.rootPath),
+          // Pass the workspace-level AutomationSystem so agents reuse the shared instance
+          automationSystem: this.automationSystems.get(managed.workspace.rootPath),
           // Per-session env overrides (e.g., ANTHROPIC_BASE_URL for custom endpoints)
           // Prevents race conditions when concurrent sessions mutate process.env
           envOverrides,
@@ -3879,10 +3879,10 @@ export class SessionManager {
 
     this.sessions.delete(sessionId)
 
-    // Clean up session metadata in HookSystem (prevents memory leak)
-    const hookSystem = this.hookSystems.get(workspaceRootPath)
-    if (hookSystem) {
-      hookSystem.removeSessionMetadata(sessionId)
+    // Clean up session metadata in AutomationSystem (prevents memory leak)
+    const automationSystem = this.automationSystems.get(workspaceRootPath)
+    if (automationSystem) {
+      automationSystem.removeSessionMetadata(sessionId)
     }
 
     // Delete from disk too
@@ -5507,9 +5507,9 @@ To view this task's output:
   }
 
   /**
-   * Execute a prompt hook by creating a new session and sending the prompt
+   * Execute a prompt automation by creating a new session and sending the prompt
    */
-  private async executePromptHook(
+  private async executePromptAutomation(
     workspaceId: string,
     workspaceRootPath: string,
     prompt: string,
@@ -5518,11 +5518,11 @@ To view this task's output:
     mentions?: string[],
   ): Promise<{ sessionId: string }> {
     // Resolve @mentions to source/skill slugs
-    const resolved = mentions ? this.resolveHookMentions(workspaceRootPath, mentions) : undefined
+    const resolved = mentions ? this.resolveAutomationMentions(workspaceRootPath, mentions) : undefined
 
-    // Create a new session for this hook
+    // Create a new session for this automation
     const session = await this.createSession(workspaceId, {
-      name: `Hook: ${prompt.slice(0, 50)}${prompt.length > 50 ? '...' : ''}`,
+      name: `Automation: ${prompt.slice(0, 50)}${prompt.length > 50 ? '...' : ''}`,
       labels,
       permissionMode: permissionMode || 'safe',
       enabledSourceSlugs: resolved?.sourceSlugs,
@@ -5537,9 +5537,9 @@ To view this task's output:
   }
 
   /**
-   * Resolve @mentions in hook prompts to source and skill slugs
+   * Resolve @mentions in automation prompts to source and skill slugs
    */
-  private resolveHookMentions(workspaceRootPath: string, mentions: string[]): { sourceSlugs: string[]; skillSlugs: string[] } | undefined {
+  private resolveAutomationMentions(workspaceRootPath: string, mentions: string[]): { sourceSlugs: string[]; skillSlugs: string[] } | undefined {
     const sources = loadWorkspaceSources(workspaceRootPath)
     const skills = loadAllSkills(workspaceRootPath)
     const sourceSlugs: string[] = []
@@ -5551,7 +5551,7 @@ To view this task's output:
       } else if (skills.some(s => s.slug === mention)) {
         skillSlugs.push(mention)
       } else {
-        sessionLog.warn(`[Hooks] Unknown mention: @${mention}`)
+        sessionLog.warn(`[Automations] Unknown mention: @${mention}`)
       }
     }
 
@@ -5572,16 +5572,16 @@ To view this task's output:
     }
     this.configWatchers.clear()
 
-    // Dispose all HookSystems (includes scheduler, handlers, and event loggers)
-    for (const [workspacePath, hookSystem] of this.hookSystems) {
+    // Dispose all AutomationSystems (includes scheduler, handlers, and event loggers)
+    for (const [workspacePath, automationSystem] of this.automationSystems) {
       try {
-        hookSystem.dispose()
-        sessionLog.info(`Disposed HookSystem for ${workspacePath}`)
+        automationSystem.dispose()
+        sessionLog.info(`Disposed AutomationSystem for ${workspacePath}`)
       } catch (error) {
-        sessionLog.error(`Failed to dispose HookSystem for ${workspacePath}:`, error)
+        sessionLog.error(`Failed to dispose AutomationSystem for ${workspacePath}:`, error)
       }
     }
-    this.hookSystems.clear()
+    this.automationSystems.clear()
 
     // Clear all pending delta flush timers
     for (const [sessionId, timer] of this.deltaFlushTimers) {

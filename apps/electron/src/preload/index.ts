@@ -532,28 +532,28 @@ const api: ElectronAPI = {
   setWorkspaceDefaultLlmConnection: (workspaceId: string, slug: string | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_SET_WORKSPACE_DEFAULT, workspaceId, slug),
 
-  // Hook testing (manual trigger from UI)
-  testHook: (payload: import('../shared/types').TestHookPayload) =>
-    ipcRenderer.invoke(IPC_CHANNELS.TEST_HOOK, payload),
+  // Automation testing (manual trigger from UI)
+  testAutomation: (payload: import('../shared/types').TestAutomationPayload) =>
+    ipcRenderer.invoke(IPC_CHANNELS.TEST_AUTOMATION, payload),
 
-  // Hook state management
-  setHookEnabled: (workspaceId: string, eventName: string, matcherIndex: number, enabled: boolean) =>
-    ipcRenderer.invoke(IPC_CHANNELS.HOOKS_SET_ENABLED, workspaceId, eventName, matcherIndex, enabled),
-  duplicateHook: (workspaceId: string, eventName: string, matcherIndex: number) =>
-    ipcRenderer.invoke(IPC_CHANNELS.HOOKS_DUPLICATE, workspaceId, eventName, matcherIndex),
-  deleteHook: (workspaceId: string, eventName: string, matcherIndex: number) =>
-    ipcRenderer.invoke(IPC_CHANNELS.HOOKS_DELETE, workspaceId, eventName, matcherIndex),
-  getHookHistory: (workspaceId: string, hookId: string, limit?: number) =>
-    ipcRenderer.invoke(IPC_CHANNELS.HOOKS_GET_HISTORY, workspaceId, hookId, limit),
+  // Automation state management
+  setAutomationEnabled: (workspaceId: string, eventName: string, matcherIndex: number, enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTOMATIONS_SET_ENABLED, workspaceId, eventName, matcherIndex, enabled),
+  duplicateAutomation: (workspaceId: string, eventName: string, matcherIndex: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTOMATIONS_DUPLICATE, workspaceId, eventName, matcherIndex),
+  deleteAutomation: (workspaceId: string, eventName: string, matcherIndex: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTOMATIONS_DELETE, workspaceId, eventName, matcherIndex),
+  getAutomationHistory: (workspaceId: string, automationId: string, limit?: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTOMATIONS_GET_HISTORY, workspaceId, automationId, limit),
 
-  // Hooks change listener (live updates when hooks.json changes on disk)
-  onHooksChanged: (callback: (workspaceId: string) => void) => {
+  // Automations change listener (live updates when automations.json changes on disk)
+  onAutomationsChanged: (callback: (workspaceId: string) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, workspaceId: string) => {
       callback(workspaceId)
     }
-    ipcRenderer.on(IPC_CHANNELS.HOOKS_CHANGED, handler)
+    ipcRenderer.on(IPC_CHANNELS.AUTOMATIONS_CHANGED, handler)
     return () => {
-      ipcRenderer.removeListener(IPC_CHANNELS.HOOKS_CHANGED, handler)
+      ipcRenderer.removeListener(IPC_CHANNELS.AUTOMATIONS_CHANGED, handler)
     }
   },
 }

@@ -14,7 +14,7 @@ import { labelBadgeComponents } from './label-badges'
 import { sessionListComponents } from './session-list'
 import { editPopoverComponents } from './edit-popover'
 import { actionCardsComponents } from './action-cards'
-import { hookComponents } from './hooks'
+import { automationComponents } from './automations'
 
 export * from './types'
 
@@ -35,7 +35,7 @@ export const componentRegistry: ComponentEntry[] = [
   ...labelBadgeComponents,
   ...sessionListComponents,
   ...editPopoverComponents,
-  ...hookComponents,
+  ...automationComponents,
 ]
 
 export function getCategories(): CategoryGroup[] {

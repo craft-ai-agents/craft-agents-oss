@@ -30,7 +30,7 @@ import type { ModelProvider } from '../../config/models.ts';
 // Import LLM connection types for auth
 import type { LlmAuthType, LlmProviderType } from '../../config/llm-connections.ts';
 export type { LlmAuthType, LlmProviderType } from '../../config/llm-connections.ts';
-import type { HookSystem } from '../../hooks-simple/index.ts';
+import type { AutomationSystem } from '../../automations/index.ts';
 
 /**
  * Provider identifier for AI backends.
@@ -411,8 +411,8 @@ export interface BackendConfig {
    */
   connectionSlug?: string;
 
-  /** Workspace-level hook system for user-defined SDK hooks (hooks.json) */
-  hookSystem?: HookSystem;
+  /** Workspace-level automation system for user-defined SDK hooks (automations.json) */
+  automationSystem?: AutomationSystem;
 
   /**
    * Per-session environment variable overrides for the SDK subprocess.

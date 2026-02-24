@@ -54,7 +54,9 @@
     "./tools": "./src/tools/index.ts",
     "./codex": "./src/codex/index.ts",
     "./mentions": "./src/mentions/index.ts",
-    "./skills/types": "./src/skills/types.ts"
+    "./skills/types": "./src/skills/types.ts",
+    "./automations": "./src/automations/index.ts",
+    "./automations/resolve-config-path": "./src/automations/resolve-config-path.ts"
   },
   "dependencies": {
     "@craft-agent/codex-types": "workspace:*",

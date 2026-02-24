@@ -84,7 +84,7 @@ export type EditContextKey =
   | 'add-label'
   | 'edit-views'
   | 'edit-tool-icons'
-  | 'hook-config'
+  | 'automation-config'
 
 /**
  * Full edit configuration including context for agent and example for UI.
@@ -481,15 +481,15 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     inlineExecution: true,        // Execute inline in popover
   }),
 
-  'hook-config': (location) => ({
+  'automation-config': (location) => ({
     context: {
-      label: 'Task Configuration',
-      filePath: `${location}/tasks.json`,
+      label: 'Automation Configuration',
+      filePath: `${location}/automations.json`,
       context:
-        'The user is editing tasks.json which configures automation tasks. ' +
-        'Structure: { version: 2, tasks: { EventName: [{ name?, matcher?, cron?, timezone?, permissionMode?, labels?, actions: [...] }] } }. ' +
+        'The user is editing automations.json which configures automations. ' +
+        'Structure: { version: 2, automations: { EventName: [{ name?, matcher?, cron?, timezone?, permissionMode?, labels?, actions: [...] }] } }. ' +
         'Each event maps to an array of matcher entries. Each matcher has an actions array ({ type: "command", command } or { type: "prompt", prompt }). ' +
-        'Read ~/.craft-agent/docs/tasks.md for full format reference. ' +
+        'Read ~/.craft-agent/docs/automations.md for full format reference. ' +
         'After editing, confirm clearly what changed.',
     },
     example: 'Change the cron schedule to every 30 minutes',

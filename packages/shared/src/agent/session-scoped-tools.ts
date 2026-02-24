@@ -217,7 +217,7 @@ const submitPlanSchema = {
 };
 
 const configValidateSchema = {
-  target: z.enum(['config', 'sources', 'statuses', 'preferences', 'permissions', 'hooks', 'tool-icons', 'all'])
+  target: z.enum(['config', 'sources', 'statuses', 'preferences', 'permissions', 'automations', 'tool-icons', 'all'])
     .describe('Which config file(s) to validate'),
   sourceSlug: z.string().optional().describe('Validate a specific source by slug'),
 };
@@ -698,7 +698,7 @@ export function getSessionScopedTools(
 
     // config_validate
     tool('config_validate', TOOL_DESCRIPTIONS.config_validate, configValidateSchema, async (args) => {
-      const result = await handleConfigValidate(ctx, args as { target: 'config' | 'sources' | 'statuses' | 'preferences' | 'permissions' | 'hooks' | 'tool-icons' | 'all'; sourceSlug?: string });
+      const result = await handleConfigValidate(ctx, args as { target: 'config' | 'sources' | 'statuses' | 'preferences' | 'permissions' | 'automations' | 'tool-icons' | 'all'; sourceSlug?: string });
       return convertResult(result);
     }),
 

@@ -156,25 +156,25 @@ export const routes = {
       return `skills/skill/${skillSlug}` as const
     },
 
-    /** Tasks view (tasks navigator) - supports type filtering */
-    tasks: (params?: { taskId?: string; type?: 'scheduled' | 'event' | 'agentic' }) => {
-      const { taskId, type } = params ?? {}
-      const base = type ? `tasks/${type}` : 'tasks'
-      if (taskId) return `${base}/task/${taskId}` as const
-      return base as 'tasks' | `tasks/${'scheduled' | 'event' | 'agentic'}`
+    /** Automations view (automations navigator) - supports type filtering */
+    automations: (params?: { automationId?: string; type?: 'scheduled' | 'event' | 'agentic' }) => {
+      const { automationId, type } = params ?? {}
+      const base = type ? `automations/${type}` : 'automations'
+      if (automationId) return `${base}/automation/${automationId}` as const
+      return base as 'automations' | `automations/${'scheduled' | 'event' | 'agentic'}`
     },
 
-    /** Scheduled tasks view (tasks navigator, scheduled filter) */
-    tasksScheduled: (taskId?: string) =>
-      taskId ? `tasks/scheduled/task/${taskId}` as const : 'tasks/scheduled' as const,
+    /** Scheduled automations view (automations navigator, scheduled filter) */
+    automationsScheduled: (automationId?: string) =>
+      automationId ? `automations/scheduled/automation/${automationId}` as const : 'automations/scheduled' as const,
 
-    /** Event-based tasks view (tasks navigator, event filter) */
-    tasksEvent: (taskId?: string) =>
-      taskId ? `tasks/event/task/${taskId}` as const : 'tasks/event' as const,
+    /** Event-based automations view (automations navigator, event filter) */
+    automationsEvent: (automationId?: string) =>
+      automationId ? `automations/event/automation/${automationId}` as const : 'automations/event' as const,
 
-    /** Agentic tasks view (tasks navigator, agentic filter) */
-    tasksAgentic: (taskId?: string) =>
-      taskId ? `tasks/agentic/task/${taskId}` as const : 'tasks/agentic' as const,
+    /** Agentic automations view (automations navigator, agentic filter) */
+    automationsAgentic: (automationId?: string) =>
+      automationId ? `automations/agentic/automation/${automationId}` as const : 'automations/agentic' as const,
 
     /** Settings view (settings navigator) - uses SettingsSubpage from registry */
     settings: (subpage?: SettingsSubpage) =>

@@ -86,7 +86,7 @@ import { useFocusZone } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useSetAtom } from "jotai"
-import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter, TaskFilter } from "../../../shared/types"
+import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter, AutomationFilter } from "../../../shared/types"
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
@@ -109,16 +109,16 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
-  isTasksNavigation,
+  isAutomationsNavigation,
   type NavigationState,
   type SessionFilter,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
-import { HooksListPanel } from "../hooks/HooksListPanel"
-import { APP_EVENTS, AGENT_EVENTS, type HookFilterKind, TASK_TYPE_TO_FILTER_KIND } from "../hooks/types"
-import { useHooks } from "@/hooks/useHooks"
+import { AutomationsListPanel } from "../automations/AutomationsListPanel"
+import { APP_EVENTS, AGENT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
+import { useAutomations } from "@/hooks/useAutomations"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { PanelHeader } from "./PanelHeader"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
@@ -575,8 +575,8 @@ function AppShellContent({
   // Derive source filter from navigation state (only when in sources navigator)
   const sourceFilter: SourceFilter | null = isSourcesNavigation(navState) ? navState.filter ?? null : null
 
-  // Derive task filter from navigation state (only when in tasks navigator)
-  const taskFilter: TaskFilter | null = isTasksNavigation(navState) ? navState.filter ?? null : null
+  // Derive automation filter from navigation state (only when in automations navigator)
+  const automationFilter: AutomationFilter | null = isAutomationsNavigation(navState) ? navState.filter ?? null : null
 
   // Per-view filter storage: each session list view (allSessions, flagged, state:X, label:X, view:X)
   // has its own independent set of status and label filters.
@@ -767,14 +767,14 @@ function AppShellContent({
   React.useEffect(() => {
     setSkillsAtom(skills)
   }, [skills, setSkillsAtom])
-  // Hooks (tasks) — state, handlers, loading, subscriptions
+  // Automations — state, handlers, loading, subscriptions
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
   const {
-    hooks, hookTestResults,
-    hookPendingDelete, pendingDeleteHook, setHookPendingDelete,
-    handleTestHook, handleToggleHook, handleDuplicateHook, handleDeleteHook, confirmDeleteHook,
-    getHookHistory,
-  } = useHooks(activeWorkspaceId, activeWorkspace?.rootPath)
+    automations, automationTestResults,
+    automationPendingDelete, pendingDeleteAutomation, setAutomationPendingDelete,
+    handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, confirmDeleteAutomation,
+    getAutomationHistory,
+  } = useAutomations(activeWorkspaceId, activeWorkspace?.rootPath)
 
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
@@ -1002,11 +1002,11 @@ function AppShellContent({
     navigate(routes.view.skills(skill.slug))
   }, [activeWorkspaceId, navigate])
 
-  // Handle selecting a task (hook) from the list
-  const handleTaskSelect = React.useCallback((hookId: string) => {
-    // Preserve current task filter when selecting a task
-    const type = isTasksNavigation(navState) ? navState.filter?.taskType : undefined
-    navigate(routes.view.tasks({ taskId: hookId, type }))
+  // Handle selecting an automation from the list
+  const handleAutomationSelect = React.useCallback((automationId: string) => {
+    // Preserve current automation filter when selecting an automation
+    const type = isAutomationsNavigation(navState) ? navState.filter?.automationType : undefined
+    navigate(routes.view.automations({ automationId, type }))
   }, [navState, navigate])
 
   // Focus zone management
@@ -1306,16 +1306,16 @@ function AppShellContent({
     return counts
   }, [sources])
 
-  // Count hooks by type for the Tasks dropdown subcategories
-  const hookTypeCounts = useMemo(() => {
+  // Count automations by type for the Automations dropdown subcategories
+  const automationTypeCounts = useMemo(() => {
     const counts = { scheduled: 0, event: 0, agentic: 0 }
-    for (const hook of hooks) {
-      if (hook.event === 'SchedulerTick') counts.scheduled++
-      else if ((APP_EVENTS as string[]).includes(hook.event)) counts.event++
-      else if ((AGENT_EVENTS as string[]).includes(hook.event)) counts.agentic++
+    for (const automation of automations) {
+      if (automation.event === 'SchedulerTick') counts.scheduled++
+      else if ((APP_EVENTS as string[]).includes(automation.event)) counts.event++
+      else if ((AGENT_EVENTS as string[]).includes(automation.event)) counts.agentic++
     }
     return counts
-  }, [hooks])
+  }, [automations])
 
   // Filter session metadata based on sidebar mode and chat filter
   const filteredSessionMetas = useMemo(() => {
@@ -1506,13 +1506,13 @@ function AppShellContent({
     isSearchModeActive: searchActive,
     chatDisplayRef,
     onChatMatchInfoChange: handleChatMatchInfoChange,
-    onTestHook: handleTestHook,
-    onToggleHook: handleToggleHook,
-    onDuplicateHook: handleDuplicateHook,
-    onDeleteHook: handleDeleteHook,
-    hookTestResults,
-    getHookHistory,
-  }), [contextValue, handleDeleteSession, sources, skills, labelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, rightSidebarOpenButton, searchActive, searchQuery, handleChatMatchInfoChange, handleTestHook, handleToggleHook, handleDuplicateHook, handleDeleteHook, hookTestResults, getHookHistory])
+    onTestAutomation: handleTestAutomation,
+    onToggleAutomation: handleToggleAutomation,
+    onDuplicateAutomation: handleDuplicateAutomation,
+    onDeleteAutomation: handleDeleteAutomation,
+    automationTestResults,
+    getAutomationHistory,
+  }), [contextValue, handleDeleteSession, sources, skills, labelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, rightSidebarOpenButton, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory])
 
   // Persist expanded folders to localStorage (workspace-scoped)
   React.useEffect(() => {
@@ -1620,21 +1620,21 @@ function AppShellContent({
     navigate(routes.view.skills())
   }, [])
 
-  // Handlers for tasks view
-  const handleTasksClick = useCallback(() => {
-    navigate(routes.view.tasks())
+  // Handlers for automations view
+  const handleAutomationsClick = useCallback(() => {
+    navigate(routes.view.automations())
   }, [])
 
-  const handleTasksScheduledClick = useCallback(() => {
-    navigate(routes.view.tasksScheduled())
+  const handleAutomationsScheduledClick = useCallback(() => {
+    navigate(routes.view.automationsScheduled())
   }, [])
 
-  const handleTasksEventClick = useCallback(() => {
-    navigate(routes.view.tasksEvent())
+  const handleAutomationsEventClick = useCallback(() => {
+    navigate(routes.view.automationsEvent())
   }, [])
 
-  const handleTasksAgenticClick = useCallback(() => {
-    navigate(routes.view.tasksAgentic())
+  const handleAutomationsAgenticClick = useCallback(() => {
+    navigate(routes.view.automationsAgentic())
   }, [])
 
   // Handler for settings view
@@ -1662,7 +1662,7 @@ function AppShellContent({
   // We use controlled popovers instead of deep links so the user can type
   // their request in the popover UI before opening a new chat window.
   // add-source variants: add-source (generic), add-source-api, add-source-mcp, add-source-local
-  const [editPopoverOpen, setEditPopoverOpen] = useState<'statuses' | 'labels' | 'views' | 'add-source' | 'add-source-api' | 'add-source-mcp' | 'add-source-local' | 'add-skill' | 'add-label' | 'hook-config' | null>(null)
+  const [editPopoverOpen, setEditPopoverOpen] = useState<'statuses' | 'labels' | 'views' | 'add-source' | 'add-source-api' | 'add-source-mcp' | 'add-source-local' | 'add-skill' | 'add-label' | 'automation-config' | null>(null)
 
   // Stores the Y position of the last right-clicked sidebar item so the EditPopover
   // appears near it rather than at a fixed location. Updated synchronously before
@@ -1775,10 +1775,10 @@ function AppShellContent({
   }, [captureContextMenuPosition])
 
   // Handler for "Add Automation" context menu action
-  // Opens the EditPopover for adding a new automation (hook)
-  const openAddTask = useCallback(() => {
+  // Opens the EditPopover for adding a new automation
+  const openAddAutomation = useCallback(() => {
     captureContextMenuPosition()
-    setTimeout(() => setEditPopoverOpen('hook-config'), 50)
+    setTimeout(() => setEditPopoverOpen('automation-config'), 50)
   }, [captureContextMenuPosition])
 
   // Create a new chat and select it
@@ -1867,12 +1867,12 @@ function AppShellContent({
     // 3. Sources, Skills, Settings
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
-    result.push({ id: 'nav:tasks', type: 'nav', action: handleTasksClick })
+    result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
 
     return result
-  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleSessionStatusClick, effectiveSessionStatuses, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleTasksClick, handleSettingsClick, handleWhatsNewClick])
+  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleSessionStatusClick, effectiveSessionStatuses, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1992,9 +1992,9 @@ function AppShellContent({
     }
 
     // Tasks navigator
-    if (isTasksNavigation(navState)) {
-      if (!taskFilter) return 'All Automations'
-      switch (taskFilter.taskType) {
+    if (isAutomationsNavigation(navState)) {
+      if (!automationFilter) return 'All Automations'
+      switch (automationFilter.automationType) {
         case 'scheduled': return 'Scheduled'
         case 'event': return 'Event-based'
         case 'agentic': return 'Agentic'
@@ -2022,7 +2022,7 @@ function AppShellContent({
       default:
         return 'All Sessions'
     }
-  }, [navState, sessionFilter, effectiveSessionStatuses, labelConfigs, viewConfigs, taskFilter])
+  }, [navState, sessionFilter, effectiveSessionStatuses, labelConfigs, viewConfigs, automationFilter])
 
   // Build recursive sidebar items from label tree.
   // Each node renders with condensed height (compact: true) since many labels expected.
@@ -2343,46 +2343,46 @@ function AppShellContent({
                       },
                     },
                     {
-                      id: "nav:tasks",
+                      id: "nav:automations",
                       title: "Automations",
-                      label: String(hooks.length),
+                      label: String(automations.length),
                       icon: ListTodo,
-                      variant: (isTasksNavigation(navState) && !taskFilter) ? "default" : "ghost",
-                      onClick: handleTasksClick,
+                      variant: (isAutomationsNavigation(navState) && !automationFilter) ? "default" : "ghost",
+                      onClick: handleAutomationsClick,
                       expandable: true,
-                      expanded: isExpanded('nav:tasks'),
-                      onToggle: () => toggleExpanded('nav:tasks'),
+                      expanded: isExpanded('nav:automations'),
+                      onToggle: () => toggleExpanded('nav:automations'),
                       contextMenu: {
-                        type: 'tasks' as const,
-                        onAddTask: openAddTask,
+                        type: 'automations' as const,
+                        onAddAutomation: openAddAutomation,
                       },
                       items: [
                         {
-                          id: "nav:tasks:scheduled",
+                          id: "nav:automations:scheduled",
                           title: "Scheduled",
-                          label: String(hookTypeCounts.scheduled),
+                          label: String(automationTypeCounts.scheduled),
                           icon: Clock,
-                          variant: (taskFilter?.kind === 'type' && taskFilter.taskType === 'scheduled') ? "default" : "ghost",
-                          onClick: handleTasksScheduledClick,
-                          contextMenu: { type: 'tasks' as const, onAddTask: openAddTask },
+                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'scheduled') ? "default" : "ghost",
+                          onClick: handleAutomationsScheduledClick,
+                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
                         },
                         {
-                          id: "nav:tasks:event",
+                          id: "nav:automations:event",
                           title: "Event-based",
-                          label: String(hookTypeCounts.event),
+                          label: String(automationTypeCounts.event),
                           icon: Radio,
-                          variant: (taskFilter?.kind === 'type' && taskFilter.taskType === 'event') ? "default" : "ghost",
-                          onClick: handleTasksEventClick,
-                          contextMenu: { type: 'tasks' as const, onAddTask: openAddTask },
+                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'event') ? "default" : "ghost",
+                          onClick: handleAutomationsEventClick,
+                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
                         },
                         {
-                          id: "nav:tasks:agentic",
+                          id: "nav:automations:agentic",
                           title: "Agentic",
-                          label: String(hookTypeCounts.agentic),
+                          label: String(automationTypeCounts.agentic),
                           icon: Bot,
-                          variant: (taskFilter?.kind === 'type' && taskFilter.taskType === 'agentic') ? "default" : "ghost",
-                          onClick: handleTasksAgenticClick,
-                          contextMenu: { type: 'tasks' as const, onAddTask: openAddTask },
+                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'agentic') ? "default" : "ghost",
+                          onClick: handleAutomationsAgenticClick,
+                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
                         },
                       ],
                     },
@@ -2529,7 +2529,7 @@ function AppShellContent({
             <PanelHeader
               title={isSidebarVisible ? listTitle : undefined}
               compensateForStoplight={!isSidebarVisible}
-              badge={taskFilter?.taskType === 'scheduled' ? (
+              badge={automationFilter?.automationType === 'scheduled' ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="text-muted-foreground/50 cursor-default flex items-center titlebar-no-drag">
@@ -3101,7 +3101,7 @@ function AppShellContent({
                     />
                   )}
                   {/* Add Automation button (only for tasks mode) */}
-                  {isTasksNavigation(navState) && activeWorkspace && (
+                  {isAutomationsNavigation(navState) && activeWorkspace && (
                     <EditPopover
                       trigger={
                         <HeaderIconButton
@@ -3109,7 +3109,7 @@ function AppShellContent({
                           tooltip="Add Automation"
                         />
                       }
-                      {...getEditConfig('hook-config', activeWorkspace.rootPath)}
+                      {...getEditConfig('automation-config', activeWorkspace.rootPath)}
                     />
                   )}
                 </>
@@ -3139,17 +3139,17 @@ function AppShellContent({
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
               />
             )}
-            {isTasksNavigation(navState) && (
-              /* Tasks List (hooks) - filtered by type if taskFilter is active */
-              <HooksListPanel
-                hooks={hooks}
-                hookFilter={taskFilter ? { kind: TASK_TYPE_TO_FILTER_KIND[taskFilter.taskType] ?? 'all' } : undefined}
-                onHookClick={handleTaskSelect}
-                onTestHook={handleTestHook}
-                onToggleHook={handleToggleHook}
-                onDuplicateHook={handleDuplicateHook}
-                onDeleteHook={handleDeleteHook}
-                selectedHookId={isTasksNavigation(navState) && navState.details ? navState.details.taskId : null}
+            {isAutomationsNavigation(navState) && (
+              /* Automations List - filtered by type if automationFilter is active */
+              <AutomationsListPanel
+                automations={automations}
+                automationFilter={automationFilter ? { kind: AUTOMATION_TYPE_TO_FILTER_KIND[automationFilter.automationType] ?? 'all' } : undefined}
+                onAutomationClick={handleAutomationSelect}
+                onTestAutomation={handleTestAutomation}
+                onToggleAutomation={handleToggleAutomation}
+                onDuplicateAutomation={handleDuplicateAutomation}
+                onDeleteAutomation={handleDeleteAutomation}
+                selectedAutomationId={isAutomationsNavigation(navState) && navState.details ? navState.details.automationId : null}
               />
             )}
             {isSettingsNavigation(navState) && (
@@ -3465,8 +3465,8 @@ function AppShellContent({
           />
           {/* Add Automation EditPopover - triggered from "Add Automation" context menu on tasks */}
           <EditPopover
-            open={editPopoverOpen === 'hook-config'}
-            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'hook-config' : null)}
+            open={editPopoverOpen === 'automation-config'}
+            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'automation-config' : null)}
             modal={true}
             trigger={
               <div
@@ -3477,7 +3477,7 @@ function AppShellContent({
             }
             side="bottom"
             align="start"
-            {...getEditConfig('hook-config', activeWorkspace.rootPath)}
+            {...getEditConfig('automation-config', activeWorkspace.rootPath)}
           />
           {/* Add Label EditPopover - triggered from "Add New Label" context menu on labels */}
           <EditPopover
@@ -3526,18 +3526,18 @@ function AppShellContent({
         onOpenUrl={(url) => window.electronAPI.openUrl(url)}
       />
 
-      {/* Delete hook confirmation dialog */}
-      <Dialog open={!!hookPendingDelete} onOpenChange={(open) => { if (!open) setHookPendingDelete(null) }}>
+      {/* Delete automation confirmation dialog */}
+      <Dialog open={!!automationPendingDelete} onOpenChange={(open) => { if (!open) setAutomationPendingDelete(null) }}>
         <DialogContent showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>Delete Automation</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete <strong>{pendingDeleteHook?.name}</strong>? This will remove the automation from your tasks.json configuration.
+              Are you sure you want to delete <strong>{pendingDeleteAutomation?.name}</strong>? This will remove the automation from your automations.json configuration.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setHookPendingDelete(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={confirmDeleteHook}>Delete</Button>
+            <Button variant="outline" onClick={() => setAutomationPendingDelete(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmDeleteAutomation}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -26,7 +26,7 @@ import {
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getDocUrl, type DocFeature } from '@craft-agent/shared/docs/doc-links'
 
-export type SidebarMenuType = 'allSessions' | 'flagged' | 'status' | 'sources' | 'skills' | 'tasks' | 'labels' | 'views' | 'newSession'
+export type SidebarMenuType = 'allSessions' | 'flagged' | 'status' | 'sources' | 'skills' | 'automations' | 'labels' | 'views' | 'newSession'
 
 export interface SidebarMenuProps {
   /** Type of sidebar item (determines available menu items) */
@@ -47,8 +47,8 @@ export interface SidebarMenuProps {
   onAddSource?: () => void
   /** Handler for "Add Skill" action - only for skills type */
   onAddSkill?: () => void
-  /** Handler for "Add Task" action - only for tasks type */
-  onAddTask?: () => void
+  /** Handler for "Add Automation" action - only for automations type */
+  onAddAutomation?: () => void
   /** Source type filter for "Learn More" link - determines which docs page to open */
   sourceType?: 'api' | 'mcp' | 'local'
   /** Handler for "Edit Views" action - for views type */
@@ -73,7 +73,7 @@ export function SidebarMenu({
   onDeleteLabel,
   onAddSource,
   onAddSkill,
-  onAddTask,
+  onAddAutomation,
   sourceType,
   onConfigureViews,
   viewId,
@@ -199,12 +199,12 @@ export function SidebarMenu({
     )
   }
 
-  // Tasks: show "Add Automation" and "Learn More"
-  if (type === 'tasks') {
+  // Automations: show "Add Automation" and "Learn More"
+  if (type === 'automations') {
     return (
       <>
-        {onAddTask && (
-          <MenuItem onClick={onAddTask}>
+        {onAddAutomation && (
+          <MenuItem onClick={onAddAutomation}>
             <Plus className="h-3.5 w-3.5" />
             <span className="flex-1">Add Automation</span>
           </MenuItem>

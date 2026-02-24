@@ -18,6 +18,7 @@ export type DocFeature =
   | 'themes'
   | 'app-settings'
   | 'preferences'
+  | 'automations'
   | 'hooks'
   | 'tasks'
 
@@ -103,17 +104,23 @@ export const DOCS: Record<DocFeature, DocInfo> = {
     summary:
       'Personal preferences like your name, timezone, and language that help the agent personalize responses. Stored in ~/.craft-agent/preferences.json.',
   },
-  hooks: {
-    path: '/tasks/overview',
-    title: 'Tasks',
+  automations: {
+    path: '/automations/overview',
+    title: 'Automations',
     summary:
-      'Automate actions when events occur — run commands on schedules, react to label changes, or trigger prompts. Configured in tasks.json.',
+      'Automate actions when events occur — run commands on schedules, react to label changes, or trigger prompts. Configured in automations.json.',
+  },
+  hooks: {
+    path: '/automations/overview',
+    title: 'Automations',
+    summary:
+      'Automate actions when events occur — run commands on schedules, react to label changes, or trigger prompts. Configured in automations.json.',
   },
   tasks: {
-    path: '/tasks/overview',
-    title: 'Tasks',
+    path: '/automations/overview',
+    title: 'Automations',
     summary:
-      'Automate actions when events occur — run commands on schedules, react to label changes, or trigger prompts. Configured in tasks.json.',
+      'Automate actions when events occur — run commands on schedules, react to label changes, or trigger prompts. Configured in automations.json.',
   },
 }
 

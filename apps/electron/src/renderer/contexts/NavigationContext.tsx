@@ -58,7 +58,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
-  isTasksNavigation,
+  isAutomationsNavigation,
   DEFAULT_NAVIGATION_STATE,
 } from '../../shared/types'
 import { isValidSettingsSubpage, type SettingsSubpage } from '../../shared/settings-registry'
@@ -72,7 +72,7 @@ export type { Route }
 
 // Re-export navigation state types for consumers
 export type { NavigationState, SessionFilter }
-export { isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isTasksNavigation }
+export { isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isAutomationsNavigation }
 
 interface NavigationContextValue {
   /** Navigate to a route */
@@ -489,7 +489,7 @@ export function NavigationProvider({
       }
 
       // For tasks: no auto-selection yet (tasks aren't loaded from disk)
-      if (isTasksNavigation(nextState)) {
+      if (isAutomationsNavigation(nextState)) {
         setNavigationState(nextState)
         return nextState
       }
@@ -624,7 +624,7 @@ export function NavigationProvider({
     }
 
     // Tasks: always valid for now (mock data, no real data layer yet)
-    if (isTasksNavigation(navState)) {
+    if (isAutomationsNavigation(navState)) {
       return true
     }
 

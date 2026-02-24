@@ -860,13 +860,13 @@ export const IPC_CHANNELS = {
   MENU_PASTE: 'menu:paste',
   MENU_SELECT_ALL: 'menu:selectAll',
 
-  // Hooks (manual trigger + state management)
-  TEST_HOOK: 'hooks:test',
-  HOOKS_SET_ENABLED: 'hooks:setEnabled',
-  HOOKS_DUPLICATE: 'hooks:duplicate',
-  HOOKS_DELETE: 'hooks:delete',
-  HOOKS_GET_HISTORY: 'hooks:getHistory',
-  HOOKS_CHANGED: 'hooks:changed',  // Broadcast event
+  // Automations (manual trigger + state management)
+  TEST_AUTOMATION: 'automations:test',
+  AUTOMATIONS_SET_ENABLED: 'automations:setEnabled',
+  AUTOMATIONS_DUPLICATE: 'automations:duplicate',
+  AUTOMATIONS_DELETE: 'automations:delete',
+  AUTOMATIONS_GET_HISTORY: 'automations:getHistory',
+  AUTOMATIONS_CHANGED: 'automations:changed',  // Broadcast event
 } as const
 
 // Re-import types for ElectronAPI
@@ -881,28 +881,24 @@ export interface ToolIconMapping {
   commands: string[]
 }
 
-// Hook testing types (manual trigger from UI)
-export interface TestHookPayload {
+// Automation testing types (manual trigger from UI)
+export interface TestAutomationPayload {
   workspaceId: string
-  hooks: Array<{ type: 'command'; command: string; timeout?: number } | { type: 'prompt'; prompt: string }>
+  actions: Array<{ type: 'prompt'; prompt: string }>
   permissionMode?: 'safe' | 'ask' | 'allow-all'
   labels?: string[]
 }
 
-export interface TestHookActionResult {
-  type: 'command' | 'prompt'
+export interface TestAutomationActionResult {
+  type: 'prompt'
   success: boolean
-  stdout?: string
   stderr?: string
-  exitCode?: number
-  blocked?: boolean
-  blockedReason?: string
   sessionId?: string
   duration: number
 }
 
-export interface TestHookResult {
-  actions: TestHookActionResult[]
+export interface TestAutomationResult {
+  actions: TestAutomationActionResult[]
 }
 
 // Type-safe IPC API exposed to renderer
@@ -1212,17 +1208,17 @@ export interface ElectronAPI {
   setDefaultLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   setWorkspaceDefaultLlmConnection(workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }>
 
-  // Hook testing (manual trigger)
-  testHook(payload: TestHookPayload): Promise<TestHookResult>
+  // Automation testing (manual trigger)
+  testAutomation(payload: TestAutomationPayload): Promise<TestAutomationResult>
 
-  // Hook state management
-  setHookEnabled(workspaceId: string, eventName: string, matcherIndex: number, enabled: boolean): Promise<void>
-  duplicateHook(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
-  deleteHook(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
-  getHookHistory(workspaceId: string, hookId: string, limit?: number): Promise<Array<{ id: string; ts: number; ok: boolean }>>
+  // Automation state management
+  setAutomationEnabled(workspaceId: string, eventName: string, matcherIndex: number, enabled: boolean): Promise<void>
+  duplicateAutomation(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
+  deleteAutomation(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
+  getAutomationHistory(workspaceId: string, automationId: string, limit?: number): Promise<Array<{ id: string; ts: number; ok: boolean }>>
 
-  // Hooks change listener (live updates when hooks.json changes on disk)
-  onHooksChanged(callback: (workspaceId: string) => void): () => void
+  // Automations change listener (live updates when automations.json changes on disk)
+  onAutomationsChanged(callback: (workspaceId: string) => void): () => void
 }
 
 /**
@@ -1345,11 +1341,11 @@ export interface SourceFilter {
 }
 
 /**
- * Task type filter for tasks navigation (e.g., show only Scheduled, Event-based, or Agentic tasks)
+ * Automation type filter for automations navigation (e.g., show only Scheduled, Event-based, or Agentic automations)
  */
-export interface TaskFilter {
+export interface AutomationFilter {
   kind: 'type'
-  taskType: 'scheduled' | 'event' | 'agentic'
+  automationType: 'scheduled' | 'event' | 'agentic'
 }
 
 /**
@@ -1388,14 +1384,14 @@ export interface SkillsNavigationState {
 }
 
 /**
- * Tasks navigation state - shows HooksListPanel in navigator
+ * Automations navigation state - shows AutomationsListPanel in navigator
  */
-export interface TasksNavigationState {
-  navigator: 'tasks'
-  /** Optional filter for task type */
-  filter?: TaskFilter
-  /** Selected task details, or null for empty state */
-  details: { type: 'task'; taskId: string } | null
+export interface AutomationsNavigationState {
+  navigator: 'automations'
+  /** Optional filter for automation type */
+  filter?: AutomationFilter
+  /** Selected automation details, or null for empty state */
+  details: { type: 'automation'; automationId: string } | null
   /** Optional right sidebar panel state */
   rightSidebar?: RightSidebarPanel
 }
@@ -1413,7 +1409,7 @@ export type NavigationState =
   | SourcesNavigationState
   | SettingsNavigationState
   | SkillsNavigationState
-  | TasksNavigationState
+  | AutomationsNavigationState
 
 /**
  * Type guard to check if state is sessions navigation
@@ -1444,11 +1440,11 @@ export const isSkillsNavigation = (
 ): state is SkillsNavigationState => state.navigator === 'skills'
 
 /**
- * Type guard to check if state is tasks navigation
+ * Type guard to check if state is automations navigation
  */
-export const isTasksNavigation = (
+export const isAutomationsNavigation = (
   state: NavigationState
-): state is TasksNavigationState => state.navigator === 'tasks'
+): state is AutomationsNavigationState => state.navigator === 'automations'
 
 /**
  * Default navigation state - allSessions with no selection
@@ -1475,11 +1471,11 @@ export const getNavigationStateKey = (state: NavigationState): string => {
     }
     return 'skills'
   }
-  if (state.navigator === 'tasks') {
-    if (state.details?.type === 'task') {
-      return `tasks/task/${state.details.taskId}`
+  if (state.navigator === 'automations') {
+    if (state.details?.type === 'automation') {
+      return `automations/automation/${state.details.automationId}`
     }
-    return 'tasks'
+    return 'automations'
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
@@ -1522,14 +1518,14 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
     return { navigator: 'skills', details: null }
   }
 
-  // Handle tasks
-  if (key === 'tasks') return { navigator: 'tasks', details: null }
-  if (key.startsWith('tasks/task/')) {
-    const taskId = key.slice(11)
-    if (taskId) {
-      return { navigator: 'tasks', details: { type: 'task', taskId } }
+  // Handle automations
+  if (key === 'automations') return { navigator: 'automations', details: null }
+  if (key.startsWith('automations/automation/')) {
+    const automationId = key.slice(22)
+    if (automationId) {
+      return { navigator: 'automations', details: { type: 'automation', automationId } }
     }
-    return { navigator: 'tasks', details: null }
+    return { navigator: 'automations', details: null }
   }
 
   // Handle settings

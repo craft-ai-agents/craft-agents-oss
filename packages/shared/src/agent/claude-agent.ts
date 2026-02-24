@@ -27,7 +27,7 @@ import {
   cleanupSessionScopedTools,
   type AuthRequest,
 } from './session-scoped-tools.ts';
-import { type HookSystem, type SdkHookCallbackMatcher } from '../hooks-simple/index.ts';
+import { type AutomationSystem, type SdkAutomationCallbackMatcher } from '../automations/index.ts';
 import {
   getPermissionMode,
   setPermissionMode,
@@ -128,8 +128,8 @@ export interface ClaudeAgentConfig {
   };
   /** System prompt preset for mini agents ('default' | 'mini' or custom string) */
   systemPromptPreset?: 'default' | 'mini' | string;
-  /** Workspace-level HookSystem instance (shared across all agents in the workspace) */
-  hookSystem?: HookSystem;
+  /** Workspace-level AutomationSystem instance (shared across all agents in the workspace) */
+  automationSystem?: AutomationSystem;
   /**
    * Per-session environment variable overrides for the SDK subprocess.
    * Used to pass connection-specific config like ANTHROPIC_BASE_URL that
@@ -335,7 +335,7 @@ const buildWindowsSkillsDirError = buildWindowsSkillsDirErrorFn;
 
 export class ClaudeAgent extends BaseAgent {
   // Note: ClaudeAgentConfig is compatible with BackendConfig, so we use the inherited this.config
-  private hookSystem?: HookSystem;
+  private automationSystem?: AutomationSystem;
   private currentQuery: Query | null = null;
   private currentQueryAbortController: AbortController | null = null;
   private lastAbortReason: AbortReason | null = null;
@@ -435,7 +435,7 @@ export class ClaudeAgent extends BaseAgent {
     super(backendConfig, DEFAULT_MODEL, CLAUDE_CONTEXT_WINDOW);
 
     this.isHeadless = config.isHeadless ?? false;
-    this.hookSystem = config.hookSystem;
+    this.automationSystem = config.automationSystem;
 
     // Initialize event adapter for SDK message → AgentEvent conversion
     this.eventAdapter = new ClaudeEventAdapter({
@@ -759,16 +759,16 @@ export class ClaudeAgent extends BaseAgent {
         // This allows Safe Mode to properly allow read-only bash commands without SDK interference
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
-        // User hooks from hooks.json are merged with internal hooks
+        // User hooks from automations.json are merged with internal hooks
         hooks: (() => {
-          // Build user-defined hooks from hooks.json using the workspace-level HookSystem
-          const userHooks: Partial<Record<string, SdkHookCallbackMatcher[]>> = this.hookSystem?.buildSdkHooks() ?? {};
+          // Build user-defined hooks from automations.json using the workspace-level AutomationSystem
+          const userHooks: Partial<Record<string, SdkAutomationCallbackMatcher[]>> = this.automationSystem?.buildSdkHooks() ?? {};
           if (Object.keys(userHooks).length > 0) {
             debug('[CraftAgent] User SDK hooks loaded:', Object.keys(userHooks).join(', '));
           }
 
           // Internal hooks for permission handling and logging
-          const internalHooks: Record<string, SdkHookCallbackMatcher[]> = {
+          const internalHooks: Record<string, SdkAutomationCallbackMatcher[]> = {
           PreToolUse: [{
             hooks: [async (_hookInput) => {
               // Only handle PreToolUse events
@@ -1256,10 +1256,10 @@ export class ClaudeAgent extends BaseAgent {
           }],
           };
 
-          // Merge internal hooks with user hooks from hooks.json
+          // Merge internal hooks with user hooks from automations.json
           // Internal hooks run first (permissions), then user hooks
-          const mergedHooks: Record<string, SdkHookCallbackMatcher[]> = { ...internalHooks };
-          for (const [event, matchers] of Object.entries(userHooks) as [string, SdkHookCallbackMatcher[]][]) {
+          const mergedHooks: Record<string, SdkAutomationCallbackMatcher[]> = { ...internalHooks };
+          for (const [event, matchers] of Object.entries(userHooks) as [string, SdkAutomationCallbackMatcher[]][]) {
             if (!matchers) continue;
             if (mergedHooks[event]) {
               // Append user hooks after internal hooks

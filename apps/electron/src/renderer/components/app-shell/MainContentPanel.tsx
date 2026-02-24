@@ -29,7 +29,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
-  isTasksNavigation,
+  isAutomationsNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { extractLabelId } from '@craft-agent/shared/labels'
@@ -37,9 +37,9 @@ import type { SessionStatusId } from '@/config/session-status-config'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
-import { HookInfoPage } from '../hooks/HookInfoPage'
-import type { ExecutionEntry } from '../hooks/types'
-import { hooksAtom } from '@/atoms/hooks'
+import { AutomationInfoPage } from '../automations/AutomationInfoPage'
+import type { ExecutionEntry } from '../automations/types'
+import { automationsAtom } from '@/atoms/automations'
 
 export interface MainContentPanelProps {
   /** Whether the app is in focused mode (single chat, no sidebar) */
@@ -60,12 +60,12 @@ export function MainContentPanel({
     onSessionLabelsChange,
     sessionStatuses,
     labels,
-    onTestHook,
-    onToggleHook,
-    onDuplicateHook,
-    onDeleteHook,
-    hookTestResults,
-    getHookHistory,
+    onTestAutomation,
+    onToggleAutomation,
+    onDuplicateAutomation,
+    onDeleteAutomation,
+    automationTestResults,
+    getAutomationHistory,
   } = useAppShellContext()
 
   // Multi-select state
@@ -74,23 +74,23 @@ export function MainContentPanel({
   const selectionCount = useSelectionCount()
   const { clearMultiSelect } = useSessionSelection()
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
-  const hooks = useAtomValue(hooksAtom)
+  const automations = useAtomValue(automationsAtom)
 
-  // Execution history for the selected hook
-  const selectedHookId = isTasksNavigation(navState) ? navState.details?.taskId : undefined
+  // Execution history for the selected automation
+  const selectedAutomationId = isAutomationsNavigation(navState) ? navState.details?.automationId : undefined
   const [executions, setExecutions] = useState<ExecutionEntry[]>([])
 
   useEffect(() => {
-    if (!selectedHookId || !getHookHistory) {
+    if (!selectedAutomationId || !getAutomationHistory) {
       setExecutions([])
       return
     }
     let stale = false
-    getHookHistory(selectedHookId).then(entries => {
+    getAutomationHistory(selectedAutomationId).then(entries => {
       if (!stale) setExecutions(entries)
     })
     return () => { stale = true }
-  }, [selectedHookId, getHookHistory])
+  }, [selectedAutomationId, getAutomationHistory])
 
   const selectedMetas = useMemo(() => {
     const metas: SessionMeta[] = []
@@ -214,21 +214,21 @@ export function MainContentPanel({
     )
   }
 
-  // Tasks navigator - show task (hook) info or empty state
-  if (isTasksNavigation(navState)) {
+  // Automations navigator - show automation info or empty state
+  if (isAutomationsNavigation(navState)) {
     if (navState.details) {
-      const hook = hooks.find(h => h.id === navState.details!.taskId)
-      if (hook) {
+      const automation = automations.find(h => h.id === navState.details!.automationId)
+      if (automation) {
         return wrapWithStoplight(
           <Panel variant="grow" className={className}>
-            <HookInfoPage
-              hook={hook}
+            <AutomationInfoPage
+              automation={automation}
               executions={executions}
-              testResult={hookTestResults?.[hook.id]}
-              onTest={onTestHook ? () => onTestHook(hook.id) : undefined}
-              onToggleEnabled={onToggleHook ? () => onToggleHook(hook.id) : undefined}
-              onDuplicate={onDuplicateHook ? () => onDuplicateHook(hook.id) : undefined}
-              onDelete={onDeleteHook ? () => onDeleteHook(hook.id) : undefined}
+              testResult={automationTestResults?.[automation.id]}
+              onTest={onTestAutomation ? () => onTestAutomation(automation.id) : undefined}
+              onToggleEnabled={onToggleAutomation ? () => onToggleAutomation(automation.id) : undefined}
+              onDuplicate={onDuplicateAutomation ? () => onDuplicateAutomation(automation.id) : undefined}
+              onDelete={onDeleteAutomation ? () => onDeleteAutomation(automation.id) : undefined}
             />
           </Panel>
         )

@@ -24,7 +24,7 @@ import type {
   LoadedSkill,
   NewChatActionParams,
   LlmConnectionWithStatus,
-  TestHookResult,
+  TestAutomationResult,
 } from '../../shared/types'
 import type { SessionStatus as SessionStatusConfig } from '@/config/session-status-config'
 import type { SessionOptions, SessionOptionUpdates } from '../hooks/useSessionOptions'
@@ -141,19 +141,19 @@ export interface AppShellContextType {
   /** Callback when ChatDisplay match info changes (for immediate UI updates) */
   onChatMatchInfoChange?: (info: { count: number; index: number }) => void
 
-  // Hook management
-  /** Test a hook by ID — executes its actions and returns results */
-  onTestHook?: (hookId: string) => void
-  /** Toggle a hook's enabled state by ID */
-  onToggleHook?: (hookId: string) => void
-  /** Duplicate a hook by ID — clones config with " Copy" suffix */
-  onDuplicateHook?: (hookId: string) => void
-  /** Delete a hook by ID — removes from hooks.json */
-  onDeleteHook?: (hookId: string) => void
-  /** Map of hookId → last test result */
-  hookTestResults?: Record<string, import('../components/hooks/types').TestResult>
-  /** Fetch execution history for a hook by ID */
-  getHookHistory?: (hookId: string) => Promise<import('../components/hooks/types').ExecutionEntry[]>
+  // Automation management
+  /** Test an automation by ID — executes its actions and returns results */
+  onTestAutomation?: (automationId: string) => void
+  /** Toggle an automation's enabled state by ID */
+  onToggleAutomation?: (automationId: string) => void
+  /** Duplicate an automation by ID — clones config with " Copy" suffix */
+  onDuplicateAutomation?: (automationId: string) => void
+  /** Delete an automation by ID — removes from automations config */
+  onDeleteAutomation?: (automationId: string) => void
+  /** Map of automationId → last test result */
+  automationTestResults?: Record<string, import('../components/automations/types').TestResult>
+  /** Fetch execution history for an automation by ID */
+  getAutomationHistory?: (automationId: string) => Promise<import('../components/automations/types').ExecutionEntry[]>
 }
 
 const AppShellContext = createContext<AppShellContextType | null>(null)
