@@ -7,7 +7,6 @@ import { PERMISSION_MODE_CONFIG } from '../agent/mode-types.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
 import { APP_VERSION } from '../version/index.ts';
 import { readPluginName } from '../utils/workspace.ts';
-import { globSync } from 'glob';
 import os from 'os';
 
 /** Maximum size of CLAUDE.md file to include (10KB) */
@@ -71,30 +70,55 @@ export function findProjectContextFile(directory: string): string | null {
 }
 
 /**
+ * Recursively collect paths to agents.md / claude.md (case-insensitive).
+ * Skips EXCLUDED_DIRECTORIES. Stops once we have enough to cap.
+ */
+function collectContextFilesRecursive(
+  directory: string,
+  baseDir: string,
+  relativePrefix: string,
+  out: string[],
+  excludedLower: Set<string>
+): void {
+  if (out.length >= MAX_CONTEXT_FILES) return;
+  let entries: string[];
+  try {
+    entries = readdirSync(directory, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const e of entries) {
+    const nameLower = e.name.toLowerCase();
+    if (e.isDirectory()) {
+      if (excludedLower.has(nameLower)) continue;
+      const subDir = join(directory, e.name);
+      const subPrefix = relativePrefix ? `${relativePrefix}/${e.name}` : e.name;
+      collectContextFilesRecursive(subDir, baseDir, subPrefix, out, excludedLower);
+      continue;
+    }
+    if (e.isFile() && (nameLower === 'agents.md' || nameLower === 'claude.md')) {
+      const rel = relativePrefix ? `${relativePrefix}/${e.name}` : e.name;
+      out.push(rel);
+    }
+  }
+}
+
+/**
  * Find all project context files (AGENTS.md or CLAUDE.md) recursively in a directory.
  * Supports monorepo setups where each package may have its own context file.
  * Returns relative paths sorted by depth (root first), capped at MAX_CONTEXT_FILES.
  */
 export function findAllProjectContextFiles(directory: string): string[] {
   try {
-    // Build glob ignore patterns from excluded directories
-    const ignorePatterns = EXCLUDED_DIRECTORIES.map((dir) => `**/${dir}/**`);
-
-    // Search for all context files (case-insensitive via nocase option)
-    const pattern = '**/{agents,claude}.md';
-    const matches = globSync(pattern, {
-      cwd: directory,
-      nocase: true,
-      ignore: ignorePatterns,
-      absolute: false,
-    });
+    const excludedLower = new Set(EXCLUDED_DIRECTORIES.map((d) => d.toLowerCase()));
+    const matches: string[] = [];
+    collectContextFilesRecursive(directory, directory, '', matches, excludedLower);
 
     if (matches.length === 0) {
       return [];
     }
 
     // Sort by depth (fewer slashes = shallower = higher priority), then alphabetically
-    // Root files come first, then nested packages
     const sorted = matches.sort((a, b) => {
       const depthA = (a.match(/\//g) || []).length;
       const depthB = (b.match(/\//g) || []).length;
@@ -102,9 +126,7 @@ export function findAllProjectContextFiles(directory: string): string[] {
       return a.localeCompare(b);
     });
 
-    // Cap at max files to avoid overwhelming the prompt
     const capped = sorted.slice(0, MAX_CONTEXT_FILES);
-
     debug(`[findAllProjectContextFiles] Found ${matches.length} files, returning ${capped.length}`);
     return capped;
   } catch (error) {

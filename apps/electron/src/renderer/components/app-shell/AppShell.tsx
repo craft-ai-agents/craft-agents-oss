@@ -115,6 +115,7 @@ import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui
 import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import { RightSidebar } from "./RightSidebar"
+import type { ChatMinimapState } from "@/components/chat/ScrollMinimap"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
@@ -1449,6 +1450,9 @@ function AppShellContent({
     )
   }, [isRightSidebarVisible])
 
+  // Chat minimap state: set by ChatDisplay, consumed by right sidebar
+  const [chatMinimapState, setChatMinimapState] = React.useState<ChatMinimapState | null>(null)
+
   // Extend context value with local overrides (textareaRef, wrapped onDeleteSession, sources, skills, labels, enabledModes, rightSidebarOpenButton, effectiveSessionStatuses)
   const appShellContextValue = React.useMemo<AppShellContextType>(() => ({
     ...contextValue,
@@ -1467,7 +1471,9 @@ function AppShellContent({
     isSearchModeActive: searchActive,
     chatDisplayRef,
     onChatMatchInfoChange: handleChatMatchInfoChange,
-  }), [contextValue, handleDeleteSession, sources, skills, labelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, rightSidebarOpenButton, searchActive, searchQuery, handleChatMatchInfoChange])
+    chatMinimapState,
+    setChatMinimapState,
+  }), [contextValue, handleDeleteSession, sources, skills, labelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, rightSidebarOpenButton, searchActive, searchQuery, handleChatMatchInfoChange, chatMinimapState])
 
   // Persist expanded folders to localStorage (workspace-scoped)
   React.useEffect(() => {

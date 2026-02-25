@@ -44,7 +44,9 @@ import type { PermissionMode } from "@craft-agent/shared/agent/modes"
 import type { ThinkingLevel } from "@craft-agent/shared/agent/thinking-levels"
 import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn } from "@craft-agent/ui"
 import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
+import type { TurnSegmentType } from "@/components/chat/ScrollMinimap"
 import { ActiveOptionBadges } from "./ActiveOptionBadges"
+import { useOptionalAppShellContext } from "@/context/AppShellContext"
 import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse } from "./input"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
@@ -1224,6 +1226,72 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const turns = allTurns.slice(startIndex)
   const hasMoreAbove = startIndex > 0
 
+  // Turn keys and labels for ScrollMinimap (segment click → scroll to turn, hover tooltip)
+  const turnKeys = React.useMemo(() => {
+    return turns.map((t) => {
+      if (t.type === 'user') return `user-${t.message.id}`
+      if (t.type === 'system') return `system-${t.message.id}`
+      if (t.type === 'auth-request') return `auth-${t.message.id}`
+      return `turn-${t.turnId}-${t.timestamp}`
+    })
+  }, [turns])
+
+  const turnLabels = React.useMemo(() => {
+    const maxLen = 32
+    return turns.map((t, i) => {
+      if (t.type === 'user') {
+        const content = t.message.content as unknown
+        let text = ''
+        if (typeof content === 'string') text = content
+        else if (Array.isArray(content)) {
+          text = content
+            .filter((block: { type?: string }) => block.type === 'text')
+            .map((block: { text?: string }) => block.text || '')
+            .join(' ')
+        }
+        const line = text.replace(/\s+/g, ' ').trim().slice(0, maxLen)
+        return line ? (line.length >= maxLen ? `${line}…` : line) : 'User'
+      }
+      if (t.type === 'assistant') return `Reply #${i + 1}`
+      if (t.type === 'system') return 'System'
+      if (t.type === 'auth-request') return 'Auth'
+      return `#${i + 1}`
+    })
+  }, [turns])
+
+  const handleMinimapSegmentClick = React.useCallback(
+    (index: number) => {
+      const key = turnKeys[index]
+      if (!key) return
+      const el = turnRefs.current.get(key)
+      el?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    },
+    [turnKeys]
+  )
+
+  // Register minimap state for right sidebar (unregister when no session/turns or compact)
+  const setChatMinimapState = useOptionalAppShellContext()?.setChatMinimapState
+  React.useEffect(() => {
+    if (!setChatMinimapState) return
+    if (compactMode || !session || turns.length === 0) {
+      setChatMinimapState(null)
+      return
+    }
+    setChatMinimapState({
+      viewportRef: scrollViewportRef,
+      turnCount: turns.length,
+      turnTypes: turns.map((t): TurnSegmentType => {
+        if (t.type === 'user') return 'user'
+        if (t.type === 'system') return 'system'
+        if (t.type === 'auth-request') return 'auth'
+        return 'assistant'
+      }),
+      turnLabels,
+      onSegmentClick: handleMinimapSegmentClick,
+    })
+    return () => setChatMinimapState(null)
+  }, [setChatMinimapState, compactMode, session?.id, turns.length, turnLabels, handleMinimapSegmentClick])
+
   // Compute if we should skip scroll-to-bottom (when search is active on session switch)
   // At render time, prevSessionIdForScrollRef still has the OLD session ID, so we can detect the switch
   const isSessionSwitchForScroll = prevSessionIdForScrollRef.current !== null && prevSessionIdForScrollRef.current !== session?.id
@@ -1235,7 +1303,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
         <div className="flex flex-1 flex-col min-h-0 min-w-0 relative">
           {/* Content layer */}
           <div className="flex flex-1 flex-col min-h-0 min-w-0 relative z-10">
-          {/* === MESSAGES AREA: Scrollable list of message bubbles === */}
+          {/* === MESSAGES AREA: Scrollable list (minimap lives in right sidebar) === */}
           <div className="relative flex-1 min-h-0">
             {/* Mask wrapper - fades content at top and bottom over transparent/image backgrounds */}
             <div

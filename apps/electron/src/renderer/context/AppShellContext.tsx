@@ -139,6 +139,10 @@ export interface AppShellContextType {
   chatDisplayRef?: React.RefObject<ChatDisplayHandle>
   /** Callback when ChatDisplay match info changes (for immediate UI updates) */
   onChatMatchInfoChange?: (info: { count: number; index: number }) => void
+
+  /** Minimap state from ChatDisplay for right sidebar (viewportRef, turns, labels, onSegmentClick) */
+  chatMinimapState?: import('@/components/chat/ScrollMinimap').ChatMinimapState | null
+  setChatMinimapState?: (state: import('@/components/chat/ScrollMinimap').ChatMinimapState | null) => void
 }
 
 const AppShellContext = createContext<AppShellContextType | null>(null)

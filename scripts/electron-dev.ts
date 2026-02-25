@@ -18,11 +18,11 @@ const SESSION_SERVER_OUTPUT = join(SESSION_SERVER_DIR, "dist/index.js");
 const BRIDGE_SERVER_DIR = join(ROOT_DIR, "packages/bridge-mcp-server");
 const BRIDGE_SERVER_OUTPUT = join(BRIDGE_SERVER_DIR, "dist/index.js");
 
-// Platform-specific binary paths (bun creates .exe on Windows, no extension on Unix)
-const IS_WINDOWS = process.platform === "win32";
-const BIN_EXT = IS_WINDOWS ? ".exe" : "";
-const VITE_BIN = join(ROOT_DIR, `node_modules/.bin/vite${BIN_EXT}`);
-const ELECTRON_BIN = join(ROOT_DIR, `node_modules/.bin/electron${BIN_EXT}`);
+// Use bunx so binaries are resolved from node_modules even if .bin symlinks are missing
+const VITE_CMD = "bunx";
+const VITE_ARGS = ["vite"];
+const ELECTRON_CMD = "bunx";
+const ELECTRON_ARGS = ["electron"];
 
 // Multi-instance detection (matches detect-instance.sh logic)
 // Detects instance number from folder name suffix (e.g., craft-agents-1 → instance 1)
@@ -223,13 +223,26 @@ function getElectronEnv(): Record<string, string> {
   };
 }
 
+// Externals for main process so esbuild resolves same as CLI (avoids ajv/markitdown subpath issues)
+const MAIN_EXTERNALS = [
+  "electron",
+  "ajv",
+  "ajv/*",
+  "ajv-formats",
+  "pdf-parse-tt-message-gone",
+  "pdf-parse-tt-message-gone/*",
+  "@apm-js-collab/code-transformer",
+  "@apm-js-collab/*",
+];
+
 // Run a one-shot esbuild using the JavaScript API
 async function runEsbuild(
   entryPoint: string,
   outfile: string,
   defines: Record<string, string> = {},
-  options: { packagesExternal?: boolean } = {}
+  options: { packagesExternal?: boolean; mainProcess?: boolean } = {}
 ): Promise<{ success: boolean; error?: string }> {
+  const external = options.mainProcess ? MAIN_EXTERNALS : ["electron"];
   try {
     await esbuild.build({
       entryPoints: [join(ROOT_DIR, entryPoint)],
@@ -237,7 +250,8 @@ async function runEsbuild(
       platform: "node",
       format: "cjs",
       outfile: join(ROOT_DIR, outfile),
-      external: ["electron"],
+      absWorkingDir: ROOT_DIR,
+      external,
       ...(options.packagesExternal ? { packages: "external" as const } : {}),
       define: defines,
       logLevel: "warning",
@@ -333,12 +347,13 @@ async function main(): Promise<void> {
   if (existsSync(mainCjsPath)) rmSync(mainCjsPath);
   if (existsSync(preloadCjsPath)) rmSync(preloadCjsPath);
 
-  // Build main and preload in parallel
+  // Build main and preload in parallel (main uses externals for ajv/markitdown compat)
   const [mainResult, preloadResult] = await Promise.all([
     runEsbuild(
       "apps/electron/src/main/index.ts",
       "apps/electron/dist/main.cjs",
-      oauthDefines
+      oauthDefines,
+      { mainProcess: true }
     ),
     runEsbuild(
       "apps/electron/src/preload/index.ts",
@@ -397,7 +412,7 @@ async function main(): Promise<void> {
 
   // 1. Vite dev server (strictPort ensures we don't silently switch ports)
   const viteProc = spawn({
-    cmd: [VITE_BIN, "dev", "--config", "apps/electron/vite.config.ts", "--port", vitePort, "--strictPort"],
+    cmd: [VITE_CMD, ...VITE_ARGS, "dev", "--config", "apps/electron/vite.config.ts", "--port", vitePort, "--strictPort"],
     cwd: ROOT_DIR,
     stdin: "ignore",
     stdout: "inherit",
@@ -413,7 +428,8 @@ async function main(): Promise<void> {
     platform: "node",
     format: "cjs",
     outfile: join(ROOT_DIR, "apps/electron/dist/main.cjs"),
-    external: ["electron"],
+    absWorkingDir: ROOT_DIR,
+    external: MAIN_EXTERNALS,
     define: oauthDefines,
     logLevel: "info",
   });
@@ -428,6 +444,7 @@ async function main(): Promise<void> {
     platform: "node",
     format: "cjs",
     outfile: join(ROOT_DIR, "apps/electron/dist/preload.cjs"),
+    absWorkingDir: ROOT_DIR,
     external: ["electron"],
     logLevel: "info",
   });
@@ -439,7 +456,7 @@ async function main(): Promise<void> {
   console.log("🚀 Starting Electron...\n");
 
   const electronProc = spawn({
-    cmd: [ELECTRON_BIN, "apps/electron"],
+    cmd: [ELECTRON_CMD, ...ELECTRON_ARGS, "apps/electron"],
     cwd: ROOT_DIR,
     stdin: "ignore",
     stdout: "inherit",

@@ -76,7 +76,7 @@ async function main(): Promise<void> {
 
   const proc = spawn({
     cmd: [
-      "bun", "run", "esbuild",
+      "bunx", "esbuild",
       "apps/electron/src/preload/index.ts",
       "--bundle",
       "--platform=node",

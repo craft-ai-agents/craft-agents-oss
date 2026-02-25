@@ -16,6 +16,7 @@ import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
 import { HorizontalResizeHandle } from '../ui/horizontal-resize-handle'
 import { SessionFilesSection } from './SessionFilesSection'
+import { ScrollMinimap } from '../chat/ScrollMinimap'
 import * as storage from '@/lib/local-storage'
 
 export interface SessionMetadataPanelProps {
@@ -70,7 +71,7 @@ function useDebouncedCallback<T extends (...args: any[]) => void>(
  * Panel displaying session metadata with minimal styling
  */
 export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadataPanelProps) {
-  const { onRenameSession } = useAppShellContext()
+  const { onRenameSession, chatMinimapState } = useAppShellContext()
   const containerRef = useRef<HTMLDivElement>(null)
 
   // State for editable fields
@@ -183,6 +184,25 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
   return (
     <div ref={containerRef} className="h-full flex flex-col">
       <PanelHeader title="Chat Info" actions={closeButton} />
+
+      {/* Message map：条带 + Jump to message 一体，Apple 式内聚 */}
+      {chatMinimapState && chatMinimapState.turnCount > 0 && (
+        <div className="shrink-0 px-4 pt-3 pb-3 border-b border-border/50">
+          <label className="text-xs font-medium text-muted-foreground block mb-2 select-none">
+            Message map
+          </label>
+          <div className="h-[200px] min-h-0 flex overflow-hidden rounded-lg shadow-minimal">
+            <ScrollMinimap
+              viewportRef={chatMinimapState.viewportRef}
+              turnCount={chatMinimapState.turnCount}
+              turnTypes={chatMinimapState.turnTypes}
+              turnLabels={chatMinimapState.turnLabels}
+              onSegmentClick={chatMinimapState.onSegmentClick}
+              className="flex-1 min-w-0 min-h-0"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Metadata section (Name + Notes) - fixed height based on state */}
       <div

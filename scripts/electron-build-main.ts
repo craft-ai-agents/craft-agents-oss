@@ -138,7 +138,7 @@ async function buildCopilotInterceptor(): Promise<void> {
 
   const proc = spawn({
     cmd: [
-      "bun", "run", "esbuild",
+      "bunx", "esbuild",
       COPILOT_INTERCEPTOR_SOURCE,
       "--bundle",
       "--platform=node",
@@ -270,7 +270,7 @@ async function main(): Promise<void> {
 
   const proc = spawn({
     cmd: [
-      "bun", "run", "esbuild",
+      "bunx", "esbuild",
       "apps/electron/src/main/index.ts",
       "--bundle",
       "--platform=node",
