@@ -86,7 +86,7 @@ bun run electron:start
 - **Multi-Session Inbox**: Desktop app with session management, status workflow, and flagging
 - **Claude Code Experience**: Streaming responses, tool visualization, real-time updates
 - **Multiple LLM Connections**: Add multiple AI providers and set per-workspace defaults
-- **Multi-Provider Support**: Run sessions with ChatGPT Plus, GitHub Copilot, or OpenAI API keys alongside Anthropic
+- **Multi-Provider Support**: Run sessions with Google AI Studio, ChatGPT Plus, GitHub Copilot, or OpenAI API keys alongside Anthropic
 - **Craft MCP Integration**: Access to 32+ Craft document tools (blocks, collections, search, tasks)
 - **Sources**: Connect to MCP servers, REST APIs (Google, Slack, Microsoft), and local filesystems
 - **Permission Modes**: Three-level system (Explore, Ask to Edit, Auto) with customizable rules
@@ -101,7 +101,7 @@ bun run electron:start
 ## Quick Start
 
 1. **Launch the app** after installation
-2. **Choose API Connection**: Use Anthropic (API key or Claude Max), ChatGPT Plus, or GitHub Copilot
+2. **Choose API Connection**: Use Anthropic (API key or Claude Max), Google AI Studio, ChatGPT Plus (Codex OAuth), or GitHub Copilot OAuth
 3. **Create a workspace**: Set up a workspace to organize your sessions
 4. **Connect sources** (optional): Add MCP servers, REST APIs, or local filesystems
 5. **Start chatting**: Create sessions and interact with Claude
@@ -258,9 +258,22 @@ Or simply tell the agent you want to connect Gmail/Calendar/Drive - it will guid
 - Never commit credentials to version control
 - For production use, consider getting your OAuth consent screen verified by Google
 
-## Configure Third-Party Providers (OpenRouter, Vercel AI Gateway, Ollama, etc.)
+## Supported LLM Providers
 
-Third-party and self-hosted LLM providers are supported **only through the Claude / Anthropic API Key** connection. When you select **Anthropic API Key** during setup, you can choose from:
+Craft Agents supports multiple ways to connect to LLM providers:
+
+### Direct Connections
+
+| Provider | Auth | Notes |
+|----------|------|-------|
+| **Anthropic** | API key or Claude Max/Pro OAuth | Direct Claude connection via the Claude Agent SDK |
+| **Google AI Studio** | API key | Gemini models with native Google Search grounding built in |
+| **ChatGPT Plus / Pro** | Codex OAuth | Sign in with your ChatGPT subscription — uses OpenAI's Codex models |
+| **GitHub Copilot** | OAuth (device code) | One-click authentication with your Copilot subscription |
+
+### Third-Party & Self-Hosted Providers
+
+Additional providers are supported through the **Claude / Anthropic API Key** connection by choosing a custom endpoint:
 
 | Provider | Endpoint | Notes |
 |----------|----------|-------|
@@ -269,14 +282,12 @@ Third-party and self-hosted LLM providers are supported **only through the Claud
 | **Ollama** | `http://localhost:11434` | Run open-source models locally. No API key required. |
 | **Custom** | Any URL | Any OpenAI-compatible or Anthropic-compatible endpoint. |
 
-### Why only under Claude?
+### Architecture
 
-Craft Agents uses two different agent backends:
+Craft Agents uses two agent backends:
 
-- **Claude** — powered by the [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk), which natively supports custom base URLs and provider routing. This makes it straightforward to point requests at any compatible endpoint.
-- **Pi** — powered by the Pi SDK, which handles ChatGPT Plus OAuth, GitHub Copilot OAuth, and OpenAI API key connections. Pi connections route through their own provider infrastructure.
-
-If you want to use models from OpenRouter, Vercel AI Gateway, Ollama, or any other third-party provider, set up a **Claude / Anthropic API Key** connection and select the desired endpoint.
+- **Claude** — powered by the [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk), which natively supports custom base URLs and provider routing. Anthropic API key, Claude Max/Pro OAuth, and all third-party endpoints use this backend.
+- **Pi** — powered by the Pi SDK, which handles Google AI Studio, ChatGPT Plus (Codex OAuth), GitHub Copilot OAuth, and OpenAI API key connections. Pi connections route through their own provider infrastructure.
 
 ## Configuration
 
