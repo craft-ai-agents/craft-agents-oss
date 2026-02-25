@@ -42,11 +42,8 @@ if (-not $yamlContent) {
 
 # Extract version from YAML manifest
 $version = $null
-foreach ($line in ($yamlContent -split "`n")) {
-    if ($line -match '^version:\s*(.+)') {
-        $version = $Matches[1].Trim()
-        break
-    }
+if ($yamlContent -match '(?m)^version:\s*(.+)') {
+    $version = $Matches[1].Trim()
 }
 
 if (-not $version) {
