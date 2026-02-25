@@ -1786,13 +1786,15 @@ export class ClaudeAgent extends BaseAgent {
   private buildTextPrompt(text: string, attachments?: FileAttachment[]): string {
     const parts: string[] = [];
 
-    // Add context parts using centralized PromptBuilder
-    // This includes: date/time, session state (with plansFolderPath),
-    // workspace capabilities, and working directory context
+    // Add context parts using centralized PromptBuilder (includes global memory when set for this turn)
     const contextParts = this.promptBuilder.buildContextParts(
-      { plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId) },
+      {
+        plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId),
+        memoryContext: this.turnMemoryContext ?? undefined,
+      },
       this.sourceManager.formatSourceState()
     );
+    this.turnMemoryContext = null; // consume once per turn
 
     parts.push(...contextParts);
 
@@ -1827,13 +1829,15 @@ export class ClaudeAgent extends BaseAgent {
   private buildSDKUserMessage(text: string, attachments?: FileAttachment[]): SDKUserMessage {
     const contentBlocks: ContentBlockParam[] = [];
 
-    // Add context parts using centralized PromptBuilder
-    // This includes: date/time, session state (with plansFolderPath),
-    // workspace capabilities, and working directory context
+    // Add context parts using centralized PromptBuilder (includes global memory when set for this turn)
     const contextParts = this.promptBuilder.buildContextParts(
-      { plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId) },
+      {
+        plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId),
+        memoryContext: this.turnMemoryContext ?? undefined,
+      },
       this.sourceManager.formatSourceState()
     );
+    this.turnMemoryContext = null; // consume once per turn
 
     for (const part of contextParts) {
       contentBlocks.push({ type: 'text', text: part });

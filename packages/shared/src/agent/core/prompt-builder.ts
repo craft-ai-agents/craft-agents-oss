@@ -69,6 +69,13 @@ export class PromptBuilder {
   ): string[] {
     const parts: string[] = [];
 
+    // Global memory context (MemOS) when provided for this turn
+    if (options.memoryContext?.trim()) {
+      parts.push(
+        `<global_memory>\nThe following are recalled facts and preferences about the user. Use them to personalize responses when relevant.\n\n${options.memoryContext.trim()}\n</global_memory>`
+      );
+    }
+
     // Add date/time context first (enables prompt caching)
     parts.push(getDateTimeContext());
 

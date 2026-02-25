@@ -9,7 +9,7 @@ import { SessionManager } from './sessions'
 import { ipcLog, windowLog, searchLog } from './logger'
 import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
-import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type SendMessageOptions, type LlmConnectionSetup } from '../shared/types'
+import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type SendMessageOptions, type LlmConnectionSetup, type MemoryConfig } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
 import { safeJsonParse } from '@craft-agent/shared/utils/files'
 import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, loadStoredConfig, saveConfig, type Workspace, getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, isOpenAIProvider, isCopilotProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, getGitBashPath, setGitBashPath, clearGitBashPath } from '@craft-agent/shared/config'
@@ -21,6 +21,8 @@ import { AppServerClient, getCodexPath } from '@craft-agent/shared/codex'
 import type { ModelDefinition } from '@craft-agent/shared/config'
 import { MarkItDown } from 'markitdown-js'
 import { isUsableGitBashPath, validateGitBashPath } from './git-bash'
+import { getMemoryConfig, setMemoryConfig } from './lib/memory-service'
+import { searchMemory, formatSearchResult } from './lib/memos-client'
 
 /**
  * Sanitizes a filename to prevent path traversal and filesystem issues.
@@ -2046,6 +2048,40 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       return { success: true }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  // ============================================================
+  // Global memory (MemOS / OpenMem)
+  // ============================================================
+  ipcMain.handle(IPC_CHANNELS.MEMORY_GET_CONFIG, async (): Promise<MemoryConfig> => {
+    return getMemoryConfig()
+  })
+  ipcMain.handle(IPC_CHANNELS.MEMORY_SET_CONFIG, async (_event, config: MemoryConfig): Promise<void> => {
+    setMemoryConfig(config)
+  })
+  ipcMain.handle(IPC_CHANNELS.MEMORY_TEST_CONNECTION, async (): Promise<{ success: boolean; message: string }> => {
+    const config = getMemoryConfig()
+    if (!config.apiKey?.trim()) {
+      return { success: false, message: 'Please enter an API Key first.' }
+    }
+    try {
+      const result = await searchMemory(
+        {
+          apiKey: config.apiKey,
+          userId: config.userId?.trim() || 'craft-user',
+          baseUrl: config.baseUrl,
+        },
+        'test connection',
+        1,
+      )
+      return {
+        success: true,
+        message: `Connected. Found ${result.facts.length} fact(s), ${result.preferences.length} preference(s).`,
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return { success: false, message: `Connection failed: ${msg}` }
     }
   })
 

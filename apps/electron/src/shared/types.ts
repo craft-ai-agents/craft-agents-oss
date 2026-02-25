@@ -73,6 +73,14 @@ export interface LlmConnectionSetup {
   models?: string[] | null  // Optional model list for compat providers
 }
 
+/** Global memory config (MemOS / OpenMem). Stored in ~/.craft-agent/memory.json */
+export interface MemoryConfig {
+  enabled: boolean
+  apiKey: string
+  userId: string
+  baseUrl?: string
+}
+
 
 /**
  * File/directory entry in a skill folder
@@ -720,6 +728,11 @@ export const IPC_CHANNELS = {
   PREFERENCES_READ: 'preferences:read',
   PREFERENCES_WRITE: 'preferences:write',
 
+  // Global memory (MemOS / OpenMem)
+  MEMORY_GET_CONFIG: 'memory:getConfig',
+  MEMORY_SET_CONFIG: 'memory:setConfig',
+  MEMORY_TEST_CONNECTION: 'memory:testConnection',
+
   // Session Drafts (input text persisted across app restarts)
   DRAFTS_GET: 'drafts:get',
   DRAFTS_SET: 'drafts:set',
@@ -1019,6 +1032,11 @@ export interface ElectronAPI {
   // User Preferences
   readPreferences(): Promise<{ content: string; exists: boolean; path: string }>
   writePreferences(content: string): Promise<{ success: boolean; error?: string }>
+
+  // Global memory (MemOS / OpenMem)
+  getMemoryConfig(): Promise<MemoryConfig>
+  setMemoryConfig(config: MemoryConfig): Promise<void>
+  testMemoryConnection(): Promise<{ success: boolean; message: string }>
 
   // Session Drafts (persisted input text)
   getDraft(sessionId: string): Promise<string | null>

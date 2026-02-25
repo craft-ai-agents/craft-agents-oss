@@ -112,6 +112,8 @@ export interface ContextBlockOptions {
   inactiveSources?: LoadedSource[];
   /** Whether local MCP is enabled */
   localMcpEnabled?: boolean;
+  /** Global memory context (MemOS search result) injected for this turn */
+  memoryContext?: string;
 }
 
 /**

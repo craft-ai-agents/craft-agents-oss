@@ -21,7 +21,7 @@ import { Spinner, FullscreenOverlayBase } from '@craft-agent/ui'
 import { useSetAtom } from 'jotai'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
 import { motion, AnimatePresence } from 'motion/react'
-import type { LlmConnectionWithStatus, ThinkingLevel, WorkspaceSettings, Workspace } from '../../../shared/types'
+import type { LlmConnectionWithStatus, ThinkingLevel, WorkspaceSettings, Workspace, MemoryConfig } from '../../../shared/types'
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVELS } from '@craft-agent/shared/agent/thinking-levels'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import {
@@ -41,6 +41,8 @@ import {
   SettingsCard,
   SettingsRow,
   SettingsMenuSelectRow,
+  SettingsInputRow,
+  SettingsToggle,
 } from '@/components/settings'
 import { useOnboarding } from '@/hooks/useOnboarding'
 import { useWorkspaceIcon } from '@/hooks/useWorkspaceIcon'
@@ -494,6 +496,16 @@ export default function AiSettingsPage() {
   const [renamingConnection, setRenamingConnection] = useState<{ slug: string; name: string } | null>(null)
   const [renameValue, setRenameValue] = useState('')
 
+  // Global memory (MemOS) state
+  const [memoryConfig, setMemoryConfigState] = useState<MemoryConfig>({
+    enabled: false,
+    apiKey: '',
+    userId: '',
+    baseUrl: '',
+  })
+  const [memoryTestMessage, setMemoryTestMessage] = useState<{ success: boolean; message: string } | null>(null)
+  const [memoryTestLoading, setMemoryTestLoading] = useState(false)
+
   // Load workspaces, default settings, and credential health
   useEffect(() => {
     const load = async () => {
@@ -716,6 +728,33 @@ export default function AiSettingsPage() {
     refreshLlmConnections?.()
   }, [refreshLlmConnections])
 
+  // Load global memory config
+  useEffect(() => {
+    if (!window.electronAPI?.getMemoryConfig) return
+    window.electronAPI.getMemoryConfig().then(setMemoryConfigState).catch(console.error)
+  }, [])
+
+  const saveMemoryConfig = useCallback(async (next: MemoryConfig) => {
+    setMemoryConfigState(next)
+    if (window.electronAPI?.setMemoryConfig) {
+      await window.electronAPI.setMemoryConfig(next)
+    }
+  }, [])
+
+  const handleTestMemoryConnection = useCallback(async () => {
+    if (!window.electronAPI?.testMemoryConnection) return
+    setMemoryTestLoading(true)
+    setMemoryTestMessage(null)
+    try {
+      const result = await window.electronAPI.testMemoryConnection()
+      setMemoryTestMessage(result)
+    } catch (e) {
+      setMemoryTestMessage({ success: false, message: String(e) })
+    } finally {
+      setMemoryTestLoading(false)
+    }
+  }, [])
+
   return (
     <div className="h-full flex flex-col">
       <PanelHeader title="AI" actions={<HeaderMenu route={routes.view.settings('ai')} />} />
@@ -771,6 +810,63 @@ export default function AiSettingsPage() {
                 </SettingsCard>
               </SettingsSection>
               )}
+
+              {/* Global memory (MemOS / OpenMem) */}
+              <SettingsSection
+                title="Global memory"
+                description="Cross-session memory via MemOS Cloud. When enabled, relevant facts and preferences are injected into each turn."
+              >
+                <SettingsCard>
+                  <SettingsToggle
+                    label="Enable global memory"
+                    description="Search and inject MemOS memories before each message"
+                    checked={memoryConfig.enabled}
+                    onCheckedChange={(checked) =>
+                      saveMemoryConfig({ ...memoryConfig, enabled: !!checked })
+                    }
+                  />
+                  <SettingsInputRow
+                    label="API Key"
+                    value={memoryConfig.apiKey}
+                    onChange={(v) => saveMemoryConfig({ ...memoryConfig, apiKey: v })}
+                    placeholder="MemOS Cloud API key"
+                    type="password"
+                    inCard
+                  />
+                  <SettingsInputRow
+                    label="User ID"
+                    value={memoryConfig.userId}
+                    onChange={(v) => saveMemoryConfig({ ...memoryConfig, userId: v })}
+                    placeholder="craft-user"
+                  />
+                  <SettingsInputRow
+                    label="Base URL (optional)"
+                    value={memoryConfig.baseUrl ?? ''}
+                    onChange={(v) => saveMemoryConfig({ ...memoryConfig, baseUrl: v || undefined })}
+                    placeholder="https://memos.memtensor.cn/api/openmem/v1"
+                  />
+                  <div className="flex items-center gap-2 pt-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={handleTestMemoryConnection}
+                      disabled={memoryTestLoading || !memoryConfig.apiKey?.trim()}
+                    >
+                      {memoryTestLoading ? 'Testing…' : 'Test connection'}
+                    </Button>
+                    {memoryTestMessage && (
+                      <span
+                        className={cn(
+                          'text-sm',
+                          memoryTestMessage.success ? 'text-green-600 dark:text-green-400' : 'text-destructive'
+                        )}
+                      >
+                        {memoryTestMessage.message}
+                      </span>
+                    )}
+                  </div>
+                </SettingsCard>
+              </SettingsSection>
 
               {/* Workspace Overrides - only show if connections exist */}
               {workspaces.length > 0 && llmConnections.length > 0 && (

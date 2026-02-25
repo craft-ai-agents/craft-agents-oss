@@ -229,6 +229,12 @@ const api: ElectronAPI = {
   readPreferences: () => ipcRenderer.invoke(IPC_CHANNELS.PREFERENCES_READ),
   writePreferences: (content: string) => ipcRenderer.invoke(IPC_CHANNELS.PREFERENCES_WRITE, content),
 
+  // Global memory (MemOS / OpenMem)
+  getMemoryConfig: () => ipcRenderer.invoke(IPC_CHANNELS.MEMORY_GET_CONFIG),
+  setMemoryConfig: (config: import('../shared/types').MemoryConfig) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MEMORY_SET_CONFIG, config),
+  testMemoryConnection: () => ipcRenderer.invoke(IPC_CHANNELS.MEMORY_TEST_CONNECTION),
+
   // Session Drafts (persisted input text)
   getDraft: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.DRAFTS_GET, sessionId),
   setDraft: (sessionId: string, text: string) => ipcRenderer.invoke(IPC_CHANNELS.DRAFTS_SET, sessionId, text),

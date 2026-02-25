@@ -86,6 +86,8 @@ import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels } from '@craft-agent/shared/labels/storage'
 import { extractLabelId } from '@craft-agent/shared/labels'
 import { HookSystem, type HookSystemMetadataSnapshot } from '@craft-agent/shared/hooks-simple'
+import { getMemoryConfig } from './lib/memory-service'
+import { searchMemory, formatSearchResult, addMemory } from './lib/memos-client'
 
 // Import and re-export (extracted to avoid Electron dependency in tests)
 import { sanitizeForTitle } from './title-sanitizer'
@@ -4220,6 +4222,28 @@ export class SessionManager {
         managed.wasInterrupted = false
       }
 
+      // Global memory: when enabled, search MemOS and inject context for this turn
+      const memoryConfig = getMemoryConfig()
+      if (memoryConfig.enabled && memoryConfig.apiKey?.trim()) {
+        try {
+          const memResult = await searchMemory(
+            {
+              apiKey: memoryConfig.apiKey,
+              userId: memoryConfig.userId?.trim() || 'craft-user',
+              baseUrl: memoryConfig.baseUrl,
+            },
+            effectiveMessage,
+            6,
+          )
+          const formatted = formatSearchResult(memResult)
+          if (formatted !== 'No memories found.') {
+            agent.setMemoryContextForTurn(formatted)
+          }
+        } catch (memErr) {
+          sessionLog.warn('Global memory search failed (continuing without):', memErr)
+        }
+      }
+
       sendSpan.mark('chat.starting')
       const chatIterator = agent.chat(effectiveMessage, attachments)
       sessionLog.info('Got chat iterator, starting iteration...')
@@ -4279,6 +4303,22 @@ export class SessionManager {
           // This can happen due to context overflow or API issues - log for debugging but don't show UI warning
           if (lastUserMsg && (!lastAssistantMsg || lastUserMsg.timestamp > lastAssistantMsg.timestamp)) {
             sessionLog.warn(`Session ${sessionId} completed without assistant response - possible context overflow or API issue`)
+          }
+
+          // Global memory: async write this turn to MemOS for future recall (fire-and-forget)
+          const memConfig = getMemoryConfig()
+          if (memConfig.enabled && memConfig.apiKey?.trim() && lastUserMsg?.content && lastAssistantMsg?.content) {
+            const creds = {
+              apiKey: memConfig.apiKey,
+              userId: memConfig.userId?.trim() || 'craft-user',
+              baseUrl: memConfig.baseUrl,
+            }
+            addMemory(creds, {
+              userMessage: lastUserMsg.content,
+              assistantMessage: lastAssistantMsg.content,
+              conversationId: sessionId,
+              tags: ['craft-agents'],
+            }).catch((err) => sessionLog.warn('Global memory add failed:', err))
           }
 
           sendSpan.mark('chat.complete')

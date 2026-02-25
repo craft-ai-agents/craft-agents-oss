@@ -135,6 +135,8 @@ export abstract class BaseAgent implements AgentBackend {
   // Additional State (protected for subclass access)
   // ============================================================
   protected temporaryClarifications: string | null = null;
+  /** Global memory context for the current turn (set by main before chat, consumed once in buildContextParts) */
+  protected turnMemoryContext: string | null = null;
 
   // ============================================================
   // Callbacks (public for facade wiring)
@@ -538,6 +540,14 @@ export abstract class BaseAgent implements AgentBackend {
    */
   getPromptBuilder(): PromptBuilder {
     return this.promptBuilder;
+  }
+
+  /**
+   * Set global memory context for the next user message (injected by main process when memory is enabled).
+   * Consumed once when building context and then cleared.
+   */
+  setMemoryContextForTurn(context: string | null): void {
+    this.turnMemoryContext = context;
   }
 
   // ============================================================

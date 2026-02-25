@@ -46,6 +46,10 @@ export const mockElectronAPI = {
     console.log('[Playground] writePreferences called:', prefs)
   },
 
+  getMemoryConfig: async () => ({ enabled: false, apiKey: '', userId: '', baseUrl: '' }),
+  setMemoryConfig: async () => {},
+  testMemoryConnection: async () => ({ success: false, message: 'Playground mock' }),
+
   // FreeFormInput required mocks
   getAutoCapitalisation: async () => false,
 

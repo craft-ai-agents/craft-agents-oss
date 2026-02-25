@@ -2063,19 +2063,16 @@ export class CodexAgent extends BaseAgent {
     // CONTEXT INJECTION (matching ClaudeAgent)
     // ============================================================
 
-    // Build context parts using centralized PromptBuilder
-    // This includes: date/time, session state (with plansFolderPath),
-    // workspace capabilities, and working directory context
+    // Build context parts using centralized PromptBuilder (includes global memory when set for this turn)
     const workspaceRoot = this.config.workspace.rootPath ?? this.workingDirectory;
     const contextParts = this.promptBuilder.buildContextParts(
       {
-        plansFolderPath: getSessionPlansPath(
-          workspaceRoot,
-          this._sessionId
-        ),
+        plansFolderPath: getSessionPlansPath(workspaceRoot, this._sessionId),
+        memoryContext: this.turnMemoryContext ?? undefined,
       },
       this.sourceManager.formatSourceState()
     );
+    this.turnMemoryContext = null; // consume once per turn
 
     // ============================================================
     // FILE ATTACHMENTS (text files as path references)
