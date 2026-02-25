@@ -43,13 +43,21 @@ export interface MainContentPanelProps {
   isFocusedMode?: boolean
   /** Optional className for the container */
   className?: string
+  /**
+   * Override the navigation state for this panel.
+   * When provided, this panel renders based on the override instead of the global NavigationState.
+   * Used by PanelSlot to render secondary panels in the panel stack.
+   */
+  navStateOverride?: import('../../../shared/types').NavigationState | null
 }
 
 export function MainContentPanel({
   isFocusedMode = false,
   className,
+  navStateOverride,
 }: MainContentPanelProps) {
-  const navState = useNavigationState()
+  const globalNavState = useNavigationState()
+  const navState = navStateOverride ?? globalNavState
   const {
     activeWorkspaceId,
     onSessionStatusChange,

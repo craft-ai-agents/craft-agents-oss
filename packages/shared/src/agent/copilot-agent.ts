@@ -203,6 +203,7 @@ export const COPILOT_TOOL_NAME_MAP: Record<string, string> = {
  */
 export class CopilotAgent extends BaseAgent {
   protected backendName = 'Copilot';
+  protected _supportsBranching = false;
 
   // ============================================================
   // Copilot-specific State

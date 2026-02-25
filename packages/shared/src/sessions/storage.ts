@@ -401,47 +401,21 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
     const workingDir = header.workingDirectory ? expandPath(header.workingDirectory) : undefined;
     const sdkCwd = header.sdkCwd ? expandPath(header.sdkCwd) : workingDir;
 
+    // Destructure fields that don't exist on SessionMetadata or need overrides
+    const {
+      enabledSourceSlugs: _es, pendingPlanExecution: _pp,
+      sessionStatus: _ss, workingDirectory: _wd, sdkCwd: _sc,
+      workspaceRootPath: _wrp, ...headerFields
+    } = header;
+
     return {
-      id: header.id,
+      ...headerFields,
       workspaceRootPath,
-      name: header.name,
-      createdAt: header.createdAt,
-      lastUsedAt: header.lastUsedAt,
-      lastMessageAt: header.lastMessageAt,
-      messageCount: header.messageCount,
-      preview: header.preview,
-      sdkSessionId: header.sdkSessionId,
-      isFlagged: header.isFlagged,
       sessionStatus: validatedStatus,
-      labels: header.labels,
-      permissionMode: header.permissionMode,
       planCount: planCount > 0 ? planCount : undefined,
-      lastMessageRole: header.lastMessageRole,
       workingDirectory: workingDir,
       sdkCwd,
-      model: header.model,
-      llmConnection: header.llmConnection,
-      connectionLocked: header.connectionLocked,
-      thinkingLevel: header.thinkingLevel,
-      // Shared viewer state - must be included for persistence across app restarts
-      sharedUrl: header.sharedUrl,
-      sharedId: header.sharedId,
-      // Token usage from JSONL header (available without loading messages)
-      tokenUsage: header.tokenUsage,
-      // Unread detection fields - pre-computed for session list display without loading messages
-      lastReadMessageId: header.lastReadMessageId,
-      lastFinalMessageId: header.lastFinalMessageId,
-      // Explicit unread flag - single source of truth for NEW badge (state machine approach)
-      hasUnread: header.hasUnread,
-      // Hidden flag for mini-agent sessions (not shown in session list)
-      hidden: header.hidden,
-      // Archive state
-      isArchived: header.isArchived,
-      archivedAt: header.archivedAt,
-      // Sub-session hierarchy
-      parentSessionId: header.parentSessionId,
-      siblingOrder: header.siblingOrder,
-    };
+    } as SessionMetadata;
   } catch (error) {
     debug(`[sessions] Failed to convert header to metadata for session "${header?.id}" in ${workspaceRootPath}:`, error);
     return null;
@@ -824,6 +798,7 @@ export async function createSubSession(
     llmConnection?: string;
     sessionStatus?: SessionConfig['sessionStatus'];
     labels?: string[];
+    branchFromMessageId?: string;
   }
 ): Promise<SessionConfig> {
   // Verify parent exists
@@ -846,13 +821,23 @@ export async function createSubSession(
     model: options?.model ?? parent.model,
     llmConnection: options?.llmConnection ?? parent.llmConnection,
     sessionStatus: options?.sessionStatus,
-    labels: options?.labels,
+    labels: options?.labels ?? parent.labels,
   });
 
-  // Set parentSessionId
+  // Set parentSessionId and copy messages if branching
   const storedSession = loadSession(workspaceRootPath, session.id);
   if (storedSession) {
     storedSession.parentSessionId = parentSessionId;
+
+    // Branch: copy messages from parent up to and including the branch point
+    if (options?.branchFromMessageId && parent.messages.length > 0) {
+      const branchIdx = parent.messages.findIndex(m => m.id === options.branchFromMessageId);
+      if (branchIdx !== -1) {
+        storedSession.messages = parent.messages.slice(0, branchIdx + 1);
+        storedSession.branchFromMessageId = options.branchFromMessageId;
+      }
+    }
+
     await saveSession(storedSession);
   }
 

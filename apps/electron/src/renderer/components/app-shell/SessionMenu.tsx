@@ -31,11 +31,15 @@ import {
   FolderOpen,
   Copy,
   AppWindow,
+  Columns2,
   CloudUpload,
   RefreshCw,
   Tag,
 } from 'lucide-react'
+import { useSetAtom } from 'jotai'
 import { toast } from 'sonner'
+import { pushPanelAtom } from '@/atoms/panel-stack'
+import { routes } from '../../../shared/routes'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getStateColor, getStateIcon, type SessionStatusId } from '@/config/session-status-config'
 import type { SessionStatus } from '@/config/session-status-config'
@@ -152,6 +156,12 @@ export function SessionMenu({
       onLabelsChange([...sessionLabels, labelId])
     }
   }, [sessionLabels, appliedLabelIds, onLabelsChange])
+
+  // Panel stack
+  const pushPanel = useSetAtom(pushPanelAtom)
+  const handleOpenInNewPanel = () => {
+    pushPanel({ route: routes.view.allSessions(sessionId) })
+  }
 
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator, Sub, SubTrigger, SubContent } = useMenuComponents()
@@ -272,6 +282,12 @@ export function SessionMenu({
       </MenuItem>
 
       <Separator />
+
+      {/* Open in New Panel */}
+      <MenuItem onClick={handleOpenInNewPanel}>
+        <Columns2 className="h-3.5 w-3.5" />
+        <span className="flex-1">Open in New Panel</span>
+      </MenuItem>
 
       {/* Open in New Window */}
       <MenuItem onClick={onOpenInNewWindow}>

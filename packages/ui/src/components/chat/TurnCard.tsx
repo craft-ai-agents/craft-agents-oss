@@ -20,6 +20,7 @@ import {
   ListTodo,
   Pencil,
   FilePenLine,
+  GitBranch,
 } from 'lucide-react'
 import * as ReactDOM from 'react-dom'
 import { cn } from '../../lib/utils'
@@ -208,6 +209,8 @@ export interface ResponseContent {
   streamStartTime?: number
   /** Whether this response is a plan (renders with plan variant) */
   isPlan?: boolean
+  /** ID of the underlying message (for branching) */
+  messageId?: string
 }
 
 // ============================================================================
@@ -271,6 +274,8 @@ export interface TurnCardProps {
   animateResponse?: boolean
   /** Hide footers for compact embedding (EditPopover) */
   compactMode?: boolean
+  /** Callback to branch the session from a specific message */
+  onBranch?: (messageId: string) => void
 }
 
 // ============================================================================
@@ -1306,6 +1311,8 @@ export interface ResponseCardProps {
   showAcceptPlan?: boolean
   /** Hide footer for compact embedding (EditPopover) */
   compactMode?: boolean
+  /** Callback to branch the session from this response */
+  onBranch?: () => void
 }
 
 const MAX_HEIGHT = 540
@@ -1339,6 +1346,7 @@ export function ResponseCard({
   isLastResponse = true,
   showAcceptPlan = true,
   compactMode = false,
+  onBranch,
 }: ResponseCardProps) {
   // Throttled content for display - updates every CONTENT_THROTTLE_MS during streaming
   const [displayedText, setDisplayedText] = useState(text)
@@ -1511,25 +1519,41 @@ export function ResponseCard({
                 )}
               </div>
 
-              {/* Right side - Accept Plan dropdown (only shown for plan variant when it's the last response) */}
-              {isPlan && showAcceptPlan && onAccept && onAcceptWithCompact && (
-                <div
-                  className={cn(
-                    "flex items-center gap-3 transition-all duration-200",
-                    isLastResponse
-                      ? "opacity-100 translate-x-0"
-                      : "opacity-0 translate-x-2 pointer-events-none"
-                  )}
-                >
-                  <span className="text-xs text-muted-foreground">
-                    Type your feedback in chat or
-                  </span>
-                  <AcceptPlanDropdown
-                    onAccept={onAccept}
-                    onAcceptWithCompact={onAcceptWithCompact}
-                  />
-                </div>
-              )}
+              {/* Right side */}
+              <div className="flex items-center gap-3">
+                {/* Accept Plan dropdown (plan variant only, last response) */}
+                {isPlan && showAcceptPlan && onAccept && onAcceptWithCompact && (
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 transition-all duration-200",
+                      isLastResponse
+                        ? "opacity-100 translate-x-0"
+                        : "opacity-0 translate-x-2 pointer-events-none"
+                    )}
+                  >
+                    <span className="text-xs text-muted-foreground">
+                      Type your feedback in chat or
+                    </span>
+                    <AcceptPlanDropdown
+                      onAccept={onAccept}
+                      onAcceptWithCompact={onAcceptWithCompact}
+                    />
+                  </div>
+                )}
+                {onBranch && (
+                  <button
+                    onClick={onBranch}
+                    className={cn(
+                      "flex items-center gap-1.5 transition-colors select-none",
+                      "text-muted-foreground hover:text-foreground",
+                      "focus:outline-none focus-visible:underline"
+                    )}
+                  >
+                    <GitBranch className={SIZE_CONFIG.iconSize} />
+                    <span>Branch</span>
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1704,6 +1728,7 @@ export const TurnCard = React.memo(function TurnCard({
   displayMode = 'detailed',
   animateResponse = false,
   compactMode = false,
+  onBranch,
 }: TurnCardProps) {
   // Derive the turn phase from props using the state machine.
   // This provides a single source of truth for lifecycle state,
@@ -2054,6 +2079,7 @@ export const TurnCard = React.memo(function TurnCard({
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse && index === planActivities.length - 1}
             compactMode={compactMode}
+            onBranch={onBranch ? () => onBranch(planActivity.id) : undefined}
           />
         </div>
       ))}
@@ -2081,6 +2107,7 @@ export const TurnCard = React.memo(function TurnCard({
                 onAcceptWithCompact={onAcceptPlanWithCompact}
                 isLastResponse={isLastResponse}
                 compactMode={compactMode}
+                onBranch={onBranch && response.messageId ? () => onBranch(response.messageId!) : undefined}
               />
             </motion.div>
           )}
@@ -2101,6 +2128,7 @@ export const TurnCard = React.memo(function TurnCard({
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse}
             compactMode={compactMode}
+            onBranch={onBranch && response.messageId ? () => onBranch(response.messageId!) : undefined}
           />
         </div>
       )}

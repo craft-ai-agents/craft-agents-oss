@@ -27,7 +27,6 @@ import {
   ExternalLink,
   Cake,
 } from "lucide-react"
-import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -68,6 +67,7 @@ import {
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher"
 import { SessionList } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
+import { PanelStackContainer } from "./PanelStackContainer"
 import type { ChatDisplayHandle } from "./ChatDisplay"
 import { LeftSidebar } from "./LeftSidebar"
 import { useSession } from "@/hooks/useSession"
@@ -1415,27 +1415,6 @@ function AppShellContent({
     return onDeleteSession(sessionId, skipConfirmation)
   }, [session.selected, setSession, onDeleteSession])
 
-  // Right sidebar OPEN button (fades out when sidebar is open, hidden in non-chat views)
-  const rightSidebarOpenButton = React.useMemo(() => {
-    if (!isSessionsNavigation(navState) || !navState.details) return null
-
-    return (
-      <motion.div
-        initial={false}
-        animate={{ opacity: isRightSidebarVisible ? 0 : 1 }}
-        transition={{ duration: 0.15 }}
-        style={{ pointerEvents: isRightSidebarVisible ? 'none' : 'auto' }}
-      >
-        <HeaderIconButton
-          icon={<PanelRightRounded className="h-5 w-6" />}
-          onClick={() => setIsRightSidebarVisible(true)}
-          tooltip="Open sidebar"
-          className="text-foreground"
-        />
-      </motion.div>
-    )
-  }, [navState, isRightSidebarVisible])
-
   // Right sidebar CLOSE button (shown in sidebar header when open)
   const rightSidebarCloseButton = React.useMemo(() => {
     if (!isRightSidebarVisible) return null
@@ -1462,13 +1441,13 @@ function AppShellContent({
     enabledModes,
     sessionStatuses: effectiveSessionStatuses,
     onSessionSourcesChange: handleSessionSourcesChange,
-    rightSidebarButton: rightSidebarOpenButton,
+    rightSidebarButton: null,
     // Search state for ChatDisplay highlighting
     sessionListSearchQuery: searchActive ? searchQuery : undefined,
     isSearchModeActive: searchActive,
     chatDisplayRef,
     onChatMatchInfoChange: handleChatMatchInfoChange,
-  }), [contextValue, handleDeleteSession, sources, skills, labelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, rightSidebarOpenButton, searchActive, searchQuery, handleChatMatchInfoChange])
+  }), [contextValue, handleDeleteSession, sources, skills, labelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, searchActive, searchQuery, handleChatMatchInfoChange])
 
   // Persist expanded folders to localStorage (workspace-scoped)
   React.useEffect(() => {
@@ -2051,29 +2030,21 @@ function AppShellContent({
         )
       })()}
 
-      {/* === OUTER LAYOUT: Sidebar | Main Content === */}
-      <div className="h-full flex items-stretch relative">
-        {/* === SIDEBAR (Left) ===
-            Animated width with spring physics for smooth 60-120fps transitions.
-            Uses overflow-hidden to clip content during collapse animation.
-            Resizable via drag handle on right edge (200-400px range). */}
-        <motion.div
-          initial={false}
-          animate={{
-            width: effectiveFocusMode ? 0 : (isSidebarVisible ? sidebarWidth : 0),
-            opacity: effectiveFocusMode ? 0 : 1,
-          }}
-          transition={isResizing ? { duration: 0 } : springTransition}
-          className="h-full overflow-hidden shrink-0 relative"
-        >
-          <div
-            ref={sidebarRef}
-            style={{ width: sidebarWidth }}
-            className="h-full font-sans relative"
-            data-focus-zone="sidebar"
-            tabIndex={sidebarFocused ? 0 : -1}
-            onKeyDown={handleSidebarKeyDown}
-          >
+      {/* === OUTER LAYOUT: Unified Panel Stack | Right Sidebar === */}
+      <div
+        className="h-full flex items-stretch relative"
+        style={{ padding: PANEL_WINDOW_EDGE_SPACING, paddingLeft: 0, gap: PANEL_PANEL_SPACING / 2 }}
+      >
+        <PanelStackContainer
+          sidebarSlot={
+            <div
+              ref={sidebarRef}
+              style={{ width: sidebarWidth }}
+              className="h-full font-sans relative"
+              data-focus-zone="sidebar"
+              tabIndex={sidebarFocused ? 0 : -1}
+              onKeyDown={handleSidebarKeyDown}
+            >
             <div className="flex h-full flex-col pt-[50px] select-none">
               {/* Sidebar Top Section */}
               <div className="flex-1 flex flex-col min-h-0">
@@ -2351,53 +2322,10 @@ function AppShellContent({
               </div>
             </div>
           </div>
-        </motion.div>
-
-        {/* Sidebar Resize Handle (hidden in focused mode) */}
-        {!effectiveFocusMode && (
-        <div
-          ref={resizeHandleRef}
-          onMouseDown={(e) => { e.preventDefault(); setIsResizing('sidebar') }}
-          onMouseMove={(e) => {
-            if (resizeHandleRef.current) {
-              const rect = resizeHandleRef.current.getBoundingClientRect()
-              setSidebarHandleY(e.clientY - rect.top)
-            }
-          }}
-          onMouseLeave={() => { if (!isResizing) setSidebarHandleY(null) }}
-          className="absolute top-0 w-3 h-full cursor-col-resize z-panel flex justify-center"
-          style={{
-            left: isSidebarVisible ? sidebarWidth - 6 : -6,
-            transition: isResizing === 'sidebar' ? undefined : 'left 0.15s ease-out',
-          }}
-        >
-          {/* Visual indicator - 2px wide */}
-          <div
-            className="w-0.5 h-full"
-            style={getResizeGradientStyle(sidebarHandleY)}
-          />
-        </div>
-        )}
-
-        {/* === MAIN CONTENT (Right) ===
-            Flex layout: Session List | Chat Display */}
-        <div
-          className="flex-1 overflow-hidden min-w-0 flex h-full"
-          style={{ padding: PANEL_WINDOW_EDGE_SPACING, gap: PANEL_PANEL_SPACING / 2 }}
-        >
-          {/* === SESSION LIST PANEL ===
-              Animated width with spring physics for smooth 60-120fps transitions.
-              Outer motion.div animates width (clipping mask), inner div maintains fixed width
-              so content doesn't reflow during animation - same pattern as left sidebar. */}
-          <motion.div
-            initial={false}
-            animate={{
-              width: effectiveFocusMode ? 0 : sessionListWidth,
-              opacity: effectiveFocusMode ? 0 : 1,
-            }}
-            transition={isResizing ? { duration: 0 } : springTransition}
-            className="h-full shrink-0 overflow-hidden bg-background shadow-middle rounded-l-[14px] rounded-r-[10px]"
-          >
+          }
+          sidebarWidth={effectiveFocusMode ? 0 : (isSidebarVisible ? sidebarWidth : 0)}
+          sidebarTitle="Sidebar"
+          navigatorSlot={
             <div
               style={{ width: sessionListWidth }}
               className="h-full flex flex-col min-w-0 relative z-panel"
@@ -3049,40 +2977,63 @@ function AppShellContent({
               </>
             )}
             </div>
-          </motion.div>
+          }
+          navigatorWidth={effectiveFocusMode ? 0 : sessionListWidth}
+          navigatorTitle={listTitle}
+          isFocusedMode={effectiveFocusMode}
+          isRightSidebarVisible={isRightSidebarVisible}
+          isResizing={!!isResizing}
+        />
 
-          {/* Session List Resize Handle (hidden in focused mode) */}
-          {!effectiveFocusMode && (
+        {/* Sidebar Resize Handle (absolute, hidden in focused mode) */}
+        {!effectiveFocusMode && (
+        <div
+          ref={resizeHandleRef}
+          onMouseDown={(e) => { e.preventDefault(); setIsResizing('sidebar') }}
+          onMouseMove={(e) => {
+            if (resizeHandleRef.current) {
+              const rect = resizeHandleRef.current.getBoundingClientRect()
+              setSidebarHandleY(e.clientY - rect.top)
+            }
+          }}
+          onMouseLeave={() => { if (!isResizing) setSidebarHandleY(null) }}
+          className="absolute top-0 w-3 h-full cursor-col-resize z-panel flex justify-center"
+          style={{
+            left: isSidebarVisible ? sidebarWidth - 6 : -6,
+            transition: isResizing === 'sidebar' ? undefined : 'left 0.15s ease-out',
+          }}
+        >
           <div
-            ref={sessionListHandleRef}
-            onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}
-            onMouseMove={(e) => {
-              if (sessionListHandleRef.current) {
-                const rect = sessionListHandleRef.current.getBoundingClientRect()
-                setSessionListHandleY(e.clientY - rect.top)
-              }
-            }}
-            onMouseLeave={() => { if (isResizing !== 'session-list') setSessionListHandleY(null) }}
-            className="relative w-0 h-full cursor-col-resize flex justify-center shrink-0"
-          >
-            {/* Touch area */}
-            <div className="absolute inset-y-0 -left-1.5 -right-1.5 flex justify-center cursor-col-resize">
-              <div
-                className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-0.5"
-                style={getResizeGradientStyle(sessionListHandleY)}
-              />
-            </div>
-          </div>
-          )}
+            className="w-0.5 h-full"
+            style={getResizeGradientStyle(sidebarHandleY)}
+          />
+        </div>
+        )}
 
-          {/* === MAIN CONTENT PANEL === */}
-          <div className={cn(
-            "flex-1 overflow-hidden min-w-0 bg-foreground-2 shadow-middle",
-            effectiveFocusMode ? "rounded-l-[14px]" : "rounded-l-[10px]",
-            isRightSidebarVisible ? "rounded-r-[10px]" : "rounded-r-[14px]"
-          )}>
-            <MainContentPanel isFocusedMode={effectiveFocusMode} />
-          </div>
+        {/* Session List Resize Handle (absolute, hidden in focused mode) */}
+        {!effectiveFocusMode && (
+        <div
+          ref={sessionListHandleRef}
+          onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}
+          onMouseMove={(e) => {
+            if (sessionListHandleRef.current) {
+              const rect = sessionListHandleRef.current.getBoundingClientRect()
+              setSessionListHandleY(e.clientY - rect.top)
+            }
+          }}
+          onMouseLeave={() => { if (isResizing !== 'session-list') setSessionListHandleY(null) }}
+          className="absolute top-0 w-3 h-full cursor-col-resize z-panel flex justify-center"
+          style={{
+            left: (isSidebarVisible ? sidebarWidth + PANEL_PANEL_SPACING / 2 : 0) + sessionListWidth + PANEL_PANEL_SPACING / 2 - 1,
+            transition: isResizing === 'session-list' ? undefined : 'left 0.15s ease-out',
+          }}
+        >
+          <div
+            className="w-0.5 h-full"
+            style={getResizeGradientStyle(sessionListHandleY)}
+          />
+        </div>
+        )}
 
           {/* Right Sidebar - Inline Mode (≥ 920px) */}
           {!shouldUseOverlay && (
@@ -3175,7 +3126,6 @@ function AppShellContent({
               )}
             </AnimatePresence>
           )}
-        </div>
       </div>
 
       {/* ============================================================================

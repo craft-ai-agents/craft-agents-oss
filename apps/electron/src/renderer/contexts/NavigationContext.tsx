@@ -64,6 +64,7 @@ import { isValidSettingsSubpage, type SettingsSubpage } from '../../shared/setti
 import { sessionMetaMapAtom, updateSessionMetaAtom, type SessionMeta } from '@/atoms/sessions'
 import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
+import { panelStackAtom, updatePrimaryPanelAtom, pushPanelAtom, closeAllSecondaryPanelsAtom } from '@/atoms/panel-stack'
 
 // Re-export routes for convenience
 export { routes }
@@ -552,14 +553,23 @@ export function NavigationProvider({
         finalRoute = buildRouteFromNavigationState(finalState) as Route
       }
 
-      // Persist route and sidebar in URL for reload restoration
+      // Persist route, sidebar, and panels in URL for reload restoration
       const url = new URL(window.location.href)
+      const currentPanels = store.get(panelStackAtom)
+      const secondaryRoutes = currentPanels.length > 1
+        ? currentPanels.slice(1).map(p => p.route)
+        : undefined
       if (navigationState.rightSidebar) {
-        const fullUrl = buildUrlWithState(navigationState)
+        const fullUrl = buildUrlWithState(navigationState, secondaryRoutes)
         url.search = fullUrl
       } else {
         url.searchParams.set('route', finalRoute)
         url.searchParams.delete('sidebar')
+        if (secondaryRoutes?.length) {
+          url.searchParams.set('panels', secondaryRoutes.join(','))
+        } else {
+          url.searchParams.delete('panels')
+        }
       }
       history.replaceState({ route: finalRoute }, '', url.toString())
 
@@ -744,6 +754,9 @@ export function NavigationProvider({
         rightSidebar: undefined,
       }))
 
+      // Close all secondary panels — they belong to the previous workspace
+      store.set(closeAllSecondaryPanelsAtom)
+
       // Reset initial route restoration flag so new workspace can restore its route
       initialRouteRestoredRef.current = false
     }
@@ -784,7 +797,7 @@ export function NavigationProvider({
     }
   }, [isReady, handleActionNavigation, applyNavigationState])
 
-  // Restore route from URL on startup (for CMD+R reload)
+  // Restore route and panels from URL on startup (for CMD+R reload)
   useEffect(() => {
     if (!isReady || !workspaceId || initialRouteRestoredRef.current) return
     initialRouteRestoredRef.current = true
@@ -792,6 +805,7 @@ export function NavigationProvider({
     const params = new URLSearchParams(window.location.search)
     const initialRoute = params.get('route')
     const sidebarParam = params.get('sidebar') || undefined
+    const panelsParam = params.get('panels')
 
     if (initialRoute) {
       // Parse with sidebar param
@@ -802,7 +816,15 @@ export function NavigationProvider({
         navigate(initialRoute as Route)
       }
     }
-  }, [isReady, workspaceId, navigate, applyNavigationState])
+
+    // Restore secondary panels from URL
+    if (panelsParam) {
+      const panelRoutes = panelsParam.split(',').filter(Boolean)
+      for (const route of panelRoutes) {
+        store.set(pushPanelAtom, { route: route as import('../../shared/routes').ViewRoute })
+      }
+    }
+  }, [isReady, workspaceId, navigate, applyNavigationState, store])
 
   // Listen for deep link navigation events from main process
   useEffect(() => {
@@ -872,12 +894,16 @@ export function NavigationProvider({
 
     setNavigationState(newState)
 
-    // Update URL with sidebar param
-    const url = buildUrlWithState(newState)
+    // Update URL with sidebar param and panels
+    const currentPanels = store.get(panelStackAtom)
+    const secondaryRoutes = currentPanels.length > 1
+      ? currentPanels.slice(1).map(p => p.route)
+      : undefined
+    const url = buildUrlWithState(newState, secondaryRoutes)
     const fullUrl = new URL(window.location.href)
     fullUrl.search = url
     history.replaceState({ route: buildRouteFromNavigationState(newState) }, '', fullUrl.toString())
-  }, [navigationState])
+  }, [navigationState, store])
 
   const toggleRightSidebar = useCallback((panel?: RightSidebarPanel) => {
     if (!navigationState) return
@@ -941,6 +967,29 @@ export function NavigationProvider({
         navigate(routes.view.allSessions(sessionId))
     }
   }, [navigationState, navigate])
+
+  // Sync the primary panel in the panel stack with the current navigation state.
+  // Whenever navigation changes, the primary panel (index 0) should reflect it.
+  const updatePrimaryPanel = useSetAtom(updatePrimaryPanelAtom)
+  useEffect(() => {
+    const route = buildRouteFromNavigationState(navigationState)
+    updatePrimaryPanel(route as import('../../shared/routes').ViewRoute)
+  }, [navigationState, updatePrimaryPanel])
+
+  // Persist panel stack changes to URL (gated on initial route restoration
+  // to prevent deleting the ?panels= param before it's been read on reload).
+  const panelStack = useAtomValue(panelStackAtom)
+  useEffect(() => {
+    if (!initialRouteRestoredRef.current) return
+    const url = new URL(window.location.href)
+    if (panelStack.length > 1) {
+      const secondaryRoutes = panelStack.slice(1).map(p => p.route)
+      url.searchParams.set('panels', secondaryRoutes.join(','))
+    } else {
+      url.searchParams.delete('panels')
+    }
+    history.replaceState(history.state, '', url.toString())
+  }, [panelStack])
 
   // After sessions load (or workspace switch), if no session is selected,
   // auto-select last-used session for this workspace (or fallback to first).

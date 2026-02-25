@@ -420,6 +420,7 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
           currentTurn.response = {
             text: lastTextActivity.content,
             isStreaming: false,
+            messageId: lastTextActivity.id,
           }
         }
       }
@@ -639,6 +640,7 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
         text: message.content,
         isStreaming: !!message.isStreaming,
         streamStartTime: message.isStreaming ? message.timestamp : undefined,
+        messageId: message.id,
       }
       currentTurn.isStreaming = !!message.isStreaming
       currentTurn.isComplete = !message.isStreaming

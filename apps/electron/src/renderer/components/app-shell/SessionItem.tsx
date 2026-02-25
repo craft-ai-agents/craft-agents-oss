@@ -1,4 +1,5 @@
 import { useActionLabel } from "@/actions"
+import { useSetAtom } from "jotai"
 import { cn } from "@/lib/utils"
 import { rendererPerf } from "@/lib/perf"
 import { EntityRow } from "@/components/ui/entity-row"
@@ -9,6 +10,8 @@ import { SessionBadges } from "./SessionBadges"
 import { SessionTrailing } from "./SessionTrailing"
 import { getSessionTitle, highlightMatch } from "@/utils/session"
 import { useSessionListContext } from "@/context/SessionListContext"
+import { pushPanelAtom } from "@/atoms/panel-stack"
+import { routes } from "../../../shared/routes"
 import type { SessionMeta } from "@/atoms/sessions"
 
 export interface SessionItemProps {
@@ -46,6 +49,7 @@ export function SessionItem({
   onRangeSelect,
 }: SessionItemProps) {
   const ctx = useSessionListContext()
+  const pushPanel = useSetAtom(pushPanelAtom)
   const { hotkey: nextHotkey } = useActionLabel('chat.nextSearchMatch')
   const { hotkey: prevHotkey } = useActionLabel('chat.prevSearchMatch')
   const title = getSessionTitle(item)
@@ -58,9 +62,15 @@ export function SessionItem({
       if (ctx.isMultiSelectActive && !isInMultiSelect && onToggleSelect) onToggleSelect()
       return
     }
-    if ((e.metaKey || e.ctrlKey) && onToggleSelect) {
+    if ((e.metaKey || e.ctrlKey)) {
       e.preventDefault()
-      onToggleSelect()
+      if (ctx.isMultiSelectActive && onToggleSelect) {
+        // Multi-select active: keep existing Cmd+Click toggle behavior
+        onToggleSelect()
+      } else {
+        // No multi-select: open session in a new panel
+        pushPanel({ route: routes.view.allSessions(item.id) })
+      }
       return
     }
     if (e.shiftKey && onRangeSelect) {

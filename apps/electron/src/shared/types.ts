@@ -415,6 +415,8 @@ export interface Session {
   parentSessionId?: string
   /** Explicit sibling order (lazy - only populated when user reorders). */
   siblingOrder?: number
+  /** Whether the backend supports session branching */
+  supportsBranching?: boolean
 }
 
 /**
@@ -449,6 +451,8 @@ export interface CreateSessionOptions {
   isFlagged?: boolean
   /** Per-session source selection (source slugs) */
   enabledSourceSlugs?: string[]
+  /** Message ID to branch from (copies conversation up to and including this message) */
+  branchFromMessageId?: string
 }
 
 // Events sent from main to renderer

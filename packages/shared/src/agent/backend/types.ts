@@ -392,6 +392,9 @@ export interface AgentBackend {
   /** Get SDK session ID (for resume, null if no session) */
   getSessionId(): string | null;
 
+  /** Whether this backend supports session branching */
+  readonly supportsBranching: boolean;
+
   // ============================================================
   // Source Management
   // ============================================================

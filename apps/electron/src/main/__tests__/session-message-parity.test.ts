@@ -11,113 +11,17 @@ import { describe, it, expect, beforeEach } from 'bun:test'
 import type { Message, StoredMessage, MessageRole } from '@craft-agent/core'
 
 // ============================================================================
-// Mirror: messageToStored / storedToMessage from sessions.ts
-// Keep in sync with the real implementation — if these drift, tests still
-// catch divergence via the exhaustive key check below.
+// Mirror: messageToStored / storedToMessage from sessions.ts (spread pattern)
 // ============================================================================
 
 function messageToStored(msg: Message): StoredMessage {
-  return {
-    id: msg.id,
-    type: msg.role,
-    content: msg.content,
-    timestamp: msg.timestamp,
-    toolName: msg.toolName,
-    toolUseId: msg.toolUseId,
-    toolInput: msg.toolInput,
-    toolResult: msg.toolResult,
-    toolStatus: msg.toolStatus,
-    toolDuration: msg.toolDuration,
-    toolIntent: msg.toolIntent,
-    toolDisplayName: msg.toolDisplayName,
-    toolDisplayMeta: msg.toolDisplayMeta,
-    parentToolUseId: msg.parentToolUseId,
-    taskId: msg.taskId,
-    shellId: msg.shellId,
-    elapsedSeconds: msg.elapsedSeconds,
-    isBackground: msg.isBackground,
-    isError: msg.isError,
-    attachments: msg.attachments,
-    badges: msg.badges,
-    isIntermediate: msg.isIntermediate,
-    turnId: msg.turnId,
-    errorCode: msg.errorCode,
-    errorTitle: msg.errorTitle,
-    errorDetails: msg.errorDetails,
-    errorOriginal: msg.errorOriginal,
-    errorCanRetry: msg.errorCanRetry,
-    ultrathink: msg.ultrathink,
-    planPath: msg.planPath,
-    authRequestId: msg.authRequestId,
-    authRequestType: msg.authRequestType,
-    authSourceSlug: msg.authSourceSlug,
-    authSourceName: msg.authSourceName,
-    authStatus: msg.authStatus,
-    authCredentialMode: msg.authCredentialMode,
-    authHeaderName: msg.authHeaderName,
-    authHeaderNames: msg.authHeaderNames,
-    authLabels: msg.authLabels,
-    authDescription: msg.authDescription,
-    authHint: msg.authHint,
-    authSourceUrl: msg.authSourceUrl,
-    authPasswordRequired: msg.authPasswordRequired,
-    authError: msg.authError,
-    authEmail: msg.authEmail,
-    authWorkspace: msg.authWorkspace,
-    isQueued: msg.isQueued,
-  }
+  const { role, isStreaming, isPending, ...rest } = msg
+  return { ...rest, type: role } as StoredMessage
 }
 
 function storedToMessage(stored: StoredMessage): Message {
-  return {
-    id: stored.id,
-    role: stored.type,
-    content: stored.content,
-    timestamp: stored.timestamp ?? Date.now(),
-    toolName: stored.toolName,
-    toolUseId: stored.toolUseId,
-    toolInput: stored.toolInput,
-    toolResult: stored.toolResult,
-    toolStatus: stored.toolStatus,
-    toolDuration: stored.toolDuration,
-    toolIntent: stored.toolIntent,
-    toolDisplayName: stored.toolDisplayName,
-    toolDisplayMeta: stored.toolDisplayMeta,
-    parentToolUseId: stored.parentToolUseId,
-    taskId: stored.taskId,
-    shellId: stored.shellId,
-    elapsedSeconds: stored.elapsedSeconds,
-    isBackground: stored.isBackground,
-    isError: stored.isError,
-    attachments: stored.attachments,
-    badges: stored.badges,
-    isIntermediate: stored.isIntermediate,
-    turnId: stored.turnId,
-    errorCode: stored.errorCode,
-    errorTitle: stored.errorTitle,
-    errorDetails: stored.errorDetails,
-    errorOriginal: stored.errorOriginal,
-    errorCanRetry: stored.errorCanRetry,
-    ultrathink: stored.ultrathink,
-    planPath: stored.planPath,
-    authRequestId: stored.authRequestId,
-    authRequestType: stored.authRequestType,
-    authSourceSlug: stored.authSourceSlug,
-    authSourceName: stored.authSourceName,
-    authStatus: stored.authStatus,
-    authCredentialMode: stored.authCredentialMode,
-    authHeaderName: stored.authHeaderName,
-    authHeaderNames: stored.authHeaderNames,
-    authLabels: stored.authLabels,
-    authDescription: stored.authDescription,
-    authHint: stored.authHint,
-    authSourceUrl: stored.authSourceUrl,
-    authPasswordRequired: stored.authPasswordRequired,
-    authError: stored.authError,
-    authEmail: stored.authEmail,
-    authWorkspace: stored.authWorkspace,
-    isQueued: stored.isQueued,
-  }
+  const { type, ...rest } = stored
+  return { ...rest, role: type, timestamp: stored.timestamp ?? Date.now() } as Message
 }
 
 // ============================================================================

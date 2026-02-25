@@ -100,48 +100,23 @@ function findLastFinalMessageId(messages: Message[]): string | undefined {
  */
 export function extractSessionMeta(session: Session): SessionMeta {
   const messages = session.messages || []
-  // Prefer pre-computed lastFinalMessageId from session storage (available without loading messages).
-  // Fall back to computing from messages for newly created sessions or when messages are loaded.
-  const lastFinalMessageId = session.lastFinalMessageId ?? findLastFinalMessageId(messages)
+
+  // Destructure fields that don't exist on SessionMeta or need overrides
+  const {
+    messages: _msgs, sessionFolderPath: _sf, supportsBranching: _sb,
+    workspaceName: _wn, thinkingLevel: _tl, currentStatus: _cs,
+    isAsyncOperationOngoing, isRegeneratingTitle,
+    messageCount, lastFinalMessageId: sessionLastFinal,
+    ...sessionFields
+  } = session
 
   return {
-    id: session.id,
-    name: session.name,
-    preview: session.preview,
-    workspaceId: session.workspaceId,
-    lastMessageAt: session.lastMessageAt,
-    isProcessing: session.isProcessing,
-    isFlagged: session.isFlagged,
-    lastReadMessageId: session.lastReadMessageId,
-    workingDirectory: session.workingDirectory,
-    enabledSourceSlugs: session.enabledSourceSlugs,
-    sharedUrl: session.sharedUrl,
-    sharedId: session.sharedId,
-    lastFinalMessageId,
-    // Explicit unread flag - source of truth for NEW badge
-    hasUnread: session.hasUnread,
-    labels: session.labels,
-    permissionMode: session.permissionMode,
-    sessionStatus: session.sessionStatus,
-    lastMessageRole: session.lastMessageRole,
-    // Use isAsyncOperationOngoing if available, fall back to deprecated isRegeneratingTitle
-    isAsyncOperationOngoing: session.isAsyncOperationOngoing ?? session.isRegeneratingTitle,
-    isRegeneratingTitle: session.isRegeneratingTitle,
-    // Fields needed by view expressions (messageCount, model, createdAt, tokenUsage)
-    messageCount: session.messageCount ?? session.messages?.length ?? 0,
-    model: session.model,
-    llmConnection: session.llmConnection,
-    createdAt: session.createdAt,
-    tokenUsage: session.tokenUsage,
-    // Hidden sessions (e.g., mini edit sessions in EditPopover)
-    hidden: session.hidden,
-    // Archive state
-    isArchived: session.isArchived,
-    archivedAt: session.archivedAt,
-    // Sub-session hierarchy (1 level max)
-    parentSessionId: session.parentSessionId,
-    siblingOrder: session.siblingOrder,
-  }
+    ...sessionFields,
+    lastFinalMessageId: sessionLastFinal ?? findLastFinalMessageId(messages),
+    messageCount: messageCount ?? messages.length ?? 0,
+    isAsyncOperationOngoing: isAsyncOperationOngoing ?? isRegeneratingTitle,
+    isRegeneratingTitle,
+  } as SessionMeta
 }
 
 /**

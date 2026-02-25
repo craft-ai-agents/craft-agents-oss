@@ -49,7 +49,9 @@ import { InputContainer, type StructuredInputState, type StructuredResponse, typ
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
 import { useTurnCardExpansion } from "@/hooks/useTurnCardExpansion"
-import type { SessionMeta } from "@/atoms/sessions"
+import { useNavigation } from "@/contexts/NavigationContext"
+import { useSetAtom } from "jotai"
+import { addSessionAtom, type SessionMeta } from "@/atoms/sessions"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { flattenLabels } from "@craft-agent/shared/labels"
 
@@ -444,6 +446,10 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const skipSmoothScrollUntilRef = React.useRef(0)
   const internalTextareaRef = React.useRef<RichTextInputHandle>(null)
   const textareaRef = externalTextareaRef || internalTextareaRef
+
+  // Navigation and atom access for session branching
+  const { navigateToSession } = useNavigation()
+  const addSession = useSetAtom(addSessionAtom)
 
   // Get isDark from useTheme hook for overlay theme
   // This accounts for scenic themes (like Haze) that force dark mode
@@ -1417,6 +1423,21 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         onOpenUrl={onOpenUrl}
                         isLastResponse={isLastResponse}
                         compactMode={compactMode}
+                        onBranch={session?.supportsBranching ? async (messageId: string) => {
+                          if (!session) return
+                          const child = await window.electronAPI.createSubSession(
+                            session.workspaceId,
+                            session.id,
+                            {
+                              branchFromMessageId: messageId,
+                              name: `Branch of ${session.name || 'Untitled'}`,
+                            }
+                          )
+                          // Optimistically add to atom so navigation finds it
+                          // (session_created event fires async and may arrive late)
+                          addSession(child)
+                          navigateToSession(child.id)
+                        } : undefined}
                         onAcceptPlan={() => {
                           window.dispatchEvent(new CustomEvent('craft:approve-plan', {
                             detail: { text: 'Plan approved, please execute.', sessionId: session?.id }

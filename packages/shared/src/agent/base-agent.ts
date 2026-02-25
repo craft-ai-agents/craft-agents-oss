@@ -160,6 +160,10 @@ export abstract class BaseAgent implements AgentBackend {
   // ============================================================
   protected abstract backendName: string;
 
+  /** Whether this backend supports session branching. Subclasses can override. */
+  protected _supportsBranching = true;
+  get supportsBranching(): boolean { return this._supportsBranching; }
+
   // ============================================================
   // Configuration (protected for subclass access)
   // ============================================================

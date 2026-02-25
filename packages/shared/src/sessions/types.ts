@@ -44,6 +44,8 @@ export const SESSION_PERSISTENT_FIELDS = [
   'isArchived', 'archivedAt',
   // Hierarchy
   'parentSessionId', 'siblingOrder',
+  // Branching
+  'branchFromMessageId',
 ] as const;
 
 export type SessionPersistentField = typeof SESSION_PERSISTENT_FIELDS[number];
@@ -156,6 +158,8 @@ export interface SessionConfig {
   parentSessionId?: string;
   /** Explicit sibling order (lazy - only populated when user reorders). */
   siblingOrder?: number;
+  /** Message ID this session was branched from (set when created via branching). */
+  branchFromMessageId?: string;
 }
 
 /**
@@ -319,4 +323,6 @@ export interface SessionMetadata {
   parentSessionId?: string;
   /** Explicit sibling order (lazy - only populated when user reorders). */
   siblingOrder?: number;
+  /** Message ID that this session was branched from */
+  branchFromMessageId?: string;
 }

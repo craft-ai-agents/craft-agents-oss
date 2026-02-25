@@ -147,6 +147,17 @@ export const actions = {
   },
 
   // ═══════════════════════════════════════════
+  // Panels
+  // ═══════════════════════════════════════════
+  'panel.closeRightmost': {
+    id: 'panel.closeRightmost',
+    label: 'Close Panel',
+    description: 'Close the rightmost secondary panel',
+    defaultHotkey: null, // Handled via Cmd+W interceptor; no standalone hotkey
+    category: 'Navigation',
+  },
+
+  // ═══════════════════════════════════════════
   // Chat
   // ═══════════════════════════════════════════
   'chat.stopProcessing': {

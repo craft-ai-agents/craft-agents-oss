@@ -11,6 +11,7 @@ import {
   resolveBackendContext,
   createBackendFromResolvedContext,
   cleanupSourceRuntimeArtifacts,
+  providerTypeToAgentProvider,
   type AgentBackend,
   type BackendHostRuntimeContext,
   type BridgeUpdateContext,
@@ -615,6 +616,7 @@ interface ManagedSession {
   // Sub-session hierarchy (1 level max)
   parentSessionId?: string
   siblingOrder?: number
+  branchFromMessageId?: string
   // Token refresh manager for OAuth token refresh with rate limiting
   tokenRefreshManager: TokenRefreshManager
   // Metadata for sessions created by hooks (automation)
@@ -630,127 +632,104 @@ interface ManagedSession {
   wasInterrupted?: boolean
 }
 
-// Convert runtime Message to StoredMessage for persistence
-// Only excludes transient field: isStreaming
-function messageToStored(msg: Message): StoredMessage {
+/**
+ * Create a ManagedSession from any session-like source (SessionMetadata, SessionConfig, StoredSession).
+ * Spreads all matching fields from the source so new persistent fields automatically propagate.
+ * Runtime-only fields get sensible defaults.
+ */
+function createManagedSession(
+  source: { id: string } & Partial<ManagedSession>,
+  workspace: Workspace,
+  overrides?: Partial<ManagedSession>,
+): ManagedSession {
+  const s = source as Record<string, unknown>
   return {
-    id: msg.id,
-    type: msg.role,  // Message uses 'role', StoredMessage uses 'type'
-    content: msg.content,
-    timestamp: msg.timestamp,
-    // Tool fields
-    toolName: msg.toolName,
-    toolUseId: msg.toolUseId,
-    toolInput: msg.toolInput,
-    toolResult: msg.toolResult,
-    toolStatus: msg.toolStatus,
-    toolDuration: msg.toolDuration,
-    toolIntent: msg.toolIntent,
-    toolDisplayName: msg.toolDisplayName,
-    toolDisplayMeta: msg.toolDisplayMeta,  // Includes base64 icon for viewer
-    parentToolUseId: msg.parentToolUseId,
-    // Background task fields
-    taskId: msg.taskId,
-    shellId: msg.shellId,
-    elapsedSeconds: msg.elapsedSeconds,
-    isBackground: msg.isBackground,
-    isError: msg.isError,
-    attachments: msg.attachments,
-    badges: msg.badges,  // Content badges for inline display (sources, skills, context)
-    // Turn grouping
-    isIntermediate: msg.isIntermediate,
-    turnId: msg.turnId,
-    // Error display
-    errorCode: msg.errorCode,
-    errorTitle: msg.errorTitle,
-    errorDetails: msg.errorDetails,
-    errorOriginal: msg.errorOriginal,
-    errorCanRetry: msg.errorCanRetry,
-    // Ultrathink
-    ultrathink: msg.ultrathink,
-    // Plan fields
-    planPath: msg.planPath,
-    // Auth request fields
-    authRequestId: msg.authRequestId,
-    authRequestType: msg.authRequestType,
-    authSourceSlug: msg.authSourceSlug,
-    authSourceName: msg.authSourceName,
-    authStatus: msg.authStatus,
-    authCredentialMode: msg.authCredentialMode,
-    authHeaderName: msg.authHeaderName,
-    authHeaderNames: msg.authHeaderNames,
-    authLabels: msg.authLabels,
-    authDescription: msg.authDescription,
-    authHint: msg.authHint,
-    authSourceUrl: msg.authSourceUrl,
-    authPasswordRequired: msg.authPasswordRequired,
-    authError: msg.authError,
-    authEmail: msg.authEmail,
-    authWorkspace: msg.authWorkspace,
-    // Queue state (for recovery after crash)
-    isQueued: msg.isQueued,
+    // Spread all session-like fields from source (id, name, permissionMode, labels, model, etc.)
+    // This ensures new persistent fields automatically flow through without manual copying.
+    ...Object.fromEntries(
+      Object.entries(s).filter(([, v]) => v !== undefined)
+    ) as Partial<ManagedSession>,
+    // Runtime-only defaults (not persisted)
+    workspace,
+    agent: null,
+    messages: [],
+    isProcessing: false,
+    lastMessageAt: (s.lastMessageAt ?? s.lastUsedAt ?? Date.now()) as number,
+    streamingText: '',
+    processingGeneration: 0,
+    isFlagged: (s.isFlagged ?? false) as boolean,
+    messageQueue: [],
+    backgroundShellCommands: new Map(),
+    messagesLoaded: false,
+    tokenRefreshManager: new TokenRefreshManager(getSourceCredentialManager(), {
+      log: (msg) => sessionLog.debug(msg),
+    }),
+    // Caller overrides (permissionMode defaults, thinkingLevel, messagesLoaded, etc.)
+    ...overrides,
+  } as ManagedSession
+}
+
+/**
+ * Resolve supportsBranching for a managed session.
+ * Prefers the live agent instance; falls back to provider type from connection.
+ */
+function resolveSupportsBranching(managed: ManagedSession): boolean {
+  // If agent is live, use its instance property (authoritative)
+  if (managed.agent) {
+    return managed.agent.supportsBranching
   }
+  // Otherwise resolve from connection's provider type
+  if (managed.llmConnection) {
+    const conn = getLlmConnection(managed.llmConnection)
+    if (conn) {
+      const provider = providerTypeToAgentProvider(conn.providerType)
+      // Copilot doesn't support branching; all others do
+      return provider !== 'copilot'
+    }
+  }
+  return true // default: branching enabled
+}
+
+const DEFAULT_TOKEN_USAGE = {
+  inputTokens: 0, outputTokens: 0, totalTokens: 0,
+  contextTokens: 0, costUsd: 0,
+}
+
+/**
+ * Convert a ManagedSession to a renderer-side Session object.
+ * Uses pickSessionFields() for persistent fields so new fields propagate automatically.
+ */
+function managedToSession(m: ManagedSession, overrides?: Partial<Session>): Session {
+  return {
+    ...pickSessionFields(m),
+    // Pre-computed fields from header (not in SESSION_PERSISTENT_FIELDS)
+    preview: m.preview,
+    lastMessageRole: m.lastMessageRole,
+    tokenUsage: m.tokenUsage,
+    messageCount: m.messageCount,
+    lastFinalMessageId: m.lastFinalMessageId,
+    // Runtime-only fields
+    workspaceId: m.workspace.id,
+    workspaceName: m.workspace.name,
+    messages: [],
+    isProcessing: m.isProcessing,
+    sessionFolderPath: getSessionStoragePath(m.workspace.rootPath, m.id),
+    supportsBranching: resolveSupportsBranching(m),
+    ...overrides,
+  } as Session
+}
+
+// Convert runtime Message to StoredMessage for persistence
+// All fields are shared except role↔type rename and isStreaming (transient, excluded)
+function messageToStored(msg: Message): StoredMessage {
+  const { role, isStreaming, isPending, ...rest } = msg
+  return { ...rest, type: role } as StoredMessage
 }
 
 // Convert StoredMessage to runtime Message
 function storedToMessage(stored: StoredMessage): Message {
-  return {
-    id: stored.id,
-    role: stored.type,  // StoredMessage uses 'type', Message uses 'role'
-    content: stored.content,
-    timestamp: stored.timestamp ?? Date.now(),
-    // Tool fields
-    toolName: stored.toolName,
-    toolUseId: stored.toolUseId,
-    toolInput: stored.toolInput,
-    toolResult: stored.toolResult,
-    toolStatus: stored.toolStatus,
-    toolDuration: stored.toolDuration,
-    toolIntent: stored.toolIntent,
-    toolDisplayName: stored.toolDisplayName,
-    toolDisplayMeta: stored.toolDisplayMeta,  // Includes base64 icon for viewer
-    parentToolUseId: stored.parentToolUseId,
-    // Background task fields
-    taskId: stored.taskId,
-    shellId: stored.shellId,
-    elapsedSeconds: stored.elapsedSeconds,
-    isBackground: stored.isBackground,
-    isError: stored.isError,
-    attachments: stored.attachments,
-    badges: stored.badges,  // Content badges for inline display (sources, skills, context)
-    // Turn grouping
-    isIntermediate: stored.isIntermediate,
-    turnId: stored.turnId,
-    // Error display
-    errorCode: stored.errorCode,
-    errorTitle: stored.errorTitle,
-    errorDetails: stored.errorDetails,
-    errorOriginal: stored.errorOriginal,
-    errorCanRetry: stored.errorCanRetry,
-    // Ultrathink
-    ultrathink: stored.ultrathink,
-    // Plan fields
-    planPath: stored.planPath,
-    // Auth request fields
-    authRequestId: stored.authRequestId,
-    authRequestType: stored.authRequestType,
-    authSourceSlug: stored.authSourceSlug,
-    authSourceName: stored.authSourceName,
-    authStatus: stored.authStatus,
-    authCredentialMode: stored.authCredentialMode,
-    authHeaderName: stored.authHeaderName,
-    authHeaderNames: stored.authHeaderNames,
-    authLabels: stored.authLabels,
-    authDescription: stored.authDescription,
-    authHint: stored.authHint,
-    authSourceUrl: stored.authSourceUrl,
-    authPasswordRequired: stored.authPasswordRequired,
-    authError: stored.authError,
-    authEmail: stored.authEmail,
-    authWorkspace: stored.authWorkspace,
-    // Queue state (for recovery after crash)
-    isQueued: stored.isQueued,
-  }
+  const { type, ...rest } = stored
+  return { ...rest, role: type, timestamp: stored.timestamp ?? Date.now() } as Message
 }
 
 // Performance: Batch IPC delta events to reduce renderer load
@@ -1224,52 +1203,10 @@ export class SessionManager {
           // Create managed session from metadata only (messages lazy-loaded on demand)
           // This dramatically reduces memory usage at startup - messages are loaded
           // when getSession() is called for a specific session
-          const managed: ManagedSession = {
-            id: meta.id,
-            workspace,
-            agent: null,  // Lazy-load agent when needed
-            messages: [],  // Lazy-load messages when needed
-            isProcessing: false,
-            lastMessageAt: meta.lastMessageAt ?? meta.lastUsedAt,  // Fallback for sessions saved before lastMessageAt was persisted
-            streamingText: '',
-            processingGeneration: 0,
-            name: meta.name,
-            preview: meta.preview,
-            createdAt: meta.createdAt,
-            messageCount: meta.messageCount,
-            isFlagged: meta.isFlagged ?? false,
-            isArchived: meta.isArchived,
-            archivedAt: meta.archivedAt,
-            permissionMode: meta.permissionMode,
-            sdkSessionId: meta.sdkSessionId,
-            tokenUsage: meta.tokenUsage,  // From JSONL header (updated on save)
-            sessionStatus: meta.sessionStatus,
-            lastReadMessageId: meta.lastReadMessageId,  // Pre-computed for unread detection
-            lastFinalMessageId: meta.lastFinalMessageId,  // Pre-computed for unread detection
-            hasUnread: meta.hasUnread,  // Explicit unread flag for NEW badge state machine
+          const managed = createManagedSession(meta, workspace, {
             enabledSourceSlugs: undefined,  // Loaded with messages
-            labels: meta.labels,
             workingDirectory: meta.workingDirectory ?? wsDefaultWorkingDir,
-            sdkCwd: meta.sdkCwd,
-            model: meta.model,
-            llmConnection: meta.llmConnection,
-            connectionLocked: meta.connectionLocked,
-            thinkingLevel: meta.thinkingLevel,
-            lastMessageRole: meta.lastMessageRole,
-            messageQueue: [],
-            backgroundShellCommands: new Map(),
-            messagesLoaded: false,  // Mark as not loaded
-            // Shared viewer state - loaded from metadata for persistence across restarts
-            sharedUrl: meta.sharedUrl,
-            sharedId: meta.sharedId,
-            hidden: meta.hidden,
-            parentSessionId: meta.parentSessionId,
-            siblingOrder: meta.siblingOrder,
-            // Initialize TokenRefreshManager for this session
-            tokenRefreshManager: new TokenRefreshManager(getSourceCredentialManager(), {
-              log: (msg) => sessionLog.debug(msg),
-            }),
-          }
+          })
 
           // Migration: clear orphaned llmConnection references (e.g., after connection was deleted)
           if (managed.llmConnection) {
@@ -1314,40 +1251,20 @@ export class SessionManager {
         m.role !== 'status'
       )
 
-      const workspaceRootPath = managed.workspace.rootPath
+      // If messages haven't been loaded yet (e.g., branched session not yet opened),
+      // skip persistence to avoid overwriting JSONL messages with empty array
+      if (!managed.messagesLoaded) {
+        return
+      }
+
       const storedSession: StoredSession = {
-        id: managed.id,
-        workspaceRootPath,
-        name: managed.name,
+        ...pickSessionFields(managed),
+        workspaceRootPath: managed.workspace.rootPath,
         createdAt: managed.createdAt ?? Date.now(),
         lastUsedAt: Date.now(),
-        lastMessageAt: managed.lastMessageAt,  // Preserve actual message time (not persist time)
-        sdkSessionId: managed.sdkSessionId,
-        isFlagged: managed.isFlagged,
-        isArchived: managed.isArchived,
-        archivedAt: managed.archivedAt,
-        permissionMode: managed.permissionMode,
-        sessionStatus: managed.sessionStatus,
-        lastReadMessageId: managed.lastReadMessageId,  // For unread detection
-        hasUnread: managed.hasUnread,  // Explicit unread flag for NEW badge state machine
-        enabledSourceSlugs: managed.enabledSourceSlugs,
-        labels: managed.labels,
-        workingDirectory: managed.workingDirectory,
-        sdkCwd: managed.sdkCwd,
-        model: managed.model,
-        llmConnection: managed.llmConnection,
-        connectionLocked: managed.connectionLocked,
-        thinkingLevel: managed.thinkingLevel,
         messages: persistableMessages.map(messageToStored),
-        tokenUsage: managed.tokenUsage ?? {
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-          contextTokens: 0,
-          costUsd: 0,
-        },
-        hidden: managed.hidden,
-      }
+        tokenUsage: managed.tokenUsage ?? DEFAULT_TOKEN_USAGE,
+      } as StoredSession
 
       // Queue for async persistence with debouncing
       sessionPersistenceQueue.enqueue(storedSession)
@@ -1686,21 +1603,7 @@ export class SessionManager {
     }
 
     return sessions
-      .map(m => ({
-        // Persistent fields (auto-included via pickSessionFields)
-        ...pickSessionFields(m),
-        // Pre-computed fields from header
-        preview: m.preview,
-        lastMessageRole: m.lastMessageRole,
-        tokenUsage: m.tokenUsage,
-        messageCount: m.messageCount,
-        lastFinalMessageId: m.lastFinalMessageId,
-        // Runtime-only fields
-        workspaceId: m.workspace.id,
-        workspaceName: m.workspace.name,
-        messages: [],  // Never send all messages - use getSession(id) for specific session
-        isProcessing: m.isProcessing,
-      }) as Session)
+      .map(m => managedToSession(m))
       .sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0))
   }
 
@@ -1716,21 +1619,7 @@ export class SessionManager {
     // Lazy-load messages from disk if not yet loaded
     await this.ensureMessagesLoaded(m)
 
-    return {
-      // Persistent fields (auto-included via pickSessionFields)
-      ...pickSessionFields(m),
-      // Pre-computed fields from header
-      preview: m.preview,  // Include preview for title fallback consistency with getSessions()
-      lastMessageRole: m.lastMessageRole,
-      tokenUsage: m.tokenUsage,
-      lastFinalMessageId: m.lastFinalMessageId,
-      // Runtime-only fields
-      workspaceId: m.workspace.id,
-      workspaceName: m.workspace.name,
-      messages: m.messages,
-      isProcessing: m.isProcessing,
-      sessionFolderPath: getSessionStoragePath(m.workspace.rootPath, m.id),
-    } as Session
+    return managedToSession(m, { messages: m.messages })
   }
 
   /**
@@ -1879,39 +1768,16 @@ export class SessionManager {
       sessionLog.info(`🤖 Creating mini agent session: model=${resolvedModel}, systemPromptPreset=${options?.systemPromptPreset}`)
     }
 
-    const managed: ManagedSession = {
-      id: storedSession.id,
-      workspace,
-      agent: null,  // Lazy-load agent on first message
-      messages: [],
-      isProcessing: false,
-      lastMessageAt: storedSession.lastMessageAt ?? storedSession.lastUsedAt,  // Fallback for sessions saved before lastMessageAt was persisted
-      streamingText: '',
-      processingGeneration: 0,
-      isFlagged: storedSession.isFlagged ?? false,
-      sessionStatus: options?.sessionStatus,
-      labels: options?.labels,
+    const managed = createManagedSession(storedSession, workspace, {
       permissionMode: defaultPermissionMode,
       workingDirectory: resolvedWorkingDir,
-      sdkCwd: storedSession.sdkCwd,
-      // Session-specific model takes priority, then workspace default
       model: resolvedModel,
-      // LLM connection - initially undefined, will be set when model is selected
-      // This allows the connection to be locked after first message
       llmConnection: options?.llmConnection,
       thinkingLevel: defaultThinkingLevel,
-      // System prompt preset for mini agents
       systemPromptPreset: options?.systemPromptPreset,
-      messageQueue: [],
-      backgroundShellCommands: new Map(),
       enabledSourceSlugs: defaultEnabledSourceSlugs,
       messagesLoaded: true,  // New sessions don't need to load messages from disk
-      hidden: options?.hidden,
-      // Initialize TokenRefreshManager for this session (handles OAuth token refresh with rate limiting)
-      tokenRefreshManager: new TokenRefreshManager(getSourceCredentialManager(), {
-        log: (msg) => sessionLog.debug(msg),
-      }),
-    }
+    })
 
     this.sessions.set(storedSession.id, managed)
 
@@ -1927,25 +1793,7 @@ export class SessionManager {
       })
     }
 
-    return {
-      id: storedSession.id,
-      name: storedSession.name,
-      workspaceId: workspace.id,
-      workspaceName: workspace.name,
-      lastMessageAt: managed.lastMessageAt,
-      messages: [],
-      isProcessing: false,
-      isFlagged: storedSession.isFlagged ?? false,
-      permissionMode: defaultPermissionMode,
-      sessionStatus: options?.sessionStatus,
-      labels: options?.labels,
-      workingDirectory: resolvedWorkingDir,
-      enabledSourceSlugs: defaultEnabledSourceSlugs,
-      model: managed.model,
-      thinkingLevel: defaultThinkingLevel,
-      sessionFolderPath: getSessionStoragePath(workspaceRootPath, storedSession.id),
-      hidden: options?.hidden,
-    }
+    return managedToSession(managed)
   }
 
   /**
@@ -1960,16 +1808,26 @@ export class SessionManager {
 
     const workspaceRootPath = workspace.rootPath
 
+    // Read live state from the parent managed session (runtime values may differ from persisted JSONL)
+    const parentManaged = this.sessions.get(parentSessionId)
+
+    // Flush parent to disk so the storage layer sees all in-memory messages when branching
+    if (parentManaged && options?.branchFromMessageId) {
+      this.persistSession(parentManaged)
+      await sessionPersistenceQueue.flush(parentManaged.id)
+    }
+
     // Create the sub-session using storage layer (validates parent exists and prevents nesting)
     const storedSession = await createStoredSubSession(workspaceRootPath, parentSessionId, {
       name: options?.name,
       workingDirectory: options?.workingDirectory,
-      permissionMode: options?.permissionMode,
-      enabledSourceSlugs: options?.enabledSourceSlugs,
-      model: options?.model,
-      llmConnection: options?.llmConnection,
+      permissionMode: options?.permissionMode ?? parentManaged?.permissionMode,
+      enabledSourceSlugs: options?.enabledSourceSlugs ?? parentManaged?.enabledSourceSlugs,
+      model: options?.model ?? parentManaged?.model,
+      llmConnection: options?.llmConnection ?? parentManaged?.llmConnection,
       sessionStatus: options?.sessionStatus,
-      labels: options?.labels,
+      labels: options?.labels ?? parentManaged?.labels,
+      branchFromMessageId: options?.branchFromMessageId,
     })
 
     // Get workspace defaults for managed session
@@ -1980,36 +1838,12 @@ export class SessionManager {
       ?? globalDefaults.workspaceDefaults.permissionMode
     const defaultThinkingLevel = wsConfig?.defaults?.thinkingLevel ?? globalDefaults.workspaceDefaults.thinkingLevel
 
-    const managed: ManagedSession = {
-      id: storedSession.id,
-      workspace,
-      agent: null,
-      messages: [],
-      isProcessing: false,
-      lastMessageAt: storedSession.lastMessageAt ?? storedSession.lastUsedAt,
-      streamingText: '',
-      processingGeneration: 0,
-      isFlagged: storedSession.isFlagged ?? false,
-      name: storedSession.name,
-      sessionStatus: storedSession.sessionStatus,
-      labels: storedSession.labels,
+    const managed = createManagedSession(storedSession, workspace, {
       permissionMode: defaultPermissionMode,
-      workingDirectory: storedSession.workingDirectory,
-      sdkCwd: storedSession.sdkCwd,
-      model: storedSession.model,
-      llmConnection: storedSession.llmConnection,
       thinkingLevel: defaultThinkingLevel,
-      messageQueue: [],
-      backgroundShellCommands: new Map(),
-      enabledSourceSlugs: storedSession.enabledSourceSlugs,
-      messagesLoaded: true,
-      parentSessionId: storedSession.parentSessionId,
-      siblingOrder: storedSession.siblingOrder,
-      // Initialize TokenRefreshManager for this session
-      tokenRefreshManager: new TokenRefreshManager(getSourceCredentialManager(), {
-        log: (msg) => sessionLog.debug(msg),
-      }),
-    }
+      branchFromMessageId: options?.branchFromMessageId,
+      messagesLoaded: !options?.branchFromMessageId,  // Branched sessions: lazy-load messages from JSONL
+    })
 
     this.sessions.set(storedSession.id, managed)
 
@@ -2020,27 +1854,7 @@ export class SessionManager {
       parentSessionId: storedSession.parentSessionId,
     }, workspace.id)
 
-    return {
-      id: storedSession.id,
-      name: storedSession.name,
-      workspaceId: workspace.id,
-      workspaceName: workspace.name,
-      lastMessageAt: managed.lastMessageAt,
-      messages: [],
-      isProcessing: false,
-      isFlagged: storedSession.isFlagged ?? false,
-      permissionMode: defaultPermissionMode,
-      sessionStatus: storedSession.sessionStatus,
-      labels: storedSession.labels,
-      workingDirectory: storedSession.workingDirectory,
-      enabledSourceSlugs: storedSession.enabledSourceSlugs,
-      model: managed.model,
-      llmConnection: storedSession.llmConnection,
-      thinkingLevel: defaultThinkingLevel,
-      sessionFolderPath: getSessionStoragePath(workspaceRootPath, storedSession.id),
-      parentSessionId: storedSession.parentSessionId,
-      siblingOrder: storedSession.siblingOrder,
-    }
+    return managedToSession(managed)
   }
 
   /**

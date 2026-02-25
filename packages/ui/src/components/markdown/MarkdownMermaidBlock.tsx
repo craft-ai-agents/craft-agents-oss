@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { renderMermaidSync } from '@craft-agent/mermaid'
+import { renderMermaidSVG } from 'beautiful-mermaid'
 import { Maximize2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { CodeBlock } from './CodeBlock'
@@ -9,7 +9,7 @@ import { useScrollFade } from './useScrollFade'
 // ============================================================================
 // MarkdownMermaidBlock — renders mermaid code fences as SVG diagrams.
 //
-// Uses @craft-agent/mermaid to parse flowchart text and produce an SVG string.
+// Uses beautiful-mermaid to parse flowchart text and produce an SVG string.
 // Falls back to a plain code block if rendering fails (invalid syntax, etc).
 //
 // Theming: Colors are passed as CSS variable references (var(--background),
@@ -58,7 +58,7 @@ export function MarkdownMermaidBlock({ code, className, showExpandButton = true 
   const { svg, error } = React.useMemo(() => {
     try {
       return {
-        svg: renderMermaidSync(code, {
+        svg: renderMermaidSVG(code, {
           bg: 'var(--background)',
           fg: 'var(--foreground)',
           accent: 'var(--accent)',

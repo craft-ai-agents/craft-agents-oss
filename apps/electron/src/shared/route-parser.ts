@@ -717,7 +717,7 @@ export function buildRightSidebarParam(panel?: RightSidebarPanel): string | unde
 /**
  * Build full URL with navigation state and sidebar param
  */
-export function buildUrlWithState(navState: NavigationState): string {
+export function buildUrlWithState(navState: NavigationState, panels?: string[]): string {
   const route = buildRouteFromNavigationState(navState)
   const params = new URLSearchParams()
   params.set('route', route)
@@ -725,6 +725,10 @@ export function buildUrlWithState(navState: NavigationState): string {
   const sidebarParam = buildRightSidebarParam(navState.rightSidebar)
   if (sidebarParam) {
     params.set('sidebar', sidebarParam)
+  }
+
+  if (panels && panels.length > 0) {
+    params.set('panels', panels.join(','))
   }
 
   return `?${params.toString()}`
