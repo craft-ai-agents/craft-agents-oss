@@ -1,6 +1,7 @@
 # Craft Agents Windows Installer
 # Usage: irm https://agents.craft.do/install-app.ps1 | iex
 
+& {
 $ErrorActionPreference = "Stop"
 
 $VERSIONS_URL = "https://agents.craft.do/electron"
@@ -258,3 +259,4 @@ Write-Host "  Launch from:"
 Write-Host "    - Start Menu or desktop shortcut"
 Write-Host "    - Command line: craft-agents (restart terminal first)"
 Write-Host ""
+}
