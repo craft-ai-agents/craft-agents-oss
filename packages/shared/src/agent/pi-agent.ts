@@ -1299,20 +1299,8 @@ export class PiAgent extends BaseAgent {
   ): Promise<void> {
     // BaseAgent.setSourceServers() handles:
     //   1. SourceManager state tracking (active slugs)
-    //   2. McpClientPool sync (connecting/disconnecting MCP sources)
+    //   2. McpClientPool sync (connecting/disconnecting MCP + API sources)
     await super.setSourceServers(mcpServers, apiServers, intendedSlugs);
-
-    // Sync API sources to pool so their tools are discoverable by the subprocess.
-    // This is done here (not in BaseAgent) because McpServer instances only support
-    // a single transport connection — ClaudeAgent connects directly, so the pool
-    // must only connect for Pi-based providers.
-    if (this.config.mcpPool) {
-      try {
-        await this.config.mcpPool.syncApiServers(apiServers);
-      } catch (err) {
-        this.debug(`Failed to sync API servers to pool: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
 
     // Register pool's proxy tool defs with subprocess so the model can call them.
     this.registerPoolToolsWithSubprocess();

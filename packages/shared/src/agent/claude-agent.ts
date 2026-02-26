@@ -320,9 +320,7 @@ export class ClaudeAgent extends BaseAgent {
   // Permission whitelists are now managed by this.permissionManager (inherited from BaseAgent)
   // Source state tracking is now managed by this.sourceManager (inherited from BaseAgent)
   // Source MCP connections are managed by this.config.mcpPool (centralized in main process)
-  // In-process API source servers (Gmail, Slack, etc.) — these are NOT in the pool
-  // because they use SDK-specific createSdkMcpServer() and handle REST API calls in-process.
-  private sourceApiServers: Record<string, unknown> = {};
+  // Both MCP sources and API sources are routed through the pool.
   // Safe mode state - user-controlled read-only exploration mode
   private safeMode: boolean = false;
   // Event adapter for SDK message → AgentEvent conversion (testable, pluggable)
@@ -674,13 +672,10 @@ export class ClaudeAgent extends BaseAgent {
           type: 'http',
           url: 'https://agents.craft.do/docs/mcp',
         },
-        // Per-source proxy servers from centralized MCP pool (MCP sources like Linear, GitHub)
-        // Each source gets its own SDK server keyed by slug (e.g., 'linear', 'github')
+        // Per-source proxy servers from centralized MCP pool (MCP + API sources)
+        // Each source gets its own SDK server keyed by slug (e.g., 'linear', 'github', 'gmail')
         // so the SDK produces correct tool names: mcp__{slug}__{toolName}
         ...sourceProxies,
-        // In-process API source servers (Gmail, Slack, Stripe, etc.)
-        // These handle REST API calls directly in-process with pre-built credentials.
-        ...this.sourceApiServers,
       };
 
       // Mini agents: filter to minimal set using centralized keys
@@ -2026,17 +2021,6 @@ export class ClaudeAgent extends BaseAgent {
    * @param intendedSlugs Optional list of source slugs that should be considered active
    *                      (what the UI shows as active, even if build failed)
    */
-  override async setSourceServers(
-    mcpServers: Record<string, SdkMcpServerConfig>,
-    apiServers: Record<string, unknown>,
-    intendedSlugs?: string[]
-  ): Promise<void> {
-    // BaseAgent handles SourceManager state + McpClientPool sync for MCP sources
-    await super.setSourceServers(mcpServers, apiServers, intendedSlugs);
-    // Store API servers separately — they're in-process MCP server instances
-    // (Gmail, Slack, Stripe, etc.) that get added directly to Options.mcpServers
-    this.sourceApiServers = apiServers;
-  }
 
   // isSourceServerActive, getActiveSourceServerNames, setAllSources, getAllSources, markSourceUnseen
   // are now inherited from BaseAgent and delegate to this.sourceManager
