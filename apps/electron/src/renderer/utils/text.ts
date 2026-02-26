@@ -17,8 +17,11 @@ export function stripMarkdown(text: string): string {
   // Process synchronously (strip-markdown is sync)
   const result = processor.processSync(text)
 
-  // Remove emojis and normalize whitespace
+  // remark/strip-markdown may leave backslash escapes (e.g. \_word\_) in the
+  // output when it removes emphasis markers. Unescape them so OS notifications
+  // display clean plain text instead of raw markdown escape sequences.
   return String(result)
+    .replace(/\\([_*`[\]\\~|>])/g, '$1')
     .replace(EMOJI_REGEX, '')
     .replace(/\s+/g, ' ')
     .trim()

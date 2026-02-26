@@ -52,7 +52,9 @@ export const LabelBadge = React.forwardRef<HTMLButtonElement, LabelBadgeProps>(
         <span className="truncate max-w-[100px]">{label.name}</span>
 
         {/* Optional value, visually separated — or placeholder icon if typed but no value set */}
-        {displayValue ? (
+        {/* Only show value for typed-value labels (valueType defined); boolean labels may have */}
+        {/* an auto-rule match ID stored as the value, which is internal metadata, not user data. */}
+        {displayValue && label.valueType ? (
           <>
             <span className="text-foreground/30">·</span>
             <span className="text-[11px] text-foreground/60 truncate max-w-[120px]">

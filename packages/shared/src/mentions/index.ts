@@ -133,3 +133,26 @@ export function stripAllMentions(text: string): string {
     .replace(/\s+/g, ' ')
     .trim()
 }
+
+/**
+ * Strip only skill and source mentions from text, preserving file/folder paths.
+ *
+ * Unlike stripAllMentions, this converts [file:path] and [folder:path] to their
+ * plain paths so the agent can still act on them (e.g. read the file).
+ *
+ * @param text - The message text with mentions
+ * @returns Text with skill/source mentions removed and file/folder mentions replaced by their paths
+ */
+export function stripSkillAndSourceMentions(text: string): string {
+  return text
+    // Remove [source:slug]
+    .replace(/\[source:[\w-]+\]/g, '')
+    // Remove [skill:slug] or [skill:workspaceId:slug]
+    .replace(new RegExp(`\\[skill:(?:${WS_ID_CHARS}+:)?[\\w-]+\\]`, 'g'), '')
+    // Replace [file:path] with the bare path so the agent can read it
+    .replace(/\[file:([^\]]+)\]/g, '$1')
+    // Replace [folder:path] with the bare path
+    .replace(/\[folder:([^\]]+)\]/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+}

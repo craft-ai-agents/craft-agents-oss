@@ -60,7 +60,7 @@ import { getMiniAgentSystemPrompt } from '../prompts/system.ts';
 import { buildTitlePrompt, buildRegenerateTitlePrompt, validateTitle } from '../utils/title-generator.ts';
 
 // Skill extraction for Codex/Copilot backends (Claude uses native SDK Skill tool)
-import { parseMentions, stripAllMentions } from '../mentions/index.ts';
+import { parseMentions, stripSkillAndSourceMentions } from '../mentions/index.ts';
 import { loadAllSkills } from '../skills/storage.ts';
 
 // ============================================================
@@ -869,8 +869,9 @@ Please continue the conversation naturally from where we left off.
       }
     }
 
-    // Strip all bracket mentions from the message text
-    const stripped = stripAllMentions(message).trim();
+    // Strip skill/source mentions (handled by the SDK Skill tool / source activation).
+    // File and folder mentions are preserved as their bare paths so the agent can read them.
+    const stripped = stripSkillAndSourceMentions(message).trim();
 
     // If user sent only skill mentions with no other text, add a directive
     const cleanMessage = (!stripped && skillPaths.size > 0)

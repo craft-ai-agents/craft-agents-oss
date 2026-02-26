@@ -55,7 +55,9 @@ export function EntityListLabelBadge({ label, rawValue, sessionLabels, onLabelsC
         }}
       >
         {label.name}
-        {displayValue ? (
+        {/* Only show value for typed-value labels (valueType defined); boolean labels may have */}
+        {/* an auto-rule match ID stored as the value, which is internal metadata, not user data. */}
+        {displayValue && label.valueType ? (
           <>
             <span style={{ opacity: 0.4 }}>·</span>
             <span className="font-normal truncate min-w-0" style={{ opacity: 0.75 }}>{displayValue}</span>
