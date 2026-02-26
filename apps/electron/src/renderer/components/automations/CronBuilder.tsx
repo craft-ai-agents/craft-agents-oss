@@ -252,19 +252,23 @@ export function CronBuilder({
           <div className="space-y-1">
             <span className="text-xs text-muted-foreground">Next runs:</span>
             <div className="flex flex-col gap-0.5">
-              {nextRuns.map((date, i) => (
-                <span key={i} className="text-xs text-foreground/70 tabular-nums">
-                  {date.toLocaleDateString('en-US', {
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                  })} {date.toLocaleTimeString('en-US', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false,
-                  })}
-                </span>
-              ))}
+              {(() => {
+                const spansYears = nextRuns.length > 1 && nextRuns[0].getFullYear() !== nextRuns[nextRuns.length - 1].getFullYear()
+                return nextRuns.map((date, i) => (
+                  <span key={i} className="text-xs text-foreground/70 tabular-nums">
+                    {date.toLocaleDateString('en-US', {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric',
+                      ...(spansYears && { year: 'numeric' }),
+                    })} {date.toLocaleTimeString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false,
+                    })}
+                  </span>
+                ))
+              })()}
             </div>
           </div>
         )}

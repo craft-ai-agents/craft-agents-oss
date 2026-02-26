@@ -131,12 +131,15 @@ export function AutomationInfoPage({
                 {nextRuns.length > 0 && (
                   <Info_Table.Row label="Next runs">
                     <div className="flex flex-col gap-0.5">
-                      {nextRuns.map((date, i) => (
-                        <span key={i} className="text-sm text-foreground/70">
-                          {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{' '}
-                          {date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
-                        </span>
-                      ))}
+                      {(() => {
+                        const spansYears = nextRuns.length > 1 && nextRuns[0].getFullYear() !== nextRuns[nextRuns.length - 1].getFullYear()
+                        return nextRuns.map((date, i) => (
+                          <span key={i} className="text-sm text-foreground/70">
+                            {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(spansYears && { year: 'numeric' }) })}{' '}
+                            {date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                          </span>
+                        ))
+                      })()}
                     </div>
                   </Info_Table.Row>
                 )}
