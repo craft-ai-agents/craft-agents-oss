@@ -294,7 +294,7 @@ export abstract class BaseAgent implements AgentBackend {
 
     this.configWatcherManager = new ConfigWatcherManager(
       {
-        workspaceRootPath: this.workingDirectory,
+        workspaceRootPath: this.config.workspace.rootPath,
         isHeadless: this.config.isHeadless,
         onDebug: (msg) => this.debug(msg),
       },
