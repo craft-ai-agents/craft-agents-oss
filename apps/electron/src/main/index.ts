@@ -63,7 +63,7 @@ Sentry.init({
 const machineId = createHash('sha256').update(hostname() + homedir()).digest('hex').slice(0, 16)
 Sentry.setUser({ id: machineId })
 
-import { join } from 'path'
+import { join, delimiter } from 'path'
 import { existsSync } from 'fs'
 import { SessionManager } from './sessions'
 import { registerIpcHandlers } from './ipc'
@@ -98,6 +98,29 @@ if (isDebugMode) {
   process.env.CRAFT_DEBUG = '1'
   enableDebug()
   setPerfEnabled(true)
+}
+
+// Bundle CLI tools: resolve platform-specific uv binary and wrapper scripts.
+// These are available to all agent Bash sessions via CRAFT_UV, CRAFT_SCRIPTS env vars
+// and PATH prepend. uv auto-downloads Python 3.12 on first use (~5s, then cached).
+{
+  // In packaged app: resources are at process.resourcesPath/app/resources/
+  // In dev: resources are at __dirname/../resources/ (sibling of dist/)
+  const resourcesBase = app.isPackaged
+    ? join(process.resourcesPath, 'app')
+    : join(__dirname, '..')
+  const platformKey = `${process.platform}-${process.arch}`
+  const uvBinary = join(resourcesBase, 'resources', 'bin', platformKey, process.platform === 'win32' ? 'uv.exe' : 'uv')
+  const binDir = join(resourcesBase, 'resources', 'bin')
+  const scriptsDir = join(resourcesBase, 'resources', 'scripts')
+
+  process.env.CRAFT_UV = uvBinary
+  process.env.CRAFT_SCRIPTS = scriptsDir
+  process.env.PATH = `${binDir}${delimiter}${process.env.PATH}`
+
+  if (isDebugMode) {
+    mainLog.info('CLI tools configured:', { uvBinary, binDir, scriptsDir })
+  }
 }
 
 // Register Pi model resolver so llm-connections.ts can resolve Pi models

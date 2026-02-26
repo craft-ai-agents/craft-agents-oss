@@ -289,7 +289,7 @@ export function useEntityListInteractions<T>({
   const getRowProps = useCallback((item: T, index: number) => {
     const id = getId(item)
     const itemProps = getItemProps(item, index)
-    const effectiveSelected = selectedIdOverride !== undefined && selectedIdOverride !== null
+    const effectiveSelected = selectedIdOverride !== undefined
       ? selectedIdOverride
       : selectionState.selected
     const isSelected = multiSelectEnabled

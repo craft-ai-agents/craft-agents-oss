@@ -75,7 +75,7 @@ interface SessionListProps {
   labelFilterMap?: Map<string, FilterMode>
   /** Override which session is highlighted (for multi-panel focused panel tracking) */
   focusedSessionId?: string | null
-  /** Override navigation target (for multi-panel: navigates focused panel instead of primary) */
+  /** Override navigation target (for multi-panel: focuses existing panel or navigates focused panel) */
   onNavigateToSession?: (sessionId: string) => void
 }
 
@@ -575,7 +575,7 @@ export function SessionList({
     flatLabels,
     labels,
     searchQuery: resolvedSearchQuery,
-    selectedSessionId: focusedSessionId ?? selectionStore.state.selected,
+    selectedSessionId: focusedSessionId !== undefined ? focusedSessionId : selectionStore.state.selected,
     isMultiSelectActive,
     sessionOptions,
     contentSearchResults,

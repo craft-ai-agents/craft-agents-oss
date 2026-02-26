@@ -399,6 +399,18 @@ export class WindowManager {
   }
 
   /**
+   * Cancel a pending close request (renderer handled it by closing a modal/panel).
+   * Clears the fallback timeout so the window stays open.
+   */
+  cancelPendingClose(webContentsId: number): void {
+    const timeout = this.pendingCloseTimeouts.get(webContentsId)
+    if (timeout) {
+      clearTimeout(timeout)
+      this.pendingCloseTimeouts.delete(webContentsId)
+    }
+  }
+
+  /**
    * Close window for a specific workspace
    */
   closeWindowForWorkspace(workspaceId: string): void {
@@ -547,7 +559,7 @@ export class WindowManager {
       // setWindowButtonVisibility can reset position to default, so we need
       // to restore the custom position using the modern setWindowButtonPosition API
       if (visible) {
-        managed.window.setWindowButtonPosition({ x: 18, y: 18 })
+        managed.window.setWindowButtonPosition({ x: 18, y: 19 })
       }
     }
   }

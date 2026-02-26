@@ -5,8 +5,9 @@
  * Each panel is identified by a ViewRoute (deeplink string) and a proportion
  * that determines its share of the available content width.
  *
- * - Panel at index 0 is the "primary" panel, synced with NavigationContext
- * - Panels at index 1+ are "secondary" panels pushed from UI interactions
+ * All panels are peers — the focused panel drives the navigator/sidebar
+ * via NavigationContext (which derives its state from focusedPanelRouteAtom).
+ *
  * - Closing a panel removes only that panel; panels to its right are preserved
  * - Proportions are relative weights that sum to 1.0 across all panels
  */
@@ -28,16 +29,11 @@ export interface PanelStackEntry {
   proportion: number
 }
 
-/** The panel stack — first entry is always the "primary" panel */
+/** The panel stack — all panels are peers, the focused one drives navigation */
 export const panelStackAtom = atom<PanelStackEntry[]>([])
 
-/** Which panel is currently focused (null = defaults to primary) */
+/** Which panel is currently focused (null = defaults to index 0) */
 export const focusedPanelIdAtom = atom<string | null>(null)
-
-/** Derived: the primary (index 0) route — syncs with NavigationContext */
-export const primaryPanelRouteAtom = atom(
-  (get) => get(panelStackAtom)[0]?.route ?? null
-)
 
 /** Derived: number of panels in the stack */
 export const panelCountAtom = atom(
@@ -102,38 +98,37 @@ export const pushPanelAtom = atom(
 )
 
 /**
- * Close a panel by ID. Only removes the targeted panel.
- * Cannot close the primary panel (index 0).
- * Redistributes the closed panels' proportions among remaining panels.
+ * Close a panel by ID. Removes the targeted panel from the stack.
+ * Redistributes the closed panel's proportion among remaining panels.
+ * Stack can reach [] — a reactive effect handles window close when empty.
  */
 export const closePanelAtom = atom(
   null,
   (get, set, id: string) => {
     const stack = get(panelStackAtom)
     const idx = stack.findIndex(p => p.id === id)
-    if (idx > 0) {
-      const remaining = [...stack.slice(0, idx), ...stack.slice(idx + 1)]
-      // Normalize proportions so they sum to 1.0
-      const totalProportion = remaining.reduce((sum, p) => sum + p.proportion, 0)
-      if (totalProportion > 0) {
-        set(panelStackAtom, remaining.map(p => ({
-          ...p,
-          proportion: p.proportion / totalProportion,
-        })))
-      } else {
-        set(panelStackAtom, remaining)
-      }
-      // If the closed panel was focused, move focus to the left neighbor
-      if (get(focusedPanelIdAtom) === id) {
-        const newIdx = Math.min(idx, remaining.length - 1)
-        set(focusedPanelIdAtom, remaining[newIdx]?.id ?? null)
-      }
+    if (idx === -1) return
+    const remaining = [...stack.slice(0, idx), ...stack.slice(idx + 1)]
+    // Normalize proportions so they sum to 1.0
+    const totalProportion = remaining.reduce((sum, p) => sum + p.proportion, 0)
+    if (totalProportion > 0) {
+      set(panelStackAtom, remaining.map(p => ({
+        ...p,
+        proportion: p.proportion / totalProportion,
+      })))
+    } else {
+      set(panelStackAtom, remaining)
+    }
+    // If the closed panel was focused, move focus to the left neighbor
+    if (get(focusedPanelIdAtom) === id) {
+      const newIdx = Math.min(idx, remaining.length - 1)
+      set(focusedPanelIdAtom, remaining[newIdx]?.id ?? null)
     }
   }
 )
 
-/** Close all secondary panels (keep only the primary) */
-export const closeAllSecondaryPanelsAtom = atom(
+/** Close all panels except the first one */
+export const closeAllOtherPanelsAtom = atom(
   null,
   (get, set) => {
     const stack = get(panelStackAtom)
@@ -146,8 +141,7 @@ export const closeAllSecondaryPanelsAtom = atom(
 
 /**
  * Restore the full panel stack from serialized state (URL restoration, deeplinks).
- * Sets all panels atomically — avoids the race condition of sequential pushPanelAtom calls
- * where updatePrimaryPanelAtom overwrites the first secondary panel.
+ * Sets all panels atomically to avoid race conditions with sequential pushPanelAtom calls.
  */
 export const restorePanelStackAtom = atom(
   null,
@@ -160,22 +154,6 @@ export const restorePanelStackAtom = atom(
     }))
     set(panelStackAtom, stack)
     set(focusedPanelIdAtom, stack[0].id)
-  }
-)
-
-/**
- * Update the primary panel's route (index 0).
- * Called by NavigationContext when navigation changes.
- */
-export const updatePrimaryPanelAtom = atom(
-  null,
-  (get, set, route: ViewRoute) => {
-    const stack = get(panelStackAtom)
-    if (stack.length === 0) {
-      set(panelStackAtom, [{ id: generatePanelId(), route, proportion: 1 }])
-    } else if (stack[0].route !== route) {
-      set(panelStackAtom, [{ ...stack[0], route }, ...stack.slice(1)])
-    }
   }
 )
 
@@ -204,12 +182,19 @@ export const resizePanelsAtom = atom(
 
 /**
  * Update the focused panel's route.
- * Used by the navigator to navigate a secondary panel without going through NavigationContext.
+ * Primary write path for NavigationContext.navigate() — all panels are peers.
  */
 export const updateFocusedPanelRouteAtom = atom(
   null,
   (get, set, route: ViewRoute) => {
     const stack = get(panelStackAtom)
+    if (stack.length === 0) {
+      // No panels — create one
+      const newEntry: PanelStackEntry = { id: generatePanelId(), route, proportion: 1 }
+      set(panelStackAtom, [newEntry])
+      set(focusedPanelIdAtom, newEntry.id)
+      return
+    }
     const idx = get(focusedPanelIndexAtom)
     if (idx < 0 || idx >= stack.length) return
     const newStack = stack.map((p, i) =>

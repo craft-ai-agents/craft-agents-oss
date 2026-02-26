@@ -1,7 +1,7 @@
 /**
  * TopBar - Persistent top bar above all panels (Slack-style)
  *
- * Layout: [Menu] [flex] [Back] [Forward] [Search field] [flex] [Settings]
+ * Layout: [Sidebar] [Menu] [flex] [Back] [Forward] [Search field] [flex] [Settings]
  *
  * Fixed at top of window, 48px tall.
  * macOS: offset left to avoid stoplight controls.
@@ -10,6 +10,7 @@
 import * as Icons from "lucide-react"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@craft-agent/ui"
 import { CraftAgentsSymbol } from "../icons/CraftAgentsSymbol"
+import { PanelLeftRounded } from "../icons/PanelLeftRounded"
 import { TopBarButton } from "../ui/TopBarButton"
 import { isMac } from "@/lib/platform"
 import { useActionLabel } from "@/actions"
@@ -183,8 +184,18 @@ export function TopBar({
       className="fixed top-0 left-0 right-0 h-[48px] z-panel flex items-center justify-between titlebar-drag-region"
       style={{ paddingLeft: menuLeftPadding, paddingRight: 12 }}
     >
-      {/* === LEFT: Menu Button === */}
-      <div className="pointer-events-auto titlebar-no-drag">
+      {/* === LEFT: Sidebar Toggle + Craft Menu === */}
+      <div className="pointer-events-auto titlebar-no-drag flex items-center gap-0.5">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <TopBarButton onClick={onToggleSidebar} aria-label="Toggle sidebar">
+              <PanelLeftRounded className="h-[18px] w-[18px] text-foreground/70" />
+            </TopBarButton>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Toggle Sidebar</TooltipContent>
+        </Tooltip>
+
+        {/* Craft Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <TopBarButton aria-label="Craft menu">

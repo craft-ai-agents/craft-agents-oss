@@ -23,19 +23,17 @@ import { cn } from '@/lib/utils'
 import { panelStackAtom, focusedPanelIdAtom, focusedPanelIndexAtom } from '@/atoms/panel-stack'
 import { PanelSlot } from './PanelSlot'
 import { PanelResizeSash } from './PanelResizeSash'
+import { PANEL_GAP, PANEL_EDGE_INSET, RADIUS_EDGE, RADIUS_INNER } from './panel-constants'
 
 /** Spring transition matching AppShell's sidebar/navigator animation */
 const PANEL_SPRING = { type: 'spring' as const, stiffness: 600, damping: 49 }
-
-/** Gap between adjacent panels */
-const PANEL_GAP = 6
 
 interface PanelStackContainerProps {
   sidebarSlot: React.ReactNode
   sidebarWidth: number
   navigatorSlot: React.ReactNode
   navigatorWidth: number
-  isFocusedMode: boolean
+  isSidebarAndNavigatorHidden: boolean
   isRightSidebarVisible?: boolean
   isResizing?: boolean
 }
@@ -45,7 +43,7 @@ export function PanelStackContainer({
   sidebarWidth,
   navigatorSlot,
   navigatorWidth,
-  isFocusedMode,
+  isSidebarAndNavigatorHidden,
   isRightSidebarVisible,
   isResizing,
 }: PanelStackContainerProps) {
@@ -58,6 +56,7 @@ export function PanelStackContainer({
   const hasSidebar = sidebarWidth > 0
   const hasNavigator = navigatorWidth > 0
   const isMultiPanel = panelStack.length > 1
+  const isLeftEdge = !hasSidebar && !hasNavigator
 
   // Auto-scroll to newly pushed content panel
   useEffect(() => {
@@ -87,12 +86,19 @@ export function PanelStackContainer({
         // Extend to window bottom so scrollbar sits at the very edge
         marginBottom: -6,
         paddingBottom: 6,
+        // Extra horizontal space for last panel's box-shadow
+        paddingRight: 8,
+        marginRight: -8,
       }}
     >
       {/* Inner flex container — flex-grow: 1 fills viewport, content can overflow for scroll.
-           Right padding gives room for the last panel's box-shadow. */}
-      <div
+           Animated paddingLeft provides window-edge spacing when sidebar/navigator are hidden.
+           Hidden slots use marginRight: -PANEL_GAP to cancel their trailing flex gap. */}
+      <motion.div
         className="flex h-full"
+        initial={false}
+        animate={{ paddingLeft: !hasSidebar ? PANEL_EDGE_INSET : 0 }}
+        transition={transition}
         style={{ gap: PANEL_GAP, flexGrow: 1, minWidth: 0 }}
       >
         {/* === SIDEBAR SLOT === */}
@@ -100,10 +106,12 @@ export function PanelStackContainer({
           initial={false}
           animate={{
             width: hasSidebar ? sidebarWidth : 0,
+            marginRight: hasSidebar ? 0 : -PANEL_GAP,
             opacity: hasSidebar ? 1 : 0,
           }}
           transition={transition}
-          className="h-full overflow-hidden relative shrink-0"
+          className="h-full relative shrink-0"
+          style={{ overflowX: 'clip', overflowY: 'visible' }}
         >
           <div className="h-full" style={{ width: sidebarWidth }}>
             {sidebarSlot}
@@ -115,14 +123,20 @@ export function PanelStackContainer({
           initial={false}
           animate={{
             width: hasNavigator ? navigatorWidth : 0,
+            marginRight: hasNavigator ? 0 : -PANEL_GAP,
             opacity: hasNavigator ? 1 : 0,
           }}
           transition={transition}
           className={cn(
-            'h-full overflow-hidden relative shrink-0',
+            'h-full overflow-hidden relative shrink-0 z-[2]',
             'bg-background shadow-middle',
-            isMultiPanel ? 'rounded-[10px]' : 'rounded-l-[14px] rounded-r-[10px]',
           )}
+          style={{
+            borderTopLeftRadius: RADIUS_INNER,
+            borderBottomLeftRadius: !hasSidebar ? RADIUS_EDGE : RADIUS_INNER,
+            borderTopRightRadius: RADIUS_INNER,
+            borderBottomRightRadius: RADIUS_INNER,
+          }}
         >
           <div className="h-full" style={{ width: navigatorWidth }}>
             {navigatorSlot}
@@ -130,26 +144,29 @@ export function PanelStackContainer({
         </motion.div>
 
         {/* === CONTENT PANELS WITH SASHES === */}
-        {panelStack.map((entry, index) => (
-          <PanelSlot
-            key={entry.id}
-            entry={entry}
-            isPrimary={index === 0}
-            isOnly={panelStack.length === 1}
-            isLast={index === panelStack.length - 1}
-            isFocusedPanel={isMultiPanel ? index === focusedIndex : true}
-            isFocusedMode={isFocusedMode}
-            isRightSidebarVisible={isRightSidebarVisible}
-            proportion={entry.proportion}
-            sash={index > 0 ? (
-              <PanelResizeSash
-                leftIndex={index - 1}
-                rightIndex={index}
-              />
-            ) : undefined}
-          />
-        ))}
-      </div>
+        {panelStack.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center" />
+        ) : (
+          panelStack.map((entry, index) => (
+            <PanelSlot
+              key={entry.id}
+              entry={entry}
+              isOnly={panelStack.length === 1}
+              isFocusedPanel={isMultiPanel ? index === focusedIndex : true}
+              isSidebarAndNavigatorHidden={isSidebarAndNavigatorHidden}
+              isAtLeftEdge={index === 0 && isLeftEdge}
+              isAtRightEdge={index === panelStack.length - 1 && !isRightSidebarVisible}
+              proportion={entry.proportion}
+              sash={index > 0 ? (
+                <PanelResizeSash
+                  leftIndex={index - 1}
+                  rightIndex={index}
+                />
+              ) : undefined}
+            />
+          ))
+        )}
+      </motion.div>
     </div>
   )
 }

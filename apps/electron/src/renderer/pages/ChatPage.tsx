@@ -68,6 +68,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     isSearchModeActive,
     chatDisplayRef,
     onChatMatchInfoChange,
+    isFocusedPanel,
   } = useAppShellContext()
 
   // Use the unified session options hook for clean access
@@ -117,11 +118,11 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   // 2. If processing → when it completes, main process will clear hasUnread
   // The main process handles all the logic; we just report viewing state.
   React.useEffect(() => {
-    if (session && isWindowFocused) {
+    if (session && isWindowFocused && isFocusedPanel !== false) {
       onSetActiveViewingSession(session.id)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.id, isWindowFocused, onSetActiveViewingSession])
+  }, [session?.id, isWindowFocused, isFocusedPanel, onSetActiveViewingSession])
 
   // Get pending permission and credential for this session
   const pendingPermission = usePendingPermission(sessionId)

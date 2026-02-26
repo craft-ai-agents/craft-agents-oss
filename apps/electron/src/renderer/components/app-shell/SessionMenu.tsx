@@ -36,10 +36,8 @@ import {
   RefreshCw,
   Tag,
 } from 'lucide-react'
-import { useSetAtom } from 'jotai'
 import { toast } from 'sonner'
-import { pushPanelAtom } from '@/atoms/panel-stack'
-import { routes } from '../../../shared/routes'
+import { navigate, routes } from '@/lib/navigate'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getStateColor, getStateIcon, type SessionStatusId } from '@/config/session-status-config'
 import type { SessionStatus } from '@/config/session-status-config'
@@ -157,10 +155,8 @@ export function SessionMenu({
     }
   }, [sessionLabels, appliedLabelIds, onLabelsChange])
 
-  // Panel stack
-  const pushPanel = useSetAtom(pushPanelAtom)
   const handleOpenInNewPanel = () => {
-    pushPanel({ route: routes.view.allSessions(sessionId) })
+    navigate(routes.view.allSessions(sessionId), { newPanel: true })
   }
 
   // Get menu components from context (works with both DropdownMenu and ContextMenu)

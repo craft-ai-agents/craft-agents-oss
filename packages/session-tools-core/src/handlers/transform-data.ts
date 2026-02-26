@@ -97,8 +97,12 @@ export async function handleTransformData(
 
   try {
     // Build command
-    const cmd = args.language === 'python3' ? 'python3' : args.language;
-    const spawnArgs = [tempScript, ...resolvedInputs, resolvedOutput];
+    // Use bundled uv for Python when available (ensures consistent Python 3.12 + deps)
+    const useUv = args.language === 'python3' && !!process.env.CRAFT_UV;
+    const cmd = useUv ? process.env.CRAFT_UV! : (args.language === 'python3' ? 'python3' : args.language);
+    const spawnArgs = useUv
+      ? ['run', '--python', '3.12', tempScript, ...resolvedInputs, resolvedOutput]
+      : [tempScript, ...resolvedInputs, resolvedOutput];
 
     // Strip sensitive env vars
     const env = { ...process.env };

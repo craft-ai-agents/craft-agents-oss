@@ -27,6 +27,30 @@ files:
   - packages/shared/src/unified-network-interceptor.ts
   - packages/shared/src/interceptor-common.ts
   - packages/shared/src/feature-flags.ts
+  # Include CLI tool Python scripts (platform-independent)
+  - resources/scripts/**/*
+  # Include CLI tool shell wrappers (platform-independent, both Unix and Windows)
+  - resources/bin/markitdown
+  - resources/bin/markitdown.cmd
+  - resources/bin/pdf-tool
+  - resources/bin/pdf-tool.cmd
+  - resources/bin/xlsx-tool
+  - resources/bin/xlsx-tool.cmd
+  - resources/bin/doc-diff
+  - resources/bin/doc-diff.cmd
+  - resources/bin/img-tool
+  - resources/bin/img-tool.cmd
+  - resources/bin/docx-tool
+  - resources/bin/docx-tool.cmd
+  - resources/bin/pptx-tool
+  - resources/bin/pptx-tool.cmd
+  - resources/bin/ical-tool
+  - resources/bin/ical-tool.cmd
+  # Include bundled uv binary (platform-specific, only the relevant one ships per build)
+  - resources/bin/darwin-arm64/**/*
+  - resources/bin/darwin-x64/**/*
+  - resources/bin/win32-x64/**/*
+  - resources/bin/linux-x64/**/*
   # Include bundled Bun runtime (platform-specific, set by build script)
   - vendor/bun/**/*
   # Include bundled Codex binary (platform-specific, downloaded by build script)
@@ -87,6 +111,8 @@ mac:
     - "!**/vendor/codex/win32-*/**"
     - "!**/vendor/copilot/linux-*/**"
     - "!**/vendor/copilot/win32-*/**"
+    - "!**/resources/bin/win32-*/**"
+    - "!**/resources/bin/linux-*/**"
   # Use predictable naming for macOS packages (applies to zip; dmg uses its own config below)
   artifactName: "Craft-Agent-${arch}.${ext}"
   # Code signing & notarization (disabled by default for local builds)
@@ -128,7 +154,9 @@ win:
     - "!**/vendor/codex/linux-*/**"
     - "!**/vendor/copilot/darwin-*/**"
     - "!**/vendor/copilot/linux-*/**"
-    # WORKAROUND: Exclude bun, codex, and copilot from regular files on Windows.
+    - "!**/resources/bin/darwin-*/**"
+    - "!**/resources/bin/linux-*/**"
+    # WORKAROUND: Exclude bun, codex, copilot, and uv from regular files on Windows.
     # electron-builder's npm node module collector causes EBUSY errors when copying
     # .exe files because it scans/locks files while simultaneously trying to copy them.
     # Moving them to extraResources avoids this by copying before the collector runs.
@@ -136,6 +164,7 @@ win:
     - "!vendor/bun/**/*"
     - "!vendor/codex/**/*"
     - "!vendor/copilot/**/*"
+    - "!**/resources/bin/win32-x64/**"
   # Copy executables as extraResources to avoid EBUSY file locking (see comment above)
   extraResources:
     - from: node_modules/@anthropic-ai/claude-agent-sdk
@@ -152,6 +181,8 @@ win:
       to: app/vendor/codex/win32-x64
     - from: vendor/copilot/win32-x64
       to: app/vendor/copilot/win32-x64
+    - from: resources/bin/win32-x64
+      to: app/resources/bin/win32-x64
 
 nsis:
   oneClick: true
@@ -183,3 +214,5 @@ linux:
     - "!**/vendor/codex/win32-*/**"
     - "!**/vendor/copilot/darwin-*/**"
     - "!**/vendor/copilot/win32-*/**"
+    - "!**/resources/bin/darwin-*/**"
+    - "!**/resources/bin/win32-*/**"

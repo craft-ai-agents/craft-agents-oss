@@ -24,6 +24,7 @@ import { loadPreferences, formatPreferencesForPrompt } from '../config/preferenc
 import type { FileAttachment } from '../utils/files.ts';
 import type { LLMQueryRequest, LLMQueryResult } from './llm-tool.ts';
 import { debug } from '../utils/debug.ts';
+import { guardLargeResult } from '../utils/large-response.ts';
 import {
   getSessionPlansDir,
   getLastPlanFilePath,
@@ -102,6 +103,15 @@ export type { LoadedSource } from '../sources/types.ts';
 // Re-exported for backwards compatibility with existing imports from claude-agent.ts
 import { AbortReason, type RecoveryMessage } from './core/index.ts';
 export { AbortReason, type RecoveryMessage };
+
+/** File extensions that can be converted to readable text by CLI tools. */
+const CONVERTIBLE_FILE_HINTS: Record<string, string> = {
+  pdf: 'markitdown or pdf-tool extract',
+  docx: 'markitdown', xlsx: 'markitdown or xlsx-tool', pptx: 'markitdown or pptx-tool',
+  doc: 'markitdown', xls: 'markitdown', ppt: 'markitdown',
+  msg: 'markitdown', eml: 'markitdown', rtf: 'markitdown',
+  ics: 'ical-tool read',
+};
 
 export interface ClaudeAgentConfig {
   workspace: Workspace;
@@ -1087,6 +1097,7 @@ export class ClaudeAgent extends BaseAgent {
       this.eventAdapter.startTurn();
 
       // Process SDK messages and convert to AgentEvents
+      const summarizeCallback = this.getSummarizeCallback();
       let receivedComplete = false;
       // Track whether we received any assistant content (for empty response detection)
       // When SDK returns empty response (e.g., failed resume), we need to detect and recover
@@ -1167,6 +1178,33 @@ export class ClaudeAgent extends BaseAgent {
             // Reset prerequisite state on compaction (LLM loses guide content)
             if (event.type === 'info' && event.message === 'Compacted Conversation') {
               this.resetPrerequisiteState();
+            }
+
+            // Intercept large Bash results — save to disk and summarize
+            if (event.type === 'tool_result' && event.toolName === 'Bash' && !event.isError && event.result) {
+              const guarded = await guardLargeResult(event.result, {
+                sessionPath: metadataSessionDir,
+                toolName: 'Bash',
+                input: event.input,
+                summarize: summarizeCallback,
+              });
+              if (guarded) {
+                yield { ...event, result: guarded };
+                continue;
+              }
+            }
+
+            // Suggest CLI tools when Read fails on convertible file types
+            if (event.type === 'tool_result' && event.toolName === 'Read' && event.isError && event.result) {
+              const filePath = typeof event.input?.file_path === 'string' ? event.input.file_path : undefined;
+              if (filePath) {
+                const ext = filePath.split('.').pop()?.toLowerCase();
+                const hint = ext ? CONVERTIBLE_FILE_HINTS[ext] : undefined;
+                if (hint) {
+                  yield { ...event, result: `${event.result}\n\nTip: Use \`${hint} "${filePath}"\` to convert this file to readable text.` };
+                  continue;
+                }
+              }
             }
 
             if (event.type === 'complete') {

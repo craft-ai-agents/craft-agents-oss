@@ -67,6 +67,7 @@ export function MarkdownMermaidBlock({ code, className, showExpandButton = true 
           surface: 'var(--foreground-3)',
           border: 'var(--foreground-20)',
           transparent: true,
+          interactive: true,
         }),
         error: null,
       }
@@ -197,6 +198,7 @@ export function MarkdownMermaidBlock({ code, className, showExpandButton = true 
               height: needsScaling && scaledDims?.height ? `${scaledDims.height}px` : undefined,
               display: needsScaling ? 'block' : 'flex',
               justifyContent: needsScaling ? undefined : 'center',
+              margin: needsScaling && !scaledDims?.needsScroll ? '0 auto' : undefined,
             }}
           >
             {/* SVG container — CSS transform scales the SVG visually.

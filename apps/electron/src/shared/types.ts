@@ -625,6 +625,7 @@ export const IPC_CHANNELS = {
   // Close request events (main → renderer, for intercepting X button / Cmd+W)
   WINDOW_CLOSE_REQUESTED: 'window:closeRequested',
   WINDOW_CONFIRM_CLOSE: 'window:confirmClose',
+  WINDOW_CANCEL_CLOSE: 'window:cancelClose',
   // Traffic light visibility (macOS only - hide when fullscreen overlays are open)
   WINDOW_SET_TRAFFIC_LIGHTS: 'window:setTrafficLights',
 
@@ -937,6 +938,8 @@ export interface ElectronAPI {
   switchWorkspace(workspaceId: string): Promise<void>
   closeWindow(): Promise<void>
   confirmCloseWindow(): Promise<void>
+  /** Cancel a pending close request (renderer handled it by closing a modal/panel). */
+  cancelCloseWindow(): Promise<void>
   /** Listen for close requests (X button, Cmd+W). Returns cleanup function. */
   onCloseRequested(callback: () => void): () => void
   /** Show/hide macOS traffic light buttons (for fullscreen overlays) */

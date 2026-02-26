@@ -21,15 +21,22 @@ export type { Route }
 // Event name for internal navigation
 export const NAVIGATE_EVENT = 'craft-agent-navigate'
 
+export interface NavigateOptions {
+  /** Open the target in a new panel instead of navigating the current one */
+  newPanel?: boolean
+  /** Skip auto-selecting first item when navigating to a list view (used when closing panels) */
+  skipAutoSelect?: boolean
+}
+
 /**
  * Navigate to a route
  *
  * This dispatches a custom event that the NavigationContext listens for.
  * Can be called from anywhere in the app.
  */
-export function navigate(route: Route): void {
+export function navigate(route: Route, options?: NavigateOptions): void {
   const event = new CustomEvent(NAVIGATE_EVENT, {
-    detail: { route },
+    detail: { route, ...options },
     bubbles: true,
   })
   window.dispatchEvent(event)

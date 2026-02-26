@@ -15,9 +15,9 @@ import { useCallback, useRef } from 'react'
 import { useSetAtom, useAtomValue } from 'jotai'
 import { panelStackAtom, resizePanelsAtom } from '@/atoms/panel-stack'
 import { useResizeGradient } from '@/hooks/useResizeGradient'
+import { PANEL_MIN_WIDTH } from './panel-constants'
 
-/** Minimum width for any content panel */
-export const PANEL_MIN_WIDTH = 440
+export { PANEL_MIN_WIDTH }
 
 interface PanelResizeSashProps {
   /** Index of the panel to the left of this sash (in panelStack) */

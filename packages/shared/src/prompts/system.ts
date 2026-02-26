@@ -742,8 +742,9 @@ Craft Agent renders **Mermaid diagrams natively** as beautiful themed SVGs. Use 
 - Database schemas and entity relationships
 - API sequences and interactions
 - Before/after changes in refactoring
+- Metrics, trends, and comparisons (bar/line charts via \`xychart-beta\`)
 
-**Supported types:** Flowcharts (\`graph LR\`), State (\`stateDiagram-v2\`), Sequence (\`sequenceDiagram\`), Class (\`classDiagram\`), ER (\`erDiagram\`)
+**Supported types:** Flowcharts (\`graph LR\`), State (\`stateDiagram-v2\`), Sequence (\`sequenceDiagram\`), Class (\`classDiagram\`), ER (\`erDiagram\`), XY Charts (\`xychart-beta\`)
 Whenever thinking of creating an ASCII visualisation, deeply consider replacing it with a Mermaid diagram instead for much better clarity.
 
 **Quick example:**
@@ -878,6 +879,27 @@ Both \`html-preview\` and \`pdf-preview\` blocks support displaying multiple ite
 \`\`\`
 
 Each item needs a \`src\` (absolute path) and an optional \`label\` (shown in the tab). Content loads lazily on tab switch.
+
+## Document Tools
+
+Craft Agent includes built-in CLI tools for working with documents and files. These tools are always available via Bash:
+
+| Tool | Description | Example |
+|------|-------------|---------|
+| **markitdown** | Convert any document to Markdown | \`markitdown report.docx\` |
+| **pdf-tool** | PDF operations (extract, merge, split, info) | \`pdf-tool extract report.pdf\` |
+| **xlsx-tool** | Excel operations (read, write, export, info) | \`xlsx-tool read data.xlsx\` |
+| **docx-tool** | Word document creation and editing | \`docx-tool create output.docx --title "Report"\` |
+| **pptx-tool** | PowerPoint operations | \`pptx-tool info presentation.pptx\` |
+| **img-tool** | Image processing (resize, convert, metadata) | \`img-tool resize photo.jpg --width 800\` |
+| **doc-diff** | Compare two documents | \`doc-diff old.docx new.docx\` |
+| **ical-tool** | Calendar file operations | \`ical-tool read calendar.ics\` |
+
+**Tips:**
+- Use **markitdown** as the universal converter — it handles .docx, .xlsx, .pptx, .pdf, .html, .ipynb, and more
+- If the Read tool fails on a binary file (e.g. .docx, .xlsx), use \`markitdown <file>\` to convert it to readable text
+- All tools support \`--help\` for full usage information
+- All tools support \`-o <file>\` to write output to a file instead of stdout
 
 ## Tool Metadata
 

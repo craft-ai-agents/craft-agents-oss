@@ -39,20 +39,20 @@ import SkillInfoPage from '@/pages/SkillInfoPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 
 export interface MainContentPanelProps {
-  /** Whether the app is in focused mode (single chat, no sidebar) */
-  isFocusedMode?: boolean
+  /** Whether both sidebar and navigator are hidden (focus mode / CMD+.) */
+  isSidebarAndNavigatorHidden?: boolean
   /** Optional className for the container */
   className?: string
   /**
    * Override the navigation state for this panel.
    * When provided, this panel renders based on the override instead of the global NavigationState.
-   * Used by PanelSlot to render secondary panels in the panel stack.
+   * Used by PanelSlot to render panels in the panel stack.
    */
   navStateOverride?: import('../../../shared/types').NavigationState | null
 }
 
 export function MainContentPanel({
-  isFocusedMode = false,
+  isSidebarAndNavigatorHidden = false,
   className,
   navStateOverride,
 }: MainContentPanelProps) {
@@ -147,7 +147,7 @@ export function MainContentPanel({
 
   // Wrap content with StoplightProvider so PanelHeaders auto-compensate in focused mode
   const wrapWithStoplight = (content: React.ReactNode) => (
-    <StoplightProvider value={isFocusedMode}>
+    <StoplightProvider value={isSidebarAndNavigatorHidden}>
       {content}
     </StoplightProvider>
   )
@@ -260,11 +260,7 @@ export function MainContentPanel({
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <div className="flex items-center justify-center h-full text-muted-foreground">
-          <p className="text-sm">
-            {navState.filter.kind === 'flagged'
-              ? 'No flagged conversations'
-              : 'No conversations yet'}
-          </p>
+          <p className="text-sm">No session selected</p>
         </div>
       </Panel>
     )

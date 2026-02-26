@@ -34,7 +34,6 @@ import { TopBar } from "./TopBar"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
 import { McpIcon } from "../icons/McpIcon"
 import { cn } from "@/lib/utils"
-import { isMac } from "@/lib/platform"
 import { Button } from "@/components/ui/button"
 import { HeaderIconButton } from "@/components/ui/HeaderIconButton"
 import { Separator } from "@/components/ui/separator"
@@ -85,8 +84,7 @@ import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSourc
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
-import { panelStackAtom, panelCountAtom, focusedPanelIdAtom, focusedPanelRouteAtom, focusedPanelIndexAtom, focusedSessionIdAtom, focusNextPanelAtom, focusPrevPanelAtom, updateFocusedPanelRouteAtom, parseSessionIdFromRoute } from "@/atoms/panel-stack"
-import { parseRouteToNavigationState, buildRouteFromNavigationState } from "../../../shared/route-parser"
+import { panelStackAtom, panelCountAtom, focusedPanelIdAtom, focusedSessionIdAtom, focusNextPanelAtom, focusPrevPanelAtom, parseSessionIdFromRoute } from "@/atoms/panel-stack"
 import { type SessionStatusId, type SessionStatus, statusConfigsToSessionStatuses } from "@/config/session-status-config"
 import { useStatuses } from "@/hooks/useStatuses"
 import { useLabels } from "@/hooks/useLabels"
@@ -110,7 +108,6 @@ import {
   type SessionFilter,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
-import type { ViewRoute } from "../../../shared/routes"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
 import { PanelHeader } from "./PanelHeader"
@@ -118,6 +115,7 @@ import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui
 import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import { RightSidebar } from "./RightSidebar"
+import { PANEL_GAP, PANEL_EDGE_INSET, RADIUS_EDGE, RADIUS_INNER } from "./panel-constants"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
@@ -428,8 +426,6 @@ function FilterLabelItems({
   )
 }
 
-const PANEL_WINDOW_EDGE_SPACING = 6 // Padding between panels and window edge
-const PANEL_PANEL_SPACING = 5 // Gap between adjacent panels
 
 /**
  * AppShell - Main 3-panel layout container
@@ -470,7 +466,6 @@ function AppShellContent({
     sessionOptions,
     onSelectWorkspace,
     onRefreshWorkspaces,
-    onCreateSession,
     onDeleteSession,
     onFlagSession,
     onUnflagSession,
@@ -511,13 +506,13 @@ function AppShellContent({
   })
   const [skipRightSidebarAnimation, setSkipRightSidebarAnimation] = React.useState(false)
 
-  // Focus mode state - hides both sidebars for distraction-free chat
+  // Hides both sidebar and navigator (CMD+. toggle)
   // Can be enabled via prop (URL param for new windows) or toggled via Cmd+.
-  const [isFocusModeActive, setIsFocusModeActive] = React.useState(() => {
+  const [isSidebarAndNavigatorHidden, setIsSidebarAndNavigatorHidden] = React.useState(() => {
     return storage.get(storage.KEYS.focusModeEnabled, false)
   })
-  // Effective focus mode combines prop-based (immutable) and state-based (toggleable)
-  const effectiveFocusMode = isFocusedMode || isFocusModeActive
+  // Combines prop-based (immutable) and state-based (toggleable)
+  const effectiveSidebarAndNavigatorHidden = isFocusedMode || isSidebarAndNavigatorHidden
 
   // What's New overlay
   const [showWhatsNew, setShowWhatsNew] = React.useState(false)
@@ -559,28 +554,15 @@ function AppShellContent({
   const { handleEscapePress } = useEscapeInterrupt()
 
   // UNIFIED NAVIGATION STATE - single source of truth from NavigationContext
-  // All sidebar/navigator/main panel state is derived from this
-  const primaryNavState = useNavigationState()
+  // Derived from focused panel's route — all panels are peers
+  const navState = useNavigationState()
 
-  // In multi-panel, sidebar/navigator reflect the focused panel (not just primary)
   const store = useStore()
   const panelCount = useAtomValue(panelCountAtom)
-  const focusedPanelRoute = useAtomValue(focusedPanelRouteAtom)
-  const focusedPanelIndex = useAtomValue(focusedPanelIndexAtom)
   const focusedSessionId = useAtomValue(focusedSessionIdAtom)
-  const updateFocusedPanelRoute = useSetAtom(updateFocusedPanelRouteAtom)
-
-  const navState = useMemo(() => {
-    if (panelCount > 1 && focusedPanelRoute) {
-      return parseRouteToNavigationState(focusedPanelRoute) ?? primaryNavState
-    }
-    return primaryNavState
-  }, [panelCount, focusedPanelRoute, primaryNavState])
 
   // Navigate the focused panel to a session.
-  // If the session is already open in any panel, focus that panel instead.
-  // Primary panel → NavigationContext (updates URL/history).
-  // Secondary panel → update its route directly via atom.
+  // If the session is already open in another panel, focus that panel instead.
   const setFocusedPanel = useSetAtom(focusedPanelIdAtom)
   const navigateToSessionInPanel = useCallback((sessionId: string) => {
     // Check if the session is already open in any panel — focus it instead of navigating
@@ -592,17 +574,9 @@ function AppShellContent({
       }
     }
 
-    // Not open in any panel — navigate the focused panel
-    if (focusedPanelIndex === 0) {
-      navigateToSession(sessionId)
-      return
-    }
-    if (isSessionsNavigation(navState)) {
-      const newState = { ...navState, details: { type: 'session' as const, sessionId } }
-      const route = buildRouteFromNavigationState(newState)
-      updateFocusedPanelRoute(route as ViewRoute)
-    }
-  }, [store, setFocusedPanel, focusedPanelIndex, navigateToSession, navState, updateFocusedPanelRoute])
+    // Not open in any panel — navigate() updates the focused panel
+    navigateToSession(sessionId)
+  }, [store, setFocusedPanel, navigateToSession])
 
   // Derive chat filter from navigation state (only when in chats navigator)
   const sessionFilter = isSessionsNavigation(navState) ? navState.filter : null
@@ -1073,7 +1047,7 @@ function AppShellContent({
   useAction('view.toggleSidebar', () => setIsSidebarVisible(v => !v))
 
   // Focus mode toggle (CMD+.) - hides both sidebars
-  useAction('view.toggleFocusMode', () => setIsFocusModeActive(v => !v))
+  useAction('view.toggleFocusMode', () => setIsSidebarAndNavigatorHidden(v => !v))
 
   // Panel focus navigation (CMD+SHIFT+[ / ])
   const focusNextPanel = useSetAtom(focusNextPanelAtom)
@@ -1082,7 +1056,8 @@ function AppShellContent({
   useAction('panel.focusPrev', focusPrevPanel, { enabled: () => panelCount > 1 })
 
   // New chat
-  useAction('app.newChat', () => handleNewChat(true))
+  useAction('app.newChat', () => handleNewChat())
+  useAction('app.newChatInPanel', () => handleNewChat(true))
 
   // Settings
   useAction('app.settings', onOpenSettings)
@@ -1521,13 +1496,13 @@ function AppShellContent({
 
   // Persist focus mode state to localStorage
   React.useEffect(() => {
-    storage.set(storage.KEYS.focusModeEnabled, isFocusModeActive)
-  }, [isFocusModeActive])
+    storage.set(storage.KEYS.focusModeEnabled, isSidebarAndNavigatorHidden)
+  }, [isSidebarAndNavigatorHidden])
 
   // Listen for focus mode toggle from menu (View → Focus Mode)
   React.useEffect(() => {
     const cleanup = window.electronAPI.onMenuToggleFocusMode?.(() => {
-      setIsFocusModeActive(v => !v)
+      setIsSidebarAndNavigatorHidden(v => !v)
     })
     return cleanup
   }, [])
@@ -1747,20 +1722,19 @@ function AppShellContent({
   }, [captureContextMenuPosition])
 
   // Create a new chat and select it
-  const handleNewChat = useCallback(async (_useCurrentAgent: boolean = true) => {
+  const handleNewChat = useCallback((newPanel: boolean = false) => {
     if (!activeWorkspace) return
 
     // Exit search mode and switch to All Sessions
     setSearchActive(false)
     setSearchQuery('')
 
-    const newSession = await onCreateSession(activeWorkspace.id)
-    // Navigate to the new session via central routing
-    navigate(routes.view.allSessions(newSession.id))
+    // Delegate to NavigationContext which handles session creation
+    navigate(routes.action.newSession(), newPanel ? { newPanel: true } : undefined)
 
     // Focus the chat input after navigation completes
     setTimeout(() => focusZone('chat', { intent: 'programmatic' }), 50)
-  }, [activeWorkspace, onCreateSession, focusZone])
+  }, [activeWorkspace, focusZone])
 
   // Delete Source - simplified since agents system is removed
   const handleDeleteSource = useCallback(async (sourceSlug: string) => {
@@ -1792,7 +1766,7 @@ function AppShellContent({
     // Skip initial render
     if (menuTriggerRef.current === menuNewChatTrigger) return
     menuTriggerRef.current = menuNewChatTrigger
-    handleNewChat(true)
+    handleNewChat()
   }, [menuNewChatTrigger, handleNewChat])
 
   // Unified sidebar items: nav buttons only (agents system removed)
@@ -2044,7 +2018,7 @@ function AppShellContent({
         {/* === TOP BAR === */}
         <TopBar
           workspaceName={activeWorkspace?.name}
-          onNewChat={() => handleNewChat(true)}
+          onNewChat={() => handleNewChat()}
           onNewWindow={() => window.electronAPI.menuNewWindow()}
           onOpenSettings={onOpenSettings}
           onOpenSettingsSubpage={handleSettingsClick}
@@ -2055,13 +2029,13 @@ function AppShellContent({
           canGoBack={canGoBack}
           canGoForward={canGoForward}
           onToggleSidebar={() => setIsSidebarVisible(prev => !prev)}
-          onToggleFocusMode={() => setIsFocusModeActive(prev => !prev)}
+          onToggleFocusMode={() => setIsSidebarAndNavigatorHidden(prev => !prev)}
         />
 
       {/* === OUTER LAYOUT: Unified Panel Stack | Right Sidebar === */}
       <div
         className="h-full flex items-stretch relative"
-        style={{ padding: PANEL_WINDOW_EDGE_SPACING, paddingLeft: 0, paddingTop: 48, gap: PANEL_PANEL_SPACING / 2 }}
+        style={{ padding: PANEL_EDGE_INSET, paddingLeft: 0, paddingTop: 48, gap: PANEL_GAP }}
       >
         <PanelStackContainer
           sidebarSlot={
@@ -2077,7 +2051,7 @@ function AppShellContent({
               {/* Sidebar Top Section */}
               <div className="flex-1 flex flex-col min-h-0">
                 {/* New Session Button - Gmail-style, with context menu for "Open in New Window" */}
-                <div className="px-2 pt-1 pb-2 shrink-0">
+                <div className="px-2 pb-2 shrink-0">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div>
@@ -2085,7 +2059,7 @@ function AppShellContent({
                           <ContextMenuTrigger asChild>
                             <Button
                               variant="ghost"
-                              onClick={() => handleNewChat(true)}
+                              onClick={(e) => handleNewChat(e.metaKey || e.ctrlKey)}
                               className="w-full justify-start gap-2 py-[7px] px-2 text-[13px] font-normal rounded-[6px] shadow-minimal bg-background"
                               data-tutorial="new-chat-button"
                             >
@@ -2351,15 +2325,14 @@ function AppShellContent({
             </div>
           </div>
           }
-          sidebarWidth={effectiveFocusMode ? 0 : (isSidebarVisible ? sidebarWidth : 0)}
+          sidebarWidth={effectiveSidebarAndNavigatorHidden ? 0 : (isSidebarVisible ? sidebarWidth : 0)}
           navigatorSlot={
             <div
               style={{ width: sessionListWidth }}
               className="h-full flex flex-col min-w-0 relative z-panel"
             >
             <PanelHeader
-              title={isSidebarVisible ? listTitle : undefined}
-              compensateForStoplight={!isSidebarVisible}
+              title={listTitle}
               actions={
                 <>
                   {/* Filter dropdown - available in ALL chat views.
@@ -3000,21 +2973,21 @@ function AppShellContent({
                   workspaceId={activeWorkspaceId ?? undefined}
                   statusFilter={listFilter}
                   labelFilterMap={labelFilter}
-                  focusedSessionId={panelCount > 1 ? focusedSessionId : undefined}
+                  focusedSessionId={panelCount === 0 ? null : panelCount > 1 ? focusedSessionId : undefined}
                   onNavigateToSession={panelCount > 1 ? navigateToSessionInPanel : undefined}
                 />
               </>
             )}
             </div>
           }
-          navigatorWidth={effectiveFocusMode ? 0 : sessionListWidth}
-          isFocusedMode={effectiveFocusMode}
+          navigatorWidth={effectiveSidebarAndNavigatorHidden ? 0 : sessionListWidth}
+          isSidebarAndNavigatorHidden={effectiveSidebarAndNavigatorHidden}
           isRightSidebarVisible={isRightSidebarVisible}
           isResizing={!!isResizing}
         />
 
         {/* Sidebar Resize Handle (absolute, hidden in focused mode) */}
-        {!effectiveFocusMode && (
+        {!effectiveSidebarAndNavigatorHidden && (
         <div
           ref={resizeHandleRef}
           onMouseDown={(e) => { e.preventDefault(); setIsResizing('sidebar') }}
@@ -3039,7 +3012,7 @@ function AppShellContent({
         )}
 
         {/* Session List Resize Handle (absolute, hidden in focused mode) */}
-        {!effectiveFocusMode && (
+        {!effectiveSidebarAndNavigatorHidden && (
         <div
           ref={sessionListHandleRef}
           onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}
@@ -3052,7 +3025,7 @@ function AppShellContent({
           onMouseLeave={() => { if (isResizing !== 'session-list') setSessionListHandleY(null) }}
           className="absolute top-0 w-3 h-full cursor-col-resize z-panel flex justify-center"
           style={{
-            left: (isSidebarVisible ? sidebarWidth + PANEL_PANEL_SPACING / 2 : 0) + sessionListWidth + PANEL_PANEL_SPACING / 2 - 1,
+            left: (isSidebarVisible ? sidebarWidth + PANEL_GAP : 0) + sessionListWidth + PANEL_GAP - 1,
             transition: isResizing === 'session-list' ? undefined : 'left 0.15s ease-out',
           }}
         >
@@ -3095,7 +3068,7 @@ function AppShellContent({
                 initial={false}
                 animate={{
                   width: isRightSidebarVisible ? rightSidebarWidth : 0,
-                  marginLeft: isRightSidebarVisible ? 0 : -PANEL_PANEL_SPACING / 2,
+                  marginLeft: isRightSidebarVisible ? 0 : -PANEL_GAP,
                 }}
                 transition={isResizing === 'right-sidebar' || skipRightSidebarAnimation ? { duration: 0 } : springTransition}
                 className="h-full shrink-0 overflow-visible"
@@ -3103,12 +3076,18 @@ function AppShellContent({
                 <motion.div
                   initial={false}
                   animate={{
-                    x: isRightSidebarVisible ? 0 : rightSidebarWidth + PANEL_PANEL_SPACING / 2,
+                    x: isRightSidebarVisible ? 0 : rightSidebarWidth + PANEL_GAP,
                     opacity: isRightSidebarVisible ? 1 : 0,
                   }}
                   transition={isResizing === 'right-sidebar' || skipRightSidebarAnimation ? { duration: 0 } : springTransition}
-                  className="h-full bg-foreground-2 shadow-middle rounded-l-[10px] rounded-r-[14px]"
-                  style={{ width: rightSidebarWidth }}
+                  className="h-full bg-foreground-2 shadow-middle"
+                  style={{
+                    width: rightSidebarWidth,
+                    borderTopLeftRadius: RADIUS_INNER,
+                    borderBottomLeftRadius: RADIUS_INNER,
+                    borderTopRightRadius: RADIUS_INNER,
+                    borderBottomRightRadius: RADIUS_EDGE,
+                  }}
                 >
                   <RightSidebar
                     panel={{ type: 'sessionMetadata' }}

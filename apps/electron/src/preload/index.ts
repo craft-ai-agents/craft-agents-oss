@@ -42,6 +42,7 @@ const api: ElectronAPI = {
   switchWorkspace: (workspaceId: string) => ipcRenderer.invoke(IPC_CHANNELS.SWITCH_WORKSPACE, workspaceId),
   closeWindow: () => ipcRenderer.invoke(IPC_CHANNELS.CLOSE_WINDOW),
   confirmCloseWindow: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_CONFIRM_CLOSE),
+  cancelCloseWindow: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_CANCEL_CLOSE),
   onCloseRequested: (callback: () => void) => {
     const handler = () => callback()
     ipcRenderer.on(IPC_CHANNELS.WINDOW_CLOSE_REQUESTED, handler)

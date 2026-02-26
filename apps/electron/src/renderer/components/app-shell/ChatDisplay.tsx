@@ -50,6 +50,7 @@ import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
 import { useTurnCardExpansion } from "@/hooks/useTurnCardExpansion"
 import { useNavigation } from "@/contexts/NavigationContext"
+import { useAppShellContext } from "@/context/AppShellContext"
 import { useSetAtom } from "jotai"
 import { addSessionAtom, type SessionMeta } from "@/atoms/sessions"
 import { CHAT_LAYOUT } from "@/config/layout"
@@ -431,6 +432,10 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Connection unavailable
   connectionUnavailable = false,
 }, ref) {
+  // Panel focus state (for multi-panel auto-scroll behavior)
+  const appShellContext = useAppShellContext()
+  const isFocusedPanel = appShellContext?.isFocusedPanel ?? true
+
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
   const isInputDisabled = disabled
@@ -442,6 +447,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const [visibleTurnCount, setVisibleTurnCount] = React.useState(TURNS_PER_PAGE)
   // Sticky-bottom: When true, auto-scroll on content changes. Toggled by user scroll behavior.
   const isStickToBottomRef = React.useRef(true)
+  // Mirror isFocusedPanel into a ref so the ResizeObserver closure reads the latest value
+  const isFocusedPanelRef = React.useRef(isFocusedPanel)
+  isFocusedPanelRef.current = isFocusedPanel
   // Skip smooth scroll briefly after session switch (instant scroll already happened)
   const skipSmoothScrollUntilRef = React.useRef(0)
   const internalTextareaRef = React.useRef<RichTextInputHandle>(null)
@@ -1129,6 +1137,13 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
     const resizeObserver = new ResizeObserver(() => {
+      // Unfocused panels: always scroll to bottom instantly (user isn't reading them)
+      if (!isFocusedPanelRef.current) {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
+        return
+      }
+
+      // Focused panel: respect sticky-bottom preference
       if (!isStickToBottomRef.current) return
 
       // Clear pending scroll and wait for layout to settle

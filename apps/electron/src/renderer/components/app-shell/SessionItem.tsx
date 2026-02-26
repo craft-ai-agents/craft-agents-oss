@@ -1,5 +1,4 @@
 import { useActionLabel } from "@/actions"
-import { useSetAtom } from "jotai"
 import { cn } from "@/lib/utils"
 import { rendererPerf } from "@/lib/perf"
 import { EntityRow } from "@/components/ui/entity-row"
@@ -10,8 +9,7 @@ import { SessionBadges } from "./SessionBadges"
 import { SessionTrailing } from "./SessionTrailing"
 import { getSessionTitle, highlightMatch } from "@/utils/session"
 import { useSessionListContext } from "@/context/SessionListContext"
-import { pushPanelAtom } from "@/atoms/panel-stack"
-import { routes } from "../../../shared/routes"
+import { navigate, routes } from "@/lib/navigate"
 import type { SessionMeta } from "@/atoms/sessions"
 
 export interface SessionItemProps {
@@ -49,7 +47,6 @@ export function SessionItem({
   onRangeSelect,
 }: SessionItemProps) {
   const ctx = useSessionListContext()
-  const pushPanel = useSetAtom(pushPanelAtom)
   const { hotkey: nextHotkey } = useActionLabel('chat.nextSearchMatch')
   const { hotkey: prevHotkey } = useActionLabel('chat.prevSearchMatch')
   const title = getSessionTitle(item)
@@ -69,7 +66,7 @@ export function SessionItem({
         onToggleSelect()
       } else {
         // No multi-select: open session in a new panel
-        pushPanel({ route: routes.view.allSessions(item.id) })
+        navigate(routes.view.allSessions(item.id), { newPanel: true })
       }
       return
     }

@@ -229,6 +229,12 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     windowManager.forceCloseWindow(event.sender.id)
   })
 
+  // Cancel close - renderer handled the request (closed a modal/panel).
+  // Clears the fallback timeout so the window stays open.
+  ipcMain.handle(IPC_CHANNELS.WINDOW_CANCEL_CLOSE, (event) => {
+    windowManager.cancelPendingClose(event.sender.id)
+  })
+
   // Show/hide macOS traffic light buttons (for fullscreen overlays)
   ipcMain.handle(IPC_CHANNELS.WINDOW_SET_TRAFFIC_LIGHTS, (event, visible: boolean) => {
     windowManager.setTrafficLightsVisible(event.sender.id, visible)

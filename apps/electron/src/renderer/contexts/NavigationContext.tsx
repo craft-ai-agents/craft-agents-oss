@@ -4,11 +4,14 @@
  * Provides a global `navigate()` function that decouples components from
  * direct session/action imports. All navigation goes through typed routes.
  *
- * UNIFIED NAVIGATION STATE:
- * This context now maintains a single NavigationState that determines all 3 panels:
- * - LeftSidebar: highlighted item (derived from navigator + filter/subpage)
- * - NavigatorPanel: which list to show (derived from navigator)
- * - MainContentPanel: what details to display (derived from details or subpage)
+ * PEER PANEL MODEL:
+ * All panels are equal. The **focused** panel drives the NavigationState
+ * (which determines sidebar highlight, navigator content, etc.).
+ * `navigate(route)` updates the focused panel's route.
+ *
+ * SNAPSHOT HISTORY:
+ * Every meaningful state change (navigate, panel add/remove, focus change,
+ * sidebar toggle) pushes a NavigationSnapshot. Back/forward restores snapshots.
  *
  * Usage:
  *   import { useNavigation, useNavigationState } from '@/contexts/NavigationContext'
@@ -39,10 +42,11 @@ import {
   parseRouteToNavigationState,
   buildRouteFromNavigationState,
   buildUrlWithState,
+  buildRightSidebarParam,
   type ParsedRoute,
 } from '../../shared/route-parser'
 import { routes, type Route, type ViewRoute } from '../../shared/routes'
-import { NAVIGATE_EVENT } from '../lib/navigate'
+import { NAVIGATE_EVENT, type NavigateOptions } from '../lib/navigate'
 import * as storage from '@/lib/local-storage'
 import type {
   DeepLinkNavigation,
@@ -64,7 +68,16 @@ import { isValidSettingsSubpage, type SettingsSubpage } from '../../shared/setti
 import { sessionMetaMapAtom, updateSessionMetaAtom, type SessionMeta } from '@/atoms/sessions'
 import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
-import { panelStackAtom, updatePrimaryPanelAtom, restorePanelStackAtom, closeAllSecondaryPanelsAtom } from '@/atoms/panel-stack'
+import {
+  panelStackAtom,
+  pushPanelAtom,
+  restorePanelStackAtom,
+  closeAllOtherPanelsAtom,
+  focusedPanelIdAtom,
+  focusedPanelRouteAtom,
+  focusedPanelIndexAtom,
+  updateFocusedPanelRouteAtom,
+} from '@/atoms/panel-stack'
 
 // Re-export routes for convenience
 export { routes }
@@ -74,12 +87,40 @@ export type { Route }
 export type { NavigationState, SessionFilter }
 export { isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation }
 
+// =============================================================================
+// Snapshot History Types
+// =============================================================================
+
+interface NavigationSnapshot {
+  /** All panels and their routes + proportions */
+  panels: { route: ViewRoute; proportion: number }[]
+  /** Which panel index is focused */
+  focusedIndex: number
+  /** Right sidebar state */
+  rightSidebar?: RightSidebarPanel
+}
+
+/** Compare snapshots for deduplication (ignores proportions — resize shouldn't create history) */
+function snapshotsEqual(a: NavigationSnapshot, b: NavigationSnapshot): boolean {
+  if (a.focusedIndex !== b.focusedIndex) return false
+  if (a.panels.length !== b.panels.length) return false
+  for (let i = 0; i < a.panels.length; i++) {
+    if (a.panels[i].route !== b.panels[i].route) return false
+  }
+  if (a.rightSidebar?.type !== b.rightSidebar?.type) return false
+  return true
+}
+
+// =============================================================================
+// Context
+// =============================================================================
+
 interface NavigationContextValue {
   /** Navigate to a route */
-  navigate: (route: Route) => void | Promise<void>
+  navigate: (route: Route, options?: NavigateOptions) => void | Promise<void>
   /** Check if navigation is ready */
   isReady: boolean
-  /** Unified navigation state - single source of truth for all 3 panels */
+  /** Unified navigation state — derived from focused panel + right sidebar */
   navigationState: NavigationState
   /** Whether we can go back in history */
   canGoBack: boolean
@@ -133,6 +174,8 @@ export function NavigationProvider({
   const sessionMetas = useMemo(() => Array.from(sessionMetaMap.values()), [sessionMetaMap])
   const updateSessionMeta = useSetAtom(updateSessionMetaAtom)
 
+  const pushPanel = useSetAtom(pushPanelAtom)
+
   // Store reference for reading fresh atom values in callbacks (avoids stale closures)
   const store = useStore()
 
@@ -142,30 +185,227 @@ export function NavigationProvider({
   // Read skills from atom (populated by AppShell)
   const skills = useAtomValue(skillsAtom)
 
-  // UNIFIED NAVIGATION STATE - single source of truth for all 3 panels
-  const [navigationState, setNavigationState] = useState<NavigationState>(DEFAULT_NAVIGATION_STATE)
+  // =========================================================================
+  // DERIVED NAVIGATION STATE (from focused panel + right sidebar)
+  // =========================================================================
 
-  // Track history state for back/forward buttons
+  const focusedRoute = useAtomValue(focusedPanelRouteAtom)
+
+  // Right sidebar is independent of panels (not per-panel state)
+  const [rightSidebar, setRightSidebar] = useState<RightSidebarPanel | undefined>()
+  const rightSidebarRef = useRef<RightSidebarPanel | undefined>(rightSidebar)
+  useEffect(() => { rightSidebarRef.current = rightSidebar }, [rightSidebar])
+
+  // NavigationState derived from the focused panel's route
+  const navigationState: NavigationState = useMemo(() => {
+    const base = focusedRoute
+      ? parseRouteToNavigationState(focusedRoute) ?? DEFAULT_NAVIGATION_STATE
+      : DEFAULT_NAVIGATION_STATE
+    return rightSidebar ? { ...base, rightSidebar } : base
+  }, [focusedRoute, rightSidebar])
+
+  // =========================================================================
+  // SNAPSHOT HISTORY
+  // =========================================================================
+
   const [canGoBack, setCanGoBack] = useState(false)
   const [canGoForward, setCanGoForward] = useState(false)
 
-  // Custom history stack (browser history doesn't work reliably in Electron)
-  const historyStackRef = useRef<Route[]>([])
+  const historyStackRef = useRef<NavigationSnapshot[]>([])
   const historyIndexRef = useRef(-1)
 
-  // Flag to prevent pushing to history when navigating via back/forward
-  const isNavigatingHistoryRef = useRef(false)
-
-  // Ref to hold the latest navigate function (avoids stale closure in goBack/goForward)
-  const navigateRef = useRef<((route: Route) => void | Promise<void>) | null>(null)
+  // Flag to suppress snapshot pushes during back/forward restore
+  const isRestoringHistoryRef = useRef(false)
 
   // Queue navigation if not ready yet
   const pendingNavigationRef = useRef<ParsedRoute | null>(null)
 
-  // Helper: Check if a session is "done" (completed or cancelled)
-  const isSessionDone = useCallback((session: SessionMeta): boolean => {
-    return session.sessionStatus === 'done' || session.sessionStatus === 'cancelled'
+  // Suppress auto-select for one cycle (used by skipAutoSelect to prevent the effect from re-selecting)
+  const suppressAutoSelectRef = useRef(false)
+
+  // Track whether initial route restoration has been attempted
+  const initialRouteRestoredRef = useRef(false)
+
+  // Update canGoBack/canGoForward from current history state
+  const updateCanGoBackForward = useCallback(() => {
+    setCanGoBack(historyIndexRef.current > 0)
+    setCanGoForward(historyIndexRef.current < historyStackRef.current.length - 1)
   }, [])
+
+  /**
+   * Push a snapshot of the current state onto the history stack.
+   * Reads atom values synchronously from the Jotai store (always fresh).
+   * Reads right sidebar from ref (always fresh).
+   * Deduplicates: won't push if identical to current snapshot.
+   */
+  const pushSnapshot = useCallback(() => {
+    if (isRestoringHistoryRef.current) return
+
+    const panels = store.get(panelStackAtom)
+    const focusedIdx = store.get(focusedPanelIndexAtom)
+
+    // Don't push if panel stack is empty (initial state before restore)
+    if (panels.length === 0) return
+
+    const snapshot: NavigationSnapshot = {
+      panels: panels.map(p => ({ route: p.route, proportion: p.proportion })),
+      focusedIndex: focusedIdx,
+      rightSidebar: rightSidebarRef.current,
+    }
+
+    // Deduplicate
+    const current = historyStackRef.current[historyIndexRef.current]
+    if (current && snapshotsEqual(current, snapshot)) return
+
+    // Truncate forward history and push
+    const newIndex = historyIndexRef.current + 1
+    historyStackRef.current = historyStackRef.current.slice(0, newIndex)
+    historyStackRef.current.push(snapshot)
+    historyIndexRef.current = newIndex
+
+    updateCanGoBackForward()
+  }, [store, updateCanGoBackForward])
+
+  // Keep pushSnapshot ref fresh for use in atom subscriptions
+  const pushSnapshotRef = useRef(pushSnapshot)
+  useEffect(() => { pushSnapshotRef.current = pushSnapshot }, [pushSnapshot])
+
+  /**
+   * Restore a snapshot (for back/forward navigation).
+   * Atomically restores panel stack, focus, and sidebar.
+   */
+  const restoreSnapshot = useCallback((snapshot: NavigationSnapshot) => {
+    isRestoringHistoryRef.current = true
+
+    // 1. Restore full panel stack (routes + proportions)
+    store.set(restorePanelStackAtom, snapshot.panels)
+
+    // 2. Restore focus (restorePanelStackAtom defaults to index 0, override if needed)
+    const stack = store.get(panelStackAtom)
+    const idx = Math.min(snapshot.focusedIndex, stack.length - 1)
+    store.set(focusedPanelIdAtom, stack[idx]?.id ?? null)
+
+    // 3. Restore right sidebar
+    setRightSidebar(snapshot.rightSidebar)
+
+    // 4. Sync URL immediately
+    syncUrlRef.current?.()
+
+    // Clear restoring flag after React processes the batched state updates.
+    // Atom subscriptions already fired synchronously (suppressed by the flag).
+    // The RAF ensures React effects from setRightSidebar are also suppressed.
+    requestAnimationFrame(() => {
+      isRestoringHistoryRef.current = false
+    })
+  }, [store])
+
+  // =========================================================================
+  // Subscribe to atom changes for snapshot pushes
+  // =========================================================================
+
+  // Panel stack changes (push, close, route change, resize)
+  // Resize produces same snapshot (proportions excluded from equality) → deduped
+  useEffect(() => {
+    const unsub = store.sub(panelStackAtom, () => {
+      pushSnapshotRef.current?.()
+    })
+    return unsub
+  }, [store])
+
+  // Focus changes (clicking a panel, keyboard focus cycling)
+  useEffect(() => {
+    const unsub = store.sub(focusedPanelIdAtom, () => {
+      pushSnapshotRef.current?.()
+    })
+    return unsub
+  }, [store])
+
+  // Right sidebar changes (via effect since it's React state, not atom)
+  const prevSidebarTypeRef = useRef(rightSidebar?.type)
+  useEffect(() => {
+    if (rightSidebar?.type === prevSidebarTypeRef.current) return
+    prevSidebarTypeRef.current = rightSidebar?.type
+    if (isRestoringHistoryRef.current) return
+    if (!initialRouteRestoredRef.current) return
+    pushSnapshot()
+  }, [rightSidebar, pushSnapshot])
+
+  // =========================================================================
+  // URL SYNC
+  // =========================================================================
+
+  /**
+   * Sync the current state to the browser URL (for reload restoration).
+   * ?route= is the focused panel's route (backward compat / deep links).
+   * ?panels= encodes ALL panels (route:proportion, comma-separated).
+   * ?fi= is the focused panel index (omitted if 0).
+   * ?sidebar= is the right sidebar state.
+   */
+  const syncUrl = useCallback(() => {
+    const panels = store.get(panelStackAtom)
+    const focusedIdx = store.get(focusedPanelIndexAtom)
+    if (panels.length === 0) return
+
+    const focusedPanel = panels[focusedIdx] ?? panels[0]
+    const url = new URL(window.location.href)
+
+    // ?route= is the focused panel's route
+    url.searchParams.set('route', focusedPanel.route)
+
+    // ?panels= encodes ALL panels in stack order
+    if (panels.length > 1) {
+      const encoded = panels.map(p => `${p.route}:${p.proportion.toFixed(4)}`).join(',')
+      url.searchParams.set('panels', encoded)
+    } else {
+      url.searchParams.delete('panels')
+    }
+
+    // ?fi= is focused panel index — always written for multi-panel to disambiguate from old format
+    if (panels.length > 1) {
+      url.searchParams.set('fi', String(focusedIdx))
+    } else {
+      url.searchParams.delete('fi')
+    }
+
+    // ?sidebar=
+    const sidebarParam = buildRightSidebarParam(rightSidebarRef.current)
+    if (sidebarParam) {
+      url.searchParams.set('sidebar', sidebarParam)
+    } else {
+      url.searchParams.delete('sidebar')
+    }
+
+    history.replaceState({ route: focusedPanel.route }, '', url.toString())
+  }, [store])
+
+  const syncUrlRef = useRef(syncUrl)
+  useEffect(() => { syncUrlRef.current = syncUrl }, [syncUrl])
+
+  // Sync URL when panel stack, focus, or sidebar changes
+  const panelStack = useAtomValue(panelStackAtom)
+  const focusedPanelId = useAtomValue(focusedPanelIdAtom)
+  useEffect(() => {
+    if (!initialRouteRestoredRef.current) return
+    syncUrl()
+  }, [panelStack, focusedPanelId, rightSidebar, syncUrl])
+
+  // =========================================================================
+  // SESSION SELECTION SYNC
+  // =========================================================================
+
+  // Keep the global session selection in sync with the focused panel
+  useEffect(() => {
+    if (isSessionsNavigation(navigationState) && navigationState.details) {
+      setSession({ selected: navigationState.details.sessionId })
+      if (workspaceId) {
+        storage.set(storage.KEYS.lastSelectedSessionId, navigationState.details.sessionId, workspaceId)
+      }
+    }
+  }, [navigationState, setSession, workspaceId])
+
+  // =========================================================================
+  // HELPERS
+  // =========================================================================
 
   // Helper: Filter sessions by SessionFilter
   // Always excludes hidden sessions - they should never appear in navigation
@@ -179,28 +419,20 @@ export function NavigationProvider({
       return visibleSessions.filter((session) => {
         switch (filter.kind) {
           case 'allSessions':
-            // Exclude archived sessions from all sessions
             return session.isArchived !== true
           case 'flagged':
-            // Exclude archived sessions from flagged view
             return session.isFlagged === true && session.isArchived !== true
           case 'archived':
             return session.isArchived === true
           case 'state':
-            // Exclude archived sessions from state views
             return session.sessionStatus === filter.stateId && session.isArchived !== true
           case 'label': {
-            // Exclude archived sessions from label views
             if (session.isArchived === true) return false
             if (!session.labels?.length) return false
             if (filter.labelId === '__all__') return true
-            // Simple match - check if session has the label (handles valued labels like "priority::3")
             return session.labels.some(l => l === filter.labelId || l.startsWith(`${filter.labelId}::`))
           }
           case 'view':
-            // Exclude archived sessions from view filters
-            // Note: Full view evaluation requires evaluateViews which isn't available here
-            // Return all non-archived sessions as fallback - SessionList does the real filtering
             if (session.isArchived === true) return false
             return true
           default:
@@ -211,7 +443,6 @@ export function NavigationProvider({
     [sessionMetas, workspaceId]
   )
 
-  // Helper: Get first session ID for a filter
   const getFirstSessionId = useCallback(
     (filter: SessionFilter): string | null => {
       const filtered = filterSessionsByFilter(filter)
@@ -220,7 +451,6 @@ export function NavigationProvider({
     [filterSessionsByFilter]
   )
 
-  // Helper: Get last selected session ID for the workspace (if still valid in filter)
   const getLastSelectedSessionId = useCallback(
     (filter: SessionFilter): string | null => {
       if (!workspaceId) return null
@@ -236,21 +466,17 @@ export function NavigationProvider({
     [workspaceId, filterSessionsByFilter]
   )
 
-  // Helper: Get first source slug (optionally filtered by type)
   const getFirstSourceSlug = useCallback(
     (filter?: SourceFilter | null): string | null => {
-      // If no filter, return first source
       if (!filter) {
         return sources[0]?.config.slug ?? null
       }
-      // Filter by source type and return first match
       const filtered = sources.filter(s => s.config.type === filter.sourceType)
       return filtered[0]?.config.slug ?? null
     },
     [sources]
   )
 
-  // Helper: Get first skill slug
   const getFirstSkillSlug = useCallback(
     (): string | null => {
       return skills[0]?.slug ?? null
@@ -258,39 +484,90 @@ export function NavigationProvider({
     [skills]
   )
 
-  // Handle action navigation (side effects that don't change navigation state)
+  // =========================================================================
+  // AUTO-SELECTION (pure computation, no side effects)
+  // =========================================================================
+
+  /**
+   * Resolve auto-selection for a NavigationState.
+   * When navigating to a filter without explicit details, auto-select the
+   * first available item. Returns the final state (no side effects).
+   */
+  const resolveAutoSelection = useCallback(
+    (newState: NavigationState, options?: { skipAutoSelect?: boolean }): NavigationState => {
+      let nextState = newState
+
+      // Validate session exists in current workspace
+      if (isSessionsNavigation(nextState) && nextState.details) {
+        const freshMetaMap = store.get(sessionMetaMapAtom)
+        const meta = freshMetaMap.get(nextState.details.sessionId)
+        if (!meta || (workspaceId && meta.workspaceId !== workspaceId)) {
+          nextState = { ...nextState, details: null }
+        }
+      }
+
+      // Sessions: auto-select last/first session
+      if (isSessionsNavigation(nextState) && !nextState.details && !options?.skipAutoSelect) {
+        const lastSelectedSessionId = getLastSelectedSessionId(nextState.filter)
+        const fallbackSessionId = lastSelectedSessionId ?? getFirstSessionId(nextState.filter)
+        if (fallbackSessionId) {
+          return { ...nextState, details: { type: 'session', sessionId: fallbackSessionId } }
+        }
+        return nextState
+      }
+
+      // Sources: auto-select first source
+      if (isSourcesNavigation(nextState) && !nextState.details && !options?.skipAutoSelect) {
+        const firstSourceSlug = getFirstSourceSlug(nextState.filter)
+        if (firstSourceSlug) {
+          return { ...nextState, details: { type: 'source', sourceSlug: firstSourceSlug } }
+        }
+        return nextState
+      }
+
+      // Skills: auto-select first skill
+      if (isSkillsNavigation(nextState) && !nextState.details && !options?.skipAutoSelect) {
+        const firstSkillSlug = getFirstSkillSlug()
+        if (firstSkillSlug) {
+          return { ...nextState, details: { type: 'skill', skillSlug: firstSkillSlug } }
+        }
+        return nextState
+      }
+
+      return nextState
+    },
+    [store, workspaceId, getLastSelectedSessionId, getFirstSessionId, getFirstSourceSlug, getFirstSkillSlug]
+  )
+
+  // =========================================================================
+  // ACTION NAVIGATION
+  // =========================================================================
+
   const handleActionNavigation = useCallback(
-    async (parsed: ParsedRoute) => {
+    async (parsed: ParsedRoute, options?: { newPanel?: boolean }) => {
       if (!workspaceId) return
 
       switch (parsed.name) {
         case 'new-session': {
-          // Create session with optional permission mode and working directory from params
           const createOptions: import('../../shared/types').CreateSessionOptions = {}
           if (parsed.params.mode && ['safe', 'ask', 'allow-all'].includes(parsed.params.mode)) {
             createOptions.permissionMode = parsed.params.mode as 'safe' | 'ask' | 'allow-all'
           }
-          // Handle workdir param: 'user_default', 'none', or absolute path
           if (parsed.params.workdir) {
             createOptions.workingDirectory = parsed.params.workdir as 'user_default' | 'none' | string
           }
-          // Model override for mini agents (e.g., 'haiku', 'sonnet')
           if (parsed.params.model) {
             createOptions.model = parsed.params.model
           }
-          // System prompt preset for mini agents (e.g., 'mini')
           if (parsed.params.systemPrompt) {
             createOptions.systemPromptPreset = parsed.params.systemPrompt as 'default' | 'mini' | string
           }
           const session = await onCreateSession(workspaceId, createOptions)
 
-          // Rename session if name provided
           if (parsed.params.name) {
             await window.electronAPI.sessionCommand(session.id, { type: 'rename', name: parsed.params.name })
           }
 
-          // Optimistically update session meta so it matches the filter immediately
-          // (avoids flicker while waiting for the event round-trip from main process)
           if (parsed.params.status) {
             updateSessionMeta(session.id, { sessionStatus: parsed.params.status })
           }
@@ -298,30 +575,35 @@ export function NavigationProvider({
             updateSessionMeta(session.id, { labels: [parsed.params.label] })
           }
 
-          // Apply status (todo state) to new session if specified
           if (parsed.params.status) {
             await window.electronAPI.sessionCommand(session.id, { type: 'setSessionStatus', state: parsed.params.status })
           }
-
-          // Apply label to new session if specified
           if (parsed.params.label) {
             await window.electronAPI.sessionCommand(session.id, { type: 'setLabels', labels: [parsed.params.label] })
           }
 
-          // Determine navigation filter — preserve status/label context if the new session was created with one
+          // Determine navigation filter
           const filter: import('../../shared/types').SessionFilter =
             parsed.params.status ? { kind: 'state', stateId: parsed.params.status } :
             parsed.params.label ? { kind: 'label', labelId: parsed.params.label } :
             { kind: 'allSessions' }
 
-          setSession({ selected: session.id })
-          setNavigationState({
-            navigator: 'sessions',
-            filter,
-            details: { type: 'session', sessionId: session.id },
-          })
+          if (options?.newPanel) {
+            // Open the new session in a new panel (pushPanel auto-focuses it)
+            pushPanel({ route: routes.view.allSessions(session.id) as ViewRoute })
+          } else {
+            // Navigate the focused panel to the new session
+            const newState: NavigationState = {
+              navigator: 'sessions',
+              filter,
+              details: { type: 'session', sessionId: session.id },
+            }
+            const route = buildRouteFromNavigationState(newState) as ViewRoute
+            store.set(updateFocusedPanelRouteAtom, route)
+            // Session selection sync handled by effect
+          }
 
-          // Parse badges from params (JSON-encoded, used for EditPopover context hiding)
+          // Parse badges from params
           let badges: ContentBadge[] | undefined
           if (parsed.params.badges) {
             try {
@@ -331,23 +613,20 @@ export function NavigationProvider({
             }
           }
 
-          // Handle input: either auto-send (if send=true) or pre-fill
+          // Handle input: either auto-send or pre-fill
           if (parsed.params.input) {
             const shouldSend = parsed.params.send === 'true'
             if (shouldSend) {
-              // Auto-send the message immediately after session is ready
-              // Pass badges in options so they're stored with the message
               setTimeout(() => {
                 window.electronAPI.sendMessage(
                   session.id,
                   parsed.params.input!,
-                  undefined, // attachments
-                  undefined, // storedAttachments
+                  undefined,
+                  undefined,
                   badges ? { badges } : undefined
                 )
               }, 100)
             } else if (onInputChange) {
-              // Pre-fill input box without sending
               setTimeout(() => {
                 onInputChange(session.id, parsed.params.input!)
               }, 100)
@@ -411,107 +690,20 @@ export function NavigationProvider({
           console.warn('[Navigation] Unknown action:', parsed.name)
       }
     },
-    [workspaceId, onCreateSession, onInputChange, setSession]
+    [workspaceId, onCreateSession, onInputChange, pushPanel, store, updateSessionMeta]
   )
 
+  // =========================================================================
+  // NAVIGATE
+  // =========================================================================
 
-  /**
-   * Apply navigation state with auto-selection logic
-   *
-   * When navigating to a filter without explicit details,
-   * auto-select the first available item. This ensures the main content
-   * panel always shows meaningful content when possible.
-   *
-   * Returns the final NavigationState (with auto-selection applied if any)
-   * so the caller can update the URL with the correct route.
-   */
-  const applyNavigationState = useCallback(
-    (newState: NavigationState): NavigationState => {
-      let nextState = newState
-
-      // If an explicit session is provided but doesn't exist in the current workspace,
-      // treat it as no selection so we can auto-select a valid session (if any).
-      // Use store.get() for fresh atom value to avoid stale closure after session creation.
-      if (isSessionsNavigation(nextState) && nextState.details) {
-        const freshMetaMap = store.get(sessionMetaMapAtom)
-        const meta = freshMetaMap.get(nextState.details.sessionId)
-        if (!meta || (workspaceId && meta.workspaceId !== workspaceId)) {
-          nextState = { ...nextState, details: null }
-        }
-      }
-
-      // For chats: auto-select last session in workspace (if valid), otherwise first
-      if (isSessionsNavigation(nextState) && !nextState.details) {
-        const lastSelectedSessionId = getLastSelectedSessionId(nextState.filter)
-        const fallbackSessionId = lastSelectedSessionId ?? getFirstSessionId(nextState.filter)
-        if (fallbackSessionId) {
-          const stateWithSelection: NavigationState = {
-            ...nextState,
-            details: { type: 'session', sessionId: fallbackSessionId },
-          }
-          if (workspaceId) {
-            storage.set(storage.KEYS.lastSelectedSessionId, fallbackSessionId, workspaceId)
-          }
-          setSession({ selected: fallbackSessionId })
-          setNavigationState(stateWithSelection)
-          return stateWithSelection
-        } else {
-          setSession({ selected: null })
-          setNavigationState(nextState)
-          return nextState
-        }
-      }
-
-      // For sources: auto-select first source if no details provided (respects filter)
-      if (isSourcesNavigation(nextState) && !nextState.details) {
-        const firstSourceSlug = getFirstSourceSlug(nextState.filter)
-        if (firstSourceSlug) {
-          const stateWithSelection: NavigationState = {
-            ...nextState,
-            details: { type: 'source', sourceSlug: firstSourceSlug },
-          }
-          setNavigationState(stateWithSelection)
-          return stateWithSelection
-        } else {
-          setNavigationState(nextState)
-          return nextState
-        }
-      }
-
-      // For skills: auto-select first skill if no details provided
-      if (isSkillsNavigation(nextState) && !nextState.details) {
-        const firstSkillSlug = getFirstSkillSlug()
-        if (firstSkillSlug) {
-          const stateWithSelection: NavigationState = {
-            ...nextState,
-            details: { type: 'skill', skillSlug: firstSkillSlug },
-          }
-          setNavigationState(stateWithSelection)
-          return stateWithSelection
-        } else {
-          setNavigationState(nextState)
-          return nextState
-        }
-      }
-
-      // For chats with explicit session: update session selection
-      if (isSessionsNavigation(nextState) && nextState.details) {
-        if (workspaceId) {
-          storage.set(storage.KEYS.lastSelectedSessionId, nextState.details.sessionId, workspaceId)
-        }
-        setSession({ selected: nextState.details.sessionId })
-      }
-
-      // Apply state directly
-      setNavigationState(nextState)
-      return nextState
-    },
-    [getFirstSessionId, getLastSelectedSessionId, getFirstSourceSlug, getFirstSkillSlug, setSession, store, workspaceId]
-  )
-
-  // Main navigate function - unified approach using NavigationState
   const navigate = useCallback(
-    async (route: Route) => {
+    async (route: Route, options?: NavigateOptions) => {
+      // Reset auto-select suppression on any normal navigation
+      if (!options?.skipAutoSelect) {
+        suppressAutoSelectRef.current = false
+      }
+
       const parsed = parseRoute(route)
       if (!parsed) {
         console.warn('[Navigation] Invalid route:', route)
@@ -523,15 +715,15 @@ export function NavigationProvider({
         return
       }
 
-      // Auto-delete empty sessions when navigating away.
-      // If the user is leaving a session that has no messages and no draft input, clean it up.
-      if (onAutoDeleteEmptySession) {
-        const currentSessionId = isSessionsNavigation(navigationState)
-          ? navigationState.details?.sessionId
+      // Auto-delete empty sessions when navigating away (skip for new panel)
+      if (onAutoDeleteEmptySession && !options?.newPanel) {
+        const focusedRt = store.get(focusedPanelRouteAtom)
+        const currentNavState = focusedRt ? parseRouteToNavigationState(focusedRt) : null
+        const currentSessionId = currentNavState && isSessionsNavigation(currentNavState)
+          ? currentNavState.details?.sessionId
           : null
 
         if (currentSessionId) {
-          // Determine the target session ID from the new route (if navigating to another session)
           const targetNavState = parsed.type === 'view'
             ? parseRouteToNavigationState(route)
             : null
@@ -539,7 +731,6 @@ export function NavigationProvider({
             ? targetNavState.details?.sessionId
             : null
 
-          // Only check if navigating to a DIFFERENT session or away from sessions entirely
           if (currentSessionId !== targetSessionId) {
             const freshMetaMap = store.get(sessionMetaMapAtom)
             const meta = freshMetaMap.get(currentSessionId)
@@ -554,100 +745,70 @@ export function NavigationProvider({
 
       // Handle actions (side effects)
       if (parsed.type === 'action') {
-        await handleActionNavigation(parsed)
-        return // Actions handle their own state updates
+        await handleActionNavigation(parsed, options)
+        return
       }
 
-      // Parse route to unified NavigationState (with sidebar param from current URL)
-      const urlParams = new URLSearchParams(window.location.search)
-      const sidebarParam = urlParams.get('sidebar') || undefined
-      let newNavState = parseRouteToNavigationState(route, sidebarParam)
-      let finalRoute = route
+      // For view routes with newPanel: push a panel (pushPanelAtom auto-focuses)
+      if (options?.newPanel) {
+        pushPanel({ route: route as ViewRoute })
+        return
+      }
 
-      // Settings subpage persistence: restore/save last viewed subpage
+      // Parse route to NavigationState
+      let newNavState = parseRouteToNavigationState(route)
+
+      // Settings subpage persistence
       if (newNavState && isSettingsNavigation(newNavState)) {
         const isBareSettingsRoute = route === 'settings'
         if (isBareSettingsRoute) {
-          // Restore last subpage from localStorage
           const savedSubpage = storage.get<string>(storage.KEYS.lastSettingsSubpage, 'app')
           if (isValidSettingsSubpage(savedSubpage) && savedSubpage !== 'app') {
             newNavState = { ...newNavState, subpage: savedSubpage as SettingsSubpage }
           }
         } else {
-          // Save the current subpage for future restoration
           storage.set(storage.KEYS.lastSettingsSubpage, newNavState.subpage)
         }
       }
 
-      let effectiveNavState = navigationState
+      // Suppress auto-select effect
+      if (options?.skipAutoSelect) {
+        suppressAutoSelectRef.current = true
+      }
+
       if (newNavState) {
-        // Apply navigation state (may auto-select first item)
-        const finalState = applyNavigationState(newNavState)
+        // Resolve auto-selection (pure — no side effects)
+        const resolvedState = resolveAutoSelection(newNavState, options)
+        const finalRoute = buildRouteFromNavigationState(resolvedState) as ViewRoute
 
-        // Build route from final state (includes auto-selection)
-        // This ensures the URL reflects the actual displayed content
-        finalRoute = buildRouteFromNavigationState(finalState) as Route
-        effectiveNavState = finalState
-      }
-
-      // Persist route, sidebar, and panels in URL for reload restoration
-      const url = new URL(window.location.href)
-      const currentPanels = store.get(panelStackAtom)
-      const secondaryPanels = currentPanels.length > 1
-        ? currentPanels.slice(1).map(p => `${p.route}:${p.proportion.toFixed(4)}`)
-        : undefined
-      if (effectiveNavState.rightSidebar) {
-        const fullUrl = buildUrlWithState(effectiveNavState, secondaryPanels)
-        url.search = fullUrl
-      } else {
-        url.searchParams.set('route', finalRoute)
-        url.searchParams.delete('sidebar')
-        if (secondaryPanels?.length) {
-          url.searchParams.set('panels', secondaryPanels.join(','))
-        } else {
-          url.searchParams.delete('panels')
+        // Persist last selected session for auto-select on next visit
+        if (isSessionsNavigation(resolvedState) && resolvedState.details && workspaceId) {
+          storage.set(storage.KEYS.lastSelectedSessionId, resolvedState.details.sessionId, workspaceId)
         }
-      }
-      history.replaceState({ route: finalRoute }, '', url.toString())
 
-      // Update our custom history stack (unless we're navigating via back/forward)
-      if (isNavigatingHistoryRef.current) {
-        isNavigatingHistoryRef.current = false
-      } else {
-        // Only push if route is different from current route (avoid duplicates)
-        const currentRoute = historyStackRef.current[historyIndexRef.current]
-        if (finalRoute !== currentRoute) {
-          // When navigating to a new route, truncate forward history and push
-          const newIndex = historyIndexRef.current + 1
-          historyStackRef.current = historyStackRef.current.slice(0, newIndex)
-          historyStackRef.current.push(finalRoute)
-          historyIndexRef.current = newIndex
-        }
-      }
+        // Clear the restoring flag — user-initiated navigation overrides any pending restore
+        isRestoringHistoryRef.current = false
 
-      // Update back/forward availability
-      const newCanGoBack = historyIndexRef.current > 0
-      const newCanGoForward = historyIndexRef.current < historyStackRef.current.length - 1
-      setCanGoBack(newCanGoBack)
-      setCanGoForward(newCanGoForward)
+        // Update the focused panel's route (atom update is synchronous)
+        store.set(updateFocusedPanelRouteAtom, finalRoute)
+
+        // Atom subscription already called pushSnapshot() synchronously.
+        // URL sync effect will fire on the next render.
+      }
     },
-    [isReady, handleActionNavigation, applyNavigationState, navigationState, store, getDraft, onAutoDeleteEmptySession]
+    [isReady, handleActionNavigation, resolveAutoSelection, store, getDraft, onAutoDeleteEmptySession, pushPanel, workspaceId]
   )
 
-  // Keep navigateRef in sync with latest navigate function
-  useEffect(() => {
-    navigateRef.current = navigate
-  }, [navigate])
+  // =========================================================================
+  // ROUTE VALIDATION (for history navigation)
+  // =========================================================================
 
-  // Helper: Check if a route points to a valid session/source/skill
-  // For sessions, also check that the session is not hidden (hidden sessions are not directly navigable)
-  const isRouteValid = useCallback((route: Route): boolean => {
+  const isRouteValid = useCallback((route: string): boolean => {
     const navState = parseRouteToNavigationState(route)
-    if (!navState) return true // Non-navigation routes are always valid
+    if (!navState) return true
 
     if (isSessionsNavigation(navState) && navState.details) {
       const meta = sessionMetaMap.get(navState.details.sessionId)
-      // Session must exist and not be hidden
       return meta != null && !meta.hidden
     }
 
@@ -657,184 +818,132 @@ export function NavigationProvider({
 
     if (isSkillsNavigation(navState) && navState.details) {
       if (navState.details.type === 'skill') {
-        const { skillSlug } = navState.details
-        return skills.some(s => s.slug === skillSlug)
+        return skills.some(s => s.slug === navState.details!.skillSlug)
       }
       return true
     }
 
-    return true // Routes without details are always valid
+    return true
   }, [sessionMetaMap, sources, skills])
 
-  // Go back in history (using our custom stack)
-  // When encountering invalid entries (deleted sessions/sources), remove them from the stack
+  /** Check if all panel routes in a snapshot are still valid */
+  const isSnapshotValid = useCallback((snapshot: NavigationSnapshot): boolean => {
+    return snapshot.panels.every(p => isRouteValid(p.route))
+  }, [isRouteValid])
+
+  // =========================================================================
+  // BACK / FORWARD
+  // =========================================================================
+
   const goBack = useCallback(() => {
     const currentIndex = historyIndexRef.current
+    if (currentIndex <= 0) return
 
-    if (currentIndex <= 0) {
-      return
-    }
-
-    // Find first valid entry going backwards, collecting indices of invalid entries
+    // Find first valid snapshot going backwards, removing invalid ones
     const invalidIndices: number[] = []
     let targetIndex = -1
 
     for (let i = currentIndex - 1; i >= 0; i--) {
-      const route = historyStackRef.current[i]
-      if (isRouteValid(route)) {
+      if (isSnapshotValid(historyStackRef.current[i])) {
         targetIndex = i
         break
       }
       invalidIndices.push(i)
     }
 
-    // Remove invalid entries from stack (in reverse order to preserve indices)
+    // Remove invalid entries (reverse order to preserve indices)
     if (invalidIndices.length > 0) {
       for (const idx of invalidIndices.sort((a, b) => b - a)) {
         historyStackRef.current.splice(idx, 1)
       }
     }
 
-    // Recalculate target index after removal
+    // Adjust indices after removal
     if (targetIndex >= 0) {
-      // Adjust for removed entries that were before the target
       const removedBefore = invalidIndices.filter(i => i < targetIndex).length
       targetIndex -= removedBefore
     }
-
-    // Also adjust current index for removed entries
     const removedBeforeCurrent = invalidIndices.filter(i => i < currentIndex).length
     historyIndexRef.current = currentIndex - removedBeforeCurrent
 
     if (targetIndex >= 0) {
       historyIndexRef.current = targetIndex
-      isNavigatingHistoryRef.current = true
-      const route = historyStackRef.current[targetIndex]
-      navigateRef.current?.(route)
-    } else {
-      // Update canGoBack/canGoForward since we may have removed entries
-      setCanGoBack(historyIndexRef.current > 0)
-      setCanGoForward(historyIndexRef.current < historyStackRef.current.length - 1)
+      restoreSnapshot(historyStackRef.current[targetIndex])
     }
-  }, [isRouteValid])
 
-  // Go forward in history (using our custom stack)
-  // When encountering invalid entries (deleted sessions/sources), remove them from the stack
+    updateCanGoBackForward()
+  }, [isSnapshotValid, restoreSnapshot, updateCanGoBackForward])
+
   const goForward = useCallback(() => {
     const currentIndex = historyIndexRef.current
     const stackLength = historyStackRef.current.length
+    if (currentIndex >= stackLength - 1) return
 
-    if (currentIndex >= stackLength - 1) {
-      return
-    }
-
-    // Find first valid entry going forwards, collecting indices of invalid entries
+    // Find first valid snapshot going forwards, removing invalid ones
     const invalidIndices: number[] = []
     let targetIndex = -1
 
     for (let i = currentIndex + 1; i < stackLength; i++) {
-      const route = historyStackRef.current[i]
-      if (isRouteValid(route)) {
+      if (isSnapshotValid(historyStackRef.current[i])) {
         targetIndex = i
         break
       }
       invalidIndices.push(i)
     }
 
-    // Remove invalid entries from stack (in reverse order to preserve indices)
+    // Remove invalid entries (reverse order to preserve indices)
     if (invalidIndices.length > 0) {
       for (const idx of invalidIndices.sort((a, b) => b - a)) {
         historyStackRef.current.splice(idx, 1)
       }
     }
 
-    // Recalculate target index after removal (invalid entries were between current and target)
+    // Adjust target index after removal
     if (targetIndex >= 0) {
       targetIndex -= invalidIndices.length
     }
 
     if (targetIndex >= 0 && targetIndex < historyStackRef.current.length) {
       historyIndexRef.current = targetIndex
-      isNavigatingHistoryRef.current = true
-      const route = historyStackRef.current[targetIndex]
-      navigateRef.current?.(route)
-    } else {
-      // Update canGoBack/canGoForward since we may have removed entries
-      setCanGoBack(historyIndexRef.current > 0)
-      setCanGoForward(historyIndexRef.current < historyStackRef.current.length - 1)
+      restoreSnapshot(historyStackRef.current[targetIndex])
     }
-  }, [isRouteValid])
 
-  // Track whether initial route restoration has been attempted
-  const initialRouteRestoredRef = useRef(false)
+    updateCanGoBackForward()
+  }, [isSnapshotValid, restoreSnapshot, updateCanGoBackForward])
 
-  // Track previous workspace to detect switches
+  // =========================================================================
+  // WORKSPACE SWITCH
+  // =========================================================================
+
   const previousWorkspaceIdRef = useRef<string | null>(null)
 
-  // Reset navigation state when workspace changes
-  // This prevents back/forward navigating to sessions from the wrong workspace
-  // and ensures sidebar doesn't show stale context
   useEffect(() => {
     if (!workspaceId) return
 
-    // Skip on initial mount (no previous workspace)
     if (previousWorkspaceIdRef.current !== null && previousWorkspaceIdRef.current !== workspaceId) {
-      // Clear history stack - old routes belong to previous workspace
+      // Clear history — old snapshots belong to previous workspace
       historyStackRef.current = []
       historyIndexRef.current = -1
       setCanGoBack(false)
       setCanGoForward(false)
 
-      // Close right sidebar - its context is workspace-specific
-      setNavigationState(prev => ({
-        ...prev,
-        rightSidebar: undefined,
-      }))
+      // Close right sidebar
+      setRightSidebar(undefined)
 
-      // Close all secondary panels — they belong to the previous workspace
-      store.set(closeAllSecondaryPanelsAtom)
+      // Close all panels except the first
+      store.set(closeAllOtherPanelsAtom)
 
-      // Reset initial route restoration flag so new workspace can restore its route
+      // Reset initial route restoration for new workspace
       initialRouteRestoredRef.current = false
     }
 
     previousWorkspaceIdRef.current = workspaceId
-  }, [workspaceId])
+  }, [workspaceId, store])
 
-  // Initialize history stack on first load
-  useEffect(() => {
-    if (!isReady || !workspaceId) return
+  // =========================================================================
+  // INITIAL ROUTE RESTORATION (CMD+R reload)
+  // =========================================================================
 
-    // Only initialize once
-    if (historyStackRef.current.length === 0) {
-      const params = new URLSearchParams(window.location.search)
-      const initialRoute = (params.get('route') || 'allSessions') as Route
-      historyStackRef.current = [initialRoute]
-      historyIndexRef.current = 0
-    }
-  }, [isReady, workspaceId])
-
-  // Process pending navigation when ready
-  useEffect(() => {
-    if (isReady && pendingNavigationRef.current) {
-      const pending = pendingNavigationRef.current
-      pendingNavigationRef.current = null
-
-      // Handle actions
-      if (pending.type === 'action') {
-        handleActionNavigation(pending)
-        return
-      }
-
-      // For view routes, reconstruct route string and parse to NavigationState
-      const navState = parseRouteToNavigationState(`${pending.name}${pending.id ? `/${pending.id}` : ''}`)
-      if (navState) {
-        applyNavigationState(navState)
-      }
-    }
-  }, [isReady, handleActionNavigation, applyNavigationState])
-
-  // Restore route and panels from URL on startup (for CMD+R reload)
   useEffect(() => {
     if (!isReady || !workspaceId || initialRouteRestoredRef.current) return
     initialRouteRestoredRef.current = true
@@ -843,22 +952,20 @@ export function NavigationProvider({
     const initialRoute = params.get('route')
     const sidebarParam = params.get('sidebar') || undefined
     const panelsParam = params.get('panels')
+    const focusedIndexParam = params.get('fi')
 
-    if (initialRoute) {
-      // Parse with sidebar param
-      const navState = parseRouteToNavigationState(initialRoute, sidebarParam)
-      if (navState) {
-        applyNavigationState(navState)
-      } else {
-        navigate(initialRoute as Route)
+    // Restore right sidebar
+    if (sidebarParam) {
+      const parsed = parseRouteToNavigationState('allSessions', sidebarParam)
+      if (parsed?.rightSidebar) {
+        setRightSidebar(parsed.rightSidebar)
       }
     }
 
-    // Restore secondary panels from URL (batch restore to avoid ordering race)
+    // Restore panels
     if (panelsParam) {
-      const primaryRoute = initialRoute ?? buildRouteFromNavigationState(navigationState)
-      const secondaryEntries = panelsParam.split(',').filter(Boolean).map(entry => {
-        // Parse proportion from "route:0.3500" format (backwards-compatible with "route" only)
+      const hasFocusedIndex = focusedIndexParam != null
+      const entries = panelsParam.split(',').filter(Boolean).map(entry => {
         const colonIdx = entry.lastIndexOf(':')
         if (colonIdx > 0) {
           const proportion = parseFloat(entry.slice(colonIdx + 1))
@@ -869,41 +976,102 @@ export function NavigationProvider({
         return { route: entry as ViewRoute, proportion: 0 }
       })
 
-      const hasProportions = secondaryEntries.some(e => e.proportion > 0)
-      const totalSecondaryProp = secondaryEntries.reduce((s, e) => s + e.proportion, 0)
+      if (hasFocusedIndex) {
+        // New format: ?panels= contains ALL panels, ?fi= is the focused index
+        const hasProportions = entries.some(e => e.proportion > 0)
+        if (!hasProportions) {
+          const equal = 1 / entries.length
+          entries.forEach(e => { e.proportion = equal })
+        } else {
+          // Normalize proportions to sum to 1.0 (guards against malformed URLs)
+          const total = entries.reduce((s, e) => s + e.proportion, 0)
+          if (total > 0 && Math.abs(total - 1) > 0.001) {
+            entries.forEach(e => { e.proportion = e.proportion / total })
+          }
+        }
+        store.set(restorePanelStackAtom, entries)
 
-      let allEntries: { route: ViewRoute; proportion: number }[]
-      if (hasProportions && totalSecondaryProp < 1) {
-        allEntries = [
-          { route: primaryRoute as ViewRoute, proportion: 1 - totalSecondaryProp },
-          ...secondaryEntries,
-        ]
+        // Restore focus
+        const fi = parseInt(focusedIndexParam!, 10) || 0
+        const stack = store.get(panelStackAtom)
+        const idx = Math.min(fi, stack.length - 1)
+        store.set(focusedPanelIdAtom, stack[idx]?.id ?? null)
       } else {
-        // No proportions encoded (old URL format) — distribute equally
-        const equal = 1 / (1 + secondaryEntries.length)
-        allEntries = [
-          { route: primaryRoute as ViewRoute, proportion: equal },
-          ...secondaryEntries.map(e => ({ ...e, proportion: equal })),
-        ]
+        // Old format: ?route= is panel[0], ?panels= are additional panels
+        const firstPanelRoute = initialRoute ?? 'allSessions'
+        const hasProportions = entries.some(e => e.proportion > 0)
+        const additionalPanelsProp = entries.reduce((s, e) => s + e.proportion, 0)
+
+        let allEntries: { route: ViewRoute; proportion: number }[]
+        if (hasProportions && additionalPanelsProp < 1) {
+          allEntries = [
+            { route: firstPanelRoute as ViewRoute, proportion: 1 - additionalPanelsProp },
+            ...entries,
+          ]
+        } else {
+          const equal = 1 / (1 + entries.length)
+          allEntries = [
+            { route: firstPanelRoute as ViewRoute, proportion: equal },
+            ...entries.map(e => ({ ...e, proportion: equal })),
+          ]
+        }
+        store.set(restorePanelStackAtom, allEntries)
+      }
+    } else if (initialRoute) {
+      // Single panel from ?route=
+      const navState = parseRouteToNavigationState(initialRoute)
+      if (navState) {
+        const resolved = resolveAutoSelection(navState)
+        const finalRoute = buildRouteFromNavigationState(resolved) as ViewRoute
+        store.set(restorePanelStackAtom, [{ route: finalRoute, proportion: 1 }])
+      } else {
+        navigate(initialRoute as Route)
+      }
+    }
+
+    // Initialize history stack with current state
+    requestAnimationFrame(() => {
+      pushSnapshotRef.current?.()
+    })
+  }, [isReady, workspaceId, navigate, resolveAutoSelection, store, pushSnapshot])
+
+  // =========================================================================
+  // PENDING NAVIGATION
+  // =========================================================================
+
+  useEffect(() => {
+    if (isReady && pendingNavigationRef.current) {
+      const pending = pendingNavigationRef.current
+      pendingNavigationRef.current = null
+
+      if (pending.type === 'action') {
+        handleActionNavigation(pending)
+        return
       }
 
-      store.set(restorePanelStackAtom, allEntries)
+      const routeStr = `${pending.name}${pending.id ? `/${pending.id}` : ''}`
+      const navState = parseRouteToNavigationState(routeStr)
+      if (navState) {
+        const resolved = resolveAutoSelection(navState)
+        const finalRoute = buildRouteFromNavigationState(resolved) as ViewRoute
+        store.set(updateFocusedPanelRouteAtom, finalRoute)
+      }
     }
-  }, [isReady, workspaceId, navigate, applyNavigationState, store, navigationState])
+  }, [isReady, handleActionNavigation, resolveAutoSelection, store])
 
-  // Listen for deep link navigation events from main process
+  // =========================================================================
+  // DEEP LINK LISTENER
+  // =========================================================================
+
   useEffect(() => {
     if (!workspaceId) return
 
     const cleanup = window.electronAPI.onDeepLinkNavigate((nav: DeepLinkNavigation) => {
-      // Convert DeepLinkNavigation to route string and navigate
       let route: string | null = null
 
-      // Compound route format (e.g., 'allSessions/session/abc123', 'settings/shortcuts')
       if (nav.view) {
         route = nav.view
       } else if (nav.action) {
-        // Action routes (e.g., 'action/new-session', 'action/delete-session/abc123')
         route = `action/${nav.action}`
         if (nav.actionParams?.id) {
           route += `/${nav.actionParams.id}`
@@ -917,10 +1085,8 @@ export function NavigationProvider({
       }
 
       if (route) {
-        // Validate the route before navigating
         const navState = parseRouteToNavigationState(route)
         if (!navState && !route.startsWith('action/')) {
-          // Invalid route that isn't an action - show error toast
           toast.error('Invalid link', {
             description: 'The content may have been moved or deleted.',
           })
@@ -933,12 +1099,16 @@ export function NavigationProvider({
     return cleanup
   }, [workspaceId, navigate])
 
-  // Listen for internal navigation events (from navigate() calls)
+  // =========================================================================
+  // INTERNAL NAVIGATION EVENT LISTENER
+  // =========================================================================
+
   useEffect(() => {
     const handleNavigateEvent = (event: Event) => {
-      const customEvent = event as CustomEvent<{ route: Route }>
+      const customEvent = event as CustomEvent<{ route: Route; newPanel?: boolean }>
       if (customEvent.detail?.route) {
-        navigate(customEvent.detail.route)
+        const { route: r, newPanel } = customEvent.detail
+        navigate(r, newPanel ? { newPanel } : undefined)
       }
     }
 
@@ -948,41 +1118,27 @@ export function NavigationProvider({
     }
   }, [navigate])
 
-  // Right sidebar navigation helpers
+  // =========================================================================
+  // SIDEBAR HELPERS
+  // =========================================================================
+
   const updateRightSidebar = useCallback((panel: RightSidebarPanel | undefined) => {
-    if (!navigationState) return
-
-    const newState = {
-      ...navigationState,
-      rightSidebar: panel,
-    }
-
-    setNavigationState(newState)
-
-    // Update URL with sidebar param and panels
-    const currentPanels = store.get(panelStackAtom)
-    const secondaryPanels = currentPanels.length > 1
-      ? currentPanels.slice(1).map(p => `${p.route}:${p.proportion.toFixed(4)}`)
-      : undefined
-    const url = buildUrlWithState(newState, secondaryPanels)
-    const fullUrl = new URL(window.location.href)
-    fullUrl.search = url
-    history.replaceState({ route: buildRouteFromNavigationState(newState) }, '', fullUrl.toString())
-  }, [navigationState, store])
+    setRightSidebar(panel)
+    // Snapshot push handled by the rightSidebar change effect
+  }, [])
 
   const toggleRightSidebar = useCallback((panel?: RightSidebarPanel) => {
-    if (!navigationState) return
-
-    // If panel specified, open to that panel
-    // If no panel, toggle between closed and default panel (sessionMetadata)
-    const newPanel = panel || (navigationState.rightSidebar && navigationState.rightSidebar.type !== 'none'
+    const currentSidebar = rightSidebarRef.current
+    const newPanel = panel || (currentSidebar && currentSidebar.type !== 'none'
       ? { type: 'none' as const }
       : { type: 'sessionMetadata' as const })
-
     updateRightSidebar(newPanel)
-  }, [navigationState, updateRightSidebar])
+  }, [updateRightSidebar])
 
-  // Navigate to a source (or source list) while preserving the current filter type (api/mcp/local)
+  // =========================================================================
+  // PRESERVE-FILTER NAVIGATION HELPERS
+  // =========================================================================
+
   const navigateToSource = useCallback((sourceSlug?: string) => {
     if (isSourcesNavigation(navigationState) && navigationState.filter?.kind === 'type') {
       switch (navigationState.filter.sourceType) {
@@ -997,11 +1153,9 @@ export function NavigationProvider({
           return
       }
     }
-    // No filter or 'all' filter - navigate without preserving type
     navigate(routes.view.sources(sourceSlug ? { sourceSlug } : undefined))
   }, [navigationState, navigate])
 
-  // Navigate to a session while preserving the current filter type
   const navigateToSession = useCallback((sessionId: string) => {
     if (!isSessionsNavigation(navigationState)) {
       navigate(routes.view.allSessions(sessionId))
@@ -1033,33 +1187,15 @@ export function NavigationProvider({
     }
   }, [navigationState, navigate])
 
-  // Sync the primary panel in the panel stack with the current navigation state.
-  // Whenever navigation changes, the primary panel (index 0) should reflect it.
-  const updatePrimaryPanel = useSetAtom(updatePrimaryPanelAtom)
-  useEffect(() => {
-    const route = buildRouteFromNavigationState(navigationState)
-    updatePrimaryPanel(route as ViewRoute)
-  }, [navigationState, updatePrimaryPanel])
+  // =========================================================================
+  // AUTO-SELECT ON SESSION LOAD
+  // =========================================================================
 
-  // Persist panel stack changes to URL (gated on initial route restoration
-  // to prevent deleting the ?panels= param before it's been read on reload).
-  const panelStack = useAtomValue(panelStackAtom)
   useEffect(() => {
-    if (!initialRouteRestoredRef.current) return
-    const url = new URL(window.location.href)
-    if (panelStack.length > 1) {
-      const secondaryPanels = panelStack.slice(1).map(p => `${p.route}:${p.proportion.toFixed(4)}`)
-      url.searchParams.set('panels', secondaryPanels.join(','))
-    } else {
-      url.searchParams.delete('panels')
-    }
-    history.replaceState(history.state, '', url.toString())
-  }, [panelStack])
-
-  // After sessions load (or workspace switch), if no session is selected,
-  // auto-select last-used session for this workspace (or fallback to first).
-  useEffect(() => {
+    if (suppressAutoSelectRef.current) return
     if (!isReady || !workspaceId) return
+    // Don't auto-select when panel stack is empty (user closed all panels)
+    if (store.get(panelStackAtom).length === 0) return
     if (!isSessionsNavigation(navigationState) || navigationState.details) return
 
     const lastSelectedSessionId = getLastSelectedSessionId(navigationState.filter)
@@ -1075,6 +1211,10 @@ export function NavigationProvider({
     getFirstSessionId,
     navigateToSession,
   ])
+
+  // =========================================================================
+  // CONTEXT VALUE
+  // =========================================================================
 
   return (
     <NavigationContext.Provider
