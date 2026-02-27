@@ -42,8 +42,6 @@ export const SESSION_PERSISTENT_FIELDS = [
   'pendingPlanExecution',
   // Archive
   'isArchived', 'archivedAt',
-  // Hierarchy
-  'parentSessionId', 'siblingOrder',
   // Branching
   'branchFromMessageId',
 ] as const;
@@ -153,11 +151,6 @@ export interface SessionConfig {
   isArchived?: boolean;
   /** Timestamp when session was archived (for retention policy) */
   archivedAt?: number;
-  // Sub-session hierarchy (1 level max)
-  /** Parent session ID (if this is a sub-session). Null/undefined = root session. */
-  parentSessionId?: string;
-  /** Explicit sibling order (lazy - only populated when user reorders). */
-  siblingOrder?: number;
   /** Message ID this session was branched from (set when created via branching). */
   branchFromMessageId?: string;
 }
@@ -239,11 +232,6 @@ export interface SessionHeader {
   isArchived?: boolean;
   /** Timestamp when session was archived (for retention policy) */
   archivedAt?: number;
-  // Sub-session hierarchy (1 level max)
-  /** Parent session ID (if this is a sub-session). Null/undefined = root session. */
-  parentSessionId?: string;
-  /** Explicit sibling order (lazy - only populated when user reorders). */
-  siblingOrder?: number;
   // Pre-computed fields for fast list loading
   /** Number of messages in session */
   messageCount: number;
@@ -318,11 +306,6 @@ export interface SessionMetadata {
   isArchived?: boolean;
   /** Timestamp when session was archived (for retention policy) */
   archivedAt?: number;
-  // Sub-session hierarchy (1 level max)
-  /** Parent session ID (if this is a sub-session). Null/undefined = root session. */
-  parentSessionId?: string;
-  /** Explicit sibling order (lazy - only populated when user reorders). */
-  siblingOrder?: number;
   /** Message ID that this session was branched from */
   branchFromMessageId?: string;
 }

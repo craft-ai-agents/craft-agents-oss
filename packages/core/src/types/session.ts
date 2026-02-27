@@ -29,9 +29,6 @@ export interface Session {
   status?: SessionStatus;        // Workflow status (todo, in_progress, needs_review, done, cancelled)
   // Read/unread tracking
   lastReadMessageId?: string;    // ID of the last message the user has read
-  // Sub-session hierarchy (1 level max)
-  parentSessionId?: string;      // Parent session ID (if this is a sub-session)
-  siblingOrder?: number;         // Explicit order among siblings (lazy - only set on reorder)
 }
 
 /**
@@ -60,7 +57,4 @@ export interface SessionMetadata {
   isFlagged?: boolean;     // Whether this session is flagged
   status?: SessionStatus;  // Workflow status
   hidden?: boolean;        // Whether this session is hidden from session list
-  // Sub-session hierarchy (1 level max)
-  parentSessionId?: string;  // Parent session ID (if this is a sub-session)
-  siblingOrder?: number;     // Explicit order among siblings (lazy - only set on reorder)
 }

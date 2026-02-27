@@ -82,7 +82,14 @@ def resize(file: str, width: int | None, height: int | None, scale: float | None
         img = Image.open(file)
         orig_w, orig_h = img.size
 
+        if (width is not None and width <= 0) or (height is not None and height <= 0):
+            click.echo("Error: --width and --height must be positive.", err=True)
+            sys.exit(1)
+
         if scale is not None:
+            if scale <= 0:
+                click.echo("Error: --scale must be positive.", err=True)
+                sys.exit(1)
             new_w = int(orig_w * scale)
             new_h = int(orig_h * scale)
         elif width is not None and height is not None:
@@ -105,6 +112,8 @@ def resize(file: str, width: int | None, height: int | None, scale: float | None
             click.echo("Error: specify --width, --height, or --scale.", err=True)
             sys.exit(1)
 
+        new_w = max(1, new_w)
+        new_h = max(1, new_h)
         resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
         save_image(resized, output)
     except Exception as e:
@@ -272,7 +281,7 @@ def watermark(file: str, text: str, font_size: int, opacity: int, position: str,
                 try:
                     font = ImageFont.truetype("C:/Windows/Fonts/arial.ttf", font_size)
                 except (IOError, OSError):
-                    font = ImageFont.load_default()
+                    font = ImageFont.load_default(size=font_size)
 
         # Get text bounding box
         bbox = draw.textbbox((0, 0), text, font=font)
@@ -293,7 +302,8 @@ def watermark(file: str, text: str, font_size: int, opacity: int, position: str,
         # Parse color
         try:
             from PIL import ImageColor
-            r, g, b = ImageColor.getrgb(color)
+            rgb = ImageColor.getrgb(color)
+            r, g, b = rgb[0], rgb[1], rgb[2]
         except Exception:
             r, g, b = 255, 255, 255
 

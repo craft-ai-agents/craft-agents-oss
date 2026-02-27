@@ -91,7 +91,7 @@ def _apply_inline_formatting(paragraph, text: str) -> None:
     paragraph.clear()
 
     # Pattern to match **bold**, *italic*, ***bold italic***
-    pattern = r"(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|([^*]+))"
+    pattern = r"(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|([^*]+|\*(?!\*)))"
 
     for match in re.finditer(pattern, text):
         if match.group(2):  # ***bold italic***
@@ -192,7 +192,7 @@ def template(template_file: str, data: str, output: str) -> None:
         # Replace in headers/footers
         for section in doc.sections:
             for header_footer in [section.header, section.footer]:
-                if header_footer:
+                if not header_footer.is_linked_to_previous:
                     for paragraph in header_footer.paragraphs:
                         _replace_in_paragraph(paragraph, template_data)
 
@@ -301,6 +301,14 @@ def replace(file: str, find: str, replace_with: str, case_sensitive: bool, outpu
             for row in table.rows:
                 for cell in row.cells:
                     for paragraph in cell.paragraphs:
+                        c = _find_replace_paragraph(paragraph, find, replace_with, case_sensitive)
+                        count += c
+
+        # Replace in headers/footers
+        for section in doc.sections:
+            for header_footer in [section.header, section.footer]:
+                if not header_footer.is_linked_to_previous:
+                    for paragraph in header_footer.paragraphs:
                         c = _find_replace_paragraph(paragraph, find, replace_with, case_sensitive)
                         count += c
 

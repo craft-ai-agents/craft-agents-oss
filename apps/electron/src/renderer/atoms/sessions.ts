@@ -74,11 +74,6 @@ export interface SessionMeta {
   isArchived?: boolean
   /** Timestamp when session was archived (for retention policy) */
   archivedAt?: number
-  // Sub-session hierarchy (1 level max)
-  /** Parent session ID (if this is a sub-session). Null/undefined = root session. */
-  parentSessionId?: string
-  /** Explicit sibling order (lazy - only populated when user reorders). */
-  siblingOrder?: number
 }
 
 /**

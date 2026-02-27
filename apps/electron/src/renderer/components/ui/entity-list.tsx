@@ -4,6 +4,7 @@
  * Handles:
  * - ScrollArea wrapping with proper padding
  * - Optional grouped layout with section headers
+ * - Collapsible groups with chevron toggle and item count
  * - Empty state rendering (centered, outside ScrollArea)
  * - Header (e.g. search bar) and footer (e.g. infinite scroll sentinel) slots
  *
@@ -11,6 +12,7 @@
  */
 
 import * as React from 'react'
+import { ChevronRight } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 
@@ -25,6 +27,8 @@ export interface EntityListGroup<T> {
   label: string
   /** Items in this group */
   items: T[]
+  /** Whether this group supports collapse/expand (default: false) */
+  collapsible?: boolean
 }
 
 export interface EntityListProps<T> {
@@ -49,6 +53,10 @@ export interface EntityListProps<T> {
   /** Additional ScrollArea class */
   scrollAreaClassName?: string
   className?: string
+  /** Set of collapsed group keys (for collapsible groups) */
+  collapsedGroups?: Set<string>
+  /** Called when a collapsible group header is clicked */
+  onToggleCollapse?: (groupKey: string) => void
 }
 
 // ============================================================================
@@ -62,6 +70,36 @@ function SectionHeader({ label }: { label: string }) {
         {label}
       </span>
     </div>
+  )
+}
+
+/** Collapsible group header with chevron toggle and item count when collapsed */
+function CollapsibleGroupHeader({
+  label,
+  isCollapsed,
+  itemCount,
+  onToggle,
+}: {
+  label: string
+  isCollapsed: boolean
+  itemCount: number
+  onToggle: () => void
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      className="w-full py-2 px-4 flex items-center gap-1.5 hover:bg-foreground/5 transition-colors cursor-pointer"
+    >
+      <ChevronRight
+        className={cn(
+          "h-3 w-3 text-muted-foreground/60 transition-transform",
+          !isCollapsed && "rotate-90"
+        )}
+      />
+      <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}{isCollapsed && <> · <span className="text-muted-foreground/50">{itemCount}</span></>}
+      </span>
+    </button>
   )
 }
 
@@ -81,6 +119,8 @@ export function EntityList<T>({
   containerProps,
   scrollAreaClassName,
   className,
+  collapsedGroups,
+  onToggleCollapse,
 }: EntityListProps<T>) {
   // Determine if we have content
   const hasGroups = groups && groups.length > 0
@@ -108,16 +148,29 @@ export function EntityList<T>({
         >
           <div className="pt-2">
             {hasGroups
-              ? groups!.map((group) => (
-                  <div key={group.key}>
-                    <SectionHeader label={group.label} />
-                    {group.items.map((item, indexInGroup) =>
-                      <React.Fragment key={getKey(item)}>
-                        {renderItem(item, indexInGroup, indexInGroup === 0)}
-                      </React.Fragment>
-                    )}
-                  </div>
-                ))
+              ? groups!.map((group) => {
+                  const isCollapsed = group.collapsible && collapsedGroups?.has(group.key)
+
+                  return (
+                    <div key={group.key}>
+                      {group.collapsible && onToggleCollapse ? (
+                        <CollapsibleGroupHeader
+                          label={group.label}
+                          isCollapsed={!!isCollapsed}
+                          itemCount={group.items.length}
+                          onToggle={() => onToggleCollapse(group.key)}
+                        />
+                      ) : (
+                        <SectionHeader label={group.label} />
+                      )}
+                      {!isCollapsed && group.items.map((item, indexInGroup) =>
+                        <React.Fragment key={getKey(item)}>
+                          {renderItem(item, indexInGroup, indexInGroup === 0)}
+                        </React.Fragment>
+                      )}
+                    </div>
+                  )
+                })
               : items?.map((item, index) =>
                   <React.Fragment key={getKey(item)}>
                     {renderItem(item, index, index === 0)}

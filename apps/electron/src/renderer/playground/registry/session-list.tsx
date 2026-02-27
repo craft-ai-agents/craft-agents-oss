@@ -80,23 +80,6 @@ const sampleSessions: SessionMeta[] = [
     sessionStatus: 'todo',
     isFlagged: true,
   },
-  // Child sessions of session-1
-  {
-    id: 'session-1-child-1',
-    name: 'Research OAuth providers',
-    workspaceId: 'workspace-1',
-    lastMessageAt: Date.now() - 1000 * 60 * 10, // 10 min ago
-    parentSessionId: 'session-1',
-    isFlagged: true,
-  },
-  {
-    id: 'session-1-child-2',
-    name: 'Write unit tests for token refresh',
-    workspaceId: 'workspace-1',
-    lastMessageAt: Date.now() - 1000 * 60 * 20, // 20 min ago
-    parentSessionId: 'session-1',
-    isFlagged: true,
-  },
 ]
 
 function createMockContext(overrides: Partial<SessionListContextValue> = {}): SessionListContextValue {
@@ -139,8 +122,6 @@ interface SessionListSearchPreviewProps {
   showNoResults?: boolean
   /** Explicit result count to display (defaults to filtered session count) */
   resultCount?: number
-  /** Override selectedSessionId to a child ID — auto-expands parent's children */
-  selectedChildId?: string
 }
 
 function SessionListSearchPreview({
@@ -151,90 +132,15 @@ function SessionListSearchPreview({
   chatMatchCount,
   showNoResults = false,
   resultCount,
-  selectedChildId,
 }: SessionListSearchPreviewProps) {
-  const rootSessions = sampleSessions.filter(s => !s.parentSessionId)
-  const childMap = React.useMemo(() => {
-    const map = new Map<string, SessionMeta[]>()
-    for (const session of sampleSessions) {
-      if (!session.parentSessionId) continue
-      const list = map.get(session.parentSessionId) ?? []
-      list.push(session)
-      map.set(session.parentSessionId, list)
-    }
-    return map
-  }, [])
-
   // Filter if there's a search query (simple title match for demo)
   const filteredSessions = React.useMemo(() => {
     if (showNoResults) return []
-    if (!searchQuery) return rootSessions
-    return rootSessions.filter(s => (s.name || '').toLowerCase().includes(searchQuery.toLowerCase()))
-  }, [showNoResults, searchQuery, rootSessions])
+    if (!searchQuery) return sampleSessions
+    return sampleSessions.filter(s => (s.name || '').toLowerCase().includes(searchQuery.toLowerCase()))
+  }, [showNoResults, searchQuery])
 
-  // When a child is selected, use its ID so SessionItem auto-expands children
-  const selectedSessionId = selectedChildId ?? filteredSessions[selectedIndex]?.id ?? null
-
-  const selectedChildParentId = React.useMemo(() => {
-    if (!selectedChildId) return null
-    return sampleSessions.find(s => s.id === selectedChildId)?.parentSessionId ?? null
-  }, [selectedChildId])
-
-  const [expandedParentIds, setExpandedParentIds] = React.useState<Set<string>>(
-    () => selectedChildParentId ? new Set([selectedChildParentId]) : new Set()
-  )
-
-  React.useEffect(() => {
-    if (!selectedChildParentId) return
-    setExpandedParentIds((prev) => {
-      if (prev.has(selectedChildParentId)) return prev
-      const next = new Set(prev)
-      next.add(selectedChildParentId)
-      return next
-    })
-  }, [selectedChildParentId])
-
-  const rows = React.useMemo(() => {
-    const result: Array<{
-      item: SessionMeta
-      depth: 0 | 1
-      parentId?: string
-      childCount: number
-      isParentExpanded: boolean
-      isFirstChild: boolean
-      isLastChild: boolean
-    }> = []
-
-    for (const parent of filteredSessions) {
-      const children = childMap.get(parent.id) ?? []
-      const isParentExpanded = children.length > 0 && expandedParentIds.has(parent.id)
-
-      result.push({
-        item: parent,
-        depth: 0,
-        childCount: children.length,
-        isParentExpanded,
-        isFirstChild: false,
-        isLastChild: false,
-      })
-
-      if (!isParentExpanded) continue
-
-      children.forEach((child, index) => {
-        result.push({
-          item: child,
-          depth: 1,
-          parentId: parent.id,
-          childCount: 0,
-          isParentExpanded: false,
-          isFirstChild: index === 0,
-          isLastChild: index === children.length - 1,
-        })
-      })
-    }
-
-    return result
-  }, [filteredSessions, childMap, expandedParentIds])
+  const selectedSessionId = filteredSessions[selectedIndex]?.id ?? null
 
   // Build content search results for match badge
   const contentSearchResults = new Map<string, ContentSearchResult>()
@@ -285,28 +191,15 @@ function SessionListSearchPreview({
                   </span>
                 </div>
 
-                {rows.map((row, index) => (
+                {filteredSessions.map((session, index) => (
                   <SessionItem
-                    key={row.item.id}
-                    item={row.item}
+                    key={session.id}
+                    item={session}
                     index={index}
                     itemProps={{ tabIndex: 0, onKeyDown: noopKeyDown }}
-                    isSelected={row.item.id === selectedSessionId}
-                    isFirstInGroup={index === 0 || row.depth === 0}
+                    isSelected={session.id === selectedSessionId}
+                    isFirstInGroup={index === 0}
                     isInMultiSelect={false}
-                    depth={row.depth}
-                    childCount={row.childCount}
-                    isParentExpanded={row.isParentExpanded}
-                    isFirstChild={row.isFirstChild}
-                    isLastChild={row.isLastChild}
-                    onToggleChildren={row.depth === 0 && row.childCount > 0 ? () => {
-                      setExpandedParentIds((prev) => {
-                        const next = new Set(prev)
-                        if (next.has(row.item.id)) next.delete(row.item.id)
-                        else next.add(row.item.id)
-                        return next
-                      })
-                    } : undefined}
                     onSelect={() => {}}
                   />
                 ))}
@@ -328,6 +221,8 @@ interface SessionItemPreviewProps {
   isSelected?: boolean
   searchQuery?: string
   chatMatchCount?: number
+  state?: 'none' | 'loading' | 'plan' | 'new'
+  flagged?: boolean
 }
 
 function SessionItemPreview({
@@ -335,15 +230,27 @@ function SessionItemPreview({
   isSelected = false,
   searchQuery = '',
   chatMatchCount,
+  state = 'none',
+  flagged = false,
 }: SessionItemPreviewProps) {
+  const resolvedItem = React.useMemo(() => {
+    const base: SessionMeta = { ...item, isProcessing: false, hasUnread: false, lastMessageRole: undefined, isFlagged: flagged }
+    switch (state) {
+      case 'loading': base.isProcessing = true; break
+      case 'plan': base.lastMessageRole = 'plan'; break
+      case 'new': base.hasUnread = true; break
+    }
+    return base
+  }, [item, state, flagged])
+
   const contentSearchResults = new Map<string, ContentSearchResult>()
-  if (chatMatchCount && item) {
-    contentSearchResults.set(item.id, { matchCount: chatMatchCount, snippet: '' })
+  if (chatMatchCount && resolvedItem) {
+    contentSearchResults.set(resolvedItem.id, { matchCount: chatMatchCount, snippet: '' })
   }
 
   const ctx = createMockContext({
     searchQuery,
-    selectedSessionId: isSelected ? item.id : null,
+    selectedSessionId: isSelected ? resolvedItem.id : null,
     contentSearchResults,
   })
 
@@ -351,7 +258,7 @@ function SessionItemPreview({
     <ActionRegistryProvider>
       <SessionListProvider value={ctx}>
         <SessionItem
-          item={item}
+          item={resolvedItem}
           index={0}
           itemProps={{ tabIndex: 0, onKeyDown: noopKeyDown }}
           isSelected={isSelected}
@@ -373,7 +280,7 @@ export const sessionListComponents: ComponentEntry[] = [
     id: 'session-list-search',
     name: 'SessionList Search States',
     category: 'Session List',
-    description: 'Session list using real SessionItem components with search, children, and badges',
+    description: 'Session list using real SessionItem components with search and badges',
     component: SessionListSearchPreview,
     props: [
       {
@@ -476,15 +383,6 @@ export const sessionListComponents: ComponentEntry[] = [
           resultCount: 0,
         },
       },
-      {
-        name: 'With Children',
-        description: 'Session with expanded child sessions (child selected, auto-expanded)',
-        props: {
-          searchQuery: '',
-          showSearchInput: false,
-          selectedChildId: 'session-1-child-1',
-        },
-      },
     ],
     mockData: () => ({}),
   },
@@ -495,6 +393,20 @@ export const sessionListComponents: ComponentEntry[] = [
     description: 'Individual real SessionItem showing visual states with search and badges',
     component: SessionItemPreview,
     props: [
+      {
+        name: 'state',
+        description: 'Indicator state shown next to status icon',
+        control: {
+          type: 'select',
+          options: [
+            { label: 'None', value: 'none' },
+            { label: 'Loading', value: 'loading' },
+            { label: 'Plan', value: 'plan' },
+            { label: 'New', value: 'new' },
+          ],
+        },
+        defaultValue: 'none',
+      },
       {
         name: 'searchQuery',
         description: 'Search query for highlighting',
@@ -513,13 +425,52 @@ export const sessionListComponents: ComponentEntry[] = [
         control: { type: 'number', min: 0, max: 50, step: 1 },
         defaultValue: 0,
       },
+      {
+        name: 'flagged',
+        description: 'Whether the session is flagged',
+        control: { type: 'boolean' },
+        defaultValue: false,
+      },
     ],
     variants: [
       {
         name: 'Default',
-        description: 'Normal state without search',
+        description: 'Normal state without indicators',
         props: {
           item: sampleSessions[0],
+          state: 'none',
+        },
+      },
+      {
+        name: 'Loading',
+        description: 'Session is processing (shows spinner)',
+        props: {
+          item: sampleSessions[0],
+          state: 'loading',
+        },
+      },
+      {
+        name: 'Plan Pending',
+        description: 'Session has a pending plan (shows compass icon)',
+        props: {
+          item: sampleSessions[0],
+          state: 'plan',
+        },
+      },
+      {
+        name: 'New / Unread',
+        description: 'Session has unread messages (shows accent dot)',
+        props: {
+          item: sampleSessions[0],
+          state: 'new',
+        },
+      },
+      {
+        name: 'Flagged',
+        description: 'Session is flagged',
+        props: {
+          item: sampleSessions[0],
+          flagged: true,
         },
       },
       {
@@ -538,13 +489,6 @@ export const sessionListComponents: ComponentEntry[] = [
           searchQuery: 'auth',
           isSelected: true,
           chatMatchCount: 5,
-        },
-      },
-      {
-        name: 'With Children',
-        description: 'Parent session with child count badge (click to expand)',
-        props: {
-          item: sampleSessions[0],
         },
       },
     ],

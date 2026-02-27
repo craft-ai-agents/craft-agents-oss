@@ -54,8 +54,6 @@ export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 import type { LoadedSkill, SkillMetadata } from '@craft-agent/shared/skills/types';
 export type { LoadedSkill, SkillMetadata };
 
-// Import session types from shared (for SessionFamily - different from core SessionMetadata)
-import type { SessionMetadata as SharedSessionMetadata } from '@craft-agent/shared/sessions/types';
 
 // Import LLM connection types
 import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType } from '@craft-agent/shared/config';
@@ -410,11 +408,6 @@ export interface Session {
   isArchived?: boolean
   /** Timestamp when session was archived (for retention policy) */
   archivedAt?: number
-  // Sub-session hierarchy (1 level max)
-  /** Parent session ID (if this is a sub-session). Null/undefined = root session. */
-  parentSessionId?: string
-  /** Explicit sibling order (lazy - only populated when user reorders). */
-  siblingOrder?: number
   /** Whether the backend supports session branching */
   supportsBranching?: boolean
 }
@@ -453,6 +446,8 @@ export interface CreateSessionOptions {
   enabledSourceSlugs?: string[]
   /** Message ID to branch from (copies conversation up to and including this message) */
   branchFromMessageId?: string
+  /** Session ID to branch from (source session for message copying) */
+  branchFromSessionId?: string
 }
 
 // Events sent from main to renderer
@@ -499,11 +494,7 @@ export type SessionEvent =
   | { type: 'session_model_changed'; sessionId: string; model: string | null }
   | { type: 'session_status_changed'; sessionId: string; sessionStatus: SessionStatus }
   | { type: 'session_deleted'; sessionId: string }
-  // Sub-session events
-  | { type: 'session_created'; sessionId: string; parentSessionId?: string }
-  | { type: 'sessions_reordered' }
-  | { type: 'session_archived_cascade'; sessionId: string; count: number }
-  | { type: 'session_deleted_cascade'; sessionId: string; count: number }
+  | { type: 'session_created'; sessionId: string }
   | { type: 'session_shared'; sessionId: string; sharedUrl: string }
   | { type: 'session_unshared'; sessionId: string }
   // Auth request events (unified auth flow)
@@ -563,21 +554,6 @@ export type SessionCommand =
   | { type: 'setPendingPlanExecution'; planPath: string }
   | { type: 'markCompactionComplete' }
   | { type: 'clearPendingPlanExecution' }
-  // Sub-session hierarchy
-  | { type: 'getSessionFamily' }
-  | { type: 'updateSiblingOrder'; orderedSessionIds: string[] }
-  | { type: 'archiveCascade' }
-  | { type: 'deleteCascade' }
-
-/**
- * Session family information (parent + siblings)
- * Uses SharedSessionMetadata from @craft-agent/shared (not core SessionMetadata)
- */
-export interface SessionFamily {
-  parent: SharedSessionMetadata
-  siblings: SharedSessionMetadata[]
-  self: SharedSessionMetadata
-}
 
 /**
  * Parameters for opening a new chat session
@@ -594,7 +570,6 @@ export const IPC_CHANNELS = {
   // Session management
   GET_SESSIONS: 'sessions:get',
   CREATE_SESSION: 'sessions:create',
-  CREATE_SUB_SESSION: 'sessions:createSubSession',
   DELETE_SESSION: 'sessions:delete',
   GET_SESSION_MESSAGES: 'sessions:getMessages',
   SEND_MESSAGE: 'sessions:sendMessage',
@@ -910,7 +885,6 @@ export interface ElectronAPI {
   getSessions(): Promise<Session[]>
   getSessionMessages(sessionId: string): Promise<Session | null>
   createSession(workspaceId: string, options?: CreateSessionOptions): Promise<Session>
-  createSubSession(workspaceId: string, parentSessionId: string, options?: CreateSessionOptions): Promise<Session>
   deleteSession(sessionId: string): Promise<void>
   sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: StoredAttachmentType[], options?: SendMessageOptions): Promise<void>
   cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
@@ -920,7 +894,7 @@ export interface ElectronAPI {
   respondToCredential(sessionId: string, requestId: string, response: CredentialResponse): Promise<boolean>
 
   // Consolidated session command handler
-  sessionCommand(sessionId: string, command: SessionCommand): Promise<void | ShareResult | RefreshTitleResult | SessionFamily | { count: number }>
+  sessionCommand(sessionId: string, command: SessionCommand): Promise<void | ShareResult | RefreshTitleResult | { count: number }>
 
   // Pending plan execution (for reload recovery)
   getPendingPlanExecution(sessionId: string): Promise<{ planPath: string; awaitingCompaction: boolean } | null>

@@ -26,6 +26,8 @@ import {
   HelpCircle,
   ExternalLink,
   Cake,
+  Calendar,
+  Layers,
 } from "lucide-react"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
@@ -64,7 +66,7 @@ import {
   springTransition as collapsibleSpring,
 } from "@/components/ui/collapsible"
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher"
-import { SessionList } from "./SessionList"
+import { SessionList, type ChatGroupingMode } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
 import { PanelStackContainer } from "./PanelStackContainer"
 import type { ChatDisplayHandle } from "./ChatDisplay"
@@ -678,6 +680,14 @@ function AppShellContent({
   const [searchActive, setSearchActive] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
 
+  // Grouping mode for chat list: 'date' | 'status'
+  const [chatGroupingMode, setChatGroupingMode] = React.useState<ChatGroupingMode>(() => {
+    return storage.get<ChatGroupingMode>(storage.KEYS.chatGroupingMode, 'date')
+  })
+  React.useEffect(() => {
+    storage.set(storage.KEYS.chatGroupingMode, chatGroupingMode)
+  }, [chatGroupingMode])
+
   // Ref for ChatDisplay navigation (exposed via forwardRef)
   const chatDisplayRef = React.useRef<ChatDisplayHandle>(null)
   // Track match count and index from ChatDisplay (for SessionList navigation UI)
@@ -1041,7 +1051,7 @@ function AppShellContent({
       const nextMode = modes[nextIndex]
       contextValue.onSessionOptionsChange(effectiveSessionId, { permissionMode: nextMode })
     }
-  }, { enabled: () => !document.querySelector('[role="dialog"]') && document.activeElement?.tagName !== 'TEXTAREA' })
+  })
 
   // Sidebar toggle (CMD+B)
   useAction('view.toggleSidebar', () => setIsSidebarVisible(v => !v))
@@ -2030,6 +2040,7 @@ function AppShellContent({
           canGoForward={canGoForward}
           onToggleSidebar={() => setIsSidebarVisible(prev => !prev)}
           onToggleFocusMode={() => setIsSidebarAndNavigatorHidden(prev => !prev)}
+          onAddPanel={() => handleNewChat(true)}
         />
 
       {/* === OUTER LAYOUT: Unified Panel Stack | Right Sidebar === */}
@@ -2665,6 +2676,28 @@ function AppShellContent({
                             </DropdownMenuSub>
 
                             <StyledDropdownMenuSeparator />
+
+                            {/* Group by submenu - switch between date and status grouping */}
+                            <DropdownMenuSub>
+                              <StyledDropdownMenuSubTrigger>
+                                <Layers className="h-3.5 w-3.5" />
+                                <span className="flex-1">Group</span>
+                              </StyledDropdownMenuSubTrigger>
+                              <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
+                                <StyledDropdownMenuItem onClick={() => setChatGroupingMode('date')}>
+                                  <Calendar className="h-3.5 w-3.5" />
+                                  <span className="flex-1">Date</span>
+                                  {chatGroupingMode === 'date' && <Check className="h-3 w-3 text-muted-foreground" />}
+                                </StyledDropdownMenuItem>
+                                <StyledDropdownMenuItem onClick={() => setChatGroupingMode('status')}>
+                                  <Inbox className="h-3.5 w-3.5" />
+                                  <span className="flex-1">Status</span>
+                                  {chatGroupingMode === 'status' && <Check className="h-3 w-3 text-muted-foreground" />}
+                                </StyledDropdownMenuItem>
+                              </StyledDropdownMenuSubContent>
+                            </DropdownMenuSub>
+
+                            <StyledDropdownMenuSeparator />
                             <StyledDropdownMenuItem
                               onClick={() => {
                                 setSearchActive(true)
@@ -2970,6 +3003,7 @@ function AppShellContent({
                   evaluateViews={evaluateViews}
                   labels={labelConfigs}
                   onLabelsChange={handleSessionLabelsChange}
+                  groupingMode={chatGroupingMode}
                   workspaceId={activeWorkspaceId ?? undefined}
                   statusFilter={listFilter}
                   labelFilterMap={labelFilter}
@@ -3000,7 +3034,7 @@ function AppShellContent({
           onMouseLeave={() => { if (!isResizing) setSidebarHandleY(null) }}
           className="absolute top-0 w-3 h-full cursor-col-resize z-panel flex justify-center"
           style={{
-            left: isSidebarVisible ? sidebarWidth - 6 : -6,
+            left: isSidebarVisible ? sidebarWidth - 3 : -6,
             transition: isResizing === 'sidebar' ? undefined : 'left 0.15s ease-out',
           }}
         >
@@ -3025,7 +3059,7 @@ function AppShellContent({
           onMouseLeave={() => { if (isResizing !== 'session-list') setSessionListHandleY(null) }}
           className="absolute top-0 w-3 h-full cursor-col-resize z-panel flex justify-center"
           style={{
-            left: (isSidebarVisible ? sidebarWidth + PANEL_GAP : 0) + sessionListWidth + PANEL_GAP - 1,
+            left: (isSidebarVisible ? sidebarWidth + PANEL_GAP : PANEL_EDGE_INSET) + sessionListWidth - 2,
             transition: isResizing === 'session-list' ? undefined : 'left 0.15s ease-out',
           }}
         >

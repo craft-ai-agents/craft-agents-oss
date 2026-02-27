@@ -32,12 +32,16 @@ import { DropdownMenuProvider, ContextMenuProvider } from '@/components/ui/menu-
 import { cn } from '@/lib/utils'
 
 export interface EntityRowProps {
-  /** Left icon area — rendered absolutely at left-4 top-3.5 */
+  /** Left icon area — rendered in-flow as a flex child before the content column.
+   *  Consumers can pass multiple icons (e.g. via a fragment) for a horizontal icon group. */
   icon?: React.ReactNode
   /** Title content (ReactNode for search highlighting support) */
   title: React.ReactNode
   /** Additional className on the title wrapper (e.g. shimmer animation) */
   titleClassName?: string
+  /** Content rendered inline after the title (e.g. timestamp). On hover, swapped with the more button.
+   *  When set, the title row becomes single-line (truncated) and the absolute more button is hidden. */
+  titleTrailing?: React.ReactNode
   /** Badge/subtitle row beneath the title */
   badges?: React.ReactNode
   /** Right-aligned content in the badge row (timestamp, child toggle) */
@@ -83,6 +87,7 @@ export function EntityRow({
   icon,
   title,
   titleClassName,
+  titleTrailing,
   badges,
   trailing,
   children,
@@ -114,13 +119,6 @@ export function EntityRow({
         <div className="absolute left-0 inset-y-0 w-[2px] bg-accent" />
       )}
 
-      {/* Icon — positioned absolutely */}
-      {icon && (
-        <div className="absolute left-4 top-3.5 z-10 flex items-center justify-center">
-          {icon}
-        </div>
-      )}
-
       {/* Main content button */}
       <button
         {...(buttonProps as React.ButtonHTMLAttributes<HTMLButtonElement>)}
@@ -135,21 +133,66 @@ export function EntityRow({
         onMouseDown={onMouseDown}
         onClick={!onMouseDown ? onClick : undefined}
       >
-        {/* Spacer for icon */}
-        {icon && <div className="w-4 h-5 shrink-0" />}
-
         {/* Content column */}
         <div className="flex flex-col gap-1.5 min-w-0 flex-1">
           {/* Title */}
-          <div className="flex items-start gap-2 w-full pr-6 min-w-0">
-            <div className={cn("font-medium font-sans line-clamp-2 min-w-0 -mb-[2px]", titleClassName)}>
-              {title}
+          {titleTrailing ? (
+            <div className="flex items-center gap-[10px] w-full min-w-0">
+              {icon && (
+                <div className="shrink-0 flex items-center gap-[10px] [&>*]:w-3 [&>*]:h-3">
+                  {icon}
+                </div>
+              )}
+              <div className={cn("font-sans truncate min-w-0", titleClassName)}>
+                {title}
+              </div>
+              <div className="shrink-0 ml-auto relative -mr-1">
+                <span className={cn(menuOpen || contextMenuOpen ? "invisible" : "group-hover:invisible")}>
+                  {titleTrailing}
+                </span>
+                {menuContent && !hideMoreButton && (
+                  <div className={cn(
+                    "absolute inset-0 flex items-center justify-end overflow-visible",
+                    menuOpen || contextMenuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                  )}>
+                    <DropdownMenu modal={true} onOpenChange={setMenuOpen}>
+                      <DropdownMenuTrigger asChild>
+                        <div className="p-1 rounded-[6px] hover:bg-foreground/10 data-[state=open]:bg-foreground/10 cursor-pointer">
+                          <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+                        </div>
+                      </DropdownMenuTrigger>
+                      <StyledDropdownMenuContent align="end">
+                        <DropdownMenuProvider>
+                          {menuContent}
+                        </DropdownMenuProvider>
+                      </StyledDropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-center gap-[10px] w-full pr-6 min-w-0">
+              {icon && (
+                <div className="shrink-0 flex items-center gap-[10px] [&>*]:w-3 [&>*]:h-3">
+                  {icon}
+                </div>
+              )}
+              <div className={cn("font-medium font-sans line-clamp-2 min-w-0 -mb-[2px]", titleClassName)}>
+                {title}
+              </div>
+            </div>
+          )}
 
           {/* Badges / subtitle row */}
           {(badges || trailing) && (
-            <div className="flex items-center gap-1.5 text-xs text-foreground/70 w-full -mb-[2px] min-w-0">
+            <div className="flex items-center gap-[10px] text-xs text-foreground/70 w-full -mb-[2px] min-w-0">
+              {/* Invisible spacer matching icon container width */}
+              {icon && (
+                <div className="shrink-0 flex items-center gap-[10px] [&>*]:w-3 [&>*]:h-3 invisible" aria-hidden="true">
+                  {icon}
+                </div>
+              )}
               {badges && (
                 <div
                   className="flex-1 flex items-center gap-1 min-w-0 overflow-x-auto scrollbar-hide"
@@ -171,14 +214,14 @@ export function EntityRow({
         </div>
       </button>
 
-      {/* Children below the button (e.g. expanded child sessions) */}
+      {/* Children rendered below the button */}
       {children}
 
       {/* Overlay (e.g. match count badge) */}
       {overlay}
 
-      {/* More menu button — visible on hover or when menu is open */}
-      {menuContent && !hideMoreButton && (
+      {/* More menu button — visible on hover or when menu is open (skipped when titleTrailing handles it inline) */}
+      {menuContent && !hideMoreButton && !titleTrailing && (
         <div
           className={cn(
             "absolute right-2 top-2 transition-opacity z-10",

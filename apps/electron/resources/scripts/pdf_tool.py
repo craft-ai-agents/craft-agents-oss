@@ -41,13 +41,21 @@ def parse_page_range(range_str: str, total_pages: int) -> list[int]:
     pages: list[int] = []
     for part in range_str.split(","):
         part = part.strip()
+        if not part:
+            continue
         if "-" in part:
             start_s, end_s = part.split("-", 1)
-            start = max(1, int(start_s))
-            end = min(total_pages, int(end_s))
+            try:
+                start = max(1, int(start_s))
+                end = min(total_pages, int(end_s))
+            except ValueError:
+                raise ValueError(f"Invalid page range: '{part}'. Expected format: '1-3' or '5'.")
             pages.extend(range(start - 1, end))
         else:
-            page_num = int(part)
+            try:
+                page_num = int(part)
+            except ValueError:
+                raise ValueError(f"Invalid page number: '{part}'. Expected a number.")
             if 1 <= page_num <= total_pages:
                 pages.append(page_num - 1)
     return pages
@@ -70,20 +78,21 @@ def extract(file: str, pages: str | None, output: str | None) -> None:
     """
     try:
         doc = fitz.open(file)
-        total = len(doc)
+        try:
+            total = len(doc)
 
-        if pages:
-            page_indices = parse_page_range(pages, total)
-        else:
-            page_indices = list(range(total))
+            if pages:
+                page_indices = parse_page_range(pages, total)
+            else:
+                page_indices = list(range(total))
 
-        parts: list[str] = []
-        for idx in page_indices:
-            page = doc[idx]
-            text = page.get_text()
-            parts.append(f"--- Page {idx + 1} ---\n{text}")
-
-        doc.close()
+            parts: list[str] = []
+            for idx in page_indices:
+                page = doc[idx]
+                text = page.get_text()
+                parts.append(f"--- Page {idx + 1} ---\n{text}")
+        finally:
+            doc.close()
         write_output("\n".join(parts), output)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
@@ -97,47 +106,52 @@ def info(file: str, output: str | None) -> None:
     """Show PDF metadata and information."""
     try:
         reader = PdfReader(file)
-        meta = reader.metadata
 
         info_dict: dict[str, object] = {
             "file": str(Path(file).resolve()),
-            "pages": len(reader.pages),
             "encrypted": reader.is_encrypted,
         }
 
-        if meta:
-            info_dict["metadata"] = {
-                "title": meta.title,
-                "author": meta.author,
-                "subject": meta.subject,
-                "creator": meta.creator,
-                "producer": meta.producer,
-                "creation_date": str(meta.creation_date) if meta.creation_date else None,
-                "modification_date": str(meta.modification_date) if meta.modification_date else None,
-            }
+        if reader.is_encrypted:
+            info_dict["pages"] = None
+            info_dict["note"] = "PDF is encrypted. Decrypt to view full metadata."
+        else:
+            info_dict["pages"] = len(reader.pages)
+            meta = reader.metadata
 
-        # Page dimensions from first page
-        if reader.pages:
-            page = reader.pages[0]
-            box = page.mediabox
-            info_dict["page_size"] = {
-                "width": float(box.width),
-                "height": float(box.height),
-                "width_inches": round(float(box.width) / 72, 2),
-                "height_inches": round(float(box.height) / 72, 2),
-            }
+            if meta:
+                info_dict["metadata"] = {
+                    "title": meta.title,
+                    "author": meta.author,
+                    "subject": meta.subject,
+                    "creator": meta.creator,
+                    "producer": meta.producer,
+                    "creation_date": str(meta.creation_date) if meta.creation_date else None,
+                    "modification_date": str(meta.modification_date) if meta.modification_date else None,
+                }
 
-        # Form fields
-        fields = reader.get_fields()
-        if fields:
-            field_info = []
-            for name, field in fields.items():
-                field_info.append({
-                    "name": name,
-                    "type": str(field.get("/FT", "Unknown")),
-                    "value": str(field.get("/V", "")),
-                })
-            info_dict["form_fields"] = field_info
+            # Page dimensions from first page
+            if reader.pages:
+                page = reader.pages[0]
+                box = page.mediabox
+                info_dict["page_size"] = {
+                    "width": float(box.width),
+                    "height": float(box.height),
+                    "width_inches": round(float(box.width) / 72, 2),
+                    "height_inches": round(float(box.height) / 72, 2),
+                }
+
+            # Form fields
+            fields = reader.get_fields()
+            if fields:
+                field_info = []
+                for name, field in fields.items():
+                    field_info.append({
+                        "name": name,
+                        "type": str(field.get("/FT", "Unknown")),
+                        "value": str(field.get("/V", "")),
+                    })
+                info_dict["form_fields"] = field_info
 
         write_output(json.dumps(info_dict, indent=2, default=str), output)
     except Exception as e:
@@ -156,6 +170,12 @@ def merge(files: tuple[str, ...], output: str) -> None:
     if len(files) < 2:
         click.echo("Error: at least 2 PDF files are required for merge.", err=True)
         sys.exit(1)
+
+    resolved_output = str(Path(output).resolve())
+    for f in files:
+        if str(Path(f).resolve()) == resolved_output:
+            click.echo("Error: output file cannot be one of the input files.", err=True)
+            sys.exit(1)
 
     try:
         writer = PdfWriter()
@@ -176,6 +196,10 @@ def merge(files: tuple[str, ...], output: str) -> None:
 @click.option("-o", "--output", type=click.Path(), required=True, help="Output PDF file path.")
 def split(file: str, pages: str, output: str) -> None:
     """Split a PDF by extracting specific pages into a new file."""
+    if str(Path(file).resolve()) == str(Path(output).resolve()):
+        click.echo("Error: output file cannot be the same as input file.", err=True)
+        sys.exit(1)
+
     try:
         reader = PdfReader(file)
         total = len(reader.pages)
@@ -207,40 +231,45 @@ def watermark(file: str, text: str, font_size: float, opacity: float, angle: flo
     """Add a text watermark to every page of a PDF."""
     try:
         doc = fitz.open(file)
+        try:
+            color_map: dict[str, tuple[float, float, float]] = {
+                "gray": (0.5, 0.5, 0.5),
+                "grey": (0.5, 0.5, 0.5),
+                "red": (1.0, 0.0, 0.0),
+                "blue": (0.0, 0.0, 1.0),
+                "green": (0.0, 0.5, 0.0),
+                "black": (0.0, 0.0, 0.0),
+            }
 
-        color_map: dict[str, tuple[float, float, float]] = {
-            "gray": (0.5, 0.5, 0.5),
-            "grey": (0.5, 0.5, 0.5),
-            "red": (1.0, 0.0, 0.0),
-            "blue": (0.0, 0.0, 1.0),
-            "green": (0.0, 0.5, 0.0),
-            "black": (0.0, 0.0, 0.0),
-        }
+            if color.startswith("#") and len(color) == 7:
+                try:
+                    r = int(color[1:3], 16) / 255.0
+                    g = int(color[3:5], 16) / 255.0
+                    b = int(color[5:7], 16) / 255.0
+                    fitz_color = (r, g, b)
+                except ValueError:
+                    click.echo(f"Warning: invalid hex color '{color}', using gray.", err=True)
+                    fitz_color = (0.5, 0.5, 0.5)
+            else:
+                fitz_color = color_map.get(color.lower(), (0.5, 0.5, 0.5))
 
-        if color.startswith("#") and len(color) == 7:
-            r = int(color[1:3], 16) / 255.0
-            g = int(color[3:5], 16) / 255.0
-            b = int(color[5:7], 16) / 255.0
-            fitz_color = (r, g, b)
-        else:
-            fitz_color = color_map.get(color.lower(), (0.5, 0.5, 0.5))
+            for page in doc:
+                rect = page.rect
+                center = fitz.Point(rect.width / 2, rect.height / 2)
 
-        for page in doc:
-            rect = page.rect
-            center = fitz.Point(rect.width / 2, rect.height / 2)
+                # Measure text width to center it on the page
+                text_width = fitz.get_text_length(text, fontsize=font_size)
+                text_point = fitz.Point(center.x - text_width / 2, center.y + font_size / 3)
 
-            # Measure text width to center it on the page
-            text_width = fitz.get_text_length(text, fontsize=font_size)
-            text_point = fitz.Point(center.x - text_width / 2, center.y + font_size / 3)
+                tw = fitz.TextWriter(page.rect, opacity=opacity)
+                tw.append(text_point, text, fontsize=font_size)
+                # fitz.Matrix(1, 1) creates identity, .prerotate(angle) applies rotation
+                rotation_matrix = fitz.Matrix(1, 1).prerotate(angle)
+                tw.write_text(page, morph=(center, rotation_matrix), color=fitz_color)
 
-            tw = fitz.TextWriter(page.rect, opacity=opacity)
-            tw.append(text_point, text, fontsize=font_size)
-            # fitz.Matrix(1, 1) creates identity, .prerotate(angle) applies rotation
-            rotation_matrix = fitz.Matrix(1, 1).prerotate(angle)
-            tw.write_text(page, morph=(center, rotation_matrix), color=fitz_color)
-
-        doc.save(output)
-        doc.close()
+            doc.save(output)
+        finally:
+            doc.close()
         click.echo(f"Watermarked PDF written to {output}", err=True)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)

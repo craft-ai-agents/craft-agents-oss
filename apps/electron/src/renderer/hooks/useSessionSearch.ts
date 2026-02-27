@@ -63,7 +63,6 @@ export interface UseSessionSearchResult {
   flatItems: SessionMeta[]
   dateGroups: DateGroup[]
   sessionIndexMap: Map<string, number>
-  childSessionsByParent: Map<string, SessionMeta[]>
 
   // Pagination
   hasMore: boolean
@@ -103,17 +102,6 @@ function groupSessionsByDate(sessions: SessionMeta[]): DateGroup[] {
       ...group,
       label: formatDateHeader(group.date),
     }))
-}
-
-function sortChildSessions(children: SessionMeta[]): SessionMeta[] {
-  const hasExplicitOrder = children.some(s => s.siblingOrder !== undefined)
-
-  return [...children].sort((a, b) => {
-    if (hasExplicitOrder) {
-      return (a.siblingOrder ?? Number.POSITIVE_INFINITY) - (b.siblingOrder ?? Number.POSITIVE_INFINITY)
-    }
-    return (a.createdAt || 0) - (b.createdAt || 0)
-  })
 }
 
 interface FilterMatchOptions {
@@ -302,23 +290,6 @@ export function useSessionSearch({
     [visibleItems]
   )
 
-  // Map parent session ID -> sorted child sessions
-  const childSessionsByParent = useMemo(() => {
-    const byParent = new Map<string, SessionMeta[]>()
-    for (const session of visibleItems) {
-      if (!session.parentSessionId) continue
-      const current = byParent.get(session.parentSessionId) ?? []
-      current.push(session)
-      byParent.set(session.parentSessionId, current)
-    }
-
-    for (const [parentId, children] of byParent) {
-      byParent.set(parentId, sortChildSessions(children))
-    }
-
-    return byParent
-  }, [visibleItems])
-
   // Filter items by search query or current filter
   const searchFilteredItems = useMemo(() => {
     if (!isSearchMode) {
@@ -342,17 +313,6 @@ export function useSessionSearch({
         return countB - countA
       })
   }, [sortedItems, isSearchMode, searchQuery, contentSearchResults, currentFilter, evaluateViews, statusFilter, labelFilterMap])
-
-  // Normal mode: deduplicate child sessions shown via parent dropdowns
-  const normalModeTopLevelItems = useMemo(() => {
-    if (isSearchMode) return searchFilteredItems
-
-    const presentIds = new Set(searchFilteredItems.map(item => item.id))
-    return searchFilteredItems.filter(item => {
-      if (!item.parentSessionId) return true
-      return !presentIds.has(item.parentSessionId)
-    })
-  }, [isSearchMode, searchFilteredItems])
 
   // Split search results: matching current filter vs others
   const { matchingFilterItems, otherResultItems, exceededSearchLimit } = useMemo(() => {
@@ -413,16 +373,14 @@ export function useSessionSearch({
   }, [searchQuery])
 
   const paginatedItems = useMemo(() => {
-    const source = isSearchMode ? searchFilteredItems : normalModeTopLevelItems
-    return source.slice(0, displayLimit)
-  }, [isSearchMode, searchFilteredItems, normalModeTopLevelItems, displayLimit])
+    return searchFilteredItems.slice(0, displayLimit)
+  }, [searchFilteredItems, displayLimit])
 
-  const hasMore = displayLimit < (isSearchMode ? searchFilteredItems.length : normalModeTopLevelItems.length)
+  const hasMore = displayLimit < searchFilteredItems.length
 
   const loadMore = useCallback(() => {
-    const total = isSearchMode ? searchFilteredItems.length : normalModeTopLevelItems.length
-    setDisplayLimit(prev => Math.min(prev + BATCH_SIZE, total))
-  }, [isSearchMode, searchFilteredItems.length, normalModeTopLevelItems.length])
+    setDisplayLimit(prev => Math.min(prev + BATCH_SIZE, searchFilteredItems.length))
+  }, [searchFilteredItems.length])
 
   useEffect(() => {
     if (!hasMore || !sentinelRef.current) return
@@ -468,7 +426,6 @@ export function useSessionSearch({
     flatItems,
     dateGroups,
     sessionIndexMap,
-    childSessionsByParent,
     hasMore,
     sentinelRef,
     searchInputRef,

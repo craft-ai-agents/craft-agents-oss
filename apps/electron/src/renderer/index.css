@@ -623,7 +623,7 @@ html[data-font="inter"] {
     padding: 1px;
     background: linear-gradient(
       to bottom,
-      rgba(var(--foreground-rgb), 0.2),
+      rgba(var(--foreground-rgb), 0.1),
       rgba(var(--foreground-rgb), 0.3)
     );
     -webkit-mask:

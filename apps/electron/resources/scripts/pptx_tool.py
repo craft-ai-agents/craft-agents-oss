@@ -17,7 +17,6 @@ from pathlib import Path
 
 import click
 from pptx import Presentation
-from pptx.util import Pt
 
 
 def write_output(text: str, output_path: str | None) -> None:
@@ -147,7 +146,11 @@ def _parse_markdown_slides(md_text: str) -> list[dict[str, str]]:
 
 def _add_title_slide(prs: Presentation, title: str, subtitle: str = "") -> None:
     """Add a title slide."""
-    layout = prs.slide_layouts[0]  # Title Slide layout
+    try:
+        layout = prs.slide_layouts[0]  # Title Slide layout
+    except IndexError:
+        click.echo("Error: template has no slide layouts.", err=True)
+        sys.exit(1)
     slide = prs.slides.add_slide(layout)
 
     if slide.placeholders:
@@ -174,6 +177,9 @@ def _add_content_slide(prs: Presentation, slide_info: dict[str, str]) -> None:
         else:
             layout = prs.slide_layouts[6]  # Blank
     except IndexError:
+        if not prs.slide_layouts:
+            click.echo("Error: template has no slide layouts.", err=True)
+            sys.exit(1)
         layout = prs.slide_layouts[0]
 
     slide = prs.slides.add_slide(layout)
@@ -183,18 +189,27 @@ def _add_content_slide(prs: Presentation, slide_info: dict[str, str]) -> None:
         slide.placeholders[0].text = title
 
     # Set body content
-    if body and slide.placeholders and 1 in slide.placeholders:
-        tf = slide.placeholders[1].text_frame
+    if body:
+        if slide.placeholders and 1 in slide.placeholders:
+            tf = slide.placeholders[1].text_frame
+        else:
+            # No content placeholder (e.g. Blank layout) — add a textbox
+            from pptx.util import Inches
+            txBox = slide.shapes.add_textbox(Inches(1), Inches(1.5), Inches(8), Inches(5))
+            tf = txBox.text_frame
+            tf.word_wrap = True
         tf.clear()
 
         body_lines = body.split("\n")
-        for i, line in enumerate(body_lines):
+        first_line = True
+        for line in body_lines:
             stripped = line.strip()
             if not stripped:
                 continue
 
-            if i == 0:
+            if first_line:
                 p = tf.paragraphs[0]
+                first_line = False
             else:
                 p = tf.add_paragraph()
 
@@ -209,11 +224,16 @@ def _add_content_slide(prs: Presentation, slide_info: dict[str, str]) -> None:
                 p.text = num_match.group(1)
                 p.level = 0
             else:
-                # Check for indented bullets (sub-items)
+                # Check for indented bullets or numbered sub-items
                 indent_match = re.match(r"^(\s+)[-*+]\s+(.+)$", line)
+                indent_num_match = re.match(r"^(\s+)\d+[.)]\s+(.+)$", line)
                 if indent_match:
                     indent_level = len(indent_match.group(1)) // 2
                     p.text = indent_match.group(2)
+                    p.level = min(indent_level, 4)
+                elif indent_num_match:
+                    indent_level = len(indent_num_match.group(1)) // 2
+                    p.text = indent_num_match.group(2)
                     p.level = min(indent_level, 4)
                 else:
                     p.text = stripped
@@ -223,8 +243,6 @@ def _add_content_slide(prs: Presentation, slide_info: dict[str, str]) -> None:
         notes_slide = slide.notes_slide
         notes_tf = notes_slide.notes_text_frame
         notes_tf.text = notes
-
-    return slide
 
 
 @cli.command()
@@ -246,11 +264,7 @@ def info(file: str, output: str | None) -> None:
             if slide.shapes.title:
                 slide_data["title"] = slide.shapes.title.text
 
-            # Count shapes
-            shape_types: dict[str, int] = {}
-            for shape in slide.shapes:
-                stype = shape.shape_type.__class__.__name__ if hasattr(shape, "shape_type") else "unknown"
-                shape_types[stype] = shape_types.get(stype, 0) + 1
+            # Count shapes by type
             slide_data["shape_count"] = len(slide.shapes)
 
             # Notes

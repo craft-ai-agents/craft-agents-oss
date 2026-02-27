@@ -1,12 +1,12 @@
 /**
  * Spawn Session Tool (spawn_session)
  *
- * Session-scoped tool that enables the main agent to create sub-sessions
+ * Session-scoped tool that enables the main agent to create independent sessions
  * with configurable connection, model, sources, and an initial prompt.
  *
  * Two modes:
  * - help=true: Returns available connections, models, and sources
- * - Default: Creates a sub-session and sends the prompt (fire-and-forget)
+ * - Default: Creates a session and sends the prompt (fire-and-forget)
  */
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
@@ -40,7 +40,7 @@ export interface SpawnSessionToolOptions {
 export function createSpawnSessionTool(options: SpawnSessionToolOptions) {
   return tool(
     'spawn_session',
-    `Create a new sub-session that runs independently with its own prompt, connection, model, and sources.
+    `Create a new session that runs independently with its own prompt, connection, model, and sources.
 
 Use this to delegate tasks to parallel sessions — research, analysis, drafts, or any work that benefits from separate context.
 

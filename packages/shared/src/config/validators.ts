@@ -412,27 +412,7 @@ const LocalSourceConfigSchema = z.object({
   format: z.string().optional(),
 });
 
-// Source brand and action card schemas
-const SourceCardActionHandlerSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('api'), method: z.string(), path: z.string() }),
-  z.object({ type: z.literal('mcp'), tool: z.string() }),
-  z.object({ type: z.literal('copy') }),
-  z.object({ type: z.literal('open'), urlTemplate: z.string() }),
-]);
-
-const SourceCardActionSchema = z.object({
-  label: z.string().min(1),
-  variant: z.enum(['primary', 'secondary']),
-  handler: SourceCardActionHandlerSchema,
-});
-
-const SourceCardDefinitionSchema = z.object({
-  type: z.string().min(1),
-  label: z.string().min(1),
-  icon: z.string().min(1),
-  actions: z.array(SourceCardActionSchema),
-});
-
+// Source brand schema
 const SourceBrandSchema = z.object({
   color: EntityColorSchema.optional(),
 });
@@ -448,7 +428,6 @@ export const FolderSourceConfigSchema = z.object({
   api: ApiSourceConfigSchema.optional(),
   local: LocalSourceConfigSchema.optional(),
   brand: SourceBrandSchema.optional(),
-  cards: z.array(SourceCardDefinitionSchema).optional(),
   isAuthenticated: z.boolean().optional(),
   lastTestedAt: z.number().int().min(0).optional(),
   // Timestamps are optional - manually created configs may not have them

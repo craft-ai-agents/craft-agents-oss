@@ -20,6 +20,7 @@ export const KEYS = {
   viewFilters: 'view-filters', // Per-view filter map: { [viewKey]: { statuses, labels } }
   expandedFolders: 'expanded-folders',
   collapsedSidebarItems: 'collapsed-sidebar-items',
+  chatGroupingMode: 'chat-grouping-mode', // How to group chats: 'date' | 'status'
 
   // Focus mode
   focusModeEnabled: 'focus-mode-enabled',

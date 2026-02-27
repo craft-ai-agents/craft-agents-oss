@@ -1,5 +1,6 @@
 import * as React from "react"
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from "react"
+import { setCurrentZone } from '@/actions/keybinding-context'
 
 /**
  * Focus zone identifiers - ordered for Tab navigation
@@ -92,6 +93,9 @@ export function FocusProvider({ children }: { children: React.ReactNode }) {
       intent,
       shouldMoveDOMFocus: shouldMoveFocus,
     })
+
+    // Sync to keybinding context for when-clause evaluation
+    setCurrentZone(id)
 
     // Only move DOM focus if explicitly requested
     if (shouldMoveFocus) {

@@ -18,7 +18,13 @@ from pathlib import Path
 
 import click
 from openpyxl import Workbook, load_workbook
-from openpyxl.utils import column_index_from_string
+
+
+def _json_serial(obj: object) -> str:
+    """JSON serializer that uses ISO 8601 for dates/datetimes."""
+    if hasattr(obj, "isoformat"):
+        return obj.isoformat()
+    return str(obj)
 
 
 def write_output(text: str, output_path: str | None) -> None:
@@ -30,96 +36,141 @@ def write_output(text: str, output_path: str | None) -> None:
         click.echo(text)
 
 
-def parse_cell_ref(ref: str) -> tuple[int, int]:
-    """Parse a cell reference like 'A1' into (row, col) 1-based."""
-    col_str = ""
-    row_str = ""
-    for ch in ref:
-        if ch.isalpha():
-            col_str += ch
-        else:
-            row_str += ch
-    col = column_index_from_string(col_str.upper())
-    row = int(row_str)
-    return row, col
-
-
 @click.group()
 def cli() -> None:
     """Excel (.xlsx) operations tool."""
     pass
 
 
+def _read_sheet_data(ws, cell_range: str | None = None) -> list[list[object]]:
+    """Read data from a worksheet, returning list of rows."""
+    if cell_range:
+        rows = list(ws[cell_range])
+    else:
+        rows = list(ws.iter_rows())
+    return [[cell.value for cell in row] for row in rows]
+
+
+def _build_records(data: list[list[object]]) -> list[dict[str, object]]:
+    """Convert row data (with header row) to list of dicts."""
+    if not data or len(data) <= 1:
+        return []
+    headers = [str(h) if h is not None else f"col_{i}" for i, h in enumerate(data[0])]
+    records = []
+    for row_data in data[1:]:
+        record: dict[str, object] = {}
+        for i, val in enumerate(row_data):
+            key = headers[i] if i < len(headers) else f"col_{i}"
+            record[key] = val
+        records.append(record)
+    return records
+
+
+def _format_data(data: list[list[object]], fmt: str) -> str:
+    """Format row data as text, csv, or json."""
+    if not data:
+        if fmt == "json":
+            return "[]"
+        elif fmt == "csv":
+            return ""
+        else:
+            return "(empty)"
+
+    if fmt == "json":
+        if len(data) > 1:
+            headers = [str(h) if h is not None else f"col_{i}" for i, h in enumerate(data[0])]
+            records = []
+            for row_data in data[1:]:
+                record: dict[str, object] = {}
+                for i, val in enumerate(row_data):
+                    key = headers[i] if i < len(headers) else f"col_{i}"
+                    record[key] = val
+                records.append(record)
+            return json.dumps(records, indent=2, default=_json_serial)
+        else:
+            # Single row = header only, no data rows
+            return "[]"
+    elif fmt == "csv":
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        for row_data in data:
+            writer.writerow(row_data)
+        return buf.getvalue()
+    else:
+        lines: list[str] = []
+        str_data = [[str(v) if v is not None else "" for v in row] for row in data]
+        if str_data:
+            max_cols = max(len(row) for row in str_data)
+            col_widths = [0] * max_cols
+            for row in str_data:
+                for i, val in enumerate(row):
+                    col_widths[i] = max(col_widths[i], len(val))
+            for row in str_data:
+                parts = []
+                for i, val in enumerate(row):
+                    width = col_widths[i] if i < len(col_widths) else 0
+                    parts.append(val.ljust(width))
+                lines.append("  ".join(parts).rstrip())
+        return "\n".join(lines)
+
+
 @cli.command()
 @click.argument("file", type=click.Path(exists=True, dir_okay=False))
 @click.option("--sheet", type=str, default=None, help="Sheet name (default: active sheet).")
+@click.option("--all-sheets", is_flag=True, default=False, help="Read all sheets in the workbook.")
 @click.option("--range", "cell_range", type=str, default=None, help="Cell range, e.g. 'A1:C10'.")
 @click.option("--format", "fmt", type=click.Choice(["text", "csv", "json"]), default="text", help="Output format.")
 @click.option("-o", "--output", type=click.Path(), default=None, help="Write output to file.")
-def read(file: str, sheet: str | None, cell_range: str | None, fmt: str, output: str | None) -> None:
+def read(file: str, sheet: str | None, all_sheets: bool, cell_range: str | None, fmt: str, output: str | None) -> None:
     """Read cells, ranges, or entire sheets from an Excel file."""
     try:
         wb = load_workbook(file, read_only=True, data_only=True)
 
+        if all_sheets and sheet:
+            wb.close()
+            click.echo("Error: --all-sheets and --sheet are mutually exclusive.", err=True)
+            sys.exit(1)
+
+        if all_sheets:
+            # Read all sheets
+            if fmt == "json":
+                all_data: dict[str, object] = {}
+                for name in wb.sheetnames:
+                    ws = wb[name]
+                    data = _read_sheet_data(ws, cell_range)
+                    all_data[name] = _build_records(data)
+                result = json.dumps(all_data, indent=2, default=_json_serial)
+            else:
+                parts: list[str] = []
+                for name in wb.sheetnames:
+                    ws = wb[name]
+                    data = _read_sheet_data(ws, cell_range)
+                    if fmt == "csv":
+                        parts.append(f"# Sheet: {name}")
+                    else:
+                        parts.append(f"=== Sheet: {name} ===")
+                    parts.append(_format_data(data, fmt))
+                    parts.append("")
+                result = "\n".join(parts)
+            wb.close()
+            write_output(result, output)
+            return
+
         if sheet:
             if sheet not in wb.sheetnames:
+                wb.close()
                 click.echo(f"Error: sheet '{sheet}' not found. Available: {', '.join(wb.sheetnames)}", err=True)
                 sys.exit(1)
             ws = wb[sheet]
         else:
             ws = wb.active
+            if ws is None:
+                click.echo("Error: no active sheet found. Use --sheet to specify one.", err=True)
+                wb.close()
+                sys.exit(1)
 
-        if cell_range:
-            rows = list(ws[cell_range])
-        else:
-            rows = list(ws.iter_rows())
-
-        if not rows:
-            write_output("(empty)", output)
-            wb.close()
-            return
-
-        data: list[list[object]] = []
-        for row in rows:
-            data.append([cell.value for cell in row])
-
-        if fmt == "json":
-            # Use first row as headers if possible
-            if len(data) > 1:
-                headers = [str(h) if h is not None else f"col_{i}" for i, h in enumerate(data[0])]
-                records = []
-                for row_data in data[1:]:
-                    record: dict[str, object] = {}
-                    for i, val in enumerate(row_data):
-                        key = headers[i] if i < len(headers) else f"col_{i}"
-                        record[key] = val
-                    records.append(record)
-                result = json.dumps(records, indent=2, default=str)
-            else:
-                result = json.dumps(data, indent=2, default=str)
-        elif fmt == "csv":
-            buf = io.StringIO()
-            writer = csv.writer(buf)
-            for row_data in data:
-                writer.writerow(row_data)
-            result = buf.getvalue()
-        else:
-            lines: list[str] = []
-            # Calculate column widths for aligned text output
-            str_data = [[str(v) if v is not None else "" for v in row] for row in data]
-            if str_data:
-                max_cols = max(len(row) for row in str_data)
-                col_widths = [0] * max_cols
-                for row in str_data:
-                    for i, val in enumerate(row):
-                        col_widths[i] = max(col_widths[i], len(val))
-                for row in str_data:
-                    parts = []
-                    for i, val in enumerate(row):
-                        width = col_widths[i] if i < len(col_widths) else 0
-                        parts.append(val.ljust(width))
-                    lines.append("  ".join(parts).rstrip())
-            result = "\n".join(lines)
+        data = _read_sheet_data(ws, cell_range)
+        result = _format_data(data, fmt)
 
         wb.close()
         write_output(result, output)
@@ -152,6 +203,10 @@ def write(file: str, sheet: str | None, cell: str, value: str, val_type: str) ->
             ws = wb[sheet]
         else:
             ws = wb.active
+            if ws is None:
+                click.echo("Error: no active sheet found. Use --sheet to specify one.", err=True)
+                wb.close()
+                sys.exit(1)
 
         # Convert value type
         converted: object
@@ -159,7 +214,12 @@ def write(file: str, sheet: str | None, cell: str, value: str, val_type: str) ->
             try:
                 converted = int(value)
             except ValueError:
-                converted = float(value)
+                try:
+                    converted = float(value)
+                except ValueError:
+                    click.echo(f"Error: '{value}' is not a valid number.", err=True)
+                    wb.close()
+                    sys.exit(1)
         elif val_type == "bool":
             converted = value.lower() in ("true", "1", "yes")
         else:
@@ -180,7 +240,7 @@ def write(file: str, sheet: str | None, cell: str, value: str, val_type: str) ->
 def info(file: str, output: str | None) -> None:
     """Show workbook information: sheets, dimensions, cell counts."""
     try:
-        wb = load_workbook(file, data_only=True)
+        wb = load_workbook(file, read_only=True, data_only=True)
 
         sheets_info = []
         for name in wb.sheetnames:
@@ -202,7 +262,7 @@ def info(file: str, output: str | None) -> None:
         }
 
         wb.close()
-        write_output(json.dumps(info_dict, indent=2, default=str), output)
+        write_output(json.dumps(info_dict, indent=2, default=_json_serial), output)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -228,6 +288,7 @@ def add_sheet(file: str, name: str, position: int | None) -> None:
                 del wb["Sheet"]
 
         if name in wb.sheetnames:
+            wb.close()
             click.echo(f"Error: sheet '{name}' already exists.", err=True)
             sys.exit(1)
 
@@ -247,48 +308,55 @@ def add_sheet(file: str, name: str, position: int | None) -> None:
 @cli.command()
 @click.argument("file", type=click.Path(exists=True, dir_okay=False))
 @click.option("--sheet", type=str, default=None, help="Sheet name (default: active sheet).")
+@click.option("--all-sheets", is_flag=True, default=False, help="Export all sheets in the workbook.")
 @click.option("--format", "fmt", type=click.Choice(["csv", "json"]), default="csv", help="Export format.")
 @click.option("-o", "--output", type=click.Path(), default=None, help="Write output to file.")
-def export(file: str, sheet: str | None, fmt: str, output: str | None) -> None:
+def export(file: str, sheet: str | None, all_sheets: bool, fmt: str, output: str | None) -> None:
     """Export a sheet as CSV or JSON."""
     try:
         wb = load_workbook(file, read_only=True, data_only=True)
 
+        if all_sheets and sheet:
+            wb.close()
+            click.echo("Error: --all-sheets and --sheet are mutually exclusive.", err=True)
+            sys.exit(1)
+
+        if all_sheets:
+            if fmt == "json":
+                all_data: dict[str, object] = {}
+                for name in wb.sheetnames:
+                    ws = wb[name]
+                    data = _read_sheet_data(ws)
+                    all_data[name] = _build_records(data)
+                result = json.dumps(all_data, indent=2, default=_json_serial)
+            else:
+                parts: list[str] = []
+                for name in wb.sheetnames:
+                    ws = wb[name]
+                    data = _read_sheet_data(ws)
+                    parts.append(f"# Sheet: {name}")
+                    parts.append(_format_data(data, "csv"))
+                    parts.append("")
+                result = "\n".join(parts)
+            wb.close()
+            write_output(result, output)
+            return
+
         if sheet:
             if sheet not in wb.sheetnames:
+                wb.close()
                 click.echo(f"Error: sheet '{sheet}' not found. Available: {', '.join(wb.sheetnames)}", err=True)
                 sys.exit(1)
             ws = wb[sheet]
         else:
             ws = wb.active
+            if ws is None:
+                click.echo("Error: no active sheet found. Use --sheet to specify one.", err=True)
+                wb.close()
+                sys.exit(1)
 
-        rows = list(ws.iter_rows())
-        if not rows:
-            write_output("(empty)", output)
-            wb.close()
-            return
-
-        data = [[cell.value for cell in row] for row in rows]
-
-        if fmt == "json":
-            if len(data) > 1:
-                headers = [str(h) if h is not None else f"col_{i}" for i, h in enumerate(data[0])]
-                records = []
-                for row_data in data[1:]:
-                    record: dict[str, object] = {}
-                    for i, val in enumerate(row_data):
-                        key = headers[i] if i < len(headers) else f"col_{i}"
-                        record[key] = val
-                    records.append(record)
-                result = json.dumps(records, indent=2, default=str)
-            else:
-                result = json.dumps(data, indent=2, default=str)
-        else:
-            buf = io.StringIO()
-            writer = csv.writer(buf)
-            for row_data in data:
-                writer.writerow(row_data)
-            result = buf.getvalue()
+        data = _read_sheet_data(ws)
+        result = _format_data(data, fmt)
 
         wb.close()
         write_output(result, output)

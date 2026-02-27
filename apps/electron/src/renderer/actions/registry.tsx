@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useCallback, useRef, useEffect } from 'react'
 import { actions, type ActionId } from './definitions'
-import type { ActionHandler } from './types'
+import type { ActionDefinition, ActionHandler } from './types'
 import { isMac } from '@/lib/platform'
+import { getKeybindingContext, evaluateWhen } from './keybinding-context'
 
 interface ActionRegistryContextType {
   // Register a handler for an action
@@ -78,46 +79,16 @@ export function ActionRegistryProvider({ children }: { children: React.ReactNode
   // Set up global hotkey listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement
-      const isInputElement = target.tagName === 'INPUT' ||
-                             target.tagName === 'TEXTAREA' ||
-                             target.isContentEditable
-
-      // Check for text selection in input elements (for Escape key handling)
-      const hasTextSelection = (() => {
-        if (!isInputElement) return false
-
-        // For contenteditable (rich text), check window selection
-        if (target.isContentEditable) {
-          const selection = window.getSelection()
-          return selection !== null && selection.toString().length > 0
-        }
-
-        // For INPUT/TEXTAREA, check selectionStart/End
-        const input = target as HTMLInputElement | HTMLTextAreaElement
-        if (typeof input.selectionStart === 'number' && typeof input.selectionEnd === 'number') {
-          return input.selectionStart !== input.selectionEnd
-        }
-
-        return false
-      })()
+      // Build context snapshot from DOM state at event time
+      const context = getKeybindingContext(e)
 
       // Check all actions for matching hotkey
       for (const [actionId, action] of Object.entries(actions)) {
         const hotkey = getHotkey(actionId as ActionId)
         if (!hotkey || !matchesHotkey(e, hotkey)) continue
 
-        // Skip non-inputSafe actions when in input element
-        if (isInputElement && !(action as { inputSafe?: boolean }).inputSafe) continue
-
-        // For inputSafe Escape actions: respect text selection first
-        // Let native browser behavior clear the selection before firing action
-        if (isInputElement &&
-            (action as { inputSafe?: boolean }).inputSafe &&
-            hotkey === 'escape' &&
-            hasTextSelection) {
-          continue
-        }
+        // Evaluate when-clause against current context
+        if (!evaluateWhen((action as ActionDefinition).when, context)) continue
 
         const handlers = handlersRef.current.get(actionId as ActionId) || []
         for (const handler of handlers) {

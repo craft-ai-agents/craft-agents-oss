@@ -18,7 +18,7 @@ from pathlib import Path
 import click
 from dateutil.parser import parse as parse_date
 from dateutil.tz import tzlocal
-from icalendar import Calendar, Event, vDatetime, vDate
+from icalendar import Calendar, Event
 
 
 def write_output(text: str, output_path: str | None) -> None:
@@ -117,9 +117,11 @@ def read(file: str, fmt: str, output: str | None) -> None:
         cal_name = str(cal.get("X-WR-CALNAME", cal.get("PRODID", "Unknown")))
 
         events = []
-        for i, component in enumerate(cal.walk()):
+        event_idx = 0
+        for component in cal.walk():
             if component.name == "VEVENT":
-                events.append(format_event(component, i + 1))
+                event_idx += 1
+                events.append(format_event(component, event_idx))
 
         if fmt == "json":
             result_dict = {
@@ -273,11 +275,11 @@ def filter(file: str, start_str: str, end_str: str, fmt: str, output: str | None
         filter_start = parse_date(start_str)
         filter_end = parse_date(end_str)
 
-        # Make timezone-aware if needed
+        # Make timezone-aware if needed (use local timezone, consistent with create command)
         if filter_start.tzinfo is None:
-            filter_start = filter_start.replace(tzinfo=timezone.utc)
+            filter_start = filter_start.replace(tzinfo=tzlocal())
         if filter_end.tzinfo is None:
-            filter_end = filter_end.replace(tzinfo=timezone.utc)
+            filter_end = filter_end.replace(tzinfo=tzlocal())
 
         cal_text = Path(file).read_bytes()
         cal = Calendar.from_ical(cal_text)
@@ -297,9 +299,9 @@ def filter(file: str, start_str: str, end_str: str, fmt: str, output: str | None
             if event_start is None:
                 continue
 
-            # Make timezone-aware if needed
+            # Make timezone-aware if needed (use local timezone, consistent with filter boundaries)
             if event_start.tzinfo is None:
-                event_start = event_start.replace(tzinfo=timezone.utc)
+                event_start = event_start.replace(tzinfo=tzlocal())
 
             if filter_start <= event_start <= filter_end:
                 matching_events.append(format_event(component, len(matching_events) + 1))
@@ -310,6 +312,10 @@ def filter(file: str, start_str: str, end_str: str, fmt: str, output: str | None
             new_cal = Calendar()
             new_cal.add("PRODID", "-//ical_tool.py//EN")
             new_cal.add("VERSION", "2.0")
+            # Copy timezone definitions from source calendar
+            for comp in cal.walk():
+                if comp.name == "VTIMEZONE":
+                    new_cal.add_component(comp)
             for comp in matching_components:
                 new_cal.add_component(comp)
             write_output(new_cal.to_ical().decode("utf-8"), output)

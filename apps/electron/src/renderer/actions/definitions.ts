@@ -87,6 +87,7 @@ export const actions = {
     label: 'Focus Next Zone',
     defaultHotkey: 'tab',
     category: 'Navigation',
+    when: '!inputFocus',  // Tab should work normally in text inputs
   },
   'nav.goBack': {
     id: 'nav.goBack',
@@ -108,6 +109,7 @@ export const actions = {
     description: 'Navigate to previous session (arrow key)',
     defaultHotkey: 'mod+left',
     category: 'Navigation',
+    when: '!inputFocus',  // CMD+Left = cursor to line start in text inputs
   },
   'nav.goForwardAlt': {
     id: 'nav.goForwardAlt',
@@ -115,6 +117,7 @@ export const actions = {
     description: 'Navigate to next session (arrow key)',
     defaultHotkey: 'mod+right',
     category: 'Navigation',
+    when: '!inputFocus',  // CMD+Right = cursor to line end in text inputs
   },
 
   // ═══════════════════════════════════════════
@@ -143,6 +146,7 @@ export const actions = {
     defaultHotkey: 'mod+a',
     category: 'Navigator',
     scope: 'navigator',
+    when: 'navigatorFocus',  // CMD+A = select all text when in input
   },
   'navigator.clearSelection': {
     id: 'navigator.clearSelection',
@@ -150,7 +154,7 @@ export const actions = {
     defaultHotkey: 'escape',
     category: 'Navigator',
     scope: 'navigator',
-    inputSafe: true,  // Works even when typing in search/chat input
+    when: 'navigatorFocus',
   },
 
   // ═══════════════════════════════════════════
@@ -181,7 +185,7 @@ export const actions = {
     defaultHotkey: 'escape',
     category: 'Chat',
     scope: 'chat',
-    inputSafe: true,  // Must work while typing in chat input
+    when: 'chatFocus && !hasSelection && !menuOpen',  // Let browser clear selection first; let inline menus handle Escape
   },
   'chat.cyclePermissionMode': {
     id: 'chat.cyclePermissionMode',
@@ -195,14 +199,12 @@ export const actions = {
     label: 'Next Search Match',
     defaultHotkey: 'mod+g',
     category: 'Chat',
-    inputSafe: true,  // Must work while typing in search input
   },
   'chat.prevSearchMatch': {
     id: 'chat.prevSearchMatch',
     label: 'Previous Search Match',
     defaultHotkey: 'mod+shift+g',
     category: 'Chat',
-    inputSafe: true,  // Must work while typing in search input
   },
 
 } as const satisfies Record<string, ActionDefinition>

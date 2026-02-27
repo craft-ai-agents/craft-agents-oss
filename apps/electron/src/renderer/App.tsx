@@ -552,14 +552,6 @@ export default function App() {
     }
 
     const cleanup = window.electronAPI.onSessionEvent((event: SessionEvent) => {
-      // Events without sessionId require full metadata refresh.
-      if (event.type === 'sessions_reordered') {
-        window.electronAPI.getSessions()
-          .then(initializeSessions)
-          .catch(error => console.error('Failed to refresh sessions after reorder event:', error))
-        return
-      }
-
       if (!('sessionId' in event)) return
 
       const sessionId = event.sessionId
@@ -591,13 +583,6 @@ export default function App() {
 
       if (event.type === 'session_deleted') {
         removeSession(sessionId)
-        return
-      }
-
-      if (event.type === 'session_deleted_cascade' || event.type === 'session_archived_cascade') {
-        window.electronAPI.getSessions()
-          .then(initializeSessions)
-          .catch(error => console.error(`Failed to refresh sessions after ${event.type}:`, error))
         return
       }
 
@@ -735,17 +720,6 @@ export default function App() {
     addSession(session)
     populateSessionOptions(session)
 
-    return session
-  }, [addSession, populateSessionOptions])
-
-  const handleCreateSubSession = useCallback(async (
-    workspaceId: string,
-    parentSessionId: string,
-    options?: import('../shared/types').CreateSessionOptions
-  ): Promise<Session> => {
-    const session = await window.electronAPI.createSubSession(workspaceId, parentSessionId, options)
-    addSession(session)
-    populateSessionOptions(session)
     return session
   }, [addSession, populateSessionOptions])
 
@@ -1311,7 +1285,6 @@ export default function App() {
     sessionOptions,
     // Session callbacks
     onCreateSession: handleCreateSession,
-    onCreateSubSession: handleCreateSubSession,
     onSendMessage: handleSendMessage,
     onRenameSession: handleRenameSession,
     onFlagSession: handleFlagSession,
@@ -1354,7 +1327,6 @@ export default function App() {
     getDraft,
     sessionOptions,
     handleCreateSession,
-    handleCreateSubSession,
     handleSendMessage,
     handleRenameSession,
     handleFlagSession,

@@ -508,7 +508,7 @@ export interface AgentBackend {
    */
   onBackendAuthRequired: ((reason: string) => void) | null;
 
-  /** Called when agent requests spawning a sub-session */
+  /** Called when agent requests spawning a new session */
   onSpawnSession: ((request: import('../base-agent.ts').SpawnSessionRequest) => Promise<import('../base-agent.ts').SpawnSessionResult>) | null;
 }
 

@@ -33,6 +33,9 @@ const OVERLAY_SELECTORS = [
 
   // Command palette (when open inside a dialog, the dialog selector catches it)
   // But standalone command menus would need: '[data-slot="command"]'
+
+  // Inline menus (@mention, /slash, #label autocomplete)
+  '[data-inline-menu]',
 ]
 
 /**

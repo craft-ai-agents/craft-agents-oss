@@ -77,7 +77,7 @@ export interface SessionScopedToolCallbacks {
   queryFn?: (request: LLMQueryRequest) => Promise<LLMQueryResult>;
 
   /**
-   * Callback for spawn_session tool — creates a sub-session and sends initial prompt.
+   * Callback for spawn_session tool — creates an independent session and sends initial prompt.
    * Each agent backend delegates to its onSpawnSession callback.
    */
   spawnSessionFn?: SpawnSessionFn;

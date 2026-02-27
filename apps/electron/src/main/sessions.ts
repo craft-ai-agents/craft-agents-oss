@@ -48,13 +48,6 @@ import {
   getSessionAttachmentsPath,
   getSessionPath as getSessionStoragePath,
   sessionPersistenceQueue,
-  // Sub-session functions
-  createSubSession as createStoredSubSession,
-  getSessionFamily as getStoredSessionFamily,
-  updateSiblingOrder as updateStoredSiblingOrder,
-  archiveSessionCascade as archiveStoredSessionCascade,
-  deleteSessionCascade as deleteStoredSessionCascade,
-  getChildSessions as getStoredChildSessions,
   type StoredSession,
   type StoredMessage,
   type SessionMetadata,
@@ -612,9 +605,6 @@ interface ManagedSession {
   authRetryInProgress?: boolean
   // Whether this session is hidden from session list (e.g., mini edit sessions)
   hidden?: boolean
-  // Sub-session hierarchy (1 level max)
-  parentSessionId?: string
-  siblingOrder?: number
   branchFromMessageId?: string
   // Token refresh manager for OAuth token refresh with rate limiting
   tokenRefreshManager: TokenRefreshManager
@@ -1744,6 +1734,15 @@ export class SessionManager {
       resolvedWorkingDir = options.workingDirectory
     }
 
+    // If branching from another session, flush source session to disk first
+    if (options?.branchFromSessionId && options?.branchFromMessageId) {
+      const sourceManaged = this.sessions.get(options.branchFromSessionId)
+      if (sourceManaged) {
+        this.persistSession(sourceManaged)
+        await sessionPersistenceQueue.flush(sourceManaged.id)
+      }
+    }
+
     // Use storage layer to create and persist the session
     const storedSession = await createStoredSession(workspaceRootPath, {
       permissionMode: defaultPermissionMode,
@@ -1753,6 +1752,22 @@ export class SessionManager {
       labels: options?.labels,
       isFlagged: options?.isFlagged,
     })
+
+    // Branch: copy messages from source session up to and including the branch point
+    if (options?.branchFromSessionId && options?.branchFromMessageId) {
+      const sourceSession = loadStoredSession(workspaceRootPath, options.branchFromSessionId)
+      if (sourceSession && sourceSession.messages.length > 0) {
+        const branchIdx = sourceSession.messages.findIndex(m => m.id === options.branchFromMessageId)
+        if (branchIdx !== -1) {
+          const branchedStored = loadStoredSession(workspaceRootPath, storedSession.id)
+          if (branchedStored) {
+            branchedStored.messages = sourceSession.messages.slice(0, branchIdx + 1)
+            branchedStored.branchFromMessageId = options.branchFromMessageId
+            await saveStoredSession(branchedStored)
+          }
+        }
+      }
+    }
 
     // Resolve connection/provider/auth/model using the provider-agnostic backend resolver.
     const resolvedContext = resolveBackendContext({
@@ -1767,6 +1782,8 @@ export class SessionManager {
       sessionLog.info(`🤖 Creating mini agent session: model=${resolvedModel}, systemPromptPreset=${options?.systemPromptPreset}`)
     }
 
+    const isBranch = !!(options?.branchFromSessionId && options?.branchFromMessageId)
+
     const managed = createManagedSession(storedSession, workspace, {
       permissionMode: defaultPermissionMode,
       workingDirectory: resolvedWorkingDir,
@@ -1775,8 +1792,15 @@ export class SessionManager {
       thinkingLevel: defaultThinkingLevel,
       systemPromptPreset: options?.systemPromptPreset,
       enabledSourceSlugs: defaultEnabledSourceSlugs,
-      messagesLoaded: true,  // New sessions don't need to load messages from disk
+      branchFromMessageId: options?.branchFromMessageId,
+      messagesLoaded: !isBranch,  // Branched sessions: lazy-load messages from JSONL
     })
+
+    // Eagerly load messages for branched sessions so the renderer gets the full
+    // conversation immediately (needed for scroll-to-bottom on panel open)
+    if (isBranch) {
+      await this.ensureMessagesLoaded(managed)
+    }
 
     this.sessions.set(storedSession.id, managed)
 
@@ -1792,161 +1816,7 @@ export class SessionManager {
       })
     }
 
-    return managedToSession(managed)
-  }
-
-  /**
-   * Create a sub-session under a parent session.
-   * Sub-sessions inherit workspace config but have a reference to their parent.
-   */
-  async createSubSession(workspaceId: string, parentSessionId: string, options?: import('../shared/types').CreateSessionOptions): Promise<Session> {
-    const workspace = getWorkspaceByNameOrId(workspaceId)
-    if (!workspace) {
-      throw new Error(`Workspace ${workspaceId} not found`)
-    }
-
-    const workspaceRootPath = workspace.rootPath
-
-    // Read live state from the parent managed session (runtime values may differ from persisted JSONL)
-    const parentManaged = this.sessions.get(parentSessionId)
-
-    // Flush parent to disk so the storage layer sees all in-memory messages when branching
-    if (parentManaged && options?.branchFromMessageId) {
-      this.persistSession(parentManaged)
-      await sessionPersistenceQueue.flush(parentManaged.id)
-    }
-
-    // Create the sub-session using storage layer (validates parent exists and prevents nesting)
-    const storedSession = await createStoredSubSession(workspaceRootPath, parentSessionId, {
-      name: options?.name,
-      workingDirectory: options?.workingDirectory,
-      permissionMode: options?.permissionMode ?? parentManaged?.permissionMode,
-      enabledSourceSlugs: options?.enabledSourceSlugs ?? parentManaged?.enabledSourceSlugs,
-      model: options?.model ?? parentManaged?.model,
-      llmConnection: options?.llmConnection ?? parentManaged?.llmConnection,
-      sessionStatus: options?.sessionStatus,
-      labels: options?.labels ?? parentManaged?.labels,
-      branchFromMessageId: options?.branchFromMessageId,
-    })
-
-    // Get workspace defaults for managed session
-    const wsConfig = loadWorkspaceConfig(workspaceRootPath)
-    const globalDefaults = loadConfigDefaults()
-    const defaultPermissionMode = storedSession.permissionMode
-      ?? wsConfig?.defaults?.permissionMode
-      ?? globalDefaults.workspaceDefaults.permissionMode
-    const defaultThinkingLevel = wsConfig?.defaults?.thinkingLevel ?? globalDefaults.workspaceDefaults.thinkingLevel
-
-    const managed = createManagedSession(storedSession, workspace, {
-      permissionMode: defaultPermissionMode,
-      thinkingLevel: defaultThinkingLevel,
-      branchFromMessageId: options?.branchFromMessageId,
-      messagesLoaded: !options?.branchFromMessageId,  // Branched sessions: lazy-load messages from JSONL
-    })
-
-    // Eagerly load messages for branched sessions so the renderer gets the full
-    // conversation immediately (needed for scroll-to-bottom on panel open)
-    if (options?.branchFromMessageId) {
-      await this.ensureMessagesLoaded(managed)
-    }
-
-    this.sessions.set(storedSession.id, managed)
-
-    // Notify all windows that a sub-session was created (for session list updates)
-    this.sendEvent({
-      type: 'session_created',
-      sessionId: storedSession.id,
-      parentSessionId: storedSession.parentSessionId,
-    }, workspace.id)
-
-    return managedToSession(managed, { messages: managed.messages })
-  }
-
-  /**
-   * Get session family (parent + siblings) for a sub-session.
-   * Returns null if the session is a root session (no parent).
-   */
-  getSessionFamily(sessionId: string): import('../shared/types').SessionFamily | null {
-    const managed = this.sessions.get(sessionId)
-    if (!managed) return null
-
-    return getStoredSessionFamily(managed.workspace.rootPath, sessionId)
-  }
-
-  /**
-   * Update sibling order for multiple sessions.
-   * Used when user reorders siblings via drag-drop.
-   */
-  async updateSiblingOrder(orderedSessionIds: string[]): Promise<void> {
-    if (orderedSessionIds.length === 0) return
-
-    // Get workspace from first session
-    const firstSession = this.sessions.get(orderedSessionIds[0]!)
-    if (!firstSession) return
-
-    await updateStoredSiblingOrder(firstSession.workspace.rootPath, orderedSessionIds)
-
-    // Notify all windows for session list refresh
-    this.sendEvent({ type: 'sessions_reordered' }, firstSession.workspace.id)
-  }
-
-  /**
-   * Archive a session and all its children.
-   * Returns the count of sessions archived.
-   */
-  async archiveSessionCascade(sessionId: string): Promise<{ count: number }> {
-    const managed = this.sessions.get(sessionId)
-    if (!managed) return { count: 0 }
-
-    // Get children before archiving
-    const children = getStoredChildSessions(managed.workspace.rootPath, sessionId)
-
-    // Archive via storage layer
-    const count = await archiveStoredSessionCascade(managed.workspace.rootPath, sessionId)
-
-    // Update in-memory state for parent
-    managed.isArchived = true
-    managed.archivedAt = Date.now()
-
-    // Update in-memory state for children
-    for (const child of children) {
-      const childManaged = this.sessions.get(child.id)
-      if (childManaged) {
-        childManaged.isArchived = true
-        childManaged.archivedAt = Date.now()
-      }
-    }
-
-    // Notify all windows
-    this.sendEvent({ type: 'session_archived_cascade', sessionId, count }, managed.workspace.id)
-
-    return { count }
-  }
-
-  /**
-   * Delete a session and all its children.
-   * Returns the count of sessions deleted.
-   */
-  deleteSessionCascade(sessionId: string): { count: number } {
-    const managed = this.sessions.get(sessionId)
-    if (!managed) return { count: 0 }
-
-    // Get children before deleting
-    const children = getStoredChildSessions(managed.workspace.rootPath, sessionId)
-
-    // Delete via storage layer
-    const count = deleteStoredSessionCascade(managed.workspace.rootPath, sessionId)
-
-    // Remove from in-memory state
-    this.sessions.delete(sessionId)
-    for (const child of children) {
-      this.sessions.delete(child.id)
-    }
-
-    // Notify all windows
-    this.sendEvent({ type: 'session_deleted_cascade', sessionId, count }, managed.workspace.id)
-
-    return { count }
+    return managedToSession(managed, isBranch ? { messages: managed.messages } : undefined)
   }
 
   /**
@@ -2286,17 +2156,17 @@ export class SessionManager {
         // The UI will call sessionCommand({ type: 'startOAuth' }) when user clicks "Sign in"
       }
 
-      // Wire up onSpawnSession to create sub-sessions from agent tool calls
+      // Wire up onSpawnSession to create independent sessions from agent tool calls
       managed.agent.onSpawnSession = async (request) => {
         sessionLog.info(`Spawn session request from session ${managed.id}:`, request.name || '(unnamed)')
 
-        const session = await this.createSubSession(managed.workspace.id, managed.id, {
+        const session = await this.createSession(managed.workspace.id, {
           name: request.name,
-          llmConnection: request.llmConnection,
-          model: request.model,
-          enabledSourceSlugs: request.enabledSourceSlugs,
-          permissionMode: request.permissionMode,
-          labels: request.labels,
+          llmConnection: request.llmConnection ?? managed.llmConnection,
+          model: request.model ?? managed.model,
+          enabledSourceSlugs: request.enabledSourceSlugs ?? managed.enabledSourceSlugs,
+          permissionMode: request.permissionMode ?? managed.permissionMode,
+          labels: request.labels ?? managed.labels,
           workingDirectory: request.workingDirectory,
         })
 

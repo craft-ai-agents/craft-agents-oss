@@ -37,17 +37,17 @@ def convert_to_text(file_path: str) -> str:
     # For plain text, read directly
     plain_text_exts = {".txt", ".md", ".rst", ".csv", ".tsv", ".log"}
     if ext in plain_text_exts:
-        return path.read_text(encoding="utf-8")
+        return path.read_text(encoding="utf-8", errors="replace")
 
     converter = MarkItDown()
     result = converter.convert(str(path))
-    return result.text_content
+    return result.text_content or ""
 
 
 def format_unified(text1: str, text2: str, name1: str, name2: str) -> str:
     """Generate a unified diff."""
-    lines1 = text1.splitlines(keepends=True)
-    lines2 = text2.splitlines(keepends=True)
+    lines1 = text1.splitlines()
+    lines2 = text2.splitlines()
     diff = difflib.unified_diff(lines1, lines2, fromfile=name1, tofile=name2, lineterm="")
     return "\n".join(diff)
 

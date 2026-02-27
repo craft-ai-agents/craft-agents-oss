@@ -462,10 +462,13 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const { isDark } = useTheme()
 
   // Register as focus zone - when zone gains focus, focus the textarea
+  // Guard with isFocusedPanelRef so only the focused panel responds in multi-panel layouts
   const { zoneRef, isFocused } = useFocusZone({
     zoneId: 'chat',
     focusFirst: () => {
-      textareaRef.current?.focus()
+      if (isFocusedPanelRef.current) {
+        textareaRef.current?.focus()
+      }
     },
   })
 
@@ -512,11 +515,12 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Does NOT auto-focus just because session changed (that would steal focus from SessionList)
   // Uses isSearchModeActive (prop) instead of isSearchActive (query-based) to prevent
   // focus stealing when search is open but query is empty
+  // In multi-panel layouts, only the focused panel should auto-focus its textarea
   useEffect(() => {
-    if (session && !isSearchModeActive && isFocused) {
+    if (session && !isSearchModeActive && isFocused && isFocusedPanel) {
       textareaRef.current?.focus()
     }
-  }, [session?.id, isFocused, isSearchModeActive])
+  }, [session?.id, isFocused, isSearchModeActive, isFocusedPanel])
 
   // Reset match state when session or search query changes
   useEffect(() => {
@@ -1438,11 +1442,11 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         compactMode={compactMode}
                         onBranch={session?.supportsBranching ? async (messageId: string, options?: { newPanel?: boolean }) => {
                           if (!session) return
-                          const child = await appShellContext.onCreateSubSession(
+                          const child = await appShellContext.onCreateSession(
                             session.workspaceId,
-                            session.id,
                             {
                               branchFromMessageId: messageId,
+                              branchFromSessionId: session.id,
                               name: `Branch of ${session.name || 'Untitled'}`,
                             }
                           )

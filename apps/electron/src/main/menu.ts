@@ -70,6 +70,7 @@ export async function rebuildMenu(): Promise<void> {
         {
           label: 'Settings...',
           accelerator: 'CmdOrCtrl+,',
+          registerAccelerator: false,  // Action registry handles the keyboard shortcut
           click: () => sendToRenderer(IPC_CHANNELS.MENU_OPEN_SETTINGS)
         },
         { type: 'separator' as const },
@@ -88,11 +89,13 @@ export async function rebuildMenu(): Promise<void> {
         {
           label: 'New Chat',
           accelerator: 'CmdOrCtrl+N',
+          registerAccelerator: false,  // Action registry handles the keyboard shortcut
           click: () => sendToRenderer(IPC_CHANNELS.MENU_NEW_CHAT)
         },
         {
           label: 'New Window',
           accelerator: 'CmdOrCtrl+Shift+N',
+          registerAccelerator: false,  // Action registry handles the keyboard shortcut
           click: () => {
             const focused = BrowserWindow.getFocusedWindow()
             if (focused) {
@@ -192,6 +195,7 @@ export async function rebuildMenu(): Promise<void> {
         {
           label: 'Keyboard Shortcuts',
           accelerator: 'CmdOrCtrl+/',
+          registerAccelerator: false,  // Action registry handles the keyboard shortcut
           click: () => sendToRenderer(IPC_CHANNELS.MENU_KEYBOARD_SHORTCUTS)
         }
       ]
@@ -229,6 +233,7 @@ function toElectronMenuItem(item: MenuItem): Electron.MenuItemConstructorOptions
     return {
       label: item.label,
       accelerator: item.shortcut,
+      registerAccelerator: false,  // Action registry handles the keyboard shortcut
       click: () => sendToRenderer(item.ipcChannel),
     }
   }

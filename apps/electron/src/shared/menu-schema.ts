@@ -18,6 +18,9 @@ export interface MenuItemAction {
   type: 'action'
   id: string
   label: string
+  /** Link to the action registry (e.g., 'view.toggleSidebar').
+   *  Enables future: derive display shortcuts from registry + propagate user overrides. */
+  actionId?: string
   shortcut: string              // Electron accelerator: 'CmdOrCtrl+B'
   shortcutDisplayMac: string    // Display on macOS: '⌘B'
   shortcutDisplayOther: string  // Display on Windows/Linux: 'Ctrl+B'
@@ -152,6 +155,7 @@ export const VIEW_MENU: MenuSection = {
     {
       type: 'action',
       id: 'toggleFocusMode',
+      actionId: 'view.toggleFocusMode',
       label: 'Toggle Focus Mode',
       shortcut: 'CmdOrCtrl+.',
       shortcutDisplayMac: '⌘.',
@@ -162,6 +166,7 @@ export const VIEW_MENU: MenuSection = {
     {
       type: 'action',
       id: 'toggleSidebar',
+      actionId: 'view.toggleSidebar',
       label: 'Toggle Sidebar',
       shortcut: 'CmdOrCtrl+B',
       shortcutDisplayMac: '⌘B',

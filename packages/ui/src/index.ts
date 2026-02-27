@@ -223,13 +223,6 @@ export {
 // Turn utilities (pure functions)
 export * from './components/chat/turn-utils'
 
-// Action Cards
-export {
-  ActionCard,
-  type ActionCardProps,
-  type ActionCardAction,
-} from './components/cards/ActionCard'
-
 // Icons
 export {
   Icon_Folder,

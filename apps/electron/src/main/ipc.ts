@@ -285,14 +285,6 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return session
   })
 
-  // Create a sub-session under a parent session
-  ipcMain.handle(IPC_CHANNELS.CREATE_SUB_SESSION, async (_event, workspaceId: string, parentSessionId: string, options?: import('../shared/types').CreateSessionOptions) => {
-    const end = perf.start('ipc.createSubSession', { workspaceId, parentSessionId })
-    const session = await sessionManager.createSubSession(workspaceId, parentSessionId, options)
-    end()
-    return session
-  })
-
   // Delete a session
   ipcMain.handle(IPC_CHANNELS.DELETE_SESSION, async (_event, sessionId: string) => {
     return sessionManager.deleteSession(sessionId)
@@ -442,15 +434,6 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         return sessionManager.markCompactionComplete(sessionId)
       case 'clearPendingPlanExecution':
         return sessionManager.clearPendingPlanExecution(sessionId)
-      // Sub-session hierarchy
-      case 'getSessionFamily':
-        return sessionManager.getSessionFamily(sessionId)
-      case 'updateSiblingOrder':
-        return sessionManager.updateSiblingOrder(command.orderedSessionIds)
-      case 'archiveCascade':
-        return sessionManager.archiveSessionCascade(sessionId)
-      case 'deleteCascade':
-        return sessionManager.deleteSessionCascade(sessionId)
       default: {
         const _exhaustive: never = command
         throw new Error(`Unknown session command: ${JSON.stringify(command)}`)

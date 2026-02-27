@@ -47,8 +47,12 @@ export function useFocusZone({
   // Track previous focus state for callbacks
   const wasFocusedRef = useRef(isFocused)
 
-  // Register zone on mount
+  // Register zone on mount + stamp container with data attribute for DOM-based zone detection
   useEffect(() => {
+    if (zoneRef.current) {
+      zoneRef.current.setAttribute('data-focus-zone', zoneId)
+    }
+
     registerZone({
       id: zoneId,
       ref: zoneRef as React.RefObject<HTMLElement>,

@@ -26,8 +26,9 @@ export function SessionStatusIcon({ item }: SessionStatusIconProps) {
       <PopoverTrigger asChild>
         <div
           className={cn(
-            "w-4 h-4 flex items-center justify-center rounded-full transition-colors cursor-pointer",
+            "flex items-center justify-center rounded-full transition-colors cursor-pointer",
             "hover:bg-foreground/5",
+            "[&>svg]:w-full [&>svg]:h-full [&>img]:w-full [&>img]:h-full [&>span]:text-base",
           )}
           style={{ color: getStateColor(status, ctx.sessionStatuses) ?? 'var(--foreground)' }}
           role="button"
@@ -39,9 +40,7 @@ export function SessionStatusIcon({ item }: SessionStatusIconProps) {
             e.stopPropagation()
           }}
         >
-          <div className="w-4 h-4 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>img]:w-full [&>img]:h-full [&>span]:text-base">
-            {getStateIcon(status, ctx.sessionStatuses)}
-          </div>
+          {getStateIcon(status, ctx.sessionStatuses)}
         </div>
       </PopoverTrigger>
       <PopoverContent

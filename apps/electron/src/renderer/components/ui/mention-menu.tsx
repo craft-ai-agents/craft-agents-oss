@@ -259,6 +259,7 @@ export function InlineMentionMenu({
   return (
     <div
       ref={menuRef}
+      data-inline-menu
       className={cn('fixed z-dropdown', MENU_CONTAINER_STYLE, className)}
       style={{
         left: Math.round(position.x) - 10,

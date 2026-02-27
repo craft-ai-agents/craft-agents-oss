@@ -141,6 +141,7 @@ interface TopBarProps {
   canGoForward: boolean
   onToggleSidebar: () => void
   onToggleFocusMode: () => void
+  onAddPanel: () => void
 }
 
 export function TopBar({
@@ -157,6 +158,7 @@ export function TopBar({
   canGoForward,
   onToggleSidebar,
   onToggleFocusMode,
+  onAddPanel,
 }: TopBarProps) {
   const [isDebugMode, setIsDebugMode] = useState(false)
 
@@ -337,7 +339,7 @@ export function TopBar({
           {/* Search field (visual placeholder) */}
           <button
             type="button"
-            className="ml-1 flex-1 min-w-0 flex items-center justify-center gap-2 h-[30px] px-3 rounded-[8px] bg-background shadow-minimal text-[13px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            className="ml-1 flex-1 min-w-0 flex items-center justify-center gap-2 h-[30px] px-3 rounded-[8px] border border-foreground/6 text-[13px] text-foreground/40 hover:bg-foreground/5 hover:text-foreground transition-colors cursor-pointer"
           >
             <Icons.Search className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">Search {workspaceName || 'Workspace'}</span>
@@ -345,15 +347,15 @@ export function TopBar({
         </div>
       </div>
 
-      {/* === RIGHT: Settings === */}
+      {/* === RIGHT: Add Panel === */}
       <div className="pointer-events-auto titlebar-no-drag flex items-center gap-1">
         <Tooltip>
           <TooltipTrigger asChild>
-            <TopBarButton onClick={onOpenSettings} aria-label="Settings">
-              <Icons.Settings className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
+            <TopBarButton onClick={onAddPanel} aria-label="Add panel">
+              <Icons.Plus className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
             </TopBarButton>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Settings {settingsHotkey}</TooltipContent>
+          <TooltipContent side="bottom">New Panel</TooltipContent>
         </Tooltip>
       </div>
     </div>

@@ -77,6 +77,7 @@ import {
   focusedPanelRouteAtom,
   focusedPanelIndexAtom,
   updateFocusedPanelRouteAtom,
+  parseSessionIdFromRoute,
 } from '@/atoms/panel-stack'
 
 // Re-export routes for convenience
@@ -388,6 +389,40 @@ export function NavigationProvider({
     if (!initialRouteRestoredRef.current) return
     syncUrl()
   }, [panelStack, focusedPanelId, rightSidebar, syncUrl])
+
+  // =========================================================================
+  // EMPTY SESSION CLEANUP (reactive — covers navigate, close tab, etc.)
+  // =========================================================================
+
+  // Track which session IDs are visible across all panels. When a session ID
+  // disappears (navigate away, close tab, Cmd+W), check if it was empty and
+  // auto-delete it. This is the single codepath for all navigate-away cleanup.
+  const prevVisibleSessionIdsRef = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    const currentIds = new Set<string>()
+    for (const entry of panelStack) {
+      const sessionId = parseSessionIdFromRoute(entry.route)
+      if (sessionId) currentIds.add(sessionId)
+    }
+
+    // Only check after we've seen at least one set of IDs
+    // (skip first render to avoid false positives during initialization)
+    if (onAutoDeleteEmptySession && prevVisibleSessionIdsRef.current.size > 0) {
+      for (const prevId of prevVisibleSessionIdsRef.current) {
+        if (!currentIds.has(prevId)) {
+          const meta = store.get(sessionMetaMapAtom).get(prevId)
+          const isEmpty = meta && !meta.lastFinalMessageId && !meta.name && !meta.isProcessing
+          const hasDraft = getDraft?.(prevId)?.trim()
+          if (isEmpty && !hasDraft) {
+            onAutoDeleteEmptySession(prevId)
+          }
+        }
+      }
+    }
+
+    prevVisibleSessionIdsRef.current = currentIds
+  }, [panelStack, onAutoDeleteEmptySession, store, getDraft])
 
   // =========================================================================
   // SESSION SELECTION SYNC
@@ -715,34 +750,6 @@ export function NavigationProvider({
         return
       }
 
-      // Auto-delete empty sessions when navigating away (skip for new panel)
-      if (onAutoDeleteEmptySession && !options?.newPanel) {
-        const focusedRt = store.get(focusedPanelRouteAtom)
-        const currentNavState = focusedRt ? parseRouteToNavigationState(focusedRt) : null
-        const currentSessionId = currentNavState && isSessionsNavigation(currentNavState)
-          ? currentNavState.details?.sessionId
-          : null
-
-        if (currentSessionId) {
-          const targetNavState = parsed.type === 'view'
-            ? parseRouteToNavigationState(route)
-            : null
-          const targetSessionId = targetNavState && isSessionsNavigation(targetNavState)
-            ? targetNavState.details?.sessionId
-            : null
-
-          if (currentSessionId !== targetSessionId) {
-            const freshMetaMap = store.get(sessionMetaMapAtom)
-            const meta = freshMetaMap.get(currentSessionId)
-            const isEmpty = meta && !meta.lastFinalMessageId && !meta.name && !meta.isProcessing
-            const hasDraft = getDraft?.(currentSessionId)?.trim()
-            if (isEmpty && !hasDraft) {
-              onAutoDeleteEmptySession(currentSessionId)
-            }
-          }
-        }
-      }
-
       // Handle actions (side effects)
       if (parsed.type === 'action') {
         await handleActionNavigation(parsed, options)
@@ -796,7 +803,7 @@ export function NavigationProvider({
         // URL sync effect will fire on the next render.
       }
     },
-    [isReady, handleActionNavigation, resolveAutoSelection, store, getDraft, onAutoDeleteEmptySession, pushPanel, workspaceId]
+    [isReady, handleActionNavigation, resolveAutoSelection, store, pushPanel, workspaceId]
   )
 
   // =========================================================================
