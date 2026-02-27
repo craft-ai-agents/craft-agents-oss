@@ -63,6 +63,7 @@ let updateInfo: UpdateInfo = {
 }
 
 let windowManager: WindowManager | null = null
+let hasActiveProcessingSessions: (() => boolean) | null = null
 
 // Flag to indicate update is in progress — used to prevent force exit during quitAndInstall
 let __isUpdating = false
@@ -80,6 +81,15 @@ export function isUpdating(): boolean {
  */
 export function setWindowManager(wm: WindowManager): void {
   windowManager = wm
+}
+
+/**
+ * Set a callback used to detect whether any sessions are currently processing.
+ * Update installation is blocked while active processing is in progress to avoid
+ * transient runtime ENOENT errors during app bundle swap.
+ */
+export function setHasActiveProcessingSessionsChecker(checker: () => boolean): void {
+  hasActiveProcessingSessions = checker
 }
 
 /**
@@ -381,6 +391,20 @@ export async function checkForUpdates(options: CheckOptions = {}): Promise<Updat
 export async function installUpdate(): Promise<void> {
   if (updateInfo.downloadState !== 'ready') {
     throw new Error('No update ready to install')
+  }
+
+  let hasRunningSessions = false
+  if (hasActiveProcessingSessions) {
+    try {
+      hasRunningSessions = hasActiveProcessingSessions()
+    } catch (error) {
+      mainLog.warn('[auto-update] Session activity checker failed, proceeding with install:', error)
+    }
+  }
+
+  if (hasRunningSessions) {
+    mainLog.warn('[auto-update] Install blocked: active sessions are still processing')
+    throw new Error('An agent task is still running. Wait for it to finish, then install the update.')
   }
 
   mainLog.info('[auto-update] Installing update and restarting...')
