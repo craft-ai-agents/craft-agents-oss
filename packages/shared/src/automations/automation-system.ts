@@ -15,7 +15,7 @@
  * - SessionManager uses ~30 lines instead of ~300
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveAutomationsConfigPath, generateShortId } from './resolve-config-path.ts';
 import { AUTOMATIONS_HISTORY_FILE } from './constants.ts';
@@ -202,6 +202,18 @@ export class AutomationSystem implements AutomationsConfigProvider {
    */
   private rotateHistory(maxEntries = 1000): void {
     const historyPath = join(this.options.workspaceRootPath, AUTOMATIONS_HISTORY_FILE);
+    const legacyHistoryPath = join(this.options.workspaceRootPath, 'automations-history.jsonl');
+
+    if (!existsSync(historyPath) && existsSync(legacyHistoryPath)) {
+      try {
+        mkdirSync(join(this.options.workspaceRootPath, '.craft-agent'), { recursive: true });
+        copyFileSync(legacyHistoryPath, historyPath);
+        log.debug('[AutomationSystem] Migrated legacy automations-history.jsonl to .craft-agent/automations-history.jsonl');
+      } catch {
+        // Best-effort migration only.
+      }
+    }
+
     try {
       if (!existsSync(historyPath)) return;
       const content = readFileSync(historyPath, 'utf-8');

@@ -8,9 +8,12 @@
 import { appendFile } from 'fs/promises';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
-import { existsSync, mkdirSync } from 'fs';
-import { getWorkspaceStateDir } from '../workspaces/paths.ts';
+import { copyFileSync, existsSync, mkdirSync } from 'fs';
+import { getWorkspaceStateDir, getWorkspaceStatePath } from '../workspaces/paths.ts';
+import { createLogger } from '../utils/debug.ts';
 import type { ActionExecutionResult } from './types.ts';
+
+const log = createLogger('automation-event-logger');
 
 // ============================================================================
 // Types
@@ -61,7 +64,19 @@ export class AutomationEventLogger {
     if (!existsSync(stateDir)) {
       mkdirSync(stateDir, { recursive: true });
     }
-    this.logPath = join(stateDir, 'events.jsonl');
+
+    const nextLogPath = getWorkspaceStatePath(workspaceRootPath, 'events.jsonl');
+    const legacyLogPath = join(workspaceRootPath, 'events.jsonl');
+    if (!existsSync(nextLogPath) && existsSync(legacyLogPath)) {
+      try {
+        copyFileSync(legacyLogPath, nextLogPath);
+        log.debug('[AutomationEventLogger] Migrated legacy events.jsonl to .craft-agent/events.jsonl');
+      } catch {
+        // Best-effort migration only.
+      }
+    }
+
+    this.logPath = nextLogPath;
   }
 
   /**

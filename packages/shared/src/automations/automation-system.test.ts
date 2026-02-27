@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { AutomationSystem, type SessionMetadataSnapshot } from './automation-system.ts';
@@ -65,6 +65,39 @@ describe('AutomationSystem', () => {
       });
 
       expect(system.getConfig()).toEqual({ automations: {} });
+
+      await system.dispose();
+    });
+
+    it('migrates legacy automations-history.jsonl into .craft-agent', async () => {
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({ automations: {} }));
+      writeFileSync(join(tempDir, 'automations-history.jsonl'), '{"event":"legacy"}\n');
+
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+
+      const migratedPath = join(tempDir, AUTOMATIONS_HISTORY_FILE);
+      expect(existsSync(migratedPath)).toBe(true);
+      expect(readFileSync(migratedPath, 'utf-8')).toBe('{"event":"legacy"}\n');
+
+      await system.dispose();
+    });
+
+    it('does not overwrite existing .craft-agent automations-history.jsonl during migration', async () => {
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({ automations: {} }));
+      mkdirSync(join(tempDir, '.craft-agent'), { recursive: true });
+      writeFileSync(join(tempDir, AUTOMATIONS_HISTORY_FILE), '{"event":"new"}\n');
+      writeFileSync(join(tempDir, 'automations-history.jsonl'), '{"event":"legacy"}\n');
+
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+
+      const migratedPath = join(tempDir, AUTOMATIONS_HISTORY_FILE);
+      expect(readFileSync(migratedPath, 'utf-8')).toBe('{"event":"new"}\n');
 
       await system.dispose();
     });
