@@ -178,6 +178,8 @@ export function validateImageForClaudeAPI(
 // Export constants for use in other modules
 export const IMAGE_LIMITS = {
   MAX_SIZE: MAX_IMAGE_SIZE,
+  /** Max raw file size before base64 encoding (base64 inflates by 4/3, so 5MB base64 ≈ 3.75MB raw) */
+  MAX_RAW_SIZE: Math.floor(MAX_IMAGE_SIZE * 3 / 4),
   MAX_DIMENSION: MAX_IMAGE_DIMENSION,
   OPTIMAL_EDGE: OPTIMAL_IMAGE_EDGE,
   /** JPEG quality for photo-like images */

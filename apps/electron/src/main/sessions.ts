@@ -1,9 +1,10 @@
 import { app, nativeImage } from 'electron'
 import * as Sentry from '@sentry/electron/main'
 import { basename, join, normalize, isAbsolute, sep } from 'path'
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
-import { appendFile, readFile, realpath } from 'fs/promises'
+import { existsSync } from 'fs'
+import { appendFile, readFile, writeFile, mkdir, realpath } from 'fs/promises'
 import { homedir, tmpdir } from 'os'
+import { randomUUID } from 'node:crypto'
 import { type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@craft-agent/shared/agent'
 import {
   resolveSessionConnection,
@@ -2298,16 +2299,16 @@ export class SessionManager {
         // Image resize callback — prevents oversized images from entering conversation history
         onImageResize: async (filePath: string, maxSizeBytes: number): Promise<string | null> => {
           try {
-            const buffer = readFileSync(filePath)
+            const buffer = await readFile(filePath)
             const result = resizeImageForAPI(buffer, { maxSizeBytes })
             if (!result) return null
 
             // Write to session tmp directory (cleaned up with session)
             const sessionTmpDir = join(sessionPath, 'tmp')
-            mkdirSync(sessionTmpDir, { recursive: true })
+            await mkdir(sessionTmpDir, { recursive: true })
             const ext = result.format === 'jpeg' ? 'jpg' : 'png'
-            const outPath = join(sessionTmpDir, `resized-${Date.now()}.${ext}`)
-            writeFileSync(outPath, result.buffer)
+            const outPath = join(sessionTmpDir, `resized-${randomUUID()}.${ext}`)
+            await writeFile(outPath, result.buffer)
 
             sessionLog.info(`Image resized for Read: ${(buffer.length / 1024 / 1024).toFixed(1)}MB → ${(result.buffer.length / 1024 / 1024).toFixed(1)}MB (→ ${result.width}×${result.height})`)
             return outPath
@@ -3851,10 +3852,10 @@ export class SessionManager {
             sessionLog.warn(`Session ${sessionId} completed without assistant response - possible context overflow or API issue`)
 
             // Check if there's a captured API error that explains the silent failure.
-            // getLastApiError() has pop semantics (deletes file after read) and a built-in
-            // 5-minute staleness window. The error file is session-scoped when _sessionDir
-            // is set, reducing cross-session attribution risk.
-            const apiError = getLastApiError()
+            // Pass explicit session path to avoid reading from the wrong session
+            // (_sessionDir singleton can be clobbered by concurrent sessions).
+            const sessionErrorPath = getSessionStoragePath(managed.workspace.rootPath, managed.id)
+            const apiError = getLastApiError(sessionErrorPath)
 
             if (apiError && apiError.status === 400) {
               const isImageError = apiError.message?.includes('image exceeds')

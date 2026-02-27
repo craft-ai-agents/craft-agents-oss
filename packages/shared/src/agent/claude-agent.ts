@@ -71,7 +71,11 @@ import type {
   SourceChangeCallback,
   SourceActivationCallback,
 } from './backend/types.ts';
-import { statSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { IMAGE_LIMITS } from '../utils/files.ts';
+
+/** Image extensions that may need size-guard in PreToolUse (matches Read tool's image detection) */
+const IMAGE_READ_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff']);
 
 // Re-export permission mode functions for application usage
 export {
@@ -815,19 +819,16 @@ export class ClaudeAgent extends BaseAgent {
                 const filePath = (input.tool_input as { file_path?: string }).file_path;
                 if (filePath) {
                   const ext = filePath.toLowerCase().split('.').pop() || '';
-                  const imageExts = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff']);
-                  if (imageExts.has(ext)) {
+                  if (IMAGE_READ_EXTENSIONS.has(ext)) {
                     try {
-                      const stats = statSync(filePath);
-                      // base64 inflates by 4/3. API limit = 5MB base64. So raw limit ≈ 3.5MB.
-                      const MAX_RAW_SIZE = 3.5 * 1024 * 1024;
+                      const stats = await stat(filePath);
 
-                      if (stats.size > MAX_RAW_SIZE) {
+                      if (stats.size > IMAGE_LIMITS.MAX_RAW_SIZE) {
                         const sizeMB = (stats.size / (1024 * 1024)).toFixed(1);
                         this.onDebug?.(`Image ${filePath} is ${sizeMB}MB, attempting resize...`);
 
                         if (this.config.onImageResize) {
-                          const resizedPath = await this.config.onImageResize(filePath, MAX_RAW_SIZE);
+                          const resizedPath = await this.config.onImageResize(filePath, IMAGE_LIMITS.MAX_RAW_SIZE);
                           if (resizedPath) {
                             this.onDebug?.(`Image resized, redirecting Read to: ${resizedPath}`);
                             return {
@@ -844,8 +845,10 @@ export class ClaudeAgent extends BaseAgent {
                           `Image too large (${sizeMB}MB). The API limit is 5MB base64 (~3.5MB raw). Use a smaller or compressed version.`
                         );
                       }
-                    } catch {
-                      // Can't stat → let Read handle normally
+                    } catch (err) {
+                      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+                        this.onDebug?.(`Image size check failed for ${filePath}: ${err}`);
+                      }
                     }
                   }
                 }

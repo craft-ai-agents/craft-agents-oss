@@ -103,6 +103,12 @@ export type ContentBlock = ToolUseBlock | ToolResultBlock | TextBlock | { type: 
 // Pure extraction functions
 // ============================================================================
 
+/** Strip internal metadata fields (_displayName, _intent) from tool input */
+function stripInternalFields(input: unknown): Record<string, unknown> {
+  const { _displayName, _intent, ...clean } = input as Record<string, unknown>;
+  return clean;
+}
+
 /**
  * Extract tool_start events from assistant message content blocks.
  *
@@ -166,13 +172,11 @@ export function extractToolStarts(
       if (hasNewInput) {
         // Re-emit with complete input (assistant message has full input, stream has {})
         const { intent, displayName } = extractToolMetadata(toolBlock, sessionDir);
-        // Strip internal metadata fields — already captured via extractToolMetadata above
-        const { _displayName: _dn, _intent: _in, ...cleanInput } = toolBlock.input as Record<string, unknown>;
         events.push({
           type: 'tool_start',
           toolName: toolBlock.name,
           toolUseId: toolBlock.id,
-          input: cleanInput,
+          input: stripInternalFields(toolBlock.input),
           intent,
           displayName,
           turnId,
@@ -185,14 +189,12 @@ export function extractToolStarts(
     emittedToolStartIds.add(toolBlock.id);
 
     const { intent, displayName } = extractToolMetadata(toolBlock, sessionDir);
-    // Strip internal metadata fields — already captured via extractToolMetadata above
-    const { _displayName: _dn2, _intent: _in2, ...cleanInput2 } = toolBlock.input as Record<string, unknown>;
 
     events.push({
       type: 'tool_start',
       toolName: toolBlock.name,
       toolUseId: toolBlock.id,
-      input: cleanInput2,
+      input: stripInternalFields(toolBlock.input),
       intent,
       displayName,
       turnId,

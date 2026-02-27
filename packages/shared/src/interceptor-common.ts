@@ -129,8 +129,8 @@ function getErrorFilePath(): string {
   return join(homedir(), '.craft-agent', 'api-error.json');
 }
 
-function getStoredError(): LastApiError | null {
-  const errorFile = getErrorFilePath();
+function getStoredError(sessionDir?: string): LastApiError | null {
+  const errorFile = sessionDir ? join(sessionDir, 'api-error.json') : getErrorFilePath();
   try {
     if (!existsSync(errorFile)) return null;
     const content = readFileSync(errorFile, 'utf-8');
@@ -165,8 +165,8 @@ export function setStoredError(error: LastApiError | null): void {
   }
 }
 
-export function getLastApiError(): LastApiError | null {
-  const error = getStoredError();
+export function getLastApiError(sessionDir?: string): LastApiError | null {
+  const error = getStoredError(sessionDir);
   if (error) {
     const age = Date.now() - error.timestamp;
     if (age < MAX_ERROR_AGE_MS) {
