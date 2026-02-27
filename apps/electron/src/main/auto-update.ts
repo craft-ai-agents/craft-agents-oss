@@ -393,7 +393,16 @@ export async function installUpdate(): Promise<void> {
     throw new Error('No update ready to install')
   }
 
-  if (hasActiveProcessingSessions?.()) {
+  let hasRunningSessions = false
+  if (hasActiveProcessingSessions) {
+    try {
+      hasRunningSessions = hasActiveProcessingSessions()
+    } catch (error) {
+      mainLog.warn('[auto-update] Session activity checker failed, proceeding with install:', error)
+    }
+  }
+
+  if (hasRunningSessions) {
     mainLog.warn('[auto-update] Install blocked: active sessions are still processing')
     throw new Error('An agent task is still running. Wait for it to finish, then install the update.')
   }
