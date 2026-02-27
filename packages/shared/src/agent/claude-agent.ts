@@ -1326,6 +1326,21 @@ export class ClaudeAgent extends BaseAgent {
           return;
         }
 
+        // Auto-update race condition handling: during app bundle swap, bundled bun/claude
+        // executable can be briefly unavailable and spawn fails with ENOENT.
+        // Retry once after a short delay to recover from this transient state.
+        const isSpawnEnoent =
+          errorMsg.includes('spawn') &&
+          errorMsg.includes('enoent');
+
+        if (isSpawnEnoent && !_isRetry) {
+          debug('[ClaudeAgent] Spawn ENOENT detected, retrying after short delay...');
+          yield { type: 'info', message: 'Runtime temporarily unavailable, retrying...' };
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          yield* this.chat(userMessage, attachments, { isRetry: true });
+          return;
+        }
+
         // Check for SDK process errors - these often wrap underlying billing/auth issues
         // The SDK's internal Claude Code process exits with code 1 for various API errors
         const isProcessError = errorMsg.includes('process exited with code');
