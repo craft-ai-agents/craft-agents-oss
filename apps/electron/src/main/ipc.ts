@@ -1,5 +1,5 @@
 import { app, ipcMain, nativeTheme, nativeImage, dialog, shell, BrowserWindow } from 'electron'
-import { readFile, readdir, stat, realpath, mkdir, writeFile, unlink, rm } from 'fs/promises'
+import { appendFile, readFile, readdir, stat, realpath, mkdir, writeFile, unlink, rm } from 'fs/promises'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { normalize, isAbsolute, join, basename, dirname, resolve, relative, sep } from 'path'
 import { homedir, tmpdir } from 'os'
@@ -9,7 +9,7 @@ import { SessionManager } from './sessions'
 import { ipcLog, windowLog, searchLog } from './logger'
 import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
-import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type SendMessageOptions, type LlmConnectionSetup } from '../shared/types'
+import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type SendMessageOptions, type LlmConnectionSetup, type SkillFile } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
 import { safeJsonParse } from '@craft-agent/shared/utils/files'
 import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, loadStoredConfig, saveConfig, type Workspace, getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, getGitBashPath, setGitBashPath, clearGitBashPath } from '@craft-agent/shared/config'
@@ -469,7 +469,12 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       return content
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
-      ipcLog.error('readFile error:', message)
+      // ENOENT is expected for optional config files (e.g. automations.json)
+      if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+        ipcLog.debug('readFile: file not found:', path)
+      } else {
+        ipcLog.error('readFile error:', message)
+      }
       throw new Error(`Failed to read file: ${message}`)
     }
   })
@@ -2508,13 +2513,6 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
     const skillDir = join(skillsDir, skillSlug)
 
-    interface SkillFile {
-      name: string
-      type: 'file' | 'directory'
-      size?: number
-      children?: SkillFile[]
-    }
-
     function scanDirectory(dirPath: string): SkillFile[] {
       try {
         const entries = readdirSync(dirPath, { withFileTypes: true })
@@ -2665,6 +2663,190 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     saveViews(workspace.rootPath, views)
     // Broadcast labels changed since views are used alongside labels in sidebar
     windowManager.broadcastToAll(IPC_CHANNELS.LABELS_CHANGED, workspaceId)
+  })
+
+  // ============================================================
+  // Automation Testing (manual trigger from UI)
+  // ============================================================
+
+  ipcMain.handle(IPC_CHANNELS.TEST_AUTOMATION, async (_event, payload: import('../shared/types').TestAutomationPayload) => {
+    const workspace = getWorkspaceByNameOrId(payload.workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const results: import('../shared/types').TestAutomationActionResult[] = []
+    const { parsePromptReferences } = await import('@craft-agent/shared/automations')
+
+    for (const action of payload.actions) {
+      const start = Date.now()
+
+      // Parse @mentions from the prompt to resolve source/skill references
+      const references = parsePromptReferences(action.prompt)
+
+      try {
+        // Delegate to executePromptAutomation which handles:
+        // - @mention resolution (sources + skills)
+        // - enabledSourceSlugs, llmConnection, model, permissionMode on createSession
+        // - skillSlugs passed to sendMessage
+        const { sessionId } = await sessionManager.executePromptAutomation(
+          payload.workspaceId,
+          workspace.rootPath,
+          action.prompt,
+          payload.labels,
+          payload.permissionMode,
+          references.mentions,
+          action.llmConnection,
+          action.model,
+        )
+        results.push({
+          type: 'prompt',
+          success: true,
+          sessionId,
+          duration: Date.now() - start,
+        })
+
+        // Write history entry for test runs
+        if (payload.automationId) {
+          const entry = { id: payload.automationId, ts: Date.now(), ok: true, sessionId, prompt: action.prompt.slice(0, 200) }
+          appendFile(join(workspace.rootPath, HISTORY_FILE), JSON.stringify(entry) + '\n', 'utf-8').catch(e => ipcLog.warn('[Automations] Failed to write history:', e))
+        }
+      } catch (err: unknown) {
+        results.push({
+          type: 'prompt',
+          success: false,
+          stderr: (err as Error).message,
+          duration: Date.now() - start,
+        })
+
+        // Write failed history entry
+        if (payload.automationId) {
+          const entry = { id: payload.automationId, ts: Date.now(), ok: false, error: ((err as Error).message ?? '').slice(0, 200), prompt: action.prompt.slice(0, 200) }
+          appendFile(join(workspace.rootPath, HISTORY_FILE), JSON.stringify(entry) + '\n', 'utf-8').catch(e => ipcLog.warn('[Automations] Failed to write history:', e))
+        }
+      }
+    }
+
+    return { actions: results } satisfies import('../shared/types').TestAutomationResult
+  })
+
+  // History file name — matches AUTOMATIONS_HISTORY_FILE from @craft-agent/shared/automations/constants
+  const HISTORY_FILE = 'automations-history.jsonl'
+  interface HistoryEntry { id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string }
+
+  // Per-workspace config mutex: serializes read-modify-write cycles on automations.json
+  // to prevent concurrent IPC calls from clobbering each other's changes.
+  const configMutexes = new Map<string, Promise<void>>()
+  function withConfigMutex<T>(workspaceRoot: string, fn: () => Promise<T>): Promise<T> {
+    const prev = configMutexes.get(workspaceRoot) ?? Promise.resolve()
+    const next = prev.then(fn, fn) // run fn regardless of previous result
+    configMutexes.set(workspaceRoot, next.then(() => {}, () => {}))
+    return next
+  }
+
+  // Shared helper: resolve workspace, read automations.json, validate matcher, mutate, write back
+  interface AutomationsConfigJson { automations?: Record<string, Record<string, unknown>[]>; [key: string]: unknown }
+  async function withAutomationMatcher(workspaceId: string, eventName: string, matcherIndex: number, mutate: (matchers: Record<string, unknown>[], index: number, config: AutomationsConfigJson, genId: () => string) => void) {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    await withConfigMutex(workspace.rootPath, async () => {
+      const { resolveAutomationsConfigPath, generateShortId } = await import('@craft-agent/shared/automations/resolve-config-path')
+      const configPath = resolveAutomationsConfigPath(workspace.rootPath)
+
+      const raw = await readFile(configPath, 'utf-8')
+      const config = JSON.parse(raw)
+
+      const eventMap = config.automations ?? {}
+      const matchers = eventMap[eventName]
+      if (!Array.isArray(matchers) || matcherIndex < 0 || matcherIndex >= matchers.length) {
+        throw new Error(`Invalid automation reference: ${eventName}[${matcherIndex}]`)
+      }
+
+      mutate(matchers, matcherIndex, config, generateShortId)
+
+      // Backfill missing IDs on all matchers before writing
+      for (const eventMatchers of Object.values(eventMap)) {
+        if (!Array.isArray(eventMatchers)) continue
+        for (const m of eventMatchers as Record<string, unknown>[]) {
+          if (!m.id) m.id = generateShortId()
+        }
+      }
+
+      await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+    })
+  }
+
+  // Automation enabled state management (toggle enabled/disabled in automations.json)
+  ipcMain.handle(IPC_CHANNELS.AUTOMATIONS_SET_ENABLED, async (_event, workspaceId: string, eventName: string, matcherIndex: number, enabled: boolean) => {
+    await withAutomationMatcher(workspaceId, eventName, matcherIndex, (matchers, idx) => {
+      if (enabled) {
+        // Remove the enabled field entirely (defaults to true) to keep JSON clean
+        delete matchers[idx].enabled
+      } else {
+        matchers[idx].enabled = false
+      }
+    })
+  })
+
+  // Duplicate an automation matcher (deep-clone, new ID, append " Copy" to name, insert after original)
+  ipcMain.handle(IPC_CHANNELS.AUTOMATIONS_DUPLICATE, async (_event, workspaceId: string, eventName: string, matcherIndex: number) => {
+    await withAutomationMatcher(workspaceId, eventName, matcherIndex, (matchers, idx, _config, genId) => {
+      const clone = JSON.parse(JSON.stringify(matchers[idx]))
+      clone.id = genId()
+      clone.name = clone.name ? `${clone.name} Copy` : 'Untitled Copy'
+      matchers.splice(idx + 1, 0, clone)
+    })
+  })
+
+  // Delete an automation matcher (remove from array, clean up empty event key)
+  ipcMain.handle(IPC_CHANNELS.AUTOMATIONS_DELETE, async (_event, workspaceId: string, eventName: string, matcherIndex: number) => {
+    await withAutomationMatcher(workspaceId, eventName, matcherIndex, (matchers, idx, config) => {
+      matchers.splice(idx, 1)
+      if (matchers.length === 0) {
+        const eventMap = config.automations
+        if (eventMap) delete eventMap[eventName]
+      }
+    })
+  })
+
+  // Read execution history for a specific automation
+  ipcMain.handle(IPC_CHANNELS.AUTOMATIONS_GET_HISTORY, async (_event, workspaceId: string, automationId: string, limit = 20) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const historyPath = join(workspace.rootPath, HISTORY_FILE)
+    try {
+      const content = await readFile(historyPath, 'utf-8')
+      const lines = content.trim().split('\n').filter(Boolean)
+
+      return lines
+        .map(line => { try { return JSON.parse(line) } catch { return null } })
+        .filter((e): e is HistoryEntry => e?.id === automationId)
+        .slice(-limit)
+        .reverse()
+    } catch {
+      return [] // File doesn't exist yet
+    }
+  })
+
+  // Return last execution timestamp for all automations (for lastExecutedAt in list)
+  ipcMain.handle(IPC_CHANNELS.AUTOMATIONS_GET_LAST_EXECUTED, async (_event, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const historyPath = join(workspace.rootPath, HISTORY_FILE)
+    try {
+      const content = await readFile(historyPath, 'utf-8')
+      const result: Record<string, number> = {}
+      for (const line of content.trim().split('\n')) {
+        try {
+          const entry = JSON.parse(line)
+          if (entry.id && entry.ts) result[entry.id] = entry.ts
+        } catch { /* skip malformed lines */ }
+      }
+      return result
+    } catch {
+      return {}
+    }
   })
 
   // Generic workspace image loading (for source icons, status icons, etc.)

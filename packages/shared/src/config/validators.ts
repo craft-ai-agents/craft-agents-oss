@@ -332,12 +332,12 @@ export function validateAll(workspaceId?: string, workspaceRoot?: string): Valid
     results.push(validateAllSources(workspaceId));
   }
 
-  // Include skill, status, label, hooks, and permissions validation if workspaceRoot is provided
+  // Include skill, status, label, automations, and permissions validation if workspaceRoot is provided
   if (workspaceRoot) {
     results.push(validateAllSkills(workspaceRoot));
     results.push(validateStatuses(workspaceRoot));
     results.push(validateLabels(workspaceRoot));
-    results.push(validateHooks(workspaceRoot));
+    results.push(validateAutomations(workspaceRoot));
     results.push(validateAllPermissions(workspaceRoot));
   }
 
@@ -1335,7 +1335,7 @@ import {
   getSourcePermissionsPath,
   getAppPermissionsDir,
 } from '../agent/permissions-config.ts';
-import { validateHooksContent, validateHooks } from '../hooks-simple/index.ts';
+import { validateAutomationsContent, validateAutomations, AUTOMATIONS_CONFIG_FILE } from '../automations/index.ts';
 
 /**
  * Internal: Validate a single permissions.json file
@@ -1856,7 +1856,7 @@ export function formatValidationResult(result: ValidationResult): string {
  * Result of detecting what type of config file a path corresponds to.
  */
 export interface ConfigFileDetection {
-  type: 'source' | 'skill' | 'statuses' | 'labels' | 'permissions' | 'tool-icons' | 'hooks';
+  type: 'source' | 'skill' | 'statuses' | 'labels' | 'permissions' | 'tool-icons' | 'automations';
   /** Slug of the source or skill (if applicable) */
   slug?: string;
   /** Display file path for error messages */
@@ -1910,9 +1910,9 @@ export function detectConfigFileType(filePath: string, workspaceRootPath: string
     return { type: 'labels', displayFile: 'labels/config.json' };
   }
 
-  // Match: hooks.json (workspace-level)
-  if (relativePath === 'hooks.json') {
-    return { type: 'hooks', displayFile: 'hooks.json' };
+  // Match: automations config file
+  if (relativePath === AUTOMATIONS_CONFIG_FILE) {
+    return { type: 'automations', displayFile: relativePath };
   }
 
   // Match: permissions.json (workspace-level)
@@ -1974,8 +1974,8 @@ export function validateConfigFileContent(
       return validateStatusesContent(content);
     case 'labels':
       return validateLabelsContent(content);
-    case 'hooks':
-      return validateHooksContent(content);
+    case 'automations':
+      return validateAutomationsContent(content, detection.displayFile);
     case 'permissions':
       return validatePermissionsContent(content, detection.displayFile);
     case 'tool-icons':

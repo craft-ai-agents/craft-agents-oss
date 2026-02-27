@@ -26,6 +26,7 @@ import {
 } from "../../shared/menu-schema"
 import type { MenuItem, MenuSection, SettingsMenuItem } from "../../shared/menu-schema"
 import { SETTINGS_ICONS } from "./icons/SettingsIcons"
+import { getDocUrl } from '@craft-agent/shared/docs/doc-links'
 
 // Map of action handlers for menu items that need custom behavior
 type MenuActionHandlers = {
@@ -269,6 +270,12 @@ export function AppMenu({
                 Help & Documentation
                 <Icons.ExternalLink className="h-3 w-3 ml-auto text-muted-foreground" />
               </StyledDropdownMenuItem>
+              <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('automations'))}>
+                <Icons.Webhook className="h-3.5 w-3.5" />
+                Automations
+                <Icons.ExternalLink className="h-3 w-3 ml-auto text-muted-foreground" />
+              </StyledDropdownMenuItem>
+              <StyledDropdownMenuSeparator />
               <StyledDropdownMenuItem onClick={onOpenKeyboardShortcuts}>
                 <Icons.Keyboard className="h-3.5 w-3.5" />
                 Keyboard Shortcuts

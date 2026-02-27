@@ -34,7 +34,7 @@ import {
   cleanupSessionScopedTools,
   type AuthRequest,
 } from './session-scoped-tools.ts';
-import { type HookSystem, type SdkHookCallbackMatcher } from '../hooks-simple/index.ts';
+import { type AutomationSystem, type SdkAutomationCallbackMatcher } from '../automations/index.ts';
 import {
   getPermissionMode,
   setPermissionMode,
@@ -124,8 +124,8 @@ export interface ClaudeAgentConfig {
   };
   /** System prompt preset for mini agents ('default' | 'mini' or custom string) */
   systemPromptPreset?: 'default' | 'mini' | string;
-  /** Workspace-level HookSystem instance (shared across all agents in the workspace) */
-  hookSystem?: HookSystem;
+  /** Workspace-level AutomationSystem instance (shared across all agents in the workspace) */
+  automationSystem?: AutomationSystem;
   /**
    * Per-session environment variable overrides for the SDK subprocess.
    * Used to pass connection-specific config like ANTHROPIC_BASE_URL that
@@ -311,7 +311,6 @@ const buildWindowsSkillsDirError = buildWindowsSkillsDirErrorFn;
 export class ClaudeAgent extends BaseAgent {
   protected backendName = 'Claude';
   // Note: ClaudeAgentConfig is compatible with BackendConfig, so we use the inherited this.config
-  // hookSystem is inherited from BaseAgent (protected)
   private currentQuery: Query | null = null;
   private currentQueryAbortController: AbortController | null = null;
   private lastAbortReason: AbortReason | null = null;
@@ -321,9 +320,7 @@ export class ClaudeAgent extends BaseAgent {
   // Permission whitelists are now managed by this.permissionManager (inherited from BaseAgent)
   // Source state tracking is now managed by this.sourceManager (inherited from BaseAgent)
   // Source MCP connections are managed by this.config.mcpPool (centralized in main process)
-  // In-process API source servers (Gmail, Slack, etc.) — these are NOT in the pool
-  // because they use SDK-specific createSdkMcpServer() and handle REST API calls in-process.
-  private sourceApiServers: Record<string, unknown> = {};
+  // Both MCP sources and API sources are routed through the pool.
   // Safe mode state - user-controlled read-only exploration mode
   private safeMode: boolean = false;
   // Event adapter for SDK message → AgentEvent conversion (testable, pluggable)
@@ -407,7 +404,7 @@ export class ClaudeAgent extends BaseAgent {
       miniModel: config.miniModel,
       mcpPool: config.mcpPool,
       connectionSlug: config.connectionSlug,
-      hookSystem: config.hookSystem,
+      automationSystem: config.automationSystem,
     };
 
     // Call BaseAgent constructor - initializes model, thinkingLevel, permissionManager, sourceManager, etc.
@@ -415,6 +412,7 @@ export class ClaudeAgent extends BaseAgent {
     super(backendConfig, DEFAULT_MODEL, CLAUDE_CONTEXT_WINDOW);
 
     this.isHeadless = config.isHeadless ?? false;
+    this.automationSystem = config.automationSystem;
 
     // Initialize event adapter for SDK message → AgentEvent conversion
     this.eventAdapter = new ClaudeEventAdapter({
@@ -674,13 +672,10 @@ export class ClaudeAgent extends BaseAgent {
           type: 'http',
           url: 'https://agents.craft.do/docs/mcp',
         },
-        // Per-source proxy servers from centralized MCP pool (MCP sources like Linear, GitHub)
-        // Each source gets its own SDK server keyed by slug (e.g., 'linear', 'github')
+        // Per-source proxy servers from centralized MCP pool (MCP + API sources)
+        // Each source gets its own SDK server keyed by slug (e.g., 'linear', 'github', 'gmail')
         // so the SDK produces correct tool names: mcp__{slug}__{toolName}
         ...sourceProxies,
-        // In-process API source servers (Gmail, Slack, Stripe, etc.)
-        // These handle REST API calls directly in-process with pre-built credentials.
-        ...this.sourceApiServers,
       };
 
       // Mini agents: filter to minimal set using centralized keys
@@ -784,16 +779,16 @@ export class ClaudeAgent extends BaseAgent {
         // This allows Safe Mode to properly allow read-only bash commands without SDK interference
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
-        // User hooks from hooks.json are merged with internal hooks
+        // User hooks from automations.json are merged with internal hooks
         hooks: (() => {
-          // Build user-defined hooks from hooks.json using the workspace-level HookSystem
-          const userHooks: Partial<Record<string, SdkHookCallbackMatcher[]>> = this.hookSystem?.buildSdkHooks() ?? {};
+          // Build user-defined hooks from automations.json using the workspace-level AutomationSystem
+          const userHooks: Partial<Record<string, SdkAutomationCallbackMatcher[]>> = this.automationSystem?.buildSdkHooks() ?? {};
           if (Object.keys(userHooks).length > 0) {
             debug('[CraftAgent] User SDK hooks loaded:', Object.keys(userHooks).join(', '));
           }
 
           // Internal hooks for permission handling and logging
-          const internalHooks: Record<string, SdkHookCallbackMatcher[]> = {
+          const internalHooks: Record<string, SdkAutomationCallbackMatcher[]> = {
           PreToolUse: [{
             hooks: [async (_hookInput) => {
               // Only handle PreToolUse events
@@ -996,10 +991,10 @@ export class ClaudeAgent extends BaseAgent {
           }],
           };
 
-          // Merge internal hooks with user hooks from hooks.json
+          // Merge internal hooks with user hooks from automations.json
           // Internal hooks run first (permissions), then user hooks
-          const mergedHooks: Record<string, SdkHookCallbackMatcher[]> = { ...internalHooks };
-          for (const [event, matchers] of Object.entries(userHooks) as [string, SdkHookCallbackMatcher[]][]) {
+          const mergedHooks: Record<string, SdkAutomationCallbackMatcher[]> = { ...internalHooks };
+          for (const [event, matchers] of Object.entries(userHooks) as [string, SdkAutomationCallbackMatcher[]][]) {
             if (!matchers) continue;
             if (mergedHooks[event]) {
               // Append user hooks after internal hooks
@@ -2026,17 +2021,6 @@ export class ClaudeAgent extends BaseAgent {
    * @param intendedSlugs Optional list of source slugs that should be considered active
    *                      (what the UI shows as active, even if build failed)
    */
-  override async setSourceServers(
-    mcpServers: Record<string, SdkMcpServerConfig>,
-    apiServers: Record<string, unknown>,
-    intendedSlugs?: string[]
-  ): Promise<void> {
-    // BaseAgent handles SourceManager state + McpClientPool sync for MCP sources
-    await super.setSourceServers(mcpServers, apiServers, intendedSlugs);
-    // Store API servers separately — they're in-process MCP server instances
-    // (Gmail, Slack, Stripe, etc.) that get added directly to Options.mcpServers
-    this.sourceApiServers = apiServers;
-  }
 
   // isSourceServerActive, getActiveSourceServerNames, setAllSources, getAllSources, markSourceUnseen
   // are now inherited from BaseAgent and delegate to this.sourceManager

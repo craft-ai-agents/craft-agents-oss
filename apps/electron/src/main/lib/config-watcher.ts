@@ -36,6 +36,7 @@ import {
   sourceNeedsIconDownload,
   downloadSourceIcon,
 } from '@craft-agent/shared/sources';
+import { AUTOMATIONS_CONFIG_FILE } from '@craft-agent/shared/automations';
 import { permissionsConfigCache, getAppPermissionsDir } from '@craft-agent/shared/agent';
 import { getWorkspacePath, getWorkspaceSourcesPath, getWorkspaceSkillsPath } from '@craft-agent/shared/workspaces';
 import type { LoadedSkill } from '@craft-agent/shared/skills';
@@ -120,9 +121,9 @@ export interface ConfigWatcherCallbacks {
   /** Called when labels config.json changes */
   onLabelConfigChange?: (workspaceId: string) => void;
 
-  // Hooks callbacks
-  /** Called when hooks.json changes */
-  onHooksConfigChange?: (workspaceId: string) => void;
+  // Automations callbacks
+  /** Called when automations.json changes */
+  onAutomationsConfigChange?: (workspaceId: string) => void;
 
   // Theme callbacks (app-level only)
   /** Called when app-level theme.json changes */
@@ -350,10 +351,10 @@ export class ConfigWatcher {
       return;
     }
 
-    // Workspace-level hooks.json
-    if (relativePath === 'hooks.json') {
-      debug('[ConfigWatcher] hooks.json change detected - triggering reload');
-      this.debounce('hooks-config', () => this.handleHooksConfigChange());
+    // Workspace-level automations config file
+    if (relativePath === AUTOMATIONS_CONFIG_FILE) {
+      debug('[ConfigWatcher] automations config change detected:', relativePath, '- triggering reload');
+      this.debounce('automations-config', () => this.handleAutomationsConfigChange());
       return;
     }
 
@@ -865,16 +866,16 @@ export class ConfigWatcher {
   }
 
   // ============================================================
-  // Hooks Handlers
+  // Automations Handlers
   // ============================================================
 
   /**
-   * Handle hooks.json change.
-   * Notifies sessions to reload hook configuration.
+   * Handle automations.json change.
+   * Notifies sessions to reload automation configuration.
    */
-  private handleHooksConfigChange(): void {
-    debug('[ConfigWatcher] hooks.json changed:', this.workspaceId);
-    this.callbacks.onHooksConfigChange?.(this.workspaceId);
+  private handleAutomationsConfigChange(): void {
+    debug('[ConfigWatcher] automations config changed:', this.workspaceId);
+    this.callbacks.onAutomationsConfigChange?.(this.workspaceId);
   }
 
   // ============================================================

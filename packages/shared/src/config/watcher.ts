@@ -49,6 +49,7 @@ import {
 } from '../statuses/storage.ts';
 import { readSessionHeader } from '../sessions/jsonl.ts';
 import type { SessionHeader } from '../sessions/types.ts';
+import { AUTOMATIONS_CONFIG_FILE } from '../automations/constants.ts';
 import { loadAppTheme, loadPresetThemes, loadPresetTheme, getAppThemesDir } from './storage.ts';
 import type { ThemeOverrides, PresetTheme } from './theme.ts';
 
@@ -125,9 +126,9 @@ export interface ConfigWatcherCallbacks {
   /** Called when labels config.json changes */
   onLabelConfigChange?: (workspaceId: string) => void;
 
-  // Hooks callbacks
-  /** Called when hooks.json changes */
-  onHooksConfigChange?: (workspaceId: string) => void;
+  // Automations callbacks
+  /** Called when automations.json changes */
+  onAutomationsConfigChange?: (workspaceId: string) => void;
 
   // Session callbacks
   /** Called when a session's JSONL header is modified externally (labels, name, flags, etc.) */
@@ -376,10 +377,10 @@ export class ConfigWatcher {
       return;
     }
 
-    // Workspace-level hooks.json
-    if (relativePath === 'hooks.json') {
-      debug('[ConfigWatcher] hooks.json change detected');
-      this.debounce('hooks-config', () => this.handleHooksConfigChange());
+    // Workspace-level automations config file
+    if (relativePath === AUTOMATIONS_CONFIG_FILE) {
+      debug('[ConfigWatcher] automations config change detected:', relativePath);
+      this.debounce('automations-config', () => this.handleAutomationsConfigChange());
       return;
     }
 
@@ -892,11 +893,11 @@ export class ConfigWatcher {
   }
 
   /**
-   * Handle hooks.json change.
+   * Handle automations config change.
    */
-  private handleHooksConfigChange(): void {
-    debug('[ConfigWatcher] hooks.json changed:', this.workspaceId);
-    this.callbacks.onHooksConfigChange?.(this.workspaceId);
+  private handleAutomationsConfigChange(): void {
+    debug('[ConfigWatcher] automations config changed:', this.workspaceId);
+    this.callbacks.onAutomationsConfigChange?.(this.workspaceId);
   }
 
   // ============================================================

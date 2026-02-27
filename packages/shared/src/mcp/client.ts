@@ -59,6 +59,16 @@ const BLOCKED_ENV_VARS = [
   'NPM_TOKEN',
 ];
 
+/**
+ * Interface for clients managed by McpClientPool.
+ * Both CraftMcpClient (remote MCP sources) and ApiSourcePoolClient (API sources) implement this.
+ */
+export interface PoolClient {
+  listTools(): Promise<Tool[]>;
+  callTool(name: string, args: Record<string, unknown>): Promise<unknown>;
+  close(): Promise<void>;
+}
+
 export class CraftMcpClient {
   private client: Client;
   private transport: Transport;

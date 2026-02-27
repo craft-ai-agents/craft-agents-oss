@@ -180,12 +180,19 @@ export function useOnboarding({
     isCheckingGitBash: true, // Start as true until check completes
   })
 
-  // Check Git Bash on Windows when starting from welcome
+  // Check Git Bash on Windows at mount. If missing, redirect to git-bash step
+  // regardless of the initial step (provider-select skips the welcome gate).
   useEffect(() => {
     const checkGitBash = async () => {
       try {
         const status = await window.electronAPI.checkGitBash()
-        setState(s => ({ ...s, gitBashStatus: status, isCheckingGitBash: false }))
+        setState(s => ({
+          ...s,
+          gitBashStatus: status,
+          isCheckingGitBash: false,
+          // Redirect to git-bash step when missing on Windows
+          ...(status.platform === 'win32' && !status.found ? { step: 'git-bash' as const } : {}),
+        }))
       } catch (error) {
         console.error('[Onboarding] Failed to check Git Bash:', error)
         // Even on error, allow continuing (will skip git-bash step)
@@ -285,7 +292,9 @@ export function useOnboarding({
     }
     switch (state.step) {
       case 'git-bash':
-        setState(s => ({ ...s, step: 'welcome' }))
+        if (onDismiss) {
+          onDismiss()
+        }
         break
       case 'provider-select':
         // If on Windows and Git Bash was needed, go back to git-bash step

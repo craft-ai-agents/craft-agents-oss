@@ -1,6 +1,6 @@
 {
   "name": "craft-agent",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Claude Code-like agent for Craft documents",
   "type": "module",
   "private": true,

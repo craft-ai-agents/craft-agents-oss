@@ -76,9 +76,9 @@ export function SessionBadges({ item }: SessionBadgesProps) {
           {PERMISSION_MODE_CONFIG[permissionMode].shortName}
         </EntityListBadge>
       )}
-      {resolvedLabels.map(({ config, rawValue }) => (
+      {resolvedLabels.map(({ config, rawValue }, idx) => (
         <EntityListLabelBadge
-          key={config.id}
+          key={`${config.id}-${idx}`}
           label={config}
           rawValue={rawValue}
           sessionLabels={item.labels || []}

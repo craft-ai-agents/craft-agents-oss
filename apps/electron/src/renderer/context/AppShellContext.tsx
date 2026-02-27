@@ -24,6 +24,7 @@ import type {
   LoadedSkill,
   NewChatActionParams,
   LlmConnectionWithStatus,
+  TestAutomationResult,
 } from '../../shared/types'
 import type { SessionStatus as SessionStatusConfig } from '@/config/session-status-config'
 import type { SessionOptions, SessionOptionUpdates } from '../hooks/useSessionOptions'
@@ -139,6 +140,20 @@ export interface AppShellContextType {
   chatDisplayRef?: React.RefObject<ChatDisplayHandle>
   /** Callback when ChatDisplay match info changes (for immediate UI updates) */
   onChatMatchInfoChange?: (info: { count: number; index: number }) => void
+
+  // Automation management
+  /** Test an automation by ID — executes its actions and returns results */
+  onTestAutomation?: (automationId: string) => void
+  /** Toggle an automation's enabled state by ID */
+  onToggleAutomation?: (automationId: string) => void
+  /** Duplicate an automation by ID — clones config with " Copy" suffix */
+  onDuplicateAutomation?: (automationId: string) => void
+  /** Delete an automation by ID — removes from automations config */
+  onDeleteAutomation?: (automationId: string) => void
+  /** Map of automationId → last test result */
+  automationTestResults?: Record<string, import('../components/automations/types').TestResult>
+  /** Fetch execution history for an automation by ID */
+  getAutomationHistory?: (automationId: string) => Promise<import('../components/automations/types').ExecutionEntry[]>
 }
 
 const AppShellContext = createContext<AppShellContextType | null>(null)

@@ -696,7 +696,7 @@ export class PiAgent extends BaseAgent {
       // Fire PostToolUse / PostToolUseFailure hook events (fire-and-forget)
       if (agentEvent.type === 'tool_result') {
         const hookEvent = agentEvent.isError ? 'PostToolUseFailure' : 'PostToolUse';
-        this.emitHookEvent(hookEvent, {
+        this.emitAutomationEvent(hookEvent, {
           hook_event_name: hookEvent,
           tool_name: agentEvent.toolName ?? (event.toolName as string) ?? 'unknown',
           tool_input: agentEvent.input,
@@ -727,8 +727,8 @@ export class PiAgent extends BaseAgent {
     const { requestId, toolName, input } = req;
     this.debug(`PreToolUse request from subprocess: ${toolName} (${requestId})`);
 
-    // Fire PreToolUse hook event (hooks.json) — await so hooks run before tool executes
-    await this.emitHookEvent('PreToolUse', {
+    // Fire PreToolUse automation event — await so automations run before tool executes
+    await this.emitAutomationEvent('PreToolUse', {
       hook_event_name: 'PreToolUse',
       tool_name: toolName,
       tool_input: input,
@@ -1119,7 +1119,7 @@ export class PiAgent extends BaseAgent {
     this.adapter.startTurn();
 
     // Fire UserPromptSubmit hook event (fire-and-forget)
-    this.emitHookEvent('UserPromptSubmit', {
+    this.emitAutomationEvent('UserPromptSubmit', {
       hook_event_name: 'UserPromptSubmit',
       prompt: message,
     });
@@ -1299,7 +1299,7 @@ export class PiAgent extends BaseAgent {
   ): Promise<void> {
     // BaseAgent.setSourceServers() handles:
     //   1. SourceManager state tracking (active slugs)
-    //   2. McpClientPool sync (connecting/disconnecting MCP sources)
+    //   2. McpClientPool sync (connecting/disconnecting MCP + API sources)
     await super.setSourceServers(mcpServers, apiServers, intendedSlugs);
 
     // Register pool's proxy tool defs with subprocess so the model can call them.
@@ -1316,7 +1316,7 @@ export class PiAgent extends BaseAgent {
 
   async abort(reason?: string): Promise<void> {
     // Fire Stop hook event (fire-and-forget)
-    this.emitHookEvent('Stop', { hook_event_name: 'Stop' });
+    this.emitAutomationEvent('Stop', { hook_event_name: 'Stop' });
 
     // Deny all pending permissions
     for (const [, pending] of this.pendingPermissions) {
@@ -1331,7 +1331,7 @@ export class PiAgent extends BaseAgent {
 
   forceAbort(reason: AbortReason): void {
     // Fire Stop hook event (fire-and-forget)
-    this.emitHookEvent('Stop', { hook_event_name: 'Stop' });
+    this.emitAutomationEvent('Stop', { hook_event_name: 'Stop' });
 
     this.abortReason = reason;
     this._isProcessing = false;

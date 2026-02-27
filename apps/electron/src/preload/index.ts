@@ -538,6 +538,33 @@ const api: ElectronAPI = {
   setDefaultLlmConnection: (slug: string) => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_SET_DEFAULT, slug),
   setWorkspaceDefaultLlmConnection: (workspaceId: string, slug: string | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_SET_WORKSPACE_DEFAULT, workspaceId, slug),
+
+  // Automation testing (manual trigger from UI)
+  testAutomation: (payload: import('../shared/types').TestAutomationPayload) =>
+    ipcRenderer.invoke(IPC_CHANNELS.TEST_AUTOMATION, payload),
+
+  // Automation state management
+  setAutomationEnabled: (workspaceId: string, eventName: string, matcherIndex: number, enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTOMATIONS_SET_ENABLED, workspaceId, eventName, matcherIndex, enabled),
+  duplicateAutomation: (workspaceId: string, eventName: string, matcherIndex: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTOMATIONS_DUPLICATE, workspaceId, eventName, matcherIndex),
+  deleteAutomation: (workspaceId: string, eventName: string, matcherIndex: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTOMATIONS_DELETE, workspaceId, eventName, matcherIndex),
+  getAutomationHistory: (workspaceId: string, automationId: string, limit?: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTOMATIONS_GET_HISTORY, workspaceId, automationId, limit),
+  getAutomationLastExecuted: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTOMATIONS_GET_LAST_EXECUTED, workspaceId) as Promise<Record<string, number>>,
+
+  // Automations change listener (live updates when automations.json changes on disk)
+  onAutomationsChanged: (callback: (workspaceId: string) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, workspaceId: string) => {
+      callback(workspaceId)
+    }
+    ipcRenderer.on(IPC_CHANNELS.AUTOMATIONS_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.AUTOMATIONS_CHANGED, handler)
+    }
+  },
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
