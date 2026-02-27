@@ -525,9 +525,9 @@ export function useInlineMention({
     currentInputRef.current = { value, cursorPosition }
 
     const textBeforeCursor = value.slice(0, cursorPosition)
-    // Match @ anywhere, followed by optional word chars, hyphens, slashes, and dots
-    // (dots needed for file extensions like @main.ts)
-    const atMatch = textBeforeCursor.match(/@([\w\-\/.]+)?$/)
+    // Match @ anywhere, followed by optional word chars, hyphens, slashes, dots, and spaces
+    // (dots needed for file extensions like @main.ts, spaces for filenames like @app availability.md)
+    const atMatch = textBeforeCursor.match(/@([\w\-\/. ]+)?$/)
 
     // Check if this is a valid @ mention trigger
     const matchStart = atMatch ? textBeforeCursor.lastIndexOf('@') : -1

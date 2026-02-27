@@ -442,6 +442,7 @@ export function FreeFormInput({
   const [isFocused, setIsFocused] = React.useState(false)
   const [inputMaxHeight, setInputMaxHeight] = React.useState(540)
   const [modelDropdownOpen, setModelDropdownOpen] = React.useState(false)
+  const [systemPromptAlwaysVisible, setSystemPromptAlwaysVisible] = React.useState(false)
 
   // Input settings (loaded from config)
   const [autoCapitalisation, setAutoCapitalisation] = React.useState(true)
@@ -466,6 +467,24 @@ export function FreeFormInput({
       }
     }
     loadInputSettings()
+  }, [])
+
+  // Load preferences on mount to honour systemPromptAlwaysVisible
+  React.useEffect(() => {
+    const loadPrefs = async () => {
+      if (!window.electronAPI) return
+      try {
+        const result = await window.electronAPI.readPreferences()
+        const prefs = JSON.parse(result.content)
+        if (prefs.systemPromptAlwaysVisible) {
+          setSystemPromptAlwaysVisible(true)
+          setModelDropdownOpen(true)
+        }
+      } catch {
+        // ignore — preferences are optional
+      }
+    }
+    loadPrefs()
   }, [])
 
   // Double-Esc interrupt: show warning overlay on first Esc, interrupt on second
@@ -1625,7 +1644,7 @@ export function FreeFormInput({
           <div className="flex items-center shrink-0">
           {/* 5. Model/Connection Selector - Hidden in compact mode (EditPopover embedding) */}
           {!compactMode && (
-          <DropdownMenu open={modelDropdownOpen} onOpenChange={setModelDropdownOpen}>
+          <DropdownMenu open={modelDropdownOpen} onOpenChange={(open) => { if (!open && systemPromptAlwaysVisible) return; setModelDropdownOpen(open) }}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
