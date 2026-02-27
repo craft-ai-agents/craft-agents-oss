@@ -1371,19 +1371,43 @@ function migrateOpus45ToOpus46(config: StoredConfig): boolean {
 
     // Migrate models array
     if (connection.models && Array.isArray(connection.models)) {
-      for (let i = 0; i < connection.models.length; i++) {
-        const model = connection.models[i];
-        if (typeof model === 'string' && model === OPUS_45_ID) {
-          connection.models[i] = OPUS_46_ID;
-          changed = true;
-        } else if (typeof model === 'object' && model.id === OPUS_45_ID) {
-          model.id = OPUS_46_ID;
-          if (model.name?.includes('4.5')) {
-            model.name = model.name.replace('4.5', '4.6');
+      const getId = (m: string | { id: string }): string => typeof m === 'string' ? m : m.id;
+      const modelIds = connection.models.map(getId);
+      const hasOpus45 = modelIds.includes(OPUS_45_ID);
+      const opus46Count = modelIds.filter(id => id === OPUS_46_ID).length;
+
+      if (hasOpus45 && opus46Count > 0) {
+        // Both exist (backfill populated both) — remove the old 4.5 entry
+        connection.models = connection.models.filter(m => getId(m) !== OPUS_45_ID);
+        changed = true;
+      } else if (hasOpus45) {
+        // Only 4.5 exists — convert to 4.6 in place
+        for (let i = 0; i < connection.models.length; i++) {
+          const model = connection.models[i];
+          if (typeof model === 'string' && model === OPUS_45_ID) {
+            connection.models[i] = OPUS_46_ID;
+            changed = true;
+          } else if (typeof model === 'object' && model.id === OPUS_45_ID) {
+            model.id = OPUS_46_ID;
+            if (model.name?.includes('4.5')) {
+              model.name = model.name.replace('4.5', '4.6');
+            }
+            changed = true;
           }
-          changed = true;
         }
+      } else if (opus46Count > 1) {
+        // Already-affected user: duplicate 4.6 entries from previous migration bug.
+        // Keep only the first occurrence.
+        let kept = false;
+        connection.models = connection.models.filter(m => {
+          if (getId(m) !== OPUS_46_ID) return true;
+          if (kept) return false;
+          kept = true;
+          return true;
+        });
+        changed = true;
       }
+      // else: single 4.6, no 4.5 — nothing to do (natural no-op)
     }
   }
 
