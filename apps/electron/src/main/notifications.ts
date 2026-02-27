@@ -13,6 +13,11 @@ import { readFileSync } from 'fs'
 import { mainLog } from './logger'
 import type { WindowManager } from './window-manager'
 
+// Keep strong references to active notifications to prevent garbage collection.
+// Without this, Electron's Notification objects get GC'd after showNotification()
+// returns, which silently destroys the 'click' handler (electron/electron#16922).
+const activeNotifications = new Set<Notification>()
+
 let windowManager: WindowManager | null = null
 let baseIconPath: string | null = null
 let baseIconDataUrl: string | null = null
@@ -54,10 +59,18 @@ export function showNotification(
     icon: undefined,  // Will use app icon by default on macOS
   })
 
+  // Hold a strong reference to prevent GC before the user interacts
+  activeNotifications.add(notification)
+
+  const cleanup = () => { activeNotifications.delete(notification) }
+
   notification.on('click', () => {
     mainLog.info('Notification clicked:', { workspaceId, sessionId })
     handleNotificationClick(workspaceId, sessionId)
+    cleanup()
   })
+
+  notification.on('close', cleanup)
 
   notification.show()
   mainLog.info('Notification shown:', { title, sessionId })
