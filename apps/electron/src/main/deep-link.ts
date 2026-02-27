@@ -17,7 +17,7 @@
  *   craftagents://workspace/{workspaceId}/action/{actionName}[?params]
  *
  * Actions:
- *   new-chat                  - Create new chat, optional ?input=text&name=name&send=true
+ *   new-session               - Create new session, optional ?input=text&name=name&send=true
  *                               If send=true is provided with input, immediately sends the message
  *   resume-sdk-session/{id}   - Resume Claude Code session by SDK session ID
  *   delete-session/{id}       - Delete session
@@ -29,7 +29,7 @@
  *   craftagents://allSessions/session/abc123                (specific session)
  *   craftagents://settings/shortcuts                     (shortcuts page)
  *   craftagents://sources/source/github                  (github source info)
- *   craftagents://action/new-chat                        (uses active window)
+ *   craftagents://action/new-session                     (uses active window)
  *   craftagents://action/resume-sdk-session/{sdkId}      (resume Claude Code session)
  *   craftagents://workspace/ws123/allSessions/session/abc123   (targets specific workspace)
  */
@@ -44,7 +44,7 @@ export interface DeepLinkTarget {
   workspaceId?: string
   /** Compound route format (e.g., 'allSessions/session/abc123', 'settings/shortcuts') */
   view?: string
-  /** Action route (e.g., 'new-chat', 'delete-session') */
+  /** Action route (e.g., 'new-session', 'delete-session') */
   action?: string
   actionParams?: Record<string, string>
   /** Window mode - if set, opens in a new window instead of navigating in existing */
@@ -65,7 +65,7 @@ export interface DeepLinkResult {
 export interface DeepLinkNavigation {
   /** Compound route format (e.g., 'allSessions/session/abc123', 'settings/shortcuts') */
   view?: string
-  /** Action route (e.g., 'new-chat', 'delete-session') */
+  /** Action route (e.g., 'new-session', 'delete-session') */
   action?: string
   actionParams?: Record<string, string>
 }

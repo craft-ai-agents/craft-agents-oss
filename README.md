@@ -369,7 +369,7 @@ craftagents://allSessions                      # All sessions view
 craftagents://allSessions/session/session123   # Specific session
 craftagents://settings                         # Settings
 craftagents://sources/source/github            # Source info
-craftagents://action/new-chat                  # Create new session
+craftagents://action/new-session               # Create new session
 ```
 
 ## Tech Stack
