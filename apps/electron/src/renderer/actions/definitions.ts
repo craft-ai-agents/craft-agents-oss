@@ -62,18 +62,21 @@ export const actions = {
     label: 'Focus Sidebar',
     defaultHotkey: 'mod+1',
     category: 'Navigation',
+    inputSafe: true,  // Must work while typing in chat/search inputs
   },
   'nav.focusNavigator': {
     id: 'nav.focusNavigator',
     label: 'Focus Navigator',
     defaultHotkey: 'mod+2',
     category: 'Navigation',
+    inputSafe: true,  // Must work while typing in chat/search inputs
   },
   'nav.focusChat': {
     id: 'nav.focusChat',
     label: 'Focus Chat',
     defaultHotkey: 'mod+3',
     category: 'Navigation',
+    inputSafe: true,  // Must work while typing in chat/search inputs
   },
   'nav.nextZone': {
     id: 'nav.nextZone',
