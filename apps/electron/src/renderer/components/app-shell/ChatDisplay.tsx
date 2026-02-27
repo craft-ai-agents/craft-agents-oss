@@ -1216,6 +1216,14 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     return groupMessagesByTurn(session.messages)
   }, [session?.messages])
 
+  // Memoized array of user messages 
+  const userHistory = React.useMemo(() => {
+    return session?.messages
+      .filter(m => m.role === 'user' && m.content?.trim())
+      .map(m => m.content.trim())
+      .reverse()
+  }, [session?.messages])
+
   // Keep ref in sync for scroll handler
   totalTurnCountRef.current = allTurns.length
 
@@ -1603,6 +1611,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               disableSend={disableSend || connectionUnavailable}
               connectionUnavailable={connectionUnavailable}
               isEmptySession={session.messages.length === 0}
+              inputHistory={userHistory}
               currentConnection={session.llmConnection}
               onConnectionChange={onConnectionChange}
               contextStatus={{

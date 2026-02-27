@@ -174,6 +174,8 @@ export interface FreeFormInputProps {
   sessionFolderPath?: string
   /** Session ID for scoping events like approve-plan */
   sessionId?: string
+  /** Input history for ArrowUp/ArrowDown navigation (derived from session messages, per-session) */
+  inputHistory?: string[]
   /** Current session status of the session (for # menu state selection) */
   currentSessionStatus?: string
   /** Disable send action (for tutorial guidance) */
@@ -243,6 +245,7 @@ export function FreeFormInput({
   onWorkingDirectoryChange,
   sessionFolderPath,
   sessionId,
+  inputHistory = [],
   currentSessionStatus,
   disableSend = false,
   isEmptySession = false,
@@ -398,14 +401,35 @@ export function FreeFormInput({
     }
   }, [enabledSourceSlugs])
 
-  // Sync from parent when inputValue changes externally (e.g., switching sessions)
+  // Sync from parent when inputValue changes externally (e.g., draft restored after async load)
+  // Session switches are handled separately below to also reset history navigation state.
+  // historyDraftRef: saves the in-progress draft when the user starts navigating history
+  const historyDraftRef = React.useRef('')
   const prevInputValueRef = React.useRef(inputValue)
+  const prevSessionIdRef = React.useRef(sessionId)
   React.useEffect(() => {
-    if (inputValue !== undefined && inputValue !== prevInputValueRef.current) {
+    const isSessionSwitch = sessionId !== prevSessionIdRef.current
+    const inputChanged = inputValue !== prevInputValueRef.current
+    if (isSessionSwitch ) {
+      // On session switch: restore draft if present, otherwise clear the input field.
+      // Always reset history navigation so the new session starts from index -1.
+      const draft = inputValue ?? ''
+      setInput(draft)
+      prevInputValueRef.current = inputValue
+      prevSessionIdRef.current = sessionId
+      historyDraftRef.current = ''
+      setTimeout(() => {
+        richInputRef.current?.setSelectionRange(draft.length, draft.length)
+      }, 0)
+    } else if (inputChanged && inputValue !== undefined) {
+      // Same session, external update (e.g., async draft load) — just sync the value.
       setInput(inputValue)
       prevInputValueRef.current = inputValue
+      setTimeout(() => {
+        richInputRef.current?.setSelectionRange(inputValue.length, inputValue.length)
+      }, 0)
     }
-  }, [inputValue])
+  }, [sessionId, inputValue])
 
   // Debounced sync to parent (saves draft without blocking typing)
   const syncTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
@@ -1073,8 +1097,12 @@ export function FreeFormInput({
       }
     }
 
+    // Reset history draft on submit
+    const trimmedInput = input.trim()
+    historyDraftRef.current = ''
+
     onSubmit(
-      input.trim(),
+      trimmedInput,
       attachments.length > 0 ? attachments : undefined,
       mentions.skills.length > 0 ? mentions.skills : undefined
     )
@@ -1103,6 +1131,62 @@ export function FreeFormInput({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // ArrowUp/ArrowDown: navigate input history when cursor is on the first/last line
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      // Only intercept when no overlays (mention/slash/label menus) are open
+      if (!inlineMention.isOpen && !inlineSlash.isOpen && !inlineLabel.isOpen) {
+        const cursorPos = input.length === 0 ? 0 : (richInputRef.current?.selectionStart ?? 0)
+        const currentValue = input
+        const currentIndex = inputHistory.indexOf(currentValue)
+        if (e.key === 'ArrowUp') {
+          if (cursorPos !== 0) {
+            // Not at start yet — jump to very beginning first
+            e.preventDefault()
+            richInputRef.current?.setSelectionRange(0, 0)
+            return
+          }
+          // Already at start — trigger history navigation
+          if (inputHistory.length > 0) {
+            const nextIndex = currentIndex === -1 ? 0 : currentIndex + 1
+            if (nextIndex < inputHistory.length) {
+              e.preventDefault()
+              // Save draft when first entering history navigation
+              if (currentIndex === -1) {
+                historyDraftRef.current = currentValue
+              }
+              const historyValue = inputHistory[nextIndex]
+              setInput(historyValue)
+              syncToParent(historyValue)
+              // hack empty input, put cursor at start
+              if (currentValue === '') {
+                setTimeout(() => {
+                  richInputRef.current?.setSelectionRange(0, 0)
+                }, 0)
+              }
+              return
+            }
+          }
+        } else {
+          // ArrowDown
+          if (currentIndex >= 0) {
+            if (cursorPos !== currentValue.length) {
+              // Not at end yet — jump to very end first
+              e.preventDefault()
+              richInputRef.current?.setSelectionRange(currentValue.length, currentValue.length)
+              return
+            }
+            // Already at end — trigger history navigation
+            e.preventDefault()
+            const nextIndex = currentIndex - 1
+            const targetValue = nextIndex < 0 ? historyDraftRef.current : inputHistory[nextIndex]
+            setInput(targetValue)
+            syncToParent(targetValue)
+            return
+          }
+        }
+      }
+    }
+
     // Shift+Tab cycles through enabled permission modes
     if (e.key === 'Tab' && e.shiftKey) {
       e.preventDefault()

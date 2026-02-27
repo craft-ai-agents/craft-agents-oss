@@ -563,6 +563,19 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
       get element() { return divRef.current },
     }), [])
 
+    // Keep cursorPositionRef up-to-date on every selection change (cursor movement via arrow
+    // keys doesn't trigger handleInput, so the ref would otherwise be stale).
+    React.useEffect(() => {
+      const handleSelectionChange = () => {
+        if (!divRef.current) return
+        // Only update when our contenteditable is the active/focused element
+        if (document.activeElement !== divRef.current) return
+        cursorPositionRef.current = getCursorPosition(divRef.current, cursorPositionRef.current)
+      }
+      document.addEventListener('selectionchange', handleSelectionChange)
+      return () => document.removeEventListener('selectionchange', handleSelectionChange)
+    }, [])
+
     // Handle input events
     const handleInput = React.useCallback(() => {
       if (isComposing.current) return
