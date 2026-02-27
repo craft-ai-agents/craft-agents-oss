@@ -671,6 +671,7 @@ export const IPC_CHANNELS = {
   OPEN_URL: 'shell:openUrl',
   OPEN_FILE: 'shell:openFile',
   SHOW_IN_FOLDER: 'shell:showInFolder',
+  OPEN_IN_EDITOR: 'shell:openInEditor',
 
   // Menu actions (main → renderer)
   MENU_NEW_CHAT: 'menu:newChat',
@@ -852,6 +853,10 @@ export const IPC_CHANNELS = {
   APPEARANCE_GET_RICH_TOOL_DESCRIPTIONS: 'appearance:getRichToolDescriptions',
   APPEARANCE_SET_RICH_TOOL_DESCRIPTIONS: 'appearance:setRichToolDescriptions',
 
+  // Editor settings
+  EDITOR_GET_DEFAULT: 'editor:getDefault',
+  EDITOR_SET_DEFAULT: 'editor:setDefault',
+
   BADGE_UPDATE: 'badge:update',
   BADGE_CLEAR: 'badge:clear',
   BADGE_SET_ICON: 'badge:setIcon',
@@ -1014,6 +1019,7 @@ export interface ElectronAPI {
   openUrl(url: string): Promise<void>
   openFile(path: string): Promise<void>
   showInFolder(path: string): Promise<void>
+  openInEditor(path: string): Promise<void>
 
   // Menu event listeners
   onMenuNewChat(callback: () => void): () => void
@@ -1191,6 +1197,10 @@ export interface ElectronAPI {
   // Appearance settings
   getRichToolDescriptions(): Promise<boolean>
   setRichToolDescriptions(enabled: boolean): Promise<void>
+
+  // Editor settings
+  getDefaultEditor(): Promise<string>
+  setDefaultEditor(editor: string): Promise<void>
 
   updateBadgeCount(count: number): Promise<void>
   clearBadgeCount(): Promise<void>

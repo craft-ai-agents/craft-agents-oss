@@ -1119,6 +1119,54 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // Shell operations - open directory in configured editor (VS Code, Cursor, etc.)
+  ipcMain.handle(IPC_CHANNELS.OPEN_IN_EDITOR, async (_event, path: string) => {
+    try {
+      const absolutePath = resolve(path)
+      const safePath = await validateFilePath(absolutePath)
+
+      const { getDefaultEditor } = await import('@craft-agent/shared/config/storage')
+      const editor = getDefaultEditor()
+
+      const editorCommands: Record<string, { cli: string; macApp: string }> = {
+        vscode: { cli: 'code', macApp: 'Visual Studio Code' },
+        cursor: { cli: 'cursor', macApp: 'Cursor' },
+        windsurf: { cli: 'windsurf', macApp: 'Windsurf' },
+      }
+
+      const editorConfig = editorCommands[editor]
+      if (!editorConfig) {
+        throw new Error(`Unsupported editor: ${editor}`)
+      }
+
+      // Try CLI first
+      try {
+        execSync(`${editorConfig.cli} "${safePath}"`, {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          timeout: 5000,
+        })
+        return
+      } catch {
+        // CLI not in PATH, try platform-specific fallback
+      }
+
+      // macOS fallback: use open -a
+      if (process.platform === 'darwin') {
+        execSync(`open -a "${editorConfig.macApp}" "${safePath}"`, {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          timeout: 5000,
+        })
+        return
+      }
+
+      throw new Error(`${editorConfig.cli} command not found. Install the "${editorConfig.cli}" CLI from your editor settings.`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      ipcLog.error('openInEditor error:', message)
+      throw new Error(`Failed to open in editor: ${message}`)
+    }
+  })
+
   // Menu actions from renderer (for unified Craft menu)
   ipcMain.handle(IPC_CHANNELS.MENU_QUIT, () => {
     app.quit()
@@ -3196,6 +3244,18 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   ipcMain.handle(IPC_CHANNELS.APPEARANCE_SET_RICH_TOOL_DESCRIPTIONS, async (_event, enabled: boolean) => {
     const { setRichToolDescriptions } = await import('@craft-agent/shared/config/storage')
     setRichToolDescriptions(enabled)
+  })
+
+  // Get default editor setting
+  ipcMain.handle(IPC_CHANNELS.EDITOR_GET_DEFAULT, async () => {
+    const { getDefaultEditor } = await import('@craft-agent/shared/config/storage')
+    return getDefaultEditor()
+  })
+
+  // Set default editor setting
+  ipcMain.handle(IPC_CHANNELS.EDITOR_SET_DEFAULT, async (_event, editor: string) => {
+    const { setDefaultEditor } = await import('@craft-agent/shared/config/storage')
+    setDefaultEditor(editor)
   })
 
   // Update app badge count

@@ -11,6 +11,8 @@ import {
   ChevronDown,
   Loader2,
   AlertCircle,
+  ExternalLink,
+  FolderOpen,
 } from 'lucide-react'
 import { Icon_Home, Icon_Folder } from '@craft-agent/ui'
 
@@ -51,6 +53,12 @@ import {
   StyledDropdownMenuSubContent,
 } from '@/components/ui/styled-dropdown'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  StyledContextMenuContent,
+  StyledContextMenuItem,
+} from '@/components/ui/styled-context-menu'
 import { cn } from '@/lib/utils'
 import { isMac, PATH_SEP, getPathBasename } from '@/lib/platform'
 import { applySmartTypography } from '@/lib/smart-typography'
@@ -2029,6 +2037,26 @@ function WorkingDirectoryBadge({
     }
   }
 
+  const handleOpenInEditor = async () => {
+    if (!workingDirectory || !window.electronAPI) return
+    try {
+      await window.electronAPI.openInEditor(workingDirectory)
+    } catch (error) {
+      toast.error('Failed to open in editor', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  }
+
+  const handleShowInFinder = async () => {
+    if (!workingDirectory || !window.electronAPI) return
+    try {
+      await window.electronAPI.showInFolder(workingDirectory)
+    } catch (error) {
+      toast.error('Failed to show in Finder')
+    }
+  }
+
   // Filter out current directory from recent list and sort alphabetically by folder name
   const filteredRecent = recentDirs
     .filter(p => p !== workingDirectory)
@@ -2053,7 +2081,10 @@ function WorkingDirectoryBadge({
   const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-2 rounded-[6px] px-3 py-1.5 text-[13px] outline-none'
 
   return (
-    <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+    <ContextMenu>
+      <ContextMenuTrigger disabled={!workingDirectory} asChild>
+        <span className="shrink min-w-0 overflow-hidden" onContextMenu={(e) => { if (workingDirectory) e.nativeEvent.stopImmediatePropagation() }}>
+          <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
       <PopoverTrigger asChild>
         <span className="shrink min-w-0 overflow-hidden">
           <FreeFormInputContextBadge
@@ -2160,6 +2191,19 @@ function WorkingDirectoryBadge({
           </div>
         </CommandPrimitive>
       </PopoverContent>
-    </Popover>
+          </Popover>
+        </span>
+      </ContextMenuTrigger>
+      <StyledContextMenuContent>
+        <StyledContextMenuItem onSelect={handleOpenInEditor}>
+          <ExternalLink className="h-3.5 w-3.5" />
+          Open in Editor
+        </StyledContextMenuItem>
+        <StyledContextMenuItem onSelect={handleShowInFinder}>
+          <FolderOpen className="h-3.5 w-3.5" />
+          Show in Finder
+        </StyledContextMenuItem>
+      </StyledContextMenuContent>
+    </ContextMenu>
   )
 }

@@ -19,6 +19,7 @@ export interface ConfigDefaults {
     spellCheck: boolean;
     keepAwakeWhileRunning: boolean;
     richToolDescriptions: boolean;
+    defaultEditor: string;
   };
   workspaceDefaults: {
     thinkingLevel: ThinkingLevel;

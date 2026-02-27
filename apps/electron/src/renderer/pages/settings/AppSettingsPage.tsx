@@ -25,6 +25,7 @@ import {
   SettingsCard,
   SettingsRow,
   SettingsToggle,
+  SettingsMenuSelectRow,
 } from '@/components/settings'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 
@@ -44,6 +45,9 @@ export default function AppSettingsPage() {
   // Power state
   const [keepAwakeEnabled, setKeepAwakeEnabled] = useState(false)
 
+  // Editor state
+  const [defaultEditor, setDefaultEditor] = useState('vscode')
+
   // Auto-update state
   const updateChecker = useUpdateChecker()
   const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false)
@@ -61,12 +65,14 @@ export default function AppSettingsPage() {
   const loadSettings = useCallback(async () => {
     if (!window.electronAPI) return
     try {
-      const [notificationsOn, keepAwakeOn] = await Promise.all([
+      const [notificationsOn, keepAwakeOn, editorValue] = await Promise.all([
         window.electronAPI.getNotificationsEnabled(),
         window.electronAPI.getKeepAwakeWhileRunning(),
+        window.electronAPI.getDefaultEditor(),
       ])
       setNotificationsEnabled(notificationsOn)
       setKeepAwakeEnabled(keepAwakeOn)
+      setDefaultEditor(editorValue)
     } catch (error) {
       console.error('Failed to load settings:', error)
     }
@@ -84,6 +90,11 @@ export default function AppSettingsPage() {
   const handleKeepAwakeEnabledChange = useCallback(async (enabled: boolean) => {
     setKeepAwakeEnabled(enabled)
     await window.electronAPI.setKeepAwakeWhileRunning(enabled)
+  }, [])
+
+  const handleDefaultEditorChange = useCallback((value: string) => {
+    setDefaultEditor(value)
+    window.electronAPI.setDefaultEditor(value)
   }, [])
 
   return (
@@ -113,6 +124,23 @@ export default function AppSettingsPage() {
                     description="Prevent the screen from turning off while sessions are running."
                     checked={keepAwakeEnabled}
                     onCheckedChange={handleKeepAwakeEnabledChange}
+                  />
+                </SettingsCard>
+              </SettingsSection>
+
+              {/* Editor */}
+              <SettingsSection title="Editor" description="Default editor for opening working directories.">
+                <SettingsCard>
+                  <SettingsMenuSelectRow
+                    label="Default editor"
+                    description="Editor used when opening directories from the working directory menu"
+                    value={defaultEditor}
+                    onValueChange={handleDefaultEditorChange}
+                    options={[
+                      { value: 'vscode', label: 'VS Code', description: 'Visual Studio Code' },
+                      { value: 'cursor', label: 'Cursor', description: 'Cursor AI Editor' },
+                      { value: 'windsurf', label: 'Windsurf', description: 'Windsurf Editor' },
+                    ]}
                   />
                 </SettingsCard>
               </SettingsSection>

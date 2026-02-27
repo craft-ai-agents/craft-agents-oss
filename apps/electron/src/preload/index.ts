@@ -121,6 +121,7 @@ const api: ElectronAPI = {
   openUrl: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_URL, url),
   openFile: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_FILE, path),
   showInFolder: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.SHOW_IN_FOLDER, path),
+  openInEditor: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_IN_EDITOR, path),
 
   // Menu event listeners
   onMenuNewChat: (callback: () => void) => {
@@ -466,6 +467,12 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.APPEARANCE_GET_RICH_TOOL_DESCRIPTIONS) as Promise<boolean>,
   setRichToolDescriptions: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.APPEARANCE_SET_RICH_TOOL_DESCRIPTIONS, enabled),
+
+  // Editor settings
+  getDefaultEditor: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.EDITOR_GET_DEFAULT) as Promise<string>,
+  setDefaultEditor: (editor: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.EDITOR_SET_DEFAULT, editor),
 
   updateBadgeCount: (count: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.BADGE_UPDATE, count),
