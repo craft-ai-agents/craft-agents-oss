@@ -53,6 +53,7 @@ import {
   registerSessionScopedToolCallbacks,
   unregisterSessionScopedToolCallbacks,
   setLastPlanFilePath,
+  getSessionScopedToolCallbacks,
 } from './session-scoped-tools.ts';
 
 // Session tool proxy definitions (for registering with subprocess)
@@ -60,6 +61,7 @@ import { getSessionToolProxyDefs, SESSION_TOOL_NAMES } from './backend/pi/sessio
 
 // Session tool registry (for executing proxy tool calls)
 import {
+  SESSION_BACKEND_TOOL_NAMES,
   SESSION_TOOL_REGISTRY,
   type ToolResult as SessionToolResult,
 } from '@craft-agent/session-tools-core';
@@ -92,6 +94,23 @@ import { LLM_QUERY_TIMEOUT_MS, type LLMQueryRequest, type LLMQueryResult } from 
 // ============================================================
 // PiAgent Implementation
 // ============================================================
+
+/** Backend-executed session tools currently supported by PiAgent. */
+export const PI_BACKEND_SESSION_TOOL_NAMES = new Set<string>([
+  'call_llm',
+  'spawn_session',
+  'browser_open',
+  'browser_navigate',
+  'browser_snapshot',
+  'browser_click',
+  'browser_fill',
+  'browser_select',
+  'browser_screenshot',
+  'browser_scroll',
+  'browser_back',
+  'browser_forward',
+  'browser_evaluate',
+]);
 
 /**
  * Backend implementation using the Pi coding agent SDK via subprocess.
@@ -201,6 +220,22 @@ export class PiAgent extends BaseAgent {
 
     if (!config.isHeadless) {
       this.startConfigWatcher();
+    }
+  }
+
+  /**
+   * Guardrail: ensure every backend-mode session tool from core is implemented here.
+   * This fails fast in development/CI instead of surfacing as runtime "Unknown session tool".
+   */
+  private assertBackendSessionToolParity(): void {
+    const missing = [...SESSION_BACKEND_TOOL_NAMES].filter(
+      (name) => !PI_BACKEND_SESSION_TOOL_NAMES.has(name),
+    );
+
+    if (missing.length > 0) {
+      throw new Error(
+        `PiAgent missing backend session tool implementations: ${missing.join(', ')}`,
+      );
     }
   }
 
@@ -349,6 +384,7 @@ export class PiAgent extends BaseAgent {
     // Register session-scoped tools as proxy tools in the subprocess.
     // These tools (SubmitPlan, config_validate, source auth, call_llm, etc.)
     // are executed in the main process when the LLM calls them.
+    this.assertBackendSessionToolParity();
     const sessionToolDefs = getSessionToolProxyDefs();
 
     // Patch call_llm description with provider-specific model hint
@@ -1022,9 +1058,84 @@ export class PiAgent extends BaseAgent {
         }
       }
 
+      // Browser tools are backend-specific in Pi (handlers are not in core registry).
+      if (toolName.startsWith('browser_')) {
+        const callbacks = getSessionScopedToolCallbacks(this._sessionId);
+        const browserFns = callbacks?.browserPaneFns;
+        if (!browserFns) {
+          return { content: 'Browser window controls are not available. This tool requires the desktop app.', isError: true };
+        }
+
+        switch (toolName) {
+          case 'browser_open': {
+            const result = await browserFns.openPanel();
+            return { content: `Opened in-app browser window (instance: ${result.instanceId})`, isError: false };
+          }
+          case 'browser_navigate': {
+            const url = String(args.url ?? '');
+            const result = await browserFns.navigate(url);
+            return { content: `Navigated to: ${result.url}\nTitle: ${result.title}`, isError: false };
+          }
+          case 'browser_snapshot': {
+            const snapshot = await browserFns.snapshot();
+            const lines: string[] = [
+              `URL: ${snapshot.url}`,
+              `Title: ${snapshot.title}`,
+              '',
+              `Elements (${snapshot.nodes.length}):`,
+            ];
+            for (const node of snapshot.nodes) {
+              let line = `  ${node.ref} [${node.role}] "${node.name}"`;
+              if (node.value !== undefined) line += ` value="${node.value}"`;
+              if (node.focused) line += ' (focused)';
+              if (node.checked) line += ' (checked)';
+              if (node.disabled) line += ' (disabled)';
+              if (node.description) line += ` — ${node.description}`;
+              lines.push(line);
+            }
+            return { content: lines.join('\n'), isError: false };
+          }
+          case 'browser_click':
+            await browserFns.click(String(args.ref ?? ''));
+            return { content: `Clicked element ${String(args.ref ?? '')}`, isError: false };
+          case 'browser_fill':
+            await browserFns.fill(String(args.ref ?? ''), String(args.value ?? ''));
+            return { content: `Filled element ${String(args.ref ?? '')} with "${String(args.value ?? '')}"`, isError: false };
+          case 'browser_select':
+            await browserFns.select(String(args.ref ?? ''), String(args.value ?? ''));
+            return { content: `Selected "${String(args.value ?? '')}" in element ${String(args.ref ?? '')}`, isError: false };
+          case 'browser_screenshot': {
+            const png = await browserFns.screenshot();
+            return { content: `Screenshot captured (${Math.round(png.length / 1024)}KB PNG, base64 omitted in Pi proxy mode)`, isError: false };
+          }
+          case 'browser_scroll':
+            await browserFns.scroll((args.direction as 'up' | 'down' | 'left' | 'right') ?? 'down', args.amount as number | undefined);
+            return { content: `Scrolled ${String(args.direction ?? 'down')}${args.amount != null ? ` by ${String(args.amount)}px` : ''}`, isError: false };
+          case 'browser_back':
+            await browserFns.goBack();
+            return { content: 'Navigated back', isError: false };
+          case 'browser_forward':
+            await browserFns.goForward();
+            return { content: 'Navigated forward', isError: false };
+          case 'browser_evaluate': {
+            const result = await browserFns.evaluate(String(args.expression ?? ''));
+            const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+            return { content: text || 'null', isError: false };
+          }
+          default:
+            return { content: `Unknown session tool: ${toolName}`, isError: true };
+        }
+      }
+
       const def = SESSION_TOOL_REGISTRY.get(toolName);
-      if (!def?.handler) {
+      if (!def) {
         return { content: `Unknown session tool: ${toolName}`, isError: true };
+      }
+      if (!def.handler) {
+        return {
+          content: `Session tool '${toolName}' is backend-executed (${def.executionMode}) but has no PiAgent adapter implementation.`,
+          isError: true,
+        };
       }
 
       const ctx = this.getSessionToolContext();

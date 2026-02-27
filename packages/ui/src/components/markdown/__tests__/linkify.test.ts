@@ -52,6 +52,11 @@ describe('preprocessLinks', () => {
       expect(preprocessLinks(input)).toBe('Visit [https://example.com](https://example.com) for more info')
     })
 
+    it('wraps a bare repo-relative file path', () => {
+      const input = 'See apps/electron/resources/docs/browser-tools.md for details'
+      expect(preprocessLinks(input)).toBe('See [apps/electron/resources/docs/browser-tools.md](apps/electron/resources/docs/browser-tools.md) for details')
+    })
+
     it('wraps a bare domain', () => {
       const input = 'Check out example.com for details'
       expect(preprocessLinks(input)).toBe('Check out [example.com](http://example.com) for details')
@@ -106,5 +111,21 @@ describe('detectLinks', () => {
     expect(links[0]).toBeDefined()
     expect(links[0]!.type).toBe('file')
     expect(links[0]!.url).toBe('/Users/foo/bar.ts')
+  })
+
+  it('detects bare repo-relative file paths', () => {
+    const links = detectLinks('Open apps/electron/resources/docs/browser-tools.md')
+    expect(links).toHaveLength(1)
+    expect(links[0]).toBeDefined()
+    expect(links[0]!.type).toBe('file')
+    expect(links[0]!.url).toBe('apps/electron/resources/docs/browser-tools.md')
+  })
+
+  it('detects parent-relative file paths', () => {
+    const links = detectLinks('See ../README.md for setup steps')
+    expect(links).toHaveLength(1)
+    expect(links[0]).toBeDefined()
+    expect(links[0]!.type).toBe('file')
+    expect(links[0]!.url).toBe('../README.md')
   })
 })

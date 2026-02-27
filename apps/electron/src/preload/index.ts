@@ -545,11 +545,7 @@ const api: ElectronAPI = {
     goForward: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_PANE_GO_FORWARD, id),
     reload: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_PANE_RELOAD, id),
     stop: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_PANE_STOP, id),
-    attach: (id: string, bounds: { x: number; y: number; width: number; height: number }) =>
-      ipcRenderer.invoke(IPC_CHANNELS.BROWSER_PANE_ATTACH, id, bounds),
-    detach: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_PANE_DETACH, id),
-    updateBounds: (id: string, bounds: { x: number; y: number; width: number; height: number }) =>
-      ipcRenderer.invoke(IPC_CHANNELS.BROWSER_PANE_UPDATE_BOUNDS, id, bounds),
+    focus: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_PANE_FOCUS, id),
     onStateChanged: (callback: (info: import('../shared/types').BrowserInstanceInfo) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, info: import('../shared/types').BrowserInstanceInfo) => {
         callback(info)

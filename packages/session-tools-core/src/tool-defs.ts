@@ -127,6 +127,8 @@ export const RenderTemplateSchema = z.object({
 });
 
 // Browser tool schemas (backend-specific — requires BrowserPaneManager in Electron)
+export const BrowserOpenSchema = z.object({});
+
 export const BrowserNavigateSchema = z.object({
   url: z.string().describe('URL to navigate to (e.g., "https://example.com" or "example.com")'),
 });
@@ -312,9 +314,16 @@ Use this when a source provides HTML templates for rich rendering of its data (e
 
 Templates use Mustache syntax — the tool handles rendering and writes the output HTML to the session data folder.`,
 
+  browser_open: `Open (or focus) an in-app browser window.
+
+Ensures the session's browser instance is visible and focused.
+Returns the browser instance ID that was opened/focused.`,
+
   browser_navigate: `Navigate the built-in browser to a URL.
 
-The browser pane is a real Chromium browser embedded in the app. Use this to load web pages for inspection, testing, or data extraction.
+The built-in browser windows run real Chromium content inside the app. Use this to load web pages for inspection, testing, or data extraction.
+
+If the browser UI may be hidden, call \`browser_open\` first.
 
 Returns the final URL and page title after navigation completes.`,
 
@@ -382,46 +391,62 @@ Only use 'attachments' for existing file paths on disk — the tool reads them a
 /** Handler function signature for session tools. */
 export type SessionToolHandler = (ctx: SessionToolContext, args: any) => Promise<ToolResult>;
 
-/** A single session tool definition combining name, description, schema, and handler. */
-export interface SessionToolDef {
+/** Where a session tool is executed. */
+export type SessionToolExecutionMode = 'registry' | 'backend';
+
+interface SessionToolDefBase {
   name: string;
   description: string;
   inputSchema: z.ZodObject<z.ZodRawShape>;
-  /** Handler function, or null for backend-specific tools (e.g., call_llm). */
-  handler: SessionToolHandler | null;
 }
+
+/** Tool executed from the canonical registry (requires a concrete handler). */
+export interface RegistrySessionToolDef extends SessionToolDefBase {
+  executionMode: 'registry';
+  handler: SessionToolHandler;
+}
+
+/** Tool executed by backend-specific adapters (Pi/Claude/session-mcp-server). */
+export interface BackendSessionToolDef extends SessionToolDefBase {
+  executionMode: 'backend';
+  handler: null;
+}
+
+/** A single session tool definition combining name, description, schema, mode, and handler. */
+export type SessionToolDef = RegistrySessionToolDef | BackendSessionToolDef;
 
 // ============================================================
 // Canonical Tool Registry
 // ============================================================
 
 export const SESSION_TOOL_DEFS: SessionToolDef[] = [
-  { name: 'SubmitPlan', description: TOOL_DESCRIPTIONS.SubmitPlan, inputSchema: SubmitPlanSchema, handler: handleSubmitPlan },
-  { name: 'config_validate', description: TOOL_DESCRIPTIONS.config_validate, inputSchema: ConfigValidateSchema, handler: handleConfigValidate },
-  { name: 'skill_validate', description: TOOL_DESCRIPTIONS.skill_validate, inputSchema: SkillValidateSchema, handler: handleSkillValidate },
-  { name: 'mermaid_validate', description: TOOL_DESCRIPTIONS.mermaid_validate, inputSchema: MermaidValidateSchema, handler: handleMermaidValidate },
-  { name: 'source_test', description: TOOL_DESCRIPTIONS.source_test, inputSchema: SourceTestSchema, handler: handleSourceTest },
-  { name: 'source_oauth_trigger', description: TOOL_DESCRIPTIONS.source_oauth_trigger, inputSchema: SourceOAuthTriggerSchema, handler: handleSourceOAuthTrigger },
-  { name: 'source_google_oauth_trigger', description: TOOL_DESCRIPTIONS.source_google_oauth_trigger, inputSchema: SourceOAuthTriggerSchema, handler: handleGoogleOAuthTrigger },
-  { name: 'source_slack_oauth_trigger', description: TOOL_DESCRIPTIONS.source_slack_oauth_trigger, inputSchema: SourceOAuthTriggerSchema, handler: handleSlackOAuthTrigger },
-  { name: 'source_microsoft_oauth_trigger', description: TOOL_DESCRIPTIONS.source_microsoft_oauth_trigger, inputSchema: SourceOAuthTriggerSchema, handler: handleMicrosoftOAuthTrigger },
-  { name: 'source_credential_prompt', description: TOOL_DESCRIPTIONS.source_credential_prompt, inputSchema: CredentialPromptSchema, handler: handleCredentialPrompt },
-  { name: 'update_user_preferences', description: TOOL_DESCRIPTIONS.update_user_preferences, inputSchema: UpdatePreferencesSchema, handler: handleUpdatePreferences },
-  { name: 'transform_data', description: TOOL_DESCRIPTIONS.transform_data, inputSchema: TransformDataSchema, handler: handleTransformData },
-  { name: 'render_template', description: TOOL_DESCRIPTIONS.render_template, inputSchema: RenderTemplateSchema, handler: handleRenderTemplate },
-  { name: 'call_llm', description: TOOL_DESCRIPTIONS.call_llm, inputSchema: CallLlmSchema, handler: null },
-  { name: 'spawn_session', description: TOOL_DESCRIPTIONS.spawn_session, inputSchema: SpawnSessionSchema, handler: null },
+  { name: 'SubmitPlan', description: TOOL_DESCRIPTIONS.SubmitPlan, inputSchema: SubmitPlanSchema, executionMode: 'registry', handler: handleSubmitPlan },
+  { name: 'config_validate', description: TOOL_DESCRIPTIONS.config_validate, inputSchema: ConfigValidateSchema, executionMode: 'registry', handler: handleConfigValidate },
+  { name: 'skill_validate', description: TOOL_DESCRIPTIONS.skill_validate, inputSchema: SkillValidateSchema, executionMode: 'registry', handler: handleSkillValidate },
+  { name: 'mermaid_validate', description: TOOL_DESCRIPTIONS.mermaid_validate, inputSchema: MermaidValidateSchema, executionMode: 'registry', handler: handleMermaidValidate },
+  { name: 'source_test', description: TOOL_DESCRIPTIONS.source_test, inputSchema: SourceTestSchema, executionMode: 'registry', handler: handleSourceTest },
+  { name: 'source_oauth_trigger', description: TOOL_DESCRIPTIONS.source_oauth_trigger, inputSchema: SourceOAuthTriggerSchema, executionMode: 'registry', handler: handleSourceOAuthTrigger },
+  { name: 'source_google_oauth_trigger', description: TOOL_DESCRIPTIONS.source_google_oauth_trigger, inputSchema: SourceOAuthTriggerSchema, executionMode: 'registry', handler: handleGoogleOAuthTrigger },
+  { name: 'source_slack_oauth_trigger', description: TOOL_DESCRIPTIONS.source_slack_oauth_trigger, inputSchema: SourceOAuthTriggerSchema, executionMode: 'registry', handler: handleSlackOAuthTrigger },
+  { name: 'source_microsoft_oauth_trigger', description: TOOL_DESCRIPTIONS.source_microsoft_oauth_trigger, inputSchema: SourceOAuthTriggerSchema, executionMode: 'registry', handler: handleMicrosoftOAuthTrigger },
+  { name: 'source_credential_prompt', description: TOOL_DESCRIPTIONS.source_credential_prompt, inputSchema: CredentialPromptSchema, executionMode: 'registry', handler: handleCredentialPrompt },
+  { name: 'update_user_preferences', description: TOOL_DESCRIPTIONS.update_user_preferences, inputSchema: UpdatePreferencesSchema, executionMode: 'registry', handler: handleUpdatePreferences },
+  { name: 'transform_data', description: TOOL_DESCRIPTIONS.transform_data, inputSchema: TransformDataSchema, executionMode: 'registry', handler: handleTransformData },
+  { name: 'render_template', description: TOOL_DESCRIPTIONS.render_template, inputSchema: RenderTemplateSchema, executionMode: 'registry', handler: handleRenderTemplate },
+  { name: 'call_llm', description: TOOL_DESCRIPTIONS.call_llm, inputSchema: CallLlmSchema, executionMode: 'backend', handler: null },
+  { name: 'spawn_session', description: TOOL_DESCRIPTIONS.spawn_session, inputSchema: SpawnSessionSchema, executionMode: 'backend', handler: null },
   // Browser tools (backend-specific — requires BrowserPaneManager in Electron)
-  { name: 'browser_navigate', description: TOOL_DESCRIPTIONS.browser_navigate, inputSchema: BrowserNavigateSchema, handler: null },
-  { name: 'browser_snapshot', description: TOOL_DESCRIPTIONS.browser_snapshot, inputSchema: BrowserSnapshotSchema, handler: null },
-  { name: 'browser_click', description: TOOL_DESCRIPTIONS.browser_click, inputSchema: BrowserClickSchema, handler: null },
-  { name: 'browser_fill', description: TOOL_DESCRIPTIONS.browser_fill, inputSchema: BrowserFillSchema, handler: null },
-  { name: 'browser_select', description: TOOL_DESCRIPTIONS.browser_select, inputSchema: BrowserSelectSchema, handler: null },
-  { name: 'browser_screenshot', description: TOOL_DESCRIPTIONS.browser_screenshot, inputSchema: BrowserScreenshotSchema, handler: null },
-  { name: 'browser_scroll', description: TOOL_DESCRIPTIONS.browser_scroll, inputSchema: BrowserScrollSchema, handler: null },
-  { name: 'browser_back', description: TOOL_DESCRIPTIONS.browser_back, inputSchema: BrowserBackSchema, handler: null },
-  { name: 'browser_forward', description: TOOL_DESCRIPTIONS.browser_forward, inputSchema: BrowserForwardSchema, handler: null },
-  { name: 'browser_evaluate', description: TOOL_DESCRIPTIONS.browser_evaluate, inputSchema: BrowserEvaluateSchema, handler: null },
+  { name: 'browser_open', description: TOOL_DESCRIPTIONS.browser_open, inputSchema: BrowserOpenSchema, executionMode: 'backend', handler: null },
+  { name: 'browser_navigate', description: TOOL_DESCRIPTIONS.browser_navigate, inputSchema: BrowserNavigateSchema, executionMode: 'backend', handler: null },
+  { name: 'browser_snapshot', description: TOOL_DESCRIPTIONS.browser_snapshot, inputSchema: BrowserSnapshotSchema, executionMode: 'backend', handler: null },
+  { name: 'browser_click', description: TOOL_DESCRIPTIONS.browser_click, inputSchema: BrowserClickSchema, executionMode: 'backend', handler: null },
+  { name: 'browser_fill', description: TOOL_DESCRIPTIONS.browser_fill, inputSchema: BrowserFillSchema, executionMode: 'backend', handler: null },
+  { name: 'browser_select', description: TOOL_DESCRIPTIONS.browser_select, inputSchema: BrowserSelectSchema, executionMode: 'backend', handler: null },
+  { name: 'browser_screenshot', description: TOOL_DESCRIPTIONS.browser_screenshot, inputSchema: BrowserScreenshotSchema, executionMode: 'backend', handler: null },
+  { name: 'browser_scroll', description: TOOL_DESCRIPTIONS.browser_scroll, inputSchema: BrowserScrollSchema, executionMode: 'backend', handler: null },
+  { name: 'browser_back', description: TOOL_DESCRIPTIONS.browser_back, inputSchema: BrowserBackSchema, executionMode: 'backend', handler: null },
+  { name: 'browser_forward', description: TOOL_DESCRIPTIONS.browser_forward, inputSchema: BrowserForwardSchema, executionMode: 'backend', handler: null },
+  { name: 'browser_evaluate', description: TOOL_DESCRIPTIONS.browser_evaluate, inputSchema: BrowserEvaluateSchema, executionMode: 'backend', handler: null },
 ];
 
 // ============================================================
@@ -430,6 +455,16 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
 
 /** Set of session tool names for quick membership checks. */
 export const SESSION_TOOL_NAMES = new Set(SESSION_TOOL_DEFS.map(d => d.name));
+
+/** Session tool names that must be handled by backend-specific adapters (Pi/Claude/session-mcp-server). */
+export const SESSION_BACKEND_TOOL_NAMES = new Set(
+  SESSION_TOOL_DEFS.filter(d => d.executionMode === 'backend').map(d => d.name)
+);
+
+/** Session tool names that are always executable from the canonical registry. */
+export const SESSION_REGISTRY_TOOL_NAMES = new Set(
+  SESSION_TOOL_DEFS.filter(d => d.executionMode === 'registry').map(d => d.name)
+);
 
 /** Map from tool name → definition for O(1) lookup. */
 export const SESSION_TOOL_REGISTRY = new Map(SESSION_TOOL_DEFS.map(d => [d.name, d]));

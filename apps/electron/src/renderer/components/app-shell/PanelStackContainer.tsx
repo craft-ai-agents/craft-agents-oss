@@ -50,9 +50,7 @@ export function PanelStackContainer({
   const panelStack = useAtomValue(panelStackAtom)
   const focusedPanelId = useAtomValue(focusedPanelIdAtom)
 
-  // Browser (rightPinned lane) is hosted by AppShell in a dedicated full-height lane,
-  // so only non-rightPinned entries are rendered as center content panels here.
-  const contentPanels = panelStack.filter((entry) => entry.laneId !== 'rightPinned')
+  const contentPanels = panelStack
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const prevCountRef = useRef(contentPanels.length)

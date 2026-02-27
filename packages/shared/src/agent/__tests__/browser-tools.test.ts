@@ -14,6 +14,7 @@ import { createBrowserTools, type BrowserPaneFns } from '../browser-tools'
 
 function createMockFns(): BrowserPaneFns {
   return {
+    openPanel: async () => ({ instanceId: 'browser-test-1' }),
     navigate: async (url: string) => ({ url: `https://${url}`, title: 'Test Page' }),
     snapshot: async () => ({
       url: 'https://example.com',
@@ -66,12 +67,13 @@ describe('createBrowserTools', () => {
     })
   })
 
-  it('returns exactly 10 tools', () => {
-    expect(tools.length).toBe(10)
+  it('returns exactly 11 tools', () => {
+    expect(tools.length).toBe(11)
   })
 
   it('includes all expected tool names', () => {
     const names = tools.map((t: any) => t.name)
+    expect(names).toContain('browser_open')
     expect(names).toContain('browser_navigate')
     expect(names).toContain('browser_snapshot')
     expect(names).toContain('browser_click')
@@ -82,6 +84,15 @@ describe('createBrowserTools', () => {
     expect(names).toContain('browser_back')
     expect(names).toContain('browser_forward')
     expect(names).toContain('browser_evaluate')
+  })
+
+  describe('browser_open', () => {
+    it('calls fns.openPanel and returns success', async () => {
+      const result = await executeTool(tools, 'browser_open')
+      expect(result.content[0].text).toContain('Opened in-app browser window')
+      expect(result.content[0].text).toContain('browser-test-1')
+      expect(result.isError).toBeUndefined()
+    })
   })
 
   describe('browser_navigate', () => {

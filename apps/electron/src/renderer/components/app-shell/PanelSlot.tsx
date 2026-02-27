@@ -20,7 +20,7 @@ import { X } from 'lucide-react'
 import { parseRouteToNavigationState } from '../../../shared/route-parser'
 import { closePanelAtom, focusedPanelIdAtom, type PanelStackEntry } from '@/atoms/panel-stack'
 import { useAppShellContext, AppShellProvider } from '@/context/AppShellContext'
-import { HeaderIconButton } from '@/components/ui/HeaderIconButton'
+import { PanelHeaderCenterButton } from '@/components/ui/PanelHeaderCenterButton'
 import { MainContentPanel } from './MainContentPanel'
 import { PANEL_MIN_WIDTH, RADIUS_EDGE, RADIUS_INNER } from './panel-constants'
 
@@ -62,11 +62,10 @@ export function PanelSlot({
   // Build close button for PanelHeader (via context override)
   const closeButton = useMemo(() => {
     return (
-      <HeaderIconButton
+      <PanelHeaderCenterButton
         icon={<X className="h-4 w-4" />}
         onClick={handleClose}
         tooltip="Close"
-        className="text-foreground"
       />
     )
   }, [handleClose])

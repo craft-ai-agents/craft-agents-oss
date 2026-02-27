@@ -2,7 +2,7 @@
  * Browser Tools (browser_navigate, browser_snapshot, browser_click, etc.)
  *
  * Session-scoped tools that enable the agent to interact with the built-in
- * browser pane. Each tool delegates to BrowserPaneFns callbacks which are
+ * in-app browser windows. Each tool delegates to BrowserPaneFns callbacks which are
  * wired by the Electron session manager to BrowserPaneManager.
  *
  * The session → browser instance mapping is handled by the callback provider
@@ -44,6 +44,7 @@ function successResponse(text: string): ToolResult {
  * browser instance via getOrCreateForSession(sessionId).
  */
 export interface BrowserPaneFns {
+  openPanel: () => Promise<{ instanceId: string }>;
   navigate: (url: string) => Promise<{ url: string; title: string }>;
   snapshot: () => Promise<{ url: string; title: string; nodes: Array<{ ref: string; role: string; name: string; value?: string; description?: string; focused?: boolean; checked?: boolean; disabled?: boolean }> }>;
   click: (ref: string) => Promise<void>;
@@ -74,9 +75,16 @@ export interface BrowserToolsOptions {
 // ============================================================================
 
 const BROWSER_DESCRIPTIONS = {
+  browser_open: `Open (or focus) an in-app browser window.
+
+Ensures the session's browser instance is visible and focused.
+Returns the browser instance ID that was opened/focused.`,
+
   browser_navigate: `Navigate the built-in browser to a URL.
 
-The browser pane is a real Chromium browser embedded in the app. Use this to load web pages for inspection, testing, or data extraction.
+The built-in browser windows run real Chromium content inside the app. Use this to load web pages for inspection, testing, or data extraction.
+
+If the browser UI may be hidden, call \`browser_open\` first.
 
 Returns the final URL and page title after navigation completes.`,
 
@@ -125,12 +133,28 @@ export function createBrowserTools(options: BrowserToolsOptions) {
   function getBrowserFns(): BrowserPaneFns {
     const fns = options.getBrowserPaneFns();
     if (!fns) {
-      throw new Error('Browser pane is not available. This tool requires the desktop app.');
+      throw new Error('Browser window controls are not available. This tool requires the desktop app.');
     }
     return fns;
   }
 
   return [
+    // browser_open
+    tool(
+      'browser_open',
+      BROWSER_DESCRIPTIONS.browser_open,
+      {},
+      async () => {
+        try {
+          const fns = getBrowserFns();
+          const result = await fns.openPanel();
+          return successResponse(`Opened in-app browser window (instance: ${result.instanceId})`);
+        } catch (error) {
+          return errorResponse(error instanceof Error ? error.message : String(error));
+        }
+      },
+    ),
+
     // browser_navigate
     tool(
       'browser_navigate',

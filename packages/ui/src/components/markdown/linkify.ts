@@ -11,9 +11,12 @@ import { FILE_EXTENSIONS_PATTERN } from '../../lib/file-classification'
 // Initialize linkify-it with default settings (fuzzy URLs, emails enabled)
 const linkify = new LinkifyIt()
 
-// File path regex - detects /path, ~/path, ./path with common extensions
+// File path regex - detects absolute/home/explicit-relative/bare-relative paths with common extensions
+// Examples: /Users/foo.ts, ~/src/app.tsx, ./README.md, ../guide.md, apps/electron/src/main.ts
 // Extensions derived from file-classification.ts to stay in sync with preview support
-const FILE_PATH_REGEX = new RegExp(`(?:^|[\\s([\\{<])((/|~/|./)[\\w\\-./@]+\\.(?:${FILE_EXTENSIONS_PATTERN}))(?=[\\s)\\]}\\.,:;!?>]|$)`, 'gi')
+const FILE_PATH_REGEX_SOURCE = `(?:^|[\\s([\\{<])((?:/|~/|\\./|\\.\\./|[A-Za-z0-9_][\\w\\-./@]*)[\\w\\-./@]*\\.(?:${FILE_EXTENSIONS_PATTERN}))(?=[\\s)\\]}\\.,:;!?>]|$)`
+const FILE_PATH_REGEX = new RegExp(FILE_PATH_REGEX_SOURCE, 'gi')
+const FILE_PATH_PRETEST_REGEX = new RegExp(FILE_PATH_REGEX_SOURCE, 'i')
 
 interface DetectedLink {
   type: 'url' | 'email' | 'file'
@@ -162,7 +165,7 @@ export function detectLinks(text: string): DetectedLink[] {
  */
 export function preprocessLinks(text: string): string {
   // Quick check - if no potential links, return early
-  if (!linkify.pretest(text) && !/[~/.]\//.test(text)) {
+  if (!linkify.pretest(text) && !FILE_PATH_PRETEST_REGEX.test(text)) {
     return text
   }
 
@@ -203,5 +206,5 @@ export function preprocessLinks(text: string): string {
  * Useful for optimization - skip preprocessing if no links present
  */
 export function hasLinks(text: string): boolean {
-  return linkify.pretest(text) || /[~/.]\/[\w]/.test(text)
+  return linkify.pretest(text) || FILE_PATH_PRETEST_REGEX.test(text)
 }

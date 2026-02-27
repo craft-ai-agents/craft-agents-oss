@@ -30,7 +30,7 @@ export interface NavigateOptions {
    * This is intentionally generic (not browser-specific) so future lane types
    * can reuse the same API without introducing per-feature navigation flags.
    */
-  targetLaneId?: 'main' | 'rightPinned'
+  targetLaneId?: 'main'
   /** Skip auto-selecting first item when navigating to a list view (used when closing panels) */
   skipAutoSelect?: boolean
 }

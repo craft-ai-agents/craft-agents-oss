@@ -2126,6 +2126,11 @@ export class SessionManager {
         const sid = managed.id
         mergeSessionScopedToolCallbacks(sid, {
           browserPaneFns: {
+            openPanel: async () => {
+              const instanceId = bpm.getOrCreateForSession(sid)
+              bpm.focus(instanceId)
+              return { instanceId }
+            },
             navigate: (url) => {
               const instanceId = bpm.getOrCreateForSession(sid)
               return bpm.navigate(instanceId, url)

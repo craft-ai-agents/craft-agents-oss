@@ -144,7 +144,6 @@ interface TopBarProps {
   onToggleFocusMode: () => void
   onAddSessionPanel: () => void
   onAddBrowserPanel: () => void
-  focusedRoute?: string | null
 }
 
 export function TopBar({
@@ -163,7 +162,6 @@ export function TopBar({
   onToggleFocusMode,
   onAddSessionPanel,
   onAddBrowserPanel,
-  focusedRoute,
 }: TopBarProps) {
   const [isDebugMode, setIsDebugMode] = useState(false)
 
@@ -354,7 +352,7 @@ export function TopBar({
 
       {/* === RIGHT: Browser Tabs + Add Panel === */}
       <div className="pointer-events-auto titlebar-no-drag flex items-center gap-1">
-        <BrowserTabStrip focusedRoute={focusedRoute} />
+        <BrowserTabStrip />
         <DropdownMenu>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -373,7 +371,7 @@ export function TopBar({
             </StyledDropdownMenuItem>
             <StyledDropdownMenuItem onClick={onAddBrowserPanel}>
               <Icons.Globe className="h-3.5 w-3.5" />
-              New Browser in Panel
+              New Browser Window
             </StyledDropdownMenuItem>
           </StyledDropdownMenuContent>
         </DropdownMenu>

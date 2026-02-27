@@ -861,9 +861,7 @@ export const IPC_CHANNELS = {
   BROWSER_PANE_GO_FORWARD: 'browser-pane:go-forward',
   BROWSER_PANE_RELOAD: 'browser-pane:reload',
   BROWSER_PANE_STOP: 'browser-pane:stop',
-  BROWSER_PANE_ATTACH: 'browser-pane:attach',
-  BROWSER_PANE_DETACH: 'browser-pane:detach',
-  BROWSER_PANE_UPDATE_BOUNDS: 'browser-pane:update-bounds',
+  BROWSER_PANE_FOCUS: 'browser-pane:focus',
   BROWSER_PANE_SNAPSHOT: 'browser-pane:snapshot',
   BROWSER_PANE_CLICK: 'browser-pane:click',
   BROWSER_PANE_FILL: 'browser-pane:fill',
@@ -1218,9 +1216,7 @@ export interface ElectronAPI {
     goForward(id: string): Promise<void>
     reload(id: string): Promise<void>
     stop(id: string): Promise<void>
-    attach(id: string, bounds: { x: number; y: number; width: number; height: number }): Promise<void>
-    detach(id: string): Promise<void>
-    updateBounds(id: string, bounds: { x: number; y: number; width: number; height: number }): Promise<void>
+    focus(id: string): Promise<void>
     onStateChanged(callback: (info: BrowserInstanceInfo) => void): () => void
     onRemoved(callback: (id: string) => void): () => void
     onInteracted(callback: (id: string) => void): () => void
@@ -1396,20 +1392,6 @@ export interface BrowserInstanceInfo {
 }
 
 /**
- * Browser navigation state.
- *
- * The route still lives in the panel stack for focus/history semantics,
- * but native browser rendering is hosted by the dedicated right-pinned
- * browser host lane in AppShell for resize stability.
- */
-export interface BrowserNavigationState {
-  navigator: 'browser'
-  instanceId: string
-  /** Optional right sidebar panel state */
-  rightSidebar?: RightSidebarPanel
-}
-
-/**
  * Skills navigation state - shows SkillsListPanel in navigator
  */
 export interface SkillsNavigationState {
@@ -1433,7 +1415,6 @@ export type NavigationState =
   | SourcesNavigationState
   | SettingsNavigationState
   | SkillsNavigationState
-  | BrowserNavigationState
 
 /**
  * Type guard to check if state is sessions navigation
@@ -1464,13 +1445,6 @@ export const isSkillsNavigation = (
 ): state is SkillsNavigationState => state.navigator === 'skills'
 
 /**
- * Type guard to check if state is browser navigation
- */
-export const isBrowserNavigation = (
-  state: NavigationState
-): state is BrowserNavigationState => state.navigator === 'browser'
-
-/**
  * Default navigation state - allSessions with no selection
  */
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
@@ -1497,9 +1471,6 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
-  }
-  if (isBrowserNavigation(state)) {
-    return `browser/${state.instanceId}`
   }
   // Chats
   const f = state.filter
@@ -1545,14 +1516,6 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
     const subpage = key.slice(9)
     if (isValidSettingsSubpage(subpage)) {
       return { navigator: 'settings', subpage }
-    }
-  }
-
-  // Handle browser
-  if (key.startsWith('browser/')) {
-    const instanceId = key.slice(8)
-    if (instanceId) {
-      return { navigator: 'browser' as const, instanceId } as BrowserNavigationState
     }
   }
 

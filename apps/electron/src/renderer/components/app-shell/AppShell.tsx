@@ -106,9 +106,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
-  isBrowserNavigation,
   type NavigationState,
-  type SessionFilter,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
@@ -118,7 +116,6 @@ import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui
 import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import { RightSidebar } from "./RightSidebar"
-import { RightPinnedBrowserHost } from "@/components/browser/RightPinnedBrowserHost"
 import { PANEL_GAP, PANEL_EDGE_INSET, RADIUS_EDGE, RADIUS_INNER } from "./panel-constants"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { hasOpenOverlay } from "@/lib/overlay-detection"
@@ -508,10 +505,6 @@ function AppShellContent({
   const [rightSidebarWidth, setRightSidebarWidth] = React.useState(() => {
     return storage.get(storage.KEYS.rightSidebarWidth, 300)
   })
-  // Full-height pinned browser host lane width (min 320, max 680)
-  const [browserHostWidth, setBrowserHostWidth] = React.useState(() => {
-    return storage.get(storage.KEYS.browserHostWidth, 420)
-  })
   const [skipRightSidebarAnimation, setSkipRightSidebarAnimation] = React.useState(false)
 
   // Hides both sidebar and navigator (CMD+. toggle)
@@ -546,15 +539,13 @@ function AppShellContent({
   const OVERLAY_THRESHOLD = MIN_INLINE_SPACE + leftSidebarEffectiveWidth + sessionListWidth
   const shouldUseOverlay = windowWidth < OVERLAY_THRESHOLD
 
-  const [isResizing, setIsResizing] = React.useState<'sidebar' | 'session-list' | 'right-sidebar' | 'browser-host' | null>(null)
+  const [isResizing, setIsResizing] = React.useState<'sidebar' | 'session-list' | 'right-sidebar' | null>(null)
   const [sidebarHandleY, setSidebarHandleY] = React.useState<number | null>(null)
   const [sessionListHandleY, setSessionListHandleY] = React.useState<number | null>(null)
   const [rightSidebarHandleY, setRightSidebarHandleY] = React.useState<number | null>(null)
-  const [browserHostHandleY, setBrowserHostHandleY] = React.useState<number | null>(null)
   const resizeHandleRef = React.useRef<HTMLDivElement>(null)
   const sessionListHandleRef = React.useRef<HTMLDivElement>(null)
   const rightSidebarHandleRef = React.useRef<HTMLDivElement>(null)
-  const browserHostHandleRef = React.useRef<HTMLDivElement>(null)
   const [session, setSession] = useSession()
   const { resolvedMode, isDark, setMode } = useTheme()
   const { canGoBack, canGoForward, goBack, goForward, navigateToSource, navigateToSession } = useNavigation()
@@ -570,14 +561,6 @@ function AppShellContent({
   const panelStack = useAtomValue(panelStackAtom)
   const panelCount = useAtomValue(panelCountAtom)
   const focusedSessionId = useAtomValue(focusedSessionIdAtom)
-
-  // Right-pinned browser lane source of truth: at most one browser panel exists in this lane.
-  const rightPinnedBrowserInstanceId = useMemo(() => {
-    const browserEntry = panelStack.find((entry) => entry.laneId === 'rightPinned' && entry.route.startsWith('browser/'))
-    if (!browserEntry) return null
-    return browserEntry.route.slice('browser/'.length)
-  }, [panelStack])
-  const isBrowserHostVisible = !!rightPinnedBrowserInstanceId
 
   // Navigate the focused panel to a session.
   // If the session is already open in another panel, focus that panel instead.
@@ -596,8 +579,17 @@ function AppShellContent({
     navigateToSession(sessionId)
   }, [store, setFocusedPanel, navigateToSession])
 
-  // Derive chat filter from navigation state (only when in chats navigator)
-  const sessionFilter = isSessionsNavigation(navState) ? navState.filter : null
+  const sessionsContext = React.useMemo(() => {
+    if (isSessionsNavigation(navState)) {
+      return {
+        filter: navState.filter,
+        sessionId: navState.details?.sessionId ?? null,
+      }
+    }
+    return null
+  }, [navState])
+
+  const sessionFilter = sessionsContext?.filter ?? null
 
   // Derive source filter from navigation state (only when in sources navigator)
   const sourceFilter: SourceFilter | null = isSourcesNavigation(navState) ? navState.filter ?? null : null
@@ -606,7 +598,7 @@ function AppShellContent({
   // has its own independent set of status and label filters.
   // Each filter entry stores a mode ('include' or 'exclude') for tri-state filtering.
   type FilterEntry = Record<string, FilterMode> // id → mode
-  type ViewFiltersMap = Record<string, { statuses: FilterEntry, labels: FilterEntry }>
+  type ViewFiltersMap = Record<string, { statuses: FilterEntry, labels: FilterEntry, groupingMode?: ChatGroupingMode }>
 
   // Compute a stable key for the current chat filter view
   const sessionFilterKey = useMemo(() => {
@@ -696,13 +688,23 @@ function AppShellContent({
   const [searchActive, setSearchActive] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
 
-  // Grouping mode for chat list: 'date' | 'status'
-  const [chatGroupingMode, setChatGroupingMode] = React.useState<ChatGroupingMode>(() => {
-    return storage.get<ChatGroupingMode>(storage.KEYS.chatGroupingMode, 'date')
-  })
-  React.useEffect(() => {
-    storage.set(storage.KEYS.chatGroupingMode, chatGroupingMode)
-  }, [chatGroupingMode])
+  // Grouping mode for chat list: per-view (stored in viewFiltersMap), forced to 'date' for state sub-views
+  const isStateSubView = sessionFilter?.kind === 'state'
+
+  const chatGroupingMode: ChatGroupingMode = isStateSubView
+    ? 'date'
+    : (viewFiltersMap[sessionFilterKey ?? '']?.groupingMode ?? 'date')
+
+  const setChatGroupingMode = useCallback((mode: ChatGroupingMode) => {
+    setViewFiltersMap(prev => {
+      if (!sessionFilterKey) return prev
+      const existing = prev[sessionFilterKey] ?? { statuses: {}, labels: {} }
+      return {
+        ...prev,
+        [sessionFilterKey]: { ...existing, groupingMode: mode }
+      }
+    })
+  }, [sessionFilterKey])
 
   // Ref for ChatDisplay navigation (exposed via forwardRef)
   const chatDisplayRef = React.useRef<ChatDisplayHandle>(null)
@@ -1200,16 +1202,6 @@ function AppShellContent({
           const rect = sessionListHandleRef.current.getBoundingClientRect()
           setSessionListHandleY(e.clientY - rect.top)
         }
-      } else if (isResizing === 'browser-host') {
-        // Browser host sits to the left of optional inline metadata sidebar.
-        // Subtract inline metadata width so drag maps to browser lane width correctly.
-        const metadataInlineWidth = !shouldUseOverlay && isRightSidebarVisible ? rightSidebarWidth + PANEL_GAP : 0
-        const newWidth = Math.min(Math.max(window.innerWidth - e.clientX - metadataInlineWidth, 320), 680)
-        setBrowserHostWidth(newWidth)
-        if (browserHostHandleRef.current) {
-          const rect = browserHostHandleRef.current.getBoundingClientRect()
-          setBrowserHostHandleY(e.clientY - rect.top)
-        }
       } else if (isResizing === 'right-sidebar') {
         // Calculate from right edge
         const newWidth = Math.min(Math.max(window.innerWidth - e.clientX, 280), 480)
@@ -1228,9 +1220,6 @@ function AppShellContent({
       } else if (isResizing === 'session-list') {
         storage.set(storage.KEYS.sessionListWidth, sessionListWidth)
         setSessionListHandleY(null)
-      } else if (isResizing === 'browser-host') {
-        storage.set(storage.KEYS.browserHostWidth, browserHostWidth)
-        setBrowserHostHandleY(null)
       } else if (isResizing === 'right-sidebar') {
         storage.set(storage.KEYS.rightSidebarWidth, rightSidebarWidth)
         setRightSidebarHandleY(null)
@@ -1249,7 +1238,6 @@ function AppShellContent({
     isResizing,
     sidebarWidth,
     sessionListWidth,
-    browserHostWidth,
     rightSidebarWidth,
     isSidebarVisible,
     isRightSidebarVisible,
@@ -1787,26 +1775,16 @@ function AppShellContent({
     setTimeout(() => focusZone('chat', { intent: 'programmatic' }), 50)
   }, [activeWorkspace, focusZone, navigate])
 
-  // Create a new browser panel and focus it.
-  // Explicitly target the rightPinned lane so browser remains spatially stable
-  // (always rightmost, singleton slot) regardless of current focused panel.
-  const handleNewBrowserPanel = useCallback(async () => {
+  // Create a new dedicated browser window and focus it.
+  const handleNewBrowserWindow = useCallback(async () => {
     try {
       const instanceId = await window.electronAPI.browserPane.create()
-      navigate(routes.view.browser(instanceId), { newPanel: true, targetLaneId: 'rightPinned' })
+      await window.electronAPI.browserPane.focus(instanceId)
     } catch (error) {
-      console.error('[Chat] Failed to create browser panel:', error)
-      toast.error('Failed to create browser panel')
+      console.error('[Chat] Failed to create browser window:', error)
+      toast.error('Failed to create browser window')
     }
-  }, [navigate])
-
-  const handleCloseRightPinnedBrowser = useCallback(async () => {
-    if (!rightPinnedBrowserInstanceId) return
-    await window.electronAPI.browserPane.destroy(rightPinnedBrowserInstanceId)
-    if (isBrowserNavigation(navState)) {
-      navigate(routes.view.allSessions())
-    }
-  }, [rightPinnedBrowserInstanceId, navState, navigate])
+  }, [])
 
   // Delete Source - simplified since agents system is removed
   const handleDeleteSource = useCallback(async (sourceSlug: string) => {
@@ -1851,16 +1829,16 @@ function AppShellContent({
   const unifiedSidebarItems = React.useMemo((): SidebarItem[] => {
     const result: SidebarItem[] = []
 
-    // 1. Sessions section: All Sessions, Flagged, States header, States items
+    // 1. Sessions section: All Sessions (expandable) with status items, Flagged, Archived as children
     result.push({ id: 'nav:allSessions', type: 'nav', action: handleAllSessionsClick })
-    result.push({ id: 'nav:flagged', type: 'nav', action: handleFlaggedClick })
-    result.push({ id: 'nav:states', type: 'nav', action: handleAllSessionsClick })
     for (const state of effectiveSessionStatuses) {
       result.push({ id: `nav:state:${state.id}`, type: 'nav', action: () => handleSessionStatusClick(state.id) })
     }
+    result.push({ id: 'nav:flagged', type: 'nav', action: handleFlaggedClick })
+    result.push({ id: 'nav:archived', type: 'nav', action: handleArchivedClick })
 
     // 2. Labels section header + regular label tree for keyboard nav
-    result.push({ id: 'nav:labels', type: 'nav', action: handleAllSessionsClick })
+    result.push({ id: 'nav:labels', type: 'nav', action: () => handleLabelClick('__all__') })
     // Flatten regular label tree for keyboard navigation (depth-first)
     const flattenTree = (nodes: LabelTreeNode[]) => {
       for (const node of nodes) {
@@ -1871,9 +1849,6 @@ function AppShellContent({
       }
     }
     flattenTree(labelTree)
-
-    // 2b. Archived section
-    result.push({ id: 'nav:archived', type: 'nav', action: handleArchivedClick })
 
     // 3. Sources, Skills, Settings
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
@@ -2090,7 +2065,6 @@ function AppShellContent({
         {/* === TOP BAR === */}
         <TopBar
           workspaceName={activeWorkspace?.name}
-          focusedRoute={isBrowserNavigation(navState) ? `browser/${navState.instanceId}` : null}
           onNewChat={() => handleNewChat()}
           onNewWindow={() => window.electronAPI.menuNewWindow()}
           onOpenSettings={onOpenSettings}
@@ -2104,7 +2078,7 @@ function AppShellContent({
           onToggleSidebar={() => setIsSidebarVisible(prev => !prev)}
           onToggleFocusMode={() => setIsSidebarAndNavigatorHidden(prev => !prev)}
           onAddSessionPanel={() => handleNewChat(true)}
-          onAddBrowserPanel={() => { void handleNewBrowserPanel() }}
+          onAddBrowserPanel={() => { void handleNewBrowserWindow() }}
         />
 
       {/* === OUTER LAYOUT: Unified Panel Stack | Right Sidebar === */}
@@ -2153,7 +2127,7 @@ function AppShellContent({
                     <TooltipContent side="right">{newChatHotkey}</TooltipContent>
                   </Tooltip>
                 </div>
-                {/* Primary Nav: All Sessions, Flagged, States, Labels | Sources, Skills | Settings */}
+                {/* Primary Nav: All Sessions (▸ Statuses, Flagged, Archived), Labels | Sources, Skills | Settings */}
                 {/* pb-4 provides clearance so the last item scrolls above the mask-fade-bottom gradient */}
                 <div className="flex-1 overflow-y-auto min-h-0 mask-fade-bottom pb-4">
                 <LeftSidebar
@@ -2162,6 +2136,7 @@ function AppShellContent({
                   focusedItemId={focusedSidebarItemId}
                   links={[
                     // --- Sessions Section ---
+                    // All Sessions: expandable with status children (sortable) + Flagged & Archived as trailing items
                     {
                       id: "nav:allSessions",
                       title: "All Sessions",
@@ -2169,46 +2144,53 @@ function AppShellContent({
                       icon: Inbox,
                       variant: sessionFilter?.kind === 'allSessions' ? "default" : "ghost",
                       onClick: handleAllSessionsClick,
-                    },
-                    {
-                      id: "nav:flagged",
-                      title: "Flagged",
-                      label: String(flaggedCount),
-                      icon: <Flag className="h-3.5 w-3.5" />,
-                      variant: sessionFilter?.kind === 'flagged' ? "default" : "ghost",
-                      onClick: handleFlaggedClick,
-                    },
-                    // States: expandable section with status sub-items (drag-and-drop reorder)
-                    {
-                      id: "nav:states",
-                      title: "Status",
-                      icon: CheckCircle2,
-                      variant: "ghost",
-                      onClick: () => toggleExpanded('nav:states'),
                       expandable: true,
-                      expanded: isExpanded('nav:states'),
-                      onToggle: () => toggleExpanded('nav:states'),
+                      expanded: isExpanded('nav:allSessions'),
+                      onToggle: () => toggleExpanded('nav:allSessions'),
                       contextMenu: {
                         type: 'allSessions',
                         onConfigureStatuses: openConfigureStatuses,
                       },
                       // Enable flat DnD reorder for status items
                       sortable: { onReorder: handleStatusReorder },
-                      items: effectiveSessionStatuses.map(state => ({
-                        id: `nav:state:${state.id}`,
-                        title: state.label,
-                        label: String(sessionStatusCounts[state.id] || 0),
-                        icon: state.icon,
-                        iconColor: state.resolvedColor,
-                        iconColorable: state.iconColorable,
-                        variant: (sessionFilter?.kind === 'state' && sessionFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
-                        onClick: () => handleSessionStatusClick(state.id),
-                        contextMenu: {
-                          type: 'status' as const,
-                          statusId: state.id,
-                          onConfigureStatuses: openConfigureStatuses,
+                      items: [
+                        // Status items (sortable via SortableStatusList)
+                        ...effectiveSessionStatuses.map(state => ({
+                          id: `nav:state:${state.id}`,
+                          title: state.label,
+                          label: String(sessionStatusCounts[state.id] || 0),
+                          icon: state.icon,
+                          iconColor: state.resolvedColor,
+                          iconColorable: state.iconColorable,
+                          variant: (sessionFilter?.kind === 'state' && sessionFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
+                          onClick: () => handleSessionStatusClick(state.id),
+                          contextMenu: {
+                            type: 'status' as const,
+                            statusId: state.id,
+                            onConfigureStatuses: openConfigureStatuses,
+                          },
+                        })),
+                        // Separator: SortableStatusList splits here — items after become non-sortable trailingItems
+                        { id: 'separator:states-flagged', type: 'separator' as const },
+                        // Flagged (trailing, non-sortable)
+                        {
+                          id: "nav:flagged",
+                          title: "Flagged",
+                          label: String(flaggedCount),
+                          icon: <Flag className="h-3.5 w-3.5" />,
+                          variant: (sessionFilter?.kind === 'flagged' ? "default" : "ghost") as "default" | "ghost",
+                          onClick: handleFlaggedClick,
                         },
-                      })),
+                        // Archived (trailing, non-sortable)
+                        {
+                          id: "nav:archived",
+                          title: "Archived",
+                          label: archivedCount > 0 ? String(archivedCount) : undefined,
+                          icon: Archive,
+                          variant: (sessionFilter?.kind === 'archived' ? "default" : "ghost") as "default" | "ghost",
+                          onClick: handleArchivedClick,
+                        },
+                      ],
                     },
                     // Labels: navigable header (shows all labeled sessions) + hierarchical tree (drag-and-drop reorder + re-parent)
                     {
@@ -2228,15 +2210,6 @@ function AppShellContent({
                         onAddLabel: handleAddLabel,
                       },
                       items: buildLabelSidebarItems(labelTree),
-                    },
-                    // --- Archived Section ---
-                    {
-                      id: "nav:archived",
-                      title: "Archived",
-                      label: archivedCount > 0 ? String(archivedCount) : undefined,
-                      icon: Archive,
-                      variant: sessionFilter?.kind === 'archived' ? "default" : "ghost",
-                      onClick: handleArchivedClick,
                     },
                     // --- Separator ---
                     { id: "separator:chats-sources", type: "separator" },
@@ -2739,27 +2712,30 @@ function AppShellContent({
                               </StyledDropdownMenuSubContent>
                             </DropdownMenuSub>
 
-                            <StyledDropdownMenuSeparator />
-
-                            {/* Group by submenu - switch between date and status grouping */}
-                            <DropdownMenuSub>
-                              <StyledDropdownMenuSubTrigger>
-                                <Layers className="h-3.5 w-3.5" />
-                                <span className="flex-1">Group</span>
-                              </StyledDropdownMenuSubTrigger>
-                              <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
-                                <StyledDropdownMenuItem onClick={() => setChatGroupingMode('date')}>
-                                  <Calendar className="h-3.5 w-3.5" />
-                                  <span className="flex-1">Date</span>
-                                  {chatGroupingMode === 'date' && <Check className="h-3 w-3 text-muted-foreground" />}
-                                </StyledDropdownMenuItem>
-                                <StyledDropdownMenuItem onClick={() => setChatGroupingMode('status')}>
-                                  <Inbox className="h-3.5 w-3.5" />
-                                  <span className="flex-1">Status</span>
-                                  {chatGroupingMode === 'status' && <Check className="h-3 w-3 text-muted-foreground" />}
-                                </StyledDropdownMenuItem>
-                              </StyledDropdownMenuSubContent>
-                            </DropdownMenuSub>
+                            {/* Group by submenu - hidden in state sub-views (always date there) */}
+                            {!isStateSubView && (
+                              <>
+                                <StyledDropdownMenuSeparator />
+                                <DropdownMenuSub>
+                                  <StyledDropdownMenuSubTrigger>
+                                    <Layers className="h-3.5 w-3.5" />
+                                    <span className="flex-1">Group</span>
+                                  </StyledDropdownMenuSubTrigger>
+                                  <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
+                                    <StyledDropdownMenuItem onClick={() => setChatGroupingMode('date')}>
+                                      <Calendar className="h-3.5 w-3.5" />
+                                      <span className="flex-1">Date</span>
+                                      {chatGroupingMode === 'date' && <Check className="h-3 w-3 text-muted-foreground" />}
+                                    </StyledDropdownMenuItem>
+                                    <StyledDropdownMenuItem onClick={() => setChatGroupingMode('status')}>
+                                      <Inbox className="h-3.5 w-3.5" />
+                                      <span className="flex-1">Status</span>
+                                      {chatGroupingMode === 'status' && <Check className="h-3 w-3 text-muted-foreground" />}
+                                    </StyledDropdownMenuItem>
+                                  </StyledDropdownMenuSubContent>
+                                </DropdownMenuSub>
+                              </>
+                            )}
 
                             <StyledDropdownMenuSeparator />
                             <StyledDropdownMenuItem
@@ -3023,8 +2999,8 @@ function AppShellContent({
                 onSelectSubpage={(subpage) => handleSettingsClick(subpage)}
               />
             )}
-            {(isSessionsNavigation(navState) || isBrowserNavigation(navState)) && (
-              /* Sessions List (also shown in browser mode to keep navigator populated) */
+            {isSessionsNavigation(navState) && (
+              /* Sessions List */
               <>
                 {/* SessionList: Scrollable list of session cards */}
                 {/* Key on sidebarMode forces full remount when switching views, skipping animations */}
@@ -3133,57 +3109,6 @@ function AppShellContent({
           />
         </div>
         )}
-
-          {/* Dedicated right-pinned browser host lane (native bounds owner) */}
-          {isBrowserHostVisible && rightPinnedBrowserInstanceId && (
-            <>
-              <div
-                ref={browserHostHandleRef}
-                onMouseDown={(e) => { e.preventDefault(); setIsResizing('browser-host') }}
-                onMouseMove={(e) => {
-                  if (browserHostHandleRef.current) {
-                    const rect = browserHostHandleRef.current.getBoundingClientRect()
-                    setBrowserHostHandleY(e.clientY - rect.top)
-                  }
-                }}
-                onMouseLeave={() => { if (isResizing !== 'browser-host') setBrowserHostHandleY(null) }}
-                className="relative w-0 h-full cursor-col-resize flex justify-center shrink-0"
-              >
-                <div className="absolute inset-y-0 -left-1.5 -right-1.5 flex justify-center cursor-col-resize">
-                  <div
-                    className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-0.5"
-                    style={getResizeGradientStyle(browserHostHandleY)}
-                  />
-                </div>
-              </div>
-
-              <motion.div
-                initial={false}
-                animate={{ width: browserHostWidth, marginLeft: 0 }}
-                transition={isResizing === 'browser-host' ? { duration: 0 } : springTransition}
-                className="h-full shrink-0 overflow-visible"
-              >
-                <motion.div
-                  initial={false}
-                  animate={{ x: 0, opacity: 1 }}
-                  transition={isResizing === 'browser-host' ? { duration: 0 } : springTransition}
-                  className="h-full bg-foreground-2 shadow-middle"
-                  style={{
-                    width: browserHostWidth,
-                    borderTopLeftRadius: RADIUS_INNER,
-                    borderBottomLeftRadius: RADIUS_INNER,
-                    borderTopRightRadius: RADIUS_INNER,
-                    borderBottomRightRadius: isRightSidebarVisible && !shouldUseOverlay ? RADIUS_INNER : RADIUS_EDGE,
-                  }}
-                >
-                  <RightPinnedBrowserHost
-                    instanceId={rightPinnedBrowserInstanceId}
-                    onClose={() => { void handleCloseRightPinnedBrowser() }}
-                  />
-                </motion.div>
-              </motion.div>
-            </>
-          )}
 
           {/* Right Sidebar - Inline Mode (≥ 920px) */}
           {!shouldUseOverlay && (

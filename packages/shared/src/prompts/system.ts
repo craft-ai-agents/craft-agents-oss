@@ -486,6 +486,7 @@ Read relevant context files using the Read tool - they contain architecture info
 | Data Tables | \`${DOC_REFS.dataTables}\` | When working with datasets of 20+ rows |
 | HTML Preview | \`${DOC_REFS.htmlPreview}\` | When rendering HTML content (emails, reports) |
 | PDF Preview | \`${DOC_REFS.pdfPreview}\` | When displaying PDF documents inline |
+| Browser Tools | \`${DOC_REFS.browserTools}\` | When using in-app browser tools (\`browser_open\`, \`browser_snapshot\`, etc.) |
 | LLM Tool | \`${DOC_REFS.llmTool}\` | When using \`call_llm\` for subtasks |
 
 **IMPORTANT:** Always read the relevant doc file BEFORE making changes. Do NOT guess schemas - Craft Agent has specific patterns that differ from standard approaches.
@@ -733,6 +734,22 @@ Use the \`call_llm\` tool to invoke a secondary LLM for focused subtasks. It run
 - Task = full agent with tools, multi-turn, expensive, sequential. Best for *exploring* and finding things.
 
 **Quick reference:** Read \`${DOC_REFS.llmTool}\` for full parameter docs, output formats, and examples.
+
+## Browser Tools
+
+Craft Agent can control built-in browser windows using browser tools.
+
+**Recommended workflow:**
+1. Call \`browser_open\` first when the browser UI might not be visible or focused
+2. Call \`browser_navigate\` to load the target page
+3. Call \`browser_snapshot\` to get element refs
+4. Interact via \`browser_click\` / \`browser_fill\` / \`browser_select\`
+
+**Tips:**
+- Prefer \`browser_snapshot\` for element interaction; use \`browser_screenshot\` for visual verification
+- Re-run \`browser_snapshot\` after navigation or major DOM changes (refs can change)
+- For advanced extraction or custom interactions, use \`browser_evaluate\`
+- Full reference: \`${DOC_REFS.browserTools}\`
 
 ## Diagrams and Visualization
 

@@ -24,6 +24,7 @@ import { basename } from 'node:path';
 
 // Import from session-tools-core: registry + schemas + base descriptions
 import {
+  SESSION_BACKEND_TOOL_NAMES,
   SESSION_TOOL_REGISTRY,
   SESSION_TOOL_DEFS,
   TOOL_DESCRIPTIONS as BASE_DESCRIPTIONS,
@@ -133,8 +134,41 @@ export function unregisterSessionScopedToolCallbacks(sessionId: string): void {
 /**
  * Get callbacks for a session
  */
-function getSessionScopedToolCallbacks(sessionId: string): SessionScopedToolCallbacks | undefined {
+export function getSessionScopedToolCallbacks(sessionId: string): SessionScopedToolCallbacks | undefined {
   return sessionScopedToolCallbackRegistry.get(sessionId);
+}
+
+/** Backend-executed session tools currently supported by the Claude adapter layer. */
+export const CLAUDE_BACKEND_SESSION_TOOL_NAMES = new Set<string>([
+  'call_llm',
+  'spawn_session',
+  'browser_open',
+  'browser_navigate',
+  'browser_snapshot',
+  'browser_click',
+  'browser_fill',
+  'browser_select',
+  'browser_screenshot',
+  'browser_scroll',
+  'browser_back',
+  'browser_forward',
+  'browser_evaluate',
+]);
+
+/**
+ * Guardrail: ensure Claude adapter wiring stays in sync with backend-mode tools
+ * declared in session-tools-core. Fail fast during setup instead of runtime drift.
+ */
+function assertClaudeBackendSessionToolParity(): void {
+  const missing = [...SESSION_BACKEND_TOOL_NAMES].filter(
+    (name) => !CLAUDE_BACKEND_SESSION_TOOL_NAMES.has(name),
+  );
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Claude session tools missing backend adapter implementations: ${missing.join(', ')}`,
+    );
+  }
 }
 
 // ============================================================
@@ -281,6 +315,9 @@ export function getSessionScopedTools(
       return convertResult(result);
     });
   }
+
+  // Ensure backend-mode tool wiring is in sync with core metadata.
+  assertClaudeBackendSessionToolParity();
 
   // Create tools from the canonical registry — all tools with handlers
   const tools = SESSION_TOOL_DEFS

@@ -29,8 +29,6 @@ export const KEYS = {
   // Right sidebar (chat page)
   rightSidebarVisible: 'right-sidebar-visible',
   rightSidebarWidth: 'right-sidebar-width',
-  // Dedicated full-height browser host lane (native WebContentsView bounds owner)
-  browserHostWidth: 'browser-host-width',
   sessionInfoMetadataHeight: 'session-info-metadata-height', // Height of metadata section in session info panel
   sessionFilesExpandedFolders: 'session-files-expanded', // Expanded folders in session files tree (keyed by sessionId)
 

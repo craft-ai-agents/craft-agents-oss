@@ -12,68 +12,52 @@ function getStack(store: ReturnType<typeof createStore>): PanelStackEntry[] {
   return store.get(panelStackAtom)
 }
 
-describe('panel stack lane policies', () => {
-  it('keeps browser rightmost while allowing new main panels', () => {
+describe('panel stack single-lane behavior', () => {
+  it('keeps insertion order for new panels', () => {
     const store = createStore()
 
     store.set(pushPanelAtom, { route: 'allSessions/session/s1' })
-    store.set(pushPanelAtom, { route: 'browser/b1' })
-    store.set(pushPanelAtom, { route: 'allSessions/session/s2' })
+    store.set(pushPanelAtom, { route: 'sources/source/github' })
+    store.set(pushPanelAtom, { route: 'settings' })
 
     const stack = getStack(store)
     expect(stack).toHaveLength(3)
-
-    // main lane panels stay before rightPinned lane
     expect(stack[0].route).toBe('allSessions/session/s1')
-    expect(stack[0].laneId).toBe('main')
-
-    expect(stack[1].route).toBe('allSessions/session/s2')
-    expect(stack[1].laneId).toBe('main')
-
-    expect(stack[2].route).toBe('browser/b1')
-    expect(stack[2].laneId).toBe('rightPinned')
+    expect(stack[1].route).toBe('sources/source/github')
+    expect(stack[2].route).toBe('settings')
+    expect(stack.every((p) => p.laneId === 'main')).toBe(true)
   })
 
-  it('does not replace browser when implicit navigation targets a session', () => {
+  it('implicit navigation updates focused panel route', () => {
     const store = createStore()
 
     store.set(pushPanelAtom, { route: 'allSessions/session/s1' })
-    store.set(pushPanelAtom, { route: 'browser/b1' })
+    store.set(pushPanelAtom, { route: 'sources/source/github' })
 
-    // Focus browser panel
-    const browserPanel = getStack(store).find((p) => p.route === 'browser/b1')
-    expect(browserPanel).toBeDefined()
-    store.set(focusedPanelIdAtom, browserPanel!.id)
+    const sourcePanel = getStack(store).find((p) => p.route === 'sources/source/github')
+    expect(sourcePanel).toBeDefined()
+    store.set(focusedPanelIdAtom, sourcePanel!.id)
 
-    // Implicit session navigation should update/focus main lane, not replace browser
     store.set(updateFocusedPanelRouteAtom, 'allSessions/session/s2')
 
     const stack = getStack(store)
-    const browserAfter = stack.find((p) => p.laneId === 'rightPinned')
-    const mainAfter = stack.filter((p) => p.laneId === 'main')
-
-    expect(browserAfter?.route).toBe('browser/b1')
-    expect(mainAfter.length).toBeGreaterThan(0)
-    expect(mainAfter.some((p) => p.route === 'allSessions/session/s2')).toBe(true)
-
-    const focusedId = store.get(focusedPanelIdAtom)
-    expect(mainAfter.some((p) => p.id === focusedId)).toBe(true)
+    expect(stack).toHaveLength(2)
+    expect(stack.some((p) => p.route === 'allSessions/session/s2')).toBe(true)
+    expect(stack.some((p) => p.route === 'allSessions/session/s1')).toBe(true)
   })
 
-  it('enforces singleton browser lane and replaces in-slot on new browser open', () => {
+  it('pushPanel afterIndex inserts immediately after the given panel', () => {
     const store = createStore()
 
     store.set(pushPanelAtom, { route: 'allSessions/session/s1' })
-    store.set(pushPanelAtom, { route: 'browser/b1' })
-    store.set(pushPanelAtom, { route: 'browser/b2' })
+    store.set(pushPanelAtom, { route: 'allSessions/session/s2' })
+
+    store.set(pushPanelAtom, { route: 'sources/source/linear', afterIndex: 0 })
 
     const stack = getStack(store)
-    const browsers = stack.filter((p) => p.laneId === 'rightPinned')
-
-    expect(browsers).toHaveLength(1)
-    expect(browsers[0].route).toBe('browser/b2')
-
-    // Browser remains rightmost
-    expect(stack[stack.length - 1].laneId).toBe('rightPinned')
+    expect(stack).toHaveLength(3)
+    expect(stack[0].route).toBe('allSessions/session/s1')
+    expect(stack[1].route).toBe('sources/source/linear')
+    expect(stack[2].route).toBe('allSessions/session/s2')
   })
 })

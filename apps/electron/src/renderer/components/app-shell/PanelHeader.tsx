@@ -53,6 +53,8 @@ export interface PanelHeaderProps {
   badge?: React.ReactNode
   /** Optional dropdown menu content for interactive title (renders chevron when provided) */
   titleMenu?: React.ReactNode
+  /** Optional center button rendered between title and right actions */
+  centerButton?: React.ReactNode
   /** Optional action buttons rendered on the right */
   actions?: React.ReactNode
   /** Optional right sidebar button (rendered after actions) */
@@ -74,6 +76,7 @@ export function PanelHeader({
   title,
   badge,
   titleMenu,
+  centerButton,
   actions,
   rightSidebarButton,
   compensateForStoplight,
@@ -138,6 +141,11 @@ export function PanelHeader({
           )}
         </div>
       </div>
+      {centerButton && (
+        <div className="titlebar-no-drag shrink-0">
+          {centerButton}
+        </div>
+      )}
       {actions && (
         <div className="titlebar-no-drag shrink-0">
           {actions}
@@ -155,7 +163,7 @@ export function PanelHeader({
   const basePadding = 16
 
   const baseClassName = cn(
-    'flex shrink-0 items-center pr-2 min-w-0 gap-1 relative z-panel h-[42px]',
+    'flex shrink-0 items-center pr-2 min-w-0 gap-1.5 relative z-panel h-[42px]',
     // Only use static paddingLeft class when not animating
     !shouldCompensate && (paddingLeft || 'pl-4'),
     className

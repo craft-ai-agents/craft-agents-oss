@@ -113,6 +113,7 @@ export const DOC_REFS = {
   htmlPreview: `${APP_ROOT}/docs/html-preview.md`,
   pdfPreview: `${APP_ROOT}/docs/pdf-preview.md`,
   llmTool: `${APP_ROOT}/docs/llm-tool.md`,
+  browserTools: `${APP_ROOT}/docs/browser-tools.md`,
   docsDir: `${APP_ROOT}/docs/`,
 } as const;
 

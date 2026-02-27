@@ -184,6 +184,7 @@ export {
   TransformDataSchema,
   RenderTemplateSchema,
   // Browser tool schemas
+  BrowserOpenSchema,
   BrowserNavigateSchema,
   BrowserSnapshotSchema,
   BrowserClickSchema,
@@ -199,13 +200,18 @@ export {
   // Registry
   SESSION_TOOL_DEFS,
   SESSION_TOOL_NAMES,
+  SESSION_BACKEND_TOOL_NAMES,
+  SESSION_REGISTRY_TOOL_NAMES,
   SESSION_TOOL_REGISTRY,
   // JSON Schema converter
   getToolDefsAsJsonSchema,
 } from './tool-defs.ts';
 
 export type {
+  SessionToolExecutionMode,
   SessionToolDef,
+  RegistrySessionToolDef,
+  BackendSessionToolDef,
   SessionToolHandler,
   JsonSchemaToolDef,
 } from './tool-defs.ts';

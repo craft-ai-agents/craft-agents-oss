@@ -3085,19 +3085,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       browserPaneManager.stop(id)
     })
 
-    ipcMain.handle(IPC_CHANNELS.BROWSER_PANE_ATTACH, (event, id: string, bounds: { x: number; y: number; width: number; height: number }) => {
-      const window = BrowserWindow.fromWebContents(event.sender)
-      if (window) {
-        browserPaneManager.attachToWindow(id, window, bounds)
-      }
-    })
-
-    ipcMain.handle(IPC_CHANNELS.BROWSER_PANE_DETACH, (_event, id: string) => {
-      browserPaneManager.detachFromWindow(id)
-    })
-
-    ipcMain.handle(IPC_CHANNELS.BROWSER_PANE_UPDATE_BOUNDS, (_event, id: string, bounds: { x: number; y: number; width: number; height: number }) => {
-      browserPaneManager.updateBounds(id, bounds)
+    ipcMain.handle(IPC_CHANNELS.BROWSER_PANE_FOCUS, (_event, id: string) => {
+      browserPaneManager.focus(id)
     })
 
     ipcMain.handle(IPC_CHANNELS.BROWSER_PANE_SNAPSHOT, async (_event, id: string) => {
