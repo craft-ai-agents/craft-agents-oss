@@ -4,7 +4,7 @@
  */
 
 import { spawn, type Subprocess } from "bun";
-import { existsSync, rmSync, cpSync, readFileSync, statSync, mkdirSync } from "fs";
+import { existsSync, rmSync, cpSync, readFileSync, statSync, mkdirSync, writeFileSync } from "fs";
 import { join, basename } from "path";
 import * as esbuild from "esbuild";
 import { downloadUv, type Platform, type Arch } from "./build/common";
@@ -293,8 +293,30 @@ async function runEsbuild(
 // Bun's bundler handles ESM→ESM bundling correctly.
 async function buildPiAgentServer(): Promise<{ success: boolean; error?: string }> {
   try {
+    const entryPoint = join(PI_AGENT_SERVER_DIR, "src/index.ts");
+
+    // Some checkouts only include a prebuilt pi-agent-server dist artifact.
+    // In that case, skip rebuilding and use the existing output.
+    if (!existsSync(entryPoint)) {
+      if (existsSync(PI_AGENT_SERVER_OUTPUT)) {
+        console.log("ℹ️  Pi agent server source missing, using prebuilt dist/index.js");
+        return { success: true };
+      }
+
+      // Create a stub so non-Pi development can continue.
+      const stub = [
+        "#!/usr/bin/env bun",
+        "console.error('[pi-agent-server] Source missing in this checkout. Pi provider is unavailable.');",
+        "process.exit(1);",
+        "",
+      ].join("\n");
+      writeFileSync(PI_AGENT_SERVER_OUTPUT, stub, "utf-8");
+      console.warn("⚠️  Pi agent server source missing; wrote stub dist/index.js (Pi provider disabled)");
+      return { success: true };
+    }
+
     const proc = spawn({
-      cmd: ["bun", "build", "src/index.ts", "--outdir=dist", "--target=bun", "--format=esm"],
+      cmd: ["bun", "build", entryPoint, "--outdir=dist", "--target=bun", "--format=esm"],
       cwd: PI_AGENT_SERVER_DIR,
       stdout: "pipe",
       stderr: "pipe",

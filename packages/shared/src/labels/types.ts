@@ -3,7 +3,7 @@
  *
  * Types for configurable session labels.
  * Labels are additive tags (many-per-session), unlike statuses which are exclusive (one-per-session).
- * Stored at {workspaceRootPath}/labels/config.json
+ * Stored at {workspaceRootPath}/.craft-agent/labels/config.json
  *
  * Hierarchy: Labels form a recursive JSON tree via the `children` array.
  * Array position determines display order (no separate order field).
@@ -39,7 +39,7 @@ export interface AutoLabelRule {
 }
 
 /**
- * Label configuration (stored in labels/config.json).
+ * Label configuration (stored in .craft-agent/labels/config.json).
  * Recursive: each label can have nested children forming a tree.
  * Array position = display order (no explicit order field needed).
  */

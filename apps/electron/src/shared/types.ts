@@ -428,7 +428,7 @@ export interface ElectronAPI {
   // LLM connections change listener
   onLlmConnectionsChanged(callback: () => void): () => void
 
-  // Views (workspace-scoped, stored in views.json)
+  // Views (workspace-scoped, stored in .craft-agent/views.json)
   listViews(workspaceId: string): Promise<import('@craft-agent/shared/views').ViewConfig[]>
   saveViews(workspaceId: string, views: import('@craft-agent/shared/views').ViewConfig[]): Promise<void>
 

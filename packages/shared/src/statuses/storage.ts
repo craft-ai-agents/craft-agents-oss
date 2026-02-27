@@ -2,15 +2,15 @@
  * Status Storage
  *
  * Filesystem-based storage for workspace status configurations.
- * Statuses are stored at {workspaceRootPath}/statuses/config.json
+ * Statuses are stored at {workspaceRootPath}/.craft-agent/statuses/config.json
  *
  * Icon handling:
- * - Local files: statuses/icons/{id}.svg (auto-discovered)
+ * - Local files: .craft-agent/statuses/icons/{id}.svg (auto-discovered)
  * - Emoji: Rendered as text in UI
- * - URL: Auto-downloaded to statuses/icons/{id}.{ext}
+ * - URL: Auto-downloaded to .craft-agent/statuses/icons/{id}.{ext}
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import type { WorkspaceStatusConfig, StatusConfig, StatusCategory } from './types.ts';
 import { readJsonFileSync } from '../utils/files.ts';
@@ -24,10 +24,13 @@ import {
 } from '../utils/icon.ts';
 import { migrateStatusColors } from '../colors/migrate.ts';
 import { debug } from '../utils/debug.ts';
+import { getWorkspaceStateDir } from '../workspaces/paths.ts';
 
-const STATUS_CONFIG_DIR = 'statuses';
-const STATUS_CONFIG_FILE = 'statuses/config.json';
-const STATUS_ICONS_DIR = 'statuses/icons';
+const STATUS_CONFIG_DIR = '.craft-agent/statuses';
+const STATUS_CONFIG_FILE = '.craft-agent/statuses/config.json';
+const STATUS_ICONS_DIR = '.craft-agent/statuses/icons';
+const LEGACY_STATUS_CONFIG_FILE = 'statuses/config.json';
+const LEGACY_STATUS_ICONS_DIR = 'statuses/icons';
 
 /**
  * Get default status configuration (matches current hardcoded behavior)
@@ -96,6 +99,11 @@ export function getDefaultStatusConfig(): WorkspaceStatusConfig {
  */
 export function ensureDefaultIconFiles(workspaceRootPath: string): void {
   const iconsDir = join(workspaceRootPath, STATUS_ICONS_DIR);
+  const legacyIconsDir = join(workspaceRootPath, LEGACY_STATUS_ICONS_DIR);
+
+  if (!existsSync(iconsDir) && existsSync(legacyIconsDir)) {
+    migrateLegacyIconFiles(legacyIconsDir, iconsDir);
+  }
 
   // Create icons directory if missing
   if (!existsSync(iconsDir)) {
@@ -138,6 +146,11 @@ export function loadStatusConfig(workspaceRootPath: string): WorkspaceStatusConf
   ensureDefaultIconFiles(workspaceRootPath);
 
   const configPath = join(workspaceRootPath, STATUS_CONFIG_FILE);
+  const legacyConfigPath = join(workspaceRootPath, LEGACY_STATUS_CONFIG_FILE);
+
+  if (!existsSync(configPath) && existsSync(legacyConfigPath)) {
+    migrateLegacyStatusConfig(workspaceRootPath);
+  }
 
   // Return defaults if config doesn't exist
   if (!existsSync(configPath)) {
@@ -189,6 +202,38 @@ export function saveStatusConfig(
   } catch (error) {
     console.error('[saveStatusConfig] Failed to save config:', error);
     throw error;
+  }
+}
+
+function migrateLegacyStatusConfig(workspaceRootPath: string): void {
+  const configPath = join(workspaceRootPath, STATUS_CONFIG_FILE);
+  const legacyConfigPath = join(workspaceRootPath, LEGACY_STATUS_CONFIG_FILE);
+  const statusDir = join(workspaceRootPath, STATUS_CONFIG_DIR);
+  const stateDir = getWorkspaceStateDir(workspaceRootPath);
+
+  if (!existsSync(legacyConfigPath) || existsSync(configPath)) return;
+
+  if (!existsSync(stateDir)) mkdirSync(stateDir, { recursive: true });
+  if (!existsSync(statusDir)) mkdirSync(statusDir, { recursive: true });
+  copyFileSync(legacyConfigPath, configPath);
+}
+
+function migrateLegacyIconFiles(legacyIconsDir: string, iconsDir: string): void {
+  if (!existsSync(iconsDir)) {
+    mkdirSync(iconsDir, { recursive: true });
+  }
+
+  try {
+    const entries = readdirSync(legacyIconsDir);
+    for (const entry of entries) {
+      const legacyPath = join(legacyIconsDir, entry);
+      const nextPath = join(iconsDir, entry);
+      if (!existsSync(nextPath)) {
+        copyFileSync(legacyPath, nextPath);
+      }
+    }
+  } catch {
+    // Best-effort migration; defaults are seeded below.
   }
 }
 

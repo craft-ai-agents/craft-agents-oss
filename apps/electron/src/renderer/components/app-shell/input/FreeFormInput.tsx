@@ -1388,7 +1388,7 @@ export function FreeFormInput({
             systemPromptPreset={addLabelEditConfig.systemPromptPreset}
             secondaryAction={workspaceRootPath ? {
               label: 'Edit File',
-              filePath: `${workspaceRootPath}/labels/config.json`,
+              filePath: `${workspaceRootPath}/.craft-agent/labels/config.json`,
             } : undefined}
             side="top"
             align="start"

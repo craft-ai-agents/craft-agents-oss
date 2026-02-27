@@ -378,12 +378,22 @@ describe('detectConfigFileType', () => {
 
   it('detects statuses config', () => {
     const result = detectConfigFileType(
+      `${workspaceRoot}/.craft-agent/statuses/config.json`,
+      workspaceRoot
+    );
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe('statuses');
+    expect(result!.displayFile).toBe('.craft-agent/statuses/config.json');
+  });
+
+  it('detects legacy statuses config path', () => {
+    const result = detectConfigFileType(
       `${workspaceRoot}/statuses/config.json`,
       workspaceRoot
     );
     expect(result).not.toBeNull();
     expect(result!.type).toBe('statuses');
-    expect(result!.displayFile).toBe('statuses/config.json');
+    expect(result!.displayFile).toBe('.craft-agent/statuses/config.json');
   });
 
   it('detects workspace-level permissions.json', () => {
@@ -464,7 +474,7 @@ Content here.
   });
 
   it('dispatches to statuses validator', () => {
-    const detection = { type: 'statuses' as const, displayFile: 'statuses/config.json' };
+    const detection = { type: 'statuses' as const, displayFile: '.craft-agent/statuses/config.json' };
     const config = JSON.stringify({
       version: 1, defaultStatusId: 'todo',
       statuses: [

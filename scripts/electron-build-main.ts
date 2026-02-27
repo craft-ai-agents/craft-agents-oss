@@ -4,7 +4,7 @@
  */
 
 import { spawn } from "bun";
-import { existsSync, readFileSync, statSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, statSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 
 const ROOT_DIR = join(import.meta.dir, "..");
@@ -214,6 +214,28 @@ async function buildPiAgentServer(): Promise<void> {
 
   console.log("🥧 Building Pi Agent Server...");
 
+  const entryPoint = join(PI_AGENT_SERVER_DIR, "src/index.ts");
+
+  // Some checkouts only include prebuilt pi-agent-server dist artifacts.
+  // If source is missing, fall back to the existing dist output.
+  if (!existsSync(entryPoint)) {
+    if (existsSync(PI_AGENT_SERVER_OUTPUT)) {
+      console.log("ℹ️  Pi agent server source missing, using prebuilt dist/index.js");
+      return;
+    }
+
+    // Create a stub so non-Pi builds can proceed.
+    const stub = [
+      "#!/usr/bin/env bun",
+      "console.error('[pi-agent-server] Source missing in this checkout. Pi provider is unavailable.');",
+      "process.exit(1);",
+      "",
+    ].join("\n");
+    writeFileSync(PI_AGENT_SERVER_OUTPUT, stub, "utf-8");
+    console.warn("⚠️  Pi agent server source missing; wrote stub dist/index.js (Pi provider disabled)");
+    return;
+  }
+
   // Ensure dist directory exists
   const distDir = join(PI_AGENT_SERVER_DIR, "dist");
   if (!existsSync(distDir)) {
@@ -226,7 +248,7 @@ async function buildPiAgentServer(): Promise<void> {
   const proc = spawn({
     cmd: [
       "bun", "build",
-      join(PI_AGENT_SERVER_DIR, "src/index.ts"),
+      entryPoint,
       "--outfile", PI_AGENT_SERVER_OUTPUT,
       "--target", "bun",
       "--format", "esm",

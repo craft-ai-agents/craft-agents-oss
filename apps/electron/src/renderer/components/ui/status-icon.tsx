@@ -5,7 +5,7 @@
  * a Tailwind color class (e.g. 'text-success') which cascades into colorable
  * SVGs via CSS currentColor inheritance.
  *
- * Status icons are discovered at `statuses/icons/{statusId}.{ext}`.
+ * Status icons are discovered at `.craft-agent/statuses/icons/{statusId}.{ext}`.
  */
 
 import { Circle } from 'lucide-react'
@@ -43,7 +43,7 @@ export function StatusIcon({
     workspaceId,
     entityType: 'status',
     identifier: statusId,
-    iconDir: 'statuses/icons',
+    iconDir: '.craft-agent/statuses/icons',
     iconValue: icon,
     // Status icons use {statusId}.ext naming (not icon.ext)
     iconFileName: statusId,

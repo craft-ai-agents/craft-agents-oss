@@ -19,7 +19,7 @@ let mockLoggerInstances: Array<{
 mock.module('../event-logger.ts', () => {
   class MockAutomationEventLogger {
     log = jest.fn();
-    getLogPath = jest.fn().mockReturnValue('/tmp/test-workspace/events.jsonl');
+    getLogPath = jest.fn().mockReturnValue('/tmp/test-workspace/.craft-agent/events.jsonl');
     dispose = jest.fn().mockResolvedValue(undefined);
     onEventLost?: (events: string[], error: Error) => void;
 
@@ -143,7 +143,7 @@ describe('EventLogHandler', () => {
   describe('log path', () => {
     it('should expose the log path from the underlying logger', () => {
       const handler = new EventLogHandler(createOptions());
-      expect(handler.getLogPath()).toBe('/tmp/test-workspace/events.jsonl');
+      expect(handler.getLogPath()).toBe('/tmp/test-workspace/.craft-agent/events.jsonl');
     });
   });
 

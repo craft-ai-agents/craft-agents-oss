@@ -100,7 +100,7 @@ Tools available within agent sessions with callback registry:
 ### Dynamic Status System (`src/statuses/`)
 Workspace-level customizable workflow states:
 
-**Storage:** `~/.craft-agent/workspaces/{id}/statuses/config.json`
+**Storage:** `~/.craft-agent/workspaces/{id}/.craft-agent/statuses/config.json`
 
 **Status properties:** `id`, `label`, `color`, `icon`, `shortcut`, `category` (open/closed), `isFixed`, `isDefault`, `order`
 

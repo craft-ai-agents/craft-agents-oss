@@ -3278,7 +3278,7 @@ function AppShellContent({
             align="start"
             secondaryAction={{
               label: 'Edit File',
-              filePath: `${activeWorkspace.rootPath}/statuses/config.json`,
+              filePath: `${activeWorkspace.rootPath}/.craft-agent/statuses/config.json`,
             }}
             {...getEditConfig('edit-statuses', activeWorkspace.rootPath)}
           />
@@ -3298,7 +3298,7 @@ function AppShellContent({
             align="start"
             secondaryAction={{
               label: 'Edit File',
-              filePath: `${activeWorkspace.rootPath}/labels/config.json`,
+              filePath: `${activeWorkspace.rootPath}/.craft-agent/labels/config.json`,
             }}
             {...(() => {
               // Spread base config, override context to include which label was right-clicked
@@ -3334,7 +3334,7 @@ function AppShellContent({
             align="start"
             secondaryAction={{
               label: 'Edit File',
-              filePath: `${activeWorkspace.rootPath}/views.json`,
+              filePath: `${activeWorkspace.rootPath}/.craft-agent/views.json`,
             }}
             {...getEditConfig('edit-views', activeWorkspace.rootPath)}
           />
@@ -3407,7 +3407,7 @@ function AppShellContent({
             align="start"
             secondaryAction={{
               label: 'Edit File',
-              filePath: `${activeWorkspace.rootPath}/labels/config.json`,
+              filePath: `${activeWorkspace.rootPath}/.craft-agent/labels/config.json`,
             }}
             {...(() => {
               // Spread base config, override context to include which label was right-clicked

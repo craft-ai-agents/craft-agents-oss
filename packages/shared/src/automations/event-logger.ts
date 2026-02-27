@@ -8,6 +8,8 @@
 import { appendFile } from 'fs/promises';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
+import { existsSync, mkdirSync } from 'fs';
+import { getWorkspaceStateDir } from '../workspaces/paths.ts';
 import type { ActionExecutionResult } from './types.ts';
 
 // ============================================================================
@@ -55,7 +57,11 @@ export class AutomationEventLogger {
   onEventLost?: (events: string[], error: Error) => void;
 
   constructor(workspaceRootPath: string) {
-    this.logPath = join(workspaceRootPath, 'events.jsonl');
+    const stateDir = getWorkspaceStateDir(workspaceRootPath);
+    if (!existsSync(stateDir)) {
+      mkdirSync(stateDir, { recursive: true });
+    }
+    this.logPath = join(stateDir, 'events.jsonl');
   }
 
   /**

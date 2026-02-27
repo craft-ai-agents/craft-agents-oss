@@ -361,12 +361,12 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
   'edit-statuses': (location) => ({
     context: {
       label: 'Status Configuration',
-      filePath: `${location}/statuses/config.json`,
+      filePath: `${location}/.craft-agent/statuses/config.json`,
       context:
         'The user wants to customize session statuses (workflow states). ' +
-        'Statuses are stored in statuses/config.json with fields: id, label, icon, category (open/closed), order, isFixed, isDefault. ' +
+        'Statuses are stored in .craft-agent/statuses/config.json with fields: id, label, icon, category (open/closed), order, isFixed, isDefault. ' +
         'Fixed statuses (todo, done, cancelled) cannot be deleted but can be reordered or have their label changed. ' +
-        'Icon can be { type: "file", value: "name.svg" } for custom icons in statuses/icons/ or { type: "lucide", value: "icon-name" } for Lucide icons. ' +
+        'Icon can be { type: "file", value: "name.svg" } for custom icons in .craft-agent/statuses/icons/ or { type: "lucide", value: "icon-name" } for Lucide icons. ' +
         'Category "open" shows in inbox, "closed" shows in archive. ' +
         'After editing, call config_validate with target "statuses" to verify the changes. ' +
         'Confirm clearly when done.',
@@ -381,10 +381,10 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
   'edit-labels': (location) => ({
     context: {
       label: 'Label Configuration',
-      filePath: `${location}/labels/config.json`,
+      filePath: `${location}/.craft-agent/labels/config.json`,
       context:
         'The user wants to customize session labels (tagging/categorization). ' +
-        'Labels are stored in labels/config.json as a hierarchical tree. ' +
+        'Labels are stored in .craft-agent/labels/config.json as a hierarchical tree. ' +
         'Each label has: id (slug, globally unique), name (display), color (optional EntityColor), children (sub-labels array). ' +
         'Colors use EntityColor format: string shorthand (e.g. "blue") or { light, dark } object for theme-aware colors. ' +
         'Labels are color-only (no icons) — rendered as colored circles in the UI. ' +
@@ -402,10 +402,10 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
   'edit-auto-rules': (location) => ({
     context: {
       label: 'Auto-Apply Rules',
-      filePath: `${location}/labels/config.json`,
+      filePath: `${location}/.craft-agent/labels/config.json`,
       context:
         'The user wants to edit auto-apply rules (regex patterns that auto-tag sessions). ' +
-        'Rules live inside the autoRules array on individual labels in labels/config.json. ' +
+        'Rules live inside the autoRules array on individual labels in .craft-agent/labels/config.json. ' +
         'Each rule has: pattern (regex with capture groups), flags (default "gi"), valueTemplate ($1/$2 substitution), description. ' +
         'Multiple rules on the same label = multiple ways to trigger. The "g" flag is always enforced. ' +
         'Avoid catastrophic backtracking patterns (e.g., (a+)+). ' +
@@ -422,10 +422,10 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
   'add-label': (location) => ({
     context: {
       label: 'Add Label',
-      filePath: `${location}/labels/config.json`,
+      filePath: `${location}/.craft-agent/labels/config.json`,
       context:
         'The user wants to create a new label from the # inline menu. ' +
-        'Labels are stored in labels/config.json as a hierarchical tree. ' +
+        'Labels are stored in .craft-agent/labels/config.json as a hierarchical tree. ' +
         'Each label has: id (slug, globally unique), name (display), color (optional EntityColor), children (sub-labels array). ' +
         'Colors use EntityColor format: string shorthand (e.g. "blue") or { light, dark } object for theme-aware colors. ' +
         'Labels are color-only (no icons) — rendered as colored circles in the UI. ' +
@@ -443,10 +443,10 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
   'edit-views': (location) => ({
     context: {
       label: 'Views Configuration',
-      filePath: `${location}/views.json`,
+      filePath: `${location}/.craft-agent/views.json`,
       context:
         'The user wants to edit views (dynamic, expression-based filters). ' +
-        'Views are stored in views.json at the workspace root under a "views" array. ' +
+        'Views are stored in .craft-agent/views.json under a "views" array. ' +
         'Each view has: id (unique slug), name (display text), description (optional), color (optional EntityColor), expression (Filtrex string). ' +
         'Expressions are evaluated against session context fields: name, preview, sessionStatus (also available as deprecated alias todoState), permissionMode, model, lastMessageRole, ' +
         'lastUsedAt, createdAt, messageCount, labelCount, isFlagged, hasUnread, isProcessing, hasPendingPlan, tokenUsage.*, labels. ' +

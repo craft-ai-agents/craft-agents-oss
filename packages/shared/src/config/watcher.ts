@@ -370,6 +370,8 @@ export class ConfigWatcher {
    */
   private handleWorkspaceFileChange(relativePath: string, eventType: string): void {
     const parts = relativePath.split('/');
+    const normalizedParts = parts[0] === '.craft-agent' ? parts.slice(1) : parts;
+    const normalizedRelativePath = normalizedParts.join('/');
 
     // Workspace-level permissions.json
     if (relativePath === 'permissions.json') {
@@ -385,12 +387,12 @@ export class ConfigWatcher {
     }
 
     // Sources changes: sources/{slug}/...
-    if (parts[0] === 'sources' && parts.length >= 2) {
-      const slug = parts[1]!;  // Safe: checked parts.length >= 2
-      const file = parts[2];
+    if (normalizedParts[0] === 'sources' && normalizedParts.length >= 2) {
+      const slug = normalizedParts[1]!;  // Safe: checked parts.length >= 2
+      const file = normalizedParts[2];
 
       // Directory-level changes (new/removed source folders)
-      if (parts.length === 2) {
+      if (normalizedParts.length === 2) {
         this.debounce('sources-dir', () => this.handleSourcesDirChange());
         return;
       }
@@ -407,12 +409,12 @@ export class ConfigWatcher {
     }
 
     // Skills changes: skills/{slug}/...
-    if (parts[0] === 'skills' && parts.length >= 2) {
-      const slug = parts[1]!;  // Safe: checked parts.length >= 2
-      const file = parts[2];
+    if (normalizedParts[0] === 'skills' && normalizedParts.length >= 2) {
+      const slug = normalizedParts[1]!;  // Safe: checked parts.length >= 2
+      const file = normalizedParts[2];
 
       // Directory-level changes (new/removed skill folders)
-      if (parts.length === 2) {
+      if (normalizedParts.length === 2) {
         this.debounce('skills-dir', () => this.handleSkillsDirChange());
         return;
       }
@@ -430,9 +432,9 @@ export class ConfigWatcher {
     // Session metadata changes: sessions/{id}/session.jsonl
     // Detects external modifications (other instances, scripts, manual edits).
     // Only reads line 1 (header) — lightweight even during active streaming.
-    if (parts[0] === 'sessions' && parts.length >= 3) {
-      const sessionId = parts[1]!;
-      const file = parts[2];
+    if (normalizedParts[0] === 'sessions' && normalizedParts.length >= 3) {
+      const sessionId = normalizedParts[1]!;
+      const file = normalizedParts[2];
 
       // Only watch actual session files, ignore .tmp (atomic write intermediates)
       if (file === 'session.jsonl') {
@@ -442,8 +444,8 @@ export class ConfigWatcher {
     }
 
     // Statuses changes: statuses/...
-    if (parts[0] === 'statuses' && parts.length >= 2) {
-      const file = parts[1];
+    if (normalizedParts[0] === 'statuses' && normalizedParts.length >= 2) {
+      const file = normalizedParts[1];
 
       // config.json change
       if (file === 'config.json') {
@@ -452,8 +454,8 @@ export class ConfigWatcher {
       }
 
       // Icon file changes: statuses/icons/*.svg, *.png, etc.
-      if (file === 'icons' && parts.length >= 3) {
-        const iconFilename = parts[2];
+      if (file === 'icons' && normalizedParts.length >= 3) {
+        const iconFilename = normalizedParts[2];
         if (iconFilename) {
           this.debounce(`statuses-icon:${iconFilename}`, () => {
             this.handleStatusIconChange(iconFilename);
@@ -464,11 +466,11 @@ export class ConfigWatcher {
     }
 
     // Labels changes: labels/...
-    if (parts[0] === 'labels' && parts.length >= 2) {
-      const file = parts[1];
+    if (normalizedParts[0] === 'labels' && normalizedParts.length >= 2) {
+      const file = normalizedParts[1];
 
       // config.json change
-      if (file === 'config.json') {
+      if (file === 'config.json' && (normalizedRelativePath === 'labels/config.json')) {
         this.debounce('labels-config', () => this.handleLabelConfigChange());
         return;
       }

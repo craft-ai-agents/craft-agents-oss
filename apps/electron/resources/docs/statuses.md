@@ -4,8 +4,8 @@ Session statuses represent workflow states. Each workspace has its own status co
 
 ## Storage Locations
 
-- Config: `~/.craft-agent/workspaces/{id}/statuses/config.json`
-- Icons: `~/.craft-agent/workspaces/{id}/statuses/icons/`
+- Config: `~/.craft-agent/workspaces/{id}/.craft-agent/statuses/config.json`
+- Icons: `~/.craft-agent/workspaces/{id}/.craft-agent/statuses/icons/`
 
 ## Default Statuses
 
@@ -95,7 +95,7 @@ If `dark` is omitted, it's auto-derived from `light` (brightened ~30%).
 }
 ```
 
-**Note:** The `icon` field is optional. Default statuses use auto-discovered SVG files from `statuses/icons/{id}.svg`.
+**Note:** The `icon` field is optional. Default statuses use auto-discovered SVG files from `.craft-agent/statuses/icons/{id}.svg`.
 
 ## Status Properties
 
@@ -113,14 +113,14 @@ If `dark` is omitted, it's auto-derived from `light` (brightened ~30%).
 ## Icon Configuration
 
 Icon resolution priority:
-1. **Local file** - Auto-discovered from `statuses/icons/{id}.svg` (or .png, .jpg, .jpeg)
+1. **Local file** - Auto-discovered from `.craft-agent/statuses/icons/{id}.svg` (or .png, .jpg, .jpeg)
 2. **Emoji** - If `icon` field is an emoji string (e.g., `"🔥"`)
 3. **Fallback** - Bullet character if no icon found
 
 **File-based icons (recommended for default statuses):**
-- Place SVG in `statuses/icons/{status-id}.svg`
+- Place SVG in `.craft-agent/statuses/icons/{status-id}.svg`
 - No config needed - auto-discovered by status ID
-- Example: `statuses/icons/blocked.svg` for status ID `blocked`
+- Example: `.craft-agent/statuses/icons/blocked.svg` for status ID `blocked`
 
 **Emoji icons (quick and easy):**
 ```json
@@ -131,7 +131,7 @@ Icon resolution priority:
 ```json
 "icon": "https://example.com/icon.svg"
 ```
-URLs are automatically downloaded to `statuses/icons/{id}.{ext}`.
+URLs are automatically downloaded to `.craft-agent/statuses/icons/{id}.{ext}`.
 
 **⚠️ Icon Sourcing Rules:**
 - **DO** generate custom SVG files following the guidelines below
@@ -140,7 +140,7 @@ URLs are automatically downloaded to `statuses/icons/{id}.{ext}`.
 
 ## Adding Custom Statuses
 
-Edit the workspace's `statuses/config.json`:
+Edit the workspace's `.craft-agent/statuses/config.json`:
 
 ```json
 {

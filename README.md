@@ -495,13 +495,20 @@ Configuration is stored at `~/.craft-agent/`:
 ├── theme.json               # App-level theme
 └── workspaces/
     └── {id}/
-        ├── config.json      # Workspace settings
-        ├── theme.json       # Workspace theme override
-        ├── automations.json  # Event-driven automations
-        ├── sessions/        # Session data (JSONL)
-        ├── sources/         # Connected sources
-        ├── skills/          # Custom skills
-        └── statuses/        # Status configuration
+        ├── .craft-agent/
+        │   ├── config.json      # Workspace settings
+        │   ├── labels/config.json
+        │   ├── statuses/config.json
+        │   ├── statuses/icons/
+        │   ├── views.json
+        │   ├── .claude-plugin/plugin.json
+        │   ├── events.jsonl
+        │   └── automations-history.jsonl
+        ├── theme.json           # Workspace theme override
+        ├── automations.json     # Event-driven automations
+        ├── sessions/            # Session data (JSONL)
+        ├── sources/             # Connected sources
+        └── skills/              # Custom skills
 ```
 
 ### Automations

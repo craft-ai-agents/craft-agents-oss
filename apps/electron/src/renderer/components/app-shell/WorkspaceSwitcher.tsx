@@ -62,10 +62,34 @@ export function WorkspaceSwitcher({
     setFullscreenOverlayOpen(true)
   }
 
+  const maybeShowGitignoreTip = React.useCallback(async (workspace: Workspace) => {
+    try {
+      const branch = await window.electronAPI.getGitBranch(workspace.rootPath)
+      if (!branch) return
+
+      let gitignoreContent = ''
+      try {
+        gitignoreContent = await window.electronAPI.readFile(`${workspace.rootPath}/.gitignore`)
+      } catch {
+        // Missing .gitignore is common - we still show the tip for git repos.
+      }
+
+      const hasCraftAgentIgnore = /(^|\n)\s*\/?\.craft-agent\/?\s*(\n|$)/m.test(gitignoreContent)
+      if (hasCraftAgentIgnore) return
+
+      toast.info('Tip for git repos', {
+        description: 'Add `.craft-agent/` to `.gitignore` to avoid tracking workspace config files.',
+      })
+    } catch {
+      // Non-critical hint; ignore failures.
+    }
+  }, [])
+
   const handleWorkspaceCreated = (workspace: Workspace) => {
     setShowCreationScreen(false)
     setFullscreenOverlayOpen(false)
     toast.success(`Created workspace "${workspace.name}"`)
+    void maybeShowGitignoreTip(workspace)
     onWorkspaceCreated?.(workspace)
     onSelect(workspace.id)
   }

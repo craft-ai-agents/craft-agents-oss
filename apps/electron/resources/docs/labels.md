@@ -4,7 +4,7 @@ Labels are additive tags that can be applied to sessions. Unlike statuses (which
 
 ## Storage Locations
 
-- Config: `~/.craft-agent/workspaces/{id}/labels/config.json`
+- Config: `~/.craft-agent/workspaces/{id}/.craft-agent/labels/config.json`
 
 ## No Defaults (Regular Labels)
 
@@ -135,7 +135,7 @@ The optional `valueType` in config is a hint only — the parser always infers f
 
 ## Adding Labels
 
-Edit the workspace's `labels/config.json`:
+Edit the workspace's `.craft-agent/labels/config.json`:
 
 ```json
 {
@@ -208,7 +208,7 @@ Auto-label rules automatically scan user messages and apply labels with extracte
 
 ### Configuration
 
-Add `autoRules` to any label in `config.json`:
+Add `autoRules` to any label in `.craft-agent/labels/config.json`:
 
 ```json
 {

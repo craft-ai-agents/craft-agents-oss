@@ -4,13 +4,13 @@
  * Views are dynamic, user-configurable filters computed from session state
  * using Filtrex expressions. They are never persisted on sessions — purely runtime.
  *
- * Stored in views.json at the workspace root.
+ * Stored in .craft-agent/views.json.
  */
 
 import type { EntityColor } from '../colors/types.ts';
 
 /**
- * View configuration as stored in views.json.
+ * View configuration as stored in .craft-agent/views.json.
  * Each view defines a Filtrex expression evaluated against session state.
  */
 export interface ViewConfig {

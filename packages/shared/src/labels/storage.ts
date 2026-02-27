@@ -2,23 +2,25 @@
  * Label Storage
  *
  * Filesystem-based storage for workspace label configurations.
- * Labels are stored at {workspaceRootPath}/labels/config.json
+ * Labels are stored at {workspaceRootPath}/.craft-agent/labels/config.json
  *
  * Hierarchy: Labels form a nested JSON tree. IDs are simple slugs.
  * New workspaces are seeded with default labels (Development + Content groups).
  * Labels are visual by color only (colored circles in the UI).
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import type { WorkspaceLabelConfig, LabelConfig } from './types.ts';
 import { flattenLabels, findLabelById } from './tree.ts';
 import { readJsonFileSync } from '../utils/files.ts';
 import { migrateLabelColors } from '../colors/migrate.ts';
 import { debug } from '../utils/debug.ts';
+import { getWorkspaceStateDir } from '../workspaces/paths.ts';
 
-const LABEL_CONFIG_DIR = 'labels';
-const LABEL_CONFIG_FILE = 'labels/config.json';
+const LABEL_CONFIG_DIR = '.craft-agent/labels';
+const LABEL_CONFIG_FILE = '.craft-agent/labels/config.json';
+const LEGACY_LABEL_CONFIG_FILE = 'labels/config.json';
 
 /**
  * Get default label configuration.
@@ -100,6 +102,11 @@ export function getDefaultLabelConfig(): WorkspaceLabelConfig {
  */
 export function loadLabelConfig(workspaceRootPath: string): WorkspaceLabelConfig {
   const configPath = join(workspaceRootPath, LABEL_CONFIG_FILE);
+  const legacyConfigPath = join(workspaceRootPath, LEGACY_LABEL_CONFIG_FILE);
+
+  if (!existsSync(configPath) && existsSync(legacyConfigPath)) {
+    migrateLegacyLabelConfig(workspaceRootPath);
+  }
 
   // If no config file exists, seed with defaults and persist to disk.
   // This ensures existing workspaces (created before default labels existed) get populated.
@@ -149,6 +156,24 @@ export function saveLabelConfig(
     debug('[saveLabelConfig] Failed to save config:', error);
     throw error;
   }
+}
+
+function migrateLegacyLabelConfig(workspaceRootPath: string): void {
+  const configPath = join(workspaceRootPath, LABEL_CONFIG_FILE);
+  const legacyConfigPath = join(workspaceRootPath, LEGACY_LABEL_CONFIG_FILE);
+  const labelDir = join(workspaceRootPath, LABEL_CONFIG_DIR);
+
+  if (!existsSync(legacyConfigPath) || existsSync(configPath)) return;
+
+  const stateDir = getWorkspaceStateDir(workspaceRootPath);
+  if (!existsSync(stateDir)) {
+    mkdirSync(stateDir, { recursive: true });
+  }
+  if (!existsSync(labelDir)) {
+    mkdirSync(labelDir, { recursive: true });
+  }
+
+  copyFileSync(legacyConfigPath, configPath);
 }
 
 /**
@@ -202,5 +227,3 @@ export function isValidLabelIdFormat(labelId: string): boolean {
   const SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
   return SLUG_PATTERN.test(labelId);
 }
-
-

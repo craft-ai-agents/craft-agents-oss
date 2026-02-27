@@ -4998,7 +4998,7 @@ To view this task's output:
 
   /**
    * Set labels for a session (additive tags, many-per-session).
-   * Labels are IDs referencing workspace labels/config.json.
+   * Labels are IDs referencing workspace .craft-agent/labels/config.json.
    */
   setSessionLabels(sessionId: string, labels: string[]): void {
     const managed = this.sessions.get(sessionId)

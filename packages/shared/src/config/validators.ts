@@ -869,7 +869,14 @@ export function validateAllSkills(workspaceRoot: string): ValidationResult {
 // Status Validators
 // ============================================================
 
-const STATUS_CONFIG_FILE = 'statuses/config.json';
+function resolveWorkspaceConfigPath(workspaceRoot: string, preferredRelativePath: string, legacyRelativePath: string): string {
+  const preferredPath = join(workspaceRoot, preferredRelativePath);
+  if (existsSync(preferredPath)) return preferredPath;
+  return join(workspaceRoot, legacyRelativePath);
+}
+
+const STATUS_CONFIG_FILE = '.craft-agent/statuses/config.json';
+const LEGACY_STATUS_CONFIG_FILE = 'statuses/config.json';
 
 /** Required fixed statuses that must always exist */
 const REQUIRED_FIXED_STATUS_IDS = ['todo', 'done', 'cancelled'] as const;
@@ -909,7 +916,7 @@ const WorkspaceStatusConfigSchema = z.object({
  * @param workspaceRoot - Absolute path to workspace root folder
  */
 export function validateStatuses(workspaceRoot: string): ValidationResult {
-  const configPath = join(workspaceRoot, STATUS_CONFIG_FILE);
+  const configPath = resolveWorkspaceConfigPath(workspaceRoot, STATUS_CONFIG_FILE, LEGACY_STATUS_CONFIG_FILE);
   const file = STATUS_CONFIG_FILE;
 
   // Check if config file exists (optional - defaults are used if missing)
@@ -955,7 +962,7 @@ export function validateStatuses(workspaceRoot: string): ValidationResult {
  * Runs schema validation and semantic checks. Skips icon file existence checks.
  */
 export function validateStatusesContent(jsonString: string): ValidationResult {
-  const file = 'statuses/config.json';
+  const file = STATUS_CONFIG_FILE;
   const errors: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
 
@@ -1074,7 +1081,8 @@ export function validateStatusesContent(jsonString: string): ValidationResult {
 
 import { validateAutoLabelRule } from '../labels/auto/validation.ts';
 
-const LABEL_CONFIG_FILE = 'labels/config.json';
+const LABEL_CONFIG_FILE = '.craft-agent/labels/config.json';
+const LEGACY_LABEL_CONFIG_FILE = 'labels/config.json';
 
 /** Maximum nesting depth for label tree (prevents excessively deep hierarchies) */
 const MAX_LABEL_DEPTH = 5;
@@ -1138,7 +1146,7 @@ const WorkspaceLabelConfigSchema = z.object({
  * @param workspaceRoot - Absolute path to workspace root folder
  */
 export function validateLabels(workspaceRoot: string): ValidationResult {
-  const configPath = join(workspaceRoot, LABEL_CONFIG_FILE);
+  const configPath = resolveWorkspaceConfigPath(workspaceRoot, LABEL_CONFIG_FILE, LEGACY_LABEL_CONFIG_FILE);
   const file = LABEL_CONFIG_FILE;
 
   // Labels config is optional — no config means no labels (valid state)
@@ -1180,7 +1188,7 @@ export function validateLabels(workspaceRoot: string): ValidationResult {
  * Checks schema validation and semantic rules (unique IDs, max depth).
  */
 export function validateLabelsContent(jsonString: string): ValidationResult {
-  const file = 'labels/config.json';
+  const file = LABEL_CONFIG_FILE;
   const errors: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
 
@@ -1850,8 +1858,8 @@ export interface ConfigFileDetection {
  * Matches patterns:
  * - .../sources/{slug}/config.json → source config
  * - .../skills/{slug}/SKILL.md → skill definition
- * - .../statuses/config.json → status workflow config
- * - .../labels/config.json → label config
+ * - .../.craft-agent/statuses/config.json (or legacy statuses/config.json) → status workflow config
+ * - .../.craft-agent/labels/config.json (or legacy labels/config.json) → label config
  * - .../permissions.json (workspace or source-level) → permission rules
  */
 export function detectConfigFileType(filePath: string, workspaceRootPath: string): ConfigFileDetection | null {
@@ -1880,14 +1888,14 @@ export function detectConfigFileType(filePath: string, workspaceRootPath: string
     return { type: 'skill', slug: skillMatch[1], displayFile: `skills/${skillMatch[1]}/SKILL.md` };
   }
 
-  // Match: statuses/config.json
-  if (relativePath === 'statuses/config.json') {
-    return { type: 'statuses', displayFile: 'statuses/config.json' };
+  // Match: .craft-agent/statuses/config.json (and legacy statuses/config.json)
+  if (relativePath === '.craft-agent/statuses/config.json' || relativePath === 'statuses/config.json') {
+    return { type: 'statuses', displayFile: '.craft-agent/statuses/config.json' };
   }
 
-  // Match: labels/config.json
-  if (relativePath === 'labels/config.json') {
-    return { type: 'labels', displayFile: 'labels/config.json' };
+  // Match: .craft-agent/labels/config.json (and legacy labels/config.json)
+  if (relativePath === '.craft-agent/labels/config.json' || relativePath === 'labels/config.json') {
+    return { type: 'labels', displayFile: '.craft-agent/labels/config.json' };
   }
 
   // Match: automations config file

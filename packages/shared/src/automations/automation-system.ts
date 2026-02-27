@@ -197,7 +197,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
   }
 
   /**
-   * Rotate automations-history.jsonl on startup: keep only the last 1000 entries.
+   * Rotate .craft-agent/automations-history.jsonl on startup: keep only the last 1000 entries.
    * Runs synchronously during init — single-threaded, no race with concurrent appends.
    */
   private rotateHistory(maxEntries = 1000): void {
@@ -439,7 +439,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
 
   /**
    * Emit a LabelConfigChange event.
-   * Call this when labels/config.json changes.
+   * Call this when .craft-agent/labels/config.json changes.
    */
   async emitLabelConfigChange(): Promise<void> {
     await this.eventBus.emit('LabelConfigChange', {

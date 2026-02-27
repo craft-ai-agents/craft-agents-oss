@@ -2,7 +2,7 @@
  * Status Types
  *
  * Types for configurable session statuses.
- * Statuses are stored at {workspaceRootPath}/statuses/config.json
+ * Statuses are stored at {workspaceRootPath}/.craft-agent/statuses/config.json
  *
  * Icon format: Simple string (emoji or URL)
  * - Emoji: "✅", "🔥" - rendered as text
@@ -26,7 +26,7 @@ import type { EntityColor } from '../colors/types.ts'
 export type StatusCategory = 'open' | 'closed';
 
 /**
- * Status configuration (stored in statuses/config.json)
+ * Status configuration (stored in .craft-agent/statuses/config.json)
  */
 export interface StatusConfig {
   /** Unique ID (slug-style: 'todo', 'in-progress', 'my-custom-status') */

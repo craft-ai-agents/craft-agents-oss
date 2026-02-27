@@ -6,7 +6,7 @@
  * 2. Auto-Apply Rules - flat table showing all regex rules across labels
  *
  * Each section has an Edit button that opens an EditPopover for AI-assisted editing
- * of the underlying labels/config.json file.
+ * of the underlying .craft-agent/labels/config.json file.
  *
  * Data is loaded via the useLabels hook which subscribes to live config changes.
  */
@@ -49,7 +49,7 @@ export default function LabelsSettingsPage() {
   // Secondary action: open the labels config file directly in system editor
   const editFileAction = rootPath ? {
     label: 'Edit File',
-    filePath: `${rootPath}/labels/config.json`,
+    filePath: `${rootPath}/.craft-agent/labels/config.json`,
   } : undefined
 
   return (
@@ -119,7 +119,7 @@ export default function LabelsSettingsPage() {
                         <div className="p-8 text-center text-muted-foreground">
                           <p className="text-sm">No labels configured.</p>
                           <p className="text-xs mt-1 text-foreground/40">
-                            Labels can be created by the agent or by editing <code className="bg-foreground/5 px-1 rounded">labels/config.json</code> in your workspace.
+                            Labels can be created by the agent or by editing <code className="bg-foreground/5 px-1 rounded">.craft-agent/labels/config.json</code> in your workspace.
                           </p>
                         </div>
                       )}

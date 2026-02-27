@@ -2,20 +2,22 @@
  * Views Storage
  *
  * Filesystem-based storage for workspace view configurations.
- * Views are stored at {workspaceRootPath}/views.json
+ * Views are stored at {workspaceRootPath}/.craft-agent/views.json
  *
  * Views are dynamic, expression-based filters computed at runtime from session state.
  * They are never persisted on sessions — purely runtime-evaluated.
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import type { ViewConfig } from './types.ts';
 import { getDefaultViews } from './defaults.ts';
 import { debug } from '../utils/debug.ts';
 import { readJsonFileSync } from '../utils/files.ts';
+import { getWorkspaceStateDir } from '../workspaces/paths.ts';
 
-const VIEWS_FILE = 'views.json';
+const VIEWS_FILE = '.craft-agent/views.json';
+const LEGACY_VIEWS_FILE = 'views.json';
 
 /**
  * Views configuration file structure.
@@ -30,12 +32,17 @@ export interface ViewsConfig {
 /**
  * Load views configuration from workspace.
  * Returns default views if no file exists or parsing fails.
- * Also handles migration from old labels/config.json smartLabels key.
+ * Also handles migration from legacy labels/config.json smartLabels key.
  */
 export function loadViewsConfig(workspaceRootPath: string): ViewsConfig {
   const configPath = join(workspaceRootPath, VIEWS_FILE);
+  const legacyConfigPath = join(workspaceRootPath, LEGACY_VIEWS_FILE);
 
-  // If no views.json exists, check for legacy smartLabels in labels/config.json
+  if (!existsSync(configPath) && existsSync(legacyConfigPath)) {
+    migrateLegacyViewsConfig(workspaceRootPath);
+  }
+
+  // If no .craft-agent/views.json exists, check for legacy smartLabels in labels/config.json
   // and migrate them. Otherwise seed with defaults.
   if (!existsSync(configPath)) {
     const migrated = migrateFromSmartLabels(workspaceRootPath);
@@ -68,6 +75,11 @@ export function saveViewsConfig(
   config: ViewsConfig
 ): void {
   const configPath = join(workspaceRootPath, VIEWS_FILE);
+  const stateDir = getWorkspaceStateDir(workspaceRootPath);
+
+  if (!existsSync(stateDir)) {
+    mkdirSync(stateDir, { recursive: true });
+  }
 
   try {
     writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
@@ -100,16 +112,18 @@ export function saveViews(
 }
 
 /**
- * Migrate legacy smartLabels from labels/config.json to views.json.
+ * Migrate legacy smartLabels from labels/config.json to .craft-agent/views.json.
  * Renames IDs from "smart-*" to "view-*" prefix.
  * Returns the migrated config if migration occurred, null otherwise.
  */
 function migrateFromSmartLabels(workspaceRootPath: string): ViewsConfig | null {
-  const labelsConfigPath = join(workspaceRootPath, 'labels', 'config.json');
-  if (!existsSync(labelsConfigPath)) return null;
+  const labelsConfigPath = join(workspaceRootPath, '.craft-agent', 'labels', 'config.json');
+  const legacyLabelsConfigPath = join(workspaceRootPath, 'labels', 'config.json');
+  const labelsPath = existsSync(labelsConfigPath) ? labelsConfigPath : legacyLabelsConfigPath;
+  if (!existsSync(labelsPath)) return null;
 
   try {
-    const labelsConfig = readJsonFileSync<Record<string, any>>(labelsConfigPath);
+    const labelsConfig = readJsonFileSync<Record<string, any>>(labelsPath);
     if (!labelsConfig.smartLabels || !Array.isArray(labelsConfig.smartLabels)) return null;
 
     // Migrate: rename IDs from smart-* to view-*
@@ -123,10 +137,21 @@ function migrateFromSmartLabels(workspaceRootPath: string): ViewsConfig | null {
 
     // Remove smartLabels from labels config to avoid confusion
     delete labelsConfig.smartLabels;
-    writeFileSync(labelsConfigPath, JSON.stringify(labelsConfig, null, 2), 'utf-8');
+    writeFileSync(labelsPath, JSON.stringify(labelsConfig, null, 2), 'utf-8');
 
     return config;
   } catch {
     return null;
   }
+}
+
+function migrateLegacyViewsConfig(workspaceRootPath: string): void {
+  const configPath = join(workspaceRootPath, VIEWS_FILE);
+  const legacyConfigPath = join(workspaceRootPath, LEGACY_VIEWS_FILE);
+  const stateDir = getWorkspaceStateDir(workspaceRootPath);
+
+  if (!existsSync(legacyConfigPath) || existsSync(configPath)) return;
+
+  if (!existsSync(stateDir)) mkdirSync(stateDir, { recursive: true });
+  copyFileSync(legacyConfigPath, configPath);
 }

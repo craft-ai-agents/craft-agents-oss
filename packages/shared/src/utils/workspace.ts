@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { getWorkspaceStatePath } from '../workspaces/paths.ts';
 
 /**
- * Read the SDK plugin name from .claude-plugin/plugin.json.
+ * Read the SDK plugin name from .craft-agent/.claude-plugin/plugin.json.
  *
  * The Claude SDK identifies plugins by the `name` field in this manifest,
  * NOT by path.basename() of the plugin directory. All skill qualification
@@ -12,9 +13,11 @@ import { join } from 'node:path';
  */
 export function readPluginName(workspaceRootPath: string): string | null {
   try {
-    const manifestPath = join(workspaceRootPath, '.claude-plugin', 'plugin.json');
-    if (!existsSync(manifestPath)) return null;
-    const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+    const manifestPath = getWorkspaceStatePath(workspaceRootPath, '.claude-plugin/plugin.json');
+    const legacyManifestPath = join(workspaceRootPath, '.claude-plugin', 'plugin.json');
+    const path = existsSync(manifestPath) ? manifestPath : legacyManifestPath;
+    if (!existsSync(path)) return null;
+    const manifest = JSON.parse(readFileSync(path, 'utf-8'));
     return manifest.name || null;
   } catch {
     return null;
@@ -27,7 +30,7 @@ export { extractWorkspaceSlugFromPath } from './workspace-slug.ts';
 /**
  * Extract workspace slug for SDK skill qualification.
  *
- * Reads the actual plugin name from .claude-plugin/plugin.json (which is what the SDK uses),
+ * Reads the actual plugin name from .craft-agent/.claude-plugin/plugin.json (which is what the SDK uses),
  * falling back to the last path component of the root path.
  *
  * NOTE: Requires Node.js (fs/path). For browser contexts, use extractWorkspaceSlugFromPath

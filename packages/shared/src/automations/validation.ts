@@ -304,7 +304,7 @@ export function validateAutomations(workspaceRoot: string): ValidationResult {
                   path: `automations.${event}[${i}].labels`,
                   message: `Label "${labelId}" does not exist in workspace`,
                   severity: 'warning',
-                  suggestion: `Create this label in labels/config.json or use an existing label ID`,
+                  suggestion: `Create this label in .craft-agent/labels/config.json or use an existing label ID`,
                 });
               }
             }

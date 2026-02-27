@@ -9,11 +9,10 @@
 import {
   existsSync,
   mkdirSync,
-  readFileSync,
+  copyFileSync,
   writeFileSync,
   readdirSync,
   rmSync,
-  statSync,
 } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -23,6 +22,7 @@ import { atomicWriteFileSync, readJsonFileSync } from '../utils/files.ts';
 import { getDefaultStatusConfig, saveStatusConfig, ensureDefaultIconFiles } from '../statuses/storage.ts';
 import { getDefaultLabelConfig, saveLabelConfig } from '../labels/storage.ts';
 import { loadConfigDefaults } from '../config/storage.ts';
+import { getWorkspaceStateDir, getWorkspaceStatePath } from './paths.ts';
 import type {
   WorkspaceConfig,
   CreateWorkspaceInput,
@@ -95,7 +95,13 @@ export function getWorkspaceSkillsPath(rootPath: string): string {
  * @param rootPath - Absolute path to workspace root folder
  */
 export function loadWorkspaceConfig(rootPath: string): WorkspaceConfig | null {
-  const configPath = join(rootPath, 'config.json');
+  const configPath = getWorkspaceStatePath(rootPath, 'config.json');
+  const legacyConfigPath = join(rootPath, 'config.json');
+
+  if (!existsSync(configPath) && existsSync(legacyConfigPath)) {
+    migrateLegacyWorkspaceConfig(rootPath);
+  }
+
   if (!existsSync(configPath)) return null;
 
   try {
@@ -117,9 +123,8 @@ export function loadWorkspaceConfig(rootPath: string): WorkspaceConfig | null {
  * @param rootPath - Absolute path to workspace root folder
  */
 export function saveWorkspaceConfig(rootPath: string, config: WorkspaceConfig): void {
-  if (!existsSync(rootPath)) {
-    mkdirSync(rootPath, { recursive: true });
-  }
+  const stateDir = getWorkspaceStateDir(rootPath);
+  if (!existsSync(stateDir)) mkdirSync(stateDir, { recursive: true });
 
   // Convert paths to portable form for cross-machine compatibility
   const storageConfig: WorkspaceConfig = {
@@ -135,7 +140,24 @@ export function saveWorkspaceConfig(rootPath: string, config: WorkspaceConfig): 
   }
 
   // Use atomic write to prevent corruption on crash/interrupt
-  atomicWriteFileSync(join(rootPath, 'config.json'), JSON.stringify(storageConfig, null, 2));
+  atomicWriteFileSync(getWorkspaceStatePath(rootPath, 'config.json'), JSON.stringify(storageConfig, null, 2));
+}
+
+/**
+ * One-time migration for legacy workspaces that stored config at root/config.json.
+ */
+function migrateLegacyWorkspaceConfig(rootPath: string): void {
+  const legacyConfigPath = join(rootPath, 'config.json');
+  const stateDir = getWorkspaceStateDir(rootPath);
+  const configPath = getWorkspaceStatePath(rootPath, 'config.json');
+
+  if (!existsSync(legacyConfigPath) || existsSync(configPath)) return;
+
+  if (!existsSync(stateDir)) {
+    mkdirSync(stateDir, { recursive: true });
+  }
+
+  copyFileSync(legacyConfigPath, configPath);
 }
 
 // ============================================================
@@ -341,7 +363,8 @@ export function deleteWorkspaceFolder(rootPath: string): boolean {
  * @param rootPath - Absolute path to check
  */
 export function isValidWorkspace(rootPath: string): boolean {
-  return existsSync(join(rootPath, 'config.json'));
+  return existsSync(getWorkspaceStatePath(rootPath, 'config.json'))
+    || existsSync(join(rootPath, 'config.json'));
 }
 
 /**
@@ -477,7 +500,7 @@ export function isLocalMcpEnabled(rootPath: string): boolean {
 // ============================================================
 
 /**
- * Ensure workspace has a .claude-plugin/plugin.json manifest.
+ * Ensure workspace has a .craft-agent/.claude-plugin/plugin.json manifest.
  * This allows the workspace to be loaded as an SDK plugin,
  * enabling skills, commands, and agents from the workspace.
  *
@@ -485,8 +508,16 @@ export function isLocalMcpEnabled(rootPath: string): boolean {
  * @param workspaceName - Display name for the workspace (used in plugin name)
  */
 export function ensurePluginManifest(rootPath: string, workspaceName: string): void {
-  const pluginDir = join(rootPath, '.claude-plugin');
+  const pluginDir = getWorkspaceStatePath(rootPath, '.claude-plugin');
   const manifestPath = join(pluginDir, 'plugin.json');
+  const legacyManifestPath = join(rootPath, '.claude-plugin', 'plugin.json');
+
+  if (!existsSync(manifestPath) && existsSync(legacyManifestPath)) {
+    const stateDir = getWorkspaceStateDir(rootPath);
+    if (!existsSync(stateDir)) mkdirSync(stateDir, { recursive: true });
+    if (!existsSync(pluginDir)) mkdirSync(pluginDir, { recursive: true });
+    copyFileSync(legacyManifestPath, manifestPath);
+  }
 
   if (existsSync(manifestPath)) return;
 
