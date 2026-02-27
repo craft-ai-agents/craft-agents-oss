@@ -61,6 +61,14 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
     contextWindow: 200_000,
   },
   {
+    id: 'claude-sonnet-4-6',
+    name: 'Sonnet 4.6',
+    shortName: 'Sonnet',
+    description: 'Best for everyday tasks',
+    provider: 'anthropic',
+    contextWindow: 200_000,
+  },
+  {
     id: 'claude-opus-4-5-20251101',
     name: 'Opus 4.5',
     shortName: 'Opus 4.5',
@@ -71,8 +79,8 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
   {
     id: 'claude-sonnet-4-5-20250929',
     name: 'Sonnet 4.5',
-    shortName: 'Sonnet',
-    description: 'Best for everyday tasks',
+    shortName: 'Sonnet 4.5',
+    description: 'Previous generation everyday model',
     provider: 'anthropic',
     contextWindow: 200_000,
   },

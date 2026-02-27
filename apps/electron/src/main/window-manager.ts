@@ -5,6 +5,7 @@ import { existsSync } from 'fs'
 import { release } from 'os'
 import { IPC_CHANNELS } from '../shared/types'
 import type { SavedWindow } from './window-state'
+import { getWorkspaces } from '@craft-agent/shared/config'
 
 // Vite dev server URL for hot reload
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
@@ -261,6 +262,14 @@ export class WindowManager {
     const webContentsId = window.webContents.id
     this.windows.set(webContentsId, { window, workspaceId })
 
+    // Set window title to workspace name
+    if (workspaceId) {
+      const workspace = getWorkspaces().find(w => w.id === workspaceId)
+      if (workspace?.name) {
+        window.setTitle(workspace.name)
+      }
+    }
+
     // Track focused mode state for persistence
     if (focused) {
       this.focusedModeWindows.add(webContentsId)
@@ -419,6 +428,11 @@ export class WindowManager {
     if (managed) {
       const oldWorkspaceId = managed.workspaceId
       managed.workspaceId = workspaceId
+      // Update window title to reflect new workspace
+      const workspace = getWorkspaces().find(w => w.id === workspaceId)
+      if (workspace?.name && !managed.window.isDestroyed()) {
+        managed.window.setTitle(workspace.name)
+      }
       windowLog.info(`Updated window ${webContentsId} from workspace ${oldWorkspaceId} to ${workspaceId}`)
       return true
     }
