@@ -1391,6 +1391,93 @@ function migrateOpus45ToOpus46(config: StoredConfig): boolean {
 }
 
 /**
+ * Migrate Sonnet 4.5 to Sonnet 4.6 for direct Anthropic connections.
+ * Same approach as migrateOpus45ToOpus46 but avoids the duplicate bug:
+ * checks if 4.6 already exists before converting, and removes duplicates
+ * if backfillAllConnectionModels() already populated both from MODEL_REGISTRY.
+ */
+function migrateSonnet45ToSonnet46(config: StoredConfig): boolean {
+  if (!config.llmConnections) return false;
+
+  const SONNET_45_ID = 'claude-sonnet-4-5-20250929';
+  const SONNET_46_ID = 'claude-sonnet-4-6';
+
+  let changed = false;
+
+  for (const connection of config.llmConnections) {
+    if (connection.providerType !== 'anthropic') continue;
+
+    // Migrate defaultModel
+    if (connection.defaultModel === SONNET_45_ID) {
+      connection.defaultModel = SONNET_46_ID;
+      changed = true;
+    }
+
+    // Migrate models array
+    if (connection.models && Array.isArray(connection.models)) {
+      const getId = (m: string | { id: string }): string => typeof m === 'string' ? m : m.id;
+      const modelIds = connection.models.map(getId);
+      const hasSonnet45 = modelIds.includes(SONNET_45_ID);
+      const sonnet46Count = modelIds.filter(id => id === SONNET_46_ID).length;
+
+      if (hasSonnet45 && sonnet46Count > 0) {
+        // Both exist (backfill populated both) — remove the old 4.5 entry
+        connection.models = connection.models.filter(m => getId(m) !== SONNET_45_ID);
+        changed = true;
+      } else if (hasSonnet45) {
+        // Only 4.5 exists — convert to 4.6 in place
+        for (let i = 0; i < connection.models.length; i++) {
+          const model = connection.models[i];
+          if (typeof model === 'string' && model === SONNET_45_ID) {
+            connection.models[i] = SONNET_46_ID;
+            changed = true;
+          } else if (typeof model === 'object' && model.id === SONNET_45_ID) {
+            model.id = SONNET_46_ID;
+            if (model.name?.includes('4.5')) {
+              model.name = model.name.replace('4.5', '4.6');
+            }
+            changed = true;
+          }
+        }
+      } else if (sonnet46Count > 1) {
+        // Duplicate 4.6 entries — keep only the first
+        let kept = false;
+        connection.models = connection.models.filter(m => {
+          if (getId(m) !== SONNET_46_ID) return true;
+          if (kept) return false;
+          kept = true;
+          return true;
+        });
+        changed = true;
+      }
+      // else: single 4.6, no 4.5 — nothing to do (natural no-op)
+    }
+  }
+
+  return changed;
+}
+
+/**
+ * Migrate Sonnet 4.5 to Sonnet 4.6 in workspace default models.
+ */
+function migrateWorkspaceSonnet45ToSonnet46(config: StoredConfig): void {
+  if (!config.workspaces) return;
+
+  const SONNET_45_ID = 'claude-sonnet-4-5-20250929';
+  const SONNET_46_ID = 'claude-sonnet-4-6';
+
+  for (const workspace of config.workspaces) {
+    const wsConfig = loadWorkspaceConfig(workspace.rootPath);
+    if (!wsConfig?.defaults?.model) continue;
+
+    if (wsConfig.defaults.model === SONNET_45_ID) {
+      wsConfig.defaults.model = SONNET_46_ID;
+      saveWorkspaceConfig(workspace.rootPath, wsConfig);
+    }
+  }
+}
+
+/**
  * Migrate Opus 4.5 to Opus 4.6 in workspace default models.
  * Iterates over all workspaces and updates defaults.model if it's Opus 4.5.
  */
@@ -1575,6 +1662,12 @@ export function migrateLegacyLlmConnectionsConfig(): void {
     }
     // Phase 1e: Migrate Opus 4.5 → Opus 4.6 in workspace default models
     migrateWorkspaceOpus45ToOpus46(config);
+    // Phase 1f: Migrate Sonnet 4.5 → Sonnet 4.6 for direct Anthropic connections
+    if (migrateSonnet45ToSonnet46(config)) {
+      needsSave = true;
+    }
+    // Phase 1g: Migrate Sonnet 4.5 → Sonnet 4.6 in workspace default models
+    migrateWorkspaceSonnet45ToSonnet46(config);
 
     if (needsSave) {
       saveConfig(config);
