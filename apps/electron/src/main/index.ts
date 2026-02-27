@@ -87,7 +87,12 @@ import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { registerPiModelResolver } from '@craft-agent/shared/config'
 import { getPiModelsForAuthProvider, getAllPiModels } from '@craft-agent/shared/config'
 import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBadge } from './notifications'
-import { checkForUpdatesOnLaunch, setWindowManager as setAutoUpdateWindowManager, isUpdating } from './auto-update'
+import {
+  checkForUpdatesOnLaunch,
+  setWindowManager as setAutoUpdateWindowManager,
+  setHasActiveProcessingSessionsChecker as setAutoUpdateSessionChecker,
+  isUpdating,
+} from './auto-update'
 import { validateGitBashPath } from './git-bash'
 
 // Initialize electron-log for renderer process support
@@ -306,6 +311,10 @@ app.whenReady().then(async () => {
     // Initialize session manager
     sessionManager = new SessionManager()
     sessionManager.setWindowManager(windowManager)
+    setAutoUpdateSessionChecker(() => {
+      if (!sessionManager) return false
+      return sessionManager.getSessions().some(session => session.isProcessing)
+    })
 
     // Initialize notification service
     initNotificationService(windowManager)
