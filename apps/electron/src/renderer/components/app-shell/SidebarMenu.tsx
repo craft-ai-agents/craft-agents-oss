@@ -18,6 +18,7 @@
 import * as React from 'react'
 import {
   AppWindow,
+  CheckCheck,
   Settings2,
   Plus,
   Trash2,
@@ -37,6 +38,8 @@ export interface SidebarMenuProps {
   labelId?: string
   /** Handler for "Configure Statuses" action - only for allSessions/status/flagged types */
   onConfigureStatuses?: () => void
+  /** Handler for "Mark All Read" action - only for allSessions type */
+  onMarkAllRead?: () => void
   /** Handler for "Configure Labels" action - receives labelId when triggered from a specific label */
   onConfigureLabels?: (labelId?: string) => void
   /** Handler for "Add New Label" action - creates a label (parentId = labelId if set) */
@@ -68,6 +71,7 @@ export function SidebarMenu({
   statusId,
   labelId,
   onConfigureStatuses,
+  onMarkAllRead,
   onConfigureLabels,
   onAddLabel,
   onDeleteLabel,
@@ -92,13 +96,24 @@ export function SidebarMenu({
     )
   }
 
-  // All Sessions / Status / Flagged: show "Configure Statuses"
+  // All Sessions / Status / Flagged: show "Configure Statuses" (+ "Mark All Read" for allSessions)
   if ((type === 'allSessions' || type === 'status' || type === 'flagged') && onConfigureStatuses) {
     return (
-      <MenuItem onClick={onConfigureStatuses}>
-        <Settings2 className="h-3.5 w-3.5" />
-        <span className="flex-1">Configure Statuses</span>
-      </MenuItem>
+      <>
+        {type === 'allSessions' && onMarkAllRead && (
+          <>
+            <MenuItem onClick={onMarkAllRead}>
+              <CheckCheck className="h-3.5 w-3.5" />
+              <span className="flex-1">Mark All Read</span>
+            </MenuItem>
+            <Separator />
+          </>
+        )}
+        <MenuItem onClick={onConfigureStatuses}>
+          <Settings2 className="h-3.5 w-3.5" />
+          <span className="flex-1">Configure Statuses</span>
+        </MenuItem>
+      </>
     )
   }
 

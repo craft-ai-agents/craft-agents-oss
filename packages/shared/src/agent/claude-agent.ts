@@ -2159,6 +2159,66 @@ export class ClaudeAgent extends BaseAgent {
   // getActiveSourceSlugs() is now inherited from BaseAgent
 
   // ============================================================
+  // Branch preflight
+  // ============================================================
+
+  /**
+   * Ensure branched sessions establish SDK fork context at creation time.
+   * This prevents "fake branches" where transcript history is copied but
+   * backend session context is only attempted later on first user message.
+   */
+  override async ensureBranchReady(): Promise<void> {
+    // Nothing to preflight for non-branched sessions or already-initialized sessions.
+    if (this.sessionId || !this.branchFromSdkSessionId) return;
+
+    const options: Options = {
+      ...getDefaultOptions(this.config.envOverrides),
+      model: this.getModel(),
+      // We only need session initialization/fork; no assistant turn required.
+      maxTurns: 0,
+      resume: this.branchFromSdkSessionId,
+      forkSession: true,
+      // Keep behavior aligned with normal chat options (permissions are enforced via hooks there).
+      permissionMode: 'bypassPermissions',
+      allowDangerouslySkipPermissions: true,
+      tools: { type: 'preset', preset: 'claude_code' },
+    };
+
+    let capturedSessionId: string | null = null;
+    let preflightQuery: Query | null = null;
+
+    try {
+      preflightQuery = query({ prompt: ' ', options });
+
+      for await (const msg of preflightQuery) {
+        if ('session_id' in msg && msg.session_id) {
+          capturedSessionId = msg.session_id;
+          break;
+        }
+      }
+    } catch (error) {
+      throw new Error(
+        `Failed to establish branch context during creation: ${error instanceof Error ? error.message : String(error)}`
+      );
+    } finally {
+      if (preflightQuery) {
+        try {
+          await preflightQuery.interrupt();
+        } catch {
+          // Ignore interrupt errors — query may already be complete.
+        }
+      }
+    }
+
+    if (!capturedSessionId) {
+      throw new Error('Failed to establish branch context during creation: no forked session ID received');
+    }
+
+    this.sessionId = capturedSessionId;
+    this.config.onSdkSessionIdUpdate?.(capturedSessionId);
+  }
+
+  // ============================================================
   // Mini Completion (for title generation and other quick tasks)
   // ============================================================
 

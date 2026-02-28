@@ -193,6 +193,15 @@ export interface SessionSearchResult {
   matches: SessionSearchMatch[]
 }
 
+export interface UnreadSummary {
+  /** Total unread sessions across all workspaces (hidden/archived excluded) */
+  totalUnreadSessions: number
+  /** Unread session count by workspace ID */
+  byWorkspace: Record<string, number>
+  /** Convenience boolean map for workspace selector indicators */
+  hasUnreadByWorkspace: Record<string, boolean>
+}
+
 /**
  * Result of sharing or revoking a session
  */
@@ -569,6 +578,9 @@ export interface NewChatActionParams {
 export const IPC_CHANNELS = {
   // Session management
   GET_SESSIONS: 'sessions:get',
+  GET_UNREAD_SUMMARY: 'sessions:getUnreadSummary',
+  MARK_ALL_SESSIONS_READ: 'sessions:markAllRead',
+  SESSIONS_UNREAD_SUMMARY_CHANGED: 'sessions:unreadSummaryChanged',  // Broadcast: UnreadSummary
   CREATE_SESSION: 'sessions:create',
   DELETE_SESSION: 'sessions:delete',
   GET_SESSION_MESSAGES: 'sessions:getMessages',
@@ -832,8 +844,7 @@ export const IPC_CHANNELS = {
   APPEARANCE_GET_RICH_TOOL_DESCRIPTIONS: 'appearance:getRichToolDescriptions',
   APPEARANCE_SET_RICH_TOOL_DESCRIPTIONS: 'appearance:setRichToolDescriptions',
 
-  BADGE_UPDATE: 'badge:update',
-  BADGE_CLEAR: 'badge:clear',
+  BADGE_REFRESH: 'badge:refresh',
   BADGE_SET_ICON: 'badge:setIcon',
   BADGE_DRAW: 'badge:draw',  // Broadcast: { count: number, iconDataUrl: string }
   BADGE_DRAW_WINDOWS: 'badge:draw-windows',  // Broadcast: { count: number }
@@ -937,6 +948,8 @@ export interface TestAutomationResult {
 export interface ElectronAPI {
   // Session management
   getSessions(): Promise<Session[]>
+  getUnreadSummary(): Promise<UnreadSummary>
+  markAllSessionsRead(workspaceId: string): Promise<void>
   getSessionMessages(sessionId: string): Promise<Session | null>
   createSession(workspaceId: string, options?: CreateSessionOptions): Promise<Session>
   deleteSession(sessionId: string): Promise<void>
@@ -975,6 +988,7 @@ export interface ElectronAPI {
 
   // Event listeners
   onSessionEvent(callback: (event: SessionEvent) => void): () => void
+  onUnreadSummaryChanged(callback: (summary: UnreadSummary) => void): () => void
 
   // File operations
   readFile(path: string): Promise<string>
@@ -1196,8 +1210,7 @@ export interface ElectronAPI {
   getRichToolDescriptions(): Promise<boolean>
   setRichToolDescriptions(enabled: boolean): Promise<void>
 
-  updateBadgeCount(count: number): Promise<void>
-  clearBadgeCount(): Promise<void>
+  refreshBadge(): Promise<void>
   setDockIconWithBadge(dataUrl: string): Promise<void>
   onBadgeDraw(callback: (data: { count: number; iconDataUrl: string }) => void): () => void
   onBadgeDrawWindows(callback: (data: { count: number }) => void): () => void
@@ -1452,6 +1465,10 @@ export interface BrowserInstanceInfo {
   ownerType: 'session' | 'manual'
   ownerSessionId: string | null
   isVisible: boolean
+  /** Whether agent control overlay is currently active for this window */
+  agentControlActive: boolean
+  /** Website theme color from <meta name="theme-color"> (null if not set) */
+  themeColor: string | null
 }
 
 /**

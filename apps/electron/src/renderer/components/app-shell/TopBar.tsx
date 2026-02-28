@@ -1,7 +1,7 @@
 /**
  * TopBar - Persistent top bar above all panels (Slack-style)
  *
- * Layout: [Sidebar] [Menu] [flex] [Back] [Forward] [Search field] [flex] [Settings]
+ * Layout: [Sidebar] [Menu] [flex] [Back] [Forward] [Workspace selector] [flex] [Settings]
  *
  * Fixed at top of window, 48px tall.
  * macOS: offset left to avoid stoplight controls.
@@ -37,6 +37,9 @@ import { SETTINGS_ICONS } from "../icons/SettingsIcons"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
 import { useEffect, useState } from "react"
 import { BrowserTabStrip } from "../browser/BrowserTabStrip"
+import type { Workspace } from "../../../shared/types"
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher"
+import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
 
 // --- Menu rendering (moved from AppMenu) ---
 
@@ -129,7 +132,11 @@ function renderMenuSection(
 // --- TopBar ---
 
 interface TopBarProps {
-  workspaceName?: string
+  workspaces: Workspace[]
+  activeWorkspaceId: string | null
+  onSelectWorkspace: (workspaceId: string, openInNewWindow?: boolean) => void
+  workspaceUnreadMap?: Record<string, boolean>
+  onWorkspaceCreated?: (workspace: Workspace) => void
   activeSessionId?: string | null
   onNewChat: () => void
   onNewWindow?: () => void
@@ -148,7 +155,11 @@ interface TopBarProps {
 }
 
 export function TopBar({
-  workspaceName,
+  workspaces,
+  activeWorkspaceId,
+  onSelectWorkspace,
+  workspaceUnreadMap,
+  onWorkspaceCreated,
   activeSessionId,
   onNewChat,
   onNewWindow,
@@ -315,7 +326,7 @@ export function TopBar({
         </DropdownMenu>
       </div>
 
-      {/* === CENTER: Back / Forward / Search (absolute centered) === */}
+      {/* === CENTER: Back / Forward / Workspace Selector (absolute centered) === */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div
           className="pointer-events-auto titlebar-no-drag flex items-center gap-1"
@@ -341,14 +352,15 @@ export function TopBar({
             <TooltipContent side="bottom">Forward {goForwardHotkey}</TooltipContent>
           </Tooltip>
 
-          {/* Search field (visual placeholder) */}
-          <button
-            type="button"
-            className="ml-1 flex-1 min-w-0 flex items-center justify-center gap-2 h-[30px] px-3 rounded-[8px] border border-foreground/6 text-[13px] text-foreground/40 hover:bg-foreground/5 hover:text-foreground transition-colors cursor-pointer"
-          >
-            <Icons.Search className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">Search {workspaceName || 'Workspace'}</span>
-          </button>
+          {/* Workspace selector */}
+          <WorkspaceSwitcher
+            variant="topbar"
+            workspaces={workspaces}
+            activeWorkspaceId={activeWorkspaceId}
+            onSelect={onSelectWorkspace}
+            onWorkspaceCreated={onWorkspaceCreated}
+            workspaceUnreadMap={workspaceUnreadMap}
+          />
         </div>
       </div>
 
@@ -374,6 +386,52 @@ export function TopBar({
             <StyledDropdownMenuItem onClick={onAddBrowserPanel}>
               <Icons.Globe className="h-3.5 w-3.5" />
               New Browser Window
+            </StyledDropdownMenuItem>
+          </StyledDropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Help button */}
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <TopBarButton aria-label="Help & Documentation">
+                  <Icons.HelpCircle className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
+                </TopBarButton>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Help & Documentation</TooltipContent>
+          </Tooltip>
+          <StyledDropdownMenuContent align="end" minWidth="min-w-48">
+            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('sources'))}>
+              <Icons.DatabaseZap className="h-3.5 w-3.5" />
+              <span className="flex-1">Sources</span>
+              <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
+            </StyledDropdownMenuItem>
+            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('skills'))}>
+              <Icons.Zap className="h-3.5 w-3.5" />
+              <span className="flex-1">Skills</span>
+              <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
+            </StyledDropdownMenuItem>
+            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('statuses'))}>
+              <Icons.CheckCircle2 className="h-3.5 w-3.5" />
+              <span className="flex-1">Statuses</span>
+              <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
+            </StyledDropdownMenuItem>
+            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('permissions'))}>
+              <Icons.Settings className="h-3.5 w-3.5" />
+              <span className="flex-1">Permissions</span>
+              <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
+            </StyledDropdownMenuItem>
+            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('automations'))}>
+              <Icons.Webhook className="h-3.5 w-3.5" />
+              <span className="flex-1">Automations</span>
+              <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
+            </StyledDropdownMenuItem>
+            <StyledDropdownMenuSeparator />
+            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}>
+              <Icons.ExternalLink className="h-3.5 w-3.5" />
+              <span className="flex-1">All Documentation</span>
             </StyledDropdownMenuItem>
           </StyledDropdownMenuContent>
         </DropdownMenu>

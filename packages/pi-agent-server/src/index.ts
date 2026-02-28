@@ -17,7 +17,7 @@
 import http from 'node:http';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 
 // Pi SDK
@@ -61,13 +61,14 @@ import { createGoogleSearchTool } from './tools/google-search.ts';
 
 /** Messages from main process (stdin) */
 type InboundMessage =
-  | { type: 'init'; apiKey: string; model: string; cwd: string; thinkingLevel: string; workspaceRootPath: string; sessionId: string; sessionPath: string; workingDirectory: string; plansFolderPath: string; miniModel?: string; agentDir?: string; providerType?: string; authType?: string; workspaceId?: string; branchFromSdkSessionId?: string; piAuth?: { provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } }
+  | { type: 'init'; apiKey: string; model: string; cwd: string; thinkingLevel: string; workspaceRootPath: string; sessionId: string; sessionPath: string; workingDirectory: string; plansFolderPath: string; miniModel?: string; agentDir?: string; providerType?: string; authType?: string; workspaceId?: string; branchFromSdkSessionId?: string; branchFromSessionPath?: string; piAuth?: { provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } }
   | { type: 'prompt'; id: string; message: string; systemPrompt: string; images?: Array<{ type: 'image'; data: string; mimeType: string }> }
   | { type: 'register_tools'; tools: ProxyToolDef[] }
   | { type: 'tool_execute_response'; requestId: string; result: { content: string; isError: boolean } }
   | { type: 'pre_tool_use_response'; requestId: string; action: 'allow' | 'block' | 'modify'; input?: Record<string, unknown>; reason?: string }
   | { type: 'abort' }
   | { type: 'mini_completion'; id: string; prompt: string }
+  | { type: 'ensure_session_ready'; id: string }
   | { type: 'set_model'; model: string }
   | { type: 'steer'; message: string }
   | { type: 'token_update'; piAuth: { provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } }
@@ -100,6 +101,7 @@ interface OutboundPreToolUseReq { type: 'pre_tool_use_request'; requestId: strin
 interface OutboundToolExecReq { type: 'tool_execute_request'; requestId: string; toolName: string; args: Record<string, unknown> }
 interface OutboundSessionToolCompleted { type: 'session_tool_completed'; toolName: string; args: Record<string, unknown>; isError: boolean }
 interface OutboundMiniResult { type: 'mini_completion_result'; id: string; text: string | null }
+interface OutboundEnsureSessionReadyResult { type: 'ensure_session_ready_result'; id: string; sessionId: string | null }
 interface OutboundSessionIdUpdate { type: 'session_id_update'; sessionId: string }
 interface OutboundError { type: 'error'; message: string; code?: string }
 
@@ -110,6 +112,7 @@ type OutboundMessage =
   | OutboundToolExecReq
   | OutboundSessionToolCompleted
   | OutboundMiniResult
+  | OutboundEnsureSessionReadyResult
   | OutboundSessionIdUpdate
   | OutboundError;
 
@@ -157,6 +160,21 @@ function send(msg: OutboundMessage): void {
 function debugLog(message: string): void {
   // Write debug messages to stderr so they don't interfere with JSONL protocol
   process.stderr.write(`[pi-server] ${message}\n`);
+}
+
+/** Find the most recent .jsonl session file in a directory. */
+function findMostRecentSessionFile(sessionDir: string): string | null {
+  if (!existsSync(sessionDir)) return null;
+  let best: { path: string; mtime: number } | null = null;
+  for (const entry of readdirSync(sessionDir)) {
+    if (!entry.endsWith('.jsonl')) continue;
+    const fullPath = join(sessionDir, entry);
+    const mtime = statSync(fullPath).mtimeMs;
+    if (!best || mtime > best.mtime) {
+      best = { path: fullPath, mtime };
+    }
+  }
+  return best?.path ?? null;
 }
 
 // ============================================================
@@ -350,7 +368,21 @@ async function ensureSession(): Promise<AgentSession> {
     // creates a new one — so this handles both first-run and resume.
     const sessionDir = join(initConfig.sessionPath, '.pi-sessions');
     mkdirSync(sessionDir, { recursive: true });
-    sessionOptions.sessionManager = PiSessionManager.continueRecent(cwd, sessionDir);
+
+    if (initConfig.branchFromSessionPath) {
+      // Branching: fork from the parent session's Pi session file.
+      // Branches must not silently degrade to fresh sessions.
+      const parentPiSessionDir = join(initConfig.branchFromSessionPath, '.pi-sessions');
+      const parentPiSessionFile = findMostRecentSessionFile(parentPiSessionDir);
+      if (!parentPiSessionFile) {
+        throw new Error(`Pi branch preflight failed: no parent Pi session file found in ${parentPiSessionDir}`);
+      }
+
+      debugLog(`Forking Pi session from parent: ${parentPiSessionFile}`);
+      sessionOptions.sessionManager = PiSessionManager.forkFrom(parentPiSessionFile, cwd, sessionDir);
+    } else {
+      sessionOptions.sessionManager = PiSessionManager.continueRecent(cwd, sessionDir);
+    }
 
   }
 
@@ -950,6 +982,15 @@ async function handleMiniCompletion(msg: Extract<InboundMessage, { type: 'mini_c
   }
 }
 
+async function handleEnsureSessionReady(msg: Extract<InboundMessage, { type: 'ensure_session_ready' }>): Promise<void> {
+  const session = await ensureSession();
+  send({
+    type: 'ensure_session_ready_result',
+    id: msg.id,
+    sessionId: session.sessionId || null,
+  });
+}
+
 async function handleSetModel(msg: Extract<InboundMessage, { type: 'set_model' }>): Promise<void> {
   debugLog(`[set_model] Received: ${msg.model}`);
   if (!piSession || !piModelRegistry) {
@@ -1036,6 +1077,10 @@ async function processMessage(msg: InboundMessage): Promise<void> {
 
     case 'mini_completion':
       await handleMiniCompletion(msg);
+      break;
+
+    case 'ensure_session_ready':
+      await handleEnsureSessionReady(msg);
       break;
 
     case 'set_model':

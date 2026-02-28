@@ -6,6 +6,8 @@ import { IPC_CHANNELS, type SessionEvent, type ElectronAPI, type FileAttachment,
 const api: ElectronAPI = {
   // Session management
   getSessions: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SESSIONS),
+  getUnreadSummary: () => ipcRenderer.invoke(IPC_CHANNELS.GET_UNREAD_SUMMARY),
+  markAllSessionsRead: (workspaceId: string) => ipcRenderer.invoke(IPC_CHANNELS.MARK_ALL_SESSIONS_READ, workspaceId),
   getSessionMessages: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_SESSION_MESSAGES, sessionId),
   createSession: (workspaceId: string, options?: import('../shared/types').CreateSessionOptions) => ipcRenderer.invoke(IPC_CHANNELS.CREATE_SESSION, workspaceId, options),
   deleteSession: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_SESSION, sessionId),
@@ -58,6 +60,15 @@ const api: ElectronAPI = {
     // Return cleanup function
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.SESSION_EVENT, handler)
+    }
+  },
+  onUnreadSummaryChanged: (callback: (summary: import('../shared/types').UnreadSummary) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, summary: import('../shared/types').UnreadSummary) => {
+      callback(summary)
+    }
+    ipcRenderer.on(IPC_CHANNELS.SESSIONS_UNREAD_SUMMARY_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.SESSIONS_UNREAD_SUMMARY_CHANGED, handler)
     }
   },
 
@@ -467,10 +478,8 @@ const api: ElectronAPI = {
   setRichToolDescriptions: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.APPEARANCE_SET_RICH_TOOL_DESCRIPTIONS, enabled),
 
-  updateBadgeCount: (count: number) =>
-    ipcRenderer.invoke(IPC_CHANNELS.BADGE_UPDATE, count),
-  clearBadgeCount: () =>
-    ipcRenderer.invoke(IPC_CHANNELS.BADGE_CLEAR),
+  refreshBadge: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.BADGE_REFRESH),
   setDockIconWithBadge: (dataUrl: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.BADGE_SET_ICON, dataUrl),
   onBadgeDraw: (callback: (data: { count: number; iconDataUrl: string }) => void) => {

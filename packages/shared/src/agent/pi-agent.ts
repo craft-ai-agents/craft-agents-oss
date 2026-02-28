@@ -107,6 +107,13 @@ export const PI_BACKEND_SESSION_TOOL_NAMES = new Set<string>([
   'browser_fill',
   'browser_select',
   'browser_screenshot',
+  'browser_screenshot_region',
+  'browser_console',
+  'browser_window_resize',
+  'browser_network',
+  'browser_wait',
+  'browser_key',
+  'browser_downloads',
   'browser_scroll',
   'browser_back',
   'browser_forward',
@@ -168,6 +175,12 @@ export class PiAgent extends BaseAgent {
     reject: (error: Error) => void;
   }> = new Map();
 
+  // Pending ensure_session_ready requests (branch preflight handshake)
+  private pendingEnsureSessionReady: Map<string, {
+    resolve: (sessionId: string | null) => void;
+    reject: (error: Error) => void;
+  }> = new Map();
+
   // Current user message (for context in summarization)
   private currentUserMessage: string = '';
 
@@ -202,9 +215,7 @@ export class PiAgent extends BaseAgent {
     const modelDef = getModelById(resolvedModel);
     super(config, resolvedModel, modelDef?.contextWindow);
 
-    // Pi session resume works, but SDK-level branch/fork semantics are not implemented yet.
-    // Keep this false so UI and runtime capabilities stay in sync.
-    this._supportsBranching = false;
+    this._supportsBranching = true;
 
     this.piSessionId = config.session?.sdkSessionId || null;
     this.adapter = new PiEventAdapter();
@@ -375,8 +386,9 @@ export class PiAgent extends BaseAgent {
       authType: this.config.authType,
       workspaceId: this.config.workspace.id,
       piAuth,
-      // Branch params for SDK-level fork (resume parent + forkSession)
+      // Branch params for Pi SDK session fork
       branchFromSdkSessionId: this.config.session?.branchFromSdkSessionId,
+      branchFromSessionPath: this.config.session?.branchFromSessionPath,
     });
 
     // Wait for subprocess to report ready
@@ -659,6 +671,11 @@ export class PiAgent extends BaseAgent {
         this.handleMiniCompletionResult(msg);
         break;
 
+      case 'ensure_session_ready_result':
+        // Response to an ensure_session_ready request
+        this.handleEnsureSessionReadyResult(msg);
+        break;
+
       case 'session_id_update':
         // Pi session ID changed
         if (msg.sessionId) {
@@ -690,6 +707,11 @@ export class PiAgent extends BaseAgent {
         for (const [id, pending] of this.pendingMiniCompletions) {
           pending.reject(new Error(String(msg.message)));
           this.pendingMiniCompletions.delete(id);
+        }
+        // Reject pending ensure_session_ready requests (used by branch preflight)
+        for (const [id, pending] of this.pendingEnsureSessionReady) {
+          pending.reject(new Error(String(msg.message)));
+          this.pendingEnsureSessionReady.delete(id);
         }
         this.eventQueue.enqueue({
           type: 'error',
@@ -1098,8 +1120,11 @@ export class PiAgent extends BaseAgent {
             return { content: lines.join('\n'), isError: false };
           }
           case 'browser_click':
-            await browserFns.click(String(args.ref ?? ''));
-            return { content: `Clicked element ${String(args.ref ?? '')}`, isError: false };
+            await browserFns.click(String(args.ref ?? ''), {
+              waitFor: args.waitFor as 'none' | 'navigation' | 'network-idle' | undefined,
+              timeoutMs: args.timeoutMs as number | undefined,
+            });
+            return { content: `Clicked element ${String(args.ref ?? '')}${args.waitFor ? ` (waitFor=${String(args.waitFor)})` : ''}`, isError: false };
           case 'browser_fill':
             await browserFns.fill(String(args.ref ?? ''), String(args.value ?? ''));
             return { content: `Filled element ${String(args.ref ?? '')} with "${String(args.value ?? '')}"`, isError: false };
@@ -1118,6 +1143,82 @@ export class PiAgent extends BaseAgent {
               content += `\n\nMetadata:\n${JSON.stringify(result.metadata, null, 2)}`;
             }
             return { content, isError: false };
+          }
+          case 'browser_screenshot_region': {
+            const result = await browserFns.screenshotRegion({
+              x: args.x as number | undefined,
+              y: args.y as number | undefined,
+              width: args.width as number | undefined,
+              height: args.height as number | undefined,
+              ref: args.ref as string | undefined,
+              selector: args.selector as string | undefined,
+              padding: args.padding as number | undefined,
+            });
+            let content = `Region screenshot captured (${Math.round(result.png.length / 1024)}KB PNG, base64 omitted in Pi proxy mode)`;
+            if (result.metadata) {
+              content += `\n\nMetadata:\n${JSON.stringify(result.metadata, null, 2)}`;
+            }
+            return { content, isError: false };
+          }
+          case 'browser_console': {
+            const entries = await browserFns.getConsoleLogs({
+              level: args.level as 'all' | 'log' | 'info' | 'warn' | 'error' | undefined,
+              limit: args.limit as number | undefined,
+            });
+            const lines: string[] = [`Console entries (${entries.length}):`];
+            for (const entry of entries) {
+              lines.push(`[${new Date(entry.timestamp).toISOString()}] [${entry.level}] ${entry.message}`);
+            }
+            return { content: lines.join('\n'), isError: false };
+          }
+          case 'browser_window_resize': {
+            const resized = await browserFns.windowResize({
+              width: Number(args.width),
+              height: Number(args.height),
+            });
+            return { content: `Window resized to ${resized.width}x${resized.height}`, isError: false };
+          }
+          case 'browser_network': {
+            const entries = await browserFns.getNetworkLogs({
+              limit: args.limit as number | undefined,
+              status: args.status as 'all' | 'failed' | '2xx' | '3xx' | '4xx' | '5xx' | undefined,
+              method: args.method as string | undefined,
+              resourceType: args.resourceType as string | undefined,
+            });
+            const lines: string[] = [`Network entries (${entries.length}):`];
+            for (const entry of entries) {
+              lines.push(`[${new Date(entry.timestamp).toISOString()}] ${entry.method} ${entry.status} ${entry.resourceType} ${entry.url}`);
+            }
+            return { content: lines.join('\n'), isError: false };
+          }
+          case 'browser_wait': {
+            const result = await browserFns.waitFor({
+              kind: args.kind as 'selector' | 'text' | 'url' | 'network-idle',
+              value: args.value as string | undefined,
+              timeoutMs: args.timeoutMs as number | undefined,
+              pollMs: args.pollMs as number | undefined,
+              idleMs: args.idleMs as number | undefined,
+            });
+            return { content: `Wait succeeded (${result.kind}) in ${result.elapsedMs}ms — ${result.detail}`, isError: false };
+          }
+          case 'browser_key': {
+            await browserFns.sendKey({
+              key: String(args.key ?? ''),
+              modifiers: args.modifiers as Array<'shift' | 'control' | 'alt' | 'meta'> | undefined,
+            });
+            return { content: `Key sent: ${String(args.key ?? '')}`, isError: false };
+          }
+          case 'browser_downloads': {
+            const entries = await browserFns.getDownloads({
+              action: args.action as 'list' | 'wait' | undefined,
+              limit: args.limit as number | undefined,
+              timeoutMs: args.timeoutMs as number | undefined,
+            });
+            const lines: string[] = [`Downloads (${entries.length}):`];
+            for (const entry of entries) {
+              lines.push(`[${new Date(entry.timestamp).toISOString()}] [${entry.state}] ${entry.filename} (${entry.bytesReceived}/${entry.totalBytes})`);
+            }
+            return { content: lines.join('\n'), isError: false };
           }
           case 'browser_scroll':
             await browserFns.scroll((args.direction as 'up' | 'down' | 'left' | 'right') ?? 'down', args.amount as number | undefined);
@@ -1143,14 +1244,25 @@ export class PiAgent extends BaseAgent {
               '  open',
               '  navigate <url>',
               '  snapshot',
-              '  click <ref>',
+              '  click <ref> [none|navigation|network-idle] [timeoutMs]',
               '  fill <ref> <value>',
               '  select <ref> <value>',
               '  screenshot',
+              '  screenshot-region <x> <y> <width> <height>',
+              '  screenshot-region --ref <@eN> [--padding <px>]',
+              '  screenshot-region --selector <css-selector> [--padding <px>]',
+              '  console [limit] [level]',
+              '  window-resize <width> <height>',
+              '  network [limit] [status]',
+              '  wait <selector|text|url|network-idle> <value?> [timeoutMs]',
+              '  key <key> [modifiers]',
+              '  downloads [list|wait] [limit|timeoutMs]',
               '  scroll <up|down|left|right> [amount]',
               '  back',
               '  forward',
               '  evaluate <expression>',
+              '  windows',
+              '  release',
             ].join('\n');
 
             if (!command) {
@@ -1199,8 +1311,20 @@ export class PiAgent extends BaseAgent {
             if (cmd === 'click') {
               const ref = parts[1];
               if (!ref) return { content: 'click requires a ref. Example: click @e1', isError: true };
-              await browserFns.click(ref);
-              return { content: `Clicked element ${ref}`, isError: false };
+              const waitForRaw = parts[2] as 'none' | 'navigation' | 'network-idle' | undefined;
+              const waitFor = waitForRaw && ['none', 'navigation', 'network-idle'].includes(waitForRaw)
+                ? waitForRaw
+                : undefined;
+              if (waitForRaw && !waitFor) {
+                return { content: 'click waitFor must be one of: none, navigation, network-idle', isError: true };
+              }
+              const timeoutRaw = parts[3];
+              const timeoutMs = timeoutRaw ? Number(timeoutRaw) : undefined;
+              if (timeoutRaw && Number.isNaN(timeoutMs)) {
+                return { content: `Invalid click timeout "${timeoutRaw}". Expected a number.`, isError: true };
+              }
+              await browserFns.click(ref, { waitFor, timeoutMs });
+              return { content: `Clicked element ${ref}${waitFor ? ` (waitFor=${waitFor})` : ''}`, isError: false };
             }
 
             if (cmd === 'fill') {
@@ -1222,6 +1346,169 @@ export class PiAgent extends BaseAgent {
             if (cmd === 'screenshot') {
               const result = await browserFns.screenshot();
               return { content: `Screenshot captured (${Math.round(result.png.length / 1024)}KB PNG, base64 omitted in Pi proxy mode)`, isError: false };
+            }
+
+            if (cmd === 'screenshot-region') {
+              const rest = parts.slice(1);
+              if (rest.length === 0) {
+                return { content: 'screenshot-region requires either coordinates, --ref, or --selector.', isError: true };
+              }
+
+              const parsePadding = (tokens: string[]) => {
+                const idx = tokens.findIndex((t) => t === '--padding');
+                if (idx === -1) return { padding: undefined as number | undefined, cleaned: tokens };
+                const raw = tokens[idx + 1];
+                if (!raw) throw new Error('Missing value for --padding');
+                const padding = Number(raw);
+                if (Number.isNaN(padding)) throw new Error(`Invalid padding "${raw}". Expected a number.`);
+                const cleaned = [...tokens.slice(0, idx), ...tokens.slice(idx + 2)];
+                return { padding, cleaned };
+              };
+
+              const { padding, cleaned } = parsePadding(rest);
+              let screenshotArgs: Record<string, unknown>;
+
+              if (cleaned[0] === '--ref') {
+                const ref = cleaned[1];
+                if (!ref) return { content: 'screenshot-region --ref requires a ref value.', isError: true };
+                screenshotArgs = { ref, padding };
+              } else if (cleaned[0] === '--selector') {
+                const selector = cleaned.slice(1).join(' ').trim();
+                if (!selector) return { content: 'screenshot-region --selector requires a CSS selector value.', isError: true };
+                screenshotArgs = { selector, padding };
+              } else {
+                if (cleaned.length < 4) return { content: 'screenshot-region coordinates require: x y width height', isError: true };
+                const [xRaw, yRaw, widthRaw, heightRaw] = cleaned;
+                const x = Number(xRaw);
+                const y = Number(yRaw);
+                const width = Number(widthRaw);
+                const height = Number(heightRaw);
+                if ([x, y, width, height].some((n) => Number.isNaN(n))) {
+                  return { content: 'screenshot-region coordinates must be numbers.', isError: true };
+                }
+                screenshotArgs = { x, y, width, height, padding };
+              }
+
+              const result = await browserFns.screenshotRegion(screenshotArgs as any);
+              let content = `Region screenshot captured (${Math.round(result.png.length / 1024)}KB PNG, base64 omitted in Pi proxy mode)`;
+              if (result.metadata) {
+                content += `\n\nMetadata:\n${JSON.stringify(result.metadata, null, 2)}`;
+              }
+              return { content, isError: false };
+            }
+
+            if (cmd === 'console') {
+              const limitRaw = parts[1];
+              const levelRaw = parts[2];
+              const limit = limitRaw ? Number(limitRaw) : undefined;
+              if (limitRaw && Number.isNaN(limit)) {
+                return { content: `Invalid console limit "${limitRaw}". Expected a number.`, isError: true };
+              }
+              const level = (levelRaw ?? 'all') as 'all' | 'log' | 'info' | 'warn' | 'error';
+              if (!['all', 'log', 'info', 'warn', 'error'].includes(level)) {
+                return { content: `Invalid console level "${String(levelRaw)}". Use one of: all, log, info, warn, error.`, isError: true };
+              }
+
+              const entries = await browserFns.getConsoleLogs({ limit, level });
+              const lines: string[] = [`Console entries (${entries.length}):`];
+              for (const entry of entries) {
+                lines.push(`[${new Date(entry.timestamp).toISOString()}] [${entry.level}] ${entry.message}`);
+              }
+              return { content: lines.join('\n'), isError: false };
+            }
+
+            if (cmd === 'window-resize') {
+              const widthRaw = parts[1];
+              const heightRaw = parts[2];
+              if (!widthRaw || !heightRaw) {
+                return { content: 'window-resize requires width and height. Example: window-resize 1280 720', isError: true };
+              }
+              const width = Number(widthRaw);
+              const height = Number(heightRaw);
+              if (Number.isNaN(width) || Number.isNaN(height)) {
+                return { content: 'window-resize width and height must be numbers.', isError: true };
+              }
+              const resized = await browserFns.windowResize({ width, height });
+              return { content: `Window resized to ${resized.width}x${resized.height}`, isError: false };
+            }
+
+            if (cmd === 'network') {
+              const limitRaw = parts[1];
+              const statusRaw = parts[2] as 'all' | 'failed' | '2xx' | '3xx' | '4xx' | '5xx' | undefined;
+              const limit = limitRaw ? Number(limitRaw) : undefined;
+              if (limitRaw && Number.isNaN(limit)) {
+                return { content: `Invalid network limit "${limitRaw}". Expected a number.`, isError: true };
+              }
+              const status = statusRaw ?? 'all';
+              if (!['all', 'failed', '2xx', '3xx', '4xx', '5xx'].includes(status)) {
+                return { content: `Invalid network status "${String(statusRaw)}". Use one of: all, failed, 2xx, 3xx, 4xx, 5xx.`, isError: true };
+              }
+              const entries = await browserFns.getNetworkLogs({ limit, status });
+              const lines: string[] = [`Network entries (${entries.length}):`];
+              for (const entry of entries) {
+                lines.push(`[${new Date(entry.timestamp).toISOString()}] ${entry.method} ${entry.status} ${entry.resourceType} ${entry.url}`);
+              }
+              return { content: lines.join('\n'), isError: false };
+            }
+
+            if (cmd === 'wait') {
+              const kind = parts[1] as 'selector' | 'text' | 'url' | 'network-idle' | undefined;
+              if (!kind || !['selector', 'text', 'url', 'network-idle'].includes(kind)) {
+                return { content: 'wait requires kind: selector|text|url|network-idle', isError: true };
+              }
+
+              let value: string | undefined;
+              let timeoutMs: number | undefined;
+              if (kind === 'network-idle') {
+                const timeoutRaw = parts[2];
+                timeoutMs = timeoutRaw ? Number(timeoutRaw) : undefined;
+                if (timeoutRaw && Number.isNaN(timeoutMs)) {
+                  return { content: `Invalid wait timeout "${timeoutRaw}". Expected a number.`, isError: true };
+                }
+              } else {
+                value = parts[2];
+                if (!value) return { content: `wait ${kind} requires a value.`, isError: true };
+                const timeoutRaw = parts[3];
+                timeoutMs = timeoutRaw ? Number(timeoutRaw) : undefined;
+                if (timeoutRaw && Number.isNaN(timeoutMs)) {
+                  return { content: `Invalid wait timeout "${timeoutRaw}". Expected a number.`, isError: true };
+                }
+              }
+
+              const result = await browserFns.waitFor({ kind, value, timeoutMs });
+              return { content: `Wait succeeded (${result.kind}) in ${result.elapsedMs}ms — ${result.detail}`, isError: false };
+            }
+
+            if (cmd === 'key') {
+              const key = parts[1];
+              if (!key) return { content: 'key requires key value. Example: key Enter', isError: true };
+              const modifiers = (parts[2] ? parts[2].split('+') : []) as Array<'shift' | 'control' | 'alt' | 'meta'>;
+              for (const m of modifiers) {
+                if (!['shift', 'control', 'alt', 'meta'].includes(m)) {
+                  return { content: `Invalid key modifier "${m}". Use shift|control|alt|meta`, isError: true };
+                }
+              }
+              await browserFns.sendKey({ key, modifiers });
+              return { content: `Key sent: ${key}${modifiers.length ? ` (${modifiers.join('+')})` : ''}`, isError: false };
+            }
+
+            if (cmd === 'downloads') {
+              const actionRaw = parts[1] as 'list' | 'wait' | undefined;
+              const action = actionRaw && ['list', 'wait'].includes(actionRaw) ? actionRaw : 'list';
+              const valueRaw = parts[2];
+              const valueNum = valueRaw ? Number(valueRaw) : undefined;
+              if (valueRaw && Number.isNaN(valueNum)) {
+                return { content: `Invalid downloads numeric value "${valueRaw}".`, isError: true };
+              }
+              const entries = await browserFns.getDownloads({
+                action,
+                ...(action === 'wait' ? { timeoutMs: valueNum } : { limit: valueNum }),
+              });
+              const lines: string[] = [`Downloads (${entries.length}):`];
+              for (const entry of entries) {
+                lines.push(`[${new Date(entry.timestamp).toISOString()}] [${entry.state}] ${entry.filename} (${entry.bytesReceived}/${entry.totalBytes})`);
+              }
+              return { content: lines.join('\n'), isError: false };
             }
 
             if (cmd === 'scroll') {
@@ -1254,6 +1541,34 @@ export class PiAgent extends BaseAgent {
               const result = await browserFns.evaluate(expression);
               const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
               return { content: text || 'null', isError: false };
+            }
+
+            if (cmd === 'windows') {
+              const windows = await browserFns.listWindows();
+              const lines: string[] = [`Browser windows (${windows.length}):`];
+              for (const w of windows) {
+                const lockState = w.boundSessionId ? `locked-session(${w.boundSessionId})` : 'unlocked';
+                const availableToSession = !w.boundSessionId || w.boundSessionId === this._sessionId;
+                lines.push(
+                  '',
+                  `- ${w.id}`,
+                  `  title: ${w.title || 'New Tab'}`,
+                  `  url: ${w.url || 'about:blank'}`,
+                  `  visible: ${w.isVisible}`,
+                  `  ownerType: ${w.ownerType}`,
+                  `  ownerSessionId: ${w.ownerSessionId ?? 'none'}`,
+                  `  boundSessionId: ${w.boundSessionId ?? 'none'}`,
+                  `  lockState: ${lockState}`,
+                  `  availableToSession: ${availableToSession}`,
+                  `  agentControlActive: ${!!w.agentControlActive}`,
+                );
+              }
+              return { content: lines.join('\n'), isError: false };
+            }
+
+            if (cmd === 'release') {
+              await browserFns.releaseControl();
+              return { content: 'Browser control released. Agent overlay dismissed.', isError: false };
             }
 
             return { content: `Unknown browser_tool command "${cmd}". Use "--help" to see supported commands.`, isError: true };
@@ -1319,6 +1634,23 @@ export class PiAgent extends BaseAgent {
   }
 
   /**
+   * Handle ensure_session_ready_result from subprocess.
+   */
+  private handleEnsureSessionReadyResult(msg: Record<string, unknown>): void {
+    const id = msg.id as string;
+    const sessionId = (msg.sessionId as string | null) ?? null;
+    const pending = this.pendingEnsureSessionReady.get(id);
+    if (!pending) return;
+
+    this.pendingEnsureSessionReady.delete(id);
+    if (sessionId && this.piSessionId !== sessionId) {
+      this.piSessionId = sessionId;
+      this.config.onSdkSessionIdUpdate?.(sessionId);
+    }
+    pending.resolve(sessionId);
+  }
+
+  /**
    * Handle subprocess exit.
    */
   private handleSubprocessExit(code: number | null, signal: string | null): void {
@@ -1347,11 +1679,73 @@ export class PiAgent extends BaseAgent {
     }
     this.pendingMiniCompletions.clear();
 
+    // Reject pending ensure_session_ready requests
+    for (const [, pending] of this.pendingEnsureSessionReady) {
+      pending.reject(new Error(`Pi subprocess exited unexpectedly (${exitReason})`));
+    }
+    this.pendingEnsureSessionReady.clear();
+
     // Reject all pending tool executions
     for (const [, pending] of this.pendingToolExecutions) {
       pending.reject(new Error('Pi subprocess exited'));
     }
     this.pendingToolExecutions.clear();
+  }
+
+  /**
+   * Ask subprocess to create/verify the primary session (without sending a prompt)
+   * and return the active Pi session ID.
+   */
+  private async requestEnsureSessionReady(): Promise<string | null> {
+    await this.ensureSubprocess();
+
+    const id = `ensure-ready-${++this.rpcIdCounter}`;
+    const timeoutMs = 15_000;
+
+    return new Promise<string | null>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingEnsureSessionReady.delete(id);
+        reject(new Error(`ensure_session_ready timed out after ${Math.floor(timeoutMs / 1000)}s`));
+      }, timeoutMs);
+
+      this.pendingEnsureSessionReady.set(id, {
+        resolve: (sessionId) => {
+          clearTimeout(timer);
+          resolve(sessionId);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+
+      this.send({ type: 'ensure_session_ready', id });
+    });
+  }
+
+  /**
+   * Ensure branched Pi sessions are backend-ready before first user message.
+   * Called by SessionManager during branch creation to avoid creating
+   * transcript-only branches without real Pi session context.
+   */
+  override async ensureBranchReady(): Promise<void> {
+    const isBranchedSession = !!this.config.session?.branchFromMessageId;
+    if (!isBranchedSession) return;
+
+    // Branched sessions must include parent session path metadata for Pi forking.
+    if (!this.config.session?.branchFromSessionPath) {
+      throw new Error('Pi branch preflight failed: missing branchFromSessionPath metadata');
+    }
+
+    const sessionId = await this.requestEnsureSessionReady();
+    if (!sessionId) {
+      throw new Error('Pi branch preflight failed: subprocess did not provide a session ID');
+    }
+
+    if (this.piSessionId !== sessionId) {
+      this.piSessionId = sessionId;
+      this.config.onSdkSessionIdUpdate?.(sessionId);
+    }
   }
 
   // ============================================================

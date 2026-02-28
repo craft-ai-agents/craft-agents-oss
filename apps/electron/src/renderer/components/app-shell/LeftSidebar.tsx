@@ -23,6 +23,8 @@ export interface SidebarContextMenuConfig {
   labelId?: string
   /** Handler for "Configure Statuses" action - for allSessions/status/flagged types */
   onConfigureStatuses?: () => void
+  /** Handler for "Mark All Read" action - for allSessions type */
+  onMarkAllRead?: () => void
   /** Handler for "Configure Labels" action - receives labelId when triggered from a specific label */
   onConfigureLabels?: (labelId?: string) => void
   /** Handler for "Add New Label" action - creates a label (parentId passed from labelId) */
@@ -235,6 +237,7 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
                         statusId={link.contextMenu.statusId}
                         labelId={link.contextMenu.labelId}
                         onConfigureStatuses={link.contextMenu.onConfigureStatuses}
+                        onMarkAllRead={link.contextMenu.onMarkAllRead}
                         onConfigureLabels={link.contextMenu.onConfigureLabels}
                         onAddLabel={link.contextMenu.onAddLabel}
                         onDeleteLabel={link.contextMenu.onDeleteLabel}
@@ -393,6 +396,7 @@ function SortableStatusList({ items, onReorder, getItemProps, focusedItemId, tra
                         statusId={item.contextMenu.statusId}
                         labelId={item.contextMenu.labelId}
                         onConfigureStatuses={item.contextMenu.onConfigureStatuses}
+                        onMarkAllRead={item.contextMenu.onMarkAllRead}
                         onConfigureLabels={item.contextMenu.onConfigureLabels}
                         onAddLabel={item.contextMenu.onAddLabel}
                         onDeleteLabel={item.contextMenu.onDeleteLabel}

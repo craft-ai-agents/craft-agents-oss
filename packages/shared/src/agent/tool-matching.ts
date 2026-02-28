@@ -161,11 +161,13 @@ export function extractToolStarts(
     // Dedup: stream_event arrives before assistant message, both have the same tool_use block.
     // The Set is append-only and order-independent (same ID always deduplicates the same way).
     if (emittedToolStartIds.has(toolBlock.id)) {
-      // Already emitted via stream — but check if we now have complete input
+      // Already emitted via stream — re-emit only when we have newly useful data.
+      // 1) Complete input arrived on assistant message (stream starts with {})
+      // 2) Metadata became available later in toolMetadataStore (race-safe)
       const hasNewInput = Object.keys(toolBlock.input).length > 0;
-      if (hasNewInput) {
-        // Re-emit with complete input (assistant message has full input, stream has {})
-        const { intent, displayName } = extractToolMetadata(toolBlock, sessionDir);
+      const { intent, displayName } = extractToolMetadata(toolBlock, sessionDir);
+      const hasMetadataUpdate = !!intent || !!displayName;
+      if (hasNewInput || hasMetadataUpdate) {
         events.push({
           type: 'tool_start',
           toolName: toolBlock.name,

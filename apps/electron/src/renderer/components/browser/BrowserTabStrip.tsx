@@ -2,17 +2,22 @@
  * BrowserTabStrip
  *
  * Rendered in the TopBar, shows compact badges for all active browser instances.
- * Clicking a badge focuses its dedicated browser window.
+ * Each badge opens a shared action menu.
  */
 
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import * as Icons from 'lucide-react'
+import { Spinner } from '@craft-agent/ui'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
+  DropdownMenuSub,
   StyledDropdownMenuContent,
   StyledDropdownMenuItem,
+  StyledDropdownMenuSubTrigger,
+  StyledDropdownMenuSubContent,
+  StyledDropdownMenuSeparator,
 } from '@/components/ui/styled-dropdown'
 import {
   activeBrowserInstanceIdAtom,
@@ -24,61 +29,93 @@ import {
 import { BrowserTabBadge } from './BrowserTabBadge'
 import type { BrowserInstanceInfo } from '../../../shared/types'
 import { getHostname } from './utils'
+import { navigate, routes } from '@/lib/navigate'
 
 const MAX_VISIBLE_BADGES = 3
 
 interface BrowserTabStripProps {
   activeSessionId?: string | null
+  instancesOverride?: BrowserInstanceInfo[]
 }
 
-export function BrowserTabStrip({ activeSessionId }: BrowserTabStripProps) {
+export function BrowserTabStrip({ activeSessionId, instancesOverride }: BrowserTabStripProps) {
   const instances = useAtomValue(browserInstancesAtom)
   const setInstances = useSetAtom(setBrowserInstancesAtom)
   const updateInstance = useSetAtom(updateBrowserInstanceAtom)
   const removeInstance = useSetAtom(removeBrowserInstanceAtom)
   const [activeInstanceId, setActiveInstanceId] = useAtom(activeBrowserInstanceIdAtom)
-  const instancesRef = useRef(instances)
+  const effectiveInstances = instancesOverride ?? instances
+  const instancesRef = useRef(effectiveInstances)
 
-  const scopedInstances = useMemo(() => {
-    if (!activeSessionId) return []
-    return instances.filter((instance) => instance.boundSessionId === activeSessionId)
-  }, [instances, activeSessionId])
+  const orderedInstances = useMemo(() => {
+    const items = [...effectiveInstances]
+
+    // Global list: keep all browser windows visible.
+    // Optional ordering preference: session-local windows first.
+    if (activeSessionId) {
+      items.sort((a, b) => {
+        const aInActiveSession = a.boundSessionId === activeSessionId ? 0 : 1
+        const bInActiveSession = b.boundSessionId === activeSessionId ? 0 : 1
+        if (aInActiveSession !== bInActiveSession) return aInActiveSession - bInActiveSession
+        return a.id.localeCompare(b.id)
+      })
+    } else {
+      items.sort((a, b) => a.id.localeCompare(b.id))
+    }
+
+    return items
+  }, [effectiveInstances, activeSessionId])
 
   useEffect(() => {
-    instancesRef.current = instances
-  }, [instances])
+    instancesRef.current = effectiveInstances
+  }, [effectiveInstances])
 
   useEffect(() => {
-    window.electronAPI.browserPane.list().then((items) => {
-      setInstances(items)
-      if (!activeSessionId) {
+    if (instancesOverride) return
+
+    const browserPaneApi = window.electronAPI?.browserPane
+    if (!browserPaneApi) {
+      setInstances([])
+      setActiveInstanceId(null)
+      return
+    }
+
+    browserPaneApi.list()
+      .then((items) => {
+        setInstances(items)
+        if (items.length === 0) {
+          setActiveInstanceId(null)
+          return
+        }
+        setActiveInstanceId((prev) => prev ?? items[0].id)
+      })
+      .catch((error) => {
+        console.warn('[BrowserTabStrip] Failed to list browser panes:', error)
+        setInstances([])
         setActiveInstanceId(null)
-        return
-      }
-      const scoped = items.filter((instance) => instance.boundSessionId === activeSessionId)
-      if (scoped.length > 0) {
-        setActiveInstanceId((prev) => prev ?? scoped[0].id)
-      }
-    })
-  }, [setInstances, activeSessionId, setActiveInstanceId])
+      })
+  }, [instancesOverride, setInstances, setActiveInstanceId])
 
   useEffect(() => {
-    const cleanupState = window.electronAPI.browserPane.onStateChanged((info: BrowserInstanceInfo) => {
+    if (instancesOverride) return
+
+    const browserPaneApi = window.electronAPI?.browserPane
+    if (!browserPaneApi) return
+
+    const cleanupState = browserPaneApi.onStateChanged((info: BrowserInstanceInfo) => {
       updateInstance(info)
     })
 
-    const cleanupRemoved = window.electronAPI.browserPane.onRemoved((id: string) => {
+    const cleanupRemoved = browserPaneApi.onRemoved((id: string) => {
       removeInstance(id)
       setActiveInstanceId((prev) => {
         if (prev !== id) return prev
-        const remaining = instancesRef.current.filter((item) => item.id !== id && item.boundSessionId === activeSessionId)
+        const remaining = instancesRef.current.filter((item) => item.id !== id)
         return remaining[0]?.id ?? null
       })
     })
 
-    const cleanupInteracted = window.electronAPI.browserPane.onInteracted((id: string) => {
-      const instance = instancesRef.current.find((item) => item.id === id)
-      if (!activeSessionId || instance?.boundSessionId !== activeSessionId) return
+    const cleanupInteracted = browserPaneApi.onInteracted((id: string) => {
       setActiveInstanceId(id)
     })
 
@@ -87,48 +124,118 @@ export function BrowserTabStrip({ activeSessionId }: BrowserTabStripProps) {
       cleanupRemoved()
       cleanupInteracted()
     }
-  }, [updateInstance, removeInstance, activeSessionId, setActiveInstanceId])
+  }, [instancesOverride, updateInstance, removeInstance, setActiveInstanceId])
 
   useEffect(() => {
-    if (!activeSessionId || scopedInstances.length === 0) {
+    if (orderedInstances.length === 0) {
       setActiveInstanceId(null)
       return
     }
-    if (!activeInstanceId || !scopedInstances.some((item) => item.id === activeInstanceId)) {
-      setActiveInstanceId(scopedInstances[0].id)
+    if (!activeInstanceId || !orderedInstances.some((item) => item.id === activeInstanceId)) {
+      setActiveInstanceId(orderedInstances[0].id)
     }
-  }, [activeSessionId, scopedInstances, activeInstanceId, setActiveInstanceId])
+  }, [orderedInstances, activeInstanceId, setActiveInstanceId])
 
-  const handleBadgeClick = useCallback((instanceId: string) => {
-    setActiveInstanceId(instanceId)
-    void window.electronAPI.browserPane.focus(instanceId)
-  }, [setActiveInstanceId])
+  const focusBrowserWindow = useCallback((instance: BrowserInstanceInfo) => {
+    setActiveInstanceId(instance.id)
+    if (instancesOverride) return
 
-  const handleBadgeClose = useCallback((instanceId: string) => {
-    void window.electronAPI.browserPane.destroy(instanceId)
-    removeInstance(instanceId)
+    const browserPaneApi = window.electronAPI?.browserPane
+    if (!browserPaneApi) {
+      console.warn('[BrowserTabStrip] browserPane API unavailable for focus action')
+      return
+    }
+
+    void browserPaneApi.focus(instance.id).catch((error) => {
+      console.warn(`[BrowserTabStrip] Failed to focus browser window ${instance.id}:`, error)
+    })
+  }, [instancesOverride, setActiveInstanceId])
+
+  const openSessionUsingWindow = useCallback((instance: BrowserInstanceInfo) => {
+    const sessionId = instance.boundSessionId ?? instance.ownerSessionId
+    if (!sessionId) return
+    navigate(routes.view.allSessions(sessionId))
+  }, [])
+
+  const terminateBrowserWindow = useCallback((instance: BrowserInstanceInfo) => {
+    if (!instancesOverride) {
+      const browserPaneApi = window.electronAPI?.browserPane
+      if (!browserPaneApi) {
+        console.warn('[BrowserTabStrip] browserPane API unavailable for terminate action')
+      } else {
+        void browserPaneApi.destroy(instance.id).catch((error) => {
+          console.warn(`[BrowserTabStrip] Failed to terminate browser window ${instance.id}:`, error)
+        })
+      }
+      removeInstance(instance.id)
+    }
+
     setActiveInstanceId((prev) => {
-      if (prev !== instanceId) return prev
-      const remaining = scopedInstances.filter((item) => item.id !== instanceId)
+      if (prev !== instance.id) return prev
+      const remaining = instancesRef.current.filter((item) => item.id !== instance.id)
       return remaining[0]?.id ?? null
     })
-  }, [removeInstance, scopedInstances, setActiveInstanceId])
+  }, [instancesOverride, removeInstance, setActiveInstanceId])
 
-  if (scopedInstances.length === 0) return null
+  const renderBrowserActions = useCallback((instance: BrowserInstanceInfo) => {
+    const canUseLiveWindowActions = !instancesOverride
+    const targetSessionId = instance.boundSessionId ?? instance.ownerSessionId
+    const canOpenSession = !!targetSessionId
+    const openSessionLabel = instance.agentControlActive
+      ? 'Open Session Using this Window'
+      : 'Open Session Which Used this Window'
 
-  const visible = scopedInstances.slice(0, MAX_VISIBLE_BADGES)
-  const overflow = scopedInstances.slice(MAX_VISIBLE_BADGES)
+    return (
+      <>
+        <StyledDropdownMenuItem
+          disabled={!canUseLiveWindowActions}
+          onSelect={() => focusBrowserWindow(instance)}
+        >
+          <Icons.Monitor className="h-3.5 w-3.5" />
+          Show Browser Window
+        </StyledDropdownMenuItem>
+
+        <StyledDropdownMenuItem
+          disabled={!canOpenSession}
+          onSelect={() => openSessionUsingWindow(instance)}
+        >
+          <Icons.PanelRightOpen className="h-3.5 w-3.5" />
+          {openSessionLabel}
+        </StyledDropdownMenuItem>
+
+        <StyledDropdownMenuSeparator />
+
+        <StyledDropdownMenuItem
+          variant="destructive"
+          disabled={!canUseLiveWindowActions}
+          onSelect={() => terminateBrowserWindow(instance)}
+        >
+          <Icons.XCircle className="h-3.5 w-3.5" />
+          Terminate Browser
+        </StyledDropdownMenuItem>
+      </>
+    )
+  }, [instancesOverride, focusBrowserWindow, openSessionUsingWindow, terminateBrowserWindow])
+
+  if (orderedInstances.length === 0) return null
+
+  const visible = orderedInstances.slice(0, MAX_VISIBLE_BADGES)
+  const overflow = orderedInstances.slice(MAX_VISIBLE_BADGES)
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1.5">
       {visible.map((instance) => (
-        <BrowserTabBadge
-          key={instance.id}
-          instance={instance}
-          isActive={instance.id === activeInstanceId}
-          onClick={() => handleBadgeClick(instance.id)}
-          onClose={() => handleBadgeClose(instance.id)}
-        />
+        <DropdownMenu key={instance.id}>
+          <DropdownMenuTrigger asChild>
+            <BrowserTabBadge
+              instance={instance}
+              isActive={instance.id === activeInstanceId}
+            />
+          </DropdownMenuTrigger>
+          <StyledDropdownMenuContent align="end" minWidth="min-w-56">
+            {renderBrowserActions(instance)}
+          </StyledDropdownMenuContent>
+        </DropdownMenu>
       ))}
 
       {overflow.length > 0 && (
@@ -136,26 +243,28 @@ export function BrowserTabStrip({ activeSessionId }: BrowserTabStripProps) {
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="h-[26px] px-1.5 rounded-md text-[11px] text-foreground/50 bg-foreground/[0.04] border border-foreground/[0.06] hover:bg-foreground/[0.08] transition-colors cursor-pointer"
+              className="h-[26px] px-1.5 rounded-lg text-[11px] text-foreground/50 bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors cursor-pointer"
             >
               +{overflow.length}
             </button>
           </DropdownMenuTrigger>
-          <StyledDropdownMenuContent align="end" minWidth="min-w-48">
+          <StyledDropdownMenuContent align="end" minWidth="min-w-64">
             {overflow.map((instance) => {
               const hostname = getHostname(instance.url)
               return (
-                <StyledDropdownMenuItem
-                  key={instance.id}
-                  onClick={() => handleBadgeClick(instance.id)}
-                >
-                  {instance.isLoading ? (
-                    <Icons.Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Icons.Globe className="h-3.5 w-3.5" />
-                  )}
-                  <span className="truncate">{instance.title || hostname}</span>
-                </StyledDropdownMenuItem>
+                <DropdownMenuSub key={instance.id}>
+                  <StyledDropdownMenuSubTrigger>
+                    {instance.isLoading ? (
+                      <Spinner className="text-[10px]" />
+                    ) : (
+                      <Icons.Globe className="h-3.5 w-3.5" />
+                    )}
+                    <span className="truncate">{instance.title || hostname}</span>
+                  </StyledDropdownMenuSubTrigger>
+                  <StyledDropdownMenuSubContent minWidth="min-w-56">
+                    {renderBrowserActions(instance)}
+                  </StyledDropdownMenuSubContent>
+                </DropdownMenuSub>
               )
             })}
           </StyledDropdownMenuContent>

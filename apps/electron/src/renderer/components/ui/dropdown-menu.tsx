@@ -4,6 +4,29 @@ import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
+const SUPPORTED_HOVER_PREFIXES = ["bg-", "text-", "border-", "ring-", "opacity-"]
+
+function mirrorHoverToOpenStateClasses(className?: string): string | undefined {
+  if (!className) return className
+
+  const tokens = className.trim().split(/\s+/)
+  const mirrored: string[] = []
+
+  for (const token of tokens) {
+    if (!token.includes("hover:")) continue
+
+    const hoverIdx = token.indexOf("hover:")
+    const afterHover = token.slice(hoverIdx + "hover:".length)
+    const utility = afterHover.includes(":") ? afterHover.slice(afterHover.lastIndexOf(":") + 1) : afterHover
+
+    if (!SUPPORTED_HOVER_PREFIXES.some(prefix => utility.startsWith(prefix))) continue
+
+    mirrored.push(token.replace("hover:", "data-[state=open]:"))
+  }
+
+  return cn(...mirrored, className)
+}
+
 function DropdownMenu({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
@@ -20,15 +43,46 @@ function DropdownMenuPortal({
 
 const DropdownMenuTrigger = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger>
->(({ className, ...props }, ref) => (
-  <DropdownMenuPrimitive.Trigger
-    ref={ref}
-    data-slot="dropdown-menu-trigger"
-    className={cn("select-none", className)}
-    {...props}
-  />
-))
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger> & {
+    /** Auto-mirror hover:* classes to data-[state=open]:* while menu is open. Default: true */
+    autoMirrorHoverToOpen?: boolean
+  }
+>(({ className, autoMirrorHoverToOpen = true, asChild, children, ...props }, ref) => {
+  const triggerClassName = cn(
+    "select-none",
+    autoMirrorHoverToOpen ? mirrorHoverToOpenStateClasses(className) : className
+  )
+
+  if (asChild && autoMirrorHoverToOpen && React.isValidElement(children)) {
+    const childClassName = (children.props as { className?: string }).className
+    const mergedChildClassName = mirrorHoverToOpenStateClasses(cn("select-none", childClassName, className))
+
+    return (
+      <DropdownMenuPrimitive.Trigger
+        ref={ref}
+        data-slot="dropdown-menu-trigger"
+        asChild
+        {...props}
+      >
+        {React.cloneElement(children as React.ReactElement<{ className?: string }>, {
+          className: mergedChildClassName,
+        })}
+      </DropdownMenuPrimitive.Trigger>
+    )
+  }
+
+  return (
+    <DropdownMenuPrimitive.Trigger
+      ref={ref}
+      data-slot="dropdown-menu-trigger"
+      asChild={asChild}
+      className={triggerClassName}
+      {...props}
+    >
+      {children}
+    </DropdownMenuPrimitive.Trigger>
+  )
+})
 DropdownMenuTrigger.displayName = "DropdownMenuTrigger"
 
 function DropdownMenuContent({

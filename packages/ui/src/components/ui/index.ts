@@ -29,3 +29,4 @@ export {
   StyledDropdownMenuSubContent,
 } from './StyledDropdown'
 export { BrowserShader, type BrowserShaderProps } from './BrowserShader'
+export { BrowserControls, type BrowserControlsProps } from './BrowserControls'

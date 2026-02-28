@@ -15,23 +15,46 @@ function validateBranchLikeSessionManager(args: {
   request: BranchRequest
   targetWorkspaceRootPath: string
   targetProvider?: 'anthropic' | 'pi'
+  targetProviderType?: string
+  targetPiAuthProvider?: string
   sourceManagedWorkspaceRootPath?: string
   sourceManagedSdkSessionId?: string
+  sourceProvider?: 'anthropic' | 'pi'
+  sourceProviderType?: string
+  sourcePiAuthProvider?: string
   sourceSession?: StoredSession
 }) {
-  const { request, targetWorkspaceRootPath, targetProvider = 'anthropic', sourceManagedWorkspaceRootPath, sourceManagedSdkSessionId, sourceSession } = args
+  const {
+    request,
+    targetWorkspaceRootPath,
+    targetProvider = 'anthropic',
+    targetProviderType,
+    targetPiAuthProvider,
+    sourceManagedWorkspaceRootPath,
+    sourceManagedSdkSessionId,
+    sourceProvider = 'anthropic',
+    sourceProviderType,
+    sourcePiAuthProvider,
+    sourceSession,
+  } = args
 
   if (request.branchFromSessionId || request.branchFromMessageId) {
     if (!request.branchFromSessionId || !request.branchFromMessageId) {
       throw new Error('Invalid branch request: both branchFromSessionId and branchFromMessageId are required')
     }
 
-    if (targetProvider === 'pi') {
-      throw new Error('Branching is not supported for the selected LLM connection')
-    }
-
     if (sourceManagedWorkspaceRootPath && sourceManagedWorkspaceRootPath !== targetWorkspaceRootPath) {
       throw new Error('Invalid branch request: source session belongs to a different workspace')
+    }
+
+    const resolvedTargetProviderType = targetProviderType ?? (targetProvider === 'pi' ? 'pi' : 'anthropic')
+    const resolvedSourceProviderType = sourceProviderType ?? (sourceProvider === 'pi' ? 'pi' : 'anthropic')
+    const providerMismatch = sourceProvider !== targetProvider
+    const providerTypeMismatch = resolvedSourceProviderType !== resolvedTargetProviderType
+    const piAuthProviderMismatch = sourceProvider === 'pi' && sourcePiAuthProvider !== targetPiAuthProvider
+
+    if (providerMismatch || providerTypeMismatch || piAuthProviderMismatch) {
+      throw new Error('Branching is only supported within the same provider/backend. Switch this panel connection and try again.')
     }
 
     if (!sourceSession) {
@@ -91,13 +114,46 @@ describe('session branching validation semantics', () => {
     })).toThrow('not found in source session')
   })
 
-  it('rejects branching when target provider does not support it (pi)', () => {
+  it('allows branching for pi provider', () => {
+    const sourceSession: StoredSession = {
+      sdkSessionId: 'pi-parent',
+      messages: [{ id: 'm1' }],
+    }
+
+    const result = validateBranchLikeSessionManager({
+      request: { branchFromSessionId: 'source-1', branchFromMessageId: 'm1' },
+      targetWorkspaceRootPath: '/ws-a',
+      targetProvider: 'pi',
+      sourceProvider: 'pi',
+      sourceManagedWorkspaceRootPath: '/ws-a',
+      sourceSession,
+    })
+
+    expect(result).toBeDefined()
+    expect(result?.branchFromSdkSessionId).toBe('pi-parent')
+  })
+
+  it('rejects cross-provider branch requests', () => {
+    expect(() => validateBranchLikeSessionManager({
+      request: { branchFromSessionId: 'source-1', branchFromMessageId: 'm1' },
+      targetWorkspaceRootPath: '/ws-a',
+      targetProvider: 'anthropic',
+      sourceProvider: 'pi',
+      sourceManagedWorkspaceRootPath: '/ws-a',
+      sourceSession: { messages: [{ id: 'm1' }] },
+    })).toThrow('Branching is only supported within the same provider/backend')
+  })
+
+  it('rejects pi branches when auth providers differ', () => {
     expect(() => validateBranchLikeSessionManager({
       request: { branchFromSessionId: 'source-1', branchFromMessageId: 'm1' },
       targetWorkspaceRootPath: '/ws-a',
       targetProvider: 'pi',
+      targetPiAuthProvider: 'openai-codex',
+      sourceProvider: 'pi',
+      sourcePiAuthProvider: 'github-copilot',
       sourceManagedWorkspaceRootPath: '/ws-a',
       sourceSession: { messages: [{ id: 'm1' }] },
-    })).toThrow('Branching is not supported')
+    })).toThrow('Branching is only supported within the same provider/backend')
   })
 })

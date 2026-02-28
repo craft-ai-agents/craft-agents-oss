@@ -70,6 +70,8 @@ export {
   MarkdownSpreadsheetBlock,
   type MarkdownProps,
   type RenderMode,
+  TiptapMarkdownEditor,
+  type TiptapMarkdownEditorProps,
   type MarkdownDatatableBlockProps,
   type MarkdownSpreadsheetBlockProps,
 } from './components/markdown'
@@ -92,6 +94,7 @@ export {
   StyledDropdownMenuSubTrigger,
   StyledDropdownMenuSubContent,
   BrowserShader,
+  BrowserControls,
   type SpinnerProps,
   type SimpleDropdownProps,
   type SimpleDropdownItemProps,
@@ -99,6 +102,7 @@ export {
   type PreviewHeaderBadgeProps,
   type PreviewBadgeVariant,
   type BrowserShaderProps,
+  type BrowserControlsProps,
 } from './components/ui'
 
 // Tooltip

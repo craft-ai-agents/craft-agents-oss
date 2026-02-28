@@ -4,7 +4,6 @@ import { useAtomValue, useStore } from "jotai"
 import { motion, AnimatePresence } from "motion/react"
 import {
   Archive,
-  CheckCircle2,
   Settings,
   ChevronRight,
   ChevronDown,
@@ -23,8 +22,6 @@ import {
   Inbox,
   Globe,
   FolderOpen,
-  HelpCircle,
-  ExternalLink,
   Cake,
   Calendar,
   Layers,
@@ -33,7 +30,6 @@ import {
   Radio,
   Bot,
   Info,
-  Webhook,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -70,7 +66,6 @@ import {
   AnimatedCollapsibleContent,
   springTransition as collapsibleSpring,
 } from "@/components/ui/collapsible"
-import { WorkspaceSwitcher } from "./WorkspaceSwitcher"
 import { SessionList, type ChatGroupingMode } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
 import { PanelStackContainer } from "./PanelStackContainer"
@@ -123,7 +118,6 @@ import { useAutomations } from "@/hooks/useAutomations"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { PanelHeader } from "./PanelHeader"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
-import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import { PANEL_GAP, PANEL_EDGE_INSET, RADIUS_EDGE, RADIUS_INNER } from "./panel-constants"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
@@ -1228,6 +1222,10 @@ function AppShellContent({
   // Use session metadata from Jotai atom (lightweight, no messages)
   // This prevents closures from retaining full message arrays
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
+  const setSessionMetaMap = useSetAtom(sessionMetaMapAtom)
+
+  // Workspace-level unread indicators (needed for workspace selectors across all workspaces)
+  const [workspaceUnreadMap, setWorkspaceUnreadMap] = useState<Record<string, boolean>>({})
 
   // Reload skills when active session's workingDirectory changes (for project-level skills)
   // Skills are loaded from: global (~/.agents/skills/), workspace, and project ({workingDirectory}/.agents/skills/)
@@ -1256,6 +1254,46 @@ function AppShellContent({
   const activeSessionMetas = useMemo(() => {
     return workspaceSessionMetas.filter(s => !s.isArchived)
   }, [workspaceSessionMetas])
+
+  const refreshWorkspaceUnreadMap = useCallback(async () => {
+    try {
+      const summary = await window.electronAPI.getUnreadSummary()
+      const next: Record<string, boolean> = {}
+
+      for (const workspace of workspaces) {
+        next[workspace.id] = !!summary.hasUnreadByWorkspace[workspace.id]
+      }
+
+      setWorkspaceUnreadMap(next)
+    } catch (error) {
+      console.error('[AppShell] Failed to refresh workspace unread indicators:', error)
+    }
+  }, [workspaces])
+
+  // Initial + workspace-list refresh
+  useEffect(() => {
+    void refreshWorkspaceUnreadMap()
+  }, [refreshWorkspaceUnreadMap])
+
+  // Keep active workspace unread indicator in sync with live metadata updates
+  useEffect(() => {
+    if (!activeWorkspaceId) return
+    const activeHasUnread = activeSessionMetas.some((session) => !!session.hasUnread)
+    setWorkspaceUnreadMap((prev) => ({ ...prev, [activeWorkspaceId]: activeHasUnread }))
+  }, [activeWorkspaceId, activeSessionMetas])
+
+  // Keep cross-workspace indicators in sync with global unread updates from main process
+  useEffect(() => {
+    const cleanup = window.electronAPI.onUnreadSummaryChanged((summary) => {
+      const next: Record<string, boolean> = {}
+      for (const workspace of workspaces) {
+        next[workspace.id] = !!summary.hasUnreadByWorkspace[workspace.id]
+      }
+      setWorkspaceUnreadMap(next)
+    })
+
+    return cleanup
+  }, [workspaces])
 
   // Count sessions by todo state (scoped to workspace)
   const isMetaDone = (s: SessionMeta) => s.sessionStatus === 'done' || s.sessionStatus === 'cancelled'
@@ -1770,19 +1808,19 @@ function AppShellContent({
     setTimeout(() => focusZone('chat', { intent: 'programmatic' }), 50)
   }, [activeWorkspace, focusZone, navigate])
 
-  // Create a new dedicated browser window and focus it.
+  // Create a brand new dedicated browser window and focus it.
+  // Intentionally unbound: this action should always create a NEW window.
   const handleNewBrowserWindow = useCallback(async () => {
     try {
       const instanceId = await window.electronAPI.browserPane.create({
         show: true,
-        bindToSessionId: effectiveSessionId ?? undefined,
       })
       await window.electronAPI.browserPane.focus(instanceId)
     } catch (error) {
       console.error('[Chat] Failed to create browser window:', error)
       toast.error('Failed to create browser window')
     }
-  }, [effectiveSessionId])
+  }, [])
 
   // Delete Source - simplified since agents system is removed
   const handleDeleteSource = useCallback(async (sourceSlug: string) => {
@@ -2074,7 +2112,11 @@ function AppShellContent({
     <AppShellProvider value={appShellContextValue}>
         {/* === TOP BAR === */}
         <TopBar
-          workspaceName={activeWorkspace?.name}
+          workspaces={workspaces}
+          activeWorkspaceId={activeWorkspaceId}
+          onSelectWorkspace={onSelectWorkspace}
+          workspaceUnreadMap={workspaceUnreadMap}
+          onWorkspaceCreated={() => onRefreshWorkspaces?.()}
           activeSessionId={effectiveSessionId}
           onNewChat={() => handleNewChat()}
           onNewWindow={() => window.electronAPI.menuNewWindow()}
@@ -2161,6 +2203,20 @@ function AppShellContent({
                       contextMenu: {
                         type: 'allSessions',
                         onConfigureStatuses: openConfigureStatuses,
+                        onMarkAllRead: () => {
+                          if (!activeWorkspaceId) return
+                          // Optimistic: clear hasUnread on all workspace session metas
+                          setSessionMetaMap(prev => {
+                            const next = new Map(prev)
+                            for (const [id, meta] of next) {
+                              if (meta.workspaceId === activeWorkspaceId && meta.hasUnread) {
+                                next.set(id, { ...meta, hasUnread: false })
+                              }
+                            }
+                            return next
+                          })
+                          window.electronAPI.markAllSessionsRead(activeWorkspaceId)
+                        },
                       },
                       // Enable flat DnD reorder for status items
                       sortable: { onReorder: handleStatusReorder },
@@ -2368,68 +2424,6 @@ function AppShellContent({
                 </div>
               </div>
 
-              {/* Sidebar Bottom Section: WorkspaceSwitcher + Help icon */}
-              <div className="mt-auto shrink-0 py-2 px-2">
-                <div className="flex items-center gap-1">
-                  {/* Workspace switcher takes available space */}
-                  <div className="flex-1 min-w-0">
-                    <WorkspaceSwitcher
-                      isCollapsed={false}
-                      workspaces={workspaces}
-                      activeWorkspaceId={activeWorkspaceId}
-                      onSelect={onSelectWorkspace}
-                      onWorkspaceCreated={() => onRefreshWorkspaces?.()}
-                    />
-                  </div>
-                  {/* Help button - icon only with tooltip */}
-                  <DropdownMenu>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            className="flex items-center justify-center h-7 w-7 rounded-[6px] select-none outline-none hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-                          >
-                            <HelpCircle className="h-4 w-4 text-foreground/60" />
-                          </button>
-                        </DropdownMenuTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">Help & Documentation</TooltipContent>
-                    </Tooltip>
-                    <StyledDropdownMenuContent align="end" side="top" sideOffset={8}>
-                      <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('sources'))}>
-                        <DatabaseZap className="h-3.5 w-3.5" />
-                        <span className="flex-1">Sources</span>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                      </StyledDropdownMenuItem>
-                      <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('skills'))}>
-                        <Zap className="h-3.5 w-3.5" />
-                        <span className="flex-1">Skills</span>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                      </StyledDropdownMenuItem>
-                      <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('statuses'))}>
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        <span className="flex-1">Statuses</span>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                      </StyledDropdownMenuItem>
-                      <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('permissions'))}>
-                        <Settings className="h-3.5 w-3.5" />
-                        <span className="flex-1">Permissions</span>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                      </StyledDropdownMenuItem>
-                      <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('automations'))}>
-                        <Webhook className="h-3.5 w-3.5" />
-                        <span className="flex-1">Automations</span>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                      </StyledDropdownMenuItem>
-                      <StyledDropdownMenuSeparator />
-                      <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}>
-                        <ExternalLink className="h-3.5 w-3.5" />
-                        <span className="flex-1">All Documentation</span>
-                      </StyledDropdownMenuItem>
-                    </StyledDropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
             </div>
           </div>
           }

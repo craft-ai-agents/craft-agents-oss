@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import * as Icons from 'lucide-react'
 import type { ComponentEntry } from './types'
-import { BrowserShader, TurnCard, type ActivityItem, type ResponseContent } from '@craft-agent/ui'
+import { BrowserControls, TurnCard, type ActivityItem, type ResponseContent } from '@craft-agent/ui'
 import { AnimatePresence, motion } from 'motion/react'
-import { TopBarButton } from '@/components/ui/TopBarButton'
-import { isMac } from '@/lib/platform'
-import { BROWSER_LIVE_FX } from '../../../shared/browser-live-fx'
+import { BrowserTabStrip } from '@/components/browser/BrowserTabStrip'
+import type { BrowserInstanceInfo } from '../../../shared/types'
+import { BROWSER_LIVE_FX_BORDER, getBrowserLiveFxCornerRadii } from '../../../shared/browser-live-fx'
 
 interface BrowserTraceSidebarSampleProps {
   scenario: 'core' | 'all-native-tools' | 'browser-tool-wrapper' | 'full-matrix'
@@ -17,8 +17,18 @@ interface BrowserTraceSidebarSampleProps {
 
 type RunState = BrowserTraceSidebarSampleProps['runState']
 type Scenario = BrowserTraceSidebarSampleProps['scenario']
+type AgentVisualState = 'idle' | 'active' | 'failed'
 
 const now = Date.now()
+const PLAYGROUND_LIVE_FX_CORNERS = getBrowserLiveFxCornerRadii(
+  typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac')
+    ? 'darwin'
+    : typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('win')
+      ? 'win32'
+      : typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('linux')
+        ? 'linux'
+        : 'other',
+)
 
 const CORE_TURN: ActivityItem[] = [
   {
@@ -175,6 +185,21 @@ function getLiveFxPayload(scenario: Scenario, runState: RunState): { active: boo
   }
 }
 
+function getLiveFxPayloadFromAgentState(
+  scenario: Scenario,
+  agentState: AgentVisualState,
+): { active: boolean; label: string; cursor: { x: number; y: number } | null } {
+  switch (agentState) {
+    case 'failed':
+      return getLiveFxPayload(scenario, 'failed')
+    case 'active':
+      return getLiveFxPayload(scenario, 'running')
+    case 'idle':
+    default:
+      return getLiveFxPayload(scenario, 'completed')
+  }
+}
+
 function BrowserMockPageSurface({ className }: { className?: string }) {
   return (
     <div className={className ?? 'absolute inset-0 p-6 z-10'}>
@@ -195,21 +220,18 @@ function BrowserMockPageSurface({ className }: { className?: string }) {
 
 function BrowserEdgeShaderFx({ className = 'absolute inset-0 pointer-events-none z-20', rounded = false }: { className?: string; rounded?: boolean }) {
   return (
-    <BrowserShader
+    <div
       className={className}
-      rounded={rounded}
-      borderRadius={BROWSER_LIVE_FX.borderRadius}
-      maskImage={BROWSER_LIVE_FX.borderMaskImage}
-      opacity={0.85}
-      colorBack="rgba(0,0,0,0)"
-      colorFront="#35d7ff"
-      shape="warp"
-      type="4x4"
-      size={2}
-      speed={0.55}
-      scale={0.78}
-      maxPixelCount={350000}
-      minPixelRatio={1}
+      style={{
+        borderTopLeftRadius: rounded ? PLAYGROUND_LIVE_FX_CORNERS.topLeft : undefined,
+        borderTopRightRadius: rounded ? PLAYGROUND_LIVE_FX_CORNERS.topRight : undefined,
+        borderBottomLeftRadius: rounded ? PLAYGROUND_LIVE_FX_CORNERS.bottomLeft : undefined,
+        borderBottomRightRadius: rounded ? PLAYGROUND_LIVE_FX_CORNERS.bottomRight : undefined,
+        borderWidth: BROWSER_LIVE_FX_BORDER.width,
+        borderStyle: BROWSER_LIVE_FX_BORDER.style,
+        borderColor: BROWSER_LIVE_FX_BORDER.color,
+        boxShadow: BROWSER_LIVE_FX_BORDER.boxShadow,
+      }}
     />
   )
 }
@@ -290,78 +312,32 @@ function BrowserTraceSidebarSample({ scenario, runState, sidebarWidth, hdrEffect
 function BrowserFramePlayground({
   initialUrl,
   loading,
-  scenario,
-  runState,
-  showToolTrace,
-  sidebarWidth,
+  agentState,
+  themeColor,
 }: {
   initialUrl: string
   loading: boolean
-  scenario: Scenario
-  runState: RunState
-  showToolTrace: boolean
-  sidebarWidth: number
+  agentState: AgentVisualState
+  themeColor: string
 }) {
   const [url, setUrl] = useState(initialUrl)
-  const [isUrlFocused, setIsUrlFocused] = useState(false)
-  const turns = getScenarioTurns(scenario).map((items) => applyRunState(items, runState))
-  const effectiveLoading = loading || runState === 'running'
-  const stoplightInset = isMac ? 86 : 0
-  const liveFx = getLiveFxPayload(scenario, runState)
+  const scenario: Scenario = 'full-matrix'
+  const liveFx = getLiveFxPayloadFromAgentState(scenario, agentState)
 
   return (
     <div className="w-full h-[700px] rounded-xl border border-border overflow-hidden bg-background shadow-sm flex">
       <div className="flex-1 min-w-0">
-        <div className="relative h-[48px] border-b border-foreground/6 px-3 flex items-center gap-1">
-          <div className="shrink-0" style={{ width: stoplightInset }} />
-          <TopBarButton aria-label="Back">
-            <Icons.ChevronLeft className="h-[18px] w-[18px] text-foreground/70" strokeWidth={1.5} />
-          </TopBarButton>
-          <TopBarButton aria-label="Forward">
-            <Icons.ChevronRight className="h-[18px] w-[18px] text-foreground/70" strokeWidth={1.5} />
-          </TopBarButton>
-          <TopBarButton aria-label={effectiveLoading ? 'Stop loading' : 'Reload'}>
-            {effectiveLoading ? (
-              <Icons.X className="h-[16px] w-[16px] text-foreground/70" strokeWidth={1.8} />
-            ) : (
-              <Icons.RotateCcw className="h-[15px] w-[15px] text-foreground/70" strokeWidth={1.8} />
-            )}
-          </TopBarButton>
-          <form
-            className="flex-1 min-w-[220px]"
-            onSubmit={(e) => {
-              e.preventDefault()
-            }}
-          >
-            <div className={`h-[30px] rounded-[8px] transition-all ${isUrlFocused ? 'bg-background border border-transparent shadow-minimal' : 'bg-transparent border border-foreground/5'}`}>
-              <input
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                onFocus={() => setIsUrlFocused(true)}
-                onBlur={() => setIsUrlFocused(false)}
-                className="w-full h-full rounded-[8px] bg-transparent px-3 text-[13px] text-foreground/70 outline-none"
-              />
-            </div>
-          </form>
-          <div className="ml-2 max-w-[220px] truncate text-[11px] text-foreground/50">Browser Frame Playground</div>
-          <AnimatePresence>
-            {effectiveLoading && (
-              <motion.div
-                className="pointer-events-none absolute left-0 right-0 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-accent to-transparent"
-                style={{ backgroundSize: '220% 100%' }}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 0.9, backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
-                exit={{ opacity: 0 }}
-                transition={{
-                  opacity: { duration: 0.2, ease: 'easeOut' },
-                  backgroundPosition: { duration: 1.6, repeat: Infinity, ease: 'easeInOut' },
-                }}
-              />
-            )}
-          </AnimatePresence>
-        </div>
-        <div className="h-[calc(100%-48px)] bg-gradient-to-br from-slate-100/70 to-slate-200/70 dark:from-slate-900/70 dark:to-slate-950/70 p-4">
-          <div className="relative h-full w-full rounded-lg border border-foreground/10 bg-background/80 overflow-hidden">
+        <BrowserControls
+          url={url}
+          loading={loading}
+          onNavigate={setUrl}
+          onUrlChange={setUrl}
+          themeColor={themeColor || undefined}
+          urlBarClassName="max-w-[600px]"
+          className="border-b-0"
+        />
+        <div className="h-[calc(100%-48px)] bg-gradient-to-br from-slate-100/70 to-slate-200/70 dark:from-slate-900/70 dark:to-slate-950/70">
+          <div className="relative h-full w-full bg-background/80 overflow-hidden">
             <BrowserMockPageSurface className="absolute inset-0 p-6" />
 
             <AnimatePresence>
@@ -378,14 +354,14 @@ function BrowserFramePlayground({
                   <div
                     className="absolute text-[11px]"
                     style={{
-                      top: BROWSER_LIVE_FX.chipTop,
-                      right: BROWSER_LIVE_FX.chipRight,
-                      padding: BROWSER_LIVE_FX.chipPadding,
-                      borderRadius: BROWSER_LIVE_FX.chipRadius,
-                      font: BROWSER_LIVE_FX.chipFont,
-                      background: BROWSER_LIVE_FX.chipBackground,
-                      color: BROWSER_LIVE_FX.chipColor,
-                      backdropFilter: BROWSER_LIVE_FX.chipBackdropFilter,
+                      top: '8px',
+                      right: '8px',
+                      padding: '4px 8px',
+                      borderRadius: '7px',
+                      font: '11px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',
+                      background: 'rgba(2, 6, 23, 0.82)',
+                      color: 'rgba(236, 254, 255, 0.95)',
+                      backdropFilter: 'blur(4px)',
                     }}
                   >
                     {liveFx.label}
@@ -395,19 +371,23 @@ function BrowserFramePlayground({
                     <motion.div
                       className="absolute"
                       style={{
-                        width: BROWSER_LIVE_FX.cursorWidth,
-                        height: BROWSER_LIVE_FX.cursorHeight,
-                        left: liveFx.cursor.x - BROWSER_LIVE_FX.cursorOffset,
-                        top: liveFx.cursor.y - BROWSER_LIVE_FX.cursorOffset,
-                        filter: BROWSER_LIVE_FX.cursorFilter,
+                        width: '18px',
+                        height: '22px',
+                        left: liveFx.cursor.x - 2,
+                        top: liveFx.cursor.y - 2,
+                        filter: 'drop-shadow(0 0 8px rgba(0,0,0,0.35))',
                       }}
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ duration: 0.16, ease: 'easeOut' }}
                     >
                       <div
-                        className="h-full w-full"
-                        dangerouslySetInnerHTML={{ __html: BROWSER_LIVE_FX.cursorInnerHtml }}
+                        className="h-full w-full bg-black"
+                        style={{
+                          clipPath: 'polygon(0% 0%, 0% 100%, 34% 73%, 51% 100%, 66% 94%, 48% 67%, 100% 67%)',
+                          borderRadius: '2px',
+                          outline: '1px solid rgba(255,255,255,0.75)',
+                        }}
                       />
                     </motion.div>
                   )}
@@ -418,33 +398,388 @@ function BrowserFramePlayground({
         </div>
       </div>
 
-      {showToolTrace && (
-        <div
-          className="h-full border-l border-border bg-background/95 backdrop-blur-sm overflow-y-auto p-3 space-y-3"
-          style={{ width: `${sidebarWidth}px` }}
-        >
-          {turns.map((activities, index) => {
-            const isRunning = runState === 'running' && index === turns.length - 1
-            const response = getScenarioResponse(scenario, runState)
+    </div>
+  )
+}
 
-            return (
-              <TurnCard
-                key={`browser-frame-turn-${index + 1}`}
-                sessionId="playground-browser-session"
-                turnId={`browser-frame-turn-${index + 1}`}
-                activities={activities}
-                response={response}
-                intent={index === 0 ? 'Tool execution trace' : 'Wrapper command trace'}
-                isStreaming={isRunning}
-                isComplete={!isRunning}
-                onOpenFile={(path) => console.log('[Playground] Open file:', path)}
-                onOpenUrl={(url) => console.log('[Playground] Open URL:', url)}
-                compactMode={true}
-              />
-            )
-          })}
+type BrowserTabStripMode = 'auto' | 'live' | 'mock'
+type BrowserTabStripMockPreset = 'default' | 'long-names' | 'many-running' | 'stress-mix'
+
+// NOTE: Theme colors below are derived from the same extraction logic used by browser-pane-manager
+// (meta tags + top-surface sampling fallback) and then applied to realistic mock scenarios.
+const MOCK_BROWSER_PRESETS: Record<BrowserTabStripMockPreset, BrowserInstanceInfo[]> = {
+  default: [
+    {
+      id: 'mock-1',
+      url: 'https://localhost:5173/playground.html',
+      title: 'localhost',
+      favicon: null,
+      isLoading: false,
+      canGoBack: true,
+      canGoForward: false,
+      boundSessionId: '260228-high-comet',
+      ownerType: 'session',
+      ownerSessionId: '260228-high-comet',
+      isVisible: true,
+      agentControlActive: false,
+      themeColor: '#4f46e5',
+    },
+    {
+      id: 'mock-2',
+      url: 'https://linear.app/craft-docs/settings/teams',
+      title: 'Linear',
+      favicon: null,
+      isLoading: true,
+      canGoBack: true,
+      canGoForward: true,
+      boundSessionId: '260228-vital-thistle',
+      ownerType: 'session',
+      ownerSessionId: '260228-vital-thistle',
+      isVisible: true,
+      agentControlActive: true,
+      themeColor: 'lch(96.667% 0 282.863 / 1)',
+    },
+    {
+      id: 'mock-3',
+      url: 'https://craftdocs.bamboohr.com/employees/pto/?id=132',
+      title: 'BambooHR',
+      favicon: null,
+      isLoading: false,
+      canGoBack: true,
+      canGoForward: false,
+      boundSessionId: '260228-quick-bobcat',
+      ownerType: 'session',
+      ownerSessionId: '260228-quick-bobcat',
+      isVisible: false,
+      agentControlActive: false,
+      themeColor: '#6db33f',
+    },
+    {
+      id: 'mock-4',
+      url: 'https://github.com/lukilabs/craft-agents-oss',
+      title: 'GitHub',
+      favicon: null,
+      isLoading: false,
+      canGoBack: true,
+      canGoForward: true,
+      boundSessionId: '260228-high-comet',
+      ownerType: 'session',
+      ownerSessionId: '260228-high-comet',
+      isVisible: true,
+      agentControlActive: false,
+      themeColor: '#1e2327',
+    },
+    {
+      id: 'mock-5',
+      url: 'https://telex.hu/',
+      title: 'Telex',
+      favicon: null,
+      isLoading: false,
+      canGoBack: true,
+      canGoForward: false,
+      boundSessionId: '260228-high-comet',
+      ownerType: 'session',
+      ownerSessionId: '260228-high-comet',
+      isVisible: true,
+      agentControlActive: false,
+      themeColor: '#002244',
+    },
+  ],
+  'long-names': [
+    {
+      id: 'long-1',
+      url: 'https://www.notion.so/Craft-Agents-Multi-Session-Browser-Registry-Design-Review-Thread-2026-Q1',
+      title: 'Craft Agents Multi-Session Browser Registry Design Review Thread (Q1 2026)',
+      favicon: null,
+      isLoading: false,
+      canGoBack: true,
+      canGoForward: true,
+      boundSessionId: '260228-high-comet',
+      ownerType: 'session',
+      ownerSessionId: '260228-high-comet',
+      isVisible: true,
+      agentControlActive: false,
+      themeColor: null,
+    },
+    {
+      id: 'long-2',
+      url: 'https://linear.app/craft-docs/issue/CHA-999/very-long-title-to-test-truncation-behavior-in-top-bar-badges',
+      title: 'CHA-999 — Extremely Long Issue Title to Validate Ellipsis and Badge Width Constraints',
+      favicon: null,
+      isLoading: false,
+      canGoBack: true,
+      canGoForward: false,
+      boundSessionId: '260228-vital-thistle',
+      ownerType: 'session',
+      ownerSessionId: '260228-vital-thistle',
+      isVisible: true,
+      agentControlActive: true,
+      themeColor: 'lch(96.667% 0 282.863 / 1)',
+    },
+    {
+      id: 'long-3',
+      url: 'https://docs.google.com/document/d/this-is-a-super-long-doc-id-used-for-playground-visual-tests/edit',
+      title: 'Quarterly Platform Reliability Retrospective — Working Draft — Internal Only',
+      favicon: null,
+      isLoading: false,
+      canGoBack: true,
+      canGoForward: false,
+      boundSessionId: '260228-quick-bobcat',
+      ownerType: 'session',
+      ownerSessionId: '260228-quick-bobcat',
+      isVisible: false,
+      agentControlActive: false,
+      themeColor: null,
+    },
+  ],
+  'many-running': [
+    {
+      id: 'run-1',
+      url: 'https://app.datadoghq.eu/dashboard/abc',
+      title: 'Datadog',
+      favicon: null,
+      isLoading: true,
+      canGoBack: true,
+      canGoForward: false,
+      boundSessionId: '260228-high-comet',
+      ownerType: 'session',
+      ownerSessionId: '260228-high-comet',
+      isVisible: true,
+      agentControlActive: true,
+      themeColor: null,
+    },
+    {
+      id: 'run-2',
+      url: 'https://linear.app/craft-docs/team/CHA/active',
+      title: 'Linear Active Issues',
+      favicon: null,
+      isLoading: true,
+      canGoBack: true,
+      canGoForward: true,
+      boundSessionId: '260228-high-comet',
+      ownerType: 'session',
+      ownerSessionId: '260228-high-comet',
+      isVisible: true,
+      agentControlActive: true,
+      themeColor: 'lch(96.667% 0 282.863 / 1)',
+    },
+    {
+      id: 'run-3',
+      url: 'https://github.com/lukilabs/craft-agents-oss/pulls',
+      title: 'GitHub PRs',
+      favicon: null,
+      isLoading: true,
+      canGoBack: false,
+      canGoForward: false,
+      boundSessionId: '260228-vital-thistle',
+      ownerType: 'session',
+      ownerSessionId: '260228-vital-thistle',
+      isVisible: true,
+      agentControlActive: false,
+      themeColor: '#1e2327',
+    },
+    {
+      id: 'run-4',
+      url: 'https://craftdocs.bamboohr.com/reports',
+      title: 'BambooHR Reports',
+      favicon: null,
+      isLoading: true,
+      canGoBack: true,
+      canGoForward: false,
+      boundSessionId: '260228-quick-bobcat',
+      ownerType: 'session',
+      ownerSessionId: '260228-quick-bobcat',
+      isVisible: true,
+      agentControlActive: false,
+      themeColor: '#6db33f',
+    },
+    {
+      id: 'run-5',
+      url: 'https://www.notion.so/',
+      title: 'Notion',
+      favicon: null,
+      isLoading: true,
+      canGoBack: true,
+      canGoForward: true,
+      boundSessionId: '260228-quick-bobcat',
+      ownerType: 'session',
+      ownerSessionId: '260228-quick-bobcat',
+      isVisible: false,
+      agentControlActive: false,
+      themeColor: '#111111',
+    },
+  ],
+  'stress-mix': [
+    {
+      id: 'mix-1',
+      url: 'https://localhost:5173/playground.html',
+      title: 'localhost',
+      favicon: null,
+      isLoading: false,
+      canGoBack: true,
+      canGoForward: false,
+      boundSessionId: '260228-high-comet',
+      ownerType: 'session',
+      ownerSessionId: '260228-high-comet',
+      isVisible: true,
+      agentControlActive: false,
+      themeColor: null,
+    },
+    {
+      id: 'mix-2',
+      url: 'https://linear.app/craft-docs/settings/new-team',
+      title: 'Add team',
+      favicon: null,
+      isLoading: true,
+      canGoBack: true,
+      canGoForward: true,
+      boundSessionId: '260228-vital-thistle',
+      ownerType: 'session',
+      ownerSessionId: '260228-vital-thistle',
+      isVisible: true,
+      agentControlActive: true,
+      themeColor: 'lch(96.667% 0 282.863 / 1)',
+    },
+    {
+      id: 'mix-3',
+      url: 'https://craftdocs.bamboohr.com/employees/pto/?id=132',
+      title: 'Péter Bobula - Time Off',
+      favicon: null,
+      isLoading: false,
+      canGoBack: true,
+      canGoForward: false,
+      boundSessionId: '260228-quick-bobcat',
+      ownerType: 'session',
+      ownerSessionId: '260228-quick-bobcat',
+      isVisible: false,
+      agentControlActive: false,
+      themeColor: null,
+    },
+    {
+      id: 'mix-4',
+      url: 'https://github.com/lukilabs/craft-agents-oss',
+      title: 'Craft Agents OSS Repo with a Surprisingly Long Branch and Compare View Name',
+      favicon: null,
+      isLoading: false,
+      canGoBack: true,
+      canGoForward: true,
+      boundSessionId: '260228-high-comet',
+      ownerType: 'session',
+      ownerSessionId: '260228-high-comet',
+      isVisible: true,
+      agentControlActive: false,
+      themeColor: '#1e2327',
+    },
+    {
+      id: 'mix-5',
+      url: 'https://www.figma.com/file/abc/Design-System',
+      title: 'Figma Design System',
+      favicon: null,
+      isLoading: false,
+      canGoBack: false,
+      canGoForward: false,
+      boundSessionId: '260228-vital-thistle',
+      ownerType: 'session',
+      ownerSessionId: '260228-vital-thistle',
+      isVisible: true,
+      agentControlActive: false,
+      themeColor: '#1abcfe',
+    },
+    {
+      id: 'mix-6',
+      url: 'https://calendar.google.com',
+      title: 'Google Calendar',
+      favicon: null,
+      isLoading: true,
+      canGoBack: true,
+      canGoForward: false,
+      boundSessionId: '260228-quick-bobcat',
+      ownerType: 'session',
+      ownerSessionId: '260228-quick-bobcat',
+      isVisible: true,
+      agentControlActive: false,
+      themeColor: '#1a73e8',
+    },
+    {
+      id: 'mix-7',
+      url: 'https://telex.hu/',
+      title: 'Telex - friss hírek, hiteles információk',
+      favicon: null,
+      isLoading: false,
+      canGoBack: true,
+      canGoForward: false,
+      boundSessionId: '260228-high-comet',
+      ownerType: 'session',
+      ownerSessionId: '260228-high-comet',
+      isVisible: true,
+      agentControlActive: false,
+      themeColor: '#002244',
+    },
+  ],
+}
+
+function BrowserTabStripPlayground({
+  activeSessionId,
+  mode,
+  mockPreset,
+}: {
+  activeSessionId: string
+  mode: BrowserTabStripMode
+  mockPreset: BrowserTabStripMockPreset
+}) {
+  const hasBrowserPaneBridge = typeof window !== 'undefined' && !!window.electronAPI?.browserPane
+  const resolvedMode: Exclude<BrowserTabStripMode, 'auto'> = mode === 'auto'
+    ? (hasBrowserPaneBridge ? 'live' : 'mock')
+    : mode
+
+  const mockInstances = useMemo(() => {
+    const items = [...(MOCK_BROWSER_PRESETS[mockPreset] ?? MOCK_BROWSER_PRESETS.default)]
+    if (!activeSessionId) return items
+
+    items.sort((a, b) => {
+      const aInActiveSession = a.boundSessionId === activeSessionId ? 0 : 1
+      const bInActiveSession = b.boundSessionId === activeSessionId ? 0 : 1
+      if (aInActiveSession !== bInActiveSession) return aInActiveSession - bInActiveSession
+      return a.id.localeCompare(b.id)
+    })
+
+    return items
+  }, [activeSessionId, mockPreset])
+
+  if (resolvedMode === 'live' && !hasBrowserPaneBridge) {
+    return (
+      <div className="w-full max-w-[900px] p-6 rounded-xl border border-border bg-background shadow-sm">
+        <div className="text-sm font-medium mb-2">Top Bar Browser Strip</div>
+        <p className="text-xs text-foreground/60">
+          Live mode requires Electron preload APIs (`window.electronAPI.browserPane`), which are not available in plain browser context.
+          Switch mode to Auto or Mock for visual review here.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-full max-w-[900px] p-6 rounded-xl border border-border bg-background shadow-sm">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-medium">Top Bar Browser Strip</h3>
+        <span className="text-xs text-foreground/50">
+          {resolvedMode === 'live' ? 'Live data from browser registry' : 'Mock preview states'}
+        </span>
+      </div>
+      {resolvedMode === 'mock' && (
+        <div className="text-xs text-foreground/50 mb-2">
+          {mockInstances.length} tabs • {mockInstances.filter(i => i.isLoading).length} loading • {mockInstances.filter(i => !i.isVisible).length} hidden • {mockInstances.filter(i => i.agentControlActive).length} agent-controlled
         </div>
       )}
+      <div className="h-[48px] px-3 rounded-lg border border-foreground/[0.08] bg-background flex items-center justify-end gap-1">
+        <BrowserTabStrip
+          activeSessionId={activeSessionId || null}
+          instancesOverride={resolvedMode === 'mock' ? mockInstances : undefined}
+        />
+      </div>
+      <p className="text-xs text-foreground/50 mt-3">
+        Accent 1px border indicates a browser currently controlled by an agent.
+      </p>
     </div>
   )
 }
@@ -466,104 +801,89 @@ export const browserUiComponents: ComponentEntry[] = [
       },
       {
         name: 'loading',
-        description: 'Show Stop vs Reload button state.',
+        description: 'Website loading state only (URL bar spinner + Stop/Reload).',
         control: { type: 'boolean' },
         defaultValue: false,
       },
+
+
       {
-        name: 'showToolTrace',
-        description: 'Show browser tool execution trace next to the frame.',
-        control: { type: 'boolean' },
-        defaultValue: true,
-      },
-      {
-        name: 'scenario',
-        description: 'Choose which browser tool capability set to preview.',
+        name: 'agentState',
+        description: 'Agent activity state only (independent from website loading).',
         control: {
           type: 'select',
           options: [
-            { label: 'Core Flow', value: 'core' },
-            { label: 'All Native browser_* Tools', value: 'all-native-tools' },
-            { label: 'browser_tool Wrapper Commands', value: 'browser-tool-wrapper' },
-            { label: 'Full Matrix (Native + Wrapper)', value: 'full-matrix' },
-          ],
-        },
-        defaultValue: 'full-matrix',
-      },
-      {
-        name: 'runState',
-        description: 'Preview completed, running, and failed activity rendering states.',
-        control: {
-          type: 'select',
-          options: [
-            { label: 'Completed', value: 'completed' },
-            { label: 'Running', value: 'running' },
+            { label: 'Idle', value: 'idle' },
+            { label: 'Active', value: 'active' },
             { label: 'Failed', value: 'failed' },
           ],
         },
-        defaultValue: 'completed',
+        defaultValue: 'idle',
       },
       {
-        name: 'sidebarWidth',
-        description: 'Width of tool trace sidebar in pixels when visible.',
-        control: { type: 'number', min: 280, max: 520, step: 10 },
-        defaultValue: 360,
+        name: 'themeColor',
+        description: 'Website theme color (hex). Simulates <meta name="theme-color">.',
+        control: {
+          type: 'select',
+          options: [
+            { label: 'None', value: '' },
+            { label: 'Google Blue (#4285f4)', value: '#4285f4' },
+            { label: 'GitHub Dark (#24292e)', value: '#1e2327' },
+            { label: 'Stripe Purple (#635bff)', value: '#635bff' },
+            { label: 'Slack (#4a154b)', value: '#4a154b' },
+            { label: 'Linear (#5e6ad2)', value: 'lch(96.667% 0 282.863 / 1)' },
+            { label: 'Twitter/X (#15202b)', value: '#15202b' },
+            { label: 'YouTube Red (#ff0000)', value: '#ff0000' },
+            { label: 'Light Gray (#f5f5f5)', value: '#f5f5f5' },
+            { label: 'White (#ffffff)', value: '#ffffff' },
+          ],
+        },
+        defaultValue: '',
       },
+
     ],
   },
   {
-    id: 'browser-trace-sidebar-sample',
-    name: 'Browser Trace Sidebar (TurnCard + HDR)',
+    id: 'browser-tab-strip-playground',
+    name: 'Browser Tab Strip (Top Bar)',
     category: 'Browser',
-    description: 'Browser UI sample with placeholder page, HDR animated glow, cursor pulse, and in-window TurnCard trace sidebar.',
-    component: BrowserTraceSidebarSample,
-    layout: 'full',
+    description: 'Live BrowserTabStrip used in the main top bar, including global registry and agent-control accent border.',
+    component: BrowserTabStripPlayground,
     props: [
       {
-        name: 'scenario',
-        description: 'Choose which browser tool capability set to preview.',
+        name: 'mode',
+        description: 'Auto: use live in Electron and mock in plain browser. Live: force bridge usage. Mock: always show sample badges.',
         control: {
           type: 'select',
           options: [
-            { label: 'Core Flow', value: 'core' },
-            { label: 'All Native browser_* Tools', value: 'all-native-tools' },
-            { label: 'browser_tool Wrapper Commands', value: 'browser-tool-wrapper' },
-            { label: 'Full Matrix (Native + Wrapper)', value: 'full-matrix' },
+            { label: 'Auto', value: 'auto' },
+            { label: 'Live', value: 'live' },
+            { label: 'Mock', value: 'mock' },
           ],
         },
-        defaultValue: 'full-matrix',
+        defaultValue: 'mock',
       },
       {
-        name: 'runState',
-        description: 'Preview completed, running, and failed activity rendering states.',
+        name: 'mockPreset',
+        description: 'Mock state bundle for visual QA: long names, multiple running tabs, hidden tabs, and agent-controlled accents.',
         control: {
           type: 'select',
           options: [
-            { label: 'Completed', value: 'completed' },
-            { label: 'Running', value: 'running' },
-            { label: 'Failed', value: 'failed' },
+            { label: 'Default', value: 'default' },
+            { label: 'Long Names', value: 'long-names' },
+            { label: 'Many Running', value: 'many-running' },
+            { label: 'Stress Mix', value: 'stress-mix' },
           ],
         },
-        defaultValue: 'completed',
+        defaultValue: 'stress-mix',
       },
       {
-        name: 'sidebarWidth',
-        description: 'Width of the trace sidebar in pixels.',
-        control: { type: 'number', min: 280, max: 520, step: 10 },
-        defaultValue: 360,
-      },
-      {
-        name: 'hdrEffect',
-        description: 'Enable animated HDR-like glow background layers.',
-        control: { type: 'boolean' },
-        defaultValue: true,
-      },
-      {
-        name: 'cursorPulse',
-        description: 'Enable animated cursor pulse path over placeholder page.',
-        control: { type: 'boolean' },
-        defaultValue: true,
+        name: 'activeSessionId',
+        description: 'Session used for ordering preference (session-local windows first) in both live and mock modes.',
+        control: { type: 'string', placeholder: '260228-high-comet' },
+        defaultValue: '260228-high-comet',
       },
     ],
   },
+
 ]

@@ -1454,11 +1454,21 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                                 branchFromMessageId: messageId,
                                 branchFromSessionId: session.id,
                                 name: `Branch of ${session.name || 'Untitled'}`,
+                                // Keep branch on the same backend/provider by inheriting parent session settings.
+                                llmConnection: session.llmConnection,
+                                model: session.model,
+                                permissionMode: session.permissionMode,
+                                workingDirectory: session.workingDirectory,
+                                enabledSourceSlugs: session.enabledSourceSlugs,
                               }
                             )
                             navigate(routes.view.allSessions(child.id), { newPanel: resolveBranchNewPanelOption(options) })
                           } catch (error) {
-                            const message = error instanceof Error ? error.message : 'Failed to create branch'
+                            const rawMessage = error instanceof Error ? error.message : 'Failed to create branch'
+                            const message = rawMessage.includes('source and target providers must match')
+                              || rawMessage.includes('same provider/backend')
+                              ? 'Branching is only supported within the same provider/backend. Switch this panel connection and try again.'
+                              : rawMessage
                             toast.error('Could not create branch', { description: message })
                           }
                         } : undefined}

@@ -150,6 +150,20 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return sessions
   })
 
+  // Get unread summary across all workspaces
+  ipcMain.handle(IPC_CHANNELS.GET_UNREAD_SUMMARY, async () => {
+    try {
+      await sessionManager.waitForInit()
+    } catch (error) {
+      ipcLog.error('GET_UNREAD_SUMMARY continuing after initialization failure:', error)
+    }
+    return sessionManager.getUnreadSummary()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MARK_ALL_SESSIONS_READ, async (_event, workspaceId: string) => {
+    return sessionManager.markAllSessionsRead(workspaceId)
+  })
+
   // Get a single session with messages (for lazy loading)
   ipcMain.handle(IPC_CHANNELS.GET_SESSION_MESSAGES, async (_event, sessionId: string) => {
     const end = perf.start('ipc.getSessionMessages')
@@ -3188,16 +3202,12 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     setRichToolDescriptions(enabled)
   })
 
-  // Update app badge count
-  ipcMain.handle(IPC_CHANNELS.BADGE_UPDATE, async (_event, count: number) => {
-    const { updateBadgeCount } = await import('./notifications')
-    updateBadgeCount(count)
-  })
-
-  // Clear app badge
-  ipcMain.handle(IPC_CHANNELS.BADGE_CLEAR, async () => {
-    const { clearBadgeCount } = await import('./notifications')
-    clearBadgeCount()
+  // Refresh badge count from current unread state (called by renderer on mount)
+  ipcMain.handle(IPC_CHANNELS.BADGE_REFRESH, async () => {
+    try {
+      await sessionManager.waitForInit()
+    } catch { /* continue */ }
+    sessionManager.refreshBadge()
   })
 
   // Set dock icon with badge (canvas-rendered badge image from renderer)

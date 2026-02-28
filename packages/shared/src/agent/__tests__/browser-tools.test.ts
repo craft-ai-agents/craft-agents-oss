@@ -28,10 +28,38 @@ function createMockFns(): BrowserPaneFns {
     fill: async (_ref: string, _value: string) => {},
     select: async (_ref: string, _value: string) => {},
     screenshot: async () => ({ png: Buffer.from('fake-png-data') }),
+    screenshotRegion: async () => ({ png: Buffer.from('fake-png-data') }),
+    getConsoleLogs: async () => ([
+      { timestamp: Date.now(), level: 'warn', message: 'Test warning' },
+    ]),
+    windowResize: async (args) => ({ width: args.width, height: args.height }),
+    getNetworkLogs: async () => ([
+      { timestamp: Date.now(), method: 'GET', url: 'https://example.com/api', status: 500, resourceType: 'xhr', ok: false },
+    ]),
+    waitFor: async (args) => ({ ok: true as const, kind: args.kind, elapsedMs: 123, detail: 'condition met' }),
+    sendKey: async (_args) => {},
+    getDownloads: async () => ([
+      { id: 'dl-1', timestamp: Date.now(), url: 'https://example.com/file.pdf', filename: 'file.pdf', state: 'completed', bytesReceived: 100, totalBytes: 100, mimeType: 'application/pdf' },
+    ]),
     scroll: async (_dir: 'up' | 'down' | 'left' | 'right', _amount?: number) => {},
     goBack: async () => {},
     goForward: async () => {},
     evaluate: async (expr: string) => eval(expr),
+    releaseControl: async () => {},
+    closeWindow: async () => {},
+    hideWindow: async () => {},
+    listWindows: async () => ([
+      {
+        id: 'browser-1',
+        title: 'Example Domain',
+        url: 'https://example.com',
+        isVisible: true,
+        ownerType: 'session',
+        ownerSessionId: 'test-session',
+        boundSessionId: 'test-session',
+        agentControlActive: true,
+      },
+    ]),
   }
 }
 
@@ -67,8 +95,8 @@ describe('createBrowserTools', () => {
     })
   })
 
-  it('returns exactly 12 tools', () => {
-    expect(tools.length).toBe(12)
+  it('returns exactly 19 tools', () => {
+    expect(tools.length).toBe(19)
   })
 
   it('includes all expected tool names', () => {
@@ -80,6 +108,13 @@ describe('createBrowserTools', () => {
     expect(names).toContain('browser_fill')
     expect(names).toContain('browser_select')
     expect(names).toContain('browser_screenshot')
+    expect(names).toContain('browser_screenshot_region')
+    expect(names).toContain('browser_console')
+    expect(names).toContain('browser_window_resize')
+    expect(names).toContain('browser_network')
+    expect(names).toContain('browser_wait')
+    expect(names).toContain('browser_key')
+    expect(names).toContain('browser_downloads')
     expect(names).toContain('browser_scroll')
     expect(names).toContain('browser_back')
     expect(names).toContain('browser_forward')
@@ -136,6 +171,75 @@ describe('createBrowserTools', () => {
     })
   })
 
+  describe('browser_screenshot_region', () => {
+    it('returns image content block with base64 for region captures', async () => {
+      const result = await executeTool(tools, 'browser_screenshot_region', { x: 10, y: 20, width: 120, height: 80 })
+      expect(result.content.length).toBe(2)
+      expect(result.content[0].type).toBe('text')
+      expect(result.content[0].text).toContain('Region screenshot captured')
+      const imageBlock = result.content[1] as any
+      expect(imageBlock.type).toBe('image')
+      expect(imageBlock.mimeType).toBe('image/png')
+    })
+
+    it('fails fast when target mode is ambiguous', async () => {
+      const result = await executeTool(tools, 'browser_screenshot_region', { ref: '@e1', selector: 'div.card' })
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain('Target mode is ambiguous')
+    })
+
+    it('fails fast when coordinate mode is incomplete', async () => {
+      const result = await executeTool(tools, 'browser_screenshot_region', { x: 10, y: 20, width: 100 })
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain('Coordinate mode requires x, y, width, and height together')
+    })
+  })
+
+  describe('browser_console', () => {
+    it('returns formatted console log lines', async () => {
+      const result = await executeTool(tools, 'browser_console', { level: 'warn', limit: 10 })
+      expect(result.content[0].text).toContain('Console entries')
+      expect(result.content[0].text).toContain('[warn]')
+    })
+  })
+
+  describe('browser_window_resize', () => {
+    it('returns resized dimensions', async () => {
+      const result = await executeTool(tools, 'browser_window_resize', { width: 1280, height: 720 })
+      expect(result.content[0].text).toContain('Window resized to 1280x720')
+    })
+  })
+
+  describe('browser_network', () => {
+    it('returns formatted network entries', async () => {
+      const result = await executeTool(tools, 'browser_network', { limit: 10, status: 'failed' })
+      expect(result.content[0].text).toContain('Network entries')
+      expect(result.content[0].text).toContain('https://example.com/api')
+    })
+  })
+
+  describe('browser_wait', () => {
+    it('returns successful wait response', async () => {
+      const result = await executeTool(tools, 'browser_wait', { kind: 'network-idle', timeoutMs: 2000 })
+      expect(result.content[0].text).toContain('Wait succeeded')
+    })
+  })
+
+  describe('browser_key', () => {
+    it('sends key input', async () => {
+      const result = await executeTool(tools, 'browser_key', { key: 'Enter' })
+      expect(result.content[0].text).toContain('Key sent: Enter')
+    })
+  })
+
+  describe('browser_downloads', () => {
+    it('returns formatted download entries', async () => {
+      const result = await executeTool(tools, 'browser_downloads', { action: 'list', limit: 10 })
+      expect(result.content[0].text).toContain('Downloads (')
+      expect(result.content[0].text).toContain('file.pdf')
+    })
+  })
+
   describe('browser_click', () => {
     it('calls fns.click with ref', async () => {
       let clickedRef = ''
@@ -143,6 +247,14 @@ describe('createBrowserTools', () => {
       const result = await executeTool(tools, 'browser_click', { ref: '@e1' })
       expect(clickedRef).toBe('@e1')
       expect(result.content[0].text).toContain('Clicked element @e1')
+    })
+
+    it('forwards optional wait settings', async () => {
+      let captured: any = null
+      mockFns.click = async (ref, options) => { captured = { ref, options } }
+      const result = await executeTool(tools, 'browser_click', { ref: '@e1', waitFor: 'network-idle', timeoutMs: 3000 })
+      expect(captured).toEqual({ ref: '@e1', options: { waitFor: 'network-idle', timeoutMs: 3000 } })
+      expect(result.content[0].text).toContain('waitFor=network-idle')
     })
   })
 
@@ -169,20 +281,98 @@ describe('createBrowserTools', () => {
     it('passes string results through', async () => {
       mockFns.evaluate = async () => 'hello world'
       const result = await executeTool(tools, 'browser_evaluate', { expression: '"hello world"' })
-      expect(result.content[0].text).toBe('hello world')
+      expect(result.content[0].text).toContain('hello world')
     })
   })
 
   describe('browser_tool', () => {
-    it('returns help text for --help', async () => {
+    it('returns help text for --help without release hint', async () => {
       const result = await executeTool(tools, 'browser_tool', { command: '--help' })
       expect(result.content[0].text).toContain('browser_tool command help')
       expect(result.content[0].text).toContain('navigate <url>')
+      expect(result.content[0].text).toContain('windows')
+      expect(result.content[0].text).not.toContain('When you are done using the browser')
     })
 
-    it('routes navigate command', async () => {
+    it('lists browser windows via windows command without release hint', async () => {
+      const result = await executeTool(tools, 'browser_tool', { command: 'windows' })
+      expect(result.content[0].text).toContain('Browser windows (1):')
+      expect(result.content[0].text).toContain('browser-1')
+      expect(result.content[0].text).toContain('ownerType: session')
+      expect(result.content[0].text).toContain('lockState: locked-session(test-session)')
+      expect(result.content[0].text).toContain('availableToSession: true')
+      expect(result.content[0].text).toContain('agentControlActive: true')
+      expect(result.content[0].text).not.toContain('When you are done using the browser')
+    })
+
+    it('routes navigate command and appends release hint', async () => {
       const result = await executeTool(tools, 'browser_tool', { command: 'navigate example.com' })
       expect(result.content[0].text).toContain('Navigated to')
+      expect(result.content[0].text).toContain('When you are done using the browser')
+    })
+
+    it('routes release command and calls releaseControl without hint', async () => {
+      let released = false
+      mockFns.releaseControl = async () => { released = true }
+
+      const result = await executeTool(tools, 'browser_tool', { command: 'release' })
+
+      expect(released).toBe(true)
+      expect(result.content[0].text).toContain('Browser control released')
+      expect(result.content[0].text).not.toContain('When you are done using the browser')
+    })
+
+    it('supports screenshot-region command', async () => {
+      const result = await executeTool(tools, 'browser_tool', { command: 'screenshot-region 10 20 100 80' })
+      expect(result.content[0].text).toContain('Region screenshot captured')
+    })
+
+    it('returns parse error for screenshot-region missing padding value', async () => {
+      const result = await executeTool(tools, 'browser_tool', { command: 'screenshot-region --ref @e12 --padding' })
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain('Missing value for --padding')
+    })
+
+    it('returns parse error for screenshot-region non-numeric coords', async () => {
+      const result = await executeTool(tools, 'browser_tool', { command: 'screenshot-region 10 nope 100 80' })
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain('coordinates must be numbers')
+    })
+
+    it('supports console command', async () => {
+      const result = await executeTool(tools, 'browser_tool', { command: 'console 10 warn' })
+      expect(result.content[0].text).toContain('Console entries')
+      expect(result.content[0].text).toContain('When you are done using the browser')
+    })
+
+    it('supports window-resize command', async () => {
+      const result = await executeTool(tools, 'browser_tool', { command: 'window-resize 1024 768' })
+      expect(result.content[0].text).toContain('Window resized to 1024x768')
+    })
+
+    it('supports network command', async () => {
+      const result = await executeTool(tools, 'browser_tool', { command: 'network 10 failed' })
+      expect(result.content[0].text).toContain('Network entries')
+    })
+
+    it('supports wait command', async () => {
+      const result = await executeTool(tools, 'browser_tool', { command: 'wait network-idle 5000' })
+      expect(result.content[0].text).toContain('Wait succeeded')
+    })
+
+    it('supports key command', async () => {
+      const result = await executeTool(tools, 'browser_tool', { command: 'key Enter' })
+      expect(result.content[0].text).toContain('Key sent: Enter')
+    })
+
+    it('supports downloads command', async () => {
+      const result = await executeTool(tools, 'browser_tool', { command: 'downloads list 10' })
+      expect(result.content[0].text).toContain('Downloads (')
+    })
+
+    it('supports click wait arguments', async () => {
+      const result = await executeTool(tools, 'browser_tool', { command: 'click @e1 network-idle 5000' })
+      expect(result.content[0].text).toContain('waitFor=network-idle')
     })
 
     it('returns validation feedback for invalid command', async () => {

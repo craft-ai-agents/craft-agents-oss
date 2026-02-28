@@ -19,6 +19,7 @@ import {
   type ToolResultBlock,
   type ContentBlock,
 } from '../tool-matching'
+import { toolMetadataStore } from '../../interceptor-common'
 
 // ============================================================================
 // Test Helpers
@@ -222,6 +223,45 @@ describe('extractToolStarts', () => {
     const events2 = extractToolStarts(assistantBlocks, null, toolIndex, emittedIds)
     expect(events2).toHaveLength(1)
     expect(events2[0]).toMatchObject({ input: { file_path: '/foo.ts' } })
+  })
+
+  it('re-emits duplicate empty-input tool_start when metadata arrives late', () => {
+    const toolUseId = 'toolu_browser_1'
+    const streamBlocks: ContentBlock[] = [
+      makeToolUseBlock('mcp__session__browser_open', {}, toolUseId),
+    ]
+
+    try {
+      // First stream event with empty input and no stored metadata
+      const events1 = extractToolStarts(streamBlocks, null, toolIndex, emittedIds)
+      expect(events1).toHaveLength(1)
+      expect(events1[0]).toMatchObject({
+        toolUseId,
+        input: {},
+        intent: undefined,
+        displayName: undefined,
+      })
+
+      // Metadata is captured later by interceptor/store
+      toolMetadataStore.set(toolUseId, {
+        intent: 'Open the in-app browser window',
+        displayName: 'Open Browser',
+        timestamp: Date.now(),
+      })
+
+      // Duplicate assistant event still has empty input for browser_open,
+      // but should re-emit now that metadata is available.
+      const events2 = extractToolStarts(streamBlocks, null, toolIndex, emittedIds)
+      expect(events2).toHaveLength(1)
+      expect(events2[0]).toMatchObject({
+        toolUseId,
+        input: {},
+        intent: 'Open the in-app browser window',
+        displayName: 'Open Browser',
+      })
+    } finally {
+      toolMetadataStore.delete(toolUseId)
+    }
   })
 
   it('registers tools in the index', () => {

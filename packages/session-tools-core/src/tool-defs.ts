@@ -135,6 +135,8 @@ export const BrowserNavigateSchema = z.object({
 
 export const BrowserClickSchema = z.object({
   ref: z.string().describe('Element ref from browser_snapshot (e.g., "@e1")'),
+  waitFor: z.enum(['none', 'navigation', 'network-idle']).optional().describe('Optional wait mode after click'),
+  timeoutMs: z.number().optional().describe('Optional wait timeout in milliseconds for waitFor modes'),
 });
 
 export const BrowserFillSchema = z.object({
@@ -166,6 +168,45 @@ export const BrowserScreenshotSchema = z.object({
   refs: z.array(z.string()).optional().describe('Element refs from browser_snapshot to annotate'),
   includeLastAction: z.boolean().optional().describe('Include last browser action target when available'),
   includeMetadata: z.boolean().optional().describe('Include compact metadata overlay and metadata payload in response text'),
+});
+export const BrowserScreenshotRegionSchema = z.object({
+  x: z.number().optional().describe('Region left coordinate in pixels (coordinate mode)'),
+  y: z.number().optional().describe('Region top coordinate in pixels (coordinate mode)'),
+  width: z.number().positive().optional().describe('Region width in pixels (coordinate mode, > 0)'),
+  height: z.number().positive().optional().describe('Region height in pixels (coordinate mode, > 0)'),
+  ref: z.string().min(1).optional().describe('Element ref from browser_snapshot (ref mode)'),
+  selector: z.string().min(1).optional().describe('CSS selector for target element (selector mode)'),
+  padding: z.number().optional().describe('Optional padding around the target in pixels'),
+});
+export const BrowserConsoleSchema = z.object({
+  level: z.enum(['all', 'log', 'info', 'warn', 'error']).optional().describe('Filter by console level. all includes every level.'),
+  limit: z.number().optional().describe('Maximum number of recent entries to return (default: 50)'),
+});
+export const BrowserWindowResizeSchema = z.object({
+  width: z.number().describe('Viewport width in pixels'),
+  height: z.number().describe('Viewport height in pixels'),
+});
+export const BrowserNetworkSchema = z.object({
+  limit: z.number().optional().describe('Maximum number of entries to return (default: 50)'),
+  status: z.enum(['all', 'failed', '2xx', '3xx', '4xx', '5xx']).optional().describe('Status filter for network entries'),
+  method: z.string().optional().describe('Optional HTTP method filter (e.g., GET, POST)'),
+  resourceType: z.string().optional().describe('Optional resource type filter (e.g., xhr, fetch, document)'),
+});
+export const BrowserWaitSchema = z.object({
+  kind: z.enum(['selector', 'text', 'url', 'network-idle']).describe('Condition kind to wait for'),
+  value: z.string().optional().describe('Condition value for selector/text/url waits'),
+  timeoutMs: z.number().optional().describe('Wait timeout in milliseconds (default: 10000)'),
+  pollMs: z.number().optional().describe('Polling interval for selector/text/url waits (default: 100)'),
+  idleMs: z.number().optional().describe('Idle window for network-idle waits (default: 700)'),
+});
+export const BrowserKeySchema = z.object({
+  key: z.string().describe('Key to send (e.g., Enter, Escape, k)'),
+  modifiers: z.array(z.enum(['shift', 'control', 'alt', 'meta'])).optional().describe('Optional modifier keys'),
+});
+export const BrowserDownloadsSchema = z.object({
+  action: z.enum(['list', 'wait']).optional().describe('list returns recent downloads, wait waits for terminal state first'),
+  limit: z.number().optional().describe('Maximum entries for list action (default: 20)'),
+  timeoutMs: z.number().optional().describe('Wait timeout for wait action (default: 10000)'),
 });
 export const BrowserBackSchema = z.object({});
 export const BrowserForwardSchema = z.object({});
@@ -344,7 +385,11 @@ Use these refs with browser_click and browser_fill to interact with elements. Th
 
   browser_click: `Click an element in the browser by its ref ID (e.g., @e1).
 
-Get refs from browser_snapshot first. This performs a real mouse click at the element's center coordinates.`,
+Get refs from browser_snapshot first. This performs a real mouse click at the element's center coordinates.
+
+Optional wait behavior:
+- waitFor: "none" (default), "navigation", or "network-idle"
+- timeoutMs: maximum wait time for waitFor modes`,
 
   browser_fill: `Fill a text input or textarea in the browser by its ref ID.
 
@@ -363,6 +408,51 @@ Supports optional agent-focused annotations and metadata:
 - includeMetadata: include compact overlay and metadata payload
 
 Use browser_snapshot instead when you need to interact with elements — screenshots are better for visual verification.`,
+
+  browser_screenshot_region: `Take a screenshot of a specific region or element in the current browser page.
+
+Supports three target modes:
+- Coordinates: x, y, width, height
+- Ref: ref from browser_snapshot (e.g., @e12)
+- Selector: CSS selector (e.g., div[data-testid="chart"]) — resolves to the first visible match (falls back to first match)
+
+Optional padding expands the capture box around the target.
+Returns PNG image content and metadata with the resolved target box.`,
+
+  browser_console: `Get recent console messages from the current browser page.
+
+Use this to inspect page errors/warnings and runtime logs without opening DevTools.
+
+Supports filtering by level and limiting number of entries.`,
+
+  browser_window_resize: `Resize the in-app browser window viewport.
+
+Sets the browser content area size to the requested width and height in pixels.
+Useful before screenshots to capture deterministic layouts.`,
+
+  browser_network: `Get recent network request activity from the current browser page.
+
+Supports filtering by status class, method, and resource type. Useful for debugging failed API calls and understanding what a click/navigation triggered.`,
+
+  browser_wait: `Wait for a browser condition to become true.
+
+Supported kinds:
+- selector: waits for CSS selector to exist
+- text: waits for page text to appear
+- url: waits until URL contains a substring
+- network-idle: waits until in-flight requests settle for an idle window
+
+Use this after click/navigation for reliability.`,
+
+  browser_key: `Send keyboard input to the browser page.
+
+Use this for shortcuts and key-driven flows (Enter, Escape, Cmd+K, etc.).`,
+
+  browser_downloads: `Inspect download activity for the current browser window.
+
+Actions:
+- list (default): return recent download entries
+- wait: wait for a terminal download state before returning`,
 
   browser_scroll: `Scroll the browser page in a given direction.
 
@@ -392,6 +482,16 @@ Examples:
 - \`select @e3 optionValue\`
 - \`scroll down 800\`
 - \`evaluate document.title\`
+- \`console 50 error\`
+- \`screenshot-region 100 200 640 480\`
+- \`screenshot-region --ref @e12 --padding 8\`
+- \`screenshot-region --selector div[data-testid="chart"]\`
+- \`window-resize 1440 900\`
+- \`network 50 failed\`
+- \`wait network-idle 8000\`
+- \`key Enter\`
+- \`key k meta\`
+- \`downloads wait 15000\`
 
 Prefer direct browser_* tools when exact structured arguments are available.`,
 
@@ -475,6 +575,13 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'browser_fill', description: TOOL_DESCRIPTIONS.browser_fill, inputSchema: BrowserFillSchema, executionMode: 'backend', handler: null },
   { name: 'browser_select', description: TOOL_DESCRIPTIONS.browser_select, inputSchema: BrowserSelectSchema, executionMode: 'backend', handler: null },
   { name: 'browser_screenshot', description: TOOL_DESCRIPTIONS.browser_screenshot, inputSchema: BrowserScreenshotSchema, executionMode: 'backend', handler: null },
+  { name: 'browser_screenshot_region', description: TOOL_DESCRIPTIONS.browser_screenshot_region, inputSchema: BrowserScreenshotRegionSchema, executionMode: 'backend', handler: null },
+  { name: 'browser_console', description: TOOL_DESCRIPTIONS.browser_console, inputSchema: BrowserConsoleSchema, executionMode: 'backend', handler: null },
+  { name: 'browser_window_resize', description: TOOL_DESCRIPTIONS.browser_window_resize, inputSchema: BrowserWindowResizeSchema, executionMode: 'backend', handler: null },
+  { name: 'browser_network', description: TOOL_DESCRIPTIONS.browser_network, inputSchema: BrowserNetworkSchema, executionMode: 'backend', handler: null },
+  { name: 'browser_wait', description: TOOL_DESCRIPTIONS.browser_wait, inputSchema: BrowserWaitSchema, executionMode: 'backend', handler: null },
+  { name: 'browser_key', description: TOOL_DESCRIPTIONS.browser_key, inputSchema: BrowserKeySchema, executionMode: 'backend', handler: null },
+  { name: 'browser_downloads', description: TOOL_DESCRIPTIONS.browser_downloads, inputSchema: BrowserDownloadsSchema, executionMode: 'backend', handler: null },
   { name: 'browser_scroll', description: TOOL_DESCRIPTIONS.browser_scroll, inputSchema: BrowserScrollSchema, executionMode: 'backend', handler: null },
   { name: 'browser_back', description: TOOL_DESCRIPTIONS.browser_back, inputSchema: BrowserBackSchema, executionMode: 'backend', handler: null },
   { name: 'browser_forward', description: TOOL_DESCRIPTIONS.browser_forward, inputSchema: BrowserForwardSchema, executionMode: 'backend', handler: null },

@@ -87,7 +87,7 @@ import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { registerPiModelResolver } from '@craft-agent/shared/config'
 import { getPiModelsForAuthProvider, getAllPiModels } from '@craft-agent/shared/config'
-import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBadge } from './notifications'
+import { initNotificationService, initBadgeIcon, initInstanceBadge } from './notifications'
 import { checkForUpdatesOnLaunch, setWindowManager as setAutoUpdateWindowManager, isUpdating } from './auto-update'
 import { validateGitBashPath } from './git-bash'
 
@@ -372,6 +372,7 @@ app.whenReady().then(async () => {
 
     // Initialize browser pane manager
     browserPaneManager = new BrowserPaneManager()
+    browserPaneManager.registerToolbarIpc()
     sessionManager.setBrowserPaneManager(browserPaneManager)
 
     // Register IPC handlers (must happen before window creation)

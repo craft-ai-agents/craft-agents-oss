@@ -6,14 +6,105 @@
  * shared session/cookie partition and CDP automation support.
  */
 
-import { BrowserView, BrowserWindow, session, type Session as ElectronSession } from 'electron'
+import { join } from 'path'
+import { BrowserView, BrowserWindow, Menu, ipcMain, nativeTheme, session, type Session as ElectronSession } from 'electron'
 import { mainLog } from './logger'
 import { BrowserCDP, type AccessibilitySnapshot, type ElementGeometry } from './browser-cdp'
 import type { BrowserInstanceInfo } from '../shared/types'
 
 export type { BrowserInstanceInfo }
 
+const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
+const TOOLBAR_LOAD_MAX_RETRIES = 4
+const TOOLBAR_LOAD_RETRY_DELAY_MS = 500
+const TOOLBAR_HEIGHT = 48
+const MAX_CONSOLE_LOG_ENTRIES = 500
+const MAX_NETWORK_LOG_ENTRIES = 500
+const MAX_DOWNLOAD_LOG_ENTRIES = 200
+const DEFAULT_WAIT_TIMEOUT_MS = 10_000
+const DEFAULT_WAIT_POLL_MS = 100
+const THEME_COLOR_SIGNAL_PREFIX = '__craft_theme_color__:'
+const THEME_COLOR_NULL_SENTINEL = '__NULL__'
+const THEME_OBSERVER_MIN_INTERVAL_MS = 120
+const EARLY_THEME_EXTRACTION_DELAY_MS = 100
+
+const THEME_COLOR_EXTRACTOR_FN = String.raw`
+() => {
+  const toHex = (r, g, b) => '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
+
+  const parseColor = (str) => {
+    if (!str) return null;
+    str = str.trim();
+    const hm = /^#([0-9a-f]{3,8})$/i.exec(str);
+    if (hm) {
+      const h = hm[1];
+      let r, g, b;
+      if (h.length === 3) { r = parseInt(h[0]+h[0],16); g = parseInt(h[1]+h[1],16); b = parseInt(h[2]+h[2],16); }
+      else if (h.length >= 6) { r = parseInt(h.slice(0,2),16); g = parseInt(h.slice(2,4),16); b = parseInt(h.slice(4,6),16); }
+      else return null;
+      return toHex(r, g, b);
+    }
+    const rm = str.match(/rgba?[\(]\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/);
+    if (rm) return toHex(+rm[1], +rm[2], +rm[3]);
+    return null;
+  };
+
+  const parseBg = (el) => {
+    if (!el) return null;
+    const bg = getComputedStyle(el).backgroundColor;
+    if (!bg || bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)') return null;
+    return parseColor(bg);
+  };
+
+  // 1. theme-color meta — respect media attribute for light/dark
+  const metas = document.querySelectorAll('meta[name="theme-color"]');
+  for (const m of metas) {
+    const media = m.getAttribute('media');
+    if (media && !window.matchMedia(media).matches) continue;
+    const c = parseColor(m.content);
+    if (c) return c;
+  }
+
+  // 2. Safari-like approach: sample fixed/sticky elements at viewport top-center
+  const els = document.elementsFromPoint(window.innerWidth / 2, 4);
+  for (const el of els) {
+    if (el === document.documentElement || el === document.body) continue;
+    const style = getComputedStyle(el);
+    const pos = style.position;
+    if (pos !== 'fixed' && pos !== 'sticky') continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width < window.innerWidth * 0.8) continue;
+    const c = parseBg(el);
+    if (c) return c;
+  }
+
+  // 3. Fallback: body then html
+  return parseBg(document.body) || parseBg(document.documentElement) || null;
+}
+`
+
+/** IPC channels for the browser toolbar preload */
+const TOOLBAR_CHANNELS = {
+  NAVIGATE: 'browser-toolbar:navigate',
+  GO_BACK: 'browser-toolbar:go-back',
+  GO_FORWARD: 'browser-toolbar:go-forward',
+  RELOAD: 'browser-toolbar:reload',
+  STOP: 'browser-toolbar:stop',
+  OPEN_MENU: 'browser-toolbar:open-menu',
+  HIDE: 'browser-toolbar:hide',
+  DESTROY: 'browser-toolbar:destroy',
+  STATE_UPDATE: 'browser-toolbar:state-update',
+  THEME_COLOR: 'browser-toolbar:theme-color',
+} as const
+
 const SESSION_PARTITION = 'persist:browser-pane'
+
+interface AgentControlState {
+  active: boolean
+  sessionId: string
+  displayName?: string
+  intent?: string
+}
 
 interface BrowserInstance {
   id: string
@@ -31,7 +122,16 @@ interface BrowserInstance {
   ownerSessionId: string | null
   isVisible: boolean
   keepAliveOnWindowClose: boolean
+  toolbarReady: boolean
+  showOnCreate: boolean
   lastAction: LastBrowserAction | null
+  agentControl: AgentControlState | null
+  themeColor: string | null
+  inPageThemeTimer: ReturnType<typeof setTimeout> | null
+  themeObserverToken: string | null
+  consoleLogs: BrowserConsoleEntry[]
+  networkLogs: BrowserNetworkEntry[]
+  downloads: BrowserDownloadEntry[]
 }
 
 interface CreateBrowserInstanceOptions {
@@ -45,6 +145,81 @@ export interface BrowserScreenshotOptions {
   refs?: string[]
   includeLastAction?: boolean
   includeMetadata?: boolean
+}
+
+export interface BrowserConsoleEntry {
+  timestamp: number
+  level: 'log' | 'info' | 'warn' | 'error'
+  message: string
+}
+
+export interface BrowserConsoleOptions {
+  level?: 'all' | BrowserConsoleEntry['level']
+  limit?: number
+}
+
+export interface BrowserScreenshotRegionTarget {
+  x?: number
+  y?: number
+  width?: number
+  height?: number
+  ref?: string
+  selector?: string
+  padding?: number
+}
+
+export interface BrowserNetworkEntry {
+  timestamp: number
+  method: string
+  url: string
+  status: number
+  resourceType: string
+  ok: boolean
+}
+
+export interface BrowserNetworkOptions {
+  limit?: number
+  status?: 'all' | 'failed' | '2xx' | '3xx' | '4xx' | '5xx'
+  method?: string
+  resourceType?: string
+}
+
+export interface BrowserWaitArgs {
+  kind: 'selector' | 'text' | 'url' | 'network-idle'
+  value?: string
+  timeoutMs?: number
+  pollMs?: number
+  idleMs?: number
+}
+
+export interface BrowserWaitResult {
+  ok: true
+  kind: BrowserWaitArgs['kind']
+  elapsedMs: number
+  detail: string
+}
+
+export interface BrowserKeyArgs {
+  key: string
+  modifiers?: Array<'shift' | 'control' | 'alt' | 'meta'>
+}
+
+export interface BrowserDownloadEntry {
+  id: string
+  timestamp: number
+  url: string
+  filename: string
+  state: 'started' | 'completed' | 'interrupted' | 'cancelled'
+  bytesReceived: number
+  totalBytes: number
+  mimeType: string
+  savePath?: string
+}
+
+export interface BrowserDownloadOptions {
+  action?: 'list' | 'wait'
+  limit?: number
+  timeoutMs?: number
 }
 
 export interface BrowserScreenshotResult {
@@ -73,6 +248,13 @@ export interface BrowserScreenshotResult {
     }
     annotationPartial?: boolean
     warnings?: string[]
+    region?: {
+      x: number
+      y: number
+      width: number
+      height: number
+    }
+    targetMode?: 'coords' | 'ref' | 'selector'
   }
 }
 
@@ -93,6 +275,9 @@ export class BrowserPaneManager {
   private removedCallback: ((id: string) => void) | null = null
   private interactedCallback: ((id: string) => void) | null = null
   private partitionPermissionsInitialized = false
+  private partitionObserversInitialized = false
+  private inFlightRequestsByWebContentsId = new Map<number, number>()
+  private lastNetworkActivityByWebContentsId = new Map<number, number>()
 
   onStateChange(callback: (info: BrowserInstanceInfo) => void): void {
     this.stateChangeCallback = callback
@@ -119,20 +304,27 @@ export class BrowserPaneManager {
 
     const ses = session.fromPartition(SESSION_PARTITION)
     this.setupSessionPermissions(ses)
+    this.setupSessionObservers(ses)
+
+    // Match background to current OS theme to prevent black/white flash on open
+    const bgColor = nativeTheme.shouldUseDarkColors ? '#2b292e' : '#fafafb'
 
     const window = new BrowserWindow({
       width: 1200,
       height: 900,
       minWidth: 700,
       minHeight: 500,
-      show: shouldShow,
-      backgroundColor: '#0f1115',
+      show: false, // Always hidden until toolbar is painted (ready-to-show)
+      backgroundColor: bgColor,
+      // Fully chromeless — toolbar is rendered via React BrowserControls
+      frame: false,
       webPreferences: {
+        preload: join(__dirname, 'browser-toolbar-preload.cjs'),
         partition: SESSION_PARTITION,
         session: ses,
         contextIsolation: true,
         nodeIntegration: false,
-        sandbox: true,
+        sandbox: false, // Required for preload script
       },
     })
 
@@ -145,6 +337,10 @@ export class BrowserPaneManager {
         sandbox: true,
       },
     })
+
+    // Set pageView background to match theme so about:blank doesn't flash white
+    const pageWcWithBg = pageView.webContents as typeof pageView.webContents & { setBackgroundColor?: (color: string) => void }
+    pageWcWithBg.setBackgroundColor?.(bgColor)
 
     const cdp = new BrowserCDP(pageView.webContents)
 
@@ -162,9 +358,18 @@ export class BrowserPaneManager {
       boundSessionId: ownerSessionId,
       ownerType,
       ownerSessionId,
-      isVisible: shouldShow,
+      isVisible: false,
       keepAliveOnWindowClose: true,
+      toolbarReady: false,
+      showOnCreate: shouldShow,
       lastAction: null,
+      agentControl: null,
+      themeColor: null,
+      inPageThemeTimer: null,
+      themeObserverToken: null,
+      consoleLogs: [],
+      networkLogs: [],
+      downloads: [],
     }
 
     const defaultUa = pageView.webContents.userAgent || ''
@@ -176,13 +381,24 @@ export class BrowserPaneManager {
     window.setBrowserView(pageView)
     this.layoutPageView(instance)
 
+    // Show window only after toolbar content has painted to prevent flash
+    window.once('ready-to-show', () => {
+      this.markToolbarReady(instance, 'ready-to-show')
+    })
+
     this.setupWindowListeners(instance)
     this.instances.set(instanceId, instance)
     this.emitStateChange(instance)
-    mainLog.info(`[browser-pane] toolbar injector version: v3-native-frame`)
+    mainLog.info(`[browser-pane] toolbar version: v4-react-chromeless`)
     mainLog.info(`[browser-pane] Created instance: ${instanceId} (show=${shouldShow}, ownerType=${ownerType}, ownerSessionId=${ownerSessionId ?? 'none'})`)
 
-    void this.renderToolbarChrome(instance)
+    void this.loadToolbarPage(instance)
+      .finally(() => {
+        // Safety net: if Electron never fires ready-to-show, still unblock focus/show behavior.
+        if (!instance.toolbarReady) {
+          this.markToolbarReady(instance, 'toolbar-load-finalized')
+        }
+      })
     void pageView.webContents.loadURL('about:blank')
 
     return instanceId
@@ -191,6 +407,18 @@ export class BrowserPaneManager {
   destroyInstance(id: string): void {
     const instance = this.instances.get(id)
     if (!instance) return
+
+    // Clear pending timers before destroying the window
+    if (instance.inPageThemeTimer) {
+      clearTimeout(instance.inPageThemeTimer)
+      instance.inPageThemeTimer = null
+    }
+    instance.themeObserverToken = null
+
+    // Clean up in-flight network tracking for this instance's webContents
+    const wcId = instance.pageView.webContents.id
+    this.inFlightRequestsByWebContentsId.delete(wcId)
+    this.lastNetworkActivityByWebContentsId.delete(wcId)
 
     if (!instance.window.isDestroyed()) {
       this.destroyingIds.add(id)
@@ -245,31 +473,16 @@ export class BrowserPaneManager {
 
     const timeoutMs = 30_000
 
-    await instance.cdp.setAgentVisualState({
-      active: true,
-      label: `browser_navigate • ${normalizedUrl}`,
-      cursor: null,
-    }).catch(() => {})
-
     try {
       const loaded = instance.pageView.webContents.loadURL(normalizedUrl)
       const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`Navigation timed out after ${timeoutMs / 1000}s`)), timeoutMs)
+        setTimeout(() => reject(new Error(`Navigation to "${normalizedUrl}" timed out after ${timeoutMs / 1000}s`)), timeoutMs)
       )
       await Promise.race([loaded, timeout])
-      await this.renderToolbarChrome(instance)
-
-      await this.flashLiveActionOverlay(instance, {
-        metadataText: `browser_navigate • ${instance.currentUrl}`,
-      })
+      this.pushToolbarState(instance)
 
       return { url: instance.currentUrl, title: instance.title }
     } catch (error) {
-      await instance.cdp.setAgentVisualState({
-        active: true,
-        label: `browser_navigate failed`,
-        cursor: null,
-      }).catch(() => {})
       throw error
     }
   }
@@ -308,6 +521,20 @@ export class BrowserPaneManager {
 
     const win = instance.window
     if (win.isDestroyed()) return
+
+    // If toolbar hasn't painted yet, defer showing until ready-to-show fires
+    if (!instance.toolbarReady) {
+      win.once('ready-to-show', () => {
+        if (!win.isDestroyed()) {
+          win.show()
+          win.focus()
+          instance.isVisible = true
+          this.emitStateChange(instance)
+        }
+      })
+      return
+    }
+
     if (win.isMinimized()) win.restore()
     win.show()
     win.focus()
@@ -334,15 +561,13 @@ export class BrowserPaneManager {
     return instance.cdp.getAccessibilitySnapshot()
   }
 
-  async clickElement(id: string, ref: string): Promise<void> {
+  async clickElement(
+    id: string,
+    ref: string,
+    options?: { waitFor?: 'none' | 'navigation' | 'network-idle'; timeoutMs?: number }
+  ): Promise<void> {
     const instance = this.instances.get(id)
     if (!instance) throw new Error(`Browser instance not found: ${id}`)
-
-    await instance.cdp.setAgentVisualState({
-      active: true,
-      label: `browser_click • ${ref}`,
-      cursor: null,
-    }).catch(() => {})
 
     try {
       const geometry = await instance.cdp.clickElement(ref)
@@ -353,10 +578,33 @@ export class BrowserPaneManager {
         geometry,
         timestamp: Date.now(),
       }
-      await this.flashLiveActionOverlay(instance, {
-        geometries: [geometry],
-        metadataText: `browser_click • ${ref}`,
-      })
+
+      const waitFor = options?.waitFor ?? 'none'
+      if (waitFor === 'navigation') {
+        const timeoutMs = Math.max(100, options?.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS)
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            cleanup()
+            reject(new Error(`Click navigation wait timed out after ${timeoutMs}ms`))
+          }, timeoutMs)
+
+          const onNav = () => {
+            cleanup()
+            resolve()
+          }
+
+          const cleanup = () => {
+            clearTimeout(timer)
+            instance.pageView.webContents.removeListener('did-navigate', onNav)
+            instance.pageView.webContents.removeListener('did-navigate-in-page', onNav)
+          }
+
+          instance.pageView.webContents.once('did-navigate', onNav)
+          instance.pageView.webContents.once('did-navigate-in-page', onNav)
+        })
+      } else if (waitFor === 'network-idle') {
+        await this.waitFor(id, { kind: 'network-idle', timeoutMs: options?.timeoutMs })
+      }
     } catch (error) {
       instance.lastAction = {
         tool: 'browser_click',
@@ -364,11 +612,6 @@ export class BrowserPaneManager {
         status: 'failed',
         timestamp: Date.now(),
       }
-      await instance.cdp.setAgentVisualState({
-        active: true,
-        label: `browser_click failed • ${ref}`,
-        cursor: null,
-      }).catch(() => {})
       throw error
     }
   }
@@ -376,12 +619,6 @@ export class BrowserPaneManager {
   async fillElement(id: string, ref: string, value: string): Promise<void> {
     const instance = this.instances.get(id)
     if (!instance) throw new Error(`Browser instance not found: ${id}`)
-
-    await instance.cdp.setAgentVisualState({
-      active: true,
-      label: `browser_fill • ${ref}`,
-      cursor: null,
-    }).catch(() => {})
 
     try {
       const geometry = await instance.cdp.fillElement(ref, value)
@@ -392,10 +629,6 @@ export class BrowserPaneManager {
         geometry,
         timestamp: Date.now(),
       }
-      await this.flashLiveActionOverlay(instance, {
-        geometries: [geometry],
-        metadataText: `browser_fill • ${ref}`,
-      })
     } catch (error) {
       instance.lastAction = {
         tool: 'browser_fill',
@@ -403,11 +636,6 @@ export class BrowserPaneManager {
         status: 'failed',
         timestamp: Date.now(),
       }
-      await instance.cdp.setAgentVisualState({
-        active: true,
-        label: `browser_fill failed • ${ref}`,
-        cursor: null,
-      }).catch(() => {})
       throw error
     }
   }
@@ -415,12 +643,6 @@ export class BrowserPaneManager {
   async selectOption(id: string, ref: string, value: string): Promise<void> {
     const instance = this.instances.get(id)
     if (!instance) throw new Error(`Browser instance not found: ${id}`)
-
-    await instance.cdp.setAgentVisualState({
-      active: true,
-      label: `browser_select • ${ref}`,
-      cursor: null,
-    }).catch(() => {})
 
     try {
       const geometry = await instance.cdp.selectOption(ref, value)
@@ -431,10 +653,6 @@ export class BrowserPaneManager {
         geometry,
         timestamp: Date.now(),
       }
-      await this.flashLiveActionOverlay(instance, {
-        geometries: [geometry],
-        metadataText: `browser_select • ${ref}`,
-      })
     } catch (error) {
       instance.lastAction = {
         tool: 'browser_select',
@@ -442,11 +660,6 @@ export class BrowserPaneManager {
         status: 'failed',
         timestamp: Date.now(),
       }
-      await instance.cdp.setAgentVisualState({
-        active: true,
-        label: `browser_select failed • ${ref}`,
-        cursor: null,
-      }).catch(() => {})
       throw error
     }
   }
@@ -538,6 +751,247 @@ export class BrowserPaneManager {
     }
   }
 
+  async screenshotRegion(id: string, target: BrowserScreenshotRegionTarget): Promise<BrowserScreenshotResult> {
+    const instance = this.instances.get(id)
+    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+
+    const hasCoords = [target.x, target.y, target.width, target.height].every((v) => typeof v === 'number')
+    const hasRef = typeof target.ref === 'string' && target.ref.length > 0
+    const hasSelector = typeof target.selector === 'string' && target.selector.length > 0
+
+    const modeCount = [hasCoords, hasRef, hasSelector].filter(Boolean).length
+    if (modeCount === 0) {
+      throw new Error('Region screenshot requires either coordinates, ref, or selector')
+    }
+    if (modeCount > 1) {
+      throw new Error('Region screenshot target is ambiguous. Provide only one of coordinates, ref, or selector')
+    }
+
+    let box: { x: number; y: number; width: number; height: number }
+
+    if (hasRef) {
+      const geometry = await instance.cdp.getElementGeometry(String(target.ref))
+      box = { ...geometry.box }
+    } else if (hasSelector) {
+      const geometry = await instance.cdp.getElementGeometryBySelector(String(target.selector))
+      box = { ...geometry.box }
+    } else {
+      box = {
+        x: Number(target.x),
+        y: Number(target.y),
+        width: Number(target.width),
+        height: Number(target.height),
+      }
+    }
+
+    const padding = Math.max(0, Number(target.padding ?? 0))
+    box = {
+      x: box.x - padding,
+      y: box.y - padding,
+      width: box.width + padding * 2,
+      height: box.height + padding * 2,
+    }
+
+    const viewport = await instance.cdp.getViewportMetrics()
+
+    const clippedX = Math.max(0, Math.floor(box.x))
+    const clippedY = Math.max(0, Math.floor(box.y))
+    const maxWidth = Math.max(0, Math.floor(viewport.width - clippedX))
+    const maxHeight = Math.max(0, Math.floor(viewport.height - clippedY))
+    const clippedWidth = Math.min(Math.max(1, Math.floor(box.width)), maxWidth)
+    const clippedHeight = Math.min(Math.max(1, Math.floor(box.height)), maxHeight)
+
+    if (maxWidth <= 0 || maxHeight <= 0 || clippedWidth <= 0 || clippedHeight <= 0) {
+      throw new Error('Resolved screenshot region is outside the current viewport')
+    }
+
+    const image = await instance.pageView.webContents.capturePage({
+      x: clippedX,
+      y: clippedY,
+      width: clippedWidth,
+      height: clippedHeight,
+    })
+
+    return {
+      png: image.toPNG(),
+      metadata: {
+        mode: 'raw',
+        viewport,
+        region: {
+          x: clippedX,
+          y: clippedY,
+          width: clippedWidth,
+          height: clippedHeight,
+        },
+        targetMode: hasRef ? 'ref' : hasSelector ? 'selector' : 'coords',
+      },
+    }
+  }
+
+  getConsoleLogs(id: string, options?: BrowserConsoleOptions): BrowserConsoleEntry[] {
+    const instance = this.instances.get(id)
+    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+
+    const level = options?.level ?? 'all'
+    const limit = Math.max(1, Math.min(500, Number(options?.limit ?? 50)))
+
+    const filtered = level === 'all'
+      ? instance.consoleLogs
+      : instance.consoleLogs.filter((entry) => entry.level === level)
+
+    return filtered.slice(-limit)
+  }
+
+  getNetworkLogs(id: string, options?: BrowserNetworkOptions): BrowserNetworkEntry[] {
+    const instance = this.instances.get(id)
+    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+
+    const statusFilter = options?.status ?? 'all'
+    const limit = Math.max(1, Math.min(500, Number(options?.limit ?? 50)))
+    const method = options?.method?.toUpperCase()
+    const resourceType = options?.resourceType?.toLowerCase()
+
+    const filtered = instance.networkLogs.filter((entry) => {
+      if (method && entry.method !== method) return false
+      if (resourceType && entry.resourceType.toLowerCase() !== resourceType) return false
+
+      if (statusFilter === 'all') return true
+      if (statusFilter === 'failed') return !entry.ok
+      if (statusFilter === '2xx') return entry.status >= 200 && entry.status < 300
+      if (statusFilter === '3xx') return entry.status >= 300 && entry.status < 400
+      if (statusFilter === '4xx') return entry.status >= 400 && entry.status < 500
+      if (statusFilter === '5xx') return entry.status >= 500 && entry.status < 600
+      return true
+    })
+
+    return filtered.slice(-limit)
+  }
+
+  async waitFor(id: string, args: BrowserWaitArgs): Promise<BrowserWaitResult> {
+    const instance = this.instances.get(id)
+    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+
+    const timeoutMs = Math.max(100, args.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS)
+    const pollMs = Math.max(25, args.pollMs ?? DEFAULT_WAIT_POLL_MS)
+    const idleMs = Math.max(100, args.idleMs ?? 700)
+    const started = Date.now()
+
+    const until = async (predicate: () => Promise<boolean>, detail: string): Promise<BrowserWaitResult> => {
+      while (Date.now() - started <= timeoutMs) {
+        if (await predicate()) {
+          return {
+            ok: true,
+            kind: args.kind,
+            elapsedMs: Date.now() - started,
+            detail,
+          }
+        }
+        await this.sleep(pollMs)
+      }
+      throw new Error(`Wait timed out after ${timeoutMs}ms (${args.kind})`)
+    }
+
+    if (args.kind === 'selector') {
+      const selector = args.value?.trim()
+      if (!selector) throw new Error('browser_wait selector requires value')
+      return until(async () => {
+        const exists = await instance.pageView.webContents.executeJavaScript(
+          `Boolean(document.querySelector(${JSON.stringify(selector)}))`
+        )
+        return Boolean(exists)
+      }, `selector matched: ${selector}`)
+    }
+
+    if (args.kind === 'text') {
+      const text = args.value?.trim()
+      if (!text) throw new Error('browser_wait text requires value')
+      return until(async () => {
+        const found = await instance.pageView.webContents.executeJavaScript(
+          `document.body && document.body.innerText && document.body.innerText.includes(${JSON.stringify(text)})`
+        )
+        return Boolean(found)
+      }, `text found: ${text}`)
+    }
+
+    if (args.kind === 'url') {
+      const needle = args.value?.trim()
+      if (!needle) throw new Error('browser_wait url requires value')
+      return until(async () => {
+        return instance.currentUrl.includes(needle)
+      }, `url matched: ${needle}`)
+    }
+
+    if (args.kind === 'network-idle') {
+      const wcId = instance.pageView.webContents.id
+      return until(async () => {
+        const inflight = this.inFlightRequestsByWebContentsId.get(wcId) ?? 0
+        const last = this.lastNetworkActivityByWebContentsId.get(wcId) ?? started
+        return inflight === 0 && (Date.now() - last) >= idleMs
+      }, `network idle for ${idleMs}ms`)
+    }
+
+    throw new Error(`Unknown wait kind: ${args.kind}`)
+  }
+
+  async sendKey(id: string, args: BrowserKeyArgs): Promise<void> {
+    const instance = this.instances.get(id)
+    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+
+    const key = args.key?.trim()
+    if (!key) throw new Error('browser_key requires key')
+
+    const modifiers = (args.modifiers ?? []) as Array<'shift' | 'control' | 'alt' | 'meta'>
+
+    instance.pageView.webContents.sendInputEvent({
+      type: 'keyDown',
+      keyCode: key,
+      modifiers,
+    } as any)
+    instance.pageView.webContents.sendInputEvent({
+      type: 'keyUp',
+      keyCode: key,
+      modifiers,
+    } as any)
+  }
+
+  async getDownloads(id: string, options?: BrowserDownloadOptions): Promise<BrowserDownloadEntry[]> {
+    const instance = this.instances.get(id)
+    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+
+    const action = options?.action ?? 'list'
+    const limit = Math.max(1, Math.min(200, Number(options?.limit ?? 20)))
+
+    if (action === 'wait') {
+      const timeoutMs = Math.max(100, Number(options?.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS))
+      const started = Date.now()
+      while (Date.now() - started <= timeoutMs) {
+        const hasTerminal = instance.downloads.some((d) => d.state === 'completed' || d.state === 'interrupted' || d.state === 'cancelled')
+        if (hasTerminal) break
+        await this.sleep(100)
+      }
+    }
+
+    return instance.downloads.slice(-limit)
+  }
+
+  windowResize(id: string, width: number, height: number): { width: number; height: number } {
+    const instance = this.instances.get(id)
+    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+
+    const requestedViewportWidth = Math.max(320, Math.floor(width))
+    const requestedViewportHeight = Math.max(240, Math.floor(height))
+    instance.window.setContentSize(requestedViewportWidth, requestedViewportHeight + TOOLBAR_HEIGHT)
+
+    this.layoutPageView(instance)
+
+    // Return effective viewport dimensions after OS/window min-size constraints are applied.
+    const [appliedContentWidth, appliedContentHeight] = instance.window.getContentSize()
+    return {
+      width: Math.max(0, Math.floor(appliedContentWidth)),
+      height: Math.max(0, Math.floor(appliedContentHeight - TOOLBAR_HEIGHT)),
+    }
+  }
+
   async evaluate(id: string, expression: string): Promise<unknown> {
     const instance = this.instances.get(id)
     if (!instance) throw new Error(`Browser instance not found: ${id}`)
@@ -583,6 +1037,14 @@ export class BrowserPaneManager {
     return null
   }
 
+  private findReusableUnboundInstance(): BrowserInstance | null {
+    const unbound = Array.from(this.instances.values()).filter(i => i.boundSessionId === null && i.ownerType === 'manual')
+    if (unbound.length === 0) return null
+
+    // Prefer visible windows first, then fall back to first available.
+    return unbound.find(i => i.isVisible) ?? unbound[0]
+  }
+
   createForSession(sessionId: string, options?: { show?: boolean }): string {
     const existing = this.getBoundForSession(sessionId)
     if (existing) {
@@ -590,6 +1052,18 @@ export class BrowserPaneManager {
         this.focus(existing)
       }
       return existing
+    }
+
+    // Reuse an unbound/manual window before creating a new one.
+    // This helps agents avoid unnecessary browser window sprawl.
+    const reusable = this.findReusableUnboundInstance()
+    if (reusable) {
+      this.bindSession(reusable.id, sessionId)
+      if (options?.show) {
+        this.focus(reusable.id)
+      }
+      mainLog.info(`[browser-pane] Reused unbound instance ${reusable.id} for session ${sessionId}`)
+      return reusable.id
     }
 
     return this.createInstance(undefined, {
@@ -609,6 +1083,13 @@ export class BrowserPaneManager {
     return this.createForSession(sessionId, { show: false })
   }
 
+  getBoundInstanceId(sessionId: string): string | null {
+    for (const [id, instance] of this.instances) {
+      if (instance.boundSessionId === sessionId) return id
+    }
+    return null
+  }
+
   destroyForSession(sessionId: string): void {
     for (const [id, instance] of this.instances) {
       if (instance.boundSessionId === sessionId) {
@@ -621,10 +1102,30 @@ export class BrowserPaneManager {
     const clears: Promise<void>[] = []
     for (const instance of this.instances.values()) {
       if (instance.boundSessionId === sessionId) {
+        instance.agentControl = null
+        this.emitStateChange(instance)
         clears.push(instance.cdp.clearAgentVisualState().catch(() => {}))
       }
     }
     await Promise.all(clears)
+  }
+
+  private getAgentControlLabel(agentControl: Pick<AgentControlState, 'displayName' | 'intent'> | null | undefined): string {
+    if (agentControl?.intent) {
+      return `${agentControl.displayName ?? 'Agent'} — ${agentControl.intent}`
+    }
+
+    return agentControl?.displayName ?? 'Agent is working…'
+  }
+
+  private reapplyAgentControlVisual(instance: BrowserInstance): void {
+    if (!instance.agentControl?.active) return
+
+    instance.cdp.setAgentVisualState({
+      active: true,
+      label: this.getAgentControlLabel(instance.agentControl),
+      cursor: null,
+    }).catch(() => {})
   }
 
   destroyAll(): void {
@@ -635,178 +1136,489 @@ export class BrowserPaneManager {
 
   private layoutPageView(instance: BrowserInstance): void {
     const [width, height] = instance.window.getContentSize()
-    const toolbarHeight = 48
-    instance.pageView.setBounds({ x: 0, y: toolbarHeight, width, height: Math.max(100, height - toolbarHeight) })
+    instance.pageView.setBounds({ x: 0, y: TOOLBAR_HEIGHT, width, height: Math.max(100, height - TOOLBAR_HEIGHT) })
     instance.pageView.setAutoResize({ width: true, height: true })
   }
 
-  private async renderToolbarChrome(instance: BrowserInstance): Promise<void> {
-    const escape = (value: string) => value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
+  private async loadToolbarPage(instance: BrowserInstance): Promise<void> {
+    const query = `instanceId=${encodeURIComponent(instance.id)}`
+    let lastError: unknown = null
 
-    const rawUrl = instance.currentUrl || 'about:blank'
-    const url = escape(rawUrl)
-    const backDisabled = instance.canGoBack ? '' : 'disabled'
-    const forwardDisabled = instance.canGoForward ? '' : 'disabled'
-    const loadingLabel = instance.isLoading ? 'Stop' : 'Reload'
-    const loadingAction = instance.isLoading ? 'stop' : 'reload'
-    const stoplightInset = process.platform === 'darwin' ? 86 : 0
+    for (let attempt = 0; attempt <= TOOLBAR_LOAD_MAX_RETRIES; attempt++) {
+      try {
+        if (VITE_DEV_SERVER_URL) {
+          await instance.window.webContents.loadURL(`${VITE_DEV_SERVER_URL}/browser-toolbar.html?${query}`)
+        } else {
+          await instance.window.webContents.loadFile(
+            join(__dirname, 'renderer/browser-toolbar.html'),
+            { query: { instanceId: instance.id } },
+          )
+        }
 
+        if (attempt > 0) {
+          mainLog.info(`[browser-pane] toolbar load recovered id=${instance.id} attempt=${attempt + 1}`)
+        }
+        return
+      } catch (error) {
+        lastError = error
+        const retrying = attempt < TOOLBAR_LOAD_MAX_RETRIES
+        mainLog.warn(
+          `[browser-pane] toolbar load failed id=${instance.id} attempt=${attempt + 1}/${TOOLBAR_LOAD_MAX_RETRIES + 1}: ${error instanceof Error ? error.message : String(error)}${retrying ? ' (retrying)' : ''}`,
+        )
+
+        if (retrying) {
+          await this.sleep(TOOLBAR_LOAD_RETRY_DELAY_MS)
+        }
+      }
+    }
+
+    const errorText = lastError instanceof Error ? lastError.message : String(lastError ?? 'unknown error')
+    await this.loadToolbarFallback(instance, errorText)
+  }
+
+  private async loadToolbarFallback(instance: BrowserInstance, reason: string): Promise<void> {
+    const safeReason = reason.replace(/[<>&]/g, (ch) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[ch] || ch))
     const html = `<!doctype html>
 <html>
   <head>
-    <meta charset="utf-8" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Browser Toolbar Error</title>
     <style>
-      :root {
-        color-scheme: light dark;
-        --bg: #ffffff;
-        --fg: #26242a;
-        --fg-40: rgba(38, 36, 42, 0.4);
-        --fg-50: rgba(38, 36, 42, 0.5);
-        --fg-70: rgba(38, 36, 42, 0.7);
-        --fg-5: rgba(38, 36, 42, 0.05);
-        --fg-6: rgba(38, 36, 42, 0.06);
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #2f2c34;
-          --fg: #e3e2e5;
-          --fg-40: rgba(227, 226, 229, 0.4);
-          --fg-50: rgba(227, 226, 229, 0.5);
-          --fg-70: rgba(227, 226, 229, 0.7);
-          --fg-5: rgba(227, 226, 229, 0.05);
-          --fg-6: rgba(227, 226, 229, 0.06);
-        }
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        background: var(--bg);
-        color: var(--fg);
-      }
-      .bar {
-        height: 48px;
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        padding: 0 12px 0 ${12 + stoplightInset}px;
-        border-bottom: 1px solid var(--fg-6);
-      }
-      .btn {
-        width: 28px;
-        height: 28px;
-        border: 0;
-        border-radius: 6px;
-        background: transparent;
-        color: var(--fg-70);
-        cursor: pointer;
-        transition: background-color 120ms ease;
-      }
-      .btn:hover { background: var(--fg-5); }
-      .btn:disabled { opacity: 0.3; pointer-events: none; }
-      .reload { width: auto; min-width: 28px; padding: 0 8px; font-size: 11px; }
-      form { flex: 1; display: flex; min-width: 220px; }
-      .url {
-        width: 100%;
-        height: 30px;
-        border-radius: 8px;
-        border: 1px solid var(--fg-6);
-        background: transparent;
-        color: var(--fg-70);
-        font-size: 13px;
-        padding: 0 10px;
-        outline: none;
-      }
-      .url:focus { border-color: var(--fg-40); }
-      .status {
-        margin-left: 8px;
-        max-width: 220px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        font-size: 11px;
-        color: var(--fg-50);
-      }
-      @media (max-width: 780px) {
-        .status { display: none; }
-      }
+      html, body { margin: 0; padding: 0; height: 100%; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fafafb; color: #1f2937; }
+      @media (prefers-color-scheme: dark) { html, body { background: #2b292e; color: #e5e7eb; } }
+      .wrap { height: 100%; display: flex; align-items: center; justify-content: center; }
+      .card { max-width: 640px; margin: 0 20px; padding: 14px 16px; border-radius: 10px; background: rgba(127,127,127,0.12); font-size: 12px; line-height: 1.45; }
+      .title { font-weight: 600; margin-bottom: 6px; }
+      .muted { opacity: 0.8; }
     </style>
   </head>
   <body>
-    <div class="bar">
-      <button class="btn" ${backDisabled} onclick="location.href='craft-browser://back'">‹</button>
-      <button class="btn" ${forwardDisabled} onclick="location.href='craft-browser://forward'">›</button>
-      <button class="btn reload" onclick="location.href='craft-browser://${loadingAction}'">${loadingLabel}</button>
-      <form onsubmit="event.preventDefault(); location.href='craft-browser://navigate?url=' + encodeURIComponent(document.getElementById('url').value);">
-        <input id="url" class="url" value="${url}" />
-      </form>
-      <div class="status">${escape(instance.title || 'New Tab')}</div>
+    <div class="wrap">
+      <div class="card">
+        <div class="title">Browser toolbar failed to load</div>
+        <div class="muted">The page area still works, but toolbar UI is unavailable. Try reopening the browser window.</div>
+        <div class="muted" style="margin-top: 8px; word-break: break-word;">Reason: ${safeReason}</div>
+      </div>
     </div>
   </body>
 </html>`
 
     try {
-      await instance.window.webContents.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+      await instance.window.webContents.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`)
+      mainLog.warn(`[browser-pane] Loaded toolbar fallback id=${instance.id}`)
     } catch (error) {
-      mainLog.warn(`[browser-pane] toolbar chrome render failed id=${instance.id}: ${error instanceof Error ? error.message : String(error)}`)
+      mainLog.error(`[browser-pane] Failed to load toolbar fallback id=${instance.id}: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
-  private async handleToolbarAction(instance: BrowserInstance, url: string): Promise<boolean> {
-    if (!url.startsWith('craft-browser://')) return false
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
+  }
 
-    const parsed = new URL(url)
-    const action = parsed.hostname
+  private pushToolbarState(instance: BrowserInstance): void {
+    if (instance.window.isDestroyed()) return
+    const state = {
+      url: instance.currentUrl,
+      title: instance.title,
+      isLoading: instance.isLoading,
+      canGoBack: instance.canGoBack,
+      canGoForward: instance.canGoForward,
+      themeColor: instance.themeColor,
+    }
+    instance.window.webContents.send(TOOLBAR_CHANNELS.STATE_UPDATE, state)
+  }
 
-    switch (action) {
-      case 'back':
-        await this.goBack(instance.id)
-        break
-      case 'forward':
-        await this.goForward(instance.id)
-        break
-      case 'reload':
-        this.reload(instance.id)
-        break
-      case 'stop':
-        this.stop(instance.id)
-        break
-      case 'navigate': {
-        const target = parsed.searchParams.get('url') || ''
-        if (target.trim()) {
-          await this.navigate(instance.id, target)
+  /** Register IPC handlers for toolbar actions. Call once at app startup. */
+  registerToolbarIpc(): void {
+    const findInstance = (instanceId: string): BrowserInstance | undefined => {
+      return this.instances.get(instanceId)
+    }
+
+    ipcMain.handle(TOOLBAR_CHANNELS.NAVIGATE, async (_event, instanceId: string, url: string) => {
+      const inst = findInstance(instanceId)
+      if (inst) await this.navigate(inst.id, url)
+    })
+
+    ipcMain.handle(TOOLBAR_CHANNELS.GO_BACK, async (_event, instanceId: string) => {
+      const inst = findInstance(instanceId)
+      if (inst) await this.goBack(inst.id)
+    })
+
+    ipcMain.handle(TOOLBAR_CHANNELS.GO_FORWARD, async (_event, instanceId: string) => {
+      const inst = findInstance(instanceId)
+      if (inst) await this.goForward(inst.id)
+    })
+
+    ipcMain.handle(TOOLBAR_CHANNELS.RELOAD, async (_event, instanceId: string) => {
+      const inst = findInstance(instanceId)
+      if (inst) this.reload(inst.id)
+    })
+
+    ipcMain.handle(TOOLBAR_CHANNELS.STOP, async (_event, instanceId: string) => {
+      const inst = findInstance(instanceId)
+      if (inst) this.stop(inst.id)
+    })
+
+    ipcMain.handle(TOOLBAR_CHANNELS.OPEN_MENU, async (event, instanceId: string, x?: number, y?: number) => {
+      const inst = findInstance(instanceId)
+      const sourceWindow = BrowserWindow.fromWebContents(event.sender)
+      if (!inst || !sourceWindow || sourceWindow.isDestroyed()) return
+
+      const menu = Menu.buildFromTemplate([
+        {
+          label: 'Hide Window',
+          click: () => this.hide(inst.id),
+        },
+        {
+          label: 'Close Window Entirely',
+          click: () => this.destroyInstance(inst.id),
+        },
+      ])
+
+      menu.popup({ window: sourceWindow, x, y })
+    })
+
+    ipcMain.handle(TOOLBAR_CHANNELS.HIDE, async (_event, instanceId: string) => {
+      const inst = findInstance(instanceId)
+      if (inst) this.hide(inst.id)
+    })
+
+    ipcMain.handle(TOOLBAR_CHANNELS.DESTROY, async (_event, instanceId: string) => {
+      const inst = findInstance(instanceId)
+      if (inst) this.destroyInstance(inst.id)
+    })
+
+    mainLog.info('[browser-pane] Toolbar IPC handlers registered')
+  }
+
+  private markToolbarReady(instance: BrowserInstance, reason: string): void {
+    if (instance.toolbarReady || instance.window.isDestroyed()) return
+
+    instance.toolbarReady = true
+    mainLog.info(`[browser-pane] toolbar ready id=${instance.id} reason=${reason}`)
+
+    if (instance.showOnCreate) {
+      instance.window.show()
+      instance.window.focus()
+      instance.isVisible = true
+      this.emitStateChange(instance)
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Agent Control — persistent overlay while agent is using the browser
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Activate or update the agent control overlay on the browser instance
+   * bound to the given session. Called from sessions.ts on browser_* tool_start events.
+   */
+  setAgentControl(sessionId: string, meta: { displayName?: string; intent?: string }): void {
+    for (const instance of this.instances.values()) {
+      if (instance.boundSessionId === sessionId) {
+        instance.agentControl = {
+          active: true,
+          sessionId,
+          displayName: meta.displayName,
+          intent: meta.intent,
         }
-        break
-      }
-      default:
-        break
-    }
 
-    return true
+        const label = this.getAgentControlLabel(instance.agentControl)
+
+        this.reapplyAgentControlVisual(instance)
+        this.emitStateChange(instance)
+
+        mainLog.info(`[browser-pane] agent control activated session=${sessionId} label=${label}`)
+        return
+      }
+    }
   }
 
-  private async flashLiveActionOverlay(instance: BrowserInstance, params: {
-    geometries?: ElementGeometry[]
-    metadataText: string
-  }): Promise<void> {
-    try {
-      const first = params.geometries?.[0]
-      await instance.cdp.setAgentVisualState({
-        active: true,
-        label: params.metadataText,
-        cursor: first?.clickPoint ?? null,
-      })
-
-      // Turn-scoped hold: do not auto-clear here.
-      // Session lifecycle is responsible for clearing visuals at turn end.
-    } catch {
-      // best-effort visual aid only
+  /**
+   * Clear the agent control overlay for the given session.
+   * Called on explicit browser_tool release or turn end.
+   */
+  clearAgentControl(sessionId: string): void {
+    for (const instance of this.instances.values()) {
+      if (instance.boundSessionId === sessionId && instance.agentControl?.active) {
+        instance.agentControl = null
+        instance.cdp.clearAgentVisualState().catch(() => {})
+        this.emitStateChange(instance)
+        mainLog.info(`[browser-pane] agent control released session=${sessionId}`)
+      }
     }
+  }
+
+  /**
+   * Extract a theme color from the page using Safari 26-style heuristics.
+   * Priority: media-aware theme-color meta → elementsFromPoint (fixed/sticky headers) → body/html bg.
+   * All colors pass through (including white/black) — contrast is handled by the renderer.
+   * Guards against stale extraction (URL change during async executeJavaScript).
+   */
+  private async extractThemeColor(instance: BrowserInstance): Promise<void> {
+    if (instance.themeColor) return // already set by did-change-theme-color or observer
+    const urlAtStart = instance.currentUrl
+    try {
+      const color = await instance.pageView.webContents.executeJavaScript(`(${THEME_COLOR_EXTRACTOR_FN})()`)
+      // Guard: if user navigated away during extraction, discard stale result
+      if (instance.currentUrl !== urlAtStart) return
+      if (typeof color === 'string' && color.length > 0) {
+        this.applyThemeColor(instance, color)
+      }
+    } catch {
+      // page destroyed or JS error — ignore
+    }
+  }
+
+  private applyThemeColor(instance: BrowserInstance, color: string | null): void {
+    if (instance.themeColor === color) return
+    instance.themeColor = color
+    if (!instance.window.isDestroyed()) {
+      instance.window.webContents.send(TOOLBAR_CHANNELS.THEME_COLOR, color)
+    }
+    this.emitStateChange(instance)
+  }
+
+  private installThemeObserver(instance: BrowserInstance): void {
+    const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    instance.themeObserverToken = token
+
+    void instance.pageView.webContents.executeJavaScript(`
+      (() => {
+        const token = ${JSON.stringify(token)};
+        const prefix = ${JSON.stringify(THEME_COLOR_SIGNAL_PREFIX)} + token + ':';
+        const nullSentinel = ${JSON.stringify(THEME_COLOR_NULL_SENTINEL)};
+        const extractThemeColor = ${THEME_COLOR_EXTRACTOR_FN};
+
+        const w = window;
+        const previousCleanup = w.__CRAFT_THEME_OBSERVER_CLEANUP__;
+        if (typeof previousCleanup === 'function') {
+          try { previousCleanup(); } catch {}
+        }
+
+        let lastColor = '__unset__';
+        let rafId = 0;
+        let timerId = 0;
+        let lastRunAt = 0;
+        const minIntervalMs = ${THEME_OBSERVER_MIN_INTERVAL_MS};
+
+        const clearScheduled = () => {
+          if (timerId) {
+            clearTimeout(timerId);
+            timerId = 0;
+          }
+          if (rafId) {
+            cancelAnimationFrame(rafId);
+            rafId = 0;
+          }
+        };
+
+        const emit = (color) => {
+          const normalized = typeof color === 'string' && color.length > 0 ? color : null;
+          if (normalized === lastColor) return;
+          lastColor = normalized;
+          console.info(prefix + (normalized ?? nullSentinel));
+        };
+
+        const run = () => {
+          rafId = 0;
+          lastRunAt = Date.now();
+          try {
+            emit(extractThemeColor());
+          } catch {}
+        };
+
+        const schedule = () => {
+          if (rafId || timerId) return;
+          const waitMs = Math.max(0, minIntervalMs - (Date.now() - lastRunAt));
+          if (waitMs > 0) {
+            timerId = setTimeout(() => {
+              timerId = 0;
+              rafId = requestAnimationFrame(run);
+            }, waitMs);
+            return;
+          }
+          rafId = requestAnimationFrame(run);
+        };
+
+        const onScroll = () => schedule();
+        const onResize = () => schedule();
+        const onMutation = () => schedule();
+
+        const headObserver = new MutationObserver(onMutation);
+        if (document.head) {
+          headObserver.observe(document.head, {
+            subtree: true,
+            childList: true,
+            attributes: true,
+            attributeFilter: ['name', 'content', 'media'],
+          });
+        }
+
+        const rootObserver = new MutationObserver(onMutation);
+        if (document.documentElement) {
+          rootObserver.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['class', 'style'],
+          });
+        }
+        if (document.body) {
+          rootObserver.observe(document.body, {
+            attributes: true,
+            attributeFilter: ['class', 'style'],
+          });
+        }
+
+        w.addEventListener('scroll', onScroll, { passive: true });
+        w.addEventListener('resize', onResize, { passive: true });
+
+        const mql = w.matchMedia('(prefers-color-scheme: dark)');
+        const onSchemeChange = () => schedule();
+        if (typeof mql.addEventListener === 'function') mql.addEventListener('change', onSchemeChange);
+        else if (typeof mql.addListener === 'function') mql.addListener(onSchemeChange);
+
+        w.__CRAFT_THEME_OBSERVER_CLEANUP__ = () => {
+          headObserver.disconnect();
+          rootObserver.disconnect();
+          w.removeEventListener('scroll', onScroll);
+          w.removeEventListener('resize', onResize);
+          if (typeof mql.removeEventListener === 'function') mql.removeEventListener('change', onSchemeChange);
+          else if (typeof mql.removeListener === 'function') mql.removeListener(onSchemeChange);
+          clearScheduled();
+        };
+
+        // Fast first color for initial toolbar paint and after SPA route changes
+        schedule();
+      })()
+    `).catch(() => {})
+  }
+
+  private scheduleEarlyThemeExtraction(instance: BrowserInstance, urlAtSchedule: string): void {
+    setTimeout(() => {
+      if (!this.instances.has(instance.id)) return
+      if (instance.currentUrl !== urlAtSchedule) return
+      void this.extractThemeColor(instance)
+    }, EARLY_THEME_EXTRACTION_DELAY_MS)
+  }
+
+  private getInstanceByWebContentsId(webContentsId: number): BrowserInstance | undefined {
+    for (const instance of this.instances.values()) {
+      if (instance.pageView.webContents.id === webContentsId) return instance
+    }
+    return undefined
+  }
+
+  private pushNetworkLog(instance: BrowserInstance, entry: BrowserNetworkEntry): void {
+    instance.networkLogs.push(entry)
+    if (instance.networkLogs.length > MAX_NETWORK_LOG_ENTRIES) {
+      instance.networkLogs.splice(0, instance.networkLogs.length - MAX_NETWORK_LOG_ENTRIES)
+    }
+  }
+
+  private pushDownloadLog(instance: BrowserInstance, entry: BrowserDownloadEntry): void {
+    instance.downloads.push(entry)
+    if (instance.downloads.length > MAX_DOWNLOAD_LOG_ENTRIES) {
+      instance.downloads.splice(0, instance.downloads.length - MAX_DOWNLOAD_LOG_ENTRIES)
+    }
+  }
+
+  private setupSessionObservers(ses: ElectronSession): void {
+    if (this.partitionObserversInitialized) return
+    this.partitionObserversInitialized = true
+
+    ses.webRequest.onBeforeRequest((details, callback) => {
+      const wcId = details.webContentsId
+      if (typeof wcId === 'number' && wcId > 0) {
+        const current = this.inFlightRequestsByWebContentsId.get(wcId) ?? 0
+        this.inFlightRequestsByWebContentsId.set(wcId, current + 1)
+        this.lastNetworkActivityByWebContentsId.set(wcId, Date.now())
+      }
+      callback({})
+    })
+
+    ses.webRequest.onCompleted((details) => {
+      const wcId = details.webContentsId
+      if (typeof wcId !== 'number' || wcId <= 0) return
+
+      const current = this.inFlightRequestsByWebContentsId.get(wcId) ?? 0
+      this.inFlightRequestsByWebContentsId.set(wcId, Math.max(0, current - 1))
+      this.lastNetworkActivityByWebContentsId.set(wcId, Date.now())
+
+      const instance = this.getInstanceByWebContentsId(wcId)
+      if (!instance) return
+
+      this.pushNetworkLog(instance, {
+        timestamp: Date.now(),
+        method: details.method ?? 'GET',
+        url: details.url ?? '',
+        status: details.statusCode ?? 0,
+        resourceType: String(details.resourceType ?? 'unknown'),
+        ok: (details.statusCode ?? 0) >= 200 && (details.statusCode ?? 0) < 400,
+      })
+    })
+
+    ses.webRequest.onErrorOccurred((details) => {
+      const wcId = details.webContentsId
+      if (typeof wcId !== 'number' || wcId <= 0) return
+
+      const current = this.inFlightRequestsByWebContentsId.get(wcId) ?? 0
+      this.inFlightRequestsByWebContentsId.set(wcId, Math.max(0, current - 1))
+      this.lastNetworkActivityByWebContentsId.set(wcId, Date.now())
+
+      const instance = this.getInstanceByWebContentsId(wcId)
+      if (!instance) return
+
+      this.pushNetworkLog(instance, {
+        timestamp: Date.now(),
+        method: details.method ?? 'GET',
+        url: details.url ?? '',
+        status: 0,
+        resourceType: String(details.resourceType ?? 'unknown'),
+        ok: false,
+      })
+    })
+
+    ses.on('will-download', (_event, item, webContents) => {
+      const wcId = webContents?.id
+      if (typeof wcId !== 'number') return
+      const instance = this.getInstanceByWebContentsId(wcId)
+      if (!instance) return
+
+      const downloadId = `dl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const started: BrowserDownloadEntry = {
+        id: downloadId,
+        timestamp: Date.now(),
+        url: item.getURL(),
+        filename: item.getFilename(),
+        state: 'started',
+        bytesReceived: item.getReceivedBytes(),
+        totalBytes: item.getTotalBytes(),
+        mimeType: 'application/octet-stream',
+        savePath: item.getSavePath(),
+      }
+      this.pushDownloadLog(instance, started)
+
+      const onUpdated = (_e: Electron.Event, state: string) => {
+        const latest = instance.downloads.find((d) => d.id === downloadId)
+        if (!latest) return
+        latest.bytesReceived = item.getReceivedBytes()
+        latest.totalBytes = item.getTotalBytes()
+        if (state === 'interrupted') latest.state = 'interrupted'
+      }
+
+      item.on('updated', onUpdated)
+
+      item.once('done', (_e, state) => {
+        item.removeListener('updated', onUpdated)
+        const latest = instance.downloads.find((d) => d.id === downloadId)
+        if (!latest) return
+        latest.bytesReceived = item.getReceivedBytes()
+        latest.totalBytes = item.getTotalBytes()
+        latest.savePath = item.getSavePath()
+        latest.state = state === 'completed' ? 'completed' : state === 'cancelled' ? 'cancelled' : 'interrupted'
+      })
+    })
   }
 
   private setupSessionPermissions(ses: ElectronSession): void {
@@ -864,50 +1676,74 @@ export class BrowserPaneManager {
       this.layoutPageView(instance)
     })
 
-    toolbarWc.on('will-navigate', (event, url) => {
-      void (async () => {
-        if (!url.startsWith('craft-browser://')) return
-        event.preventDefault()
-        await this.handleToolbarAction(instance, url)
-        await this.renderToolbarChrome(instance)
-      })()
+    toolbarWc.on('did-finish-load', () => {
+      this.markToolbarReady(instance, 'did-finish-load')
+    })
+
+    toolbarWc.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame) return
+      mainLog.warn(`[browser-pane] toolbar did-fail-load id=${instance.id} code=${errorCode} url=${validatedURL} error=${errorDescription}`)
     })
 
     pageWc.on('did-start-loading', () => {
       instance.isLoading = true
       this.emitStateChange(instance)
-      void this.renderToolbarChrome(instance)
+      void this.pushToolbarState(instance)
     })
 
     pageWc.on('did-stop-loading', () => {
       instance.isLoading = false
       instance.canGoBack = pageWc.canGoBack()
       instance.canGoForward = pageWc.canGoForward()
+      // Drain in-flight count — all pending requests are settled once loading stops
+      this.inFlightRequestsByWebContentsId.set(pageWc.id, 0)
+      this.lastNetworkActivityByWebContentsId.set(pageWc.id, Date.now())
       this.emitStateChange(instance)
-      void this.renderToolbarChrome(instance)
+      void this.pushToolbarState(instance)
+      void this.extractThemeColor(instance)
+      this.reapplyAgentControlVisual(instance)
+    })
+
+    pageWc.on('dom-ready', () => {
+      this.installThemeObserver(instance)
+      void this.extractThemeColor(instance)
     })
 
     pageWc.on('did-navigate', (_event, url) => {
+      instance.themeObserverToken = null
+      instance.themeColor = null // reset for new page (batched with state push below)
       instance.currentUrl = url
       instance.title = pageWc.getTitle()
       instance.canGoBack = pageWc.canGoBack()
       instance.canGoForward = pageWc.canGoForward()
+      // Drain in-flight count — prior page's requests are cancelled on navigation
+      this.inFlightRequestsByWebContentsId.set(pageWc.id, 0)
+      this.lastNetworkActivityByWebContentsId.set(pageWc.id, Date.now())
       this.emitStateChange(instance)
-      void this.renderToolbarChrome(instance)
+      void this.pushToolbarState(instance)
+      this.scheduleEarlyThemeExtraction(instance, url)
+      this.reapplyAgentControlVisual(instance)
     })
 
     pageWc.on('did-navigate-in-page', (_event, url) => {
       instance.currentUrl = url
       instance.canGoBack = pageWc.canGoBack()
       instance.canGoForward = pageWc.canGoForward()
+      // SPA route change — re-extract theme color (debounced)
+      if (instance.inPageThemeTimer) clearTimeout(instance.inPageThemeTimer)
+      instance.themeObserverToken = null
+      instance.themeColor = null
       this.emitStateChange(instance)
-      void this.renderToolbarChrome(instance)
+      void this.pushToolbarState(instance)
+      this.installThemeObserver(instance)
+      instance.inPageThemeTimer = setTimeout(() => { void this.extractThemeColor(instance) }, 300)
+      this.reapplyAgentControlVisual(instance)
     })
 
     pageWc.on('page-title-updated', (_event, title) => {
       instance.title = title
       this.emitStateChange(instance)
-      void this.renderToolbarChrome(instance)
+      void this.pushToolbarState(instance)
     })
 
     pageWc.on('page-favicon-updated', (_event, favicons) => {
@@ -915,11 +1751,42 @@ export class BrowserPaneManager {
       this.emitStateChange(instance)
     })
 
+    pageWc.on('did-change-theme-color', (_event, color) => {
+      this.applyThemeColor(instance, color ?? null)
+    })
+
     pageWc.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
       mainLog.warn(`[browser-pane] did-fail-load id=${instance.id} code=${errorCode} url=${validatedURL} error=${errorDescription}`)
     })
 
     pageWc.on('console-message', (_event, level, message) => {
+      if (message.startsWith(THEME_COLOR_SIGNAL_PREFIX)) {
+        const payload = message.slice(THEME_COLOR_SIGNAL_PREFIX.length)
+        const delimiterIdx = payload.indexOf(':')
+        if (delimiterIdx > 0) {
+          const token = payload.slice(0, delimiterIdx)
+          const value = payload.slice(delimiterIdx + 1).trim()
+          if (token === instance.themeObserverToken) {
+            if (value === THEME_COLOR_NULL_SENTINEL) {
+              this.applyThemeColor(instance, null)
+            } else if (value.length > 0) {
+              this.applyThemeColor(instance, value)
+            }
+          }
+        }
+        return
+      }
+
+      const mappedLevel: BrowserConsoleEntry['level'] = level >= 3 ? 'error' : level === 2 ? 'warn' : level === 1 ? 'info' : 'log'
+      instance.consoleLogs.push({
+        timestamp: Date.now(),
+        level: mappedLevel,
+        message,
+      })
+      if (instance.consoleLogs.length > MAX_CONSOLE_LOG_ENTRIES) {
+        instance.consoleLogs.splice(0, instance.consoleLogs.length - MAX_CONSOLE_LOG_ENTRIES)
+      }
+
       if (level >= 2) {
         mainLog.warn(`[browser-pane] console id=${instance.id} level=${level}: ${message}`)
       }
@@ -974,6 +1841,8 @@ export class BrowserPaneManager {
       ownerType: instance.ownerType,
       ownerSessionId: instance.ownerSessionId,
       isVisible: instance.isVisible,
+      agentControlActive: !!instance.agentControl?.active,
+      themeColor: instance.themeColor,
     }
   }
 

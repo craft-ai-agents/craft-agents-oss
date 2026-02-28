@@ -10,8 +10,8 @@
  */
 
 import type { WebContents } from 'electron'
+import { BROWSER_LIVE_FX_BORDER, getBrowserLiveFxCornerRadii } from '../shared/browser-live-fx'
 import { mainLog } from './logger'
-import { BROWSER_LIVE_FX } from '../shared/browser-live-fx'
 
 export interface AccessibilityNode {
   ref: string           // "@e1", "@e2", etc.
@@ -229,6 +229,66 @@ export class BrowserCDP {
     }
   }
 
+  async getElementGeometryBySelector(selector: string): Promise<ElementGeometry> {
+    const result = await this.send('Runtime.evaluate', {
+      expression: `(() => {
+        const candidates = Array.from(document.querySelectorAll(${JSON.stringify(selector)}));
+        if (candidates.length === 0) return null;
+
+        const isVisible = (el) => {
+          if (!(el instanceof Element)) return false;
+          const style = window.getComputedStyle(el);
+          if (!style || style.display === 'none' || style.visibility === 'hidden') return false;
+          if (Number(style.opacity || '1') === 0) return false;
+          const rect = el.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) return false;
+          return true;
+        };
+
+        const el = candidates.find(isVisible) || candidates[0];
+        const rect = el.getBoundingClientRect();
+        const tag = (el.tagName && typeof el.tagName === 'string') ? el.tagName.toLowerCase() : 'element';
+        const text = (typeof el.textContent === 'string') ? el.textContent.slice(0, 120) : '';
+        return {
+          x: rect.left,
+          y: rect.top,
+          width: rect.width,
+          height: rect.height,
+          cx: rect.left + rect.width / 2,
+          cy: rect.top + rect.height / 2,
+          tag,
+          text,
+        };
+      })()`,
+      returnByValue: true,
+    })
+
+    const value = result?.result?.value
+    if (!value) {
+      throw new Error(`No element found for selector "${selector}"`)
+    }
+
+    if (Number(value.width) <= 0 || Number(value.height) <= 0) {
+      throw new Error(`Element found for selector "${selector}" has zero size`)
+    }
+
+    return {
+      ref: `selector:${selector}`,
+      role: String(value.tag || 'element'),
+      name: String(value.text || '').trim(),
+      box: {
+        x: Number(value.x),
+        y: Number(value.y),
+        width: Number(value.width),
+        height: Number(value.height),
+      },
+      clickPoint: {
+        x: Number(value.cx),
+        y: Number(value.cy),
+      },
+    }
+  }
+
   async getViewportMetrics(): Promise<ViewportMetrics> {
     const result = await this.send('Runtime.evaluate', {
       expression: `(() => ({
@@ -354,11 +414,48 @@ export class BrowserCDP {
     label?: string
     cursor?: { x: number; y: number } | null
   }): Promise<void> {
+    const cornerRadii = getBrowserLiveFxCornerRadii(
+      process.platform === 'darwin' || process.platform === 'win32' || process.platform === 'linux'
+        ? process.platform
+        : 'other',
+    )
+
     const payload = {
       active: params.active,
       label: params.label || 'Agent is working…',
       cursor: params.cursor ?? null,
-      fx: BROWSER_LIVE_FX,
+      fx: {
+        rootId: '__craft_agent_live_fx__',
+        borderId: '__craft_agent_live_fx_border__',
+        chipId: '__craft_agent_live_fx_chip__',
+        cursorId: '__craft_agent_live_fx_cursor__',
+
+        borderTopLeftRadius: cornerRadii.topLeft,
+        borderTopRightRadius: cornerRadii.topRight,
+        borderBottomLeftRadius: cornerRadii.bottomLeft,
+        borderBottomRightRadius: cornerRadii.bottomRight,
+        borderWidth: BROWSER_LIVE_FX_BORDER.width,
+        borderStyle: BROWSER_LIVE_FX_BORDER.style,
+        borderColor: BROWSER_LIVE_FX_BORDER.color,
+        borderBoxShadow: BROWSER_LIVE_FX_BORDER.boxShadow,
+
+        chipTop: '8px',
+        chipRight: '8px',
+        chipPadding: '4px 8px',
+        chipRadius: '7px',
+        chipFont: '11px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',
+        chipBackground: 'rgba(2, 6, 23, 0.82)',
+        chipColor: 'rgba(236, 254, 255, 0.95)',
+        chipBackdropFilter: 'blur(4px)',
+
+        cursorWidth: '18px',
+        cursorHeight: '22px',
+        cursorFilter: 'drop-shadow(0 0 8px rgba(0,0,0,0.35))',
+        cursorTransition: 'left 120ms ease, top 120ms ease',
+        cursorOffset: 2,
+        cursorInnerHtml:
+          '<div style="width:100%;height:100%;background:black;clip-path:polygon(0% 0%,0% 100%,34% 73%,51% 100%,66% 94%,48% 67%,100% 67%);border-radius:2px;outline:1px solid rgba(255,255,255,0.75);"></div>',
+      },
     }
 
     await this.send('Runtime.evaluate', {
@@ -390,14 +487,14 @@ export class BrowserCDP {
           borderFx.id = fx.borderId;
           borderFx.style.position = 'absolute';
           borderFx.style.inset = '0';
-          borderFx.style.borderRadius = fx.borderRadius;
-          borderFx.style.backgroundImage = fx.borderBackgroundImage;
-          borderFx.style.backgroundSize = fx.borderBackgroundSize;
-          borderFx.style.backgroundPosition = fx.borderBackgroundPosition;
+          borderFx.style.borderTopLeftRadius = fx.borderTopLeftRadius;
+          borderFx.style.borderTopRightRadius = fx.borderTopRightRadius;
+          borderFx.style.borderBottomLeftRadius = fx.borderBottomLeftRadius;
+          borderFx.style.borderBottomRightRadius = fx.borderBottomRightRadius;
+          borderFx.style.borderWidth = fx.borderWidth;
+          borderFx.style.borderStyle = fx.borderStyle;
+          borderFx.style.borderColor = fx.borderColor;
           borderFx.style.boxShadow = fx.borderBoxShadow;
-          borderFx.style.maskImage = fx.borderMaskImage;
-          borderFx.style.webkitMaskImage = fx.borderMaskImage;
-          borderFx.style.animation = fx.borderAnimation;
 
           const chip = document.createElement('div');
           chip.id = fx.chipId;
@@ -421,14 +518,9 @@ export class BrowserCDP {
           cursor.style.filter = fx.cursorFilter;
           cursor.innerHTML = fx.cursorInnerHtml;
 
-          const style = document.createElement('style');
-          style.id = fx.styleId;
-          style.textContent = fx.keyframesCss;
-
           root.appendChild(borderFx);
           root.appendChild(chip);
           root.appendChild(cursor);
-          root.appendChild(style);
           document.documentElement.appendChild(root);
         }
 

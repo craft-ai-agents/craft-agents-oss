@@ -48,6 +48,7 @@ import {
 } from '@craft-agent/shared/statuses';
 import { loadAppTheme, loadPresetThemes, loadPresetTheme, getAppThemesDir } from '@craft-agent/shared/config';
 import type { ThemeOverrides, PresetTheme } from '@craft-agent/shared/config';
+import { readSessionHeader, type SessionHeader } from '@craft-agent/shared/sessions';
 
 // ============================================================
 // Constants
@@ -132,6 +133,10 @@ export interface ConfigWatcherCallbacks {
   onPresetThemeChange?: (themeId: string, theme: PresetTheme | null) => void;
   /** Called when the preset themes list changes (add/remove files) */
   onPresetThemesListChange?: (themes: PresetTheme[]) => void;
+
+  // Session callbacks
+  /** Called when a session header changes (external edits to sessions/{id}/session.jsonl) */
+  onSessionMetadataChange?: (sessionId: string, header: SessionHeader) => void;
 
   // Error callbacks
   /** Called when a validation error occurs */
@@ -358,6 +363,17 @@ export class ConfigWatcher {
       return;
     }
 
+    // Session metadata changes: sessions/{sessionId}/session.jsonl
+    if (parts[0] === 'sessions' && parts.length >= 3) {
+      const sessionId = parts[1]!; // Safe: checked parts.length >= 3
+      const file = parts[2];
+
+      if (file === 'session.jsonl') {
+        this.debounce(`session-metadata:${sessionId}`, () => this.handleSessionMetadataChange(sessionId));
+      }
+      return;
+    }
+
     // Sources changes: sources/{slug}/...
     if (parts[0] === 'sources' && parts.length >= 2) {
       const slug = parts[1]!;  // Safe: checked parts.length >= 2
@@ -436,6 +452,27 @@ export class ConfigWatcher {
         return;
       }
     }
+  }
+
+  /**
+   * Handle session metadata (session.jsonl header) change.
+   */
+  private handleSessionMetadataChange(sessionId: string): void {
+    const sessionFile = join(this.workspaceDir, 'sessions', sessionId, 'session.jsonl');
+
+    // Session may have been deleted/rotated.
+    if (!existsSync(sessionFile)) {
+      debug('[ConfigWatcher] Session metadata file missing:', sessionFile);
+      return;
+    }
+
+    const header = readSessionHeader(sessionFile);
+    if (!header) {
+      debug('[ConfigWatcher] Failed to read session metadata header:', sessionFile);
+      return;
+    }
+
+    this.callbacks.onSessionMetadataChange?.(sessionId, header);
   }
 
   /**

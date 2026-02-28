@@ -45,6 +45,7 @@ export const SESSION_PERSISTENT_FIELDS = [
   // Branching
   'branchFromMessageId',
   'branchFromSdkSessionId',
+  'branchFromSessionPath',
 ] as const;
 
 export type SessionPersistentField = typeof SESSION_PERSISTENT_FIELDS[number];
@@ -156,6 +157,8 @@ export interface SessionConfig {
   branchFromMessageId?: string;
   /** Parent session's SDK session ID (for SDK-level fork via resume + forkSession). */
   branchFromSdkSessionId?: string;
+  /** Parent session's storage path (for Pi SDK fork — locating parent Pi session files). */
+  branchFromSessionPath?: string;
 }
 
 /**

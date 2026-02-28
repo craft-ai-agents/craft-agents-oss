@@ -33,6 +33,12 @@ import { TurnCardActionsMenu } from './TurnCardActionsMenu'
 import { computeLastChildSet, groupActivitiesByParent, isActivityGroup, formatDuration, formatTokens, deriveTurnPhase, shouldShowThinkingIndicator, type ActivityGroup, type AssistantTurn } from './turn-utils'
 import { DocumentFormattedMarkdownOverlay } from '../overlay'
 import { AcceptPlanDropdown } from './AcceptPlanDropdown'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  StyledDropdownMenuContent,
+  StyledDropdownMenuItem,
+} from '../ui/StyledDropdown'
 
 // ============================================================================
 // Utilities
@@ -1312,7 +1318,48 @@ export interface ResponseCardProps {
   /** Hide footer for compact embedding (EditPopover) */
   compactMode?: boolean
   /** Callback to branch the session from this response */
-  onBranch?: (e: React.MouseEvent) => void
+  onBranch?: (options?: { newPanel?: boolean }) => void
+}
+
+interface BranchDropdownProps {
+  onBranch: (options?: { newPanel?: boolean }) => void
+}
+
+function BranchDropdown({ onBranch }: BranchDropdownProps) {
+  const handleBranchClick = () => {
+    onBranch({ newPanel: true })
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="Branch options"
+          title="Branch"
+          className={cn(
+            "p-1 rounded-[4px] transition-colors select-none",
+            "text-muted-foreground hover:text-foreground hover:bg-foreground/5",
+            "data-[state=open]:text-foreground data-[state=open]:bg-foreground/5",
+            "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          )}
+        >
+          <GitBranch className={SIZE_CONFIG.iconSize} />
+        </button>
+      </DropdownMenuTrigger>
+
+      <StyledDropdownMenuContent align="end" minWidth="min-w-64" sideOffset={6}>
+        <StyledDropdownMenuItem onClick={handleBranchClick} className="items-start py-2">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[13px] leading-tight">Branch From This message</span>
+            <span className="max-w-[220px] whitespace-normal text-xs leading-tight text-muted-foreground">
+              Explore an alternate direction without disrupting this conversation’s flow.
+            </span>
+          </div>
+        </StyledDropdownMenuItem>
+      </StyledDropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 const MAX_HEIGHT = 540
@@ -1537,19 +1584,7 @@ export function ResponseCard({
                     />
                   </div>
                 )}
-                {onBranch && (
-                  <button
-                    onClick={onBranch}
-                    className={cn(
-                      "flex items-center gap-1.5 transition-colors select-none",
-                      "text-muted-foreground hover:text-foreground",
-                      "focus:outline-none focus-visible:underline"
-                    )}
-                  >
-                    <GitBranch className={SIZE_CONFIG.iconSize} />
-                    <span>Branch</span>
-                  </button>
-                )}
+                {onBranch && <BranchDropdown onBranch={onBranch} />}
               </div>
             </div>
           )}
@@ -2076,7 +2111,7 @@ export const TurnCard = React.memo(function TurnCard({
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse && index === planActivities.length - 1}
             compactMode={compactMode}
-            onBranch={onBranch ? (e: React.MouseEvent) => onBranch(planActivity.id, { newPanel: e.metaKey || e.ctrlKey }) : undefined}
+            onBranch={onBranch ? (options?: { newPanel?: boolean }) => onBranch(planActivity.id, options) : undefined}
           />
         </div>
       ))}
@@ -2104,7 +2139,7 @@ export const TurnCard = React.memo(function TurnCard({
                 onAcceptWithCompact={onAcceptPlanWithCompact}
                 isLastResponse={isLastResponse}
                 compactMode={compactMode}
-                onBranch={onBranch && response.messageId ? (e: React.MouseEvent) => onBranch(response.messageId!, { newPanel: e.metaKey || e.ctrlKey }) : undefined}
+                onBranch={onBranch && response.messageId ? (options?: { newPanel?: boolean }) => onBranch(response.messageId!, options) : undefined}
               />
             </motion.div>
           )}
@@ -2125,7 +2160,7 @@ export const TurnCard = React.memo(function TurnCard({
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse}
             compactMode={compactMode}
-            onBranch={onBranch && response.messageId ? (e: React.MouseEvent) => onBranch(response.messageId!, { newPanel: e.metaKey || e.ctrlKey }) : undefined}
+            onBranch={onBranch && response.messageId ? (options?: { newPanel?: boolean }) => onBranch(response.messageId!, options) : undefined}
           />
         </div>
       )}

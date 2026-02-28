@@ -794,6 +794,14 @@ Please continue the conversation naturally from where we left off.
     // No-op by default
   }
 
+  /**
+   * Ensure branch sessions are backend-ready before first user message.
+   * Default implementation is a no-op.
+   */
+  async ensureBranchReady(): Promise<void> {
+    // No-op by default
+  }
+
   // ============================================================
   // Cleanup (common base, subclasses extend)
   // ============================================================

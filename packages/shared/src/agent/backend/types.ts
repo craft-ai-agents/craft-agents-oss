@@ -349,6 +349,15 @@ export interface AgentBackend {
   applyBridgeUpdates(context: BridgeUpdateContext): Promise<void>;
 
   /**
+   * Ensure branch sessions are backend-ready before first user message.
+   * Called at branch creation time to avoid creating "fake branches" that have
+   * copied transcript history but no actual backend branch context.
+   *
+   * Default behavior can be a no-op for providers that don't need preflight.
+   */
+  ensureBranchReady(): Promise<void>;
+
+  /**
    * Check if currently processing a query.
    */
   isProcessing(): boolean;

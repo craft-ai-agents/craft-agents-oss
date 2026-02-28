@@ -1,16 +1,14 @@
 /**
  * Notifications Hook
  *
- * Handles native OS notifications and app badge count.
+ * Handles native OS notifications and badge Canvas rendering.
  * - Tracks window focus state
  * - Shows notifications for new messages when window is unfocused
- * - Updates dock badge with total unread count
+ * - Renders badge icons via Canvas API (main process drives badge count directly)
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useAtomValue } from 'jotai'
 import type { Session } from '../../shared/types'
-import { sessionMetaMapAtom, type SessionMeta } from '@/atoms/sessions'
 
 /**
  * Draw a badge onto an icon image using Canvas
@@ -118,17 +116,6 @@ function drawWindowsBadgeOverlay(count: number): string {
   return canvas.toDataURL('image/png')
 }
 
-/**
- * Check if a session has unread messages using metadata
- * Uses the explicit hasUnread flag (state machine approach)
- */
-function hasUnreadMessagesFromMeta(meta: SessionMeta): boolean {
-  // Use the explicit hasUnread flag - single source of truth
-  // This flag is set to true when processing completes while user is NOT viewing,
-  // and cleared when user views the session
-  return meta.hasUnread === true
-}
-
 interface UseNotificationsOptions {
   /** Current workspace ID */
   workspaceId: string | null
@@ -143,8 +130,6 @@ interface UseNotificationsResult {
   isWindowFocused: boolean
   /** Show a notification for a session */
   showSessionNotification: (session: Session, messagePreview?: string) => void
-  /** Update the app badge count based on sessions */
-  updateBadgeCount: () => void
 }
 
 export function useNotifications({
@@ -154,11 +139,6 @@ export function useNotifications({
 }: UseNotificationsOptions): UseNotificationsResult {
   const [isWindowFocused, setIsWindowFocused] = useState(true)
   const onNavigateToSessionRef = useRef(onNavigateToSession)
-  const lastBadgeCountRef = useRef<number | null>(null)
-
-  // Use session metadata from Jotai atom (lightweight, no messages)
-  // This prevents closures from retaining the full messages array
-  const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
 
   // Keep ref updated
   useEffect(() => {
@@ -173,7 +153,6 @@ export function useNotifications({
     // Subscribe to focus changes
     const cleanup = window.electronAPI.onWindowFocusChange((isFocused) => {
       setIsWindowFocused(isFocused)
-      // Badge count is always shown based on unread count, not cleared on focus
     })
 
     return cleanup
@@ -200,6 +179,9 @@ export function useNotifications({
       }
     })
 
+    // Now that the Canvas listener is subscribed, request initial badge from main
+    void window.electronAPI.refreshBadge()
+
     return cleanup
   }, [])
 
@@ -216,32 +198,6 @@ export function useNotifications({
 
     return cleanup
   }, [])
-
-  // Update badge count when session metadata changes
-  const updateBadgeCount = useCallback(() => {
-    // Count sessions that have unread messages using metadata
-    // Exclude hidden sessions (mini-agent sessions) from badge count
-    const metas = Array.from(sessionMetaMap.values())
-    const unreadSessions = metas.filter(m => hasUnreadMessagesFromMeta(m) && !m.hidden)
-    const totalUnread = unreadSessions.length
-
-    // Skip badge update if any session is processing AND the count hasn't changed
-    // This prevents excessive updates during streaming while still allowing
-    // updates when user switches sessions (which marks as read and decreases count)
-    const hasProcessing = metas.some(m => m.isProcessing)
-    if (hasProcessing && totalUnread === lastBadgeCountRef.current) {
-      return
-    }
-
-    // Badge always shows unread count (regardless of focus)
-    lastBadgeCountRef.current = totalUnread
-    window.electronAPI.updateBadgeCount(totalUnread)
-  }, [sessionMetaMap])
-
-  // Auto-update badge when session metadata or focus changes
-  useEffect(() => {
-    updateBadgeCount()
-  }, [updateBadgeCount])
 
   // Show notification for a session
   const showSessionNotification = useCallback((session: Session, messagePreview?: string) => {
@@ -267,6 +223,5 @@ export function useNotifications({
   return {
     isWindowFocused,
     showSessionNotification,
-    updateBadgeCount,
   }
 }
