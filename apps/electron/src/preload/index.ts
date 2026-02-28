@@ -555,6 +555,8 @@ const api: ElectronAPI = {
     reload: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_PANE_RELOAD, id),
     stop: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_PANE_STOP, id),
     focus: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_PANE_FOCUS, id),
+    emptyStateLaunch: (payload: import('../shared/types').BrowserEmptyStateLaunchPayload) =>
+      ipcRenderer.invoke(IPC_CHANNELS.BROWSER_EMPTY_STATE_LAUNCH, payload),
     onStateChanged: (callback: (info: import('../shared/types').BrowserInstanceInfo) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, info: import('../shared/types').BrowserInstanceInfo) => {
         callback(info)

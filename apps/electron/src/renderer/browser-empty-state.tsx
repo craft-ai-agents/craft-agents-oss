@@ -6,12 +6,20 @@ import { EMPTY_STATE_PROMPT_SAMPLES } from './components/browser/empty-state-pro
 import './index.css'
 
 function BrowserEmptyStateApp() {
-  const handlePromptSelect = useCallback((fullPrompt: string) => {
+  const handlePromptSelect = useCallback(async (fullPrompt: string) => {
     const route = routes.action.newSession({ input: fullPrompt, send: true })
-    const launchParams = new URLSearchParams({ route, ts: String(Date.now()) })
+    const token = String(Date.now())
 
-    // Signal main process through hash navigation (reliable in BrowserView).
-    // BrowserPaneManager listens for #launch=... and performs deep-link routing.
+    try {
+      if (window.electronAPI?.browserPane?.emptyStateLaunch) {
+        await window.electronAPI.browserPane.emptyStateLaunch({ route, token })
+        return
+      }
+    } catch {
+      // Fallback to hash-signaling below if IPC route fails for any reason.
+    }
+
+    const launchParams = new URLSearchParams({ route, ts: token })
     window.location.hash = `launch=${launchParams.toString()}`
   }, [])
 

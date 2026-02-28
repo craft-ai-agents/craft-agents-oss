@@ -9,7 +9,6 @@ import {
   CircleAlert,
   ExternalLink,
   Info,
-  PenLine,
   X,
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
@@ -26,6 +25,8 @@ import {
   parseGrepResult,
   parseGlobResult,
   extractOverlayData,
+  extractOverlayCards,
+  ActivityCardsOverlay,
   CodePreviewOverlay,
   MultiDiffPreviewOverlay,
   TerminalPreviewOverlay,
@@ -34,7 +35,6 @@ import {
   DocumentFormattedMarkdownOverlay,
   detectLanguage,
   type ActivityItem,
-  type OverlayData,
   type FileChange,
   type DiffViewerSettings,
 } from "@craft-agent/ui"
@@ -85,16 +85,10 @@ type OverlayState =
   | MarkdownOverlayState
   | null
 
-/**
- * Checks if a file path is in a plans folder and is a markdown file.
- * Used to conditionally show the PLAN header in DocumentFormattedMarkdownOverlay.
- */
-function isPlanFilePath(filePath: string | undefined): boolean {
-  if (!filePath) return false
-  return (filePath.includes('/plans/') || filePath.startsWith('plans/')) &&
-         filePath.endsWith('.md')
+function isStackedActivityTool(activity: ActivityItem): boolean {
+  const toolName = activity.toolName?.toLowerCase() || ''
+  return toolName === 'bash' || toolName.startsWith('mcp__') || toolName.startsWith('browser_')
 }
-
 
 interface ChatDisplayProps {
   session: Session | null
@@ -1014,11 +1008,22 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     setOverlayState(null)
   }, [])
 
-  // Extract overlay data for activity-based overlays
-  // Uses the shared extractOverlayData parser from @craft-agent/ui
-  const overlayData: OverlayData | null = useMemo(() => {
+  // Extract overlay cards for activity-based overlays (Input/Output, future extensible)
+  const overlayCards = useMemo(() => {
+    if (!overlayState || overlayState.type !== 'activity') return []
+    return extractOverlayCards(overlayState.activity)
+  }, [overlayState])
+
+  // Parsed output data for legacy output-only activity overlays
+  const activityOutputOverlayData = useMemo(() => {
     if (!overlayState || overlayState.type !== 'activity') return null
     return extractOverlayData(overlayState.activity)
+  }, [overlayState])
+
+  // Stacked input/output cards are only enabled for Bash and MCP tools
+  const useStackedActivityOverlay = useMemo(() => {
+    if (!overlayState || overlayState.type !== 'activity') return false
+    return isStackedActivityTool(overlayState.activity)
   }, [overlayState])
 
   // Pop-out handler - opens message in overlay (read-only markdown)
@@ -1531,7 +1536,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                               })
                             }
                           } else {
-                            // All other tools → Use extractOverlayData for appropriate overlay
+                            // All other tools → open generic activity cards overlay (Input/Output)
                             setOverlayState({ type: 'activity', activity })
                           }
                         }}
@@ -1676,21 +1681,95 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       {/* Preview Overlays - Rendered outside the main chat flow            */}
       {/* ================================================================== */}
 
-      {/* Code preview overlay (Read tool) */}
-      {overlayData?.type === 'code' && (
-        <CodePreviewOverlay
-          isOpen={!!overlayState}
+      {/* Activity details overlay */}
+      {overlayState?.type === 'activity' && useStackedActivityOverlay && (
+        <ActivityCardsOverlay
+          isOpen={true}
           onClose={handleCloseOverlay}
-          content={overlayData.content}
-          filePath={overlayData.filePath}
-          mode={overlayData.mode}
-          startLine={overlayData.startLine}
-          totalLines={overlayData.totalLines}
-          numLines={overlayData.numLines}
+          cards={overlayCards}
+          title={overlayState.activity.displayName || overlayState.activity.toolName || 'Activity'}
           theme={isDark ? 'dark' : 'light'}
-          error={overlayData.error}
-          command={overlayData.command}
+          onOpenUrl={onOpenUrl}
+          onOpenFile={onOpenFile}
         />
+      )}
+
+      {/* Legacy output-only activity overlay for non-bash/non-mcp tools */}
+      {overlayState?.type === 'activity' && !useStackedActivityOverlay && activityOutputOverlayData && (
+        activityOutputOverlayData.type === 'code' ? (
+          <CodePreviewOverlay
+            isOpen={true}
+            onClose={handleCloseOverlay}
+            content={activityOutputOverlayData.content}
+            filePath={activityOutputOverlayData.filePath}
+            mode={activityOutputOverlayData.mode}
+            startLine={activityOutputOverlayData.startLine}
+            totalLines={activityOutputOverlayData.totalLines}
+            numLines={activityOutputOverlayData.numLines}
+            command={activityOutputOverlayData.command}
+            error={activityOutputOverlayData.error}
+            theme={isDark ? 'dark' : 'light'}
+          />
+        ) : activityOutputOverlayData.type === 'terminal' ? (
+          <TerminalPreviewOverlay
+            isOpen={true}
+            onClose={handleCloseOverlay}
+            command={activityOutputOverlayData.command}
+            output={activityOutputOverlayData.output}
+            exitCode={activityOutputOverlayData.exitCode}
+            toolType={activityOutputOverlayData.toolType}
+            description={activityOutputOverlayData.description}
+            error={activityOutputOverlayData.error}
+            theme={isDark ? 'dark' : 'light'}
+          />
+        ) : activityOutputOverlayData.type === 'json' ? (
+          <JSONPreviewOverlay
+            isOpen={true}
+            onClose={handleCloseOverlay}
+            data={activityOutputOverlayData.data}
+            title={activityOutputOverlayData.title}
+            error={activityOutputOverlayData.error}
+            theme={isDark ? 'dark' : 'light'}
+          />
+        ) : activityOutputOverlayData.type === 'document' ? (
+          <DocumentFormattedMarkdownOverlay
+            isOpen={true}
+            onClose={handleCloseOverlay}
+            content={activityOutputOverlayData.content}
+            onOpenUrl={onOpenUrl}
+            onOpenFile={onOpenFile}
+            filePath={activityOutputOverlayData.filePath}
+            typeBadge={{
+              icon: Info,
+              label: activityOutputOverlayData.toolName,
+              variant: 'blue',
+            }}
+            error={activityOutputOverlayData.error}
+          />
+        ) : detectLanguage(activityOutputOverlayData.content) === 'markdown' ? (
+          <DocumentFormattedMarkdownOverlay
+            isOpen={true}
+            onClose={handleCloseOverlay}
+            content={activityOutputOverlayData.content}
+            onOpenUrl={onOpenUrl}
+            onOpenFile={onOpenFile}
+            typeBadge={{
+              icon: Info,
+              label: overlayState.activity.displayName || overlayState.activity.toolName || 'Activity',
+              variant: 'blue',
+            }}
+            error={activityOutputOverlayData.error}
+          />
+        ) : (
+          <GenericOverlay
+            isOpen={true}
+            onClose={handleCloseOverlay}
+            content={activityOutputOverlayData.content}
+            title={activityOutputOverlayData.title}
+            error={activityOutputOverlayData.error}
+            theme={isDark ? 'dark' : 'light'}
+          />
+        )
       )}
 
       {/* Multi-diff preview overlay (Edit/Write tools) */}
@@ -1704,48 +1783,6 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
           theme={isDark ? 'dark' : 'light'}
           diffViewerSettings={diffViewerSettings}
           onDiffViewerSettingsChange={handleDiffViewerSettingsChange}
-        />
-      )}
-
-      {/* Terminal preview overlay (Bash/Grep/Glob tools) */}
-      {overlayData?.type === 'terminal' && (
-        <TerminalPreviewOverlay
-          isOpen={!!overlayState}
-          onClose={handleCloseOverlay}
-          command={overlayData.command}
-          output={overlayData.output}
-          exitCode={overlayData.exitCode}
-          toolType={overlayData.toolType}
-          description={overlayData.description}
-          theme={isDark ? 'dark' : 'light'}
-          error={overlayData.error}
-        />
-      )}
-
-      {/* JSON preview overlay (MCP tools, WebSearch, etc.) */}
-      {overlayData?.type === 'json' && (
-        <JSONPreviewOverlay
-          isOpen={!!overlayState}
-          onClose={handleCloseOverlay}
-          data={overlayData.data}
-          title={overlayData.title}
-          theme={isDark ? 'dark' : 'light'}
-          error={overlayData.error}
-        />
-      )}
-
-      {/* Document overlay (Write tool → .md/.txt files) — rendered markdown with tool badge */}
-      {overlayData?.type === 'document' && (
-        <DocumentFormattedMarkdownOverlay
-          isOpen={!!overlayState}
-          onClose={handleCloseOverlay}
-          content={overlayData.content}
-          filePath={overlayData.filePath}
-          typeBadge={{ icon: PenLine, label: overlayData.toolName, variant: 'write' }}
-          onOpenUrl={onOpenUrl}
-          onOpenFile={onOpenFile}
-          error={overlayData.error}
-          variant={isPlanFilePath(overlayData.filePath) ? 'plan' : 'response'}
         />
       )}
 
@@ -1770,29 +1807,6 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             content={overlayState.content}
             onOpenUrl={onOpenUrl}
             onOpenFile={onOpenFile}
-          />
-        )
-      )}
-
-      {/* Generic overlay for unknown tool types - route markdown to fullscreen viewer */}
-      {overlayData?.type === 'generic' && (
-        detectLanguage(overlayData.content) === 'markdown' ? (
-          <DocumentFormattedMarkdownOverlay
-            isOpen={true}
-            onClose={handleCloseOverlay}
-            content={overlayData.content}
-            onOpenUrl={onOpenUrl}
-            onOpenFile={onOpenFile}
-            error={overlayData.error}
-          />
-        ) : (
-          <GenericOverlay
-            isOpen={!!overlayState}
-            onClose={handleCloseOverlay}
-            content={overlayData.content}
-            title={overlayData.title}
-            theme={isDark ? 'dark' : 'light'}
-            error={overlayData.error}
           />
         )
       )}

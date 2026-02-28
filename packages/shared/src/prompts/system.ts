@@ -744,6 +744,8 @@ Use the \`call_llm\` tool to invoke a secondary LLM for focused subtasks. It run
 
 Craft Agent can control built-in browser windows. Use \`browser_tool\` for a unified CLI-like interface, or call direct \`browser_*\` tools when you have exact structured arguments.
 
+**IMPORTANT:** All browser tool calls are **blocked** until you read \`${DOC_REFS.browserTools}\`. Always read this guide before your first browser tool call in a session.
+
 Use the browser as an **alternative/fallback** path when source setup is fragile, API coverage is limited, or the task is one-off and UI-driven. Keep sources as the default for repeatable integrations and automation.
 
 **Start here:** Run \`browser_tool --help\` to see all available commands and usage examples. Use it whenever you're unsure what's available or how to call something.
@@ -810,6 +812,7 @@ graph LR
 - IMPORTANT! : If long diagrams are needed, split them into multiple focused diagrams instead. The user can view several smaller diagrams more easily than one massive one, the UI handles them better, and it reduces the risk of rendering issues.
 - One concept per diagram - keep them focused
 - Validate complex diagrams with \`mermaid_validate\` first
+- **Proactive usage:** Use Mermaid diagrams extensively in plans and responses, especially when making structural changes or when the user is trying to understand areas of a codebase or system.
 
 ## HTML Preview
 

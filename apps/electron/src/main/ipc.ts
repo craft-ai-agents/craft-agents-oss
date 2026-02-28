@@ -10,7 +10,7 @@ import { ipcLog, windowLog, searchLog } from './logger'
 import { WindowManager } from './window-manager'
 import type { BrowserPaneManager, BrowserScreenshotOptions } from './browser-pane-manager'
 import { registerOnboardingHandlers } from './onboarding'
-import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type SendMessageOptions, type LlmConnectionSetup, type SkillFile, type BrowserPaneCreateOptions } from '../shared/types'
+import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type SendMessageOptions, type LlmConnectionSetup, type SkillFile, type BrowserPaneCreateOptions, type BrowserEmptyStateLaunchPayload } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
 import { safeJsonParse } from '@craft-agent/shared/utils/files'
 import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, loadStoredConfig, saveConfig, type Workspace, getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, getGitBashPath, setGitBashPath, clearGitBashPath } from '@craft-agent/shared/config'
@@ -3301,6 +3301,15 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
     ipcMain.handle(IPC_CHANNELS.BROWSER_PANE_FOCUS, (_event, id: string) => {
       browserPaneManager.focus(id)
+    })
+
+    ipcMain.handle(IPC_CHANNELS.BROWSER_EMPTY_STATE_LAUNCH, async (event, payload: BrowserEmptyStateLaunchPayload) => {
+      try {
+        return await browserPaneManager.handleEmptyStateLaunchFromRenderer(event.sender.id, payload)
+      } catch (err) {
+        ipcLog.error('[browser-pane] empty-state launch IPC failed:', err)
+        throw err
+      }
     })
 
     ipcMain.handle(IPC_CHANNELS.BROWSER_PANE_SNAPSHOT, async (_event, id: string) => {

@@ -1,0 +1,116 @@
+---
+title: "API Discovery"
+description: "How the agent discovers internal APIs through network inspection for 100x faster data extraction"
+---
+
+This is one of the most powerful browser patterns. Instead of clicking through a web UI one item at a time, the agent inspects what API calls the page makes under the hood, then calls those APIs directly — often achieving **100x faster** data extraction.
+
+## The Idea
+
+Modern web apps are built as Single Page Applications (SPAs) that communicate with backend APIs. When you click through a list of employees, tickets, or orders in a web UI, the page is making `fetch()` or XHR requests to internal API endpoints behind the scenes.
+
+The agent can **observe these network requests**, understand the API pattern, and call those endpoints directly — bypassing the slow UI entirely.
+
+<Note>
+You don't need to ask for this explicitly. When the agent notices it's clicking through many similar items one by one, it will often switch to this approach automatically.
+</Note>
+
+## Why This Matters
+
+| | Clicking through the UI | Calling the API directly |
+|---|---|---|
+| **Speed per item** | 5–10 seconds | ~100 milliseconds |
+| **Parallelisation** | One at a time | All items at once |
+| **Data format** | Scraped text from the page | Structured JSON or XML |
+| **Reliability** | Breaks if the UI changes | Stable API contracts |
+| **Auth** | Already logged in | Reuses the browser session |
+
+For a task like "get sick leave data for 25 employees", this means going from **~4 minutes** of clicking to **~2 seconds** of parallel API calls.
+
+## How It Works
+
+<Steps>
+  <Step title="Navigate and interact once">
+    The agent loads the web app and clicks through one item normally — just enough for the page to make its API calls.
+  </Step>
+  <Step title="Inspect network traffic">
+    Using network inspection, the agent sees all the HTTP requests the page made. It looks for REST or GraphQL endpoints returning structured data.
+
+    ```text
+    GET /api/v1/employees/132/time-off?end=2026-12-31 → 200 (JSON, 1.2KB)
+    GET /api/v1/employees/132?fields=department,jobTitle → 200 (JSON, 0.4KB)
+    ```
+  </Step>
+  <Step title="Identify the API pattern">
+    The agent recognises the URL pattern — `/api/v1/employees/{id}/time-off` — and understands how to construct requests for any employee.
+  </Step>
+  <Step title="Test with a single call">
+    Before scaling up, the agent makes one direct API call from within the browser to verify it works:
+
+    ```javascript
+    fetch('/api/v1/employees/132/time-off?end=2026-12-31', { credentials: 'include' })
+    ```
+
+    The `credentials: 'include'` option reuses the browser's session cookies — no extra authentication needed.
+  </Step>
+  <Step title="Fetch all items in parallel">
+    Once confirmed, the agent fetches data for **all** items simultaneously:
+
+    ```javascript
+    Promise.all(employees.map(emp =>
+      fetch(`/api/v1/employees/${emp.id}/time-off?end=2026-12-31`,
+        { credentials: 'include' })
+        .then(r => r.json())
+        .then(data => ({ name: emp.name, sickDays: data.sickDaysUsed }))
+    ))
+    ```
+
+    All 25 requests fire at the same time and complete in 1–2 seconds.
+  </Step>
+  <Step title="Collect and format results">
+    The agent retrieves the structured results and formats them however you need — a table, spreadsheet, summary, or raw data.
+  </Step>
+</Steps>
+
+## Real-World Example
+
+Here's a task that used this pattern:
+
+> "Go to our HR portal, click through all employees, and get me their sick leave days for the last 12 months in a spreadsheet."
+
+**Without API discovery:** The agent clicks through 25 employees one by one, navigating to each profile, finding the sick leave section, reading the number. ~4 minutes.
+
+**With API discovery:** The agent clicks the first employee, notices the page calls `/api/v1/employees/132/time-off/calculator`, discovers the employee directory endpoint, and fetches all 25 employees' data in parallel. ~2 seconds, plus a structured dataset that includes department and job title as a bonus.
+
+The result was a complete spreadsheet with columns for employee name, department, job title, 2025 sick days, and 2026 year-to-date sick days — all data that would have required clicking through multiple tabs per employee in the UI.
+
+## Key Techniques
+
+| Technique | Why it works |
+|-----------|-------------|
+| `credentials: 'include'` | Reuses the browser's session cookies — no separate auth needed |
+| `Promise.all()` | Fires all requests simultaneously for massive speedup |
+| Storing results in `window.__` variables | Bridges async fetch results back to the agent for retrieval |
+| `DOMParser` for XML responses | Some internal APIs return XML instead of JSON |
+| Chunked batches for large datasets | Avoids overwhelming the server when fetching 50+ items |
+
+<AccordionGroup>
+  <Accordion title="What about authentication?">
+    Since the agent runs JavaScript within the browser's page context, it inherits the browser's cookies and session. If you're logged into the web app, API calls made via `fetch()` are automatically authenticated — no tokens or API keys needed.
+  </Accordion>
+  <Accordion title="Does this work with GraphQL?">
+    Yes. GraphQL apps typically use a single `/graphql` endpoint. The agent needs to inspect the network traffic to see the query structure, then replicate it with the right query body and variables. The same `credentials: 'include'` pattern applies.
+  </Accordion>
+  <Accordion title="What about rate limits?">
+    If you're fetching data for hundreds of items, the agent will chunk requests into batches (e.g., 20–50 at a time) with small delays between batches to avoid overwhelming the server or hitting rate limits.
+  </Accordion>
+  <Accordion title="What if the API returns XML?">
+    Some enterprise apps (like BambooHR, SAP, etc.) return XML instead of JSON. The agent handles this using the browser's built-in `DOMParser` to parse the XML and extract values with `querySelector` and `getAttribute`.
+  </Accordion>
+  <Accordion title="Can I ask the agent to use this pattern?">
+    Absolutely. If you know a task involves repetitive data extraction, you can prompt the agent directly: "Check the network traffic to find the API endpoint and use that instead of clicking through the UI." The agent will prioritise the API discovery approach.
+  </Accordion>
+  <Accordion title="What about CORS restrictions?">
+    Not an issue. Since the JavaScript runs in the page's own context (via `browser_evaluate`), all requests are same-origin. There are no cross-origin restrictions to worry about.
+  </Accordion>
+</AccordionGroup>

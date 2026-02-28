@@ -863,10 +863,16 @@ export function createBrowserTools(options: BrowserToolsOptions) {
         try {
           const fns = getBrowserFns();
           const result = await fns.screenshot(args);
-          const base64 = result.png.toString('base64');
+          const png = result.png;
+          const base64 = png.toString('base64');
+          if (!png || png.length === 0 || !base64) {
+            return errorResponse(
+              'Screenshot capture returned empty image data. Try waiting for page load (browser_wait network-idle), then retry browser_screenshot.'
+            );
+          }
 
           const lines = [
-            `Screenshot captured (${Math.round(result.png.length / 1024)}KB PNG)`,
+            `Screenshot captured (${Math.round(png.length / 1024)}KB PNG)`,
           ];
           if (result.metadata) {
             lines.push('', 'Metadata:', JSON.stringify(result.metadata, null, 2));
@@ -905,10 +911,16 @@ export function createBrowserTools(options: BrowserToolsOptions) {
             throw new Error(validationError);
           }
           const result = await fns.screenshotRegion(args);
-          const base64 = result.png.toString('base64');
+          const png = result.png;
+          const base64 = png.toString('base64');
+          if (!png || png.length === 0 || !base64) {
+            return errorResponse(
+              'Region screenshot capture returned empty image data. Try adjusting the region/selector or waiting for page load, then retry browser_screenshot_region.'
+            );
+          }
 
           const lines = [
-            `Region screenshot captured (${Math.round(result.png.length / 1024)}KB PNG)`,
+            `Region screenshot captured (${Math.round(png.length / 1024)}KB PNG)`,
           ];
           if (result.metadata) {
             lines.push('', 'Metadata:', JSON.stringify(result.metadata, null, 2));

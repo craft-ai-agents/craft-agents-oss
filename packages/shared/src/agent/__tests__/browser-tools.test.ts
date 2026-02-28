@@ -170,6 +170,15 @@ describe('createBrowserTools', () => {
       expect(imageBlock.mimeType).toBe('image/png')
       expect(typeof imageBlock.data).toBe('string')
     })
+
+    it('returns text-only error when screenshot PNG is empty', async () => {
+      mockFns.screenshot = async () => ({ png: Buffer.alloc(0) })
+      const result = await executeTool(tools, 'browser_screenshot')
+      expect(result.isError).toBe(true)
+      expect(result.content.length).toBe(1)
+      expect(result.content[0].type).toBe('text')
+      expect(result.content[0].text).toContain('empty image data')
+    })
   })
 
   describe('browser_screenshot_region', () => {
@@ -181,6 +190,15 @@ describe('createBrowserTools', () => {
       const imageBlock = result.content[1] as any
       expect(imageBlock.type).toBe('image')
       expect(imageBlock.mimeType).toBe('image/png')
+    })
+
+    it('returns text-only error when region screenshot PNG is empty', async () => {
+      mockFns.screenshotRegion = async () => ({ png: Buffer.alloc(0) })
+      const result = await executeTool(tools, 'browser_screenshot_region', { x: 10, y: 20, width: 120, height: 80 })
+      expect(result.isError).toBe(true)
+      expect(result.content.length).toBe(1)
+      expect(result.content[0].type).toBe('text')
+      expect(result.content[0].text).toContain('empty image data')
     })
 
     it('fails fast when target mode is ambiguous', async () => {

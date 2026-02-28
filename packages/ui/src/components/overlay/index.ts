@@ -21,3 +21,4 @@ export { ImagePreviewOverlay, type ImagePreviewOverlayProps } from './ImagePrevi
 export { PDFPreviewOverlay, type PDFPreviewOverlayProps } from './PDFPreviewOverlay'
 export { MermaidPreviewOverlay, type MermaidPreviewOverlayProps } from './MermaidPreviewOverlay'
 export { HTMLPreviewOverlay, type HTMLPreviewOverlayProps } from './HTMLPreviewOverlay'
+export { ActivityCardsOverlay, type ActivityCardsOverlayProps } from './ActivityCardsOverlay'

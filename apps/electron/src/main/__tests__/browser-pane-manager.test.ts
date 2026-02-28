@@ -41,6 +41,7 @@ function createMockWebContents() {
     setUserAgent: mock(() => {}),
     setBackgroundColor: mock(() => {}),
     capturePage: mock(async () => ({
+      isEmpty: () => false,
       toPNG: () => Buffer.from('fake-png'),
     })),
     executeJavaScript: mock(async (expr: string) => eval(expr)),
@@ -97,6 +98,7 @@ function createMockWindow(opts?: { width?: number; height?: number; minWidth?: n
     isMinimized: mock(() => false),
     restore: mock(() => {}),
     show: mock(() => {}),
+    showInactive: mock(() => {}),
     setWindowButtonVisibility: mock((_visible: boolean) => {}),
     hide: mock(() => {
       win._emit('hide')
@@ -144,6 +146,9 @@ mock.module('electron', () => ({
   },
   nativeTheme: {
     shouldUseDarkColors: false,
+  },
+  shell: {
+    openExternal: mock(async () => {}),
   },
   session: {
     fromPartition: mock(() => ({
@@ -543,15 +548,93 @@ describe('BrowserPaneManager', () => {
     expect(manager.listInstances().find(i => i.id === 'theme-early')?.themeColor).toBe('#0f1e2d')
   })
 
-  it('clears pending in-page theme timer on full navigation', () => {
+  it('clears pending in-page theme timer on full navigation', async () => {
     manager.createInstance('theme-timer-clear')
     const instance = (manager as any).instances.get('theme-timer-clear')
 
     instance.pageView.webContents._emit('did-navigate-in-page', 'https://example.com/route-a')
+    await Bun.sleep(0)
     expect(instance.inPageThemeTimer).not.toBeNull()
 
     instance.pageView.webContents._emit('did-navigate', 'https://example.com/full-nav')
     expect(instance.inPageThemeTimer).toBeNull()
+  })
+
+  it('throws when screenshot capture returns empty NativeImage', async () => {
+    manager.createInstance('screenshot-empty-image')
+    const instance = (manager as any).instances.get('screenshot-empty-image')
+    instance.pageView.webContents.capturePage = mock(async () => ({
+      isEmpty: () => true,
+      toPNG: () => Buffer.from('ignored'),
+    }))
+
+    await expect(manager.screenshot('screenshot-empty-image')).rejects.toThrow('Failed to capture screenshot: empty image buffer')
+  })
+
+  it('throws when screenshot capture returns empty PNG buffer', async () => {
+    manager.createInstance('screenshot-empty-png')
+    const instance = (manager as any).instances.get('screenshot-empty-png')
+    instance.pageView.webContents.capturePage = mock(async () => ({
+      isEmpty: () => false,
+      toPNG: () => Buffer.alloc(0),
+    }))
+
+    await expect(manager.screenshot('screenshot-empty-png')).rejects.toThrow('Failed to capture screenshot: empty image buffer')
+  })
+
+  it('recovers screenshot via non-disruptive inactive reveal and restores hidden state', async () => {
+    manager.createInstance('screenshot-rescue-success')
+    const instance = (manager as any).instances.get('screenshot-rescue-success')
+
+    let captureCalls = 0
+    instance.pageView.webContents.capturePage = mock(async () => {
+      captureCalls += 1
+      if (captureCalls <= 3) {
+        return {
+          isEmpty: () => true,
+          toPNG: () => Buffer.alloc(0),
+        }
+      }
+
+      return {
+        isEmpty: () => false,
+        toPNG: () => Buffer.from('rescued-png'),
+      }
+    })
+
+    const result = await manager.screenshot('screenshot-rescue-success', { includeMetadata: true })
+
+    expect(result.png.toString()).toBe('rescued-png')
+    expect(instance.window.showInactive).toHaveBeenCalledTimes(1)
+    expect(instance.window.focus).not.toHaveBeenCalled()
+    expect(instance.window.hide).toHaveBeenCalled()
+    expect(result.metadata?.warnings?.some((w: string) => w.includes('temporary inactive reveal'))).toBe(true)
+  })
+
+  it('throws when region screenshot capture returns empty NativeImage', async () => {
+    manager.createInstance('region-empty-image')
+    const instance = (manager as any).instances.get('region-empty-image')
+    instance.pageView.webContents.capturePage = mock(async () => ({
+      isEmpty: () => true,
+      toPNG: () => Buffer.from('ignored'),
+    }))
+
+    await expect(manager.screenshotRegion('region-empty-image', { x: 10, y: 20, width: 120, height: 80 })).rejects.toThrow(
+      'Failed to capture region screenshot: empty image buffer'
+    )
+  })
+
+  it('throws when region screenshot capture returns empty PNG buffer', async () => {
+    manager.createInstance('region-empty-png')
+    const instance = (manager as any).instances.get('region-empty-png')
+    instance.pageView.webContents.capturePage = mock(async () => ({
+      isEmpty: () => false,
+      toPNG: () => Buffer.alloc(0),
+    }))
+
+    await expect(manager.screenshotRegion('region-empty-png', { x: 10, y: 20, width: 120, height: 80 })).rejects.toThrow(
+      'Failed to capture region screenshot: empty image buffer'
+    )
   })
 
   it('captures screenshot region from ref target', async () => {

@@ -148,6 +148,16 @@ function BrowserStatusBar({
       } as React.CSSProperties}
       onClick={onClick}
     >
+      {/* Accent gradient loading line at top of banner */}
+      <div className="absolute top-0 left-0 right-0 h-[2px] z-10 overflow-hidden">
+        <div
+          className="h-full w-full animate-shimmer-loading"
+          style={{
+            background: 'linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%)',
+          }}
+        />
+      </div>
+
       <span className={`shrink-0 flex items-center justify-center ${isDarkTheme ? 'h-4 w-4' : 'h-3.5 w-3.5'}`}>
         {instance.isLoading ? (
           <Spinner className="text-[10px] leading-none" />

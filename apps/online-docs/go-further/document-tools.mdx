@@ -1,0 +1,106 @@
+---
+title: "Document Tools"
+description: "Convert, process, and create documents — Word, Excel, PDF, PowerPoint, images, and more"
+---
+
+Craft Agent includes built-in tools for working with common document formats. Convert between formats, extract text, merge files, create reports, and process images — all from within your conversation.
+
+## Quick Reference
+
+| Tool | What it does | Formats |
+|------|-------------|---------|
+| **markitdown** | Convert any document to Markdown | .docx, .xlsx, .pptx, .pdf, .html, .ipynb, and more |
+| **pdf-tool** | Extract text, merge, split, get info | .pdf |
+| **xlsx-tool** | Read, write, export spreadsheets | .xlsx, .csv |
+| **docx-tool** | Create and edit Word documents | .docx |
+| **pptx-tool** | Read and inspect presentations | .pptx |
+| **img-tool** | Resize, convert, get metadata | .png, .jpg, .webp, .gif, .svg |
+| **doc-diff** | Compare two documents | Any two files |
+| **ical-tool** | Read and parse calendar files | .ics |
+
+## Common Tasks
+
+### Convert a Document to Text
+
+The most common operation — extract readable text from any document:
+
+```text
+"Read this Word document and summarise it"
+"What's in this Excel file?"
+"Extract the text from this PDF"
+```
+
+The agent uses **markitdown** as a universal converter. It handles Word documents, Excel spreadsheets, PowerPoint presentations, PDFs, HTML files, and Jupyter notebooks — converting them all to readable Markdown.
+
+### Work with PDFs
+
+```text
+"Merge these three PDFs into one"
+"Extract pages 5-10 from this report"
+"How many pages is this PDF?"
+```
+
+The **pdf-tool** can extract text, merge multiple PDFs, split pages, and get file information (page count, metadata, file size).
+
+### Process Spreadsheets
+
+```text
+"Read the Sales sheet from this Excel file"
+"Export this data to a new Excel file"
+"Convert this CSV to Excel"
+```
+
+The **xlsx-tool** reads and writes Excel files, supports multiple sheets, and can export data to CSV.
+
+### Create Word Documents
+
+```text
+"Create a Word document from this meeting summary"
+"Turn this markdown into a .docx file"
+```
+
+The **docx-tool** creates Word documents from text or Markdown content, with support for titles, headings, and basic formatting.
+
+### Process Images
+
+```text
+"Resize this image to 800px wide"
+"Convert this PNG to JPEG"
+"What are the dimensions of this image?"
+```
+
+The **img-tool** handles resizing, format conversion, and metadata extraction for common image formats.
+
+### Compare Documents
+
+```text
+"What changed between these two versions of the contract?"
+"Compare the old and new spec documents"
+```
+
+The **doc-diff** tool compares two documents and shows the differences — useful for reviewing revisions, contract changes, or spec updates.
+
+### Parse Calendar Files
+
+```text
+"What events are in this .ics file?"
+"Read my exported calendar"
+```
+
+The **ical-tool** parses `.ics` calendar files and extracts event details (title, date, time, location, attendees).
+
+<Tip>
+All document tools support `--help` for detailed usage information. If you're curious about what a specific tool can do, just ask: "What can the pdf-tool do?"
+</Tip>
+
+<AccordionGroup>
+  <Accordion title="What if the agent can't read a file directly?">
+    If the agent encounters a binary file it can't read natively (like .docx or .pptx), it automatically falls back to **markitdown** to convert the document to readable text. You don't need to do anything — just ask the agent to read the file.
+  </Accordion>
+  <Accordion title="Where do created files go?">
+    When the agent creates or converts documents, the output files are saved in the current working directory (or a path you specify). The agent will tell you the exact file path after creation.
+  </Accordion>
+  <Accordion title="Can I chain operations?">
+    Absolutely. You can ask for multi-step workflows like "Read this PDF, extract the financial data, and create an Excel spreadsheet with just the quarterly revenue figures." The agent will use multiple tools in sequence.
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,127 @@
+---
+title: "Examples & Recipes"
+description: "Practical browser automation recipes — login flows, form filling, data extraction, and more"
+---
+
+Common patterns for browser automation. These examples show the agent's workflow — you just describe what you need in plain language, and the agent handles the tool calls.
+
+## Login and Navigate
+
+The agent can log into web apps using your credentials and navigate authenticated pages.
+
+```text
+"Go to app.example.com, log in with my credentials, and navigate to the Reports page"
+```
+
+**What happens under the hood:**
+
+<Steps>
+  <Step title="Open and navigate">
+    The agent opens the browser and navigates to the login page.
+  </Step>
+  <Step title="Snapshot the page">
+    Takes an accessibility snapshot to find the email/password inputs and login button — each gets a reference like `@e3`, `@e5`, `@e7`.
+  </Step>
+  <Step title="Fill and submit">
+    Types your email and password into the input fields, then clicks the login button.
+  </Step>
+  <Step title="Wait and continue">
+    Waits for the page to load after login, then navigates to the target page.
+  </Step>
+</Steps>
+
+<Tip>
+If you're already logged into a site in the browser, the agent can reuse that session — no need to log in again.
+</Tip>
+
+## Fill a Complex Form
+
+The agent can handle multi-field forms with dropdowns, checkboxes, and text areas.
+
+```text
+"Fill out the support ticket form on our internal tool — set priority to High,
+category to Billing, and describe the issue as 'Customer charged twice for subscription'"
+```
+
+The agent snapshots the form, identifies each field by its label, fills text inputs, selects dropdown values, and clicks submit.
+
+## Extract Data from a Page
+
+Use JavaScript execution to pull structured data from any webpage.
+
+```text
+"Go to our analytics dashboard and extract the top 10 metrics from the summary table"
+```
+
+**What the agent does:**
+
+```javascript
+// The agent runs JavaScript directly in the page context
+Array.from(document.querySelectorAll('table.summary tr'))
+  .slice(0, 10)
+  .map(row => ({
+    metric: row.cells[0].textContent,
+    value: row.cells[1].textContent
+  }))
+```
+
+This returns structured data that the agent can format as a table, export to a spreadsheet, or use for further analysis.
+
+## Monitor Network Traffic
+
+See what API calls a page is making — useful for debugging or discovering internal endpoints.
+
+```text
+"Open the dashboard, click the refresh button, and show me what API calls it makes"
+```
+
+The agent uses network inspection to capture all HTTP requests the page triggers, showing URLs, methods, status codes, and response sizes. This is especially powerful for [discovering internal APIs](/browser/api-discovery).
+
+## Take Targeted Screenshots
+
+Capture specific elements or regions instead of the full page.
+
+```text
+"Take a screenshot of just the revenue chart on the dashboard"
+```
+
+The agent can target screenshots by:
+- **Element reference** — snapshot the page, find the chart's ref, capture just that element
+- **CSS selector** — target elements like `div[data-testid="revenue-chart"]`
+- **Coordinates** — capture a specific pixel region
+
+## Send Keyboard Shortcuts
+
+Trigger app-specific keyboard shortcuts for power-user workflows.
+
+```text
+"Open the command palette with Cmd+K and search for 'billing'"
+```
+
+The agent can send any key combination including modifier keys (Shift, Control, Alt, Meta/Cmd).
+
+## Multi-Step Workflows
+
+Combine multiple browser actions into complex workflows.
+
+```text
+"Go to our HR portal, check each team member's profile, and compile their
+job titles and departments into a spreadsheet"
+```
+
+For tasks like this that involve iterating through many items, the agent often discovers a more efficient approach — see [API Discovery](/browser/api-discovery) for how the agent can find internal APIs and fetch all data in parallel instead of clicking through one by one.
+
+<AccordionGroup>
+  <Accordion title="Tips for best results">
+    - **Be specific about what you want** — "Extract the employee names and emails from the table" is better than "get the data"
+    - **Mention if you're already logged in** — saves time skipping the login flow
+    - **Describe the page structure** if it's complex — "the data is in the second tab, under the Summary section"
+    - **Ask for a specific output format** — "put it in a spreadsheet" or "format as a table"
+  </Accordion>
+  <Accordion title="Troubleshooting">
+    - **Page not loading?** — The agent will retry navigation. If it keeps failing, check that the URL is correct and the site is accessible.
+    - **Can't find an element?** — The agent re-snapshots the page after navigation. If elements load dynamically, it may need to wait or scroll first.
+    - **Login not working?** — Some sites use CAPTCHAs or multi-factor auth that the browser can't automate. You may need to log in manually first, then let the agent continue.
+    - **Interactions seem flaky?** — The agent will re-snapshot and retry. Dynamic pages with animations may need a brief wait between actions.
+  </Accordion>
+</AccordionGroup>

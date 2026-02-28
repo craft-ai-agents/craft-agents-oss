@@ -880,6 +880,7 @@ export const IPC_CHANNELS = {
   BROWSER_PANE_SCREENSHOT: 'browser-pane:screenshot',
   BROWSER_PANE_EVALUATE: 'browser-pane:evaluate',
   BROWSER_PANE_SCROLL: 'browser-pane:scroll',
+  BROWSER_EMPTY_STATE_LAUNCH: 'browser-empty-state:launch',
   // Browser pane events (main → renderer)
   BROWSER_PANE_STATE_CHANGED: 'browser-pane:state-changed',
   BROWSER_PANE_REMOVED: 'browser-pane:removed',
@@ -1261,6 +1262,7 @@ export interface ElectronAPI {
     reload(id: string): Promise<void>
     stop(id: string): Promise<void>
     focus(id: string): Promise<void>
+    emptyStateLaunch(payload: BrowserEmptyStateLaunchPayload): Promise<BrowserEmptyStateLaunchResult>
     onStateChanged(callback: (info: BrowserInstanceInfo) => void): () => void
     onRemoved(callback: (id: string) => void): () => void
     onInteracted(callback: (id: string) => void): () => void
@@ -1448,6 +1450,23 @@ export interface BrowserPaneCreateOptions {
   id?: string
   show?: boolean
   bindToSessionId?: string
+}
+
+/**
+ * Empty-state launch request from the browser empty-state renderer.
+ */
+export interface BrowserEmptyStateLaunchPayload {
+  route: string
+  token?: string
+}
+
+/**
+ * Result of browser empty-state launch handling.
+ */
+export interface BrowserEmptyStateLaunchResult {
+  ok: boolean
+  handled: boolean
+  reason?: string
 }
 
 /**

@@ -189,6 +189,8 @@ export {
   type DocumentFormattedMarkdownOverlayProps,
   type ImagePreviewOverlayProps,
   type PDFPreviewOverlayProps,
+  ActivityCardsOverlay,
+  type ActivityCardsOverlayProps,
 } from './components/overlay'
 
 // File classification (for link interceptor)
@@ -217,6 +219,7 @@ export {
   parseGrepResult,
   parseGlobResult,
   extractOverlayData,
+  extractOverlayCards,
   type ReadResult,
   type BashResult,
   type GrepResult,
@@ -227,6 +230,7 @@ export {
   type JSONOverlayData,
   type DocumentOverlayData,
   type OverlayData,
+  type OverlayCard,
 } from './lib/tool-parsers'
 
 // Turn utilities (pure functions)

@@ -1012,6 +1012,16 @@ html.dark[data-scenic] .fullscreen-overlay-background {
   border-radius: inherit;
 }
 
+/* Browser loading line — accent gradient sliding left→right */
+@keyframes shimmer-loading {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.animate-shimmer-loading {
+  animation: shimmer-loading 1.2s linear infinite;
+}
+
 /* Text shimmer - subtle opacity pulse for inline text (title regeneration, etc.) */
 .animate-shimmer-text {
   animation: shimmer-text 1.2s ease-in-out infinite;

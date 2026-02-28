@@ -117,22 +117,22 @@ class SessionPersistenceQueue {
       const previousSig = this.lastWrittenHeaderSignature.get(sessionId)
       const diskSig = diskHeader ? getHeaderMetadataSignature(diskHeader) : undefined
 
-      // Robust optimistic conflict resolution:
-      // - If disk metadata differs from local metadata, AND
-      // - either we've never written this session in-process yet (startup) OR
-      //   disk changed since our last known write,
-      // then preserve disk metadata fields over local header.
-      const hasExternalMetadataChange = !!diskHeader
-        && !!diskSig
-        && diskSig !== localSig
-        && (previousSig === undefined || diskSig !== previousSig)
-
-      const header = hasExternalMetadataChange
+      // Queue writes should never clobber session metadata changed externally
+      // (watcher edits, direct header edits, other instances), but they must
+      // still persist local metadata updates (e.g. generated title).
+      //
+      // Preserve disk metadata only when disk diverged from our last written
+      // signature, which indicates an external mutation.
+      const hasMetadataMismatch = !!diskHeader && !!diskSig && diskSig !== localSig
+      const hasExternalMetadataChange = !!diskHeader && !!diskSig && !!previousSig && diskSig !== previousSig
+      const header = hasExternalMetadataChange && diskHeader
         ? mergeHeaderWithExternalMetadata(localHeader, diskHeader)
         : localHeader
 
-      if (hasExternalMetadataChange) {
-        debug(`[PersistenceQueue] Session ${sessionId} header conflict detected; preserving external metadata`)
+      if (hasMetadataMismatch) {
+        const baseline = previousSig ? `, previousSig=${previousSig.slice(0, 12)}` : ', previousSig=<none>'
+        const mode = hasExternalMetadataChange ? 'disk preserved' : 'local preserved'
+        debug(`[PersistenceQueue] Session ${sessionId} metadata mismatch detected (${mode}${baseline})`)
       }
 
       const persistableMessages = storageSession.messages.filter(m => !m.isIntermediate)

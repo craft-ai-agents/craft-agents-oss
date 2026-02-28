@@ -11,7 +11,7 @@ import { BrowserView, BrowserWindow, Menu, ipcMain, nativeTheme, session, shell,
 import { mainLog } from './logger'
 import type { WindowManager } from './window-manager'
 import { BrowserCDP, type AccessibilitySnapshot, type ElementGeometry } from './browser-cdp'
-import type { BrowserInstanceInfo } from '../shared/types'
+import type { BrowserEmptyStateLaunchPayload, BrowserEmptyStateLaunchResult, BrowserInstanceInfo } from '../shared/types'
 
 export type { BrowserInstanceInfo }
 
@@ -24,6 +24,11 @@ const MAX_NETWORK_LOG_ENTRIES = 500
 const MAX_DOWNLOAD_LOG_ENTRIES = 200
 const DEFAULT_WAIT_TIMEOUT_MS = 10_000
 const DEFAULT_WAIT_POLL_MS = 100
+const SCREENSHOT_HIDDEN_CAPTURE_ATTEMPTS = 3
+const SCREENSHOT_RETRY_DELAY_MS = 120
+const SCREENSHOT_RESCUE_PAINT_DELAY_MS = 180
+const SCREENSHOT_NETWORK_IDLE_TIMEOUT_MS = 1_000
+const SCREENSHOT_NETWORK_IDLE_MS = 300
 const THEME_COLOR_SIGNAL_PREFIX = '__craft_theme_color__:'
 const THEME_COLOR_NULL_SENTINEL = '__NULL__'
 const THEME_OBSERVER_MIN_INTERVAL_MS = 120
@@ -460,6 +465,89 @@ export class BrowserPaneManager {
     return this.instances.get(id)
   }
 
+  async handleEmptyStateLaunchFromRenderer(
+    senderWebContentsId: number,
+    payload: BrowserEmptyStateLaunchPayload,
+  ): Promise<BrowserEmptyStateLaunchResult> {
+    const instance = this.findInstanceByPageWebContentsId(senderWebContentsId)
+    if (!instance) {
+      mainLog.warn(`[browser-pane] empty-state launch ignored: sender not mapped senderWebContentsId=${senderWebContentsId}`)
+      return { ok: false, handled: false, reason: 'instance_not_found' }
+    }
+
+    const route = payload.route?.trim()
+    if (!route) {
+      mainLog.warn(`[browser-pane] empty-state launch missing route id=${instance.id}`)
+      return { ok: false, handled: false, reason: 'missing_route' }
+    }
+
+    const token = payload.token ?? null
+    const handled = await this.triggerEmptyStateRouteLaunch(instance, route, token, 'ipc')
+    return {
+      ok: true,
+      handled,
+      reason: handled ? undefined : 'duplicate',
+    }
+  }
+
+  private findInstanceByPageWebContentsId(senderWebContentsId: number): BrowserInstance | undefined {
+    for (const instance of this.instances.values()) {
+      if (instance.pageView.webContents.id === senderWebContentsId) {
+        return instance
+      }
+    }
+    return undefined
+  }
+
+  private resolveLaunchWorkspaceId(): string | null {
+    if (!this.windowManager) return null
+
+    const focusedWindow = this.windowManager.getFocusedWindow()
+    if (focusedWindow) {
+      const focusedWorkspaceId = this.windowManager.getWorkspaceForWindow(focusedWindow.webContents.id)
+      if (focusedWorkspaceId) {
+        return focusedWorkspaceId
+      }
+    }
+
+    const managedWindows = this.windowManager.getAllWindows()
+    return managedWindows[0]?.workspaceId ?? null
+  }
+
+  private buildDeepLinkFromRoute(route: string): string {
+    const queryStart = route.indexOf('?')
+    const routePath = queryStart >= 0 ? route.slice(0, queryStart) : route
+    const routeQuery = queryStart >= 0 ? route.slice(queryStart + 1) : ''
+    let normalizedPath = routePath.replace(/^\/+/, '')
+
+    const workspaceId = this.resolveLaunchWorkspaceId()
+    if (workspaceId && !normalizedPath.startsWith('workspace/')) {
+      normalizedPath = `workspace/${encodeURIComponent(workspaceId)}/${normalizedPath}`
+    }
+
+    return `${CRAFT_DEEPLINK_SCHEME_PREFIX}${normalizedPath}${routeQuery ? `?${routeQuery}` : ''}`
+  }
+
+  private async triggerEmptyStateRouteLaunch(
+    instance: BrowserInstance,
+    route: string,
+    token: string | null,
+    source: 'hash' | 'ipc',
+  ): Promise<boolean> {
+    const dedupeToken = token ?? route
+    if (dedupeToken && instance.lastLaunchToken === dedupeToken) {
+      mainLog.info(`[browser-pane] ignoring duplicate empty-state launch id=${instance.id} source=${source} token=${dedupeToken}`)
+      return false
+    }
+
+    instance.lastLaunchToken = dedupeToken
+    const deepLink = this.buildDeepLinkFromRoute(route)
+    mainLog.info(`[browser-pane] handling empty-state launch id=${instance.id} source=${source} route=${route} deepLink=${deepLink}`)
+
+    await this.handleDeepLinkUrl(deepLink)
+    return true
+  }
+
   listInstances(): BrowserInstanceInfo[] {
     return Array.from(this.instances.values()).map(i => this.toInfo(i))
   }
@@ -706,10 +794,19 @@ export class BrowserPaneManager {
     const mode = options?.mode === 'agent' ? 'agent' : 'raw'
 
     if (mode === 'raw') {
-      const image = await instance.pageView.webContents.capturePage()
+      const captured = await this.capturePageWithRecovery(instance, {
+        mode,
+        errorPrefix: 'screenshot',
+      })
+
       return {
-        png: image.toPNG(),
-        metadata: options?.includeMetadata ? { mode: 'raw' } : undefined,
+        png: captured.png,
+        metadata: options?.includeMetadata
+          ? {
+            mode: 'raw',
+            warnings: captured.warnings.length > 0 ? captured.warnings : undefined,
+          }
+          : undefined,
       }
     }
 
@@ -751,10 +848,17 @@ export class BrowserPaneManager {
 
     try {
       const viewport = await instance.cdp.getViewportMetrics()
-      const image = await instance.pageView.webContents.capturePage()
+      const captured = await this.capturePageWithRecovery(instance, {
+        mode,
+        errorPrefix: 'screenshot',
+      })
+
+      if (captured.warnings.length > 0) {
+        warnings.push(...captured.warnings)
+      }
 
       return {
-        png: image.toPNG(),
+        png: captured.png,
         metadata: {
           mode: 'agent',
           viewport,
@@ -840,15 +944,19 @@ export class BrowserPaneManager {
       throw new Error('Resolved screenshot region is outside the current viewport')
     }
 
-    const image = await instance.pageView.webContents.capturePage({
-      x: clippedX,
-      y: clippedY,
-      width: clippedWidth,
-      height: clippedHeight,
+    const captured = await this.capturePageWithRecovery(instance, {
+      mode: 'region',
+      errorPrefix: 'region screenshot',
+      rect: {
+        x: clippedX,
+        y: clippedY,
+        width: clippedWidth,
+        height: clippedHeight,
+      },
     })
 
     return {
-      png: image.toPNG(),
+      png: captured.png,
       metadata: {
         mode: 'raw',
         viewport,
@@ -859,8 +967,127 @@ export class BrowserPaneManager {
           height: clippedHeight,
         },
         targetMode: hasRef ? 'ref' : hasSelector ? 'selector' : 'coords',
+        warnings: captured.warnings.length > 0 ? captured.warnings : undefined,
       },
     }
+  }
+
+  private async capturePageWithRecovery(
+    instance: BrowserInstance,
+    options: {
+      mode: 'raw' | 'agent' | 'region'
+      errorPrefix: 'screenshot' | 'region screenshot'
+      rect?: { x: number; y: number; width: number; height: number }
+    },
+  ): Promise<{ png: Buffer; warnings: string[] }> {
+    let rescueUsed = false
+    const warnings: string[] = []
+
+    for (let attempt = 1; attempt <= SCREENSHOT_HIDDEN_CAPTURE_ATTEMPTS; attempt += 1) {
+      const png = await this.capturePagePng(instance, {
+        rect: options.rect,
+        useHiddenCaptureOptions: true,
+      })
+
+      if (png) {
+        if (attempt > 1) {
+          warnings.push(`Capture recovered after ${attempt} hidden attempt${attempt === 1 ? '' : 's'}.`)
+        }
+        return { png, warnings }
+      }
+
+      mainLog.warn(
+        `[browser-pane] ${options.errorPrefix} empty capture attempt instance=${instance.id} mode=${options.mode} attempt=${attempt}/${SCREENSHOT_HIDDEN_CAPTURE_ATTEMPTS} visible=${instance.isVisible} isLoading=${instance.isLoading} url=${instance.currentUrl}`,
+      )
+
+      if (attempt < SCREENSHOT_HIDDEN_CAPTURE_ATTEMPTS) {
+        await this.waitForScreenshotReadiness(instance.id)
+      }
+    }
+
+    const window = instance.window
+    const wasVisible = instance.isVisible
+
+    if (!window.isDestroyed()) {
+      try {
+        if (!wasVisible) {
+          if (window.isMinimized()) {
+            window.restore()
+          }
+          window.showInactive()
+          instance.isVisible = true
+          this.emitStateChange(instance)
+          rescueUsed = true
+          await this.sleep(SCREENSHOT_RESCUE_PAINT_DELAY_MS)
+          await this.waitForScreenshotReadiness(instance.id)
+        }
+
+        const rescuePng = await this.capturePagePng(instance, {
+          rect: options.rect,
+          useHiddenCaptureOptions: false,
+        })
+
+        if (rescuePng) {
+          if (rescueUsed) {
+            warnings.push('Capture required temporary inactive reveal for rendering; browser visibility was restored immediately.')
+          }
+          return { png: rescuePng, warnings }
+        }
+      } finally {
+        if (!wasVisible && !window.isDestroyed()) {
+          window.hide()
+          instance.isVisible = false
+          this.emitStateChange(instance)
+        }
+      }
+    }
+
+    mainLog.warn(
+      `[browser-pane] ${options.errorPrefix} capture failed after recovery instance=${instance.id} mode=${options.mode} visible=${instance.isVisible} isLoading=${instance.isLoading} url=${instance.currentUrl} rescueUsed=${rescueUsed}`,
+    )
+
+    throw new Error(`Failed to capture ${options.errorPrefix}: empty image buffer`)
+  }
+
+  private async capturePagePng(
+    instance: BrowserInstance,
+    options: {
+      rect?: { x: number; y: number; width: number; height: number }
+      useHiddenCaptureOptions: boolean
+    },
+  ): Promise<Buffer | null> {
+    const captureOpts = options.useHiddenCaptureOptions
+      ? { stayHidden: true, stayAwake: true }
+      : undefined
+
+    const image = options.rect
+      ? await instance.pageView.webContents.capturePage(options.rect, captureOpts)
+      : await instance.pageView.webContents.capturePage(undefined, captureOpts)
+
+    if (image.isEmpty()) {
+      return null
+    }
+
+    const png = image.toPNG()
+    if (!png || png.length === 0) {
+      return null
+    }
+
+    return png
+  }
+
+  private async waitForScreenshotReadiness(instanceId: string): Promise<void> {
+    try {
+      await this.waitFor(instanceId, {
+        kind: 'network-idle',
+        timeoutMs: SCREENSHOT_NETWORK_IDLE_TIMEOUT_MS,
+        idleMs: SCREENSHOT_NETWORK_IDLE_MS,
+      })
+    } catch {
+      // network-idle can fail on continuously active pages; still proceed after bounded delay
+    }
+
+    await this.sleep(SCREENSHOT_RETRY_DELAY_MS)
   }
 
   getConsoleLogs(id: string, options?: BrowserConsoleOptions): BrowserConsoleEntry[] {
@@ -1242,15 +1469,7 @@ export class BrowserPaneManager {
       return false
     }
 
-    if (token && instance.lastLaunchToken === token) {
-      return true
-    }
-
-    instance.lastLaunchToken = token
-    const deepLink = `${CRAFT_DEEPLINK_SCHEME_PREFIX}${route}`
-    mainLog.info(`[browser-pane] handling empty-state launch id=${instance.id} route=${route}`)
-
-    await this.handleDeepLinkUrl(deepLink)
+    const handled = await this.triggerEmptyStateRouteLaunch(instance, route, token, 'hash')
 
     try {
       await instance.pageView.webContents.executeJavaScript(
@@ -1260,7 +1479,7 @@ export class BrowserPaneManager {
       // Best effort cleanup only
     }
 
-    return true
+    return handled
   }
 
   private async loadToolbarPage(instance: BrowserInstance): Promise<void> {
