@@ -32,6 +32,7 @@ import { TurnCardActionsMenu } from './TurnCardActionsMenu'
 import { computeLastChildSet, groupActivitiesByParent, isActivityGroup, formatDuration, formatTokens, deriveTurnPhase, shouldShowThinkingIndicator, type ActivityGroup, type AssistantTurn } from './turn-utils'
 import { DocumentFormattedMarkdownOverlay } from '../overlay'
 import { AcceptPlanDropdown } from './AcceptPlanDropdown'
+import { MarkdownAnnotationProvider, useMarkdownAnnotations, MarkdownAnnotationLayer, AnnotationPopover, AnnotationControls } from '../markdown-annotations'
 
 // ============================================================================
 // Utilities
@@ -261,6 +262,8 @@ export interface TurnCardProps {
   onAcceptPlan?: () => void
   /** Callback when user accepts the plan with compaction (compact conversation first, then execute) */
   onAcceptPlanWithCompact?: () => void
+  /** Callback to send structured comments text to the chat input (plan annotations) */
+  onSendToChat?: (text: string) => void
   /** Whether this is the last response in the session (shows Accept Plan button only for last response) */
   isLastResponse?: boolean
   /** Session folder path for stripping from file paths in tool display */
@@ -1306,9 +1309,58 @@ export interface ResponseCardProps {
   showAcceptPlan?: boolean
   /** Hide footer for compact embedding (EditPopover) */
   compactMode?: boolean
+  /** Callback to send structured comments text to the chat input */
+  onSendToChat?: (text: string) => void
+  /** Stable ID for plan annotation persistence */
+  planId?: string
 }
 
 const MAX_HEIGHT = 540
+
+/** Footer right section for plan cards — swaps Accept Plan for annotation controls when comments exist. */
+function AnnotationFooterRight({
+  onAccept,
+  onAcceptWithCompact,
+  isLastResponse,
+  onSendToChat,
+}: {
+  onAccept: () => void
+  onAcceptWithCompact: () => void
+  isLastResponse: boolean
+  onSendToChat?: (text: string) => void
+}) {
+  const { annotations, copyComments, getCommentsText, clearAll } = useMarkdownAnnotations()
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-3 transition-all duration-200",
+        isLastResponse
+          ? "opacity-100 translate-x-0"
+          : "opacity-0 translate-x-2 pointer-events-none"
+      )}
+    >
+      {annotations.length > 0 ? (
+        <AnnotationControls
+          count={annotations.length}
+          onCopy={copyComments}
+          onReply={onSendToChat ? () => { onSendToChat(getCommentsText()); clearAll() } : undefined}
+          onClear={clearAll}
+        />
+      ) : (
+        <>
+          <span className="text-xs text-muted-foreground">
+            Type your feedback in chat, leave comments inline or
+          </span>
+          <AcceptPlanDropdown
+            onAccept={onAccept}
+            onAcceptWithCompact={onAcceptWithCompact}
+          />
+        </>
+      )}
+    </div>
+  )
+}
 
 /**
  * ResponseCard - Unified card component for AI responses and plans
@@ -1339,6 +1391,8 @@ export function ResponseCard({
   isLastResponse = true,
   showAcceptPlan = true,
   compactMode = false,
+  onSendToChat,
+  planId,
 }: ResponseCardProps) {
   // Throttled content for display - updates every CONTENT_THROTTLE_MS during streaming
   const [displayedText, setDisplayedText] = useState(text)
@@ -1416,7 +1470,17 @@ export function ResponseCard({
   if (isCompleted || variant === 'plan') {
     const isPlan = variant === 'plan'
 
-    return (
+    const markdownContent = (
+      <Markdown
+        mode="minimal"
+        onUrlClick={onOpenUrl}
+        onFileClick={onOpenFile}
+      >
+        {text}
+      </Markdown>
+    )
+
+    const cardJsx = (
       <>
         <div className="bg-background shadow-minimal rounded-[8px] overflow-hidden relative group">
           {/* Fullscreen button - top right corner, visible on hover */}
@@ -1459,13 +1523,11 @@ export function ResponseCard({
               }),
             }}
           >
-            <Markdown
-              mode="minimal"
-              onUrlClick={onOpenUrl}
-              onFileClick={onOpenFile}
-            >
-              {text}
-            </Markdown>
+            {isPlan ? (
+              <MarkdownAnnotationLayer>{markdownContent}</MarkdownAnnotationLayer>
+            ) : (
+              markdownContent
+            )}
           </div>
 
           {/* Footer with actions - hidden in compact mode */}
@@ -1511,28 +1573,21 @@ export function ResponseCard({
                 )}
               </div>
 
-              {/* Right side - Accept Plan dropdown (only shown for plan variant when it's the last response) */}
+              {/* Right side - Accept Plan or Annotation Controls */}
               {isPlan && showAcceptPlan && onAccept && onAcceptWithCompact && (
-                <div
-                  className={cn(
-                    "flex items-center gap-3 transition-all duration-200",
-                    isLastResponse
-                      ? "opacity-100 translate-x-0"
-                      : "opacity-0 translate-x-2 pointer-events-none"
-                  )}
-                >
-                  <span className="text-xs text-muted-foreground">
-                    Type your feedback in chat or
-                  </span>
-                  <AcceptPlanDropdown
-                    onAccept={onAccept}
-                    onAcceptWithCompact={onAcceptWithCompact}
-                  />
-                </div>
+                <AnnotationFooterRight
+                  onAccept={onAccept}
+                  onAcceptWithCompact={onAcceptWithCompact}
+                  isLastResponse={isLastResponse}
+                  onSendToChat={onSendToChat}
+                />
               )}
             </div>
           )}
         </div>
+
+        {/* Annotation popover (portal) — only for plans */}
+        {isPlan && <AnnotationPopover />}
 
         {/* Fullscreen overlay for reading response/plan */}
         <DocumentFormattedMarkdownOverlay
@@ -1542,9 +1597,15 @@ export function ResponseCard({
           variant={isPlan ? 'plan' : undefined}
           onOpenUrl={onOpenUrl}
           onOpenFile={onOpenFile}
+          onSendToChat={onSendToChat}
         />
       </>
     )
+
+    // Plans are wrapped in MarkdownAnnotationProvider — planId enables persistence across unmounts
+    return isPlan ? (
+      <MarkdownAnnotationProvider planId={planId}>{cardJsx}</MarkdownAnnotationProvider>
+    ) : cardJsx
   }
 
   // Streaming response - show throttled content with spinner
@@ -1699,6 +1760,7 @@ export const TurnCard = React.memo(function TurnCard({
   renderActionsMenu,
   onAcceptPlan,
   onAcceptPlanWithCompact,
+  onSendToChat,
   isLastResponse,
   sessionFolderPath,
   displayMode = 'detailed',
@@ -2050,8 +2112,10 @@ export const TurnCard = React.memo(function TurnCard({
             onOpenUrl={onOpenUrl}
             onPopOut={onPopOut ? () => onPopOut(planActivity.content || '') : undefined}
             variant="plan"
+            planId={planActivity.id}
             onAccept={onAcceptPlan}
             onAcceptWithCompact={onAcceptPlanWithCompact}
+            onSendToChat={onSendToChat}
             isLastResponse={isLastResponse && index === planActivities.length - 1}
             compactMode={compactMode}
           />
@@ -2079,6 +2143,7 @@ export const TurnCard = React.memo(function TurnCard({
                 variant={response.isPlan ? 'plan' : 'response'}
                 onAccept={onAcceptPlan}
                 onAcceptWithCompact={onAcceptPlanWithCompact}
+                onSendToChat={onSendToChat}
                 isLastResponse={isLastResponse}
                 compactMode={compactMode}
               />
@@ -2099,6 +2164,7 @@ export const TurnCard = React.memo(function TurnCard({
             variant={response.isPlan ? 'plan' : 'response'}
             onAccept={onAcceptPlan}
             onAcceptWithCompact={onAcceptPlanWithCompact}
+            onSendToChat={onSendToChat}
             isLastResponse={isLastResponse}
             compactMode={compactMode}
           />
