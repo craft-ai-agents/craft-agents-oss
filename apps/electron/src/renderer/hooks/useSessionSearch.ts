@@ -438,7 +438,7 @@ export function useSessionSearch({
 
     observer.observe(sentinelRef.current)
     return () => observer.disconnect()
-  }, [hasMore, loadMore])
+  }, [hasMore, loadMore, displayLimit])
 
   // --- Derived render data ---
 
