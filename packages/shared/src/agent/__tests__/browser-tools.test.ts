@@ -46,6 +46,7 @@ function createMockFns(): BrowserPaneFns {
     getDownloads: async () => ([
       { id: 'dl-1', timestamp: Date.now(), url: 'https://example.com/file.pdf', filename: 'file.pdf', state: 'completed', bytesReceived: 100, totalBytes: 100, mimeType: 'application/pdf' },
     ]),
+    upload: async (_ref: string, _filePaths: string[]) => {},
     scroll: async (_dir: 'up' | 'down' | 'left' | 'right', _amount?: number) => {},
     goBack: async () => {},
     goForward: async () => {},
@@ -118,6 +119,7 @@ describe('createBrowserTools', () => {
       expect(result.content[0].text).toContain('find <query>')
       expect(result.content[0].text).toContain('click-at <x> <y>')
       expect(result.content[0].text).toContain('type <text>')
+      expect(result.content[0].text).toContain('upload <ref> <path> [path2...]')
       expect(result.content[0].text).toContain('set-clipboard <text>')
       expect(result.content[0].text).toContain('get-clipboard')
       expect(result.content[0].text).toContain('paste <text>')
@@ -323,6 +325,28 @@ describe('createBrowserTools', () => {
       expect(selectedValue).toBe('optionValue')
     })
 
+    it('routes upload command with one or more file paths', async () => {
+      let uploadedRef = ''
+      let uploadedPaths: string[] = []
+      mockFns.upload = async (ref, filePaths) => { uploadedRef = ref; uploadedPaths = filePaths }
+
+      const result = await executeTool(tools, 'browser_tool', {
+        command: 'upload @e3 /tmp/a.pdf /tmp/b.jpg',
+      })
+
+      expect(uploadedRef).toBe('@e3')
+      expect(uploadedPaths).toEqual(['/tmp/a.pdf', '/tmp/b.jpg'])
+      expect(result.content[0].text).toContain('Uploaded 2 files:')
+      expect(result.content[0].text).toContain('/tmp/a.pdf')
+      expect(result.content[0].text).toContain('/tmp/b.jpg')
+    })
+
+    it('returns error for upload with missing arguments', async () => {
+      const result = await executeTool(tools, 'browser_tool', { command: 'upload @e3' })
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain('upload requires ref and file path(s)')
+    })
+
     it('routes set-clipboard command', async () => {
       let clipboardText = ''
       mockFns.setClipboard = async (text) => { clipboardText = text }
@@ -516,6 +540,25 @@ describe('createBrowserTools', () => {
     it('routes downloads command', async () => {
       const result = await executeTool(tools, 'browser_tool', { command: 'downloads list 10' })
       expect(result.content[0].text).toContain('Downloads (')
+    })
+
+    it('includes savePath in downloads output when available', async () => {
+      mockFns.getDownloads = async () => ([
+        {
+          id: 'dl-42',
+          timestamp: Date.now(),
+          url: 'https://example.com/file.pdf',
+          filename: 'file.pdf',
+          state: 'completed',
+          bytesReceived: 100,
+          totalBytes: 100,
+          mimeType: 'application/pdf',
+          savePath: '/tmp/downloads/file.pdf',
+        },
+      ])
+
+      const result = await executeTool(tools, 'browser_tool', { command: 'downloads list 10' })
+      expect(result.content[0].text).toContain('-> /tmp/downloads/file.pdf')
     })
 
     it('routes scroll command', async () => {

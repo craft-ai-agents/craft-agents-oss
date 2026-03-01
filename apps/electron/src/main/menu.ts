@@ -125,8 +125,32 @@ export async function rebuildMenu(): Promise<void> {
         // Dev tools only in development
         ...(!app.isPackaged ? [
           { type: 'separator' as const },
-          { role: 'reload' as const },
-          { role: 'forceReload' as const },
+          {
+            label: 'Reload',
+            accelerator: 'CmdOrCtrl+R',
+            click: (_menuItem: Electron.MenuItem, browserWindow?: BrowserWindow | null) => {
+              if (!browserWindow) return
+              const views = browserWindow.getBrowserViews()
+              if (views.length > 0) {
+                views[0].webContents.reload()
+              } else {
+                browserWindow.webContents.reload()
+              }
+            }
+          },
+          {
+            label: 'Force Reload',
+            accelerator: 'CmdOrCtrl+Shift+R',
+            click: (_menuItem: Electron.MenuItem, browserWindow?: BrowserWindow | null) => {
+              if (!browserWindow) return
+              const views = browserWindow.getBrowserViews()
+              if (views.length > 0) {
+                views[0].webContents.reloadIgnoringCache()
+              } else {
+                browserWindow.webContents.reloadIgnoringCache()
+              }
+            }
+          },
           { type: 'separator' as const },
           { role: 'toggleDevTools' as const }
         ] : [])

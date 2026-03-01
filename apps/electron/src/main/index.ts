@@ -111,13 +111,17 @@ if (isDebugMode) {
     ? join(process.resourcesPath, 'app')
     : join(__dirname, '..')
   const platformKey = `${process.platform}-${process.arch}`
-  const uvBinary = join(resourcesBase, 'resources', 'bin', platformKey, process.platform === 'win32' ? 'uv.exe' : 'uv')
+  const uvPlatformDir = join(resourcesBase, 'resources', 'bin', platformKey)
+  const uvBinary = join(uvPlatformDir, process.platform === 'win32' ? 'uv.exe' : 'uv')
   const binDir = join(resourcesBase, 'resources', 'bin')
   const scriptsDir = join(resourcesBase, 'resources', 'scripts')
 
   process.env.CRAFT_UV = uvBinary
   process.env.CRAFT_SCRIPTS = scriptsDir
-  process.env.PATH = `${binDir}${delimiter}${process.env.PATH}`
+  // Prepend both generic wrappers dir and platform uv dir:
+  // - binDir exposes wrapper commands (pdf-tool, docx-tool, ...)
+  // - uvPlatformDir exposes raw `uv` for direct shell usage / debugging
+  process.env.PATH = `${binDir}${delimiter}${uvPlatformDir}${delimiter}${process.env.PATH}`
 
   if (isDebugMode) {
     mainLog.info('CLI tools configured:', { uvBinary, binDir, scriptsDir })

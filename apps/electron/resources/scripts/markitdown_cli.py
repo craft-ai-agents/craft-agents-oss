@@ -12,7 +12,11 @@ Usage:
 """
 
 import sys
+import warnings
 from pathlib import Path
+
+# Suppress pydub/ffmpeg warning from markitdown[all] — irrelevant for document conversion
+warnings.filterwarnings("ignore", message="Couldn't find ffmpeg", category=RuntimeWarning)
 
 import click
 from markitdown import MarkItDown
@@ -80,7 +84,7 @@ def main(file: str, output: str | None) -> None:
     try:
         converter = MarkItDown()
         result = converter.convert(str(file_path))
-        write_output(result.text_content, output)
+        write_output(result.text_content or "", output)
     except Exception as e:
         click.echo(f"Error converting {file_path.name}: {e}", err=True)
         sys.exit(1)

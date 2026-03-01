@@ -628,4 +628,23 @@ export class BrowserCDP {
       throw new Error(`Failed to select option in ${ref}: ${err}`)
     }
   }
+
+  async setFileInputFiles(ref: string, filePaths: string[]): Promise<ElementGeometry> {
+    const backendNodeId = this.refMap.get(ref)
+    if (!backendNodeId) {
+      throw new Error(`Element ${ref} not found. Run browser_snapshot first to get current element refs.`)
+    }
+
+    try {
+      await this.send('DOM.setFileInputFiles', {
+        files: filePaths,
+        backendNodeId,
+      })
+
+      return await this.getElementGeometry(ref)
+    } catch (err) {
+      mainLog.error(`[browser-cdp] setFileInputFiles failed for ${ref}:`, err)
+      throw new Error(`Failed to set files on ${ref}: ${err}`)
+    }
+  }
 }

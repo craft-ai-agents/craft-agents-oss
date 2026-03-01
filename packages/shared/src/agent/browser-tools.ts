@@ -140,6 +140,7 @@ export interface BrowserPaneFns {
   waitFor: (args: BrowserWaitArgs) => Promise<{ ok: true; kind: string; elapsedMs: number; detail: string }>;
   sendKey: (args: BrowserKeyArgs) => Promise<void>;
   getDownloads: (args?: BrowserDownloadsArgs) => Promise<Array<{ id: string; timestamp: number; url: string; filename: string; state: string; bytesReceived: number; totalBytes: number; mimeType: string; savePath?: string }>>;
+  upload: (ref: string, filePaths: string[]) => Promise<void>;
   scroll: (direction: 'up' | 'down' | 'left' | 'right', amount?: number) => Promise<void>;
   goBack: () => Promise<void>;
   goForward: () => Promise<void>;
@@ -202,6 +203,7 @@ Examples:
 - \`set-clipboard Name\\tAge\\nAlice\\t30\` — write text to clipboard
 - \`get-clipboard\` — read clipboard text content
 - \`paste Name\\tAge\\nAlice\\t30\` — set clipboard and trigger Ctrl/Cmd+V
+- \`upload @e3 /path/to/file.pdf\` — attach local file(s) to a file input
 - \`scroll down 800\`
 - \`evaluate document.title\`
 - \`console 50 error\`

@@ -81,6 +81,7 @@ import { sanitizeForTitle } from './title-sanitizer'
 import { shouldActivateBrowserOverlay, normalizeBrowserToolName } from './browser-tool-detection'
 import { rollbackFailedBranchCreation } from './session-branch-cleanup'
 import { resizeImageForAPI } from './image-utils'
+import { releaseBrowserOwnershipOnForcedStop } from './session-browser-release'
 export { sanitizeForTitle }
 
 function buildBackendHostRuntimeContext(): BackendHostRuntimeContext {
@@ -829,6 +830,7 @@ export class SessionManager {
 
   setBrowserPaneManager(bpm: import('./browser-pane-manager').BrowserPaneManager): void {
     this.browserPaneManager = bpm
+    bpm.setSessionPathResolver((sessionId) => this.getSessionPath(sessionId))
   }
 
   /** Returns a strictly increasing timestamp (ms). When Date.now() collides with
@@ -2522,6 +2524,10 @@ export class SessionManager {
               const instanceId = resolveSessionBrowserInstance('browser_downloads')
               return bpm.getDownloads(instanceId, options)
             },
+            upload: (ref, filePaths) => {
+              const instanceId = resolveSessionBrowserInstance('browser_upload')
+              return bpm.uploadFile(instanceId, ref, filePaths).then(() => {})
+            },
             scroll: (direction, amount) => {
               const instanceId = resolveSessionBrowserInstance('browser_scroll')
               return bpm.scroll(instanceId, direction, amount)
@@ -2757,6 +2763,10 @@ export class SessionManager {
             managed.agent.forceAbort(AbortReason.PlanSubmitted)
             managed.isProcessing = false
 
+            // Release browser overlay + session binding because the agent is no longer running.
+            // Plan submission pauses execution until user review, so browser ownership should not remain locked.
+            await releaseBrowserOwnershipOnForcedStop(this.browserPaneManager, managed.id)
+
             // Send complete event so renderer knows processing stopped (include tokenUsage for real-time updates)
             this.sendEvent({ type: 'complete', sessionId: managed.id, tokenUsage: managed.tokenUsage }, managed.workspace.id)
 
@@ -2808,6 +2818,9 @@ export class SessionManager {
           sessionLog.info(`Force-aborting after auth request for session ${managed.id}`)
           managed.agent.forceAbort(AbortReason.AuthRequest)
           managed.isProcessing = false
+
+          // Release browser overlay + session binding because the agent is paused awaiting user auth.
+          void releaseBrowserOwnershipOnForcedStop(this.browserPaneManager, managed.id)
 
           // Send complete event so renderer knows processing stopped (include tokenUsage for real-time updates)
           this.sendEvent({ type: 'complete', sessionId: managed.id, tokenUsage: managed.tokenUsage }, managed.workspace.id)

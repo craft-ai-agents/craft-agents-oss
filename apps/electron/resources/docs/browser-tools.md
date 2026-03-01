@@ -59,6 +59,7 @@ browser_tool({ command: "drag 100 200 300 400" })
 browser_tool({ command: "fill @e5 user@example.com" })
 browser_tool({ command: "type Hello World" })
 browser_tool({ command: "select @e3 optionValue" })
+browser_tool({ command: "upload @e3 /absolute/path/to/file.pdf" })
 browser_tool({ command: "set-clipboard Name\tAge\nAlice\t30" })
 browser_tool({ command: "get-clipboard" })
 browser_tool({ command: "paste Name\tAge\nAlice\t30" })
@@ -136,6 +137,14 @@ Get coordinates from `screenshot` or `screenshot --annotated`.
 ### `fill <ref> <value>` / `select <ref> <value>`
 Fill text inputs or select dropdown values. Requires an element ref from `snapshot`.
 
+### `upload <ref> <path> [path2...]`
+Attach local file(s) to a file input (`<input type="file">`) using a ref from `snapshot`.
+
+Notes:
+- Use absolute file paths.
+- Multiple files are supported: `upload @e3 /path/a.pdf /path/b.jpg`
+- Files must exist and pass safety validation (sensitive paths are blocked).
+
 ### `type <text>`
 Type text character-by-character into the **currently focused element** without needing a ref. Use this when:
 - The target is a canvas-based input (no DOM ref available)
@@ -160,8 +169,10 @@ Convenience command: writes text to clipboard then triggers Ctrl+V (or Cmd+V on 
 ### `screenshot` / `screenshot --annotated` / `screenshot-region ...`
 Capture full-window or targeted screenshots. `--annotated` overlays `@eN` labels on interactive elements for easier ref debugging.
 
-### `console`, `network`, `wait`
-Debug runtime issues, requests, and synchronization points.
+### `console`, `network`, `wait`, `downloads`
+Debug runtime issues, requests, synchronization points, and download progress.
+
+`downloads` output includes the resolved local `savePath` when available so you can reference the downloaded file directly.
 
 ### `focus [windowId]` / `windows`
 Manage and inspect browser window ownership and visibility.

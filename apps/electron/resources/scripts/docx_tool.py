@@ -212,10 +212,15 @@ def _replace_in_paragraph(paragraph, data: dict[str, str]) -> None:
     if "{{" not in full_text:
         return
 
-    for key, value in data.items():
-        placeholder = "{{" + str(key) + "}}"
-        if placeholder in full_text:
-            full_text = full_text.replace(placeholder, str(value))
+    # Single-pass replacement to avoid cascading (a replacement value containing
+    # {{other_key}} should not be substituted again).
+    def _replacer(match: re.Match) -> str:
+        key = match.group(1)
+        if key in data:
+            return str(data[key])
+        return match.group(0)  # leave unmatched placeholders as-is
+
+    full_text = re.sub(r"\{\{(\w+)\}\}", _replacer, full_text)
 
     # Rebuild runs with the replaced text
     if paragraph.runs:

@@ -11,6 +11,7 @@ Usage:
 """
 
 import json
+import re
 import sys
 from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
@@ -19,6 +20,14 @@ import click
 from dateutil.parser import parse as parse_date
 from dateutil.tz import tzlocal
 from icalendar import Calendar, Event
+
+
+def _is_date_only(date_str: str) -> bool:
+    """Check if a date string represents a date-only value (no time component).
+
+    Returns True for "2024-03-15", False for "2024-03-15T00:00:00" or "2024-03-15 00:00:00".
+    """
+    return "T" not in date_str and not re.search(r"\s\d{1,2}:", date_str)
 
 
 def write_output(text: str, output_path: str | None) -> None:
@@ -31,14 +40,18 @@ def write_output(text: str, output_path: str | None) -> None:
 
 
 def dt_to_datetime(dt_val) -> datetime | None:
-    """Convert an icalendar date/datetime to a Python datetime."""
+    """Convert an icalendar date/datetime to a Python datetime.
+
+    All-day events (date objects) are converted to midnight in the local timezone,
+    so that filtering by date range works correctly regardless of the user's timezone.
+    """
     if dt_val is None:
         return None
     dt = dt_val.dt if hasattr(dt_val, "dt") else dt_val
     if isinstance(dt, datetime):
         return dt
     elif isinstance(dt, date):
-        return datetime(dt.year, dt.month, dt.day, tzinfo=timezone.utc)
+        return datetime(dt.year, dt.month, dt.day, tzinfo=tzlocal())
     return None
 
 
@@ -205,7 +218,7 @@ def create(data: str, cal_name: str, output: str | None) -> None:
             start_str = ev_data.get("start")
             if start_str:
                 start_dt = parse_date(start_str)
-                if start_dt.hour == 0 and start_dt.minute == 0 and "T" not in start_str:
+                if _is_date_only(start_str):
                     event.add("DTSTART", start_dt.date())
                 else:
                     if start_dt.tzinfo is None:
@@ -216,13 +229,13 @@ def create(data: str, cal_name: str, output: str | None) -> None:
             end_str = ev_data.get("end")
             if end_str:
                 end_dt = parse_date(end_str)
-                if end_dt.hour == 0 and end_dt.minute == 0 and "T" not in end_str:
+                if _is_date_only(end_str):
                     event.add("DTEND", end_dt.date())
                 else:
                     if end_dt.tzinfo is None:
                         end_dt = end_dt.replace(tzinfo=tzlocal())
                     event.add("DTEND", end_dt)
-            elif start_str and "T" not in start_str:
+            elif start_str and _is_date_only(start_str):
                 # All-day event without end: make it 1 day
                 start_dt = parse_date(start_str)
                 event.add("DTEND", start_dt.date() + timedelta(days=1))

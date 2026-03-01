@@ -53,6 +53,7 @@ export function getBrowserToolHelp(): string {
     '  fill <ref> <value>',
     '  type <text>                                    type into focused element (no ref needed)',
     '  select <ref> <value>',
+    '  upload <ref> <path> [path2...]                 attach local file(s) to a file input',
     '  set-clipboard <text>                           write text to page clipboard',
     '  get-clipboard                                  read clipboard text content',
     '  paste <text>                                   set clipboard + trigger Ctrl/Cmd+V',
@@ -90,6 +91,7 @@ export function getBrowserToolHelp(): string {
     '  drag 100 200 300 400',
     '  fill @e5 user@example.com',
     '  type Hello World',
+    '  upload @e3 /path/to/file.pdf',
     '  set-clipboard Name\\tAge\\nAlice\\t30',
     '  get-clipboard',
     '  paste Name\\tAge\\nAlice\\t30',
@@ -742,6 +744,28 @@ async function executeSingleCommand(args: {
     };
   }
 
+  if (cmd === 'upload') {
+    const ref = parts[1];
+    const filePaths = parts.slice(2);
+    if (!ref || filePaths.length === 0) {
+      throw new Error('upload requires ref and file path(s). Example: upload @e3 /path/to/file.pdf');
+    }
+
+    await fns.upload(ref, filePaths);
+    const after = await getPageMetrics(fns);
+    const fileList = filePaths.length === 1
+      ? filePaths[0]
+      : `${filePaths.length} files:\n${filePaths.map((p) => `  - ${p}`).join('\n')}`;
+
+    return {
+      output: [
+        `Uploaded ${fileList} to element ${ref}`,
+        `Active element after: ${describeActive(after)}`,
+      ].join('\n'),
+      appendReleaseHint: true,
+    };
+  }
+
   if (cmd === 'set-clipboard') {
     const text = parts.slice(1).join(' ');
     if (!text) throw new Error('set-clipboard requires text. Example: set-clipboard Hello World');
@@ -1109,8 +1133,9 @@ async function executeSingleCommand(args: {
     ];
 
     for (const entry of entries) {
+      const savePathSuffix = entry.savePath ? ` -> ${entry.savePath}` : '';
       lines.push(
-        `[${new Date(entry.timestamp).toISOString()}] [${entry.state}] ${entry.filename} (${formatBytes(entry.bytesReceived)}/${formatBytes(entry.totalBytes)})`,
+        `[${new Date(entry.timestamp).toISOString()}] [${entry.state}] ${entry.filename} (${formatBytes(entry.bytesReceived)}/${formatBytes(entry.totalBytes)})${savePathSuffix}`,
       );
     }
     return { output: lines.join('\n'), appendReleaseHint: true };

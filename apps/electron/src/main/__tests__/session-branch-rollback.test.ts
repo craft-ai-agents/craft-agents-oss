@@ -46,6 +46,14 @@ mock.module('@craft-agent/shared/config', () => ({
   }),
   getLlmConnection: () => null,
   getDefaultLlmConnection: () => null,
+  resolveAuthEnvVars: () => ({}),
+  getToolIconsDir: () => '/tmp/tool-icons',
+  getMiniModel: () => 'claude-haiku-4-5-20251001',
+  ConfigWatcher: class ConfigWatcher {
+    constructor(..._args: unknown[]) {}
+    start() {}
+    stop() {}
+  },
   migrateLegacyCredentials: async () => {},
   migrateLegacyLlmConnectionsConfig: async () => {},
   migrateOrphanedDefaultConnections: async () => {},
@@ -64,6 +72,7 @@ mock.module('@craft-agent/shared/workspaces', () => ({
 
 mock.module('@craft-agent/shared/agent', () => ({
   setPermissionMode: () => {},
+  getPermissionModeDiagnostics: () => ({ mode: 'ask', source: 'test' }),
   unregisterSessionScopedToolCallbacks: () => {},
   mergeSessionScopedToolCallbacks: () => {},
   AbortReason: {
@@ -113,6 +122,10 @@ mock.module('@craft-agent/shared/automations', () => ({
     reloadConfig() { return { errors: [], automationCount: 0 } }
     emitLabelConfigChange = async () => {}
   },
+  validateAutomationsConfig: () => ({ valid: true, errors: [], config: { automations: {} } }),
+  validateAutomationsContent: () => ({ valid: true, errors: [], warnings: [] }),
+  validateAutomations: () => ({ valid: true, errors: [], warnings: [] }),
+  AUTOMATIONS_CONFIG_FILE: 'automations.json',
   AUTOMATIONS_HISTORY_FILE: 'automations.history.jsonl',
 }))
 
@@ -154,6 +167,7 @@ mock.module('@craft-agent/shared/sessions', () => ({
   getPendingPlanExecution: async () => null,
   getSessionAttachmentsPath: () => '/tmp/attachments',
   getSessionPath: (_root: string, id: string) => `${workspaceRootPath}/sessions/${id}`,
+  getOrCreateLatestSession: async () => null,
   sessionPersistenceQueue: { flush: async () => {} },
   pickSessionFields: (s: any) => ({ ...s }),
 }))

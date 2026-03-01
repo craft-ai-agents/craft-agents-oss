@@ -6,8 +6,11 @@
  * shared session/cookie partition and CDP automation support.
  */
 
-import { join } from 'path'
-import { BrowserView, BrowserWindow, Menu, ipcMain, nativeTheme, session, shell, type Session as ElectronSession } from 'electron'
+import { join, parse as parsePath, normalize, isAbsolute, sep } from 'path'
+import { existsSync, mkdirSync } from 'fs'
+import { realpath } from 'fs/promises'
+import { homedir, tmpdir } from 'os'
+import { BrowserView, BrowserWindow, Menu, app, ipcMain, nativeTheme, session, shell, type Session as ElectronSession } from 'electron'
 import { mainLog } from './logger'
 import type { WindowManager } from './window-manager'
 import { BrowserCDP, type AccessibilitySnapshot, type ElementGeometry } from './browser-cdp'
@@ -307,9 +310,14 @@ export class BrowserPaneManager {
   private inFlightRequestsByWebContentsId = new Map<number, number>()
   private lastNetworkActivityByWebContentsId = new Map<number, number>()
   private windowManager: WindowManager | null = null
+  private sessionPathResolver: ((sessionId: string) => string | null) | null = null
 
   setWindowManager(windowManager: WindowManager): void {
     this.windowManager = windowManager
+  }
+
+  setSessionPathResolver(fn: (sessionId: string) => string | null): void {
+    this.sessionPathResolver = fn
   }
 
   onStateChange(callback: (info: BrowserInstanceInfo) => void): void {
@@ -822,7 +830,10 @@ export class BrowserPaneManager {
         await new Promise<void>((resolve, reject) => {
           const timer = setTimeout(() => {
             cleanup()
-            reject(new Error(`Click navigation wait timed out after ${timeoutMs}ms`))
+            reject(new Error(
+              `Click navigation wait timed out after ${timeoutMs}ms (no navigation event observed). `
+              + `Tip: retry with "click ${ref}" (no navigation wait), then use "wait url <pattern>" or "wait network-idle".`
+            ))
           }, timeoutMs)
 
           const onNav = () => {
@@ -1162,15 +1173,28 @@ export class BrowserPaneManager {
     },
   ): Promise<{ imageBuffer: Buffer; imageFormat: 'png' | 'jpeg'; warnings: string[] }> {
     let rescueUsed = false
+    let sawDisplaySurfaceUnavailable = false
     const warnings: string[] = []
     const imageOpts = { dpr: options.dpr, format: options.format, jpegQuality: options.jpegQuality }
 
     for (let attempt = 1; attempt <= SCREENSHOT_HIDDEN_CAPTURE_ATTEMPTS; attempt += 1) {
-      const result = await this.capturePageImage(instance, {
-        rect: options.rect,
-        useHiddenCaptureOptions: true,
-        ...imageOpts,
-      })
+      let result: { buffer: Buffer; format: 'png' | 'jpeg' } | null = null
+      try {
+        result = await this.capturePageImage(instance, {
+          rect: options.rect,
+          useHiddenCaptureOptions: true,
+          ...imageOpts,
+        })
+      } catch (error) {
+        if (this.isDisplaySurfaceUnavailableError(error)) {
+          sawDisplaySurfaceUnavailable = true
+          mainLog.warn(
+            `[browser-pane] ${options.errorPrefix} display surface unavailable instance=${instance.id} mode=${options.mode} attempt=${attempt}/${SCREENSHOT_HIDDEN_CAPTURE_ATTEMPTS} visible=${instance.isVisible} url=${instance.currentUrl}`,
+          )
+        } else {
+          throw error
+        }
+      }
 
       if (result) {
         if (attempt > 1) {
@@ -1205,11 +1229,23 @@ export class BrowserPaneManager {
           await this.waitForScreenshotReadiness(instance.id)
         }
 
-        const rescueResult = await this.capturePageImage(instance, {
-          rect: options.rect,
-          useHiddenCaptureOptions: false,
-          ...imageOpts,
-        })
+        let rescueResult: { buffer: Buffer; format: 'png' | 'jpeg' } | null = null
+        try {
+          rescueResult = await this.capturePageImage(instance, {
+            rect: options.rect,
+            useHiddenCaptureOptions: false,
+            ...imageOpts,
+          })
+        } catch (error) {
+          if (this.isDisplaySurfaceUnavailableError(error)) {
+            sawDisplaySurfaceUnavailable = true
+            mainLog.warn(
+              `[browser-pane] ${options.errorPrefix} display surface unavailable during rescue instance=${instance.id} mode=${options.mode} visible=${instance.isVisible} url=${instance.currentUrl}`,
+            )
+          } else {
+            throw error
+          }
+        }
 
         if (rescueResult) {
           if (rescueUsed) {
@@ -1230,7 +1266,19 @@ export class BrowserPaneManager {
       `[browser-pane] ${options.errorPrefix} capture failed after recovery instance=${instance.id} mode=${options.mode} visible=${instance.isVisible} isLoading=${instance.isLoading} url=${instance.currentUrl} rescueUsed=${rescueUsed}`,
     )
 
+    if (sawDisplaySurfaceUnavailable) {
+      throw new Error(
+        `Failed to capture ${options.errorPrefix}: current display surface is unavailable. `
+        + `Try focusing the browser window first ("focus ${instance.id}" or "open --foreground") and retry.`
+      )
+    }
+
     throw new Error(`Failed to capture ${options.errorPrefix}: empty image buffer`)
+  }
+
+  private isDisplaySurfaceUnavailableError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false
+    return error.message.toLowerCase().includes('current display surface not available for capture')
   }
 
   private async capturePageImage(
@@ -1437,6 +1485,68 @@ export class BrowserPaneManager {
     }
 
     return instance.downloads.slice(-limit)
+  }
+
+  private async validateUploadFilePath(filePath: string): Promise<string> {
+    let normalizedPath = normalize(filePath)
+
+    if (normalizedPath.startsWith('~')) {
+      normalizedPath = normalizedPath.replace(/^~/, homedir())
+    }
+
+    if (!isAbsolute(normalizedPath)) {
+      throw new Error(`Upload path must be absolute: ${filePath}`)
+    }
+
+    let realFilePath: string
+    try {
+      realFilePath = await realpath(normalizedPath)
+    } catch {
+      realFilePath = normalizedPath
+    }
+
+    const allowedDirs = [homedir(), tmpdir()]
+    const isAllowed = allowedDirs.some((dir) => {
+      const normalizedDir = normalize(dir)
+      const normalizedReal = normalize(realFilePath)
+      return normalizedReal.startsWith(normalizedDir + sep) || normalizedReal === normalizedDir
+    })
+
+    if (!isAllowed) {
+      throw new Error(`Access denied for upload path (outside allowed directories): ${filePath}`)
+    }
+
+    const sensitivePatterns = [
+      /\.ssh\//,
+      /\.gnupg\//,
+      /\.aws\/credentials/,
+      /\.env$/,
+      /\.env\./,
+      /credentials\.json$/,
+      /secrets?\./i,
+      /\.pem$/,
+      /\.key$/,
+    ]
+
+    if (sensitivePatterns.some((pattern) => pattern.test(realFilePath))) {
+      throw new Error(`Access denied for upload path (sensitive file): ${filePath}`)
+    }
+
+    return realFilePath
+  }
+
+  async uploadFile(id: string, ref: string, filePaths: string[]): Promise<ElementGeometry> {
+    const instance = this.instances.get(id)
+    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+
+    const safePaths: string[] = []
+    for (const p of filePaths) {
+      const safePath = await this.validateUploadFilePath(p)
+      if (!existsSync(safePath)) throw new Error(`File not found: ${p}`)
+      safePaths.push(safePath)
+    }
+
+    return instance.cdp.setFileInputFiles(ref, safePaths)
   }
 
   windowResize(id: string, width: number, height: number): { width: number; height: number } {
@@ -2278,6 +2388,30 @@ export class BrowserPaneManager {
     }
   }
 
+  private resolveDownloadsDir(instance: BrowserInstance): string {
+    const sessionId = instance.boundSessionId ?? instance.ownerSessionId
+    if (sessionId && this.sessionPathResolver) {
+      const sessionPath = this.sessionPathResolver(sessionId)
+      if (sessionPath) {
+        const dir = join(sessionPath, 'downloads')
+        mkdirSync(dir, { recursive: true })
+        return dir
+      }
+    }
+    // Fallback: OS downloads folder for manual/unbound windows
+    return app.getPath('downloads')
+  }
+
+  private uniqueFilename(dir: string, filename: string): string {
+    if (!existsSync(join(dir, filename))) return filename
+    const { name, ext } = parsePath(filename)
+    let counter = 1
+    while (existsSync(join(dir, `${name}_${counter}${ext}`))) {
+      counter++
+    }
+    return `${name}_${counter}${ext}`
+  }
+
   private setupSessionObservers(ses: ElectronSession): void {
     if (this.partitionObserversInitialized) return
     this.partitionObserversInitialized = true
@@ -2340,17 +2474,23 @@ export class BrowserPaneManager {
       const instance = this.getInstanceByWebContentsId(wcId)
       if (!instance) return
 
+      // Auto-save: set a deterministic path so Electron doesn't show a native dialog
+      const downloadsDir = this.resolveDownloadsDir(instance)
+      const filename = this.uniqueFilename(downloadsDir, item.getFilename())
+      const savePath = join(downloadsDir, filename)
+      item.setSavePath(savePath)
+
       const downloadId = `dl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       const started: BrowserDownloadEntry = {
         id: downloadId,
         timestamp: Date.now(),
         url: item.getURL(),
-        filename: item.getFilename(),
+        filename,
         state: 'started',
         bytesReceived: item.getReceivedBytes(),
         totalBytes: item.getTotalBytes(),
-        mimeType: 'application/octet-stream',
-        savePath: item.getSavePath(),
+        mimeType: item.getMimeType() || 'application/octet-stream',
+        savePath,
       }
       this.pushDownloadLog(instance, started)
 
@@ -2465,22 +2605,9 @@ export class BrowserPaneManager {
       void this.extractThemeColor(instance)
     })
 
-    pageWc.on('before-input-event', (_event, input) => {
+    pageWc.on('before-input-event', (_event, _input) => {
       if (instance.lockState.active) {
         _event.preventDefault()
-        return
-      }
-
-      if (input.type !== 'keyDown') return
-      const cmdOrCtrl = process.platform === 'darwin' ? input.meta : input.control
-      if (!cmdOrCtrl) return
-
-      if (input.key === 'r' && !input.shift) {
-        _event.preventDefault()
-        this.reload(instance.id)
-      } else if (input.key === 'r' && input.shift) {
-        _event.preventDefault()
-        instance.pageView.webContents.reloadIgnoringCache()
       }
     })
 
