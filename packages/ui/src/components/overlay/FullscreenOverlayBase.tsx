@@ -82,6 +82,8 @@ export interface FullscreenOverlayBaseProps {
 
   /** Optional error banner — rendered between header and children */
   error?: OverlayErrorBannerProps
+  /** Intercept ESC key before the dialog closes — call e.preventDefault() to keep it open */
+  onEscapeKeyDown?: (e: KeyboardEvent) => void
 }
 
 export function FullscreenOverlayBase({
@@ -98,6 +100,7 @@ export function FullscreenOverlayBase({
   headerActions,
   copyContent,
   error,
+  onEscapeKeyDown,
 }: FullscreenOverlayBaseProps) {
   const { onSetTrafficLightsVisible } = usePlatform()
 
@@ -129,6 +132,7 @@ export function FullscreenOverlayBase({
           )}
           style={{ zIndex: Z_FULLSCREEN }}
           onOpenAutoFocus={(e) => e.preventDefault()}
+          onEscapeKeyDown={onEscapeKeyDown}
         >
           {/* Visually hidden title for accessibility - required by Radix Dialog */}
           <Dialog.Title className="sr-only">{accessibleTitle}</Dialog.Title>

@@ -995,6 +995,11 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     setOverlayState(null)
   }, [])
 
+  // Send structured comments as a message (used by plan annotation "Reply with Comments")
+  const handleSendToChat = useCallback((text: string) => {
+    onSendMessage(text)
+  }, [onSendMessage])
+
   // Extract overlay data for activity-based overlays
   // Uses the shared extractOverlayData parser from @craft-agent/ui
   const overlayData: OverlayData | null = useMemo(() => {
@@ -1417,6 +1422,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         onOpenUrl={onOpenUrl}
                         isLastResponse={isLastResponse}
                         compactMode={compactMode}
+                        onSendToChat={handleSendToChat}
                         onAcceptPlan={() => {
                           window.dispatchEvent(new CustomEvent('craft:approve-plan', {
                             detail: { text: 'Plan approved, please execute.', sessionId: session?.id }
@@ -1690,6 +1696,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
           onOpenFile={onOpenFile}
           error={overlayData.error}
           variant={isPlanFilePath(overlayData.filePath) ? 'plan' : 'response'}
+          onSendToChat={handleSendToChat}
         />
       )}
 
