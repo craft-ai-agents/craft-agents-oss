@@ -1371,17 +1371,31 @@ function migrateOpus45ToOpus46(config: StoredConfig): boolean {
 
     // Migrate models array
     if (connection.models && Array.isArray(connection.models)) {
-      for (let i = 0; i < connection.models.length; i++) {
-        const model = connection.models[i];
-        if (typeof model === 'string' && model === OPUS_45_ID) {
-          connection.models[i] = OPUS_46_ID;
-          changed = true;
-        } else if (typeof model === 'object' && model.id === OPUS_45_ID) {
-          model.id = OPUS_46_ID;
-          if (model.name?.includes('4.5')) {
-            model.name = model.name.replace('4.5', '4.6');
+      const hasNew = connection.models.some(m =>
+        (typeof m === 'string' ? m : m.id) === OPUS_46_ID
+      );
+
+      if (hasNew) {
+        // New model already exists — just remove the old entry to avoid duplicates
+        const before = connection.models.length;
+        connection.models = connection.models.filter(m =>
+          (typeof m === 'string' ? m : m.id) !== OPUS_45_ID
+        );
+        if (connection.models.length !== before) changed = true;
+      } else {
+        // New model doesn't exist — rename the old entry in place
+        for (let i = 0; i < connection.models.length; i++) {
+          const model = connection.models[i];
+          if (typeof model === 'string' && model === OPUS_45_ID) {
+            connection.models[i] = OPUS_46_ID;
+            changed = true;
+          } else if (typeof model === 'object' && model.id === OPUS_45_ID) {
+            model.id = OPUS_46_ID;
+            if (model.name?.includes('4.5')) {
+              model.name = model.name.replace('4.5', '4.6');
+            }
+            changed = true;
           }
-          changed = true;
         }
       }
     }
@@ -1414,17 +1428,31 @@ function migrateSonnet45ToSonnet46(config: StoredConfig): boolean {
 
     // Migrate models array
     if (connection.models && Array.isArray(connection.models)) {
-      for (let i = 0; i < connection.models.length; i++) {
-        const model = connection.models[i];
-        if (typeof model === 'string' && model === SONNET_45_ID) {
-          connection.models[i] = SONNET_46_ID;
-          changed = true;
-        } else if (typeof model === 'object' && model.id === SONNET_45_ID) {
-          model.id = SONNET_46_ID;
-          if (model.name?.includes('4.5')) {
-            model.name = model.name.replace('4.5', '4.6');
+      const hasNew = connection.models.some(m =>
+        (typeof m === 'string' ? m : m.id) === SONNET_46_ID
+      );
+
+      if (hasNew) {
+        // New model already exists — just remove the old entry to avoid duplicates
+        const before = connection.models.length;
+        connection.models = connection.models.filter(m =>
+          (typeof m === 'string' ? m : m.id) !== SONNET_45_ID
+        );
+        if (connection.models.length !== before) changed = true;
+      } else {
+        // New model doesn't exist — rename the old entry in place
+        for (let i = 0; i < connection.models.length; i++) {
+          const model = connection.models[i];
+          if (typeof model === 'string' && model === SONNET_45_ID) {
+            connection.models[i] = SONNET_46_ID;
+            changed = true;
+          } else if (typeof model === 'object' && model.id === SONNET_45_ID) {
+            model.id = SONNET_46_ID;
+            if (model.name?.includes('4.5')) {
+              model.name = model.name.replace('4.5', '4.6');
+            }
+            changed = true;
           }
-          changed = true;
         }
       }
     }
