@@ -914,6 +914,64 @@ export const BROWSER_TOOLBAR_CHANNELS = {
   THEME_COLOR: 'browser-toolbar:theme-color',
 } as const
 
+/**
+ * Type map for main → renderer push channels (broadcasts and per-window events).
+ * NOT for request/response channels — those are typed at the handler site.
+ * Keys are channel string literals, values are argument tuples.
+ */
+export interface BroadcastEventMap {
+  // Session events (workspace-scoped via broadcastToWorkspace)
+  [IPC_CHANNELS.sessions.EVENT]: [event: SessionEvent]
+  [IPC_CHANNELS.sessions.UNREAD_SUMMARY_CHANGED]: [summary: UnreadSummary]
+  [IPC_CHANNELS.sessions.FILES_CHANGED]: [sessionId: string]
+
+  // Domain change broadcasts (global via broadcastToAll)
+  [IPC_CHANNELS.sources.CHANGED]: [sources: LoadedSource[]]
+  [IPC_CHANNELS.labels.CHANGED]: [workspaceId: string]
+  [IPC_CHANNELS.statuses.CHANGED]: [workspaceId: string]
+  [IPC_CHANNELS.automations.CHANGED]: [workspaceId: string]
+  [IPC_CHANNELS.skills.CHANGED]: [skills: LoadedSkill[]]
+  [IPC_CHANNELS.llmConnections.CHANGED]: []
+  [IPC_CHANNELS.permissions.DEFAULTS_CHANGED]: [value: null]
+
+  // Theme broadcasts (global)
+  [IPC_CHANNELS.theme.APP_CHANGED]: [theme: import('@craft-agent/shared/config').ThemeOverrides | null]
+  [IPC_CHANNELS.theme.SYSTEM_CHANGED]: [isDark: boolean]
+  [IPC_CHANNELS.theme.PREFERENCES_CHANGED]: [preferences: { mode: string; colorTheme: string; font: string }]
+  [IPC_CHANNELS.theme.WORKSPACE_THEME_CHANGED]: [data: { workspaceId: string; themeId: string | null }]
+
+  // Update broadcasts (global — auto-update.ts already iterates all windows)
+  [IPC_CHANNELS.update.AVAILABLE]: [info: UpdateInfo]
+  [IPC_CHANNELS.update.DOWNLOAD_PROGRESS]: [progress: number]
+
+  // Badge broadcasts (global)
+  [IPC_CHANNELS.badge.DRAW]: [data: { count: number; iconDataUrl: string }]
+  [IPC_CHANNELS.badge.DRAW_WINDOWS]: [data: { count: number }]
+
+  // Window events (per-window)
+  [IPC_CHANNELS.window.FOCUS_STATE]: [isFocused: boolean]
+  [IPC_CHANNELS.window.CLOSE_REQUESTED]: []
+
+  // Browser pane events (global)
+  [IPC_CHANNELS.browserPane.STATE_CHANGED]: [info: BrowserInstanceInfo]
+  [IPC_CHANNELS.browserPane.REMOVED]: [id: string]
+  [IPC_CHANNELS.browserPane.INTERACTED]: [id: string]
+
+  // Navigation events (per-window)
+  [IPC_CHANNELS.notification.NAVIGATE]: [data: { workspaceId: string; sessionId: string }]
+  [IPC_CHANNELS.deeplink.NAVIGATE]: [navigation: DeepLinkNavigation]
+
+  // Copilot device code event
+  [IPC_CHANNELS.copilot.DEVICE_CODE]: [data: { userCode: string; verificationUri: string }]
+
+  // Menu events (per-window, no payload)
+  [IPC_CHANNELS.menu.NEW_CHAT]: []
+  [IPC_CHANNELS.menu.OPEN_SETTINGS]: []
+  [IPC_CHANNELS.menu.KEYBOARD_SHORTCUTS]: []
+  [IPC_CHANNELS.menu.TOGGLE_FOCUS_MODE]: []
+  [IPC_CHANNELS.menu.TOGGLE_SIDEBAR]: []
+}
+
 // Re-import types for ElectronAPI
 import type { Workspace, SessionMetadata, StoredAttachment as StoredAttachmentType } from '@craft-agent/core/types';
 
