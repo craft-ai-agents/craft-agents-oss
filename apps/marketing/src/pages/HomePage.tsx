@@ -11,6 +11,8 @@ import themingScreenshot from '../assets/desktop/theming.webp'
 import themingScreenshot2x from '../assets/desktop/theming@2x.webp'
 import agentNativeScreenshot from '../assets/desktop/agent_native.webp'
 import agentNativeScreenshot2x from '../assets/desktop/agent_native@2x.webp'
+import browserScreenshot from '../assets/desktop/browser.webp'
+import browserScreenshot2x from '../assets/desktop/browser@2x.webp'
 import agentsLogo from '../assets/agents_logo.svg'
 
 // Integration icons - locally served
@@ -491,10 +493,13 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* Browser screenshot placeholder */}
-      <div className="max-w-4xl w-full rounded-[12px] border-2 border-dashed border-foreground/20 bg-foreground/5 flex items-center justify-center aspect-video">
-        <span className="text-foreground/30 text-[14px]">Browser screenshot</span>
-      </div>
+      {/* Browser screenshot */}
+      <img
+        src={browserScreenshot}
+        srcSet={`${browserScreenshot} 1x, ${browserScreenshot2x} 2x`}
+        alt="Built-in browser"
+        className="max-w-4xl w-full rounded-[12px]"
+      />
 
       {/* Browser feature cards */}
       <div className="max-w-4xl w-full py-8">

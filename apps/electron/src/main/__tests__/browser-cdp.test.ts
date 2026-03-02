@@ -181,6 +181,77 @@ describe('BrowserCDP', () => {
       expect(snapshot.nodes).toHaveLength(500)
       expect(snapshot.nodes[499].ref).toBe('@e500')
     })
+
+    it('normalizes role casing for primary filtering', async () => {
+      const wc = createMockWebContents(async (method) => {
+        if (method === 'Accessibility.getFullAXTree') {
+          return {
+            nodes: [
+              { role: { value: 'Button' }, name: { value: 'Submit' }, backendDOMNodeId: 1 },
+            ],
+          }
+        }
+        return {}
+      })
+
+      const cdp = new BrowserCDP(wc as any)
+      const snapshot = await cdp.getAccessibilitySnapshot()
+
+      expect(snapshot.nodes).toHaveLength(1)
+      expect(snapshot.nodes[0].role).toBe('button')
+      expect(snapshot.nodes[0].name).toBe('Submit')
+    })
+
+    it('uses fallback selection when primary filtering keeps zero nodes', async () => {
+      const wc = createMockWebContents(async (method) => {
+        if (method === 'Accessibility.getFullAXTree') {
+          return {
+            nodes: [
+              { role: { value: 'grouping' }, name: { value: 'Recents List' }, backendDOMNodeId: 21 },
+              { role: { value: 'pane' }, name: { value: 'Shared Files' }, backendDOMNodeId: 22 },
+            ],
+          }
+        }
+        return {}
+      })
+
+      const cdp = new BrowserCDP(wc as any)
+      const snapshot = await cdp.getAccessibilitySnapshot()
+
+      expect(snapshot.nodes).toHaveLength(2)
+      expect(snapshot.nodes[0].name).toBe('Recents List')
+      expect(snapshot.nodes[1].name).toBe('Shared Files')
+    })
+
+    it('keeps fallback nodes clickable through ref mapping', async () => {
+      const sentCommands: string[] = []
+      const wc = createMockWebContents(async (method) => {
+        sentCommands.push(method)
+        if (method === 'Accessibility.getFullAXTree') {
+          return {
+            nodes: [
+              { role: { value: 'pane' }, name: { value: 'Canvas Action' }, backendDOMNodeId: 42 },
+            ],
+          }
+        }
+        if (method === 'DOM.resolveNode') {
+          return { object: { objectId: 'obj-42' } }
+        }
+        if (method === 'DOM.getBoxModel') {
+          return { model: { content: [10, 10, 50, 10, 50, 50, 10, 50] } }
+        }
+        return {}
+      })
+
+      const cdp = new BrowserCDP(wc as any)
+      const snapshot = await cdp.getAccessibilitySnapshot()
+
+      expect(snapshot.nodes).toHaveLength(1)
+      await cdp.clickElement('@e1')
+
+      expect(sentCommands).toContain('DOM.resolveNode')
+      expect(sentCommands).toContain('Input.dispatchMouseEvent')
+    })
   })
 
   describe('clickElement', () => {

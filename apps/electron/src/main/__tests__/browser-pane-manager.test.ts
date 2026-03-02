@@ -9,16 +9,21 @@ import { describe, it, expect, beforeEach, mock } from 'bun:test'
 
 const createdWindows: any[] = []
 let toolbarLoadFailuresRemaining = 0
+const mockShellOpenExternal = mock(async () => {})
+const mockIpcMainHandle = mock(() => {})
 
 function createMockWebContents() {
   const listeners: Record<string, Function[]> = {}
+  let currentUrl = 'about:blank'
   return {
     userAgent: 'Mock Chrome Electron/99.0.0',
+    session: {},
     on: (event: string, cb: Function) => {
       if (!listeners[event]) listeners[event] = []
       listeners[event].push(cb)
     },
     loadURL: mock(async (url: string) => {
+      currentUrl = url
       const isToolbarUrl = typeof url === 'string' && url.includes('browser-toolbar.html')
       if (isToolbarUrl && toolbarLoadFailuresRemaining > 0) {
         toolbarLoadFailuresRemaining--
@@ -32,6 +37,7 @@ function createMockWebContents() {
       }
     }),
     getTitle: mock(() => 'Test Page'),
+    getURL: mock(() => currentUrl),
     canGoBack: mock(() => false),
     canGoForward: mock(() => false),
     goBack: mock(() => {}),
@@ -146,7 +152,7 @@ mock.module('electron', () => ({
     }
   },
   ipcMain: {
-    handle: mock(() => {}),
+    handle: mockIpcMainHandle,
   },
   Menu: {
     buildFromTemplate: mock(() => ({
@@ -157,7 +163,7 @@ mock.module('electron', () => ({
     shouldUseDarkColors: false,
   },
   shell: {
-    openExternal: mock(async () => {}),
+    openExternal: mockShellOpenExternal,
   },
   session: {
     fromPartition: mock(() => ({
@@ -228,6 +234,8 @@ describe('BrowserPaneManager', () => {
   beforeEach(() => {
     createdWindows.length = 0
     toolbarLoadFailuresRemaining = 0
+    mockShellOpenExternal.mockClear()
+    mockIpcMainHandle.mockClear()
     manager = new BrowserPaneManager()
   })
 
@@ -248,9 +256,73 @@ describe('BrowserPaneManager', () => {
     expect(manager.listInstances()).toHaveLength(1)
   })
 
+  it('allows http(s) popups with shared browser partition', () => {
+    manager.createInstance('popup-allow')
+    const instance = (manager as any).instances.get('popup-allow')
+    const openHandler = instance.pageView.webContents.setWindowOpenHandler.mock.calls[0][0]
+
+    const result = openHandler({
+      url: 'https://accounts.google.com/o/oauth2/v2/auth',
+      disposition: 'new-popup',
+      frameName: 'oauth-popup',
+    })
+
+    expect(result.action).toBe('allow')
+    expect(result.overrideBrowserWindowOptions?.webPreferences?.partition).toBe('persist:browser-pane')
+    expect(result.overrideBrowserWindowOptions?.webPreferences?.nodeIntegration).toBe(false)
+    expect(result.overrideBrowserWindowOptions?.webPreferences?.contextIsolation).toBe(true)
+  })
+
+  it('denies app deep-link popups and forwards to deep-link handler', async () => {
+    manager.createInstance('popup-deeplink')
+    const instance = (manager as any).instances.get('popup-deeplink')
+    const openHandler = instance.pageView.webContents.setWindowOpenHandler.mock.calls[0][0]
+
+    const result = openHandler({
+      url: 'craftagents://settings',
+      disposition: 'new-popup',
+      frameName: '',
+    })
+
+    expect(result).toEqual({ action: 'deny' })
+    await Bun.sleep(0)
+    expect(mockShellOpenExternal).toHaveBeenCalledWith('craftagents://settings')
+  })
+
+  it('destroys child popups when parent instance is destroyed', () => {
+    manager.createInstance('popup-parent')
+    const instance = (manager as any).instances.get('popup-parent')
+
+    const popupWindow = createMockWindow({ width: 520, height: 720 })
+    instance.pageView.webContents._emit('did-create-window', popupWindow, { url: 'https://accounts.google.com/signin' })
+
+    expect((manager as any).popupWindowsByParentInstanceId.get('popup-parent')?.size).toBe(1)
+
+    manager.destroyInstance('popup-parent')
+
+    expect(popupWindow.destroy).toHaveBeenCalledTimes(1)
+    expect((manager as any).popupWindowsByParentInstanceId.has('popup-parent')).toBe(false)
+  })
+
   it('destroys instances', () => {
     manager.createInstance('d1')
     manager.destroyInstance('d1')
+    expect(manager.listInstances()).toHaveLength(0)
+  })
+
+  it('destroys instance via toolbar destroy IPC handler', async () => {
+    manager.createInstance('d-ipc-destroy')
+    manager.registerToolbarIpc()
+
+    const destroyRegistration = mockIpcMainHandle.mock.calls.find(
+      (args: unknown[]) => args[0] === 'browser-toolbar:destroy',
+    )
+
+    expect(destroyRegistration).toBeTruthy()
+
+    const destroyHandler = destroyRegistration[1] as (_event: unknown, instanceId: string) => Promise<void>
+    await destroyHandler({}, 'd-ipc-destroy')
+
     expect(manager.listInstances()).toHaveLength(0)
   })
 
@@ -407,6 +479,32 @@ describe('BrowserPaneManager', () => {
     expect(instance.window.hide).toHaveBeenCalled()
     expect(manager.listInstances()).toHaveLength(1)
     expect(manager.listInstances()[0].isVisible).toBe(false)
+  })
+
+  it('does not intercept close when destroy is explicit', () => {
+    manager.createInstance('h-explicit-destroy')
+    const instance = (manager as any).instances.get('h-explicit-destroy')
+
+    ;(manager as any).destroyingIds.add('h-explicit-destroy')
+
+    const closeEvent = { preventDefault: mock(() => {}) }
+    instance.window._emit('close', closeEvent)
+
+    expect(closeEvent.preventDefault).not.toHaveBeenCalled()
+    expect(instance.window.hide).not.toHaveBeenCalled()
+  })
+
+  it('still destroys instance when cleanup throws', () => {
+    manager.createInstance('destroy-cleanup-throw')
+    const instance = (manager as any).instances.get('destroy-cleanup-throw')
+
+    ;(manager as any).updateNativeOverlayState = () => {
+      throw new Error('mock overlay cleanup failure')
+    }
+
+    expect(() => manager.destroyInstance('destroy-cleanup-throw')).not.toThrow()
+    expect(instance.window.destroy).toHaveBeenCalledTimes(1)
+    expect(manager.listInstances()).toHaveLength(0)
   })
 
   it('emits removed callback when window closes', () => {

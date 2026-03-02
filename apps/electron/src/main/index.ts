@@ -499,6 +499,9 @@ app.on('before-quit', async (event) => {
   if (isQuitting) return
   isQuitting = true
 
+  // Ensure Cmd+Q/app quit bypasses layered window close interception (Cmd+W behavior).
+  windowManager?.setAppQuitting(true)
+
   if (windowManager) {
     // Get full window states (includes bounds, type, and query)
     const windows = windowManager.getWindowStates()

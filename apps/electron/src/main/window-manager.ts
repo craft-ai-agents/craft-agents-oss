@@ -54,6 +54,7 @@ export class WindowManager {
   private windows: Map<number, ManagedWindow> = new Map()  // webContents.id → ManagedWindow
   private focusedModeWindows: Set<number> = new Set()  // webContents.id of windows in focused mode
   private pendingCloseTimeouts: Map<number, NodeJS.Timeout> = new Map()  // Fallback timeouts for window close
+  private isAppQuitting = false  // Skip layered close interception during app quit
 
   /**
    * Create a new window for a workspace
@@ -290,6 +291,12 @@ export class WindowManager {
     // Handle window close request (X button, Cmd+W) - intercept to allow modal closing first
     // The renderer can respond via WINDOW_CONFIRM_CLOSE to actually close the window
     window.on('close', (event) => {
+      // During app quit, bypass layered close behavior and allow native close flow.
+      // This preserves expected Cmd+Q semantics (quit app instead of closing overlays/panels first).
+      if (this.isAppQuitting) {
+        return
+      }
+
       // Check if renderer is ready (mainFrame exists) - if not, allow close directly
       if (!window.webContents.isDestroyed() && window.webContents.mainFrame) {
         event.preventDefault()
@@ -366,6 +373,14 @@ export class WindowManager {
   getWorkspaceForWindow(webContentsId: number): string | null {
     const managed = this.windows.get(webContentsId)
     return managed?.workspaceId ?? null
+  }
+
+  /**
+   * Mark whether the app is in quit flow.
+   * When true, window close events bypass layered close interception.
+   */
+  setAppQuitting(isQuitting: boolean): void {
+    this.isAppQuitting = isQuitting
   }
 
   /**

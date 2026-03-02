@@ -759,6 +759,13 @@ async function executeSingleCommand(args: {
     for (const node of snapshot.nodes) {
       lines.push(formatNodeLine(node));
     }
+
+    if (snapshot.nodes.length === 0) {
+      lines.push('');
+      lines.push('No accessibility elements were detected on this view.');
+      lines.push('This can happen on canvas-heavy/custom UIs. Try: evaluate <js>, click-at <x> <y>, type <text>, screenshot --annotated.');
+    }
+
     return { output: lines.join('\n'), appendReleaseHint: true };
   }
 

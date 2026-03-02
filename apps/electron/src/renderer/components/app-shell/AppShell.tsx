@@ -503,12 +503,11 @@ function AppShellContent({
   })
 
   // Hides both sidebar and navigator (CMD+. toggle)
-  // Can be enabled via prop (URL param for new windows) or toggled via Cmd+.
+  // Seed from either focused window param or persisted preference, then keep it toggleable.
   const [isSidebarAndNavigatorHidden, setIsSidebarAndNavigatorHidden] = React.useState(() => {
-    return storage.get(storage.KEYS.focusModeEnabled, false)
+    return isFocusedMode || storage.get(storage.KEYS.focusModeEnabled, false)
   })
-  // Combines prop-based (immutable) and state-based (toggleable)
-  const effectiveSidebarAndNavigatorHidden = isFocusedMode || isSidebarAndNavigatorHidden
+  const effectiveSidebarAndNavigatorHidden = isSidebarAndNavigatorHidden
 
   // What's New overlay
   const [showWhatsNew, setShowWhatsNew] = React.useState(false)
@@ -1053,8 +1052,16 @@ function AppShellContent({
     }
   })
 
+  const handleToggleSidebar = useCallback(() => {
+    if (isSidebarAndNavigatorHidden) {
+      setIsSidebarAndNavigatorHidden(false)
+      return
+    }
+    setIsSidebarVisible(v => !v)
+  }, [isSidebarAndNavigatorHidden])
+
   // Sidebar toggle (CMD+B)
-  useAction('view.toggleSidebar', () => setIsSidebarVisible(v => !v))
+  useAction('view.toggleSidebar', handleToggleSidebar)
 
   // Focus mode toggle (CMD+.) - hides both sidebars
   useAction('view.toggleFocusMode', () => setIsSidebarAndNavigatorHidden(v => !v))
@@ -1560,10 +1567,10 @@ function AppShellContent({
   // Listen for sidebar toggle from menu (View → Toggle Sidebar)
   React.useEffect(() => {
     const cleanup = window.electronAPI.onMenuToggleSidebar?.(() => {
-      setIsSidebarVisible(v => !v)
+      handleToggleSidebar()
     })
     return cleanup
-  }, [])
+  }, [handleToggleSidebar])
 
   // Persist per-view filter map to localStorage (workspace-scoped)
   React.useEffect(() => {
@@ -2133,7 +2140,7 @@ function AppShellContent({
           onForward={goForward}
           canGoBack={canGoBack}
           canGoForward={canGoForward}
-          onToggleSidebar={() => setIsSidebarVisible(prev => !prev)}
+          onToggleSidebar={handleToggleSidebar}
           onToggleFocusMode={() => setIsSidebarAndNavigatorHidden(prev => !prev)}
           onAddSessionPanel={() => handleNewChat(true)}
           onAddBrowserPanel={() => { void handleNewBrowserWindow() }}
