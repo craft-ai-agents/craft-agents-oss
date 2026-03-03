@@ -117,6 +117,7 @@ import { APP_EVENTS, AGENT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO
 import { useAutomations } from "@/hooks/useAutomations"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { PanelHeader } from "./PanelHeader"
+import { resolveLeadingActionClassName } from "./panel-header-utils"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import { PANEL_GAP, PANEL_EDGE_INSET, RADIUS_EDGE, RADIUS_INNER } from "./panel-constants"
@@ -2453,7 +2454,7 @@ function AppShellContent({
                   icon={<SquarePenRounded className="h-4 w-4" />}
                   tooltip="New Session"
                   onClick={(e: React.MouseEvent) => handleNewChat(e.metaKey || e.ctrlKey)}
-                  className={cn("rounded-[8px]", isSidebarVisible && "invisible")}
+                  className={resolveLeadingActionClassName("rounded-[8px]", isSidebarVisible)}
                 />
               ) : undefined}
               badge={automationFilter?.automationType === 'scheduled' ? (

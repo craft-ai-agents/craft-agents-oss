@@ -39,12 +39,18 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { StyledDropdownMenuContent } from '@/components/ui/styled-dropdown'
 
+// Import helpers for internal use
+import { buildPanelHeaderClassName } from './panel-header-utils'
+
+// Re-export testable helpers for consumers
+export {
+  STOPLIGHT_PADDING,
+  buildPanelHeaderClassName,
+  resolveLeadingActionClassName,
+} from './panel-header-utils'
+
 // Spring transition for smooth animations (matches sidebar)
 const springTransition = { type: 'spring' as const, stiffness: 300, damping: 30 }
-
-// Padding to compensate for macOS traffic lights (stoplight buttons)
-// Traffic lights positioned at x:18, ~52px wide = 70px + 14px gap
-const STOPLIGHT_PADDING = 84
 
 export interface PanelHeaderProps {
   /** Header title (undefined hides with animation) */
@@ -167,13 +173,7 @@ export function PanelHeader({
     </>
   )
 
-  // Base padding (16px = pl-4)
-  const basePadding = 16
-
-  const baseClassName = cn(
-    'flex shrink-0 items-center pr-2 min-w-0 gap-1.5 relative z-panel h-[42px] pl-1',
-    className
-  )
+  const baseClassName = buildPanelHeaderClassName(className)
 
   return (
     <motion.div
