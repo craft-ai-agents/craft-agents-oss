@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { IPC_CHANNELS } from '../types'
+import { IPC_CHANNELS, type BroadcastEventMap } from '../types'
 
 function flattenValues(obj: Record<string, unknown>): string[] {
   return Object.values(obj).flatMap(v =>
@@ -258,5 +258,25 @@ describe('IPC_CHANNELS wire-format stability', () => {
     const values = flattenValues(IPC_CHANNELS)
     const unique = new Set(values)
     expect(values.length).toBe(unique.size)
+  })
+})
+
+// ── BroadcastEventMap payload shape assertions ──────────────────────────
+// These compile-time checks prevent the emitter/listener payload mismatch
+// that caused sources:changed to silently send undefined after OAuth flows.
+type AssertTuple<T extends readonly unknown[], N extends number> =
+  T['length'] extends N ? true : false
+
+describe('BroadcastEventMap payload shapes', () => {
+  it('sources:changed carries (workspaceId, sources)', () => {
+    type Payload = BroadcastEventMap[typeof IPC_CHANNELS.sources.CHANGED]
+    const _check: AssertTuple<Payload, 2> = true
+    expect(_check).toBe(true)
+  })
+
+  it('skills:changed carries (workspaceId, skills)', () => {
+    type Payload = BroadcastEventMap[typeof IPC_CHANNELS.skills.CHANGED]
+    const _check: AssertTuple<Payload, 2> = true
+    expect(_check).toBe(true)
   })
 })

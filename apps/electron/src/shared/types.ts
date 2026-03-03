@@ -941,11 +941,11 @@ export interface BroadcastEventMap {
   [IPC_CHANNELS.sessions.FILES_CHANGED]: [sessionId: string]
 
   // Domain change broadcasts (global via broadcastToAll)
-  [IPC_CHANNELS.sources.CHANGED]: [sources: LoadedSource[]]
+  [IPC_CHANNELS.sources.CHANGED]: [workspaceId: string, sources: LoadedSource[]]
   [IPC_CHANNELS.labels.CHANGED]: [workspaceId: string]
   [IPC_CHANNELS.statuses.CHANGED]: [workspaceId: string]
   [IPC_CHANNELS.automations.CHANGED]: [workspaceId: string]
-  [IPC_CHANNELS.skills.CHANGED]: [skills: LoadedSkill[]]
+  [IPC_CHANNELS.skills.CHANGED]: [workspaceId: string, skills: LoadedSkill[]]
   [IPC_CHANNELS.llmConnections.CHANGED]: []
   [IPC_CHANNELS.permissions.DEFAULTS_CHANGED]: [value: null]
 

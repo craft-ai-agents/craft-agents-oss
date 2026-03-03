@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { IPC_CHANNELS } from '../../shared/types'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import { loadSource, getSourceCredentialManager } from '@craft-agent/shared/sources'
+import { loadSource, loadWorkspaceSources, getSourceCredentialManager } from '@craft-agent/shared/sources'
 import { createPendingFlow } from '@craft-agent/shared/auth'
 import type { RpcServer } from '../../transport/types'
 import type { HandlerDeps } from './handler-deps'
@@ -102,7 +102,9 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
     }
 
     // Push source status update to all clients in this workspace
-    server.push(IPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId: flow.workspaceId })
+    const completeWorkspace = getWorkspaceByNameOrId(flow.workspaceId)
+    const completeSources = completeWorkspace ? loadWorkspaceSources(completeWorkspace.rootPath) : []
+    server.push(IPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId: flow.workspaceId }, flow.workspaceId, completeSources)
 
     log.info(`[OAuth] Flow complete for ${flow.sourceSlug} (success=${result.success})`)
     return result
@@ -145,7 +147,8 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
     credManager.markSourceNeedsReauth(source, 'Signed out by user')
 
     // Push source status update
-    server.push(IPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId: ctx.workspaceId })
+    const revokeSources = loadWorkspaceSources(workspace.rootPath)
+    server.push(IPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId: ctx.workspaceId }, ctx.workspaceId, revokeSources)
 
     log.info(`[OAuth] Revoked credentials for ${sourceSlug}`)
     return { success: true }
