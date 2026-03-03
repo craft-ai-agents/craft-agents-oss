@@ -20,7 +20,7 @@ import {
   getModelsForProviderType,
 } from '@craft-agent/shared/config'
 import { MODEL_FETCHERS } from './registry'
-import { ipcLog } from '../logger'
+import { handlerLog } from '../logger'
 
 // ============================================================
 // Types
@@ -66,7 +66,7 @@ class ModelRefreshService {
   private async _doRefresh(slug: string): Promise<void> {
     const connection = getLlmConnection(slug)
     if (!connection) {
-      ipcLog.warn(`Model refresh: connection not found: ${slug}`)
+      handlerLog.warn(`Model refresh: connection not found: ${slug}`)
       return
     }
 
@@ -78,7 +78,7 @@ class ModelRefreshService {
     const providerType = connection.providerType as FetchableProvider
     const fetcher = this.fetchers[providerType]
     if (!fetcher) {
-      ipcLog.warn(`Model refresh: no fetcher for provider type: ${providerType}`)
+      handlerLog.warn(`Model refresh: no fetcher for provider type: ${providerType}`)
       return
     }
 
@@ -91,15 +91,15 @@ class ModelRefreshService {
       const result = await fetcher.fetchModels(connection, credentials)
       newModels = result.models
       serverDefault = result.serverDefault
-      ipcLog.info(`Model refresh [${slug}]: fetched ${newModels.length} models from provider`)
+      handlerLog.info(`Model refresh [${slug}]: fetched ${newModels.length} models from provider`)
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
-      ipcLog.info(`Model refresh [${slug}]: provider fetch failed: ${msg}`)
+      handlerLog.info(`Model refresh [${slug}]: provider fetch failed: ${msg}`)
     }
 
     // Layer 2: Persisted connection.models (keep what we have)
     if (!newModels && connection.models && connection.models.length > 0) {
-      ipcLog.info(`Model refresh [${slug}]: keeping ${connection.models.length} persisted models`)
+      handlerLog.info(`Model refresh [${slug}]: keeping ${connection.models.length} persisted models`)
       return // Nothing to update
     }
 
@@ -108,12 +108,12 @@ class ModelRefreshService {
       const registryModels = getModelsForProviderType(providerType, connection.piAuthProvider)
       if (registryModels.length > 0) {
         newModels = registryModels
-        ipcLog.info(`Model refresh [${slug}]: using ${newModels.length} models from MODEL_REGISTRY`)
+        handlerLog.info(`Model refresh [${slug}]: using ${newModels.length} models from MODEL_REGISTRY`)
       }
     }
 
     if (!newModels || newModels.length === 0) {
-      ipcLog.warn(`Model refresh [${slug}]: no models available from any source`)
+      handlerLog.warn(`Model refresh [${slug}]: no models available from any source`)
       return
     }
 
@@ -147,7 +147,7 @@ class ModelRefreshService {
 
       // Immediate non-blocking fetch
       this.refreshConnection(conn.slug).catch(err => {
-        ipcLog.warn(`Initial model refresh failed for ${conn.slug}: ${err instanceof Error ? err.message : err}`)
+        handlerLog.warn(`Initial model refresh failed for ${conn.slug}: ${err instanceof Error ? err.message : err}`)
       })
 
       // Set up periodic refresh if the fetcher supports it
@@ -163,7 +163,7 @@ class ModelRefreshService {
   stopAll(): void {
     for (const [slug, timer] of this.timers) {
       clearInterval(timer)
-      ipcLog.info(`Stopped model refresh timer for ${slug}`)
+      handlerLog.info(`Stopped model refresh timer for ${slug}`)
     }
     this.timers.clear()
   }
@@ -206,7 +206,7 @@ class ModelRefreshService {
       try {
         await this.refreshConnection(slug)
       } catch (err) {
-        ipcLog.warn(`Periodic model refresh failed for ${slug}: ${err instanceof Error ? err.message : err}`)
+        handlerLog.warn(`Periodic model refresh failed for ${slug}: ${err instanceof Error ? err.message : err}`)
       }
     }, intervalMs)
 

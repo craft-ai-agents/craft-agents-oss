@@ -8,7 +8,7 @@ import { app } from 'electron'
 import type { ModelFetcher, ModelFetchResult, ModelFetcherCredentials } from '@craft-agent/shared/config'
 import type { LlmConnection } from '@craft-agent/shared/config'
 import { fetchBackendModels } from '@craft-agent/shared/agent/backend'
-import { ipcLog } from '../logger'
+import { handlerLog } from '../logger'
 
 const ANTHROPIC_TIMEOUT_MS = 30_000
 
@@ -31,7 +31,7 @@ export class AnthropicModelFetcher implements ModelFetcher {
       },
     })
 
-    ipcLog.info(`Fetched ${result.models.length} Anthropic models: ${result.models.map(m => m.id).join(', ')}`)
+    handlerLog.info(`Fetched ${result.models.length} Anthropic models: ${result.models.map(m => m.id).join(', ')}`)
     return result
   }
 }

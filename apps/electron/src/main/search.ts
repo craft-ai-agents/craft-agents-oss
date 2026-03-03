@@ -9,7 +9,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { app } from 'electron';
 import { existsSync } from 'fs';
 import { resolveBackendHostTooling } from '@craft-agent/shared/agent/backend';
-import { ipcLog, searchLog } from './logger';
+import { handlerLog, searchLog } from './logger';
 
 // Track current search process to cancel on new search
 let currentSearchProcess: ChildProcess | null = null;
@@ -181,15 +181,15 @@ export async function searchSessions(
   searchLog.info('ripgrep:start', { searchId, query });
 
   const rgPath = getRipgrepPath();
-  ipcLog.debug('[search] Ripgrep path:', rgPath);
+  handlerLog.debug('[search] Ripgrep path:', rgPath);
   if (!rgPath || !existsSync(rgPath)) {
-    ipcLog.error('[search] ripgrep binary not found:', rgPath);
+    handlerLog.error('[search] ripgrep binary not found:', rgPath);
     return [];
   }
 
-  ipcLog.debug('[search] Sessions directory:', sessionsDir);
+  handlerLog.debug('[search] Sessions directory:', sessionsDir);
   if (!existsSync(sessionsDir)) {
-    ipcLog.warn('[search] Sessions directory not found:', sessionsDir);
+    handlerLog.warn('[search] Sessions directory not found:', sessionsDir);
     return [];
   }
 
@@ -241,7 +241,7 @@ export async function searchSessions(
       } else {
         rg.kill('SIGTERM');
       }
-      ipcLog.warn('[search] Search timed out after', timeout, 'ms');
+      handlerLog.warn('[search] Search timed out after', timeout, 'ms');
     }, timeout);
 
     rg.stdout.on('data', (chunk: Buffer) => {
@@ -311,17 +311,17 @@ export async function searchSessions(
           }
         } catch (e) {
           // Skip malformed JSON lines
-          ipcLog.debug('[search] Failed to parse ripgrep output:', e);
+          handlerLog.debug('[search] Failed to parse ripgrep output:', e);
         }
       }
     });
 
     rg.stderr.on('data', (data: Buffer) => {
-      ipcLog.warn('[search] ripgrep stderr:', data.toString());
+      handlerLog.warn('[search] ripgrep stderr:', data.toString());
     });
 
     // Log the command being executed
-    ipcLog.debug('[search] Running ripgrep:', rgPath, args.join(' '));
+    handlerLog.debug('[search] Running ripgrep:', rgPath, args.join(' '));
 
     rg.on('close', (code) => {
       clearTimeout(timeoutHandle);
@@ -332,7 +332,7 @@ export async function searchSessions(
 
       if (code !== 0 && code !== 1) {
         // Exit code 1 means no matches found (not an error)
-        ipcLog.debug('[search] ripgrep exited with code:', code);
+        handlerLog.debug('[search] ripgrep exited with code:', code);
       }
 
       // Convert map to array, sorted by match count (descending)
@@ -351,7 +351,7 @@ export async function searchSessions(
 
     rg.on('error', (error) => {
       clearTimeout(timeoutHandle);
-      ipcLog.error('[search] ripgrep error:', error);
+      handlerLog.error('[search] ripgrep error:', error);
       resolve([]);
     });
   });

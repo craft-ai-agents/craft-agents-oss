@@ -46,7 +46,7 @@ if (isDebugMode) {
 // Export scoped loggers for different modules
 export const mainLog = log.scope('main')
 export const sessionLog = log.scope('session')
-export const ipcLog = log.scope('ipc')
+export const handlerLog = log.scope('handler')
 export const windowLog = log.scope('window')
 export const agentLog = log.scope('agent')
 export const searchLog = log.scope('search')
