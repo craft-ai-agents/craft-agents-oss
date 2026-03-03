@@ -61,8 +61,6 @@ interface SessionListProps {
   searchQuery?: string
   /** Called when search query changes */
   onSearchChange?: (query: string) => void
-  /** Called when search is closed */
-  onSearchClose?: () => void
   /** Dynamic todo states from workspace config */
   sessionStatuses?: SessionStatus[]
   /** View evaluator — evaluates a session and returns matching view configs */
@@ -121,7 +119,6 @@ export function SessionList({
   searchActive,
   searchQuery = '',
   onSearchChange,
-  onSearchClose,
   sessionStatuses = [],
   evaluateViews,
   labels = [],
@@ -606,11 +603,9 @@ export function SessionList({
         }}
         header={
           <>
-            {searchActive && (
               <SessionSearchHeader
                 searchQuery={searchQuery}
                 onSearchChange={onSearchChange}
-                onSearchClose={onSearchClose}
                 onKeyDown={handleSearchKeyDown}
                 onFocus={() => setIsSearchInputFocused(true)}
                 onBlur={() => setIsSearchInputFocused(false)}
@@ -619,7 +614,6 @@ export function SessionList({
                 exceededLimit={exceededSearchLimit}
                 inputRef={searchInputRef}
               />
-            )}
             {isSearchMode && matchingFilterItems.length === 0 && otherResultItems.length > 0 && (
               <div className="px-4 py-3 text-sm text-muted-foreground">
                 No results in current filter

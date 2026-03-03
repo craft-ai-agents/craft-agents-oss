@@ -670,7 +670,7 @@ function AppShellContent({
     })
   }, [sessionFilterKey])
   // Search state for session list
-  const [searchActive, setSearchActive] = React.useState(false)
+  const [searchActive, setSearchActive] = React.useState(true)
   const [searchQuery, setSearchQuery] = React.useState('')
 
   // Grouping mode for chat list: per-view (stored in viewFiltersMap), forced to 'date' for state sub-views
@@ -722,7 +722,6 @@ function AppShellContent({
   }, [navState])
 
   React.useEffect(() => {
-    setSearchActive(false)
     setSearchQuery('')
   }, [navFilterKey])
 
@@ -809,8 +808,7 @@ function AppShellContent({
 
     // Clear transient UI state only on workspace SWITCH (not initial mount)
     if (previousWorkspaceId !== null && previousWorkspaceId !== activeWorkspaceId) {
-      // Clear search state
-      setSearchActive(false)
+      // Clear search query (search bar stays visible)
       setSearchQuery('')
 
       // Clear filter dropdown state
@@ -2448,8 +2446,16 @@ function AppShellContent({
               className="h-full flex flex-col min-w-0 relative z-panel"
             >
             <PanelHeader
-              title={isSidebarVisible ? listTitle : undefined}
+              title={listTitle}
               compensateForStoplight={!isSidebarVisible}
+              leadingActions={isSessionsNavigation(navState) ? (
+                <HeaderIconButton
+                  icon={<SquarePenRounded className="h-4 w-4" />}
+                  tooltip="New Session"
+                  onClick={(e: React.MouseEvent) => handleNewChat(e.metaKey || e.ctrlKey)}
+                  className={cn("rounded-[8px]", isSidebarVisible && "invisible")}
+                />
+              ) : undefined}
               badge={automationFilter?.automationType === 'scheduled' ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -2818,15 +2824,6 @@ function AppShellContent({
                               </>
                             )}
 
-                            <StyledDropdownMenuSeparator />
-                            <StyledDropdownMenuItem
-                              onClick={() => {
-                                setSearchActive(true)
-                              }}
-                            >
-                              <Search className="h-3.5 w-3.5" />
-                              <span className="flex-1">Search</span>
-                            </StyledDropdownMenuItem>
                           </>
                         ) : (
                           <>
@@ -3142,10 +3139,6 @@ function AppShellContent({
                   searchActive={searchActive}
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
-                  onSearchClose={() => {
-                    setSearchActive(false)
-                    setSearchQuery('')
-                  }}
                   sessionStatuses={effectiveSessionStatuses}
                   evaluateViews={evaluateViews}
                   labels={labelConfigs}

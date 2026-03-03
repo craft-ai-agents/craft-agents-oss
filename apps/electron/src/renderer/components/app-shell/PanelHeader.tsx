@@ -55,6 +55,8 @@ export interface PanelHeaderProps {
   titleMenu?: React.ReactNode
   /** Optional center button rendered between title and right actions */
   centerButton?: React.ReactNode
+  /** Optional action buttons rendered before the title (left side) */
+  leadingActions?: React.ReactNode
   /** Optional action buttons rendered on the right */
   actions?: React.ReactNode
   /** Optional right sidebar button (rendered after actions) */
@@ -76,6 +78,7 @@ export function PanelHeader({
   title,
   badge,
   titleMenu,
+  leadingActions,
   centerButton,
   actions,
   rightSidebarButton,
@@ -110,6 +113,11 @@ export function PanelHeader({
 
   const content = (
     <>
+      {leadingActions && (
+        <div className="titlebar-no-drag shrink-0">
+          {leadingActions}
+        </div>
+      )}
       <div className="flex-1 min-w-0 flex items-center select-none">
         <div className="mx-auto w-fit">
           {titleMenu ? (
@@ -163,17 +171,13 @@ export function PanelHeader({
   const basePadding = 16
 
   const baseClassName = cn(
-    'flex shrink-0 items-center pr-2 min-w-0 gap-1.5 relative z-panel h-[42px]',
-    // Only use static paddingLeft class when not animating
-    !shouldCompensate && (paddingLeft || 'pl-4'),
+    'flex shrink-0 items-center pr-2 min-w-0 gap-1.5 relative z-panel h-[42px] pl-1',
     className
   )
 
-  // Use motion.div with animated paddingLeft to shift content while keeping background full-width
   return (
     <motion.div
       initial={false}
-      animate={{ paddingLeft: shouldCompensate ? STOPLIGHT_PADDING : basePadding }}
       transition={springTransition}
       className={baseClassName}
     >
