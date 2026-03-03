@@ -11,12 +11,15 @@ import type { BrowserInstanceInfo } from '../../../shared/types'
 import { FreeFormInput } from '@/components/app-shell/input/FreeFormInput'
 import { InputContainer } from '@/components/app-shell/input/InputContainer'
 import { PermissionRequest } from '@/components/app-shell/input/structured/PermissionRequest'
+import { AdminApprovalRequest } from '@/components/app-shell/input/structured/AdminApprovalRequest'
 import type { StructuredInputState } from '@/components/app-shell/input/structured/types'
 
 // Import adapters for mock data generation
 import {
   mockPermissionRequest,
+  mockAdminApprovalRequest,
   type PermissionRequestPlaygroundProps,
+  type AdminApprovalRequestPlaygroundProps,
 } from '../adapters/input-adapters'
 
 // ============================================================================
@@ -148,6 +151,42 @@ function PermissionRequestPlayground({
   )
 }
 
+/**
+ * AdminApprovalRequest wrapper for playground - provides mock data
+ */
+function AdminApprovalRequestPlayground({
+  appName = 'Docker Desktop',
+  reason = 'Homebrew needs admin access to complete post-install steps.',
+  command = 'brew install --cask docker',
+  impact = 'May install files in /Applications and system-managed directories.',
+  requiresSystemPrompt = true,
+  rememberForMinutes = 10,
+  onAction,
+  unstyled = false,
+}: AdminApprovalRequestPlaygroundProps) {
+  const mockRequest = mockAdminApprovalRequest({
+    appName,
+    reason,
+    command,
+    impact,
+    requiresSystemPrompt,
+    rememberForMinutes,
+  })
+
+  return (
+    <AdminApprovalRequest
+      request={mockRequest}
+      onApprove={() => onAction?.()}
+      onCancel={() => onAction?.()}
+      unstyled={unstyled}
+    />
+  )
+}
+
+function AdminApprovalPreviewWrapper({ children }: { children: React.ReactNode }) {
+  return <div className="w-full max-w-[680px]">{children}</div>
+}
+
 // ============================================================================
 // Input Transitions - Full app-like layout for testing animations
 // Uses InputContainer directly (single source of truth for height/animation logic)
@@ -165,15 +204,28 @@ const PLACEHOLDER_MESSAGES = [
 const MODE_OPTIONS = [
   { id: 'freeform', label: 'Input', color: null },
   { id: 'permission', label: 'Permission', color: 'bg-amber-500' },
+  { id: 'admin_approval', label: 'Admin Approval', color: 'bg-info' },
 ]
 
-type HeightMode = 'freeform' | 'permission'
+type HeightMode = 'freeform' | 'permission' | 'admin_approval'
 
 /**
  * Create mock StructuredInputState for playground testing
  */
 function createMockStructuredInput(mode: HeightMode): StructuredInputState | undefined {
   if (mode === 'freeform') return undefined
+
+  if (mode === 'admin_approval') {
+    return {
+      type: 'admin_approval',
+      data: mockAdminApprovalRequest({
+        appName: 'Docker Desktop',
+        reason: 'Homebrew needs admin access to complete post-install steps.',
+        impact: 'May install files in /Applications and system-managed directories.',
+        command: 'brew install --cask docker',
+      }),
+    }
+  }
 
   return {
     type: 'permission',
@@ -433,6 +485,100 @@ export const inputComponents: ComponentEntry[] = [
       { name: 'Bash Command', props: { toolName: 'Bash', description: 'Execute a shell command', command: 'npm install && npm run build' } },
       { name: 'Read File', props: { toolName: 'Read', description: 'Read file contents', command: '/etc/passwd' } },
       { name: 'Write File', props: { toolName: 'Write', description: 'Create or overwrite a file', command: '/tmp/output.txt' } },
+    ],
+    mockData: () => ({}),
+  },
+  {
+    id: 'admin-approval-request',
+    name: 'AdminApprovalRequest',
+    category: 'Chat Inputs',
+    description: 'Friendly admin approval prompt for privileged installs and system-level actions',
+    component: AdminApprovalRequestPlayground,
+    layout: 'top',
+    wrapper: AdminApprovalPreviewWrapper,
+    props: [
+      {
+        name: 'appName',
+        description: 'App or package being installed',
+        control: { type: 'string', placeholder: 'Docker Desktop' },
+        defaultValue: 'Docker Desktop',
+      },
+      {
+        name: 'reason',
+        description: 'Plain-language reason this needs admin approval',
+        control: { type: 'textarea', placeholder: 'Reason...', rows: 2 },
+        defaultValue: 'Homebrew needs admin access to complete post-install steps.',
+      },
+      {
+        name: 'impact',
+        description: 'What this can change on the machine',
+        control: { type: 'textarea', placeholder: 'Impact...', rows: 2 },
+        defaultValue: 'May install files in /Applications and system-managed directories.',
+      },
+      {
+        name: 'command',
+        description: 'Exact command that will run',
+        control: { type: 'textarea', placeholder: 'Command preview...', rows: 2 },
+        defaultValue: 'brew install --cask docker',
+      },
+      {
+        name: 'requiresSystemPrompt',
+        description: 'Show note about macOS Touch ID/password prompt',
+        control: { type: 'boolean' },
+        defaultValue: true,
+      },
+      {
+        name: 'rememberForMinutes',
+        description: 'Temporary remember window for this exact command',
+        control: { type: 'number', min: 1, max: 120, step: 1 },
+        defaultValue: 10,
+      },
+    ],
+    variants: [
+      {
+        name: 'Default (Install)',
+        props: {
+          appName: 'Docker Desktop',
+          reason: 'Homebrew needs admin access to complete post-install steps.',
+          impact: 'May install files in /Applications and system-managed directories.',
+          command: 'brew install --cask docker',
+          requiresSystemPrompt: true,
+          rememberForMinutes: 10,
+        },
+      },
+      {
+        name: 'Update Existing App',
+        props: {
+          appName: 'Visual Studio Code',
+          reason: 'Updating this cask requires elevated file replacement in protected locations.',
+          impact: 'May replace app binaries in /Applications.',
+          command: 'brew upgrade --cask visual-studio-code',
+          requiresSystemPrompt: true,
+          rememberForMinutes: 10,
+        },
+      },
+      {
+        name: 'High Impact Script',
+        props: {
+          appName: 'Security Agent',
+          reason: 'Installer needs admin rights to register background services.',
+          impact: 'Adds system services and startup items.',
+          command: 'installer -pkg /tmp/security-agent.pkg -target /',
+          requiresSystemPrompt: true,
+          rememberForMinutes: 5,
+        },
+      },
+      {
+        name: 'No Native Prompt Note',
+        props: {
+          appName: 'CLI Utility',
+          reason: 'This action is elevated in-app but does not trigger a separate OS prompt.',
+          impact: 'Writes files to protected system directories.',
+          command: 'cp ./bin/tool /usr/local/bin/tool',
+          requiresSystemPrompt: false,
+          rememberForMinutes: 10,
+        },
+      },
     ],
     mockData: () => ({}),
   },

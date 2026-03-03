@@ -51,14 +51,14 @@ describe('apiSetupMethodToConnectionSetup', () => {
   it('anthropic_api_key includes credential, baseUrl, defaultModel, models', () => {
     const setup = apiSetupMethodToConnectionSetup(
       'anthropic_api_key',
-      { credential: 'sk-ant-test', baseUrl: 'https://custom.api', connectionDefaultModel: 'claude-sonnet-4-5', models: ['model-a'] },
+      { credential: 'sk-ant-test', baseUrl: 'https://custom.api', connectionDefaultModel: 'claude-sonnet-4-6', models: ['model-a'] },
       null,
       new Set(),
     )
     expect(setup.slug).toBe('anthropic-api')
     expect(setup.credential).toBe('sk-ant-test')
     expect(setup.baseUrl).toBe('https://custom.api')
-    expect(setup.defaultModel).toBe('claude-sonnet-4-5')
+    expect(setup.defaultModel).toBe('claude-sonnet-4-6')
     expect(setup.models).toEqual(['model-a'])
   })
 

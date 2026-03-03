@@ -300,6 +300,8 @@ export class BrowserPaneManager {
   private partitionObserversInitialized = false
   private inFlightRequestsByWebContentsId = new Map<number, number>()
   private lastNetworkActivityByWebContentsId = new Map<number, number>()
+  private popupWindowsByParentInstanceId = new Map<string, Set<BrowserWindow>>()
+  private popupParentByWebContentsId = new Map<number, string>()
   private windowManager: WindowManager | null = null
   private sessionPathResolver: ((sessionId: string) => string | null) | null = null
 
@@ -471,7 +473,13 @@ export class BrowserPaneManager {
 
   destroyInstance(id: string): void {
     const instance = this.instances.get(id)
-    if (!instance) return
+    if (!instance) {
+      mainLog.info(`[browser-pane] destroy requested for missing instance id=${id}`)
+      return
+    }
+
+    const destroyedBefore = instance.window.isDestroyed()
+    mainLog.info(`[browser-pane] destroy requested id=${id} destroyedBefore=${destroyedBefore} keepAlive=${instance.keepAliveOnWindowClose}`)
 
     // Clear pending timers before destroying the window
     if (instance.inPageThemeTimer) {
@@ -487,16 +495,30 @@ export class BrowserPaneManager {
     this.inFlightRequestsByWebContentsId.delete(wcId)
     this.lastNetworkActivityByWebContentsId.delete(wcId)
 
-    this.applyAgentControlLock(instance, false)
-    this.updateNativeOverlayState(instance)
-
-    if (!instance.window.isDestroyed()) {
-      this.destroyingIds.add(id)
-      instance.window.destroy()
+    const runCleanup = (label: string, action: () => void): void => {
+      try {
+        action()
+      } catch (error) {
+        mainLog.warn(`[browser-pane] destroy cleanup failed id=${id} step=${label} error=${error instanceof Error ? error.message : String(error)}`)
+      }
     }
 
-    // Finalize synchronously in case closed does not fire (or fires later).
-    this.finalizeDestroyedInstance(instance, 'destroy')
+    runCleanup('closePopupsForParent', () => this.closePopupsForParent(instance.id, 'parent_destroy'))
+    runCleanup('applyAgentControlLock', () => this.applyAgentControlLock(instance, false))
+    runCleanup('updateNativeOverlayState', () => this.updateNativeOverlayState(instance))
+
+    try {
+      if (!instance.window.isDestroyed()) {
+        this.destroyingIds.add(id)
+        instance.window.destroy()
+      }
+    } catch (error) {
+      mainLog.warn(`[browser-pane] destroy failed id=${id} error=${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      // Finalize synchronously in case closed does not fire (or fires later).
+      this.finalizeDestroyedInstance(instance, 'destroy')
+      mainLog.info(`[browser-pane] destroy completed id=${id} removed=${!this.instances.has(id)}`)
+    }
   }
 
   getInstance(id: string): BrowserInstance | undefined {
@@ -676,6 +698,7 @@ export class BrowserPaneManager {
       if (instance.pendingShowOnReady) return
       instance.pendingShowOnReady = true
       const token = ++instance.pendingShowToken
+      mainLog.info(`[browser-pane] focus deferred until ready id=${instance.id} token=${token}`)
       win.once('ready-to-show', () => {
         if (instance.pendingShowToken !== token) return
         instance.pendingShowOnReady = false
@@ -684,6 +707,7 @@ export class BrowserPaneManager {
           win.focus()
           instance.isVisible = true
           this.emitStateChange(instance)
+          mainLog.info(`[browser-pane] focus deferred show completed id=${instance.id} token=${token}`)
         }
       })
       return
@@ -1862,6 +1886,7 @@ export class BrowserPaneManager {
     }
 
     this.destroyingIds.delete(instance.id)
+    this.closePopupsForParent(instance.id, 'parent_destroy')
     this.applyAgentControlLock(instance, false)
     this.updateNativeOverlayState(instance)
     instance.cdp.detach()
@@ -2080,16 +2105,27 @@ export class BrowserPaneManager {
     ipcMain.handle(TOOLBAR_CHANNELS.OPEN_MENU, async (event, instanceId: string, x?: number, y?: number) => {
       const inst = findInstance(instanceId)
       const sourceWindow = BrowserWindow.fromWebContents(event.sender)
-      if (!inst || !sourceWindow || sourceWindow.isDestroyed()) return
+      if (!inst || !sourceWindow || sourceWindow.isDestroyed()) {
+        mainLog.info(`[browser-pane] toolbar menu ignored instanceId=${instanceId} reason=${!inst ? 'instance_not_found' : 'invalid_source_window'}`)
+        return
+      }
+
+      mainLog.info(`[browser-pane] toolbar menu open instanceId=${instanceId} x=${x ?? -1} y=${y ?? -1}`)
 
       const menu = Menu.buildFromTemplate([
         {
           label: 'Hide Window',
-          click: () => this.hide(inst.id),
+          click: () => {
+            mainLog.info(`[browser-pane] toolbar menu click action=hide instanceId=${inst.id}`)
+            this.hide(inst.id)
+          },
         },
         {
           label: 'Close Window Entirely',
-          click: () => this.destroyInstance(inst.id),
+          click: () => {
+            mainLog.info(`[browser-pane] toolbar menu click action=destroy instanceId=${inst.id}`)
+            this.destroyInstance(inst.id)
+          },
         },
       ])
 
@@ -2098,11 +2134,13 @@ export class BrowserPaneManager {
 
     ipcMain.handle(TOOLBAR_CHANNELS.HIDE, async (_event, instanceId: string) => {
       const inst = findInstance(instanceId)
+      mainLog.info(`[browser-pane] toolbar ipc hide requested instanceId=${instanceId} resolved=${inst?.id ?? 'none'}`)
       if (inst) this.hide(inst.id)
     })
 
     ipcMain.handle(TOOLBAR_CHANNELS.DESTROY, async (_event, instanceId: string) => {
       const inst = findInstance(instanceId)
+      mainLog.info(`[browser-pane] toolbar ipc destroy requested instanceId=${instanceId} resolved=${inst?.id ?? 'none'}`)
       if (inst) this.destroyInstance(inst.id)
     })
 
@@ -2365,6 +2403,87 @@ export class BrowserPaneManager {
     return undefined
   }
 
+  private registerPopupWindow(parentInstance: BrowserInstance, popupWindow: BrowserWindow, sourceUrl?: string): void {
+    const popupWcId = popupWindow.webContents.id
+    const existingParent = this.popupParentByWebContentsId.get(popupWcId)
+    if (existingParent && existingParent !== parentInstance.id) {
+      this.unregisterPopupWindow(popupWindow, 'reparented')
+    }
+
+    let popups = this.popupWindowsByParentInstanceId.get(parentInstance.id)
+    if (!popups) {
+      popups = new Set<BrowserWindow>()
+      this.popupWindowsByParentInstanceId.set(parentInstance.id, popups)
+    }
+
+    popups.add(popupWindow)
+    this.popupParentByWebContentsId.set(popupWcId, parentInstance.id)
+
+    const initialUrl = sourceUrl || popupWindow.webContents.getURL?.() || 'about:blank'
+    mainLog.info(`[browser-pane] popup created parent=${parentInstance.id} popupWebContentsId=${popupWcId} url=${initialUrl}`)
+
+    popupWindow.webContents.on('did-navigate', (_event, urlFromEvent) => {
+      const popupUrl = typeof popupWindow.webContents.getURL === 'function'
+        ? popupWindow.webContents.getURL()
+        : (urlFromEvent || initialUrl)
+      mainLog.info(`[browser-pane] popup did-navigate parent=${parentInstance.id} popupWebContentsId=${popupWcId} url=${popupUrl}`)
+    })
+
+    popupWindow.webContents.on('did-redirect-navigation', (_event, popupUrl, isInPlace, isMainFrame) => {
+      mainLog.info(
+        `[browser-pane] popup redirect parent=${parentInstance.id} popupWebContentsId=${popupWcId} url=${popupUrl} inPlace=${isInPlace} mainFrame=${isMainFrame}`,
+      )
+    })
+
+    popupWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame) return
+      mainLog.warn(
+        `[browser-pane] popup did-fail-load parent=${parentInstance.id} popupWebContentsId=${popupWcId} code=${errorCode} url=${validatedURL} error=${errorDescription}`,
+      )
+    })
+
+    popupWindow.on('closed', () => {
+      this.unregisterPopupWindow(popupWindow, 'closed')
+    })
+  }
+
+  private unregisterPopupWindow(popupWindow: BrowserWindow, reason: 'closed' | 'parent_destroy' | 'reparented'): void {
+    const popupWcId = popupWindow.webContents.id
+    const parentId = this.popupParentByWebContentsId.get(popupWcId)
+    if (!parentId) return
+
+    this.popupParentByWebContentsId.delete(popupWcId)
+
+    const popups = this.popupWindowsByParentInstanceId.get(parentId)
+    if (popups) {
+      popups.delete(popupWindow)
+      if (popups.size === 0) {
+        this.popupWindowsByParentInstanceId.delete(parentId)
+      }
+    }
+
+    mainLog.info(`[browser-pane] popup closed parent=${parentId} popupWebContentsId=${popupWcId} reason=${reason}`)
+  }
+
+  private closePopupsForParent(parentId: string, reason: 'parent_destroy'): void {
+    const popups = this.popupWindowsByParentInstanceId.get(parentId)
+    if (!popups || popups.size === 0) return
+
+    for (const popupWindow of Array.from(popups)) {
+      const popupWcId = popupWindow.webContents.id
+      this.unregisterPopupWindow(popupWindow, reason)
+      try {
+        if (!popupWindow.isDestroyed()) {
+          popupWindow.destroy()
+        }
+      } catch (error) {
+        mainLog.warn(
+          `[browser-pane] popup destroy failed parent=${parentId} popupWebContentsId=${popupWcId} reason=${reason} error=${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
+    }
+  }
+
   private pushNetworkLog(instance: BrowserInstance, entry: BrowserNetworkEntry): void {
     instance.networkLogs.push(entry)
     if (instance.networkLogs.length > MAX_NETWORK_LOG_ENTRIES) {
@@ -2507,6 +2626,17 @@ export class BrowserPaneManager {
     })
   }
 
+  private logPermissionDecision(kind: 'check' | 'request', permission: string, origin: string): void {
+    const isNonBlockingNoise = permission === 'background-sync'
+    const suffix = isNonBlockingNoise ? ' (non-blocking)' : ''
+    const message = `[browser-pane] permission denied (${kind}): ${permission} origin=${origin}${suffix}`
+    if (isNonBlockingNoise) {
+      mainLog.info(message)
+      return
+    }
+    mainLog.warn(message)
+  }
+
   private setupSessionPermissions(ses: ElectronSession): void {
     if (this.partitionPermissionsInitialized) return
     this.partitionPermissionsInitialized = true
@@ -2528,7 +2658,7 @@ export class BrowserPaneManager {
       ses.setPermissionCheckHandler((_webContents, permission: string, requestingOrigin: string, _details: any) => {
         const allowed = allow.has(permission)
         if (!allowed) {
-          mainLog.warn(`[browser-pane] permission denied (check): ${permission} origin=${requestingOrigin}`)
+          this.logPermissionDecision('check', permission, requestingOrigin)
         }
         return allowed
       })
@@ -2539,7 +2669,7 @@ export class BrowserPaneManager {
       ses.setPermissionRequestHandler((_webContents, permission: string, callback: (allow: boolean) => void, details: any) => {
         const allowed = allow.has(permission)
         if (!allowed) {
-          mainLog.warn(`[browser-pane] permission denied (request): ${permission} origin=${details?.requestingOrigin ?? 'unknown'}`)
+          this.logPermissionDecision('request', permission, details?.requestingOrigin ?? 'unknown')
         }
         callback(allowed)
       })
@@ -2552,7 +2682,10 @@ export class BrowserPaneManager {
 
     instance.window.on('close', (event) => {
       const explicitDestroy = this.destroyingIds.has(instance.id)
-      if (!explicitDestroy && instance.keepAliveOnWindowClose) {
+      const interceptToHide = !explicitDestroy && instance.keepAliveOnWindowClose
+      mainLog.info(`[browser-pane] window close requested id=${instance.id} explicitDestroy=${explicitDestroy} keepAlive=${instance.keepAliveOnWindowClose} interceptToHide=${interceptToHide}`)
+
+      if (interceptToHide) {
         event.preventDefault()
         instance.window.hide()
       }
@@ -2610,6 +2743,7 @@ export class BrowserPaneManager {
 
     pageWc.on('did-navigate', (_event, urlFromEvent) => {
       const url = typeof pageWc.getURL === 'function' ? pageWc.getURL() : (urlFromEvent || instance.currentUrl)
+      const previousUrl = instance.currentUrl
       if (instance.inPageThemeTimer) {
         clearTimeout(instance.inPageThemeTimer)
         instance.inPageThemeTimer = null
@@ -2619,6 +2753,7 @@ export class BrowserPaneManager {
       const normalized = this.normalizePageState(url, pageWc.getTitle())
       instance.currentUrl = normalized.url
       instance.title = normalized.title
+      mainLog.info(`[browser-pane] did-navigate id=${instance.id} from=${previousUrl} to=${instance.currentUrl}`)
       instance.canGoBack = pageWc.canGoBack()
       instance.canGoForward = pageWc.canGoForward()
       // Drain in-flight count — prior page's requests are cancelled on navigation
@@ -2628,6 +2763,11 @@ export class BrowserPaneManager {
       void this.pushToolbarState(instance)
       this.scheduleEarlyThemeExtraction(instance, url)
       this.reapplyAgentControlVisual(instance)
+    })
+
+    pageWc.on('did-redirect-navigation', (_event, url, isInPlace, isMainFrame) => {
+      if (!isMainFrame) return
+      mainLog.info(`[browser-pane] did-redirect-navigation id=${instance.id} url=${url} inPlace=${isInPlace}`)
     })
 
     pageWc.on('did-navigate-in-page', (_event, urlFromEvent) => {
@@ -2719,14 +2859,54 @@ export class BrowserPaneManager {
       }
     })
 
-    // Keep popups in the same browser window unless they are app deep links.
+    pageWc.on('did-create-window', (popupWindow, details) => {
+      const popupUrl = details?.url || popupWindow.webContents.getURL?.() || 'about:blank'
+      this.registerPopupWindow(instance, popupWindow, popupUrl)
+    })
+
     pageWc.setWindowOpenHandler((details) => {
+      mainLog.info(
+        `[browser-pane] window-open requested id=${instance.id} url=${details.url} disposition=${details.disposition ?? 'unknown'} frameName=${details.frameName || 'none'}`,
+      )
+
       if (details.url.startsWith(CRAFT_DEEPLINK_SCHEME_PREFIX)) {
         void this.handleDeepLinkUrl(details.url)
         return { action: 'deny' }
       }
-      void pageWc.loadURL(details.url)
-      return { action: 'deny' }
+
+      let parsed: URL
+      try {
+        parsed = new URL(details.url)
+      } catch {
+        mainLog.warn(`[browser-pane] window-open denied id=${instance.id} reason=invalid_url url=${details.url}`)
+        return { action: 'deny' }
+      }
+
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        mainLog.warn(`[browser-pane] window-open denied id=${instance.id} reason=unsupported_protocol protocol=${parsed.protocol} url=${details.url}`)
+        return { action: 'deny' }
+      }
+
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 520,
+          height: 720,
+          minWidth: 420,
+          minHeight: 520,
+          show: true,
+          autoHideMenuBar: true,
+          parent: instance.window,
+          modal: false,
+          webPreferences: {
+            partition: SESSION_PARTITION,
+            session: pageWc.session,
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+          },
+        },
+      }
     })
 
     pageWc.on('focus', () => {

@@ -6,7 +6,7 @@ import { existsSync } from 'fs'
 import { appendFile, readFile, writeFile, mkdir, realpath } from 'fs/promises'
 import { homedir, tmpdir } from 'os'
 import { randomUUID } from 'node:crypto'
-import { type AgentEvent, setPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns } from '@craft-agent/shared/agent'
+import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns } from '@craft-agent/shared/agent'
 import {
   resolveSessionConnection,
   createBackendFromConnection,
@@ -20,6 +20,7 @@ import {
 } from '@craft-agent/shared/agent/backend'
 import { getLlmConnection, getDefaultLlmConnection } from '@craft-agent/shared/config'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
+import { PrivilegedExecutionBroker } from './privileged-execution-broker'
 import { updateBadgeCount } from './notifications'
 import { InitGate } from './init-gate'
 import {
@@ -99,6 +100,8 @@ export const AGENT_FLAGS = {
   /** Default modes enabled for new sessions */
   defaultModesEnabled: true,
 } as const
+
+const MAX_ADMIN_REMEMBER_MINUTES = 60
 
 /**
  * Validate spawn attachment path using the same safety policy as IPC attachment reads.
@@ -573,6 +576,8 @@ interface ManagedSession {
   archivedAt?: number
   /** Permission mode for this session ('safe', 'ask', 'allow-all') */
   permissionMode?: PermissionMode
+  /** Previous permission mode (preserved across restarts for session_state modeTransition context) */
+  previousPermissionMode?: PermissionMode
   /** Centralized MCP client pool for this session's source connections */
   mcpPool?: McpClientPool
   /** HTTP MCP server exposing pool tools to external SDK subprocesses */
@@ -802,6 +807,20 @@ export class SessionManager {
   private automationSystems: Map<string, AutomationSystem> = new Map()
   // Pending credential request resolvers (keyed by requestId)
   private pendingCredentialResolvers: Map<string, (response: import('../shared/types').CredentialResponse) => void> = new Map()
+  // Permission request metadata tracking (keyed by requestId)
+  private pendingPermissionRequests: Map<string, {
+    sessionId: string
+    type?: 'bash' | 'file_write' | 'mcp_mutation' | 'api_mutation' | 'admin_approval'
+    commandHash?: string
+  }> = new Map()
+  // Privileged approval binding + audit logger
+  private privilegedExecutionBroker = new PrivilegedExecutionBroker()
+  // Session-local admin remember windows (exact command hash binding)
+  private adminRememberApprovals: Map<string, {
+    createdAt: number
+    expiresAt: number
+    sourceRequestId: string
+  }> = new Map()
   // Promise deduplication for lazy-loading messages (prevents race conditions)
   private messageLoadingPromises: Map<string, Promise<void>> = new Map()
   /**
@@ -839,6 +858,69 @@ export class SessionManager {
     const now = Date.now()
     this.lastTimestamp = now > this.lastTimestamp ? now : this.lastTimestamp + 1
     return this.lastTimestamp
+  }
+
+  private getAdminRememberKey(sessionId: string, commandHash: string): string {
+    return `${sessionId}:${commandHash}`
+  }
+
+  private hasActiveAdminRememberApproval(sessionId: string, commandHash: string): boolean {
+    const key = this.getAdminRememberKey(sessionId, commandHash)
+    const entry = this.adminRememberApprovals.get(key)
+    if (!entry) {
+      return false
+    }
+
+    if (Date.now() > entry.expiresAt) {
+      this.adminRememberApprovals.delete(key)
+      this.privilegedExecutionBroker.auditEvent('privileged_remember_window_expired', {
+        sessionId,
+        commandHash,
+        sourceRequestId: entry.sourceRequestId,
+        expiresAt: entry.expiresAt,
+      })
+      return false
+    }
+
+    return true
+  }
+
+  private storeAdminRememberApproval(sessionId: string, commandHash: string, sourceRequestId: string, rememberForMinutes: number): void {
+    const boundedMinutes = Math.min(Math.max(Math.floor(rememberForMinutes), 1), MAX_ADMIN_REMEMBER_MINUTES)
+    const now = Date.now()
+    const expiresAt = now + boundedMinutes * 60 * 1000
+
+    this.adminRememberApprovals.set(this.getAdminRememberKey(sessionId, commandHash), {
+      createdAt: now,
+      expiresAt,
+      sourceRequestId,
+    })
+
+    this.privilegedExecutionBroker.auditEvent('privileged_remember_window_stored', {
+      sessionId,
+      commandHash,
+      sourceRequestId,
+      rememberForMinutes: boundedMinutes,
+      createdAt: now,
+      expiresAt,
+    })
+  }
+
+  private clearAdminRememberApprovalsForSession(sessionId: string): void {
+    const prefix = `${sessionId}:`
+    for (const key of this.adminRememberApprovals.keys()) {
+      if (key.startsWith(prefix)) {
+        this.adminRememberApprovals.delete(key)
+      }
+    }
+  }
+
+  private clearPendingPermissionRequestsForSession(sessionId: string): void {
+    for (const [requestId, metadata] of this.pendingPermissionRequests.entries()) {
+      if (metadata.sessionId === sessionId) {
+        this.pendingPermissionRequests.delete(requestId)
+      }
+    }
   }
 
   /**
@@ -924,13 +1006,13 @@ export class SessionManager {
     const callbacks: ConfigWatcherCallbacks = {
       onSourcesListChange: async (sources: LoadedSource[]) => {
         sessionLog.info(`Sources list changed in ${workspaceRootPath} (${sources.length} sources)`)
-        this.broadcastSourcesChanged(sources)
+        this.broadcastSourcesChanged(workspaceId, sources)
         await this.reloadSourcesForWorkspace(workspaceRootPath)
       },
       onSourceChange: async (slug: string, source: LoadedSource | null) => {
         sessionLog.info(`Source '${slug}' changed:`, source ? 'updated' : 'deleted')
         const sources = loadWorkspaceSources(workspaceRootPath)
-        this.broadcastSourcesChanged(sources)
+        this.broadcastSourcesChanged(workspaceId, sources)
         await this.reloadSourcesForWorkspace(workspaceRootPath)
       },
       onSourceGuideChange: (sourceSlug: string) => {
@@ -938,7 +1020,7 @@ export class SessionManager {
         // Broadcast the updated sources list so sidebar picks up guide changes
         // Note: Guide changes don't require session source reload (no server changes)
         const sources = loadWorkspaceSources(workspaceRootPath)
-        this.broadcastSourcesChanged(sources)
+        this.broadcastSourcesChanged(workspaceId, sources)
       },
       onStatusConfigChange: () => {
         sessionLog.info(`Status config changed in ${workspaceId}`)
@@ -988,14 +1070,14 @@ export class SessionManager {
       },
       onSkillsListChange: async (skills) => {
         sessionLog.info(`Skills list changed in ${workspaceRootPath} (${skills.length} skills)`)
-        this.broadcastSkillsChanged(skills)
+        this.broadcastSkillsChanged(workspaceId, skills)
       },
       onSkillChange: async (slug, skill) => {
         sessionLog.info(`Skill '${slug}' changed:`, skill ? 'updated' : 'deleted')
         // Broadcast updated list to UI
         const { loadAllSkills } = await import('@craft-agent/shared/skills')
         const skills = loadAllSkills(workspaceRootPath)
-        this.broadcastSkillsChanged(skills)
+        this.broadcastSkillsChanged(workspaceId, skills)
       },
 
       // Session metadata changes (external edits to session.jsonl headers).
@@ -1090,9 +1172,9 @@ export class SessionManager {
     }
   }
 
-  private broadcastSourcesChanged(sources: LoadedSource[]): void {
+  private broadcastSourcesChanged(workspaceId: string, sources: LoadedSource[]): void {
     if (!this.eventSink) return
-    this.eventSink(IPC_CHANNELS.sources.CHANGED, { to: 'all' }, sources)
+    this.eventSink(IPC_CHANNELS.sources.CHANGED, { to: 'all' }, workspaceId, sources)
   }
 
   private broadcastStatusesChanged(workspaceId: string): void {
@@ -1125,10 +1207,10 @@ export class SessionManager {
     this.eventSink(IPC_CHANNELS.llmConnections.CHANGED, { to: 'all' })
   }
 
-  private broadcastSkillsChanged(skills: import('@craft-agent/shared/skills').LoadedSkill[]): void {
+  private broadcastSkillsChanged(workspaceId: string, skills: import('@craft-agent/shared/skills').LoadedSkill[]): void {
     if (!this.eventSink) return
     sessionLog.info(`Broadcasting skills changed (${skills.length} skills)`)
-    this.eventSink(IPC_CHANNELS.skills.CHANGED, { to: 'all' }, skills)
+    this.eventSink(IPC_CHANNELS.skills.CHANGED, { to: 'all' }, workspaceId, skills)
   }
 
   private broadcastDefaultPermissionsChanged(): void {
@@ -1294,6 +1376,9 @@ export class SessionManager {
           // Initialize mode-manager state for restored sessions even before agent creation.
           // This keeps diagnostics/effective mode aligned with persisted session metadata.
           setPermissionMode(meta.id, managed.permissionMode ?? 'ask', { changedBy: 'restore' })
+          if (managed.previousPermissionMode) {
+            hydratePreviousPermissionMode(meta.id, managed.previousPermissionMode)
+          }
 
           this.sessions.set(meta.id, managed)
 
@@ -2084,6 +2169,9 @@ export class SessionManager {
     // Initialize mode-manager state immediately to avoid UI/enforcement races
     // before the agent instance is lazily created.
     setPermissionMode(storedSession.id, managed.permissionMode ?? 'ask', { changedBy: 'restore' })
+    if (managed.previousPermissionMode) {
+      hydratePreviousPermissionMode(storedSession.id, managed.previousPermissionMode)
+    }
 
     this.sessions.set(storedSession.id, managed)
 
@@ -2637,13 +2725,79 @@ export class SessionManager {
       managed.agentReadyResolve?.()
 
       // Set up permission handler to forward requests to renderer
-      managed.agent.onPermissionRequest = (request: { requestId: string; toolName: string; command?: string; description: string; type?: 'bash' | 'file_write' | 'mcp_mutation' | 'api_mutation' }) => {
+      managed.agent.onPermissionRequest = (request: {
+        requestId: string;
+        toolName: string;
+        command?: string;
+        description: string;
+        type?: 'bash' | 'file_write' | 'mcp_mutation' | 'api_mutation' | 'admin_approval';
+        appName?: string;
+        reason?: string;
+        impact?: string;
+        requiresSystemPrompt?: boolean;
+        rememberForMinutes?: number;
+        commandHash?: string;
+        approvalTtlSeconds?: number;
+      }) => {
         sessionLog.info(`Permission request for session ${managed.id}:`, request.command)
+        let brokerMetadata: {
+          commandHash?: string
+          approvalTtlSeconds?: number
+        } = {}
+
+        if (request.type === 'admin_approval' && request.command) {
+          const brokerRequest = this.privilegedExecutionBroker.createRequest({
+            requestId: request.requestId,
+            sessionId: managed.id,
+            command: request.command,
+            reason: request.reason,
+            impact: request.impact,
+            approvalTtlSeconds: request.approvalTtlSeconds,
+          })
+
+          brokerMetadata = {
+            commandHash: brokerRequest.commandHash,
+            approvalTtlSeconds: brokerRequest.approvalTtlSeconds,
+          }
+        }
+
+        const effectiveCommandHash = brokerMetadata.commandHash ?? request.commandHash
+
+        this.pendingPermissionRequests.set(request.requestId, {
+          sessionId: managed.id,
+          type: request.type,
+          commandHash: effectiveCommandHash,
+        })
+
+        if (request.type === 'admin_approval' && effectiveCommandHash && this.hasActiveAdminRememberApproval(managed.id, effectiveCommandHash)) {
+          const brokerResult = this.privilegedExecutionBroker.resolveApproval(request.requestId, true, {
+            expectedCommandHash: effectiveCommandHash,
+          })
+
+          this.pendingPermissionRequests.delete(request.requestId)
+
+          if (brokerResult.ok) {
+            this.privilegedExecutionBroker.auditEvent('privileged_auto_approved_remember_window', {
+              sessionId: managed.id,
+              requestId: request.requestId,
+              commandHash: effectiveCommandHash,
+            })
+            const liveAgent = managed.agent
+            if (liveAgent) {
+              liveAgent.respondToPermission(request.requestId, true, false)
+              return
+            }
+          }
+
+          sessionLog.warn(`Remember-window auto-approval skipped for ${request.requestId}: ${brokerResult.reason}`)
+        }
+
         this.sendEvent({
           type: 'permission_request',
           sessionId: managed.id,
           request: {
             ...request,
+            ...brokerMetadata,
             sessionId: managed.id,
           }
         }, managed.workspace.id)
@@ -2662,6 +2816,7 @@ export class SessionManager {
 
         managed.permissionMode = mode
         const diagnostics = getPermissionModeDiagnostics(managed.id)
+        managed.previousPermissionMode = diagnostics.previousPermissionMode
         sessionLog.info('Permission mode changed (agent callback)', {
           sessionId: managed.id,
           permissionMode: mode,
@@ -2676,6 +2831,8 @@ export class SessionManager {
           modeVersion: diagnostics.modeVersion,
           changedBy: diagnostics.lastChangedBy,
           changedAt: diagnostics.lastChangedAt,
+          previousPermissionMode: diagnostics.previousPermissionMode,
+          transitionDisplay: diagnostics.transitionDisplay,
         }, managed.workspace.id)
       }
 
@@ -2946,6 +3103,9 @@ export class SessionManager {
       // This ensures the UI toggle state is reflected in the agent before first message
       if (managed.permissionMode) {
         setPermissionMode(managed.id, managed.permissionMode, { changedBy: 'restore' })
+        if (managed.previousPermissionMode) {
+          hydratePreviousPermissionMode(managed.id, managed.previousPermissionMode)
+        }
         managed.agent!.setPermissionMode(managed.permissionMode)
         const diagnostics = getPermissionModeDiagnostics(managed.id)
         sessionLog.info('Applied permission mode to agent', {
@@ -3745,6 +3905,8 @@ export class SessionManager {
       this.deltaFlushTimers.delete(sessionId)
     }
     this.pendingDeltas.delete(sessionId)
+    this.clearAdminRememberApprovalsForSession(sessionId)
+    this.clearPendingPermissionRequestsForSession(sessionId)
 
     // Cancel any pending persistence write (session is being deleted, no need to save)
     sessionPersistenceQueue.cancel(sessionId)
@@ -4637,9 +4799,34 @@ To view this task's output:
    * Respond to a pending permission request
    * Returns true if the response was delivered, false if agent/session is gone
    */
-  respondToPermission(sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean): boolean {
+  respondToPermission(
+    sessionId: string,
+    requestId: string,
+    allowed: boolean,
+    alwaysAllow: boolean,
+    options?: import('../shared/types').PermissionResponseOptions,
+  ): boolean {
     const managed = this.sessions.get(sessionId)
     if (managed?.agent) {
+      const requestMeta = this.pendingPermissionRequests.get(requestId)
+      this.pendingPermissionRequests.delete(requestId)
+
+      if (requestMeta?.type === 'admin_approval') {
+        const brokerResult = this.privilegedExecutionBroker.resolveApproval(requestId, allowed, {
+          expectedCommandHash: requestMeta.commandHash,
+        })
+        if (!brokerResult.ok) {
+          sessionLog.warn(`Admin approval rejected by broker for ${requestId}: ${brokerResult.reason}`)
+          // Broker rejection should fail closed.
+          managed.agent.respondToPermission(requestId, false, false)
+          return false
+        }
+
+        if (allowed && requestMeta.commandHash && options?.rememberForMinutes) {
+          this.storeAdminRememberApproval(sessionId, requestMeta.commandHash, requestId, options.rememberForMinutes)
+        }
+      }
+
       sessionLog.info(`Permission response for ${requestId}: allowed=${allowed}, alwaysAllow=${alwaysAllow}`)
       managed.agent.respondToPermission(requestId, allowed, alwaysAllow)
       return true
@@ -4696,6 +4883,7 @@ To view this task's output:
       // Update the mode state for this specific session via mode manager
       setPermissionMode(sessionId, mode, { changedBy: 'user' })
       const diagnostics = getPermissionModeDiagnostics(sessionId)
+      managed.previousPermissionMode = diagnostics.previousPermissionMode
       sessionLog.info('Permission mode changed', {
         sessionId,
         permissionMode: mode,
@@ -4717,6 +4905,8 @@ To view this task's output:
         modeVersion: diagnostics.modeVersion,
         changedBy: diagnostics.lastChangedBy,
         changedAt: diagnostics.lastChangedAt,
+        previousPermissionMode: diagnostics.previousPermissionMode,
+        transitionDisplay: diagnostics.transitionDisplay,
       }, managed.workspace.id)
       // Persist to disk
       this.persistSession(managed)
@@ -4729,6 +4919,8 @@ To view this task's output:
    */
   getSessionPermissionModeState(sessionId: string): {
     permissionMode: PermissionMode
+    previousPermissionMode?: PermissionMode
+    transitionDisplay?: string
     modeVersion: number
     changedAt: string
     changedBy: 'user' | 'system' | 'restore' | 'automation' | 'unknown'
@@ -4737,6 +4929,12 @@ To view this task's output:
     if (!managed) return null
 
     let diagnostics = getPermissionModeDiagnostics(sessionId)
+
+    // Hydrate persisted transition context when mode-manager has been reset (e.g. app restart).
+    if (managed.previousPermissionMode && !diagnostics.previousPermissionMode) {
+      hydratePreviousPermissionMode(sessionId, managed.previousPermissionMode)
+      diagnostics = getPermissionModeDiagnostics(sessionId)
+    }
 
     // Heal restore races where mode-manager still has default state while
     // session metadata already has a persisted non-default mode.
@@ -4749,11 +4947,18 @@ To view this task's output:
         changedBy: diagnostics.lastChangedBy,
       })
       setPermissionMode(sessionId, managed.permissionMode, { changedBy: 'restore' })
+      if (managed.previousPermissionMode) {
+        hydratePreviousPermissionMode(sessionId, managed.previousPermissionMode)
+      }
       diagnostics = getPermissionModeDiagnostics(sessionId)
     }
 
+    managed.previousPermissionMode = diagnostics.previousPermissionMode
+
     return {
       permissionMode: diagnostics.permissionMode,
+      previousPermissionMode: diagnostics.previousPermissionMode,
+      transitionDisplay: diagnostics.transitionDisplay,
       modeVersion: diagnostics.modeVersion,
       changedAt: diagnostics.lastChangedAt,
       changedBy: diagnostics.lastChangedBy,
@@ -5649,6 +5854,8 @@ To view this task's output:
 
     // Clear pending credential resolvers (they won't be resolved, but prevents memory leak)
     this.pendingCredentialResolvers.clear()
+    this.pendingPermissionRequests.clear()
+    this.adminRememberApprovals.clear()
 
     // Clean up session-scoped tool callbacks for all sessions
     for (const sessionId of this.sessions.keys()) {

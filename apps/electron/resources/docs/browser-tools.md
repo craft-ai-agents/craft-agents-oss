@@ -59,6 +59,7 @@ browser_tool({ command: "drag 100 200 300 400" })
 browser_tool({ command: "fill @e5 user@example.com" })
 browser_tool({ command: "type Hello World" })
 browser_tool({ command: "select @e3 optionValue" })
+browser_tool({ command: "select @e75 CNAME --assert-text Target --timeout 3000" })
 browser_tool({ command: "upload @e3 /absolute/path/to/file.pdf" })
 browser_tool({ command: "set-clipboard Name\tAge\nAlice\t30" })
 browser_tool({ command: "get-clipboard" })
@@ -134,8 +135,15 @@ Drag from pixel coordinates (x1, y1) to (x2, y2). Performs mousedown, interpolat
 
 Get coordinates from `screenshot` or `screenshot --annotated`.
 
-### `fill <ref> <value>` / `select <ref> <value>`
+### `fill <ref> <value>` / `select <ref> <value> [--assert-text <text>] [--assert-value <value>] [--timeout <ms>]`
 Fill text inputs or select dropdown values. Requires an element ref from `snapshot`.
+
+For modern React/portal combobox UIs, `select` now performs additional verification and may return a warning when interaction succeeds but form state does not appear to mutate.
+
+Useful flags:
+- `--assert-text <text>`: verify downstream UI mutation (for example field label changes to `Target`)
+- `--assert-value <value>`: verify selected control reflects expected value
+- `--timeout <ms>`: verification timeout (default 2000ms)
 
 ### `upload <ref> <path> [path2...]`
 Attach local file(s) to a file input (`<input type="file">`) using a ref from `snapshot`.

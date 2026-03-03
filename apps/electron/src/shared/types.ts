@@ -232,6 +232,14 @@ export interface PermissionRequest extends BasePermissionRequest {
   sessionId: string
 }
 
+/**
+ * Optional metadata for permission responses.
+ * Used by admin approvals for time-scoped remember windows.
+ */
+export interface PermissionResponseOptions {
+  rememberForMinutes?: number
+}
+
 // ============================================
 // Credential Input Types (Secure Auth UI)
 // ============================================
@@ -461,6 +469,8 @@ export interface CreateSessionOptions {
 
 export interface PermissionModeState {
   permissionMode: PermissionMode
+  previousPermissionMode?: PermissionMode
+  transitionDisplay?: string
   modeVersion: number
   changedAt: string
   changedBy: 'user' | 'system' | 'restore' | 'automation' | 'unknown'
@@ -487,7 +497,7 @@ export type SessionEvent =
   | { type: 'permission_request'; sessionId: string; request: PermissionRequest }
   | { type: 'credential_request'; sessionId: string; request: CredentialRequest }
   // Permission mode events
-  | { type: 'permission_mode_changed'; sessionId: string; permissionMode: PermissionMode; modeVersion?: number; changedAt?: string; changedBy?: PermissionModeState['changedBy'] }
+  | { type: 'permission_mode_changed'; sessionId: string; permissionMode: PermissionMode; previousPermissionMode?: PermissionMode; transitionDisplay?: string; modeVersion?: number; changedAt?: string; changedBy?: PermissionModeState['changedBy'] }
   | { type: 'plan_submitted'; sessionId: string; message: CoreMessage }
   // Source events
   | { type: 'sources_changed'; sessionId: string; enabledSourceSlugs: string[] }
@@ -1019,7 +1029,7 @@ export interface ElectronAPI {
   cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
   killShell(sessionId: string, shellId: string): Promise<{ success: boolean; error?: string }>
   getTaskOutput(taskId: string): Promise<string | null>
-  respondToPermission(sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean): Promise<boolean>
+  respondToPermission(sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean, options?: PermissionResponseOptions): Promise<boolean>
   respondToCredential(sessionId: string, requestId: string, response: CredentialResponse): Promise<boolean>
 
   // Consolidated session command handler
@@ -1193,7 +1203,7 @@ export interface ElectronAPI {
   searchSessionContent(workspaceId: string, query: string, searchId?: string): Promise<SessionSearchResult[]>
 
   // Sources change listener (live updates when sources are added/removed)
-  onSourcesChanged(callback: (sources: LoadedSource[]) => void): () => void
+  onSourcesChanged(callback: (workspaceId: string, sources: LoadedSource[]) => void): () => void
 
   // Default permissions change listener (live updates when default.json changes)
   onDefaultPermissionsChanged(callback: () => void): () => void
@@ -1206,7 +1216,7 @@ export interface ElectronAPI {
   openSkillInFinder(workspaceId: string, skillSlug: string): Promise<void>
 
   // Skills change listener (live updates when skills are added/removed/modified)
-  onSkillsChanged(callback: (skills: LoadedSkill[]) => void): () => void
+  onSkillsChanged(callback: (workspaceId: string, skills: LoadedSkill[]) => void): () => void
 
   // Statuses (workspace-scoped)
   listStatuses(workspaceId: string): Promise<import('@craft-agent/shared/statuses').StatusConfig[]>

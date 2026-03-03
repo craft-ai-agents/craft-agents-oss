@@ -75,6 +75,8 @@ export interface ModeState {
   sessionId: string;
   /** Current permission mode */
   permissionMode: PermissionMode;
+  /** Previous permission mode (if any mode transition has occurred) */
+  previousPermissionMode?: PermissionMode;
   /** Monotonic version incremented each time the mode changes */
   modeVersion: number;
   /** ISO timestamp for the last mode change */
@@ -171,6 +173,23 @@ class ModeManager {
   private subscribers: Map<string, Set<() => void>> = new Map();
 
   /**
+   * Hydrate persisted transition context (previous mode) without mutating current mode/version.
+   * Used on session restore so transition metadata can survive app restarts.
+   */
+  setPreviousPermissionMode(sessionId: string, previousPermissionMode?: PermissionMode): void {
+    const existing = this.getState(sessionId);
+    if (existing.previousPermissionMode === previousPermissionMode) {
+      return;
+    }
+
+    const newState: ModeState = {
+      ...existing,
+      previousPermissionMode,
+    };
+    this.states.set(sessionId, newState);
+  }
+
+  /**
    * Get or create state for a session
    */
   getState(sessionId: string): ModeState {
@@ -207,8 +226,11 @@ class ModeManager {
     const changedAt = metadata?.changedAt ?? new Date().toISOString();
     const changedBy = metadata?.changedBy ?? 'unknown';
 
+    const shouldTrackTransition = !(existing.modeVersion === 0 && changedBy === 'restore');
+
     const newState: ModeState = {
       ...existing,
+      previousPermissionMode: shouldTrackTransition ? existing.permissionMode : undefined,
       permissionMode: mode,
       modeVersion: existing.modeVersion + 1,
       lastChangedAt: changedAt,
@@ -340,17 +362,32 @@ export function getModeState(sessionId: string): ModeState {
 }
 
 /**
+ * Hydrate persisted transition context for a session without changing current mode.
+ */
+export function hydratePreviousPermissionMode(sessionId: string, previousPermissionMode?: PermissionMode): void {
+  modeManager.setPreviousPermissionMode(sessionId, previousPermissionMode);
+}
+
+/**
  * Lightweight diagnostics for permission denials and debugging.
  */
 export function getPermissionModeDiagnostics(sessionId: string): {
   permissionMode: PermissionMode;
+  previousPermissionMode?: PermissionMode;
+  transitionDisplay?: string;
   modeVersion: number;
   lastChangedAt: string;
   lastChangedBy: PermissionModeChangedBy;
 } {
   const state = modeManager.getState(sessionId);
+  const transitionDisplay = state.previousPermissionMode
+    ? `${PERMISSION_MODE_CONFIG[state.previousPermissionMode].displayName} -> ${PERMISSION_MODE_CONFIG[state.permissionMode].displayName}`
+    : undefined;
+
   return {
     permissionMode: state.permissionMode,
+    previousPermissionMode: state.previousPermissionMode,
+    transitionDisplay,
     modeVersion: state.modeVersion,
     lastChangedAt: state.lastChangedAt,
     lastChangedBy: state.lastChangedBy,
@@ -1954,11 +1991,18 @@ export function formatSessionState(
   sessionId: string,
   options?: { plansFolderPath?: string; dataFolderPath?: string }
 ): string {
-  const mode = getPermissionMode(sessionId);
+  const diagnostics = getPermissionModeDiagnostics(sessionId);
 
   // Use the display name (lowercased) so the agent sees "explore" instead of internal key "safe"
-  const modeName = PERMISSION_MODE_CONFIG[mode].displayName.toLowerCase();
+  const modeName = PERMISSION_MODE_CONFIG[diagnostics.permissionMode].displayName.toLowerCase();
   let result = `<session_state>\nsessionId: ${sessionId}\npermissionMode: ${modeName}`;
+
+  if (diagnostics.transitionDisplay) {
+    result += `\nmodeTransition: ${diagnostics.transitionDisplay}`;
+  }
+  result += `\nmodeChangedBy: ${diagnostics.lastChangedBy}`;
+  result += `\nmodeChangedAt: ${diagnostics.lastChangedAt}`;
+  result += `\nmodeVersion: ${diagnostics.modeVersion}`;
 
   // Always include plans folder path so agent knows where plans are stored
   if (options?.plansFolderPath) {

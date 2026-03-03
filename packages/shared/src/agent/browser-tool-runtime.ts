@@ -52,7 +52,7 @@ export function getBrowserToolHelp(): string {
     '  drag <x1> <y1> <x2> <y2>                      drag from (x1,y1) to (x2,y2)',
     '  fill <ref> <value>',
     '  type <text>                                    type into focused element (no ref needed)',
-    '  select <ref> <value>',
+    '  select <ref> <value> [--assert-text <text>] [--assert-value <value>] [--timeout <ms>]',
     '  upload <ref> <path> [path2...]                 attach local file(s) to a file input',
     '  set-clipboard <text>                           write text to page clipboard',
     '  get-clipboard                                  read clipboard text content',
@@ -226,6 +226,80 @@ function summarizeWindows(windows: Awaited<ReturnType<BrowserPaneFns['listWindow
   return `total=${windows.length}, visible=${visible}, locked=${locked}, overlays=${withOverlay}`;
 }
 
+function getOpenVisibilitySettleTimeoutMs(override?: number): number {
+  if (typeof override === 'number' && Number.isFinite(override)) {
+    return Math.max(100, override);
+  }
+  const envValue = Number(process.env.CRAFT_BROWSER_OPEN_SETTLE_TIMEOUT_MS);
+  if (Number.isFinite(envValue) && envValue > 0) {
+    return Math.max(100, envValue);
+  }
+  return 1500;
+}
+
+function getOpenVisibilitySettlePollMs(override?: number): number {
+  if (typeof override === 'number' && Number.isFinite(override)) {
+    return Math.max(25, override);
+  }
+  const envValue = Number(process.env.CRAFT_BROWSER_OPEN_SETTLE_POLL_MS);
+  if (Number.isFinite(envValue) && envValue > 0) {
+    return Math.max(25, envValue);
+  }
+  return 100;
+}
+
+async function waitForForegroundOpenVisibility(args: {
+  fns: BrowserPaneFns;
+  instanceId: string;
+  timeoutMs?: number;
+  pollMs?: number;
+}): Promise<{
+  windows: Awaited<ReturnType<BrowserPaneFns['listWindows']>>;
+  win: Awaited<ReturnType<BrowserPaneFns['listWindows']>>[number] | undefined;
+  settledByWait: boolean;
+  usedFocusFallback: boolean;
+}> {
+  const timeoutMs = getOpenVisibilitySettleTimeoutMs(args.timeoutMs);
+  const pollMs = getOpenVisibilitySettlePollMs(args.pollMs);
+  const started = Date.now();
+
+  const readWindowState = async () => {
+    const windows = await args.fns.listWindows();
+    const win = windows.find((w) => w.id === args.instanceId);
+    return { windows, win };
+  };
+
+  let state = await readWindowState();
+  while (Date.now() - started < timeoutMs) {
+    if (!state.win || state.win.isVisible) {
+      return {
+        ...state,
+        settledByWait: true,
+        usedFocusFallback: false,
+      };
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+    state = await readWindowState();
+  }
+
+  let usedFocusFallback = false;
+  if (state.win && !state.win.isVisible) {
+    try {
+      await args.fns.focusWindow(args.instanceId);
+      usedFocusFallback = true;
+      state = await readWindowState();
+    } catch {
+      // Keep existing state if focus fallback fails; caller output will surface visibility.
+    }
+  }
+
+  return {
+    ...state,
+    settledByWait: false,
+    usedFocusFallback,
+  };
+}
+
 function formatLifecycleResultLine(result: BrowserLifecycleActionResult): string {
   if (result.action === 'noop') {
     return [
@@ -385,6 +459,134 @@ function tokenizeCommand(input: string): string[] {
   return tokens;
 }
 
+interface ParsedSelectCommand {
+  ref: string;
+  value: string;
+  assertText?: string;
+  assertValue?: string;
+  timeoutMs: number;
+}
+
+function parseSelectCommand(parts: string[]): ParsedSelectCommand {
+  const ref = parts[1];
+  if (!ref) throw new Error('select requires ref and value. Example: select @e3 optionValue');
+
+  const tokens = parts.slice(2);
+  const valueTokens: string[] = [];
+  let assertText: string | undefined;
+  let assertValue: string | undefined;
+  let timeoutMs = 2000;
+
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i]!;
+    if (token === '--assert-text') {
+      const next = tokens[i + 1];
+      if (!next) throw new Error('select --assert-text requires a value. Example: select @e3 CNAME --assert-text Target');
+      assertText = next;
+      i += 1;
+      continue;
+    }
+    if (token === '--assert-value') {
+      const next = tokens[i + 1];
+      if (!next) throw new Error('select --assert-value requires a value. Example: select @e3 CNAME --assert-value CNAME');
+      assertValue = next;
+      i += 1;
+      continue;
+    }
+    if (token === '--timeout') {
+      const next = tokens[i + 1];
+      if (!next) throw new Error('select --timeout requires milliseconds. Example: select @e3 CNAME --timeout 3000');
+      const parsed = Number(next);
+      if (Number.isNaN(parsed)) throw new Error(`Invalid select timeout "${next}". Expected a number.`);
+      timeoutMs = Math.max(100, parsed);
+      i += 1;
+      continue;
+    }
+    valueTokens.push(token);
+  }
+
+  const value = valueTokens.join(' ').trim();
+  if (!value) throw new Error('select requires ref and value. Example: select @e3 optionValue');
+
+  return { ref, value, assertText, assertValue, timeoutMs };
+}
+
+function includesNormalized(haystack: string | undefined, needle: string): boolean {
+  const h = (haystack ?? '').trim().toLowerCase();
+  const n = needle.trim().toLowerCase();
+  if (!h || !n) return false;
+  return h.includes(n);
+}
+
+async function verifySelectResult(args: {
+  fns: BrowserPaneFns;
+  ref: string;
+  selectedValue: string;
+  assertText?: string;
+  assertValue?: string;
+  timeoutMs: number;
+}): Promise<{
+  selectedRefMatched: boolean;
+  assertTextMatched: boolean;
+  assertValueMatched: boolean;
+  elapsedMs: number;
+}> {
+  const { fns, ref, selectedValue, assertText, assertValue, timeoutMs } = args;
+  const started = Date.now();
+  const pollMs = 120;
+
+  let selectedRefMatched = false;
+  let assertTextMatched = false;
+  let assertValueMatched = false;
+
+  while (Date.now() - started <= timeoutMs) {
+    const snapshot = await fns.snapshot();
+    const selectedNode = snapshot.nodes.find((n) => n.ref === ref);
+
+    selectedRefMatched = !!selectedNode
+      && (
+        includesNormalized(selectedNode.value, selectedValue)
+        || includesNormalized(selectedNode.name, selectedValue)
+      );
+
+    if (assertText) {
+      assertTextMatched = snapshot.nodes.some((n) =>
+        includesNormalized(n.name, assertText)
+        || includesNormalized(n.value, assertText)
+        || includesNormalized(n.description, assertText)
+      );
+    } else {
+      assertTextMatched = true;
+    }
+
+    if (assertValue) {
+      assertValueMatched = !!selectedNode
+        && (
+          includesNormalized(selectedNode.value, assertValue)
+          || includesNormalized(selectedNode.name, assertValue)
+        );
+    } else {
+      assertValueMatched = true;
+    }
+
+    const strongMatch = selectedRefMatched || assertValueMatched;
+    const assertionsOk = assertTextMatched && assertValueMatched;
+    if (strongMatch && assertionsOk) {
+      break;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+
+  return {
+    selectedRefMatched,
+    assertTextMatched,
+    assertValueMatched,
+    elapsedMs: Date.now() - started,
+  };
+}
+
+
 export async function executeBrowserToolCommand(args: {
   command: string | string[];
   fns: BrowserPaneFns;
@@ -467,8 +669,23 @@ async function executeSingleCommand(args: {
     const foreground = parts.includes('--foreground') || parts.includes('-f');
     const windowsBefore = await fns.listWindows();
     const result = await fns.openPanel({ background: !foreground });
-    const windowsAfter = await fns.listWindows();
-    const win = windowsAfter.find((w) => w.id === result.instanceId);
+
+    let windowsAfter = await fns.listWindows();
+    let win = windowsAfter.find((w) => w.id === result.instanceId);
+    let settledByWait = true;
+    let usedFocusFallback = false;
+
+    if (foreground) {
+      const visibilityResult = await waitForForegroundOpenVisibility({
+        fns,
+        instanceId: result.instanceId,
+      });
+      windowsAfter = visibilityResult.windows;
+      win = visibilityResult.win;
+      settledByWait = visibilityResult.settledByWait;
+      usedFocusFallback = visibilityResult.usedFocusFallback;
+    }
+
     const reused = windowsBefore.some((w) => w.id === result.instanceId);
     const mode = foreground ? 'foreground' : 'background';
 
@@ -477,6 +694,9 @@ async function executeSingleCommand(args: {
       `Window state: ${reused ? 'reused existing window' : 'created new window'}`,
       `Session windows: ${summarizeWindows(windowsAfter)}`,
     ];
+    if (foreground) {
+      lines.push(`Visibility settle: ${settledByWait ? 'wait-loop' : 'timeout'}${usedFocusFallback ? ' + focus retry' : ''}`);
+    }
     if (win) {
       lines.push(
         `Visible: ${win.isVisible}, ownerType: ${win.ownerType}, boundSessionId: ${win.boundSessionId ?? 'none'}`,
@@ -539,6 +759,13 @@ async function executeSingleCommand(args: {
     for (const node of snapshot.nodes) {
       lines.push(formatNodeLine(node));
     }
+
+    if (snapshot.nodes.length === 0) {
+      lines.push('');
+      lines.push('No accessibility elements were detected on this view.');
+      lines.push('This can happen on canvas-heavy/custom UIs. Try: evaluate <js>, click-at <x> <y>, type <text>, screenshot --annotated.');
+    }
+
     return { output: lines.join('\n'), appendReleaseHint: true };
   }
 
@@ -727,16 +954,45 @@ async function executeSingleCommand(args: {
   }
 
   if (cmd === 'select') {
-    const ref = parts[1];
-    const value = parts.slice(2).join(' ');
-    if (!ref || !value) throw new Error('select requires ref and value. Example: select @e3 optionValue');
+    const parsed = parseSelectCommand(parts);
+    const { ref, value, assertText, assertValue, timeoutMs } = parsed;
 
     await fns.select(ref, value);
     const after = await getPageMetrics(fns);
+    const verification = await verifySelectResult({
+      fns,
+      ref,
+      selectedValue: value,
+      assertText,
+      assertValue,
+      timeoutMs,
+    });
+
+    const warnings: string[] = [];
+    if (!verification.selectedRefMatched) {
+      warnings.push('selected control did not reflect requested value in accessibility snapshot');
+    }
+    if (assertText && !verification.assertTextMatched) {
+      warnings.push(`assert-text did not match: "${assertText}"`);
+    }
+    if (assertValue && !verification.assertValueMatched) {
+      warnings.push(`assert-value did not match: "${assertValue}"`);
+    }
+
+    const verificationStatus = warnings.length === 0 ? 'verified' : 'warning';
 
     return {
       output: [
-        `Selected "${value}" in element ${ref}`,
+        `Selected "${value}" in element ${ref} (${verificationStatus})`,
+        `Verification: selectedRefMatched=${verification.selectedRefMatched}, assertTextMatched=${verification.assertTextMatched}, assertValueMatched=${verification.assertValueMatched}`,
+        `Verification time: ${verification.elapsedMs}ms (timeout=${timeoutMs}ms)`,
+        ...(warnings.length > 0
+          ? [
+            `Warning: select interaction succeeded but effective form state could not be fully verified.`,
+            ...warnings.map((warning) => `- ${warning}`),
+            'Tip: retry with --assert-text and/or --assert-value targeting downstream field changes.',
+          ]
+          : []),
         `Value length: ${value.length} characters`,
         `Active element after: ${describeActive(after)}`,
       ].join('\n'),

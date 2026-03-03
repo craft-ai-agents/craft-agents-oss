@@ -32,6 +32,8 @@ export interface SessionListContextValue {
   // Per-session lookup maps
   sessionOptions?: Map<string, SessionOptions>
   contentSearchResults: Map<string, ContentSearchResult>
+  /** Whether a session currently has a pending permission/admin prompt */
+  hasPendingPrompt?: (sessionId: string) => boolean
 }
 
 const SessionListContext = createContext<SessionListContextValue | null>(null)

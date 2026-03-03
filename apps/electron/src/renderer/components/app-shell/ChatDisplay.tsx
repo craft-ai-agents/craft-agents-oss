@@ -46,7 +46,7 @@ import type { ThinkingLevel } from "@craft-agent/shared/agent/thinking-levels"
 import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn } from "@craft-agent/ui"
 import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
 import { ActiveOptionBadges } from "./ActiveOptionBadges"
-import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse } from "./input"
+import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse, type AdminApprovalResponse } from "./input"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
 import { useTurnCardExpansion } from "@/hooks/useTurnCardExpansion"
@@ -108,7 +108,13 @@ interface ChatDisplayProps {
   /** Pending permission request for this session */
   pendingPermission?: PermissionRequest
   /** Callback to respond to permission request */
-  onRespondToPermission?: (sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) => void
+  onRespondToPermission?: (
+    sessionId: string,
+    requestId: string,
+    allowed: boolean,
+    alwaysAllow: boolean,
+    options?: import('../../../shared/types').PermissionResponseOptions
+  ) => void
   /** Pending credential request for this session */
   pendingCredential?: CredentialRequest
   /** Callback to respond to credential request */
@@ -1214,13 +1220,25 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
   // Handle structured input responses (permissions and credentials)
   const handleStructuredResponse = (response: StructuredResponse) => {
-    if (response.type === 'permission' && pendingPermission && onRespondToPermission) {
-      const permResponse = response as PermissionResponse
+    if ((response.type === 'permission' || response.type === 'admin_approval') && pendingPermission && onRespondToPermission) {
+      if (response.type === 'permission') {
+        const permResponse = response as PermissionResponse
+        onRespondToPermission(
+          pendingPermission.sessionId,
+          pendingPermission.requestId,
+          permResponse.allowed,
+          permResponse.alwaysAllow
+        )
+        return
+      }
+
+      const adminResponse = response as AdminApprovalResponse
       onRespondToPermission(
         pendingPermission.sessionId,
         pendingPermission.requestId,
-        permResponse.allowed,
-        permResponse.alwaysAllow
+        adminResponse.approved,
+        false,
+        { rememberForMinutes: adminResponse.rememberForMinutes }
       )
     } else if (response.type === 'credential' && pendingCredential && onRespondToCredential) {
       const credResponse = response as CredentialResponse
@@ -1235,6 +1253,19 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Build structured input state from pending requests (permissions take priority)
   const structuredInput: StructuredInputState | undefined = React.useMemo(() => {
     if (pendingPermission) {
+      if (pendingPermission.type === 'admin_approval') {
+        return {
+          type: 'admin_approval',
+          data: {
+            appName: pendingPermission.appName || pendingPermission.toolName || 'System action',
+            reason: pendingPermission.reason || pendingPermission.description,
+            impact: pendingPermission.impact,
+            command: pendingPermission.command || '',
+            requiresSystemPrompt: pendingPermission.requiresSystemPrompt ?? true,
+            rememberForMinutes: pendingPermission.rememberForMinutes ?? 10,
+          },
+        }
+      }
       return { type: 'permission', data: pendingPermission }
     }
     if (pendingCredential) {

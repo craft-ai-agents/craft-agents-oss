@@ -121,15 +121,25 @@ if (isDebugMode) {
   const binDir = join(resourcesBase, 'resources', 'bin')
   const scriptsDir = join(resourcesBase, 'resources', 'scripts')
 
-  process.env.CRAFT_UV = uvBinary
+  const bundledUvExists = existsSync(uvBinary)
+  const fallbackUv = bundledUvExists ? null : 'uv'
+
+  process.env.CRAFT_UV = bundledUvExists ? uvBinary : (fallbackUv ?? uvBinary)
   process.env.CRAFT_SCRIPTS = scriptsDir
   // Prepend both generic wrappers dir and platform uv dir:
   // - binDir exposes wrapper commands (pdf-tool, docx-tool, ...)
   // - uvPlatformDir exposes raw `uv` for direct shell usage / debugging
   process.env.PATH = `${binDir}${delimiter}${uvPlatformDir}${delimiter}${process.env.PATH}`
 
+  if (!bundledUvExists) {
+    mainLog.warn('Bundled uv binary missing, CLI document tools may fail unless uv is available on PATH.', {
+      expectedUvPath: uvBinary,
+      usingCraftUv: process.env.CRAFT_UV,
+    })
+  }
+
   if (isDebugMode) {
-    mainLog.info('CLI tools configured:', { uvBinary, binDir, scriptsDir })
+    mainLog.info('CLI tools configured:', { uvBinary: process.env.CRAFT_UV, binDir, scriptsDir, bundledUvExists })
   }
 }
 
@@ -569,6 +579,9 @@ app.on('before-quit', async (event) => {
   // Avoid re-entry when we call app.exit()
   if (isQuitting) return
   isQuitting = true
+
+  // Ensure Cmd+Q/app quit bypasses layered window close interception (Cmd+W behavior).
+  windowManager?.setAppQuitting(true)
 
   if (windowManager) {
     // Get full window states (includes bounds, type, and query)

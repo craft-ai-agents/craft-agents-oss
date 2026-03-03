@@ -46,6 +46,7 @@ export {
   PERMISSION_MODE_CONFIG,
   type PermissionMode,
   getModeState,
+  hydratePreviousPermissionMode,
   getPermissionModeDiagnostics,
   initializeModeState,
   cleanupModeState,

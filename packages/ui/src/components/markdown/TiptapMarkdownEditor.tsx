@@ -8,9 +8,8 @@ import { cn } from '../../lib/utils'
 import 'katex/dist/katex.min.css'
 import './tiptap-editor.css'
 
-function getMarkdown(editor: { storage: unknown }): string {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return ((editor.storage as any).markdown as MarkdownStorage).getMarkdown()
+function getMarkdown(editor: { storage: { markdown?: MarkdownStorage } }): string {
+  return editor.storage.markdown?.getMarkdown() ?? ''
 }
 
 export interface TiptapMarkdownEditorProps {

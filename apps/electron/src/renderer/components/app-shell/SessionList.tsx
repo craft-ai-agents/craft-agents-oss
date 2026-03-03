@@ -83,6 +83,8 @@ interface SessionListProps {
   focusedSessionId?: string | null
   /** Override navigation target (for multi-panel: focuses existing panel or navigates focused panel) */
   onNavigateToSession?: (sessionId: string) => void
+  /** Session-level pending prompt marker (permission/admin approval) */
+  hasPendingPrompt?: (sessionId: string) => boolean
 }
 
 // Re-export SessionStatusId for use by parent components
@@ -130,6 +132,7 @@ export function SessionList({
   labelFilterMap,
   focusedSessionId,
   onNavigateToSession,
+  hasPendingPrompt,
 }: SessionListProps) {
   // --- Selection (atom-backed, shared with ChatDisplay + BatchActionPanel) ---
   const {
@@ -529,6 +532,7 @@ export function SessionList({
     isMultiSelectActive,
     sessionOptions,
     contentSearchResults,
+    hasPendingPrompt,
   }), [
     handleRenameClick, onSessionStatusChange,
     onFlag, handleFlagWithToast, onUnflag, handleUnflagWithToast,
@@ -537,7 +541,7 @@ export function SessionList({
     handleSelectSessionById, handleOpenInNewWindow, handleFocusZone, handleKeyDown,
     sessionStatuses, flatLabels, labels, resolvedSearchQuery,
     focusedSessionId, selectionStore.state.selected, isMultiSelectActive,
-    sessionOptions, contentSearchResults,
+    sessionOptions, contentSearchResults, hasPendingPrompt,
   ])
 
   // --- Empty state (non-search) — render before EntityList ---

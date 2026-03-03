@@ -70,6 +70,8 @@ type InboundMessage =
   | { type: 'mini_completion'; id: string; prompt: string }
   | { type: 'ensure_session_ready'; id: string }
   | { type: 'set_model'; model: string }
+  | { type: 'compact'; id: string; customInstructions?: string }
+  | { type: 'set_auto_compaction'; id: string; enabled: boolean }
   | { type: 'steer'; message: string }
   | { type: 'token_update'; piAuth: { provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } }
   | { type: 'shutdown' };
@@ -102,6 +104,20 @@ interface OutboundToolExecReq { type: 'tool_execute_request'; requestId: string;
 interface OutboundSessionToolCompleted { type: 'session_tool_completed'; toolName: string; args: Record<string, unknown>; isError: boolean }
 interface OutboundMiniResult { type: 'mini_completion_result'; id: string; text: string | null }
 interface OutboundEnsureSessionReadyResult { type: 'ensure_session_ready_result'; id: string; sessionId: string | null }
+interface OutboundCompactResult {
+  type: 'compact_result';
+  id: string;
+  success: boolean;
+  result?: { summary: string; firstKeptEntryId: string; tokensBefore: number };
+  errorMessage?: string;
+}
+interface OutboundSetAutoCompactionResult {
+  type: 'set_auto_compaction_result';
+  id: string;
+  success: boolean;
+  enabled: boolean;
+  errorMessage?: string;
+}
 interface OutboundSessionIdUpdate { type: 'session_id_update'; sessionId: string }
 interface OutboundError { type: 'error'; message: string; code?: string }
 
@@ -113,6 +129,8 @@ type OutboundMessage =
   | OutboundSessionToolCompleted
   | OutboundMiniResult
   | OutboundEnsureSessionReadyResult
+  | OutboundCompactResult
+  | OutboundSetAutoCompactionResult
   | OutboundSessionIdUpdate
   | OutboundError;
 
@@ -244,7 +262,7 @@ function resolvePiModel(
   modelId: string,
   piAuthProvider?: string,
 ): PiModel<any> | undefined {
-  // Strip Craft's pi/ prefix — Pi SDK uses bare model IDs (e.g. "claude-sonnet-4-5")
+  // Strip Craft's pi/ prefix — Pi SDK uses bare model IDs (e.g. "claude-sonnet-4-6")
   const bareId = modelId.startsWith('pi/') ? modelId.slice(3) : modelId;
 
   // If we know the auth provider, do an exact provider+model lookup first.
@@ -870,6 +888,17 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
   });
 }
 
+function isContextOverflowErrorMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('context_length_exceeded') ||
+    normalized.includes('exceeds the context window') ||
+    normalized.includes('context window') && normalized.includes('exceed') ||
+    normalized.includes('too many tokens') ||
+    normalized.includes('token limit exceeded')
+  );
+}
+
 async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): Promise<void> {
   currentUserMessage = msg.message;
 
@@ -908,6 +937,33 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
     });
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
+
+    // Fallback hardening: if the provider surfaced a context-overflow error,
+    // force a manual compact and retry this prompt once.
+    if (isContextOverflowErrorMessage(errorMsg)) {
+      debugLog(`Prompt overflow detected, attempting compact+retry: ${errorMsg}`);
+      try {
+        const session = await ensureSession();
+        await session.compact();
+        await session.prompt(msg.message, {
+          images: msg.images && msg.images.length > 0 ? msg.images : undefined,
+          streamingBehavior: 'followUp',
+        });
+        debugLog('Compact+retry succeeded after overflow');
+        return;
+      } catch (retryError) {
+        const retryMsg = retryError instanceof Error ? retryError.message : String(retryError);
+        debugLog(`Compact+retry failed: ${retryMsg}`);
+        send({
+          type: 'error',
+          message: `Prompt overflow recovery failed: ${retryMsg}`,
+          code: 'prompt_overflow_recovery_failed',
+        });
+        send({ type: 'event', event: { type: 'agent_end' } });
+        return;
+      }
+    }
+
     debugLog(`Prompt failed: ${errorMsg}`);
     send({ type: 'error', message: errorMsg, code: 'prompt_error' });
     // Send synthetic agent_end so the main process event queue unblocks
@@ -989,6 +1045,55 @@ async function handleEnsureSessionReady(msg: Extract<InboundMessage, { type: 'en
     id: msg.id,
     sessionId: session.sessionId || null,
   });
+}
+
+async function handleCompact(msg: Extract<InboundMessage, { type: 'compact' }>): Promise<void> {
+  try {
+    const session = await ensureSession();
+    const result = await session.compact(msg.customInstructions);
+    send({
+      type: 'compact_result',
+      id: msg.id,
+      success: true,
+      result: {
+        summary: result.summary,
+        firstKeptEntryId: result.firstKeptEntryId,
+        tokensBefore: result.tokensBefore,
+      },
+    });
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    debugLog(`[compact] Failed: ${errorMsg}`);
+    send({
+      type: 'compact_result',
+      id: msg.id,
+      success: false,
+      errorMessage: errorMsg,
+    });
+  }
+}
+
+async function handleSetAutoCompaction(msg: Extract<InboundMessage, { type: 'set_auto_compaction' }>): Promise<void> {
+  try {
+    const session = await ensureSession();
+    session.setAutoCompactionEnabled(msg.enabled);
+    send({
+      type: 'set_auto_compaction_result',
+      id: msg.id,
+      success: true,
+      enabled: session.autoCompactionEnabled,
+    });
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    debugLog(`[set_auto_compaction] Failed: ${errorMsg}`);
+    send({
+      type: 'set_auto_compaction_result',
+      id: msg.id,
+      success: false,
+      enabled: msg.enabled,
+      errorMessage: errorMsg,
+    });
+  }
 }
 
 async function handleSetModel(msg: Extract<InboundMessage, { type: 'set_model' }>): Promise<void> {
@@ -1085,6 +1190,14 @@ async function processMessage(msg: InboundMessage): Promise<void> {
 
     case 'set_model':
       await handleSetModel(msg);
+      break;
+
+    case 'compact':
+      await handleCompact(msg);
+      break;
+
+    case 'set_auto_compaction':
+      await handleSetAutoCompaction(msg);
       break;
 
     case 'steer':

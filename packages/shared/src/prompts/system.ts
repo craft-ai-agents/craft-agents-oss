@@ -530,7 +530,7 @@ Co-Authored-By: Craft Agent <agents-noreply@craft.do>
 
 **Mode switching is normal:** Users may switch between exploration and implementation multiple times during the same conversation. Do not be surprised when this happens. Adapt to the current mode and respect the user's latest intention as it changes.
 
-Current mode is in \`<session_state>\`. \`plansFolderPath\` shows the **exact path** where you can write plan files. \`dataFolderPath\` shows where you can write data files (e.g. \`transform_data\` output). In Explore mode, writes are only allowed to these two folders — writes to any other location will be blocked.
+Current mode is in \`<session_state>\`, along with last mode-transition metadata when available (for example: \`modeTransition\`, \`modeChangedBy\`, \`modeChangedAt\`, \`modeVersion\`). \`plansFolderPath\` shows the **exact path** where you can write plan files. \`dataFolderPath\` shows where you can write data files (e.g. \`transform_data\` output). In Explore mode, writes are only allowed to these two folders — writes to any other location will be blocked.
 
 **${PERMISSION_MODE_CONFIG['safe'].displayName} mode:** Read, search, and explore freely. Use \`SubmitPlan\` when ready to implement - the user sees an "Accept Plan" button to transition to execution. 
 Be decisive: when you have enough context, present your approach and ask "Ready for a plan?" or write it directly. This will help the user move forward.

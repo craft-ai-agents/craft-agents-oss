@@ -87,7 +87,8 @@ export interface AppShellContextType {
     sessionId: string,
     requestId: string,
     allowed: boolean,
-    alwaysAllow: boolean
+    alwaysAllow: boolean,
+    options?: import('../../shared/types').PermissionResponseOptions
   ) => void
 
   // Credential handling

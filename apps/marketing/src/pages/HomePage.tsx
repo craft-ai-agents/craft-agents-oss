@@ -1,5 +1,4 @@
-import { useCallback, useState, useRef, useEffect } from 'react'
-import { Markdown } from '@craft-agent/ui/markdown'
+import { useState, useRef, useEffect } from 'react'
 import desktopScreenshot from '../assets/desktop/agent-screenshot.webp'
 import desktopScreenshot2x from '../assets/desktop/agent-screenshot@2x.webp'
 import multitaskingScreenshot from '../assets/desktop/Multitasking.webp'
@@ -12,6 +11,8 @@ import themingScreenshot from '../assets/desktop/theming.webp'
 import themingScreenshot2x from '../assets/desktop/theming@2x.webp'
 import agentNativeScreenshot from '../assets/desktop/agent_native.webp'
 import agentNativeScreenshot2x from '../assets/desktop/agent_native@2x.webp'
+import browserScreenshot from '../assets/desktop/browser.webp'
+import browserScreenshot2x from '../assets/desktop/browser@2x.webp'
 import agentsLogo from '../assets/agents_logo.svg'
 
 // Integration icons - locally served
@@ -48,6 +49,9 @@ import iconEvernote from '../assets/icons/evernote.svg'
 import iconClickup from '../assets/icons/clickup.svg'
 import iconX from '../assets/icons/x.svg'
 import iconAnthropic from '../assets/icons/anthropic.svg'
+import iconOpenai from '../assets/icons/openai.svg'
+import iconOpenrouter from '../assets/icons/openrouter.svg'
+import iconOllama from '../assets/icons/ollama.svg'
 
 const integrationIcons = [
   { name: 'Craft', src: iconCraft },
@@ -85,17 +89,6 @@ const integrationIcons = [
   { name: 'Anthropic', src: iconAnthropic },
 ]
 
-const article = `
-Craft Agents is a tool we built so we can work effectively with agents. It enables intuitive multitasking, no-fluff connection to any API or Service, and a more document (vs code) centric workflow - in a beautiful and fluid UI.
-
-It uses the [Claude Agent SDK](https://docs.anthropic.com/en/docs/claude-code/sdk) and the [Codex app-server](https://developers.openai.com/codex/app-server) side by side, building on what we found great, and improving areas where we've desired improvements.
-
-It's built with [Agent Native](https://every.to/guides/agent-native) software principles in mind, and is highly customisable out of the box. One of the first of its kind.
-
-Craft Agents is open source under the Apache 2.0 license - so you are free to remix, change **anything.** And that's actually possible. We ourselves are building Craft Agents with Craft Agents only - no code editors - so really, any customisation is just a prompt away.
-
-We built Craft Agents because we wanted a better, more opinionated (and preferably non-CLI way) of working with the most powerful agents in the world. We'll continue to improve it, based on our experiences and intuition.
-`
 
 // FAQ items — conversational tone, skeptic getting progressively won over
 const faqItems = [
@@ -116,11 +109,15 @@ const faqItems = [
   },
   {
     question: "Surely it can't handle custom APIs?",
-    answer: "It can. Paste an OpenAPI spec, some endpoint URLs, screenshots of docs, whatever you have. It will figure it out and guide you through the rest.",
+    answer: "It can. Paste an OpenAPI spec, some endpoint URLs, screenshots of docs, whatever you have. It will figure it out and guide you through the rest. And if there's no API? It opens a browser and does the work directly on the website.",
   },
   {
     question: "But I meant APIs. Not MCPs. Are you sure?",
-    answer: "Yes. Craft Agents is built to connect to anything. We have it hooked up to a direct Postgres DB behind a jumpbox. Skills + Sources = magic.",
+    answer: "Yes. Craft Agents is built to connect to anything. We have it hooked up to a direct Postgres DB behind a jumpbox. And for services with no API at all, the agent opens a built-in browser, logs in, and gets the job done. Skills + Sources + Browser = magic.",
+  },
+  {
+    question: 'Wait, it has a browser?',
+    answer: 'Yes. A full Chromium browser, built in. The agent can navigate pages, fill forms, click buttons, extract data, and take screenshots. Sign into a service yourself, then let the agent take over. Or let it browse autonomously. It sees what you see.',
   },
   {
     question: 'How do I import my Claude Code skills and MCPs?',
@@ -139,7 +136,7 @@ const faqItems = [
   },
   {
     question: 'So I can just... ask it anything?',
-    answer: "Yes. That's the core idea. Agent-native software means you describe what you want, and it figures out how. That's a good use of tokens. The agent doing the work for you.",
+    answer: "Yes. That's the core idea. Agent-native software means you describe what you want, and it figures out how — via APIs, MCP servers, code, or the browser. That's a good use of tokens. The agent doing the work for you.",
   },
 ]
 
@@ -202,11 +199,6 @@ export default function HomePage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Open markdown links in new tab
-  const handleUrlClick = useCallback((url: string) => {
-    window.open(url, '_blank', 'noopener,noreferrer')
-  }, [])
-
   return (
     <main className="relative z-10 min-h-screen flex flex-col items-center justify-center p-6 pt-[80px] pb-[128px]">
       {/* Craft Agents logo */}
@@ -218,11 +210,11 @@ export default function HomePage() {
           Work with most powerful agents in the world, with the UX they deserve
         </h1>
         <p className="text-[18px] text-foreground/70 leading-relaxed">
-          Connect any API, MCP server, or local filesystem.
+          Works with <strong>Claude</strong>, <strong>ChatGPT</strong>, <strong>OpenRouter</strong>, <strong>local models</strong>, and more.
+          <br />
+          Connect to anything — either via Browser, API, MCP server, or local filesystem.
           <br />
           Multitask naturally. Build your next-gen workflow with agents.
-          <br />
-          Works with both Anthropic and OpenAI models, including <strong>Claude</strong> and <strong>Codex</strong>.
         </p>
       </div>
 
@@ -308,12 +300,6 @@ export default function HomePage() {
         </div>
       </a>
 
-      <div className="bg-background rounded-[20px] shadow-strong max-w-3xl w-full p-8 pt-8 md:p-12 md:pt-10 text-[13px] [&_p]:leading-snug [&_p]:my-4">
-        <Markdown onUrlClick={handleUrlClick}>
-          {article}
-        </Markdown>
-      </div>
-
       {/* FAQ section — conversational Q&A list */}
       <div className="max-w-[720px] w-full py-8 mt-16">
         <h2 className="text-2xl font-extrabold leading-tight mb-16 text-center">
@@ -344,6 +330,49 @@ export default function HomePage() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Bring your own model section */}
+      <div className="text-left max-w-4xl w-full py-8 mt-16">
+        <h2 className="text-2xl font-extrabold leading-tight mb-4">
+          Bring your own model
+        </h2>
+        <p className="text-[18px] text-foreground/70 leading-relaxed">
+          Use Claude with your Anthropic API key. Connect your ChatGPT Plus subscription. Route through OpenRouter for 400+ models. Run fully offline with Ollama or LM Studio. Switch anytime — your workflow stays the same.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+          <div className="bg-background rounded-[12px] shadow-minimal p-6">
+            <div className="flex items-center gap-3 mb-2">
+              <img src={iconAnthropic} alt="Anthropic" className="w-5 h-5" />
+              <h3 className="font-semibold">Claude</h3>
+            </div>
+            <p className="text-[14px] text-foreground/70">The most powerful coding agents. Direct API key or Max subscription.</p>
+          </div>
+          <div className="bg-background rounded-[12px] shadow-minimal p-6">
+            <div className="flex items-center gap-3 mb-2">
+              <img src={iconOpenai} alt="OpenAI" className="w-5 h-5" />
+              <h3 className="font-semibold">ChatGPT Plus</h3>
+            </div>
+            <p className="text-[14px] text-foreground/70">Use your existing OpenAI subscription. Full agent capabilities via Codex.</p>
+          </div>
+          <div className="bg-background rounded-[12px] shadow-minimal p-6">
+            <div className="flex items-center gap-3 mb-2">
+              <img src={iconOpenrouter} alt="OpenRouter" className="w-5 h-5" />
+              <h3 className="font-semibold">OpenRouter, Vercel AI Gateway & more</h3>
+            </div>
+            <p className="text-[14px] text-foreground/70">Route through OpenRouter, Vercel AI Gateway, or any compatible gateway. Access hundreds of models through a single endpoint.</p>
+          </div>
+          <div className="bg-background rounded-[12px] shadow-minimal p-6">
+            <div className="flex items-center gap-3 mb-2">
+              <img src={iconOllama} alt="Ollama" className="w-5 h-5" />
+              <h3 className="font-semibold">Local Models</h3>
+            </div>
+            <p className="text-[14px] text-foreground/70">Run Ollama, LM Studio, or any OpenAI-compatible endpoint. Fully private, fully offline.</p>
+          </div>
+        </div>
+        <p className="text-[13px] text-foreground/40 leading-relaxed mt-6">
+          Compatible with Anthropic, OpenAI, Google Gemini, xAI Grok, Mistral, DeepSeek, Meta Llama, Cohere, Groq, Together.ai, Fireworks, Cerebras, Perplexity, Amazon Bedrock, Azure OpenAI, Google Vertex, Alibaba Qwen, MiniMax, Inflection Pi, Moonshot, DeepInfra, SambaNova, Zhipu AI, FriendliAI — and any OpenAI-compatible endpoint via OpenRouter, Ollama, or llama.cpp. Powered by the Vercel AI SDK.
+        </p>
       </div>
 
       <hr className="w-[128px] border-foreground/10 mt-[40px]" />
@@ -450,6 +479,46 @@ export default function HomePage() {
           <div className="bg-background rounded-[12px] shadow-minimal p-6">
             <h3 className="font-semibold mb-2">Execute mode</h3>
             <p className="text-[14px] text-foreground/70">Once aligned, switch to Execute. The agent executes without interruption. Review the results when done, just like reviewing delivered work from a teammate.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Browser section */}
+      <div className="text-left max-w-4xl w-full py-8 mt-8">
+        <h2 className="text-2xl font-extrabold leading-tight mb-4">
+          A browser, built right in
+        </h2>
+        <p className="text-[18px] text-foreground/70 leading-relaxed">
+          Navigate websites, fill forms, extract data, take screenshots — all without leaving your workflow. The agent sees what you see and acts on your behalf.
+        </p>
+      </div>
+
+      {/* Browser screenshot */}
+      <img
+        src={browserScreenshot}
+        srcSet={`${browserScreenshot} 1x, ${browserScreenshot2x} 2x`}
+        alt="Built-in browser"
+        className="max-w-4xl w-full rounded-[12px]"
+      />
+
+      {/* Browser feature cards */}
+      <div className="max-w-4xl w-full py-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-background rounded-[12px] shadow-minimal p-6">
+            <h3 className="font-semibold mb-2">See and interact</h3>
+            <p className="text-[14px] text-foreground/70">The agent navigates real web pages. Click, fill, scroll, and extract — all through natural language.</p>
+          </div>
+          <div className="bg-background rounded-[12px] shadow-minimal p-6">
+            <h3 className="font-semibold mb-2">Login and authenticate</h3>
+            <p className="text-[14px] text-foreground/70">Sign into services the agent needs. OAuth flows, cookie-based auth, or just browsing as yourself.</p>
+          </div>
+          <div className="bg-background rounded-[12px] shadow-minimal p-6">
+            <h3 className="font-semibold mb-2">Extract and transform</h3>
+            <p className="text-[14px] text-foreground/70">Pull structured data from any webpage. Tables, listings, dashboards — into your workflow instantly.</p>
+          </div>
+          <div className="bg-background rounded-[12px] shadow-minimal p-6">
+            <h3 className="font-semibold mb-2">Screenshot and capture</h3>
+            <p className="text-[14px] text-foreground/70">Take annotated screenshots of any page or element. Document, debug, or compare UI states visually.</p>
           </div>
         </div>
       </div>

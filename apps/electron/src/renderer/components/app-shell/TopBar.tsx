@@ -240,7 +240,9 @@ export function TopBar({
     >
       <div className="flex h-full w-full items-center justify-between gap-2">
       {/* === LEFT: Sidebar + Menu + Navigation + Workspace === */}
-      <div className="pointer-events-auto titlebar-no-drag flex min-w-0 flex-1 items-center gap-0.5" style={{ paddingLeft: menuLeftPadding }}>
+      {/* Keep this container draggable. Only individual interactive controls should use titlebar-no-drag. */}
+      <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-0.5" style={{ paddingLeft: menuLeftPadding }}>
+        <div className="flex items-center gap-0.5">
         <Tooltip>
           <TooltipTrigger asChild>
             <TopBarButton onClick={onToggleSidebar} aria-label="Toggle sidebar">
@@ -361,9 +363,10 @@ export function TopBar({
             </StyledDropdownMenuItem>
           </StyledDropdownMenuContent>
         </DropdownMenu>
+        </div>
 
         {/* Back / Forward / Workspace selector (moved from center) */}
-        <div className="ml-1 flex w-full max-w-[640px] min-w-0 items-center gap-1">
+        <div className="ml-1 flex w-[clamp(220px,42vw,640px)] min-w-0 items-center gap-1">
           <Tooltip>
             <TooltipTrigger asChild>
               <TopBarButton onClick={onBack} disabled={!canGoBack} aria-label="Go back">
@@ -396,7 +399,7 @@ export function TopBar({
       </div>
 
       {/* === RIGHT: Browser strip + add + help === */}
-      <div ref={rightSlotRef} className="pointer-events-auto titlebar-no-drag flex min-w-0 shrink-0 items-center justify-end gap-1" style={{ paddingRight: 12 }}>
+      <div ref={rightSlotRef} className="flex min-w-0 shrink-0 items-center justify-end gap-1" style={{ paddingRight: 12 }}>
         <div className="min-w-0">
           <BrowserTabStrip activeSessionId={activeSessionId} maxVisibleBadges={maxVisibleBrowserBadges} />
         </div>

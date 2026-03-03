@@ -368,7 +368,20 @@ export class ClaudeAgent extends BaseAgent {
   }
 
   // Callback for permission requests - set by application to receive permission prompts
-  public onPermissionRequest: ((request: { requestId: string; toolName: string; command?: string; description: string; type?: PermissionRequestType }) => void) | null = null;
+  public onPermissionRequest: ((request: {
+    requestId: string;
+    toolName: string;
+    command?: string;
+    description: string;
+    type?: PermissionRequestType;
+    appName?: string;
+    reason?: string;
+    impact?: string;
+    requiresSystemPrompt?: boolean;
+    rememberForMinutes?: number;
+    commandHash?: string;
+    approvalTtlSeconds?: number;
+  }) => void) | null = null;
 
   // Debug callback for status messages
   public onDebug: ((message: string) => void) | null = null;
@@ -1009,6 +1022,13 @@ export class ClaudeAgent extends BaseAgent {
                       command,
                       description: checkResult.description,
                       type: checkResult.promptType,
+                      appName: checkResult.appName,
+                      reason: checkResult.reason,
+                      impact: checkResult.impact,
+                      requiresSystemPrompt: checkResult.requiresSystemPrompt,
+                      rememberForMinutes: checkResult.rememberForMinutes,
+                      commandHash: checkResult.commandHash,
+                      approvalTtlSeconds: checkResult.approvalTtlSeconds,
                     });
                   } else {
                     this.pendingPermissions.delete(requestId);
@@ -1110,10 +1130,8 @@ export class ClaudeAgent extends BaseAgent {
 
       // Log resume attempt for debugging session failures
       if (wasResuming) {
-        console.error(`[ClaudeAgent] Attempting to resume SDK session: ${this.sessionId}`);
         debug(`[ClaudeAgent] Attempting to resume SDK session: ${this.sessionId}`);
       } else {
-        console.error(`[ClaudeAgent] Starting fresh SDK session (no resume)`);
         debug(`[ClaudeAgent] Starting fresh SDK session (no resume)`);
       }
 

@@ -24,9 +24,9 @@ export type ModelProvider = 'anthropic' | 'pi';
  * Used throughout the application for model selection and display.
  */
 export interface ModelDefinition {
-  /** Model identifier (e.g., 'claude-sonnet-4-5-20250929', 'gpt-5.3-codex') */
+  /** Model identifier (e.g., 'claude-sonnet-4-6', 'gpt-5.3-codex') */
   id: string;
-  /** Human-readable name (e.g., 'Sonnet 4.5', 'Codex') */
+  /** Human-readable name (e.g., 'Sonnet 4.6', 'Codex') */
   name: string;
   /** Short display name for compact UI (e.g., 'Sonnet', 'Codex') */
   shortName: string;
@@ -69,8 +69,8 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
     contextWindow: 200_000,
   },
   {
-    id: 'claude-sonnet-4-5-20250929',
-    name: 'Sonnet 4.5',
+    id: 'claude-sonnet-4-6',
+    name: 'Sonnet 4.6',
     shortName: 'Sonnet',
     description: 'Best for everyday tasks',
     provider: 'anthropic',
@@ -218,7 +218,7 @@ export function isOpusModel(modelId: string): boolean {
 
 /**
  * Check if a model ID refers to a Claude model.
- * Handles both direct Anthropic IDs (e.g. "claude-sonnet-4-5-20250929")
+ * Handles both direct Anthropic IDs (e.g. "claude-sonnet-4-6")
  * and provider-prefixed IDs (e.g. "anthropic/claude-sonnet-4" via OpenRouter).
  */
 export function isClaudeModel(modelId: string): boolean {

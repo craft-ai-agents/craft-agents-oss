@@ -46,12 +46,9 @@ describe('getDefaultModelsForConnection', () => {
     expect(models.length).toBeGreaterThan(0)
   })
 
-  it('anthropic_compat returns string model IDs', () => {
+  it('anthropic_compat returns empty list (dynamic provider)', () => {
     const models = getDefaultModelsForConnection('anthropic_compat')
-    expect(models.length).toBeGreaterThan(0)
-    for (const m of models) {
-      expect(typeof m).toBe('string')
-    }
+    expect(models).toEqual([])
   })
 })
 
@@ -81,6 +78,16 @@ describe('getDefaultModelForConnection', () => {
     const models = getDefaultModelsForConnection('pi', 'openai')
     const modelIds = models.map(m => typeof m === 'string' ? m : m.id)
     expect(modelIds).toContain(defaultModel)
+  })
+
+  it('returns empty string for anthropic_compat (dynamic provider)', () => {
+    const defaultModel = getDefaultModelForConnection('anthropic_compat')
+    expect(defaultModel).toBe('')
+  })
+
+  it('returns empty string for pi_compat (dynamic provider)', () => {
+    const defaultModel = getDefaultModelForConnection('pi_compat')
+    expect(defaultModel).toBe('')
   })
 })
 

@@ -33,7 +33,7 @@ export const SESSION_PERSISTENT_FIELDS = [
   // Read tracking
   'lastReadMessageId', 'hasUnread',
   // Config
-  'enabledSourceSlugs', 'permissionMode', 'workingDirectory',
+  'enabledSourceSlugs', 'permissionMode', 'previousPermissionMode', 'workingDirectory',
   // Model/Connection
   'model', 'llmConnection', 'connectionLocked', 'thinkingLevel',
   // Sharing
@@ -106,6 +106,8 @@ export interface SessionConfig {
   isFlagged?: boolean;
   /** Permission mode for this session ('safe', 'ask', 'allow-all') */
   permissionMode?: PermissionMode;
+  /** Previous permission mode (used to preserve modeTransition context across restarts) */
+  previousPermissionMode?: PermissionMode;
   /** User-controlled session status - determines inbox vs completed */
   sessionStatus?: SessionStatus;
   /** Labels applied to this session (bare IDs or "id::value" entries) */
@@ -191,6 +193,8 @@ export interface SessionHeader {
   isFlagged?: boolean;
   /** Permission mode for this session ('safe', 'ask', 'allow-all') */
   permissionMode?: PermissionMode;
+  /** Previous permission mode (used to preserve modeTransition context across restarts) */
+  previousPermissionMode?: PermissionMode;
   /** User-controlled session status - determines inbox vs completed */
   sessionStatus?: SessionStatus;
   /** Labels applied to this session (bare IDs or "id::value" entries) */
@@ -274,6 +278,8 @@ export interface SessionMetadata {
   labels?: string[];
   /** Permission mode for this session */
   permissionMode?: PermissionMode;
+  /** Previous permission mode (used to preserve modeTransition context across restarts) */
+  previousPermissionMode?: PermissionMode;
   /** Number of plan files for this session */
   planCount?: number;
   /** Shared viewer URL (if shared via viewer) */

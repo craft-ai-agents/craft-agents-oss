@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["markitdown[all]>=0.1.5,<0.2", "diff-match-patch>=20241021", "click>=8.3,<9"]
+# dependencies = ["markitdown>=0.1.5,<0.2", "python-docx>=1.1,<2", "diff-match-patch>=20241021", "click>=8.3,<9"]
 # ///
 """Document comparison tool.
 
@@ -21,7 +21,6 @@ warnings.filterwarnings("ignore", message="Couldn't find ffmpeg", category=Runti
 
 import click
 from diff_match_patch import diff_match_patch
-from markitdown import MarkItDown
 
 
 def write_output(text: str, output_path: str | None) -> None:
@@ -33,6 +32,21 @@ def write_output(text: str, output_path: str | None) -> None:
         click.echo(text)
 
 
+def _extract_docx_text(path: Path) -> str:
+    from docx import Document
+
+    doc = Document(str(path))
+    parts: list[str] = []
+    for p in doc.paragraphs:
+        if p.text:
+            parts.append(p.text)
+    for table in doc.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells]
+            parts.append(" | ".join(cells))
+    return "\n".join(parts)
+
+
 def convert_to_text(file_path: str) -> str:
     """Convert a file to text/markdown. Plain text files are read directly."""
     path = Path(file_path)
@@ -42,6 +56,19 @@ def convert_to_text(file_path: str) -> str:
     plain_text_exts = {".txt", ".md", ".rst", ".csv", ".tsv", ".log"}
     if ext in plain_text_exts:
         return path.read_text(encoding="utf-8", errors="replace")
+
+    # DOCX fallback path independent of MarkItDown native dependencies.
+    if ext == ".docx":
+        return _extract_docx_text(path)
+
+    try:
+        from markitdown import MarkItDown  # Lazy import to keep CLI startup resilient
+    except Exception as e:
+        raise click.ClickException(
+            "MarkItDown backend unavailable for non-text files. "
+            "Install Microsoft Visual C++ Redistributable and retry. "
+            f"Details: {e}"
+        ) from e
 
     converter = MarkItDown()
     result = converter.convert(str(path))

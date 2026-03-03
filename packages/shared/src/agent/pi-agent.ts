@@ -166,6 +166,18 @@ export class PiAgent extends BaseAgent {
     reject: (error: Error) => void;
   }> = new Map();
 
+  // Pending compact requests (manual compaction RPC)
+  private pendingCompactions: Map<string, {
+    resolve: (result: { summary: string; firstKeptEntryId: string; tokensBefore: number } | null) => void;
+    reject: (error: Error) => void;
+  }> = new Map();
+
+  // Pending auto-compaction toggle requests
+  private pendingAutoCompactionToggles: Map<string, {
+    resolve: (enabled: boolean) => void;
+    reject: (error: Error) => void;
+  }> = new Map();
+
   // Current user message (for context in summarization)
   private currentUserMessage: string = '';
 
@@ -379,6 +391,15 @@ export class PiAgent extends BaseAgent {
     // Wait for subprocess to report ready
     await this.subprocessReady;
     this.debug('Pi subprocess is ready');
+
+    // Ensure auto-compaction is explicitly enabled for embedded sessions.
+    // PI defaults this to enabled, but we set it proactively for clarity and resilience.
+    try {
+      const enabled = await this.requestSetAutoCompaction(true);
+      this.debug(`PI auto-compaction enabled: ${enabled}`);
+    } catch (error) {
+      this.debug(`Failed to configure PI auto-compaction (continuing): ${error instanceof Error ? error.message : String(error)}`);
+    }
 
     // Register session-scoped tools as proxy tools in the subprocess.
     // These tools (SubmitPlan, config_validate, source auth, call_llm, etc.)
@@ -661,6 +682,16 @@ export class PiAgent extends BaseAgent {
         this.handleEnsureSessionReadyResult(msg);
         break;
 
+      case 'compact_result':
+        // Response to a compact request
+        this.handleCompactResult(msg);
+        break;
+
+      case 'set_auto_compaction_result':
+        // Response to an auto-compaction toggle request
+        this.handleSetAutoCompactionResult(msg);
+        break;
+
       case 'session_id_update':
         // Pi session ID changed
         if (msg.sessionId) {
@@ -697,6 +728,15 @@ export class PiAgent extends BaseAgent {
         for (const [id, pending] of this.pendingEnsureSessionReady) {
           pending.reject(new Error(String(msg.message)));
           this.pendingEnsureSessionReady.delete(id);
+        }
+        // Reject pending compact/toggle requests
+        for (const [id, pending] of this.pendingCompactions) {
+          pending.reject(new Error(String(msg.message)));
+          this.pendingCompactions.delete(id);
+        }
+        for (const [id, pending] of this.pendingAutoCompactionToggles) {
+          pending.reject(new Error(String(msg.message)));
+          this.pendingAutoCompactionToggles.delete(id);
         }
         this.eventQueue.enqueue({
           type: 'error',
@@ -924,6 +964,13 @@ export class PiAgent extends BaseAgent {
           command: checkResult.command,
           description: checkResult.description,
           type: checkResult.promptType,
+          appName: checkResult.appName,
+          reason: checkResult.reason,
+          impact: checkResult.impact,
+          requiresSystemPrompt: checkResult.requiresSystemPrompt,
+          rememberForMinutes: checkResult.rememberForMinutes,
+          commandHash: checkResult.commandHash,
+          approvalTtlSeconds: checkResult.approvalTtlSeconds,
         });
 
         const allowed = await permissionPromise;
@@ -1199,6 +1246,52 @@ export class PiAgent extends BaseAgent {
   }
 
   /**
+   * Handle compact_result from subprocess.
+   */
+  private handleCompactResult(msg: Record<string, unknown>): void {
+    const id = msg.id as string;
+    const success = Boolean(msg.success);
+    const pending = this.pendingCompactions.get(id);
+    if (!pending) return;
+
+    this.pendingCompactions.delete(id);
+    if (!success) {
+      pending.reject(new Error(String(msg.errorMessage || 'Compaction failed')));
+      return;
+    }
+
+    const raw = msg.result as Record<string, unknown> | undefined;
+    if (!raw) {
+      pending.resolve(null);
+      return;
+    }
+
+    pending.resolve({
+      summary: String(raw.summary || ''),
+      firstKeptEntryId: String(raw.firstKeptEntryId || ''),
+      tokensBefore: Number(raw.tokensBefore || 0),
+    });
+  }
+
+  /**
+   * Handle set_auto_compaction_result from subprocess.
+   */
+  private handleSetAutoCompactionResult(msg: Record<string, unknown>): void {
+    const id = msg.id as string;
+    const success = Boolean(msg.success);
+    const pending = this.pendingAutoCompactionToggles.get(id);
+    if (!pending) return;
+
+    this.pendingAutoCompactionToggles.delete(id);
+    if (!success) {
+      pending.reject(new Error(String(msg.errorMessage || 'Failed to set auto-compaction')));
+      return;
+    }
+
+    pending.resolve(Boolean(msg.enabled));
+  }
+
+  /**
    * Handle subprocess exit.
    */
   private handleSubprocessExit(code: number | null, signal: string | null): void {
@@ -1232,6 +1325,17 @@ export class PiAgent extends BaseAgent {
       pending.reject(new Error(`Pi subprocess exited unexpectedly (${exitReason})`));
     }
     this.pendingEnsureSessionReady.clear();
+
+    // Reject pending compact/toggle requests
+    for (const [, pending] of this.pendingCompactions) {
+      pending.reject(new Error(`Pi subprocess exited unexpectedly (${exitReason})`));
+    }
+    this.pendingCompactions.clear();
+
+    for (const [, pending] of this.pendingAutoCompactionToggles) {
+      pending.reject(new Error(`Pi subprocess exited unexpectedly (${exitReason})`));
+    }
+    this.pendingAutoCompactionToggles.clear();
 
     // Reject all pending tool executions
     for (const [, pending] of this.pendingToolExecutions) {
@@ -1268,6 +1372,66 @@ export class PiAgent extends BaseAgent {
       });
 
       this.send({ type: 'ensure_session_ready', id });
+    });
+  }
+
+  /**
+   * Ask subprocess to compact the active session context.
+   */
+  private async requestCompact(customInstructions?: string): Promise<{ summary: string; firstKeptEntryId: string; tokensBefore: number } | null> {
+    await this.ensureSubprocess();
+
+    const id = `compact-${++this.rpcIdCounter}`;
+    const timeoutMs = 60_000;
+
+    return new Promise<{ summary: string; firstKeptEntryId: string; tokensBefore: number } | null>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingCompactions.delete(id);
+        reject(new Error(`compact timed out after ${Math.floor(timeoutMs / 1000)}s`));
+      }, timeoutMs);
+
+      this.pendingCompactions.set(id, {
+        resolve: (result) => {
+          clearTimeout(timer);
+          resolve(result);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+
+      this.send({ type: 'compact', id, customInstructions });
+    });
+  }
+
+  /**
+   * Ask subprocess to enable/disable auto-compaction.
+   */
+  private async requestSetAutoCompaction(enabled: boolean): Promise<boolean> {
+    await this.ensureSubprocess();
+
+    const id = `set-auto-compaction-${++this.rpcIdCounter}`;
+    const timeoutMs = 15_000;
+
+    return new Promise<boolean>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingAutoCompactionToggles.delete(id);
+        reject(new Error(`set_auto_compaction timed out after ${Math.floor(timeoutMs / 1000)}s`));
+      }, timeoutMs);
+
+      this.pendingAutoCompactionToggles.set(id, {
+        resolve: (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+
+      this.send({ type: 'set_auto_compaction', id, enabled });
     });
   }
 
@@ -1355,6 +1519,23 @@ export class PiAgent extends BaseAgent {
         } else {
           throw subprocessError;
         }
+      }
+
+      const trimmedMessage = message.trim();
+      const compactMatch = trimmedMessage.match(/^\/compact(?:\s+([\s\S]+))?$/i);
+      if (compactMatch) {
+        const customInstructions = compactMatch[1]?.trim() || undefined;
+        const compactResult = await this.requestCompact(customInstructions);
+        if (compactResult) {
+          yield {
+            type: 'info',
+            message: `Compacted context to fit within limits (from ~${compactResult.tokensBefore.toLocaleString()} tokens)`,
+          };
+        } else {
+          yield { type: 'info', message: 'Compacted context to fit within limits' };
+        }
+        yield { type: 'complete' };
+        return;
       }
 
       // Build system prompt

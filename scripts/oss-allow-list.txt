@@ -127,3 +127,6 @@ scripts/electron-build-resources.ts
 scripts/electron-build-assets.ts
 scripts/electron-clean.ts
 scripts/electron-dev.ts
+
+# Browser tool CLI (used by browser integration)
+scripts/browser-tool.ts

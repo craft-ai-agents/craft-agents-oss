@@ -76,7 +76,7 @@ export const mockElectronAPI = {
         // Top 10 expensive
         { id: 'anthropic/claude-opus-4.6', name: 'Claude Opus 4.6', costInput: 5, costOutput: 25, contextWindow: 200000, reasoning: true },
         { id: 'xai/grok-4', name: 'Grok 4', costInput: 6, costOutput: 18, contextWindow: 256000, reasoning: true },
-        { id: 'anthropic/claude-sonnet-4.5', name: 'Claude Sonnet 4.5', costInput: 3, costOutput: 15, contextWindow: 200000, reasoning: true },
+        { id: 'anthropic/claude-sonnet-4.6', name: 'Claude Sonnet 4.6', costInput: 3, costOutput: 15, contextWindow: 200000, reasoning: true },
         { id: 'openai/gpt-5.2-codex', name: 'GPT-5.2 Codex', costInput: 1.75, costOutput: 14, contextWindow: 400000, reasoning: false },
         { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', costInput: 1.25, costOutput: 10, contextWindow: 1048576, reasoning: true },
         { id: 'openai/o3', name: 'OpenAI o3', costInput: 2, costOutput: 8, contextWindow: 200000, reasoning: true },
@@ -124,7 +124,7 @@ export const mockElectronAPI = {
       ],
       'amazon-bedrock': [
         { id: 'anthropic.claude-opus-4.6', name: 'Claude Opus 4.6', costInput: 5, costOutput: 25, contextWindow: 200000, reasoning: true },
-        { id: 'anthropic.claude-sonnet-4.5', name: 'Claude Sonnet 4.5', costInput: 3, costOutput: 15, contextWindow: 200000, reasoning: true },
+        { id: 'anthropic.claude-sonnet-4.6', name: 'Claude Sonnet 4.6', costInput: 3, costOutput: 15, contextWindow: 200000, reasoning: true },
         { id: 'anthropic.claude-haiku-4.5', name: 'Claude Haiku 4.5', costInput: 1, costOutput: 5, contextWindow: 200000, reasoning: false },
       ],
       'zai': [
@@ -134,7 +134,7 @@ export const mockElectronAPI = {
       ],
       'vercel-ai-gateway': [
         { id: 'anthropic/claude-opus-4.6', name: 'Claude Opus 4.6', costInput: 5, costOutput: 25, contextWindow: 200000, reasoning: true },
-        { id: 'anthropic/claude-sonnet-4.5', name: 'Claude Sonnet 4.5', costInput: 3, costOutput: 15, contextWindow: 200000, reasoning: true },
+        { id: 'anthropic/claude-sonnet-4.6', name: 'Claude Sonnet 4.6', costInput: 3, costOutput: 15, contextWindow: 200000, reasoning: true },
         { id: 'openai/gpt-5.2-codex', name: 'GPT-5.2 Codex', costInput: 1.75, costOutput: 14, contextWindow: 400000, reasoning: false },
       ],
     }

@@ -7,6 +7,7 @@ import { spawn, type Subprocess } from "bun";
 import { existsSync, rmSync, cpSync, readFileSync, statSync, mkdirSync } from "fs";
 import { join, basename } from "path";
 import * as esbuild from "esbuild";
+import { downloadUv, type Platform, type Arch } from "./build/common";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const ELECTRON_DIR = join(ROOT_DIR, "apps/electron");
@@ -24,6 +25,43 @@ const IS_WINDOWS = process.platform === "win32";
 const BIN_EXT = IS_WINDOWS ? ".exe" : "";
 const VITE_BIN = join(ROOT_DIR, `node_modules/.bin/vite${BIN_EXT}`);
 const ELECTRON_BIN = join(ROOT_DIR, `node_modules/.bin/electron${BIN_EXT}`);
+
+function resolveBuildPlatform(): Platform {
+  if (process.platform === "darwin") return "darwin";
+  if (process.platform === "win32") return "win32";
+  if (process.platform === "linux") return "linux";
+  throw new Error(`Unsupported platform for uv bootstrap: ${process.platform}`);
+}
+
+function resolveBuildArch(): Arch {
+  if (process.arch === "arm64") return "arm64";
+  if (process.arch === "x64") return "x64";
+  throw new Error(`Unsupported architecture for uv bootstrap: ${process.arch}`);
+}
+
+async function ensureBundledUvForCurrentPlatform(): Promise<void> {
+  const platform = resolveBuildPlatform();
+  const arch = resolveBuildArch();
+  const platformKey = `${platform}-${arch}`;
+  const uvBinary = platform === "win32" ? "uv.exe" : "uv";
+  const uvPath = join(ELECTRON_DIR, "resources", "bin", platformKey, uvBinary);
+
+  if (existsSync(uvPath)) {
+    console.log(`✅ Bundled uv present: ${uvPath}`);
+    return;
+  }
+
+  console.log(`⬇️  Bundled uv missing, bootstrapping ${platformKey}...`);
+  await downloadUv({
+    platform,
+    arch,
+    upload: false,
+    uploadLatest: false,
+    uploadScript: false,
+    rootDir: ROOT_DIR,
+    electronDir: ELECTRON_DIR,
+  });
+}
 
 // Multi-instance detection (matches detect-instance.sh logic)
 // Detects instance number from folder name suffix (e.g., craft-agents-1 → instance 1)
@@ -333,6 +371,8 @@ async function main(): Promise<void> {
   if (!existsSync(DIST_DIR)) {
     mkdirSync(DIST_DIR, { recursive: true });
   }
+
+  await ensureBundledUvForCurrentPlatform();
 
   copyResources();
 

@@ -44,7 +44,7 @@ export const BrowserTabBadge = forwardRef<HTMLButtonElement, BrowserTabBadgeProp
       ref={ref}
       type="button"
       className={`
-        group flex items-center gap-1 h-[26px] pl-2.5 pr-1.5 rounded-lg cursor-pointer select-none
+        group flex items-center gap-1 h-[26px] pl-2.5 pr-1.5 rounded-lg cursor-pointer select-none titlebar-no-drag
         text-[11px] leading-tight transition-colors max-w-[160px] shadow-minimal
         bg-background
         ${foregroundClass}

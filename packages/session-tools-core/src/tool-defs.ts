@@ -313,6 +313,7 @@ Examples:
 - \`fill @e5 user@example.com\`
 - \`type Hello World\` — type into currently focused element (no ref needed)
 - \`select @e3 optionValue\`
+- \`select @e75 CNAME --assert-text Target --timeout 3000\`
 - \`set-clipboard Name\\tAge\\nAlice\\t30\` — write text to clipboard
 - \`get-clipboard\` — read clipboard text content
 - \`paste Name\\tAge\\nAlice\\t30\` — set clipboard and trigger Ctrl/Cmd+V

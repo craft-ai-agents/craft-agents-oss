@@ -62,7 +62,8 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
     loadSkill()
 
     // Subscribe to skill changes
-    const unsubscribe = window.electronAPI.onSkillsChanged?.((skills) => {
+    const unsubscribe = window.electronAPI.onSkillsChanged?.((changedWorkspaceId, skills) => {
+      if (changedWorkspaceId !== workspaceId) return
       const updated = skills.find((s) => s.slug === skillSlug)
       if (updated) {
         setSkill(updated)

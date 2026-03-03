@@ -262,8 +262,12 @@ def create(data: str, cal_name: str, output: str | None) -> None:
 
             cal.add_component(event)
 
-        ics_text = cal.to_ical().decode("utf-8")
-        write_output(ics_text, output)
+        ics_bytes = cal.to_ical()
+        if output:
+            Path(output).write_bytes(ics_bytes)
+            click.echo(f"Output written to {output}", err=True)
+        else:
+            click.echo(ics_bytes.decode("utf-8"))
 
     except json.JSONDecodeError as e:
         click.echo(f"Error parsing JSON: {e}", err=True)

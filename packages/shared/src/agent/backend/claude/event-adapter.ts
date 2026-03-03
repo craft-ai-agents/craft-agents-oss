@@ -111,8 +111,8 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
   async adapt(message: SDKMessage): Promise<AgentEvent[]> {
     const events: AgentEvent[] = [];
 
-    // Debug: log all SDK message types
-    if (this.callbacks.onDebug) {
+    // Debug: log non-streaming SDK message types (stream_event is too frequent)
+    if (this.callbacks.onDebug && message.type !== 'stream_event') {
       const msgInfo = message.type === 'user' && 'tool_use_result' in message
         ? `user (tool_result for ${(message as any).parent_tool_use_id})`
         : message.type;
@@ -289,10 +289,10 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
   private adaptStreamEvent(message: SDKMessage, events: AgentEvent[]): void {
     const event = (message as any).event;
 
-    // Debug: log non-delta stream events
-    if (this.callbacks.onDebug && event.type !== 'content_block_delta') {
+    // Debug: log key stream events only (skip per-chunk deltas and frequent pings)
+    if (this.callbacks.onDebug && (event.type === 'message_start' || event.type === 'message_stop')) {
       this.callbacks.onDebug(
-        `stream_event: ${event.type}, content_type=${event.content_block?.type || event.delta?.type || 'n/a'}`,
+        `stream_event: ${event.type}`,
       );
     }
 

@@ -381,7 +381,7 @@ describe('phase4 backend abstraction APIs', () => {
     const result = await testBackendConnection({
       provider: 'anthropic',
       apiKey: '   ',
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-sonnet-4-6',
       hostRuntime: {
         appRootPath: process.cwd(),
         isPackaged: false,

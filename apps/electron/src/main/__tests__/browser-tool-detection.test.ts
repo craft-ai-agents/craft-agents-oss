@@ -46,9 +46,11 @@ describe('browser-tool-detection', () => {
       expect(shouldActivateBrowserOverlay('write', {})).toBe(false)
     })
 
-    it('does not activate for browser_tool help/release/teardown commands', () => {
+    it('does not activate for browser_tool help/open/release/teardown commands', () => {
       expect(shouldActivateBrowserOverlay('browser_tool', { command: '--help' })).toBe(false)
       expect(shouldActivateBrowserOverlay('browser_tool', { command: 'help' })).toBe(false)
+      expect(shouldActivateBrowserOverlay('browser_tool', { command: 'open' })).toBe(false)
+      expect(shouldActivateBrowserOverlay('browser_tool', { command: 'open --foreground' })).toBe(false)
       expect(shouldActivateBrowserOverlay('mcp__session__browser_tool', { command: 'release' })).toBe(false)
       expect(shouldActivateBrowserOverlay('browser_tool', { command: 'close' })).toBe(false)
       expect(shouldActivateBrowserOverlay('browser_tool', { command: 'hide' })).toBe(false)

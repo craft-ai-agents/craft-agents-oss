@@ -7,7 +7,7 @@ import { isClaudeModel, isOpusModel, getModelShortName } from '../src/config/mod
 describe('isClaudeModel', () => {
   // Direct Anthropic model IDs
   it('detects direct Anthropic Claude model IDs', () => {
-    expect(isClaudeModel('claude-sonnet-4-5-20250929')).toBe(true);
+    expect(isClaudeModel('claude-sonnet-4-6')).toBe(true);
     expect(isClaudeModel('claude-opus-4-6')).toBe(true);
     expect(isClaudeModel('claude-haiku-4-5-20251001')).toBe(true);
     expect(isClaudeModel('claude-3-5-sonnet-20241022')).toBe(true);
@@ -41,7 +41,7 @@ describe('isClaudeModel', () => {
 
   // Case insensitivity
   it('handles case variations', () => {
-    expect(isClaudeModel('Claude-Sonnet-4-5-20250929')).toBe(true);
+    expect(isClaudeModel('Claude-Sonnet-4-6')).toBe(true);
     expect(isClaudeModel('CLAUDE-OPUS-4-6')).toBe(true);
     expect(isClaudeModel('Anthropic/Claude-Sonnet-4')).toBe(true);
   });

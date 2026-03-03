@@ -412,6 +412,8 @@ export function handlePermissionModeChanged(
       type: 'permission_mode_changed',
       sessionId: event.sessionId,
       permissionMode: event.permissionMode,
+      previousPermissionMode: event.previousPermissionMode,
+      transitionDisplay: event.transitionDisplay,
       modeVersion: event.modeVersion,
       changedAt: event.changedAt,
       changedBy: event.changedBy,

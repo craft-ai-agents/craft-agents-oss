@@ -1,4 +1,4 @@
-import { Shield, Check, X, RefreshCw } from 'lucide-react'
+import { ShieldAlert, Check, X, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { PermissionRequest as PermissionRequestType } from '../../../../../shared/types'
@@ -47,19 +47,15 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
     >
       {/* Content - grows to fill available space */}
       <div className="p-4 space-y-3 flex-1 min-h-0 flex flex-col">
-        {/* Header with shield icon */}
-        <div className="flex items-start gap-3">
-          <div className="shrink-0 mt-0.5">
-            <Shield className="h-5 w-5 text-info" />
+        <div className="space-y-2 pb-1">
+          <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+            <ShieldAlert className="h-3.5 w-3.5 text-info" />
+            <span>Permission required</span>
           </div>
-          <div className="flex-1 min-w-0 space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-foreground">
-                Permission Required
-              </span>
-              <span className="text-xs text-muted-foreground">({request.toolName})</span>
-            </div>
-            <p className="text-xs text-muted-foreground">{request.description}</p>
+          <div className="text-xs leading-[18px] text-muted-foreground">
+            <span className="font-medium text-foreground">Tool:</span> {request.toolName}
+            <br />
+            {request.description}
           </div>
         </div>
 

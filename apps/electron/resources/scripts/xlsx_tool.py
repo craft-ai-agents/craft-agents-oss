@@ -245,9 +245,15 @@ def info(file: str, output: str | None) -> None:
         sheets_info = []
         for name in wb.sheetnames:
             ws = wb[name]
+            try:
+                dimensions = ws.dimensions
+            except Exception:
+                # ReadOnlyWorksheet may not expose .dimensions in some openpyxl versions.
+                dimensions = ws.calculate_dimension() if hasattr(ws, "calculate_dimension") else None
+
             sheets_info.append({
                 "name": name,
-                "dimensions": ws.dimensions,
+                "dimensions": dimensions,
                 "min_row": ws.min_row,
                 "max_row": ws.max_row,
                 "min_column": ws.min_column,

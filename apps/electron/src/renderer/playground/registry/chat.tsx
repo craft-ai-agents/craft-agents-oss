@@ -494,7 +494,7 @@ function ActiveTasksBarContext({ tasks = sampleBackgroundTasks }: ActiveTasksBar
           placeholder="Message Craft Agent..."
           disabled={false}
           isProcessing={false}
-          currentModel="claude-sonnet-4-5-20250929"
+          currentModel="claude-sonnet-4-6"
           permissionMode={permissionMode}
           onPermissionModeChange={setPermissionMode}
           ultrathinkEnabled={ultrathinkEnabled}
@@ -602,7 +602,7 @@ function PermissionInputToggle({ autoToggle = false, autoToggleInterval = 3000, 
         placeholder="Message Craft Agent..."
         disabled={false}
         isProcessing={false}
-        currentModel="claude-sonnet-4-5-20250929"
+        currentModel="claude-sonnet-4-6"
         permissionMode={permissionMode}
         onPermissionModeChange={setPermissionMode}
         ultrathinkEnabled={ultrathinkEnabled}
@@ -949,12 +949,12 @@ export const chatComponents: ComponentEntry[] = [
         control: {
           type: 'select',
           options: [
-            { label: 'Sonnet 4.5', value: 'claude-sonnet-4-5-20250929' },
+            { label: 'Sonnet 4.6', value: 'claude-sonnet-4-6' },
             { label: 'Opus 4.6', value: 'claude-opus-4-6' },
             { label: 'Haiku 3.5', value: 'claude-3-5-haiku-20241022' },
           ],
         },
-        defaultValue: 'claude-sonnet-4-5-20250929',
+        defaultValue: 'claude-sonnet-4-6',
       },
       {
         name: 'permissionMode',

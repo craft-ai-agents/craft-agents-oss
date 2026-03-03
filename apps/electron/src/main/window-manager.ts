@@ -56,6 +56,7 @@ export class WindowManager {
   private pendingCloseTimeouts: Map<number, NodeJS.Timeout> = new Map()  // Fallback timeouts for window close
   private eventSink: ((channel: string, target: import('@craft-agent/shared/protocol').PushTarget, ...args: any[]) => void) | null = null
   private clientResolver: ((wcId: number) => string | undefined) | null = null
+  private isAppQuitting = false  // Skip layered close interception during app quit
 
   /**
    * Set the event sink and client resolver for pushing events via the RPC server
@@ -306,6 +307,12 @@ export class WindowManager {
     // Handle window close request (X button, Cmd+W) - intercept to allow modal closing first
     // The renderer can respond via WINDOW_CONFIRM_CLOSE to actually close the window
     window.on('close', (event) => {
+      // During app quit, bypass layered close behavior and allow native close flow.
+      // This preserves expected Cmd+Q semantics (quit app instead of closing overlays/panels first).
+      if (this.isAppQuitting) {
+        return
+      }
+
       // Check if renderer is ready (mainFrame exists) - if not, allow close directly
       if (!window.webContents.isDestroyed() && window.webContents.mainFrame) {
         event.preventDefault()
@@ -390,6 +397,14 @@ export class WindowManager {
   getWorkspaceForWindow(webContentsId: number): string | null {
     const managed = this.windows.get(webContentsId)
     return managed?.workspaceId ?? null
+  }
+
+  /**
+   * Mark whether the app is in quit flow.
+   * When true, window close events bypass layered close interception.
+   */
+  setAppQuitting(isQuitting: boolean): void {
+    this.isAppQuitting = isQuitting
   }
 
   /**

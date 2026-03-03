@@ -39,6 +39,7 @@ import {
   cleanBuildArtifacts,
   installDependencies,
   downloadBun,
+  downloadUv,
   copySDK,
   copyInterceptor,
   copyInterceptorBundle,
@@ -159,30 +160,33 @@ async function main(): Promise<void> {
 
   try {
     // Load environment variables
-    console.log('\n[1/8] Loading environment...');
+    console.log('\n[1/9] Loading environment...');
     await loadEnvFile(config);
 
     // Common build steps
-    console.log('\n[2/8] Cleaning previous builds...');
+    console.log('\n[2/9] Cleaning previous builds...');
     cleanBuildArtifacts(config);
 
-    console.log('\n[3/8] Installing dependencies...');
+    console.log('\n[3/9] Installing dependencies...');
     await installDependencies(config);
 
-    console.log('\n[4/8] Downloading Bun runtime...');
+    console.log('\n[4/9] Downloading Bun runtime...');
     await downloadBun(config);
 
-    console.log('\n[5/8] Copying SDK and interceptors...');
+    console.log('\n[5/9] Downloading uv runtime...');
+    await downloadUv(config);
+
+    console.log('\n[6/9] Copying SDK and interceptors...');
     copySDK(config);
     copyInterceptor(config);
     copyInterceptorBundle(config);
 
     // Build MCP servers (session + Pi agent)
-    console.log('\n[6/8] Building MCP servers...');
+    console.log('\n[7/9] Building MCP servers...');
     buildMcpServers(config);
 
     // Build Electron app (Windows has special OAuth injection)
-    console.log('\n[7/8] Building Electron app...');
+    console.log('\n[8/9] Building Electron app...');
     if (platform === 'win32') {
       await buildElectronAppWindows(config);
     } else {
@@ -195,7 +199,7 @@ async function main(): Promise<void> {
     verifyMcpServersExist(config);
 
     // Package for the target platform
-    console.log('\n[8/8] Packaging for platform...');
+    console.log('\n[9/9] Packaging for platform...');
     let artifactPath: string;
     switch (platform) {
       case 'darwin':

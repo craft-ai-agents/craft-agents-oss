@@ -12,6 +12,7 @@ const BROWSER_TOOL_OVERLAY_EXCLUDED_COMMANDS = new Set([
   '--help',
   '-h',
   'help',
+  'open',
   'release',
   'close',
   'hide',

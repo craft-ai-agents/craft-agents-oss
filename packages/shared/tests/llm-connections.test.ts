@@ -26,7 +26,7 @@ describe('getMiniModel()', () => {
   it('finds haiku for anthropic provider', () => {
     const conn = makeConnection('anthropic', [
       'claude-opus-4-6',
-      'claude-sonnet-4-5-20250929',
+      'claude-sonnet-4-6',
       'claude-haiku-4-5-20251001',
     ]);
     expect(getMiniModel(conn)).toBe('claude-haiku-4-5-20251001');
@@ -78,7 +78,7 @@ describe('getMiniModel()', () => {
 
   it('finds mini for copilot provider', () => {
     const conn = makeConnection('copilot', [
-      'claude-sonnet-4.5',
+      'claude-sonnet-4.6',
       'gpt-5',
       'gpt-5-mini',
       'o3',
@@ -90,7 +90,7 @@ describe('getMiniModel()', () => {
     const conn = makeConnection('copilot', [
       'gpt-5',
       'o4-mini',
-      'claude-sonnet-4.5',
+      'claude-sonnet-4.6',
     ]);
     expect(getMiniModel(conn)).toBe('o4-mini');
   });
@@ -98,7 +98,7 @@ describe('getMiniModel()', () => {
   it('falls back to last model when copilot has no mini model', () => {
     const conn = makeConnection('copilot', [
       'gpt-5',
-      'claude-sonnet-4.5',
+      'claude-sonnet-4.6',
       'o3',
     ]);
     expect(getMiniModel(conn)).toBe('o3');
@@ -119,10 +119,10 @@ describe('getMiniModel()', () => {
   it('falls back to last model when no keyword match', () => {
     const conn = makeConnection('anthropic', [
       'claude-opus-4-6',
-      'claude-sonnet-4-5-20250929',
+      'claude-sonnet-4-6',
     ]);
     // No haiku in list — falls back to last model
-    expect(getMiniModel(conn)).toBe('claude-sonnet-4-5-20250929');
+    expect(getMiniModel(conn)).toBe('claude-sonnet-4-6');
   });
 
   it('handles single-model list', () => {
@@ -140,7 +140,7 @@ describe('getSummarizationModel()', () => {
     const conn = makeConnection('copilot', [
       'gpt-5',
       'gpt-5-mini',
-      'claude-sonnet-4.5',
+      'claude-sonnet-4.6',
     ]);
     expect(getSummarizationModel(conn)).toBe(getMiniModel(conn));
   });

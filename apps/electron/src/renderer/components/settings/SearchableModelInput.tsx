@@ -43,7 +43,7 @@ export function SearchableModelInput({
   value,
   onChange,
   onBlur,
-  placeholder = 'e.g., anthropic/claude-3.5-sonnet',
+  placeholder = 'e.g., claude-sonnet-4-6',
   models,
   isLoading,
   onFetchModels,

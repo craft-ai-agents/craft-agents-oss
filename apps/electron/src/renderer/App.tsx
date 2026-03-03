@@ -541,6 +541,16 @@ export default function App() {
               next.set(sessionId, [...existingQueue, effect.request])
               return next
             })
+
+            // Native notification for approval-required pauses (same gating as completion notifications)
+            const notifySession = store.get(sessionAtomFamily(sessionId))
+            if (notifySession && !notifySession.hidden) {
+              const isAdminPrompt = effect.request.type === 'admin_approval'
+              const promptBody = isAdminPrompt
+                ? `Admin approval required: ${effect.request.appName || effect.request.toolName}`
+                : `Permission required: ${effect.request.toolName}`
+              showSessionNotification(notifySession, promptBody)
+            }
             break
           }
           case 'permission_mode_changed': {
@@ -1146,8 +1156,14 @@ export default function App() {
     }
   }, [windowWorkspaceId, handleCreateSession, handleInputChange])
 
-  const handleRespondToPermission = useCallback(async (sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) => {
-    const success = await window.electronAPI.respondToPermission(sessionId, requestId, allowed, alwaysAllow)
+  const handleRespondToPermission = useCallback(async (
+    sessionId: string,
+    requestId: string,
+    allowed: boolean,
+    alwaysAllow: boolean,
+    options?: import('../shared/types').PermissionResponseOptions,
+  ) => {
+    const success = await window.electronAPI.respondToPermission(sessionId, requestId, allowed, alwaysAllow, options)
 
     if (success) {
       // Remove only the first permission from the queue (the one we just responded to)

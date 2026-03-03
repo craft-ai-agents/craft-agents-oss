@@ -1,10 +1,11 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#   "pymupdf>=1.27,<2",
+#   "pypdfium2>=5.5,<6",
 #   "pypdf>=6.7,<7",
+#   "img2pdf>=0.5,<1",
+#   "Pillow>=10,<12",
 #   "click>=8.3,<9",
-#   "openpyxl>=3.1,<4",
 #   "python-pptx>=1.0,<2",
 #   "python-docx>=1.1,<2",
 # ]
@@ -15,7 +16,7 @@ Commands:
   Organize:  extract, info, merge, split, rotate, reorder, duplicate
   Edit:      watermark, fill-form, compress, crop, resize, flatten, header-footer
   Security:  encrypt, decrypt, redact, sanitize
-  Convert:   to-image, from-image, to-docx, to-xlsx, to-pptx
+  Convert:   to-image, from-image, to-docx, to-pptx
 
 Usage:
     uv run pdf_tool.py COMMAND [OPTIONS]
@@ -27,11 +28,13 @@ Validation note:
 
 import io
 import json
+import math
 import sys
+import zlib
 from pathlib import Path
 
 import click
-import fitz  # pymupdf
+import pypdfium2 as pdfium
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import BooleanObject, NameObject, RectangleObject
 
@@ -159,6 +162,260 @@ def parse_color(color: str) -> tuple[float, float, float]:
     return color_map.get(color.lower(), (0.5, 0.5, 0.5))
 
 
+def _render_page_to_pil(page: pdfium.PdfPage, dpi: int = 150):
+    """Render a pypdfium2 page to a PIL Image at the given DPI."""
+    scale = dpi / 72
+    bitmap = page.render(scale=scale)
+    return bitmap.to_pil()
+
+
+def _make_watermark_pdf(width: float, height: float, text: str, font_size: float,
+                        opacity: float, angle: float, color: tuple[float, float, float]) -> bytes:
+    """Generate a single-page transparent PDF with centered rotated text.
+
+    Builds a minimal valid PDF from raw bytes — no extra dependencies needed.
+    """
+    r, g, b = color
+    angle_rad = math.radians(angle)
+    cos_a = math.cos(angle_rad)
+    sin_a = math.sin(angle_rad)
+
+    # Approximate text width (Helvetica ~0.5 * font_size per char)
+    approx_text_width = len(text) * font_size * 0.5
+    cx, cy = width / 2, height / 2
+    tx = cx - (approx_text_width * cos_a) / 2 + (font_size * sin_a) / 3
+    ty = cy - (approx_text_width * sin_a) / 2 - (font_size * cos_a) / 3
+
+    # PDF content stream: set color, font, position via rotation matrix, show text
+    stream_content = (
+        f"q\n"
+        f"/GS1 gs\n"
+        f"BT\n"
+        f"{r:.3f} {g:.3f} {b:.3f} rg\n"
+        f"/F1 {font_size:.1f} Tf\n"
+        f"{cos_a:.6f} {sin_a:.6f} {-sin_a:.6f} {cos_a:.6f} {tx:.2f} {ty:.2f} Tm\n"
+        f"({_pdf_escape(text)}) Tj\n"
+        f"ET\n"
+        f"Q\n"
+    )
+    stream_bytes = stream_content.encode("latin-1")
+
+    # Build minimal PDF structure
+    objects: list[str] = []
+
+    # 1: Catalog
+    objects.append("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj")
+    # 2: Pages
+    objects.append("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj")
+    # 3: Page
+    objects.append(
+        f"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width:.2f} {height:.2f}] "
+        f"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> /ExtGState << /GS1 6 0 R >> >> >>\nendobj"
+    )
+    # 4: Content stream
+    objects.append(
+        f"4 0 obj\n<< /Length {len(stream_bytes)} >>\nstream\n".rstrip()
+    )
+    # 5: Font
+    objects.append("5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj")
+    # 6: ExtGState for opacity
+    objects.append(f"6 0 obj\n<< /Type /ExtGState /ca {opacity:.2f} /CA {opacity:.2f} >>\nendobj")
+
+    # Assemble PDF
+    pdf_lines = ["%PDF-1.4"]
+    offsets: list[int] = []
+
+    for i, obj in enumerate(objects):
+        offset = sum(len(line.encode("latin-1")) + 1 for line in pdf_lines)
+        offsets.append(offset)
+        if i == 3:  # content stream object — inject binary stream
+            pdf_lines.append(obj)
+            # We need special handling for stream content
+        else:
+            pdf_lines.append(obj)
+
+    # Rebuild properly with stream
+    output = io.BytesIO()
+    output.write(b"%PDF-1.4\n")
+
+    obj_offsets: list[int] = []
+
+    # Obj 1: Catalog
+    obj_offsets.append(output.tell())
+    output.write(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+
+    # Obj 2: Pages
+    obj_offsets.append(output.tell())
+    output.write(b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n")
+
+    # Obj 3: Page
+    obj_offsets.append(output.tell())
+    output.write(
+        f"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width:.2f} {height:.2f}] "
+        f"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> /ExtGState << /GS1 6 0 R >> >> >>\nendobj\n"
+        .encode("latin-1")
+    )
+
+    # Obj 4: Content stream
+    obj_offsets.append(output.tell())
+    output.write(f"4 0 obj\n<< /Length {len(stream_bytes)} >>\nstream\n".encode("latin-1"))
+    output.write(stream_bytes)
+    output.write(b"\nendstream\nendobj\n")
+
+    # Obj 5: Font
+    obj_offsets.append(output.tell())
+    output.write(b"5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n")
+
+    # Obj 6: ExtGState
+    obj_offsets.append(output.tell())
+    output.write(f"6 0 obj\n<< /Type /ExtGState /ca {opacity:.2f} /CA {opacity:.2f} >>\nendobj\n".encode("latin-1"))
+
+    # Cross-reference table
+    xref_offset = output.tell()
+    output.write(b"xref\n")
+    output.write(f"0 {len(obj_offsets) + 1}\n".encode("latin-1"))
+    output.write(b"0000000000 65535 f \n")
+    for off in obj_offsets:
+        output.write(f"{off:010d} 00000 n \n".encode("latin-1"))
+
+    # Trailer
+    output.write(f"trailer\n<< /Size {len(obj_offsets) + 1} /Root 1 0 R >>\n".encode("latin-1"))
+    output.write(b"startxref\n")
+    output.write(f"{xref_offset}\n".encode("latin-1"))
+    output.write(b"%%EOF\n")
+
+    return output.getvalue()
+
+
+def _pdf_escape(text: str) -> str:
+    """Escape text for PDF string literal."""
+    return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def _make_text_overlay_pdf(width: float, height: float, texts: list[dict]) -> bytes:
+    """Generate a single-page PDF with positioned text elements.
+
+    Each text dict: {"x": float, "y": float, "text": str, "font_size": float, "color": (r,g,b)}
+    """
+    parts: list[str] = []
+    parts.append("BT\n")
+    for t in texts:
+        r, g, b = t["color"]
+        parts.append(f"{r:.3f} {g:.3f} {b:.3f} rg\n")
+        parts.append(f"/F1 {t['font_size']:.1f} Tf\n")
+        parts.append(f"{t['x']:.2f} {t['y']:.2f} Td\n")
+        parts.append(f"({_pdf_escape(t['text'])}) Tj\n")
+        # Reset position for next element
+        parts.append(f"{-t['x']:.2f} {-t['y']:.2f} Td\n")
+    parts.append("ET\n")
+
+    stream_bytes = "".join(parts).encode("latin-1")
+
+    output = io.BytesIO()
+    output.write(b"%PDF-1.4\n")
+
+    obj_offsets: list[int] = []
+
+    obj_offsets.append(output.tell())
+    output.write(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+
+    obj_offsets.append(output.tell())
+    output.write(b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n")
+
+    obj_offsets.append(output.tell())
+    output.write(
+        f"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width:.2f} {height:.2f}] "
+        f"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n"
+        .encode("latin-1")
+    )
+
+    obj_offsets.append(output.tell())
+    output.write(f"4 0 obj\n<< /Length {len(stream_bytes)} >>\nstream\n".encode("latin-1"))
+    output.write(stream_bytes)
+    output.write(b"\nendstream\nendobj\n")
+
+    obj_offsets.append(output.tell())
+    output.write(b"5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n")
+
+    xref_offset = output.tell()
+    output.write(b"xref\n")
+    output.write(f"0 {len(obj_offsets) + 1}\n".encode("latin-1"))
+    output.write(b"0000000000 65535 f \n")
+    for off in obj_offsets:
+        output.write(f"{off:010d} 00000 n \n".encode("latin-1"))
+
+    output.write(f"trailer\n<< /Size {len(obj_offsets) + 1} /Root 1 0 R >>\n".encode("latin-1"))
+    output.write(b"startxref\n")
+    output.write(f"{xref_offset}\n".encode("latin-1"))
+    output.write(b"%%EOF\n")
+
+    return output.getvalue()
+
+
+def _pil_to_image_pdf_page(img) -> bytes:
+    """Convert a PIL Image to a single-page PDF with the image embedded (raw RGB, flate-compressed).
+
+    Returns raw PDF bytes. Used for flatten and redact where we need to replace
+    page content with a rasterized image.
+    """
+    width_px, height_px = img.size
+    rgb_data = img.convert("RGB").tobytes()
+    compressed = zlib.compress(rgb_data, 6)
+
+    # Page size in points — match original aspect ratio at 72 DPI equivalent
+    # The caller should set the page size; we use pixel dimensions as points here
+    # and let the caller scale appropriately.
+    output = io.BytesIO()
+    output.write(b"%PDF-1.4\n")
+
+    obj_offsets: list[int] = []
+
+    obj_offsets.append(output.tell())
+    output.write(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+
+    obj_offsets.append(output.tell())
+    output.write(b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n")
+
+    # Content stream: draw image scaled to full page
+    cs = f"q\n{width_px} 0 0 {height_px} 0 0 cm\n/Im1 Do\nQ\n".encode("latin-1")
+
+    obj_offsets.append(output.tell())
+    output.write(
+        f"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width_px} {height_px}] "
+        f"/Contents 4 0 R /Resources << /XObject << /Im1 5 0 R >> >> >>\nendobj\n"
+        .encode("latin-1")
+    )
+
+    obj_offsets.append(output.tell())
+    output.write(f"4 0 obj\n<< /Length {len(cs)} >>\nstream\n".encode("latin-1"))
+    output.write(cs)
+    output.write(b"\nendstream\nendobj\n")
+
+    obj_offsets.append(output.tell())
+    output.write(
+        f"5 0 obj\n<< /Type /XObject /Subtype /Image /Width {width_px} /Height {height_px} "
+        f"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode "
+        f"/Length {len(compressed)} >>\nstream\n"
+        .encode("latin-1")
+    )
+    output.write(compressed)
+    output.write(b"\nendstream\nendobj\n")
+
+    xref_offset = output.tell()
+    output.write(b"xref\n")
+    output.write(f"0 {len(obj_offsets) + 1}\n".encode("latin-1"))
+    output.write(b"0000000000 65535 f \n")
+    for off in obj_offsets:
+        output.write(f"{off:010d} 00000 n \n".encode("latin-1"))
+
+    output.write(f"trailer\n<< /Size {len(obj_offsets) + 1} /Root 1 0 R >>\n".encode("latin-1"))
+    output.write(b"startxref\n")
+    output.write(f"{xref_offset}\n".encode("latin-1"))
+    output.write(b"%%EOF\n")
+
+    return output.getvalue()
+
+
 @click.group()
 def cli() -> None:
     """PDF operations tool."""
@@ -180,22 +437,17 @@ def extract(file: str, pages: str | None, output: str | None) -> None:
     Extracts all text by default, or specific pages with --pages.
     """
     try:
-        doc = fitz.open(file)
-        try:
-            total = len(doc)
+        pdf = pdfium.PdfDocument(file)
+        total = len(pdf)
+        page_indices = parse_page_range(pages, total) if pages else list(range(total))
 
-            if pages:
-                page_indices = parse_page_range(pages, total)
-            else:
-                page_indices = list(range(total))
+        parts: list[str] = []
+        for idx in page_indices:
+            page = pdf[idx]
+            textpage = page.get_textpage()
+            text = textpage.get_text_bounded()
+            parts.append(f"--- Page {idx + 1} ---\n{text}")
 
-            parts: list[str] = []
-            for idx in page_indices:
-                page = doc[idx]
-                text = page.get_text()
-                parts.append(f"--- Page {idx + 1} ---\n{text}")
-        finally:
-            doc.close()
         write_output("\n".join(parts), output)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
@@ -466,26 +718,23 @@ def watermark(file: str, text: str, font_size: float, opacity: float, angle: flo
     check_output_differs(file, output)
 
     try:
-        doc = fitz.open(file)
-        try:
-            fitz_color = parse_color(color)
+        reader = PdfReader(file)
+        writer = PdfWriter()
+        rgb = parse_color(color)
 
-            for page in doc:
-                rect = page.rect
-                center = fitz.Point(rect.width / 2, rect.height / 2)
+        for page in reader.pages:
+            box = page.mediabox
+            w = float(box.width)
+            h = float(box.height)
 
-                # Measure text width to center it on the page
-                text_width = fitz.get_text_length(text, fontsize=font_size)
-                text_point = fitz.Point(center.x - text_width / 2, center.y + font_size / 3)
+            wm_bytes = _make_watermark_pdf(w, h, text, font_size, opacity, angle, rgb)
+            wm_reader = PdfReader(io.BytesIO(wm_bytes))
+            wm_page = wm_reader.pages[0]
 
-                tw = fitz.TextWriter(page.rect, opacity=opacity)
-                tw.append(text_point, text, fontsize=font_size)
-                rotation_matrix = fitz.Matrix(1, 1).prerotate(angle)
-                tw.write_text(page, morph=(center, rotation_matrix), color=fitz_color)
+            page.merge_page(wm_page)
+            writer.add_page(page)
 
-            doc.save(output)
-        finally:
-            doc.close()
+        write_pdf(writer, output)
         click.echo(f"Watermarked PDF written to {output}", err=True)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
@@ -541,11 +790,16 @@ def compress(file: str, output: str) -> None:
     """Compress a PDF to reduce file size."""
     check_output_differs(file, output)
     try:
-        doc = fitz.open(file)
-        try:
-            doc.save(output, deflate=True, garbage=4)
-        finally:
-            doc.close()
+        reader = PdfReader(file)
+        writer = PdfWriter()
+        writer.append(reader)
+
+        for page in writer.pages:
+            page.compress_content_streams()
+
+        with open(output, "wb") as f:
+            writer.write(f)
+
         original = Path(file).stat().st_size
         compressed = Path(output).stat().st_size
         ratio = (1 - compressed / original) * 100 if original > 0 else 0
@@ -623,20 +877,38 @@ def resize(file: str, size: str, pages: str | None, output: str) -> None:
 @click.argument("file", type=click.Path(exists=True, dir_okay=False))
 @click.option("-o", "--output", type=click.Path(), required=True, help="Output PDF file path.")
 def flatten(file: str, output: str) -> None:
-    """Flatten PDF forms and annotations into static content."""
+    """Flatten PDF forms and annotations into static content.
+
+    Renders each page as a high-DPI image and re-embeds it. This produces a visually
+    identical PDF where forms and annotations are baked into the page content.
+    """
     check_output_differs(file, output)
     try:
-        doc = fitz.open(file)
-        try:
-            new_doc = fitz.open()
-            for page in doc:
-                # show_pdf_page copies visual content (incl. annotations) as static content
-                new_page = new_doc.new_page(width=page.rect.width, height=page.rect.height)
-                new_page.show_pdf_page(new_page.rect, doc, page.number)
-            new_doc.save(output)
-            new_doc.close()
-        finally:
-            doc.close()
+        pdf = pdfium.PdfDocument(file)
+        writer = PdfWriter()
+
+        for i in range(len(pdf)):
+            page = pdf[i]
+            w_pt, h_pt = page.get_size()
+
+            # Render at 300 DPI for high quality
+            img = _render_page_to_pil(page, dpi=300)
+
+            # Create a single-page image PDF and merge into output
+            img_pdf_bytes = _pil_to_image_pdf_page(img)
+            img_reader = PdfReader(io.BytesIO(img_pdf_bytes))
+            img_page = img_reader.pages[0]
+
+            # Scale the image page to match original point dimensions
+            img_w = float(img_page.mediabox.width)
+            img_h = float(img_page.mediabox.height)
+            if img_w > 0 and img_h > 0:
+                img_page.scale(w_pt / img_w, h_pt / img_h)
+                img_page.mediabox = RectangleObject([0, 0, w_pt, h_pt])
+
+            writer.add_page(img_page)
+
+        write_pdf(writer, output)
         click.echo(f"Flattened PDF written to {output}", err=True)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
@@ -662,28 +934,37 @@ def header_footer(file: str, header_text: str | None, footer_text: str | None, f
         click.echo("Error: provide --header and/or --footer.", err=True)
         sys.exit(1)
     try:
-        doc = fitz.open(file)
-        try:
-            total = len(doc)
-            fitz_color = parse_color(color)
-            for i, page in enumerate(doc):
-                rect = page.rect
-                page_num = i + 1
-                if header_text:
-                    text = header_text.replace("{n}", str(page_num)).replace("{total}", str(total))
-                    text_width = fitz.get_text_length(text, fontsize=font_size)
-                    x = (rect.width - text_width) / 2
-                    y = margin + font_size
-                    page.insert_text(fitz.Point(x, y), text, fontsize=font_size, color=fitz_color)
-                if footer_text:
-                    text = footer_text.replace("{n}", str(page_num)).replace("{total}", str(total))
-                    text_width = fitz.get_text_length(text, fontsize=font_size)
-                    x = (rect.width - text_width) / 2
-                    y = rect.height - margin
-                    page.insert_text(fitz.Point(x, y), text, fontsize=font_size, color=fitz_color)
-            doc.save(output)
-        finally:
-            doc.close()
+        reader = PdfReader(file)
+        writer = PdfWriter()
+        total = len(reader.pages)
+        rgb = parse_color(color)
+
+        for i, page in enumerate(reader.pages):
+            box = page.mediabox
+            w = float(box.width)
+            h = float(box.height)
+            page_num = i + 1
+
+            texts: list[dict] = []
+            if header_text:
+                text = header_text.replace("{n}", str(page_num)).replace("{total}", str(total))
+                approx_width = len(text) * font_size * 0.5
+                x = (w - approx_width) / 2
+                y = h - margin
+                texts.append({"x": x, "y": y, "text": text, "font_size": font_size, "color": rgb})
+            if footer_text:
+                text = footer_text.replace("{n}", str(page_num)).replace("{total}", str(total))
+                approx_width = len(text) * font_size * 0.5
+                x = (w - approx_width) / 2
+                y = margin - font_size
+                texts.append({"x": x, "y": y, "text": text, "font_size": font_size, "color": rgb})
+
+            overlay_bytes = _make_text_overlay_pdf(w, h, texts)
+            overlay_reader = PdfReader(io.BytesIO(overlay_bytes))
+            page.merge_page(overlay_reader.pages[0])
+            writer.add_page(page)
+
+        write_pdf(writer, output)
         click.echo(f"Header/footer added, written to {output}", err=True)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
@@ -721,15 +1002,12 @@ def decrypt(file: str, password: str, output: str) -> None:
     """Remove password protection from an encrypted PDF."""
     check_output_differs(file, output)
     try:
-        doc = fitz.open(file)
-        try:
-            if doc.is_encrypted:
-                if not doc.authenticate(password):
-                    click.echo("Error: incorrect password.", err=True)
-                    sys.exit(1)
-            doc.save(output)
-        finally:
-            doc.close()
+        reader = PdfReader(file, password=password)
+        if reader.is_encrypted:
+            reader.decrypt(password)
+        writer = PdfWriter()
+        writer.append(reader)
+        write_pdf(writer, output)
         click.echo(f"Decrypted PDF written to {output}", err=True)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
@@ -746,43 +1024,110 @@ def redact(file: str, texts: tuple[str, ...], areas: tuple[str, ...], output: st
 
     Redact by text:  --text "confidential" --text "SSN: 123-45-6789"
     Redact by area:  --area "1:100,200,300,250"  (page 1, rectangle in points)
+
+    Redacted pages are re-rendered as images, destroying the original content.
+    This is a true redaction — original text is irrecoverably removed.
     """
     check_output_differs(file, output)
     if not texts and not areas:
         click.echo("Error: provide --text and/or --area to redact.", err=True)
         sys.exit(1)
     try:
-        doc = fitz.open(file)
-        try:
-            # Text-based redaction
-            for search_text in texts:
-                for page in doc:
-                    instances = page.search_for(search_text)
-                    for rect in instances:
-                        page.add_redact_annot(rect, fill=(0, 0, 0))
+        from PIL import ImageDraw
 
-            # Area-based redaction
-            for area_spec in areas:
-                try:
-                    page_str, coords_str = area_spec.split(":", 1)
-                    page_num = int(page_str) - 1
-                    coords = [float(c.strip()) for c in coords_str.split(",")]
-                    if len(coords) != 4:
-                        raise ValueError("Need 4 coordinates")
-                    rect = fitz.Rect(*coords)
-                    doc[page_num].add_redact_annot(rect, fill=(0, 0, 0))
-                except (ValueError, IndexError) as e:
-                    click.echo(f"Error: invalid area spec '{area_spec}': {e}", err=True)
-                    sys.exit(1)
+        pdf = pdfium.PdfDocument(file)
+        total = len(pdf)
 
-            # Apply all redactions
-            for page in doc:
-                page.apply_redactions()
+        # Build a map of page_index -> list of redaction rectangles (in points)
+        page_redactions: dict[int, list[tuple[float, float, float, float]]] = {}
 
-            doc.save(output)
-        finally:
-            doc.close()
+        # Text-based redactions: search each page
+        for search_text in texts:
+            for idx in range(total):
+                page = pdf[idx]
+                textpage = page.get_textpage()
+                searcher = textpage.search(search_text)
+                match = searcher.get_next()
+                while match:
+                    char_idx, char_count = match
+                    # Build bounding rect from per-character boxes
+                    left = float("inf")
+                    bottom = float("inf")
+                    right = float("-inf")
+                    top = float("-inf")
+                    for ci in range(char_count):
+                        box = textpage.get_charbox(char_idx + ci)
+                        left = min(left, box[0])
+                        bottom = min(bottom, box[1])
+                        right = max(right, box[2])
+                        top = max(top, box[3])
+                    page_redactions.setdefault(idx, []).append((left, bottom, right, top))
+                    match = searcher.get_next()
+
+        # Area-based redactions
+        for area_spec in areas:
+            try:
+                page_str, coords_str = area_spec.split(":", 1)
+                page_num = int(page_str) - 1
+                coords = [float(c.strip()) for c in coords_str.split(",")]
+                if len(coords) != 4:
+                    raise ValueError("Need 4 coordinates")
+                if page_num < 0 or page_num >= total:
+                    raise ValueError(f"Page {page_num + 1} out of range")
+                page_redactions.setdefault(page_num, []).append(tuple(coords))
+            except (ValueError, IndexError) as e:
+                click.echo(f"Error: invalid area spec '{area_spec}': {e}", err=True)
+                sys.exit(1)
+
+        # Re-render affected pages with black rectangles over redacted areas
+        reader = PdfReader(file)
+        writer = PdfWriter()
+
+        for idx in range(total):
+            if idx in page_redactions:
+                page = pdf[idx]
+                w_pt, h_pt = page.get_size()
+                dpi = 300
+                scale = dpi / 72
+
+                img = _render_page_to_pil(page, dpi=dpi)
+
+                draw = ImageDraw.Draw(img)
+                for rect in page_redactions[idx]:
+                    # Convert PDF points to pixel coords
+                    # PDF coords: (left, bottom, right, top) with origin at bottom-left
+                    # PIL coords: origin at top-left
+                    left = rect[0] * scale
+                    bottom = rect[1] * scale
+                    right = rect[2] * scale
+                    top = rect[3] * scale
+                    # Flip Y: PIL y = (page_height_px - pdf_y)
+                    h_px = h_pt * scale
+                    pil_top = h_px - top
+                    pil_bottom = h_px - bottom
+                    draw.rectangle([left, pil_top, right, pil_bottom], fill="black")
+
+                # Create image PDF page
+                img_pdf_bytes = _pil_to_image_pdf_page(img)
+                img_reader = PdfReader(io.BytesIO(img_pdf_bytes))
+                img_page = img_reader.pages[0]
+
+                # Scale to original page dimensions
+                img_w = float(img_page.mediabox.width)
+                img_h = float(img_page.mediabox.height)
+                if img_w > 0 and img_h > 0:
+                    img_page.scale(w_pt / img_w, h_pt / img_h)
+                    img_page.mediabox = RectangleObject([0, 0, w_pt, h_pt])
+
+                writer.add_page(img_page)
+            else:
+                # Pass through unmodified pages
+                writer.add_page(reader.pages[idx])
+
+        write_pdf(writer, output)
         click.echo(f"Redacted PDF written to {output}", err=True)
+    except SystemExit:
+        raise
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -792,35 +1137,40 @@ def redact(file: str, texts: tuple[str, ...], areas: tuple[str, ...], output: st
 @click.argument("file", type=click.Path(exists=True, dir_okay=False))
 @click.option("-o", "--output", type=click.Path(), required=True, help="Output PDF file path.")
 def sanitize(file: str, output: str) -> None:
-    """Clear metadata and perform aggressive PDF cleanup save.
+    """Clear metadata and perform PDF cleanup.
 
     This command:
     - clears standard document metadata fields
-    - removes XMP metadata
-    - saves with garbage collection / cleanup options
+    - saves with content stream compression
 
     Note: it does not guarantee removal of every possible active-content pattern
     across all PDFs.
     """
     check_output_differs(file, output)
     try:
-        doc = fitz.open(file)
-        try:
-            # Clear all standard metadata
-            doc.set_metadata({
-                "title": "",
-                "author": "",
-                "subject": "",
-                "keywords": "",
-                "creator": "",
-                "producer": "",
-            })
-            # Remove XMP metadata
-            doc.del_xml_metadata()
-            # Save with full garbage collection to strip unreferenced objects (JS, embedded files, etc.)
-            doc.save(output, garbage=4, clean=True, deflate=True)
-        finally:
-            doc.close()
+        reader = PdfReader(file)
+        writer = PdfWriter()
+        writer.append(reader)
+
+        # Clear all standard metadata
+        writer.add_metadata({
+            "/Title": "",
+            "/Author": "",
+            "/Subject": "",
+            "/Keywords": "",
+            "/Creator": "",
+            "/Producer": "",
+        })
+
+        # Remove XMP metadata if present
+        if "/Metadata" in writer._root_object:
+            del writer._root_object["/Metadata"]
+
+        # Compress content streams
+        for page in writer.pages:
+            page.compress_content_streams()
+
+        write_pdf(writer, output)
         click.echo(f"Sanitized PDF written to {output}", err=True)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
@@ -828,7 +1178,7 @@ def sanitize(file: str, output: str) -> None:
 
 
 # ============================================================
-# Convert: to-image, from-image, to-docx, to-xlsx, to-pptx
+# Convert: to-image, from-image, to-docx, to-pptx
 # ============================================================
 
 
@@ -841,24 +1191,23 @@ def sanitize(file: str, output: str) -> None:
 def to_image(file: str, fmt: str, dpi: int, pages: str | None, output: str) -> None:
     """Convert PDF pages to images (PNG or JPG)."""
     try:
-        doc = fitz.open(file)
-        try:
-            total = len(doc)
-            indices = parse_page_range(pages, total) if pages else list(range(total))
-            out_dir = Path(output)
-            out_dir.mkdir(parents=True, exist_ok=True)
-            for idx in indices:
-                page = doc[idx]
-                pix = page.get_pixmap(dpi=dpi)
-                ext = "jpg" if fmt == "jpg" else "png"
-                out_path = out_dir / f"page_{idx + 1}.{ext}"
-                if fmt == "jpg":
-                    pix.save(str(out_path), jpg_quality=85)
-                else:
-                    pix.save(str(out_path))
-                click.echo(f"Saved {out_path}", err=True)
-        finally:
-            doc.close()
+        pdf = pdfium.PdfDocument(file)
+        total = len(pdf)
+        indices = parse_page_range(pages, total) if pages else list(range(total))
+        out_dir = Path(output)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        for idx in indices:
+            page = pdf[idx]
+            img = _render_page_to_pil(page, dpi=dpi)
+            ext = "jpg" if fmt == "jpg" else "png"
+            out_path = out_dir / f"page_{idx + 1}.{ext}"
+            if fmt == "jpg":
+                img.save(str(out_path), "JPEG", quality=85)
+            else:
+                img.save(str(out_path), "PNG")
+            click.echo(f"Saved {out_path}", err=True)
+
         click.echo(f"Converted {len(indices)} pages to {fmt.upper()} in {output}", err=True)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
@@ -871,19 +1220,17 @@ def to_image(file: str, fmt: str, dpi: int, pages: str | None, output: str) -> N
 def from_image(files: tuple[str, ...], output: str) -> None:
     """Convert images to a PDF document.
 
-    Each image becomes one page. Supports PNG, JPG, BMP, GIF, SVG, WebP.
+    Each image becomes one page. Supports PNG, JPG, BMP, GIF, TIFF, WebP.
     """
     try:
-        doc = fitz.open()
+        import img2pdf
+
+        img_data = []
         for img_path in files:
-            img = fitz.open(img_path)
-            pdfbytes = img.convert_to_pdf()
-            img_pdf = fitz.open("pdf", pdfbytes)
-            doc.insert_pdf(img_pdf)
-            img.close()
-            img_pdf.close()
-        doc.save(output)
-        doc.close()
+            img_data.append(Path(img_path).read_bytes())
+
+        pdf_bytes = img2pdf.convert(img_data)
+        Path(output).write_bytes(pdf_bytes)
         click.echo(f"PDF written to {output} ({len(files)} pages from images)", err=True)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
@@ -899,69 +1246,23 @@ def to_docx(file: str, pages: str | None, output: str) -> None:
     from docx import Document as DocxDocument
 
     try:
-        doc = fitz.open(file)
-        try:
-            total = len(doc)
-            indices = parse_page_range(pages, total) if pages else list(range(total))
-            docx_doc = DocxDocument()
-            for i, idx in enumerate(indices):
-                page = doc[idx]
-                blocks = page.get_text("blocks")
-                for block in sorted(blocks, key=lambda b: (b[1], b[0])):
-                    if block[6] == 0:  # text block
-                        text = block[4].strip()
-                        if text:
-                            docx_doc.add_paragraph(text)
-                if i < len(indices) - 1:
-                    docx_doc.add_page_break()
-        finally:
-            doc.close()
+        pdf = pdfium.PdfDocument(file)
+        total = len(pdf)
+        indices = parse_page_range(pages, total) if pages else list(range(total))
+
+        docx_doc = DocxDocument()
+        for i, idx in enumerate(indices):
+            page = pdf[idx]
+            textpage = page.get_textpage()
+            text = textpage.get_text_bounded()
+            for line in text.splitlines():
+                if line.strip():
+                    docx_doc.add_paragraph(line.strip())
+            if i < len(indices) - 1:
+                docx_doc.add_page_break()
+
         docx_doc.save(output)
         click.echo(f"DOCX written to {output}", err=True)
-    except Exception as e:
-        click.echo(f"Error: {e}", err=True)
-        sys.exit(1)
-
-
-@cli.command("to-xlsx")
-@click.argument("file", type=click.Path(exists=True, dir_okay=False))
-@click.option("--pages", type=str, default=None, help="Page range to convert (default: all).")
-@click.option("-o", "--output", type=click.Path(), required=True, help="Output XLSX file path.")
-def to_xlsx(file: str, pages: str | None, output: str) -> None:
-    """Extract tables from PDF to Excel spreadsheet.
-
-    Uses PyMuPDF's built-in table detection. Falls back to text extraction if no tables found.
-    """
-    from openpyxl import Workbook
-
-    try:
-        doc = fitz.open(file)
-        try:
-            total = len(doc)
-            indices = parse_page_range(pages, total) if pages else list(range(total))
-            wb = Workbook()
-            wb.remove(wb.active)
-            table_count = 0
-            for idx in indices:
-                page = doc[idx]
-                tabs = page.find_tables()
-                for j, table in enumerate(tabs.tables):
-                    table_count += 1
-                    ws = wb.create_sheet(title=f"Page{idx + 1}_Table{j + 1}")
-                    for row in table.extract():
-                        ws.append([cell if cell else "" for cell in row])
-            if table_count == 0:
-                # No tables found — extract text as fallback
-                ws = wb.create_sheet(title="Text")
-                for idx in indices:
-                    page = doc[idx]
-                    for line in page.get_text().split("\n"):
-                        if line.strip():
-                            ws.append([line.strip()])
-        finally:
-            doc.close()
-        wb.save(output)
-        click.echo(f"XLSX written to {output} ({table_count} tables extracted)", err=True)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -978,30 +1279,37 @@ def to_pptx(file: str, dpi: int, pages: str | None, output: str) -> None:
     from pptx.util import Emu
 
     try:
-        doc = fitz.open(file)
-        try:
-            total = len(doc)
-            indices = parse_page_range(pages, total) if pages else list(range(total))
-            if not indices:
-                click.echo("Error: no pages selected for conversion.", err=True)
-                sys.exit(1)
-            prs = Presentation()
-            # Set slide size to match first page aspect ratio (points -> EMU: 1pt = 12700 EMU)
-            first_page = doc[indices[0]]
-            prs.slide_width = Emu(int(first_page.rect.width * 12700))
-            prs.slide_height = Emu(int(first_page.rect.height * 12700))
-            blank_layout = prs.slide_layouts[6]  # blank slide
-            for idx in indices:
-                page = doc[idx]
-                pix = page.get_pixmap(dpi=dpi)
-                img_bytes = pix.tobytes("png")
-                slide = prs.slides.add_slide(blank_layout)
-                slide.shapes.add_picture(
-                    io.BytesIO(img_bytes), 0, 0,
-                    prs.slide_width, prs.slide_height,
-                )
-        finally:
-            doc.close()
+        pdf = pdfium.PdfDocument(file)
+        total = len(pdf)
+        indices = parse_page_range(pages, total) if pages else list(range(total))
+
+        if not indices:
+            click.echo("Error: no pages selected for conversion.", err=True)
+            sys.exit(1)
+
+        prs = Presentation()
+
+        # Set slide size to match first page aspect ratio (points -> EMU: 1pt = 12700 EMU)
+        first_page = pdf[indices[0]]
+        first_w, first_h = first_page.get_size()
+        prs.slide_width = Emu(int(first_w * 12700))
+        prs.slide_height = Emu(int(first_h * 12700))
+        blank_layout = prs.slide_layouts[6]  # blank slide
+
+        for idx in indices:
+            page = pdf[idx]
+            img = _render_page_to_pil(page, dpi=dpi)
+
+            img_buffer = io.BytesIO()
+            img.save(img_buffer, format="PNG")
+            img_buffer.seek(0)
+
+            slide = prs.slides.add_slide(blank_layout)
+            slide.shapes.add_picture(
+                img_buffer, 0, 0,
+                prs.slide_width, prs.slide_height,
+            )
+
         prs.save(output)
         click.echo(f"PPTX written to {output} ({len(indices)} slides)", err=True)
     except Exception as e:

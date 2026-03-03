@@ -149,16 +149,95 @@ describe('createBrowserTools', () => {
       expect(result.content[0].text).toContain('browser-test-1')
     })
 
-    it('routes open command with --foreground flag', async () => {
+    it('routes open command with --foreground flag and reports settled visibility', async () => {
       let openOptions: { background?: boolean } | undefined
+      let listCalls = 0
       mockFns.openPanel = async (options) => {
         openOptions = options
         return { instanceId: 'browser-test-1' }
+      }
+      mockFns.listWindows = async () => {
+        listCalls += 1
+        const isVisible = listCalls >= 3
+        return [{
+          id: 'browser-test-1',
+          title: 'Example Domain',
+          url: 'https://example.com',
+          isVisible,
+          ownerType: 'session',
+          ownerSessionId: 'test-session',
+          boundSessionId: 'test-session',
+          agentControlActive: true,
+        }]
       }
 
       const result = await executeTool(tools, 'browser_tool', { command: 'open --foreground' })
       expect(openOptions).toEqual({ background: false })
       expect(result.content[0].text).toContain('Opened in-app browser window in foreground')
+      expect(result.content[0].text).toContain('Visibility settle: wait-loop')
+      expect(result.content[0].text).toContain('Visible: true')
+    })
+
+    it('uses focus fallback when foreground open visibility does not settle in wait loop', async () => {
+      const previousTimeout = process.env.CRAFT_BROWSER_OPEN_SETTLE_TIMEOUT_MS
+      const previousPoll = process.env.CRAFT_BROWSER_OPEN_SETTLE_POLL_MS
+      process.env.CRAFT_BROWSER_OPEN_SETTLE_TIMEOUT_MS = '120'
+      process.env.CRAFT_BROWSER_OPEN_SETTLE_POLL_MS = '20'
+
+      try {
+        let focusCalls = 0
+        let listCalls = 0
+        mockFns.listWindows = async () => {
+          listCalls += 1
+          const isVisible = focusCalls > 0
+          return [{
+            id: 'browser-test-1',
+            title: 'Example Domain',
+            url: 'https://example.com',
+            isVisible,
+            ownerType: 'session',
+            ownerSessionId: 'test-session',
+            boundSessionId: 'test-session',
+            agentControlActive: true,
+          }]
+        }
+        mockFns.focusWindow = async (instanceId?: string) => {
+          focusCalls += 1
+          return {
+            instanceId: instanceId ?? 'browser-test-1',
+            title: 'Example Domain',
+            url: 'https://example.com',
+          }
+        }
+
+        const result = await executeTool(tools, 'browser_tool', { command: 'open --foreground' })
+        expect(listCalls).toBeGreaterThan(2)
+        expect(focusCalls).toBe(1)
+        expect(result.content[0].text).toContain('Visibility settle: timeout + focus retry')
+        expect(result.content[0].text).toContain('Visible: true')
+      } finally {
+        if (previousTimeout === undefined) delete process.env.CRAFT_BROWSER_OPEN_SETTLE_TIMEOUT_MS
+        else process.env.CRAFT_BROWSER_OPEN_SETTLE_TIMEOUT_MS = previousTimeout
+
+        if (previousPoll === undefined) delete process.env.CRAFT_BROWSER_OPEN_SETTLE_POLL_MS
+        else process.env.CRAFT_BROWSER_OPEN_SETTLE_POLL_MS = previousPoll
+      }
+    })
+
+    it('does not use focus fallback for background open', async () => {
+      let focusCalls = 0
+      mockFns.focusWindow = async (instanceId?: string) => {
+        focusCalls += 1
+        return {
+          instanceId: instanceId ?? 'browser-test-1',
+          title: 'Example Domain',
+          url: 'https://example.com',
+        }
+      }
+
+      const result = await executeTool(tools, 'browser_tool', { command: 'open' })
+      expect(focusCalls).toBe(0)
+      expect(result.content[0].text).not.toContain('Visibility settle:')
     })
 
     it('routes snapshot command and formats nodes', async () => {
@@ -320,9 +399,70 @@ describe('createBrowserTools', () => {
       let selectedRef = ''
       let selectedValue = ''
       mockFns.select = async (ref, value) => { selectedRef = ref; selectedValue = value }
+      mockFns.snapshot = async () => ({
+        url: 'https://example.com',
+        title: 'Example',
+        nodes: [
+          { ref: '@e3', role: 'combobox', name: 'Type', value: 'optionValue' },
+        ],
+      })
+
       const result = await executeTool(tools, 'browser_tool', { command: 'select @e3 optionValue' })
       expect(selectedRef).toBe('@e3')
       expect(selectedValue).toBe('optionValue')
+      expect(result.content[0].text).toContain('(verified)')
+    })
+
+    it('parses select assertion flags and timeout', async () => {
+      let selectedRef = ''
+      let selectedValue = ''
+      mockFns.select = async (ref, value) => { selectedRef = ref; selectedValue = value }
+      mockFns.snapshot = async () => ({
+        url: 'https://example.com',
+        title: 'Example',
+        nodes: [
+          { ref: '@e75', role: 'combobox', name: 'Type', value: 'CNAME' },
+          { ref: '@e80', role: 'textbox', name: 'Target', value: 'beautiful-mermaid.com' },
+        ],
+      })
+
+      const result = await executeTool(tools, 'browser_tool', {
+        command: 'select @e75 CNAME --assert-text Target --assert-value CNAME --timeout 3000',
+      })
+
+      expect(selectedRef).toBe('@e75')
+      expect(selectedValue).toBe('CNAME')
+      expect(result.content[0].text).toContain('assertTextMatched=true')
+      expect(result.content[0].text).toContain('assertValueMatched=true')
+      expect(result.content[0].text).toContain('timeout=3000ms')
+      expect(result.content[0].text).toContain('(verified)')
+    })
+
+    it('returns warning when select cannot be verified', async () => {
+      mockFns.snapshot = async () => ({
+        url: 'https://example.com',
+        title: 'Example',
+        nodes: [
+          { ref: '@e75', role: 'combobox', name: 'Type', value: 'A' },
+          { ref: '@e80', role: 'textbox', name: 'IPv4 address (required)', value: '' },
+        ],
+      })
+
+      const result = await executeTool(tools, 'browser_tool', {
+        command: 'select @e75 CNAME --assert-text Target --timeout 500',
+      })
+
+      expect(result.content[0].text).toContain('(warning)')
+      expect(result.content[0].text).toContain('Warning: select interaction succeeded but effective form state could not be fully verified')
+      expect(result.content[0].text).toContain('assert-text did not match: "Target"')
+    })
+
+    it('returns error when select assertion flag is missing value', async () => {
+      const result = await executeTool(tools, 'browser_tool', {
+        command: 'select @e75 CNAME --assert-text',
+      })
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain('select --assert-text requires a value')
     })
 
     it('routes upload command with one or more file paths', async () => {

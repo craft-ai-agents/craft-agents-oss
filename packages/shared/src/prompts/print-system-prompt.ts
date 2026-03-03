@@ -101,7 +101,7 @@ const sessionState = formatSessionState('260121-example-session', {
     '/Users/example/.craft-agent/workspaces/abc123/sessions/260121-example-session/plans',
 });
 printSection('2. SESSION STATE - formatSessionState()', sessionState, colors.magenta);
-printAnnotation('Contains: sessionId, permissionMode, plansFolderPath');
+printAnnotation('Contains: sessionId, permissionMode, modeTransition/modeChangedBy/modeChangedAt/modeVersion (when available), plansFolderPath');
 
 // 3. Source State (example - can't call formatSourceState without agent instance)
 const exampleSourceState = `<sources>

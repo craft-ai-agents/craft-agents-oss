@@ -212,10 +212,6 @@ function findSmallModel(connection: Pick<LlmConnection, 'models' | 'providerType
 
   const toId = (m: ModelDefinition | string) => typeof m === 'string' ? m : m.id;
 
-  // DEBUG LOG
-  // eslint-disable-next-line no-console
-  console.log(`[findSmallModel] Searching for small model. Provider: ${connection.providerType}`, connection.models.map(toId));
-
   const toSearchStr = (m: ModelDefinition | string) =>
     typeof m === 'string' ? m.toLowerCase() : `${m.id} ${m.name} ${m.shortName}`.toLowerCase();
 
@@ -226,6 +222,9 @@ function findSmallModel(connection: Pick<LlmConnection, 'models' | 'providerType
     keywords.push('haiku');
   } else if (isPiProvider(connection.providerType)) {
     keywords.push('mini', 'flash');
+  } else {
+    // Aggregator providers (copilot, etc.) — try all common small-model keywords
+    keywords.push('mini', 'haiku', 'flash');
   }
 
   if (keywords.length > 0) {
@@ -234,18 +233,12 @@ function findSmallModel(connection: Pick<LlmConnection, 'models' | 'providerType
       return keywords.some(k => searchStr.includes(k));
     });
     if (match) {
-      const id = toId(match);
-      // eslint-disable-next-line no-console
-      console.log(`[findSmallModel] Found match: ${id} using keywords: ${keywords.join(', ')}`);
-      return id;
+      return toId(match);
     }
   }
 
   // Fallback: last model in the list
-  const fallback = toId(connection.models[connection.models.length - 1]!);
-  // eslint-disable-next-line no-console
-  console.log(`[findSmallModel] No keyword match found. Fallback to last model: ${fallback}`);
-  return fallback;
+  return toId(connection.models[connection.models.length - 1]!);
 }
 
 /**
@@ -415,9 +408,11 @@ export function getModelsForProviderType(providerType: LlmProviderType, piAuthPr
  * Format: bare model IDs (without pi/ prefix). Matched against pi/{id} or pi/{id}-*.
  */
 export const PI_PREFERRED_DEFAULTS: Record<string, string[]> = {
-  anthropic: ['claude-sonnet-4-5', 'claude-sonnet-4-6', 'claude-sonnet-4-0', 'claude-haiku-4-5'],
+  anthropic: ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
   openai: ['gpt-5.2', 'gpt-5.1', 'gpt-5', 'o4-mini', 'o3', 'gpt-4o'],
+  'openai-codex': ['gpt-5.2', 'gpt-5.1', 'gpt-5', 'o4-mini', 'o3', 'gpt-4o'],
   google: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'],
+  'github-copilot': ['claude-sonnet-4-6', 'gpt-5', 'o4-mini', 'claude-haiku-4-5'],
 };
 
 export function getDefaultModelsForConnection(providerType: LlmProviderType, piAuthProvider?: string): Array<ModelDefinition | string> {
@@ -437,11 +432,7 @@ export function getDefaultModelsForConnection(providerType: LlmProviderType, piA
     return models;
   }
   if (providerType === 'pi_compat') return [];  // Dynamic — user specifies
-  if (providerType === 'anthropic_compat') return [
-    'anthropic/claude-opus-4.6',
-    'anthropic/claude-sonnet-4.5',
-    'anthropic/claude-haiku-4.5',
-  ];
+  if (providerType === 'anthropic_compat') return [];  // Dynamic — user specifies
   // anthropic, bedrock, vertex
   return ANTHROPIC_MODELS;
 }
@@ -457,7 +448,7 @@ export function getDefaultModelsForConnection(providerType: LlmProviderType, piA
 export function getDefaultModelForConnection(providerType: LlmProviderType, piAuthProvider?: string): string {
   const models = getDefaultModelsForConnection(providerType, piAuthProvider);
   const first = models[0];
-  if (!first) return ANTHROPIC_MODELS[0]!.id;
+  if (!first) return '';  // Dynamic provider — no default
   return typeof first === 'string' ? first : first.id;
 }
 

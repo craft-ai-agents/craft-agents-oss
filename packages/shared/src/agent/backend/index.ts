@@ -17,7 +17,7 @@
  * const agent = createAgent({
  *   provider: 'anthropic',
  *   workspace: myWorkspace,
- *   model: 'claude-sonnet-4-5-20250929',
+ *   model: 'claude-sonnet-4-6',
  * });
  *
  * for await (const event of agent.chat('Hello')) {

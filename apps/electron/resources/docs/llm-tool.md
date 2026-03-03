@@ -153,7 +153,7 @@ call_llm({
 call_llm({
   prompt: "Analyze this algorithm for edge cases and potential bugs",
   attachments: ["/src/sorting.ts"],
-  model: "claude-sonnet-4-5-20250929",
+  model: "claude-sonnet-4-6",
   thinking: true,
   thinkingBudget: 15000
 })
@@ -165,7 +165,7 @@ call_llm({
 call_llm({
   prompt: "Describe the UI issues in this screenshot",
   attachments: ["/screenshots/bug-report.png"],
-  model: "claude-sonnet-4-5-20250929"
+  model: "claude-sonnet-4-6"
 })
 ```
 

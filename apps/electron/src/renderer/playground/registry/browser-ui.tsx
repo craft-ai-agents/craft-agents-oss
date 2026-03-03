@@ -14,6 +14,7 @@ import { EMPTY_STATE_PROMPT_SAMPLES } from '@/components/browser/empty-state-pro
 import type { BrowserInstanceInfo } from '../../../shared/types'
 import { BROWSER_LIVE_FX_BORDER, getBrowserLiveFxCornerRadii } from '../../../shared/browser-live-fx'
 import { routes } from '../../../shared/routes'
+import { isLinux, isMac, isWindows } from '@/lib/platform'
 
 interface BrowserTraceSidebarSampleProps {
   scenario: 'core' | 'all-native-tools' | 'browser-tool-wrapper' | 'full-matrix'
@@ -30,11 +31,11 @@ type BrowserSurfaceMode = 'content' | 'empty-state'
 
 const now = Date.now()
 const PLAYGROUND_LIVE_FX_CORNERS = getBrowserLiveFxCornerRadii(
-  typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac')
+  isMac
     ? 'darwin'
-    : typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('win')
+    : isWindows
       ? 'win32'
-      : typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('linux')
+      : isLinux
         ? 'linux'
         : 'other',
 )

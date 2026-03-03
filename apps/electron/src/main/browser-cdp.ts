@@ -69,6 +69,25 @@ const CONTENT_ROLES = new Set([
   'status', 'progressbar', 'meter', 'timer',
 ])
 
+const MAX_AX_SNAPSHOT_NODES = 500
+const FALLBACK_EXCLUDED_ROLES = new Set(['none', 'generic', 'rootwebarea', 'webarea'])
+
+function normalizeAxText(value: unknown): string {
+  return String(value ?? '').trim()
+}
+
+function incrementCount(map: Map<string, number>, key: string): void {
+  map.set(key, (map.get(key) ?? 0) + 1)
+}
+
+function summarizeTopCounts(map: Map<string, number>, maxEntries = 8): string {
+  return Array.from(map.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, maxEntries)
+    .map(([key, count]) => `${key}:${count}`)
+    .join(', ')
+}
+
 export class BrowserCDP {
   private webContents: WebContents
   private attached = false
@@ -124,61 +143,153 @@ export class BrowserCDP {
 
   async getAccessibilitySnapshot(): Promise<AccessibilitySnapshot> {
     const tree = await this.send('Accessibility.getFullAXTree')
-    const nodes = tree.nodes as any[]
+    const nodes = Array.isArray(tree?.nodes) ? tree.nodes as any[] : []
 
     this.refMap.clear()
     this.refDetails.clear()
     const result: AccessibilityNode[] = []
+    const fallbackCandidates: Array<{
+      backendDOMNodeId: number
+      role: string
+      name: string
+      value?: string
+      description?: string
+      focused?: boolean
+      checked?: boolean
+      disabled?: boolean
+    }> = []
+
+    const rawRoleCounts = new Map<string, number>()
+    const droppedReasonCounts = new Map<string, number>()
+
     let refCounter = 0
 
-    for (const node of nodes) {
-      const role = node.role?.value || ''
-      const name = node.name?.value || ''
-      const value = node.value?.value
-
-      // Filter: only include interactive elements, content elements with names,
-      // or elements with both role and name
-      const isInteractive = INTERACTIVE_ROLES.has(role)
-      const isContent = CONTENT_ROLES.has(role) && name
-      const hasValue = value !== undefined && value !== ''
-
-      if (!isInteractive && !isContent && !hasValue) continue
-
-      // Skip generic roles without meaningful names
-      if ((role === 'generic' || role === 'none' || !role) && !name) continue
+    const pushAccessNode = (entry: {
+      backendDOMNodeId?: number
+      role: string
+      name: string
+      value?: string
+      description?: string
+      focused?: boolean
+      checked?: boolean
+      disabled?: boolean
+    }): boolean => {
+      if (refCounter >= MAX_AX_SNAPSHOT_NODES) return false
 
       refCounter++
       const ref = `@e${refCounter}`
 
-      // Store mapping from ref to backend node ID
-      if (node.backendDOMNodeId) {
-        this.refMap.set(ref, node.backendDOMNodeId)
-        this.refDetails.set(ref, { role, name })
+      if (entry.backendDOMNodeId) {
+        this.refMap.set(ref, entry.backendDOMNodeId)
+        this.refDetails.set(ref, { role: entry.role, name: entry.name })
       }
 
       const accessNode: AccessibilityNode = {
         ref,
-        role,
-        name,
+        role: entry.role,
+        name: entry.name,
       }
 
-      if (hasValue) accessNode.value = String(value)
-      if (node.description?.value) accessNode.description = node.description.value
+      if (entry.value !== undefined) accessNode.value = entry.value
+      if (entry.description) accessNode.description = entry.description
+      if (entry.focused) accessNode.focused = true
+      if (entry.checked) accessNode.checked = true
+      if (entry.disabled) accessNode.disabled = true
 
-      // Boolean properties
+      result.push(accessNode)
+      return true
+    }
+
+    for (const node of nodes) {
+      const role = normalizeAxText(node.role?.value).toLowerCase()
+      const name = normalizeAxText(node.name?.value)
+      const rawValue = node.value?.value
+      const hasValue = rawValue !== undefined && rawValue !== ''
+      const value = hasValue ? String(rawValue) : undefined
+      const description = normalizeAxText(node.description?.value) || undefined
+      const backendDOMNodeId = typeof node.backendDOMNodeId === 'number' ? node.backendDOMNodeId : undefined
+
+      incrementCount(rawRoleCounts, role || '(empty)')
+
+      let focused = false
+      let checked = false
+      let disabled = false
+      let focusable = false
+
       const props = node.properties as any[] | undefined
       if (props) {
         for (const prop of props) {
-          if (prop.name === 'focused' && prop.value?.value === true) accessNode.focused = true
-          if (prop.name === 'checked' && prop.value?.value !== 'false') accessNode.checked = prop.value?.value === true || prop.value?.value === 'true'
-          if (prop.name === 'disabled' && prop.value?.value === true) accessNode.disabled = true
+          if (prop.name === 'focused' && prop.value?.value === true) focused = true
+          if (prop.name === 'checked' && prop.value?.value !== 'false') checked = prop.value?.value === true || prop.value?.value === 'true'
+          if (prop.name === 'disabled' && prop.value?.value === true) disabled = true
+          if (prop.name === 'focusable' && prop.value?.value === true) focusable = true
         }
       }
 
-      result.push(accessNode)
+      const isInteractive = INTERACTIVE_ROLES.has(role)
+      const isContent = CONTENT_ROLES.has(role) && !!name
+      const hasPrimarySignal = isInteractive || isContent || hasValue
+      const isGenericWithoutName = (!role || role === 'generic' || role === 'none') && !name
 
-      // Cap at 500 nodes to prevent token explosion
-      if (refCounter >= 500) break
+      if (!hasPrimarySignal) {
+        incrementCount(droppedReasonCounts, 'no-primary-signal')
+      } else if (isGenericWithoutName) {
+        incrementCount(droppedReasonCounts, 'generic-without-name')
+      }
+
+      const shouldKeepPrimary = hasPrimarySignal && !isGenericWithoutName
+
+      if (shouldKeepPrimary) {
+        pushAccessNode({
+          backendDOMNodeId,
+          role,
+          name,
+          value,
+          description,
+          focused,
+          checked,
+          disabled,
+        })
+
+        if (refCounter >= MAX_AX_SNAPSHOT_NODES) break
+        continue
+      }
+
+      const fallbackEligible = !!backendDOMNodeId
+        && !FALLBACK_EXCLUDED_ROLES.has(role)
+        && (!!name || hasValue || focusable || focused)
+
+      if (fallbackEligible) {
+        fallbackCandidates.push({
+          backendDOMNodeId,
+          role,
+          name,
+          value,
+          description,
+          focused,
+          checked,
+          disabled,
+        })
+      }
+    }
+
+    let fallbackKept = 0
+    if (result.length === 0 && fallbackCandidates.length > 0) {
+      for (const candidate of fallbackCandidates) {
+        const pushed = pushAccessNode(candidate)
+        if (!pushed) break
+        fallbackKept++
+      }
+
+      mainLog.info(
+        `[browser-cdp] snapshot fallback engaged url=${this.webContents.getURL()} raw=${nodes.length} kept=${result.length} fallbackKept=${fallbackKept} roles=[${summarizeTopCounts(rawRoleCounts)}] dropped=[${summarizeTopCounts(droppedReasonCounts)}]`,
+      )
+    }
+
+    if (result.length === 0 && nodes.length > 0) {
+      mainLog.warn(
+        `[browser-cdp] snapshot produced zero nodes url=${this.webContents.getURL()} raw=${nodes.length} roles=[${summarizeTopCounts(rawRoleCounts)}] dropped=[${summarizeTopCounts(droppedReasonCounts)}]`,
+      )
     }
 
     return {
@@ -612,15 +723,178 @@ export class BrowserCDP {
 
     try {
       const { object } = await this.send('DOM.resolveNode', { backendNodeId })
-      await this.send('Runtime.callFunctionOn', {
+      const result = await this.send('Runtime.callFunctionOn', {
         objectId: object.objectId,
+        returnByValue: true,
         functionDeclaration: `function(val) {
-          this.value = val;
-          this.dispatchEvent(new Event('input', { bubbles: true }));
-          this.dispatchEvent(new Event('change', { bubbles: true }));
+          const normalize = (input) => String(input ?? '').trim().toLowerCase()
+          const desired = normalize(val)
+
+          const isVisible = (el) => {
+            if (!el || !(el instanceof Element)) return false
+            const style = window.getComputedStyle(el)
+            if (!style) return false
+            if (style.display === 'none' || style.visibility === 'hidden') return false
+            if (Number(style.opacity || '1') === 0) return false
+            const rect = el.getBoundingClientRect()
+            return rect.width > 0 && rect.height > 0
+          }
+
+          const fireClick = (el) => {
+            if (!el) return
+            const events = [
+              ['pointerdown', PointerEvent],
+              ['mousedown', MouseEvent],
+              ['pointerup', PointerEvent],
+              ['mouseup', MouseEvent],
+              ['click', MouseEvent],
+            ]
+            for (const [name, EventCtor] of events) {
+              try {
+                el.dispatchEvent(new EventCtor(name, { bubbles: true, cancelable: true, composed: true }))
+              } catch {
+                el.dispatchEvent(new Event(name, { bubbles: true, cancelable: true }))
+              }
+            }
+          }
+
+          const readOptionValue = (el) => {
+            if (!el || !(el instanceof Element)) return ''
+            return (
+              el.getAttribute('data-value')
+              || el.getAttribute('value')
+              || el.textContent
+              || ''
+            )
+          }
+
+          const hasDesired = (input) => normalize(input).includes(desired)
+
+          const isNativeSelect = this instanceof HTMLSelectElement || String(this.tagName || '').toLowerCase() === 'select'
+          if (isNativeSelect) {
+            this.value = val
+            this.dispatchEvent(new Event('input', { bubbles: true }))
+            this.dispatchEvent(new Event('change', { bubbles: true }))
+
+            const selected = this.selectedOptions && this.selectedOptions.length > 0 ? this.selectedOptions[0] : null
+            const selectedValue = selected ? (selected.value || selected.textContent || '') : (this.value || '')
+            const verified = hasDesired(selectedValue) || hasDesired(this.value)
+            return {
+              ok: verified,
+              strategy: 'native',
+              reason: verified ? undefined : 'native select value did not update as expected',
+              selectedValue: this.value || '',
+              selectedText: selected ? String(selected.textContent || '').trim() : '',
+            }
+          }
+
+          this.focus && this.focus()
+          fireClick(this)
+
+          const candidateContainers = []
+          const linkedIds = [this.getAttribute('aria-controls'), this.getAttribute('aria-owns')].filter(Boolean)
+          for (const id of linkedIds) {
+            const linked = document.getElementById(id)
+            if (linked && isVisible(linked)) candidateContainers.push(linked)
+          }
+
+          const expandedCombos = Array.from(document.querySelectorAll('[role="combobox"][aria-expanded="true"]'))
+          for (const combo of expandedCombos) {
+            if (isVisible(combo) && combo !== this) candidateContainers.push(combo)
+            const controls = combo.getAttribute('aria-controls') || combo.getAttribute('aria-owns')
+            if (controls) {
+              const linked = document.getElementById(controls)
+              if (linked && isVisible(linked)) candidateContainers.push(linked)
+            }
+          }
+
+          for (const listbox of Array.from(document.querySelectorAll('[role="listbox"]'))) {
+            if (isVisible(listbox)) candidateContainers.push(listbox)
+          }
+
+          const seen = new Set()
+          const uniqueContainers = candidateContainers.filter((el) => {
+            if (!el) return false
+            if (seen.has(el)) return false
+            seen.add(el)
+            return true
+          })
+
+          const gatherOptions = (container) => {
+            if (!container || !(container instanceof Element)) return []
+            const options = Array.from(container.querySelectorAll('[role="option"], option, [data-value]'))
+            return options.filter((opt) => isVisible(opt))
+          }
+
+          let options = []
+          for (const container of uniqueContainers) {
+            const local = gatherOptions(container)
+            if (local.length > 0) {
+              options = local
+              break
+            }
+          }
+
+          if (options.length === 0) {
+            options = Array.from(document.querySelectorAll('[role="option"], option, [data-value]')).filter((opt) => isVisible(opt))
+          }
+
+          let matched = options.find((opt) => normalize(readOptionValue(opt)) === desired)
+          if (!matched) matched = options.find((opt) => hasDesired(readOptionValue(opt)))
+
+          if (!matched) {
+            return {
+              ok: false,
+              strategy: 'aria',
+              reason: 'option "' + val + '" not found in active listbox',
+              selectedValue: '',
+              selectedText: '',
+            }
+          }
+
+          fireClick(matched)
+
+          const selfValue = (
+            this.value
+            || this.getAttribute('value')
+            || this.getAttribute('aria-valuetext')
+            || this.getAttribute('aria-label')
+            || this.textContent
+            || ''
+          )
+          const matchedValue = readOptionValue(matched)
+          const verified = hasDesired(selfValue) || hasDesired(matchedValue)
+
+          return {
+            ok: verified,
+            strategy: 'aria',
+            reason: verified ? undefined : 'option click succeeded but control state did not reflect selected value',
+            selectedValue: String(selfValue || ''),
+            selectedText: String(matchedValue || '').trim(),
+          }
         }`,
         arguments: [{ value }],
       })
+
+      const details = result?.result?.value as {
+        ok?: boolean
+        strategy?: string
+        reason?: string
+        selectedValue?: string
+        selectedText?: string
+      } | undefined
+
+      if (details?.ok === false) {
+        throw new Error(
+          [
+            `Selection did not bind to form state`,
+            details.strategy ? `strategy=${details.strategy}` : null,
+            details.reason ? `reason=${details.reason}` : null,
+            details.selectedValue ? `selectedValue=${details.selectedValue}` : null,
+            details.selectedText ? `selectedText=${details.selectedText}` : null,
+          ].filter(Boolean).join('; '),
+        )
+      }
 
       return await this.getElementGeometry(ref)
     } catch (err) {

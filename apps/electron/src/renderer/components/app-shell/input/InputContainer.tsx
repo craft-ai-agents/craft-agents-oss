@@ -29,6 +29,7 @@ const FALLBACK_HEIGHTS: Record<InputMode | string, number> = {
   'freeform-compact': 70,  // Smaller for compact mode
   permission: 200,
   credential: 240,  // Taller for form fields + hint
+  admin_approval: 220,
 }
 
 /**
