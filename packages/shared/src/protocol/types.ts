@@ -40,6 +40,8 @@ export interface MessageEnvelope {
   serverId?: string
   /** Electron webContents.id, sent on handshake by local clients. */
   webContentsId?: number
+  /** Client capabilities advertised on handshake. */
+  clientCapabilities?: string[]
 }
 
 export interface WireError {
@@ -64,6 +66,9 @@ export type ErrorCode =
   | 'TRANSFER_TIMEOUT'
   | 'TRANSFER_VERIFICATION_FAILED'
   | 'REQUEST_TIMEOUT'
+  | 'CAPABILITY_UNAVAILABLE'
+  | 'CLIENT_DISCONNECTED'
+  | 'CLIENT_REQUEST_TIMEOUT'
 
 // ---------------------------------------------------------------------------
 // Push target (server → clients)

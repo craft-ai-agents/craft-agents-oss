@@ -9,6 +9,7 @@ import { isUsableGitBashPath, validateGitBashPath } from '../git-bash'
 import { validateFilePath } from './files'
 import type { RpcServer } from '../../transport/types'
 import type { HandlerDeps } from './handler-deps'
+import { requestClientOpenExternal } from '../../transport/capabilities'
 
 export const HANDLED_CHANNELS = [
   IPC_CHANNELS.theme.GET_SYSTEM_PREFERENCE,
@@ -231,7 +232,7 @@ export function registerSystemHandlers(server: RpcServer, deps: HandlerDeps): vo
   })
 
   // Shell operations - open URL in external browser (or handle craftagents:// internally)
-  server.handle(IPC_CHANNELS.shell.OPEN_URL, async (_ctx, url: string) => {
+  server.handle(IPC_CHANNELS.shell.OPEN_URL, async (ctx, url: string) => {
     deps.platform.logger.info('[OPEN_URL] Received request:', url)
     try {
       // Validate URL format
@@ -251,7 +252,13 @@ export function registerSystemHandlers(server: RpcServer, deps: HandlerDeps): vo
       if (!['http:', 'https:', 'mailto:', 'craftdocs:'].includes(parsed.protocol)) {
         throw new Error('Only http, https, mailto, craftdocs URLs are allowed')
       }
-      await shell.openExternal(url)
+
+      // Route through client capability so browser opens on the user's machine (not the server)
+      const result = await requestClientOpenExternal(server, ctx.clientId, url)
+      if (!result.opened) {
+        deps.platform.logger.error(`[OPEN_URL] Client capability failed: ${result.error}`)
+        throw new Error(`Cannot open URL on client: ${result.error}`)
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
       deps.platform.logger.error('openUrl error:', message)

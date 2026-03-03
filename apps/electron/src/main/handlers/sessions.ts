@@ -5,7 +5,7 @@ import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { perf } from '@craft-agent/shared/utils'
 import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { searchLog } from '../logger'
-import type { RpcServer } from '../../transport/types'
+import { pushTyped, type RpcServer } from '../../transport/types'
 import type { HandlerDeps } from './handler-deps'
 
 // Session file watcher state - only one session watched at a time
@@ -147,13 +147,13 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
     sessionManager.sendMessage(sessionId, message, attachments, storedAttachments, options).catch(err => {
       log.error('Error in sendMessage:', err)
       // Send error to the calling client
-      server.push(IPC_CHANNELS.sessions.EVENT, { to: 'client', clientId: callerClientId }, {
+      pushTyped(server, IPC_CHANNELS.sessions.EVENT, { to: 'client', clientId: callerClientId }, {
         type: 'error',
         sessionId,
         error: err instanceof Error ? err.message : 'Unknown error'
       } as SessionEvent)
       // Also send complete event to clear processing state
-      server.push(IPC_CHANNELS.sessions.EVENT, { to: 'client', clientId: callerClientId }, {
+      pushTyped(server, IPC_CHANNELS.sessions.EVENT, { to: 'client', clientId: callerClientId }, {
         type: 'complete',
         sessionId
       } as SessionEvent)
@@ -381,7 +381,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
         }
         fileChangeDebounceTimer = setTimeout(() => {
           // Notify all windows that session files changed
-          server.push(IPC_CHANNELS.sessions.FILES_CHANGED, { to: 'all' }, watchedSessionId!)
+          pushTyped(server, IPC_CHANNELS.sessions.FILES_CHANGED, { to: 'all' }, watchedSessionId!)
         }, 100)
       })
     } catch (error) {

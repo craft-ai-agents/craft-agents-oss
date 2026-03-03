@@ -12,6 +12,7 @@ import {
   type MessageEnvelope,
 } from '@craft-agent/shared/protocol'
 import type { RpcClient } from './types'
+import { serializeEnvelope, deserializeEnvelope } from './codec'
 
 // ---------------------------------------------------------------------------
 // Pending request state
@@ -40,6 +41,8 @@ export interface WsRpcClientOptions {
   maxReconnectDelay?: number
   /** Whether to auto-reconnect on disconnect. Default: true */
   autoReconnect?: boolean
+  /** Capabilities to advertise on handshake. Handlers must be registered via handleCapability(). */
+  clientCapabilities?: string[]
 }
 
 // ---------------------------------------------------------------------------
@@ -50,6 +53,7 @@ export class WsRpcClient implements RpcClient {
   private ws: WebSocket | null = null
   private pending = new Map<string, PendingRequest>()
   private listeners = new Map<string, Set<(...args: any[]) => void>>()
+  private capabilityHandlers = new Map<string, (...args: any[]) => Promise<any> | any>()
   private clientId: string | null = null
   private connected = false
   private reconnectAttempt = 0
@@ -60,6 +64,7 @@ export class WsRpcClient implements RpcClient {
   private readonly workspaceId: string | undefined
   private readonly webContentsId: number | undefined
   private readonly token: string | undefined
+  private readonly clientCapabilities: string[]
   private readonly requestTimeout: number
   private readonly maxReconnectDelay: number
   private readonly autoReconnect: boolean
@@ -69,6 +74,7 @@ export class WsRpcClient implements RpcClient {
     this.workspaceId = opts?.workspaceId
     this.webContentsId = opts?.webContentsId
     this.token = opts?.token
+    this.clientCapabilities = opts?.clientCapabilities ?? []
     this.requestTimeout = opts?.requestTimeout ?? REQUEST_TIMEOUT_MS
     this.maxReconnectDelay = opts?.maxReconnectDelay ?? 30_000
     this.autoReconnect = opts?.autoReconnect ?? true
@@ -100,7 +106,7 @@ export class WsRpcClient implements RpcClient {
         args,
       }
 
-      this.ws.send(JSON.stringify(envelope))
+      this.ws.send(serializeEnvelope(envelope))
     })
   }
 
@@ -120,6 +126,10 @@ export class WsRpcClient implements RpcClient {
     }
   }
 
+  handleCapability(channel: string, handler: (...args: any[]) => Promise<any> | any): void {
+    this.capabilityHandlers.set(channel, handler)
+  }
+
   // -------------------------------------------------------------------------
   // Connection lifecycle
   // -------------------------------------------------------------------------
@@ -137,8 +147,9 @@ export class WsRpcClient implements RpcClient {
         workspaceId: this.workspaceId,
         webContentsId: this.webContentsId,
         token: this.token,
+        clientCapabilities: this.clientCapabilities.length > 0 ? this.clientCapabilities : undefined,
       }
-      this.ws!.send(JSON.stringify(handshake))
+      this.ws!.send(serializeEnvelope(handshake))
     }
 
     this.ws.onmessage = (event) => {
@@ -182,7 +193,7 @@ export class WsRpcClient implements RpcClient {
   private onMessage(raw: string): void {
     let envelope: MessageEnvelope
     try {
-      envelope = JSON.parse(raw)
+      envelope = deserializeEnvelope(raw)
     } catch {
       return
     }
@@ -217,6 +228,14 @@ export class WsRpcClient implements RpcClient {
         break
       }
 
+      case 'request': {
+        // Server→client capability invocation
+        if (envelope.channel) {
+          this.onServerRequest(envelope)
+        }
+        break
+      }
+
       case 'event': {
         if (envelope.channel) {
           const set = this.listeners.get(envelope.channel)
@@ -232,6 +251,40 @@ export class WsRpcClient implements RpcClient {
         }
         break
       }
+    }
+  }
+
+  private async onServerRequest(envelope: MessageEnvelope): Promise<void> {
+    const handler = this.capabilityHandlers.get(envelope.channel!)
+    if (!handler) {
+      const response: MessageEnvelope = {
+        id: envelope.id,
+        type: 'response',
+        channel: envelope.channel,
+        error: { code: 'CHANNEL_NOT_FOUND', message: `No handler for: ${envelope.channel}` },
+      }
+      this.ws?.send(serializeEnvelope(response))
+      return
+    }
+
+    try {
+      const result = await handler(...(envelope.args ?? []))
+      const response: MessageEnvelope = {
+        id: envelope.id,
+        type: 'response',
+        channel: envelope.channel,
+        result,
+      }
+      this.ws?.send(serializeEnvelope(response))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      const response: MessageEnvelope = {
+        id: envelope.id,
+        type: 'response',
+        channel: envelope.channel,
+        error: { code: 'HANDLER_ERROR', message },
+      }
+      this.ws?.send(serializeEnvelope(response))
     }
   }
 

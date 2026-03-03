@@ -9,7 +9,7 @@ import { CraftOAuth, startClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, c
 import { validateMcpConnection } from '@craft-agent/shared/mcp'
 import { IPC_CHANNELS } from '../shared/types'
 import type { RpcServer } from '../transport/types'
-import type { HandlerDeps } from './ipc/handler-deps'
+import type { HandlerDeps } from './handlers/handler-deps'
 
 // ============================================
 // IPC Handlers

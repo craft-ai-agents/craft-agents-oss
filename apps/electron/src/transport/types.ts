@@ -31,6 +31,8 @@ export interface RpcServer {
   handle(channel: string, handler: HandlerFn): void
   /** Push an event to matching clients. */
   push(channel: string, target: PushTarget, ...args: any[]): void
+  /** Invoke a capability on a specific client and await the response. */
+  invokeClient(clientId: string, channel: string, ...args: any[]): Promise<any>
   /** Update a client's workspace binding (keeps push routing correct after workspace switch). */
   updateClientWorkspace?(clientId: string, workspaceId: string): void
 }
@@ -44,6 +46,8 @@ export interface RpcClient {
   invoke(channel: string, ...args: any[]): Promise<any>
   /** Subscribe to server-pushed events. Returns an unsubscribe function. */
   on(channel: string, callback: (...args: any[]) => void): () => void
+  /** Register a capability handler for server→client invocations. */
+  handleCapability(channel: string, handler: (...args: any[]) => Promise<any> | any): void
 }
 
 // ---------------------------------------------------------------------------
@@ -51,3 +55,19 @@ export interface RpcClient {
 // ---------------------------------------------------------------------------
 
 export type EventSink = (channel: string, target: PushTarget, ...args: any[]) => void
+
+// ---------------------------------------------------------------------------
+// pushTyped — compile-time typed wrapper around server.push()
+// ---------------------------------------------------------------------------
+
+import type { BroadcastEventMap } from '../shared/types'
+
+/** Type-safe push. Constrains args against BroadcastEventMap at compile time. */
+export function pushTyped<K extends keyof BroadcastEventMap & string>(
+  server: RpcServer,
+  channel: K,
+  target: PushTarget,
+  ...args: BroadcastEventMap[K]
+): void {
+  server.push(channel, target, ...args)
+}

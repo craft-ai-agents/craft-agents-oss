@@ -5,7 +5,7 @@ import { homedir } from 'os'
 import { IPC_CHANNELS } from '../../shared/types'
 import { getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace } from '@craft-agent/shared/config'
 import { perf } from '@craft-agent/shared/utils'
-import type { RpcServer } from '../../transport/types'
+import { pushTyped, type RpcServer } from '../../transport/types'
 import type { HandlerDeps } from './handler-deps'
 
 export const HANDLED_CHANNELS = [
@@ -332,7 +332,7 @@ export function registerWorkspaceHandlers(server: RpcServer, deps: HandlerDeps):
 
   // Broadcast theme preferences to all other windows (for cross-window sync)
   server.handle(IPC_CHANNELS.theme.BROADCAST_PREFERENCES, async (ctx, preferences: { mode: string; colorTheme: string; font: string }) => {
-    server.push(IPC_CHANNELS.theme.PREFERENCES_CHANGED, { to: 'all' }, preferences)
+    pushTyped(server, IPC_CHANNELS.theme.PREFERENCES_CHANGED, { to: 'all' }, preferences)
   })
 
   // Workspace-level theme overrides
@@ -367,7 +367,7 @@ export function registerWorkspaceHandlers(server: RpcServer, deps: HandlerDeps):
 
   // Broadcast workspace theme change to all other windows (for cross-window sync)
   server.handle(IPC_CHANNELS.theme.BROADCAST_WORKSPACE_THEME, async (ctx, workspaceId: string, themeId: string | null) => {
-    server.push(IPC_CHANNELS.theme.WORKSPACE_THEME_CHANGED, { to: 'all' }, { workspaceId, themeId })
+    pushTyped(server, IPC_CHANNELS.theme.WORKSPACE_THEME_CHANGED, { to: 'all' }, { workspaceId, themeId })
   })
 
   // ============================================================
@@ -391,7 +391,7 @@ export function registerWorkspaceHandlers(server: RpcServer, deps: HandlerDeps):
     const { saveViews } = await import('@craft-agent/shared/views/storage')
     saveViews(workspace.rootPath, views)
     // Broadcast labels changed since views are used alongside labels in sidebar
-    server.push(IPC_CHANNELS.labels.CHANGED, { to: 'all' }, workspaceId)
+    pushTyped(server, IPC_CHANNELS.labels.CHANGED, { to: 'all' }, workspaceId)
   })
 
   // ============================================================

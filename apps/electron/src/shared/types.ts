@@ -750,6 +750,7 @@ export const IPC_CHANNELS = {
   },
   chatgpt: {
     START_OAUTH: 'chatgpt:startOAuth',
+    COMPLETE_OAUTH: 'chatgpt:completeOAuth',
     CANCEL_OAUTH: 'chatgpt:cancelOAuth',
     GET_AUTH_STATUS: 'chatgpt:getAuthStatus',
     LOGOUT: 'chatgpt:logout',

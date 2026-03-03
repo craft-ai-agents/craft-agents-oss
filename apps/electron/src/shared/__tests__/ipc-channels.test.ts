@@ -59,6 +59,7 @@ const EXPECTED_CHANNELS: string[] = [
   'browser-pane:state-changed',
   'browser-pane:stop',
   'chatgpt:cancelOAuth',
+  'chatgpt:completeOAuth',
   'chatgpt:getAuthStatus',
   'chatgpt:logout',
   'chatgpt:startOAuth',

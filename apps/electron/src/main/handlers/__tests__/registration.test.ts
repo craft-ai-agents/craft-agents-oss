@@ -48,6 +48,7 @@ function createMockServer(): RpcServer {
       registeredChannels.push(channel)
     },
     push() {},
+    async invokeClient() {},
   }
 }
 

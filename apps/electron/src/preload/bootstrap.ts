@@ -18,6 +18,8 @@ import { WsRpcClient } from '../transport/client'
 import { buildClientApi } from '../transport/build-api'
 import { CHANNEL_MAP } from '../transport/channel-map'
 import { createCallbackServer } from '@craft-agent/shared/auth/callback-server'
+import { CHATGPT_OAUTH_CONFIG } from '@craft-agent/shared/auth/chatgpt-oauth-config'
+import { CLIENT_OPEN_EXTERNAL, LOCAL_CLIENT_CAPABILITIES } from '../transport/capabilities'
 
 // Connection details — from env (remote server) or main process (local)
 let wsUrl: string
@@ -45,7 +47,12 @@ const client = new WsRpcClient(wsUrl, {
   workspaceId,
   webContentsId,
   autoReconnect: true,
+  clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
 })
+
+// Register client-side capability handlers (server can invoke these)
+client.handleCapability(CLIENT_OPEN_EXTERNAL, (url: string) => shell.openExternal(url))
+
 client.connect()
 
 // Build the full ElectronAPI proxy — identical shape to the IPC preload.
@@ -110,6 +117,65 @@ const api = buildClientApi(client, CHANNEL_MAP)
     return {
       success: false,
       error: err instanceof Error ? err.message : 'OAuth flow failed',
+    }
+  } finally {
+    callbackServer?.close()
+  }
+}
+
+// ── performChatGptOAuth ──────────────────────────────────────────────────
+// Same shape as performOAuth: callback server (port 1455) → chatgpt:startOAuth →
+// browser → callback → chatgpt:completeOAuth.
+// Overrides the startChatGptOAuth API method so the renderer call is unchanged.
+;(api as any).startChatGptOAuth = async (
+  connectionSlug: string,
+): Promise<{ success: boolean; error?: string }> => {
+  let callbackServer: Awaited<ReturnType<typeof createCallbackServer>> | null = null
+  let flowId: string | undefined
+  let state: string | undefined
+
+  try {
+    // 1. Start callback server on ChatGPT's fixed port with /auth/callback path
+    callbackServer = await createCallbackServer({
+      appType: 'electron',
+      port: CHATGPT_OAUTH_CONFIG.CALLBACK_PORT,
+      callbackPaths: ['/auth/callback'],
+    })
+
+    // 2. Ask server to prepare the flow (PKCE, auth URL, store pending flow)
+    const startResult = await client.invoke('chatgpt:startOAuth', connectionSlug)
+    flowId = startResult.flowId
+    state = startResult.state
+
+    // 3. Open browser for user consent
+    await shell.openExternal(startResult.authUrl)
+
+    // 4. Wait for OpenAI to redirect to our callback server
+    const callback = await callbackServer.promise
+
+    // 5. Check for errors from the provider
+    if (callback.query.error) {
+      const error = callback.query.error_description || callback.query.error
+      await client.invoke('chatgpt:cancelOAuth', { state })
+      return { success: false, error }
+    }
+
+    const code = callback.query.code
+    if (!code) {
+      await client.invoke('chatgpt:cancelOAuth', { state })
+      return { success: false, error: 'No authorization code received' }
+    }
+
+    // 6. Send code to server for token exchange + credential storage
+    const result = await client.invoke('chatgpt:completeOAuth', { flowId, code, state })
+    return { success: result.success, error: result.error }
+  } catch (err) {
+    if (state) {
+      client.invoke('chatgpt:cancelOAuth', { state }).catch(() => {})
+    }
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'ChatGPT OAuth flow failed',
     }
   } finally {
     callbackServer?.close()

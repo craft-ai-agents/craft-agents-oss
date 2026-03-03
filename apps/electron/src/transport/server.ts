@@ -18,6 +18,7 @@ import {
   type ErrorCode,
 } from '@craft-agent/shared/protocol'
 import type { RpcServer, HandlerFn, RequestContext } from './types'
+import { serializeEnvelope, deserializeEnvelope } from './codec'
 
 // ---------------------------------------------------------------------------
 // Client connection state
@@ -28,8 +29,16 @@ interface ClientConnection {
   ws: WebSocket
   workspaceId: string | null
   webContentsId: number | null
+  capabilities: Set<string>
   missedPongs: number
   alive: boolean
+}
+
+interface PendingInvoke {
+  clientId: string
+  resolve: (value: any) => void
+  reject: (error: Error) => void
+  timeout: ReturnType<typeof setTimeout>
 }
 
 // ---------------------------------------------------------------------------
@@ -61,6 +70,7 @@ export class WsRpcServer implements RpcServer {
   private wss: WebSocketServer | null = null
   private clients = new Map<string, ClientConnection>()
   private handlers = new Map<string, HandlerFn>()
+  private pendingInvokes = new Map<string, PendingInvoke>()
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   private _port = 0
 
@@ -106,13 +116,54 @@ export class WsRpcServer implements RpcServer {
       args,
       serverId: this.serverId,
     }
-    const data = JSON.stringify(envelope)
+    const data = serializeEnvelope(envelope)
 
     for (const client of this.clients.values()) {
       if (this.matchesTarget(client, target)) {
         this.safeSend(client.ws, data)
       }
     }
+  }
+
+  invokeClient(clientId: string, channel: string, ...args: any[]): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const client = this.clients.get(clientId)
+
+      // Check connection
+      if (!client) {
+        const err = new Error(`Client not connected: ${clientId}`)
+        ;(err as any).code = 'CLIENT_DISCONNECTED'
+        reject(err)
+        return
+      }
+
+      // Check capability
+      if (!client.capabilities.has(channel)) {
+        const err = new Error(`Client lacks capability: ${channel}`)
+        ;(err as any).code = 'CAPABILITY_UNAVAILABLE'
+        reject(err)
+        return
+      }
+
+      const id = randomUUID()
+      const timeout = setTimeout(() => {
+        this.pendingInvokes.delete(id)
+        const err = new Error(`Client request timeout: ${channel} (30000ms)`)
+        ;(err as any).code = 'CLIENT_REQUEST_TIMEOUT'
+        reject(err)
+      }, 30_000)
+
+      this.pendingInvokes.set(id, { clientId, resolve, reject, timeout })
+
+      const envelope: MessageEnvelope = {
+        id,
+        type: 'request',
+        channel,
+        args,
+        serverId: this.serverId,
+      }
+      this.safeSend(client.ws, serializeEnvelope(envelope))
+    })
   }
 
   // -------------------------------------------------------------------------
@@ -150,6 +201,14 @@ export class WsRpcServer implements RpcServer {
       clearInterval(this.heartbeatTimer)
       this.heartbeatTimer = null
     }
+    // Reject all pending invokes before tearing down connections
+    for (const [id, pending] of this.pendingInvokes) {
+      clearTimeout(pending.timeout)
+      const err = new Error('Server shutting down')
+      ;(err as any).code = 'CLIENT_DISCONNECTED'
+      pending.reject(err)
+      this.pendingInvokes.delete(id)
+    }
     for (const client of this.clients.values()) {
       client.ws.terminate()
     }
@@ -176,7 +235,7 @@ export class WsRpcServer implements RpcServer {
     ws.on('message', async (raw) => {
       let envelope: MessageEnvelope
       try {
-        envelope = JSON.parse(raw.toString())
+        envelope = deserializeEnvelope(raw.toString())
       } catch {
         ws.close(4002, 'Invalid JSON')
         return
@@ -229,6 +288,7 @@ export class WsRpcServer implements RpcServer {
           ws,
           workspaceId: envelope.workspaceId ?? null,
           webContentsId: envelope.webContentsId ?? null,
+          capabilities: new Set(envelope.clientCapabilities ?? []),
           missedPongs: 0,
           alive: true,
         }
@@ -242,7 +302,7 @@ export class WsRpcServer implements RpcServer {
           protocolVersion: PROTOCOL_VERSION,
           clientId,
         }
-        this.safeSend(ws, JSON.stringify(ack))
+        this.safeSend(ws, serializeEnvelope(ack))
 
         // Notify lifecycle listener
         this.onClientConnected?.({
@@ -254,6 +314,7 @@ export class WsRpcServer implements RpcServer {
         // Setup close handler
         ws.on('close', () => {
           this.clients.delete(clientId)
+          this.rejectPendingInvokesForClient(clientId)
           this.onClientDisconnected?.(clientId)
         })
 
@@ -274,8 +335,9 @@ export class WsRpcServer implements RpcServer {
 
       if (envelope.type === 'request') {
         await this.onRequest(client, envelope)
+      } else if (envelope.type === 'response') {
+        this.onClientResponse(envelope)
       }
-      // Ignore other types from client (events, responses are server→client only)
     })
 
     ws.on('error', () => {
@@ -315,7 +377,7 @@ export class WsRpcServer implements RpcServer {
         channel,
         result,
       }
-      this.safeSend(client.ws, JSON.stringify(response))
+      this.safeSend(client.ws, serializeEnvelope(response))
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       const code: ErrorCode = (err as any)?.code ?? 'HANDLER_ERROR'
@@ -389,7 +451,7 @@ export class WsRpcServer implements RpcServer {
       channel,
       error: { code, message },
     }
-    this.safeSend(ws, JSON.stringify(envelope))
+    this.safeSend(ws, serializeEnvelope(envelope))
   }
 
   /** Protocol-level errors only (handshake rejection, version mismatch). May close connection. */
@@ -399,7 +461,35 @@ export class WsRpcServer implements RpcServer {
       type: 'error',
       error: { code, message },
     }
-    this.safeSend(ws, JSON.stringify(envelope))
+    this.safeSend(ws, serializeEnvelope(envelope))
+  }
+
+  private onClientResponse(envelope: MessageEnvelope): void {
+    const pending = this.pendingInvokes.get(envelope.id)
+    if (!pending) return
+
+    this.pendingInvokes.delete(envelope.id)
+    clearTimeout(pending.timeout)
+
+    if (envelope.error) {
+      const err = new Error(envelope.error.message)
+      ;(err as any).code = envelope.error.code
+      ;(err as any).data = envelope.error.data
+      pending.reject(err)
+    } else {
+      pending.resolve(envelope.result)
+    }
+  }
+
+  private rejectPendingInvokesForClient(clientId: string): void {
+    for (const [id, pending] of this.pendingInvokes) {
+      if (pending.clientId !== clientId) continue
+      clearTimeout(pending.timeout)
+      const err = new Error(`Client disconnected: ${clientId}`)
+      ;(err as any).code = 'CLIENT_DISCONNECTED'
+      pending.reject(err)
+      this.pendingInvokes.delete(id)
+    }
   }
 
   private safeSend(ws: WebSocket, data: string): void {

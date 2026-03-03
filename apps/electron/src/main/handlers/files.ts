@@ -162,7 +162,7 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
   })
 
   // Read a file as raw binary (Uint8Array) for react-pdf.
-  // Returns Uint8Array which IPC automatically converts to ArrayBuffer for the renderer.
+  // The WS transport codec preserves Uint8Array payloads over JSON envelopes.
   server.handle(IPC_CHANNELS.file.READ_BINARY, async (_ctx, path: string) => {
     try {
       const safePath = await validateFilePath(path)

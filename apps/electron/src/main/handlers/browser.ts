@@ -1,6 +1,6 @@
 import { IPC_CHANNELS, type BrowserPaneCreateOptions, type BrowserEmptyStateLaunchPayload } from '../../shared/types'
 import type { BrowserScreenshotOptions } from '../browser-pane-manager'
-import type { RpcServer } from '../../transport/types'
+import { pushTyped, type RpcServer } from '../../transport/types'
 import type { HandlerDeps } from './handler-deps'
 
 export const HANDLED_CHANNELS = [
@@ -169,16 +169,16 @@ export function registerBrowserHandlers(server: RpcServer, deps: HandlerDeps): v
 
   // Forward browser state changes to all windows
   browserPaneManager.onStateChange((info) => {
-    server.push(IPC_CHANNELS.browserPane.STATE_CHANGED, { to: 'all' }, info)
+    pushTyped(server, IPC_CHANNELS.browserPane.STATE_CHANGED, { to: 'all' }, info)
   })
 
   // Forward browser removals so renderer can immediately drop stale tabs
   browserPaneManager.onRemoved((id) => {
-    server.push(IPC_CHANNELS.browserPane.REMOVED, { to: 'all' }, id)
+    pushTyped(server, IPC_CHANNELS.browserPane.REMOVED, { to: 'all' }, id)
   })
 
   // Forward browser interaction/focus events so renderer can align panel focus.
   browserPaneManager.onInteracted((id) => {
-    server.push(IPC_CHANNELS.browserPane.INTERACTED, { to: 'all' }, id)
+    pushTyped(server, IPC_CHANNELS.browserPane.INTERACTED, { to: 'all' }, id)
   })
 }

@@ -33,18 +33,35 @@ async function waitConnected(client: WsRpcClient, timeoutMs = 2000): Promise<voi
 }
 
 /** Create a server + connected client pair. */
-async function createPair(serverOpts?: Partial<import('../transport/server').WsRpcServerOptions>) {
-  const server = trackServer(new WsRpcServer({ host: '127.0.0.1', port: 0, ...serverOpts }))
+async function createPair(
+  serverOpts?: Partial<import('../transport/server').WsRpcServerOptions>,
+  clientOpts?: Partial<import('../transport/client').WsRpcClientOptions>,
+) {
+  let connectedClientId: string | null = null
+  const server = trackServer(new WsRpcServer({
+    host: '127.0.0.1',
+    port: 0,
+    onClientConnected: (info) => { connectedClientId = info.clientId },
+    ...serverOpts,
+  }))
   await server.listen()
 
   const client = trackClient(new WsRpcClient(`ws://127.0.0.1:${server.port}`, {
     workspaceId: 'test-workspace',
     autoReconnect: false,
+    ...clientOpts,
   }))
   client.connect()
   await waitConnected(client)
 
-  return { server, client }
+  // Wait for onClientConnected callback
+  const start = Date.now()
+  while (!connectedClientId) {
+    if (Date.now() - start > 2000) throw new Error('No clientId received')
+    await new Promise(r => setTimeout(r, 10))
+  }
+
+  return { server, client, clientId: connectedClientId! }
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +181,34 @@ describe('RPC', () => {
     expect(r2).toBe('second')
     expect(r3).toBe('third')
   })
+
+  test('Uint8Array response payload roundtrips intact', async () => {
+    const { server, client } = await createPair()
+
+    server.handle('binary:response', async () => {
+      return new Uint8Array([37, 80, 68, 70, 45]) // "%PDF-"
+    })
+
+    const result = await client.invoke('binary:response')
+    expect(result).toBeInstanceOf(Uint8Array)
+    expect(Array.from(result as Uint8Array)).toEqual([37, 80, 68, 70, 45])
+  })
+
+  test('Uint8Array request args decode correctly in handler', async () => {
+    const { server, client } = await createPair()
+
+    let seen: Uint8Array | null = null
+
+    server.handle('binary:arg', async (_ctx, bytes: Uint8Array) => {
+      seen = bytes
+      return Array.from(bytes).reduce((sum, value) => sum + value, 0)
+    })
+
+    const result = await client.invoke('binary:arg', new Uint8Array([1, 2, 3, 4]))
+    expect(result).toBe(10)
+    expect(seen).toBeInstanceOf(Uint8Array)
+    expect(Array.from(seen!)).toEqual([1, 2, 3, 4])
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -240,6 +285,24 @@ describe('push events', () => {
     await new Promise(r => setTimeout(r, 50))
 
     expect(received).toEqual(['before'])
+  })
+
+  test('Uint8Array event args roundtrip intact', async () => {
+    const { server, client } = await createPair()
+
+    let received: Uint8Array | null = null
+
+    client.on('binary:event', (data: Uint8Array) => {
+      received = data
+    })
+
+    await new Promise(r => setTimeout(r, 50))
+
+    server.push('binary:event', { to: 'all' }, new Uint8Array([9, 8, 7]))
+
+    await new Promise(r => setTimeout(r, 50))
+    expect(received).toBeInstanceOf(Uint8Array)
+    expect(Array.from(received!)).toEqual([9, 8, 7])
   })
 })
 
@@ -349,5 +412,133 @@ describe('edge cases', () => {
 
     server.handle('once', async () => 'ok')
     expect(() => server.handle('once', async () => 'dup')).toThrow('already registered')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Server → Client invoke (bidirectional RPC)
+// ---------------------------------------------------------------------------
+
+describe('invokeClient', () => {
+  test('server invokes client capability and receives result', async () => {
+    const { server, client, clientId } = await createPair(
+      {},
+      { clientCapabilities: ['client:openExternal'] },
+    )
+
+    client.handleCapability('client:openExternal', (url: string) => {
+      return `opened: ${url}`
+    })
+
+    const result = await server.invokeClient(clientId, 'client:openExternal', 'https://example.com')
+    expect(result).toBe('opened: https://example.com')
+  })
+
+  test('invokeClient on missing capability returns CAPABILITY_UNAVAILABLE immediately', async () => {
+    const { server, clientId } = await createPair(
+      {},
+      { clientCapabilities: [] },
+    )
+
+    try {
+      await server.invokeClient(clientId, 'client:openExternal', 'https://example.com')
+      throw new Error('Should have thrown')
+    } catch (err: any) {
+      expect(err.code).toBe('CAPABILITY_UNAVAILABLE')
+    }
+  })
+
+  test('invokeClient on disconnected client returns CLIENT_DISCONNECTED immediately', async () => {
+    const { server } = await createPair()
+
+    try {
+      await server.invokeClient('nonexistent-client-id', 'client:openExternal', 'url')
+      throw new Error('Should have thrown')
+    } catch (err: any) {
+      expect(err.code).toBe('CLIENT_DISCONNECTED')
+    }
+  })
+
+  test('client handler error propagates to server', async () => {
+    const { server, client, clientId } = await createPair(
+      {},
+      { clientCapabilities: ['client:failing'] },
+    )
+
+    client.handleCapability('client:failing', () => {
+      throw new Error('Handler blew up')
+    })
+
+    try {
+      await server.invokeClient(clientId, 'client:failing')
+      throw new Error('Should have thrown')
+    } catch (err: any) {
+      expect(err.code).toBe('HANDLER_ERROR')
+      expect(err.message).toBe('Handler blew up')
+    }
+  })
+
+  test('disconnect mid-flight rejects pending invoke with CLIENT_DISCONNECTED', async () => {
+    const { server, client, clientId } = await createPair(
+      {},
+      { clientCapabilities: ['client:slow'] },
+    )
+
+    // Register a handler that never resolves — we'll disconnect before it returns
+    client.handleCapability('client:slow', () => {
+      return new Promise(() => {}) // Never resolves
+    })
+
+    const invokePromise = server.invokeClient(clientId, 'client:slow')
+
+    // Disconnect client after a brief delay
+    await new Promise(r => setTimeout(r, 50))
+    client.destroy()
+
+    try {
+      await invokePromise
+      throw new Error('Should have thrown')
+    } catch (err: any) {
+      expect(err.code).toBe('CLIENT_DISCONNECTED')
+    }
+  })
+
+  test('handshake with capabilities stores them on server', async () => {
+    const { server, client, clientId } = await createPair(
+      {},
+      { clientCapabilities: ['client:openExternal', 'client:notify'] },
+    )
+
+    client.handleCapability('client:openExternal', () => 'ok1')
+    client.handleCapability('client:notify', () => 'ok2')
+
+    // Both capabilities should work
+    const r1 = await server.invokeClient(clientId, 'client:openExternal')
+    const r2 = await server.invokeClient(clientId, 'client:notify')
+    expect(r1).toBe('ok1')
+    expect(r2).toBe('ok2')
+
+    // Unregistered capability should fail
+    try {
+      await server.invokeClient(clientId, 'client:unknown')
+      throw new Error('Should have thrown')
+    } catch (err: any) {
+      expect(err.code).toBe('CAPABILITY_UNAVAILABLE')
+    }
+  })
+
+  test('async client handler works', async () => {
+    const { server, client, clientId } = await createPair(
+      {},
+      { clientCapabilities: ['client:async'] },
+    )
+
+    client.handleCapability('client:async', async (ms: number) => {
+      await new Promise(r => setTimeout(r, ms))
+      return 'done'
+    })
+
+    const result = await server.invokeClient(clientId, 'client:async', 20)
+    expect(result).toBe('done')
   })
 })
