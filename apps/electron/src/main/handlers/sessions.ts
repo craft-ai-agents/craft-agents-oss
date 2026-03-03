@@ -8,10 +8,34 @@ import { searchLog } from '../logger'
 import { pushTyped, type RpcServer } from '../../transport/types'
 import type { HandlerDeps } from './handler-deps'
 
-// Session file watcher state - only one session watched at a time
-let sessionFileWatcher: import('fs').FSWatcher | null = null
-let watchedSessionId: string | null = null
-let fileChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null
+interface ClientSessionWatchState {
+  watcher: import('fs').FSWatcher
+  sessionId: string
+  debounceTimer: ReturnType<typeof setTimeout> | null
+}
+
+// Per-client session file watcher state (supports concurrent windows/clients safely)
+const clientSessionWatches = new Map<string, ClientSessionWatchState>()
+
+function cleanupSessionWatchForClient(clientId: string): void {
+  const state = clientSessionWatches.get(clientId)
+  if (!state) return
+
+  if (state.debounceTimer) {
+    clearTimeout(state.debounceTimer)
+    state.debounceTimer = null
+  }
+
+  state.watcher.close()
+  clientSessionWatches.delete(clientId)
+}
+
+/**
+ * Called from main process disconnect hooks to prevent watcher leaks.
+ */
+export function cleanupSessionFileWatchForClient(clientId: string): void {
+  cleanupSessionWatchForClient(clientId)
+}
 
 // Recursive directory scanner for session files
 // Filters out internal files (session.jsonl) and hidden files (. prefix)
@@ -350,58 +374,48 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
     }
   })
 
-  // Start watching a session directory for file changes
-  server.handle(IPC_CHANNELS.sessions.WATCH_FILES, async (_ctx, sessionId: string) => {
+  // Start watching a session directory for file changes (per client)
+  server.handle(IPC_CHANNELS.sessions.WATCH_FILES, async (ctx, sessionId: string) => {
+    const clientId = ctx.clientId
+    cleanupSessionWatchForClient(clientId)
+
     const sessionPath = sessionManager.getSessionPath(sessionId)
     if (!sessionPath) return
 
-    // Close existing watcher if watching a different session
-    if (sessionFileWatcher) {
-      sessionFileWatcher.close()
-      sessionFileWatcher = null
-    }
-    if (fileChangeDebounceTimer) {
-      clearTimeout(fileChangeDebounceTimer)
-      fileChangeDebounceTimer = null
-    }
-
-    watchedSessionId = sessionId
-
     try {
       const { watch } = await import('fs')
-      sessionFileWatcher = watch(sessionPath, { recursive: true }, (eventType, filename) => {
+
+      const state: ClientSessionWatchState = {
+        watcher: null as unknown as import('fs').FSWatcher,
+        sessionId,
+        debounceTimer: null,
+      }
+
+      state.watcher = watch(sessionPath, { recursive: true }, (_eventType, filename) => {
         // Ignore internal files and hidden files
         if (filename && (filename.includes('session.jsonl') || filename.startsWith('.'))) {
           return
         }
 
         // Debounce: wait 100ms before notifying to batch rapid changes
-        if (fileChangeDebounceTimer) {
-          clearTimeout(fileChangeDebounceTimer)
+        if (state.debounceTimer) {
+          clearTimeout(state.debounceTimer)
         }
-        fileChangeDebounceTimer = setTimeout(() => {
-          // Notify all windows that session files changed
-          pushTyped(server, IPC_CHANNELS.sessions.FILES_CHANGED, { to: 'all' }, watchedSessionId!)
+
+        state.debounceTimer = setTimeout(() => {
+          pushTyped(server, IPC_CHANNELS.sessions.FILES_CHANGED, { to: 'client', clientId }, state.sessionId)
         }, 100)
       })
+
+      clientSessionWatches.set(clientId, state)
     } catch (error) {
       log.error('Failed to start session file watcher:', error)
     }
   })
 
-  // Stop watching session files
-  server.handle(IPC_CHANNELS.sessions.UNWATCH_FILES, async () => {
-    if (sessionFileWatcher) {
-      sessionFileWatcher.close()
-      sessionFileWatcher = null
-    }
-    if (fileChangeDebounceTimer) {
-      clearTimeout(fileChangeDebounceTimer)
-      fileChangeDebounceTimer = null
-    }
-    if (watchedSessionId) {
-      watchedSessionId = null
-    }
+  // Stop watching session files for the calling client
+  server.handle(IPC_CHANNELS.sessions.UNWATCH_FILES, async (ctx) => {
+    cleanupSessionWatchForClient(ctx.clientId)
   })
 
   // Get session notes (reads notes.md from session directory)

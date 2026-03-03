@@ -4,6 +4,15 @@ const WIRE_TYPE_KEY = '__craftRpcType'
 const WIRE_BASE64_KEY = 'base64'
 const UINT8_WIRE_TYPE = 'u8'
 
+const MESSAGE_TYPES = new Set([
+  'handshake',
+  'handshake_ack',
+  'request',
+  'response',
+  'event',
+  'error',
+])
+
 type EncodedUint8Array = {
   [WIRE_TYPE_KEY]: typeof UINT8_WIRE_TYPE
   [WIRE_BASE64_KEY]: string
@@ -103,10 +112,40 @@ function decodeWireValue(value: unknown): unknown {
   return value
 }
 
+function isWireError(value: unknown): boolean {
+  return isRecord(value)
+    && typeof value.code === 'string'
+    && typeof value.message === 'string'
+}
+
+export function validateEnvelopeShape(value: unknown): value is MessageEnvelope {
+  if (!isRecord(value)) return false
+  if (typeof value.id !== 'string' || value.id.length === 0) return false
+  if (typeof value.type !== 'string' || !MESSAGE_TYPES.has(value.type)) return false
+
+  if ((value.type === 'request' || value.type === 'event') && typeof value.channel !== 'string') {
+    return false
+  }
+
+  if (value.type === 'response' && value.error !== undefined && !isWireError(value.error)) {
+    return false
+  }
+
+  if (value.type === 'error' && !isWireError(value.error)) {
+    return false
+  }
+
+  return true
+}
+
 export function serializeEnvelope(envelope: MessageEnvelope): string {
   return JSON.stringify(encodeWireValue(envelope))
 }
 
 export function deserializeEnvelope(raw: string): MessageEnvelope {
-  return decodeWireValue(JSON.parse(raw)) as MessageEnvelope
+  const parsed = decodeWireValue(JSON.parse(raw))
+  if (!validateEnvelopeShape(parsed)) {
+    throw new Error('Invalid envelope shape')
+  }
+  return parsed
 }

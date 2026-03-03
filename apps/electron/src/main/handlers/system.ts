@@ -244,7 +244,7 @@ export function registerSystemHandlers(server: RpcServer, deps: HandlerDeps): vo
         if (!windowManager) return  // headless — deep links require GUI windows
         deps.platform.logger.info('[OPEN_URL] Handling as deep link')
         const { handleDeepLink } = await import('../deep-link')
-        const result = await handleDeepLink(url, windowManager, server.push.bind(server))
+        const result = await handleDeepLink(url, windowManager, server.push.bind(server), undefined, ctx.clientId)
         deps.platform.logger.info('[OPEN_URL] Deep link result:', result)
         return
       }

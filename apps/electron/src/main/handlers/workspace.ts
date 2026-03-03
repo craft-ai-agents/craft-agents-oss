@@ -397,7 +397,7 @@ export function registerWorkspaceHandlers(server: RpcServer, deps: HandlerDeps):
     const { saveViews } = await import('@craft-agent/shared/views/storage')
     saveViews(workspace.rootPath, views)
     // Broadcast labels changed since views are used alongside labels in sidebar
-    pushTyped(server, IPC_CHANNELS.labels.CHANGED, { to: 'all' }, workspaceId)
+    pushTyped(server, IPC_CHANNELS.labels.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
   })
 
   // ============================================================

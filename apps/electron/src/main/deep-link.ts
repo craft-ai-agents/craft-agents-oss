@@ -235,7 +235,9 @@ function buildDeepLinkWithoutWindowParam(url: string): string {
 export async function handleDeepLink(
   url: string,
   windowManager: WindowManager,
-  sink?: EventSink
+  sink?: EventSink,
+  resolveClientId?: (webContentsId: number) => string | undefined,
+  preferredClientId?: string,
 ): Promise<DeepLinkResult> {
   const target = parseDeepLink(url)
 
@@ -323,7 +325,11 @@ export async function handleDeepLink(
       actionParams: target.actionParams,
     }
     const wsId = target.workspaceId ?? windowManager.getWorkspaceForWindow(window.webContents.id)
-    if (sink && wsId) {
+    const clientId = preferredClientId ?? resolveClientId?.(window.webContents.id)
+
+    if (sink && clientId) {
+      sink(IPC_CHANNELS.deeplink.NAVIGATE, { to: 'client', clientId }, navigation)
+    } else if (sink && wsId) {
       sink(IPC_CHANNELS.deeplink.NAVIGATE, { to: 'workspace', workspaceId: wsId }, navigation)
     }
   }

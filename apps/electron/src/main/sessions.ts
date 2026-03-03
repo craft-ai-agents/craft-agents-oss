@@ -1174,25 +1174,25 @@ export class SessionManager {
 
   private broadcastSourcesChanged(workspaceId: string, sources: LoadedSource[]): void {
     if (!this.eventSink) return
-    this.eventSink(IPC_CHANNELS.sources.CHANGED, { to: 'all' }, workspaceId, sources)
+    this.eventSink(IPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, sources)
   }
 
   private broadcastStatusesChanged(workspaceId: string): void {
     if (!this.eventSink) return
     sessionLog.info(`Broadcasting statuses changed for ${workspaceId}`)
-    this.eventSink(IPC_CHANNELS.statuses.CHANGED, { to: 'all' }, workspaceId)
+    this.eventSink(IPC_CHANNELS.statuses.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
   }
 
   private broadcastLabelsChanged(workspaceId: string): void {
     if (!this.eventSink) return
     sessionLog.info(`Broadcasting labels changed for ${workspaceId}`)
-    this.eventSink(IPC_CHANNELS.labels.CHANGED, { to: 'all' }, workspaceId)
+    this.eventSink(IPC_CHANNELS.labels.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
   }
 
   private broadcastAutomationsChanged(workspaceId: string): void {
     if (!this.eventSink) return
     sessionLog.info(`Broadcasting automations changed for ${workspaceId}`)
-    this.eventSink(IPC_CHANNELS.automations.CHANGED, { to: 'all' }, workspaceId)
+    this.eventSink(IPC_CHANNELS.automations.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
   }
 
   private broadcastAppThemeChanged(theme: import('@craft-agent/shared/config').ThemeOverrides | null): void {
@@ -1210,7 +1210,7 @@ export class SessionManager {
   private broadcastSkillsChanged(workspaceId: string, skills: import('@craft-agent/shared/skills').LoadedSkill[]): void {
     if (!this.eventSink) return
     sessionLog.info(`Broadcasting skills changed (${skills.length} skills)`)
-    this.eventSink(IPC_CHANNELS.skills.CHANGED, { to: 'all' }, workspaceId, skills)
+    this.eventSink(IPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
   }
 
   private broadcastDefaultPermissionsChanged(): void {

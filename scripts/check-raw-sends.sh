@@ -2,11 +2,11 @@
 # Lint guard: detect raw webContents.send() outside typed wrappers.
 #
 # Approved locations:
-#   - window-manager.ts:  broadcastToAll / broadcastToAllExcept / broadcastToWorkspace / sendToWindow
+#   - window-manager.ts: legacy handshake fallback in pushToWindow()
 #   - browser-pane-manager.ts: toolbar scope (separate preload context, not in BroadcastEventMap)
 #   - menu.ts: sendToRenderer (typed with MenuBroadcastChannel)
 #
-# All other raw webContents.send() calls should use typed WindowManager methods.
+# All other raw webContents.send() calls should use typed RpcServer.push() / pushTyped().
 
 set -euo pipefail
 
@@ -29,8 +29,8 @@ if [ -n "${VIOLATIONS:-}" ]; then
   echo "ERROR: Raw webContents.send() found outside approved wrappers:"
   echo "$VIOLATIONS"
   echo ""
-  echo "Use windowManager.broadcastToAll/broadcastToAllExcept/broadcastToWorkspace/sendToWindow instead."
-  echo "See apps/electron/src/main/window-manager.ts for typed broadcast methods."
+  echo "Use RpcServer.push()/pushTyped() and explicit PushTarget routing instead."
+  echo "See apps/electron/src/main/handlers and apps/electron/src/transport/types.ts for typed dispatch patterns."
   exit 1
 fi
 

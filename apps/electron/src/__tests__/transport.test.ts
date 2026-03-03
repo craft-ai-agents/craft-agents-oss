@@ -6,6 +6,7 @@
  */
 
 import { describe, test, expect, afterEach } from 'bun:test'
+import { WebSocket } from 'ws'
 import { WsRpcServer } from '../transport/server'
 import { WsRpcClient } from '../transport/client'
 
@@ -78,6 +79,29 @@ describe('handshake', () => {
     const server = trackServer(new WsRpcServer({ host: '127.0.0.1', port: 0 }))
     await server.listen()
     expect(server.port).toBeGreaterThan(0)
+  })
+
+  test('handshake without protocolVersion is rejected', async () => {
+    const server = trackServer(new WsRpcServer({ host: '127.0.0.1', port: 0 }))
+    await server.listen()
+
+    const result = await new Promise<{ code: number; reason: string }>((resolve, reject) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}`)
+
+      ws.on('open', () => {
+        ws.send(JSON.stringify({ id: 'missing-version', type: 'handshake' }))
+      })
+
+      ws.on('close', (code, reason) => {
+        resolve({ code, reason: reason.toString() })
+      })
+
+      ws.on('error', (error) => {
+        reject(error)
+      })
+    })
+
+    expect(result.code).toBe(4004)
   })
 })
 
@@ -374,16 +398,46 @@ describe('auth', () => {
 // ---------------------------------------------------------------------------
 
 describe('edge cases', () => {
+  test('invoke queues until handshake completes', async () => {
+    const server = trackServer(new WsRpcServer({ host: '127.0.0.1', port: 0 }))
+    await server.listen()
+
+    server.handle('ping', async () => 'pong')
+
+    const client = trackClient(new WsRpcClient(`ws://127.0.0.1:${server.port}`, {
+      autoReconnect: false,
+    }))
+
+    client.connect()
+    const result = await client.invoke('ping')
+    expect(result).toBe('pong')
+  })
+
+  test('invoke without explicit connect auto-starts connection', async () => {
+    const server = trackServer(new WsRpcServer({ host: '127.0.0.1', port: 0 }))
+    await server.listen()
+
+    server.handle('ping', async () => 'pong')
+
+    const client = trackClient(new WsRpcClient(`ws://127.0.0.1:${server.port}`, {
+      autoReconnect: false,
+    }))
+
+    const result = await client.invoke('ping')
+    expect(result).toBe('pong')
+  })
+
   test('invoke on disconnected client throws', async () => {
     const client = trackClient(new WsRpcClient('ws://127.0.0.1:1', {
       autoReconnect: false,
+      connectTimeout: 250,
     }))
 
     try {
       await client.invoke('anything')
       throw new Error('Should have thrown')
     } catch (err: any) {
-      expect(err.message).toContain('Not connected')
+      expect(err.message).toContain('Connection')
     }
   })
 

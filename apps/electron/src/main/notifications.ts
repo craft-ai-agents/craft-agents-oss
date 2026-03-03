@@ -15,8 +15,11 @@ import { IPC_CHANNELS } from '../shared/types'
 import type { WindowManager } from './window-manager'
 import type { EventSink } from '../transport/types'
 
+type ClientResolver = (webContentsId: number) => string | undefined
+
 let windowManager: WindowManager | null = null
 let eventSink: EventSink | null = null
+let clientResolver: ClientResolver | null = null
 let baseIconPath: string | null = null
 let baseIconDataUrl: string | null = null
 let currentBadgeCount: number = 0
@@ -30,10 +33,14 @@ export function initNotificationService(wm: WindowManager): void {
 }
 
 /**
- * Set the event sink for notification broadcasts (called after server creation)
+ * Set the event sink for notification broadcasts (called after server creation).
+ *
+ * When a resolver is provided we can route session navigation events to a
+ * single client instead of broadcasting to every window in the workspace.
  */
-export function setNotificationEventSink(sink: EventSink): void {
+export function setNotificationEventSink(sink: EventSink, resolver?: ClientResolver): void {
   eventSink = sink
+  clientResolver = resolver ?? null
 }
 
 /**
@@ -98,12 +105,21 @@ function handleNotificationClick(workspaceId: string, sessionId: string): void {
     }
     window.focus()
 
-    // Send navigation event to renderer to open the session
+    // Send navigation event to renderer to open the session.
+    // Prefer a single-client target to avoid cross-window navigation side effects.
     if (eventSink) {
-      eventSink(IPC_CHANNELS.notification.NAVIGATE, { to: 'workspace', workspaceId }, {
-        workspaceId,
-        sessionId,
-      })
+      const clientId = clientResolver?.(window.webContents.id)
+      if (clientId) {
+        eventSink(IPC_CHANNELS.notification.NAVIGATE, { to: 'client', clientId }, {
+          workspaceId,
+          sessionId,
+        })
+      } else {
+        eventSink(IPC_CHANNELS.notification.NAVIGATE, { to: 'workspace', workspaceId }, {
+          workspaceId,
+          sessionId,
+        })
+      }
     }
   }
 }

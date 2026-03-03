@@ -6,6 +6,7 @@
 import { join } from 'node:path'
 import { WsRpcServer } from '../transport/server'
 import { registerAllRpcHandlers } from '../main/handlers/index'
+import { cleanupSessionFileWatchForClient } from '../main/handlers/sessions'
 import { createHeadlessPlatform } from '../runtime/platform-headless'
 import { SessionManager, setSessionPlatform } from '../main/sessions'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
@@ -92,6 +93,9 @@ const wsServer = new WsRpcServer({
   requireAuth: true,
   validateToken: async (t) => t === serverToken,
   serverId: 'headless',
+  onClientDisconnected: (clientId) => {
+    cleanupSessionFileWatchForClient(clientId)
+  },
 })
 
 await wsServer.listen()

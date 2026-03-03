@@ -61,6 +61,10 @@ function createMockDeps(): HandlerDeps {
       isPackaged: false,
       appVersion: '0.0.0-test',
       logger: console,
+      imageProcessor: {
+        getMetadata: async () => null,
+        process: async () => Buffer.from(''),
+      },
     },
     windowManager: {} as HandlerDeps['windowManager'],
     browserPaneManager: {

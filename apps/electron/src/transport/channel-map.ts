@@ -16,7 +16,7 @@ function listener(channel: string) {
   return { type: 'listener' as const, channel }
 }
 
-export const CHANNEL_MAP: ChannelMap = {
+export const CHANNEL_MAP = {
   // Session management
   getSessions: invoke(IPC_CHANNELS.sessions.GET),
   getUnreadSummary: invoke(IPC_CHANNELS.sessions.GET_UNREAD_SUMMARY),
@@ -331,4 +331,4 @@ export const CHANNEL_MAP: ChannelMap = {
   getAutomationHistory: invoke(IPC_CHANNELS.automations.GET_HISTORY),
   getAutomationLastExecuted: invoke(IPC_CHANNELS.automations.GET_LAST_EXECUTED),
   onAutomationsChanged: listener(IPC_CHANNELS.automations.CHANGED),
-}
+} satisfies ChannelMap

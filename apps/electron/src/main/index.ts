@@ -67,6 +67,7 @@ import { join, delimiter } from 'path'
 import { existsSync } from 'fs'
 import { SessionManager } from './sessions'
 import { registerAllRpcHandlers } from './handlers/index'
+import { cleanupSessionFileWatchForClient } from './handlers/sessions'
 import type { PlatformServices } from '../runtime/platform'
 import type { HandlerDeps } from './handlers/handler-deps'
 import type { RpcServer } from '../transport/types'
@@ -163,6 +164,7 @@ let sessionManager: SessionManager | null = null
 let browserPaneManager: BrowserPaneManager | null = null
 let oauthFlowStore: OAuthFlowStore | null = null
 let moduleSink: EventSink | null = null
+let moduleClientResolver: ((webContentsId: number) => string | undefined) | null = null
 
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
@@ -193,7 +195,7 @@ app.on('open-url', (event, url) => {
   mainLog.info('Received deeplink:', url)
 
   if (windowManager) {
-    handleDeepLink(url, windowManager, moduleSink ?? undefined).catch(err => {
+    handleDeepLink(url, windowManager, moduleSink ?? undefined, moduleClientResolver ?? undefined).catch(err => {
       mainLog.error('Failed to handle deep link:', err)
     })
   } else {
@@ -213,7 +215,7 @@ if (!gotTheLock) {
     const url = commandLine.find(arg => arg.startsWith(`${DEEPLINK_SCHEME}://`))
     if (url && windowManager) {
       mainLog.info('Received deeplink from second instance:', url)
-      handleDeepLink(url, windowManager, moduleSink ?? undefined).catch(err => {
+      handleDeepLink(url, windowManager, moduleSink ?? undefined, moduleClientResolver ?? undefined).catch(err => {
         mainLog.error('Failed to handle deep link:', err)
       })
     } else if (windowManager) {
@@ -511,6 +513,7 @@ app.whenReady().then(async () => {
           for (const [wcId, cId] of clientMap) {
             if (cId === clientId) { clientMap.delete(wcId); break }
           }
+          cleanupSessionFileWatchForClient(clientId)
         },
       })
       await wsServer.listen()
@@ -523,8 +526,9 @@ app.whenReady().then(async () => {
         console.log(`CRAFT_SERVER_TOKEN=${localToken}`)
       }
 
-      // Module-level EventSink — used by deep-link handlers defined before app.whenReady
+      // Module-level EventSink/client resolver — used by deep-link handlers defined before app.whenReady
       moduleSink = server.push.bind(server)
+      moduleClientResolver = resolveClientId
 
       // Bootstrap IPC handlers — preload uses sendSync to get WS connection details
       ipcMain.on('__get-ws-port', (e) => {
@@ -564,7 +568,7 @@ app.whenReady().then(async () => {
       const { setMenuEventSink } = await import('./menu')
       setMenuEventSink(moduleSink!, resolveClientId)
       const { setNotificationEventSink } = await import('./notifications')
-      setNotificationEventSink(moduleSink!)
+      setNotificationEventSink(moduleSink!, resolveClientId)
 
       // Initialize auth (must happen after window creation for error reporting)
       await sessionManager.initialize()
@@ -633,7 +637,7 @@ app.whenReady().then(async () => {
     // Process pending deep link from cold start
     if (pendingDeepLink) {
       mainLog.info('Processing pending deep link:', pendingDeepLink)
-      await handleDeepLink(pendingDeepLink, windowManager, moduleSink ?? undefined)
+      await handleDeepLink(pendingDeepLink, windowManager, moduleSink ?? undefined, moduleClientResolver ?? undefined)
       pendingDeepLink = null
     }
 

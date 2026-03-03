@@ -252,16 +252,21 @@ export class WsRpcServer implements RpcServer {
           handshakeTimeout = null
         }
 
-        // Protocol version check
-        if (envelope.protocolVersion) {
-          const clientMajor = parseInt(envelope.protocolVersion.split('.')[0], 10)
-          const serverMajor = parseInt(PROTOCOL_VERSION.split('.')[0], 10)
-          if (clientMajor !== serverMajor) {
-            this.sendError(ws, envelope.id, 'PROTOCOL_VERSION_UNSUPPORTED',
-              `Server protocol ${PROTOCOL_VERSION}, client ${envelope.protocolVersion}`)
-            ws.close(4004, 'Protocol version unsupported')
-            return
-          }
+        // Protocol version check (required)
+        if (!envelope.protocolVersion || typeof envelope.protocolVersion !== 'string') {
+          this.sendError(ws, envelope.id, 'PROTOCOL_VERSION_UNSUPPORTED',
+            `Missing protocolVersion. Server protocol ${PROTOCOL_VERSION}`)
+          ws.close(4004, 'Protocol version unsupported')
+          return
+        }
+
+        const clientMajor = parseInt(envelope.protocolVersion.split('.')[0], 10)
+        const serverMajor = parseInt(PROTOCOL_VERSION.split('.')[0], 10)
+        if (clientMajor !== serverMajor) {
+          this.sendError(ws, envelope.id, 'PROTOCOL_VERSION_UNSUPPORTED',
+            `Server protocol ${PROTOCOL_VERSION}, client ${envelope.protocolVersion}`)
+          ws.close(4004, 'Protocol version unsupported')
+          return
         }
 
         // Auth check

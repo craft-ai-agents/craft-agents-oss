@@ -26,7 +26,7 @@ export function registerLabelsHandlers(server: RpcServer, _deps: HandlerDeps): v
 
     const { createLabel } = await import('@craft-agent/shared/labels/crud')
     const label = createLabel(workspace.rootPath, input)
-    pushTyped(server, IPC_CHANNELS.labels.CHANGED, { to: 'all' }, workspaceId)
+    pushTyped(server, IPC_CHANNELS.labels.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
     return label
   })
 
@@ -37,7 +37,7 @@ export function registerLabelsHandlers(server: RpcServer, _deps: HandlerDeps): v
 
     const { deleteLabel } = await import('@craft-agent/shared/labels/crud')
     const result = deleteLabel(workspace.rootPath, labelId)
-    pushTyped(server, IPC_CHANNELS.labels.CHANGED, { to: 'all' }, workspaceId)
+    pushTyped(server, IPC_CHANNELS.labels.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
     return result
   })
 }

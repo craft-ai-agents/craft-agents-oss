@@ -391,10 +391,10 @@ apps/electron/
 ├── src/
 │   ├── main/              # Electron main process (Node.js)
 │   │   ├── index.ts       # Window creation, app lifecycle, nativeTheme listener
-│   │   ├── ipc/           # Modular IPC handler registration
+│   │   ├── handlers/      # Transport-agnostic RPC handler registration
 │   │   │   ├── index.ts   # registerAllRpcHandlers() composition root
-│   │   │   ├── sessions.ts # Session-related IPC handlers
-│   │   │   ├── sources.ts  # Source/permissions IPC handlers
+│   │   │   ├── sessions.ts # Session-related handlers
+│   │   │   ├── sources.ts  # Source/permissions handlers
 │   │   │   └── ...         # Other domain handler files
 │   │   ├── menu.ts        # Application menu (File, Edit, View, Help menus)
 │   │   ├── sessions.ts    # SessionManager - CraftAgent integration
@@ -408,8 +408,9 @@ apps/electron/
 │   │   ├── code-preview-window.ts # Code preview functionality
 │   │   ├── diff-preview-window.ts # Diff preview functionality
 │   │   └── terminal-preview-window.ts # Terminal preview
-│   ├── preload/           # Context bridge (main ↔ renderer)
-│   │   └── index.ts       # Exposes electronAPI to renderer (incl. theme APIs)
+│   ├── preload/           # Context bridge + WS bootstrap (main ↔ renderer)
+│   │   └── bootstrap.ts   # Creates WsRpcClient + exposes electronAPI proxy
+│   ├── transport/         # WS RPC transport (server/client/channel-map/codec)
 │   ├── renderer/          # React UI (browser context)
 ```
 
@@ -424,7 +425,7 @@ const { loadSourcePermissionsConfig } = await import('@craft-agent/shared/agent'
 const config = loadSourcePermissionsConfig(workspaceId, sourceSlug)
 ```
 
-✅ **Correct** (use IPC to call main process):
+✅ **Correct** (use RPC handlers in main + channel map in preload):
 ```tsx
 // 1. Add IPC channel to shared/types.ts
 export const IPC_CHANNELS = {
@@ -432,7 +433,7 @@ export const IPC_CHANNELS = {
   // ...
 }
 
-// 2. Add handler in the relevant domain file (e.g. main/ipc/sources.ts)
+// 2. Add handler in the relevant domain file (e.g. main/handlers/sources.ts)
 export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): void {
   server.handle(IPC_CHANNELS.SOURCES_GET_PERMISSIONS, async (_ctx, workspaceId: string, sourceSlug: string) => {
     const { loadSourcePermissionsConfig } = await import('@craft-agent/shared/agent')
@@ -441,14 +442,10 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
   })
 }
 
-// 3. Ensure the domain registrar is wired in main/ipc/index.ts via registerAllRpcHandlers()
+// 3. Ensure the domain registrar is wired in main/handlers/index.ts via registerAllRpcHandlers()
 
-// 4. Add to preload/index.ts
-contextBridge.exposeInMainWorld('electronAPI', {
-  getSourcePermissionsConfig: (workspaceId: string, sourceSlug: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SOURCES_GET_PERMISSIONS, workspaceId, sourceSlug),
-  // ...
-})
+// 4. Add method mapping in transport/channel-map.ts
+// buildClientApi() exposes the generated electronAPI proxy automatically.
 
 // 5. Use in renderer
 const config = await window.electronAPI.getSourcePermissionsConfig(workspaceId, sourceSlug)
@@ -508,9 +505,9 @@ const config = await window.electronAPI.getSourcePermissionsConfig(workspaceId, 
 └── resources/             # App icons
 ```
 
-### IPC Communication
+### WS RPC Communication
 
-The app uses Electron's IPC for main ↔ renderer communication:
+The app uses a WebSocket RPC transport for main ↔ renderer communication (`WsRpcServer` in main, `WsRpcClient` in preload). Channel wire strings remain stable (same `IPC_CHANNELS` values), but transport is no longer `ipcRenderer.invoke`-driven.
 
 | Channel | Direction | Purpose |
 |---------|-----------|---------|
@@ -951,11 +948,11 @@ bun run electron:start
 Import from `src/main/logger.ts`:
 
 ```typescript
-import { mainLog, sessionLog, ipcLog, windowLog, agentLog, isDebugMode } from './logger'
+import { mainLog, sessionLog, handlerLog, windowLog, agentLog, isDebugMode } from './logger'
 
 mainLog.info('App started')
 sessionLog.info('Session created', { sessionId: 'abc123' })
-ipcLog.debug('Message received', { channel: 'chat' })
+handlerLog.debug('Message received', { channel: 'chat' })
 windowLog.warn('Window not found', { windowId: 123 })
 agentLog.error('Agent failed', { error: err.message })
 ```
@@ -984,7 +981,7 @@ The utility auto-detects Electron and outputs to stderr (console).
 |-------|--------|---------|
 | `main` | `mainLog` | App lifecycle, global events, menu actions |
 | `session` | `sessionLog` | Session CRUD, state changes, persistence |
-| `ipc` | `ipcLog` | Renderer ↔ Main communication |
+| `handler` | `handlerLog` | Renderer ↔ Main RPC handler communication |
 | `window` | `windowLog` | Window creation, focus, state, positioning |
 | `agent` | `agentLog` | Claude SDK, tool calls, streaming, events |
 
@@ -1021,7 +1018,7 @@ cat ~/Library/Logs/Craft\ Agents/main.log | jq 'select(.level == "error")'
 ### Best Practices
 
 1. **Prefer logging over console.log** - Craft Agent can read log files for debugging
-2. **Use scoped loggers** - `sessionLog`, `ipcLog`, etc. for organized output
+2. **Use scoped loggers** - `sessionLog`, `handlerLog`, etc. for organized output
 3. **Include context objects** - Pass structured data as second argument
 4. **Use appropriate log levels** - `debug` for verbose, `info` for important events, `error` for failures
 
