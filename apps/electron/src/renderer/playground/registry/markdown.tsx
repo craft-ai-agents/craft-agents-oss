@@ -138,6 +138,37 @@ const jsonCode = `{
   }
 }`
 
+const richBlockParityMarkdown = `# Rich Block Interaction Parity
+
+Use this fixture to compare **inline** and **fullscreen** interactions for Mermaid and image blocks.
+
+- Tap/click inline content to open fullscreen
+- In fullscreen: wheel/pinch zoom, drag pan, double-click reset
+- Keyboard: Cmd/Ctrl +, -, 0
+
+## Mermaid block
+
+\`\`\`mermaid
+graph LR
+    A[Input] --> B{Validate}
+    B -->|Valid| C[Persist]
+    B -->|Invalid| D[Show Error]
+    C --> E[Notify]
+\`\`\`
+
+## Image block
+
+\`\`\`image-preview
+{
+  "title": "Parity Check",
+  "items": [
+    { "src": "/mock/images/gallery-1.png", "label": "Lake" },
+    { "src": "/mock/images/gallery-2.png", "label": "Forest" }
+  ]
+}
+\`\`\`
+`
+
 // Wrapper for collapsible markdown
 function CollapsibleWrapper({ children }: { children: React.ReactNode }) {
   return <CollapsibleMarkdownProvider>{children}</CollapsibleMarkdownProvider>
@@ -612,5 +643,42 @@ export const markdownComponents: ComponentEntry[] = [
         props: { code: '{ invalid json here' },
       },
     ],
+  },
+  {
+    id: 'rich-block-interaction-parity',
+    name: 'RichBlockInteractionParity',
+    category: 'Markdown',
+    description: 'Single playground fixture to verify inline + fullscreen interaction parity across Mermaid and image-preview blocks.',
+    component: Markdown,
+    wrapper: MarkdownImageBlockWrapper,
+    layout: 'top',
+    props: [
+      {
+        name: 'children',
+        description: 'Markdown fixture for parity checks',
+        control: { type: 'textarea', rows: 20 },
+        defaultValue: richBlockParityMarkdown,
+      },
+      {
+        name: 'mode',
+        description: 'Render mode controlling formatting level',
+        control: {
+          type: 'select',
+          options: [
+            { label: 'Terminal', value: 'terminal' },
+            { label: 'Minimal', value: 'minimal' },
+            { label: 'Full', value: 'full' },
+          ],
+        },
+        defaultValue: 'full',
+      },
+    ],
+    variants: [
+      { name: 'Parity Fixture', props: { children: richBlockParityMarkdown, mode: 'full' } },
+    ],
+    mockData: () => ({
+      onUrlClick: (url: string) => console.log('[Playground] URL clicked:', url),
+      onFileClick: (path: string) => console.log('[Playground] File clicked:', path),
+    }),
   },
 ]

@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { resolveTheme, themeToCSS, type PresetTheme, type ThemeFile } from '@config/theme'
+import type { PresetTheme } from '@config/theme'
 import { ThemeToggle } from './ThemeToggle'
 import { Sidebar } from './Sidebar'
 import { ComponentPreview } from './ComponentPreview'
@@ -38,19 +38,6 @@ const FALLBACK_THEME_OPTIONS = [
   { value: 'vitesse', label: 'Vitesse' },
 ] as const
 
-const bundledThemeModules = import.meta.glob('../../../resources/themes/*.json', {
-  eager: true,
-  import: 'default',
-}) as Record<string, ThemeFile>
-
-const BUNDLED_THEMES = new Map<string, ThemeFile>(
-  Object.entries(bundledThemeModules).map(([path, theme]) => {
-    const fileName = path.split('/').pop() ?? ''
-    const id = fileName.replace('.json', '')
-    return [id, theme]
-  })
-)
-
 export function PlaygroundApp() {
   const categories = React.useMemo(() => getCategories(), [])
   const {
@@ -60,7 +47,6 @@ export function PlaygroundApp() {
     setWorkspaceColorTheme,
     setPreviewColorTheme,
     activeWorkspaceId,
-    isDark,
   } = useTheme()
   const [presetThemes, setPresetThemes] = React.useState<PresetTheme[]>([])
   const [selectedId, setSelectedId] = React.useState<string | null>(() => {
@@ -134,42 +120,6 @@ export function PlaygroundApp() {
       setPreviewColorTheme(null)
     }
   }, [setPreviewColorTheme])
-
-  React.useEffect(() => {
-    const styleId = 'playground-theme-fallback-overrides'
-    let styleEl = document.getElementById(styleId) as HTMLStyleElement | null
-
-    if (!styleEl) {
-      styleEl = document.createElement('style')
-      styleEl.id = styleId
-      document.head.appendChild(styleEl)
-    }
-
-    if (!effectiveColorTheme || effectiveColorTheme === 'default') {
-      styleEl.textContent = ''
-      return () => {
-        styleEl?.remove()
-      }
-    }
-
-    const selectedTheme =
-      presetThemes.find(theme => theme.id === effectiveColorTheme)?.theme
-      ?? BUNDLED_THEMES.get(effectiveColorTheme)
-
-    if (!selectedTheme) {
-      styleEl.textContent = ''
-      return () => {
-        styleEl?.remove()
-      }
-    }
-
-    const cssVars = themeToCSS(resolveTheme(selectedTheme), isDark)
-    styleEl.textContent = cssVars ? `:root {\n  ${cssVars}\n}` : ''
-
-    return () => {
-      styleEl?.remove()
-    }
-  }, [effectiveColorTheme, isDark, presetThemes])
 
   // Persist selected component to localStorage
   React.useEffect(() => {

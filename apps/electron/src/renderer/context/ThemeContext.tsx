@@ -42,6 +42,12 @@ interface ThemeContextType {
   previewColorTheme: string | null
   /** Set temporary preview theme for hover preview. Pass null to clear. */
   setPreviewColorTheme: (theme: string | null) => void
+  /** Where effectiveColorTheme came from for current render cycle */
+  effectiveColorThemeSource: 'preview' | 'workspace' | 'app'
+  /** How the preset theme was resolved */
+  themeResolvedFrom: 'none' | 'ipc' | 'fallback'
+  /** Non-fatal theme loading error. Null when theme loaded normally. */
+  themeLoadError: string | null
 
   // Theme resolution (singleton - loaded once)
   /** Loaded preset theme file, null if default or loading */
@@ -67,6 +73,19 @@ interface StoredTheme {
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
+
+const bundledThemeModules = import.meta.glob('../../../resources/themes/*.json', {
+  eager: true,
+  import: 'default',
+}) as Record<string, ThemeFile>
+
+const BUNDLED_THEMES = new Map<string, ThemeFile>(
+  Object.entries(bundledThemeModules).map(([path, theme]) => {
+    const fileName = path.split('/').pop() ?? ''
+    const id = fileName.replace('.json', '')
+    return [id, theme]
+  })
+)
 
 interface ThemeProviderProps {
   children: ReactNode
@@ -138,11 +157,15 @@ export function ThemeProvider({
 
   // === Preset theme state (singleton) ===
   const [presetTheme, setPresetTheme] = useState<ThemeFile | null>(null)
+  const [themeResolvedFrom, setThemeResolvedFrom] = useState<'none' | 'ipc' | 'fallback'>('none')
+  const [themeLoadError, setThemeLoadError] = useState<string | null>(null)
 
   // === Derived values ===
   const resolvedMode = mode === 'system' ? systemPreference : mode
   // Effective theme: preview > workspace override > app default
   const effectiveColorTheme = previewColorTheme ?? workspaceColorTheme ?? colorTheme
+  const effectiveColorThemeSource: 'preview' | 'workspace' | 'app' =
+    previewColorTheme !== null ? 'preview' : workspaceColorTheme !== null ? 'workspace' : 'app'
   const isDarkFromMode = resolvedMode === 'dark'
 
   // Load workspace theme override when workspace changes
@@ -161,17 +184,56 @@ export function ThemeProvider({
 
   // Load preset theme when effectiveColorTheme changes (SINGLETON - only here, not in useTheme)
   useEffect(() => {
-    if (!effectiveColorTheme || effectiveColorTheme === 'default') {
-      setPresetTheme(null)
-      return
+    let cancelled = false
+
+    const applyFallback = (reason: string) => {
+      const fallbackTheme = BUNDLED_THEMES.get(effectiveColorTheme)
+      if (fallbackTheme) {
+        if (!cancelled) {
+          setPresetTheme(fallbackTheme)
+          setThemeResolvedFrom('fallback')
+          setThemeLoadError(reason)
+        }
+        console.warn(`[ThemeContext] ${reason} Falling back to bundled theme: ${effectiveColorTheme}`)
+        return
+      }
+
+      if (!cancelled) {
+        setPresetTheme(null)
+        setThemeResolvedFrom('none')
+        setThemeLoadError(reason)
+      }
+      console.error(`[ThemeContext] ${reason} No bundled fallback found for: ${effectiveColorTheme}`)
     }
 
-    // Load preset theme via IPC (app-level)
-    window.electronAPI?.loadPresetTheme?.(effectiveColorTheme).then((preset) => {
-      setPresetTheme(preset?.theme ?? null)
-    }).catch(() => {
+    if (!effectiveColorTheme || effectiveColorTheme === 'default') {
       setPresetTheme(null)
+      setThemeResolvedFrom('none')
+      setThemeLoadError(null)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    // Load preset theme via IPC (app-level), then fallback to bundled themes
+    window.electronAPI?.loadPresetTheme?.(effectiveColorTheme).then((preset) => {
+      if (cancelled) return
+
+      if (preset?.theme) {
+        setPresetTheme(preset.theme)
+        setThemeResolvedFrom('ipc')
+        setThemeLoadError(null)
+        return
+      }
+
+      applyFallback(`Preset theme was not returned by IPC for "${effectiveColorTheme}".`)
+    }).catch((error) => {
+      applyFallback(`Failed to load preset theme via IPC for "${effectiveColorTheme}": ${error instanceof Error ? error.message : String(error)}.`)
     })
+
+    return () => {
+      cancelled = true
+    }
   }, [effectiveColorTheme])
 
   // Resolve theme (preset → final)
@@ -437,6 +499,9 @@ export function ThemeProvider({
         effectiveColorTheme,
         previewColorTheme,
         setPreviewColorTheme,
+        effectiveColorThemeSource,
+        themeResolvedFrom,
+        themeLoadError,
 
         // Theme resolution (singleton)
         presetTheme,

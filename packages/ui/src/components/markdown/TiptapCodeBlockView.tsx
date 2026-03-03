@@ -53,7 +53,7 @@ function TiptapCodeBlockView({ node, editor, getPos }: TiptapCodeBlockViewProps)
           >
             <Pencil className="w-3.5 h-3.5" />
           </button>
-          <MarkdownMermaidBlock code={node.textContent} showExpandButton={false} />
+          <MarkdownMermaidBlock code={node.textContent} showExpandButton={false} tapToOpen={false} />
         </div>
       </NodeViewWrapper>
     )

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'bun:test'
 import { Editor } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import { Mathematics } from '@tiptap/extension-mathematics'
+import Image from '@tiptap/extension-image'
 import { Markdown } from '@tiptap/markdown'
 import {
   preprocessMarkdownForOfficial,
@@ -111,6 +112,34 @@ describe('official markdown + mathematics foundation', () => {
     expect(md).toContain('graph TD')
     expect(md).toContain('```ts')
     expect(md).toContain('const x = 1')
+
+    editor.destroy()
+  })
+
+  it('round-trips markdown images with alt, src, and title in official markdown mode', () => {
+    const source = [
+      'Before image',
+      '',
+      '![Planner board](https://picsum.photos/seed/planner-image-test/1200/600 "Planner Board")',
+      '',
+      'After image',
+    ].join('\n')
+
+    const editor = new Editor({
+      extensions: [StarterKit, Image, Markdown],
+      content: source,
+      contentType: 'markdown',
+    })
+
+    const json = editor.getJSON()
+    const md = editor.getMarkdown()
+    const jsonText = JSON.stringify(json)
+
+    expect(jsonText).toContain('"type":"image"')
+    expect(jsonText).toContain('"src":"https://picsum.photos/seed/planner-image-test/1200/600"')
+    expect(jsonText).toContain('"alt":"Planner board"')
+    expect(jsonText).toContain('"title":"Planner Board"')
+    expect(md).toContain('![Planner board](https://picsum.photos/seed/planner-image-test/1200/600 "Planner Board")')
 
     editor.destroy()
   })

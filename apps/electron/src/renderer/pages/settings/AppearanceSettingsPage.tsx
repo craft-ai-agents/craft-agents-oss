@@ -93,7 +93,18 @@ const toolIconColumns: ColumnDef<ToolIconMapping>[] = [
 // ============================================
 
 export default function AppearanceSettingsPage() {
-  const { mode, setMode, colorTheme, setColorTheme, font, setFont, activeWorkspaceId, setWorkspaceColorTheme } = useTheme()
+  const {
+    mode,
+    setMode,
+    colorTheme,
+    setColorTheme,
+    font,
+    setFont,
+    activeWorkspaceId,
+    setWorkspaceColorTheme,
+    themeLoadError,
+    themeResolvedFrom,
+  } = useTheme()
   const { workspaces } = useAppShellContext()
 
   // Fetch workspace icons as data URLs (file:// URLs don't work in renderer)
@@ -265,6 +276,11 @@ export default function AppearanceSettingsPage() {
                     />
                   </SettingsRow>
                 </SettingsCard>
+                {themeLoadError && (
+                  <p className="mt-2 text-xs text-info">
+                    Theme warning: {themeLoadError} ({themeResolvedFrom === 'fallback' ? 'using bundled fallback' : 'using default theme'})
+                  </p>
+                )}
               </SettingsSection>
 
               {/* Workspace Themes */}

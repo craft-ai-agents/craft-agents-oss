@@ -1,10 +1,5 @@
 /**
  * ImagePreviewOverlay - In-app image preview for the link interceptor and markdown blocks.
- *
- * Loads image data URLs (from READ_FILE_DATA_URL IPC) and displays images with fit-to-container sizing.
- * Supports optional multiple items with arrow/dropdown navigation in the header.
- *
- * File path badge provides "Open" and "Reveal in {file manager}" via PlatformContext.
  */
 
 import * as React from 'react'
@@ -13,6 +8,9 @@ import { Image } from 'lucide-react'
 import { PreviewOverlay } from './PreviewOverlay'
 import { CopyButton } from './CopyButton'
 import { ItemNavigator } from './ItemNavigator'
+import { ZoomControls } from './ZoomControls'
+import { RICH_BLOCK_DEFAULTS } from './rich-block-interaction-spec'
+import { useRichBlockInteractions } from './useRichBlockInteractions'
 
 interface PreviewItem {
   src: string
@@ -22,15 +20,10 @@ interface PreviewItem {
 export interface ImagePreviewOverlayProps {
   isOpen: boolean
   onClose: () => void
-  /** Absolute file path for the image (single item / backward compatibility) */
   filePath: string
-  /** Optional multiple items for arrow navigation */
   items?: PreviewItem[]
-  /** Initial active item index (defaults to 0) */
   initialIndex?: number
-  /** Optional overlay title (used by markdown block previews) */
   title?: string
-  /** Async loader that returns a data URL (data:{mime};base64,...) */
   loadDataUrl: (path: string) => Promise<string>
   theme?: 'light' | 'dark'
 }
@@ -51,24 +44,47 @@ export function ImagePreviewOverlay({
   }, [items, filePath])
 
   const [activeIdx, setActiveIdx] = useState(initialIndex)
-
-  // Content cache: src path → data URL
   const [contentCache, setContentCache] = useState<Record<string, string>>({})
+  const [dimensionsCache, setDimensionsCache] = useState<Record<string, { width: number; height: number }>>({})
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
+  const containerRef = React.useRef<HTMLDivElement>(null)
+
+  const {
+    scale,
+    translate,
+    isDragging,
+    isAnimating,
+    setIsAnimating,
+    zoomByStep,
+    zoomToPreset,
+    zoomToFit,
+    reset,
+    onMouseDown,
+    onDoubleClick,
+  } = useRichBlockInteractions({
+    isOpen,
+    containerRef,
+  })
+
   const activeItem = resolvedItems[activeIdx]
   const activeDataUrl = activeItem ? contentCache[activeItem.src] : null
+  const activeDimensions = activeItem ? dimensionsCache[activeItem.src] : null
 
-  // Reset active item when overlay opens
   useEffect(() => {
     if (isOpen) {
       const bounded = Math.max(0, Math.min(initialIndex, resolvedItems.length - 1))
       setActiveIdx(bounded)
+      reset()
     }
-  }, [isOpen, initialIndex, resolvedItems.length])
+  }, [isOpen, initialIndex, resolvedItems.length, reset])
 
-  // Load active item's image data URL when needed
+  useEffect(() => {
+    if (!isOpen) return
+    reset()
+  }, [activeIdx, isOpen, reset])
+
   useEffect(() => {
     if (!isOpen || !activeItem?.src) return
     if (contentCache[activeItem.src]) {
@@ -84,6 +100,16 @@ export function ImagePreviewOverlay({
       .then((url) => {
         if (!cancelled) {
           setContentCache((prev) => ({ ...prev, [activeItem.src]: url }))
+          const img = new window.Image()
+          img.onload = () => {
+            if (cancelled) return
+            if (!img.naturalWidth || !img.naturalHeight) return
+            setDimensionsCache(prev => ({
+              ...prev,
+              [activeItem.src]: { width: img.naturalWidth, height: img.naturalHeight },
+            }))
+          }
+          img.src = url
           setIsLoading(false)
         }
       })
@@ -97,10 +123,25 @@ export function ImagePreviewOverlay({
     return () => { cancelled = true }
   }, [isOpen, activeItem?.src, loadDataUrl, contentCache])
 
-  // Header actions: item navigation + copy path button
+  const isDefaultView = scale === 1 && translate.x === 0 && translate.y === 0
+
   const headerActions = (
     <div className="flex items-center gap-2">
       <ItemNavigator items={resolvedItems} activeIndex={activeIdx} onSelect={setActiveIdx} size="md" />
+
+      <ZoomControls
+        scale={scale}
+        minScale={RICH_BLOCK_DEFAULTS.minScale}
+        maxScale={RICH_BLOCK_DEFAULTS.maxScale}
+        zoomPresets={RICH_BLOCK_DEFAULTS.zoomPresets}
+        onZoomIn={() => zoomByStep('in')}
+        onZoomOut={() => zoomByStep('out')}
+        onZoomToPreset={zoomToPreset}
+        onZoomToFit={() => zoomToFit(activeDimensions ?? null)}
+        onReset={reset}
+        resetDisabled={isDefaultView}
+      />
+
       <CopyButton content={activeItem?.src || filePath} title="Copy path" className="bg-background shadow-minimal" />
     </div>
   )
@@ -120,7 +161,16 @@ export function ImagePreviewOverlay({
       error={error ? { label: 'Load Failed', message: error } : undefined}
       headerActions={headerActions}
     >
-      <div className="min-h-full flex items-center justify-center p-4">
+      <div
+        ref={containerRef}
+        className="min-h-full flex items-center justify-center p-4 select-none"
+        onMouseDown={onMouseDown}
+        onDoubleClick={onDoubleClick}
+        style={{
+          cursor: isDragging ? 'grabbing' : 'grab',
+          overflow: 'hidden',
+        }}
+      >
         {!activeDataUrl && isLoading && (
           <div className="text-muted-foreground text-sm">Loading image...</div>
         )}
@@ -130,6 +180,12 @@ export function ImagePreviewOverlay({
             alt={activeItem?.label || activeItem?.src.split('/').pop() || 'Image preview'}
             className="max-w-full max-h-full object-contain rounded-sm"
             draggable={false}
+            onTransitionEnd={() => setIsAnimating(false)}
+            style={{
+              transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
+              transformOrigin: 'center center',
+              transition: isAnimating ? 'transform 150ms ease-out' : 'none',
+            }}
           />
         )}
       </div>
