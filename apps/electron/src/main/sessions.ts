@@ -1,4 +1,5 @@
 import type { EventSink } from '@craft-agent/server-core/transport'
+import type { ISessionManager } from '@craft-agent/server-core/handlers'
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '../runtime/platform'
 import { basename, join, normalize, isAbsolute, sep } from 'path'
 import { existsSync } from 'fs'
@@ -826,7 +827,7 @@ interface PendingDelta {
   turnId?: string
 }
 
-export class SessionManager {
+export class SessionManager implements ISessionManager {
   private sessions: Map<string, ManagedSession> = new Map()
   // Delta batching for performance - reduces IPC events from 50+/sec to ~20/sec
   private pendingDeltas: Map<string, PendingDelta> = new Map()
