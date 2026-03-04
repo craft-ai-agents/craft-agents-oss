@@ -2,7 +2,7 @@ import { join } from 'path'
 import { readdirSync, statSync } from 'fs'
 import { IPC_CHANNELS, type SkillFile } from '../../shared/types'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import type { RpcServer } from '../../transport/types'
+import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
 
 export const HANDLED_CHANNELS = [

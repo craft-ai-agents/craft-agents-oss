@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { handleDeepLink } from '../deep-link'
 import { IPC_CHANNELS } from '../../shared/types'
-import type { EventSink } from '../../transport/types'
+import type { EventSink } from '@craft-agent/server-core/transport'
 import type { WindowManager } from '../window-manager'
 
 function createMockWindow(webContentsId: number) {

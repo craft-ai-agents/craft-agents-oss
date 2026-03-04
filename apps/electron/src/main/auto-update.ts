@@ -27,7 +27,7 @@ import {
 } from '@craft-agent/shared/config'
 import { readJsonFileSync } from '@craft-agent/shared/utils/files'
 import { IPC_CHANNELS, type UpdateInfo } from '../shared/types'
-import type { EventSink } from '../transport/types'
+import type { EventSink } from '@craft-agent/server-core/transport'
 
 // Platform detection
 const PLATFORM = platform()

@@ -26,8 +26,8 @@ import {
   CLIENT_CONFIRM_DIALOG,
   CLIENT_OPEN_FILE_DIALOG,
   LOCAL_CLIENT_CAPABILITIES,
-} from '../transport/capabilities'
-import type { ConfirmDialogSpec, FileDialogSpec } from '../transport/capabilities'
+} from '@craft-agent/server-core/transport'
+import type { ConfirmDialogSpec, FileDialogSpec } from '@craft-agent/server-core/transport'
 
 // Connection details — from env (remote server) or main process (local)
 let wsUrl: string

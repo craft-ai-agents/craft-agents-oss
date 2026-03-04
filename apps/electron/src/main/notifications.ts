@@ -13,7 +13,7 @@ import { readFileSync } from 'fs'
 import { mainLog } from './logger'
 import { IPC_CHANNELS } from '../shared/types'
 import type { WindowManager } from './window-manager'
-import type { EventSink } from '../transport/types'
+import type { EventSink } from '@craft-agent/server-core/transport'
 
 type ClientResolver = (webContentsId: number) => string | undefined
 

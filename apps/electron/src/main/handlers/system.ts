@@ -6,14 +6,14 @@ import { IPC_CHANNELS } from '../../shared/types'
 import { getGitBashPath, setGitBashPath, clearGitBashPath } from '@craft-agent/shared/config'
 import { isUsableGitBashPath, validateGitBashPath } from '../git-bash'
 import { validateFilePath } from './files'
-import type { RpcServer } from '../../transport/types'
+import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
 import {
   requestClientOpenExternal,
   requestClientOpenPath,
   requestClientShowInFolder,
   requestClientOpenFileDialog,
-} from '../../transport/capabilities'
+} from '@craft-agent/server-core/transport'
 
 export const CORE_HANDLED_CHANNELS = [
   IPC_CHANNELS.theme.GET_SYSTEM_PREFERENCE,

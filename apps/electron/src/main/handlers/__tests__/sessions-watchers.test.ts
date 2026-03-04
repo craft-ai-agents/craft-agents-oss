@@ -4,7 +4,7 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { IPC_CHANNELS } from '../../../shared/types'
 import { registerSessionsHandlers, cleanupSessionFileWatchForClient } from '../sessions'
-import type { RpcServer } from '../../../transport/types'
+import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
 type HandlerFn = (ctx: { clientId: string }, ...args: any[]) => Promise<any> | any

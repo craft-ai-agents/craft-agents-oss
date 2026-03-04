@@ -2,10 +2,10 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'path'
 import { IPC_CHANNELS } from '../../shared/types'
 import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import { getWorkspaceOrThrow } from './utils'
-import type { RpcServer } from '../../transport/types'
+import { getWorkspaceOrThrow } from '@craft-agent/server-core/handlers'
+import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
-import { requestClientOpenFileDialog } from '../../transport/capabilities'
+import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
 
 export const HANDLED_CHANNELS = [
   IPC_CHANNELS.workspace.SETTINGS_GET,

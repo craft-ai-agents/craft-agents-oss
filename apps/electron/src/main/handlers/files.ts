@@ -9,9 +9,9 @@ import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { resizeImageForAPI, getImageSize } from '../image-utils'
 import { MarkItDown } from 'markitdown-js'
 import { realpath } from 'fs/promises'
-import type { RpcServer } from '../../transport/types'
+import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
-import { requestClientOpenFileDialog } from '../../transport/capabilities'
+import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
 
 /**
  * Sanitizes a filename to prevent path traversal and filesystem issues.

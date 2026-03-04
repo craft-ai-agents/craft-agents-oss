@@ -1,4 +1,4 @@
-import type { EventSink } from '../transport/types'
+import type { EventSink } from '@craft-agent/server-core/transport'
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '../runtime/platform'
 import { basename, join, normalize, isAbsolute, sep } from 'path'
 import { existsSync } from 'fs'

@@ -1,5 +1,5 @@
 import type { HandlerDeps } from './handler-deps'
-import type { RpcServer } from '../../transport/types'
+import type { RpcServer } from '@craft-agent/server-core/transport'
 
 import { registerLabelsHandlers } from './labels'
 import { registerStatusesHandlers } from './statuses'

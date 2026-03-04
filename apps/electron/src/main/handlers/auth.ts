@@ -3,9 +3,9 @@ import { join } from 'path'
 import { homedir } from 'os'
 import { IPC_CHANNELS } from '../../shared/types'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
-import type { RpcServer } from '../../transport/types'
+import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
-import { requestClientConfirmDialog } from '../../transport/capabilities'
+import { requestClientConfirmDialog } from '@craft-agent/server-core/transport'
 
 export const HANDLED_CHANNELS = [
   IPC_CHANNELS.auth.LOGOUT,

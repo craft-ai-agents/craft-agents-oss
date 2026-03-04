@@ -4,7 +4,7 @@ import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type SendMess
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { perf } from '@craft-agent/shared/utils'
 import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
-import { pushTyped, type RpcServer } from '../../transport/types'
+import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
 
 interface ClientSessionWatchState {

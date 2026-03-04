@@ -11,7 +11,7 @@ import {
   REQUEST_TIMEOUT_MS,
   type MessageEnvelope,
 } from '@craft-agent/shared/protocol'
-import type { RpcClient } from './types'
+import type { RpcClient } from '@craft-agent/server-core/transport'
 import { serializeEnvelope, deserializeEnvelope } from './codec'
 
 // ---------------------------------------------------------------------------
