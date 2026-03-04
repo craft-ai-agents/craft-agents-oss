@@ -239,3 +239,5 @@ export function initModelRefreshService(getCredentials: CredentialResolver): Mod
   _service = new ModelRefreshService(MODEL_FETCHERS, getCredentials)
   return _service
 }
+
+export { setFetcherPlatform } from './runtime'

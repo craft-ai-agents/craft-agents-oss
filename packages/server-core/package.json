@@ -10,7 +10,8 @@
     "./transport": "./src/transport/index.ts",
     "./runtime": "./src/runtime/index.ts",
     "./handlers": "./src/handlers/index.ts",
-    "./bootstrap": "./src/bootstrap/index.ts"
+    "./bootstrap": "./src/bootstrap/index.ts",
+    "./model-fetchers": "./src/model-fetchers/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

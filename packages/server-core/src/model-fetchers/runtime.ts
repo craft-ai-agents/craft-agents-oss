@@ -3,7 +3,7 @@
  * Avoids circular imports (index.ts → registry.ts → fetchers → index.ts).
  * Must be initialized via setFetcherPlatform() before any model fetching.
  */
-import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '../../runtime/platform'
+import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '../runtime/platform'
 
 let _platform: PlatformServices | null = null
 

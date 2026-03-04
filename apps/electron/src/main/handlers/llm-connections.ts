@@ -6,7 +6,7 @@ import {
   testBackendConnection,
   validateStoredBackendConnection,
 } from '@craft-agent/shared/agent/backend'
-import { getModelRefreshService } from '../model-fetchers'
+import { getModelRefreshService } from '@craft-agent/server-core/model-fetchers'
 import { parseTestConnectionError, createBuiltInConnection, validateModelList, piAuthProviderDisplayName } from '../connection-setup-logic'
 import { getWorkspaceOrThrow, buildBackendHostRuntimeContext } from './utils'
 import { pushTyped, type RpcServer } from '../../transport/types'
