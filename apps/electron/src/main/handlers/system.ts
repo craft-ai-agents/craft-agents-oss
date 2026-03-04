@@ -5,7 +5,7 @@ import { execSync } from 'child_process'
 import { IPC_CHANNELS } from '../../shared/types'
 import { getGitBashPath, setGitBashPath, clearGitBashPath } from '@craft-agent/shared/config'
 import { isUsableGitBashPath, validateGitBashPath } from '@craft-agent/server-core/services'
-import { validateFilePath } from './files'
+import { validateFilePath } from '@craft-agent/server-core/handlers'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
 import {

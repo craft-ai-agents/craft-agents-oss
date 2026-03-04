@@ -1,103 +1,19 @@
 import { readFile, writeFile, unlink, mkdir, readdir } from 'fs/promises'
-import { normalize, isAbsolute, join, sep } from 'path'
-import { homedir, tmpdir } from 'os'
+import { join } from 'path'
 import { randomUUID } from 'crypto'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment } from '../../shared/types'
 import { readFileAttachment, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
 import { getSessionAttachmentsPath, validateSessionId } from '@craft-agent/shared/sessions'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { resizeImageForAPI, getImageSize } from '@craft-agent/server-core/services'
+import { sanitizeFilename, validateFilePath } from '@craft-agent/server-core/handlers'
 import { MarkItDown } from 'markitdown-js'
-import { realpath } from 'fs/promises'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
 import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
 
-/**
- * Sanitizes a filename to prevent path traversal and filesystem issues.
- * Removes dangerous characters and limits length.
- */
-export function sanitizeFilename(name: string): string {
-  return name
-    // Remove path separators and traversal patterns
-    .replace(/[/\\]/g, '_')
-    // Remove Windows-forbidden characters: < > : " | ? *
-    .replace(/[<>:"|?*]/g, '_')
-    // Remove control characters (ASCII 0-31)
-    .replace(/[\x00-\x1f]/g, '')
-    // Collapse multiple dots (prevent hidden files and extension tricks)
-    .replace(/\.{2,}/g, '.')
-    // Remove leading/trailing dots and spaces (Windows issues)
-    .replace(/^[.\s]+|[.\s]+$/g, '')
-    // Limit length (200 chars is safe for all filesystems)
-    .slice(0, 200)
-    // Fallback if name is empty after sanitization
-    || 'unnamed'
-}
-
-/**
- * Validates that a file path is within allowed directories to prevent path traversal attacks.
- * Allowed directories: user's home directory and /tmp
- */
-export async function validateFilePath(filePath: string): Promise<string> {
-  // Normalize the path to resolve . and .. components
-  let normalizedPath = normalize(filePath)
-
-  // Expand ~ to home directory
-  if (normalizedPath.startsWith('~')) {
-    normalizedPath = normalizedPath.replace(/^~/, homedir())
-  }
-
-  // Must be an absolute path
-  if (!isAbsolute(normalizedPath)) {
-    throw new Error('Only absolute file paths are allowed')
-  }
-
-  // Resolve symlinks to get the real path
-  let realPath: string
-  try {
-    realPath = await realpath(normalizedPath)
-  } catch {
-    // File doesn't exist or can't be resolved - use normalized path
-    realPath = normalizedPath
-  }
-
-  // Define allowed base directories
-  const allowedDirs = [
-    homedir(),      // User's home directory
-    tmpdir(),       // Platform-appropriate temp directory
-  ]
-
-  // Check if the real path is within an allowed directory (cross-platform)
-  const isAllowed = allowedDirs.some(dir => {
-    const normalizedDir = normalize(dir)
-    const normalizedReal = normalize(realPath)
-    return normalizedReal.startsWith(normalizedDir + sep) || normalizedReal === normalizedDir
-  })
-
-  if (!isAllowed) {
-    throw new Error('Access denied: file path is outside allowed directories')
-  }
-
-  // Block sensitive files even within home directory
-  const sensitivePatterns = [
-    /\.ssh\//,
-    /\.gnupg\//,
-    /\.aws\/credentials/,
-    /\.env$/,
-    /\.env\./,
-    /credentials\.json$/,
-    /secrets?\./i,
-    /\.pem$/,
-    /\.key$/,
-  ]
-
-  if (sensitivePatterns.some(pattern => pattern.test(realPath))) {
-    throw new Error('Access denied: cannot read sensitive files')
-  }
-
-  return realPath
-}
+// Re-export from server-core for backward compatibility
+export { sanitizeFilename, validateFilePath } from '@craft-agent/server-core/handlers'
 
 export const HANDLED_CHANNELS = [
   IPC_CHANNELS.file.READ,
