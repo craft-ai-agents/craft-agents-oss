@@ -383,6 +383,7 @@ export class PiAgent extends BaseAgent {
       authType: this.config.authType,
       workspaceId: this.config.workspace.id,
       piAuth,
+      baseUrl: runtime.baseUrl,
       // Branch params for Pi SDK session fork
       branchFromSdkSessionId: this.config.session?.branchFromSdkSessionId,
       branchFromSessionPath: this.config.session?.branchFromSessionPath,

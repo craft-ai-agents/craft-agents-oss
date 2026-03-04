@@ -88,6 +88,7 @@ export const piDriver: ProviderDriver = {
       node: resolvedPaths.nodeRuntimePath,
     },
     piAuthProvider: providerOptions?.piAuthProvider || context.connection?.piAuthProvider,
+    baseUrl: context.connection?.baseUrl,
   }),
   fetchModels: async ({ connection, credentials, resolvedPaths, timeoutMs }) => {
     // Copilot OAuth: fetch models dynamically from the Copilot API

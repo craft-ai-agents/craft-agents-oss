@@ -61,7 +61,7 @@ import { createGoogleSearchTool } from './tools/google-search.ts';
 
 /** Messages from main process (stdin) */
 type InboundMessage =
-  | { type: 'init'; apiKey: string; model: string; cwd: string; thinkingLevel: string; workspaceRootPath: string; sessionId: string; sessionPath: string; workingDirectory: string; plansFolderPath: string; miniModel?: string; agentDir?: string; providerType?: string; authType?: string; workspaceId?: string; branchFromSdkSessionId?: string; branchFromSessionPath?: string; piAuth?: { provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } }
+  | { type: 'init'; apiKey: string; model: string; cwd: string; thinkingLevel: string; workspaceRootPath: string; sessionId: string; sessionPath: string; workingDirectory: string; plansFolderPath: string; miniModel?: string; agentDir?: string; providerType?: string; authType?: string; workspaceId?: string; baseUrl?: string; branchFromSdkSessionId?: string; branchFromSessionPath?: string; piAuth?: { provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } }
   | { type: 'prompt'; id: string; message: string; systemPrompt: string; images?: Array<{ type: 'image'; data: string; mimeType: string }> }
   | { type: 'register_tools'; tools: ProxyToolDef[] }
   | { type: 'tool_execute_response'; requestId: string; result: { content: string; isError: boolean } }
@@ -877,6 +877,13 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
   }
 
   initConfig = msg;
+
+  // Azure OpenAI requires a base URL (customer-specific deployment endpoint).
+  // The Pi SDK (via Vercel AI SDK) reads AZURE_OPENAI_BASE_URL from the environment.
+  if (msg.piAuth?.provider === 'azure-openai-responses' && msg.baseUrl) {
+    process.env.AZURE_OPENAI_BASE_URL = msg.baseUrl;
+    debugLog(`Set AZURE_OPENAI_BASE_URL=${msg.baseUrl}`);
+  }
 
   // Start callback server for call_llm (idempotent — skips if already running)
   await startCallbackServer();
