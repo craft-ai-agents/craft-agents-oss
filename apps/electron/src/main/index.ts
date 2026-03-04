@@ -370,52 +370,60 @@ app.whenReady().then(async () => {
     // Create the application menu (needs windowManager for New Window action)
     createApplicationMenu(windowManager)
 
-    // Initialize session manager
-    sessionManager = new SessionManager()
+    // When CRAFT_SERVER_URL is set, this Electron instance is a thin client —
+    // it only creates windows whose preload connects to the remote server.
+    // Skip server-side initialization (SessionManager, model refresh, platform injection).
+    const isClientOnly = !!process.env.CRAFT_SERVER_URL
+    const isHeadless = !!process.env.CRAFT_HEADLESS
 
-    // Initialize notification service
-    initNotificationService(windowManager)
+    // Initialize session manager (server-side only — thin client delegates to remote server)
+    let modelRefreshService: ReturnType<typeof initModelRefreshService> | null = null
+    if (!isClientOnly) {
+      sessionManager = new SessionManager()
 
-    // Restore persisted Git Bash path on Windows (must happen before any SDK subprocess spawn)
-    if (process.platform === 'win32') {
-      const { getGitBashPath, clearGitBashPath } = await import('@craft-agent/shared/config')
-      const gitBashPath = getGitBashPath()
-      if (gitBashPath) {
-        const validation = await validateGitBashPath(gitBashPath)
-        if (validation.valid) {
-          process.env.CLAUDE_CODE_GIT_BASH_PATH = validation.path
-        } else {
-          clearGitBashPath()
-          delete process.env.CLAUDE_CODE_GIT_BASH_PATH
-          mainLog.warn(`Cleared invalid persisted Git Bash path: ${gitBashPath}`)
+      // Restore persisted Git Bash path on Windows (must happen before any SDK subprocess spawn)
+      if (process.platform === 'win32') {
+        const { getGitBashPath, clearGitBashPath } = await import('@craft-agent/shared/config')
+        const gitBashPath = getGitBashPath()
+        if (gitBashPath) {
+          const validation = await validateGitBashPath(gitBashPath)
+          if (validation.valid) {
+            process.env.CLAUDE_CODE_GIT_BASH_PATH = validation.path
+          } else {
+            clearGitBashPath()
+            delete process.env.CLAUDE_CODE_GIT_BASH_PATH
+            mainLog.warn(`Cleared invalid persisted Git Bash path: ${gitBashPath}`)
+          }
         }
       }
+
+      // Initialize model refresh service BEFORE IPC handlers —
+      // getModelRefreshService() is called from IPC handlers, so it must be ready
+      // before any renderer can send messages.
+      modelRefreshService = initModelRefreshService(async (slug: string) => {
+        const { getCredentialManager } = await import('@craft-agent/shared/credentials')
+        const manager = getCredentialManager()
+        const [apiKey, oauth] = await Promise.all([
+          manager.getLlmApiKey(slug).catch(() => null),
+          manager.getLlmOAuth(slug).catch(() => null),
+        ])
+        return {
+          apiKey: apiKey ?? undefined,
+          oauthAccessToken: oauth?.accessToken,
+          oauthRefreshToken: oauth?.refreshToken,
+          oauthIdToken: oauth?.idToken,
+        }
+      })
     }
 
-    // Initialize model refresh service BEFORE IPC handlers —
-    // getModelRefreshService() is called from IPC handlers, so it must be ready
-    // before any renderer can send messages. The credential resolver uses lazy
-    // import() so it doesn't depend on session manager being initialized first.
-    const modelRefreshService = initModelRefreshService(async (slug: string) => {
-      const { getCredentialManager } = await import('@craft-agent/shared/credentials')
-      const manager = getCredentialManager()
-      const [apiKey, oauth] = await Promise.all([
-        manager.getLlmApiKey(slug).catch(() => null),
-        manager.getLlmOAuth(slug).catch(() => null),
-      ])
-      return {
-        apiKey: apiKey ?? undefined,
-        oauthAccessToken: oauth?.accessToken,
-        oauthRefreshToken: oauth?.refreshToken,
-        oauthIdToken: oauth?.idToken,
-      }
-    })
+    // Initialize notification service (always — triggered by server push events)
+    initNotificationService(windowManager)
 
     // Initialize browser pane manager
     browserPaneManager = new BrowserPaneManager()
     browserPaneManager.setWindowManager(windowManager)
     browserPaneManager.registerToolbarIpc()
-    sessionManager.setBrowserPaneManager(browserPaneManager)
+    sessionManager?.setBrowserPaneManager(browserPaneManager)
 
     // Build real PlatformServices from Electron APIs
     const platform: PlatformServices = {
@@ -467,22 +475,24 @@ app.whenReady().then(async () => {
       captureError: (err) => Sentry.captureException(err),
     }
 
-    // Inject platform into subsystems that can't receive it through HandlerDeps
-    setFetcherPlatform(platform)
-    setSessionPlatform(platform)
-    setSessionRuntimeHooks({
-      updateBadgeCount,
-      captureException: (error, context) => {
-        Sentry.captureException(error instanceof Error ? error : new Error(String(error)), {
-          tags: {
-            ...(context?.errorSource ? { errorSource: context.errorSource } : {}),
-            ...(context?.sessionId ? { sessionId: context.sessionId } : {}),
-          },
-        })
-      },
-    })
-    setSearchPlatform(platform)
-    setImageProcessor(platform.imageProcessor)
+    // Inject platform into server-side subsystems (skip in thin-client mode)
+    if (!isClientOnly) {
+      setFetcherPlatform(platform)
+      setSessionPlatform(platform)
+      setSessionRuntimeHooks({
+        updateBadgeCount,
+        captureException: (error, context) => {
+          Sentry.captureException(error instanceof Error ? error : new Error(String(error)), {
+            tags: {
+              ...(context?.errorSource ? { errorSource: context.errorSource } : {}),
+              ...(context?.sessionId ? { sessionId: context.sessionId } : {}),
+            },
+          })
+        },
+      })
+      setSearchPlatform(platform)
+      setImageProcessor(platform.imageProcessor)
+    }
 
     // Bootstrap IPC handlers — preload uses sendSync for window-local details
     ipcMain.on('__get-web-contents-id', (e) => {
@@ -508,11 +518,6 @@ app.whenReady().then(async () => {
       const result = await dialog.showOpenDialog(win, spec)
       return { canceled: result.canceled, filePaths: result.filePaths }
     })
-
-    // When CRAFT_SERVER_URL is set, this Electron instance is a thin client —
-    // it only creates windows whose preload connects to the remote server.
-    const isClientOnly = !!process.env.CRAFT_SERVER_URL
-    const isHeadless = !!process.env.CRAFT_HEADLESS
 
     if (!isClientOnly) {
       // Create WS RPC server (local WebSocket transport)
@@ -573,7 +578,7 @@ app.whenReady().then(async () => {
       }
 
       const deps: HandlerDeps = {
-        sessionManager,
+        sessionManager: sessionManager!,
         platform,
         windowManager,
         browserPaneManager,
@@ -584,7 +589,7 @@ app.whenReady().then(async () => {
       registerAllRpcHandlers(server, deps)
 
       // Wire EventSink so SessionManager pushes events via the RPC server
-      sessionManager.setEventSink(server.push.bind(server))
+      sessionManager!.setEventSink(server.push.bind(server))
 
       // Wire EventSink to services that broadcast events to renderers
       // Must happen BEFORE createInitialWindows() so event handlers use WS from the start
@@ -595,10 +600,10 @@ app.whenReady().then(async () => {
       setNotificationEventSink(moduleSink!, resolveClientId)
 
       // Initialize auth (must happen after window creation for error reporting)
-      await sessionManager.initialize()
+      await sessionManager!.initialize()
 
       // Start periodic model refresh after auth is initialized
-      modelRefreshService.startAll()
+      modelRefreshService!.startAll()
     }
 
     // Create initial windows (restores from saved state or opens first workspace)
@@ -609,16 +614,19 @@ app.whenReady().then(async () => {
 
     // Run credential health check at startup to detect issues early
     // (corruption, machine migration, missing credentials for default connection)
-    try {
-      const { getCredentialManager } = await import('@craft-agent/shared/credentials')
-      const credentialManager = getCredentialManager()
-      const health = await credentialManager.checkHealth()
-      if (!health.healthy) {
-        mainLog.warn('Credential health check failed:', health.issues)
-        // Issues will be displayed in Settings → AI when user navigates there
+    // Skip in thin-client mode — credentials are managed by the remote server.
+    if (!isClientOnly) {
+      try {
+        const { getCredentialManager } = await import('@craft-agent/shared/credentials')
+        const credentialManager = getCredentialManager()
+        const health = await credentialManager.checkHealth()
+        if (!health.healthy) {
+          mainLog.warn('Credential health check failed:', health.issues)
+          // Issues will be displayed in Settings → AI when user navigates there
+        }
+      } catch (err) {
+        mainLog.error('Credential health check error:', err)
       }
-    } catch (err) {
-      mainLog.error('Credential health check error:', err)
     }
 
     // Initialize power manager (loads setting, must happen after config is available)
