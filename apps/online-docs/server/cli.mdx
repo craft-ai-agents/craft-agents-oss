@@ -7,6 +7,23 @@ description: Use the Craft Agents CLI to interact with the server from your term
 
 The `craft-cli` is a terminal client for the Craft Agent headless server. It connects over WebSocket and lets you manage sessions, send messages with real-time streaming, and validate server health — all from the command line.
 
+## Installation
+
+From the [monorepo](https://github.com/lukilabs/craft-agents-oss) root:
+
+```bash
+# Install dependencies
+bun install
+
+# Option A: Run directly (no global install)
+bun run apps/cli/src/index.ts <command>
+
+# Option B: Link globally (adds craft-cli to PATH)
+cd apps/cli && bun link
+```
+
+After linking, `craft-cli` is available anywhere in your terminal.
+
 ## Quick Start
 
 ### 1. Start the server

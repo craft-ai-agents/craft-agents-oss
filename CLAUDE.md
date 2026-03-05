@@ -11,12 +11,20 @@ Craft Agent is a Claude Code-like interface for managing Craft documents using t
 ```
 craft-agent/
 ├── apps/
+│   ├── cli/         # Craft CLI terminal client
 │   ├── electron/    # Desktop GUI (primary interface)
+│   ├── marketing/   # Marketing site
+│   ├── online-docs/ # Online documentation
 │   └── viewer/      # Web viewer for session transcripts
 └── packages/
-    ├── core/        # @craft-agent/core - Shared types
-    ├── shared/      # @craft-agent/shared - Business logic
-    └── server-core/ # @craft-agent/server-core - Reusable WS/headless server infrastructure
+    ├── core/                # @craft-agent/core - Shared types
+    ├── pi-agent-server/     # Pi SDK agent server (subprocess)
+    ├── server/              # Standalone headless Bun server
+    ├── server-core/         # @craft-agent/server-core - Reusable WS/headless server infrastructure
+    ├── session-mcp-server/  # Session-level MCP server
+    ├── session-tools-core/  # Core session tool implementations
+    ├── shared/              # @craft-agent/shared - Business logic
+    └── ui/                  # @craft-agent/ui - Shared UI components
 ```
 
 **Imports:**
