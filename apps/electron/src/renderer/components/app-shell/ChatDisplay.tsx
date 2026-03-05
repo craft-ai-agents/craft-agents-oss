@@ -9,6 +9,7 @@ import {
   CircleAlert,
   ExternalLink,
   Info,
+  List,
   X,
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
@@ -45,6 +46,7 @@ import type { PermissionMode } from "@craft-agent/shared/agent/modes"
 import type { ThinkingLevel } from "@craft-agent/shared/agent/thinking-levels"
 import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn } from "@craft-agent/ui"
 import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
+import { SessionOutline, getTurnKey } from "@/components/chat/SessionOutline"
 import { ActiveOptionBadges } from "./ActiveOptionBadges"
 import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse, type AdminApprovalResponse } from "./input"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
@@ -199,6 +201,7 @@ export interface ChatDisplayHandle {
   goToPrevMatch: () => void
   matchCount: number
   currentMatchIndex: number
+  toggleOutline: () => void
 }
 
 /**
@@ -491,6 +494,26 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Track which label should auto-open its value popover after being added via # menu.
   // Set when a valued label is selected, cleared once the popover opens.
   const [autoOpenLabelId, setAutoOpenLabelId] = useState<string | null>(null)
+
+  // Session outline (collapsible navigation aid)
+  const [isOutlineOpen, setIsOutlineOpen] = useState(false)
+
+  // Scroll-to-turn handler for the session outline.
+  // Ensures the target turn is within the visible pagination window, then scrolls to it.
+  const scrollToTurn = useCallback((turnKey: string, turnIndex: number) => {
+    // Expand pagination if needed
+    const totalTurns = totalTurnCountRef.current
+    const requiredVisible = totalTurns - turnIndex + 2
+    setVisibleTurnCount(prev => Math.max(prev, requiredVisible))
+
+    // Scroll after DOM update
+    requestAnimationFrame(() => {
+      const el = turnRefs.current.get(turnKey)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    })
+  }, [])
 
   // ============================================================================
   // Search Highlighting (from session list search)
@@ -955,6 +978,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     goToPrevMatch,
     matchCount: validMatches.length,
     currentMatchIndex,
+    toggleOutline: () => setIsOutlineOpen(prev => !prev),
   }), [goToNextMatch, goToPrevMatch, validMatches.length, currentMatchIndex])
 
   // Notify parent when match count changes
@@ -1299,6 +1323,31 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
         <div className="flex flex-1 flex-col min-h-0 min-w-0 relative">
           {/* Content layer */}
           <div className="flex flex-1 flex-col min-h-0 min-w-0 relative z-10">
+          {/* === SESSION OUTLINE: Collapsible turn-by-turn navigation === */}
+          {!compactMode && allTurns.length > 0 && (
+            <div className="shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsOutlineOpen(prev => !prev)}
+                className={cn(
+                  "flex items-center gap-1.5 px-4 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full",
+                  isOutlineOpen && "text-foreground"
+                )}
+              >
+                <List size={14} />
+                <span>Outline</span>
+                <span className="text-muted-foreground/50">({allTurns.length})</span>
+                <ChevronDown size={12} className={cn("ml-auto transition-transform", isOutlineOpen && "rotate-180")} />
+              </button>
+              <AnimatedCollapsibleContent isOpen={isOutlineOpen}>
+                <SessionOutline
+                  turns={allTurns}
+                  onScrollToTurn={scrollToTurn}
+                  className="max-h-64 border-b border-border/50 pb-1"
+                />
+              </AnimatedCollapsibleContent>
+            </div>
+          )}
           {/* === MESSAGES AREA: Scrollable list of message bubbles === */}
           <div className="relative flex-1 min-h-0">
             {/* Mask wrapper - fades content at top and bottom over transparent/image backgrounds */}
