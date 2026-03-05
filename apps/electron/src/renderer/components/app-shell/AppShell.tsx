@@ -129,9 +129,9 @@ import {
   RADIUS_EDGE,
   RADIUS_INNER,
 } from "./panel-constants"
-import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
+import { dispatchFocusInputEvent } from "./input/focus-input-events"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -1027,12 +1027,6 @@ function AppShellContent({
   // Register focus zones
   const { zoneRef: sidebarRef, isFocused: sidebarFocused } = useFocusZone({ zoneId: 'sidebar' })
 
-  // Ref for focusing chat input (passed to ChatDisplay)
-  const chatInputRef = useRef<RichTextInputHandle>(null)
-  const focusChatInput = useCallback(() => {
-    chatInputRef.current?.focus()
-  }, [])
-
   // Global keyboard shortcuts using centralized action registry
   // Actions are defined in @/actions/definitions.ts
 
@@ -1049,6 +1043,13 @@ function AppShellContent({
   // Shift+Tab cycles permission mode through enabled modes (textarea handles its own, this handles when focus is elsewhere)
   // In multi-panel, targets the focused panel's session
   const effectiveSessionId = focusedSessionId ?? session.selected
+
+  // Focus chat input for the target session only (multi-panel safe).
+  const focusChatInputForSession = useCallback((targetSessionId?: string | null) => {
+    if (!targetSessionId) return
+    dispatchFocusInputEvent({ sessionId: targetSessionId })
+  }, [])
+
   useAction('chat.cyclePermissionMode', () => {
     if (effectiveSessionId) {
       const currentOptions = contextValue.sessionOptions.get(effectiveSessionId)
@@ -1171,16 +1172,18 @@ function AppShellContent({
       // Prevent default paste behavior
       e.preventDefault()
 
-      // Dispatch custom event for FreeFormInput to handle
+      // Dispatch custom event for FreeFormInput to handle (target focused session only)
       const filesArray = Array.from(files)
+      const targetSessionId = focusedSessionId ?? session.selected
+      if (!targetSessionId) return
       window.dispatchEvent(new CustomEvent('craft:paste-files', {
-        detail: { files: filesArray }
+        detail: { files: filesArray, sessionId: targetSessionId }
       }))
     }
 
     document.addEventListener('paste', handleGlobalPaste)
     return () => document.removeEventListener('paste', handleGlobalPaste)
-  }, [])
+  }, [focusedSessionId, session.selected])
 
   // Resize effect for sidebar, session list, browser host lane, and metadata right sidebar.
   React.useEffect(() => {
@@ -1525,11 +1528,10 @@ function AppShellContent({
     return onDeleteSession(sessionId, skipConfirmation)
   }, [session.selected, setSession, onDeleteSession])
 
-  // Extend context value with local overrides (textareaRef, wrapped onDeleteSession, sources, skills, labels, enabledModes, rightSidebarOpenButton, effectiveSessionStatuses)
+  // Extend context value with local overrides (wrapped onDeleteSession, sources, skills, labels, enabledModes, rightSidebarOpenButton, effectiveSessionStatuses)
   const appShellContextValue = React.useMemo<AppShellContextType>(() => ({
     ...contextValue,
     onDeleteSession: handleDeleteSession,
-    textareaRef: chatInputRef,
     enabledSources: sources,
     skills,
     labels: labelConfigs,
@@ -3131,7 +3133,9 @@ function AppShellContent({
                   onMarkUnread={onMarkSessionUnread}
                   onSessionStatusChange={onSessionStatusChange}
                   onRename={onRenameSession}
-                  onFocusChatInput={focusChatInput}
+                  onFocusChatInput={(targetSessionId) => {
+                    focusChatInputForSession(targetSessionId ?? focusedSessionId ?? session.selected)
+                  }}
                   onSessionSelect={(selectedMeta) => {
                     navigateToSession(selectedMeta.id)
                   }}

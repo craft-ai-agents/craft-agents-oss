@@ -10,6 +10,8 @@ interface UseFocusZoneOptions {
   onBlur?: () => void
   /** Custom function to focus first element in zone */
   focusFirst?: () => void
+  /** Whether this zone should be registered. Useful when multiple instances share a logical zone. */
+  enabled?: boolean
 }
 
 interface UseFocusZoneReturn {
@@ -34,13 +36,14 @@ export function useFocusZone({
   onFocus,
   onBlur,
   focusFirst,
+  enabled = true,
 }: UseFocusZoneOptions): UseFocusZoneReturn {
   const zoneRef = useRef<HTMLDivElement>(null)
   const { registerZone, unregisterZone, focusZone, isZoneFocused, focusState } = useFocusContext()
 
-  const isFocused = isZoneFocused(zoneId)
+  const isFocused = enabled && isZoneFocused(zoneId)
   // shouldMoveDOMFocus is true only when this zone is focused AND the intent requires DOM focus movement
-  const shouldMoveDOMFocus = focusState.zone === zoneId && focusState.shouldMoveDOMFocus
+  const shouldMoveDOMFocus = enabled && focusState.zone === zoneId && focusState.shouldMoveDOMFocus
   // Intent is only relevant if this zone is focused
   const intent = focusState.zone === zoneId ? focusState.intent : null
 
@@ -49,6 +52,11 @@ export function useFocusZone({
 
   // Register zone on mount + stamp container with data attribute for DOM-based zone detection
   useEffect(() => {
+    if (!enabled) {
+      unregisterZone(zoneId)
+      return
+    }
+
     if (zoneRef.current) {
       zoneRef.current.setAttribute('data-focus-zone', zoneId)
     }
@@ -62,7 +70,7 @@ export function useFocusZone({
     return () => {
       unregisterZone(zoneId)
     }
-  }, [zoneId, registerZone, unregisterZone, focusFirst])
+  }, [zoneId, registerZone, unregisterZone, focusFirst, enabled])
 
   // Handle focus/blur callbacks
   useEffect(() => {

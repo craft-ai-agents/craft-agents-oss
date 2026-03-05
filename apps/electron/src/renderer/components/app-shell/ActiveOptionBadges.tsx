@@ -164,6 +164,7 @@ export function ActiveOptionBadges({
               ultrathinkEnabled={ultrathinkEnabled}
               onPermissionModeChange={onPermissionModeChange}
               onUltrathinkChange={onUltrathinkChange}
+              sessionId={sessionId}
             />
           </div>
         )}
@@ -175,6 +176,7 @@ export function ActiveOptionBadges({
               state={resolvedState}
               sessionStatuses={sessionStatuses}
               onSessionStatusChange={onSessionStatusChange}
+              sessionId={sessionId}
             />
           </div>
         )}
@@ -205,6 +207,7 @@ export function ActiveOptionBadges({
                   value={rawValue}
                   autoOpen={config.id === autoOpenLabelId}
                   onAutoOpenConsumed={onAutoOpenConsumed}
+                  sessionId={sessionId}
                   onValueChange={(newValue) => {
                     // Rebuild the sessionLabels array with the updated entry
                     const updated = [...sessionLabels]
@@ -282,6 +285,7 @@ function LabelBadge({
   onAutoOpenConsumed,
   onValueChange,
   onRemove,
+  sessionId,
 }: {
   label: LabelConfig
   value?: string
@@ -290,6 +294,7 @@ function LabelBadge({
   onAutoOpenConsumed?: () => void
   onValueChange?: (newValue: string | undefined) => void
   onRemove: () => void
+  sessionId?: string
 }) {
   const { isDark } = useTheme()
   const [open, setOpen] = React.useState(false)
@@ -318,6 +323,7 @@ function LabelBadge({
       onOpenChange={setOpen}
       onValueChange={onValueChange}
       onRemove={onRemove}
+      sessionId={sessionId}
     >
       <MetadataBadge
         label={label.name}
@@ -348,10 +354,12 @@ function StateBadge({
   state,
   sessionStatuses,
   onSessionStatusChange,
+  sessionId,
 }: {
   state: SessionStatus
   sessionStatuses: SessionStatus[]
   onSessionStatusChange?: (stateId: string) => void
+  sessionId?: string
 }) {
   const [open, setOpen] = React.useState(false)
 
@@ -391,7 +399,9 @@ function StateBadge({
         sideOffset={4}
         onCloseAutoFocus={(e) => {
           e.preventDefault()
-          window.dispatchEvent(new CustomEvent('craft:focus-input'))
+          window.dispatchEvent(new CustomEvent('craft:focus-input', {
+            detail: { sessionId }
+          }))
         }}
       >
         <SessionStatusMenu
@@ -436,7 +446,9 @@ function FilesPopoverButton({ sessionId, sessionFolderPath }: { sessionId?: stri
         }}
         onCloseAutoFocus={(e) => {
           e.preventDefault()
-          window.dispatchEvent(new CustomEvent('craft:focus-input'))
+          window.dispatchEvent(new CustomEvent('craft:focus-input', {
+            detail: { sessionId }
+          }))
         }}
       >
         <SessionInfoPopoverContent sessionId={sessionId} sessionFolderPath={sessionFolderPath} />
@@ -511,9 +523,10 @@ interface PermissionModeDropdownProps {
   ultrathinkEnabled?: boolean
   onPermissionModeChange?: (mode: PermissionMode) => void
   onUltrathinkChange?: (enabled: boolean) => void
+  sessionId?: string
 }
 
-function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onPermissionModeChange, onUltrathinkChange }: PermissionModeDropdownProps) {
+function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onPermissionModeChange, onUltrathinkChange, sessionId }: PermissionModeDropdownProps) {
   const [open, setOpen] = React.useState(false)
   // Optimistic local state - updates immediately, syncs with prop
   const [optimisticMode, setOptimisticMode] = React.useState(permissionMode)
@@ -588,7 +601,9 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
         sideOffset={4}
         onCloseAutoFocus={(e) => {
           e.preventDefault()
-          window.dispatchEvent(new CustomEvent('craft:focus-input'))
+          window.dispatchEvent(new CustomEvent('craft:focus-input', {
+            detail: { sessionId }
+          }))
         }}
       >
         <SlashCommandMenu

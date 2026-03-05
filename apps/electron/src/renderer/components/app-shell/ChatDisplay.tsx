@@ -468,6 +468,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Guard with isFocusedPanelRef so only the focused panel responds in multi-panel layouts
   const { zoneRef, isFocused } = useFocusZone({
     zoneId: 'chat',
+    enabled: isFocusedPanel,
     focusFirst: () => {
       if (isFocusedPanelRef.current) {
         textareaRef.current?.focus()

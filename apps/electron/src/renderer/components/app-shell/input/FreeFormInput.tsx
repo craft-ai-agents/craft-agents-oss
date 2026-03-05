@@ -67,6 +67,8 @@ import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelName } from '@craf
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { hasOpenOverlay } from '@/lib/overlay-detection'
 import { ToolbarStatusSlot } from './ToolbarStatusSlot'
+import { shouldHandleScopedInputEvent } from './input-event-guards'
+import { clearPendingFocusForSession, consumePendingFocusForSession } from './focus-input-events'
 
 /**
  * Format token count for display (e.g., 1500 -> "1.5k", 200000 -> "200k")
@@ -503,7 +505,10 @@ export function FreeFormInput({
   // Listen for craft:insert-text events (generic mechanism for inserting text into input)
   // Used by components that want to pre-fill the input with text
   React.useEffect(() => {
-    const handleInsertText = (e: CustomEvent<{ text: string }>) => {
+    const handleInsertText = (e: CustomEvent<{ text: string; sessionId?: string }>) => {
+      const targetSessionId = e.detail?.sessionId
+      if (!shouldHandleScopedInputEvent({ sessionId, isFocusedPanel, targetSessionId })) return
+
       const { text } = e.detail
       setInput(text)
       syncToParent(text)
@@ -517,7 +522,7 @@ export function FreeFormInput({
 
     window.addEventListener('craft:insert-text', handleInsertText as EventListener)
     return () => window.removeEventListener('craft:insert-text', handleInsertText as EventListener)
-  }, [syncToParent, richInputRef])
+  }, [sessionId, isFocusedPanel, syncToParent, richInputRef])
 
   // Listen for craft:approve-plan events (used by ResponseCard's Accept Plan button)
   // This disables safe mode AND submits the message in one action
@@ -654,7 +659,15 @@ export function FreeFormInput({
 
   // Listen for craft:focus-input events (restore focus after popover/dropdown closes)
   React.useEffect(() => {
-    const handleFocusInput = () => {
+    const handleFocusInput = (e: Event) => {
+      const detail = (e as CustomEvent<{ sessionId?: string }>).detail
+      const targetSessionId = detail?.sessionId
+      if (!shouldHandleScopedInputEvent({ sessionId, isFocusedPanel, targetSessionId })) return
+
+      if (targetSessionId) {
+        clearPendingFocusForSession(targetSessionId)
+      }
+
       richInputRef.current?.focus()
       // Restore caret position if saved, then clear it (one-shot)
       if (lastCaretPositionRef.current !== null) {
@@ -668,7 +681,16 @@ export function FreeFormInput({
 
     window.addEventListener('craft:focus-input', handleFocusInput)
     return () => window.removeEventListener('craft:focus-input', handleFocusInput)
-  }, [richInputRef])
+  }, [sessionId, isFocusedPanel, richInputRef])
+
+  // Recover queued focus requests after session switch/mount races.
+  React.useEffect(() => {
+    if (!consumePendingFocusForSession(sessionId)) return
+
+    setTimeout(() => {
+      richInputRef.current?.focus()
+    }, 0)
+  }, [sessionId, richInputRef])
 
   // Get the next available number for a pasted file prefix (e.g., pasted-image-1, pasted-image-2)
   const getNextPastedNumber = (
@@ -688,8 +710,11 @@ export function FreeFormInput({
 
   // Listen for craft:paste-files events (for global paste when input not focused)
   React.useEffect(() => {
-    const handlePasteFiles = async (e: CustomEvent<{ files: File[] }>) => {
+    const handlePasteFiles = async (e: CustomEvent<{ files: File[]; sessionId?: string }>) => {
       if (disabled) return
+
+      const targetSessionId = e.detail?.sessionId
+      if (!shouldHandleScopedInputEvent({ sessionId, isFocusedPanel, targetSessionId })) return
 
       const { files } = e.detail
       if (!files || files.length === 0) return
@@ -724,7 +749,7 @@ export function FreeFormInput({
 
     window.addEventListener('craft:paste-files', handlePasteFiles as unknown as EventListener)
     return () => window.removeEventListener('craft:paste-files', handlePasteFiles as unknown as EventListener)
-  }, [disabled, richInputRef])
+  }, [disabled, sessionId, isFocusedPanel, richInputRef])
 
   // Build active commands list for slash command menu
   const activeCommands = React.useMemo(() => {

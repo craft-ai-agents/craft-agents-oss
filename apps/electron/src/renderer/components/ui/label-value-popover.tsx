@@ -31,6 +31,8 @@ export interface LabelValuePopoverProps {
   open: boolean
   /** Open state change handler */
   onOpenChange: (open: boolean) => void
+  /** Session identifier for scoped focus restoration */
+  sessionId?: string
   /** The trigger element (typically a LabelBadge) */
   children: React.ReactNode
 }
@@ -42,6 +44,7 @@ export function LabelValuePopover({
   onRemove,
   open,
   onOpenChange,
+  sessionId,
   children,
 }: LabelValuePopoverProps) {
   // Local draft value — resets to prop value when popover opens
@@ -85,8 +88,10 @@ export function LabelValuePopover({
    *  Matches the pattern used in ActiveOptionBadges. */
   const handleCloseAutoFocus = React.useCallback((e: Event) => {
     e.preventDefault()
-    window.dispatchEvent(new CustomEvent('craft:focus-input'))
-  }, [])
+    window.dispatchEvent(new CustomEvent('craft:focus-input', {
+      detail: { sessionId }
+    }))
+  }, [sessionId])
 
   /** Commit the current draft value */
   const commitValue = React.useCallback(() => {
