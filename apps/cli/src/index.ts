@@ -296,12 +296,14 @@ async function cmdSessionDelete(client: CliRpcClient, args: CliArgs): Promise<vo
 /**
  * Read prompt text from positional args + stdin.
  * If there are positional words, they become the base message.
- * If stdin has data (or --stdin is in args), append it.
+ * Reads stdin when: --stdin flag is present, or no message and stdin is piped (not a TTY).
  */
 async function readPrompt(words: string[], restArgs?: string[]): Promise<string> {
   let message = words.join(' ')
 
-  if (restArgs?.includes('--stdin') || !message) {
+  const wantsStdin = restArgs?.includes('--stdin')
+  const isTTY = typeof process.stdin.isTTY === 'boolean' ? process.stdin.isTTY : false
+  if (wantsStdin || (!message && !isTTY)) {
     const chunks: string[] = []
     const reader = Bun.stdin.stream().getReader()
     const decoder = new TextDecoder()
@@ -785,7 +787,7 @@ export function getValidateSteps(): ValidateStep[] {
         // Use bash to create the skill file deterministically
         return await waitForSendEvents(client, ctx.createdSessionId,
           `Use the Bash tool to run this exact command:
-mkdir -p ${skillDir} && cat > ${skillDir}/SKILL.md << 'SKILLEOF'
+mkdir -p "${skillDir}" && cat > "${skillDir}/SKILL.md" << 'SKILLEOF'
 ---
 name: "CLI Validate Skill"
 description: "Validation skill created by craft-cli"
@@ -978,7 +980,8 @@ export async function main(argv: string[] = process.argv): Promise<void> {
   }
 
   if (args.command === 'version') {
-    out('0.6.0', false)
+    const pkg = await import('../package.json')
+    out(pkg.version ?? pkg.default?.version ?? 'unknown', false)
     return
   }
 

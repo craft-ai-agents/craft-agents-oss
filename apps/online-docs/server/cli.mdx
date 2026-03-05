@@ -49,7 +49,7 @@ After deploying or updating the server, run the built-in validation:
 craft-cli --validate-server
 ```
 
-This exercises 12 steps covering connectivity, credential health, workspace listing, session lifecycle, and cleanup. Use `--json` for CI-friendly output:
+This exercises 21 steps covering connectivity, credential health, workspace listing, session lifecycle, source/skill creation and cleanup. **Note:** it mutates workspace state (creates and deletes temporary resources). Use `--json` for CI-friendly output:
 
 ```bash
 craft-cli --validate-server --json | jq '.failed'
