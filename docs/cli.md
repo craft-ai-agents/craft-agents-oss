@@ -8,6 +8,33 @@ Terminal client for Craft Agent server. Connects over WebSocket (`ws://` or `wss
 - For `run` and `--validate-server`: an API key via `--api-key`, `$LLM_API_KEY`, or a provider-specific env var (e.g., `$ANTHROPIC_API_KEY`)
 - For all other commands: a running Craft Agent headless server with URL and token
 
+## Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/anthropics/craft-agents.git
+cd craft-agents
+
+# Install dependencies
+bun install
+
+# Option A: Run directly
+bun run apps/cli/src/index.ts <command>
+
+# Option B: Link globally (adds craft-cli to PATH)
+cd apps/cli && bun link
+craft-cli <command>
+```
+
+### Quick Start
+
+The fastest way to try it out — no server setup needed:
+
+```bash
+# Self-contained run (spawns a server automatically)
+ANTHROPIC_API_KEY=sk-... bun run apps/cli/src/index.ts run "Hello, world!"
+```
+
 ## Connection Options
 
 | Flag | Env var | Default | Description |

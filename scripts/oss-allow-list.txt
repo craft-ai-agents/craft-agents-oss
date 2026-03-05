@@ -23,6 +23,13 @@ SECURITY.md
 # GitHub Issue Templates
 .github/ISSUE_TEMPLATE/**/*
 
+# GitHub CI Workflows
+.github/workflows/validate.yml
+.github/workflows/validate-server.yml
+
+# Documentation
+docs/cli.md
+
 # =============================================================================
 # APPS - ELECTRON (Desktop GUI)
 # =============================================================================
@@ -62,6 +69,11 @@ apps/viewer/vite.config.ts
 apps/viewer/index.html
 apps/viewer/public/**/*
 apps/viewer/src/**/*
+
+# =============================================================================
+# APPS - CLI (Command-line Interface)
+# =============================================================================
+apps/cli/**/*
 
 # =============================================================================
 # PACKAGES - CORE (Type Definitions)
@@ -142,6 +154,9 @@ scripts/build/**/*
 
 # Browser tool CLI (used by browser integration)
 scripts/browser-tool.ts
+
+# CI workflow testing
+scripts/test-workflow-local.sh
 
 # =============================================================================
 # PACKAGES - SERVER (Standalone Headless Server Entry)
