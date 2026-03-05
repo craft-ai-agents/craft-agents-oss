@@ -61,7 +61,6 @@ function createFullMessage(): Message {
     errorDetails: ['DNS lookup failed'],
     errorOriginal: 'ENOTFOUND',
     errorCanRetry: true,
-    ultrathink: true,
     planPath: '/plans/plan.md',
     authRequestId: 'auth-req-1',
     authRequestType: 'credential',
@@ -119,7 +118,6 @@ describe('messageToStored/storedToMessage round-trip', () => {
       'isError', 'attachments', 'badges',
       'isIntermediate', 'turnId',
       'errorCode', 'errorTitle', 'errorDetails', 'errorOriginal', 'errorCanRetry',
-      'ultrathink',
       'planPath',
       'authRequestId', 'authRequestType', 'authSourceSlug', 'authSourceName',
       'authStatus', 'authCredentialMode', 'authHeaderName', 'authHeaderNames',
@@ -166,7 +164,6 @@ describe('messageToStored/storedToMessage round-trip', () => {
     expect(restored.errorDetails).toEqual(original.errorDetails)
     expect(restored.errorOriginal).toBe(original.errorOriginal)
     expect(restored.errorCanRetry).toBe(original.errorCanRetry)
-    expect(restored.ultrathink).toBe(original.ultrathink)
     expect(restored.planPath).toBe(original.planPath)
     expect(restored.authRequestId).toBe(original.authRequestId)
     expect(restored.authRequestType).toBe(original.authRequestType)

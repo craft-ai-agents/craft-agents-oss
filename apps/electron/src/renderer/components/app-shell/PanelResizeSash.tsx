@@ -15,7 +15,13 @@ import { useCallback, useRef } from 'react'
 import { useSetAtom, useAtomValue } from 'jotai'
 import { panelStackAtom, resizePanelsAtom } from '@/atoms/panel-stack'
 import { useResizeGradient } from '@/hooks/useResizeGradient'
-import { PANEL_MIN_WIDTH } from './panel-constants'
+import {
+  PANEL_MIN_WIDTH,
+  PANEL_SASH_FLEX_MARGIN,
+  PANEL_SASH_HALF_HIT_WIDTH,
+  PANEL_SASH_LINE_WIDTH,
+  PANEL_STACK_VERTICAL_OVERFLOW,
+} from './panel-constants'
 
 export { PANEL_MIN_WIDTH }
 
@@ -118,17 +124,25 @@ export function PanelResizeSash({
     <div
       ref={ref}
       className="relative w-0 h-full cursor-col-resize flex justify-center shrink-0"
-      style={{ margin: '0 -3px' }}
+      style={{ margin: `0 ${PANEL_SASH_FLEX_MARGIN}px` }}
       onMouseDown={handleMouseDown}
       onMouseMove={handlers.onMouseMove}
       onMouseLeave={handlers.onMouseLeave}
       onDoubleClick={handleDoubleClick}
     >
       {/* Touch area — wider than visible line for easier grabbing */}
-      <div className="absolute inset-y-0 -left-1.5 -right-1.5 flex justify-center cursor-col-resize">
+      <div
+        className="absolute inset-y-0 flex justify-center cursor-col-resize"
+        style={{ left: -PANEL_SASH_HALF_HIT_WIDTH, right: -PANEL_SASH_HALF_HIT_WIDTH }}
+      >
         <div
-          className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-0.5"
-          style={gradientStyle}
+          className="absolute left-1/2 -translate-x-1/2"
+          style={{
+            ...gradientStyle,
+            width: PANEL_SASH_LINE_WIDTH,
+            top: PANEL_STACK_VERTICAL_OVERFLOW,
+            bottom: PANEL_STACK_VERTICAL_OVERFLOW,
+          }}
         />
       </div>
     </div>

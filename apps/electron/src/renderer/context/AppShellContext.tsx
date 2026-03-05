@@ -9,7 +9,6 @@
 import * as React from 'react'
 import { createContext, useContext, useCallback } from 'react'
 import { useAtomValue } from 'jotai'
-import type { RichTextInputHandle } from '@/components/ui/rich-text-input'
 import type { ChatDisplayHandle } from '@/components/app-shell/ChatDisplay'
 import type {
   Session,
@@ -63,7 +62,7 @@ export interface AppShellContextType {
   /** Dynamic todo states from workspace config (provided by AppShell, defaults to empty) */
   sessionStatuses?: SessionStatusConfig[]
 
-  // Unified session options (replaces ultrathinkSessions and sessionModes)
+  // Unified session options map
   /** All session-scoped options in one map. Use useSessionOptionsFor() hook for easy access. */
   sessionOptions: Map<string, SessionOptions>
 
@@ -112,7 +111,7 @@ export interface AppShellContextType {
   onOpenStoredUserPreferences: () => void
   onReset: () => void
 
-  // Unified session options callback (replaces onUltrathinkChange, onSkipPermissionsChange, onModeChange)
+  // Unified session options callback
   onSessionOptionsChange: (sessionId: string, updates: SessionOptionUpdates) => void
 
   // Input draft callback
@@ -120,9 +119,6 @@ export interface AppShellContextType {
 
   // Source selection callback (per-session) - provided by AppShell component
   onSessionSourcesChange?: (sessionId: string, sourceSlugs: string[]) => void
-
-  // Chat input ref (for focusing)
-  textareaRef?: React.RefObject<RichTextInputHandle>
 
   // Open a new chat with optional agent, name, and pre-filled input
   openNewChat?: (params?: NewChatActionParams) => Promise<void>
@@ -225,15 +221,13 @@ export function usePendingCredential(sessionId: string): CredentialRequest | und
  * This is the primary way components should access session options.
  *
  * Usage:
- *   const { options, setPermissionMode, toggleUltrathink } = useSessionOptionsFor(sessionId)
- *   if (options.ultrathinkEnabled) { ... }
+ *   const { options, setPermissionMode } = useSessionOptionsFor(sessionId)
  *   setPermissionMode('safe')
  */
 export function useSessionOptionsFor(sessionId: string): {
   options: SessionOptions
   setOption: <K extends keyof SessionOptions>(key: K, value: SessionOptions[K]) => void
   setOptions: (updates: SessionOptionUpdates) => void
-  toggleUltrathink: () => void
   setPermissionMode: (mode: PermissionMode) => void
   isSafeModeActive: () => boolean
 } {
@@ -252,10 +246,6 @@ export function useSessionOptionsFor(sessionId: string): {
     onSessionOptionsChange(sessionId, updates)
   }, [sessionId, onSessionOptionsChange])
 
-  const toggleUltrathink = useCallback(() => {
-    setOption('ultrathinkEnabled', !options.ultrathinkEnabled)
-  }, [options.ultrathinkEnabled, setOption])
-
   const setPermissionMode = useCallback((mode: PermissionMode) => {
     setOption('permissionMode', mode)
   }, [setOption])
@@ -268,7 +258,6 @@ export function useSessionOptionsFor(sessionId: string): {
     options,
     setOption,
     setOptions,
-    toggleUltrathink,
     setPermissionMode,
     isSafeModeActive,
   }

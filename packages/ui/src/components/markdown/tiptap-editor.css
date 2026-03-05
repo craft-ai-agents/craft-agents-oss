@@ -2,7 +2,7 @@
 
 .tiptap-editor {
   --tiptap-bubble-z: var(--z-floating-menu, 400);
-  --tiptap-image-selection-width: 3px;
+  --tiptap-image-selection-width: 1.5px;
   --tiptap-image-selection-color: color-mix(in oklch, var(--accent) 45%, transparent);
 }
 
@@ -357,24 +357,15 @@
 
 .tiptap-editor .tiptap-mermaid-block {
   margin: 0.5rem 0;
-}
-
-/* Highlight visual code blocks when selected via keyboard (NodeSelection) */
-.tiptap-mermaid-block.ProseMirror-selectednode,
-.ProseMirror-selectednode .tiptap-mermaid-block {
-  background: color-mix(in oklch, var(--accent) 12%, transparent);
-}
-
-.tiptap-latex-block.ProseMirror-selectednode,
-.ProseMirror-selectednode .tiptap-latex-block {
-  background: color-mix(in oklch, var(--accent) 12%, transparent);
   border-radius: 0.5rem;
+  overflow: hidden;
 }
 
 /* ── LaTeX blocks ── */
 .tiptap-editor .tiptap-latex-block {
   margin: 0.5rem 0;
   padding: 0.5rem 0;
+  border-radius: 0.5rem;
 }
 
 /* ── Bubble menu toolbar ── */
@@ -545,24 +536,34 @@
   background: color-mix(in oklch, var(--accent) 12%, transparent);
 }
 
-/* Block-level selection highlight for rich nodes (via RichBlockInteractions plugin).
-   Applied when these nodes fall within a range selection (e.g. Cmd+A).
-   Decoration.node() may put .is-selected on the same element OR the outer wrapper. */
+/* Unified rich-block selection outline (image + mermaid + latex).
+   Covers both keyboard NodeSelection (.ProseMirror-selectednode) and range
+   decorations (.is-selected), where classes can land on the same element or
+   a wrapping ancestor depending on ProseMirror/NodeView structure. */
+.tiptap-image-block.ProseMirror-selectednode,
+.ProseMirror-selectednode .tiptap-image-block,
+.tiptap-image-block.is-selected,
+.is-selected .tiptap-image-block,
+.tiptap-mermaid-block.ProseMirror-selectednode,
+.ProseMirror-selectednode .tiptap-mermaid-block,
+.tiptap-mermaid-block.is-selected,
+.is-selected .tiptap-mermaid-block,
+.tiptap-latex-block.ProseMirror-selectednode,
+.ProseMirror-selectednode .tiptap-latex-block,
+.tiptap-latex-block.is-selected,
+.is-selected .tiptap-latex-block {
+  outline: var(--tiptap-image-selection-width) solid var(--tiptap-image-selection-color);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+  background: color-mix(in oklch, var(--accent) 5%, transparent);
+}
+
+/* Compatibility fallback: keep visual parity if selection class lands directly on <img>. */
 .tiptap-editor .tiptap-prose img.ProseMirror-selectednode,
 .tiptap-editor .tiptap-prose img.is-selected,
 .tiptap-editor .tiptap-prose .is-selected img {
   outline: var(--tiptap-image-selection-width) solid var(--tiptap-image-selection-color);
   outline-offset: 2px;
-}
-
-.tiptap-mermaid-block.is-selected,
-.is-selected .tiptap-mermaid-block {
-  background: color-mix(in oklch, var(--accent) 12%, transparent);
-}
-
-.tiptap-latex-block.is-selected,
-.is-selected .tiptap-latex-block {
-  background: color-mix(in oklch, var(--accent) 12%, transparent);
   border-radius: 0.5rem;
 }
 

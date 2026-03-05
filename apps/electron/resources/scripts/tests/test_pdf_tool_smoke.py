@@ -8,70 +8,17 @@ Run manually:
 from __future__ import annotations
 
 import base64
-import os
-import platform
-import shutil
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-
-REPO_ROOT = Path(__file__).resolve().parents[5]
-BIN_DIR = REPO_ROOT / "apps" / "electron" / "resources" / "bin"
-SCRIPTS_DIR = REPO_ROOT / "apps" / "electron" / "resources" / "scripts"
-
-
-def resolve_platform_key() -> str:
-    sys_name = platform.system().lower()
-    machine = platform.machine().lower()
-
-    if machine in ("x86_64", "amd64"):
-        arch = "x64"
-    elif machine in ("arm64", "aarch64"):
-        arch = "arm64"
-    else:
-        arch = machine
-
-    if sys_name.startswith("darwin"):
-        os_key = "darwin"
-    elif sys_name.startswith("linux"):
-        os_key = "linux"
-    elif sys_name.startswith("windows"):
-        os_key = "win32"
-    else:
-        os_key = os.name
-
-    return f"{os_key}-{arch}"
+from ._tool_test_harness import REPO_ROOT, build_env, run_tool
 
 
 class PdfToolSmokeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        platform_key = resolve_platform_key()
-        uv_name = "uv.exe" if os.name == "nt" else "uv"
-        cls.uv = BIN_DIR / platform_key / uv_name
-        if not cls.uv.exists():
-            uv_fallback = shutil.which("uv")
-            if uv_fallback:
-                cls.uv = Path(uv_fallback)
-            else:
-                raise unittest.SkipTest(
-                    f"No bundled uv at {BIN_DIR / platform_key / uv_name} and no uv on PATH"
-                )
-
-        cls.wrapper = BIN_DIR / ("pdf-tool.cmd" if os.name == "nt" else "pdf-tool")
-        if not cls.wrapper.exists():
-            raise unittest.SkipTest(f"pdf-tool wrapper not found: {cls.wrapper}")
-
-        cls.env = dict(os.environ)
-        cls.env["CRAFT_UV"] = str(cls.uv)
-        cls.env["CRAFT_SCRIPTS"] = str(SCRIPTS_DIR)
-        cls.env["PATH"] = os.pathsep.join([
-            str(BIN_DIR),
-            str(cls.uv.parent),
-            cls.env.get("PATH", ""),
-        ])
+        cls.env = build_env()
 
         cls.tmpdir_obj = tempfile.TemporaryDirectory(prefix="pdf-tool-smoke-")
         cls.tmpdir = Path(cls.tmpdir_obj.name)
@@ -82,18 +29,33 @@ class PdfToolSmokeTests(unittest.TestCase):
         )
         image_paths: list[Path] = []
         for i in range(3):
+            tiny_img = cls.tmpdir / f"tiny_img_{i + 1}.png"
+            tiny_img.write_bytes(png_bytes)
             img_path = cls.tmpdir / f"img_{i + 1}.png"
-            img_path.write_bytes(png_bytes)
+            resized = run_tool(
+                "img-tool",
+                "resize",
+                str(tiny_img),
+                "--width",
+                "200",
+                "--height",
+                "200",
+                "-o",
+                str(img_path),
+                env=cls.env,
+            )
+            if resized.returncode != 0:
+                raise RuntimeError(f"Failed to resize fixture image: {resized.stderr}")
             image_paths.append(img_path)
 
         cls.input_pdf = cls.tmpdir / "input.pdf"
-        result = subprocess.run(
-            [str(cls.wrapper), "from-image", *(str(p) for p in image_paths), "-o", str(cls.input_pdf)],
-            cwd=REPO_ROOT,
+        result = run_tool(
+            "pdf-tool",
+            "from-image",
+            *(str(p) for p in image_paths),
+            "-o",
+            str(cls.input_pdf),
             env=cls.env,
-            capture_output=True,
-            text=True,
-            check=False,
         )
         if result.returncode != 0:
             raise RuntimeError(f"Failed to create fixture PDF: {result.stderr}")
@@ -102,15 +64,8 @@ class PdfToolSmokeTests(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls.tmpdir_obj.cleanup()
 
-    def run_tool(self, *args: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            [str(self.wrapper), *args],
-            cwd=REPO_ROOT,
-            env=self.env,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+    def run_tool(self, *args: str):
+        return run_tool("pdf-tool", *args, env=self.env)
 
     def test_invalid_pages_out_of_range_fails(self) -> None:
         result = self.run_tool("extract", str(self.input_pdf), "--pages", "999")

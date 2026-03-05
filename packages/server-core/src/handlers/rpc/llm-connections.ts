@@ -7,7 +7,7 @@ import {
   validateStoredBackendConnection,
 } from '@craft-agent/shared/agent/backend'
 import { getModelRefreshService } from '@craft-agent/server-core/model-fetchers'
-import { parseTestConnectionError, createBuiltInConnection, validateModelList, piAuthProviderDisplayName } from '@craft-agent/server-core/domain'
+import { parseTestConnectionError, createBuiltInConnection, validateModelList, piAuthProviderDisplayName, validateSetupTestInput } from '@craft-agent/server-core/domain'
 import { getWorkspaceOrThrow, buildBackendHostRuntimeContext } from '@craft-agent/server-core/handlers'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -88,6 +88,21 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       if (setup.models !== undefined) {
         updates.models = setup.models ?? undefined
       }
+      if (setup.modelSelectionMode !== undefined) {
+        updates.modelSelectionMode = setup.modelSelectionMode
+      }
+
+      const effectiveProviderType = updates.providerType ?? connection.providerType
+      if (effectiveProviderType === 'pi') {
+        const toPiModelId = (id: string) => id.startsWith('pi/') ? id : `pi/${id}`
+        if (updates.models) {
+          updates.models = updates.models.map(m => typeof m === 'string' ? toPiModelId(m) : { ...m, id: toPiModelId(m.id) })
+        }
+        if (updates.defaultModel) {
+          updates.defaultModel = toPiModelId(updates.defaultModel)
+        }
+      }
+
       // Pi API key flow: set piAuthProvider from setup data (e.g. 'anthropic', 'google', 'openai')
       if (setup.piAuthProvider) {
         updates.piAuthProvider = setup.piAuthProvider
@@ -100,12 +115,35 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         if (!hasCustomEndpoint && !setup.models?.length) {
           updates.models = getDefaultModelsForConnection('pi', setup.piAuthProvider)
           updates.defaultModel = getDefaultModelForConnection('pi', setup.piAuthProvider)
+          updates.modelSelectionMode ??= 'automaticallySyncedFromProvider'
         }
       }
 
       const pendingConnection: LlmConnection = {
         ...connection,
         ...updates,
+      }
+
+      if (pendingConnection.providerType === 'pi') {
+        const modelIds = (pendingConnection.models ?? []).map(m => typeof m === 'string' ? m : m.id)
+        deps.platform.logger?.info('Pi setup pending connection snapshot', {
+          slug: pendingConnection.slug,
+          piAuthProvider: pendingConnection.piAuthProvider,
+          modelSelectionMode: pendingConnection.modelSelectionMode,
+          defaultModel: pendingConnection.defaultModel,
+          modelCount: modelIds.length,
+          modelsFirst5: modelIds.slice(0, 5),
+          setupModelCount: setup.models?.length,
+          setupDefaultModel: setup.defaultModel,
+        })
+      }
+
+      if (pendingConnection.providerType === 'pi' && pendingConnection.piAuthProvider && !pendingConnection.modelSelectionMode) {
+        const inferredMode = setup.models?.length
+          ? 'userDefined3Tier'
+          : 'automaticallySyncedFromProvider'
+        pendingConnection.modelSelectionMode = inferredMode
+        updates.modelSelectionMode = inferredMode
       }
 
       if (updates.models && updates.models.length > 0) {
@@ -189,6 +227,11 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       return { success: false, error: 'API key is required' }
     }
 
+    const setupValidation = validateSetupTestInput({ provider, baseUrl, piAuthProvider })
+    if (!setupValidation.valid) {
+      return { success: false, error: setupValidation.error }
+    }
+
     deps.platform.logger?.info(`[testLlmConnectionSetup] Testing: provider=${provider}${piAuthProvider ? ` piAuth=${piAuthProvider}` : ''}${baseUrl ? ` baseUrl=${baseUrl}` : ''}`)
 
     try {
@@ -235,7 +278,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       const sorted = [...models].sort((a, b) => b.cost.output - a.cost.output || b.cost.input - a.cost.input)
       return {
         models: sorted.map(m => ({
-          id: m.id,
+          id: m.id.startsWith('pi/') ? m.id : `pi/${m.id}`,
           name: m.name,
           costInput: m.cost.input,
           costOutput: m.cost.output,

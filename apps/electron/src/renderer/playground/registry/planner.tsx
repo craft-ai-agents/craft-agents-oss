@@ -30,6 +30,12 @@ import {
 import { TiptapMarkdownEditor } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { getResizeGradientStyle } from '@/hooks/useResizeGradient'
+import {
+  PANEL_GAP,
+  PANEL_SASH_HALF_HIT_WIDTH,
+  PANEL_SASH_HIT_WIDTH,
+  PANEL_SASH_LINE_WIDTH,
+} from '@/components/app-shell/panel-constants'
 import './planner.css'
 
 type TaskState = 'todo' | 'in_progress' | 'done' | 'cancelled'
@@ -892,9 +898,9 @@ function PlannerBoard() {
                       }}
                       onClick={() => { if (!isDraggingRef.current) setSelectedTaskId(task.id) }}
                       className={cn(
-                        'planner-sortable-item w-full rounded-[8px] border-l border-transparent px-3 py-2 text-left select-none',
+                        'planner-sortable-item w-full rounded-[8px] px-3 py-2 text-left select-none',
                         selectedTaskId === task.id
-                          ? 'planner-sortable-item--selected border-l-accent bg-background'
+                          ? 'planner-sortable-item--selected bg-background'
                           : 'bg-background shadow-none'
                       )}
                     >
@@ -1048,10 +1054,19 @@ function PlannerBoard() {
           }
         }}
         onMouseLeave={() => { if (isResizing !== 'sidebar') setSidebarHandleY(null) }}
-        className="absolute top-0 w-3 h-full cursor-col-resize z-10 flex justify-center"
-        style={{ left: sidebarWidth - 3 }}
+        className="absolute top-0 h-full cursor-col-resize z-10 flex justify-center"
+        style={{
+          width: PANEL_SASH_HIT_WIDTH,
+          left: sidebarWidth + (PANEL_GAP / 2) - PANEL_SASH_HALF_HIT_WIDTH,
+        }}
       >
-        <div className="w-0.5 h-full" style={getResizeGradientStyle(sidebarHandleY)} />
+        <div
+          className="h-full"
+          style={{
+            width: PANEL_SASH_LINE_WIDTH,
+            ...getResizeGradientStyle(sidebarHandleY, sidebarHandleRef.current?.clientHeight ?? null),
+          }}
+        />
       </div>
 
       {/* Navigator resize handle (absolute) */}
@@ -1065,10 +1080,19 @@ function PlannerBoard() {
           }
         }}
         onMouseLeave={() => { if (isResizing !== 'navigator') setNavigatorHandleY(null) }}
-        className="absolute top-0 w-3 h-full cursor-col-resize z-10 flex justify-center"
-        style={{ left: sidebarWidth + 6 + navigatorWidth - 2 }}
+        className="absolute top-0 h-full cursor-col-resize z-10 flex justify-center"
+        style={{
+          width: PANEL_SASH_HIT_WIDTH,
+          left: sidebarWidth + PANEL_GAP + navigatorWidth + (PANEL_GAP / 2) - PANEL_SASH_HALF_HIT_WIDTH,
+        }}
       >
-        <div className="w-0.5 h-full" style={getResizeGradientStyle(navigatorHandleY)} />
+        <div
+          className="h-full"
+          style={{
+            width: PANEL_SASH_LINE_WIDTH,
+            ...getResizeGradientStyle(navigatorHandleY, navigatorHandleRef.current?.clientHeight ?? null),
+          }}
+        />
       </div>
     </div>
   )

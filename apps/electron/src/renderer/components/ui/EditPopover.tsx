@@ -958,11 +958,10 @@ export function EditPopover({
             {/* Container */}
             <div
               ref={popoverRef}
-              className="relative bg-foreground-2 overflow-hidden w-full h-full"
+              className="relative bg-foreground-2 overflow-hidden w-full h-full shadow-modal-small"
               style={{
                 transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`,
                 borderRadius: 16,
-                boxShadow: '0 4px 24px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05)',
               }}
             >
               {/* Drag handle - floating overlay */}

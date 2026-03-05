@@ -38,6 +38,7 @@ interface CredentialsStepProps {
     baseUrl?: string
     connectionDefaultModel?: string
     activePreset?: string
+    models?: string[]
   }
 }
 
@@ -257,8 +258,16 @@ export function CredentialsStep({
   // Determine provider type and description based on selected method
   const providerType = isPiApiKey ? 'pi_api_key' : 'anthropic'
   const apiKeyDescription = isPiApiKey
-    ? "Select your LLM provider and enter the API key. Optionally configure a custom endpoint."
+    ? "Select a provider preset and enter the API key. For arbitrary Anthropic-compatible endpoints, use Anthropic API Key mode."
     : "Enter your API key. Optionally configure a custom endpoint for OpenRouter, Ollama, or compatible APIs."
+
+  const apiKeyInputKey = [
+    apiSetupMethod,
+    editInitialValues?.activePreset ?? '',
+    editInitialValues?.baseUrl ?? '',
+    editInitialValues?.connectionDefaultModel ?? '',
+    (editInitialValues?.models ?? []).join('|'),
+  ].join('::')
 
   return (
     <StepFormLayout
@@ -278,6 +287,7 @@ export function CredentialsStep({
       }
     >
       <ApiKeyInput
+        key={apiKeyInputKey}
         status={status as ApiKeyStatus}
         errorMessage={errorMessage}
         onSubmit={onSubmit}

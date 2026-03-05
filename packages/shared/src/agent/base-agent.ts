@@ -177,7 +177,6 @@ export abstract class BaseAgent implements AgentBackend {
   // ============================================================
   protected _model: string;
   protected _thinkingLevel: ThinkingLevel;
-  protected _ultrathinkOverride: boolean = false;
 
   // ============================================================
   // Core Modules (protected for subclass access)
@@ -440,11 +439,6 @@ export abstract class BaseAgent implements AgentBackend {
   setThinkingLevel(level: ThinkingLevel): void {
     this._thinkingLevel = level;
     this.debug(`Thinking level set to: ${level}`);
-  }
-
-  setUltrathinkOverride(enabled: boolean): void {
-    this._ultrathinkOverride = enabled;
-    this.debug(`Ultrathink override: ${enabled ? 'ENABLED' : 'disabled'}`);
   }
 
   // ============================================================

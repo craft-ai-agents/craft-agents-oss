@@ -12,7 +12,7 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "cd packages/shared && bun run tsc --noEmit",
-    "typecheck:all": "cd packages/core && bun run tsc --noEmit && cd ../shared && bun run tsc --noEmit && cd ../server-core && bun run tsc --noEmit && cd ../server && bun run tsc --noEmit && cd ../session-tools-core && bun run tsc --noEmit",
+    "typecheck:all": "cd packages/core && bun run tsc --noEmit && cd ../shared && bun run tsc --noEmit && cd ../server-core && bun run tsc --noEmit && cd ../server && bun run tsc --noEmit && cd ../session-tools-core && bun run tsc --noEmit && cd ../../apps/electron && bun run typecheck && cd ../../packages/ui && bun run tsc --noEmit",
     "server:start": "bun run packages/server/src/index.ts",
     "server:dev": "CRAFT_DEBUG=true CRAFT_BUNDLED_ASSETS_ROOT=$PWD/apps/electron bun run packages/server/src/index.ts",
     "server:build": "bun run scripts/build-server.ts",
@@ -25,7 +25,8 @@
     "test:shared:models-pi": "cd packages/shared && bun test tests/models-pi.test.ts",
     "test:shared:config": "cd packages/shared && bun test src/config/__tests__/llm-connections.test.ts src/config/__tests__/storage-migrations.test.ts src/config/__tests__/storage-startup-migration.test.ts",
     "test:shared:all": "bun run test:shared:llm-connections && bun run test:shared:models-pi && bun run test:shared:config",
-    "validate:dev": "bun run typecheck:all && bun run typecheck:electron && bun run test:shared:all",
+    "test:doc-tools": "python3 -m unittest apps.electron.resources.scripts.tests.test_pdf_tool_smoke apps.electron.resources.scripts.tests.test_xlsx_tool_smoke apps.electron.resources.scripts.tests.test_docx_tool_smoke apps.electron.resources.scripts.tests.test_pptx_tool_smoke apps.electron.resources.scripts.tests.test_img_tool_smoke apps.electron.resources.scripts.tests.test_ical_tool_smoke apps.electron.resources.scripts.tests.test_doc_diff_smoke apps.electron.resources.scripts.tests.test_markitdown_smoke",
+    "validate:dev": "bun run typecheck:all && bun run test:shared:all && bun run test:doc-tools",
     "validate:ci": "bun run validate:dev",
     "lint:ipc-sends": "bash scripts/check-raw-sends.sh",
     "lint:electron": "cd apps/electron && bun run lint",

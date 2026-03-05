@@ -23,7 +23,13 @@ import { cn } from '@/lib/utils'
 import { panelStackAtom, focusedPanelIdAtom } from '@/atoms/panel-stack'
 import { PanelSlot } from './PanelSlot'
 import { PanelResizeSash } from './PanelResizeSash'
-import { PANEL_GAP, PANEL_EDGE_INSET, RADIUS_EDGE, RADIUS_INNER } from './panel-constants'
+import {
+  PANEL_GAP,
+  PANEL_EDGE_INSET,
+  PANEL_STACK_VERTICAL_OVERFLOW,
+  RADIUS_EDGE,
+  RADIUS_INNER,
+} from './panel-constants'
 
 /** Spring transition matching AppShell's sidebar/navigator animation */
 const PANEL_SPRING = { type: 'spring' as const, stiffness: 600, damping: 49 }
@@ -83,8 +89,8 @@ export function PanelStackContainer({
         overflowX: 'auto',
         overflowY: 'hidden',
         // Extra vertical space for box-shadows (collapsed back with negative margin)
-        paddingBlock: 8,
-        marginBlock: -8,
+        paddingBlock: PANEL_STACK_VERTICAL_OVERFLOW,
+        marginBlock: -PANEL_STACK_VERTICAL_OVERFLOW,
         // Extend to window bottom so scrollbar sits at the very edge
         marginBottom: -6,
         paddingBottom: 6,

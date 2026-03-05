@@ -45,8 +45,8 @@ interface SessionListProps {
   onMarkUnread: (sessionId: string) => void
   onSessionStatusChange: (sessionId: string, state: SessionStatusId) => void
   onRename: (sessionId: string, name: string) => void
-  /** Called when Enter is pressed to focus chat input */
-  onFocusChatInput?: () => void
+  /** Called when Enter is pressed to focus chat input for a specific session */
+  onFocusChatInput?: (sessionId?: string) => void
   /** Called when a session is selected */
   onSessionSelect?: (session: SessionMeta) => void
   /** Called when user wants to open a session in a new window */
@@ -388,7 +388,7 @@ export function SessionList({
         if (!MultiSelect.isMultiSelectActive(selectionStore.state)) {
           navigateToSession(row.item.id)
         }
-        onFocusChatInput?.()
+        onFocusChatInput?.(row.item.id)
       }, [selectionStore.state, navigateToSession, onFocusChatInput]),
       enabled: isKeyboardEligible,
       virtualFocus: searchActive ?? false,
@@ -498,12 +498,12 @@ export function SessionList({
     }
     if (e.key === 'Enter') {
       e.preventDefault()
-      onFocusChatInput?.()
+      onFocusChatInput?.(selectionStore.state.selected ?? undefined)
       return
     }
     // Forward arrow keys via interactions
     interactions.searchInputProps.onKeyDown(e)
-  }, [searchInputRef, onFocusChatInput, interactions.searchInputProps])
+  }, [searchInputRef, onFocusChatInput, interactions.searchInputProps, selectionStore.state.selected])
 
   // --- Context value (shared across all SessionItems) ---
   const handleFocusZone = useCallback(() => focusZone('navigator', { intent: 'click', moveFocus: false }), [focusZone])

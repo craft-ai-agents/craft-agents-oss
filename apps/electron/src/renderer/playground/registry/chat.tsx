@@ -450,7 +450,6 @@ interface ActiveTasksBarContextProps {
 
 function ActiveTasksBarContext({ tasks = sampleBackgroundTasks }: ActiveTasksBarContextProps) {
   const [permissionMode, setPermissionMode] = React.useState<'safe' | 'ask' | 'allow-all'>('ask')
-  const [ultrathinkEnabled, setUltrathinkEnabled] = React.useState(false)
 
   // Inject mock electronAPI for file attachments
   React.useEffect(() => {
@@ -480,8 +479,6 @@ function ActiveTasksBarContext({ tasks = sampleBackgroundTasks }: ActiveTasksBar
       <div className="mx-auto w-full px-4 pb-4 mt-1" style={{ maxWidth: 'var(--content-max-width, 960px)' }}>
         {/* Active option badges and tasks */}
         <ActiveOptionBadges
-          ultrathinkEnabled={ultrathinkEnabled}
-          onUltrathinkChange={setUltrathinkEnabled}
           permissionMode={permissionMode}
           onPermissionModeChange={setPermissionMode}
           tasks={tasks}
@@ -497,8 +494,6 @@ function ActiveTasksBarContext({ tasks = sampleBackgroundTasks }: ActiveTasksBar
           currentModel="claude-sonnet-4-6"
           permissionMode={permissionMode}
           onPermissionModeChange={setPermissionMode}
-          ultrathinkEnabled={ultrathinkEnabled}
-          onUltrathinkChange={setUltrathinkEnabled}
           sources={mockSources}
           enabledSourceSlugs={['github-api', 'local-files']}
           workingDirectory="/Users/demo/projects/craft-agent"
@@ -530,7 +525,6 @@ interface PermissionInputToggleProps {
 function PermissionInputToggle({ autoToggle = false, autoToggleInterval = 3000, useLongCommand = false }: PermissionInputToggleProps) {
   const [showPermission, setShowPermission] = React.useState(false)
   const [permissionMode, setPermissionMode] = React.useState<'safe' | 'ask' | 'allow-all'>('ask')
-  const [ultrathinkEnabled, setUltrathinkEnabled] = React.useState(false)
 
   const permissionRequest = useLongCommand ? veryLongPermissionRequest : samplePermissionRequest
 
@@ -591,8 +585,6 @@ function PermissionInputToggle({ autoToggle = false, autoToggleInterval = 3000, 
 
       {/* Active option badges */}
       <ActiveOptionBadges
-        ultrathinkEnabled={ultrathinkEnabled}
-        onUltrathinkChange={setUltrathinkEnabled}
         permissionMode={permissionMode}
         onPermissionModeChange={setPermissionMode}
       />
@@ -605,8 +597,6 @@ function PermissionInputToggle({ autoToggle = false, autoToggleInterval = 3000, 
         currentModel="claude-sonnet-4-6"
         permissionMode={permissionMode}
         onPermissionModeChange={setPermissionMode}
-        ultrathinkEnabled={ultrathinkEnabled}
-        onUltrathinkChange={setUltrathinkEnabled}
         sources={mockSources}
         enabledSourceSlugs={['github-api', 'local-files']}
         workingDirectory="/Users/demo/projects/craft-agent"
@@ -727,15 +717,9 @@ export const chatComponents: ComponentEntry[] = [
     id: 'active-option-badges',
     name: 'ActiveOptionBadges',
     category: 'Chat',
-    description: 'Shows active options (ultrathink, permission mode) and background tasks as badge pills above chat input',
+    description: 'Shows active options (permission mode) and background tasks as badge pills above chat input',
     component: ActiveOptionBadges,
     props: [
-      {
-        name: 'ultrathinkEnabled',
-        description: 'Show ultrathink badge',
-        control: { type: 'boolean' },
-        defaultValue: false,
-      },
       {
         name: 'permissionMode',
         description: 'Current permission mode',
@@ -763,21 +747,19 @@ export const chatComponents: ComponentEntry[] = [
       },
     ],
     variants: [
-      { name: 'Ultrathink Only', props: { ultrathinkEnabled: true, permissionMode: 'ask', tasks: [], sessionId: 'session-1' } },
-      { name: 'Permission Mode (Ask)', props: { ultrathinkEnabled: false, permissionMode: 'ask', tasks: [], sessionId: 'session-1' } },
-      { name: 'Permission Mode (Safe)', props: { ultrathinkEnabled: false, permissionMode: 'safe', tasks: [], sessionId: 'session-1' } },
-      { name: 'Permission Mode (Allow All)', props: { ultrathinkEnabled: false, permissionMode: 'allow-all', tasks: [], sessionId: 'session-1' } },
-      { name: 'Single Task', props: { ultrathinkEnabled: false, permissionMode: 'ask', tasks: singleBackgroundTask, sessionId: 'session-1' } },
-      { name: 'Multiple Tasks', props: { ultrathinkEnabled: false, permissionMode: 'ask', tasks: sampleBackgroundTasks, sessionId: 'session-1' } },
-      { name: 'Long Running Tasks', props: { ultrathinkEnabled: false, permissionMode: 'ask', tasks: longRunningTasks, sessionId: 'session-1' } },
-      { name: 'All Active (Everything)', props: { ultrathinkEnabled: true, permissionMode: 'ask', tasks: sampleBackgroundTasks, sessionId: 'session-1' } },
-      { name: 'Tasks in Safe Mode', props: { ultrathinkEnabled: false, permissionMode: 'safe', tasks: sampleBackgroundTasks, sessionId: 'session-1' } },
-      { name: 'Cycle Variant', props: { ultrathinkEnabled: false, permissionMode: 'ask', tasks: sampleBackgroundTasks, variant: 'cycle', sessionId: 'session-1' } },
+      { name: 'Permission Mode (Ask)', props: { permissionMode: 'ask', tasks: [], sessionId: 'session-1' } },
+      { name: 'Permission Mode (Safe)', props: { permissionMode: 'safe', tasks: [], sessionId: 'session-1' } },
+      { name: 'Permission Mode (Allow All)', props: { permissionMode: 'allow-all', tasks: [], sessionId: 'session-1' } },
+      { name: 'Single Task', props: { permissionMode: 'ask', tasks: singleBackgroundTask, sessionId: 'session-1' } },
+      { name: 'Multiple Tasks', props: { permissionMode: 'ask', tasks: sampleBackgroundTasks, sessionId: 'session-1' } },
+      { name: 'Long Running Tasks', props: { permissionMode: 'ask', tasks: longRunningTasks, sessionId: 'session-1' } },
+      { name: 'All Active (Everything)', props: { permissionMode: 'ask', tasks: sampleBackgroundTasks, sessionId: 'session-1' } },
+      { name: 'Tasks in Safe Mode', props: { permissionMode: 'safe', tasks: sampleBackgroundTasks, sessionId: 'session-1' } },
+      { name: 'Cycle Variant', props: { permissionMode: 'ask', tasks: sampleBackgroundTasks, variant: 'cycle', sessionId: 'session-1' } },
     ],
     mockData: () => ({
       tasks: sampleBackgroundTasks,
       sessionId: 'session-playground',
-      onUltrathinkChange: (enabled: boolean) => console.log('[Playground] Ultrathink changed:', enabled),
       onPermissionModeChange: (mode: string) => console.log('[Playground] Permission mode changed:', mode),
       onKillTask: (taskId: string) => console.log('[Playground] Kill task:', taskId),
     }),
@@ -903,7 +885,7 @@ export const chatComponents: ComponentEntry[] = [
     id: 'active-tasks-bar-context',
     name: 'Active Tasks & Badges',
     category: 'Chat',
-    description: 'Integrated display of option badges (ultrathink, permission mode) and background tasks in a horizontally scrollable row. Shows full chat context with messages above and input below.',
+    description: 'Integrated display of option badges (permission mode) and background tasks in a horizontally scrollable row. Shows full chat context with messages above and input below.',
     component: ActiveTasksBarContext,
     layout: 'full',
     props: [],
@@ -970,12 +952,6 @@ export const chatComponents: ComponentEntry[] = [
         defaultValue: 'ask',
       },
       {
-        name: 'ultrathinkEnabled',
-        description: 'Show ultrathink toggle',
-        control: { type: 'boolean' },
-        defaultValue: false,
-      },
-      {
         name: 'workingDirectory',
         description: 'Current working directory',
         control: { type: 'string', placeholder: '/path/to/project' },
@@ -1011,13 +987,6 @@ export const chatComponents: ComponentEntry[] = [
         description: 'Read-only permission mode',
         props: {
           permissionMode: 'safe',
-        },
-      },
-      {
-        name: 'Ultrathink',
-        description: 'With ultrathink enabled',
-        props: {
-          ultrathinkEnabled: true,
         },
       },
       {

@@ -23,6 +23,8 @@ export interface BackendRuntimePaths {
 export interface BackendRuntimePayload extends Record<string, unknown> {
   paths?: BackendRuntimePaths;
   piAuthProvider?: string;
+  /** Custom base URL from the LLM connection (e.g. Azure OpenAI endpoint). */
+  baseUrl?: string;
 }
 
 export interface BackendResolutionContext {

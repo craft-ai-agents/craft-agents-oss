@@ -393,9 +393,6 @@ export interface AgentBackend {
   /** Set thinking level */
   setThinkingLevel(level: ThinkingLevel): void;
 
-  /** Enable/disable ultrathink override for next message */
-  setUltrathinkOverride(enabled: boolean): void;
-
   // ============================================================
   // Permission Mode
   // ============================================================

@@ -1847,7 +1847,7 @@ export class SessionManager implements ISessionManager {
             messageId: msg.id,
             attachments: undefined,  // Attachments already stored on disk
             storedAttachments: msg.attachments,
-            options: msg.ultrathink ? { ultrathinkEnabled: true } : undefined,
+            options: undefined,
           })
         }
         // Process queue when session becomes active (will be triggered by first message or interaction)
@@ -4200,13 +4200,6 @@ export class SessionManager implements ISessionManager {
       sessionLog.info('Message:', message)
       sessionLog.info('Agent model:', agent.getModel())
       sessionLog.info('process.cwd():', process.cwd())
-
-      // Set ultrathink override if enabled (single-shot - resets after query)
-      // This boosts the session's thinkingLevel to 'max' for this message only
-      if (options?.ultrathinkEnabled) {
-        sessionLog.info('Ultrathink override ENABLED')
-        agent.setUltrathinkOverride(true)
-      }
 
       // Process the message through the agent
       sessionLog.info('Calling agent.chat()...')

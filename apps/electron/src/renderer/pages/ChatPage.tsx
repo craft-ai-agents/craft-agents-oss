@@ -47,7 +47,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     onMarkSessionRead,
     onMarkSessionUnread,
     onSetActiveViewingSession,
-    textareaRef,
     getDraft,
     onInputChange,
     enabledSources,
@@ -547,15 +546,12 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 currentModel={effectiveModel}
                 onModelChange={handleModelChange}
                 onConnectionChange={handleConnectionChange}
-                textareaRef={textareaRef}
                 pendingPermission={undefined}
                 onRespondToPermission={onRespondToPermission}
                 pendingCredential={undefined}
                 onRespondToCredential={onRespondToCredential}
                 thinkingLevel={sessionOpts.thinkingLevel}
                 onThinkingLevelChange={(level) => setOption('thinkingLevel', level)}
-                ultrathinkEnabled={sessionOpts.ultrathinkEnabled}
-                onUltrathinkChange={(enabled) => setOption('ultrathinkEnabled', enabled)}
                 permissionMode={sessionOpts.permissionMode}
                 onPermissionModeChange={setPermissionMode}
                 enabledModes={enabledModes}
@@ -620,15 +616,12 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             currentModel={effectiveModel}
             onModelChange={handleModelChange}
             onConnectionChange={handleConnectionChange}
-            textareaRef={textareaRef}
             pendingPermission={pendingPermission}
             onRespondToPermission={onRespondToPermission}
             pendingCredential={pendingCredential}
             onRespondToCredential={onRespondToCredential}
             thinkingLevel={sessionOpts.thinkingLevel}
             onThinkingLevelChange={(level) => setOption('thinkingLevel', level)}
-            ultrathinkEnabled={sessionOpts.ultrathinkEnabled}
-            onUltrathinkChange={(enabled) => setOption('ultrathinkEnabled', enabled)}
             permissionMode={sessionOpts.permissionMode}
             onPermissionModeChange={setPermissionMode}
             enabledModes={enabledModes}

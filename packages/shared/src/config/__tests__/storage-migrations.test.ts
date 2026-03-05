@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { shouldMigratePiOpenAiProvider, shouldRepairPiApiKeyCodexProvider } from '../storage'
+import { inferModelSelectionMode, shouldMigratePiOpenAiProvider, shouldRepairPiApiKeyCodexProvider } from '../storage'
 
 describe('shouldMigratePiOpenAiProvider', () => {
   it('migrates legacy Pi OAuth OpenAI connections to openai-codex', () => {
@@ -67,5 +67,25 @@ describe('shouldRepairPiApiKeyCodexProvider', () => {
       piAuthProvider: 'openai',
       authType: 'api_key',
     })).toBe(false)
+  })
+})
+
+describe('inferModelSelectionMode', () => {
+  it('infers automaticallySyncedFromProvider when model list equals provider defaults', () => {
+    const providerDefaults = ['pi/zai-best', 'pi/zai-balanced', 'pi/zai-fast']
+    const mode = inferModelSelectionMode({ models: [...providerDefaults] }, providerDefaults)
+    expect(mode).toBe('automaticallySyncedFromProvider')
+  })
+
+  it('infers userDefined3Tier when model list is a custom subset', () => {
+    const providerDefaults = ['pi/zai-best', 'pi/zai-balanced', 'pi/zai-fast', 'pi/zai-extra']
+    const mode = inferModelSelectionMode({ models: ['pi/zai-best', 'pi/zai-fast', 'pi/zai-extra'] }, providerDefaults)
+    expect(mode).toBe('userDefined3Tier')
+  })
+
+  it('infers automaticallySyncedFromProvider for empty model lists', () => {
+    const providerDefaults = ['pi/zai-best', 'pi/zai-balanced', 'pi/zai-fast']
+    const mode = inferModelSelectionMode({ models: [] }, providerDefaults)
+    expect(mode).toBe('automaticallySyncedFromProvider')
   })
 })

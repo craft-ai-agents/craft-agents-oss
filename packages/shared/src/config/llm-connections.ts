@@ -92,6 +92,13 @@ export type LlmAuthType =
   | 'none';
 
 /**
+ * Ownership mode for a connection's model list.
+ * - automaticallySyncedFromProvider: provider defaults are synced automatically.
+ * - userDefined3Tier: user-picked Best/Balanced/Fast list is preserved.
+ */
+export type ModelSelectionMode = 'automaticallySyncedFromProvider' | 'userDefined3Tier';
+
+/**
  * LLM Connection configuration.
  * Stored in config.llmConnections array.
  */
@@ -122,6 +129,13 @@ export interface LlmConnection {
 
   /** Default model for this connection */
   defaultModel?: string;
+
+  /**
+   * Ownership mode for the model list.
+   * - automaticallySyncedFromProvider: provider defaults are kept in sync.
+   * - userDefined3Tier: preserve user-selected Best/Balanced/Fast list.
+   */
+  modelSelectionMode?: ModelSelectionMode;
 
   /**
    * Pi auth provider name (e.g., 'anthropic', 'openai', 'github-copilot').

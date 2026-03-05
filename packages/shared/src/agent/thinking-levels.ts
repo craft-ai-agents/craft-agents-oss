@@ -7,7 +7,6 @@
  * - Max Think: Deep reasoning (maximum token budget)
  *
  * Session-level setting with workspace defaults.
- * Ultrathink override can boost to Max Think for a single message.
  */
 
 export type ThinkingLevel = 'off' | 'think' | 'max';

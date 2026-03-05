@@ -273,10 +273,6 @@ export const mockInputCallbacks = {
     console.log('[Playground] Permission mode changed:', mode)
   },
 
-  onUltrathinkChange: (enabled: boolean) => {
-    console.log('[Playground] Ultrathink changed:', enabled)
-  },
-
   onSourcesChange: (slugs: string[]) => {
     console.log('[Playground] Sources changed:', slugs)
   },

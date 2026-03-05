@@ -25,6 +25,9 @@ export function parseTestConnectionError(msg: string): string {
   if (lower.includes('econnrefused') || lower.includes('enotfound') || lower.includes('fetch failed')) {
     return 'Cannot connect to API server. Check the URL and ensure the server is running.'
   }
+  if (lower.includes('no api key found for')) {
+    return 'Provider mismatch during setup. Select a provider preset in Craft Agents Backend API Key mode, or use Anthropic API Key mode for arbitrary compatible endpoints.'
+  }
   if (lower.includes('401') || lower.includes('unauthorized') || lower.includes('authentication')) {
     return 'Invalid API key'
   }
@@ -42,6 +45,25 @@ export function parseTestConnectionError(msg: string): string {
   }
 
   return msg.slice(0, 300)
+}
+
+/**
+ * Guard against ambiguous Pi custom endpoint tests where no provider routing is selected.
+ */
+export function validateSetupTestInput(params: {
+  provider: 'anthropic' | 'pi'
+  baseUrl?: string
+  piAuthProvider?: string
+}): { valid: true } | { valid: false; error: string } {
+  const hasCustomEndpoint = !!params.baseUrl?.trim()
+  if (params.provider === 'pi' && hasCustomEndpoint && !params.piAuthProvider) {
+    return {
+      valid: false,
+      error: 'Custom endpoint in Craft Agents Backend mode requires selecting a provider preset. For arbitrary Anthropic-compatible endpoints, use Anthropic API Key mode.',
+    }
+  }
+
+  return { valid: true }
 }
 
 // ============================================================
@@ -155,6 +177,7 @@ export function createBuiltInConnection(slug: string, baseUrl?: string | null): 
     authType,
     models: getDefaultModelsForConnection(providerType, template.piAuthProvider),
     defaultModel: getDefaultModelForConnection(providerType, template.piAuthProvider),
+    modelSelectionMode: providerType === 'pi' ? 'automaticallySyncedFromProvider' : undefined,
     piAuthProvider: template.piAuthProvider,
     createdAt: Date.now(),
   }

@@ -101,7 +101,7 @@ const API_SETUP_OPTIONS: ApiSetupOption[] = [
   {
     id: 'pi_api_key',
     name: 'API Key',
-    description: 'Use your API key from Anthropic, OpenAI, Google, and more.',
+    description: 'Use provider presets (Anthropic, OpenAI, Google, etc.) via Craft Agents Backend.',
     icon: <Key className="size-4" />,
     providerType: 'pi',
   },

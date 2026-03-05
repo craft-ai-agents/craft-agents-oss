@@ -19,7 +19,7 @@ import { SystemMessage } from './SystemMessage'
 import {
   groupMessagesByTurn,
   storedToMessage,
-  type AssistantTurn,
+  getAssistantTurnUiKey,
   type ActivityItem,
 } from './turn-utils'
 
@@ -94,7 +94,11 @@ export function SessionViewer({
   const [expandedTurns, setExpandedTurns] = useState<Set<string>>(() => {
     // Default: all turns collapsed, can override with defaultExpanded prop
     if (defaultExpanded) {
-      return new Set(turns.filter(t => t.type === 'assistant').map(t => (t as AssistantTurn).turnId))
+      return new Set(
+        turns
+          .map((turn, index) => turn.type === 'assistant' ? getAssistantTurnUiKey(turn, index) : null)
+          .filter((key): key is string => !!key)
+      )
     }
     return new Set()
   })
@@ -154,7 +158,7 @@ export function SessionViewer({
         >
           <div className="h-full overflow-y-auto">
             <div className={cn(CHAT_LAYOUT.maxWidth, "mx-auto", CHAT_LAYOUT.containerPadding, CHAT_LAYOUT.messageSpacing)}>
-            {turns.map((turn) => {
+            {turns.map((turn, index) => {
               if (turn.type === 'user') {
                 return (
                   <div key={turn.message.id} className={CHAT_LAYOUT.userMessagePadding}>
@@ -183,17 +187,18 @@ export function SessionViewer({
               }
 
               if (turn.type === 'assistant') {
+                const assistantUiKey = getAssistantTurnUiKey(turn, index)
                 return (
                   <TurnCard
-                    key={turn.turnId}
+                    key={assistantUiKey}
                     turnId={turn.turnId}
                     activities={turn.activities}
                     response={turn.response}
                     intent={turn.intent}
                     isStreaming={turn.isStreaming}
                     isComplete={turn.isComplete}
-                    isExpanded={expandedTurns.has(turn.turnId)}
-                    onExpandedChange={(expanded) => handleExpandedChange(turn.turnId, expanded)}
+                    isExpanded={expandedTurns.has(assistantUiKey)}
+                    onExpandedChange={(expanded) => handleExpandedChange(assistantUiKey, expanded)}
                     onOpenFile={platformActions.onOpenFile}
                     onOpenUrl={platformActions.onOpenUrl}
                     onPopOut={platformActions.onOpenMarkdownPreview}

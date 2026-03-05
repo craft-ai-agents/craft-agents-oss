@@ -119,7 +119,14 @@ export function resolveSlugForMethod(
 // Map ApiSetupMethod to LlmConnectionSetup for the new unified connection system
 export function apiSetupMethodToConnectionSetup(
   method: ApiSetupMethod,
-  options: { credential?: string; baseUrl?: string; connectionDefaultModel?: string; models?: string[]; piAuthProvider?: string },
+  options: {
+    credential?: string
+    baseUrl?: string
+    connectionDefaultModel?: string
+    models?: string[]
+    piAuthProvider?: string
+    modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
+  },
   editingSlug: string | null,
   existingSlugs: Set<string>,
 ): LlmConnectionSetup {
@@ -153,6 +160,7 @@ export function apiSetupMethodToConnectionSetup(
         defaultModel: options.connectionDefaultModel,
         models: options.models,
         piAuthProvider: options.piAuthProvider,
+        modelSelectionMode: options.modelSelectionMode,
       }
   }
 }
@@ -206,7 +214,17 @@ export function useOnboarding({
   // Returns true on success, false on failure (sets errorMessage on failure)
   // `methodOverride` lets callers pass the method explicitly to avoid stale-closure issues
   // (e.g. when called from an async OAuth flow whose closure predates the state update).
-  const handleSaveConfig = useCallback(async (credential?: string, options?: { baseUrl?: string; connectionDefaultModel?: string; models?: string[]; piAuthProvider?: string }, methodOverride?: ApiSetupMethod): Promise<boolean> => {
+  const handleSaveConfig = useCallback(async (
+    credential?: string,
+    options?: {
+      baseUrl?: string
+      connectionDefaultModel?: string
+      models?: string[]
+      piAuthProvider?: string
+      modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
+    },
+    methodOverride?: ApiSetupMethod,
+  ): Promise<boolean> => {
     const method = methodOverride ?? state.apiSetupMethod
     if (!method) {
       return false
@@ -222,6 +240,7 @@ export function useOnboarding({
         connectionDefaultModel: options?.connectionDefaultModel,
         models: options?.models,
         piAuthProvider: options?.piAuthProvider,
+        modelSelectionMode: options?.modelSelectionMode,
       }, editingSlug, existingSlugs)
       // Use new unified API
       const result = await window.electronAPI.setupLlmConnection(setup)
@@ -333,6 +352,7 @@ export function useOnboarding({
           connectionDefaultModel: data.connectionDefaultModel,
           models: data.models,
           piAuthProvider: data.piAuthProvider,
+          modelSelectionMode: data.modelSelectionMode,
         })
         if (saved) {
           setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
@@ -391,6 +411,7 @@ export function useOnboarding({
         connectionDefaultModel: data.connectionDefaultModel,
         models: data.models,
         piAuthProvider: data.piAuthProvider,
+        modelSelectionMode: data.modelSelectionMode,
       })
 
       if (saved) {

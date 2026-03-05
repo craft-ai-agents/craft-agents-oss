@@ -508,7 +508,7 @@ export class BrowserCDP {
           box.style.height = g.box.height + 'px';
           box.style.border = '2px solid rgba(59, 130, 246, 0.95)';
           box.style.borderRadius = '6px';
-          box.style.boxShadow = '0 0 0 1px rgba(255,255,255,0.8) inset';
+
           root.appendChild(box);
 
           const label = document.createElement('div');
@@ -537,7 +537,7 @@ export class BrowserCDP {
             point.style.height = '8px';
             point.style.borderRadius = '999px';
             point.style.background = 'rgba(239, 68, 68, 0.98)';
-            point.style.boxShadow = '0 0 0 2px rgba(255,255,255,0.8)';
+
             root.appendChild(point);
           }
         }

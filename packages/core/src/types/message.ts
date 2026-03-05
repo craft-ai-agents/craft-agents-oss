@@ -178,8 +178,6 @@ export interface Message {
   errorDetails?: string[];
   errorOriginal?: string;
   errorCanRetry?: boolean;
-  // Ultrathink mode - indicates this user message was sent with extended thinking
-  ultrathink?: boolean;
   // Plan-specific fields (for role='plan')
   planPath?: string;  // Path to the plan markdown file
   // Auth-request-specific fields (for role='auth-request')
@@ -248,8 +246,6 @@ export interface StoredMessage {
   errorDetails?: string[];
   errorOriginal?: string;
   errorCanRetry?: boolean;
-  // Ultrathink mode - indicates this user message was sent with extended thinking
-  ultrathink?: boolean;
   // Plan-specific fields (for role='plan')
   planPath?: string;
   // Auth-request-specific fields (for role='auth-request')

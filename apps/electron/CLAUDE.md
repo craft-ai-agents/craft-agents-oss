@@ -54,7 +54,6 @@ import { Spinner, LoadingIndicator } from "@/components/ui/loading-indicator"
 // Full loading indicator with label
 <LoadingIndicator label="Loading..." />
 <LoadingIndicator label="Thinking..." showElapsed />  // With elapsed time
-<LoadingIndicator ultrathink />                       // Gradient animation
 ```
 
 The spinner is based on [SpinKit Grid](https://github.com/tobiasahlin/SpinKit):
@@ -404,6 +403,16 @@ bun run electron:build:preload   # Bundle preload script (esbuild)
 bun run electron:build:renderer  # Bundle React UI (Vite)
 bun run electron:build:resources # Copy icons
 ```
+
+### Document CLI Tool Testing
+
+If you change bundled document tool scripts/wrappers (`resources/scripts/*`, `resources/bin/*`), update smoke tests in `resources/scripts/tests/` and run:
+
+```bash
+bun run test:doc-tools
+```
+
+This guards regressions in `pdf-tool`, `xlsx-tool`, `docx-tool`, `pptx-tool`, `img-tool`, `ical-tool`, `doc-diff`, and `markitdown`.
 
 ### Hot Reload Development
 

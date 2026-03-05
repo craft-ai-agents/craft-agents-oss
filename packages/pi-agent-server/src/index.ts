@@ -61,7 +61,7 @@ import { createSearchTool } from './tools/search/create-search-tool.ts';
 
 /** Messages from main process (stdin) */
 type InboundMessage =
-  | { type: 'init'; apiKey: string; model: string; cwd: string; thinkingLevel: string; workspaceRootPath: string; sessionId: string; sessionPath: string; workingDirectory: string; plansFolderPath: string; miniModel?: string; agentDir?: string; providerType?: string; authType?: string; workspaceId?: string; branchFromSdkSessionId?: string; branchFromSessionPath?: string; piAuth?: { provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } }
+  | { type: 'init'; apiKey: string; model: string; cwd: string; thinkingLevel: string; workspaceRootPath: string; sessionId: string; sessionPath: string; workingDirectory: string; plansFolderPath: string; miniModel?: string; agentDir?: string; providerType?: string; authType?: string; workspaceId?: string; baseUrl?: string; branchFromSdkSessionId?: string; branchFromSessionPath?: string; piAuth?: { provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } }
   | { type: 'prompt'; id: string; message: string; systemPrompt: string; images?: Array<{ type: 'image'; data: string; mimeType: string }> }
   | { type: 'register_tools'; tools: ProxyToolDef[] }
   | { type: 'tool_execute_response'; requestId: string; result: { content: string; isError: boolean } }
@@ -336,6 +336,14 @@ function createAuthenticatedRegistry(): {
     authStorage.set(provider, credential);
     debugLog(`Injected ${credential.type} credential for provider: ${provider}`);
   } else if (initConfig?.apiKey) {
+    const hasCustomEndpoint = !!initConfig.baseUrl?.trim();
+    if (hasCustomEndpoint) {
+      throw new Error(
+        'Custom endpoint in Craft Agents Backend mode requires explicit provider selection. ' +
+        'Use a provider preset in Pi API key mode, or use Anthropic API key mode for arbitrary compatible endpoints.'
+      );
+    }
+
     authStorage.set('anthropic', { type: 'api_key', key: initConfig.apiKey });
     debugLog('Injected API key into auth storage (legacy fallback)');
   }
@@ -956,6 +964,13 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
   }
 
   initConfig = msg;
+
+  // Azure OpenAI requires a tenant-specific endpoint URL.
+  // The Pi SDK (via Vercel AI SDK) reads AZURE_OPENAI_BASE_URL from env.
+  if (msg.piAuth?.provider === 'azure-openai-responses' && msg.baseUrl) {
+    process.env.AZURE_OPENAI_BASE_URL = msg.baseUrl;
+    debugLog(`Set AZURE_OPENAI_BASE_URL=${msg.baseUrl}`);
+  }
 
   // Start callback server for call_llm (idempotent — skips if already running)
   await startCallbackServer();

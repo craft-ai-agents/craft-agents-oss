@@ -231,8 +231,15 @@ function RichBlockEditMenu({ editor }: { editor: Editor }) {
       const el = textareaRef.current
       el.style.height = 'auto'
       el.style.height = `${el.scrollHeight}px`
+
+      // Content height changes after first render; force BubbleMenu to recalculate.
+      requestAnimationFrame(() => {
+        if (editor.isDestroyed) return
+        const tr = editor.state.tr.setMeta('richBlockEdit', 'updatePositionAfterResize')
+        editor.view.dispatch(tr)
+      })
     }
-  }, [isEditing, code])
+  }, [editor, isEditing, code])
 
   // BubbleMenu positions on ProseMirror transactions/resize, not React-only state changes.
   // Opening edit mode changes popover content size/anchor context, so force re-position.
@@ -240,17 +247,23 @@ function RichBlockEditMenu({ editor }: { editor: Editor }) {
     if (!isEditing) return
 
     let raf2: number | null = null
+    let raf3: number | null = null
     const raf1 = requestAnimationFrame(() => {
       raf2 = requestAnimationFrame(() => {
         const tr = editor.state.tr.setMeta('richBlockEdit', 'updatePosition')
         editor.view.dispatch(tr)
-        setPositionReady(true)
+
+        // Reveal on the next frame so floating-ui has applied computed position.
+        raf3 = requestAnimationFrame(() => {
+          setPositionReady(true)
+        })
       })
     })
 
     return () => {
       cancelAnimationFrame(raf1)
       if (raf2 != null) cancelAnimationFrame(raf2)
+      if (raf3 != null) cancelAnimationFrame(raf3)
     }
   }, [editor, isEditing])
 
@@ -413,9 +426,9 @@ export { INLINE_MATH_EDIT_EVENT }
 
 const TIPTAP_BUBBLE_MENU_Z_INDEX = 'var(--z-floating-menu, 400)'
 const TIPTAP_BUBBLE_MENU_BASE_OPTIONS = {
-  strategy: 'fixed' as const,
+  // Keep default positioning strategy/portal behavior.
+  // `fixed + appendTo(body)` can drift in nested/animated layouts on first show.
   zIndex: TIPTAP_BUBBLE_MENU_Z_INDEX,
-  appendTo: () => document.body,
 }
 
 export function TiptapBubbleMenus({ editor }: { editor: Editor }) {
@@ -426,13 +439,31 @@ export function TiptapBubbleMenus({ editor }: { editor: Editor }) {
     const name = selection.node.type.name
     if (name !== 'mermaidBlock' && name !== 'latexBlock') return null
 
-    const selectedButton = editor.view.dom.querySelector('.ProseMirror-selectednode .rich-block-edit-button')
-    if (!(selectedButton instanceof HTMLElement)) return null
+    const getRect = () => {
+      // Preferred path: edit button bounds inside selected node DOM.
+      const selectedNodeDom = editor.view.nodeDOM(selection.from)
+      if (selectedNodeDom instanceof HTMLElement) {
+        const selectedButton = selectedNodeDom.querySelector('.rich-block-edit-button')
+        if (selectedButton instanceof HTMLElement) {
+          return selectedButton.getBoundingClientRect()
+        }
 
-    // Use a virtual element rect to anchor exactly to the edit button bounds.
+        // Fallback: selected node wrapper rect.
+        const nodeRect = selectedNodeDom.getBoundingClientRect()
+        if (nodeRect.width > 0 && nodeRect.height > 0) {
+          return nodeRect
+        }
+      }
+
+      // Final fallback: ProseMirror coords (always available once the selection exists).
+      // Use a tiny virtual rect near the top-left of the node as deterministic anchor.
+      const coords = editor.view.coordsAtPos(selection.from)
+      return new DOMRect(coords.left, coords.top, 1, 1)
+    }
+
     return {
-      getBoundingClientRect: () => selectedButton.getBoundingClientRect(),
-      getClientRects: () => [selectedButton.getBoundingClientRect()],
+      getBoundingClientRect: getRect,
+      getClientRects: () => [getRect()],
     }
   }, [editor])
 

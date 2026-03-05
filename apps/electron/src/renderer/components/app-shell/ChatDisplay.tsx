@@ -43,7 +43,7 @@ import { useTheme } from "@/hooks/useTheme"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
 import type { PermissionMode } from "@craft-agent/shared/agent/modes"
 import type { ThinkingLevel } from "@craft-agent/shared/agent/thinking-levels"
-import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn } from "@craft-agent/ui"
+import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, getAssistantTurnUiKey, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn } from "@craft-agent/ui"
 import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
 import { ActiveOptionBadges } from "./ActiveOptionBadges"
 import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse, type AdminApprovalResponse } from "./input"
@@ -125,9 +125,6 @@ interface ChatDisplayProps {
   /** Callback when thinking level changes */
   onThinkingLevelChange?: (level: ThinkingLevel) => void
   // Advanced options
-  /** Enable ultrathink mode for extended reasoning */
-  ultrathinkEnabled?: boolean
-  onUltrathinkChange?: (enabled: boolean) => void
   /** Current permission mode */
   permissionMode?: PermissionMode
   onPermissionModeChange?: (mode: PermissionMode) => void
@@ -394,8 +391,6 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   thinkingLevel = 'think',
   onThinkingLevelChange,
   // Advanced options
-  ultrathinkEnabled = false,
-  onUltrathinkChange,
   permissionMode = 'ask',
   onPermissionModeChange,
   enabledModes,
@@ -468,6 +463,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Guard with isFocusedPanelRef so only the focused panel responds in multi-panel layouts
   const { zoneRef, isFocused } = useFocusZone({
     zoneId: 'chat',
+    enabled: isFocusedPanel,
     focusFirst: () => {
       if (isFocusedPanelRef.current) {
         textareaRef.current?.focus()
@@ -1452,6 +1448,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                     const isLastResponse = index === turns.length - 1 || !turns.slice(index + 1).some(t => t.type === 'user')
 
                     // Assistant turns - render with TurnCard (buffered streaming)
+                    const assistantUiKey = getAssistantTurnUiKey(turn, index)
                     return (
                       <div
                         key={turnKey}
@@ -1472,8 +1469,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         intent={turn.intent}
                         isStreaming={turn.isStreaming}
                         isComplete={turn.isComplete}
-                        isExpanded={expandedTurns.has(turn.turnId)}
-                        onExpandedChange={(expanded) => toggleTurn(turn.turnId, expanded)}
+                        isExpanded={expandedTurns.has(assistantUiKey)}
+                        onExpandedChange={(expanded) => toggleTurn(assistantUiKey, expanded)}
                         expandedActivityGroups={expandedActivityGroups}
                         onExpandedActivityGroupsChange={setExpandedActivityGroups}
                         todos={turn.todos}
@@ -1620,8 +1617,6 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             {/* Active option badges and tasks - positioned above input */}
             {!compactMode && (
             <ActiveOptionBadges
-              ultrathinkEnabled={ultrathinkEnabled}
-              onUltrathinkChange={onUltrathinkChange}
               permissionMode={permissionMode}
               onPermissionModeChange={onPermissionModeChange}
               tasks={backgroundTasks}
@@ -1657,8 +1652,6 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               onModelChange={onModelChange}
               thinkingLevel={thinkingLevel}
               onThinkingLevelChange={onThinkingLevelChange}
-              ultrathinkEnabled={ultrathinkEnabled}
-              onUltrathinkChange={onUltrathinkChange}
               permissionMode={permissionMode}
               onPermissionModeChange={onPermissionModeChange}
               enabledModes={enabledModes}
@@ -1940,7 +1933,6 @@ function MessageBubble({
         badges={message.badges}
         isPending={message.isPending}
         isQueued={message.isQueued}
-        ultrathink={message.ultrathink}
         onUrlClick={onOpenUrl}
         onFileClick={onOpenFile}
         compactMode={compactMode}

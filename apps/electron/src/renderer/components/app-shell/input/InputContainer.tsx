@@ -3,7 +3,6 @@ import { motion, AnimatePresence, useMotionValue, useMotionValueEvent, animate }
 import { cn } from '@/lib/utils'
 import { FreeFormInput, type FreeFormInputProps } from './FreeFormInput'
 import { StructuredInput } from './StructuredInput'
-import { UltrathinkGlow } from '@/components/ui/ultrathink-glow'
 import type { RichTextInputHandle } from '@/components/ui/rich-text-input'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import type { StructuredInputState, StructuredResponse, InputMode } from './structured/types'
@@ -54,31 +53,14 @@ export function InputContainer({
   const isFocusedPanel = appShellContext?.isFocusedPanel ?? true
   const mode: InputMode = structuredInput ? 'structured' : 'freeform'
   const measureRef = React.useRef<HTMLDivElement>(null)
-  const containerRef = React.useRef<HTMLDivElement>(null)
   // Separate height states: freeform uses callback, structured uses measuring div
   // Use smaller fallback height for compact mode
   const [freeformHeight, setFreeformHeight] = React.useState<number>(
     compactMode ? FALLBACK_HEIGHTS['freeform-compact'] : FALLBACK_HEIGHTS.freeform
   )
   const [structuredHeight, setStructuredHeight] = React.useState<number | null>(null)
-  const [containerWidth, setContainerWidth] = React.useState<number>(600)
   const [isFocused, setIsFocused] = React.useState(false)
   const hasInitializedRef = React.useRef(false)
-
-  // Track container width for shader corner radius calculation
-  React.useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerWidth(entry.contentRect.width)
-      }
-    })
-
-    observer.observe(container)
-    return () => observer.disconnect()
-  }, [])
 
   // Create a stable key for the current content
   const contentKey = mode === 'freeform' ? 'freeform' : `structured-${structuredInput?.type}`
@@ -235,7 +217,6 @@ export function InputContainer({
 
       {/* Visible animated container */}
       <motion.div
-        ref={containerRef}
         className={cn(
           "input-container relative rounded-[12px] overflow-hidden transition-colors",
           isFocusedPanel ? "shadow-middle" : "shadow-minimal",
@@ -243,13 +224,6 @@ export function InputContainer({
         )}
         style={{ height: heightMotionValue }}
       >
-        {/* Ultrathink Pulsing Border shader effect - covers entire input */}
-        <UltrathinkGlow
-          enabled={freeFormProps.ultrathinkEnabled ?? false}
-          width={containerWidth}
-          height={targetHeight}
-        />
-
         {/* Crossfading content - freeform anchored to bottom (for auto-grow), others fill */}
         <AnimatePresence mode="sync" initial={false}>
           <motion.div

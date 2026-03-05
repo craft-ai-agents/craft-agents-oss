@@ -1524,7 +1524,8 @@ export function extractBashWriteTarget(command: string): string | null {
   }
 
   // Pattern 3: Direct redirect - extract path after > or >>
-  const directRedirectMatch = command.match(/>{1,2}\s*([^\s;|&"'>]+)/);
+  // Guard against non-shell uses like JavaScript arrow functions (=>).
+  const directRedirectMatch = command.match(/(?:^|[^=<>])>{1,2}\s*([^\s;|&"'>=][^\s;|&"'>]*)/);
   if (directRedirectMatch?.[1] && directRedirectMatch[1] !== '/dev/null') {
     return directRedirectMatch[1];
   }
@@ -1576,7 +1577,11 @@ export function extractBashWriteTarget(command: string): string | null {
  * Used to provide better error messages when write detection fails.
  */
 export function looksLikePotentialWrite(command: string): boolean {
-  return /Out-File|Set-Content|Add-Content|>\s*[^&]|>>/i.test(command);
+  // Shell redirects at token boundaries (avoid matching JS arrows like =>)
+  const hasRedirectToken = /(?:^|[\s;|&()])\d*>>?(?![=>])/.test(command);
+  // Common PowerShell write cmdlets
+  const hasPowerShellWriteCmdlet = /(?:Out-File|Set-Content|Add-Content)\b/i.test(command);
+  return hasRedirectToken || hasPowerShellWriteCmdlet;
 }
 
 /**
@@ -1767,8 +1772,12 @@ export function shouldAllowToolInMode(
       // Plans/data folder exception for bash/PowerShell writes.
       // Bash uses redirects: /bin/zsh -lc "cat <<'EOF' > /path/to/plans/file.md..."
       // PowerShell uses: @(...) | Out-File -FilePath 'C:\path\to\plans\file.md'
-      // Allow these if the write target is within the plans or data folder.
-      if (options?.plansFolderPath || options?.dataFolderPath) {
+      // Only run this branch for likely write attempts to avoid false positives.
+      const likelyWriteAttempt =
+        (rejection.type === 'dangerous_operator' && rejection.operatorType === 'redirect') ||
+        looksLikePotentialWrite(command);
+
+      if (likelyWriteAttempt && (options?.plansFolderPath || options?.dataFolderPath)) {
         const targetPath = extractBashWriteTarget(command) ?? extractPowerShellWriteTarget(command);
         if (targetPath) {
           // Check plans folder with robust path containment (prevents sibling-prefix bypasses)

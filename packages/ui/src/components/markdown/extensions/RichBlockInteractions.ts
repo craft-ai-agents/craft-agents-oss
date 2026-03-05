@@ -7,6 +7,7 @@ import { RICH_BLOCK_EDIT_EVENT } from '../rich-block-events'
 const RICH_BLOCK_NODES = new Set(['image', 'mermaidBlock', 'latexBlock'])
 const EDITABLE_RICH_BLOCK_NODES = new Set(['mermaidBlock', 'latexBlock'])
 const INLINE_MATH_EDIT_EVENT = 'inlineMathEdit'
+const RICH_BLOCK_SELECTION_HIGHLIGHT_KEY = new PluginKey<{ suspendDuringPointerDrag: boolean }>('richBlockSelectionHighlight')
 
 function isRichBlockNode(node: { type?: { name?: string } } | null | undefined): boolean {
   return node?.type?.name != null && RICH_BLOCK_NODES.has(node.type.name)
@@ -57,9 +58,55 @@ export const RichBlockInteractions = Extension.create({
   addProseMirrorPlugins() {
     return [
       new Plugin({
-        key: new PluginKey('richBlockSelectionHighlight'),
+        key: RICH_BLOCK_SELECTION_HIGHLIGHT_KEY,
+        state: {
+          init: () => ({ suspendDuringPointerDrag: false }),
+          apply(tr, prev) {
+            const meta = tr.getMeta(RICH_BLOCK_SELECTION_HIGHLIGHT_KEY) as { suspendDuringPointerDrag?: boolean } | undefined
+            if (typeof meta?.suspendDuringPointerDrag === 'boolean' && meta.suspendDuringPointerDrag !== prev.suspendDuringPointerDrag) {
+              return { suspendDuringPointerDrag: meta.suspendDuringPointerDrag }
+            }
+            return prev
+          },
+        },
+        view: (view) => {
+          let pointerDown = false
+
+          const setSuspendDuringPointerDrag = (suspendDuringPointerDrag: boolean) => {
+            const pluginState = RICH_BLOCK_SELECTION_HIGHLIGHT_KEY.getState(view.state) as { suspendDuringPointerDrag: boolean } | undefined
+            if (pluginState?.suspendDuringPointerDrag === suspendDuringPointerDrag) return
+            view.dispatch(view.state.tr.setMeta(RICH_BLOCK_SELECTION_HIGHLIGHT_KEY, { suspendDuringPointerDrag }))
+          }
+
+          const handleMouseDownCapture = (event: MouseEvent) => {
+            if (event.button !== 0) return
+            pointerDown = true
+            setSuspendDuringPointerDrag(true)
+          }
+
+          const handlePointerUp = () => {
+            if (!pointerDown) return
+            pointerDown = false
+            setSuspendDuringPointerDrag(false)
+          }
+
+          view.dom.addEventListener('mousedown', handleMouseDownCapture, true)
+          view.dom.ownerDocument.addEventListener('mouseup', handlePointerUp, true)
+          view.dom.ownerDocument.addEventListener('dragend', handlePointerUp, true)
+
+          return {
+            destroy: () => {
+              view.dom.removeEventListener('mousedown', handleMouseDownCapture, true)
+              view.dom.ownerDocument.removeEventListener('mouseup', handlePointerUp, true)
+              view.dom.ownerDocument.removeEventListener('dragend', handlePointerUp, true)
+            },
+          }
+        },
         props: {
           decorations(state) {
+            const pluginState = RICH_BLOCK_SELECTION_HIGHLIGHT_KEY.getState(state) as { suspendDuringPointerDrag: boolean } | undefined
+            if (pluginState?.suspendDuringPointerDrag) return DecorationSet.empty
+
             const { from, to } = state.selection
             if (from === to) return DecorationSet.empty
             if (state.selection instanceof NodeSelection) return DecorationSet.empty

@@ -117,6 +117,17 @@ class ModelRefreshService {
       return
     }
 
+    // For Pi connections with explicit user-owned 3-tier selection,
+    // never overwrite model lists from background refresh.
+    if (connection.providerType === 'pi' && connection.modelSelectionMode === 'userDefined3Tier') {
+      const modelCount = connection.models?.length ?? 0
+      handlerLog.info(`Model refresh [${slug}]: preserving user-defined Pi model list (${modelCount} models)`)
+      if (modelCount > 10) {
+        handlerLog.warn(`Model refresh [${slug}]: userDefined3Tier has suspicious model count (${modelCount})`)
+      }
+      return
+    }
+
     // Preserve user's defaultModel if still valid
     const currentDefault = connection.defaultModel
     const stillValid = currentDefault && newModels.some(m => m.id === currentDefault)

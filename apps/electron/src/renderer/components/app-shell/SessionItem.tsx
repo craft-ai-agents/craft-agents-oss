@@ -142,16 +142,14 @@ export function SessionItem({
       titleTrailing={hasMatch ? (
         <span
           className={cn(
-            "inline-flex items-center justify-center min-w-[24px] px-1 py-0.5 rounded-[6px] text-[10px] font-medium tabular-nums leading-tight whitespace-nowrap",
+            "inline-flex items-center justify-center min-w-[24px] px-1 py-0.5 rounded-[6px] text-[10px] font-medium tabular-nums leading-tight whitespace-nowrap shadow-tinted",
             isSelected
               ? "bg-yellow-300/50 border border-yellow-500 text-yellow-900"
               : "bg-yellow-300/10 border border-yellow-600/20 text-yellow-800"
           )}
           style={{
-            boxShadow: isSelected
-              ? '0 1px 2px 0 rgba(234, 179, 8, 0.3)'
-              : '0 1px 2px 0 rgba(133, 77, 14, 0.15)',
-          }}
+            '--shadow-color': isSelected ? '234, 179, 8' : '133, 77, 14',
+          } as React.CSSProperties}
           title={`Matches found (${nextHotkey} next, ${prevHotkey} prev)`}
         >
           {chatMatchCount}

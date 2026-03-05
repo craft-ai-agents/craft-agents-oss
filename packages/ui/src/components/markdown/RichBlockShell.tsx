@@ -16,7 +16,16 @@ export function RichBlockShell({ children, onEdit, editTitle = 'Edit block', cla
       {onEdit && (
         <TiptapHoverActions>
           <TiptapHoverActionButton
-            onClick={onEdit}
+            onMouseDown={(event) => {
+              // Keep focus/selection in ProseMirror so BubbleMenu anchor is stable on first open.
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onEdit()
+            }}
             className="rich-block-edit-button"
             title={editTitle}
             aria-label={editTitle}

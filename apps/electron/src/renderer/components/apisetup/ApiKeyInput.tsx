@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/styled-dropdown"
 import { cn } from "@/lib/utils"
 import { Check, ChevronDown, Eye, EyeOff, Loader2 } from "lucide-react"
+import { pickTierDefaults, resolveTierModels, type PiModelInfo } from "./tier-models"
 
 export type ApiKeyStatus = 'idle' | 'validating' | 'success' | 'error'
 
@@ -31,6 +32,7 @@ export interface ApiKeySubmitData {
   connectionDefaultModel?: string
   models?: string[]
   piAuthProvider?: string
+  modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
 }
 
 export interface ApiKeyInputProps {
@@ -52,6 +54,7 @@ export interface ApiKeyInputProps {
     baseUrl?: string
     connectionDefaultModel?: string
     activePreset?: string
+    models?: string[]
   }
 }
 
@@ -129,27 +132,6 @@ function parseModelList(value: string): string[] {
 // Pi model tier selection (for providers with many models)
 // ============================================================
 
-interface PiModelInfo {
-  id: string
-  name: string
-  costInput: number
-  costOutput: number
-  contextWindow: number
-  reasoning: boolean
-}
-
-/** Pick smart defaults for 3 tiers from a cost-sorted model list (expensive-first). */
-function pickTierDefaults(models: PiModelInfo[]): { best: string; default_: string; cheap: string } {
-  if (models.length === 0) return { best: '', default_: '', cheap: '' }
-  if (models.length === 1) return { best: models[0].id, default_: models[0].id, cheap: models[0].id }
-  const best = models[0].id
-  const cheap = models[models.length - 1].id
-  // ~40% from the top gives a mid-expensive model (list is top-10 + bottom-10)
-  const defaultIdx = Math.min(Math.floor(models.length * 0.4), models.length - 2)
-  const default_ = models[defaultIdx].id
-  return { best, default_, cheap }
-}
-
 export function ApiKeyInput({
   status,
   errorMessage,
@@ -184,6 +166,7 @@ export function ApiKeyInput({
   const [tierFilter, setTierFilter] = useState('')
   const [tierDropdownPosition, setTierDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null)
   const tierFilterInputRef = useRef<HTMLInputElement>(null)
+  const hydratedTierProviderRef = useRef<string | null>(null)
 
   const isDisabled = disabled || status === 'validating'
 
@@ -211,10 +194,14 @@ export function ApiKeyInput({
     try {
       const result = await window.electronAPI.getPiProviderModels(provider)
       setPiModels(result.models)
-      const defaults = pickTierDefaults(result.models)
-      setBestModel(defaults.best)
-      setDefaultModel(defaults.default_)
-      setCheapModel(defaults.cheap)
+
+      if (hydratedTierProviderRef.current !== provider) {
+        const tiers = resolveTierModels(result.models, provider === initialPreset ? initialValues?.models : undefined)
+        setBestModel(tiers.best)
+        setDefaultModel(tiers.default_)
+        setCheapModel(tiers.cheap)
+        hydratedTierProviderRef.current = provider
+      }
     } catch (err) {
       console.error('[ApiKeyInput] Failed to load models for', provider, err)
       setPiModels([])
@@ -254,7 +241,17 @@ export function ApiKeyInput({
   const handleBaseUrlChange = (value: string) => {
     setBaseUrl(value)
     const presetKey = getPresetForUrl(value, presets)
-    setActivePreset(presetKey)
+    if (presetKey !== 'custom') {
+      setActivePreset(presetKey)
+    } else {
+      const currentPresetObj = presets.find(p => p.key === activePreset)
+      // Only fall back to 'custom' if the current preset has a non-empty default URL.
+      // Presets with empty URLs (e.g. Azure OpenAI) expect user-provided endpoints;
+      // switching them to custom would drop piAuthProvider routing metadata.
+      if (currentPresetObj && currentPresetObj.url !== '') {
+        setActivePreset('custom')
+      }
+    }
     setModelError(null)
     if (!connectionDefaultModel.trim()) {
       if (presetKey === 'ollama') {
@@ -274,18 +271,14 @@ export function ApiKeyInput({
         setModelError('Please select a model for each tier.')
         return
       }
-      // Deduplicate while preserving order
-      const seen = new Set<string>()
-      const models: string[] = []
-      for (const id of [bestModel, defaultModel, cheapModel]) {
-        if (!seen.has(id)) { seen.add(id); models.push(id) }
-      }
+      const models: string[] = [bestModel, defaultModel, cheapModel]
       onSubmit({
         apiKey: apiKey.trim(),
         baseUrl: baseUrl.trim() || undefined,
         connectionDefaultModel: bestModel,
         models,
         piAuthProvider: activePreset !== 'custom' ? activePreset : undefined,
+        modelSelectionMode: 'userDefined3Tier',
       })
       return
     }
@@ -307,6 +300,9 @@ export function ApiKeyInput({
       connectionDefaultModel: parsedModels[0],
       models: parsedModels.length > 0 ? parsedModels : undefined,
       piAuthProvider: isPiApiKeyFlow && activePreset !== 'custom' ? activePreset : undefined,
+      modelSelectionMode: isPiApiKeyFlow
+        ? (parsedModels.length > 0 ? 'userDefined3Tier' : 'automaticallySyncedFromProvider')
+        : undefined,
     })
   }
 

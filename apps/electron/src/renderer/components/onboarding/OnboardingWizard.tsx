@@ -69,6 +69,7 @@ interface OnboardingWizardProps {
     baseUrl?: string
     connectionDefaultModel?: string
     activePreset?: string
+    models?: string[]
   }
 
   className?: string

@@ -41,17 +41,6 @@ describe('BaseAgent', () => {
       expect(agent.getThinkingLevel()).toBe('max');
     });
 
-    it('should track ultrathink override', () => {
-      // Set up debug callback to verify the override is set
-      let debugMessage = '';
-      agent.onDebug = (msg) => { debugMessage = msg; };
-
-      agent.setUltrathinkOverride(true);
-      expect(debugMessage).toContain('Ultrathink override: ENABLED');
-
-      agent.setUltrathinkOverride(false);
-      expect(debugMessage).toContain('Ultrathink override: disabled');
-    });
   });
 
   describe('Permission Mode', () => {

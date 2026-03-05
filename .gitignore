@@ -62,3 +62,7 @@ id_ed25519*
 # Credentials files
 credentials.enc
 *.credentials
+
+# act (local GitHub Actions runner)
+.secrets
+.actrc

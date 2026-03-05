@@ -26,8 +26,8 @@ import { useRef, useCallback } from 'react'
  *
  * @param options.gap - Gap between badges when space allows (default: 8)
  * @param options.minVisible - Minimum visible strip per badge in px (default: 20)
- * @param options.reservedStart - Reserved left-side space (e.g. mask width) where
- *   stacking should begin before overflow reaches (default: 0)
+ * @param options.reservedStart - Optional visual reserve applied only in stacking
+ *   math (capped to one gap) to keep fade behavior stable (default: 0)
  */
 export function useDynamicStack(options?: { gap?: number; minVisible?: number; reservedStart?: number }) {
   const { gap = 8, minVisible = 20, reservedStart = 0 } = options ?? {}
@@ -68,11 +68,13 @@ export function useDynamicStack(options?: { gap?: number; minVisible?: number; r
       }
 
       const totalWidth = widths.reduce((sum, w) => sum + w, 0)
-      const effectiveWidth = el.clientWidth - reservedStart
+      const availableWidth = el.clientWidth
 
-      // Phase 0: Enough space — uniform gap, no stacking needed
+      // Phase 0: Enough real space — uniform gap, no stacking needed.
+      // Use the actual measured width here so stacking doesn't start prematurely
+      // when visual-reserve tuning is configured.
       const totalWithGaps = totalWidth + (childCount - 1) * gap
-      if (totalWithGaps <= effectiveWidth) {
+      if (totalWithGaps <= availableWidth) {
         for (let i = 0; i < childCount; i++) {
           const child = children[i] as HTMLElement
           child.style.marginLeft = i === 0 ? '0px' : `${gap}px`
@@ -83,8 +85,12 @@ export function useDynamicStack(options?: { gap?: number; minVisible?: number; r
         return
       }
 
+      // Optional tiny reserve for stacking phase only (capped to one gap).
+      // This keeps visual fade behavior stable without forcing premature overlap.
+      const stackingWidth = Math.max(0, availableWidth - Math.min(reservedStart, gap))
+
       // Target visible strip V (for the equal-strip formula)
-      const V = Math.max(minVisible, (effectiveWidth - widths[childCount - 1]) / (childCount - 1))
+      const V = Math.max(minVisible, (stackingWidth - widths[childCount - 1]) / (childCount - 1))
 
       // Narrowest non-last badge — the crossover threshold.
       // When V < this, all per-badge margins are ≤ 0 (no uneven positive gaps).
@@ -93,7 +99,7 @@ export function useDynamicStack(options?: { gap?: number; minVisible?: number; r
 
       // Uniform margin: distributes the total deficit evenly across all gaps.
       // Gives visually even spacing regardless of individual badge widths.
-      const uniformMargin = Math.min(gap, (effectiveWidth - totalWidth) / (childCount - 1))
+      const uniformMargin = Math.min(gap, (stackingWidth - totalWidth) / (childCount - 1))
 
       if (V >= minNonLastWidth) {
         // Phase 1: TRANSITION — V is larger than some badge widths.

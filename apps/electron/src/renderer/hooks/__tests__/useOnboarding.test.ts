@@ -84,16 +84,21 @@ describe('apiSetupMethodToConnectionSetup', () => {
     expect(setup.slug).toBe('github-copilot')
   })
 
-  it('pi_api_key includes piAuthProvider', () => {
+  it('pi_api_key includes piAuthProvider and modelSelectionMode', () => {
     const setup = apiSetupMethodToConnectionSetup(
       'pi_api_key',
-      { credential: 'sk-pi', piAuthProvider: 'anthropic' },
+      {
+        credential: 'sk-pi',
+        piAuthProvider: 'anthropic',
+        modelSelectionMode: 'userDefined3Tier',
+      },
       null,
       new Set(),
     )
     expect(setup.slug).toBe('pi-api-key')
     expect(setup.credential).toBe('sk-pi')
     expect(setup.piAuthProvider).toBe('anthropic')
+    expect(setup.modelSelectionMode).toBe('userDefined3Tier')
   })
 
   it('uses editingSlug when editing', () => {

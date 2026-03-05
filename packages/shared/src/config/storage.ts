@@ -1314,6 +1314,34 @@ export function shouldRepairPiApiKeyCodexProvider(connection: Pick<LlmConnection
   return connection.authType === 'api_key' || connection.authType === 'api_key_with_endpoint';
 }
 
+function normalizeModelIds(models?: Array<{ id: string } | string>): string[] {
+  if (!models) return [];
+  return models
+    .map(m => typeof m === 'string' ? m : m.id)
+    .filter((id): id is string => !!id && id.trim().length > 0);
+}
+
+function modelSetEquals(a: string[], b: string[]): boolean {
+  const as = new Set(a);
+  const bs = new Set(b);
+  if (as.size !== bs.size) return false;
+  for (const id of as) {
+    if (!bs.has(id)) return false;
+  }
+  return true;
+}
+
+export function inferModelSelectionMode(
+  connection: Pick<LlmConnection, 'models'>,
+  providerDefaultModelIds: string[],
+): 'automaticallySyncedFromProvider' | 'userDefined3Tier' {
+  const currentIds = normalizeModelIds(connection.models);
+  if (currentIds.length === 0) return 'automaticallySyncedFromProvider';
+  return modelSetEquals(currentIds, providerDefaultModelIds)
+    ? 'automaticallySyncedFromProvider'
+    : 'userDefined3Tier';
+}
+
 function backfillAllConnectionModels(config: StoredConfig): boolean {
   if (!config.llmConnections) return false;
   let changed = false;
@@ -1332,29 +1360,73 @@ function backfillAllConnectionModels(config: StoredConfig): boolean {
 
     const defaultModels = getDefaultModelsForConnection(connection.providerType, connection.piAuthProvider);
     const defaultModel = getDefaultModelForConnection(connection.providerType, connection.piAuthProvider);
+    const providerDefaultModelIds = normalizeModelIds(defaultModels as Array<{ id: string } | string>);
 
-    if (!connection.models || (Array.isArray(connection.models) && connection.models.length === 0)) {
-      connection.models = defaultModels;
-      changed = true;
-    }
-
-    // For Pi connections with piAuthProvider, re-filter models to ensure
-    // only models matching the auth provider are shown. This migrates
-    // existing connections that were created before provider-based filtering.
-    if (isPiProvider(connection.providerType) && connection.piAuthProvider && connection.models) {
-      const correctIds = new Set(
-        (defaultModels as Array<{ id: string } | string>).map(m => typeof m === 'string' ? m : m.id)
-      );
-      const currentIds = new Set(
-        connection.models.map(m => typeof m === 'string' ? m : (m as { id: string }).id)
-      );
-      const mismatch = currentIds.size !== correctIds.size
-        || [...currentIds].some(id => !correctIds.has(id))
-        || [...correctIds].some(id => !currentIds.has(id));
-      if (mismatch) {
-        connection.models = defaultModels;
+    if (isPiProvider(connection.providerType) && connection.piAuthProvider) {
+      const mode = connection.modelSelectionMode
+        ?? inferModelSelectionMode(connection, providerDefaultModelIds);
+      if (connection.modelSelectionMode !== mode) {
+        debug('[storage] backfill mode inferred', {
+          slug: connection.slug,
+          piAuthProvider: connection.piAuthProvider,
+          from: connection.modelSelectionMode,
+          to: mode,
+          currentModelCount: normalizeModelIds(connection.models).length,
+        });
+        connection.modelSelectionMode = mode;
         changed = true;
       }
+
+      if (mode === 'automaticallySyncedFromProvider') {
+        const currentIds = normalizeModelIds(connection.models);
+        if (providerDefaultModelIds.length > 0 && !modelSetEquals(currentIds, providerDefaultModelIds)) {
+          connection.models = defaultModels;
+          changed = true;
+        }
+      } else {
+        const currentIds = normalizeModelIds(connection.models);
+        if (providerDefaultModelIds.length > 0) {
+          const allowedIds = new Set(providerDefaultModelIds);
+          const canonicalCurrentIds = currentIds.map((id) => {
+            if (allowedIds.has(id)) return id;
+            if (!id.startsWith('pi/')) {
+              const prefixed = `pi/${id}`;
+              if (allowedIds.has(prefixed)) return prefixed;
+            }
+            return id;
+          });
+          const filtered = canonicalCurrentIds.filter(id => allowedIds.has(id));
+
+          if (!modelSetEquals(canonicalCurrentIds, currentIds) || filtered.length !== currentIds.length) {
+            debug('[storage] backfill userDefined filtered', {
+              slug: connection.slug,
+              piAuthProvider: connection.piAuthProvider,
+              beforeCount: currentIds.length,
+              canonicalCount: canonicalCurrentIds.length,
+              afterCount: filtered.length,
+              beforeFirst5: currentIds.slice(0, 5),
+              afterFirst5: filtered.slice(0, 5),
+            });
+            connection.models = filtered;
+            changed = true;
+          }
+
+          if (filtered.length === 0) {
+            debug('[storage] backfill userDefined fallback-to-defaults', {
+              slug: connection.slug,
+              piAuthProvider: connection.piAuthProvider,
+              defaultCount: providerDefaultModelIds.length,
+            });
+            connection.models = defaultModels;
+            changed = true;
+          }
+        }
+      }
+    }
+
+    if (defaultModels.length > 0 && (!connection.models || (Array.isArray(connection.models) && connection.models.length === 0))) {
+      connection.models = defaultModels;
+      changed = true;
     }
 
     if (!connection.defaultModel && defaultModel) {
@@ -1743,6 +1815,7 @@ export function migrateLegacyLlmConnectionsConfig(): void {
         providerType: 'pi',
         authType: 'oauth',
         piAuthProvider: 'openai-codex',
+        modelSelectionMode: 'automaticallySyncedFromProvider',
         models: getDefaultModelsForConnection('pi', 'openai-codex'),
         createdAt: Date.now(),
       };
@@ -1754,6 +1827,7 @@ export function migrateLegacyLlmConnectionsConfig(): void {
         providerType: 'pi',
         authType: 'api_key',
         piAuthProvider: 'openai',
+        modelSelectionMode: 'automaticallySyncedFromProvider',
         models: getDefaultModelsForConnection('pi', 'openai'),
         createdAt: Date.now(),
       };
@@ -2018,6 +2092,9 @@ export function updateLlmConnection(slug: string, updates: Partial<Omit<LlmConne
   if (index === -1) return false;
 
   const existing = connections[index]!;
+  const toModelIds = (models?: Array<{ id: string } | string>): string[] =>
+    (models ?? []).map(m => typeof m === 'string' ? m : m.id);
+
   connections[index] = {
     // Preserve required fields from existing
     slug: existing.slug,
@@ -2030,6 +2107,7 @@ export function updateLlmConnection(slug: string, updates: Partial<Omit<LlmConne
     baseUrl: updates.baseUrl !== undefined ? updates.baseUrl : existing.baseUrl,
     models: updates.models !== undefined ? updates.models : existing.models,
     defaultModel: updates.defaultModel !== undefined ? updates.defaultModel : existing.defaultModel,
+    modelSelectionMode: updates.modelSelectionMode !== undefined ? updates.modelSelectionMode : existing.modelSelectionMode,
     // Cloud provider fields
     awsRegion: updates.awsRegion !== undefined ? updates.awsRegion : existing.awsRegion,
     gcpProjectId: updates.gcpProjectId !== undefined ? updates.gcpProjectId : existing.gcpProjectId,
@@ -2039,6 +2117,42 @@ export function updateLlmConnection(slug: string, updates: Partial<Omit<LlmConne
     // Timestamps
     lastUsedAt: updates.lastUsedAt !== undefined ? updates.lastUsedAt : existing.lastUsedAt,
   };
+
+  const updated = connections[index]!;
+  if (updated.providerType === 'pi') {
+    const beforeModelIds = toModelIds(existing.models);
+    const afterModelIds = toModelIds(updated.models);
+    const changed =
+      existing.defaultModel !== updated.defaultModel ||
+      existing.modelSelectionMode !== updated.modelSelectionMode ||
+      !modelSetEquals(beforeModelIds, afterModelIds);
+
+    if (changed) {
+      const stack = (new Error().stack ?? '').split('\n').slice(2, 7).map(s => s.trim());
+      debug('[storage] updateLlmConnection(pi) changed', {
+        slug,
+        before: {
+          mode: existing.modelSelectionMode,
+          defaultModel: existing.defaultModel,
+          modelCount: beforeModelIds.length,
+          modelsFirst5: beforeModelIds.slice(0, 5),
+        },
+        after: {
+          mode: updated.modelSelectionMode,
+          defaultModel: updated.defaultModel,
+          modelCount: afterModelIds.length,
+          modelsFirst5: afterModelIds.slice(0, 5),
+        },
+        updates: {
+          keys: Object.keys(updates),
+          defaultModel: updates.defaultModel,
+          modelSelectionMode: updates.modelSelectionMode,
+          modelsCount: Array.isArray(updates.models) ? updates.models.length : undefined,
+        },
+        stack,
+      });
+    }
+  }
 
   saveConfig(config);
   return true;

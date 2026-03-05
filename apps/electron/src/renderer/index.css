@@ -551,6 +551,15 @@ html[data-font="inter"] {
       rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px;
   }
 
+  /* Semantic inset separators for table rows/headers (border-like, but shadow-based) */
+  .shadow-bottom-border {
+    box-shadow: inset 0 -1.5px 0 var(--color-border);
+  }
+
+  .shadow-bottom-border-thin {
+    box-shadow: inset 0 -1px 0 var(--color-border);
+  }
+
   .shadow-minimal {
     box-shadow: var(--shadow-minimal);
   }

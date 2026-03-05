@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { shouldAllowToolInMode } from '../../agent/mode-manager.ts';
+import { shouldAllowToolInMode, extractBashWriteTarget } from '../../agent/mode-manager.ts';
 
 describe('mode-manager path containment for plans/data exceptions', () => {
   let base: string;
@@ -96,5 +96,26 @@ describe('mode-manager path containment for plans/data exceptions', () => {
       { plansFolderPath: plansDir, dataFolderPath: dataDir }
     );
     expect(result.allowed).toBe(false);
+  });
+
+  it('does not treat JavaScript arrow syntax (=>) as a bash write redirect target', () => {
+    const command = "node -e \"const f = (s) => s.includes('electron'); console.log(f('typecheck'))\"";
+    expect(extractBashWriteTarget(command)).toBeNull();
+  });
+
+  it('keeps allowlist mismatch messaging for node -e arrow command (no write-path error)', () => {
+    const command = "node -e \"const f = (s) => s.includes('electron'); console.log(f('typecheck'))\"";
+    const result = shouldAllowToolInMode(
+      'Bash',
+      { command },
+      'safe',
+      { plansFolderPath: plansDir, dataFolderPath: dataDir }
+    );
+
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) {
+      expect(result.reason).toContain('read-only allowlist');
+      expect(result.reason).not.toContain('Write blocked (Explore mode) - target not in allowed folders');
+    }
   });
 });

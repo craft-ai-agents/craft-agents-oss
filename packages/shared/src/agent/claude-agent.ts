@@ -342,7 +342,7 @@ export class ClaudeAgent extends BaseAgent {
   private safeMode: boolean = false;
   // Event adapter for SDK message → AgentEvent conversion (testable, pluggable)
   private eventAdapter!: ClaudeEventAdapter;
-  // Thinking level and ultrathink override are now managed by BaseAgent
+  // Thinking level is managed by BaseAgent
   // Pinned system prompt components (captured on first chat, used for consistency after compaction)
   private pinnedPreferencesPrompt: string | null = null;
   // Track if preference drift notification has been shown this session
@@ -536,7 +536,7 @@ export class ClaudeAgent extends BaseAgent {
   }
 
   // Config watcher methods (startConfigWatcher, stopConfigWatcher) are now inherited from BaseAgent
-  // Thinking level methods (setThinkingLevel, getThinkingLevel, setUltrathinkOverride) are now inherited from BaseAgent
+  // Thinking level methods (setThinkingLevel, getThinkingLevel) are inherited from BaseAgent
 
   // Permission command utilities (getBaseCommand, isDangerousCommand, extractDomainFromNetworkCommand)
   // are now available via this.permissionManager
@@ -730,11 +730,8 @@ export class ClaudeAgent extends BaseAgent {
         debug(`[chat] Custom provider: baseUrl=${activeBaseUrl}, model=${model}, hasApiKey=${!!process.env.ANTHROPIC_API_KEY}`);
       }
 
-      // Determine effective thinking level: ultrathink override boosts to max for this message
-      // Uses inherited protected fields from BaseAgent
-      const effectiveThinkingLevel: ThinkingLevel = this._ultrathinkOverride ? 'max' : this._thinkingLevel;
-      const thinkingTokens = getThinkingTokens(effectiveThinkingLevel, model);
-      debug(`[chat] Thinking: level=${this._thinkingLevel}, override=${this._ultrathinkOverride}, effective=${effectiveThinkingLevel}, tokens=${thinkingTokens}`);
+      const thinkingTokens = getThinkingTokens(this._thinkingLevel, model);
+      debug(`[chat] Thinking: level=${this._thinkingLevel}, tokens=${thinkingTokens}`);
 
       // NOTE: Parent-child tracking for subagents is documented below (search for
       // "PARENT-CHILD TOOL TRACKING"). The SDK's parent_tool_use_id is authoritative.
@@ -773,7 +770,7 @@ export class ClaudeAgent extends BaseAgent {
             this.lastStderrOutput.shift();
           }
         },
-        // Extended thinking: tokens based on effective thinking level (session level + ultrathink override)
+        // Extended thinking: tokens based on session thinking level
         // Non-Claude models don't support extended thinking, so pass 0 to disable
         // Mini agents also disable thinking for efficiency (quick config edits don't need deep reasoning)
         maxThinkingTokens: miniConfig.minimizeThinking ? 0 : (isClaude ? thinkingTokens : 0),
@@ -1328,7 +1325,7 @@ export class ClaudeAgent extends BaseAgent {
 
         // Defensive: flush any pending text that wasn't emitted
         // This can happen if the SDK sends an assistant message with text but skips the
-        // message_delta event that normally triggers text_complete (e.g., in some ultrathink scenarios)
+        // message_delta event that normally triggers text_complete (rare edge scenarios)
         const flushedEvent = this.eventAdapter.flushPending();
         if (flushedEvent) {
           yield flushedEvent;
@@ -1628,9 +1625,6 @@ export class ClaudeAgent extends BaseAgent {
       yield { type: 'complete' };
     } finally {
       this.currentQuery = null;
-      // Reset ultrathink override after query completes (single-shot per-message boost)
-      // Note: thinkingLevel is NOT reset - it's sticky for the session
-      this._ultrathinkOverride = false;
 
       // If a steer message was never delivered (no PreToolUse fired), notify the session
       // layer so it can re-queue the message for the next turn.

@@ -67,6 +67,8 @@ import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelName } from '@craf
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { hasOpenOverlay } from '@/lib/overlay-detection'
 import { ToolbarStatusSlot } from './ToolbarStatusSlot'
+import { shouldHandleScopedInputEvent } from './input-event-guards'
+import { clearPendingFocusForSession, consumePendingFocusForSession } from './focus-input-events'
 
 /**
  * Format token count for display (e.g., 1500 -> "1.5k", 200000 -> "200k")
@@ -79,6 +81,10 @@ function formatTokenCount(tokens: number): string {
     return `${(tokens / 1000).toFixed(tokens >= 10000 ? 0 : 1)}k`
   }
   return tokens.toString()
+}
+
+function stripPiPrefixForDisplay(value: string): string {
+  return value.startsWith('pi/') ? value.slice(3) : value
 }
 
 /** Platform-specific modifier key for keyboard shortcuts */
@@ -128,8 +134,6 @@ export interface FreeFormInputProps {
   /** Callback when thinking level changes */
   onThinkingLevelChange?: (level: ThinkingLevel) => void
   // Advanced options
-  ultrathinkEnabled?: boolean
-  onUltrathinkChange?: (enabled: boolean) => void
   permissionMode?: PermissionMode
   onPermissionModeChange?: (mode: PermissionMode) => void
   /** Enabled permission modes for Shift+Tab cycling (min 2 modes) */
@@ -219,8 +223,6 @@ export function FreeFormInput({
   onModelChange,
   thinkingLevel = 'think',
   onThinkingLevelChange,
-  ultrathinkEnabled = false,
-  onUltrathinkChange,
   permissionMode = 'ask',
   onPermissionModeChange,
   enabledModes = ['safe', 'ask', 'allow-all'],
@@ -302,9 +304,9 @@ export function FreeFormInput({
     )
     if (!model) {
       // Fallback: use helper function to format unknown model IDs nicely
-      return getModelDisplayName(modelToDisplay)
+      return stripPiPrefixForDisplay(getModelDisplayName(modelToDisplay))
     }
-    return typeof model === 'string' ? model : model.name
+    return typeof model === 'string' ? stripPiPrefixForDisplay(model) : model.name
   }, [availableModels, currentModel, connectionDefaultModel])
 
   // Group connections by provider type for hierarchical dropdown
@@ -499,7 +501,10 @@ export function FreeFormInput({
   // Listen for craft:insert-text events (generic mechanism for inserting text into input)
   // Used by components that want to pre-fill the input with text
   React.useEffect(() => {
-    const handleInsertText = (e: CustomEvent<{ text: string }>) => {
+    const handleInsertText = (e: CustomEvent<{ text: string; sessionId?: string }>) => {
+      const targetSessionId = e.detail?.sessionId
+      if (!shouldHandleScopedInputEvent({ sessionId, isFocusedPanel, targetSessionId })) return
+
       const { text } = e.detail
       setInput(text)
       syncToParent(text)
@@ -513,7 +518,7 @@ export function FreeFormInput({
 
     window.addEventListener('craft:insert-text', handleInsertText as EventListener)
     return () => window.removeEventListener('craft:insert-text', handleInsertText as EventListener)
-  }, [syncToParent, richInputRef])
+  }, [sessionId, isFocusedPanel, syncToParent, richInputRef])
 
   // Listen for craft:approve-plan events (used by ResponseCard's Accept Plan button)
   // This disables safe mode AND submits the message in one action
@@ -650,7 +655,15 @@ export function FreeFormInput({
 
   // Listen for craft:focus-input events (restore focus after popover/dropdown closes)
   React.useEffect(() => {
-    const handleFocusInput = () => {
+    const handleFocusInput = (e: Event) => {
+      const detail = (e as CustomEvent<{ sessionId?: string }>).detail
+      const targetSessionId = detail?.sessionId
+      if (!shouldHandleScopedInputEvent({ sessionId, isFocusedPanel, targetSessionId })) return
+
+      if (targetSessionId) {
+        clearPendingFocusForSession(targetSessionId)
+      }
+
       richInputRef.current?.focus()
       // Restore caret position if saved, then clear it (one-shot)
       if (lastCaretPositionRef.current !== null) {
@@ -664,7 +677,16 @@ export function FreeFormInput({
 
     window.addEventListener('craft:focus-input', handleFocusInput)
     return () => window.removeEventListener('craft:focus-input', handleFocusInput)
-  }, [richInputRef])
+  }, [sessionId, isFocusedPanel, richInputRef])
+
+  // Recover queued focus requests after session switch/mount races.
+  React.useEffect(() => {
+    if (!consumePendingFocusForSession(sessionId)) return
+
+    setTimeout(() => {
+      richInputRef.current?.focus()
+    }, 0)
+  }, [sessionId, richInputRef])
 
   // Get the next available number for a pasted file prefix (e.g., pasted-image-1, pasted-image-2)
   const getNextPastedNumber = (
@@ -684,8 +706,11 @@ export function FreeFormInput({
 
   // Listen for craft:paste-files events (for global paste when input not focused)
   React.useEffect(() => {
-    const handlePasteFiles = async (e: CustomEvent<{ files: File[] }>) => {
+    const handlePasteFiles = async (e: CustomEvent<{ files: File[]; sessionId?: string }>) => {
       if (disabled) return
+
+      const targetSessionId = e.detail?.sessionId
+      if (!shouldHandleScopedInputEvent({ sessionId, isFocusedPanel, targetSessionId })) return
 
       const { files } = e.detail
       if (!files || files.length === 0) return
@@ -720,7 +745,7 @@ export function FreeFormInput({
 
     window.addEventListener('craft:paste-files', handlePasteFiles as unknown as EventListener)
     return () => window.removeEventListener('craft:paste-files', handlePasteFiles as unknown as EventListener)
-  }, [disabled, richInputRef])
+  }, [disabled, sessionId, isFocusedPanel, richInputRef])
 
   // Build active commands list for slash command menu
   const activeCommands = React.useMemo(() => {
@@ -729,17 +754,15 @@ export function FreeFormInput({
     if (permissionMode === 'safe') active.push('safe')
     else if (permissionMode === 'ask') active.push('ask')
     else if (permissionMode === 'allow-all') active.push('allow-all')
-    if (ultrathinkEnabled) active.push('ultrathink')
     return active
-  }, [permissionMode, ultrathinkEnabled])
+  }, [permissionMode])
 
   // Handle slash command selection (mode/feature commands)
   const handleSlashCommand = React.useCallback((commandId: SlashCommandId) => {
     if (commandId === 'safe') onPermissionModeChange?.('safe')
     else if (commandId === 'ask') onPermissionModeChange?.('ask')
     else if (commandId === 'allow-all') onPermissionModeChange?.('allow-all')
-    else if (commandId === 'ultrathink') onUltrathinkChange?.(!ultrathinkEnabled)
-  }, [permissionMode, ultrathinkEnabled, onPermissionModeChange, onUltrathinkChange])
+  }, [onPermissionModeChange])
 
   // Handle folder selection from slash command menu
   const handleSlashFolderSelect = React.useCallback((path: string) => {
@@ -1584,7 +1607,7 @@ Model
                   className="flex items-center justify-between px-2 py-2 rounded-lg"
                 >
                   <div className="text-left">
-                    <div className="font-medium text-sm">{connectionDefaultModel}</div>
+                    <div className="font-medium text-sm">{stripPiPrefixForDisplay(connectionDefaultModel)}</div>
                     <div className="text-xs text-muted-foreground">Connection default</div>
                   </div>
                   <Check className="h-3 w-3 text-foreground shrink-0 ml-3" />
@@ -1625,7 +1648,7 @@ Model
                               {/* Show models for this connection - use provider-specific models as fallback */}
                               {(conn.models || ANTHROPIC_MODELS).map((model) => {
                                 const modelId = typeof model === 'string' ? model : model.id
-                                const modelName = typeof model === 'string' ? getModelShortName(model) : model.name
+                                const modelName = typeof model === 'string' ? stripPiPrefixForDisplay(getModelShortName(model)) : model.name
                                 const isSelectedModel = isCurrentConnection && currentModel === modelId
                                 return (
                                   <StyledDropdownMenuItem
@@ -1672,7 +1695,7 @@ Model
                   {/* Model options based on effective connection's provider type */}
                   {availableModels.map((model) => {
                     const modelId = typeof model === 'string' ? model : model.id
-                    const modelName = typeof model === 'string' ? getModelShortName(model) : model.name
+                    const modelName = typeof model === 'string' ? stripPiPrefixForDisplay(getModelShortName(model)) : model.name
                     const isSelected = currentModel === modelId
                     const description = typeof model !== 'string' && 'description' in model ? (model.description as string) : ''
                     return (

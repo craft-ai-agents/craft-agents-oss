@@ -80,6 +80,7 @@ const LlmConnectionSchema = z.object({
   baseUrl: z.string().optional(),
   models: z.array(z.union([z.string(), z.object({ id: z.string() }).passthrough()])).optional(),
   defaultModel: z.string().optional(),
+  modelSelectionMode: z.enum(['automaticallySyncedFromProvider', 'userDefined3Tier']).optional(),
   createdAt: z.number(),
   // Allow additional fields (codexPath, awsRegion, gcpProjectId, etc.)
 }).passthrough();

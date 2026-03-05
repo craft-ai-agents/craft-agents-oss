@@ -18,8 +18,6 @@ import { DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-level
  * All session-scoped options in one place.
  */
 export interface SessionOptions {
-  /** Extended thinking mode (single-shot per message) - boosts to max thinking for one message */
-  ultrathinkEnabled: boolean
   /** Permission mode ('safe', 'ask', 'allow-all') */
   permissionMode: PermissionMode
   /** Monotonic version from backend permission mode state (used to ignore stale events) */
@@ -30,7 +28,6 @@ export interface SessionOptions {
 
 /** Default values for new sessions */
 export const defaultSessionOptions: SessionOptions = {
-  ultrathinkEnabled: false,
   permissionMode: 'ask', // Default to ask mode (prompt for permissions)
   thinkingLevel: DEFAULT_THINKING_LEVEL, // Default to 'think' level
 }

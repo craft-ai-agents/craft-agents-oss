@@ -389,6 +389,18 @@ html[data-font="inter"] {
       rgba(0, 0, 0, 0.04) 0px 24px 24px -12px;
   }
 
+  .shadow-modal-small {
+    box-shadow:
+      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+      rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
+      rgba(0, 0, 0, 0.04) 0px 1px 1px -0.5px,
+      rgba(0, 0, 0, 0.04) 0px 3px 3px 0px,
+      rgba(0, 0, 0, 0.02) 0px 6px 6px 0px,
+      rgba(0, 0, 0, 0.02) 0px 12px 12px 0px,
+      rgba(0, 0, 0, 0.02) 0px 24px 24px 0px;
+  }
+
   /* Smooth corners (iOS-style superellipse)
    * Uses CSS continuous corners when supported, falls back to standard border-radius.
    * The border-radius value should be set on the element using this class.

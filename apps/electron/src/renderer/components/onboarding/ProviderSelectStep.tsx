@@ -94,7 +94,7 @@ export function ProviderSelectStep({ onSelect }: ProviderSelectStepProps) {
             {/* Content */}
             <div className="flex-1 min-w-0">
               <span className="font-medium text-sm">{option.name}</span>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-0 text-xs text-muted-foreground">
                 {option.description}
               </p>
             </div>

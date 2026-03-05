@@ -36,7 +36,6 @@ interface FreeFormInputPlaygroundProps {
   disabled?: boolean
   isProcessing?: boolean
   currentModel: string
-  ultrathinkEnabled?: boolean
   permissionMode?: PermissionMode
   inputValue?: string
   onInputChange?: (value: string) => void
@@ -54,7 +53,6 @@ function FreeFormInputPlayground({
   disabled = false,
   isProcessing = false,
   currentModel,
-  ultrathinkEnabled = false,
   permissionMode = 'ask',
   inputValue,
   onInputChange,
@@ -68,11 +66,9 @@ function FreeFormInputPlayground({
 }: FreeFormInputPlaygroundProps) {
   // Local state for options since playground doesn't have parent state management
   const [model, setModel] = React.useState(currentModel)
-  const [ultrathink, setUltrathink] = React.useState(ultrathinkEnabled)
   const [mode, setMode] = React.useState<PermissionMode>(permissionMode)
   const setBrowserInstances = useSetAtom(setBrowserInstancesAtom)
 
-  React.useEffect(() => setUltrathink(ultrathinkEnabled), [ultrathinkEnabled])
   React.useEffect(() => setMode(permissionMode), [permissionMode])
 
   React.useEffect(() => {
@@ -116,8 +112,6 @@ function FreeFormInputPlayground({
       isProcessing={isProcessing}
       currentModel={model}
       onModelChange={setModel}
-      ultrathinkEnabled={ultrathink}
-      onUltrathinkChange={setUltrathink}
       permissionMode={mode}
       onPermissionModeChange={setMode}
       inputValue={inputValue}
@@ -369,12 +363,6 @@ export const inputComponents: ComponentEntry[] = [
         defaultValue: 'claude-sonnet-4-20250514',
       },
       {
-        name: 'ultrathinkEnabled',
-        description: 'Ultrathink badge active',
-        control: { type: 'boolean' },
-        defaultValue: false,
-      },
-      {
         name: 'showBrowserStatus',
         description: 'Show toolbar browser status slot for this session',
         control: { type: 'boolean' },
@@ -407,7 +395,7 @@ export const inputComponents: ComponentEntry[] = [
     ],
     variants: [
       { name: 'Default', props: { currentModel: 'claude-sonnet-4-20250514' } },
-      { name: 'With Badges', props: { currentModel: 'claude-sonnet-4-20250514', permissionMode: 'safe' as PermissionMode, ultrathinkEnabled: true } },
+      { name: 'With Badges', props: { currentModel: 'claude-sonnet-4-20250514', permissionMode: 'safe' as PermissionMode } },
       { name: 'Processing', props: { currentModel: 'claude-sonnet-4-20250514', isProcessing: true } },
       { name: 'Disabled', props: { currentModel: 'claude-sonnet-4-20250514', disabled: true } },
       {
