@@ -1,0 +1,15 @@
+{
+  "id": "craft-public_7c3e9d2f",
+  "name": "Craft Public",
+  "slug": "craft-public",
+  "type": "mcp",
+  "provider": "craft",
+  "enabled": true,
+  "mcp": {
+    "transport": "http",
+    "url": "https://mcp.craft.do/links/4kAPGGJTV4e/mcp",
+    "authType": "none"
+  },
+  "icon": "https://craft.do/apple-touch-icon.png",
+  "tagline": "Public Craft workspace via shared workflow link"
+}
