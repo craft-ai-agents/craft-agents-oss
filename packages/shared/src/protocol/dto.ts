@@ -181,7 +181,6 @@ export type SessionEvent =
   | { type: 'usage_update'; sessionId: string; tokenUsage: { inputTokens: number; contextWindow?: number } }
 
 export interface SendMessageOptions {
-  ultrathinkEnabled?: boolean
   skillSlugs?: string[]
   badges?: ContentBadge[]
   optimisticMessageId?: string
