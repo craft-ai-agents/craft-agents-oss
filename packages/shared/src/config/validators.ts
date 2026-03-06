@@ -72,6 +72,8 @@ const LlmAuthTypeSchema = z.enum([
   'bearer_token', 'service_account_file', 'environment', 'none',
 ]);
 
+const ThinkingLevelSchema = z.enum(['off', 'think', 'max']);
+
 const LlmConnectionSchema = z.object({
   slug: z.string().min(1),
   name: z.string().min(1),
@@ -91,6 +93,7 @@ export const StoredConfigSchema = z.object({
   activeSessionId: z.string().nullable(),
   llmConnections: z.array(LlmConnectionSchema).optional(),
   defaultLlmConnection: z.string().optional(),
+  defaultThinkingLevel: ThinkingLevelSchema.optional(),
   // Note: tokenDisplay, showCost, cumulativeUsage, defaultPermissionMode removed
   // Permission mode and cyclable modes are now per-workspace in workspace config.json
 });

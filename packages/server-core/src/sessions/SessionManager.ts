@@ -18,7 +18,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getDefaultLlmConnection } from '@craft-agent/shared/config'
+import { getLlmConnection, getDefaultLlmConnection, getDefaultThinkingLevel } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { InitGate } from '@craft-agent/server-core/domain'
 import {
@@ -1890,8 +1890,11 @@ export class SessionManager implements ISessionManager {
       ?? globalDefaults.workspaceDefaults.permissionMode
 
     const userDefaultWorkingDir = wsConfig?.defaults?.workingDirectory || undefined
-    // Get default thinking level from workspace config, fallback to global defaults
-    const defaultThinkingLevel = wsConfig?.defaults?.thinkingLevel ?? globalDefaults.workspaceDefaults.thinkingLevel
+    // Get default thinking level for new sessions:
+    // workspace override > app-level default > bundled default
+    const defaultThinkingLevel = wsConfig?.defaults?.thinkingLevel
+      ?? getDefaultThinkingLevel()
+      ?? globalDefaults.workspaceDefaults.thinkingLevel
     // Get default model from workspace config (used when no session-specific model is set)
     const defaultModel = wsConfig?.defaults?.model
     // Get default enabled sources from workspace config

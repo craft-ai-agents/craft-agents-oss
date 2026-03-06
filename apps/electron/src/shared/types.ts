@@ -345,6 +345,10 @@ export interface ElectronAPI {
   setupLlmConnection(setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }>
   /** Unified connection test — spawns a lightweight agent subprocess to validate credentials */
   testLlmConnectionSetup(params: TestLlmConnectionParams): Promise<TestLlmConnectionResult>
+  /** App-level default thinking level for new sessions */
+  getDefaultThinkingLevel(): Promise<ThinkingLevel>
+  /** Persist app-level default thinking level for new sessions */
+  setDefaultThinkingLevel(level: ThinkingLevel): Promise<void>
 
   // Pi provider discovery (main process only — Pi SDK can't run in renderer)
   getPiApiKeyProviders(): Promise<Array<{ key: string; label: string; placeholder: string }>>
