@@ -686,7 +686,7 @@ export default function AiSettingsPage() {
       const method = connection.providerType === 'pi'
                    ? (connection.piAuthProvider === 'github-copilot' ? 'pi_copilot_oauth' : 'pi_chatgpt_oauth')
                    : 'claude_oauth'
-      apiSetupOnboarding.handleStartOAuth(method)
+      apiSetupOnboarding.handleStartOAuth(method, connection.slug)
     }
   }, [apiSetupOnboarding, openApiSetup])
 

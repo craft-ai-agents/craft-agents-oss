@@ -294,6 +294,8 @@ export interface LlmConnectionSetup {
   models?: string[] | null
   piAuthProvider?: string
   modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
+  /** When true, reject setup if the connection doesn't already exist (reauth guard). */
+  updateOnly?: boolean
 }
 
 export interface TestLlmConnectionParams {
