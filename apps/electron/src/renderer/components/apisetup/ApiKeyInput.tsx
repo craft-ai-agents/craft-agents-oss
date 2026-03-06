@@ -72,6 +72,7 @@ interface Preset {
 // Also used by Pi API key flow (same providers, routed via Pi SDK)
 const ANTHROPIC_PRESETS: Preset[] = [
   { key: 'anthropic', label: 'Anthropic', url: 'https://api.anthropic.com', placeholder: 'sk-ant-...' },
+  { key: 'kimi-coding', label: 'Kimi (Moonshot) - Coding Plan', url: 'https://api.kimi.com/coding', placeholder: 'sk-kimi-...' },
   { key: 'openai', label: 'OpenAI', url: 'https://api.openai.com/v1', placeholder: 'sk-...' },
   { key: 'google', label: 'Google AI Studio', url: 'https://generativelanguage.googleapis.com/v1beta', placeholder: 'AIza...' },
   { key: 'openrouter', label: 'OpenRouter', url: 'https://openrouter.ai/api/v1', placeholder: 'sk-or-...' },

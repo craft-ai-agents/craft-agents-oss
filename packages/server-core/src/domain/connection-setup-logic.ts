@@ -126,6 +126,7 @@ const PI_AUTH_PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   mistral: 'Mistral',
   xai: 'xAI',
   cerebras: 'Cerebras',
+  'kimi-coding': 'Kimi - Coding Plan',
   zai: 'z.ai',
   huggingface: 'Hugging Face',
   'vercel-ai-gateway': 'Vercel AI Gateway',
