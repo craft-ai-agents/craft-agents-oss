@@ -44,6 +44,12 @@ export interface IslandTransitionConfig {
   bounce?: number
   /** Enter/exit blur radius in px for content crossfade */
   blurPx?: number
+  /** Direction in degrees for directional enter/exit offset (0 = from right, 90 = from bottom). */
+  entryAngleDeg?: number
+  /** Directional travel distance in pixels for enter/exit offset. */
+  entryDistancePx?: number
+  /** Start scale used when no morph target scale is available. */
+  entryStartScale?: number
 }
 
 export interface IslandActiveViewSize {
@@ -63,12 +69,21 @@ export interface IslandProps {
   isVisible?: boolean
   /** Called after hide animation settles. Parent can unmount safely here. */
   onExitComplete?: () => void
+  /** Calls onRequestClose when pointer-down happens outside the island shell while visible. */
+  dismissOnPointerDownOutside?: boolean
+  /** Consumer callback for close/dismiss requests (outside tap, future escape key support, etc.). */
+  onRequestClose?: () => void
+  /** Locks document scrolling while the island is visible, regardless of active view-level lockScroll flags. */
+  lockScrollWhileVisible?: boolean
 }
 
 const DEFAULT_TRANSITION: Required<IslandTransitionConfig> = {
   duration: 0.4,
   bounce: 0.2,
   blurPx: 7,
+  entryAngleDeg: 0,
+  entryDistancePx: 0,
+  entryStartScale: 0.25,
 }
 
 const IslandAnimationContext = React.createContext<Required<IslandTransitionConfig>>(DEFAULT_TRANSITION)
@@ -120,6 +135,16 @@ function clampScale(value: number): number {
   return Math.max(0.06, Math.min(4, value))
 }
 
+function computeDirectionalOffset(angleDeg: number, distancePx: number): { x: number; y: number } {
+  if (!Number.isFinite(distancePx) || distancePx === 0) return { x: 0, y: 0 }
+
+  const angleRad = (Number.isFinite(angleDeg) ? angleDeg : 0) * (Math.PI / 180)
+  return {
+    x: Math.cos(angleRad) * distancePx,
+    y: Math.sin(angleRad) * distancePx,
+  }
+}
+
 function computeMorphDelta(
   elementRect: DOMRect,
   target: IslandMorphTarget,
@@ -164,6 +189,8 @@ export function Island({
   onActiveViewSizeChange,
   isVisible = true,
   onExitComplete,
+  dismissOnPointerDownOutside = false,
+  onRequestClose,
 }: IslandProps) {
   const shellRef = React.useRef<HTMLDivElement | null>(null)
   const activeViewRef = React.useRef<HTMLDivElement | null>(null)
@@ -172,6 +199,9 @@ export function Island({
   const [morphDelta, setMorphDelta] = React.useState<{ x: number; y: number; scaleX: number; scaleY: number } | null>(null)
   const warmedViewIdsRef = React.useRef<Set<string>>(new Set())
   const [isMorphWarmReady, setIsMorphWarmReady] = React.useState(true)
+  const hasRenderedVisibleRef = React.useRef<boolean>(false)
+  const spawnHiddenPoseRef = React.useRef<{ opacity: number; x: number; y: number; scaleX: number; scaleY: number } | null>(null)
+  const prevIsVisibleRef = React.useRef<boolean>(isVisible)
   const cfg = React.useMemo(
     () => ({ ...DEFAULT_TRANSITION, ...(transitionConfig ?? {}) }),
     [transitionConfig]
@@ -337,6 +367,24 @@ export function Island({
   }, [activeView?.id, activeView?.lockScroll, isVisible])
 
   React.useEffect(() => {
+    if (!dismissOnPointerDownOutside || !isVisible || !onRequestClose) return
+    if (typeof window === 'undefined') return
+
+    const onPointerDown = (event: PointerEvent) => {
+      const shell = shellRef.current
+      const target = event.target as Node | null
+      if (!shell || !target) return
+      if (shell.contains(target)) return
+      onRequestClose()
+    }
+
+    window.addEventListener('pointerdown', onPointerDown, true)
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, true)
+    }
+  }, [dismissOnPointerDownOutside, isVisible, onRequestClose])
+
+  React.useEffect(() => {
     if (!isTransitionSettling) return
 
     if (typeof window === 'undefined') {
@@ -411,12 +459,39 @@ export function Island({
 
   if (!activeView) return null
 
+  const FALLBACK_HIDDEN_SCALE = clampScale(cfg.entryStartScale)
+  const isPreShowWarmup = shouldMorph && isVisible && !isMorphWarmReady
+  const directionalOffset = React.useMemo(
+    () => computeDirectionalOffset(cfg.entryAngleDeg, cfg.entryDistancePx),
+    [cfg.entryAngleDeg, cfg.entryDistancePx]
+  )
+
+  const hasUsableMorphDelta = React.useMemo(() => {
+    if (!shouldMorph || !morphDelta) return false
+    if (typeof window === 'undefined') return true
+
+    // Guard against transiently bad frame calculations on first open.
+    // If delta is implausibly large, prefer in-place scale morph for that frame.
+    const maxX = window.innerWidth * 0.75
+    const maxY = window.innerHeight * 0.75
+    return Math.abs(morphDelta.x) <= maxX && Math.abs(morphDelta.y) <= maxY
+  }, [shouldMorph, morphDelta])
+
+  const hasEntryTranslation = Math.abs(cfg.entryDistancePx) > 0.0001
+  const hasEntryScale = transitionConfig?.entryStartScale != null && Math.abs(cfg.entryStartScale - 1) > 0.0001
+  const shouldAnimateFromHiddenOnMount = shouldMorph || hasEntryTranslation || hasEntryScale
+  const shouldUseConfiguredStartScale = transitionConfig?.entryStartScale != null
+
   const hiddenPose = {
     opacity: 0,
-    x: morphDelta?.x ?? 0,
-    y: morphDelta?.y ?? 0,
-    scaleX: morphDelta?.scaleX ?? 0.94,
-    scaleY: morphDelta?.scaleY ?? 0.94,
+    x: (hasUsableMorphDelta ? (morphDelta?.x ?? 0) : 0) + directionalOffset.x,
+    y: (hasUsableMorphDelta ? (morphDelta?.y ?? 0) : 0) + directionalOffset.y,
+    scaleX: (hasUsableMorphDelta && !shouldUseConfiguredStartScale)
+      ? (morphDelta?.scaleX ?? FALLBACK_HIDDEN_SCALE)
+      : FALLBACK_HIDDEN_SCALE,
+    scaleY: (hasUsableMorphDelta && !shouldUseConfiguredStartScale)
+      ? (morphDelta?.scaleY ?? FALLBACK_HIDDEN_SCALE)
+      : FALLBACK_HIDDEN_SCALE,
   }
 
   const visiblePose = {
@@ -427,16 +502,54 @@ export function Island({
     scaleY: 1,
   }
 
-  const effectiveVisible = shouldMorph ? (isVisible && isMorphWarmReady) : isVisible
+  React.useEffect(() => {
+    const isFirstVisibleFrame = isVisible && spawnHiddenPoseRef.current == null
+    const becameVisible = !prevIsVisibleRef.current && isVisible
+    if (isFirstVisibleFrame || becameVisible) {
+      // Remember the original spawn rectangle/pose so hide can always animate back to it
+      // even if content/view dimensions changed while the island was open.
+      spawnHiddenPoseRef.current = { ...hiddenPose }
+    }
+
+    if (!isVisible) {
+      // Keep last captured spawn pose for exit animation.
+      prevIsVisibleRef.current = false
+      return
+    }
+
+    prevIsVisibleRef.current = true
+  }, [isVisible, hiddenPose])
+
+  const shouldHideForWarmup = shouldMorph && isVisible && !isMorphWarmReady && !hasRenderedVisibleRef.current
+  const effectiveVisible = isVisible && !shouldHideForWarmup
+  const exitHiddenPose = spawnHiddenPoseRef.current ?? hiddenPose
+
+  React.useEffect(() => {
+    if (effectiveVisible) {
+      hasRenderedVisibleRef.current = true
+      return
+    }
+
+    if (!isVisible) {
+      hasRenderedVisibleRef.current = false
+    }
+  }, [effectiveVisible, isVisible])
+
+  const shellTransition = React.useMemo(
+    () => (isPreShowWarmup
+      ? ({ type: 'tween' as const, duration: 0 })
+      : layoutTransition),
+    [isPreShowWarmup, layoutTransition]
+  )
 
   return (
     <IslandAnimationContext.Provider value={cfg}>
       <motion.div
         ref={shellRef}
         layout
-        initial={shouldMorph ? hiddenPose : false}
-        animate={effectiveVisible ? visiblePose : hiddenPose}
-        transition={layoutTransition}
+        initial={shouldAnimateFromHiddenOnMount ? hiddenPose : false}
+        animate={effectiveVisible ? visiblePose : exitHiddenPose}
+        transition={shellTransition}
         style={{ borderRadius: radius, transformOrigin: '50% 50%' }}
         className={cn('mx-auto w-fit overflow-hidden border border-border/50 bg-background shadow-strong', className)}
       >

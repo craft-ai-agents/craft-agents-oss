@@ -32,6 +32,7 @@ import {
   IslandContentView,
   IslandFollowUpContentView,
   type IslandActiveViewSize,
+  type IslandTransitionConfig,
 } from '../ui'
 import { Tooltip, TooltipTrigger, TooltipContent } from '../tooltip'
 import { parseDiffFromFile, type FileContents } from '@pierre/diffs'
@@ -1397,8 +1398,63 @@ const ANNOTATION_PREFIX_SUFFIX_WINDOW = 24
 const SELECTION_MENU_VIEWPORT_PADDING = 12
 const SELECTION_MENU_DEFAULT_WIDTH_ESTIMATE = 192
 const SELECTION_POINTER_MAX_AGE_MS = 1500
+const SELECTION_MENU_DEFAULT_START_SCALE = 0.25
+const SELECTION_MENU_MIN_ENTRY_DISTANCE = 20
+const SELECTION_MENU_MAX_ENTRY_DISTANCE = 132
+const SELECTION_MENU_FALLBACK_ENTRY_DISTANCE = 44
+const SELECTION_MENU_SPEED_TO_DISTANCE_FACTOR = 0.065
 
 type SelectionMenuView = 'compact' | 'confirm-follow-up'
+
+type PointerSnapshot = {
+  x: number
+  y: number
+  ts: number
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
+function buildSelectionEntryTransition(from: PointerSnapshot | null, to: PointerSnapshot | null): IslandTransitionConfig {
+  if (!from || !to) {
+    return {
+      entryAngleDeg: 90,
+      entryDistancePx: SELECTION_MENU_FALLBACK_ENTRY_DISTANCE,
+      entryStartScale: SELECTION_MENU_DEFAULT_START_SCALE,
+    }
+  }
+
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const distancePx = Math.hypot(dx, dy)
+  const deltaMs = Math.max(12, to.ts - from.ts)
+  const speedPxPerSec = distancePx / (deltaMs / 1000)
+
+  // Pointer deltas use screen coordinates (Y grows downward). Flip Y to avoid vertical mirroring,
+  // then add 180° so the island comes from *behind* the drag direction ("catching up" effect).
+  // Example: drag left -> right => origin from left.
+  const angleDeg = (Math.atan2(-dy, dx) * 180 / Math.PI + 540) % 360
+  const derivedDistancePx = clamp(
+    speedPxPerSec * SELECTION_MENU_SPEED_TO_DISTANCE_FACTOR,
+    SELECTION_MENU_MIN_ENTRY_DISTANCE,
+    SELECTION_MENU_MAX_ENTRY_DISTANCE,
+  )
+
+  return {
+    entryAngleDeg: Number.isFinite(angleDeg) ? angleDeg : 90,
+    entryDistancePx: Number.isFinite(derivedDistancePx) ? derivedDistancePx : SELECTION_MENU_FALLBACK_ENTRY_DISTANCE,
+    entryStartScale: SELECTION_MENU_DEFAULT_START_SCALE,
+  }
+}
+
+function buildAnnotationChipEntryTransition(): IslandTransitionConfig {
+  return {
+    entryAngleDeg: 90,
+    entryDistancePx: 64,
+    entryStartScale: SELECTION_MENU_DEFAULT_START_SCALE,
+  }
+}
 
 type ActiveAnnotationDetail = {
   annotationId: string
@@ -1940,12 +1996,17 @@ export function ResponseCard({
   const [activeAnnotationDetail, setActiveAnnotationDetail] = useState<ActiveAnnotationDetail | null>(null)
   const [activeSelectionMenuSize, setActiveSelectionMenuSize] = useState<IslandActiveViewSize | null>(null)
   const [selectionMenuRenderAnchor, setSelectionMenuRenderAnchor] = useState<{ x: number; y: number } | null>(null)
+  const [selectionMenuRenderSourceKey, setSelectionMenuRenderSourceKey] = useState('none')
   const [isSelectionMenuVisible, setIsSelectionMenuVisible] = useState(false)
+  const [selectionMenuTransitionConfig, setSelectionMenuTransitionConfig] = useState<IslandTransitionConfig>(
+    buildAnnotationChipEntryTransition()
+  )
   const [annotationOverlay, setAnnotationOverlay] = useState<{ rects: AnnotationOverlayRect[]; chips: AnnotationOverlayChip[] }>({ rects: [], chips: [] })
   const contentRef = useRef<HTMLDivElement>(null)
   const contentLayerRef = useRef<HTMLDivElement>(null)
   const selectionMenuRef = useRef<HTMLDivElement>(null)
-  const lastPointerRef = useRef<{ x: number; y: number; ts: number } | null>(null)
+  const lastPointerRef = useRef<PointerSnapshot | null>(null)
+  const dragStartPointerRef = useRef<PointerSnapshot | null>(null)
   const selectionStartedInContentRef = useRef(false)
 
   // Detect dark mode from document class and listen for changes
@@ -1966,7 +2027,6 @@ export function ResponseCard({
     setSelectionMenuView('compact')
     setFollowUpDraft('')
     setActiveAnnotationDetail(null)
-    setActiveSelectionMenuSize(null)
   }, [])
 
   const handleCopy = useCallback(async () => {
@@ -2294,6 +2354,7 @@ export function ResponseCard({
       { type: 'note' }
     > | undefined
 
+    setSelectionMenuTransitionConfig(buildAnnotationChipEntryTransition())
     setPendingSelection(null)
     setFollowUpDraft(noteBody?.text ?? '')
     setActiveAnnotationDetail({ annotationId, index, anchorX, anchorY })
@@ -2309,11 +2370,14 @@ export function ResponseCard({
 
   const handleSelectionPointerDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     selectionStartedInContentRef.current = true
-    lastPointerRef.current = {
+    const snapshot = {
       x: event.clientX,
       y: event.clientY,
       ts: Date.now(),
     }
+
+    dragStartPointerRef.current = snapshot
+    lastPointerRef.current = snapshot
   }, [])
 
   const showSelectionMenuFromCurrentSelection = useCallback(() => {
@@ -2402,6 +2466,7 @@ export function ResponseCard({
         : anchorRect.left + (anchorRect.width / 2)
       const anchorY = anchorRect.top - 8
 
+      setSelectionMenuTransitionConfig(buildSelectionEntryTransition(dragStartPointerRef.current, pointer))
       setSelectionMenuView('compact')
       setFollowUpDraft('')
       setActiveSelectionMenuSize(null)
@@ -2414,6 +2479,7 @@ export function ResponseCard({
         anchorX,
         anchorY,
       })
+      dragStartPointerRef.current = null
     })
   }, [annotations, closeSelectionMenu])
 
@@ -2535,32 +2601,35 @@ export function ResponseCard({
     return null
   }, [pendingSelection, activeAnnotationDetail])
 
+  const selectionMenuSourceKey = useMemo(() => {
+    if (pendingSelection) {
+      return `selection:${pendingSelection.start}:${pendingSelection.end}`
+    }
+
+    if (activeAnnotationDetail) {
+      return `annotation:${activeAnnotationDetail.annotationId}`
+    }
+
+    return 'none'
+  }, [pendingSelection, activeAnnotationDetail])
+
   useEffect(() => {
     if (activeMenuAnchor) {
       setSelectionMenuRenderAnchor(activeMenuAnchor)
+      setSelectionMenuRenderSourceKey(selectionMenuSourceKey)
       setIsSelectionMenuVisible(true)
       return
     }
 
     setIsSelectionMenuVisible(false)
-  }, [activeMenuAnchor])
+  }, [activeMenuAnchor, selectionMenuSourceKey])
 
   const handleSelectionMenuExitComplete = useCallback(() => {
     if (activeMenuAnchor) return
     setSelectionMenuRenderAnchor(null)
+    setSelectionMenuRenderSourceKey('none')
     setActiveSelectionMenuSize(null)
   }, [activeMenuAnchor])
-
-  const selectionMenuMorphTarget = useMemo(() => {
-    if (!selectionMenuRenderAnchor) return null
-
-    return {
-      x: selectionMenuRenderAnchor.x,
-      y: Math.max(36, selectionMenuRenderAnchor.y),
-      width: 24,
-      height: 24,
-    }
-  }, [selectionMenuRenderAnchor])
 
   const selectionMenuAnchorX = useMemo(() => {
     if (typeof window === 'undefined') {
@@ -2588,14 +2657,16 @@ export function ResponseCard({
           onMouseDown={handleSelectionMenuMouseDown}
         >
           <Island
+            key={selectionMenuRenderSourceKey}
             activeViewId={selectionMenuView}
             radius={12}
             className="border-border/40 bg-background/75 backdrop-blur-xl backdrop-saturate-150 shadow-strong"
             onActiveViewSizeChange={setActiveSelectionMenuSize}
             isVisible={isSelectionMenuVisible}
             onExitComplete={handleSelectionMenuExitComplete}
+            transitionConfig={selectionMenuTransitionConfig}
           >
-            <IslandContentView id="compact" anchorX="center" anchorY="bottom" morphFrom={selectionMenuMorphTarget}>
+            <IslandContentView id="compact" anchorX="center" anchorY="bottom">
               <div className="p-1 flex items-center gap-1">
                 <button
                   type="button"
@@ -2626,7 +2697,6 @@ export function ResponseCard({
               placeholder="Add comments the agent should consider in the next turn…"
               maxInputHeight={320}
               sendMessageKey={sendMessageKey}
-              morphFrom={selectionMenuMorphTarget}
               lockScroll
             />
 
