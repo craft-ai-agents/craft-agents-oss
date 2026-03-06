@@ -108,6 +108,125 @@ export interface ContentBadge {
 }
 
 /**
+ * Author metadata for annotations
+ */
+export interface AnnotationAuthor {
+  id: string;
+  name?: string;
+  type?: 'user' | 'agent' | 'system';
+}
+
+/**
+ * Annotation body payloads (extensible)
+ */
+export type AnnotationBody =
+  | { type: 'highlight' }
+  | { type: 'note'; text: string; format?: 'plain' | 'markdown' }
+  | { type: 'tag'; value: string };
+
+/**
+ * Annotation intent (tight v1 semantics).
+ */
+export type AnnotationIntent = 'highlight' | 'comment' | 'question';
+
+/**
+ * Optional lifecycle status for annotation workflows.
+ */
+export type AnnotationStatus = 'pending' | 'acknowledged' | 'resolved' | 'dismissed';
+
+/**
+ * Block types for block selectors.
+ */
+export type AnnotationBlockType =
+  | 'paragraph'
+  | 'code'
+  | 'latex'
+  | 'mermaid'
+  | 'datatable'
+  | 'spreadsheet'
+  | 'image-preview'
+  | 'pdf-preview'
+  | 'html-preview';
+
+/**
+ * Selector union used to anchor an annotation target.
+ * Multiple selectors can be stored for robust fallback resolution.
+ */
+export type AnnotationSelector =
+  | {
+      type: 'text-quote';
+      exact: string;
+      prefix?: string;
+      suffix?: string;
+    }
+  | {
+      type: 'text-position';
+      start: number;
+      end: number;
+      textVersion?: string;
+    }
+  | {
+      type: 'block';
+      blockType: AnnotationBlockType;
+      path: string;
+      blockId?: string;
+    }
+  | {
+      type: 'xywh';
+      unit: 'pixel' | 'percent';
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      page?: number;
+      rotation?: number;
+    }
+  | {
+      type: 'table-cell';
+      rowKey: string | number;
+      columnKey: string;
+    };
+
+/**
+ * Annotation target definition.
+ */
+export interface AnnotationTarget {
+  source: {
+    sessionId: string;
+    messageId: string;
+  };
+  selectors: AnnotationSelector[];
+}
+
+/**
+ * Persisted annotation payload (schema-versioned for migration safety).
+ */
+export interface AnnotationV1 {
+  id: string;
+  schemaVersion: 1;
+  createdAt: number;
+  updatedAt?: number;
+  createdBy?: AnnotationAuthor;
+  deletedAt?: number;
+  body: AnnotationBody[];
+  target: AnnotationTarget;
+  /** Optional workflow intent (tight v1 semantics). */
+  intent?: AnnotationIntent;
+  /** Optional lifecycle status. */
+  status?: AnnotationStatus;
+  /** Optional reference to the conversation/thread around this annotation. */
+  threadRef?: {
+    threadId?: string;
+    sessionId?: string;
+  };
+  style?: {
+    color?: 'yellow' | 'green' | 'blue' | 'pink' | string;
+    opacity?: number;
+  };
+  meta?: Record<string, unknown>;
+}
+
+/**
  * Stored attachment metadata (persisted to disk, no base64)
  * Created when user sends a message with attachments
  */
@@ -156,6 +275,8 @@ export interface Message {
   attachments?: StoredAttachment[];
   // Content badges for inline display (sources, skills)
   badges?: ContentBadge[];
+  /** Annotation payloads for this message */
+  annotations?: AnnotationV1[];
   isError?: boolean;
   isStreaming?: boolean;
   // Pending: streaming text where we don't yet know if it's intermediate
@@ -235,6 +356,8 @@ export interface StoredMessage {
   attachments?: StoredAttachment[];
   /** Content badges for inline display (sources, skills) */
   badges?: ContentBadge[];
+  /** Annotations persisted at message level */
+  annotations?: AnnotationV1[];
   // Turn grouping - critical for TurnCard rendering after reload
   isIntermediate?: boolean;
   turnId?: string;

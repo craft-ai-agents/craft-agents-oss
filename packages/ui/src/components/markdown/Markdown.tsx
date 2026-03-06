@@ -91,6 +91,15 @@ interface CollapsibleContext {
  * @param hideFirstMermaidExpand - Whether to hide the expand button on the first
  *   mermaid block when the message starts with a mermaid fence. Defaults to true.
  */
+function stableHash(input: string): string {
+  let hash = 2166136261
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36)
+}
+
 function createComponents(
   mode: RenderMode,
   onUrlClick?: (url: string) => void,
@@ -99,6 +108,32 @@ function createComponents(
   firstMermaidCodeRef?: React.RefObject<string | null>,
   hideFirstMermaidExpand: boolean = true
 ): Partial<Components> {
+  let blockIndex = 0
+  const wrapBlock = (
+    blockType: string,
+    content: string,
+    child: React.ReactNode,
+    nodePosition?: { start?: { line?: number }; end?: { line?: number } },
+  ) => {
+    blockIndex += 1
+    const startLine = nodePosition?.start?.line
+    const endLine = nodePosition?.end?.line
+    const path = startLine && endLine
+      ? `line:${startLine}-${endLine}`
+      : `idx:${blockIndex}`
+    const blockId = `blk-${stableHash(`${blockType}|${path}|${content.slice(0, 240)}`)}`
+
+    return (
+      <div
+        data-ca-block-type={blockType}
+        data-ca-block-path={path}
+        data-ca-block-id={blockId}
+      >
+        {child}
+      </div>
+    )
+  }
+
   const baseComponents: Partial<Components> = {
     // Section wrapper for collapsible headings
     div: ({ node, children, ...props }) => {
@@ -197,35 +232,35 @@ function createComponents(
           const code = String(children).replace(/\n$/, '')
           // Diff code blocks → pierre/diffs for a proper diff viewer
           if (match?.[1] === 'diff') {
-            return <MarkdownDiffBlock code={code} className="my-2" />
+            return wrapBlock('code', code, <MarkdownDiffBlock code={code} className="my-2" />, props.node?.position)
           }
           // JSON code blocks → interactive tree viewer
           if (match?.[1] === 'json') {
-            return <MarkdownJsonBlock code={code} className="my-2" />
+            return wrapBlock('code', code, <MarkdownJsonBlock code={code} className="my-2" />, props.node?.position)
           }
           // Datatable code blocks → sortable/filterable data table
           if (match?.[1] === 'datatable') {
-            return <MarkdownDatatableBlock code={code} className="my-2" />
+            return wrapBlock('datatable', code, <MarkdownDatatableBlock code={code} className="my-2" />, props.node?.position)
           }
           // Spreadsheet code blocks → Excel-style grid
           if (match?.[1] === 'spreadsheet') {
-            return <MarkdownSpreadsheetBlock code={code} className="my-2" />
+            return wrapBlock('spreadsheet', code, <MarkdownSpreadsheetBlock code={code} className="my-2" />, props.node?.position)
           }
           // HTML preview blocks → sandboxed iframe
           if (match?.[1] === 'html-preview') {
-            return <MarkdownHtmlBlock code={code} className="my-2" />
+            return wrapBlock('html-preview', code, <MarkdownHtmlBlock code={code} className="my-2" />, props.node?.position)
           }
           // PDF preview blocks → inline first page with expand to full viewer
           if (match?.[1] === 'pdf-preview') {
-            return <MarkdownPdfBlock code={code} className="my-2" />
+            return wrapBlock('pdf-preview', code, <MarkdownPdfBlock code={code} className="my-2" />, props.node?.position)
           }
           // Image preview blocks → inline image with expand to full viewer
           if (match?.[1] === 'image-preview') {
-            return <MarkdownImageBlock code={code} className="my-2" />
+            return wrapBlock('image-preview', code, <MarkdownImageBlock code={code} className="my-2" />, props.node?.position)
           }
           // LaTeX/math code blocks → KaTeX rendered display math
           if (match?.[1] === 'latex' || match?.[1] === 'math') {
-            return <MarkdownLatexBlock code={code} className="my-2" />
+            return wrapBlock('latex', code, <MarkdownLatexBlock code={code} className="my-2" />, props.node?.position)
           }
           // Mermaid code blocks → zinc-styled SVG diagram.
           // Hide the inline expand button when the mermaid block is the first
@@ -237,9 +272,14 @@ function createComponents(
             const isFirstBlock = hideFirstMermaidExpand &&
                                 firstMermaidCodeRef?.current != null &&
                                 code === firstMermaidCodeRef.current
-            return <MarkdownMermaidBlock code={code} className="my-2" showExpandButton={!isFirstBlock} />
+            return wrapBlock(
+              'mermaid',
+              code,
+              <MarkdownMermaidBlock code={code} className="my-2" showExpandButton={!isFirstBlock} />,
+              props.node?.position,
+            )
           }
-          return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-2" />
+          return wrapBlock('code', code, <CodeBlock code={code} language={match?.[1]} mode="full" className="my-2" />, props.node?.position)
         }
 
         // Inline code
@@ -321,35 +361,35 @@ function createComponents(
         const code = String(children).replace(/\n$/, '')
         // Diff code blocks → pierre/diffs for a proper diff viewer
         if (match?.[1] === 'diff') {
-          return <MarkdownDiffBlock code={code} className="my-2" />
+          return wrapBlock('code', code, <MarkdownDiffBlock code={code} className="my-2" />, props.node?.position)
         }
         // JSON code blocks → interactive tree viewer
         if (match?.[1] === 'json') {
-          return <MarkdownJsonBlock code={code} className="my-2" />
+          return wrapBlock('code', code, <MarkdownJsonBlock code={code} className="my-2" />, props.node?.position)
         }
         // Datatable code blocks → sortable/filterable data table
         if (match?.[1] === 'datatable') {
-          return <MarkdownDatatableBlock code={code} className="my-2" />
+          return wrapBlock('datatable', code, <MarkdownDatatableBlock code={code} className="my-2" />, props.node?.position)
         }
         // Spreadsheet code blocks → Excel-style grid
         if (match?.[1] === 'spreadsheet') {
-          return <MarkdownSpreadsheetBlock code={code} className="my-2" />
+          return wrapBlock('spreadsheet', code, <MarkdownSpreadsheetBlock code={code} className="my-2" />, props.node?.position)
         }
         // HTML preview blocks → sandboxed iframe
         if (match?.[1] === 'html-preview') {
-          return <MarkdownHtmlBlock code={code} className="my-2" />
+          return wrapBlock('html-preview', code, <MarkdownHtmlBlock code={code} className="my-2" />, props.node?.position)
         }
         // PDF preview blocks → inline first page with expand to full viewer
         if (match?.[1] === 'pdf-preview') {
-          return <MarkdownPdfBlock code={code} className="my-2" />
+          return wrapBlock('pdf-preview', code, <MarkdownPdfBlock code={code} className="my-2" />, props.node?.position)
         }
         // Image preview blocks → inline image with expand to full viewer
         if (match?.[1] === 'image-preview') {
-          return <MarkdownImageBlock code={code} className="my-2" />
+          return wrapBlock('image-preview', code, <MarkdownImageBlock code={code} className="my-2" />, props.node?.position)
         }
         // LaTeX/math code blocks → KaTeX rendered display math
         if (match?.[1] === 'latex' || match?.[1] === 'math') {
-          return <MarkdownLatexBlock code={code} className="my-2" />
+          return wrapBlock('latex', code, <MarkdownLatexBlock code={code} className="my-2" />, props.node?.position)
         }
         // Mermaid code blocks → zinc-styled SVG diagram.
         // (Same first-block detection as minimal mode — see comment above.)
@@ -357,9 +397,14 @@ function createComponents(
           const isFirstBlock = hideFirstMermaidExpand &&
                               firstMermaidCodeRef?.current != null &&
                               code === firstMermaidCodeRef.current
-          return <MarkdownMermaidBlock code={code} className="my-2" showExpandButton={!isFirstBlock} />
+          return wrapBlock(
+            'mermaid',
+            code,
+            <MarkdownMermaidBlock code={code} className="my-2" showExpandButton={!isFirstBlock} />,
+            props.node?.position,
+          )
         }
-        return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-2" />
+        return wrapBlock('code', code, <CodeBlock code={code} language={match?.[1]} mode="full" className="my-2" />, props.node?.position)
       }
 
       return <InlineCode>{children}</InlineCode>

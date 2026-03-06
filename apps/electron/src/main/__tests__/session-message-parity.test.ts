@@ -39,6 +39,21 @@ function createFullMessage(): Message {
     isError: false,
     attachments: [{ id: 'att-1', type: 'text', name: 'file.txt', mimeType: 'text/plain', size: 100, storedPath: '/path' }],
     badges: [{ type: 'source', label: 'Linear', rawText: '@linear', start: 0, end: 7 }],
+    annotations: [{
+      id: 'ann-1',
+      schemaVersion: 1,
+      createdAt: 1700000000100,
+      intent: 'highlight',
+      body: [{ type: 'highlight' }],
+      target: {
+        source: { sessionId: 'session-1', messageId: 'msg-full-test' },
+        selectors: [
+          { type: 'text-position', start: 0, end: 4 },
+          { type: 'text-quote', exact: 'Tool', prefix: '', suffix: ' output' },
+        ],
+      },
+      style: { color: 'yellow', opacity: 0.35 },
+    }],
     isStreaming: false,
     isPending: false,
     isIntermediate: false,
@@ -103,7 +118,7 @@ describe('messageToStored/storedToMessage round-trip', () => {
       'toolDuration', 'toolIntent', 'toolDisplayName', 'toolDisplayMeta',
       'parentToolUseId',
       'taskId', 'shellId', 'elapsedSeconds', 'isBackground',
-      'isError', 'attachments', 'badges',
+      'isError', 'attachments', 'badges', 'annotations',
       'isIntermediate', 'turnId', 'infoLevel',
       'errorCode', 'errorTitle', 'errorDetails', 'errorOriginal', 'errorCanRetry',
       'planPath',
@@ -145,6 +160,7 @@ describe('messageToStored/storedToMessage round-trip', () => {
     expect(restored.isError).toBe(original.isError)
     expect(restored.attachments).toEqual(original.attachments)
     expect(restored.badges).toEqual(original.badges)
+    expect(restored.annotations).toEqual(original.annotations)
     expect(restored.isIntermediate).toBe(original.isIntermediate)
     expect(restored.turnId).toBe(original.turnId)
     expect(restored.infoLevel).toBe(original.infoLevel)

@@ -102,6 +102,8 @@ export const AGENT_FLAGS = {
 } as const
 
 const MAX_ADMIN_REMEMBER_MINUTES = 60
+const MAX_ANNOTATIONS_PER_MESSAGE = 200
+const MAX_ANNOTATION_JSON_BYTES = 32 * 1024
 
 /**
  * Validate spawn attachment path using the same safety policy as IPC attachment reads.
@@ -3907,6 +3909,173 @@ export class SessionManager {
     // Persist the updated session
     this.persistSession(managed)
     sessionLog.info(`Updated message ${messageId} content in session ${sessionId}`)
+  }
+
+  /**
+   * Add an annotation to a message and persist the session.
+   */
+  addMessageAnnotation(sessionId: string, messageId: string, annotation: NonNullable<Message['annotations']>[number]): void {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) {
+      sessionLog.warn(`Cannot add annotation: session ${sessionId} not found`)
+      return
+    }
+
+    const message = managed.messages.find(m => m.id === messageId)
+    if (!message) {
+      sessionLog.warn(`Cannot add annotation: message ${messageId} not found in session ${sessionId}`)
+      return
+    }
+
+    if (!annotation?.id || !annotation?.target?.selectors?.length) {
+      sessionLog.warn(`Cannot add annotation: invalid annotation payload for message ${messageId}`)
+      return
+    }
+
+    if (annotation.target.source.messageId !== messageId) {
+      sessionLog.warn(`Cannot add annotation: target source.messageId mismatch (${annotation.target.source.messageId} !== ${messageId})`)
+      return
+    }
+
+    const safeAnnotation: NonNullable<Message['annotations']>[number] = {
+      ...annotation,
+      schemaVersion: 1,
+      target: {
+        ...annotation.target,
+        source: {
+          ...annotation.target.source,
+          sessionId,
+          messageId,
+        },
+      },
+    }
+
+    const annotationBytes = Buffer.byteLength(JSON.stringify(safeAnnotation), 'utf8')
+    if (annotationBytes > MAX_ANNOTATION_JSON_BYTES) {
+      sessionLog.warn(`Cannot add annotation: payload too large (${annotationBytes} bytes > ${MAX_ANNOTATION_JSON_BYTES}) on message ${messageId}`)
+      return
+    }
+
+    const existing = message.annotations ?? []
+    if (existing.some(a => a.id === safeAnnotation.id)) {
+      sessionLog.warn(`Cannot add annotation: duplicate annotation id ${safeAnnotation.id} on message ${messageId}`)
+      return
+    }
+
+    if (existing.length >= MAX_ANNOTATIONS_PER_MESSAGE) {
+      sessionLog.warn(`Cannot add annotation: per-message limit reached (${MAX_ANNOTATIONS_PER_MESSAGE}) on message ${messageId}`)
+      return
+    }
+
+    message.annotations = [...existing, safeAnnotation]
+    this.persistSession(managed)
+    this.sendEvent({ type: 'message_annotations_updated', sessionId, messageId, annotations: message.annotations }, managed.workspace.id)
+  }
+
+  /**
+   * Patch an existing annotation on a message.
+   */
+  updateMessageAnnotation(
+    sessionId: string,
+    messageId: string,
+    annotationId: string,
+    patch: Partial<NonNullable<Message['annotations']>[number]>
+  ): void {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) {
+      sessionLog.warn(`Cannot update annotation: session ${sessionId} not found`)
+      return
+    }
+
+    const message = managed.messages.find(m => m.id === messageId)
+    if (!message) {
+      sessionLog.warn(`Cannot update annotation: message ${messageId} not found in session ${sessionId}`)
+      return
+    }
+
+    const existing = message.annotations ?? []
+    const idx = existing.findIndex(a => a.id === annotationId)
+    if (idx === -1) {
+      sessionLog.warn(`Cannot update annotation: annotation ${annotationId} not found on message ${messageId}`)
+      return
+    }
+
+    if (patch.target?.source?.messageId && patch.target.source.messageId !== messageId) {
+      sessionLog.warn(`Cannot update annotation: target source.messageId mismatch in patch (${patch.target.source.messageId} !== ${messageId})`)
+      return
+    }
+
+    if (patch.target?.selectors && patch.target.selectors.length === 0) {
+      sessionLog.warn(`Cannot update annotation: empty selectors patch for annotation ${annotationId} on message ${messageId}`)
+      return
+    }
+
+    const current = existing[idx]!
+    const updated = {
+      ...current,
+      ...patch,
+      id: current.id,
+      schemaVersion: current.schemaVersion,
+      target: patch.target
+        ? {
+            ...current.target,
+            ...patch.target,
+            source: {
+              ...current.target.source,
+              ...(patch.target.source ?? {}),
+              sessionId,
+              messageId,
+            },
+          }
+        : {
+            ...current.target,
+            source: {
+              ...current.target.source,
+              sessionId,
+              messageId,
+            },
+          },
+      updatedAt: Date.now(),
+    }
+
+    const updatedBytes = Buffer.byteLength(JSON.stringify(updated), 'utf8')
+    if (updatedBytes > MAX_ANNOTATION_JSON_BYTES) {
+      sessionLog.warn(`Cannot update annotation: payload too large (${updatedBytes} bytes > ${MAX_ANNOTATION_JSON_BYTES}) for annotation ${annotationId} on message ${messageId}`)
+      return
+    }
+
+    const next = [...existing]
+    next[idx] = updated
+    message.annotations = next
+    this.persistSession(managed)
+    this.sendEvent({ type: 'message_annotations_updated', sessionId, messageId, annotations: message.annotations }, managed.workspace.id)
+  }
+
+  /**
+   * Remove an annotation from a message and persist the session.
+   */
+  removeMessageAnnotation(sessionId: string, messageId: string, annotationId: string): void {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) {
+      sessionLog.warn(`Cannot remove annotation: session ${sessionId} not found`)
+      return
+    }
+
+    const message = managed.messages.find(m => m.id === messageId)
+    if (!message) {
+      sessionLog.warn(`Cannot remove annotation: message ${messageId} not found in session ${sessionId}`)
+      return
+    }
+
+    const existing = message.annotations ?? []
+    if (!existing.some(a => a.id === annotationId)) {
+      sessionLog.warn(`Cannot remove annotation: annotation ${annotationId} not found on message ${messageId}`)
+      return
+    }
+
+    message.annotations = existing.filter(a => a.id !== annotationId)
+    this.persistSession(managed)
+    this.sendEvent({ type: 'message_annotations_updated', sessionId, messageId, annotations: message.annotations }, managed.workspace.id)
   }
 
   async deleteSession(sessionId: string): Promise<void> {

@@ -59,6 +59,7 @@ class ImageBlockErrorBoundary extends React.Component<
 export interface MarkdownImageBlockProps {
   code: string
   className?: string
+  onCreateRegionAnnotation?: (region: { x: number; y: number; w: number; h: number; unit: 'pixel' | 'percent' }) => void
 }
 
 function detectImageRatio(src: string): Promise<number | null> {
@@ -76,7 +77,7 @@ function detectImageRatio(src: string): Promise<number | null> {
   })
 }
 
-export function MarkdownImageBlock({ code, className }: MarkdownImageBlockProps) {
+export function MarkdownImageBlock({ code, className, onCreateRegionAnnotation: _onCreateRegionAnnotation }: MarkdownImageBlockProps) {
   const { onReadFileDataUrl } = usePlatform()
 
   const spec = React.useMemo<ImagePreviewSpec | null>(() => {

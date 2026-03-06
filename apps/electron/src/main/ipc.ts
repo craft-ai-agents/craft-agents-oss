@@ -426,6 +426,12 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         return sessionManager.setSessionSources(sessionId, command.sourceSlugs)
       case 'setLabels':
         return sessionManager.setSessionLabels(sessionId, command.labels)
+      case 'addAnnotation':
+        return sessionManager.addMessageAnnotation(sessionId, command.messageId, command.annotation)
+      case 'updateAnnotation':
+        return sessionManager.updateMessageAnnotation(sessionId, command.messageId, command.annotationId, command.patch)
+      case 'removeAnnotation':
+        return sessionManager.removeMessageAnnotation(sessionId, command.messageId, command.annotationId)
       case 'showInFinder': {
         const sessionPath = sessionManager.getSessionPath(sessionId)
         if (sessionPath) {

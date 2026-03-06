@@ -1505,6 +1505,20 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                             toast.error('Could not create branch', { description: message })
                           }
                         } : undefined}
+                        onAddAnnotation={async (messageId, annotation) => {
+                          if (!session) return
+                          try {
+                            await window.electronAPI.sessionCommand(session.id, {
+                              type: 'addAnnotation',
+                              messageId,
+                              annotation,
+                            })
+                          } catch (error) {
+                            toast.error('Could not save highlight', {
+                              description: error instanceof Error ? error.message : 'Unknown error',
+                            })
+                          }
+                        }}
                         onAcceptPlan={() => {
                           window.dispatchEvent(new CustomEvent('craft:approve-plan', {
                             detail: { text: 'Plan approved, please execute.', sessionId: session?.id }

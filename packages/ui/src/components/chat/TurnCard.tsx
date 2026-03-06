@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useMemo, useEffect, useRef, useCallback, useState } from 'react'
-import type { ToolDisplayMeta } from '@craft-agent/core'
+import type { ToolDisplayMeta, AnnotationV1 } from '@craft-agent/core'
 import { normalizePath, pathStartsWith, stripPathPrefix } from '@craft-agent/core/utils'
 import { motion, AnimatePresence } from 'motion/react'
 import {
@@ -25,6 +25,7 @@ import {
 import * as ReactDOM from 'react-dom'
 import { cn } from '../../lib/utils'
 import { Markdown } from '../markdown'
+import { resolveTextAnnotations } from '../markdown/annotation-resolver'
 import { Spinner } from '../ui/LoadingIndicator'
 import { Tooltip, TooltipTrigger, TooltipContent } from '../tooltip'
 import { parseDiffFromFile, type FileContents } from '@pierre/diffs'
@@ -215,8 +216,10 @@ export interface ResponseContent {
   streamStartTime?: number
   /** Whether this response is a plan (renders with plan variant) */
   isPlan?: boolean
-  /** ID of the underlying message (for branching) */
+  /** ID of the underlying message (for branching + annotations) */
   messageId?: string
+  /** Persisted annotations attached to the response message */
+  annotations?: AnnotationV1[]
 }
 
 // ============================================================================
@@ -282,6 +285,8 @@ export interface TurnCardProps {
   compactMode?: boolean
   /** Callback to branch the session from a specific message */
   onBranch?: (messageId: string, options?: { newPanel?: boolean }) => void
+  /** Callback to add an annotation to a response message */
+  onAddAnnotation?: (messageId: string, annotation: AnnotationV1) => void
 }
 
 // ============================================================================
@@ -1307,6 +1312,10 @@ export interface ResponseCardProps {
   onPopOut?: () => void
   /** Card variant - 'response' for AI messages, 'plan' for plan messages */
   variant?: 'response' | 'plan'
+  /** Underlying message ID for annotation actions */
+  messageId?: string
+  /** Persisted annotations for this response */
+  annotations?: AnnotationV1[]
   /** Callback when user accepts the plan (plan variant only) */
   onAccept?: () => void
   /** Callback when user accepts the plan with compaction (compact first, then execute) */
@@ -1319,6 +1328,8 @@ export interface ResponseCardProps {
   compactMode?: boolean
   /** Callback to branch the session from this response */
   onBranch?: (options?: { newPanel?: boolean }) => void
+  /** Callback to add annotation from selected text */
+  onAddAnnotation?: (messageId: string, annotation: AnnotationV1) => void
 }
 
 interface BranchDropdownProps {
@@ -1364,6 +1375,118 @@ function BranchDropdown({ onBranch }: BranchDropdownProps) {
 
 const MAX_HEIGHT = 540
 
+const ANNOTATION_PREFIX_SUFFIX_WINDOW = 24
+
+function annotationColorToCss(color?: string): string {
+  switch (color) {
+    case 'green':
+      return 'rgba(74, 222, 128, 0.35)'
+    case 'blue':
+      return 'rgba(96, 165, 250, 0.35)'
+    case 'pink':
+      return 'rgba(244, 114, 182, 0.35)'
+    case 'yellow':
+    default:
+      return 'rgba(250, 204, 21, 0.35)'
+  }
+}
+
+function collectTextSegments(root: HTMLElement): Array<{ node: Text; start: number; end: number }> {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  const segments: Array<{ node: Text; start: number; end: number }> = []
+  let cursor = 0
+  let current = walker.nextNode()
+  while (current) {
+    const node = current as Text
+    const len = node.nodeValue?.length ?? 0
+    segments.push({ node, start: cursor, end: cursor + len })
+    cursor += len
+    current = walker.nextNode()
+  }
+  return segments
+}
+
+function resolveNodeOffset(root: HTMLElement, targetNode: Node, nodeOffset: number): number | null {
+  const segments = collectTextSegments(root)
+  for (const segment of segments) {
+    if (segment.node === targetNode) {
+      return segment.start + nodeOffset
+    }
+  }
+  return null
+}
+
+function clearAnnotationMarks(root: HTMLElement): void {
+  const marks = root.querySelectorAll('span[data-ca-annotation-id]')
+  marks.forEach(mark => {
+    const parent = mark.parentNode
+    if (!parent) return
+    parent.replaceChild(document.createTextNode(mark.textContent || ''), mark)
+    parent.normalize()
+  })
+}
+
+function applyTextHighlightRange(
+  root: HTMLElement,
+  range: { start: number; end: number },
+  annotation: AnnotationV1,
+): void {
+  if (range.end <= range.start) return
+
+  const segments = collectTextSegments(root)
+  for (const segment of segments) {
+    if (segment.end <= range.start || segment.start >= range.end) continue
+
+    const localStart = Math.max(range.start, segment.start) - segment.start
+    const localEnd = Math.min(range.end, segment.end) - segment.start
+    if (localEnd <= localStart) continue
+
+    const source = segment.node
+    const after = source.splitText(localEnd)
+    const selected = source.splitText(localStart)
+
+    const mark = document.createElement('span')
+    mark.setAttribute('data-ca-annotation-id', annotation.id)
+    mark.style.backgroundColor = annotationColorToCss(annotation.style?.color)
+    mark.style.borderRadius = '2px'
+    mark.style.padding = '0 1px'
+    selected.parentNode?.replaceChild(mark, selected)
+    mark.appendChild(selected)
+
+    // Keep reference alive for TS and clarity
+    void after
+  }
+}
+
+function clearBlockAnnotationMarkers(root: HTMLElement): void {
+  const blocks = root.querySelectorAll<HTMLElement>('[data-ca-block-annotated="true"]')
+  blocks.forEach((block) => {
+    block.removeAttribute('data-ca-block-annotated')
+    block.style.boxShadow = ''
+    block.style.borderRadius = ''
+  })
+}
+
+function applyBlockAnnotationMarker(root: HTMLElement, annotation: AnnotationV1): void {
+  const blockSelector = annotation.target.selectors.find(s => s.type === 'block') as Extract<
+    AnnotationV1['target']['selectors'][number],
+    { type: 'block' }
+  > | undefined
+
+  if (!blockSelector) return
+
+  const selector = blockSelector.blockId
+    ? `[data-ca-block-id="${CSS.escape(blockSelector.blockId)}"]`
+    : `[data-ca-block-path="${CSS.escape(blockSelector.path)}"]`
+
+  const target = root.querySelector<HTMLElement>(selector)
+  if (!target) return
+
+  target.setAttribute('data-ca-block-annotated', 'true')
+  target.style.boxShadow = `inset 3px 0 0 ${annotationColorToCss(annotation.style?.color)}`
+  target.style.borderRadius = '6px'
+}
+
 /**
  * ResponseCard - Unified card component for AI responses and plans
  *
@@ -1388,12 +1511,15 @@ export function ResponseCard({
   onOpenUrl,
   onPopOut,
   variant = 'response',
+  messageId,
+  annotations,
   onAccept,
   onAcceptWithCompact,
   isLastResponse = true,
   showAcceptPlan = true,
   compactMode = false,
   onBranch,
+  onAddAnnotation,
 }: ResponseCardProps) {
   // Throttled content for display - updates every CONTENT_THROTTLE_MS during streaming
   const [displayedText, setDisplayedText] = useState(text)
@@ -1404,6 +1530,7 @@ export function ResponseCard({
   const [isFullscreen, setIsFullscreen] = useState(false)
   // Dark mode detection - scroll fade only shown in dark mode
   const [isDarkMode, setIsDarkMode] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
 
   // Detect dark mode from document class and listen for changes
   useEffect(() => {
@@ -1427,6 +1554,144 @@ export function ResponseCard({
       console.error('Failed to copy:', err)
     }
   }, [text])
+
+  useEffect(() => {
+    const root = contentRef.current
+    if (!root) return
+
+    clearAnnotationMarks(root)
+    clearBlockAnnotationMarkers(root)
+
+    if (!annotations?.length) return
+
+    // Apply from end to start to keep text offsets stable while wrapping nodes.
+    const fullText = root.textContent || ''
+    const resolution = resolveTextAnnotations(fullText, annotations)
+    const resolved = resolution.resolved
+      .slice()
+      .sort((a, b) => b.range.start - a.range.start)
+
+    for (const item of resolved) {
+      applyTextHighlightRange(root, item.range, item.annotation)
+    }
+
+    for (const annotation of annotations) {
+      applyBlockAnnotationMarker(root, annotation)
+    }
+
+    if (process.env.NODE_ENV !== 'production' && resolution.unresolved.length > 0) {
+      console.debug('[annotations] unresolved annotations', {
+        count: resolution.unresolved.length,
+        ids: resolution.unresolved.map(item => item.annotation.id),
+        reasons: resolution.unresolved.map(item => item.reason),
+      })
+    }
+  }, [annotations, text, displayedText, isStreaming])
+
+  const handleTextSelection = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!onAddAnnotation || !messageId || variant !== 'response' || isStreaming) return
+    const root = contentRef.current
+    if (!root) return
+
+    // Block annotation gesture: Shift+click on a block wrapper
+    if (event.shiftKey) {
+      const targetElement = event.target instanceof Element ? event.target : null
+      const blockElement = targetElement?.closest<HTMLElement>('[data-ca-block-path]')
+      if (blockElement) {
+        const blockPath = blockElement.getAttribute('data-ca-block-path') || ''
+        const blockType = blockElement.getAttribute('data-ca-block-type') || 'paragraph'
+        const blockId = blockElement.getAttribute('data-ca-block-id') || undefined
+
+        if (blockPath) {
+          const alreadyExists = (annotations ?? []).some(annotation => {
+            const blockSelector = annotation.target.selectors.find(s => s.type === 'block') as Extract<
+              AnnotationV1['target']['selectors'][number],
+              { type: 'block' }
+            > | undefined
+            if (!blockSelector) return false
+            if (blockId && blockSelector.blockId) return blockSelector.blockId === blockId
+            return blockSelector.path === blockPath
+          })
+
+          if (!alreadyExists) {
+            const annotation: AnnotationV1 = {
+              id: `ann-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              schemaVersion: 1,
+              createdAt: Date.now(),
+              intent: 'highlight',
+              body: [{ type: 'highlight' }],
+              target: {
+                source: {
+                  sessionId: '',
+                  messageId,
+                },
+                selectors: [
+                  {
+                    type: 'block',
+                    blockType: blockType as Extract<AnnotationV1['target']['selectors'][number], { type: 'block' }>['blockType'],
+                    path: blockPath,
+                    ...(blockId ? { blockId } : {}),
+                  },
+                ],
+              },
+              style: { color: 'yellow', opacity: 0.35 },
+            }
+            onAddAnnotation(messageId, annotation)
+          }
+        }
+      }
+      return
+    }
+
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return
+
+    const range = selection.getRangeAt(0)
+    if (!root.contains(range.commonAncestorContainer)) return
+
+    const start = resolveNodeOffset(root, range.startContainer, range.startOffset)
+    const end = resolveNodeOffset(root, range.endContainer, range.endOffset)
+    if (start == null || end == null || end <= start) return
+
+    const selectedText = range.toString()
+    if (!selectedText || !/\S/.test(selectedText)) return
+
+    const fullText = root.textContent || ''
+    const prefix = fullText.slice(Math.max(0, start - ANNOTATION_PREFIX_SUFFIX_WINDOW), start)
+    const suffix = fullText.slice(end, end + ANNOTATION_PREFIX_SUFFIX_WINDOW)
+
+    const alreadyExists = (annotations ?? []).some(annotation => {
+      const pos = annotation.target.selectors.find(s => s.type === 'text-position') as Extract<
+        AnnotationV1['target']['selectors'][number],
+        { type: 'text-position' }
+      > | undefined
+      return pos?.start === start && pos?.end === end
+    })
+
+    if (alreadyExists) return
+
+    const annotation: AnnotationV1 = {
+      id: `ann-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      schemaVersion: 1,
+      createdAt: Date.now(),
+      intent: 'highlight',
+      body: [{ type: 'highlight' }],
+      target: {
+        source: {
+          sessionId: '',
+          messageId,
+        },
+        selectors: [
+          { type: 'text-position', start, end },
+          { type: 'text-quote', exact: selectedText, prefix, suffix },
+        ],
+      },
+      style: { color: 'yellow', opacity: 0.35 },
+    }
+
+    onAddAnnotation(messageId, annotation)
+    selection.removeAllRanges()
+  }, [onAddAnnotation, messageId, variant, isStreaming, annotations])
 
   // Throttle content updates during streaming for performance
   // Updates immediately when streaming ends to show final content
@@ -1504,6 +1769,8 @@ export function ResponseCard({
 
           {/* Scrollable content area with subtle fade at edges (dark mode only) */}
           <div
+            ref={contentRef}
+            onMouseUp={handleTextSelection}
             className="pl-[22px] pr-[16px] py-3 text-sm overflow-y-auto scrollbar-hover"
             style={{
               maxHeight: MAX_HEIGHT,
@@ -1529,7 +1796,7 @@ export function ResponseCard({
               "pl-4 pr-2.5 py-2 border-t border-border/30 flex items-center justify-between bg-muted/20",
               SIZE_CONFIG.fontSize
             )}>
-              {/* Left side - Copy and View as Markdown */}
+              {/* Left side - Copy, View as Markdown, Annotation hint */}
               <div className="flex items-center gap-3">
                 <button
                   onClick={handleCopy}
@@ -1609,6 +1876,8 @@ export function ResponseCard({
       {/* Content area - uses displayedText (throttled) for performance */}
       {/* Subtle fade at top and bottom edges (dark mode only) */}
       <div
+        ref={contentRef}
+        onMouseUp={handleTextSelection}
         className="pl-[22px] pr-4 py-3 text-sm overflow-y-auto scrollbar-hover"
         style={{
           maxHeight: MAX_HEIGHT,
@@ -1761,6 +2030,7 @@ export const TurnCard = React.memo(function TurnCard({
   animateResponse = false,
   compactMode = false,
   onBranch,
+  onAddAnnotation,
 }: TurnCardProps) {
   // Derive the turn phase from props using the state machine.
   // This provides a single source of truth for lifecycle state,
@@ -2135,6 +2405,9 @@ export const TurnCard = React.memo(function TurnCard({
                 onOpenUrl={onOpenUrl}
                 onPopOut={onPopOut ? () => onPopOut(response.text) : undefined}
                 variant={response.isPlan ? 'plan' : 'response'}
+                messageId={response.messageId}
+                annotations={response.annotations}
+                onAddAnnotation={onAddAnnotation}
                 onAccept={onAcceptPlan}
                 onAcceptWithCompact={onAcceptPlanWithCompact}
                 isLastResponse={isLastResponse}
@@ -2156,6 +2429,9 @@ export const TurnCard = React.memo(function TurnCard({
             onOpenUrl={onOpenUrl}
             onPopOut={onPopOut ? () => onPopOut(response.text) : undefined}
             variant={response.isPlan ? 'plan' : 'response'}
+            messageId={response.messageId}
+            annotations={response.annotations}
+            onAddAnnotation={onAddAnnotation}
             onAccept={onAcceptPlan}
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse}
@@ -2188,6 +2464,9 @@ export const TurnCard = React.memo(function TurnCard({
 
   // Re-render if activities changed (important for playground/testing scenarios)
   if (prev.activities !== next.activities) return false
+
+  // Re-render when response object changes (e.g., annotation updates)
+  if (prev.response !== next.response) return false
 
   // For complete, non-streaming turns: skip re-render if same turn
   // These are static and safe to cache

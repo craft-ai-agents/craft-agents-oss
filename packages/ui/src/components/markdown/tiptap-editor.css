@@ -276,15 +276,92 @@
 
 .tiptap-editor .tiptap-prose ul[data-type="taskList"] li {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.5rem;
 }
 
 .tiptap-editor .tiptap-prose ul[data-type="taskList"] li > label {
+  position: relative;
   margin-top: 0;
-  block-size: 1lh;
+  inline-size: 0.95rem;
+  block-size: 0.95rem;
   display: inline-grid;
   place-items: center;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
+.tiptap-editor .tiptap-prose ul[data-type="taskList"] li > label input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.tiptap-editor .tiptap-prose ul[data-type="taskList"] li > label > span {
+  position: relative;
+  display: inline-block;
+  inline-size: 0.95rem;
+  block-size: 0.95rem;
+  border-radius: 5px;
+  border: 1.5px solid color-mix(in oklch, var(--foreground) 40%, transparent);
+  background-color: transparent;
+  box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 0%, transparent);
+  transform: scale(1);
+  transition:
+    border-color 200ms ease,
+    background-color 200ms ease,
+    box-shadow 180ms ease,
+    transform 120ms ease;
+}
+
+.tiptap-editor .tiptap-prose ul[data-type="taskList"] li > label > span.tiptap-task-checkbox-visual {
+  display: inline-grid;
+  place-items: center;
+}
+
+.tiptap-editor .tiptap-prose ul[data-type="taskList"] li > label > span .tiptap-task-checkbox-svg {
+  inline-size: 100%;
+  block-size: 100%;
+  color: var(--background);
+}
+
+.tiptap-editor .tiptap-prose ul[data-type="taskList"] li > label > span .tiptap-task-checkbox-path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  opacity: 1;
+  transition: stroke-dashoffset 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.tiptap-editor .tiptap-prose ul[data-type="taskList"] li > label:hover > span {
+  border-color: color-mix(in oklch, var(--foreground) 60%, transparent);
+  background: color-mix(in oklch, var(--foreground) 3%, transparent);
+}
+
+.tiptap-editor .tiptap-prose ul[data-type="taskList"] li > label:active > span {
+  transform: scale(0.92);
+}
+
+.tiptap-editor .tiptap-prose ul[data-type="taskList"] li > label input[type='checkbox']:focus-visible + span {
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--foreground) 18%, transparent);
+}
+
+.tiptap-editor .tiptap-prose ul[data-type="taskList"] li[data-checked='true'] > label > span {
+  background-color: var(--foreground);
+  border-color: transparent;
+}
+
+.tiptap-editor .tiptap-prose ul[data-type="taskList"] li[data-checked='false'] > label > span .tiptap-task-checkbox-path {
+  stroke-dashoffset: 1;
+}
+
+.tiptap-editor .tiptap-prose ul[data-type="taskList"] li[data-checked='true'] > label > span .tiptap-task-checkbox-path {
+  stroke-dashoffset: 0;
 }
 
 .tiptap-editor .tiptap-prose ul[data-type="taskList"] li > div {
@@ -293,33 +370,49 @@
 }
 
 .tiptap-editor .tiptap-prose ul[data-type="taskList"] li > div > p {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
   margin: 0;
+  color: var(--foreground);
+  transition: color 200ms ease;
 }
 
-.tiptap-editor .tiptap-prose ul[data-type="taskList"] li > label input[type='checkbox'] {
-  appearance: none;
-  -webkit-appearance: none;
-  margin: 0;
-  inline-size: 0.84rem;
-  block-size: 0.84rem;
-  border-radius: 0.2rem;
-  border: 1.5px solid color-mix(in oklch, var(--foreground) 34%, transparent);
-  background-color: transparent;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 0.52rem 0.4rem;
-  transition: background-color 0.12s ease, border-color 0.12s ease;
+.tiptap-editor .tiptap-prose ul[data-type="taskList"] li > div > p::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 53%;
+  inline-size: 100%;
+  block-size: 1.5px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--foreground) 45%, transparent);
+  opacity: 0;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition:
+    transform 400ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease;
+  pointer-events: none;
 }
 
-.tiptap-editor .tiptap-prose ul[data-type="taskList"] li[data-checked='false'] > label input[type='checkbox'] {
-  background-color: transparent;
-  border-color: color-mix(in oklch, var(--foreground) 34%, transparent);
+.tiptap-editor .tiptap-prose ul[data-type="taskList"] li[data-checked='true'] > div > p {
+  color: color-mix(in oklch, var(--foreground) 50%, transparent);
 }
 
-.tiptap-editor .tiptap-prose ul[data-type="taskList"] li[data-checked='true'] > label input[type='checkbox'] {
-  background-color: var(--accent);
-  border-color: var(--accent);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 12'%3E%3Cpath d='M1.5 6.5l3.2 3.2L14.5 1.9' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+.tiptap-editor .tiptap-prose ul[data-type="taskList"] li[data-checked='true'] > div > p::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tiptap-editor .tiptap-prose ul[data-type="taskList"] li > label > span,
+  .tiptap-editor .tiptap-prose ul[data-type="taskList"] li > label > span .tiptap-task-checkbox-path,
+  .tiptap-editor .tiptap-prose ul[data-type="taskList"] li > div > p,
+  .tiptap-editor .tiptap-prose ul[data-type="taskList"] li > div > p::after {
+    transition-duration: 1ms !important;
+    animation: none !important;
+  }
 }
 
 /* ── Shiki dual-theme ── */
