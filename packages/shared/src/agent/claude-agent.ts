@@ -2304,13 +2304,25 @@ export class ClaudeAgent extends BaseAgent {
       ]);
     } catch (error) {
       // On error/timeout: interrupt() is needed to kill the SDK subprocess
-      // and stop the detached async iterator. This is the standard SDK
-      // cancellation API — used throughout the codebase.
+      // and stop the detached async iterator. Race it against a 2s timeout
+      // so a stuck subprocess can't block the catch path indefinitely.
       if (preflightQuery) {
+        // Temporarily suppress ERR_STREAM_WRITE_AFTER_END that the SDK may
+        // emit during interrupt — it has no stdin error handler (SDK bug).
+        const suppress = (err: Error & { code?: string }) => {
+          if (err.code === 'ERR_STREAM_WRITE_AFTER_END') return;
+          throw err;
+        };
+        process.prependOnceListener('uncaughtException', suppress);
         try {
-          await preflightQuery.interrupt();
+          await Promise.race([
+            preflightQuery.interrupt(),
+            new Promise<void>(r => setTimeout(r, 2000)),
+          ]);
         } catch {
-          // Ignore — query may already be complete or errored.
+          // Best-effort cleanup — ignore errors
+        } finally {
+          process.removeListener('uncaughtException', suppress);
         }
       }
       throw new Error(
