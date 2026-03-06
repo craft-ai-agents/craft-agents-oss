@@ -7,8 +7,9 @@
  * - Renders badge icons via Canvas API (main process drives badge count directly)
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import type { Session } from '../../shared/types'
+import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 
 /**
  * Draw a badge onto an icon image using Canvas
@@ -140,6 +141,12 @@ export function useNotifications({
   const [isWindowFocused, setIsWindowFocused] = useState(true)
   const onNavigateToSessionRef = useRef(onNavigateToSession)
 
+  // Check once whether this server has GUI notification channels (headless servers don't)
+  const hasGuiChannels = useMemo(
+    () => window.electronAPI.isChannelAvailable(RPC_CHANNELS.notification.SHOW),
+    [],
+  )
+
   // Keep ref updated
   useEffect(() => {
     onNavigateToSessionRef.current = onNavigateToSession
@@ -147,6 +154,8 @@ export function useNotifications({
 
   // Subscribe to window focus changes
   useEffect(() => {
+    if (!hasGuiChannels) return
+
     // Get initial focus state
     window.electronAPI.getWindowFocusState().then(setIsWindowFocused)
 
@@ -156,20 +165,24 @@ export function useNotifications({
     })
 
     return cleanup
-  }, [])
+  }, [hasGuiChannels])
 
   // Subscribe to notification navigation (when user clicks a notification)
   useEffect(() => {
+    if (!hasGuiChannels) return
+
     const cleanup = window.electronAPI.onNotificationNavigate((data) => {
       onNavigateToSessionRef.current?.(data.sessionId)
     })
 
     return cleanup
-  }, [])
+  }, [hasGuiChannels])
 
   // Subscribe to badge draw requests from main process
   // This uses Canvas API (only available in renderer) to draw badge on icon
   useEffect(() => {
+    if (!hasGuiChannels) return
+
     const cleanup = window.electronAPI.onBadgeDraw(async (data) => {
       try {
         const badgedIconDataUrl = await drawBadgeOnIcon(data.iconDataUrl, data.count)
@@ -183,10 +196,12 @@ export function useNotifications({
     void window.electronAPI.refreshBadge()
 
     return cleanup
-  }, [])
+  }, [hasGuiChannels])
 
   // Subscribe to Windows taskbar overlay draw requests from main process
   useEffect(() => {
+    if (!hasGuiChannels) return
+
     const cleanup = window.electronAPI.onBadgeDrawWindows(async (data) => {
       try {
         const overlayDataUrl = drawWindowsBadgeOverlay(data.count)
@@ -197,7 +212,7 @@ export function useNotifications({
     })
 
     return cleanup
-  }, [])
+  }, [hasGuiChannels])
 
   // Show notification for a session
   const showSessionNotification = useCallback((session: Session, messagePreview?: string) => {
@@ -207,6 +222,8 @@ export function useNotifications({
     if (isWindowFocused) return
     // Don't show if no workspace
     if (!workspaceId) return
+    // Don't show if server doesn't have GUI notification handlers
+    if (!hasGuiChannels) return
 
     // Get session title for notification
     const title = session.name || 'New message'
@@ -218,7 +235,7 @@ export function useNotifications({
     }
 
     window.electronAPI.showNotification(title, body, workspaceId, session.id)
-  }, [enabled, isWindowFocused, workspaceId])
+  }, [enabled, isWindowFocused, workspaceId, hasGuiChannels])
 
   return {
     isWindowFocused,

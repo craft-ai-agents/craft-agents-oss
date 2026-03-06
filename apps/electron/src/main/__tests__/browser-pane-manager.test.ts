@@ -179,13 +179,19 @@ mock.module('electron', () => ({
   },
 }))
 
-mock.module('../logger', () => ({
-  mainLog: {
-    info: () => {},
-    error: () => {},
-    warn: () => {},
-  },
-}))
+mock.module('../logger', () => {
+  const stubLog = { info: () => {}, error: () => {}, warn: () => {}, debug: () => {} }
+  return {
+    mainLog: stubLog,
+    sessionLog: stubLog,
+    handlerLog: stubLog,
+    windowLog: stubLog,
+    agentLog: stubLog,
+    searchLog: stubLog,
+    isDebugMode: false,
+    getLogFilePath: () => '/tmp/main.log',
+  }
+})
 
 mock.module('../browser-cdp', () => ({
   BrowserCDP: class MockBrowserCDP {

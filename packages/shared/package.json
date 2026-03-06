@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/shared",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "license": "Apache-2.0",
   "description": "Shared business logic for Craft Agents - agent, auth, config, credentials, MCP integration",
   "type": "module",
@@ -55,7 +55,8 @@
     "./mentions": "./src/mentions/index.ts",
     "./skills/types": "./src/skills/types.ts",
     "./automations": "./src/automations/index.ts",
-    "./automations/resolve-config-path": "./src/automations/resolve-config-path.ts"
+    "./automations/resolve-config-path": "./src/automations/resolve-config-path.ts",
+    "./protocol": "./src/protocol/index.ts"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",

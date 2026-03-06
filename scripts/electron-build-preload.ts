@@ -2,7 +2,7 @@
  * Cross-platform preload build script with verification.
  *
  * Builds BOTH preload entry points:
- * - apps/electron/src/preload/index.ts -> dist/preload.cjs
+ * - apps/electron/src/preload/bootstrap.ts -> dist/bootstrap-preload.cjs
  * - apps/electron/src/preload/browser-toolbar.ts -> dist/browser-toolbar-preload.cjs
  */
 
@@ -15,9 +15,9 @@ const DIST_DIR = join(ROOT_DIR, "apps/electron/dist");
 
 const OUTPUTS = [
   {
-    entry: "apps/electron/src/preload/index.ts",
-    outfile: "apps/electron/dist/preload.cjs",
-    label: "preload.cjs",
+    entry: "apps/electron/src/preload/bootstrap.ts",
+    outfile: "apps/electron/dist/bootstrap-preload.cjs",
+    label: "bootstrap-preload.cjs",
   },
   {
     entry: "apps/electron/src/preload/browser-toolbar.ts",

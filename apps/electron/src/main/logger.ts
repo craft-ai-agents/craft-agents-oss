@@ -1,15 +1,31 @@
 import log from 'electron-log/main'
-import { app } from 'electron'
 
 /**
- * Debug mode is enabled when running from source (not packaged) or with --debug flag.
- * - true: `bun run electron:start` or `electron .` or packaged app with `--debug`
- * - false: bundled .app/.exe release without --debug flag
+ * Resolve debug mode deterministically across runtimes.
  *
- * Note: We guard against app being undefined for build verification (node --check)
- * which runs outside of Electron context.
+ * Priority:
+ * 1) --debug flag always enables debug mode
+ * 2) CRAFT_IS_PACKAGED env (when explicitly set)
+ * 3) Electron runtime heuristic (defaultApp => dev, otherwise packaged)
+ * 4) Non-Electron runtimes default to debug mode (headless Bun / node --check)
  */
-export const isDebugMode = !app?.isPackaged || process.argv.includes('--debug')
+function resolveDebugMode(): boolean {
+  if (process.argv.includes('--debug')) return true
+
+  const packagedEnv = process.env.CRAFT_IS_PACKAGED
+  if (packagedEnv === 'true') return false
+  if (packagedEnv === 'false') return true
+
+  const isElectronRuntime = typeof process.versions?.electron === 'string'
+  if (isElectronRuntime) {
+    if (process.defaultApp) return true
+    return false
+  }
+
+  return true
+}
+
+export const isDebugMode = resolveDebugMode()
 
 // Configure transports based on debug mode
 if (isDebugMode) {
@@ -46,7 +62,7 @@ if (isDebugMode) {
 // Export scoped loggers for different modules
 export const mainLog = log.scope('main')
 export const sessionLog = log.scope('session')
-export const ipcLog = log.scope('ipc')
+export const handlerLog = log.scope('handler')
 export const windowLog = log.scope('window')
 export const agentLog = log.scope('agent')
 export const searchLog = log.scope('search')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { rollbackFailedBranchCreation } from '../session-branch-cleanup'
+import { rollbackFailedBranchCreation } from '@craft-agent/server-core/domain'
 
 describe('rollbackFailedBranchCreation', () => {
   it('cleans runtime + storage and tears down agent/pool on preflight failure', async () => {

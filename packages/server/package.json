@@ -1,0 +1,23 @@
+{
+  "name": "@craft-agent/server",
+  "version": "0.7.0",
+  "description": "Standalone headless Craft Agent server (Bun runtime)",
+  "type": "module",
+  "main": "src/index.ts",
+  "bin": {
+    "craft-server": "src/index.ts"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@craft-agent/core": "workspace:*",
+    "@craft-agent/server-core": "workspace:*",
+    "@craft-agent/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2",
+    "@types/node": "^22.0.0"
+  }
+}

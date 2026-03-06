@@ -7,14 +7,36 @@ Craft Agents monorepo overview for fast onboarding.
 - Shared business logic in workspace packages.
 - Web viewer for read-only session transcript sharing.
 
-## Monorepo map (current)
-- `apps/electron` — primary desktop app
-- `apps/viewer` — transcript viewer
-- `apps/marketing`, `apps/online-docs` — web properties
-- `packages/shared` — core app logic (agent, sources, sessions, config)
-- `packages/core` — shared types
-- `packages/ui` — shared UI components
-- `packages/session-tools-core`, `packages/session-mcp-server`, `packages/bridge-mcp-server`, `packages/pi-agent-server`, `packages/apps-runtime`, `packages/apps-db` — runtime/integration packages
+**Keep docs up-to-date:** `packages/shared/` → this file | `apps/electron/` → `apps/electron/CLAUDE.md`
+
+## Monorepo Structure
+
+```
+craft-agent/
+├── apps/
+│   ├── cli/         # Craft CLI terminal client
+│   ├── electron/    # Desktop GUI (primary interface)
+│   ├── marketing/   # Marketing site
+│   ├── online-docs/ # Online documentation
+│   └── viewer/      # Web viewer for session transcripts
+└── packages/
+    ├── core/                # @craft-agent/core - Shared types
+    ├── pi-agent-server/     # Pi SDK agent server (subprocess)
+    ├── server/              # Standalone headless Bun server
+    ├── server-core/         # @craft-agent/server-core - Reusable WS/headless server infrastructure
+    ├── session-mcp-server/  # Session-level MCP server
+    ├── session-tools-core/  # Core session tool implementations
+    ├── shared/              # @craft-agent/shared - Business logic
+    └── ui/                  # @craft-agent/ui - Shared UI components
+```
+
+**Imports:**
+```typescript
+import { createAgent, ClaudeAgent, PiAgent } from '@craft-agent/shared/agent'
+import type { AgentBackend, BackendConfig } from '@craft-agent/shared/agent'
+```
+
+**Sub-docs:** [`apps/electron/CLAUDE.md`](apps/electron/CLAUDE.md) | [`packages/shared/CLAUDE.md`](packages/shared/CLAUDE.md)
 
 ## Run & validate (from repo root)
 ```bash

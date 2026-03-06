@@ -261,16 +261,21 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
   }, [isValid, handleSubmit, handleCancel])
 
   const handleOAuthClick = useCallback(async () => {
-    // Trigger OAuth flow when user clicks - no longer automatic
-    if (!authRequestId) return
+    // Client-driven OAuth: callback server runs locally, server owns tokens
+    if (!authRequestId || !authSourceSlug) return
     setIsSubmitting(true)
     try {
-      await window.electronAPI.sessionCommand(sessionId, { type: 'startOAuth', requestId: authRequestId })
+      await window.electronAPI.performOAuth({
+        sourceSlug: authSourceSlug,
+        sessionId,
+        authRequestId,
+      })
     } catch (error) {
       console.error('Failed to start OAuth:', error)
+    } finally {
       setIsSubmitting(false)
     }
-  }, [sessionId, authRequestId])
+  }, [sessionId, authRequestId, authSourceSlug])
 
   // Get field labels
   const credentialLabel = authLabels?.credential ||

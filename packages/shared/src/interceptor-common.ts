@@ -337,6 +337,11 @@ export const toolMetadataStore = {
   get size(): number {
     return _metadataMap.size;
   },
+
+  /** Clear all in-memory entries. Used by tests to prevent cross-file state leaks. */
+  _clearForTesting(): void {
+    _metadataMap.clear();
+  },
 };
 
 // ============================================================================

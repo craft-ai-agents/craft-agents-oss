@@ -1,0 +1,816 @@
+#!/usr/bin/env bun
+/**
+ * Build script for standalone Craft Agent server.
+ *
+ * Assembles a self-contained distribution directory with all runtime
+ * dependencies, resources, and platform-specific binaries.
+ *
+ * Usage:
+ *   bun run scripts/build-server.ts
+ *   bun run scripts/build-server.ts --platform=linux --arch=x64
+ *   bun run scripts/build-server.ts --platform=linux --arch=arm64 --compress
+ *
+ * Options:
+ *   --platform       Target platform: darwin, linux (default: current)
+ *   --arch           Target architecture: x64, arm64 (default: current)
+ *   --output         Output directory (default: dist/server)
+ *   --compress       Create .tar.gz archive after assembly
+ *   --skip-download  Skip Bun/uv downloads (use existing if present)
+ *   --help           Show help
+ */
+
+process.on('uncaughtException', (error) => {
+  console.error('\n  Build failed (uncaught):', error);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('\n  Build failed (unhandled):', reason);
+  process.exit(1);
+});
+
+import { parseArgs } from 'util';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+import {
+  existsSync,
+  mkdirSync,
+  rmSync,
+  copyFileSync,
+  cpSync,
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+  chmodSync,
+} from 'fs';
+import { $ } from 'bun';
+import {
+  type Platform,
+  type Arch,
+  type BuildConfig,
+  BUN_VERSION,
+  UV_VERSION,
+  downloadBun,
+  downloadUv,
+  buildMcpServers,
+  getPlatformKey,
+} from './build/common';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type ServerPlatform = 'darwin' | 'linux';
+
+interface ServerBuildConfig {
+  platform: ServerPlatform;
+  arch: Arch;
+  rootDir: string;
+  electronDir: string;  // Source of resources
+  outputDir: string;
+  compress: boolean;
+  skipDownload: boolean;
+  version: string;
+}
+
+// ---------------------------------------------------------------------------
+// CLI
+// ---------------------------------------------------------------------------
+
+function showHelp(): void {
+  console.log(`
+Standalone server build script for Craft Agent
+
+Usage:
+  bun run scripts/build-server.ts [options]
+
+Options:
+  --platform=<platform>  Target platform: darwin, linux
+                         (default: ${process.platform})
+  --arch=<arch>          Target architecture: x64, arm64
+                         (default: ${process.arch === 'arm64' ? 'arm64' : 'x64'})
+  --output=<path>        Output directory (default: dist/server)
+  --compress             Create .tar.gz after assembly
+  --skip-download        Reuse existing Bun/uv binaries
+  --help                 Show this help message
+
+Examples:
+  # Build for current platform
+  bun run scripts/build-server.ts
+
+  # Build Linux x64 tarball
+  bun run scripts/build-server.ts --platform=linux --arch=x64 --compress
+
+  # Build Linux ARM64 tarball
+  bun run scripts/build-server.ts --platform=linux --arch=arm64 --compress
+`);
+}
+
+// ---------------------------------------------------------------------------
+// Resource assembly
+// ---------------------------------------------------------------------------
+
+function assembleResources(config: ServerBuildConfig): void {
+  const { electronDir, outputDir, platform, arch } = config;
+  const srcResources = join(electronDir, 'resources');
+  const destResources = join(outputDir, 'resources');
+
+  console.log('  Copying docs, themes, permissions, tool-icons...');
+  for (const dir of ['docs', 'themes', 'permissions', 'tool-icons']) {
+    const src = join(srcResources, dir);
+    if (existsSync(src)) {
+      cpSync(src, join(destResources, dir), { recursive: true });
+    }
+  }
+
+  // Config defaults
+  const configDefaults = join(srcResources, 'config-defaults.json');
+  if (existsSync(configDefaults)) {
+    copyFileSync(configDefaults, join(destResources, 'config-defaults.json'));
+  }
+
+  // Python scripts (skip tests/)
+  console.log('  Copying Python scripts...');
+  const scriptsDir = join(srcResources, 'scripts');
+  const destScripts = join(destResources, 'scripts');
+  mkdirSync(destScripts, { recursive: true });
+  if (existsSync(scriptsDir)) {
+    for (const entry of readdirSync(scriptsDir)) {
+      if (entry === 'tests') continue;
+      const src = join(scriptsDir, entry);
+      const stat = lstatSync(src);
+      if (stat.isFile()) {
+        copyFileSync(src, join(destScripts, entry));
+      }
+    }
+  }
+
+  // Shell wrappers for doc tools (not .cmd files — those are Windows-only)
+  console.log('  Copying doc tool wrappers...');
+  const binDir = join(destResources, 'bin');
+  mkdirSync(binDir, { recursive: true });
+  const srcBin = join(srcResources, 'bin');
+  if (existsSync(srcBin)) {
+    for (const entry of readdirSync(srcBin)) {
+      const src = join(srcBin, entry);
+      const stat = lstatSync(src);
+      // Only copy files (not platform directories), skip .cmd
+      if (stat.isFile() && !entry.endsWith('.cmd')) {
+        copyFileSync(src, join(binDir, entry));
+      }
+    }
+  }
+
+  // MCP servers
+  console.log('  Copying MCP servers...');
+  for (const server of ['session-mcp-server', 'bridge-mcp-server']) {
+    const src = join(srcResources, server);
+    if (existsSync(src)) {
+      cpSync(src, join(destResources, server), { recursive: true });
+    }
+  }
+
+  // Also copy session-mcp-server from packages/ build output (dev path fallback)
+  const sessionServerDist = join(config.rootDir, 'packages', 'session-mcp-server', 'dist', 'index.js');
+  if (existsSync(sessionServerDist)) {
+    const destSessionServer = join(destResources, 'session-mcp-server');
+    mkdirSync(destSessionServer, { recursive: true });
+    copyFileSync(sessionServerDist, join(destSessionServer, 'index.js'));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// uv binary — download into output dir (not electron resources)
+// ---------------------------------------------------------------------------
+
+async function downloadUvForServer(config: ServerBuildConfig): Promise<void> {
+  const { platform, arch, outputDir, skipDownload } = config;
+  const uvDest = join(outputDir, 'resources', 'bin', 'uv');
+
+  if (skipDownload && existsSync(uvDest)) {
+    console.log('  uv already present, skipping download');
+    return;
+  }
+
+  // Use common.ts downloadUv which writes to electronDir/resources/bin/{platform-arch}/
+  // Then we'll copy the binary to our flat layout
+  const platformKey = getPlatformKey(platform, arch);
+  const electronUvPath = join(config.electronDir, 'resources', 'bin', platformKey, 'uv');
+
+  if (!existsSync(electronUvPath)) {
+    // Download using the shared helper
+    const buildConfig: BuildConfig = {
+      platform,
+      arch,
+      upload: false,
+      uploadLatest: false,
+      uploadScript: false,
+      rootDir: config.rootDir,
+      electronDir: config.electronDir,
+    };
+    await downloadUv(buildConfig);
+  }
+
+  if (!existsSync(electronUvPath)) {
+    throw new Error(`uv binary not found after download at ${electronUvPath}`);
+  }
+
+  // Flatten: copy to resources/bin/uv (no platform subdirectory in server dist)
+  const binDir = join(outputDir, 'resources', 'bin');
+  mkdirSync(binDir, { recursive: true });
+  copyFileSync(electronUvPath, uvDest);
+  await $`chmod +x ${uvDest}`.quiet();
+  console.log(`  uv binary installed (${(lstatSync(uvDest).size / 1024 / 1024).toFixed(1)} MB)`);
+}
+
+// ---------------------------------------------------------------------------
+// Bun runtime — download into output dir
+// ---------------------------------------------------------------------------
+
+async function downloadBunForServer(config: ServerBuildConfig): Promise<void> {
+  const { platform, arch, outputDir, skipDownload } = config;
+  const runtimeDir = join(outputDir, 'vendor', 'bun');
+  const bunDest = join(runtimeDir, 'bun');
+
+  if (skipDownload && existsSync(bunDest)) {
+    console.log('  Bun already present, skipping download');
+    return;
+  }
+
+  // Download to electron's vendor dir using shared helper, then copy
+  const buildConfig: BuildConfig = {
+    platform,
+    arch,
+    upload: false,
+    uploadLatest: false,
+    uploadScript: false,
+    rootDir: config.rootDir,
+    electronDir: config.electronDir,
+  };
+  await downloadBun(buildConfig);
+
+  const electronBunPath = join(config.electronDir, 'vendor', 'bun', 'bun');
+  if (!existsSync(electronBunPath)) {
+    throw new Error(`Bun binary not found after download at ${electronBunPath}`);
+  }
+
+  mkdirSync(runtimeDir, { recursive: true });
+  copyFileSync(electronBunPath, bunDest);
+  await $`chmod +x ${bunDest}`.quiet();
+  console.log(`  Bun runtime installed (${(lstatSync(bunDest).size / 1024 / 1024).toFixed(1)} MB)`);
+}
+
+// ---------------------------------------------------------------------------
+// Production node_modules
+// ---------------------------------------------------------------------------
+
+function copyProductionDeps(config: ServerBuildConfig): void {
+  const { rootDir, outputDir, platform, arch } = config;
+  const srcModules = join(rootDir, 'node_modules');
+  const destModules = join(outputDir, 'node_modules');
+
+  // Explicit list of production dependencies needed by the server.
+  // This is intentionally explicit to avoid shipping devDependencies (~1.5 GB).
+  const PRODUCTION_DEPS = [
+    // SDK (core AI functionality + ripgrep)
+    '@anthropic-ai/claude-agent-sdk',
+    // MCP protocol
+    '@modelcontextprotocol/sdk',
+    // Schema validation
+    'zod',
+    'zod-to-json-schema',
+    // Image processing (sharp + platform-specific native binary)
+    'sharp',
+    `@img/sharp-${platform === 'darwin' ? 'darwin' : 'linux'}-${arch}`,
+    `@img/sharp-libvips-${platform === 'darwin' ? 'darwin' : 'linux'}-${arch}`,
+    '@img/colour',
+    // WebSocket
+    'ws',
+    // Caching
+    '@isaacs/ttlcache',
+    // Fuzzy search
+    '@leeoniya/ufuzzy',
+    // Shell parsing
+    'bash-parser',
+    'shell-quote',
+    // Cron scheduling
+    'croner',
+    // Expression filtering
+    'filtrex',
+    // Incremental regex
+    'incr-regex-package',
+    // YAML frontmatter
+    'gray-matter',
+    // Mermaid diagrams
+    'beautiful-mermaid',
+    // JSON/YAML utilities
+    'js-yaml',
+    // Content type
+    'content-type',
+    // Raw body parsing
+    'raw-body',
+    // PKI (transitive via MCP SDK — only copy if present)
+    'pkijs',
+    'asn1js',
+    'pvutils',
+    'bytestreamjs',
+    'pvtsutils',
+    // Additional transitive deps
+    'eventsource',
+    'cross-spawn',
+    'shebang-command',
+    'shebang-regex',
+    'isexe',
+    'which',
+    'path-key',
+    'js-tokens',
+    'section-matter',
+    'strip-bom-string',
+    'kind-of',
+  ];
+
+  // For deps like @anthropic-ai/claude-agent-sdk, copy the whole scope if needed
+  const copiedScopes = new Set<string>();
+
+  for (const dep of PRODUCTION_DEPS) {
+    const src = join(srcModules, dep);
+    const dest = join(destModules, dep);
+
+    if (!existsSync(src)) {
+      // Could be a platform-specific package not installed on this OS
+      if (dep.startsWith('@img/sharp-') || dep.startsWith('@img/sharp-libvips-')) {
+        console.log(`  Skipping ${dep} (not installed for current platform)`);
+        continue;
+      }
+      console.warn(`  Warning: dependency ${dep} not found in node_modules`);
+      continue;
+    }
+
+    // Ensure scope directory exists
+    if (dep.startsWith('@')) {
+      const scope = dep.split('/')[0];
+      if (!copiedScopes.has(scope)) {
+        mkdirSync(join(destModules, scope), { recursive: true });
+        copiedScopes.add(scope);
+      }
+    }
+
+    mkdirSync(dirname(dest), { recursive: true });
+    cpSync(src, dest, { recursive: true, dereference: true });
+  }
+
+  // Filter ripgrep to target platform only
+  filterRipgrep(config);
+}
+
+function filterRipgrep(config: ServerBuildConfig): void {
+  const { outputDir, platform, arch } = config;
+  const ripgrepDir = join(outputDir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep');
+
+  if (!existsSync(ripgrepDir)) {
+    console.warn('  Warning: ripgrep vendor directory not found in SDK');
+    return;
+  }
+
+  const keepPlatform = `${arch}-${platform}`;
+  let removedSize = 0;
+
+  for (const entry of readdirSync(ripgrepDir)) {
+    const fullPath = join(ripgrepDir, entry);
+    const stat = lstatSync(fullPath);
+    if (stat.isDirectory() && entry !== keepPlatform) {
+      const dirSize = getDirSize(fullPath);
+      removedSize += dirSize;
+      rmSync(fullPath, { recursive: true, force: true });
+    }
+  }
+
+  if (removedSize > 0) {
+    console.log(`  Filtered ripgrep: removed ${(removedSize / 1024 / 1024).toFixed(1)} MB (kept ${keepPlatform})`);
+  }
+}
+
+function getDirSize(dir: string): number {
+  let size = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isFile()) {
+      size += lstatSync(fullPath).size;
+    } else if (entry.isDirectory()) {
+      size += getDirSize(fullPath);
+    }
+  }
+  return size;
+}
+
+// ---------------------------------------------------------------------------
+// Workspace packages
+// ---------------------------------------------------------------------------
+
+function copyWorkspacePackages(config: ServerBuildConfig): void {
+  const { rootDir, outputDir } = config;
+
+  const packages = ['server', 'server-core', 'shared', 'core', 'session-tools-core', 'session-mcp-server'];
+
+  for (const pkg of packages) {
+    const src = join(rootDir, 'packages', pkg);
+    const dest = join(outputDir, 'packages', pkg);
+
+    if (!existsSync(src)) {
+      console.warn(`  Warning: package ${pkg} not found`);
+      continue;
+    }
+
+    mkdirSync(dest, { recursive: true });
+
+    // Copy package.json
+    copyFileSync(join(src, 'package.json'), join(dest, 'package.json'));
+
+    // Copy tsconfig.json if present
+    const tsconfig = join(src, 'tsconfig.json');
+    if (existsSync(tsconfig)) {
+      copyFileSync(tsconfig, join(dest, 'tsconfig.json'));
+    }
+
+    // Copy src/ directory
+    const srcDir = join(src, 'src');
+    if (existsSync(srcDir)) {
+      cpSync(srcDir, join(dest, 'src'), { recursive: true });
+    }
+
+    // Copy dist/ directory if present (built artifacts like session-mcp-server)
+    const distDir = join(src, 'dist');
+    if (existsSync(distDir)) {
+      cpSync(distDir, join(dest, 'dist'), { recursive: true });
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Root config files for workspace resolution
+// ---------------------------------------------------------------------------
+
+function createRootConfig(config: ServerBuildConfig): void {
+  const { outputDir, version } = config;
+
+  // Root package.json with workspaces (Bun resolves @craft-agent/* through this)
+  const rootPkg = {
+    name: 'craft-server-dist',
+    version,
+    private: true,
+    workspaces: ['packages/*'],
+  };
+  writeFileSync(join(outputDir, 'package.json'), JSON.stringify(rootPkg, null, 2) + '\n');
+
+  // Root tsconfig.json for path resolution
+  const rootTsconfig = {
+    compilerOptions: {
+      target: 'ESNext',
+      module: 'ESNext',
+      moduleResolution: 'bundler',
+      paths: {
+        '@craft-agent/server-core/*': ['./packages/server-core/src/*'],
+        '@craft-agent/shared/*': ['./packages/shared/src/*'],
+        '@craft-agent/core/*': ['./packages/core/src/*'],
+        '@craft-agent/session-tools-core/*': ['./packages/session-tools-core/src/*'],
+      },
+    },
+  };
+  writeFileSync(join(outputDir, 'tsconfig.json'), JSON.stringify(rootTsconfig, null, 2) + '\n');
+}
+
+// ---------------------------------------------------------------------------
+// Entry scripts
+// ---------------------------------------------------------------------------
+
+function createEntryScripts(config: ServerBuildConfig): void {
+  const { outputDir } = config;
+  const binDir = join(outputDir, 'bin');
+  mkdirSync(binDir, { recursive: true });
+
+  // bin/craft-server — main entry wrapper
+  const craftServer = `#!/bin/sh
+set -e
+
+# Resolve the distribution root
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Set environment for resource resolution
+export CRAFT_BUNDLED_ASSETS_ROOT="$ROOT"
+export CRAFT_IS_PACKAGED=true
+export CRAFT_APP_ROOT="$ROOT"
+export CRAFT_RESOURCES_PATH="$ROOT/resources"
+
+# CLI tools (doc tools use uv + Python scripts)
+export CRAFT_UV="$ROOT/resources/bin/uv"
+export CRAFT_SCRIPTS="$ROOT/resources/scripts"
+
+# Prepend resource bin to PATH (makes doc tool wrappers available)
+export PATH="$ROOT/resources/bin:$ROOT/vendor/bun:$PATH"
+
+# Use bundled Bun runtime
+exec "$ROOT/vendor/bun/bun" run "$ROOT/packages/server/src/index.ts" "$@"
+`;
+  writeFileSync(join(binDir, 'craft-server'), craftServer);
+
+  // start.sh — convenience entry
+  const startSh = `#!/bin/sh
+# Craft Agent Server — convenience entry point
+DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "$DIR/bin/craft-server" "$@"
+`;
+  writeFileSync(join(outputDir, 'start.sh'), startSh);
+
+  // install.sh — setup + optional systemd
+  const installSh = `#!/bin/bash
+set -euo pipefail
+
+DIR="$(cd "$(dirname "$0")" && pwd)"
+
+echo "=== Craft Agent Server Setup ==="
+echo ""
+
+# Make binaries executable
+chmod +x "$DIR/bin/craft-server" "$DIR/start.sh"
+[ -f "$DIR/vendor/bun/bun" ] && chmod +x "$DIR/vendor/bun/bun"
+[ -f "$DIR/resources/bin/uv" ] && chmod +x "$DIR/resources/bin/uv"
+
+# Make doc tool wrappers executable
+for wrapper in "$DIR/resources/bin/"*; do
+  [ -f "$wrapper" ] && chmod +x "$wrapper"
+done
+
+echo "Binaries configured."
+
+# Generate token if not set
+if [ -z "\${CRAFT_SERVER_TOKEN:-}" ]; then
+  TOKEN=\$(openssl rand -hex 32)
+  cat > "$DIR/.env" <<ENVFILE
+CRAFT_SERVER_TOKEN=$TOKEN
+
+# TLS — uncomment and set paths to enable wss://
+# CRAFT_RPC_TLS_CERT=/path/to/cert.pem
+# CRAFT_RPC_TLS_KEY=/path/to/key.pem
+# CRAFT_RPC_TLS_CA=/path/to/ca.pem
+ENVFILE
+  echo ""
+  echo "Generated server token (saved to $DIR/.env)"
+else
+  TOKEN="\$CRAFT_SERVER_TOKEN"
+  echo ""
+  echo "Using CRAFT_SERVER_TOKEN from environment."
+fi
+
+# Systemd installation
+if [ "\${1:-}" = "--systemd" ]; then
+  if [ "\$(id -u)" -ne 0 ]; then
+    echo "Error: --systemd requires root. Run with sudo."
+    exit 1
+  fi
+
+  SERVICE_USER="\${CRAFT_USER:-\$(logname 2>/dev/null || echo craft)}"
+  SERVICE_FILE="/etc/systemd/system/craft-server.service"
+
+  cat > "$SERVICE_FILE" <<UNIT
+[Unit]
+Description=Craft Agent Server
+After=network.target
+
+[Service]
+Type=simple
+User=$SERVICE_USER
+WorkingDirectory=$DIR
+EnvironmentFile=$DIR/.env
+Environment=CRAFT_RPC_HOST=127.0.0.1
+Environment=CRAFT_RPC_PORT=9100
+ExecStart=$DIR/bin/craft-server
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+  systemctl daemon-reload
+  systemctl enable craft-server
+
+  echo ""
+  echo "Systemd service installed."
+  echo "  Start:   sudo systemctl start craft-server"
+  echo "  Status:  sudo systemctl status craft-server"
+  echo "  Logs:    journalctl -u craft-server -f"
+  echo ""
+  exit 0
+fi
+
+echo ""
+echo "Quick start:"
+echo "  CRAFT_SERVER_TOKEN=$TOKEN $DIR/start.sh"
+echo ""
+echo "Or with systemd:"
+echo "  sudo $DIR/install.sh --systemd"
+echo ""
+`;
+  writeFileSync(join(outputDir, 'install.sh'), installSh);
+
+  // Make scripts executable at build time
+  for (const script of [
+    join(binDir, 'craft-server'),
+    join(outputDir, 'start.sh'),
+    join(outputDir, 'install.sh'),
+  ]) {
+    chmodSync(script, 0o755);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Docker
+// ---------------------------------------------------------------------------
+
+function createDockerFiles(config: ServerBuildConfig): void {
+  const { outputDir, version } = config;
+
+  const dockerfile = `FROM oven/bun:1.3-slim
+
+WORKDIR /app
+
+# Copy pre-assembled server distribution
+COPY . .
+
+# Make binaries executable
+RUN chmod +x bin/craft-server vendor/bun/bun resources/bin/uv && \\
+    for f in resources/bin/*; do [ -f "$f" ] && chmod +x "$f"; done
+
+ENV CRAFT_IS_PACKAGED=true
+ENV CRAFT_BUNDLED_ASSETS_ROOT=/app
+ENV CRAFT_APP_ROOT=/app
+ENV CRAFT_RESOURCES_PATH=/app/resources
+ENV CRAFT_UV=/app/resources/bin/uv
+ENV CRAFT_SCRIPTS=/app/resources/scripts
+ENV CRAFT_RPC_HOST=0.0.0.0
+ENV CRAFT_RPC_PORT=9100
+ENV PATH="/app/resources/bin:/app/vendor/bun:\${PATH}"
+
+EXPOSE 9100
+
+ENTRYPOINT ["/app/bin/craft-server"]
+`;
+  writeFileSync(join(outputDir, 'Dockerfile'), dockerfile);
+
+  const dockerCompose = `version: "3.8"
+services:
+  craft-server:
+    build: .
+    ports:
+      - "9100:9100"
+    environment:
+      - CRAFT_SERVER_TOKEN=\${CRAFT_SERVER_TOKEN:?Set CRAFT_SERVER_TOKEN}
+      - CRAFT_RPC_PORT=9100
+      # TLS — uncomment to enable wss://
+      # - CRAFT_RPC_TLS_CERT=/certs/cert.pem
+      # - CRAFT_RPC_TLS_KEY=/certs/key.pem
+    volumes:
+      - craft-data:/root/.craft-agent
+      # TLS — mount cert directory
+      # - ./certs:/certs:ro
+    restart: unless-stopped
+
+volumes:
+  craft-data:
+`;
+  writeFileSync(join(outputDir, 'docker-compose.yml'), dockerCompose);
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+async function main(): Promise<void> {
+  const { values } = parseArgs({
+    args: process.argv.slice(2),
+    options: {
+      platform: { type: 'string', default: process.platform },
+      arch: { type: 'string', default: process.arch === 'arm64' ? 'arm64' : 'x64' },
+      output: { type: 'string', default: 'dist/server' },
+      compress: { type: 'boolean', default: false },
+      'skip-download': { type: 'boolean', default: false },
+      help: { type: 'boolean', default: false },
+    },
+    allowPositionals: true,
+  });
+
+  if (values.help) {
+    showHelp();
+    process.exit(0);
+  }
+
+  const platform = values.platform as ServerPlatform;
+  if (platform !== 'darwin' && platform !== 'linux') {
+    console.error(`Unsupported platform: ${platform}. Use darwin or linux.`);
+    process.exit(1);
+  }
+
+  const arch = values.arch as Arch;
+  if (arch !== 'x64' && arch !== 'arm64') {
+    console.error(`Unsupported arch: ${arch}. Use x64 or arm64.`);
+    process.exit(1);
+  }
+
+  const scriptDir = dirname(fileURLToPath(import.meta.url));
+  const rootDir = dirname(scriptDir);
+  const electronDir = join(rootDir, 'apps', 'electron');
+
+  if (!existsSync(join(rootDir, 'package.json'))) {
+    console.error('Must run from the repository root');
+    process.exit(1);
+  }
+
+  // Read version from electron package.json
+  const electronPkg = JSON.parse(readFileSync(join(electronDir, 'package.json'), 'utf-8'));
+  const version: string = electronPkg.version;
+
+  const outputDir = join(rootDir, values.output!);
+
+  const config: ServerBuildConfig = {
+    platform,
+    arch,
+    rootDir,
+    electronDir,
+    outputDir,
+    compress: values.compress ?? false,
+    skipDownload: values['skip-download'] ?? false,
+    version,
+  };
+
+  console.log(`=== Building Craft Agent Server ${version} for ${platform}-${arch} ===`);
+  console.log(`  Output: ${outputDir}`);
+
+  // Step 1: Clean
+  console.log('\n[1/8] Cleaning output directory...');
+  if (existsSync(outputDir)) {
+    rmSync(outputDir, { recursive: true, force: true });
+  }
+  mkdirSync(outputDir, { recursive: true });
+
+  // Step 2: Download Bun runtime
+  console.log(`\n[2/8] Downloading Bun ${BUN_VERSION}...`);
+  await downloadBunForServer(config);
+
+  // Step 3: Download uv
+  console.log(`\n[3/8] Downloading uv ${UV_VERSION}...`);
+  await downloadUvForServer(config);
+
+  // Step 4: Build MCP servers
+  console.log('\n[4/8] Building MCP servers...');
+  const buildConfig: BuildConfig = {
+    platform,
+    arch,
+    upload: false,
+    uploadLatest: false,
+    uploadScript: false,
+    rootDir,
+    electronDir,
+  };
+  buildMcpServers(buildConfig);
+
+  // Step 5: Assemble resources
+  console.log('\n[5/8] Assembling resources...');
+  assembleResources(config);
+
+  // Step 6: Copy production node_modules
+  console.log('\n[6/8] Copying production dependencies...');
+  copyProductionDeps(config);
+
+  // Step 7: Copy workspace packages
+  console.log('\n[7/8] Copying workspace packages...');
+  copyWorkspacePackages(config);
+  createRootConfig(config);
+
+  // Step 8: Create entry scripts + Docker files
+  console.log('\n[8/8] Creating entry scripts...');
+  createEntryScripts(config);
+  createDockerFiles(config);
+
+  // Calculate total size
+  const totalSize = getDirSize(outputDir);
+  console.log(`\n  Assembly complete: ${(totalSize / 1024 / 1024).toFixed(0)} MB`);
+
+  // Compress if requested
+  if (config.compress) {
+    const archiveName = `craft-server-${version}-${platform}-${arch}.tar.gz`;
+    const archivePath = join(dirname(outputDir), archiveName);
+    console.log(`\nCompressing to ${archiveName}...`);
+    await $`tar -czf ${archivePath} -C ${outputDir} .`;
+    const archiveSize = lstatSync(archivePath).size;
+    console.log(`  Archive: ${(archiveSize / 1024 / 1024).toFixed(0)} MB`);
+    console.log(`  Path: ${archivePath}`);
+  }
+
+  console.log('\n  Build completed successfully!');
+  console.log(`\nQuick start:`);
+  console.log(`  CRAFT_SERVER_TOKEN=<secret> ${outputDir}/start.sh`);
+}
+
+main();

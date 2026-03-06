@@ -2,9 +2,10 @@ import { describe, expect, it } from 'bun:test'
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
+import { pathToFileURL } from 'url'
 
-const STORAGE_MODULE_PATH = '/Users/balintorosz/Documents/GitHub/craft-agents/packages/shared/src/config/storage.ts'
-const PI_RESOLVER_SETUP_PATH = '/Users/balintorosz/Documents/GitHub/craft-agents/packages/shared/tests/setup/register-pi-model-resolver.ts'
+const STORAGE_MODULE_PATH = pathToFileURL(join(import.meta.dir, '..', 'storage.ts')).href
+const PI_RESOLVER_SETUP_PATH = pathToFileURL(join(import.meta.dir, '..', '..', '..', 'tests', 'setup', 'register-pi-model-resolver.ts')).href
 
 function setupWorkspaceConfigDir() {
   const configDir = mkdtempSync(join(tmpdir(), 'craft-agent-config-'))

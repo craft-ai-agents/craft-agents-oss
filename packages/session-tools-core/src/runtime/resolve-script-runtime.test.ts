@@ -41,14 +41,24 @@ describe('resolveScriptRuntime', () => {
 
   it('blocks PATH fallback in packaged mode', () => {
     const prevUv = process.env.CRAFT_UV;
+    const prevBase = process.env.CRAFT_RESOURCES_BASE;
+    const prevRoot = process.env.CRAFT_APP_ROOT;
     delete process.env.CRAFT_UV;
+    delete process.env.CRAFT_RESOURCES_BASE;
+    delete process.env.CRAFT_APP_ROOT;
 
-    expect(() => resolveScriptRuntime('python3', { isPackaged: true })).toThrow(
-      'packaged app'
-    );
-
-    if (prevUv === undefined) delete process.env.CRAFT_UV;
-    else process.env.CRAFT_UV = prevUv;
+    try {
+      expect(() => resolveScriptRuntime('python3', { isPackaged: true })).toThrow(
+        'packaged app'
+      );
+    } finally {
+      if (prevUv === undefined) delete process.env.CRAFT_UV;
+      else process.env.CRAFT_UV = prevUv;
+      if (prevBase === undefined) delete process.env.CRAFT_RESOURCES_BASE;
+      else process.env.CRAFT_RESOURCES_BASE = prevBase;
+      if (prevRoot === undefined) delete process.env.CRAFT_APP_ROOT;
+      else process.env.CRAFT_APP_ROOT = prevRoot;
+    }
   });
 
   it('rejects bare CRAFT_NODE command in packaged mode', () => {

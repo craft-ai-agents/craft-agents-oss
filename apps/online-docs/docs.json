@@ -111,6 +111,13 @@
               "go-further/connect-to-anything",
               "go-further/deeplinks"
             ]
+          },
+          {
+            "group": "Server & CLI",
+            "pages": [
+              "server/headless",
+              "server/cli"
+            ]
           }
         ]
       },
@@ -126,6 +133,12 @@
               "reference/config/credentials",
               "reference/config/custom-endpoint",
               "reference/config/environment-variables"
+            ]
+          },
+          {
+            "group": "CLI",
+            "pages": [
+              "reference/cli"
             ]
           }
         ]

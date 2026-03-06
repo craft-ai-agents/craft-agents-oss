@@ -1,12 +1,17 @@
 import { Menu, app, shell, BrowserWindow } from 'electron'
-import { IPC_CHANNELS } from '../shared/types'
+import { RPC_CHANNELS, type BroadcastEventMap } from '../shared/types'
 import { EDIT_MENU, VIEW_MENU, WINDOW_MENU } from '../shared/menu-schema'
 import type { MenuItem } from '../shared/menu-schema'
 import type { WindowManager } from './window-manager'
+import type { EventSink } from '@craft-agent/server-core/transport'
 import { mainLog } from './logger'
 
-// Store reference for rebuilding menu
+type ClientResolver = (webContentsId: number) => string | undefined
+
+// Store references for rebuilding menu
 let cachedWindowManager: WindowManager | null = null
+let cachedEventSink: EventSink | null = null
+let cachedClientResolver: ClientResolver | null = null
 
 /**
  * Creates and sets the application menu for macOS.
@@ -14,9 +19,20 @@ let cachedWindowManager: WindowManager | null = null
  *
  * Call rebuildMenu() when update state changes to refresh the menu.
  */
-export function createApplicationMenu(windowManager: WindowManager): void {
+export function createApplicationMenu(windowManager: WindowManager, sink?: EventSink, resolver?: ClientResolver): void {
   cachedWindowManager = windowManager
+  cachedEventSink = sink ?? null
+  cachedClientResolver = resolver ?? null
   rebuildMenu()
+}
+
+/**
+ * Set the event sink and client resolver after server creation.
+ * Called separately from createApplicationMenu since the server may not exist at menu init time.
+ */
+export function setMenuEventSink(sink: EventSink, resolver: ClientResolver): void {
+  cachedEventSink = sink
+  cachedClientResolver = resolver
 }
 
 /**
@@ -71,7 +87,7 @@ export async function rebuildMenu(): Promise<void> {
           label: 'Settings...',
           accelerator: 'CmdOrCtrl+,',
           registerAccelerator: false,  // Action registry handles the keyboard shortcut
-          click: () => sendToRenderer(IPC_CHANNELS.MENU_OPEN_SETTINGS)
+          click: () => sendToRenderer(RPC_CHANNELS.menu.OPEN_SETTINGS)
         },
         { type: 'separator' as const },
         { role: 'hide' as const, label: 'Hide Craft Agents' },
@@ -90,7 +106,7 @@ export async function rebuildMenu(): Promise<void> {
           label: 'New Chat',
           accelerator: 'CmdOrCtrl+N',
           registerAccelerator: false,  // Action registry handles the keyboard shortcut
-          click: () => sendToRenderer(IPC_CHANNELS.MENU_NEW_CHAT)
+          click: () => sendToRenderer(RPC_CHANNELS.menu.NEW_CHAT)
         },
         {
           label: 'New Window',
@@ -222,7 +238,7 @@ export async function rebuildMenu(): Promise<void> {
           label: 'Keyboard Shortcuts',
           accelerator: 'CmdOrCtrl+/',
           registerAccelerator: false,  // Action registry handles the keyboard shortcut
-          click: () => sendToRenderer(IPC_CHANNELS.MENU_KEYBOARD_SHORTCUTS)
+          click: () => sendToRenderer(RPC_CHANNELS.menu.KEYBOARD_SHORTCUTS)
         }
       ]
     }
@@ -232,13 +248,20 @@ export async function rebuildMenu(): Promise<void> {
   Menu.setApplicationMenu(menu)
 }
 
+/** Menu channels that are main→renderer push events in BroadcastEventMap */
+type MenuBroadcastChannel = Extract<keyof BroadcastEventMap, `menu:${string}`>
+
 /**
- * Sends an IPC message to the focused renderer window.
+ * Sends an event to the focused renderer window via the RPC event sink.
  */
-function sendToRenderer(channel: string): void {
+function sendToRenderer(channel: MenuBroadcastChannel): void {
+  if (!cachedEventSink || !cachedClientResolver) return
   const win = BrowserWindow.getFocusedWindow()
   if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
-    win.webContents.send(channel)
+    const clientId = cachedClientResolver(win.webContents.id)
+    if (clientId) {
+      cachedEventSink(channel, { to: 'client', clientId })
+    }
   }
 }
 
@@ -260,7 +283,7 @@ function toElectronMenuItem(item: MenuItem): Electron.MenuItemConstructorOptions
       label: item.label,
       accelerator: item.shortcut,
       registerAccelerator: false,  // Action registry handles the keyboard shortcut
-      click: () => sendToRenderer(item.ipcChannel),
+      click: () => sendToRenderer(item.ipcChannel as MenuBroadcastChannel),
     }
   }
 

@@ -14,9 +14,14 @@ import { BrowserView, BrowserWindow, app, ipcMain, nativeTheme, session, shell, 
 import { mainLog } from './logger'
 import type { WindowManager } from './window-manager'
 import { BrowserCDP, type AccessibilitySnapshot, type ElementGeometry } from './browser-cdp'
-import type { BrowserEmptyStateLaunchPayload, BrowserEmptyStateLaunchResult, BrowserInstanceInfo } from '../shared/types'
+import {
+  type BrowserEmptyStateLaunchPayload,
+  type BrowserEmptyStateLaunchResult,
+  type BrowserInstanceInfo,
+} from '../shared/types'
 import { DEFAULT_THEME, loadAppTheme } from '@craft-agent/shared/config'
 import { getBrowserLiveFxCornerRadii } from '../shared/browser-live-fx'
+import type { IBrowserPaneManager } from '@craft-agent/server-core/handlers'
 
 export type { BrowserInstanceInfo }
 
@@ -110,7 +115,6 @@ const TOOLBAR_CHANNELS = {
   STATE_UPDATE: 'browser-toolbar:state-update',
   THEME_COLOR: 'browser-toolbar:theme-color',
 } as const
-
 const SESSION_PARTITION = 'persist:browser-pane'
 
 interface AgentControlState {
@@ -304,7 +308,7 @@ interface LastBrowserAction {
 
 let instanceCounter = 0
 
-export class BrowserPaneManager {
+export class BrowserPaneManager implements IBrowserPaneManager {
   private instances: Map<string, BrowserInstance> = new Map()
   private destroyingIds: Set<string> = new Set()
   private stateChangeCallback: ((info: BrowserInstanceInfo) => void) | null = null
@@ -2083,7 +2087,9 @@ export class BrowserPaneManager {
       }
 
       const { handleDeepLink } = await import('./deep-link')
-      const result = await handleDeepLink(url, this.windowManager)
+      const sink = this.windowManager.getRpcEventSink() ?? undefined
+      const resolver = (wcId: number) => this.windowManager?.getClientIdForWindow(wcId)
+      const result = await handleDeepLink(url, this.windowManager, sink, resolver)
       if (!result.success) {
         mainLog.warn(`[browser-pane] deep-link handling failed: ${result.error ?? 'unknown error'} url=${url}`)
       }

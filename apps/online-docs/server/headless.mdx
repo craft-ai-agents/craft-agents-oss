@@ -1,0 +1,113 @@
+---
+title: Headless Server
+description: Run Craft Agents as a headless server on a remote machine
+---
+
+# Headless Server
+
+Craft Agents can run as a headless server without the desktop GUI. This lets you keep long-running sessions alive on a remote machine, access them from multiple clients, and run compute-heavy tasks on a powerful server.
+
+## Quick Start
+
+From the monorepo root:
+
+```bash
+# Generate a token and start the server
+CRAFT_SERVER_TOKEN=$(openssl rand -hex 32) bun run packages/server/src/index.ts
+```
+
+The server prints connection details on startup:
+
+```
+CRAFT_SERVER_URL=ws://203.0.113.5:9100
+CRAFT_SERVER_TOKEN=<generated-token>
+```
+
+## Connecting Clients
+
+### Desktop App (Thin Client)
+
+Launch the Electron app in thin-client mode:
+
+```bash
+CRAFT_SERVER_URL=wss://203.0.113.5:9100 \
+CRAFT_SERVER_TOKEN=<token> \
+bun run electron:start
+```
+
+The desktop app renders the UI but all session logic, tool execution, and LLM calls run on the remote server.
+
+### CLI Client
+
+Use the terminal client for scripting and automation:
+
+```bash
+export CRAFT_SERVER_URL=ws://127.0.0.1:9100
+export CRAFT_SERVER_TOKEN=<token>
+
+craft-cli ping
+craft-cli sessions
+craft-cli send abc-123 "Run the tests"
+```
+
+See the [CLI guide](/server/cli) for the full command reference.
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `CRAFT_SERVER_TOKEN` | Yes | — | Bearer token for authentication |
+| `CRAFT_RPC_HOST` | No | `127.0.0.1` | Bind address (`0.0.0.0` for remote) |
+| `CRAFT_RPC_PORT` | No | `9100` | Bind port |
+| `CRAFT_RPC_TLS_CERT` | No | — | PEM certificate file (enables `wss://`) |
+| `CRAFT_RPC_TLS_KEY` | No | — | PEM private key file |
+| `CRAFT_RPC_TLS_CA` | No | — | PEM CA chain file (optional) |
+| `CRAFT_DEBUG` | No | `false` | Enable debug logging |
+
+## TLS
+
+When exposing the server over the network, TLS encrypts the WebSocket connection (`wss://` instead of `ws://`).
+
+### Self-Signed (Development)
+
+```bash
+./scripts/generate-dev-cert.sh
+# Creates certs/cert.pem and certs/key.pem (valid 365 days)
+```
+
+```bash
+CRAFT_SERVER_TOKEN=<token> \
+CRAFT_RPC_HOST=0.0.0.0 \
+CRAFT_RPC_TLS_CERT=certs/cert.pem \
+CRAFT_RPC_TLS_KEY=certs/key.pem \
+bun run packages/server/src/index.ts
+```
+
+### Production
+
+Use certificates from a trusted CA (e.g., Let's Encrypt) or place the server behind a reverse proxy (nginx, Caddy) that terminates TLS.
+
+## Docker
+
+```bash
+docker run -d \
+  -p 9100:9100 \
+  -e CRAFT_SERVER_TOKEN=<token> \
+  -e CRAFT_RPC_HOST=0.0.0.0 \
+  -v craft-data:/root/.craft-agent \
+  craft-agents-server
+```
+
+With TLS:
+
+```bash
+docker run -d \
+  -p 9100:9100 \
+  -e CRAFT_SERVER_TOKEN=<token> \
+  -e CRAFT_RPC_HOST=0.0.0.0 \
+  -e CRAFT_RPC_TLS_CERT=/certs/cert.pem \
+  -e CRAFT_RPC_TLS_KEY=/certs/key.pem \
+  -v ./certs:/certs:ro \
+  -v craft-data:/root/.craft-agent \
+  craft-agents-server
+```

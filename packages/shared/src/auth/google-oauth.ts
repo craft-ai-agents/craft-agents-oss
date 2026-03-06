@@ -17,6 +17,7 @@ import { openUrl } from '../utils/open-url.ts';
 import { createCallbackServer, type AppType } from './callback-server.ts';
 import { type GoogleService } from '../sources/types.ts';
 import { type OAuthSessionContext, buildOAuthDeeplinkUrl } from './types.ts';
+import type { PreparedOAuthFlow, OAuthExchangeParams, OAuthExchangeResult } from './oauth-flow-types.ts';
 
 // Re-export GoogleService type for convenient access
 export type { GoogleService };
@@ -256,6 +257,93 @@ export function getGoogleScopes(options: GoogleOAuthOptions): string[] {
 
   // Default to Gmail scopes for backwards compatibility
   return GOOGLE_SERVICE_SCOPES.gmail;
+}
+
+/**
+ * Options for preparing a Google OAuth flow (server-side, no browser interaction)
+ */
+export interface PrepareGoogleOAuthOptions {
+  service?: GoogleService;
+  scopes?: string[];
+  callbackPort: number;
+  clientId?: string;
+  clientSecret?: string;
+}
+
+/**
+ * Prepare a Google OAuth flow without starting a callback server or opening a browser.
+ * Returns everything needed to construct the auth URL and later exchange the code.
+ */
+export function prepareGoogleOAuth(options: PrepareGoogleOAuthOptions): PreparedOAuthFlow {
+  const clientId = options.clientId || GOOGLE_CLIENT_ID_ENV;
+  const clientSecret = options.clientSecret || GOOGLE_CLIENT_SECRET_ENV;
+
+  if (!isGoogleOAuthConfigured(clientId, clientSecret)) {
+    throw new Error(
+      'Google OAuth not configured. Provide clientId and clientSecret in source config, ' +
+      'or set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET environment variables.'
+    );
+  }
+
+  const scopes = getGoogleScopes(options);
+  const pkce = generatePKCE();
+  const state = generateState();
+  const redirectUri = `http://localhost:${options.callbackPort}/callback`;
+
+  const authUrl = new URL(GOOGLE_AUTH_URL);
+  authUrl.searchParams.set('client_id', clientId);
+  authUrl.searchParams.set('redirect_uri', redirectUri);
+  authUrl.searchParams.set('response_type', 'code');
+  authUrl.searchParams.set('scope', scopes.join(' '));
+  authUrl.searchParams.set('state', state);
+  authUrl.searchParams.set('code_challenge', pkce.challenge);
+  authUrl.searchParams.set('code_challenge_method', 'S256');
+  authUrl.searchParams.set('access_type', 'offline');
+  authUrl.searchParams.set('prompt', 'consent');
+
+  return {
+    authUrl: authUrl.toString(),
+    state,
+    codeVerifier: pkce.verifier,
+    tokenEndpoint: GOOGLE_TOKEN_URL,
+    clientId,
+    clientSecret,
+    redirectUri,
+    provider: 'google',
+  };
+}
+
+/**
+ * Exchange a Google authorization code for tokens (server-side).
+ * Also fetches the user's email address.
+ */
+export async function exchangeGoogleOAuth(params: OAuthExchangeParams): Promise<OAuthExchangeResult> {
+  try {
+    const tokens = await exchangeCodeForTokens(
+      params.code,
+      params.codeVerifier,
+      params.redirectUri,
+      params.clientId,
+      params.clientSecret || ''
+    );
+
+    const email = await getUserEmail(tokens.accessToken);
+
+    return {
+      success: true,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresAt: tokens.expiresIn ? Date.now() + tokens.expiresIn * 1000 : undefined,
+      email,
+      oauthClientId: params.clientId,
+      oauthClientSecret: params.clientSecret,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Google OAuth exchange failed',
+    };
+  }
 }
 
 /**

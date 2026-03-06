@@ -162,15 +162,21 @@ export function loadStoredConfig(): StoredConfig | null {
       config.activeWorkspaceId = config.workspaces[0]?.id || null;
     }
 
-    // Ensure workspace folder structure exists for all workspaces
+    // Ensure workspace folder structure exists for all workspaces.
+    // Failures here are non-fatal — the workspace will be re-created on next access.
     for (const workspace of config.workspaces) {
       if (!isValidWorkspace(workspace.rootPath)) {
-        createWorkspaceAtPath(workspace.rootPath, workspace.name);
+        try {
+          createWorkspaceAtPath(workspace.rootPath, workspace.name);
+        } catch (wsError) {
+          debug('[config] Failed to create workspace at', workspace.rootPath, ':', wsError instanceof Error ? wsError.message : wsError);
+        }
       }
     }
 
     return config;
-  } catch {
+  } catch (error) {
+    debug('[config] loadStoredConfig failed:', error instanceof Error ? error.message : error);
     return null;
   }
 }

@@ -1,0 +1,334 @@
+/**
+ * Channel map — maps ElectronAPI method names to IPC channels.
+ *
+ * Derived from preload/index.ts. This is the single source of truth for
+ * the method→channel mapping used by buildClientApi().
+ */
+
+import { RPC_CHANNELS } from '../shared/types'
+import type { ChannelMap } from './build-api'
+
+function invoke(channel: string, transform?: (result: any) => any) {
+  return { type: 'invoke' as const, channel, ...(transform && { transform }) }
+}
+
+function listener(channel: string) {
+  return { type: 'listener' as const, channel }
+}
+
+export const CHANNEL_MAP = {
+  // Session management
+  getSessions: invoke(RPC_CHANNELS.sessions.GET),
+  getUnreadSummary: invoke(RPC_CHANNELS.sessions.GET_UNREAD_SUMMARY),
+  markAllSessionsRead: invoke(RPC_CHANNELS.sessions.MARK_ALL_READ),
+  getSessionMessages: invoke(RPC_CHANNELS.sessions.GET_MESSAGES),
+  createSession: invoke(RPC_CHANNELS.sessions.CREATE),
+  deleteSession: invoke(RPC_CHANNELS.sessions.DELETE),
+  sendMessage: invoke(RPC_CHANNELS.sessions.SEND_MESSAGE),
+  cancelProcessing: invoke(RPC_CHANNELS.sessions.CANCEL),
+  killShell: invoke(RPC_CHANNELS.sessions.KILL_SHELL),
+  getTaskOutput: invoke(RPC_CHANNELS.tasks.GET_OUTPUT),
+  respondToPermission: invoke(RPC_CHANNELS.sessions.RESPOND_TO_PERMISSION),
+  respondToCredential: invoke(RPC_CHANNELS.sessions.RESPOND_TO_CREDENTIAL),
+  sessionCommand: invoke(RPC_CHANNELS.sessions.COMMAND),
+  getPendingPlanExecution: invoke(RPC_CHANNELS.sessions.GET_PENDING_PLAN_EXECUTION),
+  getSessionPermissionModeState: invoke(RPC_CHANNELS.sessions.GET_PERMISSION_MODE_STATE),
+
+  // Event listeners
+  onSessionEvent: listener(RPC_CHANNELS.sessions.EVENT),
+  onUnreadSummaryChanged: listener(RPC_CHANNELS.sessions.UNREAD_SUMMARY_CHANGED),
+
+  // Workspace management
+  getWorkspaces: invoke(RPC_CHANNELS.workspaces.GET),
+  createWorkspace: invoke(RPC_CHANNELS.workspaces.CREATE),
+  checkWorkspaceSlug: invoke(RPC_CHANNELS.workspaces.CHECK_SLUG),
+
+  // Window management
+  getWindowWorkspace: invoke(RPC_CHANNELS.window.GET_WORKSPACE),
+  getWindowMode: invoke(RPC_CHANNELS.window.GET_MODE),
+  openWorkspace: invoke(RPC_CHANNELS.window.OPEN_WORKSPACE),
+  openSessionInNewWindow: invoke(RPC_CHANNELS.window.OPEN_SESSION_IN_NEW_WINDOW),
+  switchWorkspace: invoke(RPC_CHANNELS.window.SWITCH_WORKSPACE),
+  closeWindow: invoke(RPC_CHANNELS.window.CLOSE),
+  confirmCloseWindow: invoke(RPC_CHANNELS.window.CONFIRM_CLOSE),
+  cancelCloseWindow: invoke(RPC_CHANNELS.window.CANCEL_CLOSE),
+  onCloseRequested: listener(RPC_CHANNELS.window.CLOSE_REQUESTED),
+  setTrafficLightsVisible: invoke(RPC_CHANNELS.window.SET_TRAFFIC_LIGHTS),
+
+  // File operations
+  readFile: invoke(RPC_CHANNELS.file.READ),
+  readFileDataUrl: invoke(RPC_CHANNELS.file.READ_DATA_URL),
+  readFileBinary: invoke(RPC_CHANNELS.file.READ_BINARY),
+  openFileDialog: invoke(RPC_CHANNELS.file.OPEN_DIALOG),
+  readFileAttachment: invoke(RPC_CHANNELS.file.READ_ATTACHMENT),
+  storeAttachment: invoke(RPC_CHANNELS.file.STORE_ATTACHMENT),
+  generateThumbnail: invoke(RPC_CHANNELS.file.GENERATE_THUMBNAIL),
+
+  // Theme
+  getSystemTheme: invoke(RPC_CHANNELS.theme.GET_SYSTEM_PREFERENCE),
+  onSystemThemeChange: listener(RPC_CHANNELS.theme.SYSTEM_CHANGED),
+
+  // System
+  getVersions: invoke(RPC_CHANNELS.system.VERSIONS),
+  getHomeDir: invoke(RPC_CHANNELS.system.HOME_DIR),
+  isDebugMode: invoke(RPC_CHANNELS.system.IS_DEBUG_MODE),
+
+  // Auto-update
+  checkForUpdates: invoke(RPC_CHANNELS.update.CHECK),
+  getUpdateInfo: invoke(RPC_CHANNELS.update.GET_INFO),
+  installUpdate: invoke(RPC_CHANNELS.update.INSTALL),
+  dismissUpdate: invoke(RPC_CHANNELS.update.DISMISS),
+  getDismissedUpdateVersion: invoke(RPC_CHANNELS.update.GET_DISMISSED),
+  onUpdateAvailable: listener(RPC_CHANNELS.update.AVAILABLE),
+  onUpdateDownloadProgress: listener(RPC_CHANNELS.update.DOWNLOAD_PROGRESS),
+
+  // Release notes
+  getReleaseNotes: invoke(RPC_CHANNELS.releaseNotes.GET),
+  getLatestReleaseVersion: invoke(RPC_CHANNELS.releaseNotes.GET_LATEST_VERSION),
+
+  // Shell operations
+  openUrl: invoke(RPC_CHANNELS.shell.OPEN_URL),
+  openFile: invoke(RPC_CHANNELS.shell.OPEN_FILE),
+  showInFolder: invoke(RPC_CHANNELS.shell.SHOW_IN_FOLDER),
+
+  // Menu event listeners
+  onMenuNewChat: listener(RPC_CHANNELS.menu.NEW_CHAT),
+  onMenuOpenSettings: listener(RPC_CHANNELS.menu.OPEN_SETTINGS),
+  onMenuKeyboardShortcuts: listener(RPC_CHANNELS.menu.KEYBOARD_SHORTCUTS),
+  onMenuToggleFocusMode: listener(RPC_CHANNELS.menu.TOGGLE_FOCUS_MODE),
+  onMenuToggleSidebar: listener(RPC_CHANNELS.menu.TOGGLE_SIDEBAR),
+
+  // Deep link
+  onDeepLinkNavigate: listener(RPC_CHANNELS.deeplink.NAVIGATE),
+
+  // Auth
+  showLogoutConfirmation: invoke(RPC_CHANNELS.auth.SHOW_LOGOUT_CONFIRMATION),
+  showDeleteSessionConfirmation: invoke(RPC_CHANNELS.auth.SHOW_DELETE_SESSION_CONFIRMATION),
+  logout: invoke(RPC_CHANNELS.auth.LOGOUT),
+  getCredentialHealth: invoke(RPC_CHANNELS.credentials.HEALTH_CHECK),
+
+  // Onboarding
+  getAuthState: invoke(RPC_CHANNELS.onboarding.GET_AUTH_STATE),
+  getSetupNeeds: invoke(RPC_CHANNELS.onboarding.GET_AUTH_STATE, r => r.setupNeeds),
+  startWorkspaceMcpOAuth: invoke(RPC_CHANNELS.onboarding.START_MCP_OAUTH),
+  startClaudeOAuth: invoke(RPC_CHANNELS.onboarding.START_CLAUDE_OAUTH),
+  exchangeClaudeCode: invoke(RPC_CHANNELS.onboarding.EXCHANGE_CLAUDE_CODE),
+  hasClaudeOAuthState: invoke(RPC_CHANNELS.onboarding.HAS_CLAUDE_OAUTH_STATE),
+  clearClaudeOAuthState: invoke(RPC_CHANNELS.onboarding.CLEAR_CLAUDE_OAUTH_STATE),
+
+  // ChatGPT OAuth
+  startChatGptOAuth: invoke(RPC_CHANNELS.chatgpt.START_OAUTH),
+  cancelChatGptOAuth: invoke(RPC_CHANNELS.chatgpt.CANCEL_OAUTH),
+  getChatGptAuthStatus: invoke(RPC_CHANNELS.chatgpt.GET_AUTH_STATUS),
+  chatGptLogout: invoke(RPC_CHANNELS.chatgpt.LOGOUT),
+
+  // GitHub Copilot OAuth
+  startCopilotOAuth: invoke(RPC_CHANNELS.copilot.START_OAUTH),
+  cancelCopilotOAuth: invoke(RPC_CHANNELS.copilot.CANCEL_OAUTH),
+  getCopilotAuthStatus: invoke(RPC_CHANNELS.copilot.GET_AUTH_STATUS),
+  copilotLogout: invoke(RPC_CHANNELS.copilot.LOGOUT),
+  onCopilotDeviceCode: listener(RPC_CHANNELS.copilot.DEVICE_CODE),
+
+  // Settings - API Setup
+  setupLlmConnection: invoke(RPC_CHANNELS.settings.SETUP_LLM_CONNECTION),
+  testLlmConnectionSetup: invoke(RPC_CHANNELS.settings.TEST_LLM_CONNECTION_SETUP),
+
+  // Pi provider discovery
+  getPiApiKeyProviders: invoke(RPC_CHANNELS.pi.GET_API_KEY_PROVIDERS),
+  getPiProviderBaseUrl: invoke(RPC_CHANNELS.pi.GET_PROVIDER_BASE_URL),
+  getPiProviderModels: invoke(RPC_CHANNELS.pi.GET_PROVIDER_MODELS),
+
+  // Session-specific model
+  getSessionModel: invoke(RPC_CHANNELS.sessions.GET_MODEL),
+  setSessionModel: invoke(RPC_CHANNELS.sessions.SET_MODEL),
+
+  // Workspace Settings
+  getWorkspaceSettings: invoke(RPC_CHANNELS.workspace.SETTINGS_GET),
+  updateWorkspaceSetting: invoke(RPC_CHANNELS.workspace.SETTINGS_UPDATE),
+
+  // Folder dialog
+  openFolderDialog: invoke(RPC_CHANNELS.dialog.OPEN_FOLDER),
+
+  // Filesystem search
+  searchFiles: invoke(RPC_CHANNELS.fs.SEARCH),
+
+  // Debug logging
+  debugLog: invoke(RPC_CHANNELS.debug.LOG),
+
+  // User Preferences
+  readPreferences: invoke(RPC_CHANNELS.preferences.READ),
+  writePreferences: invoke(RPC_CHANNELS.preferences.WRITE),
+
+  // Session Drafts
+  getDraft: invoke(RPC_CHANNELS.drafts.GET),
+  setDraft: invoke(RPC_CHANNELS.drafts.SET),
+  deleteDraft: invoke(RPC_CHANNELS.drafts.DELETE),
+  getAllDrafts: invoke(RPC_CHANNELS.drafts.GET_ALL),
+
+  // Session Info Panel
+  getSessionFiles: invoke(RPC_CHANNELS.sessions.GET_FILES),
+  getSessionNotes: invoke(RPC_CHANNELS.sessions.GET_NOTES),
+  setSessionNotes: invoke(RPC_CHANNELS.sessions.SET_NOTES),
+  watchSessionFiles: invoke(RPC_CHANNELS.sessions.WATCH_FILES),
+  unwatchSessionFiles: invoke(RPC_CHANNELS.sessions.UNWATCH_FILES),
+  onSessionFilesChanged: listener(RPC_CHANNELS.sessions.FILES_CHANGED),
+
+  // Sources
+  getSources: invoke(RPC_CHANNELS.sources.GET),
+  createSource: invoke(RPC_CHANNELS.sources.CREATE),
+  deleteSource: invoke(RPC_CHANNELS.sources.DELETE),
+  startSourceOAuth: invoke(RPC_CHANNELS.sources.START_OAUTH),
+  saveSourceCredentials: invoke(RPC_CHANNELS.sources.SAVE_CREDENTIALS),
+  getSourcePermissionsConfig: invoke(RPC_CHANNELS.sources.GET_PERMISSIONS),
+  getWorkspacePermissionsConfig: invoke(RPC_CHANNELS.workspace.GET_PERMISSIONS),
+  getDefaultPermissionsConfig: invoke(RPC_CHANNELS.permissions.GET_DEFAULTS),
+  onDefaultPermissionsChanged: listener(RPC_CHANNELS.permissions.DEFAULTS_CHANGED),
+  getMcpTools: invoke(RPC_CHANNELS.sources.GET_MCP_TOOLS),
+
+  // Session content search
+  searchSessionContent: invoke(RPC_CHANNELS.sessions.SEARCH_CONTENT),
+
+  // OAuth (server-owned credentials)
+  oauthRevoke: invoke(RPC_CHANNELS.oauth.REVOKE),
+
+  // Sources change listener
+  onSourcesChanged: listener(RPC_CHANNELS.sources.CHANGED),
+
+  // Skills
+  getSkills: invoke(RPC_CHANNELS.skills.GET),
+  getSkillFiles: invoke(RPC_CHANNELS.skills.GET_FILES),
+  deleteSkill: invoke(RPC_CHANNELS.skills.DELETE),
+  openSkillInEditor: invoke(RPC_CHANNELS.skills.OPEN_EDITOR),
+  openSkillInFinder: invoke(RPC_CHANNELS.skills.OPEN_FINDER),
+  onSkillsChanged: listener(RPC_CHANNELS.skills.CHANGED),
+
+  // Statuses
+  listStatuses: invoke(RPC_CHANNELS.statuses.LIST),
+  reorderStatuses: invoke(RPC_CHANNELS.statuses.REORDER),
+  onStatusesChanged: listener(RPC_CHANNELS.statuses.CHANGED),
+
+  // Labels
+  listLabels: invoke(RPC_CHANNELS.labels.LIST),
+  createLabel: invoke(RPC_CHANNELS.labels.CREATE),
+  deleteLabel: invoke(RPC_CHANNELS.labels.DELETE),
+  onLabelsChanged: listener(RPC_CHANNELS.labels.CHANGED),
+
+  // LLM connections change listener
+  onLlmConnectionsChanged: listener(RPC_CHANNELS.llmConnections.CHANGED),
+
+  // Views
+  listViews: invoke(RPC_CHANNELS.views.LIST),
+  saveViews: invoke(RPC_CHANNELS.views.SAVE),
+
+  // Tool icon mappings
+  getToolIconMappings: invoke(RPC_CHANNELS.toolIcons.GET_MAPPINGS),
+
+  // Workspace images
+  readWorkspaceImage: invoke(RPC_CHANNELS.workspace.READ_IMAGE),
+  writeWorkspaceImage: invoke(RPC_CHANNELS.workspace.WRITE_IMAGE),
+
+  // Theme
+  getAppTheme: invoke(RPC_CHANNELS.theme.GET_APP),
+  loadPresetThemes: invoke(RPC_CHANNELS.theme.GET_PRESETS),
+  loadPresetTheme: invoke(RPC_CHANNELS.theme.LOAD_PRESET),
+  getColorTheme: invoke(RPC_CHANNELS.theme.GET_COLOR_THEME),
+  setColorTheme: invoke(RPC_CHANNELS.theme.SET_COLOR_THEME),
+  getWorkspaceColorTheme: invoke(RPC_CHANNELS.theme.GET_WORKSPACE_COLOR_THEME),
+  setWorkspaceColorTheme: invoke(RPC_CHANNELS.theme.SET_WORKSPACE_COLOR_THEME),
+  getAllWorkspaceThemes: invoke(RPC_CHANNELS.theme.GET_ALL_WORKSPACE_THEMES),
+  getLogoUrl: invoke(RPC_CHANNELS.logo.GET_URL),
+  onAppThemeChange: listener(RPC_CHANNELS.theme.APP_CHANGED),
+  broadcastThemePreferences: invoke(RPC_CHANNELS.theme.BROADCAST_PREFERENCES),
+  onThemePreferencesChange: listener(RPC_CHANNELS.theme.PREFERENCES_CHANGED),
+  broadcastWorkspaceThemeChange: invoke(RPC_CHANNELS.theme.BROADCAST_WORKSPACE_THEME),
+  onWorkspaceThemeChange: listener(RPC_CHANNELS.theme.WORKSPACE_THEME_CHANGED),
+
+  // Notifications
+  showNotification: invoke(RPC_CHANNELS.notification.SHOW),
+  getNotificationsEnabled: invoke(RPC_CHANNELS.notification.GET_ENABLED),
+  setNotificationsEnabled: invoke(RPC_CHANNELS.notification.SET_ENABLED),
+
+  // Input settings
+  getAutoCapitalisation: invoke(RPC_CHANNELS.input.GET_AUTO_CAPITALISATION),
+  setAutoCapitalisation: invoke(RPC_CHANNELS.input.SET_AUTO_CAPITALISATION),
+  getSendMessageKey: invoke(RPC_CHANNELS.input.GET_SEND_MESSAGE_KEY),
+  setSendMessageKey: invoke(RPC_CHANNELS.input.SET_SEND_MESSAGE_KEY),
+  getSpellCheck: invoke(RPC_CHANNELS.input.GET_SPELL_CHECK),
+  setSpellCheck: invoke(RPC_CHANNELS.input.SET_SPELL_CHECK),
+
+  // Power settings
+  getKeepAwakeWhileRunning: invoke(RPC_CHANNELS.power.GET_KEEP_AWAKE),
+  setKeepAwakeWhileRunning: invoke(RPC_CHANNELS.power.SET_KEEP_AWAKE),
+
+  // Appearance settings
+  getRichToolDescriptions: invoke(RPC_CHANNELS.appearance.GET_RICH_TOOL_DESCRIPTIONS),
+  setRichToolDescriptions: invoke(RPC_CHANNELS.appearance.SET_RICH_TOOL_DESCRIPTIONS),
+
+  // Badge
+  refreshBadge: invoke(RPC_CHANNELS.badge.REFRESH),
+  setDockIconWithBadge: invoke(RPC_CHANNELS.badge.SET_ICON),
+  onBadgeDraw: listener(RPC_CHANNELS.badge.DRAW),
+  onBadgeDrawWindows: listener(RPC_CHANNELS.badge.DRAW_WINDOWS),
+
+  // Window focus
+  getWindowFocusState: invoke(RPC_CHANNELS.window.GET_FOCUS_STATE),
+  onWindowFocusChange: listener(RPC_CHANNELS.window.FOCUS_STATE),
+  onNotificationNavigate: listener(RPC_CHANNELS.notification.NAVIGATE),
+
+  // Git
+  getGitBranch: invoke(RPC_CHANNELS.git.GET_BRANCH),
+  checkGitBash: invoke(RPC_CHANNELS.gitbash.CHECK),
+  browseForGitBash: invoke(RPC_CHANNELS.gitbash.BROWSE),
+  setGitBashPath: invoke(RPC_CHANNELS.gitbash.SET_PATH),
+
+  // Menu actions
+  menuQuit: invoke(RPC_CHANNELS.menu.QUIT),
+  menuNewWindow: invoke(RPC_CHANNELS.menu.NEW_WINDOW),
+  menuMinimize: invoke(RPC_CHANNELS.menu.MINIMIZE),
+  menuMaximize: invoke(RPC_CHANNELS.menu.MAXIMIZE),
+  menuZoomIn: invoke(RPC_CHANNELS.menu.ZOOM_IN),
+  menuZoomOut: invoke(RPC_CHANNELS.menu.ZOOM_OUT),
+  menuZoomReset: invoke(RPC_CHANNELS.menu.ZOOM_RESET),
+  menuToggleDevTools: invoke(RPC_CHANNELS.menu.TOGGLE_DEV_TOOLS),
+  menuUndo: invoke(RPC_CHANNELS.menu.UNDO),
+  menuRedo: invoke(RPC_CHANNELS.menu.REDO),
+  menuCut: invoke(RPC_CHANNELS.menu.CUT),
+  menuCopy: invoke(RPC_CHANNELS.menu.COPY),
+  menuPaste: invoke(RPC_CHANNELS.menu.PASTE),
+  menuSelectAll: invoke(RPC_CHANNELS.menu.SELECT_ALL),
+
+  // Browser pane management
+  'browserPane.create': invoke(RPC_CHANNELS.browserPane.CREATE),
+  'browserPane.destroy': invoke(RPC_CHANNELS.browserPane.DESTROY),
+  'browserPane.list': invoke(RPC_CHANNELS.browserPane.LIST),
+  'browserPane.navigate': invoke(RPC_CHANNELS.browserPane.NAVIGATE),
+  'browserPane.goBack': invoke(RPC_CHANNELS.browserPane.GO_BACK),
+  'browserPane.goForward': invoke(RPC_CHANNELS.browserPane.GO_FORWARD),
+  'browserPane.reload': invoke(RPC_CHANNELS.browserPane.RELOAD),
+  'browserPane.stop': invoke(RPC_CHANNELS.browserPane.STOP),
+  'browserPane.focus': invoke(RPC_CHANNELS.browserPane.FOCUS),
+  'browserPane.emptyStateLaunch': invoke(RPC_CHANNELS.browserPane.LAUNCH),
+  'browserPane.onStateChanged': listener(RPC_CHANNELS.browserPane.STATE_CHANGED),
+  'browserPane.onRemoved': listener(RPC_CHANNELS.browserPane.REMOVED),
+  'browserPane.onInteracted': listener(RPC_CHANNELS.browserPane.INTERACTED),
+
+  // LLM Connections
+  listLlmConnections: invoke(RPC_CHANNELS.llmConnections.LIST),
+  listLlmConnectionsWithStatus: invoke(RPC_CHANNELS.llmConnections.LIST_WITH_STATUS),
+  getLlmConnection: invoke(RPC_CHANNELS.llmConnections.GET),
+  getLlmConnectionApiKey: invoke(RPC_CHANNELS.llmConnections.GET_API_KEY),
+  saveLlmConnection: invoke(RPC_CHANNELS.llmConnections.SAVE),
+  deleteLlmConnection: invoke(RPC_CHANNELS.llmConnections.DELETE),
+  testLlmConnection: invoke(RPC_CHANNELS.llmConnections.TEST),
+  setDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_DEFAULT),
+  setWorkspaceDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT),
+
+  // Automations
+  testAutomation: invoke(RPC_CHANNELS.automations.TEST),
+  setAutomationEnabled: invoke(RPC_CHANNELS.automations.SET_ENABLED),
+  duplicateAutomation: invoke(RPC_CHANNELS.automations.DUPLICATE),
+  deleteAutomation: invoke(RPC_CHANNELS.automations.DELETE),
+  getAutomationHistory: invoke(RPC_CHANNELS.automations.GET_HISTORY),
+  getAutomationLastExecuted: invoke(RPC_CHANNELS.automations.GET_LAST_EXECUTED),
+  onAutomationsChanged: listener(RPC_CHANNELS.automations.CHANGED),
+} satisfies ChannelMap

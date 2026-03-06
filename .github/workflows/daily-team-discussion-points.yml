@@ -1,10 +1,8 @@
 name: Run Daily Team Discussion Points Agent
 
 on:
-  # Run Mon-Fri at 6am UTC
   schedule:
     - cron: '0 5 * * 1-5'
-  # Allow manual trigger
   workflow_dispatch:
 
 jobs:
@@ -12,19 +10,36 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install Craft CLI
-        run: curl -fsSL https://agents.craft.do/cli/install.sh | bash
+      - uses: actions/checkout@v4
 
-      - name: Run Daily Team Discussion Points Agent
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Create discussion points skill
+        timeout-minutes: 5
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          bun run apps/cli/src/index.ts run \
+            --workspace-dir .github/agents \
+            --source craft-public \
+            --output-format stream-json \
+            "Read the 'Daily Team Discussion Points' document from the Craft \
+             source. Extract the AI Instructions section and create a local \
+             skill file at skills/daily-discussion-points/SKILL.md with those \
+             instructions as the skill content. Use the name 'Daily Team \
+             Discussion Points' and description from the document."
+
+      - name: Run discussion points agent
         timeout-minutes: 10
         env:
-          CRAFT_ANTHROPIC_API_KEY: ${{ secrets.CRAFT_ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          craft \
-            -w "${{ secrets.CRAFT_KB_MCP_URL }}" \
-            -a "@daily-team-discussion-points" \
-            -p "please do a run on today's daily note" \
+          bun run apps/cli/src/index.ts run \
+            --workspace-dir .github/agents \
+            --source craft-public \
             --output-format stream-json \
-            -m claude-opus-4-6 \
-            --debug
-
+            "[skill:daily-discussion-points] Run the skill on today's daily note"

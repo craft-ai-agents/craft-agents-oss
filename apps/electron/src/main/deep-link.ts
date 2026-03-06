@@ -37,7 +37,8 @@
 import type { BrowserWindow } from 'electron'
 import { mainLog } from './logger'
 import type { WindowManager } from './window-manager'
-import { IPC_CHANNELS } from '../shared/types'
+import { RPC_CHANNELS } from '../shared/types'
+import type { EventSink } from '@craft-agent/server-core/transport'
 
 export interface DeepLinkTarget {
   /** Workspace ID - undefined means use active window */
@@ -233,7 +234,10 @@ function buildDeepLinkWithoutWindowParam(url: string): string {
  */
 export async function handleDeepLink(
   url: string,
-  windowManager: WindowManager
+  windowManager: WindowManager,
+  sink?: EventSink,
+  resolveClientId?: (webContentsId: number) => string | undefined,
+  preferredClientId?: string,
 ): Promise<DeepLinkResult> {
   const target = parseDeepLink(url)
 
@@ -320,8 +324,17 @@ export async function handleDeepLink(
       action: target.action,
       actionParams: target.actionParams,
     }
-    if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
-      window.webContents.send(IPC_CHANNELS.DEEP_LINK_NAVIGATE, navigation)
+    const wsId = target.workspaceId ?? windowManager.getWorkspaceForWindow(window.webContents.id)
+    const resolvedClientId = resolveClientId?.(window.webContents.id)
+
+    // Prefer the resolved target window client. Only use preferredClientId as
+    // fallback when no resolver was provided (legacy call sites).
+    const clientId = resolvedClientId ?? (!resolveClientId ? preferredClientId : undefined)
+
+    if (sink && clientId) {
+      sink(RPC_CHANNELS.deeplink.NAVIGATE, { to: 'client', clientId }, navigation)
+    } else if (sink && wsId) {
+      sink(RPC_CHANNELS.deeplink.NAVIGATE, { to: 'workspace', workspaceId: wsId }, navigation)
     }
   }
 

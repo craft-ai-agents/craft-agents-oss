@@ -29,6 +29,9 @@ jobs:
       - name: Validate backend import boundary
         run: bash scripts/check-main-backend-boundary.sh
 
+      - name: Validate raw webContents.send usage
+        run: bash scripts/check-raw-sends.sh
+
       - name: Get version
         id: version
         run: |

@@ -11,10 +11,15 @@ import { Notification, app, BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
 import { readFileSync } from 'fs'
 import { mainLog } from './logger'
-import { IPC_CHANNELS } from '../shared/types'
+import { RPC_CHANNELS } from '../shared/types'
 import type { WindowManager } from './window-manager'
+import type { EventSink } from '@craft-agent/server-core/transport'
+
+type ClientResolver = (webContentsId: number) => string | undefined
 
 let windowManager: WindowManager | null = null
+let eventSink: EventSink | null = null
+let clientResolver: ClientResolver | null = null
 let baseIconPath: string | null = null
 let baseIconDataUrl: string | null = null
 let currentBadgeCount: number = 0
@@ -25,6 +30,17 @@ let instanceNumber: number | null = null  // Multi-instance dev: instance number
  */
 export function initNotificationService(wm: WindowManager): void {
   windowManager = wm
+}
+
+/**
+ * Set the event sink for notification broadcasts (called after server creation).
+ *
+ * When a resolver is provided we can route session navigation events to a
+ * single client instead of broadcasting to every window in the workspace.
+ */
+export function setNotificationEventSink(sink: EventSink, resolver?: ClientResolver): void {
+  eventSink = sink
+  clientResolver = resolver ?? null
 }
 
 /**
@@ -89,11 +105,22 @@ function handleNotificationClick(workspaceId: string, sessionId: string): void {
     }
     window.focus()
 
-    // Send navigation event to renderer to open the session
-    window.webContents.send('notification:navigate', {
-      workspaceId,
-      sessionId,
-    })
+    // Send navigation event to renderer to open the session.
+    // Prefer a single-client target to avoid cross-window navigation side effects.
+    if (eventSink) {
+      const clientId = clientResolver?.(window.webContents.id)
+      if (clientId) {
+        eventSink(RPC_CHANNELS.notification.NAVIGATE, { to: 'client', clientId }, {
+          workspaceId,
+          sessionId,
+        })
+      } else {
+        eventSink(RPC_CHANNELS.notification.NAVIGATE, { to: 'workspace', workspaceId }, {
+          workspaceId,
+          sessionId,
+        })
+      }
+    }
   }
 }
 
@@ -146,10 +173,8 @@ function updateBadgeCountMacOS(count: number): void {
   try {
     if (count > 0) {
       // Draw badge onto icon using the renderer process (Canvas API)
-      // Use windowManager to target only app windows — BrowserWindow.getAllWindows()
-      // includes browser pane windows which have no onBadgeDraw listener
-      if (windowManager && baseIconDataUrl) {
-        windowManager.broadcastToAll(IPC_CHANNELS.BADGE_DRAW, { count, iconDataUrl: baseIconDataUrl })
+      if (eventSink && baseIconDataUrl) {
+        eventSink(RPC_CHANNELS.badge.DRAW, { to: 'all' }, { count, iconDataUrl: baseIconDataUrl })
       }
     } else {
       // Reset to original icon (no badge)
@@ -171,9 +196,8 @@ function updateBadgeCountWindows(count: number): void {
   try {
     if (count > 0) {
       // Draw overlay icon using the renderer process (Canvas API)
-      // Use windowManager to target only app windows
-      if (windowManager) {
-        windowManager.broadcastToAll(IPC_CHANNELS.BADGE_DRAW_WINDOWS, { count })
+      if (eventSink) {
+        eventSink(RPC_CHANNELS.badge.DRAW_WINDOWS, { to: 'all' }, { count })
       }
     } else {
       // Clear the overlay on all windows

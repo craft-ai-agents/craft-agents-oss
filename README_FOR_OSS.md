@@ -147,11 +147,205 @@ Use **SHIFT+TAB** to cycle through modes in the chat interface.
 | `Enter` | Send message |
 | `Shift+Enter` | New line |
 
+## Remote Server (Headless)
+
+Craft Agents can run as a headless server on a remote machine (e.g., a Linux VPS), with the desktop app connecting as a thin client. This lets you keep long-running sessions alive, access them from multiple machines, and run compute-heavy tasks on a powerful server.
+
+### Quick Start
+
+From the monorepo root:
+
+```bash
+# Generate a token and start the server
+CRAFT_SERVER_TOKEN=$(openssl rand -hex 32) bun run packages/server/src/index.ts
+```
+
+The server prints the connection details on startup:
+
+```
+CRAFT_SERVER_URL=ws://203.0.113.5:9100
+CRAFT_SERVER_TOKEN=<generated-token>
+```
+
+Copy these values and use them to connect the desktop app.
+
+### Connecting the Desktop App
+
+Launch the Electron app in thin-client mode by passing the server URL and token:
+
+```bash
+CRAFT_SERVER_URL=wss://203.0.113.5:9100 CRAFT_SERVER_TOKEN=<token> bun run electron:start
+```
+
+In thin-client mode, the desktop app renders the UI but all session logic, tool execution, and LLM calls run on the remote server.
+
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `CRAFT_SERVER_TOKEN` | Yes | — | Bearer token for client authentication |
+| `CRAFT_RPC_HOST` | No | `127.0.0.1` | Bind address (`0.0.0.0` for remote access) |
+| `CRAFT_RPC_PORT` | No | `9100` | Bind port |
+| `CRAFT_RPC_TLS_CERT` | No | — | Path to PEM certificate file (enables `wss://`) |
+| `CRAFT_RPC_TLS_KEY` | No | — | Path to PEM private key file (required with cert) |
+| `CRAFT_RPC_TLS_CA` | No | — | Path to PEM CA chain file (optional, for client cert verification) |
+| `CRAFT_DEBUG` | No | `false` | Enable debug logging |
+
+### TLS (Recommended for Remote Access)
+
+When exposing the server over the network, TLS encrypts the WebSocket connection (`wss://` instead of `ws://`).
+
+**Generate a self-signed certificate (development/testing):**
+
+```bash
+./scripts/generate-dev-cert.sh
+# Creates certs/cert.pem and certs/key.pem (valid 365 days)
+```
+
+**Start the server with TLS:**
+
+```bash
+CRAFT_SERVER_TOKEN=<token> \
+CRAFT_RPC_HOST=0.0.0.0 \
+CRAFT_RPC_TLS_CERT=certs/cert.pem \
+CRAFT_RPC_TLS_KEY=certs/key.pem \
+bun run packages/server/src/index.ts
+```
+
+The server will print `CRAFT_SERVER_URL=wss://<your-public-ip>:9100`.
+
+**For production**, use certificates from a trusted CA (e.g., Let's Encrypt) or place the server behind a reverse proxy (nginx, Caddy) that terminates TLS.
+
+### Docker
+
+```bash
+docker run -d \
+  -p 9100:9100 \
+  -e CRAFT_SERVER_TOKEN=<token> \
+  -e CRAFT_RPC_HOST=0.0.0.0 \
+  -v craft-data:/root/.craft-agent \
+  craft-agents-server
+```
+
+To enable TLS in Docker, mount your certificates and set the env vars:
+
+```bash
+docker run -d \
+  -p 9100:9100 \
+  -e CRAFT_SERVER_TOKEN=<token> \
+  -e CRAFT_RPC_HOST=0.0.0.0 \
+  -e CRAFT_RPC_TLS_CERT=/certs/cert.pem \
+  -e CRAFT_RPC_TLS_KEY=/certs/key.pem \
+  -v ./certs:/certs:ro \
+  -v craft-data:/root/.craft-agent \
+  craft-agents-server
+```
+
+## CLI Client
+
+A terminal client that connects to a running Craft Agent server over WebSocket (`ws://` or `wss://`). Use it for scripting, CI/CD pipelines, server validation, or when you prefer the command line.
+
+### Installation
+
+```bash
+# From the monorepo (requires Bun)
+bun run apps/cli/src/index.ts --help
+
+# Or add to your PATH
+alias craft-cli="bun run $(pwd)/apps/cli/src/index.ts"
+```
+
+### Connection
+
+The CLI reads connection details from flags or environment variables:
+
+```bash
+# Via environment (set once)
+export CRAFT_SERVER_URL=ws://127.0.0.1:9100
+export CRAFT_SERVER_TOKEN=<your-token>
+
+# Or via flags
+craft-cli --url ws://127.0.0.1:9100 --token <token> ping
+```
+
+For TLS connections (`wss://`), use `--tls-ca <path>` for self-signed certificates.
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `ping` | Verify connectivity (clientId + latency) |
+| `health` | Check credential store health |
+| `versions` | Show server runtime versions |
+| `workspaces` | List workspaces |
+| `sessions` | List sessions in workspace |
+| `connections` | List LLM connections |
+| `sources` | List configured sources |
+| `session create` | Create a session (`--name`, `--mode`) |
+| `session messages <id>` | Print session message history |
+| `session delete <id>` | Delete a session |
+| `send <id> <message>` | Send message and stream AI response |
+| `cancel <id>` | Cancel in-progress processing |
+| `invoke <channel> [args]` | Raw RPC call with JSON args |
+| `listen <channel>` | Subscribe to push events (Ctrl+C to stop) |
+| `run <prompt>` | Self-contained: spawn server, run prompt, stream response, exit |
+| `--validate-server` | 21-step integration test (auto-spawns server if no `--url`) |
+
+#### Run Command Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--workspace-dir <path>` | — | Register a workspace directory before running |
+| `--source <slug>` | — | Enable a source (repeatable) |
+| `--output-format <fmt>` | `text` | Output format: `text` or `stream-json` |
+| `--mode <mode>` | `allow-all` | Permission mode for the session |
+| `--no-cleanup` | `false` | Skip session deletion on exit |
+| `--server-entry <path>` | — | Custom server entry point |
+| `--provider <name>` | `anthropic` | LLM provider (`anthropic`, `openai`, `google`, `openrouter`, `groq`, `mistral`, `xai`, etc.) |
+| `--model <id>` | (provider default) | Model ID (e.g., `claude-sonnet-4-5-20250929`, `gpt-4o`, `gemini-2.0-flash`) |
+| `--api-key <key>` | — | API key (or `$LLM_API_KEY`, or provider-specific env var) |
+| `--base-url <url>` | — | Custom API endpoint for proxies or self-hosted models |
+
+The `run` command is fully self-contained — it spawns a headless server, creates a session, sends the prompt, streams the response, and exits. No separate server setup needed. An API key is resolved from `--api-key`, `$LLM_API_KEY`, or a provider-specific env var (e.g., `$ANTHROPIC_API_KEY`, `$OPENAI_API_KEY`).
+
+### Examples
+
+```bash
+# Quick connectivity check
+craft-cli ping
+
+# List sessions (human-readable)
+craft-cli sessions
+
+# Send a message and stream the AI response
+craft-cli send abc-123 "What files are in the current directory?"
+
+# Pipe input
+echo "Summarize this" | craft-cli send abc-123
+
+# JSON output for scripting
+craft-cli --json workspaces | jq '.[].name'
+
+# Self-contained run (spawns its own server)
+craft-cli run "Summarize the README"
+craft-cli run --workspace-dir ./my-project --source github "List open PRs"
+
+# Multi-provider support
+craft-cli run --provider openai --model gpt-4o "Summarize this repo"
+GOOGLE_API_KEY=... craft-cli run --provider google --model gemini-2.0-flash "Hello"
+craft-cli run --provider anthropic --base-url https://openrouter.ai/api/v1 --api-key $OR_KEY "Hello"
+
+# Validate the server (auto-spawns if no --url)
+craft-cli --validate-server
+craft-cli --validate-server --url ws://127.0.0.1:9100 --token <token>
+```
+
 ## Architecture
 
 ```
 craft-agent/
 ├── apps/
+│   ├── cli/                   # Terminal client (CLI)
 │   └── electron/              # Desktop GUI (primary)
 │       └── src/
 │           ├── main/          # Electron main process

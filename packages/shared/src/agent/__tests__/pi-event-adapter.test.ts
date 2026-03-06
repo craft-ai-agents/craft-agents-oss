@@ -29,6 +29,7 @@ describe('PiEventAdapter', () => {
   });
 
   afterEach(() => {
+    toolMetadataStore._clearForTesting();
     rmSync(sessionDir, { recursive: true, force: true });
   });
 

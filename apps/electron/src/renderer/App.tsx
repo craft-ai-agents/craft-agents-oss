@@ -53,6 +53,8 @@ import {
   JSONPreviewOverlay,
 } from '@craft-agent/ui'
 import { useLinkInterceptor, type FilePreviewState } from '@/hooks/useLinkInterceptor'
+import { useTransportConnectionState } from '@/hooks/useTransportConnectionState'
+import { TransportConnectionBanner, shouldShowTransportConnectionBanner } from '@/components/app-shell/TransportConnectionBanner'
 import { getFileManagerName } from '@/lib/platform'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
@@ -1258,6 +1260,16 @@ export default function App() {
     readFileBinary: (path) => window.electronAPI.readFileBinary(path),
   })
 
+  const transportConnectionState = useTransportConnectionState()
+  const showTransportConnectionBanner = shouldShowTransportConnectionBanner(transportConnectionState)
+
+  const handleReconnectTransport = useCallback(() => {
+    void window.electronAPI.reconnectTransport().catch((error) => {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      toast.error('Reconnect failed', { description: message })
+    })
+  }, [])
+
   const handleOpenFile = linkInterceptor.handleOpenFile
   const handleOpenUrl = linkInterceptor.handleOpenUrl
 
@@ -1580,6 +1592,12 @@ export default function App() {
 
           {/* Main UI - always rendered, splash fades away to reveal it */}
           <div className="h-full flex flex-col text-foreground">
+            {showTransportConnectionBanner && transportConnectionState && (
+              <TransportConnectionBanner
+                state={transportConnectionState}
+                onRetry={handleReconnectTransport}
+              />
+            )}
             <div className="flex-1 min-h-0">
               <AppShell
                 contextValue={appShellContextValue}

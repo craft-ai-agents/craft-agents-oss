@@ -8,13 +8,19 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 
 // Mock logger before import
-mock.module('../logger', () => ({
-  mainLog: {
-    info: () => {},
-    error: () => {},
-    warn: () => {},
-  },
-}))
+mock.module('../logger', () => {
+  const stubLog = { info: () => {}, error: () => {}, warn: () => {}, debug: () => {} }
+  return {
+    mainLog: stubLog,
+    sessionLog: stubLog,
+    handlerLog: stubLog,
+    windowLog: stubLog,
+    agentLog: stubLog,
+    searchLog: stubLog,
+    isDebugMode: false,
+    getLogFilePath: () => '/tmp/main.log',
+  }
+})
 
 const { BrowserCDP } = await import('../browser-cdp')
 

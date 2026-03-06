@@ -92,9 +92,12 @@ export const piDriver: ProviderDriver = {
   }),
   fetchModels: async ({ connection, credentials, resolvedPaths, timeoutMs }) => {
     // Copilot OAuth: fetch models dynamically from the Copilot API
-    if (connection.piAuthProvider === 'github-copilot' && credentials.oauthAccessToken) {
+    // The CopilotClient CLI binary expects the GitHub OAuth token (our refreshToken),
+    // NOT the Copilot API token (our accessToken). The CLI does its own token exchange.
+    const copilotGitHubToken = credentials.oauthRefreshToken || credentials.oauthAccessToken;
+    if (connection.piAuthProvider === 'github-copilot' && copilotGitHubToken) {
       const models = await fetchCopilotModels(
-        credentials.oauthAccessToken,
+        copilotGitHubToken,
         resolvedPaths.copilotCliPath,
         timeoutMs,
       );

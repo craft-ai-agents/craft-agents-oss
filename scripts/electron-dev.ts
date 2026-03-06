@@ -391,7 +391,7 @@ async function main(): Promise<void> {
   console.log("🔨 Building main process...");
 
   const mainCjsPath = join(DIST_DIR, "main.cjs");
-  const preloadCjsPath = join(DIST_DIR, "preload.cjs");
+  const preloadCjsPath = join(DIST_DIR, "bootstrap-preload.cjs");
   const toolbarPreloadCjsPath = join(DIST_DIR, "browser-toolbar-preload.cjs");
 
   // Remove old build files to ensure fresh build
@@ -407,8 +407,8 @@ async function main(): Promise<void> {
       oauthDefines
     ),
     runEsbuild(
-      "apps/electron/src/preload/index.ts",
-      "apps/electron/dist/preload.cjs"
+      "apps/electron/src/preload/bootstrap.ts",
+      "apps/electron/dist/bootstrap-preload.cjs"
     ),
     runEsbuild(
       "apps/electron/src/preload/browser-toolbar.ts",
@@ -458,7 +458,7 @@ async function main(): Promise<void> {
   }
 
   if (!preloadValid.valid) {
-    console.error("❌ preload.cjs is invalid:", preloadValid.error);
+    console.error("❌ bootstrap-preload.cjs is invalid:", preloadValid.error);
     process.exit(1);
   }
 
@@ -505,11 +505,11 @@ async function main(): Promise<void> {
 
   // 3. Preload watcher (using esbuild watch API)
   const preloadContext = await esbuild.context({
-    entryPoints: [join(ROOT_DIR, "apps/electron/src/preload/index.ts")],
+    entryPoints: [join(ROOT_DIR, "apps/electron/src/preload/bootstrap.ts")],
     bundle: true,
     platform: "node",
     format: "cjs",
-    outfile: join(ROOT_DIR, "apps/electron/dist/preload.cjs"),
+    outfile: join(ROOT_DIR, "apps/electron/dist/bootstrap-preload.cjs"),
     external: ["electron"],
     logLevel: "info",
   });

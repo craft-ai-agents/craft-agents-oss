@@ -26,8 +26,8 @@ import {
   clearDismissedUpdateVersion,
 } from '@craft-agent/shared/config'
 import { readJsonFileSync } from '@craft-agent/shared/utils/files'
-import type { UpdateInfo } from '../shared/types'
-import type { WindowManager } from './window-manager'
+import { RPC_CHANNELS, type UpdateInfo } from '../shared/types'
+import type { EventSink } from '@craft-agent/server-core/transport'
 
 // Platform detection
 const PLATFORM = platform()
@@ -62,7 +62,7 @@ let updateInfo: UpdateInfo = {
   downloadProgress: 0,
 }
 
-let windowManager: WindowManager | null = null
+let eventSink: EventSink | null = null
 
 // Flag to indicate update is in progress — used to prevent force exit during quitAndInstall
 let __isUpdating = false
@@ -76,10 +76,10 @@ export function isUpdating(): boolean {
 }
 
 /**
- * Set the window manager for broadcasting update events to renderer windows
+ * Set the event sink for broadcasting update events to renderer windows
  */
-export function setWindowManager(wm: WindowManager): void {
-  windowManager = wm
+export function setAutoUpdateEventSink(sink: EventSink): void {
+  eventSink = sink
 }
 
 /**
@@ -94,29 +94,19 @@ export function getUpdateInfo(): UpdateInfo {
  * Creates a snapshot to avoid race conditions during broadcast.
  */
 function broadcastUpdateInfo(): void {
-  if (!windowManager) return
+  if (!eventSink) return
 
   const snapshot = { ...updateInfo }
-  const windows = windowManager.getAllWindows()
-  for (const { window } of windows) {
-    if (!window.isDestroyed()) {
-      window.webContents.send('update:available', snapshot)
-    }
-  }
+  eventSink(RPC_CHANNELS.update.AVAILABLE, { to: 'all' }, snapshot)
 }
 
 /**
  * Broadcast download progress to all renderer windows.
  */
 function broadcastDownloadProgress(progress: number): void {
-  if (!windowManager) return
+  if (!eventSink) return
 
-  const windows = windowManager.getAllWindows()
-  for (const { window } of windows) {
-    if (!window.isDestroyed()) {
-      window.webContents.send('update:downloadProgress', progress)
-    }
-  }
+  eventSink(RPC_CHANNELS.update.DOWNLOAD_PROGRESS, { to: 'all' }, progress)
 }
 
 // ─── Configure electron-updater ───────────────────────────────────────────────

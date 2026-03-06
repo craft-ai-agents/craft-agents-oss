@@ -23,6 +23,13 @@ SECURITY.md
 # GitHub Issue Templates
 .github/ISSUE_TEMPLATE/**/*
 
+# GitHub CI Workflows
+.github/workflows/validate.yml
+.github/workflows/validate-server.yml
+
+# Documentation
+docs/cli.md
+
 # =============================================================================
 # APPS - ELECTRON (Desktop GUI)
 # =============================================================================
@@ -64,6 +71,11 @@ apps/viewer/public/**/*
 apps/viewer/src/**/*
 
 # =============================================================================
+# APPS - CLI (Command-line Interface)
+# =============================================================================
+apps/cli/**/*
+
+# =============================================================================
 # PACKAGES - CORE (Type Definitions)
 # =============================================================================
 packages/core/**/*
@@ -82,6 +94,11 @@ packages/codex-types/**/*
 # PACKAGES - SESSION TOOLS CORE (Shared handlers for session-scoped tools)
 # =============================================================================
 packages/session-tools-core/**/*
+
+# =============================================================================
+# PACKAGES - SERVER CORE (Reusable WS/headless server infrastructure)
+# =============================================================================
+packages/server-core/**/*
 
 # =============================================================================
 # PACKAGES - PI AGENT SERVER (Out-of-process Pi SDK agent via stdio)
@@ -128,5 +145,20 @@ scripts/electron-build-assets.ts
 scripts/electron-clean.ts
 scripts/electron-dev.ts
 
+# Server build + distribution scripts
+scripts/build-server.ts
+scripts/generate-dev-cert.sh
+
+# Build common utilities (shared by electron-dev.ts and build-server.ts)
+scripts/build/**/*
+
 # Browser tool CLI (used by browser integration)
 scripts/browser-tool.ts
+
+# CI workflow testing
+scripts/test-workflow-local.sh
+
+# =============================================================================
+# PACKAGES - SERVER (Standalone Headless Server Entry)
+# =============================================================================
+packages/server/**/*

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -54,9 +54,9 @@ describe('unified-network-interceptor SSE processors', () => {
     toolMetadataStore.setSessionDir(sessionDir);
   });
 
-  afterAll(() => {
-    // best effort: remove temp dirs created by tests
-    // (individual tests create one per run)
+  afterEach(() => {
+    toolMetadataStore._clearForTesting();
+    rmSync(sessionDir, { recursive: true, force: true });
   });
 
   it('OpenAI: handles multiple tool calls in one delta chunk without dropping calls', async () => {

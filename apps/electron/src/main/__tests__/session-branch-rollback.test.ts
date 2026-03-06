@@ -15,9 +15,21 @@ mock.module('electron', () => ({
   app: {
     isPackaged: false,
     getAppPath: () => process.cwd(),
+    dock: { setIcon: () => {}, setBadge: () => {} },
+    setBadgeCount: () => {},
   },
   nativeImage: {
     createFromPath: () => ({ isEmpty: () => true }),
+    createFromDataURL: () => ({}),
+  },
+  Notification: class {
+    static isSupported() { return false }
+    on() {}
+    show() {}
+  },
+  BrowserWindow: {
+    getAllWindows: () => [],
+    getFocusedWindow: () => null,
   },
 }))
 
@@ -25,15 +37,19 @@ mock.module('@sentry/electron/main', () => ({
   captureException: () => {},
 }))
 
-mock.module('../logger', () => ({
-  sessionLog: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
-  isDebugMode: false,
-  getLogFilePath: () => '/tmp/main.log',
-}))
-
-mock.module('../notifications', () => ({
-  updateBadgeCount: () => {},
-}))
+mock.module('../logger', () => {
+  const stubLog = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} }
+  return {
+    mainLog: stubLog,
+    sessionLog: stubLog,
+    handlerLog: stubLog,
+    windowLog: stubLog,
+    agentLog: stubLog,
+    searchLog: stubLog,
+    isDebugMode: false,
+    getLogFilePath: () => '/tmp/main.log',
+  }
+})
 
 mock.module('@craft-agent/shared/config', () => ({
   getWorkspaceByNameOrId: (id: string) => (id === workspace.id ? workspace : null),
@@ -58,6 +74,33 @@ mock.module('@craft-agent/shared/config', () => ({
   migrateLegacyLlmConnectionsConfig: async () => {},
   migrateOrphanedDefaultConnections: async () => {},
   MODEL_REGISTRY: [],
+  // Targeted stubs: prevent SyntaxError in tests that import these from the barrel
+  DEFAULT_MODEL: 'claude-sonnet-4-20250514',
+  DEFAULT_THEME: { mode: 'system' },
+  getDefaultModelsForConnection: () => ({ default: 'claude-sonnet-4-20250514', mini: 'claude-haiku-4-5-20251001' }),
+  getDefaultModelForConnection: () => 'claude-sonnet-4-20250514',
+  setGitBashPath: () => {},
+  clearGitBashPath: () => {},
+  setActiveWorkspace: () => {},
+  getSummarizationModel: () => 'claude-haiku-4-5-20251001',
+  ensureConfigDir: () => {},
+  ensureConfigDefaults: () => {},
+  addWorkspace: async () => null,
+  getAllSessionDrafts: () => [],
+  getGitBashPath: () => null,
+  // Handler-required stubs: prevent SyntaxError in handler modules loaded by registration test
+  getPreferencesPath: () => '/tmp/preferences.json',
+  getSessionDraft: () => null,
+  setSessionDraft: async () => {},
+  deleteSessionDraft: async () => {},
+  getLlmConnections: () => [],
+  addLlmConnection: async () => null,
+  updateLlmConnection: async () => null,
+  deleteLlmConnection: async () => {},
+  setDefaultLlmConnection: async () => {},
+  touchLlmConnection: async () => {},
+  isCompatProvider: () => false,
+  isAnthropicProvider: () => true,
 }))
 
 mock.module('@craft-agent/shared/workspaces', () => ({
@@ -78,6 +121,14 @@ mock.module('@craft-agent/shared/agent', () => ({
   AbortReason: {
     USER_REQUEST: 'user_request',
   },
+  // Targeted stubs: prevent SyntaxError in tests that import these from the barrel
+  hydratePreviousPermissionMode: () => {},
+  initializeModeState: () => {},
+  cleanupModeState: () => {},
+  getPermissionMode: () => 'ask',
+  registerSessionScopedToolCallbacks: () => {},
+  cleanupSessionScopedTools: () => {},
+  getSessionScopedTools: () => [],
 }))
 
 mock.module('@craft-agent/shared/agent/backend', () => ({
@@ -95,6 +146,19 @@ mock.module('@craft-agent/shared/agent/backend', () => ({
   },
   cleanupSourceRuntimeArtifacts: async () => {},
   providerTypeToAgentProvider: () => 'anthropic',
+  // Targeted stubs: prevent SyntaxError in tests that import these from the barrel
+  fetchBackendModels: async () => ({ models: [] }),
+  initializeBackendHostRuntime: () => {},
+  testBackendConnection: async () => ({ success: false, error: 'stub' }),
+  validateStoredBackendConnection: async () => ({ success: false, error: 'stub' }),
+  createBackend: () => { throw new Error('stub') },
+  createAgent: () => { throw new Error('stub') },
+  detectProvider: () => 'anthropic',
+  getAvailableProviders: () => ['anthropic'],
+  isProviderAvailable: () => true,
+  connectionTypeToProvider: () => 'anthropic',
+  connectionAuthTypeToBackendAuthType: () => 'api_key',
+  resolveSetupTestConnectionHint: () => ({}),
 }))
 
 mock.module('@craft-agent/shared/sources', () => ({
@@ -113,6 +177,9 @@ mock.module('@craft-agent/shared/sources', () => ({
     constructor(_mgr: unknown, _opts: unknown) {}
   },
   createTokenGetter: () => async () => null,
+  // Targeted stubs: prevent SyntaxError in tests that import these from the barrel
+  loadSource: () => null,
+  API_OAUTH_PROVIDERS: [],
 }))
 
 mock.module('@craft-agent/shared/automations', () => ({
@@ -169,10 +236,27 @@ mock.module('@craft-agent/shared/sessions', () => ({
   getSessionPath: (_root: string, id: string) => `${workspaceRootPath}/sessions/${id}`,
   getOrCreateLatestSession: async () => null,
   sessionPersistenceQueue: { flush: async () => {} },
-  pickSessionFields: (s: any) => ({ ...s }),
+  pickSessionFields: (s: any) => {
+    // Must match SESSION_PERSISTENT_FIELDS to prevent contamination of persistence tests
+    const fields = [
+      'id','workspaceRootPath','sdkSessionId','sdkCwd',
+      'createdAt','lastUsedAt','lastMessageAt',
+      'name','isFlagged','sessionStatus','labels','hidden',
+      'lastReadMessageId','hasUnread',
+      'enabledSourceSlugs','permissionMode','previousPermissionMode','workingDirectory',
+      'model','llmConnection','connectionLocked','thinkingLevel',
+      'sharedUrl','sharedId','pendingPlanExecution',
+      'isArchived','archivedAt',
+      'branchFromMessageId','branchFromSdkSessionId','branchFromSessionPath',
+    ]
+    const result: Record<string, unknown> = {}
+    for (const f of fields) if (f in s) result[f] = (s as Record<string, unknown>)[f]
+    return result
+  },
+  validateSessionId: () => true,
 }))
 
-const { SessionManager } = await import('../sessions')
+const { SessionManager } = await import('@craft-agent/server-core/sessions')
 
 describe('session branch rollback on preflight failure', () => {
   beforeEach(() => {

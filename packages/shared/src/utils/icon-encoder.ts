@@ -42,6 +42,11 @@ export interface EncodeIconOptions {
   resize?: (buffer: Buffer, targetSize: number) => Buffer | undefined;
 }
 
+export interface EncodeIconOptionsAsync {
+  /** Async resize raster icons to 32x32. Takes (buffer, targetSize), returns PNG buffer. */
+  resize?: (buffer: Buffer, targetSize: number) => Promise<Buffer | undefined>;
+}
+
 /**
  * Get the thumbnail cache path for an icon file.
  * e.g., /path/to/icon.png → /path/to/icon.thumb.png
@@ -138,6 +143,73 @@ export function encodeIconToDataUrl(iconPath: string | undefined, options?: Enco
   }
 
   // Fallback: encode directly (SVGs, or raster without resize callback)
+  try {
+    const buffer = readFileSync(iconPath);
+    if (buffer.length > MAX_FILE_SIZE) {
+      return undefined;
+    }
+    const base64 = buffer.toString('base64');
+    return `data:${mimeType};base64,${base64}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Async variant of encodeIconToDataUrl that supports async resize callbacks (e.g. sharp).
+ * Same thumbnail caching behavior as the sync version.
+ */
+export async function encodeIconToDataUrlAsync(iconPath: string | undefined, options?: EncodeIconOptionsAsync): Promise<string | undefined> {
+  if (!iconPath) {
+    return undefined;
+  }
+
+  if (iconPath.startsWith('data:')) {
+    return iconPath;
+  }
+
+  if (isEmoji(iconPath)) {
+    return undefined;
+  }
+
+  if (!existsSync(iconPath)) {
+    return undefined;
+  }
+
+  const ext = extname(iconPath).toLowerCase();
+  const mimeType = EXT_TO_MIME[ext];
+  if (!mimeType) {
+    return undefined;
+  }
+
+  const isRaster = RASTER_EXTENSIONS.has(ext);
+
+  if (isRaster && options?.resize) {
+    const thumbPath = getThumbPath(iconPath);
+
+    if (isThumbValid(iconPath, thumbPath)) {
+      try {
+        const thumbBuffer = readFileSync(thumbPath);
+        const base64 = thumbBuffer.toString('base64');
+        return `data:image/png;base64,${base64}`;
+      } catch {
+        // Cache read failed, fall through to regenerate
+      }
+    }
+
+    try {
+      const buffer = readFileSync(iconPath);
+      const resized = await options.resize(buffer, ICON_TARGET_SIZE);
+      if (resized) {
+        try { writeFileSync(thumbPath, resized); } catch { /* cache write is best-effort */ }
+        const base64 = resized.toString('base64');
+        return `data:image/png;base64,${base64}`;
+      }
+    } catch {
+      return undefined;
+    }
+  }
+
   try {
     const buffer = readFileSync(iconPath);
     if (buffer.length > MAX_FILE_SIZE) {

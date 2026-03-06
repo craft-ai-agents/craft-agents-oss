@@ -55,21 +55,16 @@ function generatePKCE(): { codeVerifier: string; codeChallenge: string } {
 }
 
 /**
- * Start the OAuth flow by generating the login URL and opening the browser
+ * Prepare the OAuth flow by generating PKCE, state, and the auth URL.
+ * Does NOT open the browser — the caller is responsible for that.
  *
- * Returns the authorization URL that was opened. The user will authenticate
- * and then need to copy the authorization code from the callback page.
+ * Returns the authorization URL. The caller should open it on the user's
+ * machine (client-side), not on the server.
  */
-export async function startClaudeOAuth(
-  onStatus?: (message: string) => void
-): Promise<string> {
-  onStatus?.('Generating authentication URL...')
-
-  // Generate secure random values
+export function prepareClaudeOAuth(): string {
   const state = generateState()
   const { codeVerifier, codeChallenge } = generatePKCE()
 
-  // Store state for later verification
   const now = Date.now()
   currentOAuthState = {
     state,
@@ -78,7 +73,6 @@ export async function startClaudeOAuth(
     expiresAt: now + STATE_EXPIRY_MS,
   }
 
-  // Build OAuth URL
   const params = new URLSearchParams({
     code: 'true',
     client_id: CLAUDE_CLIENT_ID,
@@ -90,9 +84,23 @@ export async function startClaudeOAuth(
     state,
   })
 
-  const authUrl = `${CLAUDE_AUTH_URL}?${params.toString()}`
+  return `${CLAUDE_AUTH_URL}?${params.toString()}`
+}
 
-  // Open browser
+/**
+ * Start the OAuth flow by generating the login URL and opening the browser.
+ *
+ * @deprecated Use prepareClaudeOAuth() + open browser on the client instead.
+ * This function opens the browser on the server host, which fails in remote mode.
+ */
+export async function startClaudeOAuth(
+  onStatus?: (message: string) => void
+): Promise<string> {
+  onStatus?.('Generating authentication URL...')
+
+  const authUrl = prepareClaudeOAuth()
+
+  // Open browser (server-side — broken in remote mode)
   onStatus?.('Opening browser for authentication...')
   await openUrl(authUrl)
 

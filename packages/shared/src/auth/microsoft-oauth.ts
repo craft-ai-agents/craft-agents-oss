@@ -20,6 +20,7 @@ import { openUrl } from '../utils/open-url.ts';
 import { createCallbackServer, type AppType } from './callback-server.ts';
 import { type MicrosoftService } from '../sources/types.ts';
 import { type OAuthSessionContext, buildOAuthDeeplinkUrl } from './types.ts';
+import type { PreparedOAuthFlow, OAuthExchangeParams, OAuthExchangeResult } from './oauth-flow-types.ts';
 
 // Re-export MicrosoftService type for convenient access
 export type { MicrosoftService };
@@ -254,6 +255,78 @@ export function getMicrosoftScopes(options: MicrosoftOAuthOptions): string[] {
 
   // Default to Outlook scopes for backwards compatibility
   return MICROSOFT_SERVICE_SCOPES.outlook;
+}
+
+/**
+ * Options for preparing a Microsoft OAuth flow (server-side, no browser interaction)
+ */
+export interface PrepareMicrosoftOAuthOptions {
+  service?: MicrosoftService;
+  scopes?: string[];
+  callbackPort: number;
+}
+
+/**
+ * Prepare a Microsoft OAuth flow without starting a callback server or opening a browser.
+ * Returns everything needed to construct the auth URL and later exchange the code.
+ */
+export function prepareMicrosoftOAuth(options: PrepareMicrosoftOAuthOptions): PreparedOAuthFlow {
+  if (!isMicrosoftOAuthConfigured()) {
+    throw new Error(
+      'Microsoft OAuth not configured. Set MICROSOFT_OAUTH_CLIENT_ID environment variable.'
+    );
+  }
+
+  const scopes = getMicrosoftScopes(options);
+  const pkce = generatePKCE();
+  const state = generateState();
+  const redirectUri = `http://localhost:${options.callbackPort}/callback`;
+
+  const authUrl = new URL(MICROSOFT_AUTH_URL);
+  authUrl.searchParams.set('client_id', MICROSOFT_CLIENT_ID);
+  authUrl.searchParams.set('redirect_uri', redirectUri);
+  authUrl.searchParams.set('response_type', 'code');
+  authUrl.searchParams.set('scope', scopes.join(' '));
+  authUrl.searchParams.set('state', state);
+  authUrl.searchParams.set('code_challenge', pkce.challenge);
+  authUrl.searchParams.set('code_challenge_method', 'S256');
+  authUrl.searchParams.set('response_mode', 'query');
+  authUrl.searchParams.set('prompt', 'consent');
+
+  return {
+    authUrl: authUrl.toString(),
+    state,
+    codeVerifier: pkce.verifier,
+    tokenEndpoint: MICROSOFT_TOKEN_URL,
+    clientId: MICROSOFT_CLIENT_ID,
+    redirectUri,
+    provider: 'microsoft',
+  };
+}
+
+/**
+ * Exchange a Microsoft authorization code for tokens (server-side).
+ * Also fetches the user's email/UPN via Microsoft Graph.
+ */
+export async function exchangeMicrosoftOAuth(params: OAuthExchangeParams): Promise<OAuthExchangeResult> {
+  try {
+    const tokens = await exchangeCodeForTokens(params.code, params.codeVerifier, params.redirectUri);
+
+    const email = await getUserEmail(tokens.accessToken);
+
+    return {
+      success: true,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresAt: tokens.expiresIn ? Date.now() + tokens.expiresIn * 1000 : undefined,
+      email,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Microsoft OAuth exchange failed',
+    };
+  }
 }
 
 /**

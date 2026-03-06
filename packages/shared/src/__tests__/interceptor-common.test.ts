@@ -18,6 +18,7 @@ describe('interceptor-common', () => {
   });
 
   afterEach(() => {
+    toolMetadataStore._clearForTesting();
     rmSync(sessionDirA, { recursive: true, force: true });
     rmSync(sessionDirB, { recursive: true, force: true });
   });
