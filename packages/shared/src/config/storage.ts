@@ -34,6 +34,7 @@ export type {
 
 // Import for local use
 import type { Workspace, AuthType } from '@craft-agent/core/types';
+import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 
 // Import LLM connection types and constants
 import type { LlmConnection } from './llm-connections.ts';
@@ -47,6 +48,7 @@ export interface StoredConfig {
   // LLM Connections (authoritative source for auth and model config)
   llmConnections?: LlmConnection[];
   defaultLlmConnection?: string;  // Slug of default connection for new sessions
+  defaultThinkingLevel?: ThinkingLevel;  // App-level default thinking level for new sessions
 
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
@@ -2248,6 +2250,32 @@ export function setDefaultLlmConnection(slug: string): boolean {
   }
 
   config.defaultLlmConnection = slug;
+  saveConfig(config);
+  return true;
+}
+
+/**
+ * Get app-level default thinking level for new sessions.
+ * Falls back to bundled config defaults when unset.
+ */
+export function getDefaultThinkingLevel(): ThinkingLevel {
+  const config = loadStoredConfig();
+  if (config?.defaultThinkingLevel) {
+    return config.defaultThinkingLevel;
+  }
+
+  const defaults = loadConfigDefaults();
+  return defaults.workspaceDefaults.thinkingLevel;
+}
+
+/**
+ * Set app-level default thinking level for new sessions.
+ */
+export function setDefaultThinkingLevel(level: ThinkingLevel): boolean {
+  const config = loadStoredConfig();
+  if (!config) return false;
+
+  config.defaultThinkingLevel = level;
   saveConfig(config);
   return true;
 }
