@@ -56,6 +56,13 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       let connection = getLlmConnection(setup.slug)
       let isNewConnection = false
       if (!connection) {
+        // Reauth guard: if updateOnly is set, the connection must already exist.
+        // Clean up any orphaned credentials from a preceding OAuth flow.
+        if (setup.updateOnly) {
+          await manager.deleteLlmCredentials(setup.slug).catch(() => {})
+          deps.platform.logger?.warn(`[SETUP_LLM_CONNECTION] updateOnly rejected for missing slug: ${setup.slug}`)
+          return { success: false, error: 'Connection not found. Cannot re-authenticate a non-existent connection.' }
+        }
         // Create connection with appropriate defaults based on slug
         connection = createBuiltInConnection(setup.slug, setup.baseUrl)
         isNewConnection = true
@@ -648,7 +655,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
     error?: string
   }> => {
     try {
-      const { loginGitHubCopilot } = await import('@mariozechner/pi-ai')
+      const { loginGitHubCopilot } = await import('@mariozechner/pi-ai/oauth')
       const credentialManager = getCredentialManager()
 
       // Cancel any previous in-flight flow

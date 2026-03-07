@@ -171,21 +171,6 @@ export interface Base64ExtractionResult {
 }
 
 /**
- * Check if a character code is in the base64 charset (standard + URL-safe + padding + whitespace).
- */
-function isBase64Char(c: number): boolean {
-  return (
-    (c >= 65 && c <= 90) ||   // A-Z
-    (c >= 97 && c <= 122) ||  // a-z
-    (c >= 48 && c <= 57) ||   // 0-9
-    c === 43 || c === 47 ||   // + /
-    c === 45 || c === 95 ||   // - _ (URL-safe)
-    c === 61 ||               // =
-    c === 10 || c === 13 || c === 32  // whitespace (some encoders add line breaks)
-  );
-}
-
-/**
  * Check if a MIME type is inherently binary (no need to verify decoded bytes).
  */
 function isBinaryMime(mime: string): boolean {
@@ -231,38 +216,53 @@ export function extractBase64Binary(text: string): Base64ExtractionResult | null
   }
 
   // --- Path B: Raw base64 blob ---
+  // Strict canonicalization pipeline — rejects anything that isn't structurally
+  // valid base64. Eliminates false positives from Node's lenient Buffer.from().
   if (trimmed.length < MIN_BASE64_LENGTH) return null;
 
-  // Quick reject: strings starting with structured-data delimiters are not raw base64
+  // Quick reject: structured data delimiters
   const firstChar = trimmed.charCodeAt(0);
   if (firstChar === 0x7B || firstChar === 0x5B || firstChar === 0x3C) return null; // { [ <
 
-  // Sample first 8KB for charset analysis
-  const sampleLen = Math.min(trimmed.length, 8192);
-  let validCount = 0;
-  for (let i = 0; i < sampleLen; i++) {
-    if (isBase64Char(trimmed.charCodeAt(i))) validCount++;
-  }
+  // Step 1: Strip only CR/LF (standard base64 line wrapping per RFC 2045).
+  // Spaces are NOT stripped — real base64 never contains spaces.
+  const stripped = trimmed.replace(/[\r\n]/g, '');
 
-  // Require ≥90% base64-valid characters
-  if (validCount / sampleLen < 0.9) return null;
+  // Step 2: Strict charset — detect alphabet variant.
+  // Standard: [A-Za-z0-9+/] with optional = padding
+  // URL-safe: [A-Za-z0-9\-_] with optional = padding
+  const isStandard = /^[A-Za-z0-9+/]+=*$/.test(stripped);
+  const isUrlSafe = !isStandard && /^[A-Za-z0-9\-_]+=*$/.test(stripped);
+  if (!isStandard && !isUrlSafe) return null;
 
-  // Decode and verify — use full string (not just sample) for the actual decode
+  // Step 3: Normalize to standard alphabet for decoding
+  const normalized = isUrlSafe
+    ? stripped.replace(/-/g, '+').replace(/_/g, '/')
+    : stripped;
+
+  // Step 4: Auto-pad to make length divisible by 4
+  const padded = normalized.length % 4 === 0
+    ? normalized
+    : normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+
+  // Step 5: Decode
+  let decoded: Buffer;
   try {
-    const decoded = Buffer.from(trimmed, 'base64');
-    if (decoded.length < MIN_DECODED_SIZE) return null;
-
-    // Decode ratio check: valid base64 decodes to ~75% of input length.
-    // Significantly lower ratios indicate non-base64 chars were silently skipped.
-    if (decoded.length < trimmed.length * 0.6) return null;
-
-    if (!looksLikeBinary(decoded)) return null;
-
-    const ext = detectExtensionFromMagic(decoded) || '.bin';
-    return { buffer: decoded, mimeType: null, ext, source: 'raw-base64' };
+    decoded = Buffer.from(padded, 'base64');
   } catch {
     return null;
   }
+  if (decoded.length < MIN_DECODED_SIZE) return null;
+
+  // Step 6: Canonical roundtrip — re-encode and compare to padded input.
+  // Catches any input that Node's lenient decoder silently mangled.
+  if (decoded.toString('base64') !== padded) return null;
+
+  // Step 7: Binary-likeness check (unchanged)
+  if (!looksLikeBinary(decoded)) return null;
+
+  const ext = detectExtensionFromMagic(decoded) || '.bin';
+  return { buffer: decoded, mimeType: null, ext, source: 'raw-base64' };
 }
 
 // ============================================================

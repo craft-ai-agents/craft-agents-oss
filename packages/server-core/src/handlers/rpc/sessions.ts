@@ -146,7 +146,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   // Create a new session
   server.handle(RPC_CHANNELS.sessions.CREATE, async (_ctx, workspaceId: string, options?: import('@craft-agent/shared/protocol').CreateSessionOptions) => {
     const end = perf.start('ipc.createSession', { workspaceId })
-    const session = sessionManager.createSession(workspaceId, options)
+    const session = await sessionManager.createSession(workspaceId, options)
     end()
     return session
   })

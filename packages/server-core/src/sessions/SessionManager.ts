@@ -1155,6 +1155,7 @@ export class SessionManager implements ISessionManager {
                 pending.mentions,
                 pending.llmConnection,
                 pending.model,
+                pending.automationName,
               )
             )
           )
@@ -3989,8 +3990,9 @@ export class SessionManager implements ISessionManager {
 
       // If this is the first user message and no title exists, set one immediately
       // AI generation will enhance it later, but we always have a title from the start
+      // Automation sessions (triggeredBy set) already have a title and skip AI generation entirely
       const isFirstUserMessage = managed.messages.filter(m => m.role === 'user').length === 1
-      if (isFirstUserMessage && !managed.name) {
+      if (isFirstUserMessage && !managed.name && !managed.triggeredBy) {
         // Replace bracket mentions with their display labels (e.g. [skill:ws:commit] -> "Commit")
         // so titles show human-readable names instead of raw IDs
         let titleSource = message
@@ -4477,6 +4479,98 @@ export class SessionManager implements ISessionManager {
 
     // NOTE: We don't clear isProcessing or send complete event here anymore.
     // The event loop will drain remaining events and call onProcessingStopped when done.
+  }
+
+  /**
+   * Attempt auth retry: refresh token, destroy agent, resend last message.
+   * Shared by both typed_error and plain error auth-retry paths.
+   * Returns true if retry was initiated, false if conditions not met.
+   */
+  private attemptAuthRetry(
+    sessionId: string,
+    managed: ManagedSession,
+    workspaceId: string,
+    failureErrorCode?: string,
+  ): boolean {
+    if (managed.authRetryAttempted || !managed.lastSentMessage) return false
+
+    sessionLog.info(`Auth error detected, attempting token refresh and retry for session ${sessionId}`)
+    managed.authRetryAttempted = true
+    managed.authRetryInProgress = true
+
+    // Emit lightweight info so the user sees progress instead of a scary red error
+    this.sendEvent({
+      type: 'info',
+      sessionId,
+      message: 'Token expired, refreshing session…',
+      timestamp: this.monotonic(),
+    }, workspaceId)
+
+    setImmediate(async () => {
+      try {
+        // 1. Reset summarization client so it picks up fresh credentials
+        sessionLog.info(`[auth-retry] Resetting summarization client for session ${sessionId}`)
+        resetSummarizationClient()
+
+        // 2. Destroy the agent — the new agent's postInit() will refresh auth
+        sessionLog.info(`[auth-retry] Destroying agent for session ${sessionId}`)
+        managed.agent = null
+
+        // 3. Retry the message
+        const retryMessage = managed.lastSentMessage
+        const retryAttachments = managed.lastSentAttachments
+        const retryStoredAttachments = managed.lastSentStoredAttachments
+        const retryOptions = managed.lastSentOptions
+
+        if (retryMessage) {
+          sessionLog.info(`[auth-retry] Retrying message for session ${sessionId}`)
+          managed.isProcessing = false
+
+          // Remove the user message that was added for this failed attempt
+          // so we don't get duplicate messages when retrying
+          const lastUserMsgIndex = managed.messages.findLastIndex(m => m.role === 'user')
+          if (lastUserMsgIndex !== -1) {
+            managed.messages.splice(lastUserMsgIndex, 1)
+          }
+
+          managed.authRetryInProgress = false
+
+          await this.sendMessage(
+            sessionId,
+            retryMessage,
+            retryAttachments,
+            retryStoredAttachments,
+            retryOptions,
+            undefined,  // existingMessageId
+            true        // _isAuthRetry - prevents infinite retry loop
+          )
+          sessionLog.info(`[auth-retry] Retry completed for session ${sessionId}`)
+        } else {
+          managed.authRetryInProgress = false
+        }
+      } catch (retryError) {
+        managed.authRetryInProgress = false
+        sessionLog.error(`[auth-retry] Failed to retry after auth refresh for session ${sessionId}:`, retryError)
+        sessionRuntimeHooks.captureException(retryError, { errorSource: 'auth-retry', sessionId })
+        const failedMessage: Message = {
+          id: generateMessageId(),
+          role: 'error',
+          content: 'Authentication failed. Please check your credentials.',
+          timestamp: this.monotonic(),
+          errorCode: failureErrorCode,
+        }
+        managed.messages.push(failedMessage)
+        this.sendEvent({
+          type: 'error',
+          sessionId,
+          error: 'Authentication failed. Please check your credentials.',
+          timestamp: failedMessage.timestamp,
+        }, workspaceId)
+        this.onProcessingStopped(sessionId, 'error')
+      }
+    })
+
+    return true
   }
 
   /**
@@ -5372,12 +5466,26 @@ To view this task's output:
         break
       }
 
-      case 'error':
+      case 'error': {
         // Skip abort errors - these are expected when force-aborting via Query.close()
         if (event.message.includes('aborted') || event.message.includes('AbortError')) {
           sessionLog.info('Skipping abort error event (expected during interrupt)')
           break
         }
+
+        // Defensive: detect auth-expiry text in plain errors that weren't classified
+        // as typed_error (e.g. Pi SDK error path or future provider changes).
+        const lowerErr = event.message.toLowerCase()
+        const isPlainAuthError =
+          lowerErr.includes('token is expired') ||
+          lowerErr.includes('authentication token is expired') ||
+          lowerErr.includes('please try signing in again') ||
+          (lowerErr.includes('401') && (lowerErr.includes('unauthorized') || lowerErr.includes('auth')))
+
+        if (isPlainAuthError && this.attemptAuthRetry(sessionId, managed, workspaceId)) {
+          break
+        }
+
         // AgentEvent uses `message` not `error`
         const errorMessage: Message = {
           id: generateMessageId(),
@@ -5388,6 +5496,7 @@ To view this task's output:
         managed.messages.push(errorMessage)
         this.sendEvent({ type: 'error', sessionId, error: event.message, timestamp: errorMessage.timestamp }, workspaceId)
         break
+      }
 
       case 'typed_error':
         // Skip abort errors - these are expected when force-aborting via Query.close()
@@ -5408,84 +5517,7 @@ To view this task's output:
         const isAuthError = event.error.code === 'invalid_api_key' ||
           event.error.code === 'expired_oauth_token'
 
-        if (isAuthError && !managed.authRetryAttempted && managed.lastSentMessage) {
-          sessionLog.info(`Auth error detected, attempting token refresh and retry for session ${sessionId}`)
-          managed.authRetryAttempted = true
-          managed.authRetryInProgress = true
-
-          // Trigger async retry (don't block the event processing)
-          // We use setImmediate to let the current event loop finish
-          setImmediate(async () => {
-            try {
-              // 1. Reset summarization client so it picks up fresh credentials
-              sessionLog.info(`[auth-retry] Resetting summarization client for session ${sessionId}`)
-              resetSummarizationClient()
-
-              // 2. Destroy the agent — the new agent's postInit() will refresh auth
-              sessionLog.info(`[auth-retry] Destroying agent for session ${sessionId}`)
-              managed.agent = null
-
-              // 3. Retry the message
-              // Get the stored message/attachments before they're cleared
-              const retryMessage = managed.lastSentMessage
-              const retryAttachments = managed.lastSentAttachments
-              const retryStoredAttachments = managed.lastSentStoredAttachments
-              const retryOptions = managed.lastSentOptions
-
-              if (retryMessage) {
-                sessionLog.info(`[auth-retry] Retrying message for session ${sessionId}`)
-                // Clear processing state so sendMessage can start fresh
-                managed.isProcessing = false
-                // Note: Don't clear lastSentMessage yet - sendMessage will set new ones
-
-                // Remove the user message that was added for this failed attempt
-                // so we don't get duplicate messages when retrying
-                // Find and remove the last user message (the one we're retrying)
-                const lastUserMsgIndex = managed.messages.findLastIndex(m => m.role === 'user')
-                if (lastUserMsgIndex !== -1) {
-                  managed.messages.splice(lastUserMsgIndex, 1)
-                }
-
-                // Clear authRetryInProgress before calling sendMessage
-                // This allows the new request to be processed normally
-                managed.authRetryInProgress = false
-
-                await this.sendMessage(
-                  sessionId,
-                  retryMessage,
-                  retryAttachments,
-                  retryStoredAttachments,
-                  retryOptions,
-                  undefined,  // existingMessageId
-                  true        // _isAuthRetry - prevents infinite retry loop
-                )
-                sessionLog.info(`[auth-retry] Retry completed for session ${sessionId}`)
-              } else {
-                managed.authRetryInProgress = false
-              }
-            } catch (retryError) {
-              managed.authRetryInProgress = false
-              sessionLog.error(`[auth-retry] Failed to retry after auth refresh for session ${sessionId}:`, retryError)
-              // Report auth retry failures via runtime hooks
-              sessionRuntimeHooks.captureException(retryError, { errorSource: 'auth-retry', sessionId })
-              // Show the original error to the user since retry failed
-              const failedMessage: Message = {
-                id: generateMessageId(),
-                role: 'error',
-                content: 'Authentication failed. Please check your credentials.',
-                timestamp: this.monotonic(),
-                errorCode: event.error.code,
-              }
-              managed.messages.push(failedMessage)
-              this.sendEvent({
-                type: 'typed_error',
-                sessionId,
-                error: event.error
-              }, workspaceId)
-              this.onProcessingStopped(sessionId, 'error')
-            }
-          })
-
+        if (isAuthError && this.attemptAuthRetry(sessionId, managed, workspaceId, event.error.code)) {
           // Don't add error message or send to renderer - we're handling it via retry
           break
         }
@@ -5706,6 +5738,7 @@ To view this task's output:
     mentions?: string[],
     llmConnection?: string,
     model?: string,
+    automationName?: string,
   ): Promise<{ sessionId: string }> {
     // Warn if llmConnection was specified but doesn't resolve
     if (llmConnection) {
@@ -5718,15 +5751,32 @@ To view this task's output:
     // Resolve @mentions to source/skill slugs
     const resolved = mentions ? this.resolveAutomationMentions(workspaceRootPath, mentions) : undefined
 
+    // Use automation name if provided, otherwise fall back to prompt snippet
+    const fallback = `Automation: ${prompt.slice(0, 50)}${prompt.length > 50 ? '...' : ''}`
+    const sessionName = automationName || fallback
+
     // Create a new session for this automation
     const session = await this.createSession(workspaceId, {
-      name: `Automation: ${prompt.slice(0, 50)}${prompt.length > 50 ? '...' : ''}`,
+      name: sessionName,
       labels,
       permissionMode: permissionMode || 'safe',
       enabledSourceSlugs: resolved?.sourceSlugs,
       llmConnection,
       model,
     })
+
+    // Populate triggeredBy metadata so title generation is explicitly skipped
+    // and the session is identifiable as automation-initiated after reload
+    const managed = this.sessions.get(session.id)
+    if (managed) {
+      managed.triggeredBy = { automationName, timestamp: Date.now() }
+      this.persistSession(managed)
+    }
+
+    // Notify renderer to hydrate full session metadata (including title)
+    // before streaming events arrive. Without this, the renderer may create
+    // a synthetic empty session and temporarily show "New chat".
+    this.sendEvent({ type: 'session_created', sessionId: session.id }, workspaceId)
 
     // Send the prompt
     await this.sendMessage(session.id, prompt, undefined, undefined, {

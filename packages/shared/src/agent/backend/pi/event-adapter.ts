@@ -20,6 +20,7 @@ import type { AssistantMessageEvent } from '@mariozechner/pi-ai';
 import { BaseEventAdapter } from '../base-event-adapter.ts';
 import { PI_TOOL_NAME_MAP } from './constants.ts';
 import { toolMetadataStore } from '../../../interceptor-common.ts';
+import { parseError } from '../../errors.ts';
 
 /**
  * Combined event type the adapter can handle.
@@ -185,7 +186,15 @@ export class PiEventAdapter extends BaseEventAdapter {
 
         // Surface API errors — Pi SDK sets stopReason: 'error' and errorMessage on failures
         if (msg.stopReason === 'error' && msg.errorMessage) {
-          yield { type: 'error', message: msg.errorMessage };
+          // Classify the error — auth/billing errors should be typed so SessionManager
+          // can trigger its auth-retry pipeline (refresh token + resend).
+          const parsed = parseError(new Error(msg.errorMessage));
+          const isClassified = parsed.code !== 'unknown_error';
+          if (isClassified) {
+            yield { type: 'typed_error', error: parsed };
+          } else {
+            yield { type: 'error', message: msg.errorMessage };
+          }
           break;
         }
 

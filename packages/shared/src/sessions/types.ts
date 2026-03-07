@@ -46,6 +46,8 @@ export const SESSION_PERSISTENT_FIELDS = [
   'branchFromMessageId',
   'branchFromSdkSessionId',
   'branchFromSessionPath',
+  // Automation origin
+  'triggeredBy',
 ] as const;
 
 export type SessionPersistentField = typeof SESSION_PERSISTENT_FIELDS[number];
@@ -161,6 +163,8 @@ export interface SessionConfig {
   branchFromSdkSessionId?: string;
   /** Parent session's storage path (for Pi SDK fork — locating parent Pi session files). */
   branchFromSessionPath?: string;
+  /** Metadata for sessions created by automations */
+  triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
 }
 
 /**
@@ -242,6 +246,8 @@ export interface SessionHeader {
   isArchived?: boolean;
   /** Timestamp when session was archived (for retention policy) */
   archivedAt?: number;
+  /** Metadata for sessions created by automations */
+  triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
   // Pre-computed fields for fast list loading
   /** Number of messages in session */
   messageCount: number;

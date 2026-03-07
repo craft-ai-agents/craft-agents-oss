@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/pi-agent-server",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "license": "Apache-2.0",
   "description": "Out-of-process Pi agent server communicating via JSONL over stdio",
   "type": "module",
@@ -12,9 +12,9 @@
     "build": "bun build src/index.ts --outdir=dist --target=bun --format=esm --external koffi"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "0.55.0",
-    "@mariozechner/pi-agent-core": "0.55.0",
-    "@mariozechner/pi-ai": "0.55.0",
+    "@mariozechner/pi-coding-agent": "0.56.2",
+    "@mariozechner/pi-agent-core": "0.56.2",
+    "@mariozechner/pi-ai": "0.56.2",
     "duck-duck-scrape": "^2.2.7"
   },
   "devDependencies": {

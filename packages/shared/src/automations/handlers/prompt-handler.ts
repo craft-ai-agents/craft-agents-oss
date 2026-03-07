@@ -10,6 +10,7 @@ import type { EventBus, BaseEventPayload } from '../event-bus.ts';
 import type { AutomationHandler, PromptHandlerOptions, AutomationsConfigProvider } from './types.ts';
 import { APP_EVENTS, type AutomationEvent, type PromptAction, type PendingPrompt, type AppEvent } from '../types.ts';
 import { matcherMatches, buildEnvFromPayload, expandEnvVars, parsePromptReferences } from '../utils.ts';
+import { deriveAutomationName } from '../name-utils.ts';
 
 const log = createLogger('prompt-handler');
 
@@ -53,6 +54,7 @@ export class PromptHandler implements AutomationHandler {
     // Group prompt actions by matcher for per-matcher history
     const matcherPrompts: Array<{
       matcherId: string | undefined;
+      automationName: string;
       prompts: Array<{ prompt: PromptAction; labels?: string[]; permissionMode?: 'safe' | 'ask' | 'allow-all' }>;
     }> = [];
 
@@ -66,7 +68,7 @@ export class PromptHandler implements AutomationHandler {
         }
       }
       if (prompts.length > 0) {
-        matcherPrompts.push({ matcherId: matcher.id, prompts });
+        matcherPrompts.push({ matcherId: matcher.id, automationName: deriveAutomationName(event, matcher), prompts });
       }
     }
 
@@ -81,7 +83,7 @@ export class PromptHandler implements AutomationHandler {
     // Process prompts per matcher
     const pendingPrompts: PendingPrompt[] = [];
 
-    for (const { matcherId, prompts } of matcherPrompts) {
+    for (const { matcherId, automationName, prompts } of matcherPrompts) {
       for (const { prompt, labels, permissionMode } of prompts) {
         // Expand environment variables in the prompt
         const expandedPrompt = expandEnvVars(prompt.prompt, env);
@@ -95,6 +97,7 @@ export class PromptHandler implements AutomationHandler {
         pendingPrompts.push({
           sessionId: this.options.sessionId,
           matcherId,
+          automationName,
           prompt: expandedPrompt,
           mentions: references.mentions,
           labels: expandedLabels,

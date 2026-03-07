@@ -477,6 +477,81 @@ describe('PromptHandler', () => {
     });
   });
 
+  describe('automationName propagation', () => {
+    it('should set automationName from matcher.name when provided', async () => {
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        LabelAdd: [{
+          name: 'Daily Triage',
+          actions: [{ type: 'prompt', prompt: 'Review issues' }],
+        }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+
+      await bus.emit('LabelAdd', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'test',
+      });
+
+      expect(onPromptsReady).toHaveBeenCalledTimes(1);
+      const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+      expect(prompts[0]!.automationName).toBe('Daily Triage');
+
+      handler.dispose();
+    });
+
+    it('should derive automationName from @mention when matcher has no name', async () => {
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        LabelAdd: [{
+          actions: [{ type: 'prompt', prompt: '@linear check for issues' }],
+        }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+
+      await bus.emit('LabelAdd', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'test',
+      });
+
+      expect(onPromptsReady).toHaveBeenCalledTimes(1);
+      const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+      expect(prompts[0]!.automationName).toBe('linear prompt');
+
+      handler.dispose();
+    });
+
+    it('should derive automationName from prompt text when no name or @mention', async () => {
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        LabelAdd: [{
+          actions: [{ type: 'prompt', prompt: 'Review the code' }],
+        }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+
+      await bus.emit('LabelAdd', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'test',
+      });
+
+      expect(onPromptsReady).toHaveBeenCalledTimes(1);
+      const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+      expect(prompts[0]!.automationName).toBe('Review the code');
+
+      handler.dispose();
+    });
+  });
+
   describe('dispose', () => {
     it('should unsubscribe from the event bus', () => {
       const configProvider = createMockConfigProvider();

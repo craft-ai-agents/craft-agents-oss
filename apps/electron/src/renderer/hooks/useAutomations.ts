@@ -95,6 +95,7 @@ export function useAutomations(
     window.electronAPI.testAutomation({
       workspaceId: activeWorkspaceId,
       automationId: automation.id,
+      automationName: automation.name,
       actions: automation.actions,
       permissionMode: automation.permissionMode,
       labels: automation.labels,
