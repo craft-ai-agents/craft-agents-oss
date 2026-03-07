@@ -32,6 +32,106 @@ export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.gitbash.SET_PATH,
 ] as const
 
+interface ParsedInternalDeepLink {
+  navigation?: {
+    view?: string
+    action?: string
+    actionParams?: Record<string, string>
+  }
+  workspaceId?: string
+  /** Use client shell.openExternal fallback (e.g. window=focused links). */
+  requiresExternalOpen?: boolean
+  /** True when URL is intentionally consumed without navigation (auth callbacks). */
+  handledNoop?: boolean
+}
+
+const COMPOUND_ROUTE_PREFIXES = new Set([
+  'allSessions',
+  'flagged',
+  'state',
+  'sources',
+  'settings',
+  'skills',
+])
+
+function collectDeepLinkParams(parsed: URL, pathId?: string): Record<string, string> | undefined {
+  const params: Record<string, string> = {}
+  if (pathId) params.id = pathId
+
+  parsed.searchParams.forEach((value, key) => {
+    if (key === 'window' || key === 'sidebar') return
+    params[key] = value
+  })
+
+  return Object.keys(params).length > 0 ? params : undefined
+}
+
+function parseInternalCraftAgentsDeepLink(parsed: URL): ParsedInternalDeepLink | null {
+  if (parsed.protocol !== 'craftagents:') return null
+
+  const host = parsed.hostname
+  const pathParts = parsed.pathname.split('/').filter(Boolean)
+  const windowMode = parsed.searchParams.get('window')
+
+  // Preserve window-specific behavior via OS protocol path.
+  if (windowMode === 'focused' || windowMode === 'full') {
+    return { requiresExternalOpen: true }
+  }
+
+  // OAuth callback links are handled by auth flow code paths.
+  if (host === 'auth-callback') {
+    return { handledNoop: true }
+  }
+
+  if (COMPOUND_ROUTE_PREFIXES.has(host)) {
+    const viewRoute = pathParts.length > 0 ? `${host}/${pathParts.join('/')}` : host
+    return { navigation: { view: viewRoute } }
+  }
+
+  if (host === 'action') {
+    const action = pathParts[0]
+    if (!action) return null
+
+    const actionParams = collectDeepLinkParams(parsed, pathParts[1])
+    return {
+      navigation: {
+        action,
+        actionParams,
+      },
+    }
+  }
+
+  if (host === 'workspace') {
+    const workspaceId = pathParts[0]
+    if (!workspaceId) return null
+
+    const routeType = pathParts[1]
+    if (!routeType) return null
+
+    if (COMPOUND_ROUTE_PREFIXES.has(routeType)) {
+      return {
+        workspaceId,
+        navigation: { view: pathParts.slice(1).join('/') },
+      }
+    }
+
+    if (routeType === 'action') {
+      const action = pathParts[2]
+      if (!action) return null
+
+      return {
+        workspaceId,
+        navigation: {
+          action,
+          actionParams: collectDeepLinkParams(parsed, pathParts[3]),
+        },
+      }
+    }
+  }
+
+  return null
+}
+
 export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps): void {
   const windowManager = deps.windowManager
 
@@ -174,14 +274,37 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
     try {
       const parsed = new URL(url)
 
-      // craftagents:// URLs require the GUI deep-link handler (Electron only)
       if (parsed.protocol === 'craftagents:') {
-        deps.platform.logger.info('[OPEN_URL] craftagents:// URLs require GUI deep-link handler — skipping in core')
+        const deepLink = parseInternalCraftAgentsDeepLink(parsed)
+
+        if (deepLink?.handledNoop) {
+          deps.platform.logger.info('[OPEN_URL] Ignoring auth-callback deep link in OPEN_URL handler')
+          return
+        }
+
+        if (deepLink?.navigation?.view || deepLink?.navigation?.action) {
+          const target = deepLink.workspaceId && deepLink.workspaceId !== ctx.workspaceId
+            ? { to: 'workspace' as const, workspaceId: deepLink.workspaceId }
+            : { to: 'client' as const, clientId: ctx.clientId }
+
+          deps.platform.logger.info('[OPEN_URL] Routing craftagents:// URL internally via deeplink:navigate')
+          server.push(RPC_CHANNELS.deeplink.NAVIGATE, target, deepLink.navigation)
+          return
+        }
+
+        // For links requiring window management (e.g. window=focused/full), or
+        // unknown deep-link shapes, fall back to the client protocol handler.
+        deps.platform.logger.info('[OPEN_URL] Falling back to client openExternal for craftagents:// URL')
+        const deepLinkResult = await requestClientOpenExternal(server, ctx.clientId, url)
+        if (!deepLinkResult.opened) {
+          deps.platform.logger.error(`[OPEN_URL] Client capability failed: ${deepLinkResult.error}`)
+          throw new Error(`Cannot open URL on client: ${deepLinkResult.error}`)
+        }
         return
       }
 
       if (!['http:', 'https:', 'mailto:', 'craftdocs:'].includes(parsed.protocol)) {
-        throw new Error('Only http, https, mailto, craftdocs URLs are allowed')
+        throw new Error('Only http, https, mailto, craftdocs, craftagents URLs are allowed')
       }
 
       const result = await requestClientOpenExternal(server, ctx.clientId, url)
