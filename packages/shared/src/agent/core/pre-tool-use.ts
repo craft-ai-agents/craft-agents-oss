@@ -26,7 +26,13 @@ import {
   formatValidationResult,
   type ConfigFileDetection,
 } from '../../config/validators.ts';
-import { CLI_DOMAIN_POLICIES, type CliDomainNamespace } from '../../config/cli-domains.ts';
+import {
+  CLI_DOMAIN_POLICIES,
+  CRAFT_AGENTS_CLI_BASH_GUARD_SCOPE_ENTRIES,
+  CRAFT_AGENTS_CLI_WORKSPACE_SCOPE_ENTRIES,
+  type CliDomainNamespace,
+} from '../../config/cli-domains.ts';
+import { FEATURE_FLAGS } from '../../feature-flags.ts';
 import { AGENTS_PLUGIN_NAME } from '../../skills/types.ts';
 import { GLOBAL_AGENT_SKILLS_DIR, PROJECT_AGENT_SKILLS_DIR } from '../../skills/storage.ts';
 import {
@@ -443,6 +449,13 @@ function matchesPathScope(relativePath: string, scope: string): boolean {
     return relativePath === prefix || relativePath.startsWith(`${prefix}/`)
   }
 
+  if (scope.includes('*')) {
+    const escaped = scope
+      .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*/g, '[^/]+')
+    return new RegExp(`^${escaped}$`).test(relativePath)
+  }
+
   return relativePath === scope
 }
 
@@ -471,12 +484,17 @@ export function getConfigCliRedirect(
 
   if (filePath && LABELS_BLOCKED_FILE_TOOLS.has(toolName)) {
     const relativePath = getWorkspaceRelativePath(filePath, workspaceRootPath, workingDirectory)
-    if (relativePath && CLI_DOMAIN_POLICIES.label.workspacePathScopes.some(scope => matchesPathScope(relativePath, scope))) {
-      return {
-        message: buildCliDomainBlockMessage(
-          'label',
-          `Direct ${toolName} operations in labels/ are blocked.`
-        ),
+    if (relativePath) {
+      const labelsScopeMatch = CRAFT_AGENTS_CLI_WORKSPACE_SCOPE_ENTRIES.find(
+        entry => entry.namespace === 'label' && matchesPathScope(relativePath, entry.scope)
+      )
+      if (labelsScopeMatch) {
+        return {
+          message: buildCliDomainBlockMessage(
+            'label',
+            `Direct ${toolName} operations in labels/ are blocked.`
+          ),
+        }
       }
     }
   }
@@ -528,8 +546,7 @@ export function getConfigDomainBashRedirect(
     candidates.push(candidate);
   }
 
-  const bashGuardEntries: Array<{ namespace: CliDomainNamespace; scope: string }> = Object.values(CLI_DOMAIN_POLICIES)
-    .flatMap(policy => (policy.bashGuardPaths ?? []).map(scope => ({ namespace: policy.namespace, scope })))
+  const bashGuardEntries: Array<{ namespace: CliDomainNamespace; scope: string }> = CRAFT_AGENTS_CLI_BASH_GUARD_SCOPE_ENTRIES
 
   for (const candidate of candidates) {
     const relativePath = getWorkspaceRelativePath(candidate, workspaceRootPath, baseDir);
@@ -788,7 +805,7 @@ export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult
   }
 
   // 5b. Config-domain Bash guard (block direct labels/automations path operations unless using craft-agent)
-  if (toolName === 'Bash') {
+  if (FEATURE_FLAGS.craftAgentsCli && toolName === 'Bash') {
     const configDomainBashRedirect = getConfigDomainBashRedirect(currentInput, workspaceRootPath, workingDirectory);
     if (configDomainBashRedirect) {
       return { type: 'block', reason: configDomainBashRedirect.message };
@@ -802,9 +819,11 @@ export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult
   }
 
   // 5d. Config file CLI redirect (labels + automations)
-  const cliRedirect = getConfigCliRedirect(toolName, currentInput, workspaceRootPath, workingDirectory);
-  if (cliRedirect) {
-    return { type: 'block', reason: cliRedirect.message };
+  if (FEATURE_FLAGS.craftAgentsCli) {
+    const cliRedirect = getConfigCliRedirect(toolName, currentInput, workspaceRootPath, workingDirectory);
+    if (cliRedirect) {
+      return { type: 'block', reason: cliRedirect.message };
+    }
   }
 
   // 5e. Skill qualification

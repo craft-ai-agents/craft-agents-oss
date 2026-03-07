@@ -2,60 +2,19 @@ import * as React from 'react'
 import { motion } from 'motion/react'
 import { Check, CornerDownRight, GripHorizontal, MessageCircleMore, RefreshCcw, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Island, IslandContentView, IslandFollowUpContentView, type IslandActiveViewSize, type IslandMorphTarget } from '@craft-agent/ui'
+import {
+  Island,
+  IslandContentView,
+  IslandFollowUpContentView,
+  useIslandNavigation,
+  type IslandActiveViewSize,
+  type IslandMorphTarget,
+  type IslandNavigation,
+} from '@craft-agent/ui'
 import type { ComponentEntry } from './types'
 
 type IslandViewId = 'compact' | 'confirm-follow-up' | 'confirm-ask-inline'
 type AskScope = 'selection' | 'full'
-
-// ============================================================================
-// Backstack navigation helper for Island demos
-// ============================================================================
-
-interface IslandNavigation<TView extends string> {
-  current: TView
-  canPop: boolean
-  stack: TView[]
-  push: (next: TView) => void
-  replace: (next: TView) => void
-  pop: () => void
-  reset: (root?: TView) => void
-}
-
-function useIslandBackstack<TView extends string>(initial: TView): IslandNavigation<TView> {
-  const [stack, setStack] = React.useState<TView[]>([initial])
-
-  const push = React.useCallback((next: TView) => {
-    setStack((prev) => [...prev, next])
-  }, [])
-
-  const replace = React.useCallback((next: TView) => {
-    setStack((prev) => {
-      const base = prev.length > 0 ? prev.slice(0, -1) : []
-      return [...base, next]
-    })
-  }, [])
-
-  const pop = React.useCallback(() => {
-    setStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev))
-  }, [])
-
-  const reset = React.useCallback((root?: TView) => {
-    setStack([root ?? initial])
-  }, [initial])
-
-  const current = stack[stack.length - 1]
-
-  return {
-    current,
-    canPop: stack.length > 1,
-    stack,
-    push,
-    replace,
-    pop,
-    reset,
-  }
-}
 
 // ============================================================================
 // Demo implementation using generic Island + IslandContentView
@@ -221,7 +180,7 @@ interface ToolbarToConfirmTransitionDemoProps {
 }
 
 function ToolbarToConfirmTransitionDemo({ initialView = 'compact' }: ToolbarToConfirmTransitionDemoProps) {
-  const navigation = useIslandBackstack<IslandViewId>(initialView)
+  const navigation = useIslandNavigation<IslandViewId>(initialView)
   const [note, setNote] = React.useState('')
   const [askScope, setAskScope] = React.useState<AskScope>('selection')
   const [lastConfirmed, setLastConfirmed] = React.useState<string | null>(null)

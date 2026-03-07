@@ -20,25 +20,59 @@ import {
   Pencil,
   FilePenLine,
   GitBranch,
-  CornerDownRight,
 } from 'lucide-react'
-import * as ReactDOM from 'react-dom'
 import { cn } from '../../lib/utils'
 import { Markdown } from '../markdown'
-import { resolveTextAnnotations } from '../markdown/annotation-resolver'
 import { Spinner } from '../ui/LoadingIndicator'
+import { type IslandTransitionConfig } from '../ui'
+import { AnnotationIslandMenu } from '../annotations/AnnotationIslandMenu'
 import {
-  Island,
-  IslandContentView,
-  IslandFollowUpContentView,
-  type IslandActiveViewSize,
-  type IslandTransitionConfig,
-} from '../ui'
+  type PointerSnapshot,
+  buildAnnotationChipEntryTransition,
+  buildSelectionEntryTransition,
+} from '../annotations/island-motion'
 import { Tooltip, TooltipTrigger, TooltipContent } from '../tooltip'
 import { parseDiffFromFile, type FileContents } from '@pierre/diffs'
 import { getDiffStats, getUnifiedDiffStats } from '../code-viewer'
 import { TurnCardActionsMenu } from './TurnCardActionsMenu'
 import { computeLastChildSet, groupActivitiesByParent, isActivityGroup, formatDuration, formatTokens, deriveTurnPhase, shouldShowThinkingIndicator, type ActivityGroup, type AssistantTurn } from './turn-utils'
+import {
+  formatAnnotationFollowUpTooltipText,
+  getAnnotationNoteText,
+} from '../annotations/follow-up-state'
+import {
+  ANNOTATION_PREFIX_SUFFIX_WINDOW,
+  SELECTION_POINTER_MAX_AGE_MS,
+  clamp,
+  hasExistingTextRangeAnnotation,
+  createSelectionPreviewAnnotation,
+  createTextSelectionAnnotation,
+  collectTextSegments,
+  getCanonicalText,
+  resolveNodeOffset,
+  resolveRangeFromOffsets,
+  type AnnotationOverlayRect,
+} from '../annotations/annotation-core'
+import {
+  annotationColorToCss,
+} from '../annotations/annotation-style-tokens'
+import {
+  shouldIgnoreSelectionMouseUpTarget,
+} from '../annotations/interaction-policy'
+import { computeAnnotationOverlayGeometry, type AnnotationOverlayChip } from '../annotations/annotation-overlay-geometry'
+import { AnnotationOverlayLayer } from '../annotations/AnnotationOverlayLayer'
+import {
+  getAnnotationInteractionAnchor,
+  getAnnotationInteractionSourceKey,
+  hasAnnotationInteraction,
+} from '../annotations/interaction-selectors'
+import {
+  type AnnotationIslandMode,
+  type AnchoredSelection,
+} from '../annotations/interaction-state-machine'
+import { useAnnotationInteractionController } from '../annotations/use-annotation-interaction-controller'
+import { useAnnotationIslandPresentation } from '../annotations/use-annotation-island-presentation'
+import { useAnnotationIslandEvents } from '../annotations/use-annotation-island-events'
 import { DocumentFormattedMarkdownOverlay } from '../overlay'
 import { AcceptPlanDropdown } from './AcceptPlanDropdown'
 import {
@@ -201,6 +235,10 @@ export interface ActivityItem {
   toolInput?: Record<string, unknown>
   content?: string
   intent?: string
+  /** Optional backing message id (used by plan activities for branching/annotations) */
+  messageId?: string
+  /** Optional persisted annotations (used by plan activities) */
+  annotations?: AnnotationV1[]
   displayName?: string  // LLM-generated human-friendly tool name (for MCP tools)
   toolDisplayMeta?: ToolDisplayMeta  // Embedded metadata with base64 icon (for viewer compatibility)
   timestamp: number
@@ -232,6 +270,15 @@ export interface ResponseContent {
 // ============================================================================
 // TurnCard Props
 // ============================================================================
+
+export type OpenAnnotationRequest = {
+  messageId: string
+  annotationId: string
+  mode: 'view' | 'edit'
+  anchorX?: number
+  anchorY?: number
+  nonce: number
+}
 
 export interface TurnCardProps {
   /** Session ID for state persistence (optional in shared context) */
@@ -300,6 +347,10 @@ export interface TurnCardProps {
   onUpdateAnnotation?: (messageId: string, annotationId: string, patch: Partial<AnnotationV1>) => void
   /** Input send key behavior used by follow-up editor */
   sendMessageKey?: 'enter' | 'cmd-enter'
+  /** Whether there are active pending follow-up annotations in the session */
+  hasActiveFollowUpAnnotations?: boolean
+  /** External request to open a specific annotation in the follow-up island */
+  openAnnotationRequest?: OpenAnnotationRequest | null
 }
 
 // ============================================================================
@@ -1351,6 +1402,10 @@ export interface ResponseCardProps {
   onUpdateAnnotation?: (messageId: string, annotationId: string, patch: Partial<AnnotationV1>) => void
   /** Input send key behavior used by follow-up editor */
   sendMessageKey?: 'enter' | 'cmd-enter'
+  /** Whether there are active pending follow-up annotations in the session */
+  hasActiveFollowUpAnnotations?: boolean
+  /** External request to open a specific annotation in this response */
+  openAnnotationRequest?: OpenAnnotationRequest | null
 }
 
 interface BranchDropdownProps {
@@ -1395,368 +1450,6 @@ function BranchDropdown({ onBranch }: BranchDropdownProps) {
 }
 
 const MAX_HEIGHT = 540
-
-const ANNOTATION_PREFIX_SUFFIX_WINDOW = 24
-const SELECTION_MENU_VIEWPORT_PADDING = 12
-const SELECTION_MENU_DEFAULT_WIDTH_ESTIMATE = 192
-const SELECTION_POINTER_MAX_AGE_MS = 1500
-const SELECTION_MENU_DEFAULT_START_SCALE = 0.25
-const SELECTION_MENU_MIN_ENTRY_DISTANCE = 20
-const SELECTION_MENU_MAX_ENTRY_DISTANCE = 132
-const SELECTION_MENU_FALLBACK_ENTRY_DISTANCE = 44
-const SELECTION_MENU_SPEED_TO_DISTANCE_FACTOR = 0.065
-
-type SelectionMenuView = 'compact' | 'confirm-follow-up'
-
-type PointerSnapshot = {
-  x: number
-  y: number
-  ts: number
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max)
-}
-
-function buildSelectionEntryTransition(from: PointerSnapshot | null, to: PointerSnapshot | null): IslandTransitionConfig {
-  if (!from || !to) {
-    return {
-      entryAngleDeg: 90,
-      entryDistancePx: SELECTION_MENU_FALLBACK_ENTRY_DISTANCE,
-      entryStartScale: SELECTION_MENU_DEFAULT_START_SCALE,
-    }
-  }
-
-  const dx = to.x - from.x
-  const dy = to.y - from.y
-  const distancePx = Math.hypot(dx, dy)
-  const deltaMs = Math.max(12, to.ts - from.ts)
-  const speedPxPerSec = distancePx / (deltaMs / 1000)
-
-  // Pointer deltas use screen coordinates (Y grows downward). Keep the native Y direction,
-  // then add 180° so the island comes from *behind* the drag direction ("catching up" effect).
-  // Example: drag left -> right => origin from left.
-  const angleDeg = (Math.atan2(dy, dx) * 180 / Math.PI + 540) % 360
-  const derivedDistancePx = clamp(
-    speedPxPerSec * SELECTION_MENU_SPEED_TO_DISTANCE_FACTOR,
-    SELECTION_MENU_MIN_ENTRY_DISTANCE,
-    SELECTION_MENU_MAX_ENTRY_DISTANCE,
-  )
-
-  return {
-    entryAngleDeg: Number.isFinite(angleDeg) ? angleDeg : 90,
-    entryDistancePx: Number.isFinite(derivedDistancePx) ? derivedDistancePx : SELECTION_MENU_FALLBACK_ENTRY_DISTANCE,
-    entryStartScale: SELECTION_MENU_DEFAULT_START_SCALE,
-  }
-}
-
-function buildAnnotationChipEntryTransition(): IslandTransitionConfig {
-  return {
-    entryAngleDeg: 90,
-    entryDistancePx: 64,
-    entryStartScale: SELECTION_MENU_DEFAULT_START_SCALE,
-  }
-}
-
-type ActiveAnnotationDetail = {
-  annotationId: string
-  index: number
-  anchorX: number
-  anchorY: number
-}
-
-type PendingTextAnnotationSelection = {
-  start: number
-  end: number
-  selectedText: string
-  prefix: string
-  suffix: string
-  anchorX: number
-  anchorY: number
-}
-
-type AnnotationOverlayRect = {
-  id: string
-  left: number
-  top: number
-  width: number
-  height: number
-  color: string
-}
-
-type AnnotationOverlayChip = {
-  id: string
-  index: number
-  left: number
-  top: number
-}
-
-function hasExistingTextRangeAnnotation(
-  annotations: AnnotationV1[] | undefined,
-  start: number,
-  end: number,
-): boolean {
-  return (annotations ?? []).some(annotation => {
-    const pos = annotation.target.selectors.find(s => s.type === 'text-position') as Extract<
-      AnnotationV1['target']['selectors'][number],
-      { type: 'text-position' }
-    > | undefined
-    return pos?.start === start && pos?.end === end
-  })
-}
-
-function createSelectionPreviewAnnotation(
-  messageId: string,
-  selection: Omit<PendingTextAnnotationSelection, 'anchorX' | 'anchorY'>,
-): AnnotationV1 {
-  return {
-    id: '__pending-selection-preview__',
-    schemaVersion: 1,
-    createdAt: Date.now(),
-    intent: 'highlight',
-    body: [{ type: 'highlight' }],
-    target: {
-      source: {
-        sessionId: '',
-        messageId,
-      },
-      selectors: [
-        { type: 'text-position', start: selection.start, end: selection.end },
-        {
-          type: 'text-quote',
-          exact: selection.selectedText,
-          prefix: selection.prefix,
-          suffix: selection.suffix,
-        },
-      ],
-    },
-    style: { color: 'yellow' },
-    meta: {
-      ephemeral: true,
-      source: 'follow-up-selection-preview',
-    },
-  }
-}
-
-function createTextSelectionAnnotation(
-  messageId: string,
-  selection: Omit<PendingTextAnnotationSelection, 'anchorX' | 'anchorY'>,
-  followUpNote?: string,
-): AnnotationV1 {
-  const note = followUpNote?.trim() ?? ''
-  const hasNote = note.length > 0
-
-  return {
-    id: `ann-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    schemaVersion: 1,
-    createdAt: Date.now(),
-    intent: hasNote ? 'comment' : 'highlight',
-    body: hasNote
-      ? [{ type: 'highlight' }, { type: 'note', text: note, format: 'plain' }]
-      : [{ type: 'highlight' }],
-    target: {
-      source: {
-        sessionId: '',
-        messageId,
-      },
-      selectors: [
-        { type: 'text-position', start: selection.start, end: selection.end },
-        {
-          type: 'text-quote',
-          exact: selection.selectedText,
-          prefix: selection.prefix,
-          suffix: selection.suffix,
-        },
-      ],
-    },
-    style: { color: 'yellow' },
-    ...(hasNote
-      ? {
-          meta: {
-            followUp: {
-              text: note,
-              createdAt: Date.now(),
-            },
-          },
-        }
-      : {}),
-  }
-}
-
-function clampSelectionMenuAnchorX(anchorX: number, islandWidth: number): number {
-  const safeWidth = Math.max(1, islandWidth)
-  const halfWidth = safeWidth / 2
-  const minX = SELECTION_MENU_VIEWPORT_PADDING + halfWidth
-  const maxX = window.innerWidth - SELECTION_MENU_VIEWPORT_PADDING - halfWidth
-
-  if (maxX < minX) {
-    return window.innerWidth / 2
-  }
-
-  return Math.min(Math.max(anchorX, minX), maxX)
-}
-
-function annotationColorToCss(color?: string): string {
-  switch (color) {
-    case 'green':
-      return 'rgba(74, 222, 128, 0.10)'
-    case 'blue':
-      return 'rgba(96, 165, 250, 0.10)'
-    case 'pink':
-      return 'rgba(244, 114, 182, 0.10)'
-    case 'yellow':
-    default:
-      return 'color-mix(in srgb, var(--info) 10%, transparent)'
-  }
-}
-
-function collectTextSegments(root: HTMLElement): Array<{ node: Text; start: number; end: number }> {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-  const segments: Array<{ node: Text; start: number; end: number }> = []
-  let cursor = 0
-  let current = walker.nextNode()
-  while (current) {
-    const node = current as Text
-    const parent = node.parentElement
-
-    // Ignore synthetic annotation overlay/index content in text/offset math.
-    if (parent?.closest('[data-ca-annotation-overlay]') || parent?.closest('[data-ca-annotation-index]')) {
-      current = walker.nextNode()
-      continue
-    }
-
-    const len = node.nodeValue?.length ?? 0
-    segments.push({ node, start: cursor, end: cursor + len })
-    cursor += len
-    current = walker.nextNode()
-  }
-  return segments
-}
-
-function getCanonicalText(root: HTMLElement): string {
-  return collectTextSegments(root)
-    .map(segment => segment.node.nodeValue || '')
-    .join('')
-}
-
-function resolveNodeOffset(root: HTMLElement, targetNode: Node, nodeOffset: number): number | null {
-  const segments = collectTextSegments(root)
-  for (const segment of segments) {
-    if (segment.node === targetNode) {
-      return segment.start + nodeOffset
-    }
-  }
-
-  // Fallback: range boundaries may land on element nodes (common with reverse drags).
-  // In that case, derive character offset by measuring canonical text length
-  // from root start to the boundary, excluding synthetic annotation index badges.
-  try {
-    const probe = document.createRange()
-    probe.selectNodeContents(root)
-    probe.setEnd(targetNode, nodeOffset)
-
-    const fragment = probe.cloneContents()
-    fragment.querySelectorAll('[data-ca-annotation-index]').forEach(node => node.remove())
-    return (fragment.textContent || '').length
-  } catch {
-    return null
-  }
-}
-
-function resolveRangeFromOffsets(root: HTMLElement, start: number, end: number): Range | null {
-  if (end <= start) return null
-
-  const segments = collectTextSegments(root)
-  if (segments.length === 0) return null
-
-  let startNode: Text | null = null
-  let startOffset = 0
-  let endNode: Text | null = null
-  let endOffset = 0
-
-  for (const segment of segments) {
-    const segmentLength = segment.end - segment.start
-
-    if (!startNode && start >= segment.start && start <= segment.end) {
-      startNode = segment.node
-      startOffset = Math.min(Math.max(0, start - segment.start), segmentLength)
-    }
-
-    if (!endNode && end >= segment.start && end <= segment.end) {
-      endNode = segment.node
-      endOffset = Math.min(Math.max(0, end - segment.start), segmentLength)
-    }
-
-    if (startNode && endNode) break
-  }
-
-  if (!startNode || !endNode) return null
-
-  const range = document.createRange()
-  range.setStart(startNode, startOffset)
-  range.setEnd(endNode, endOffset)
-  return range
-}
-
-function getClientRectsForOffsets(root: HTMLElement, start: number, end: number): DOMRect[] {
-  if (end <= start) return []
-
-  const segments = collectTextSegments(root)
-  const rects: DOMRect[] = []
-
-  for (const segment of segments) {
-    if (segment.end <= start || segment.start >= end) continue
-
-    const localStart = Math.max(start, segment.start) - segment.start
-    const localEnd = Math.min(end, segment.end) - segment.start
-    if (localEnd <= localStart) continue
-
-    const segmentRange = document.createRange()
-    segmentRange.setStart(segment.node, localStart)
-    segmentRange.setEnd(segment.node, localEnd)
-
-    rects.push(...Array.from(segmentRange.getClientRects()))
-  }
-
-  return rects.filter((rect) => rect.width > 0 && rect.height > 0)
-}
-
-function consolidateRectsByLine(rects: AnnotationOverlayRect[]): AnnotationOverlayRect[] {
-  if (rects.length <= 1) return rects
-
-  const sorted = rects.slice().sort((a, b) => (Math.abs(a.top - b.top) <= 2 ? a.left - b.left : a.top - b.top))
-  const rows: Array<{ top: number; rects: AnnotationOverlayRect[] }> = []
-
-  for (const rect of sorted) {
-    const row = rows.find(candidate => Math.abs(candidate.top - rect.top) <= 2)
-    if (row) {
-      row.rects.push(rect)
-    } else {
-      rows.push({ top: rect.top, rects: [rect] })
-    }
-  }
-
-  const consolidated: AnnotationOverlayRect[] = []
-  for (const row of rows) {
-    const rowRects = row.rects.slice().sort((a, b) => a.left - b.left)
-    const first = rowRects[0]
-    const last = rowRects[rowRects.length - 1]
-    if (!first || !last) continue
-
-    const top = Math.min(...rowRects.map(rect => rect.top))
-    const height = Math.max(...rowRects.map(rect => rect.height))
-    consolidated.push({
-      id: first.id,
-      color: first.color,
-      left: first.left,
-      top,
-      width: (last.left + last.width) - first.left,
-      height,
-    })
-  }
-
-  return consolidated
-}
 
 function clearAnnotationMarks(root: HTMLElement): void {
   const annotatedInlineCodeNodes = root.querySelectorAll<HTMLElement>('code[data-ca-annotation-inline-code="true"]')
@@ -1982,6 +1675,8 @@ export function ResponseCard({
   onRemoveAnnotation,
   onUpdateAnnotation,
   sendMessageKey = 'enter',
+  hasActiveFollowUpAnnotations = false,
+  openAnnotationRequest,
 }: ResponseCardProps) {
   // Throttled content for display - updates every CONTENT_THROTTLE_MS during streaming
   const [displayedText, setDisplayedText] = useState(text)
@@ -1993,26 +1688,39 @@ export function ResponseCard({
   // Dark mode detection - scroll fade only shown in dark mode
   const [isDarkMode, setIsDarkMode] = useState(false)
   // Pending text selection waiting for explicit follow-up action
-  const [pendingSelection, setPendingSelection] = useState<PendingTextAnnotationSelection | null>(null)
-  const [selectionMenuView, setSelectionMenuView] = useState<SelectionMenuView>('compact')
-  const [followUpDraft, setFollowUpDraft] = useState('')
-  const [activeAnnotationDetail, setActiveAnnotationDetail] = useState<ActiveAnnotationDetail | null>(null)
-  const [activeSelectionMenuSize, setActiveSelectionMenuSize] = useState<IslandActiveViewSize | null>(null)
-  const [selectionMenuRenderAnchor, setSelectionMenuRenderAnchor] = useState<{ x: number; y: number } | null>(null)
-  const [selectionMenuRenderSourceKey, setSelectionMenuRenderSourceKey] = useState('none')
+  const interaction = useAnnotationInteractionController()
+  const {
+    state: interactionState,
+    setDraft: setFollowUpDraft,
+    openFromSelection,
+    openFollowUpFromSelection,
+    openFromAnnotation,
+    requestEdit,
+    cancelFollowUp,
+    closeAll,
+    markSubmitSuccess,
+    markDeleteSuccess,
+    consumeExternalOpenRequest,
+  } = interaction
+
+  const pendingSelection = interactionState.pendingSelection
+  const selectionMenuView = interactionState.selectionMenuView
+  const followUpDraft = interactionState.followUpDraft
+  const followUpMode = interactionState.followUpMode
+  const activeAnnotationDetail = interactionState.activeAnnotationDetail
+
   const [selectionMenuShowNonce, setSelectionMenuShowNonce] = useState(0)
-  const [isSelectionMenuVisible, setIsSelectionMenuVisible] = useState(false)
   const [selectionMenuTransitionConfig, setSelectionMenuTransitionConfig] = useState<IslandTransitionConfig>(
     buildAnnotationChipEntryTransition()
   )
   const [annotationOverlay, setAnnotationOverlay] = useState<{ rects: AnnotationOverlayRect[]; chips: AnnotationOverlayChip[] }>({ rects: [], chips: [] })
   const contentRef = useRef<HTMLDivElement>(null)
   const contentLayerRef = useRef<HTMLDivElement>(null)
-  const selectionMenuRef = useRef<HTMLDivElement>(null)
   const lastPointerRef = useRef<PointerSnapshot | null>(null)
   const dragStartPointerRef = useRef<PointerSnapshot | null>(null)
-  const selectionMenuOpenedAtRef = useRef(0)
   const selectionStartedInContentRef = useRef(false)
+
+  const canAnnotate = !!onAddAnnotation && !!messageId && !isStreaming
 
   // Detect dark mode from document class and listen for changes
   useEffect(() => {
@@ -2028,11 +1736,8 @@ export function ResponseCard({
   }, [])
 
   const closeSelectionMenu = useCallback(() => {
-    setPendingSelection(null)
-    setSelectionMenuView('compact')
-    setFollowUpDraft('')
-    setActiveAnnotationDetail(null)
-  }, [])
+    closeAll()
+  }, [closeAll])
 
   const debugSelectionIsland = useCallback((event: string, payload?: unknown) => {
     if (typeof window === 'undefined') return
@@ -2042,6 +1747,13 @@ export function ResponseCard({
     }).electronAPI
 
     electronApi?.debugLog?.('[SelectionIsland]', event, payload ?? null)
+  }, [])
+
+  const isTargetInsideAnnotationIsland = useCallback((target: Node | null): boolean => {
+    if (!target) return false
+    const element = target instanceof Element ? target : target.parentElement
+    if (!element) return false
+    return !!element.closest('[data-ca-annotation-island="true"]')
   }, [])
 
   const triggerSelectionMenuEntryReplay = useCallback((reason: 'selection-open' | 'annotation-open') => {
@@ -2057,6 +1769,27 @@ export function ResponseCard({
       return next
     })
   }, [debugSelectionIsland, sessionId, messageId])
+
+  const activeMenuAnchor = useMemo(() => {
+    return getAnnotationInteractionAnchor(interactionState)
+  }, [interactionState])
+
+  const selectionMenuSourceKey = useMemo(() => {
+    const messageScope = messageId ?? 'no-message'
+    return getAnnotationInteractionSourceKey(interactionState, messageScope)
+  }, [interactionState, messageId])
+
+  const {
+    renderAnchor: selectionMenuRenderAnchor,
+    renderSourceKey: selectionMenuRenderSourceKey,
+    isVisible: isSelectionMenuVisible,
+    openedAtRef: selectionMenuOpenedAtRef,
+    handleExitComplete: handleSelectionMenuExitComplete,
+    resetPresentation,
+  } = useAnnotationIslandPresentation({
+    anchor: activeMenuAnchor,
+    sourceKey: selectionMenuSourceKey,
+  })
 
   const handleCopy = useCallback(async () => {
     try {
@@ -2081,7 +1814,7 @@ export function ResponseCard({
 
     return [
       ...persisted,
-      createSelectionPreviewAnnotation(messageId, pendingSelection),
+      createSelectionPreviewAnnotation(messageId, pendingSelection, sessionId ?? ''),
     ]
   }, [annotations, pendingSelection, selectionMenuView, messageId])
 
@@ -2113,58 +1846,23 @@ export function ResponseCard({
         return
       }
 
-      const fullText = getCanonicalText(root)
-      const resolution = resolveTextAnnotations(fullText, renderedAnnotations)
-      const annotationIndexById = new Map((annotations ?? []).map((annotation, idx) => [annotation.id, idx + 1]))
-      const rootRect = root.getBoundingClientRect()
-
-      const rects: AnnotationOverlayRect[] = []
-      const chips: AnnotationOverlayChip[] = []
-
-      for (const item of resolution.resolved) {
-        const rawRects = getClientRectsForOffsets(root, item.range.start, item.range.end)
-          .map(rect => ({
-            id: item.annotation.id,
-            left: rect.left - rootRect.left,
-            top: rect.top - rootRect.top,
-            width: rect.width,
-            height: rect.height,
-            color: annotationColorToCss(item.annotation.style?.color),
-          }))
-
-        const lineRects = consolidateRectsByLine(rawRects)
-        rects.push(...lineRects)
-
-        const annotationIndex = annotationIndexById.get(item.annotation.id)
-        if (annotationIndex != null && lineRects.length > 0) {
-          const minTop = Math.min(...lineRects.map(rect => rect.top))
-          const topRowRects = lineRects.filter(rect => Math.abs(rect.top - minTop) <= 2)
-          const anchorRect = topRowRects.reduce((best, rect) => {
-            const bestRight = best.left + best.width
-            const rectRight = rect.left + rect.width
-            return rectRight > bestRight ? rect : best
-          })
-
-          chips.push({
-            id: item.annotation.id,
-            index: annotationIndex,
-            left: anchorRect.left + anchorRect.width,
-            top: anchorRect.top,
-          })
-        }
-      }
+      const geometry = computeAnnotationOverlayGeometry({
+        root,
+        renderedAnnotations,
+        persistedAnnotations: annotations,
+      })
 
       for (const annotation of renderedAnnotations) {
         applyBlockAnnotationMarker(root, annotation)
       }
 
-      setAnnotationOverlay({ rects, chips })
+      setAnnotationOverlay({ rects: geometry.rects, chips: geometry.chips })
 
-      if (process.env.NODE_ENV !== 'production' && resolution.unresolved.length > 0) {
+      if (process.env.NODE_ENV !== 'production' && geometry.unresolved.length > 0) {
         console.debug('[annotations] unresolved annotations', {
-          count: resolution.unresolved.length,
-          ids: resolution.unresolved.map(item => item.annotation.id),
-          reasons: resolution.unresolved.map(item => item.reason),
+          count: geometry.unresolved.length,
+          ids: geometry.unresolved.map(item => item.annotation.id),
+          reasons: geometry.unresolved.map(item => item.reason),
         })
       }
     }
@@ -2177,68 +1875,30 @@ export function ResponseCard({
   }, [annotations, renderedAnnotations, text, displayedText, isStreaming])
 
   useEffect(() => {
-    if (variant !== 'response' || isStreaming || !messageId) {
+    if (!canAnnotate) {
       closeSelectionMenu()
     }
-  }, [variant, isStreaming, messageId, closeSelectionMenu])
+  }, [canAnnotate, closeSelectionMenu])
 
   useEffect(() => {
     // Session switches should fully reset local island UI state to avoid stale
     // "hot" instances suppressing entry animations in the newly focused session.
     closeSelectionMenu()
-    setSelectionMenuRenderAnchor(null)
-    setSelectionMenuRenderSourceKey('none')
-    setIsSelectionMenuVisible(false)
-    setActiveSelectionMenuSize(null)
+    resetPresentation()
     dragStartPointerRef.current = null
     lastPointerRef.current = null
-  }, [sessionId, closeSelectionMenu])
+  }, [sessionId, closeSelectionMenu, resetPresentation])
+
+  useAnnotationIslandEvents({
+    enabled: hasAnnotationInteraction(interactionState) && isSelectionMenuVisible,
+    openedAtRef: selectionMenuOpenedAtRef,
+    isCompactView: selectionMenuView === 'compact',
+    isTargetInsideAnnotationIsland,
+    onClose: closeSelectionMenu,
+  })
 
   useEffect(() => {
-    if ((!pendingSelection && !activeAnnotationDetail) || !isSelectionMenuVisible) return
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node | null
-      if (!target) return
-      if (selectionMenuRef.current?.contains(target)) return
-      closeSelectionMenu()
-    }
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-
-      if (selectionMenuView !== 'compact') {
-        event.preventDefault()
-        setSelectionMenuView('compact')
-        setFollowUpDraft('')
-        setActiveAnnotationDetail(null)
-        return
-      }
-
-      closeSelectionMenu()
-    }
-
-    const handleScroll = (event: Event) => {
-      const target = event.target as Node | null
-
-      // Ignore transient scroll events emitted as part of the same interaction frame
-      // that opened the island (selection/layout side effects).
-      if (Date.now() - selectionMenuOpenedAtRef.current < 180) {
-        return
-      }
-
-      // Never auto-dismiss while in expanded island views.
-      if (selectionMenuView !== 'compact') {
-        return
-      }
-
-      // Ignore scroll events originating from inside the island.
-      if (target && selectionMenuRef.current?.contains(target)) {
-        return
-      }
-
-      closeSelectionMenu()
-    }
+    if (!hasAnnotationInteraction(interactionState) || !isSelectionMenuVisible) return
 
     const handleSelectionChange = () => {
       if (Date.now() - selectionMenuOpenedAtRef.current < 180) {
@@ -2265,7 +1925,7 @@ export function ResponseCard({
         : common.parentElement
 
       // Selecting text inside the island (e.g. follow-up textarea) should not close it.
-      if (commonElement && selectionMenuRef.current?.contains(commonElement)) {
+      if (commonElement && isTargetInsideAnnotationIsland(commonElement)) {
         return
       }
 
@@ -2274,27 +1934,11 @@ export function ResponseCard({
       }
     }
 
-    document.addEventListener('mousedown', handlePointerDown)
-    document.addEventListener('keydown', handleEscape)
-    window.addEventListener('scroll', handleScroll, true)
     document.addEventListener('selectionchange', handleSelectionChange)
-
     return () => {
-      document.removeEventListener('mousedown', handlePointerDown)
-      document.removeEventListener('keydown', handleEscape)
-      window.removeEventListener('scroll', handleScroll, true)
       document.removeEventListener('selectionchange', handleSelectionChange)
     }
-  }, [pendingSelection, activeAnnotationDetail, isSelectionMenuVisible, closeSelectionMenu, selectionMenuView])
-
-  const handleSelectionMenuMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement | null
-    if (target?.closest('textarea, input, [contenteditable="true"], [role="textbox"]')) {
-      return
-    }
-
-    event.preventDefault()
-  }, [])
+  }, [interactionState, isSelectionMenuVisible, closeSelectionMenu, isTargetInsideAnnotationIsland, selectionMenuOpenedAtRef])
 
   const handleOpenFollowUpView = useCallback(() => {
     if (!pendingSelection) return
@@ -2302,9 +1946,12 @@ export function ResponseCard({
     // Native browser selection steals typing focus from the follow-up textarea.
     // Keep semantic selection in pendingSelection and clear only the DOM selection.
     window.getSelection()?.removeAllRanges()
-    setActiveAnnotationDetail(null)
-    setSelectionMenuView('confirm-follow-up')
-  }, [pendingSelection])
+    openFollowUpFromSelection()
+  }, [pendingSelection, openFollowUpFromSelection])
+
+  const handleRequestFollowUpEdit = useCallback(() => {
+    requestEdit()
+  }, [requestEdit])
 
   const handleSubmitFollowUp = useCallback((note: string) => {
     const normalizedNote = note.trim()
@@ -2342,7 +1989,7 @@ export function ResponseCard({
           : (Object.keys(nextMeta).length > 0 ? nextMeta : undefined),
       })
 
-      closeSelectionMenu()
+      markSubmitSuccess()
       return
     }
 
@@ -2353,9 +2000,9 @@ export function ResponseCard({
       return
     }
 
-    const annotation = createTextSelectionAnnotation(messageId, pendingSelection, normalizedNote)
+    const annotation = createTextSelectionAnnotation(messageId, pendingSelection, normalizedNote, sessionId ?? '')
     onAddAnnotation(messageId, annotation)
-    closeSelectionMenu()
+    markSubmitSuccess()
     window.getSelection()?.removeAllRanges()
   }, [
     messageId,
@@ -2366,14 +2013,14 @@ export function ResponseCard({
     pendingSelection,
     annotations,
     closeSelectionMenu,
+    sessionId,
+    markSubmitSuccess,
   ])
 
   const handleCancelFollowUp = useCallback(() => {
-    setFollowUpDraft('')
-    setSelectionMenuView('compact')
-    setActiveAnnotationDetail(null)
+    const { pendingSelection: selectionToRestore } = cancelFollowUp()
 
-    if (!pendingSelection || typeof window === 'undefined') {
+    if (!selectionToRestore || typeof window === 'undefined') {
       return
     }
 
@@ -2381,7 +2028,7 @@ export function ResponseCard({
       const root = contentLayerRef.current
       if (!root) return
 
-      const range = resolveRangeFromOffsets(root, pendingSelection.start, pendingSelection.end)
+      const range = resolveRangeFromOffsets(root, selectionToRestore.start, selectionToRestore.end)
       if (!range) return
 
       const selection = window.getSelection()
@@ -2390,14 +2037,17 @@ export function ResponseCard({
       selection.removeAllRanges()
       selection.addRange(range)
     })
-  }, [pendingSelection])
+  }, [cancelFollowUp])
 
-  const handleOpenAnnotationDetail = useCallback((annotationId: string, index: number, anchorX: number, anchorY: number) => {
+  const handleOpenAnnotationDetail = useCallback((
+    annotationId: string,
+    index: number,
+    anchorX: number,
+    anchorY: number,
+    mode: AnnotationIslandMode = 'view'
+  ) => {
     const annotation = (annotations ?? []).find(item => item.id === annotationId)
-    const noteBody = annotation?.body.find(body => body.type === 'note') as Extract<
-      AnnotationV1['body'][number],
-      { type: 'note' }
-    > | undefined
+    const noteText = annotation ? getAnnotationNoteText(annotation) : ''
 
     const transition = buildAnnotationChipEntryTransition()
     debugSelectionIsland('annotation-open-intent', {
@@ -2411,18 +2061,41 @@ export function ResponseCard({
 
     setSelectionMenuTransitionConfig(transition)
     triggerSelectionMenuEntryReplay('annotation-open')
-    setPendingSelection(null)
-    setFollowUpDraft(noteBody?.text ?? '')
-    setActiveAnnotationDetail({ annotationId, index, anchorX, anchorY })
-    setSelectionMenuView('confirm-follow-up')
-  }, [annotations, debugSelectionIsland, sessionId, messageId, triggerSelectionMenuEntryReplay])
+    openFromAnnotation({ annotationId, index, anchorX, anchorY }, noteText, mode)
+  }, [annotations, debugSelectionIsland, sessionId, messageId, triggerSelectionMenuEntryReplay, openFromAnnotation])
+
+  useEffect(() => {
+    const contentRect = contentLayerRef.current?.getBoundingClientRect()
+    const fallbackAnchor = {
+      x: contentRect ? contentRect.left + contentRect.width / 2 : window.innerWidth / 2,
+      y: contentRect ? contentRect.top + 20 : Math.max(24, window.innerHeight * 0.2),
+    }
+
+    const consumed = consumeExternalOpenRequest(openAnnotationRequest, {
+      messageId,
+      annotations,
+      getNoteText: getAnnotationNoteText,
+      fallbackAnchor,
+    })
+
+    if (!consumed) return
+
+    setSelectionMenuTransitionConfig(buildAnnotationChipEntryTransition())
+    triggerSelectionMenuEntryReplay('annotation-open')
+  }, [
+    openAnnotationRequest,
+    messageId,
+    annotations,
+    consumeExternalOpenRequest,
+    triggerSelectionMenuEntryReplay,
+  ])
 
   const handleDeleteActiveAnnotation = useCallback(() => {
     if (!onRemoveAnnotation || !messageId || !activeAnnotationDetail) return
 
     onRemoveAnnotation(messageId, activeAnnotationDetail.annotationId)
-    closeSelectionMenu()
-  }, [onRemoveAnnotation, messageId, activeAnnotationDetail, closeSelectionMenu])
+    markDeleteSuccess()
+  }, [onRemoveAnnotation, messageId, activeAnnotationDetail, markDeleteSuccess])
 
   const handleSelectionPointerDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     selectionStartedInContentRef.current = true
@@ -2545,10 +2218,7 @@ export function ResponseCard({
 
       setSelectionMenuTransitionConfig(transition)
       triggerSelectionMenuEntryReplay('selection-open')
-      setSelectionMenuView('compact')
-      setFollowUpDraft('')
-      setActiveSelectionMenuSize(null)
-      setPendingSelection({
+      openFromSelection({
         start,
         end,
         selectedText,
@@ -2559,15 +2229,14 @@ export function ResponseCard({
       })
       dragStartPointerRef.current = null
     })
-  }, [annotations, closeSelectionMenu, debugSelectionIsland, sessionId, messageId, triggerSelectionMenuEntryReplay])
+  }, [annotations, closeSelectionMenu, debugSelectionIsland, sessionId, messageId, triggerSelectionMenuEntryReplay, openFromSelection])
 
   const handleTextSelection = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (!onAddAnnotation || !messageId || variant !== 'response' || isStreaming) return
+    if (!canAnnotate || !onAddAnnotation || !messageId) return
     const root = contentLayerRef.current
     if (!root) return
 
-    const targetElement = event.target instanceof Element ? event.target : null
-    if (targetElement?.closest('[data-ca-annotation-index]')) {
+    if (shouldIgnoreSelectionMouseUpTarget(event.target)) {
       selectionStartedInContentRef.current = false
       return
     }
@@ -2633,10 +2302,10 @@ export function ResponseCard({
 
     selectionStartedInContentRef.current = false
     showSelectionMenuFromCurrentSelection()
-  }, [onAddAnnotation, messageId, variant, isStreaming, annotations, showSelectionMenuFromCurrentSelection, closeSelectionMenu])
+  }, [canAnnotate, onAddAnnotation, messageId, annotations, showSelectionMenuFromCurrentSelection, closeSelectionMenu])
 
   useEffect(() => {
-    if (!onAddAnnotation || !messageId || variant !== 'response' || isStreaming) return
+    if (!canAnnotate || !onAddAnnotation || !messageId) return
 
     const handleDocumentMouseUp = (event: MouseEvent) => {
       if (!selectionStartedInContentRef.current) return
@@ -2665,68 +2334,7 @@ export function ResponseCard({
     return () => {
       document.removeEventListener('mouseup', handleDocumentMouseUp)
     }
-  }, [onAddAnnotation, messageId, variant, isStreaming, showSelectionMenuFromCurrentSelection])
-
-  const activeMenuAnchor = useMemo(() => {
-    if (pendingSelection) {
-      return { x: pendingSelection.anchorX, y: pendingSelection.anchorY }
-    }
-
-    if (activeAnnotationDetail) {
-      return { x: activeAnnotationDetail.anchorX, y: activeAnnotationDetail.anchorY }
-    }
-
-    return null
-  }, [pendingSelection, activeAnnotationDetail])
-
-  const selectionMenuSourceKey = useMemo(() => {
-    const sessionScope = sessionId ?? 'no-session'
-    const messageScope = messageId ?? 'no-message'
-
-    if (pendingSelection) {
-      return `${sessionScope}:${messageScope}:selection:${pendingSelection.start}:${pendingSelection.end}`
-    }
-
-    if (activeAnnotationDetail) {
-      return `${sessionScope}:${messageScope}:annotation:${activeAnnotationDetail.annotationId}`
-    }
-
-    return `${sessionScope}:${messageScope}:none`
-  }, [sessionId, messageId, pendingSelection, activeAnnotationDetail])
-
-  useEffect(() => {
-    if (activeMenuAnchor) {
-      debugSelectionIsland('anchor-sync-open', {
-        sessionId: sessionId ?? null,
-        messageId: messageId ?? null,
-        activeMenuAnchor,
-        selectionMenuSourceKey,
-      })
-
-      selectionMenuOpenedAtRef.current = Date.now()
-      setSelectionMenuRenderAnchor(activeMenuAnchor)
-      setSelectionMenuRenderSourceKey(selectionMenuSourceKey)
-      setIsSelectionMenuVisible(true)
-    }
-
-    const openedRecently = Date.now() - selectionMenuOpenedAtRef.current < 220
-    if (openedRecently && selectionMenuRenderAnchor) {
-      debugSelectionIsland('anchor-sync-close-skipped', {
-        sessionId: sessionId ?? null,
-        messageId: messageId ?? null,
-        selectionMenuSourceKey,
-        openedRecently,
-      })
-      return
-    }
-
-    debugSelectionIsland('anchor-sync-close', {
-      sessionId: sessionId ?? null,
-      messageId: messageId ?? null,
-      selectionMenuSourceKey,
-    })
-    setIsSelectionMenuVisible(false)
-  }, [activeMenuAnchor, selectionMenuSourceKey, selectionMenuRenderAnchor, debugSelectionIsland, sessionId, messageId])
+  }, [canAnnotate, onAddAnnotation, messageId, showSelectionMenuFromCurrentSelection])
 
   useEffect(() => {
     debugSelectionIsland('render-state', {
@@ -2751,151 +2359,49 @@ export function ResponseCard({
     activeMenuAnchor,
   ])
 
-  const handleSelectionMenuExitComplete = useCallback(() => {
-    debugSelectionIsland('exit-complete', {
-      sessionId: sessionId ?? null,
-      messageId: messageId ?? null,
-      activeMenuAnchor,
-    })
-
-    if (activeMenuAnchor) return
-    setSelectionMenuRenderAnchor(null)
-    setSelectionMenuRenderSourceKey('none')
-    setActiveSelectionMenuSize(null)
-  }, [activeMenuAnchor, debugSelectionIsland, sessionId, messageId])
-
-  const selectionMenuAnchorX = useMemo(() => {
-    if (typeof window === 'undefined') {
-      return 0
+  const handleSelectionMenuRequestBack = useCallback((): boolean => {
+    if (selectionMenuView !== 'compact') {
+      handleCancelFollowUp()
+      return true
     }
 
-    if (!selectionMenuRenderAnchor) {
-      return window.innerWidth / 2
-    }
+    return false
+  }, [selectionMenuView, handleCancelFollowUp])
 
-    const activeWidth = activeSelectionMenuSize?.width ?? SELECTION_MENU_DEFAULT_WIDTH_ESTIMATE
-    return clampSelectionMenuAnchorX(selectionMenuRenderAnchor.x, activeWidth)
-  }, [selectionMenuRenderAnchor, activeSelectionMenuSize])
+  const selectionMenu = (
+    <AnnotationIslandMenu
+      anchor={selectionMenuRenderAnchor}
+      sourceKey={selectionMenuRenderSourceKey}
+      replayNonce={selectionMenuShowNonce}
+      isVisible={isSelectionMenuVisible}
+      activeView={selectionMenuView}
+      mode={followUpMode}
+      draft={followUpDraft}
+      onDraftChange={setFollowUpDraft}
+      onOpenFollowUp={handleOpenFollowUpView}
+      onCancel={handleCancelFollowUp}
+      onRequestBack={handleSelectionMenuRequestBack}
+      onRequestEdit={handleRequestFollowUpEdit}
+      onSubmit={handleSubmitFollowUp}
+      onDelete={activeAnnotationDetail ? handleDeleteActiveAnnotation : undefined}
+      sendMessageKey={sendMessageKey}
+      transitionConfig={selectionMenuTransitionConfig}
+      onExitComplete={handleSelectionMenuExitComplete}
+      zIndex={50}
+    />
+  )
 
-  const selectionMenu = selectionMenuRenderAnchor
-    ? ReactDOM.createPortal(
-        <div
-          ref={selectionMenuRef}
-          className="fixed z-50"
-          style={{
-            left: selectionMenuAnchorX,
-            top: Math.max(36, selectionMenuRenderAnchor.y),
-            transform: 'translate(-50%, -100%)',
-          }}
-          onMouseDown={handleSelectionMenuMouseDown}
-        >
-          <Island
-            key={selectionMenuRenderSourceKey}
-            activeViewId={selectionMenuView}
-            radius={12}
-            className="border-border/40 bg-background/75 backdrop-blur-xl backdrop-saturate-150 shadow-strong"
-            onActiveViewSizeChange={setActiveSelectionMenuSize}
-            isVisible={isSelectionMenuVisible}
-            onExitComplete={handleSelectionMenuExitComplete}
-            replayEntryKey={`${selectionMenuRenderSourceKey}:${selectionMenuShowNonce}`}
-            replayOnVisible="always"
-            transitionConfig={selectionMenuTransitionConfig}
-          >
-            <IslandContentView id="compact" anchorX="center" anchorY="bottom">
-              <div className="p-1 flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={handleOpenFollowUpView}
-                  className={cn(
-                    "h-[30px] px-2.5 rounded-[8px] text-[13px] font-medium inline-flex items-center gap-1.5",
-                    "text-foreground/85 hover:text-foreground hover:bg-foreground/5",
-                    "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  )}
-                >
-                  <CornerDownRight className="h-3.5 w-3.5" />
-                  <span>Follow up</span>
-                </button>
-              </div>
-            </IslandContentView>
-
-            <IslandFollowUpContentView
-              id="confirm-follow-up"
-              value={followUpDraft}
-              onValueChange={setFollowUpDraft}
-              onCancel={handleCancelFollowUp}
-              onSubmit={handleSubmitFollowUp}
-              onDelete={activeAnnotationDetail ? handleDeleteActiveAnnotation : undefined}
-              title="Follow-up"
-              submitLabel={activeAnnotationDetail ? 'Save' : 'Continue'}
-              placeholder="Add comments the agent should consider in the next turn…"
-              maxInputHeight={320}
-              sendMessageKey={sendMessageKey}
-              lockScroll
-            />
-
-          </Island>
-        </div>,
-        document.body,
-      )
-    : null
-
-  const annotationOverlayLayer = (annotationOverlay.rects.length > 0 || annotationOverlay.chips.length > 0)
-    ? (
-      <div data-ca-annotation-overlay className="pointer-events-none absolute inset-0 z-[2]">
-        {annotationOverlay.rects.map((rect, idx) => (
-          <div
-            key={`rect-${rect.id}-${idx}`}
-            className="absolute shadow-tinted"
-            style={{
-              left: rect.left - 4,
-              top: rect.top - 1,
-              width: rect.width + 8,
-              height: rect.height + 2,
-              backgroundColor: rect.color,
-              borderRadius: '4px',
-              ['--shadow-color' as string]: 'var(--info-rgb)',
-              ['--shadow-border-opacity' as string]: '0.14',
-              ['--shadow-blur-opacity' as string]: '0.10',
-            }}
-          />
-        ))}
-        {annotationOverlay.chips.map((chip) => (
-          <button
-            key={`chip-${chip.id}`}
-            type="button"
-            data-ca-annotation-index={String(chip.index)}
-            onClick={(event) => {
-              const rect = event.currentTarget.getBoundingClientRect()
-              handleOpenAnnotationDetail(chip.id, chip.index, rect.left + rect.width / 2, rect.top - 8)
-            }}
-            className="absolute shadow-tinted pointer-events-auto cursor-pointer hover:bg-foreground/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            style={{
-              left: chip.left,
-              top: chip.top,
-              transform: 'translate(-2px, -8px)',
-              minWidth: '16px',
-              height: '15px',
-              padding: '0 3px',
-              borderRadius: '4px',
-              backgroundColor: 'color-mix(in srgb, var(--info) 30%, var(--background))',
-              color: 'rgba(15, 23, 42, 0.95)',
-              fontSize: '10px',
-              fontWeight: '600',
-              lineHeight: '15px',
-              textAlign: 'center',
-              userSelect: 'none',
-              position: 'absolute',
-              ['--shadow-color' as string]: 'var(--info-rgb)',
-              ['--shadow-border-opacity' as string]: '0.14',
-              ['--shadow-blur-opacity' as string]: '0.10',
-            }}
-          >
-            {chip.index}
-          </button>
-        ))}
-      </div>
-    )
-    : null
+  const annotationOverlayLayer = (
+    <AnnotationOverlayLayer
+      rects={annotationOverlay.rects}
+      chips={annotationOverlay.chips}
+      annotations={renderedAnnotations}
+      getTooltipText={(annotation) => formatAnnotationFollowUpTooltipText(annotation)}
+      onChipOpen={({ annotationId, index, anchorX, anchorY, mode }) => {
+        handleOpenAnnotationDetail(annotationId, index, anchorX, anchorY, mode)
+      }}
+    />
+  )
 
   // Throttle content updates during streaming for performance
   // Updates immediately when streaming ends to show final content
@@ -3056,6 +2562,8 @@ export function ResponseCard({
                     <AcceptPlanDropdown
                       onAccept={onAccept}
                       onAcceptWithCompact={onAcceptWithCompact}
+                      acceptLabel={hasActiveFollowUpAnnotations ? 'Accept & Send Follow-ups' : 'Accept Plan'}
+                      acceptOptionLabel={hasActiveFollowUpAnnotations ? 'Accept & Send Follow-ups' : 'Accept'}
                     />
                   </div>
                 )}
@@ -3065,7 +2573,7 @@ export function ResponseCard({
           )}
         </div>
 
-        {/* Fullscreen overlay for reading response/plan */}
+        {/* Fullscreen overlay for reading/annotating response and plan content. */}
         <DocumentFormattedMarkdownOverlay
           content={text}
           isOpen={isFullscreen}
@@ -3073,6 +2581,13 @@ export function ResponseCard({
           variant={isPlan ? 'plan' : undefined}
           onOpenUrl={onOpenUrl}
           onOpenFile={onOpenFile}
+          sessionId={sessionId}
+          messageId={messageId}
+          annotations={annotations}
+          onAddAnnotation={onAddAnnotation}
+          onRemoveAnnotation={onRemoveAnnotation}
+          onUpdateAnnotation={onUpdateAnnotation}
+          sendMessageKey={sendMessageKey}
         />
         {selectionMenu}
       </>
@@ -3250,6 +2765,8 @@ export const TurnCard = React.memo(function TurnCard({
   onRemoveAnnotation,
   onUpdateAnnotation,
   sendMessageKey = 'enter',
+  hasActiveFollowUpAnnotations = false,
+  openAnnotationRequest,
 }: TurnCardProps) {
   // Derive the turn phase from props using the state machine.
   // This provides a single source of truth for lifecycle state,
@@ -3597,12 +3114,19 @@ export const TurnCard = React.memo(function TurnCard({
             onOpenUrl={onOpenUrl}
             onPopOut={onPopOut ? () => onPopOut(planActivity.content || '') : undefined}
             variant="plan"
+            messageId={planActivity.messageId}
+            annotations={planActivity.annotations}
+            onAddAnnotation={onAddAnnotation}
+            onRemoveAnnotation={onRemoveAnnotation}
+            onUpdateAnnotation={onUpdateAnnotation}
             onAccept={onAcceptPlan}
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse && index === planActivities.length - 1}
             compactMode={compactMode}
-            onBranch={onBranch ? (options?: { newPanel?: boolean }) => onBranch(planActivity.id, options) : undefined}
+            onBranch={onBranch ? (options?: { newPanel?: boolean }) => onBranch(planActivity.messageId ?? planActivity.id, options) : undefined}
             sendMessageKey={sendMessageKey}
+            hasActiveFollowUpAnnotations={hasActiveFollowUpAnnotations}
+            openAnnotationRequest={openAnnotationRequest}
           />
         </div>
       ))}
@@ -3638,6 +3162,8 @@ export const TurnCard = React.memo(function TurnCard({
                 compactMode={compactMode}
                 onBranch={onBranch && response.messageId ? (options?: { newPanel?: boolean }) => onBranch(response.messageId!, options) : undefined}
                 sendMessageKey={sendMessageKey}
+                hasActiveFollowUpAnnotations={hasActiveFollowUpAnnotations}
+                openAnnotationRequest={openAnnotationRequest}
               />
             </motion.div>
           )}
@@ -3666,6 +3192,8 @@ export const TurnCard = React.memo(function TurnCard({
             compactMode={compactMode}
             onBranch={onBranch && response.messageId ? (options?: { newPanel?: boolean }) => onBranch(response.messageId!, options) : undefined}
             sendMessageKey={sendMessageKey}
+            hasActiveFollowUpAnnotations={hasActiveFollowUpAnnotations}
+            openAnnotationRequest={openAnnotationRequest}
           />
         </div>
       )}
@@ -3696,6 +3224,12 @@ export const TurnCard = React.memo(function TurnCard({
 
   // Re-render when response object changes (e.g., annotation updates)
   if (prev.response !== next.response) return false
+
+  // Re-render when external annotation-open requests change
+  if (prev.openAnnotationRequest !== next.openAnnotationRequest) return false
+
+  // Re-render when active follow-up annotation state changes (plan CTA label)
+  if (prev.hasActiveFollowUpAnnotations !== next.hasActiveFollowUpAnnotations) return false
 
   // For complete, non-streaming turns: skip re-render only when both
   // session and turn identities match. Prevents stale local UI state from

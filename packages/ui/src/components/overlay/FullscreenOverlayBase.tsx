@@ -30,10 +30,11 @@
  * Used by: PreviewOverlay, DocumentFormattedMarkdownOverlay, WorkspaceCreationScreen
  */
 
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { usePlatform } from '../../context/PlatformContext'
 import { cn } from '../../lib/utils'
+import { getDismissibleLayerBridge } from '../../lib/dismissible-layer-bridge'
 import { FullscreenOverlayBaseHeader, type OverlayTypeBadge } from './FullscreenOverlayBaseHeader'
 import { OverlayErrorBanner, type OverlayErrorBannerProps } from './OverlayErrorBanner'
 
@@ -84,6 +85,12 @@ export interface FullscreenOverlayBaseProps {
   error?: OverlayErrorBannerProps
 }
 
+export function handleFullscreenEscapeWithStack(): boolean {
+  const bridge = getDismissibleLayerBridge()
+  if (!bridge) return false
+  return bridge.handleEscape()
+}
+
 export function FullscreenOverlayBase({
   isOpen,
   onClose,
@@ -104,6 +111,21 @@ export function FullscreenOverlayBase({
   // Determine if we should render the structured header.
   // Any header-related prop triggers header rendering.
   const hasHeader = !!(typeBadge || filePath || title || subtitle || headerActions || copyContent)
+  const overlayIdRef = useRef(`fullscreen-overlay-${Math.random().toString(36).slice(2)}`)
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    const bridge = getDismissibleLayerBridge()
+    if (!bridge) return
+
+    return bridge.registerLayer({
+      id: overlayIdRef.current,
+      type: 'radix-dialog',
+      priority: 100,
+      close: onClose,
+    })
+  }, [isOpen, onClose])
 
   // Hide macOS traffic lights when overlay opens, restore when it closes
   // This prevents accidental clicks on window controls behind the fullscreen overlay
@@ -129,6 +151,13 @@ export function FullscreenOverlayBase({
           )}
           style={{ zIndex: Z_FULLSCREEN }}
           onOpenAutoFocus={(e) => e.preventDefault()}
+          onEscapeKeyDown={(event) => {
+            const handled = handleFullscreenEscapeWithStack()
+            if (!handled) return
+
+            event.preventDefault()
+            event.stopPropagation()
+          }}
         >
           {/* Visually hidden title for accessibility - required by Radix Dialog */}
           <Dialog.Title className="sr-only">{accessibleTitle}</Dialog.Title>

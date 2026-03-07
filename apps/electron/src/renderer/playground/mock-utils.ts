@@ -32,6 +32,29 @@ export const mockElectronAPI = {
     return `Output for task ${taskId}:\n\nThis is a mock output in the playground.\nIn the real app, this would show the actual task output.`
   },
 
+  // Session files API used by SessionFilesSection (Info popover)
+  getSessionFiles: async (sessionId: string) => {
+    console.log('[Playground] getSessionFiles called:', sessionId)
+    return []
+  },
+
+  watchSessionFiles: (sessionId: string) => {
+    console.log('[Playground] watchSessionFiles called:', sessionId)
+  },
+
+  unwatchSessionFiles: () => {
+    console.log('[Playground] unwatchSessionFiles called')
+  },
+
+  onSessionFilesChanged: (callback: (sessionId: string) => void) => {
+    console.log('[Playground] onSessionFilesChanged subscribed')
+    // Keep callback referenced for parity/debugging, but no events emitted in playground
+    void callback
+    return () => {
+      console.log('[Playground] onSessionFilesChanged unsubscribed')
+    }
+  },
+
   browserPane: {
     focus: async (instanceId: string) => {
       console.log('[Playground] browserPane.focus called:', instanceId)
@@ -41,6 +64,11 @@ export const mockElectronAPI = {
   openFile: async (path: string) => {
     console.log('[Playground] openFile called:', path)
     alert(`Would open file in system editor:\n${path}`)
+  },
+
+  showInFolder: async (path: string) => {
+    console.log('[Playground] showInFolder called:', path)
+    alert(`Would reveal in file manager:\n${path}`)
   },
 
   // ChatDisplay required mocks

@@ -15,6 +15,7 @@ import type { LabelConfig } from '@craft-agent/shared/labels'
 import type { SessionStatus } from '@/config/session-status-config'
 import type { FileAttachment, PermissionRequest, PermissionMode } from '../../../shared/types'
 import { cn } from '@/lib/utils'
+import { AppShellProvider } from '@/context/AppShellContext'
 import {
   ensureMockElectronAPI,
   mockInputCallbacks,
@@ -163,6 +164,48 @@ const inputContainerSampleStatuses: SessionStatus[] = [
     category: 'closed',
   },
 ]
+
+const playgroundAppShellContext = {
+  workspaces: [{ id: 'playground-workspace', name: 'Playground', path: '/playground', rootPath: '/playground' }],
+  activeWorkspaceId: 'playground-workspace',
+  activeWorkspaceSlug: 'playground-workspace',
+  llmConnections: [],
+  workspaceDefaultLlmConnection: undefined,
+  refreshLlmConnections: async () => {},
+  pendingPermissions: new Map(),
+  pendingCredentials: new Map(),
+  getDraft: () => '',
+  sessionOptions: new Map(),
+  onCreateSession: async () => ({
+    id: 'playground-session',
+    workspaceId: 'playground-workspace',
+    workspaceName: 'Playground',
+    messages: [],
+    isProcessing: false,
+    lastMessageAt: Date.now(),
+  }),
+  onSendMessage: () => {},
+  onRenameSession: () => {},
+  onFlagSession: () => {},
+  onUnflagSession: () => {},
+  onArchiveSession: () => {},
+  onUnarchiveSession: () => {},
+  onMarkSessionRead: () => {},
+  onMarkSessionUnread: () => {},
+  onSetActiveViewingSession: () => {},
+  onSessionStatusChange: () => {},
+  onDeleteSession: async () => true,
+  onOpenFile: () => {},
+  onOpenUrl: () => {},
+  onSelectWorkspace: () => {},
+  onRefreshWorkspaces: () => {},
+  onOpenSettings: () => {},
+  onOpenKeyboardShortcuts: () => {},
+  onOpenStoredUserPreferences: () => {},
+  onReset: () => {},
+  onSessionOptionsChange: () => {},
+  onInputChange: () => {},
+}
 
 // ============================================================================
 // Sample Nested Tool Activities (Task subagent with child tools)
@@ -497,6 +540,8 @@ interface InputContainerPlaygroundProps {
   showSources?: boolean
   sourceCount?: number
   showWorkingDirectory?: boolean
+  showAttachments?: boolean
+  attachmentCount?: number
   showFollowUps?: boolean
   followUpCount?: number
 }
@@ -518,9 +563,12 @@ function InputContainerPlayground({
   showSources = true,
   sourceCount = 2,
   showWorkingDirectory = true,
+  showAttachments = false,
+  attachmentCount = 2,
   showFollowUps = false,
   followUpCount = 2,
 }: InputContainerPlaygroundProps) {
+  const playgroundSessionId = 'playground-session'
   const [model, setModel] = React.useState(currentModel)
   const [mode, setMode] = React.useState<PermissionMode>(permissionMode)
   const [inputValue, setInputValue] = React.useState('')
@@ -567,14 +615,82 @@ function InputContainerPlayground({
 
   const followUpItems = React.useMemo(() => {
     const samples = [
-      { id: 'fu-a', index: 1, excerpt: 'Include OAuth refresh edge cases', note: 'Prevent stale token from discarding draft input.' },
-      { id: 'fu-b', index: 2, excerpt: 'Validate animation with permission mode transitions', note: 'Check compact mode and quick mode switching.' },
-      { id: 'fu-c', index: 3, excerpt: 'Review label + source badge density on narrow widths' },
-      { id: 'fu-d', index: 4, excerpt: 'Add chip click affordance for jumping back to annotation' },
+      {
+        id: 'fu-a',
+        messageId: 'assistant-msg-1',
+        annotationId: 'annotation-1',
+        index: 1,
+        noteLabel: 'Prevent stale token from discarding draft input.',
+        selectedText: 'Include OAuth refresh edge cases',
+        color: 'info',
+      },
+      {
+        id: 'fu-b',
+        messageId: 'assistant-msg-1',
+        annotationId: 'annotation-2',
+        index: 2,
+        noteLabel: 'Check compact mode and quick mode switching.',
+        selectedText: 'Validate animation with permission mode transitions',
+        color: 'info',
+      },
+      {
+        id: 'fu-c',
+        messageId: 'assistant-msg-2',
+        annotationId: 'annotation-3',
+        index: 3,
+        noteLabel: 'Review spacing and overflow for label/source badge density.',
+        selectedText: 'Review label + source badge density on narrow widths',
+        color: 'info',
+      },
+      {
+        id: 'fu-d',
+        messageId: 'assistant-msg-3',
+        annotationId: 'annotation-4',
+        index: 4,
+        noteLabel: 'Add chip click affordance for jumping back to annotation',
+        selectedText: 'Add chip click affordance for jumping back to annotation',
+        color: 'info',
+      },
     ]
     if (!showFollowUps) return []
     return samples.slice(0, Math.max(1, Math.min(followUpCount, samples.length)))
   }, [showFollowUps, followUpCount])
+
+  const attachmentFiles = React.useMemo(() => {
+    if (!showAttachments) return [] as File[]
+
+    const imageBytes = sampleImageAttachment.base64
+      ? Uint8Array.from(atob(sampleImageAttachment.base64), char => char.charCodeAt(0))
+      : new Uint8Array([137, 80, 78, 71])
+
+    const samples: File[] = [
+      new File([imageBytes], sampleImageAttachment.name, { type: sampleImageAttachment.mimeType }),
+      new File(['%PDF-1.4\n% Playground sample\n'], samplePdfAttachment.name, { type: samplePdfAttachment.mimeType }),
+      new File(['export function App() {\n  return <div>Hello Playground</div>\n}\n'], sampleCodeAttachment.name, { type: sampleCodeAttachment.mimeType }),
+    ]
+
+    return samples.slice(0, Math.max(1, Math.min(attachmentCount, samples.length)))
+  }, [showAttachments, attachmentCount])
+
+  const attachmentSeedKey = React.useMemo(() => {
+    if (!showAttachments) return 'none'
+    return attachmentFiles.map(file => `${file.name}:${file.size}`).join('|')
+  }, [showAttachments, attachmentFiles])
+
+  React.useEffect(() => {
+    if (!showAttachments || attachmentFiles.length === 0) return
+
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('craft:paste-files', {
+        detail: {
+          files: attachmentFiles,
+          sessionId: playgroundSessionId,
+        },
+      }))
+    }, 0)
+
+    return () => clearTimeout(timer)
+  }, [showAttachments, attachmentSeedKey, attachmentFiles, playgroundSessionId])
 
   const structuredInput = React.useMemo(() => {
     if (inputMode === 'permission') {
@@ -600,49 +716,52 @@ function InputContainerPlayground({
   }, [inputMode])
 
   return (
-    <div className="w-full h-full flex flex-col bg-background">
-      <div className="flex-1" />
+    <AppShellProvider value={playgroundAppShellContext as any}>
+      <div className="w-full h-full flex flex-col bg-background">
+        <div className="flex-1" />
 
-      <ChatInputZone
-        compactMode={compactMode}
-        showOptionBadges={showOptionBadges}
-        permissionMode={mode}
-        onPermissionModeChange={setMode}
-        tasks={showTasks ? sampleBackgroundTasks : []}
-        sessionId="playground-session"
-        onKillTask={(taskId) => console.log('[Playground] Kill task:', taskId)}
-        onInsertMessage={setInputValue}
-        sessionLabels={showLabels ? sessionLabels : []}
-        labels={showLabels ? labels : []}
-        onLabelsChange={setSessionLabels}
-        sessionStatuses={showStatuses ? inputContainerSampleStatuses : []}
-        currentSessionStatus={showStatuses ? currentSessionStatus : undefined}
-        onSessionStatusChange={setCurrentSessionStatus}
-        inputProps={{
-          placeholder,
-          disabled,
-          isProcessing,
-          structuredInput,
-          onStructuredResponse: (response) => {
-            console.log('[Playground] Structured response:', response)
-          },
-          currentModel: model,
-          sources: showSources ? sources : [],
-          enabledSourceSlugs: showSources ? enabledSourceSlugs : [],
-          onSourcesChange: showSources ? setEnabledSourceSlugs : undefined,
-          workingDirectory: showWorkingDirectory ? cwd : undefined,
-          onWorkingDirectoryChange: showWorkingDirectory ? setCwd : undefined,
-          followUpItems,
-          onSubmit: mockInputCallbacks.onSubmit,
-          onModelChange: setModel,
-          onInputChange: setInputValue,
-          inputValue,
-          onHeightChange: mockInputCallbacks.onHeightChange,
-          onFocusChange: mockInputCallbacks.onFocusChange,
-          onStop: mockInputCallbacks.onStop,
-        }}
-      />
-    </div>
+        <ChatInputZone
+          key={`input:${inputMode}:${compactMode ? 'compact' : 'full'}:${showAttachments ? attachmentSeedKey : 'none'}:${showFollowUps ? followUpCount : 0}`}
+          compactMode={compactMode}
+          showOptionBadges={showOptionBadges}
+          permissionMode={mode}
+          onPermissionModeChange={setMode}
+          tasks={showTasks ? sampleBackgroundTasks : []}
+          sessionId={playgroundSessionId}
+          onKillTask={(taskId) => console.log('[Playground] Kill task:', taskId)}
+          onInsertMessage={setInputValue}
+          sessionLabels={showLabels ? sessionLabels : []}
+          labels={showLabels ? labels : []}
+          onLabelsChange={setSessionLabels}
+          sessionStatuses={showStatuses ? inputContainerSampleStatuses : []}
+          currentSessionStatus={showStatuses ? currentSessionStatus : undefined}
+          onSessionStatusChange={setCurrentSessionStatus}
+          inputProps={{
+            placeholder,
+            disabled,
+            isProcessing,
+            structuredInput,
+            onStructuredResponse: (response) => {
+              console.log('[Playground] Structured response:', response)
+            },
+            currentModel: model,
+            sources: showSources ? sources : [],
+            enabledSourceSlugs: showSources ? enabledSourceSlugs : [],
+            onSourcesChange: showSources ? setEnabledSourceSlugs : undefined,
+            workingDirectory: showWorkingDirectory ? cwd : undefined,
+            onWorkingDirectoryChange: showWorkingDirectory ? setCwd : undefined,
+            followUpItems,
+            onSubmit: mockInputCallbacks.onSubmit,
+            onModelChange: setModel,
+            onInputChange: setInputValue,
+            inputValue,
+            onHeightChange: mockInputCallbacks.onHeightChange,
+            onFocusChange: mockInputCallbacks.onFocusChange,
+            onStop: mockInputCallbacks.onStop,
+          }}
+        />
+      </div>
+    </AppShellProvider>
   )
 }
 
@@ -1231,6 +1350,18 @@ export const chatComponents: ComponentEntry[] = [
         defaultValue: '/Users/demo/projects/craft-agent',
       },
       {
+        name: 'showAttachments',
+        description: 'Show preloaded attachment chips above editor',
+        control: { type: 'boolean' },
+        defaultValue: false,
+      },
+      {
+        name: 'attachmentCount',
+        description: 'Number of preloaded attachments to preview',
+        control: { type: 'number', min: 1, max: 3, step: 1 },
+        defaultValue: 2,
+      },
+      {
         name: 'showFollowUps',
         description: 'Show follow-up annotation chips above editor',
         control: { type: 'boolean' },
@@ -1316,6 +1447,16 @@ export const chatComponents: ComponentEntry[] = [
         name: 'Follow-up Review',
         description: 'Follow-up annotation chips visible in input',
         props: {
+          showFollowUps: true,
+          followUpCount: 3,
+        },
+      },
+      {
+        name: 'Attachments + Follow-ups',
+        description: 'Preloaded attachments with follow-up annotation chips visible together',
+        props: {
+          showAttachments: true,
+          attachmentCount: 2,
           showFollowUps: true,
           followUpCount: 3,
         },

@@ -9,6 +9,7 @@
  */
 
 import type { FocusZoneId } from '@/context/FocusContext'
+import { hasOpenOverlay } from '@/lib/overlay-detection'
 
 /**
  * Context keys available in when-clause expressions.
@@ -98,10 +99,7 @@ export function getKeybindingContext(e: KeyboardEvent): KeybindingContext {
     chatFocus: _currentZone === 'chat',
     navigatorFocus: _currentZone === 'navigator',
     sidebarFocus: _currentZone === 'sidebar',
-    menuOpen:
-      document.querySelector(
-        '[data-state="open"][role="dialog"], [data-radix-popper-content-wrapper], [data-inline-menu]'
-      ) !== null,
+    menuOpen: hasOpenOverlay(),
   }
 }
 

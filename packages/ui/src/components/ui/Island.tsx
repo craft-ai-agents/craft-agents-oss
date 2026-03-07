@@ -1,9 +1,11 @@
 import * as React from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { cn } from '../../lib/utils'
+import { getDismissibleLayerBridge } from '../../lib/dismissible-layer-bridge'
 
 export type AnchorX = 'left' | 'center' | 'right'
 export type AnchorY = 'top' | 'center' | 'bottom'
+export type IslandDialogBehavior = 'none' | 'close' | 'back-or-close'
 
 export type IslandMorphTarget = {
   x: number
@@ -71,8 +73,12 @@ export interface IslandProps {
   onExitComplete?: () => void
   /** Calls onRequestClose when pointer-down happens outside the island shell while visible. */
   dismissOnPointerDownOutside?: boolean
-  /** Consumer callback for close/dismiss requests (outside tap, future escape key support, etc.). */
+  /** Consumer callback for close/dismiss requests (outside tap, escape, etc.). */
   onRequestClose?: () => void
+  /** Consumer callback for back navigation requests. Return true when handled. */
+  onRequestBack?: () => boolean
+  /** Dialog semantics for Escape handling while visible. */
+  dialogBehavior?: IslandDialogBehavior
   /** Locks document scrolling while the island is visible, regardless of active view-level lockScroll flags. */
   lockScrollWhileVisible?: boolean
   /** Force entry animation replay when this value changes (show(animated:true)-style control). */
@@ -94,6 +100,31 @@ const IslandAnimationContext = React.createContext<Required<IslandTransitionConf
 
 export function useIslandAnimationConfig(): Required<IslandTransitionConfig> {
   return React.useContext(IslandAnimationContext)
+}
+
+export interface HandleIslandEscapeParams {
+  dialogBehavior: IslandDialogBehavior
+  onRequestBack?: () => boolean
+  onRequestClose?: () => void
+}
+
+/**
+ * Apply Island Escape behavior. Returns true when Escape was handled.
+ */
+export function handleIslandEscape({
+  dialogBehavior,
+  onRequestBack,
+  onRequestClose,
+}: HandleIslandEscapeParams): boolean {
+  if (dialogBehavior === 'none') return false
+
+  if (dialogBehavior === 'back-or-close' && onRequestBack?.()) {
+    return true
+  }
+
+  if (!onRequestClose) return false
+  onRequestClose()
+  return true
 }
 
 const CONTENT_EASE = [0.2, 0.8, 0.2, 1] as const
@@ -253,12 +284,15 @@ export function Island({
   onExitComplete,
   dismissOnPointerDownOutside = false,
   onRequestClose,
+  onRequestBack,
+  dialogBehavior = 'back-or-close',
   lockScrollWhileVisible = false,
   replayEntryKey,
   replayOnVisible = 'auto',
 }: IslandProps) {
   const shellRef = React.useRef<HTMLDivElement | null>(null)
   const activeViewRef = React.useRef<HTMLDivElement | null>(null)
+  const layerIdRef = React.useRef(`island-${Math.random().toString(36).slice(2)}`)
   const lastSizeRef = React.useRef<{ id: string; width: number; height: number } | null>(null)
   const [isTransitionSettling, setIsTransitionSettling] = React.useState(true)
   const [morphDelta, setMorphDelta] = React.useState<{ x: number; y: number; scaleX: number; scaleY: number } | null>(null)
@@ -465,6 +499,29 @@ export function Island({
   }, [isVisible, replayEntryKey, replayOnVisible])
 
   const shouldLockScroll = (activeView?.lockScroll ?? false) || lockScrollWhileVisible
+  const isDialogMode = dialogBehavior !== 'none'
+
+  React.useEffect(() => {
+    if (!isDialogMode || !isVisible) return
+
+    const bridge = getDismissibleLayerBridge()
+    if (!bridge) return
+
+    return bridge.registerLayer({
+      id: layerIdRef.current,
+      type: 'island',
+      priority: 200,
+      close: () => {
+        onRequestClose?.()
+      },
+      canBack: dialogBehavior === 'back-or-close'
+        ? () => Boolean(onRequestBack)
+        : undefined,
+      back: dialogBehavior === 'back-or-close'
+        ? () => handleIslandEscape({ dialogBehavior, onRequestBack, onRequestClose })
+        : undefined,
+    })
+  }, [isDialogMode, isVisible, dialogBehavior, onRequestBack, onRequestClose])
 
   React.useEffect(() => {
     if (!shouldLockScroll || !isVisible) return
@@ -476,9 +533,38 @@ export function Island({
   }, [activeView?.id, shouldLockScroll, isVisible])
 
   React.useEffect(() => {
-    if (!shouldLockScroll || !isVisible) return
+    if (!(shouldLockScroll || isDialogMode) || !isVisible) return
     shellRef.current?.focus()
-  }, [shouldLockScroll, isVisible, activeView?.id])
+  }, [shouldLockScroll, isDialogMode, isVisible, activeView?.id])
+
+  React.useEffect(() => {
+    if (!isVisible || dialogBehavior === 'none') return
+    if (typeof window === 'undefined') return
+
+    const bridge = getDismissibleLayerBridge()
+    if (bridge) return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+
+      const handled = handleIslandEscape({
+        dialogBehavior,
+        onRequestBack,
+        onRequestClose,
+      })
+
+      if (!handled) return
+
+      event.preventDefault()
+      event.stopPropagation()
+    }
+
+    // Bubble phase so nested controls can consume Escape first.
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [isVisible, dialogBehavior, onRequestBack, onRequestClose])
 
   React.useEffect(() => {
     if (!dismissOnPointerDownOutside || !isVisible || !onRequestClose) return
@@ -696,16 +782,11 @@ export function Island({
         animate={effectiveVisible ? visiblePose : exitHiddenPose}
         transition={shellTransition}
         style={{ borderRadius: radius, transformOrigin: '50% 50%' }}
-        role={shouldLockScroll ? 'dialog' : undefined}
-        aria-modal={shouldLockScroll ? true : undefined}
-        tabIndex={shouldLockScroll ? -1 : undefined}
-        onKeyDown={shouldLockScroll
-          ? (event) => {
-              if (event.key === 'Escape') {
-                event.stopPropagation()
-              }
-            }
-          : undefined}
+        role={isDialogMode ? 'dialog' : undefined}
+        aria-modal={isDialogMode ? true : undefined}
+        tabIndex={isDialogMode ? -1 : undefined}
+        data-ca-island-dialog={isDialogMode ? 'true' : undefined}
+        data-state={effectiveVisible ? 'open' : 'closed'}
         onAnimationStart={() => {
           debugIsland('shell-animation-start', {
             activeViewId: activeView.id,

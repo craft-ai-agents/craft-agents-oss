@@ -43,7 +43,24 @@ import { useTheme } from "@/hooks/useTheme"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
 import type { PermissionMode } from "@craft-agent/shared/agent/modes"
 import type { ThinkingLevel } from "@craft-agent/shared/agent/thinking-levels"
-import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, getAssistantTurnUiKey, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn } from "@craft-agent/ui"
+import {
+  TurnCard,
+  UserMessageBubble,
+  groupMessagesByTurn,
+  formatTurnAsMarkdown,
+  formatActivityAsMarkdown,
+  getAssistantTurnUiKey,
+  asRecord,
+  getAnnotationNoteText,
+  isAnnotationFollowUpSent,
+  extractAnnotationSelectedText,
+  normalizeFollowUpText,
+  type Turn,
+  type AssistantTurn,
+  type UserTurn,
+  type SystemTurn,
+  type AuthRequestTurn,
+} from "@craft-agent/ui"
 import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
 import { ChatInputZone, type StructuredInputState, type StructuredResponse, type PermissionResponse, type AdminApprovalResponse } from "./input"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
@@ -86,6 +103,13 @@ type OverlayState =
 function isStackedActivityTool(activity: ActivityItem): boolean {
   const toolName = activity.toolName?.toLowerCase() || ''
   return toolName === 'bash' || toolName.startsWith('mcp__') || toolName.startsWith('browser_')
+}
+
+function getTurnKey(turn: Turn): string {
+  if (turn.type === 'user') return `user-${turn.message.id}`
+  if (turn.type === 'system') return `system-${turn.message.id}`
+  if (turn.type === 'auth-request') return `auth-${turn.message.id}`
+  return `turn-${turn.turnId}-${turn.timestamp}`
 }
 
 interface ChatDisplayProps {
@@ -184,6 +208,84 @@ interface ChatDisplayProps {
   emptyStateLabel?: string
   /** When true, the session's locked connection has been removed - disables send and shows unavailable state */
   connectionUnavailable?: boolean
+}
+
+type PendingFollowUpAnnotation = {
+  messageId: string
+  annotationId: string
+  note: string
+  selectedText: string
+  createdAt: number
+  color?: string
+  meta?: Record<string, unknown>
+}
+
+function normalizeExcerptForMessage(text: string, maxLength = 280): string {
+  const normalized = normalizeFollowUpText(text)
+  if (normalized.length <= maxLength) return normalized
+  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`
+}
+
+function formatFollowUpSection(
+  followUps: PendingFollowUpAnnotation[],
+  options?: { includeTopSeparator?: boolean }
+): string {
+  if (followUps.length === 0) return ''
+
+  const includeTopSeparator = options?.includeTopSeparator ?? true
+
+  const items = followUps.map((followUp, idx) => {
+    const quoteText = normalizeExcerptForMessage(followUp.selectedText)
+    return [
+      `> [#${idx + 1}] ${quoteText}`,
+      `→ ${followUp.note}`,
+    ].join('\n')
+  })
+
+  const body = ['**Follow-ups**', items.join('\n\n---\n\n')].join('\n\n')
+  return includeTopSeparator ? `---\n\n${body}` : body
+}
+
+function normalizeFollowUpsMarkdown(message: string): string {
+  const normalizedInput = message.replace(/\r\n/g, '\n')
+  const headingMatch = /(?:\*\*Follow-ups\*\*|Follow-up annotations:)/i.exec(normalizedInput)
+  if (!headingMatch || headingMatch.index == null) return message
+
+  const headingIndex = headingMatch.index
+  const beforeHeading = normalizedInput.slice(0, headingIndex).trimEnd()
+  const hasTrailingSeparator = /(?:^|\n)\s*---\s*$/.test(beforeHeading)
+  const sectionText = normalizedInput.slice(headingIndex)
+
+  // Remove heading and optional leading separator so we can parse items robustly.
+  const body = sectionText
+    .replace(/^\s*(?:---\s*)?(?:\*\*Follow-ups\*\*|Follow-up annotations:)\s*/i, '')
+
+  const itemRegex = />?\s*\[#(\d+)\]\s*([\s\S]*?)\s*→\s*([\s\S]*?)(?=(?:\s*---\s*>?\s*\[#\d+\])|$)/g
+  const parsedItems: Array<{ quote: string; note: string }> = []
+
+  for (const match of body.matchAll(itemRegex)) {
+    const quote = match[2]?.replace(/\s+/g, ' ').trim()
+    const note = match[3]?.replace(/\s+/g, ' ').trim()
+    if (!quote || !note) continue
+    parsedItems.push({ quote, note })
+  }
+
+  if (parsedItems.length === 0) {
+    return message
+  }
+
+  const rebuiltItems = parsedItems.map((item, idx) => [
+    `> [#${idx + 1}] ${item.quote}`,
+    `→ ${item.note}`,
+  ].join('\n'))
+
+  const includeTopSeparator = beforeHeading.length > 0 && !hasTrailingSeparator
+  const rebuiltBody = ['**Follow-ups**', rebuiltItems.join('\n\n---\n\n')].join('\n\n')
+  const rebuiltSection = includeTopSeparator
+    ? `---\n\n${rebuiltBody}`
+    : rebuiltBody
+
+  return beforeHeading.length > 0 ? `${beforeHeading}\n\n${rebuiltSection}` : rebuiltSection
 }
 
 /**
@@ -455,6 +557,15 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const internalTextareaRef = React.useRef<RichTextInputHandle>(null)
   const textareaRef = externalTextareaRef || internalTextareaRef
   const [sendMessageKey, setSendMessageKey] = useState<'enter' | 'cmd-enter'>('enter')
+  const [openAnnotationRequest, setOpenAnnotationRequest] = React.useState<{
+    messageId: string
+    annotationId: string
+    mode: 'view' | 'edit'
+    anchorX?: number
+    anchorY?: number
+    nonce: number
+  } | null>(null)
+  const followUpOpenNonceRef = React.useRef(0)
 
   // Navigation for session branching
   const { navigate, navigateToSession } = useNavigation()
@@ -1120,6 +1231,47 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const lastMessageId = lastMessage?.id
   const lastMessageRole = lastMessage?.role
 
+  const pendingFollowUpAnnotations = useMemo<PendingFollowUpAnnotation[]>(() => {
+    if (!session?.messages?.length) return []
+
+    const pending: PendingFollowUpAnnotation[] = []
+
+    for (const message of session.messages) {
+      if (message.role !== 'assistant' && message.role !== 'plan') continue
+      if (!message.annotations?.length) continue
+
+      for (const annotation of message.annotations) {
+        const note = getAnnotationNoteText(annotation)
+        if (!note) continue
+        if (isAnnotationFollowUpSent(annotation)) continue
+
+        pending.push({
+          messageId: message.id,
+          annotationId: annotation.id,
+          note,
+          selectedText: extractAnnotationSelectedText(annotation, message.content),
+          createdAt: annotation.updatedAt ?? annotation.createdAt,
+          color: annotation.style?.color,
+          meta: asRecord(annotation.meta) ?? undefined,
+        })
+      }
+    }
+
+    return pending.sort((a, b) => a.createdAt - b.createdAt)
+  }, [session?.messages])
+
+  const followUpInputItems = useMemo(() => {
+    return pendingFollowUpAnnotations.map((followUp, idx) => ({
+      id: `${followUp.messageId}:${followUp.annotationId}`,
+      messageId: followUp.messageId,
+      annotationId: followUp.annotationId,
+      index: idx + 1,
+      noteLabel: normalizeExcerptForMessage(followUp.note, 140),
+      selectedText: normalizeExcerptForMessage(followUp.selectedText, 260),
+      color: followUp.color,
+    }))
+  }, [pendingFollowUpAnnotations])
+
   // Track scroll position to toggle sticky-bottom behavior
   // - User scrolls up → unstick (stop auto-scrolling)
   // - User scrolls back to bottom → re-stick (resume auto-scrolling)
@@ -1249,9 +1401,48 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Handle message submission from InputContainer
   // Backend handles interruption and queueing if currently processing
   const handleSubmit = (message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => {
+    const hasBaseMessage = message.trim().length > 0
+    const followUpSection = formatFollowUpSection(pendingFollowUpAnnotations, {
+      includeTopSeparator: hasBaseMessage,
+    })
+    const messageWithFollowUps = followUpSection.length > 0
+      ? (hasBaseMessage ? `${message}\n\n${followUpSection}` : followUpSection)
+      : message
+    const normalizedMessage = normalizeFollowUpsMarkdown(messageWithFollowUps)
+
     // Force stick-to-bottom when user sends a message
     isStickToBottomRef.current = true
-    onSendMessage(message, attachments, skillSlugs)
+    onSendMessage(normalizedMessage, attachments, skillSlugs)
+
+    // Persist sent marker on follow-up annotations so TurnCard can distinguish
+    // sent vs pending follow-ups. If user edits a follow-up later, TurnCard
+    // clears these markers and the annotation becomes pending again.
+    if (session && pendingFollowUpAnnotations.length > 0) {
+      const sentAt = Date.now()
+      void Promise.all(pendingFollowUpAnnotations.map((followUp) => {
+        const currentMeta = followUp.meta ?? {}
+        const currentFollowUpMeta = asRecord(currentMeta.followUp) ?? {}
+
+        return window.electronAPI.sessionCommand(session.id, {
+          type: 'updateAnnotation',
+          messageId: followUp.messageId,
+          annotationId: followUp.annotationId,
+          patch: {
+            meta: {
+              ...currentMeta,
+              followUp: {
+                ...currentFollowUpMeta,
+                text: followUp.note,
+                lastSentAt: sentAt,
+                lastSentText: followUp.note,
+              },
+            },
+          },
+        })
+      })).catch((error) => {
+        console.error('[ChatDisplay] Failed to mark follow-up annotations as sent:', error)
+      })
+    }
 
     // Immediately scroll to bottom after sending - use requestAnimationFrame
     // to ensure the DOM has updated with the new message
@@ -1349,6 +1540,88 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const turns = allTurns.slice(startIndex)
   const hasMoreAbove = startIndex > 0
 
+  const assistantTurnIndexByMessageId = useMemo(() => {
+    const map = new Map<string, number>()
+    allTurns.forEach((turn, index) => {
+      if (turn.type !== 'assistant') return
+      const messageId = turn.response?.messageId
+      if (messageId) map.set(messageId, index)
+    })
+    return map
+  }, [allTurns])
+
+  const scrollToFollowUpTurn = useCallback((item: {
+    messageId: string
+    annotationId: string
+  }) => {
+    const targetTurnIndex = assistantTurnIndexByMessageId.get(item.messageId)
+    if (targetTurnIndex == null) return
+
+    const ensureVisibleCount = allTurns.length - targetTurnIndex
+
+    const scrollToTurn = () => {
+      const targetTurn = allTurns[targetTurnIndex]
+      if (!targetTurn) return false
+
+      const turnKey = getTurnKey(targetTurn)
+      const turnContainer = turnRefs.current.get(turnKey)
+      if (!turnContainer) return false
+
+      turnContainer.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return true
+    }
+
+    if (ensureVisibleCount > visibleTurnCount) {
+      setVisibleTurnCount(ensureVisibleCount)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!scrollToTurn()) {
+            setTimeout(() => {
+              void scrollToTurn()
+            }, 80)
+          }
+        })
+      })
+      return
+    }
+
+    if (!scrollToTurn()) {
+      requestAnimationFrame(() => {
+        void scrollToTurn()
+      })
+    }
+  }, [assistantTurnIndexByMessageId, allTurns, visibleTurnCount])
+
+  const handleFollowUpChipClick = useCallback((item: {
+    messageId: string
+    annotationId: string
+  }, anchor?: { x: number; y: number }) => {
+    const targetTurnIndex = assistantTurnIndexByMessageId.get(item.messageId)
+    if (targetTurnIndex != null) {
+      const ensureVisibleCount = allTurns.length - targetTurnIndex
+      if (ensureVisibleCount > visibleTurnCount) {
+        setVisibleTurnCount(ensureVisibleCount)
+      }
+    }
+
+    followUpOpenNonceRef.current += 1
+    setOpenAnnotationRequest({
+      messageId: item.messageId,
+      annotationId: item.annotationId,
+      mode: 'view',
+      anchorX: anchor?.x,
+      anchorY: anchor?.y,
+      nonce: followUpOpenNonceRef.current,
+    })
+  }, [assistantTurnIndexByMessageId, allTurns, visibleTurnCount])
+
+  const handleFollowUpIndexClick = useCallback((item: {
+    messageId: string
+    annotationId: string
+  }) => {
+    scrollToFollowUpTurn(item)
+  }, [scrollToFollowUpTurn])
+
   // Compute if we should skip scroll-to-bottom (when search is active on session switch)
   // At render time, prevSessionIdForScrollRef still has the OLD session ID, so we can detect the switch
   const isSessionSwitchForScroll = prevSessionIdForScrollRef.current !== null && prevSessionIdForScrollRef.current !== session?.id
@@ -1429,13 +1702,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                   )}
                   {turns.map((turn, index) => {
                     // Compute turn key and check if it's a search match
-                    const getTurnKey = () => {
-                      if (turn.type === 'user') return `user-${turn.message.id}`
-                      if (turn.type === 'system') return `system-${turn.message.id}`
-                      if (turn.type === 'auth-request') return `auth-${turn.message.id}`
-                      return `turn-${turn.turnId}-${turn.timestamp}`
-                    }
-                    const turnKey = getTurnKey()
+                    const turnKey = getTurnKey(turn)
                     const isCurrentMatch = isSearchActive && matchingTurnIds[currentMatchIndex] === turnKey
                     const isAnyMatch = isSearchActive && matchingTurnIds.includes(turnKey)
 
@@ -1528,6 +1795,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                       <TurnCard
                         sessionId={session.id}
                         sessionFolderPath={session.sessionFolderPath}
+                        hasActiveFollowUpAnnotations={pendingFollowUpAnnotations.length > 0}
                         turnId={turn.turnId}
                         activities={turn.activities}
                         response={turn.response}
@@ -1544,6 +1812,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         isLastResponse={isLastResponse}
                         compactMode={compactMode}
                         sendMessageKey={sendMessageKey}
+                        openAnnotationRequest={openAnnotationRequest}
                         onBranch={session?.supportsBranching ? async (messageId: string, options?: { newPanel?: boolean }) => {
                           if (!session) return
                           try {
@@ -1615,21 +1884,29 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                           }
                         }}
                         onAcceptPlan={() => {
-                          window.dispatchEvent(new CustomEvent('craft:approve-plan', {
-                            detail: { text: 'Plan approved, please execute.', sessionId: session?.id }
-                          }))
-                        }}
-                        onAcceptPlanWithCompact={() => {
-                          // Find the most recent plan message to get its path
-                          // After compaction, Claude needs to know which plan file to read
                           const planMessage = session?.messages.findLast(m => m.role === 'plan')
                           const planPath = planMessage?.planPath
 
-                          // Dispatch event to compact conversation first, then execute plan
-                          // FreeFormInput handles this by sending /compact, waiting for completion,
-                          // then sending a message with the plan path for Claude to read and execute
+                          window.dispatchEvent(new CustomEvent('craft:approve-plan', {
+                            detail: {
+                              sessionId: session?.id,
+                              planPath,
+                              includeDraftInput: true,
+                              source: 'plan-card',
+                            },
+                          }))
+                        }}
+                        onAcceptPlanWithCompact={() => {
+                          const planMessage = session?.messages.findLast(m => m.role === 'plan')
+                          const planPath = planMessage?.planPath
+
                           window.dispatchEvent(new CustomEvent('craft:approve-plan-with-compact', {
-                            detail: { sessionId: session?.id, planPath }
+                            detail: {
+                              sessionId: session?.id,
+                              planPath,
+                              includeDraftInput: true,
+                              source: 'plan-card',
+                            },
                           }))
                         }}
                         onPopOut={(text) => {
@@ -1767,6 +2044,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                 inputTokens: session.tokenUsage?.inputTokens,
                 contextWindow: session.tokenUsage?.contextWindow,
               },
+              followUpItems: followUpInputItems,
+              onFollowUpClick: handleFollowUpChipClick,
+              onFollowUpIndexClick: handleFollowUpIndexClick,
             }}
           />
           </div>

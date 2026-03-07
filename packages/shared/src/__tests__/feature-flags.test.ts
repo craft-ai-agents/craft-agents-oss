@@ -1,10 +1,11 @@
 import { describe, it, expect, afterEach } from 'bun:test';
-import { isDevRuntime, isDeveloperFeedbackEnabled } from '../feature-flags.ts';
+import { isDevRuntime, isDeveloperFeedbackEnabled, isCraftAgentsCliEnabled } from '../feature-flags.ts';
 
 const ORIGINAL_ENV = {
   NODE_ENV: process.env.NODE_ENV,
   CRAFT_DEBUG: process.env.CRAFT_DEBUG,
   CRAFT_FEATURE_DEVELOPER_FEEDBACK: process.env.CRAFT_FEATURE_DEVELOPER_FEEDBACK,
+  CRAFT_FEATURE_CRAFT_AGENTS_CLI: process.env.CRAFT_FEATURE_CRAFT_AGENTS_CLI,
 };
 
 afterEach(() => {
@@ -16,6 +17,9 @@ afterEach(() => {
 
   if (ORIGINAL_ENV.CRAFT_FEATURE_DEVELOPER_FEEDBACK === undefined) delete process.env.CRAFT_FEATURE_DEVELOPER_FEEDBACK;
   else process.env.CRAFT_FEATURE_DEVELOPER_FEEDBACK = ORIGINAL_ENV.CRAFT_FEATURE_DEVELOPER_FEEDBACK;
+
+  if (ORIGINAL_ENV.CRAFT_FEATURE_CRAFT_AGENTS_CLI === undefined) delete process.env.CRAFT_FEATURE_CRAFT_AGENTS_CLI;
+  else process.env.CRAFT_FEATURE_CRAFT_AGENTS_CLI = ORIGINAL_ENV.CRAFT_FEATURE_CRAFT_AGENTS_CLI;
 });
 
 describe('feature-flags runtime helpers', () => {
@@ -54,5 +58,23 @@ describe('feature-flags runtime helpers', () => {
     delete process.env.CRAFT_FEATURE_DEVELOPER_FEEDBACK;
 
     expect(isDeveloperFeedbackEnabled()).toBe(true);
+  });
+
+  it('isCraftAgentsCliEnabled defaults to false when no override is set', () => {
+    delete process.env.CRAFT_FEATURE_CRAFT_AGENTS_CLI;
+
+    expect(isCraftAgentsCliEnabled()).toBe(false);
+  });
+
+  it('isCraftAgentsCliEnabled honors explicit override true', () => {
+    process.env.CRAFT_FEATURE_CRAFT_AGENTS_CLI = '1';
+
+    expect(isCraftAgentsCliEnabled()).toBe(true);
+  });
+
+  it('isCraftAgentsCliEnabled honors explicit override false', () => {
+    process.env.CRAFT_FEATURE_CRAFT_AGENTS_CLI = '0';
+
+    expect(isCraftAgentsCliEnabled()).toBe(false);
   });
 });

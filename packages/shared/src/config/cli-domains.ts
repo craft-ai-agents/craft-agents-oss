@@ -92,6 +92,42 @@ const POLICIES: Record<CliDomainNamespace, CliDomainPolicy> = {
 
 export const CLI_DOMAIN_POLICIES = POLICIES
 
+export interface CliDomainScopeEntry {
+  namespace: CliDomainNamespace
+  scope: string
+}
+
+function dedupeScopes(scopes: string[]): string[] {
+  return [...new Set(scopes)]
+}
+
+/**
+ * Canonical workspace-relative path scopes owned by craft-agent CLI domains.
+ * Use these for file-path ownership checks to avoid drift across call sites.
+ */
+export const CRAFT_AGENTS_CLI_OWNED_WORKSPACE_PATH_SCOPES = dedupeScopes(
+  Object.values(POLICIES).flatMap(policy => policy.workspacePathScopes)
+)
+
+/**
+ * Canonical workspace-relative path scopes guarded for direct Bash operations.
+ */
+export const CRAFT_AGENTS_CLI_OWNED_BASH_GUARD_PATH_SCOPES = dedupeScopes(
+  Object.values(POLICIES).flatMap(policy => policy.bashGuardPaths ?? [])
+)
+
+/**
+ * Namespace-aware workspace scope entries for craft-agent CLI owned paths.
+ */
+export const CRAFT_AGENTS_CLI_WORKSPACE_SCOPE_ENTRIES: CliDomainScopeEntry[] = Object.values(POLICIES)
+  .flatMap(policy => policy.workspacePathScopes.map(scope => ({ namespace: policy.namespace, scope })))
+
+/**
+ * Namespace-aware Bash guard scope entries.
+ */
+export const CRAFT_AGENTS_CLI_BASH_GUARD_SCOPE_ENTRIES: CliDomainScopeEntry[] = Object.values(POLICIES)
+  .flatMap(policy => (policy.bashGuardPaths ?? []).map(scope => ({ namespace: policy.namespace, scope })))
+
 export interface BashPatternRule {
   pattern: string
   comment: string

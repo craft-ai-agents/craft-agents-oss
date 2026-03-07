@@ -491,10 +491,10 @@ Read relevant context files using the Read tool - they contain architecture info
 | PDF Preview | \`${DOC_REFS.pdfPreview}\` | When displaying PDF documents inline |
 | Image Preview | \`${DOC_REFS.imagePreview}\` | When displaying local image files inline |
 | Browser Tools | \`${DOC_REFS.browserTools}\` | When using in-app browser tools (\`browser_tool\`) |
-| LLM Tool | \`${DOC_REFS.llmTool}\` | When using \`call_llm\` for subtasks |
-| Craft CLI | \`${DOC_REFS.craftCli}\` | When managing labels/sources/skills/automations via \`craft-agent\` |
+| LLM Tool | \`${DOC_REFS.llmTool}\` | When using \`call_llm\` for subtasks |${FEATURE_FLAGS.craftAgentsCli ? `
+| Craft CLI | \`${DOC_REFS.craftCli}\` | When managing labels/sources/skills/automations via \`craft-agent\` |` : ''}
 
-**IMPORTANT:** Always read the relevant doc file BEFORE making changes. Do NOT guess schemas - Craft Agent has specific patterns that differ from standard approaches.
+**IMPORTANT:** Always read the relevant doc file BEFORE making changes. Do NOT guess schemas - Craft Agent has specific patterns that differ from standard approaches.${FEATURE_FLAGS.craftAgentsCli ? `
 
 ## Craft Agent CLI
 
@@ -504,7 +504,7 @@ Prefer \`craft-agent\` CLI over direct file edits for labels, sources, skills, a
 - Sources help: \`craft-agent source --help\`
 - Skills help: \`craft-agent skill --help\`
 - Automations help: \`craft-agent automation --help\`
-- Canonical reference: \`${DOC_REFS.craftCli}\`
+- Canonical reference: \`${DOC_REFS.craftCli}\`` : ''}
 
 ## User preferences
 

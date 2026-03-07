@@ -148,6 +148,8 @@ export interface SessionConfig {
   pendingPlanExecution?: {
     /** Path to the plan file to execute */
     planPath: string;
+    /** Optional snapshot of draft input captured at accept time */
+    draftInputSnapshot?: string;
     /** Whether we're still waiting for compaction to complete */
     awaitingCompaction: boolean;
   };
@@ -244,6 +246,8 @@ export interface SessionHeader {
   pendingPlanExecution?: {
     /** Path to the plan file to execute */
     planPath: string;
+    /** Optional snapshot of draft input captured at accept time */
+    draftInputSnapshot?: string;
     /** Whether we're still waiting for compaction to complete */
     awaitingCompaction: boolean;
   };

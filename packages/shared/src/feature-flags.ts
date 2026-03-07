@@ -31,6 +31,17 @@ export function isDeveloperFeedbackEnabled(): boolean {
   return isDevRuntime();
 }
 
+/**
+ * Runtime-evaluated check for craft-agents-cli integration.
+ *
+ * Defaults to disabled. Override with CRAFT_FEATURE_CRAFT_AGENTS_CLI=1|0.
+ */
+export function isCraftAgentsCliEnabled(): boolean {
+  const override = parseBooleanEnv(process.env.CRAFT_FEATURE_CRAFT_AGENTS_CLI);
+  if (override !== undefined) return override;
+  return false;
+}
+
 export const FEATURE_FLAGS = {
   /** Enable Opus 4.6 fast mode (speed:"fast" + beta header). 6x pricing. */
   fastMode: false,
@@ -42,5 +53,13 @@ export const FEATURE_FLAGS = {
    */
   get developerFeedback(): boolean {
     return isDeveloperFeedbackEnabled();
+  },
+  /**
+   * Enable craft-agent CLI guidance and guardrails.
+   *
+   * Defaults to disabled. Override with CRAFT_FEATURE_CRAFT_AGENTS_CLI=1|0.
+   */
+  get craftAgentsCli(): boolean {
+    return isCraftAgentsCliEnabled();
   },
 } as const;

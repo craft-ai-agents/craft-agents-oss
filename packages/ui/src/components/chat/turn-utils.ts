@@ -508,6 +508,8 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
         type: 'plan' as ActivityType,
         status: 'completed',
         content: message.content,
+        messageId: message.id,
+        annotations: message.annotations,
         displayName: 'Plan',
         timestamp: message.timestamp,
       })

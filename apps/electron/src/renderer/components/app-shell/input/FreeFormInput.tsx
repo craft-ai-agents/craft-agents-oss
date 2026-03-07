@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Command as CommandPrimitive } from 'cmdk'
 import { toast } from 'sonner'
+import { AnimatePresence, motion } from 'motion/react'
 import {
   Paperclip,
   ArrowUp,
@@ -67,6 +68,7 @@ import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelName } from '@craf
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { hasOpenOverlay } from '@/lib/overlay-detection'
 import { ToolbarStatusSlot } from './ToolbarStatusSlot'
+import { buildPlanApprovalMessage } from '../plan-approval-message'
 import { shouldHandleScopedInputEvent } from './input-event-guards'
 import { clearPendingFocusForSession, consumePendingFocusForSession } from './focus-input-events'
 
@@ -86,6 +88,7 @@ function formatTokenCount(tokens: number): string {
 function stripPiPrefixForDisplay(value: string): string {
   return value.startsWith('pi/') ? value.slice(3) : value
 }
+
 
 /** Platform-specific modifier key for keyboard shortcuts */
 const cmdKey = isMac ? '⌘' : 'Ctrl'
@@ -113,9 +116,11 @@ function shuffleArray<T>(array: T[]): T[] {
 
 export interface FollowUpInputItem {
   id: string
+  messageId: string
+  annotationId: string
   index?: number
-  excerpt: string
-  note?: string
+  noteLabel: string
+  selectedText: string
   color?: string
 }
 
@@ -201,6 +206,10 @@ export interface FreeFormInputProps {
   }
   /** Follow-up annotations shown as context chips above the input */
   followUpItems?: FollowUpInputItem[]
+  /** Callback when user clicks a follow-up chip body */
+  onFollowUpClick?: (item: FollowUpInputItem, anchor?: { x: number; y: number }) => void
+  /** Callback when user clicks the follow-up index badge */
+  onFollowUpIndexClick?: (item: FollowUpInputItem) => void
   /** Enable compact mode - hides attach, sources, working directory for popover embedding */
   compactMode?: boolean
   // Connection selection (hierarchical connection → model selector)
@@ -258,6 +267,8 @@ export function FreeFormInput({
   isEmptySession = false,
   contextStatus,
   followUpItems = [],
+  onFollowUpClick,
+  onFollowUpIndexClick,
   compactMode = false,
   currentConnection,
   onConnectionChange,
@@ -531,44 +542,69 @@ export function FreeFormInput({
     return () => window.removeEventListener('craft:insert-text', handleInsertText as EventListener)
   }, [sessionId, isFocusedPanel, syncToParent, richInputRef])
 
+  const clearInputDraft = React.useCallback(() => {
+    setInput('')
+    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
+    onInputChange?.('')
+    prevInputValueRef.current = ''
+  }, [onInputChange])
+
+  const consumeInputDraftSnapshot = React.useCallback((): string => {
+    const snapshot = input.trim()
+    clearInputDraft()
+    return snapshot
+  }, [input, clearInputDraft])
+
+  type PlanApprovalEventDetail = {
+    sessionId?: string
+    planPath?: string
+    includeDraftInput?: boolean
+    source?: string
+  }
+
   // Listen for craft:approve-plan events (used by ResponseCard's Accept Plan button)
   // This disables safe mode AND submits the message in one action
   // Only process events for this session (sessionId must match)
   React.useEffect(() => {
-    const handleApprovePlan = (e: CustomEvent<{ text?: string; sessionId?: string }>) => {
+    const handleApprovePlan = (e: CustomEvent<PlanApprovalEventDetail>) => {
       // Only handle if this event is for our session
       if (e.detail?.sessionId && e.detail.sessionId !== sessionId) {
         return
       }
-      const text = e.detail?.text
-      if (!text) {
-        toast.error('No details provided')
-        return
-      }
+
+      const shouldIncludeDraft = e.detail?.includeDraftInput !== false
+      const draftInput = shouldIncludeDraft ? consumeInputDraftSnapshot() : ''
+      const text = buildPlanApprovalMessage({
+        planPath: e.detail?.planPath,
+        draftInput,
+      })
+
       // Switch to allow-all (Auto) mode if in Explore mode (allow execution without prompts)
       // Only switch if currently in safe mode - if user is in 'ask' mode, respect their choice
       if (permissionMode === 'safe') {
         onPermissionModeChange?.('allow-all')
       }
-      // Submit the message
+
       onSubmit(text, undefined)
     }
 
     window.addEventListener('craft:approve-plan', handleApprovePlan as EventListener)
     return () => window.removeEventListener('craft:approve-plan', handleApprovePlan as EventListener)
-  }, [sessionId, permissionMode, onPermissionModeChange, onSubmit])
+  }, [sessionId, permissionMode, onPermissionModeChange, onSubmit, consumeInputDraftSnapshot])
 
   // Listen for craft:approve-plan-with-compact events (Accept & Compact option)
   // This compacts the conversation first, then executes the plan.
   // The pending state is persisted to survive page reloads (CMD+R).
   React.useEffect(() => {
-    const handleApprovePlanWithCompact = async (e: CustomEvent<{ sessionId?: string; planPath?: string }>) => {
+    const handleApprovePlanWithCompact = async (e: CustomEvent<PlanApprovalEventDetail>) => {
       // Only handle if this event is for our session
       if (e.detail?.sessionId && e.detail.sessionId !== sessionId) {
         return
       }
 
       const planPath = e.detail?.planPath
+      const shouldIncludeDraft = e.detail?.includeDraftInput !== false
+      const draftInputSnapshot = shouldIncludeDraft ? consumeInputDraftSnapshot() : ''
 
       // Switch to allow-all (Auto) mode if in Explore mode
       if (permissionMode === 'safe') {
@@ -577,10 +613,11 @@ export function FreeFormInput({
 
       // Persist the pending plan execution state BEFORE sending /compact.
       // This allows reload recovery if CMD+R happens during compaction.
-      if (planPath && sessionId) {
+      if (sessionId) {
         await window.electronAPI.sessionCommand(sessionId, {
           type: 'setPendingPlanExecution',
-          planPath,
+          planPath: planPath ?? '',
+          draftInputSnapshot,
         })
       }
 
@@ -598,13 +635,11 @@ export function FreeFormInput({
         // Remove the listener (one-time use)
         window.removeEventListener('craft:compaction-complete', handleCompactionComplete as unknown as EventListener)
 
-        // Send the execution message with explicit plan path
-        // After compaction, Claude doesn't automatically remember the plan file
-        if (planPath) {
-          onSubmit(`Read the plan at ${planPath} and execute it.`, undefined)
-        } else {
-          onSubmit('Plan approved, please execute.', undefined)
-        }
+        const executionMessage = buildPlanApprovalMessage({
+          planPath,
+          draftInput: draftInputSnapshot,
+        })
+        onSubmit(executionMessage, undefined)
 
         // Clear the pending state since we just sent the execution message
         if (sessionId) {
@@ -619,7 +654,7 @@ export function FreeFormInput({
 
     window.addEventListener('craft:approve-plan-with-compact', handleApprovePlanWithCompact as unknown as EventListener)
     return () => window.removeEventListener('craft:approve-plan-with-compact', handleApprovePlanWithCompact as unknown as EventListener)
-  }, [sessionId, permissionMode, onPermissionModeChange, onSubmit])
+  }, [sessionId, permissionMode, onPermissionModeChange, onSubmit, consumeInputDraftSnapshot])
 
   // Reload recovery: Check for pending plan execution on mount.
   // If the page reloaded after compaction completed (awaitingCompaction = false),
@@ -639,7 +674,11 @@ export function FreeFormInput({
       // Compaction completed but we never sent the execution message (page reloaded).
       // Send it now and clear the pending state.
       hasExecuted = true
-      onSubmit(`Read the plan at ${pending.planPath} and execute it.`, undefined)
+      const executionMessage = buildPlanApprovalMessage({
+        planPath: pending.planPath,
+        draftInput: pending.draftInputSnapshot,
+      })
+      onSubmit(executionMessage, undefined)
 
       await window.electronAPI.sessionCommand(sessionId, {
         type: 'clearPendingPlanExecution',
@@ -1089,7 +1128,7 @@ export function FreeFormInput({
 
   // Submit message - backend handles queueing and interruption
   const submitMessage = React.useCallback(() => {
-    const hasContent = input.trim() || attachments.length > 0
+    const hasContent = input.trim() || attachments.length > 0 || followUpItems.length > 0
     if (!hasContent || disabled) return false
 
     // Tutorial may disable sending to guide user through specific steps
@@ -1127,7 +1166,7 @@ export function FreeFormInput({
     })
 
     return true
-  }, [input, attachments, disabled, disableSend, onInputChange, onSubmit, skills, sources, optimisticSourceSlugs, onSourcesChange, onWorkingDirectoryChange, homeDir])
+  }, [input, attachments, followUpItems, disabled, disableSend, onInputChange, onSubmit, skills, sources, optimisticSourceSlugs, onSourcesChange, onWorkingDirectoryChange, homeDir])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1328,7 +1367,34 @@ export function FreeFormInput({
     richInputRef.current?.focus()
   }, [inlineLabel, syncToParent, sessionId, onSessionStatusChange])
 
-  const hasContent = input.trim() || attachments.length > 0
+  const followUpLayoutKey = React.useMemo(
+    () => followUpItems.map(item => [
+      item.id,
+      item.index ?? '',
+      item.noteLabel,
+      item.selectedText,
+      item.color ?? '',
+    ].join('::')).join('|'),
+    [followUpItems]
+  )
+  const previousFollowUpLayoutKeyRef = React.useRef<string | null>(null)
+  const [animateFollowUpLayout, setAnimateFollowUpLayout] = React.useState(false)
+
+  React.useEffect(() => {
+    const previous = previousFollowUpLayoutKeyRef.current
+    previousFollowUpLayoutKeyRef.current = followUpLayoutKey
+
+    if (previous == null || previous === followUpLayoutKey) return
+
+    setAnimateFollowUpLayout(true)
+    const timer = window.setTimeout(() => {
+      setAnimateFollowUpLayout(false)
+    }, 220)
+
+    return () => window.clearTimeout(timer)
+  }, [followUpLayoutKey])
+
+  const hasContent = input.trim() || attachments.length > 0 || followUpItems.length > 0
 
   return (
     <form onSubmit={handleSubmit}>
@@ -1416,31 +1482,83 @@ export function FreeFormInput({
         />
 
         {/* Follow-up context chips */}
-        {followUpItems.length > 0 && (
-          <div className="px-4 pt-2 pb-1">
-            <div className="flex flex-wrap gap-1.5">
-              {followUpItems.map((item, idx) => {
-                const chipIndex = item.index ?? idx + 1
-                const excerpt = item.excerpt.trim()
-                const hasNote = Boolean(item.note?.trim())
+        <AnimatePresence initial={false}>
+          {followUpItems.length > 0 && (
+            <motion.div
+              key="follow-up-chips"
+              layout={animateFollowUpLayout}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.18, ease: [0.2, 0, 0.2, 1] }}
+              className="overflow-hidden"
+            >
+              <motion.div layout={animateFollowUpLayout} className="px-3 pt-3.5 pb-0">
+                <motion.div layout={animateFollowUpLayout} className="flex flex-wrap gap-1">
+                  <AnimatePresence initial={false}>
+                    {followUpItems.map((item, idx) => {
+                      const chipIndex = item.index ?? idx + 1
+                      const label = item.noteLabel.trim() || 'Follow-up'
+                      const tooltipText = item.selectedText.trim() || 'Selected text'
 
-                return (
-                  <div
-                    key={item.id}
-                    className="inline-flex max-w-full items-center gap-1.5 rounded-[7px] bg-foreground/5 px-2 py-1 text-[11px] text-foreground/80"
-                    title={item.note?.trim() || excerpt}
-                  >
-                    <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-[4px] bg-background px-1 text-[10px] font-medium text-foreground/70">
-                      #{chipIndex}
-                    </span>
-                    <span className="max-w-[280px] truncate">{excerpt || 'Selected text'}</span>
-                    {hasNote && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-info/80" />}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
+                      return (
+                        <motion.button
+                          key={item.id}
+                          type="button"
+                          layout={animateFollowUpLayout}
+                          initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                          transition={{ duration: 0.16, ease: [0.2, 0, 0.2, 1] }}
+                          className="inline-flex max-w-full items-center gap-1.5 rounded-[6px] bg-foreground/2 pl-1.5 pr-2 py-1 text-[12px] text-foreground/80 select-none transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          onClick={(event) => {
+                            const rect = event.currentTarget.getBoundingClientRect()
+                            onFollowUpClick?.(item, {
+                              x: rect.left + rect.width / 2,
+                              y: rect.top - 8,
+                            })
+                          }}
+                        >
+                          <Tooltip delayDuration={250}>
+                            <TooltipTrigger asChild>
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                className="inline-flex h-4 min-w-4 cursor-pointer items-center justify-center rounded-[4px] bg-background px-0.5 text-[10px] font-medium text-foreground shadow-minimal focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                onMouseDown={(event) => {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                }}
+                                onClick={(event) => {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  onFollowUpIndexClick?.(item)
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    onFollowUpIndexClick?.(item)
+                                  }
+                                }}
+                              >
+                                {chipIndex}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-[420px] break-words text-xs">
+                              {tooltipText}
+                            </TooltipContent>
+                          </Tooltip>
+                          <span className="max-w-[320px] pr-0.5 truncate text-left">{label}</span>
+                        </motion.button>
+                      )
+                    })}
+                  </AnimatePresence>
+                </motion.div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Rich Text Input with inline mention badges */}
         {/* In compact mode, hide input while processing (collapses to just bottom bar) */}

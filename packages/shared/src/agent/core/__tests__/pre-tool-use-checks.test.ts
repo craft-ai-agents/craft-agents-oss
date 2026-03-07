@@ -82,6 +82,19 @@ mock.module('../../../skills/storage.ts', () => ({
   PROJECT_AGENT_SKILLS_DIR: '.agents/skills',
 }));
 
+let mockCraftAgentsCliFlag = false;
+mock.module('../../../feature-flags.ts', () => ({
+  FEATURE_FLAGS: {
+    get craftAgentsCli() {
+      return mockCraftAgentsCliFlag;
+    },
+    get developerFeedback() {
+      return false;
+    },
+    fastMode: false,
+  },
+}));
+
 // ============================================================
 // Import module under test (after mocks)
 // ============================================================
@@ -153,6 +166,7 @@ describe('runPreToolUseChecks', () => {
     mockValidateConfigFileContent.mockReset();
     mockValidateConfigFileContent.mockImplementation(() => null);
     mockReadOnlyBashPatterns = [];
+    mockCraftAgentsCliFlag = false;
   });
 
   // ============================================================
@@ -399,6 +413,10 @@ describe('runPreToolUseChecks', () => {
   // ============================================================
 
   describe('step 5: input transforms', () => {
+    beforeEach(() => {
+      mockCraftAgentsCliFlag = true;
+    });
+
     it('expands tilde paths and returns modify', () => {
       const result = runPreToolUseChecks(createInput({
         toolName: 'Read',
@@ -449,7 +467,9 @@ describe('runPreToolUseChecks', () => {
       }
     });
 
-    it('blocks direct label folder reads and suggests craft-agent label help', () => {
+    it('blocks direct label folder reads and suggests craft-agent label help when feature is enabled', () => {
+      mockCraftAgentsCliFlag = true;
+
       const result = runPreToolUseChecks(createInput({
         toolName: 'Read',
         input: { file_path: '/test/workspace/labels/config.json' },
@@ -463,7 +483,8 @@ describe('runPreToolUseChecks', () => {
       }
     });
 
-    it('blocks direct label config writes and suggests craft-agent label help', () => {
+    it('blocks direct label config writes and suggests craft-agent label help when feature is enabled', () => {
+      mockCraftAgentsCliFlag = true;
       mockDetectConfigFileType.mockImplementation(() => ({ type: 'labels', displayFile: 'labels/config.json' }));
 
       const result = runPreToolUseChecks(createInput({
@@ -478,7 +499,44 @@ describe('runPreToolUseChecks', () => {
       }
     });
 
-    it('blocks direct automations config edits and suggests craft-agent automation commands', () => {
+    it('does not apply config-file CLI redirect when feature is disabled', () => {
+      mockCraftAgentsCliFlag = false;
+      mockDetectConfigFileType.mockImplementation(() => ({ type: 'labels', displayFile: 'labels/config.json' }));
+
+      const result = runPreToolUseChecks(createInput({
+        toolName: 'Write',
+        input: { file_path: '/test/workspace/labels/config.json', content: '{}' },
+      }));
+
+      expect(result.type).toBe('allow');
+    });
+
+    it('does not block label config writes when feature is disabled', () => {
+      mockCraftAgentsCliFlag = false;
+      mockDetectConfigFileType.mockImplementation(() => ({ type: 'labels', displayFile: 'labels/config.json' }));
+
+      const result = runPreToolUseChecks(createInput({
+        toolName: 'Write',
+        input: { file_path: '/test/workspace/labels/config.json', content: '{}' },
+      }));
+
+      expect(result.type).toBe('allow');
+    });
+
+    it('does not block bash commands touching automations files when feature is disabled', () => {
+      mockCraftAgentsCliFlag = false;
+
+      const result = runPreToolUseChecks(createInput({
+        toolName: 'Bash',
+        input: { command: 'python3 scripts/update.py automations.json' },
+        permissionMode: 'allow-all',
+      }));
+
+      expect(result.type).toBe('allow');
+    });
+
+    it('blocks direct automations config edits and suggests craft-agent automation commands when feature is enabled', () => {
+      mockCraftAgentsCliFlag = true;
       mockDetectConfigFileType.mockImplementation(() => ({ type: 'automations', displayFile: 'automations.json' }));
 
       const result = runPreToolUseChecks(createInput({
@@ -497,7 +555,8 @@ describe('runPreToolUseChecks', () => {
       }
     });
 
-    it('blocks direct source config edits and suggests craft-agent source commands', () => {
+    it('blocks direct source config edits and suggests craft-agent source commands when feature is enabled', () => {
+      mockCraftAgentsCliFlag = true;
       mockDetectConfigFileType.mockImplementation(() => ({
         type: 'source',
         slug: 'linear',
@@ -520,7 +579,8 @@ describe('runPreToolUseChecks', () => {
       }
     });
 
-    it('blocks direct skill file edits and suggests craft-agent skill commands', () => {
+    it('blocks direct skill file edits and suggests craft-agent skill commands when feature is enabled', () => {
+      mockCraftAgentsCliFlag = true;
       mockDetectConfigFileType.mockImplementation(() => ({
         type: 'skill',
         slug: 'commit-helper',
@@ -543,7 +603,9 @@ describe('runPreToolUseChecks', () => {
       }
     });
 
-    it('blocks bash commands touching labels paths and points to craft-agent label --help', () => {
+    it('blocks bash commands touching labels paths and points to craft-agent label --help when feature is enabled', () => {
+      mockCraftAgentsCliFlag = true;
+
       const result = runPreToolUseChecks(createInput({
         toolName: 'Bash',
         input: { command: 'python3 scripts/update.py labels/config.json' },
@@ -567,7 +629,9 @@ describe('runPreToolUseChecks', () => {
       expect(result.type).toBe('allow');
     });
 
-    it('blocks bash commands touching automations files and points to craft-agent automation --help', () => {
+    it('blocks bash commands touching automations files and points to craft-agent automation --help when feature is enabled', () => {
+      mockCraftAgentsCliFlag = true;
+
       const result = runPreToolUseChecks(createInput({
         toolName: 'Bash',
         input: { command: 'python3 scripts/update.py automations.json' },
@@ -585,6 +649,18 @@ describe('runPreToolUseChecks', () => {
       const result = runPreToolUseChecks(createInput({
         toolName: 'Bash',
         input: { command: 'craft-agent automation list' },
+        permissionMode: 'allow-all',
+      }));
+
+      expect(result.type).toBe('allow');
+    });
+
+    it('does not apply config-domain bash guard when feature is disabled', () => {
+      mockCraftAgentsCliFlag = false;
+
+      const result = runPreToolUseChecks(createInput({
+        toolName: 'Bash',
+        input: { command: 'python3 scripts/update.py automations.json' },
         permissionMode: 'allow-all',
       }));
 
@@ -854,6 +930,7 @@ describe('shouldPromptInAskMode', () => {
     mockValidateConfigFileContent.mockReset();
     mockValidateConfigFileContent.mockImplementation(() => null);
     mockReadOnlyBashPatterns = [];
+    mockCraftAgentsCliFlag = false;
   });
 
   // --- File writes ---

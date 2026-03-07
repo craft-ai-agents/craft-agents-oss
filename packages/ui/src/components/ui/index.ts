@@ -48,10 +48,16 @@ export {
   type IslandTransitionConfig,
   type IslandActiveViewSize,
   type IslandMorphTarget,
+  type IslandDialogBehavior,
   type AnchorX,
   type AnchorY,
 } from './Island'
 export {
   IslandFollowUpContentView,
   type IslandFollowUpContentViewProps,
+  type IslandFollowUpMode,
 } from './IslandFollowUpContentView'
+export {
+  useIslandNavigation,
+  type IslandNavigation,
+} from './useIslandNavigation'

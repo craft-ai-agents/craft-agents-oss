@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { useModalRegistry } from '@/context/ModalContext'
+import { useDismissibleLayerRegistry } from '@/context/DismissibleLayerContext'
 import { panelStackAtom, closePanelAtom, focusedPanelIdAtom } from '@/atoms/panel-stack'
 import type { WindowCloseRequest } from '../../shared/types'
 
@@ -21,6 +22,7 @@ import type { WindowCloseRequest } from '../../shared/types'
  * This hook should be called once at the app root level.
  */
 export function useWindowCloseHandler() {
+  const { hasOpenLayers, closeTop } = useDismissibleLayerRegistry()
   const { hasOpenModals, closeTopModal } = useModalRegistry()
   const panelStack = useAtomValue(panelStackAtom)
   const focusedPanelId = useAtomValue(focusedPanelIdAtom)
@@ -33,6 +35,13 @@ export function useWindowCloseHandler() {
         return
       }
 
+      if (hasOpenLayers()) {
+        closeTop()
+        window.electronAPI.cancelCloseWindow()
+        return
+      }
+
+      // Backward-compatible fallback for legacy modals not yet migrated.
       if (hasOpenModals()) {
         closeTopModal()
         window.electronAPI.cancelCloseWindow()
@@ -53,5 +62,5 @@ export function useWindowCloseHandler() {
     })
 
     return cleanup
-  }, [hasOpenModals, closeTopModal, panelStack, focusedPanelId, closePanel])
+  }, [hasOpenLayers, closeTop, hasOpenModals, closeTopModal, panelStack, focusedPanelId, closePanel])
 }
