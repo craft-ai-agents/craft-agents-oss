@@ -97,7 +97,7 @@ export function AnnotationOverlayLayer({
               ...chipVisual.style,
             }}
           >
-            {chip.index}
+            {chip.sentFollowUp ? 'i' : chip.index}
           </button>
         )
 

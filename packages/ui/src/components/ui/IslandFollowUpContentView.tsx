@@ -1,5 +1,12 @@
 import * as React from 'react'
+import { ChevronDown } from 'lucide-react'
 import { IslandContentView, type IslandMorphTarget } from './Island'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  StyledDropdownMenuContent,
+  StyledDropdownMenuItem,
+} from './StyledDropdown'
 
 export type IslandFollowUpMode = 'edit' | 'view'
 
@@ -9,10 +16,12 @@ export interface IslandFollowUpContentViewProps {
   onValueChange: (next: string) => void
   onCancel: () => void
   onSubmit: (value: string) => void
+  onSubmitAndSend?: (value: string) => void
   onDelete?: () => void
   title?: string
   placeholder?: string
   submitLabel?: string
+  submitAndSendLabel?: string
   editLabel?: string
   deleteLabel?: string
   maxInputHeight?: number
@@ -36,10 +45,12 @@ export function IslandFollowUpContentView({
   onValueChange,
   onCancel,
   onSubmit,
+  onSubmitAndSend,
   onDelete,
   title = 'Follow up',
   placeholder = 'Add comments the agent should consider in the next turn…',
   submitLabel = 'Continue',
+  submitAndSendLabel = 'Save & Send',
   editLabel = 'Edit',
   deleteLabel = 'Delete',
   maxInputHeight = 400,
@@ -52,9 +63,31 @@ export function IslandFollowUpContentView({
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null)
   const measureTextareaRef = React.useRef<HTMLTextAreaElement | null>(null)
   const isViewMode = mode === 'view'
+  const isEmpty = !isViewMode && value.trim().length === 0
+  const canSubmitAndSend = !isViewMode && !!onSubmitAndSend
   const minInputHeight = isViewMode ? 20 : 44
   const [inputHeight, setInputHeight] = React.useState(minInputHeight)
   const [inputOverflow, setInputOverflow] = React.useState(false)
+  const [submitMenuOpen, setSubmitMenuOpen] = React.useState(false)
+
+  const handleSubmitMenuInteractOutside = React.useCallback((event: unknown) => {
+    const dismissEvent = event as {
+      preventDefault?: () => void
+      detail?: {
+        originalEvent?: {
+          preventDefault?: () => void
+          stopPropagation?: () => void
+        }
+      }
+    }
+
+    // Dismiss only the Save & Send popup. Do not let this outside tap
+    // cascade into the parent island's outside-dismiss behavior.
+    dismissEvent.preventDefault?.()
+    dismissEvent.detail?.originalEvent?.preventDefault?.()
+    dismissEvent.detail?.originalEvent?.stopPropagation?.()
+    setSubmitMenuOpen(false)
+  }, [])
 
   React.useLayoutEffect(() => {
     const measure = measureTextareaRef.current
@@ -83,6 +116,12 @@ export function IslandFollowUpContentView({
 
     return () => window.cancelAnimationFrame(raf)
   }, [isViewMode])
+
+  React.useEffect(() => {
+    if (!canSubmitAndSend && submitMenuOpen) {
+      setSubmitMenuOpen(false)
+    }
+  }, [canSubmitAndSend, submitMenuOpen])
 
   return (
     <IslandContentView id={id} anchorX="center" anchorY="top" morphFrom={morphFrom} lockScroll={lockScroll}>
@@ -122,16 +161,18 @@ export function IslandFollowUpContentView({
 
               if (event.nativeEvent.isComposing) return
 
+              const trimmedEmpty = value.trim().length === 0
+
               if (sendMessageKey === 'enter') {
                 if (event.key === 'Enter' && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
                   event.preventDefault()
-                  onSubmit(value)
+                  if (!trimmedEmpty) onSubmit(value)
                   return
                 }
 
                 if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
                   event.preventDefault()
-                  onSubmit(value)
+                  if (!trimmedEmpty) onSubmit(value)
                 }
 
                 return
@@ -139,7 +180,7 @@ export function IslandFollowUpContentView({
 
               if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
                 event.preventDefault()
-                onSubmit(value)
+                if (!trimmedEmpty) onSubmit(value)
               }
             }}
             placeholder={placeholder}
@@ -170,20 +211,66 @@ export function IslandFollowUpContentView({
             >
               Cancel
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (isViewMode) {
-                  onRequestEdit?.()
-                  return
-                }
 
-                onSubmit(value)
-              }}
-              className="h-8 px-3 rounded-[8px] text-sm bg-background shadow-minimal text-foreground inline-flex items-center cursor-pointer hover:bg-foreground/2"
-            >
-              {isViewMode ? editLabel : submitLabel}
-            </button>
+            {canSubmitAndSend ? (
+              <div className="inline-flex rounded-[8px] bg-background shadow-minimal overflow-hidden">
+                <button
+                  type="button"
+                  disabled={isEmpty}
+                  onClick={() => onSubmit(value)}
+                  className="h-8 px-3 text-sm text-foreground inline-flex items-center cursor-pointer hover:bg-foreground/2 disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent"
+                >
+                  {submitLabel}
+                </button>
+
+                <DropdownMenu open={submitMenuOpen} onOpenChange={(open) => { if (!isEmpty) setSubmitMenuOpen(open) }}>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={isEmpty}
+                      aria-label="More submit actions"
+                      title="More submit actions"
+                      className="h-8 w-8 border-l border-border/40 inline-flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-foreground/2 data-[state=open]:bg-foreground/2 data-[state=open]:text-foreground disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-foreground/70"
+                    >
+                      <ChevronDown className="h-3 w-3" />
+                    </button>
+                  </DropdownMenuTrigger>
+
+                  <StyledDropdownMenuContent
+                    side="bottom"
+                    align="end"
+                    sideOffset={6}
+                    minWidth="min-w-[150px]"
+                    onInteractOutside={handleSubmitMenuInteractOutside}
+                  >
+                    <StyledDropdownMenuItem
+                      onSelect={() => {
+                        setSubmitMenuOpen(false)
+                        onSubmitAndSend?.(value)
+                      }}
+                    >
+                      {submitAndSendLabel}
+                    </StyledDropdownMenuItem>
+                  </StyledDropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={isEmpty}
+                onClick={() => {
+                  if (isViewMode) {
+                    onRequestEdit?.()
+                    return
+                  }
+
+                  onSubmit(value)
+                }}
+                className="h-8 px-3 rounded-[8px] text-sm bg-background shadow-minimal text-foreground inline-flex items-center cursor-pointer hover:bg-foreground/2 disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent"
+              >
+                {isViewMode ? editLabel : submitLabel}
+              </button>
+            )}
           </div>
         </div>
       </div>

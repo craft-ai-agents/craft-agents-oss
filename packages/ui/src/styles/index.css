@@ -53,6 +53,44 @@
   --shadow-border-opacity: 0.08;            /* Border ring opacity */
   --shadow-blur-opacity: 0.06;              /* Blur layers opacity */
 
+  /* === SHADOW VALUES (reusable across utility classes and component overrides) === */
+  --shadow-minimal:
+    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+    rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
+    rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 1px 1px -0.5px,
+    rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 3px 3px -1.5px;
+
+  --shadow-minimal-flat:
+    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+    rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px;
+
+  --shadow-modal-small:
+    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+    rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
+    rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 1px 1px -0.5px,
+    rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 3px 3px 0px,
+    rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 6px 6px 0px,
+    rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 12px 12px 0px,
+    rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 24px 24px 0px;
+
+  /* === Z-INDEX SCALE === */
+  --z-base: 0;
+  --z-local: 10;
+  --z-sticky: 20;
+  --z-titlebar: 40;
+  --z-panel: 50;
+  --z-dropdown: 100;
+  --z-tooltip: 150;
+  --z-modal: 200;
+  --z-overlay: 300;
+  --z-fullscreen: 350;
+  --z-floating-backdrop: 390;
+  --z-floating-menu: 400;
+  --z-splash: 600;
+
   /* === MIX VARIANTS (solid interpolation toward background) === */
   --foreground-2: color-mix(in oklch, var(--foreground) 2%, var(--background));
   --foreground-3: color-mix(in oklch, var(--foreground) 3%, var(--background));
@@ -82,6 +120,9 @@
   --ring: oklch(from var(--foreground) l c h / 0.25);
   --ring-width: 1px;
   --ring-offset: 0px;
+
+  /* === COMPONENT TOKENS === */
+  --user-message-bubble: oklch(from var(--foreground) l c h / 0.05);
 
   /* Markdown list markers */
   --md-bullets: var(--foreground-50);
@@ -155,6 +196,9 @@
   --input: oklch(from var(--foreground) l c h / 0.1);
   --ring: oklch(from var(--foreground) l c h / 0.25);
 
+  /* === COMPONENT TOKENS === */
+  --user-message-bubble: oklch(from var(--foreground) l c h / 0.05);
+
   /* Markdown list markers */
   --md-bullets: var(--foreground-50);
   --md-counters: var(--foreground-50);
@@ -212,6 +256,7 @@ html[data-font="inter"] {
   --color-ring: var(--ring);
   --color-md-bullets: var(--md-bullets);
   --color-md-counters: var(--md-counters);
+  --color-user-message-bubble: var(--user-message-bubble);
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
@@ -311,12 +356,7 @@ html[data-font="inter"] {
 
   /* Custom shadow utilities */
   .shadow-minimal {
-    box-shadow:
-      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
-      rgba(0, 0, 0, 0.06) 0px 1px 1px -0.5px,
-      rgba(0, 0, 0, 0.06) 0px 3px 3px -1.5px;
+    box-shadow: var(--shadow-minimal);
   }
 
   .shadow-middle {
@@ -390,15 +430,7 @@ html[data-font="inter"] {
   }
 
   .shadow-modal-small {
-    box-shadow:
-      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
-      rgba(0, 0, 0, 0.04) 0px 1px 1px -0.5px,
-      rgba(0, 0, 0, 0.04) 0px 3px 3px 0px,
-      rgba(0, 0, 0, 0.02) 0px 6px 6px 0px,
-      rgba(0, 0, 0, 0.02) 0px 12px 12px 0px,
-      rgba(0, 0, 0, 0.02) 0px 24px 24px 0px;
+    box-shadow: var(--shadow-modal-small);
   }
 
   /* Smooth corners (iOS-style superellipse)

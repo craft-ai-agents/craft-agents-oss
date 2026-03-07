@@ -1168,6 +1168,18 @@ export function FreeFormInput({
     return true
   }, [input, attachments, followUpItems, disabled, disableSend, onInputChange, onSubmit, skills, sources, optimisticSourceSlugs, onSourcesChange, onWorkingDirectoryChange, homeDir])
 
+  // Listen for craft:submit-input events (simulate pressing the Send button)
+  React.useEffect(() => {
+    const handleSubmitInput = (e: CustomEvent<{ sessionId?: string }>) => {
+      const targetSessionId = e.detail?.sessionId
+      if (!shouldHandleScopedInputEvent({ sessionId, isFocusedPanel, targetSessionId })) return
+      submitMessage()
+    }
+
+    window.addEventListener('craft:submit-input', handleSubmitInput as EventListener)
+    return () => window.removeEventListener('craft:submit-input', handleSubmitInput as EventListener)
+  }, [sessionId, isFocusedPanel, submitMessage])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     submitMessage()
@@ -1510,7 +1522,7 @@ export function FreeFormInput({
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: -4, scale: 0.98 }}
                           transition={{ duration: 0.16, ease: [0.2, 0, 0.2, 1] }}
-                          className="inline-flex max-w-full items-center gap-1.5 rounded-[6px] bg-foreground/2 pl-1.5 pr-2 py-1 text-[12px] text-foreground/80 select-none transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          className="inline-flex max-w-full items-center gap-1.5 rounded-[6px] bg-foreground/3 pl-1.5 pr-2 py-1 text-[13px] text-foreground/80 select-none transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                           onClick={(event) => {
                             const rect = event.currentTarget.getBoundingClientRect()
                             onFollowUpClick?.(item, {

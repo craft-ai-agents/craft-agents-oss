@@ -568,7 +568,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const followUpOpenNonceRef = React.useRef(0)
 
   // Navigation for session branching
-  const { navigate, navigateToSession } = useNavigation()
+  const { navigate } = useNavigation()
 
   // Get isDark from useTheme hook for overlay theme
   // This accounts for scenic themes (like Haze) that force dark mode
@@ -1451,6 +1451,29 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     })
   }
 
+  const handleSaveAndSendFollowUp = useCallback((_target: {
+    messageId: string
+    annotationId: string
+    note: string
+    selectedText: string
+  }) => {
+    if (!session) return
+
+    if (isInputDisabled || disableSend || connectionUnavailable) {
+      toast.error('Cannot send right now', {
+        description: 'Sending is currently disabled for this session.',
+      })
+      return
+    }
+
+    // Mimic pressing Send in the input after Save completes.
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('craft:submit-input', {
+        detail: { sessionId: session.id },
+      }))
+    }, 0)
+  }, [session, isInputDisabled, disableSend, connectionUnavailable])
+
   // Handle stop request from InputContainer
   // silent=true when redirecting (sending new message), silent=false when user clicks Stop button
   const handleStop = (silent = false) => {
@@ -1852,6 +1875,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                             toast.error('Could not save highlight', {
                               description: error instanceof Error ? error.message : 'Unknown error',
                             })
+                            throw error
                           }
                         }}
                         onRemoveAnnotation={async (messageId, annotationId) => {
@@ -1881,8 +1905,10 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                             toast.error('Could not update highlight', {
                               description: error instanceof Error ? error.message : 'Unknown error',
                             })
+                            throw error
                           }
                         }}
+                        onSaveAndSendFollowUp={handleSaveAndSendFollowUp}
                         onAcceptPlan={() => {
                           const planMessage = session?.messages.findLast(m => m.role === 'plan')
                           const planPath = planMessage?.planPath

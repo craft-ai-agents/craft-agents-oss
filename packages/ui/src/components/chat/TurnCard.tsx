@@ -36,6 +36,7 @@ import { parseDiffFromFile, type FileContents } from '@pierre/diffs'
 import { getDiffStats, getUnifiedDiffStats } from '../code-viewer'
 import { TurnCardActionsMenu } from './TurnCardActionsMenu'
 import { computeLastChildSet, groupActivitiesByParent, isActivityGroup, formatDuration, formatTokens, deriveTurnPhase, shouldShowThinkingIndicator, type ActivityGroup, type AssistantTurn } from './turn-utils'
+import { extractAnnotationSelectedText } from './follow-up-helpers'
 import {
   formatAnnotationFollowUpTooltipText,
   getAnnotationNoteText,
@@ -351,6 +352,8 @@ export interface TurnCardProps {
   onUpdateAnnotation?: (messageId: string, annotationId: string, patch: Partial<AnnotationV1>) => void
   /** Input send key behavior used by follow-up editor */
   sendMessageKey?: 'enter' | 'cmd-enter'
+  /** Callback when follow-up is saved via "Save & Send" action */
+  onSaveAndSendFollowUp?: (target: { messageId: string; annotationId: string; note: string; selectedText: string }) => void
   /** Whether there are active pending follow-up annotations in the session */
   hasActiveFollowUpAnnotations?: boolean
   /** External request to open a specific annotation in the follow-up island */
@@ -1408,6 +1411,8 @@ export interface ResponseCardProps {
   onUpdateAnnotation?: (messageId: string, annotationId: string, patch: Partial<AnnotationV1>) => void
   /** Input send key behavior used by follow-up editor */
   sendMessageKey?: 'enter' | 'cmd-enter'
+  /** Callback when follow-up is saved via "Save & Send" action */
+  onSaveAndSendFollowUp?: (target: { messageId: string; annotationId: string; note: string; selectedText: string }) => void
   /** Whether there are active pending follow-up annotations in the session */
   hasActiveFollowUpAnnotations?: boolean
   /** External request to open a specific annotation in this response */
@@ -1649,6 +1654,7 @@ export function ResponseCard({
   onRemoveAnnotation,
   onUpdateAnnotation,
   sendMessageKey = 'enter',
+  onSaveAndSendFollowUp,
   hasActiveFollowUpAnnotations = false,
   openAnnotationRequest,
   annotationInteractionMode = 'interactive',
@@ -1925,7 +1931,7 @@ export function ResponseCard({
     requestEdit()
   }, [requestEdit])
 
-  const handleSubmitFollowUp = useCallback((note: string) => {
+  const saveFollowUp = useCallback(async (note: string, sendAfterSave = false) => {
     const normalizedNote = note.trim()
 
     if (!messageId) return
@@ -1946,20 +1952,33 @@ export function ResponseCard({
       const nextMeta = { ...(activeAnnotation.meta ?? {}) }
       delete nextMeta.followUp
 
-      onUpdateAnnotation(messageId, activeAnnotationDetail.annotationId, {
-        body: nextBody,
-        intent: normalizedNote.length > 0 ? 'comment' : 'highlight',
-        updatedAt: Date.now(),
-        meta: normalizedNote.length > 0
-          ? {
-              ...nextMeta,
-              followUp: {
-                text: normalizedNote,
-                updatedAt: Date.now(),
-              },
-            }
-          : (Object.keys(nextMeta).length > 0 ? nextMeta : undefined),
-      })
+      try {
+        await Promise.resolve(onUpdateAnnotation(messageId, activeAnnotationDetail.annotationId, {
+          body: nextBody,
+          intent: normalizedNote.length > 0 ? 'comment' : 'highlight',
+          updatedAt: Date.now(),
+          meta: normalizedNote.length > 0
+            ? {
+                ...nextMeta,
+                followUp: {
+                  text: normalizedNote,
+                  updatedAt: Date.now(),
+                },
+              }
+            : (Object.keys(nextMeta).length > 0 ? nextMeta : undefined),
+        }))
+      } catch {
+        return
+      }
+
+      if (sendAfterSave && normalizedNote.length > 0) {
+        onSaveAndSendFollowUp?.({
+          messageId,
+          annotationId: activeAnnotationDetail.annotationId,
+          note: normalizedNote,
+          selectedText: extractAnnotationSelectedText(activeAnnotation, text),
+        })
+      }
 
       markSubmitSuccess()
       return
@@ -1973,7 +1992,22 @@ export function ResponseCard({
     }
 
     const annotation = createTextSelectionAnnotation(messageId, pendingSelection, normalizedNote, sessionId ?? '')
-    onAddAnnotation(messageId, annotation)
+
+    try {
+      await Promise.resolve(onAddAnnotation(messageId, annotation))
+    } catch {
+      return
+    }
+
+    if (sendAfterSave && normalizedNote.length > 0) {
+      onSaveAndSendFollowUp?.({
+        messageId,
+        annotationId: annotation.id,
+        note: normalizedNote,
+        selectedText: pendingSelection.selectedText,
+      })
+    }
+
     markSubmitSuccess()
     clearDomSelection()
   }, [
@@ -1987,7 +2021,17 @@ export function ResponseCard({
     closeSelectionMenu,
     sessionId,
     markSubmitSuccess,
+    onSaveAndSendFollowUp,
+    text,
   ])
+
+  const handleSubmitFollowUp = useCallback((note: string) => {
+    void saveFollowUp(note, false)
+  }, [saveFollowUp])
+
+  const handleSubmitAndSendFollowUp = useCallback((note: string) => {
+    void saveFollowUp(note, true)
+  }, [saveFollowUp])
 
   const handleCancelFollowUp = useAnnotationCancelRestore({
     contentRootRef: contentLayerRef,
@@ -2352,6 +2396,7 @@ export function ResponseCard({
       onRequestBack={handleSelectionMenuRequestBack}
       onRequestEdit={handleRequestFollowUpEdit}
       onSubmit={handleSubmitFollowUp}
+      onSubmitAndSend={handleSubmitAndSendFollowUp}
       onDelete={activeAnnotationDetail ? handleDeleteActiveAnnotation : undefined}
       sendMessageKey={sendMessageKey}
       transitionConfig={selectionMenuTransitionConfig}
@@ -2738,6 +2783,7 @@ export const TurnCard = React.memo(function TurnCard({
   onRemoveAnnotation,
   onUpdateAnnotation,
   sendMessageKey = 'enter',
+  onSaveAndSendFollowUp,
   hasActiveFollowUpAnnotations = false,
   openAnnotationRequest,
   annotationInteractionMode = 'interactive',
@@ -3093,6 +3139,7 @@ export const TurnCard = React.memo(function TurnCard({
             onAddAnnotation={onAddAnnotation}
             onRemoveAnnotation={onRemoveAnnotation}
             onUpdateAnnotation={onUpdateAnnotation}
+            onSaveAndSendFollowUp={onSaveAndSendFollowUp}
             onAccept={onAcceptPlan}
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse && index === planActivities.length - 1}
@@ -3131,6 +3178,7 @@ export const TurnCard = React.memo(function TurnCard({
                 onAddAnnotation={onAddAnnotation}
                 onRemoveAnnotation={onRemoveAnnotation}
                 onUpdateAnnotation={onUpdateAnnotation}
+                onSaveAndSendFollowUp={onSaveAndSendFollowUp}
                 onAccept={onAcceptPlan}
                 onAcceptWithCompact={onAcceptPlanWithCompact}
                 isLastResponse={isLastResponse}
@@ -3162,6 +3210,7 @@ export const TurnCard = React.memo(function TurnCard({
             onAddAnnotation={onAddAnnotation}
             onRemoveAnnotation={onRemoveAnnotation}
             onUpdateAnnotation={onUpdateAnnotation}
+            onSaveAndSendFollowUp={onSaveAndSendFollowUp}
             onAccept={onAcceptPlan}
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse}

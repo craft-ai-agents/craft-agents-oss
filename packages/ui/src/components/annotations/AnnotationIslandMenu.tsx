@@ -29,6 +29,7 @@ export interface AnnotationIslandMenuProps {
   onRequestBack?: () => boolean
   onRequestEdit: () => void
   onSubmit: (value: string) => void
+  onSubmitAndSend?: (value: string) => void
   onDelete?: () => void
   sendMessageKey?: 'enter' | 'cmd-enter'
   transitionConfig: IslandTransitionConfig
@@ -50,6 +51,7 @@ export function AnnotationIslandMenu({
   onRequestBack,
   onRequestEdit,
   onSubmit,
+  onSubmitAndSend,
   onDelete,
   sendMessageKey = 'enter',
   transitionConfig,
@@ -122,9 +124,10 @@ export function AnnotationIslandMenu({
           onCancel={onCancel}
           onRequestEdit={onRequestEdit}
           onSubmit={onSubmit}
+          onSubmitAndSend={onSubmitAndSend}
           onDelete={onDelete}
           title="Follow-up"
-          submitLabel={onDelete ? 'Save' : 'Continue'}
+          submitLabel="Save"
           placeholder="Add comments the agent should consider in the next turn…"
           maxInputHeight={320}
           sendMessageKey={sendMessageKey}

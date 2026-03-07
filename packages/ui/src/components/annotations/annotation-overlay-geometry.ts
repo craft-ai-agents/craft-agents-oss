@@ -24,12 +24,15 @@ export interface ComputeAnnotationOverlayGeometryOptions {
   root: HTMLElement
   renderedAnnotations: AnnotationV1[]
   persistedAnnotations?: AnnotationV1[]
+  /** Override per-message indices with session-level indices (e.g. for pending follow-ups) */
+  annotationIndexOverrides?: Map<string, number>
 }
 
 export function computeAnnotationOverlayGeometry({
   root,
   renderedAnnotations,
   persistedAnnotations,
+  annotationIndexOverrides,
 }: ComputeAnnotationOverlayGeometryOptions): {
   rects: AnnotationOverlayRect[]
   chips: AnnotationOverlayChip[]
@@ -67,7 +70,7 @@ export function computeAnnotationOverlayGeometry({
     const lineRects = consolidateRectsByLine(rawRects)
     rects.push(...lineRects)
 
-    const annotationIndex = annotationIndexById.get(item.annotation.id)
+    const annotationIndex = annotationIndexOverrides?.get(item.annotation.id) ?? annotationIndexById.get(item.annotation.id)
     if (annotationIndex == null || lineRects.length === 0) {
       continue
     }
