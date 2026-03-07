@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useEffect, useState, useMemo, useCallback } from "react"
+import { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import {
   AlertTriangle,
   CheckCircle2,
@@ -973,14 +973,19 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Diff viewer settings - loaded from user preferences on mount, persisted on change
   // These settings are stored in ~/.craft-agent/preferences.json (not localStorage)
   const [diffViewerSettings, setDiffViewerSettings] = useState<Partial<DiffViewerSettings>>({})
+  // Whether to auto-expand all tool activity step panels (from preferences.json)
+  const [defaultExpandToolSteps, setDefaultExpandToolSteps] = useState(false)
 
-  // Load diff viewer settings from preferences on mount
+  // Load diff viewer settings and UI preferences from preferences on mount
   useEffect(() => {
     window.electronAPI.readPreferences().then(({ content }) => {
       try {
         const prefs = JSON.parse(content)
         if (prefs.diffViewer) {
           setDiffViewerSettings(prefs.diffViewer)
+        }
+        if (prefs.defaultExpandToolSteps) {
+          setDefaultExpandToolSteps(true)
         }
       } catch {
         // Ignore parse errors, use defaults
@@ -1288,6 +1293,24 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // At render time, prevSessionIdForScrollRef still has the OLD session ID, so we can detect the switch
   const isSessionSwitchForScroll = prevSessionIdForScrollRef.current !== null && prevSessionIdForScrollRef.current !== session?.id
   const skipScrollToBottom = isSessionSwitchForScroll && isSearchActive
+
+  // Tracks which turns have already been auto-expanded so user-initiated collapses are respected
+  const autoExpandedTurnsRef = useRef<Set<string>>(new Set())
+
+  // Auto-expand all assistant turns when the defaultExpandToolSteps preference is enabled.
+  // A ref (not state) tracks processed turns to avoid an infinite loop from expandedTurns
+  // being a dependency. If a user manually collapses a turn it will stay collapsed.
+  useEffect(() => {
+    if (!defaultExpandToolSteps) return
+    allTurns.forEach((turn, index) => {
+      if (turn.type !== 'assistant') return
+      const key = getAssistantTurnUiKey(turn, index)
+      if (!autoExpandedTurnsRef.current.has(key)) {
+        autoExpandedTurnsRef.current.add(key)
+        toggleTurn(key, true)
+      }
+    })
+  }, [defaultExpandToolSteps, allTurns, toggleTurn])
 
   return (
     <div ref={zoneRef} className="flex h-full flex-col min-w-0" data-focus-zone="chat">
