@@ -20,6 +20,7 @@ import {
   SettingsCard,
   SettingsInput,
   SettingsTextarea,
+  SettingsToggle,
 } from '@/components/settings'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
@@ -36,6 +37,7 @@ interface PreferencesFormState {
   city: string
   country: string
   notes: string
+  systemPromptAlwaysVisible: boolean
 }
 
 const emptyFormState: PreferencesFormState = {
@@ -45,6 +47,7 @@ const emptyFormState: PreferencesFormState = {
   city: '',
   country: '',
   notes: '',
+  systemPromptAlwaysVisible: false,
 }
 
 // Parse JSON to form state
@@ -58,6 +61,7 @@ function parsePreferences(json: string): PreferencesFormState {
       city: prefs.location?.city || '',
       country: prefs.location?.country || '',
       notes: prefs.notes || '',
+      systemPromptAlwaysVisible: prefs.systemPromptAlwaysVisible ?? false,
     }
   } catch {
     return emptyFormState
@@ -80,6 +84,7 @@ function serializePreferences(state: PreferencesFormState): string {
   }
 
   if (state.notes) prefs.notes = state.notes
+  if (state.systemPromptAlwaysVisible) prefs.systemPromptAlwaysVisible = state.systemPromptAlwaysVisible
   prefs.updatedAt = Date.now()
 
   return JSON.stringify(prefs, null, 2)
@@ -247,6 +252,22 @@ export default function PreferencesPage() {
                 value={formState.country}
                 onChange={(v) => updateField('country', v)}
                 placeholder="e.g., USA"
+                inCard
+              />
+            </SettingsCard>
+          </SettingsSection>
+
+          {/* Interface */}
+          <SettingsSection
+            title="Interface"
+            description="Customise how Craft Agent's input panel behaves."
+          >
+            <SettingsCard divided>
+              <SettingsToggle
+                label="Always show model context panel"
+                description="Keep the model and context info panel visible in the input bar without clicking."
+                checked={formState.systemPromptAlwaysVisible}
+                onCheckedChange={(v) => updateField('systemPromptAlwaysVisible', v)}
                 inCard
               />
             </SettingsCard>

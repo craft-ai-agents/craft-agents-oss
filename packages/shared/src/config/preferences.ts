@@ -30,6 +30,8 @@ export interface UserPreferences {
   notes?: string;
   // Diff viewer display preferences
   diffViewer?: DiffViewerPreferences;
+  // Always show the model/context panel in the input bar
+  systemPromptAlwaysVisible?: boolean;
   // When the preferences were last updated
   updatedAt?: number;
 }

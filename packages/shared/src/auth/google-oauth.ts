@@ -425,10 +425,13 @@ export async function startGoogleOAuth(
 
     // Check for error
     if (callback.query.error) {
-      return {
-        success: false,
-        error: callback.query.error_description || callback.query.error,
-      };
+      const isAccessBlocked =
+        callback.query.error === 'access_denied' ||
+        String(callback.query.error_description ?? '').toLowerCase().includes('verif')
+      const error = isAccessBlocked
+        ? `Google has blocked this app (not yet verified).\n\nTo fix this, add your own Google OAuth credentials to the source config:\n  "googleOAuthClientId": "...",\n  "googleOAuthClientSecret": "..."\n\nSee: https://console.cloud.google.com/apis/credentials`
+        : callback.query.error_description || callback.query.error
+      return { success: false, error }
     }
 
     // Get authorization code
