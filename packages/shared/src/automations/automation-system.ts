@@ -397,6 +397,19 @@ export class AutomationSystem implements AutomationsConfigProvider {
         newState: next.sessionStatus ?? '',
       });
       emittedEvents.push('SessionStatusChange');
+
+      // Emit SessionEnd when transitioning to a terminal state so that
+      // automations and hooks can react to the session closing.
+      if (next.sessionStatus === 'done' || next.sessionStatus === 'cancelled') {
+        await this.eventBus.emit('SessionEnd', {
+          sessionId,
+          sessionName,
+          workspaceId: this.options.workspaceId,
+          timestamp,
+          data: {},
+        });
+        emittedEvents.push('SessionEnd');
+      }
     }
 
     // Update stored metadata
