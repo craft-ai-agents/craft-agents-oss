@@ -24,6 +24,7 @@
   "dependencies": {
     "@craft-agent/core": "workspace:*",
     "@craft-agent/shared": "workspace:*",
+    "@mariozechner/pi-ai": "^0.56.2",
     "ws": "^8.19.0",
     "sharp": "0.34.5"
   },
