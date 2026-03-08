@@ -63,9 +63,11 @@
     "@craft-agent/session-tools-core": "workspace:*",
     "@isaacs/ttlcache": "^2.1.4",
     "@leeoniya/ufuzzy": "^1.0.19",
+    "@mariozechner/pi-ai": "^0.56.2",
     "bash-parser": "^0.5.0",
     "croner": "^10.0.1",
     "filtrex": "^3.1.0",
+    "glob": "^11.0.0",
     "incr-regex-package": "^1.0.4",
     "shell-quote": "^1.8.3"
   },

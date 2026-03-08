@@ -15,7 +15,11 @@
     "@mariozechner/pi-coding-agent": "0.56.2",
     "@mariozechner/pi-agent-core": "0.56.2",
     "@mariozechner/pi-ai": "0.56.2",
-    "duck-duck-scrape": "^2.2.7"
+    "@sinclair/typebox": "^0.34.0",
+    "duck-duck-scrape": "^2.2.7",
+    "node-html-parser": "^7.0.0",
+    "pdfjs-dist": "^4.9.246",
+    "turndown": "^7.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0"
