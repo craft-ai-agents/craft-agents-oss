@@ -25,4 +25,6 @@ export interface HandlerDeps<
   windowManager?: TWindowManager
   browserPaneManager?: TBrowserPaneManager
   oauthFlowStore: TOAuthFlowStore
+  /** Optional handler for craftagents:// deep link URLs. Provided by GUI hosts (Electron). */
+  handleDeepLink?: (url: string, clientId: string) => Promise<void>
 }
