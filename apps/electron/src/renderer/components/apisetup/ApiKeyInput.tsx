@@ -23,6 +23,11 @@ import {
 import { cn } from "@/lib/utils"
 import { Check, ChevronDown, Eye, EyeOff, Loader2 } from "lucide-react"
 import { pickTierDefaults, resolveTierModels, type PiModelInfo } from "./tier-models"
+import {
+  resolvePiAuthProviderForSubmit,
+  resolvePresetStateForBaseUrlChange,
+  type PresetKey,
+} from "./submit-helpers"
 
 export type ApiKeyStatus = 'idle' | 'validating' | 'success' | 'error'
 
@@ -57,9 +62,6 @@ export interface ApiKeyInputProps {
     models?: string[]
   }
 }
-
-// Preset key — string to support dynamic Pi SDK providers
-type PresetKey = string
 
 interface Preset {
   key: PresetKey
@@ -153,6 +155,9 @@ export function ApiKeyInput({
   const [showValue, setShowValue] = useState(false)
   const [baseUrl, setBaseUrl] = useState(initialValues?.baseUrl ?? defaultPreset.url)
   const [activePreset, setActivePreset] = useState<PresetKey>(initialPreset)
+  const [lastNonCustomPreset, setLastNonCustomPreset] = useState<PresetKey | null>(
+    initialPreset !== 'custom' ? initialPreset : defaultPreset.key
+  )
   const [connectionDefaultModel, setConnectionDefaultModel] = useState(initialValues?.connectionDefaultModel ?? '')
   const [modelError, setModelError] = useState<string | null>(null)
 
@@ -219,6 +224,9 @@ export function ApiKeyInput({
 
   const handlePresetSelect = (preset: Preset) => {
     setActivePreset(preset.key)
+    if (preset.key !== 'custom') {
+      setLastNonCustomPreset(preset.key)
+    }
     if (preset.key === 'custom') {
       setBaseUrl('')
     } else {
@@ -241,17 +249,15 @@ export function ApiKeyInput({
   const handleBaseUrlChange = (value: string) => {
     setBaseUrl(value)
     const presetKey = getPresetForUrl(value, presets)
-    if (presetKey !== 'custom') {
-      setActivePreset(presetKey)
-    } else {
-      const currentPresetObj = presets.find(p => p.key === activePreset)
-      // Only fall back to 'custom' if the current preset has a non-empty default URL.
-      // Presets with empty URLs (e.g. Azure OpenAI) expect user-provided endpoints;
-      // switching them to custom would drop piAuthProvider routing metadata.
-      if (currentPresetObj && currentPresetObj.url !== '') {
-        setActivePreset('custom')
-      }
-    }
+    const currentPresetObj = presets.find(p => p.key === activePreset)
+    const nextPresetState = resolvePresetStateForBaseUrlChange({
+      matchedPreset: presetKey,
+      activePreset,
+      activePresetHasEmptyUrl: currentPresetObj?.url === '',
+      lastNonCustomPreset,
+    })
+    setActivePreset(nextPresetState.activePreset)
+    setLastNonCustomPreset(nextPresetState.lastNonCustomPreset)
     setModelError(null)
     if (!connectionDefaultModel.trim()) {
       if (presetKey === 'ollama') {
@@ -265,6 +271,10 @@ export function ApiKeyInput({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
+    const effectivePiAuthProvider = isPiApiKeyFlow
+      ? resolvePiAuthProviderForSubmit(activePreset, lastNonCustomPreset)
+      : undefined
+
     // Pi API key flow with tier dropdowns — submit selected models
     if (hasPiModels) {
       if (!bestModel || !defaultModel || !cheapModel) {
@@ -277,7 +287,7 @@ export function ApiKeyInput({
         baseUrl: baseUrl.trim() || undefined,
         connectionDefaultModel: bestModel,
         models,
-        piAuthProvider: activePreset !== 'custom' ? activePreset : undefined,
+        piAuthProvider: effectivePiAuthProvider,
         modelSelectionMode: 'userDefined3Tier',
       })
       return
@@ -299,7 +309,7 @@ export function ApiKeyInput({
       baseUrl: isUsingDefaultEndpoint ? undefined : effectiveBaseUrl,
       connectionDefaultModel: parsedModels[0],
       models: parsedModels.length > 0 ? parsedModels : undefined,
-      piAuthProvider: isPiApiKeyFlow && activePreset !== 'custom' ? activePreset : undefined,
+      piAuthProvider: effectivePiAuthProvider,
       modelSelectionMode: isPiApiKeyFlow
         ? (parsedModels.length > 0 ? 'userDefined3Tier' : 'automaticallySyncedFromProvider')
         : undefined,

@@ -875,9 +875,10 @@ const STATUS_CONFIG_FILE = 'statuses/config.json';
 const REQUIRED_FIXED_STATUS_IDS = ['todo', 'done', 'cancelled'] as const;
 
 /**
- * Status icons are simple strings: emoji characters (e.g., "✅") or URLs.
- * Local icon files (statuses/icons/{id}.svg) are auto-discovered at runtime,
- * not referenced in the config.
+ * Status icons are simple strings: emoji characters, URLs, or local filenames
+ * such as "in-progress.svg" which resolve to statuses/icons/in-progress.svg.
+ * When icon is omitted, local icon files (statuses/icons/{id}.svg) are still
+ * auto-discovered at runtime.
  */
 const StatusIconSchema = z.string();
 
