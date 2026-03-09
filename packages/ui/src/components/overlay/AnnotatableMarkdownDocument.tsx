@@ -55,7 +55,7 @@ export interface AnnotatableMarkdownDocumentProps {
   onOpenUrl?: (url: string) => void
   onOpenFile?: (path: string) => void
   sendMessageKey?: 'enter' | 'cmd-enter'
-  islandZIndex?: number
+  islandZIndex?: React.CSSProperties['zIndex']
   openAnnotationRequest?: ExternalOpenAnnotationRequest | null
   isStreaming?: boolean
 }
@@ -71,7 +71,7 @@ export function AnnotatableMarkdownDocument({
   onOpenUrl,
   onOpenFile,
   sendMessageKey = 'enter',
-  islandZIndex = 420,
+  islandZIndex = 'var(--z-island, 400)',
   openAnnotationRequest,
   isStreaming = false,
 }: AnnotatableMarkdownDocumentProps) {

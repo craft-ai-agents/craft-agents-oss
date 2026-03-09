@@ -89,7 +89,7 @@ export interface IslandProps {
   /** Controls whether visible transitions always run through an internal priming frame for deterministic entry replay. */
   replayOnVisible?: 'auto' | 'always'
   /** z-index for the blockOutsideInteraction overlay (portaled to body). Set to containerZIndex − 1. */
-  overlayZIndex?: number
+  overlayZIndex?: React.CSSProperties['zIndex']
 }
 
 const DEFAULT_TRANSITION: Required<IslandTransitionConfig> = {
@@ -133,16 +133,6 @@ export function handleIslandEscape({
 }
 
 const CONTENT_EASE = [0.2, 0.8, 0.2, 1] as const
-
-function debugIsland(event: string, payload?: unknown): void {
-  if (typeof window === 'undefined') return
-
-  const electronApi = (window as typeof window & {
-    electronAPI?: { debugLog?: (...args: unknown[]) => void }
-  }).electronAPI
-
-  electronApi?.debugLog?.('[IslandCore]', event, payload ?? null)
-}
 
 let bodyScrollLockCount = 0
 let previousBodyOverflow: string | null = null
@@ -758,44 +748,25 @@ export function Island({
     [isPreShowWarmup, layoutTransition]
   )
 
-  React.useEffect(() => {
-    debugIsland('state', {
-      activeViewId: activeView.id,
-      isVisible,
-      effectiveVisible,
-      replayEntryKey: replayEntryKey ?? null,
-      replayOnVisible,
-      isVisibilityPrimed,
-      shouldAnimateFromHiddenOnMount,
-      shouldHideForWarmup,
-      shouldHideForReplayPriming,
-      hasUsableMorphDelta,
-      hiddenPose,
-    })
-  }, [
-    activeView.id,
-    isVisible,
-    effectiveVisible,
-    replayEntryKey,
-    replayOnVisible,
-    isVisibilityPrimed,
-    shouldAnimateFromHiddenOnMount,
-    shouldHideForWarmup,
-    shouldHideForReplayPriming,
-    hasUsableMorphDelta,
-    hiddenPose,
-  ])
-
   return (
     <IslandAnimationContext.Provider value={cfg}>
       {shouldBlockOutside && typeof document !== 'undefined' && ReactDOM.createPortal(
         <div
+          data-ca-island-blocker="true"
           className="fixed inset-0"
           style={overlayZIndex != null ? { zIndex: overlayZIndex } : undefined}
           onPointerDown={(e) => {
             e.preventDefault()
             e.stopPropagation()
-            onRequestClose?.()
+          }}
+          onMouseDown={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+          }}
+          onPointerUp={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            handleIslandEscape({ dialogBehavior, onRequestBack, onRequestClose })
           }}
         />,
         document.body
@@ -813,22 +784,6 @@ export function Island({
         tabIndex={isDialogMode ? -1 : undefined}
         data-ca-island-dialog={isDialogMode ? 'true' : undefined}
         data-state={effectiveVisible ? 'open' : 'closed'}
-        onAnimationStart={() => {
-          debugIsland('shell-animation-start', {
-            activeViewId: activeView.id,
-            isVisible,
-            effectiveVisible,
-            replayEntryKey: replayEntryKey ?? null,
-          })
-        }}
-        onAnimationComplete={() => {
-          debugIsland('shell-animation-complete', {
-            activeViewId: activeView.id,
-            isVisible,
-            effectiveVisible,
-            replayEntryKey: replayEntryKey ?? null,
-          })
-        }}
         className={cn('mx-auto w-fit overflow-hidden border border-border/50 bg-background shadow-strong', className)}
       >
         <div className="relative">

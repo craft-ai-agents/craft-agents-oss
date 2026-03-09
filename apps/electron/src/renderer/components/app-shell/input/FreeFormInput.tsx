@@ -89,6 +89,15 @@ function stripPiPrefixForDisplay(value: string): string {
   return value.startsWith('pi/') ? value.slice(3) : value
 }
 
+function formatFollowUpChipText(text: string, fallback: string, maxLength = 50): string {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (!normalized) return fallback
+
+  return normalized.length > maxLength
+    ? `${normalized.slice(0, maxLength - 1).trimEnd()}…`
+    : normalized
+}
+
 
 /** Platform-specific modifier key for keyboard shortcuts */
 const cmdKey = isMac ? '⌘' : 'Ctrl'
@@ -1510,8 +1519,9 @@ export function FreeFormInput({
                   <AnimatePresence initial={false}>
                     {followUpItems.map((item, idx) => {
                       const chipIndex = item.index ?? idx + 1
-                      const label = item.noteLabel.trim() || 'Follow-up'
                       const tooltipText = item.selectedText.trim() || 'Selected text'
+                      const selectedExcerpt = formatFollowUpChipText(item.selectedText, 'Selected text', 50)
+                      const noteExcerpt = formatFollowUpChipText(item.noteLabel, 'Follow-up', 50)
 
                       return (
                         <motion.button
@@ -1522,7 +1532,7 @@ export function FreeFormInput({
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: -4, scale: 0.98 }}
                           transition={{ duration: 0.16, ease: [0.2, 0, 0.2, 1] }}
-                          className="inline-flex max-w-full items-center gap-1.5 rounded-[6px] bg-foreground/2 pl-1.5 pr-2 py-1 text-[12px] text-foreground/80 select-none transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          className="inline-flex max-w-full items-center gap-1.5 overflow-hidden rounded-[6px] bg-foreground/2 pl-1.5 pr-2 py-1 text-[12px] text-foreground/80 select-none transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                           onClick={(event) => {
                             const rect = event.currentTarget.getBoundingClientRect()
                             onFollowUpClick?.(item, {
@@ -1561,7 +1571,11 @@ export function FreeFormInput({
                               {tooltipText}
                             </TooltipContent>
                           </Tooltip>
-                          <span className="max-w-[320px] pr-0.5 truncate text-left">{label}</span>
+                          <span className="min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap pr-0.5 text-left">
+                            <span className="italic text-foreground/60">{selectedExcerpt}</span>
+                            <span className="mx-1 text-foreground/40">·</span>
+                            <span>{noteExcerpt}</span>
+                          </span>
                         </motion.button>
                       )
                     })}
@@ -2013,7 +2027,7 @@ Model
               type="submit"
               size="icon"
               className="h-7 w-7 rounded-full shrink-0 ml-2"
-              disabled={!hasContent || disabled}
+              disabled={!hasContent || disabled || disableSend}
               data-tutorial="send-button"
             >
               <ArrowUp className="h-4 w-4" />

@@ -205,6 +205,8 @@
      fullscreen         350     Fullscreen content viewers (above app chrome)
      floating-backdrop  390     Backdrop for floating menus
      floating-menu      400     Floating menus above modals
+     island-overlay     390     Backdrop for annotation island interactions
+     island             400     Annotation island menu surface
      splash             600     Splash screen, workspace creation
   */
   --z-base: 0;
@@ -219,6 +221,8 @@
   --z-fullscreen: 350;
   --z-floating-backdrop: 390;
   --z-floating-menu: 400;
+  --z-island-overlay: 390;
+  --z-island: 400;
   --z-splash: 600;
 
 }
@@ -433,6 +437,8 @@ html[data-font="inter"] {
   --z-index-fullscreen: var(--z-fullscreen);
   --z-index-floating-backdrop: var(--z-floating-backdrop);
   --z-index-floating-menu: var(--z-floating-menu);
+  --z-index-island-overlay: var(--z-island-overlay);
+  --z-index-island: var(--z-island);
   --z-index-splash: var(--z-splash);
 
   --shadow-2xs: var(--shadow-2xs);

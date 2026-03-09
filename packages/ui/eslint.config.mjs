@@ -7,6 +7,7 @@
 
 import tsParser from '@typescript-eslint/parser'
 import noHardcodedZIndex from './eslint-rules/no-hardcoded-z-index.cjs'
+import noFloatingZTokensInIsland from './eslint-rules/no-floating-z-tokens-in-island.cjs'
 import noNonstandardShadows from './eslint-rules/no-nonstandard-shadows.cjs'
 
 export default [
@@ -35,6 +36,7 @@ export default [
       'craft-styles': {
         rules: {
           'no-hardcoded-z-index': noHardcodedZIndex,
+          'no-floating-z-tokens-in-island': noFloatingZTokensInIsland,
           'no-nonstandard-shadows': noNonstandardShadows,
         },
       },
@@ -52,6 +54,9 @@ export default [
 
       // Enforce centralized z-index token scale
       'craft-styles/no-hardcoded-z-index': 'error',
+
+      // Enforce dedicated island z-index tokens in island components
+      'craft-styles/no-floating-z-tokens-in-island': 'error',
 
       // Enforce approved shadow utility classes/tokens only
       'craft-styles/no-nonstandard-shadows': ['error', {

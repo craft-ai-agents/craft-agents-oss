@@ -103,11 +103,22 @@ module.exports = {
       )
     }
 
+    function isZIndexIdentifier(node) {
+      return node && node.type === 'Identifier' && node.name === 'zIndex'
+    }
+
     return {
       Property(node) {
         if (!isZIndexPropertyName(node.key)) return
         if (isHardcodedLiteralValue(node.value)) {
           context.report({ node: node.value, messageId: 'noHardcodedZIndex' })
+        }
+      },
+
+      AssignmentPattern(node) {
+        if (!isZIndexIdentifier(node.left)) return
+        if (isHardcodedLiteralValue(node.right)) {
+          context.report({ node: node.right, messageId: 'noHardcodedZIndex' })
         }
       },
 

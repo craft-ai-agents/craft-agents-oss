@@ -1725,16 +1725,6 @@ export function ResponseCard({
     closeAll()
   }, [closeAll])
 
-  const debugSelectionIsland = useCallback((event: string, payload?: unknown) => {
-    if (typeof window === 'undefined') return
-
-    const electronApi = (window as typeof window & {
-      electronAPI?: { debugLog?: (...args: unknown[]) => void }
-    }).electronAPI
-
-    electronApi?.debugLog?.('[SelectionIsland]', event, payload ?? null)
-  }, [])
-
   const isTargetInsideAnnotationIsland = useCallback((target: Node | null): boolean => {
     if (!target) return false
     const element = target instanceof Element ? target : target.parentElement
@@ -1742,19 +1732,9 @@ export function ResponseCard({
     return !!element.closest('[data-ca-annotation-island="true"]')
   }, [])
 
-  const triggerSelectionMenuEntryReplay = useCallback((reason: 'selection-open' | 'annotation-open') => {
-    setSelectionMenuShowNonce((prev) => {
-      const next = prev + 1
-      debugSelectionIsland('replay-trigger', {
-        reason,
-        prevNonce: prev,
-        nextNonce: next,
-        sessionId: sessionId ?? null,
-        messageId: messageId ?? null,
-      })
-      return next
-    })
-  }, [debugSelectionIsland, sessionId, messageId])
+  const triggerSelectionMenuEntryReplay = useCallback(() => {
+    setSelectionMenuShowNonce((prev) => prev + 1)
+  }, [])
 
   const activeMenuAnchor = useMemo(() => {
     return getAnnotationInteractionAnchor(interactionState)
@@ -2057,19 +2037,11 @@ export function ResponseCard({
     const noteText = annotation ? getAnnotationNoteText(annotation) : ''
 
     const transition = buildAnnotationChipEntryTransition()
-    debugSelectionIsland('annotation-open-intent', {
-      sessionId: sessionId ?? null,
-      messageId: messageId ?? null,
-      annotationId,
-      anchorX,
-      anchorY,
-      transition,
-    })
 
     setSelectionMenuTransitionConfig(transition)
-    triggerSelectionMenuEntryReplay('annotation-open')
+    triggerSelectionMenuEntryReplay()
     openFromAnnotation({ annotationId, index, anchorX, anchorY }, noteText, mode)
-  }, [allowAnnotationIsland, annotations, debugSelectionIsland, sessionId, messageId, triggerSelectionMenuEntryReplay, openFromAnnotation])
+  }, [allowAnnotationIsland, annotations, triggerSelectionMenuEntryReplay, openFromAnnotation])
 
   useEffect(() => {
     if (!allowAnnotationIsland) return
@@ -2090,7 +2062,7 @@ export function ResponseCard({
     if (!consumed) return
 
     setSelectionMenuTransitionConfig(buildAnnotationChipEntryTransition())
-    triggerSelectionMenuEntryReplay('annotation-open')
+    triggerSelectionMenuEntryReplay()
   }, [
     allowAnnotationIsland,
     openAnnotationRequest,
@@ -2216,18 +2188,9 @@ export function ResponseCard({
       const anchorY = anchorRect.top - 8
 
       const transition = buildSelectionEntryTransition(dragStartPointerRef.current, pointer)
-      debugSelectionIsland('selection-open-intent', {
-        sessionId: sessionId ?? null,
-        messageId: messageId ?? null,
-        selectionRange: { start, end },
-        pointer: pointer ?? null,
-        dragStart: dragStartPointerRef.current,
-        anchor: { x: anchorX, y: anchorY },
-        transition,
-      })
 
       setSelectionMenuTransitionConfig(transition)
-      triggerSelectionMenuEntryReplay('selection-open')
+      triggerSelectionMenuEntryReplay()
       openFromSelection({
         start,
         end,
@@ -2239,7 +2202,7 @@ export function ResponseCard({
       })
       dragStartPointerRef.current = null
     })
-  }, [annotations, closeSelectionMenu, debugSelectionIsland, sessionId, messageId, triggerSelectionMenuEntryReplay, openFromSelection])
+  }, [annotations, closeSelectionMenu, triggerSelectionMenuEntryReplay, openFromSelection])
 
   const handleTextSelection = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (!canAnnotate || !onAddAnnotation || !messageId) return
@@ -2345,29 +2308,6 @@ export function ResponseCard({
       document.removeEventListener('mouseup', handleDocumentMouseUp)
     }
   }, [canAnnotate, onAddAnnotation, messageId, showSelectionMenuFromCurrentSelection])
-
-  useEffect(() => {
-    debugSelectionIsland('render-state', {
-      sessionId: sessionId ?? null,
-      messageId: messageId ?? null,
-      isSelectionMenuVisible,
-      selectionMenuShowNonce,
-      selectionMenuRenderSourceKey,
-      selectionMenuSourceKey,
-      selectionMenuRenderAnchor,
-      activeMenuAnchor,
-    })
-  }, [
-    debugSelectionIsland,
-    sessionId,
-    messageId,
-    isSelectionMenuVisible,
-    selectionMenuShowNonce,
-    selectionMenuRenderSourceKey,
-    selectionMenuSourceKey,
-    selectionMenuRenderAnchor,
-    activeMenuAnchor,
-  ])
 
   const handleSelectionMenuRequestBack = useCallback((): boolean => {
     if (selectionMenuView !== 'compact') {

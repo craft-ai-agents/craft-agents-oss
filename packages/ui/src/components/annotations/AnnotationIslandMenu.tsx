@@ -34,7 +34,8 @@ export interface AnnotationIslandMenuProps {
   sendMessageKey?: 'enter' | 'cmd-enter'
   transitionConfig: IslandTransitionConfig
   onExitComplete?: () => void
-  zIndex?: number
+  zIndex?: React.CSSProperties['zIndex']
+  overlayZIndex?: React.CSSProperties['zIndex']
 }
 
 export function AnnotationIslandMenu({
@@ -56,7 +57,8 @@ export function AnnotationIslandMenu({
   sendMessageKey = 'enter',
   transitionConfig,
   onExitComplete,
-  zIndex = 50,
+  zIndex = 'var(--z-island, 400)',
+  overlayZIndex = 'var(--z-island-overlay, 390)',
   usePortal = true,
 }: AnnotationIslandMenuProps) {
   const menuRef = React.useRef<HTMLDivElement>(null)
@@ -98,7 +100,7 @@ export function AnnotationIslandMenu({
         dialogBehavior="back-or-close"
         onRequestBack={onRequestBack}
         onRequestClose={onCancel}
-        overlayZIndex={zIndex - 1}
+        overlayZIndex={overlayZIndex}
       >
         <IslandContentView id="compact" anchorX="center" anchorY="bottom">
           <div className="p-1 flex items-center gap-1">

@@ -4,6 +4,29 @@ import {
   type IslandOutsideDismissBehavior,
 } from './island-dismiss-policy'
 
+export const ISLAND_BLOCKER_SELECTOR = '[data-ca-island-blocker="true"]'
+
+export function isIslandBlockerTarget(target: EventTarget | null): boolean {
+  if (!target || typeof target !== 'object') return false
+
+  const maybeElement = target as {
+    closest?: (selector: string) => Element | null
+    parentElement?: {
+      closest?: (selector: string) => Element | null
+    } | null
+  }
+
+  if (typeof maybeElement.closest === 'function') {
+    return Boolean(maybeElement.closest(ISLAND_BLOCKER_SELECTOR))
+  }
+
+  if (maybeElement.parentElement && typeof maybeElement.parentElement.closest === 'function') {
+    return Boolean(maybeElement.parentElement.closest(ISLAND_BLOCKER_SELECTOR))
+  }
+
+  return false
+}
+
 export interface UseAnnotationIslandEventsOptions {
   enabled: boolean
   openedAtRef: React.MutableRefObject<number>
@@ -42,6 +65,8 @@ export function useAnnotationIslandEvents({
     }
 
     const handlePointerDown = (event: MouseEvent) => {
+      if (isIslandBlockerTarget(event.target)) return
+
       const target = event.target as Node | null
       if (!target) return
       if (isTargetInsideAnnotationIsland(target)) return
@@ -54,6 +79,10 @@ export function useAnnotationIslandEvents({
       }
 
       if (!isCompactView) {
+        return
+      }
+
+      if (isIslandBlockerTarget(event.target)) {
         return
       }
 
