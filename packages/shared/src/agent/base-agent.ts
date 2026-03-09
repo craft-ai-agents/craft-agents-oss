@@ -1153,11 +1153,12 @@ ${formattedMessages}
    * Uses runMiniCompletion with the same auth as the main agent.
    *
    * @param message - The user's message to generate a title from
+   * @param options.language - Preferred language for the title
    * @returns Generated title (2-5 words), or null if generation fails
    */
-  async generateTitle(message: string): Promise<string | null> {
+  async generateTitle(message: string, options?: { language?: string }): Promise<string | null> {
     try {
-      const prompt = buildTitlePrompt(message);
+      const prompt = buildTitlePrompt(message, options);
       const result = await this.runMiniCompletion(prompt);
       return validateTitle(result);
     } catch (error) {
@@ -1168,15 +1169,17 @@ ${formattedMessages}
 
   /**
    * Regenerate a session title based on recent conversation context.
-   * Uses recent messages to capture what the session has evolved into.
+   * Uses a spread of messages (first, middle, last) to capture the session's purpose.
    *
-   * @param recentUserMessages - The last few user messages
+   * @param recentUserMessages - Spread of user messages
    * @param lastAssistantResponse - The most recent assistant response
+   * @param options.currentTitle - Current title for refinement context
+   * @param options.language - Preferred language for the title
    * @returns Generated title (2-5 words), or null if generation fails
    */
-  async regenerateTitle(recentUserMessages: string[], lastAssistantResponse: string): Promise<string | null> {
+  async regenerateTitle(recentUserMessages: string[], lastAssistantResponse: string, options?: { currentTitle?: string; language?: string }): Promise<string | null> {
     try {
-      const prompt = buildRegenerateTitlePrompt(recentUserMessages, lastAssistantResponse);
+      const prompt = buildRegenerateTitlePrompt(recentUserMessages, lastAssistantResponse, options);
       const result = await this.runMiniCompletion(prompt);
       return validateTitle(result);
     } catch (error) {

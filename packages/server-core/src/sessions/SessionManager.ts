@@ -25,6 +25,7 @@ import {
   getWorkspaces,
   getWorkspaceByNameOrId,
   loadConfigDefaults,
+  loadPreferences,
 
   migrateLegacyCredentials,
   migrateLegacyLlmConnectionsConfig,
@@ -66,7 +67,7 @@ import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/shared/mcp'
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
 import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
-import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment } from '@craft-agent/shared/utils'
+import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages } from '@craft-agent/shared/utils'
 import { loadAllSkills, loadSkillBySlug, type LoadedSkill } from '@craft-agent/shared/skills'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
@@ -3713,13 +3714,13 @@ export class SessionManager implements ISessionManager {
     // Ensure messages are loaded from disk (lazy loading support)
     await this.ensureMessagesLoaded(managed)
 
-    // Get recent user messages (last 3) for context
-    const userMessages = managed.messages
+    // Select a spread of user messages (first, middle, last) to capture the session's purpose
+    const allUserContents = managed.messages
       .filter((m) => m.role === 'user')
-      .slice(-3)
       .map((m) => m.content)
+    const userMessages = selectSpreadMessages(allUserContents)
 
-    sessionLog.info(`refreshTitle: Found ${userMessages.length} user messages`)
+    sessionLog.info(`refreshTitle: Selected ${userMessages.length} spread messages from ${allUserContents.length} total`)
 
     if (userMessages.length === 0) {
       sessionLog.warn(`refreshTitle: No user messages found`)
@@ -3732,6 +3733,10 @@ export class SessionManager implements ISessionManager {
       .slice(-1)[0]
 
     const assistantResponse = lastAssistantMsg?.content ?? ''
+
+    // Load user preferences for language-aware title generation
+    const preferences = loadPreferences()
+    const titleOptions = { currentTitle: managed.name, language: preferences.language }
 
     // Use existing agent or create temporary one
     let agent: AgentInstance | null = managed.agent
@@ -3778,7 +3783,7 @@ export class SessionManager implements ISessionManager {
     this.sendEvent({ type: 'title_regenerating', sessionId, isRegenerating: true }, managed.workspace.id)
 
     try {
-      const title = await agent.regenerateTitle(userMessages, assistantResponse)
+      const title = await agent.regenerateTitle(userMessages, assistantResponse, titleOptions)
       sessionLog.info(`refreshTitle: regenerateTitle returned: ${title ? `"${title}"` : 'null'}`)
       if (title) {
         managed.name = title
@@ -5386,7 +5391,8 @@ export class SessionManager implements ISessionManager {
     }
 
     try {
-      const title = await agent.generateTitle(userMessage)
+      const preferences = loadPreferences()
+      const title = await agent.generateTitle(userMessage, { language: preferences.language })
       if (title) {
         managed.name = title
         this.persistSession(managed)
