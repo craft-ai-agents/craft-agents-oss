@@ -607,9 +607,10 @@ export function useEntityIcon(opts: UseEntityIconOptions): ResolvedEntityIcon {
         const relativePath = relativeMatch ? relativeMatch[0] : iconPath
 
         result = await loadIconFile(workspaceId, relativePath)
-      } else if (iconDir && !iconValue) {
+      } else if (iconDir) {
         // Auto-discover icon files in directory
-        // Only do auto-discovery when iconValue is undefined (config takes precedence)
+        // Always try file discovery — local files take precedence over config strings.
+        // This handles: user-placed SVGs, default SVGs written by ensureDefaultIconFiles(), and downloaded URL icons.
         // iconFileName overrides the default 'icon' prefix (e.g. statuses use statusId)
         result = await discoverIconFile(workspaceId, iconDir, iconFileName)
       }

@@ -31,43 +31,43 @@ GitHub organizes code and collaboration around:
 
 ## Setup Guide
 
-### CRITICAL - Check for GitHub CLI First
+There are three ways to access GitHub from Craft Agents, listed from simplest to most complex. **Most users should use Tier 1.**
+
+---
+
+### Tier 1 — Recommended: GitHub CLI (`gh`)
 
 <Warning>
-Before creating ANY GitHub source, you **MUST** check if the `gh` CLI is installed.
+**You may not need a source at all.** If the GitHub CLI is installed and authenticated, you already have full GitHub access through Craft Agent's built-in Bash tool — no source setup required.
 </Warning>
 
-1. Run `which gh` or `gh --version` to check
-2. If `gh` is installed, **ask the user before proceeding**
+The `gh` CLI is the simplest and most reliable way to work with GitHub:
 
-**If `gh` is installed and authenticated:**
-- The user ALREADY has full GitHub access through the built-in Bash tool
-- `gh` commands work out of the box: `gh issue list`, `gh pr view`, `gh repo clone`, etc.
-- Creating a separate GitHub source is **redundant** in most cases
+- **Zero configuration** — works out of the box after `gh auth login`
+- **Full API coverage** — `gh issue list`, `gh pr view`, `gh repo clone`, `gh api repos/{owner}/{repo}/...`
+- **No tokens to manage** — authentication is handled by `gh auth`
+- **Always up to date** — no dependency on third-party MCP wrappers
 
-**You MUST ask the user explicitly:**
-> "I noticed you have the GitHub CLI (`gh`) installed. You already have full GitHub access through `gh` commands. Do you still want me to create a separate GitHub MCP source?"
+**Quick check:**
+```bash
+gh --version    # Is it installed?
+gh auth status  # Is it authenticated?
+```
 
-**ONLY proceed with source creation if:**
-1. `gh` is NOT installed, OR
-2. User EXPLICITLY says yes after being asked
+If both pass, you're done — just use `gh` commands directly. No source creation needed.
 
-### If Creating a GitHub Source
+**If `gh` is not installed:** install it from [cli.github.com](https://cli.github.com), then run `gh auth login`.
 
-#### Authentication - OAuth Will Fail
+---
 
-GitHub's MCP server requires OAuth with a pre-registered client app. Craft Agents is NOT registered with GitHub, so OAuth authentication **will fail**. This is expected.
+### Tier 2 — MCP Source with Personal Access Token (stdio)
 
-**The ONLY solution is a Personal Access Token (PAT):**
+For users who want structured MCP tool calls instead of raw CLI output, you can set up GitHub as an MCP source using a Personal Access Token (PAT).
 
-1. Ask the user to create a PAT at: GitHub Settings → Developer settings → Personal access tokens
-2. Required scopes: `repo`, `read:org` (optional)
-3. Set `authType: "bearer"` in config (NOT "oauth")
-4. Use `source_credential_prompt` to collect the PAT
+**Step 1:** Create a PAT at GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens. Grant `repo` access (and optionally `read:org`).
 
-### Configuration
+**Step 2:** Use this `config.json`:
 
-**Required config.json:**
 ```json
 {
   "name": "GitHub",
@@ -75,29 +75,34 @@ GitHub's MCP server requires OAuth with a pre-registered client app. Craft Agent
   "enabled": true,
   "provider": "github",
   "type": "mcp",
-  "mcp": {
-    "url": "https://api.githubcopilot.com/mcp/",
-    "authType": "bearer"
-  }
-}
-```
-
-**Alternative - Local MCP Server (Docker):**
-```json
-{
-  "type": "mcp",
+  "tagline": "GitHub via MCP (stdio)",
   "mcp": {
     "transport": "stdio",
     "command": "docker",
     "args": ["run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "ghcr.io/github/github-mcp-server"],
-    "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_..." }
+    "env": {
+      "GITHUB_PERSONAL_ACCESS_TOKEN": "<your-pat-here>"
+    },
+    "authType": "none"
   }
 }
 ```
 
 <Note>
-The `@modelcontextprotocol/server-github` npm package is deprecated. Use the official GitHub MCP server Docker image (`ghcr.io/github/github-mcp-server`) or the remote endpoint at `https://api.githubcopilot.com/mcp/` instead.
+This uses the official GitHub MCP server Docker image (`ghcr.io/github/github-mcp-server`). Requires Docker to be installed and running.
 </Note>
+
+**Step 3:** Use `source_credential_prompt` to securely collect the PAT from the user instead of hardcoding it.
+
+---
+
+### Tier 3 — Remote OAuth (not supported)
+
+GitHub's remote MCP endpoint at `https://api.githubcopilot.com/mcp/` requires OAuth with a pre-registered client application. **Craft Agents is not registered with GitHub as an OAuth client, so this will not work.**
+
+Do not attempt remote OAuth setup — it will fail during the authorization step. Use Tier 1 or Tier 2 instead.
+
+---
 
 ### Rate Limits
 - 5000 requests per hour for authenticated users
