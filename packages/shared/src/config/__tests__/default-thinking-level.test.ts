@@ -81,10 +81,10 @@ function runEval(configDir: string, code: string): string {
 }
 
 describe('default thinking level storage', () => {
-  it('returns undefined when no app-level default is set', () => {
+  it('falls back to bundled default when no app-level default is set', () => {
     const { configDir } = setupWorkspaceConfigDir()
     const output = runEval(configDir, "console.log(String(getDefaultThinkingLevel()))")
-    expect(output).toBe('undefined')
+    expect(output).toBe('off')
   })
 
   it('persists defaultThinkingLevel to config.json', () => {
