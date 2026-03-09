@@ -289,12 +289,12 @@ function FilterLabelItems({
   /** Label ID pinned by the current route (non-removable, shown as checked+disabled) */
   pinnedLabelId?: string | null
 }) {
-  /** Toggle a label filter: if active → remove, if inactive → add as 'include' */
-  const toggleLabel = (id: string) => {
+  /** Toggle a label filter: if active → remove, if inactive → add as 'include' (or 'exclude' with Alt) */
+  const toggleLabel = (id: string, altKey = false) => {
     setLabelFilter(prev => {
       const next = new Map(prev)
       if (next.has(id)) next.delete(id)
-      else next.set(id, 'include')
+      else next.set(id, altKey ? 'exclude' : 'include')
       return next
     })
   }
@@ -347,7 +347,7 @@ function FilterLabelItems({
                   <>
                     <DropdownMenuSub>
                       {/* Click the group title to clear, hover to open mode submenu */}
-                      <StyledDropdownMenuSubTrigger onClick={(e) => { e.preventDefault(); toggleLabel(label.id) }}>
+                      <StyledDropdownMenuSubTrigger onClick={(e) => { e.preventDefault(); toggleLabel(label.id, e.altKey) }}>
                         <FilterMenuRow
                           icon={<LabelIcon label={label} size="lg" hasChildren />}
                           label={label.name}
@@ -374,7 +374,7 @@ function FilterLabelItems({
                       onClick={(e) => {
                         if (isPinned) return
                         e.preventDefault()
-                        toggleLabel(label.id)
+                        toggleLabel(label.id, e.altKey)
                       }}
                     >
                       <FilterMenuRow
@@ -402,7 +402,7 @@ function FilterLabelItems({
           return (
             <DropdownMenuSub key={label.id}>
               {/* Click the item itself to clear, hover to open mode submenu */}
-              <StyledDropdownMenuSubTrigger onClick={(e) => { e.preventDefault(); toggleLabel(label.id) }}>
+              <StyledDropdownMenuSubTrigger onClick={(e) => { e.preventDefault(); toggleLabel(label.id, e.altKey) }}>
                 <FilterMenuRow
                   icon={<LabelIcon label={label} size="lg" />}
                   label={label.name}
@@ -424,7 +424,7 @@ function FilterLabelItems({
             onClick={(e) => {
               if (isPinned) return
               e.preventDefault()
-              toggleLabel(label.id)
+              toggleLabel(label.id, e.altKey)
             }}
           >
             <FilterMenuRow
@@ -2557,6 +2557,7 @@ function AppShellContent({
                                     break
                                   case 'Enter': {
                                     e.preventDefault()
+                                    const mode: FilterMode = e.altKey ? 'exclude' : 'include'
                                     const idx = filterDropdownSelectedIdx
                                     if (idx < ms.length) {
                                       // Toggle a status filter
@@ -2565,7 +2566,7 @@ function AppShellContent({
                                         setListFilter(prev => {
                                           const next = new Map(prev)
                                           if (next.has(state.id)) next.delete(state.id)
-                                          else next.set(state.id, 'include')
+                                          else next.set(state.id, mode)
                                           return next
                                         })
                                       }
@@ -2576,7 +2577,7 @@ function AppShellContent({
                                         setLabelFilter(prev => {
                                           const next = new Map(prev)
                                           if (next.has(item.id)) next.delete(item.id)
-                                          else next.set(item.id, 'include')
+                                          else next.set(item.id, mode)
                                           return next
                                         })
                                       }
@@ -2764,7 +2765,7 @@ function AppShellContent({
                                         setListFilter(prev => {
                                           const next = new Map(prev)
                                           if (next.has(state.id)) next.delete(state.id)
-                                          else next.set(state.id, 'include')
+                                          else next.set(state.id, e.altKey ? 'exclude' : 'include')
                                           return next
                                         })
                                       }}
@@ -2911,7 +2912,7 @@ function AppShellContent({
                                             setListFilter(prev => {
                                               const next = new Map(prev)
                                               if (next.has(state.id)) next.delete(state.id)
-                                              else next.set(state.id, 'include')
+                                              else next.set(state.id, e.altKey ? 'exclude' : 'include')
                                               return next
                                             })
                                           }}
@@ -3000,7 +3001,7 @@ function AppShellContent({
                                             setLabelFilter(prev => {
                                               const next = new Map(prev)
                                               if (next.has(item.id)) next.delete(item.id)
-                                              else next.set(item.id, 'include')
+                                              else next.set(item.id, e.altKey ? 'exclude' : 'include')
                                               return next
                                             })
                                           }}

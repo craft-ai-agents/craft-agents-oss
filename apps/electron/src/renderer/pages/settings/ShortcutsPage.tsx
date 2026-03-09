@@ -42,6 +42,7 @@ const componentSpecificSections: ShortcutSection[] = [
     shortcuts: [
       { keys: ['Enter'], description: 'Focus chat input' },
       { keys: ['Right-click'], description: 'Open context menu' },
+      { keys: [isMac ? '⌥' : 'Alt', 'Click'], description: 'Add filter as excluded' },
     ],
   },
   {

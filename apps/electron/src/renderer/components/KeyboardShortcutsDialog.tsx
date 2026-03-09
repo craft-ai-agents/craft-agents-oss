@@ -41,6 +41,7 @@ const componentSpecificSections: ShortcutSection[] = [
       { keys: ['Delete'], description: 'Delete session' },
       { keys: ['R'], description: 'Rename session' },
       { keys: ['Right-click'], description: 'Open context menu' },
+      { keys: [isMac ? '⌥' : 'Alt', 'Click'], description: 'Add filter as excluded' },
     ],
   },
   {
