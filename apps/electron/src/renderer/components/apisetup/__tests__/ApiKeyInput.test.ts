@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'bun:test'
+import {
+  resolvePiAuthProviderForSubmit,
+  resolvePresetStateForBaseUrlChange,
+} from '../submit-helpers'
 import { pickTierDefaults, resolveTierModels } from '../tier-models'
 
 const MODELS = [
@@ -38,6 +42,58 @@ describe('ApiKeyInput tier hydration helpers', () => {
       best: 'pi/zai-best',
       default_: defaults.default_,
       cheap: defaults.cheap,
+    })
+  })
+})
+
+describe('resolvePiAuthProviderForSubmit', () => {
+  it('preserves the last non-custom provider when custom endpoint mode is selected', () => {
+    expect(resolvePiAuthProviderForSubmit('custom', 'openai')).toBe('openai')
+  })
+
+  it('defaults custom endpoint mode to anthropic routing when none was selected yet', () => {
+    expect(resolvePiAuthProviderForSubmit('custom', null)).toBe('anthropic')
+  })
+
+  it('passes through non-custom presets unchanged', () => {
+    expect(resolvePiAuthProviderForSubmit('google', 'anthropic')).toBe('google')
+  })
+})
+
+describe('resolvePresetStateForBaseUrlChange', () => {
+  it('updates the remembered provider when the typed URL matches a known preset', () => {
+    expect(resolvePresetStateForBaseUrlChange({
+      matchedPreset: 'openrouter',
+      activePreset: 'custom',
+      activePresetHasEmptyUrl: true,
+      lastNonCustomPreset: 'anthropic',
+    })).toEqual({
+      activePreset: 'openrouter',
+      lastNonCustomPreset: 'openrouter',
+    })
+  })
+
+  it('preserves provider routing when editing a provider with an empty default URL', () => {
+    expect(resolvePresetStateForBaseUrlChange({
+      matchedPreset: 'custom',
+      activePreset: 'azure-openai-responses',
+      activePresetHasEmptyUrl: true,
+      lastNonCustomPreset: 'azure-openai-responses',
+    })).toEqual({
+      activePreset: 'azure-openai-responses',
+      lastNonCustomPreset: 'azure-openai-responses',
+    })
+  })
+
+  it('falls back to custom while keeping the most recent matched provider', () => {
+    expect(resolvePresetStateForBaseUrlChange({
+      matchedPreset: 'custom',
+      activePreset: 'openrouter',
+      activePresetHasEmptyUrl: false,
+      lastNonCustomPreset: 'openrouter',
+    })).toEqual({
+      activePreset: 'custom',
+      lastNonCustomPreset: 'openrouter',
     })
   })
 })
