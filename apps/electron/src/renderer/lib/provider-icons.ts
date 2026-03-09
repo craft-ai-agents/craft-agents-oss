@@ -11,6 +11,7 @@ import claudeIcon from '@/assets/provider-icons/claude.svg'
 import copilotIcon from '@/assets/provider-icons/copilot.svg'
 import googleIcon from '@/assets/provider-icons/google.svg'
 import huggingfaceIcon from '@/assets/provider-icons/huggingface.svg'
+import minimaxIcon from '@/assets/provider-icons/minimax.svg'
 import mistralIcon from '@/assets/provider-icons/mistral.svg'
 import ollamaIcon from '@/assets/provider-icons/ollama.svg'
 import openaiIcon from '@/assets/provider-icons/openai.svg'
@@ -30,6 +31,7 @@ export const providerIcons = {
   copilot: copilotIcon,
   google: googleIcon,
   huggingface: huggingfaceIcon,
+  minimax: minimaxIcon,
   mistral: mistralIcon,
   ollama: ollamaIcon,
   openai: openaiIcon,
@@ -52,6 +54,7 @@ const providerDisplayNames: Record<string, string> = {
   pi: 'Craft Agents Backend',
   pi_compat: 'Craft Agents Backend',
   vercel: 'Vercel',
+  minimax: 'Minimax',
 }
 
 /** Get a human-readable provider name from provider type and optional base URL */
@@ -62,6 +65,7 @@ export function getProviderDisplayName(providerType: string, baseUrl?: string | 
     if (url.includes('openrouter.ai')) return 'OpenRouter'
     if (url.includes('ollama')) return 'Ollama'
     if (url.includes('v0.dev') || url.includes('vercel')) return 'Vercel'
+    if (url.includes('minimax.io') || url.includes('minimaxi.com')) return 'Minimax'
   }
   return providerDisplayNames[providerType] || providerType
 }
@@ -81,6 +85,7 @@ function detectProviderFromUrl(baseUrl: string): ProviderIconKey | null {
   if (url.includes('mistral.ai')) return 'mistral'
   if (url.includes('bedrock')) return 'aws'
   if (url.includes('huggingface.co')) return 'huggingface'
+  if (url.includes('minimax.io') || url.includes('minimaxi.com')) return 'minimax'
 
   return null
 }
@@ -113,6 +118,8 @@ function piAuthProviderToIcon(piAuthProvider: string): ProviderIconKey | null {
       return 'huggingface'
     case 'vercel-ai-gateway':
       return 'vercel'
+    case 'minimax':
+      return 'minimax'
     default:
       return null
   }

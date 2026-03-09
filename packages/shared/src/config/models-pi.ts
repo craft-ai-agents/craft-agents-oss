@@ -129,6 +129,7 @@ const PI_PROVIDER_DISPLAY: Partial<Record<KnownProvider, { label: string; placeh
   'vercel-ai-gateway':      { label: 'Vercel AI Gateway',  placeholder: 'Paste your key here...' },
   'huggingface':            { label: 'Hugging Face',       placeholder: 'hf_...' },
   'zai':                    { label: 'z.ai (GLM)',         placeholder: 'Paste your key here...' },
+  'minimax':                { label: 'Minimax',            placeholder: 'Paste your key here...' },
 };
 
 /**
