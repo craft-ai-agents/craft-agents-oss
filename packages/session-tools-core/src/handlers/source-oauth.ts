@@ -56,6 +56,26 @@ export async function handleSourceOAuthTrigger(
     );
   }
 
+  // Try silent refresh before triggering full re-auth popup.
+  // Uses server-side refresh (not local expiry check) so a revoked token won't block re-auth.
+  if (ctx.credentialManager) {
+    const workspaceId = basename(ctx.workspacePath) || '';
+    const loadedSource = {
+      config: source,
+      guide: null,
+      folderPath: '',
+      workspaceRootPath: ctx.workspacePath,
+      workspaceId,
+    };
+
+    const refreshedToken = await ctx.credentialManager.refresh(loadedSource);
+    if (refreshedToken) {
+      return successResponse(
+        `Token for source '${sourceSlug}' has been refreshed successfully. The source is ready — proceed with using its tools directly.`
+      );
+    }
+  }
+
   // Build auth request
   const authRequest: McpOAuthAuthRequest = {
     type: 'oauth',
