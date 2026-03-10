@@ -140,22 +140,32 @@ export function stripAllMentions(text: string): string {
 }
 
 /**
- * Resolve file and folder mentions to absolute paths.
+ * Resolve file and folder mentions to semantic markers with absolute paths.
  *
- * [file:src/index.ts]       → /Users/me/project/src/index.ts
- * [folder:src/components]   → /Users/me/project/src/components
- * [file:/tmp/test.txt]      → /tmp/test.txt  (already absolute, unchanged)
+ * [file:src/index.ts]       → [Mentioned file: index.ts (at /Users/me/project/src/index.ts)]
+ * [folder:src/components]   → [Mentioned folder: components (at /Users/me/project/src/components)]
+ * [file:/tmp/test.txt]      → [Mentioned file: test.txt (at /tmp/test.txt)]
+ *
+ * The semantic wrapper signals to the agent that the user explicitly referenced
+ * this file/folder and it should be proactively read. This matches the
+ * [Attached file: ...] pattern used by drag-and-drop attachments.
  *
  * Leaves other mention types ([skill:...], [source:...]) untouched.
  */
 export function resolveFileMentions(text: string, workingDirectory: string): string {
   return text
     .replace(/\[file:([^\]]+)\]/g, (_match, filePath: string) => {
-      if (filePath.startsWith('/') || filePath.startsWith('~')) return filePath
-      return joinPath(workingDirectory, filePath)
+      const resolved = filePath.startsWith('/') || filePath.startsWith('~')
+        ? filePath
+        : joinPath(workingDirectory, filePath)
+      const name = filePath.split('/').pop() || filePath
+      return `[Mentioned file: ${name} (at ${resolved})]`
     })
     .replace(/\[folder:([^\]]+)\]/g, (_match, folderPath: string) => {
-      if (folderPath.startsWith('/') || folderPath.startsWith('~')) return folderPath
-      return joinPath(workingDirectory, folderPath)
+      const resolved = folderPath.startsWith('/') || folderPath.startsWith('~')
+        ? folderPath
+        : joinPath(workingDirectory, folderPath)
+      const name = folderPath.split('/').pop() || folderPath
+      return `[Mentioned folder: ${name} (at ${resolved})]`
     })
 }
