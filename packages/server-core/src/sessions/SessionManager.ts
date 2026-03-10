@@ -4425,24 +4425,11 @@ export class SessionManager implements ISessionManager {
         sessionLog.warn(`Source build errors:`, errors)
       }
 
-      // Apply source servers to the agent
-      const mcpCount = Object.keys(mcpServers).length
-      const apiCount = Object.keys(apiServers).length
-      if (mcpCount > 0 || apiCount > 0 || managed.enabledSourceSlugs.length > 0) {
-        // Pass intended slugs so agent shows sources as active even if build failed
-        const intendedSlugs = sources.filter(isSourceUsable).map(s => s.config.slug)
-
-        // Sync pool first so tools are available, then apply bridge updates (which may trigger reconnect)
-        const usableSources = sources.filter(isSourceUsable)
-        await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
-        await applyBridgeUpdates(agent, sessionPath, usableSources, mcpServers, sessionId, workspaceRootPath, 'send message', managed.poolServer?.url)
-        sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
-      }
-      sendSpan.mark('servers.applied')
-
-      // Proactive OAuth token refresh before chat starts.
-      // This ensures tokens are fresh BEFORE the first API call, avoiding mid-call auth failures.
-      // Handles both MCP OAuth (Linear, Notion) and API OAuth (Gmail, Slack, Microsoft).
+      // Proactive OAuth token refresh before applying servers to agent.
+      // This ensures tokens are fresh BEFORE the agent sees source state, avoiding a race
+      // where the agent receives a stale "needs_auth" status and triggers unnecessary re-auth
+      // even though the refresh succeeds moments later.
+      let tokensRefreshed = false
       if (managed.tokenRefreshManager) {
         const refreshResult = await refreshOAuthTokensIfNeeded(
           agent,
@@ -4455,9 +4442,27 @@ export class SessionManager implements ISessionManager {
           sessionLog.warn('[OAuth] Some sources failed token refresh:', refreshResult.failedSources.map(f => f.slug))
         }
         if (refreshResult.tokensRefreshed) {
+          tokensRefreshed = true
           sendSpan.mark('oauth.refreshed')
         }
       }
+
+      // Apply source servers to the agent.
+      // If tokens were refreshed, refreshOAuthTokensIfNeeded already rebuilt servers and
+      // called setSourceServers with fresh credentials — skip the duplicate call to avoid
+      // overwriting the post-refresh state with stale build results.
+      if (!tokensRefreshed) {
+        const mcpCount = Object.keys(mcpServers).length
+        const apiCount = Object.keys(apiServers).length
+        if (mcpCount > 0 || apiCount > 0 || managed.enabledSourceSlugs.length > 0) {
+          const intendedSlugs = sources.filter(isSourceUsable).map(s => s.config.slug)
+          const usableSources = sources.filter(isSourceUsable)
+          await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
+          await applyBridgeUpdates(agent, sessionPath, usableSources, mcpServers, sessionId, workspaceRootPath, 'send message', managed.poolServer?.url)
+          sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
+        }
+      }
+      sendSpan.mark('servers.applied')
     }
 
     try {
