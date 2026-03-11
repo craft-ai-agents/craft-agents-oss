@@ -177,6 +177,8 @@ export const RPC_CHANNELS = {
     TEST_LLM_CONNECTION_SETUP: 'settings:testLlmConnectionSetup',
     GET_DEFAULT_THINKING_LEVEL: 'settings:getDefaultThinkingLevel',
     SET_DEFAULT_THINKING_LEVEL: 'settings:setDefaultThinkingLevel',
+    GET_NETWORK_PROXY: 'settings:getNetworkProxy',
+    SET_NETWORK_PROXY: 'settings:setNetworkProxy',
   },
   pi: {
     GET_API_KEY_PROVIDERS: 'pi:getApiKeyProviders',

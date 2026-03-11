@@ -98,6 +98,7 @@ import { initNotificationService, initBadgeIcon, initInstanceBadge, updateBadgeC
 import { checkForUpdatesOnLaunch, setAutoUpdateEventSink, isUpdating } from './auto-update'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import { validateGitBashPath } from '@craft-agent/server-core/services'
+import { applyConfiguredProxySettings } from './network-proxy'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -250,6 +251,8 @@ if (!gotTheLock) {
   })
 }
 
+void applyConfiguredProxySettings()
+
 // Helper to create initial windows on startup
 async function createInitialWindows(): Promise<void> {
   if (!windowManager) return
@@ -341,6 +344,8 @@ app.whenReady().then(async () => {
 
   // Register thumbnail:// protocol handler (scheme was registered earlier, before app.whenReady)
   registerThumbnailHandler()
+
+  await applyConfiguredProxySettings()
 
   // Note: electron-updater handles pending updates internally via autoInstallOnAppQuit
 

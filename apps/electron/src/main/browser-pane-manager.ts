@@ -115,7 +115,8 @@ const TOOLBAR_CHANNELS = {
   STATE_UPDATE: 'browser-toolbar:state-update',
   THEME_COLOR: 'browser-toolbar:theme-color',
 } as const
-const SESSION_PARTITION = 'persist:browser-pane'
+export const BROWSER_PANE_SESSION_PARTITION = 'persist:browser-pane'
+const SESSION_PARTITION = BROWSER_PANE_SESSION_PARTITION
 
 interface AgentControlState {
   active: boolean

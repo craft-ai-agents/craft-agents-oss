@@ -12,3 +12,10 @@ export type {
   AuthType,
   OAuthCredentials,
 } from '@craft-agent/core/types';
+
+export interface NetworkProxySettings {
+  enabled: boolean;
+  httpProxy?: string;
+  httpsProxy?: string;
+  noProxy?: string;
+}
