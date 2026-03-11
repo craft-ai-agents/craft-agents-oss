@@ -18,6 +18,7 @@ import type {
 import type { ProviderChoice } from '@/components/onboarding/ProviderSelectStep'
 import type { LocalModelSubmitData } from '@/components/onboarding/LocalModelStep'
 import type { ApiKeySubmitData } from '@/components/apisetup'
+import type { CustomEndpointConfig } from '@config/llm-connections'
 import type { SetupNeeds, LlmConnectionSetup } from '../../shared/types'
 
 interface UseOnboardingOptions {
@@ -117,6 +118,19 @@ export function resolveSlugForMethod(
 }
 
 // Map ApiSetupMethod to LlmConnectionSetup for the new unified connection system
+function isLoopbackEndpoint(baseUrl?: string): boolean {
+  if (!baseUrl?.trim()) return false
+  try {
+    const hostname = new URL(baseUrl.trim()).hostname
+    const normalizedHostname = hostname.startsWith('[') && hostname.endsWith(']')
+      ? hostname.slice(1, -1)
+      : hostname
+    return normalizedHostname === 'localhost' || normalizedHostname === '127.0.0.1' || normalizedHostname === '::1'
+  } catch {
+    return false
+  }
+}
+
 export function apiSetupMethodToConnectionSetup(
   method: ApiSetupMethod,
   options: {
@@ -126,6 +140,7 @@ export function apiSetupMethodToConnectionSetup(
     models?: string[]
     piAuthProvider?: string
     modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
+    customEndpoint?: CustomEndpointConfig
   },
   editingSlug: string | null,
   existingSlugs: Set<string>,
@@ -140,6 +155,7 @@ export function apiSetupMethodToConnectionSetup(
         baseUrl: options.baseUrl,
         defaultModel: options.connectionDefaultModel,
         models: options.models,
+        customEndpoint: options.customEndpoint,
       }
     case 'claude_oauth':
       return {
@@ -161,6 +177,7 @@ export function apiSetupMethodToConnectionSetup(
         models: options.models,
         piAuthProvider: options.piAuthProvider,
         modelSelectionMode: options.modelSelectionMode,
+        customEndpoint: options.customEndpoint,
       }
   }
 }
@@ -222,6 +239,7 @@ export function useOnboarding({
       models?: string[]
       piAuthProvider?: string
       modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
+      customEndpoint?: CustomEndpointConfig
     },
     methodOverride?: ApiSetupMethod,
     connectionSlugOverride?: string,
@@ -243,6 +261,7 @@ export function useOnboarding({
         models: options?.models,
         piAuthProvider: options?.piAuthProvider,
         modelSelectionMode: options?.modelSelectionMode,
+        customEndpoint: options?.customEndpoint,
       }, connectionSlugOverride ?? editingSlug, existingSlugs)
       // Use new unified API
       const result = await window.electronAPI.setupLlmConnection(
@@ -357,6 +376,7 @@ export function useOnboarding({
           models: data.models,
           piAuthProvider: data.piAuthProvider,
           modelSelectionMode: data.modelSelectionMode,
+          customEndpoint: data.customEndpoint,
         })
         if (saved) {
           setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
@@ -366,13 +386,12 @@ export function useOnboarding({
         return
       }
 
-      // API key validation differs by provider:
-      // - Pi flow: API key required for known providers, optional for Custom endpoints (Ollama, local)
-      // - Anthropic flow: API key required for hosted providers, optional for Ollama/local
+      // API key validation differs by endpoint locality:
+      // - Local/loopback custom endpoints may be keyless (e.g. Ollama)
+      // - Non-local endpoints require an API key
+      const isLoopbackCustomEndpoint = isLoopbackEndpoint(data.baseUrl)
       if (isPiApiKeyFlow) {
-        // Pi: API key required for known providers, optional for Custom endpoints (Ollama, local)
-        const isPiCustom = !data.piAuthProvider
-        if (!data.apiKey.trim() && !isPiCustom) {
+        if (!data.apiKey.trim() && !isLoopbackCustomEndpoint) {
           setState(s => ({
             ...s,
             credentialStatus: 'error',
@@ -381,8 +400,7 @@ export function useOnboarding({
           return
         }
       } else {
-        // Anthropic flow - key optional for custom endpoints (Ollama, local models)
-        if (!data.apiKey.trim() && !data.baseUrl) {
+        if (!data.apiKey.trim() && !isLoopbackCustomEndpoint) {
           setState(s => ({
             ...s,
             credentialStatus: 'error',
@@ -416,6 +434,7 @@ export function useOnboarding({
         models: data.models,
         piAuthProvider: data.piAuthProvider,
         modelSelectionMode: data.modelSelectionMode,
+        customEndpoint: data.customEndpoint,
       })
 
       if (saved) {

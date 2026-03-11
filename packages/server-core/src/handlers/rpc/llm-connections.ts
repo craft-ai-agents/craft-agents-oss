@@ -7,7 +7,7 @@ import {
   validateStoredBackendConnection,
 } from '@craft-agent/shared/agent/backend'
 import { getModelRefreshService } from '@craft-agent/server-core/model-fetchers'
-import { parseTestConnectionError, createBuiltInConnection, validateModelList, piAuthProviderDisplayName, validateSetupTestInput } from '@craft-agent/server-core/domain'
+import { parseTestConnectionError, createBuiltInConnection, validateModelList, piAuthProviderDisplayName, validateSetupTestInput, setupTestRequiresApiKey } from '@craft-agent/server-core/domain'
 import { getWorkspaceOrThrow, buildBackendHostRuntimeContext } from '@craft-agent/server-core/handlers'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -99,19 +99,29 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         updates.modelSelectionMode = setup.modelSelectionMode
       }
 
-      const effectiveProviderType = updates.providerType ?? connection.providerType
-      if (effectiveProviderType === 'pi') {
-        const toPiModelId = (id: string) => id.startsWith('pi/') ? id : `pi/${id}`
-        if (updates.models) {
-          updates.models = updates.models.map(m => typeof m === 'string' ? toPiModelId(m) : { ...m, id: toPiModelId(m.id) })
-        }
-        if (updates.defaultModel) {
-          updates.defaultModel = toPiModelId(updates.defaultModel)
+      const customEndpoint = hasCustomEndpoint ? setup.customEndpoint : undefined
+      const isCustomEndpointCompat = !!customEndpoint
+      if (customEndpoint) {
+        updates.customEndpoint = customEndpoint
+        // Route custom OpenAI/Anthropic-compatible endpoints through PiAgent.
+        updates.providerType = 'pi_compat'
+        updates.authType = 'api_key_with_endpoint'
+        // Keep provider hint in lockstep with selected protocol toggle.
+        updates.piAuthProvider = customEndpoint.api === 'anthropic-messages' ? 'anthropic' : 'openai'
+      } else {
+        // Endpoint removed or no protocol config: clear stale custom endpoint metadata.
+        if (setup.baseUrl !== undefined && !hasCustomEndpoint) {
+          updates.customEndpoint = undefined
+          if (connection.providerType === 'pi_compat' && connection.authType !== 'oauth') {
+            updates.providerType = 'pi'
+            updates.authType = 'api_key'
+          }
         }
       }
 
-      // Pi API key flow: set piAuthProvider from setup data (e.g. 'anthropic', 'google', 'openai')
-      if (setup.piAuthProvider) {
+      // Pi API key flow: set piAuthProvider from setup data (e.g. 'anthropic', 'google', 'openai').
+      // Skip when custom endpoint protocol is driving routing.
+      if (setup.piAuthProvider && !isCustomEndpointCompat) {
         updates.piAuthProvider = setup.piAuthProvider
         // Update connection name to show the actual provider (e.g. "Craft Agents Backend (Google AI Studio)")
         const providerName = piAuthProviderDisplayName(setup.piAuthProvider)
@@ -123,6 +133,17 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
           updates.models = getDefaultModelsForConnection('pi', setup.piAuthProvider)
           updates.defaultModel = getDefaultModelForConnection('pi', setup.piAuthProvider)
           updates.modelSelectionMode ??= 'automaticallySyncedFromProvider'
+        }
+      }
+
+      const effectiveProviderType = updates.providerType ?? connection.providerType
+      if (effectiveProviderType === 'pi') {
+        const toPiModelId = (id: string) => id.startsWith('pi/') ? id : `pi/${id}`
+        if (updates.models) {
+          updates.models = updates.models.map(m => typeof m === 'string' ? toPiModelId(m) : { ...m, id: toPiModelId(m.id) })
+        }
+        if (updates.defaultModel) {
+          updates.defaultModel = toPiModelId(updates.defaultModel)
         }
       }
 
@@ -228,9 +249,10 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   // and validate credentials via runMiniCompletion(). Same code path as actual chat.
   server.handle(RPC_CHANNELS.settings.TEST_LLM_CONNECTION_SETUP, async (_ctx, params: import('@craft-agent/shared/protocol').TestLlmConnectionParams): Promise<import('@craft-agent/shared/protocol').TestLlmConnectionResult> => {
     const { provider, apiKey, baseUrl, model, piAuthProvider } = params
-    const trimmedKey = apiKey?.trim()
+    const trimmedKey = apiKey?.trim() ?? ''
+    const allowEmptyApiKey = !setupTestRequiresApiKey(baseUrl)
 
-    if (!trimmedKey) {
+    if (!trimmedKey && !allowEmptyApiKey) {
       return { success: false, error: 'API key is required' }
     }
 
@@ -246,6 +268,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       const result = await testBackendConnection({
         provider,
         apiKey: trimmedKey,
+        allowEmptyApiKey,
         model: testModel,
         baseUrl,
         timeoutMs: 20000,

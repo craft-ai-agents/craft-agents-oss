@@ -99,6 +99,20 @@ export type LlmAuthType =
 export type ModelSelectionMode = 'automaticallySyncedFromProvider' | 'userDefined3Tier';
 
 /**
+ * Protocol for custom API endpoints.
+ * Determines which streaming adapter the Pi SDK uses for requests.
+ */
+export type CustomEndpointApi = 'openai-completions' | 'anthropic-messages';
+
+/**
+ * Custom endpoint protocol config.
+ * Set when user configures an arbitrary API endpoint (Ollama, DashScope, vLLM, etc.).
+ */
+export interface CustomEndpointConfig {
+  api: CustomEndpointApi;
+}
+
+/**
  * LLM Connection configuration.
  * Stored in config.llmConnections array.
  */
@@ -143,6 +157,13 @@ export interface LlmConnection {
    * Only relevant for 'pi' providerType connections.
    */
   piAuthProvider?: string;
+
+  /**
+   * Custom endpoint protocol config.
+   * Set when user configures an arbitrary API endpoint (Ollama, DashScope, vLLM, etc.).
+   * Determines which streaming adapter the Pi SDK uses for requests.
+   */
+  customEndpoint?: CustomEndpointConfig;
 
   // --- Cloud provider specific fields ---
 

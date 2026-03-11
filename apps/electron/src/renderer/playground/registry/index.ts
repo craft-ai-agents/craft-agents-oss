@@ -19,10 +19,12 @@ import { plannerComponents } from './planner'
 import { customShadowsComponents } from './custom-shadows'
 import { transportBannerComponents } from './transport-banner'
 import { containerTransitionsComponents } from './container-transitions'
+import { apiKeyInputComponents } from './api-key-input'
 
 export * from './types'
 
 export const componentRegistry: ComponentEntry[] = [
+  ...apiKeyInputComponents,
   ...onboardingComponents,
   ...chatComponents,
   ...turnCardComponents,

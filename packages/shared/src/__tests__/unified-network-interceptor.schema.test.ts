@@ -1,11 +1,12 @@
 import { beforeAll, describe, expect, it } from 'bun:test';
 
 let injectMetadataIntoToolSchema: typeof import('../unified-network-interceptor.ts').injectMetadataIntoToolSchema;
+let sanitizeEmptyTextCacheControl: typeof import('../unified-network-interceptor.ts').sanitizeEmptyTextCacheControl;
 
 describe('unified-network-interceptor schema metadata injection', () => {
   beforeAll(async () => {
     process.env.CRAFT_INTERCEPTOR_DISABLE_AUTO_INSTALL = '1';
-    ({ injectMetadataIntoToolSchema } = await import('../unified-network-interceptor.ts'));
+    ({ injectMetadataIntoToolSchema, sanitizeEmptyTextCacheControl } = await import('../unified-network-interceptor.ts'));
   });
 
   it('injects metadata fields into empty/zero-arg schemas', () => {
@@ -47,5 +48,70 @@ describe('unified-network-interceptor schema metadata injection', () => {
     expect(result.required).toEqual(['_displayName', '_intent']);
     expect(result.properties._displayName).toEqual({ type: 'string', description: 'custom display name schema' });
     expect(result.properties._intent).toEqual({ type: 'string', description: 'custom intent schema' });
+  });
+});
+
+describe('sanitizeEmptyTextCacheControl', () => {
+  it('strips cache_control from empty text blocks', () => {
+    const body = {
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: '', cache_control: { type: 'ephemeral' } },
+          { type: 'text', text: 'hello', cache_control: { type: 'ephemeral' } },
+        ],
+      }],
+    };
+
+    const stripped = sanitizeEmptyTextCacheControl(body);
+
+    expect(stripped).toBe(1);
+    expect((body.messages[0]!.content as any[])[0].cache_control).toBeUndefined();
+    expect((body.messages[0]!.content as any[])[1].cache_control).toEqual({ type: 'ephemeral' });
+  });
+
+  it('strips cache_control from whitespace-only text blocks', () => {
+    const body = {
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: '   \n\t  ', cache_control: { type: 'ephemeral' } },
+        ],
+      }],
+    };
+
+    const stripped = sanitizeEmptyTextCacheControl(body);
+
+    expect(stripped).toBe(1);
+    expect((body.messages[0]!.content as any[])[0].cache_control).toBeUndefined();
+  });
+
+  it('leaves non-text blocks untouched', () => {
+    const body = {
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: {}, cache_control: { type: 'ephemeral' } },
+        ],
+      }],
+    };
+
+    const stripped = sanitizeEmptyTextCacheControl(body);
+
+    expect(stripped).toBe(0);
+    expect((body.messages[0]!.content as any[])[0].cache_control).toEqual({ type: 'ephemeral' });
+  });
+
+  it('handles messages without content arrays', () => {
+    const body = {
+      messages: [{ role: 'user', content: 'plain string' }],
+    };
+
+    const stripped = sanitizeEmptyTextCacheControl(body);
+    expect(stripped).toBe(0);
+  });
+
+  it('returns 0 when no messages present', () => {
+    expect(sanitizeEmptyTextCacheControl({})).toBe(0);
   });
 });

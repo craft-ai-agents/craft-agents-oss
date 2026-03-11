@@ -394,3 +394,15 @@ describe('phase4 backend abstraction APIs', () => {
     expect(result.error).toBe('API key is required');
   });
 });
+
+describe('ClaudeAgent model switching', () => {
+  it('setModel updates getModel (regression: setModel used to write config.model but getModel reads _model)', () => {
+    const agent = createBackend(createTestConfig({ provider: 'anthropic', model: 'claude-opus-4-6' }));
+
+    expect(agent.getModel()).toBe('claude-opus-4-6');
+
+    agent.setModel('claude-sonnet-4-6');
+
+    expect(agent.getModel()).toBe('claude-sonnet-4-6');
+  });
+});

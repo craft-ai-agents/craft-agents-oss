@@ -1737,12 +1737,28 @@ function FilePreviewRenderer({
     }
 
     case 'json': {
-      // JSONPreviewOverlay expects parsed data, not a raw string
+      // JSONPreviewOverlay expects parsed data, not a raw string.
+      // @uiw/react-json-view crashes on null value, so guard against it.
       let parsedData: unknown = null
       try {
         if (state.content) parsedData = JSON.parse(state.content)
       } catch {
         // If parsing fails, fall back to showing as code
+        return (
+          <CodePreviewOverlay
+            isOpen
+            onClose={onClose}
+            filePath={state.filePath}
+            content={state.content ?? ''}
+            language="json"
+            mode="read"
+            theme={theme}
+            error={state.error}
+          />
+        )
+      }
+      // If read failed and content is empty, show raw code overlay with the read error.
+      if ((!state.content || !state.content.trim()) && state.error) {
         return (
           <CodePreviewOverlay
             isOpen

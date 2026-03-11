@@ -59,9 +59,42 @@ import { createSearchTool } from './tools/search/create-search-tool.ts';
 // Types — JSONL Protocol
 // ============================================================
 
+/** Credential union used in init and token_update messages */
+type PiCredential =
+  | { type: 'api_key'; key: string }
+  | { type: 'oauth'; access: string; refresh: string; expires: number };
+
+/** Custom endpoint protocol — determines which streaming adapter Pi SDK uses */
+type CustomEndpointApi = 'openai-completions' | 'anthropic-messages';
+
+/** Init message from main process — configures the Pi agent server */
+interface InitMessage {
+  type: 'init';
+  apiKey: string;
+  model: string;
+  cwd: string;
+  thinkingLevel: string;
+  workspaceRootPath: string;
+  sessionId: string;
+  sessionPath: string;
+  workingDirectory: string;
+  plansFolderPath: string;
+  miniModel?: string;
+  agentDir?: string;
+  providerType?: string;
+  authType?: string;
+  workspaceId?: string;
+  baseUrl?: string;
+  branchFromSdkSessionId?: string;
+  branchFromSessionPath?: string;
+  customEndpoint?: { api: CustomEndpointApi };
+  customModels?: string[];
+  piAuth?: { provider: string; credential: PiCredential };
+}
+
 /** Messages from main process (stdin) */
 type InboundMessage =
-  | { type: 'init'; apiKey: string; model: string; cwd: string; thinkingLevel: string; workspaceRootPath: string; sessionId: string; sessionPath: string; workingDirectory: string; plansFolderPath: string; miniModel?: string; agentDir?: string; providerType?: string; authType?: string; workspaceId?: string; baseUrl?: string; branchFromSdkSessionId?: string; branchFromSessionPath?: string; piAuth?: { provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } }
+  | InitMessage
   | { type: 'prompt'; id: string; message: string; systemPrompt: string; images?: Array<{ type: 'image'; data: string; mimeType: string }> }
   | { type: 'register_tools'; tools: ProxyToolDef[] }
   | { type: 'tool_execute_response'; requestId: string; result: { content: string; isError: boolean } }
@@ -74,7 +107,7 @@ type InboundMessage =
   | { type: 'compact'; id: string; customInstructions?: string }
   | { type: 'set_auto_compaction'; id: string; enabled: boolean }
   | { type: 'steer'; message: string }
-  | { type: 'token_update'; piAuth: { provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } }
+  | { type: 'token_update'; piAuth: { provider: string; credential: PiCredential } }
   | { type: 'shutdown' };
 
 /** Proxy tool definition from main process */
@@ -318,6 +351,83 @@ function setInterceptorApiHints(model: { api?: string; provider?: string; baseUr
 }
 
 /**
+ * Build a synthetic model definition for a custom endpoint.
+ * Uses reasonable defaults for context window and max tokens since we can't
+ * query the endpoint for its actual capabilities.
+ */
+function buildCustomEndpointModelDef(id: string) {
+  return {
+    id,
+    name: id,
+    reasoning: false,
+    input: ['text'] as ('text' | 'image')[],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    // Sensible defaults — actual limits depend on the model behind the endpoint.
+    // The Pi SDK uses these for context window management and output truncation.
+    contextWindow: 131_072,
+    maxTokens: 8_192,
+  };
+}
+
+/** Strip bare model IDs (remove pi/ prefix if present) */
+function stripPiPrefix(id: string): string {
+  return id.startsWith('pi/') ? id.slice(3) : id;
+}
+
+/**
+ * Resolve the API key for custom endpoint auth.
+ * Returns empty string for local endpoints (Ollama etc.) that don't need auth.
+ */
+function resolveCustomEndpointApiKey(): string {
+  if (initConfig?.piAuth?.credential?.type === 'api_key') {
+    return initConfig.piAuth.credential.key;
+  }
+  const key = initConfig?.apiKey || '';
+  if (!key && initConfig?.baseUrl && !isLocalhostUrl(initConfig.baseUrl)) {
+    debugLog('[custom-endpoint] Warning: no API key found for non-localhost endpoint — requests will likely fail');
+  }
+  return key;
+}
+
+function isLocalhostUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname;
+    const normalizedHostname = hostname.startsWith('[') && hostname.endsWith(']')
+      ? hostname.slice(1, -1)
+      : hostname;
+    return normalizedHostname === 'localhost' || normalizedHostname === '127.0.0.1' || normalizedHostname === '::1';
+  } catch {
+    return false;
+  }
+}
+
+/** Model IDs currently registered under the custom-endpoint provider */
+let customEndpointModelIds: Set<string> = new Set();
+
+/**
+ * Register (or re-register) the custom-endpoint provider with the given model IDs.
+ * Note: registerProvider replaces the entire provider, so we maintain a Set of all
+ * known model IDs and always pass the full set.
+ */
+function registerCustomEndpointModels(
+  registry: PiModelRegistry,
+  api: CustomEndpointApi,
+  baseUrl: string,
+  modelIds: string[],
+): void {
+  for (const id of modelIds) customEndpointModelIds.add(id);
+  const allIds = [...customEndpointModelIds];
+  registry.registerProvider('custom-endpoint', {
+    baseUrl,
+    apiKey: resolveCustomEndpointApiKey(),
+    api,
+    authHeader: true,
+    models: allIds.map(buildCustomEndpointModelDef),
+  });
+  debugLog(`Registered custom endpoint: ${baseUrl} with ${allIds.length} model(s) [${allIds.join(', ')}], api: ${api}`);
+}
+
+/**
  * Create an in-memory auth storage pre-loaded with the user's credentials
  * and a model registry backed by it. Used by both the main session and
  * ephemeral queryLlm sessions.
@@ -337,18 +447,28 @@ function createAuthenticatedRegistry(): {
     authStorage.set(provider, credential);
     debugLog(`Injected ${credential.type} credential for provider: ${provider}`);
   } else if (initConfig?.apiKey) {
-    const hasCustomEndpoint = !!initConfig.baseUrl?.trim();
-    if (hasCustomEndpoint) {
-      throw new Error(
-        'Custom endpoint in Craft Agents Backend mode requires explicit provider selection. ' +
-        'Use a provider preset in Pi API key mode, or use Anthropic API key mode for arbitrary compatible endpoints.'
-      );
-    }
-
     authStorage.set('anthropic', { type: 'api_key', key: initConfig.apiKey });
     debugLog('Injected API key into auth storage (legacy fallback)');
   }
-  return { authStorage, modelRegistry: new PiModelRegistry(authStorage) };
+
+  const modelRegistry = new PiModelRegistry(authStorage);
+
+  // Register custom endpoint models dynamically via Pi SDK's registerProvider API.
+  // This makes arbitrary OpenAI/Anthropic-compatible endpoints work through the Pi SDK
+  // by creating synthetic Model<Api> objects that the SDK requires.
+  const hasCustomEndpoint = !!initConfig?.baseUrl?.trim();
+  if (hasCustomEndpoint && initConfig?.customEndpoint) {
+    const { api } = initConfig.customEndpoint;
+    const modelIds = initConfig.customModels?.length
+      ? initConfig.customModels.map(stripPiPrefix)
+      : [initConfig.model || 'default'].map(stripPiPrefix);
+    customEndpointModelIds = new Set();  // Reset on fresh registry creation
+    registerCustomEndpointModels(modelRegistry, api, initConfig.baseUrl!.trim(), modelIds);
+  } else if (hasCustomEndpoint && !initConfig?.customEndpoint) {
+    debugLog('Custom endpoint without protocol config — models may not resolve. Set customEndpoint.api for proper routing.');
+  }
+
+  return { authStorage, modelRegistry };
 }
 
 async function ensureSession(): Promise<AgentSession> {
@@ -1197,7 +1317,18 @@ async function handleSetModel(msg: Extract<InboundMessage, { type: 'set_model' }
     debugLog(`[set_model] No active session or model registry, ignoring`);
     return;
   }
-  const piModel = resolvePiModel(piModelRegistry, msg.model, initConfig?.piAuth?.provider);
+  let piModel = resolvePiModel(piModelRegistry, msg.model, initConfig?.piAuth?.provider);
+
+  // For custom endpoints, dynamically register unknown models so mid-session switching works.
+  // Uses registerCustomEndpointModels which accumulates into the existing model set
+  // (registerProvider replaces, so we track all IDs and re-register the full set).
+  if (!piModel && initConfig?.baseUrl?.trim() && initConfig?.customEndpoint) {
+    const bareId = stripPiPrefix(msg.model);
+    registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint.api, initConfig.baseUrl!.trim(), [bareId]);
+    piModel = piModelRegistry.find('custom-endpoint', bareId) ?? undefined;
+    debugLog(`[set_model] Dynamically registered custom endpoint model: ${bareId}`);
+  }
+
   if (!piModel) {
     debugLog(`[set_model] Could not resolve model: ${msg.model}`);
     setInterceptorApiHints(undefined);

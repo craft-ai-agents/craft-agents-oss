@@ -2261,8 +2261,7 @@ This is a branched conversation. All prior messages in this conversation are par
   }
 
   setModel(model: string): void {
-    this.config.model = model;
-    // Note: Model change takes effect on the next query
+    super.setModel(model);
   }
 
   // ============================================================

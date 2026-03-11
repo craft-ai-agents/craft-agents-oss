@@ -135,6 +135,40 @@ function getConfiguredBaseUrl(): string {
 const FAST_MODE_BETA = 'fast-mode-2026-02-01';
 
 /**
+ * Strip cache_control from empty text blocks in API request bodies.
+ *
+ * The Claude Agent SDK's auto-mode classifier can assign cache_control to
+ * content blocks without checking whether their text is empty. The Anthropic
+ * API rejects this with "cache_control cannot be set for empty text blocks".
+ *
+ * Exported for focused unit tests.
+ */
+export function sanitizeEmptyTextCacheControl(body: Record<string, unknown>): number {
+  const messages = body.messages as Array<{ content?: Array<Record<string, unknown>> }> | undefined;
+  if (!messages) return 0;
+
+  let stripped = 0;
+  for (const message of messages) {
+    if (!Array.isArray(message.content)) continue;
+    for (const block of message.content) {
+      if (
+        block.type === 'text' &&
+        block.cache_control &&
+        (typeof block.text !== 'string' || !block.text.trim())
+      ) {
+        delete block.cache_control;
+        stripped++;
+      }
+    }
+  }
+
+  if (stripped > 0) {
+    debugLog(`[Anthropic] Stripped cache_control from ${stripped} empty text block(s)`);
+  }
+  return stripped;
+}
+
+/**
  * Check if fast mode should be enabled for this request.
  * Only activates for Opus 4.6 on Anthropic's API when the feature flag is on.
  */
@@ -473,6 +507,8 @@ const anthropicAdapter: ApiAdapter = {
   stripsSseMetadata: true,
 
   modifyRequest(_url: string, init: RequestInit, body: Record<string, unknown>): { init: RequestInit; body: Record<string, unknown> } {
+    sanitizeEmptyTextCacheControl(body);
+
     const fastMode = shouldEnableFastMode(body.model);
     if (fastMode) {
       body.speed = 'fast';

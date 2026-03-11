@@ -66,6 +66,31 @@ export function validateSetupTestInput(params: {
   return { valid: true }
 }
 
+/**
+ * Returns true when a URL points to local loopback.
+ * Used to permit keyless setup tests for local model runtimes (e.g. Ollama).
+ */
+export function isLoopbackBaseUrl(baseUrl?: string): boolean {
+  if (!baseUrl?.trim()) return false
+  try {
+    const hostname = new URL(baseUrl.trim()).hostname
+    const normalizedHostname = hostname.startsWith('[') && hostname.endsWith(']')
+      ? hostname.slice(1, -1)
+      : hostname
+    return normalizedHostname === 'localhost' || normalizedHostname === '127.0.0.1' || normalizedHostname === '::1'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Setup tests require API keys for non-local endpoints, but local loopback
+ * endpoints may be keyless.
+ */
+export function setupTestRequiresApiKey(baseUrl?: string): boolean {
+  return !isLoopbackBaseUrl(baseUrl)
+}
+
 // ============================================================
 // Built-in Connection Templates
 // ============================================================

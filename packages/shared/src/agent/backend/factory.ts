@@ -669,16 +669,19 @@ export async function testBackendConnection(args: {
   baseUrl?: string;
   hostRuntime: BackendHostRuntimeContext;
   timeoutMs?: number;
+  allowEmptyApiKey?: boolean;
   connection?: Pick<LlmConnection, 'providerType' | 'piAuthProvider'>;
 }): Promise<{ success: boolean; error?: string }> {
   const trimmedKey = args.apiKey.trim();
-  if (!trimmedKey) {
+  if (!trimmedKey && !args.allowEmptyApiKey) {
     return { success: false, error: 'API key is required' };
   }
 
   const tempSlug = `__test-${Date.now()}`;
   const cm = getCredentialManager();
-  await cm.setLlmApiKey(tempSlug, trimmedKey);
+  if (trimmedKey) {
+    await cm.setLlmApiKey(tempSlug, trimmedKey);
+  }
 
   try {
     const testModel = args.model;
