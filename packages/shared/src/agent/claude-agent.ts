@@ -1205,6 +1205,9 @@ export class ClaudeAgent extends BaseAgent {
       // Track whether we're trying to resume a session (for error handling)
       // Also covers branch fork attempts where sessionId is null but branchFromSdkSessionId is set
       const wasResuming = !_isRetry && (!!this.sessionId || !!this.branchFromSdkSessionId);
+      // Track whether this turn attempted branch-point cutoff via resumeSessionAt.
+      // Needed for targeted fallback when the parent message UUID no longer exists server-side.
+      const attemptedBranchCutoff = !_isRetry && !!this.branchFromSdkSessionId && !!this.branchFromSdkTurnId;
 
       // Log resume attempt for debugging session failures
       if (wasResuming) {
@@ -1282,6 +1285,7 @@ This is a branched conversation. All prior messages in this conversation are par
       // When SDK returns empty response (e.g., failed resume), we need to detect and recover
       let receivedAssistantContent = false;
       let suppressedSessionExpiredError = false;
+      let suppressedBranchCutoffError = false;
       try {
         for await (const message of this.currentQuery) {
           // Track if we got any text content from assistant
@@ -1412,10 +1416,24 @@ This is a branched conversation. All prior messages in this conversation are par
               continue;
             }
 
+            // Suppress resumeSessionAt branch-cutoff failures when the requested
+            // parent message UUID no longer exists server-side (e.g., compaction/TTL).
+            // We'll retry once without resumeSessionAt.
+            if (
+              attemptedBranchCutoff && wasResuming && !_isRetry &&
+              event.type === 'error' &&
+              'message' in event && typeof event.message === 'string' &&
+              event.message.includes('No message found with message.uuid')
+            ) {
+              debug('[SESSION_DEBUG] Suppressing missing-UUID branch cutoff error for fallback:', event.message);
+              suppressedBranchCutoffError = true;
+              continue;
+            }
+
             // Also suppress the complete event that follows a suppressed error —
             // recovery will produce its own completion flow.
-            if (suppressedSessionExpiredError && event.type === 'complete') {
-              debug('[SESSION_DEBUG] Suppressing complete event after session-expired error');
+            if ((suppressedSessionExpiredError || suppressedBranchCutoffError) && event.type === 'complete') {
+              debug('[SESSION_DEBUG] Suppressing complete event after suppressed resume/fork error');
               receivedComplete = true; // prevent duplicate complete emission
               continue;
             }
@@ -1425,6 +1443,16 @@ This is a branched conversation. All prior messages in this conversation are par
             }
             yield event;
           }
+        }
+
+        // Missing-UUID fallback: branch cutoff failed because resumeSessionAt target
+        // no longer exists server-side. Retry once by resuming the child session
+        // that was already established (without re-applying resumeSessionAt).
+        if (suppressedBranchCutoffError && !_isRetry && this.sessionId) {
+          debug('[SESSION_DEBUG] >>> DETECTED MISSING-UUID BRANCH CUTOFF ERROR - retrying on child session without cutoff');
+          yield { type: 'info', message: 'Branch point was compacted on server, retrying with nearest available context...' };
+          yield* this.chat(userMessage, attachments);
+          return;
         }
 
         // Detect empty response when resuming - SDK silently fails resume if session is invalid
