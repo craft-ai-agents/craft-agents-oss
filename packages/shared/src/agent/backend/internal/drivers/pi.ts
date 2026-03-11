@@ -180,7 +180,8 @@ export const piDriver: ProviderDriver = {
     try {
       const { getModels } = await import('@mariozechner/pi-ai');
       const models = getModels(piAuthProvider as Parameters<typeof getModels>[0]);
-      const match = models.find(m => m.id === args.model) || models[0];
+      const requestedId = args.model.startsWith('pi/') ? args.model.slice(3) : args.model;
+      const match = models.find(m => m.id === requestedId) || models[0];
       if (match) {
         modelApi = (match as { api?: string }).api;
         modelBaseUrl = (match as { baseUrl?: string }).baseUrl;
