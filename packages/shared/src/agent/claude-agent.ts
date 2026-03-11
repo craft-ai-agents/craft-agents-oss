@@ -1229,6 +1229,20 @@ export class ClaudeAgent extends BaseAgent {
         SDK_SLASH_COMMANDS.includes(commandName as typeof SDK_SLASH_COMMANDS[number]) &&
         !attachments?.length;
 
+      // For SDK-fork branches: prepend a one-time context hint so the model treats
+      // the parent conversation history (already in the SDK's messages via --fork-session)
+      // as part of this conversation. Without this, the model sees new session metadata
+      // and treats prior messages as "not this session."
+      // branchFromSdkSessionId is non-null only on the first message (cleared after fork/recovery).
+      let effectiveUserMessage = userMessage;
+      if (!_isRetry && this.branchFromSdkSessionId) {
+        const branchHint = `<branch_context>
+This is a branched conversation. All prior messages in this conversation are part of your shared context with the user. When the user refers to "this conversation" or asks what you discussed, include the full conversation history — not just messages after the branch point.
+</branch_context>`;
+        effectiveUserMessage = `${branchHint}\n\n${userMessage}`;
+        debug('[chat] Injected SDK-fork branch context hint into first message');
+      }
+
       // Create the query - handle slash commands, binary attachments, or regular messages
       if (isSlashCommand) {
         // Send slash commands directly to SDK without context wrapping.
@@ -1236,14 +1250,14 @@ export class ClaudeAgent extends BaseAgent {
         debug(`[chat] Detected SDK slash command: ${trimmedMessage}`);
         this.currentQuery = query({ prompt: trimmedMessage, options: optionsWithAbort });
       } else if (hasBinaryAttachments) {
-        const sdkMessage = this.buildSDKUserMessage(userMessage, attachments);
+        const sdkMessage = this.buildSDKUserMessage(effectiveUserMessage, attachments);
         async function* singleMessage(): AsyncIterable<SDKUserMessage> {
           yield sdkMessage;
         }
         this.currentQuery = query({ prompt: singleMessage(), options: optionsWithAbort });
       } else {
         // Simple string prompt for text-only messages (may include text file contents)
-        const prompt = this.buildTextPrompt(userMessage, attachments);
+        const prompt = this.buildTextPrompt(effectiveUserMessage, attachments);
         this.currentQuery = query({ prompt, options: optionsWithAbort });
       }
 
