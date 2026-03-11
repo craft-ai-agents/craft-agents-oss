@@ -2376,7 +2376,10 @@ export class ClaudeAgent extends BaseAgent {
       model: this.getModel(),
       permissionMode: 'bypassPermissions',
       allowDangerouslySkipPermissions: true,
-      tools: { type: 'preset', preset: 'claude_code' },
+      // No tools — we only need a simple text response to create real API
+      // activity. Including claude_code tools can cause the subprocess to
+      // crash if the model attempts tool use during the preflight turn.
+      tools: [],
       // Single query: fork parent and force one real model turn.
       // The model response creates genuine API activity that prevents
       // Anthropic from garbage-collecting the forked session.
