@@ -93,7 +93,7 @@ export interface ProviderDriver {
   initializeHostRuntime?: (args: DriverHostRuntimeArgs) => void;
   fetchModels?: (args: DriverFetchModelsArgs) => Promise<ModelFetchResult>;
   validateStoredConnection?: (args: DriverValidateStoredConnectionArgs) => Promise<StoredConnectionValidationResult>;
-  testConnection?: (args: DriverTestConnectionArgs) => Promise<{ success: boolean; error?: string }>;
+  testConnection?: (args: DriverTestConnectionArgs) => Promise<{ success: boolean; error?: string } | null>;
   prepareRuntime?: (args: DriverBuildArgs) => void;
   buildRuntime: (args: DriverBuildArgs) => BackendRuntimePayload;
 }

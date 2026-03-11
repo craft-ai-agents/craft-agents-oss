@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
-import type { ProviderDriver } from '../driver-types.ts';
+import type { ProviderDriver, DriverTestConnectionArgs } from '../driver-types.ts';
 import type { ModelDefinition } from '../../../../config/models.ts';
 import { getAllPiModels, getPiModelsForAuthProvider } from '../../../../config/models-pi.ts';
+import { getPiProviderBaseUrl } from '../../../../config/models-pi.ts';
 
 /**
  * Fetch models dynamically from the GitHub Copilot API using @github/copilot-sdk.
@@ -79,6 +80,51 @@ async function fetchCopilotModels(
   }));
 }
 
+/**
+ * Lightweight direct HTTP test for Pi providers that expose an Anthropic-compatible
+ * messages endpoint. Avoids spawning a full Pi subprocess (which can exceed the
+ * 20s test timeout due to SDK initialization overhead).
+ */
+async function testAnthropicCompatible(
+  apiKey: string,
+  baseUrl: string,
+  model: string,
+  timeoutMs: number,
+): Promise<{ success: boolean; error?: string }> {
+  const url = `${baseUrl.replace(/\/$/, '')}/v1/messages`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 16,
+        messages: [{ role: 'user', content: 'Say ok' }],
+      }),
+    });
+
+    if (res.ok) return { success: true };
+
+    const text = await res.text().catch(() => '');
+    return { success: false, error: `${res.status} ${text}`.slice(0, 500) };
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      return { success: false, error: 'Connection test timed out' };
+    }
+    return { success: false, error: (err as Error).message };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export const piDriver: ProviderDriver = {
   provider: 'pi',
   buildRuntime: ({ context, providerOptions, resolvedPaths }) => ({
@@ -118,6 +164,42 @@ export const piDriver: ProviderDriver = {
     }
 
     return { models };
+  },
+  testConnection: async (args: DriverTestConnectionArgs): Promise<{ success: boolean; error?: string } | null> => {
+    const piAuthProvider = args.connection?.piAuthProvider;
+    if (!piAuthProvider) {
+      // No provider hint — fall back to generic subprocess path
+      return null;
+    }
+
+    // Resolve the model's API type from the Pi SDK registry.
+    // For anthropic-messages providers, do a lightweight direct HTTP test
+    // instead of spawning a full Pi subprocess (which can exceed the timeout).
+    let modelApi: string | undefined;
+    let modelBaseUrl: string | undefined;
+    try {
+      const { getModels } = await import('@mariozechner/pi-ai');
+      const models = getModels(piAuthProvider as Parameters<typeof getModels>[0]);
+      const match = models.find(m => m.id === args.model) || models[0];
+      if (match) {
+        modelApi = (match as { api?: string }).api;
+        modelBaseUrl = (match as { baseUrl?: string }).baseUrl;
+      }
+    } catch { /* ignore — fall through to subprocess */ }
+
+    if (modelApi !== 'anthropic-messages') {
+      // Non-Anthropic API types need the full Pi SDK — let factory.ts handle it
+      return null;
+    }
+
+    const baseUrl = args.baseUrl?.trim() || modelBaseUrl || getPiProviderBaseUrl(piAuthProvider);
+    if (!baseUrl) {
+      return { success: false, error: 'Could not determine API endpoint for provider' };
+    }
+
+    // Strip Pi SDK's 'pi/' prefix — Anthropic-compatible endpoints only accept bare model IDs
+    const bareModel = args.model.startsWith('pi/') ? args.model.slice(3) : args.model;
+    return testAnthropicCompatible(args.apiKey, baseUrl, bareModel, args.timeoutMs);
   },
   validateStoredConnection: async () => ({ success: true }),
 };

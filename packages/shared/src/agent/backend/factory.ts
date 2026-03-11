@@ -722,7 +722,7 @@ export async function testBackendConnection(args: {
 
     const { driver, resolvedPaths } = resolveDriverRuntime(args.provider, args.hostRuntime);
     if (driver.testConnection) {
-      return driver.testConnection({
+      const driverResult = await driver.testConnection({
         provider: args.provider,
         apiKey: trimmedKey,
         model: testModel,
@@ -732,6 +732,8 @@ export async function testBackendConnection(args: {
         resolvedPaths,
         timeoutMs: args.timeoutMs ?? 20000,
       });
+      // null = driver declined to handle; fall through to generic subprocess test
+      if (driverResult !== null) return driverResult;
     }
 
     const cwd = homedir();

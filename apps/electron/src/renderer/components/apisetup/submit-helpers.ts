@@ -2,11 +2,12 @@ export type PresetKey = string
 
 /**
  * Preset keys that are regional variants of a canonical Pi auth provider.
- * The Pi SDK and server-side display name maps only recognize the canonical key.
+ * The Pi SDK recognizes both 'minimax' and 'minimax-cn' as separate providers
+ * with distinct base URLs (api.minimax.io vs api.minimaxi.com), so only
+ * 'minimax-global' needs aliasing — 'minimax-cn' maps 1:1 to the Pi SDK provider.
  */
 const PI_AUTH_PROVIDER_ALIASES: Record<string, string> = {
   'minimax-global': 'minimax',
-  'minimax-cn': 'minimax',
 }
 
 export function resolvePiAuthProviderForSubmit(

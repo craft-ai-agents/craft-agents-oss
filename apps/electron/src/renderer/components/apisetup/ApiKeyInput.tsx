@@ -121,6 +121,9 @@ const GOOGLE_PRESETS: Preset[] = [
   { key: 'google', label: 'Google AI Studio', url: '' },
 ]
 
+/** Presets that require the Pi SDK for authentication — hidden in Anthropic API Key mode */
+const PI_ONLY_PRESET_KEYS: ReadonlySet<string> = new Set(['minimax-global', 'minimax-cn'])
+
 const COMPAT_ANTHROPIC_DEFAULTS = 'anthropic/claude-opus-4.6, anthropic/claude-sonnet-4.6, anthropic/claude-haiku-4.5'
 const COMPAT_OPENAI_DEFAULTS = 'openai/gpt-5.2-codex, openai/gpt-5.1-codex-mini'
 const COMPAT_MINIMAX_DEFAULTS = 'MiniMax-M2.5, MiniMax-M2.5-highspeed'
@@ -130,7 +133,9 @@ function getPresetsForProvider(providerType: 'anthropic' | 'openai' | 'pi' | 'go
   if (providerType === 'pi_api_key') return ANTHROPIC_PRESETS
   if (providerType === 'google') return GOOGLE_PRESETS
   if (providerType === 'pi') return PI_PRESETS
-  return providerType === 'openai' ? OPENAI_PRESETS : ANTHROPIC_PRESETS
+  if (providerType === 'openai') return OPENAI_PRESETS
+  // Anthropic mode: exclude presets that only work via Pi SDK
+  return ANTHROPIC_PRESETS.filter(p => !PI_ONLY_PRESET_KEYS.has(p.key))
 }
 
 function getPresetForUrl(url: string, presets: Preset[]): PresetKey {

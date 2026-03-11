@@ -154,6 +154,7 @@ const PI_AUTH_PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   zai: 'z.ai',
   huggingface: 'Hugging Face',
   minimax: 'Minimax',
+  'minimax-cn': 'Minimax CN',
   'kimi-coding': 'Kimi (Coding)',
   'vercel-ai-gateway': 'Vercel AI Gateway',
 }
