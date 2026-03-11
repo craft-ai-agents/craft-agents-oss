@@ -1201,6 +1201,9 @@ export class ClaudeAgent extends BaseAgent {
       // Log resume attempt for debugging session failures
       if (wasResuming) {
         debug(`[ClaudeAgent] Attempting to resume SDK session: ${this.sessionId}`);
+        if (this.branchFromSdkSessionId) {
+          debug(`[ClaudeAgent] Branch fork: parentSdkSessionId=${this.branchFromSdkSessionId}, branchFromSdkCwd=${this.branchFromSdkCwd}, childSdkCwd=${this.config.session?.sdkCwd}`);
+        }
       } else {
         debug(`[ClaudeAgent] Starting fresh SDK session (no resume)`);
       }
