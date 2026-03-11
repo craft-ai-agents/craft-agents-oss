@@ -68,7 +68,7 @@ import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/shared/mcp'
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
 import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
-import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages } from '@craft-agent/shared/utils'
+import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
 import { loadAllSkills, loadSkillBySlug, type LoadedSkill } from '@craft-agent/shared/skills'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
@@ -2295,7 +2295,24 @@ export class SessionManager implements ISessionManager {
         throw new Error(`Failed to load newly created session ${storedSession.id} for branch copy`)
       }
 
-      branchedStored.messages = validatedBranch.sourceSession.messages.slice(0, validatedBranch.branchIdx + 1)
+      const sourceMessages = validatedBranch.sourceSession.messages.slice(0, validatedBranch.branchIdx + 1)
+
+      // Re-map embedded paths: source messages were loaded with expandSessionPath(sourceDir),
+      // so they contain absolute paths to the *source* session directory. When saved to the
+      // branch session, makeSessionPathPortable uses the *branch* dir — which won't match.
+      // Fix: replace source dir paths with branch dir paths so tokenization works on save.
+      const sourceDir = normalizePath(getSessionStoragePath(workspaceRootPath, validatedBranch.sourceSessionId))
+      const branchDir = normalizePath(getSessionStoragePath(workspaceRootPath, storedSession.id))
+      if (sourceDir !== branchDir) {
+        branchedStored.messages = sourceMessages.map(m => {
+          const json = JSON.stringify(m)
+          if (!json.includes(sourceDir)) return m
+          return JSON.parse(json.replaceAll(sourceDir, branchDir)) as StoredMessage
+        })
+      } else {
+        branchedStored.messages = sourceMessages
+      }
+
       branchedStored.branchFromMessageId = validatedBranch.sourceMessageId
       if (validatedBranch.branchContextStrategy === 'sdk-fork') {
         branchedStored.branchFromSdkSessionId = validatedBranch.branchFromSdkSessionId
