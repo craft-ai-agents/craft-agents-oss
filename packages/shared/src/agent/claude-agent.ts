@@ -396,6 +396,7 @@ export class ClaudeAgent extends BaseAgent {
   private lastAbortReason: AbortReason | null = null;
   private sessionId: string | null = null;
   private branchFromSdkSessionId: string | null = null;
+  private branchFromSdkCwd: string | null = null;
   private isHeadless: boolean = false;
   private pendingPermissions: Map<string, PendingPermission> = new Map();
   // Permission whitelists are now managed by this.permissionManager (inherited from BaseAgent)
@@ -524,6 +525,7 @@ export class ClaudeAgent extends BaseAgent {
     // Initialize branch params for SDK-level fork (resume parent + forkSession)
     if (config.session?.branchFromSdkSessionId) {
       this.branchFromSdkSessionId = config.session.branchFromSdkSessionId;
+      this.branchFromSdkCwd = config.session.branchFromSdkCwd ?? null;
     }
 
     // Initialize permission mode state with callbacks
@@ -857,8 +859,13 @@ export class ClaudeAgent extends BaseAgent {
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
         // This ensures SDK can always find session transcripts regardless of workingDirectory changes.
         // Note: workingDirectory is still used for context injection and shown to the agent.
-        cwd: this.config.session?.sdkCwd ??
-          (sessionId ? getSessionPath(this.workspaceRootPath, sessionId) : this.workspaceRootPath),
+        // For fork attempts: use the parent's sdkCwd so the SDK subprocess can find the parent's
+        // session file (stored under ~/.claude/projects/{cwd-hash}/). Without this, cross-CWD
+        // branches (e.g., worktree ↔ main repo) fail with "No conversation found".
+        cwd: (!_isRetry && this.branchFromSdkCwd && this.branchFromSdkSessionId)
+          ? this.branchFromSdkCwd
+          : (this.config.session?.sdkCwd ??
+            (sessionId ? getSessionPath(this.workspaceRootPath, sessionId) : this.workspaceRootPath)),
         includePartialMessages: true,
         // Tools configuration:
         // - Mini agents: minimal set for quick config edits (reduces token count ~70%)
@@ -1396,6 +1403,7 @@ export class ClaudeAgent extends BaseAgent {
           // SDK resume failed silently - clear session and retry with context
           this.sessionId = null;
           this.branchFromSdkSessionId = null; // prevent retry from re-attempting fork with dead parent
+          this.branchFromSdkCwd = null;
           // Notify that we're clearing the session ID (for persistence)
           this.config.onSdkSessionIdCleared?.();
           // Clear pinned state for fresh start
@@ -1403,6 +1411,8 @@ export class ClaudeAgent extends BaseAgent {
           this.preferencesDriftNotified = false;
 
           // Build recovery context from previous messages to inject into retry
+          // Skip for branch failures — the messages are already in the UI, and
+          // injecting 300+ messages as recovery context overflows the SDK.
           const recoveryContext = this.buildRecoveryContext();
           const messageWithContext = recoveryContext
             ? recoveryContext + userMessage
@@ -1581,6 +1591,7 @@ export class ClaudeAgent extends BaseAgent {
           debug('[ClaudeAgent] SDK session expired server-side, clearing and retrying fresh');
           this.sessionId = null;
           this.branchFromSdkSessionId = null; // prevent retry from re-attempting fork with dead parent
+          this.branchFromSdkCwd = null;
           this.config.onSdkSessionIdCleared?.(); // persist cleared ID to JSONL header
           // Clear pinned state so retry captures fresh values
           this.pinnedPreferencesPrompt = null;
@@ -1696,6 +1707,7 @@ export class ClaudeAgent extends BaseAgent {
           debug('[SESSION_DEBUG] >>> TAKING PATH: wasResuming fallback retry');
           this.sessionId = null;
           this.branchFromSdkSessionId = null; // prevent retry from re-attempting fork with dead parent
+          this.branchFromSdkCwd = null;
           // Clear pinned state so retry captures fresh values
           this.pinnedPreferencesPrompt = null;
           this.preferencesDriftNotified = false;

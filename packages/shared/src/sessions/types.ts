@@ -46,6 +46,7 @@ export const SESSION_PERSISTENT_FIELDS = [
   'branchFromMessageId',
   'branchFromSdkSessionId',
   'branchFromSessionPath',
+  'branchFromSdkCwd',
   // Automation origin
   'triggeredBy',
 ] as const;
@@ -172,6 +173,12 @@ export interface SessionConfig {
    * Parent session's storage path (optional, only when provider-level forking needs parent session files).
    */
   branchFromSessionPath?: string;
+  /**
+   * Parent session's sdkCwd (optional). SDK session files are stored per-CWD
+   * (`~/.claude/projects/{cwd-hash}/`), so forking requires the child subprocess
+   * to use the parent's CWD to locate the parent's session file.
+   */
+  branchFromSdkCwd?: string;
   /** Metadata for sessions created by automations */
   triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
 }
