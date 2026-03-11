@@ -26,6 +26,7 @@ jobs:
           bun run apps/cli/src/index.ts run \
             --workspace-dir .github/agents \
             --source craft-public \
+            --send-timeout 270000 \
             --output-format stream-json \
             "Read the 'Daily Team Discussion Points' document from the Craft \
              source. Extract the AI Instructions section and create a local \
@@ -41,5 +42,6 @@ jobs:
           bun run apps/cli/src/index.ts run \
             --workspace-dir .github/agents \
             --source craft-public \
+            --send-timeout 540000 \
             --output-format stream-json \
             "[skill:daily-discussion-points] Run the skill on today's daily note"
