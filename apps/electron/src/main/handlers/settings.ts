@@ -32,6 +32,8 @@ export const CORE_HANDLED_CHANNELS = [
 
 export const GUI_HANDLED_CHANNELS = [
   RPC_CHANNELS.power.SET_KEEP_AWAKE,
+  RPC_CHANNELS.settings.GET_NETWORK_PROXY,
+  RPC_CHANNELS.settings.SET_NETWORK_PROXY,
 ] as const
 
 /** @deprecated Use CORE_HANDLED_CHANNELS / GUI_HANDLED_CHANNELS */
@@ -272,5 +274,17 @@ export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps
     setKeepAwakeWhileRunning(enabled)
     // Update the power manager's cached value and power state
     setKeepAwakeSetting(enabled)
+  })
+
+  // Read network proxy settings from app config
+  server.handle(RPC_CHANNELS.settings.GET_NETWORK_PROXY, async () => {
+    const { getNetworkProxySettings } = await import('@craft-agent/shared/config/storage')
+    return getNetworkProxySettings()
+  })
+
+  // Set network proxy settings and apply immediately
+  server.handle(RPC_CHANNELS.settings.SET_NETWORK_PROXY, async (_ctx, settings) => {
+    const { updateConfiguredProxySettings } = await import('../network-proxy')
+    await updateConfiguredProxySettings(settings)
   })
 }

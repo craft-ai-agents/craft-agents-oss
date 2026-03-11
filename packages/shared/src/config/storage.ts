@@ -23,6 +23,7 @@ import { isValidThinkingLevel } from '../agent/thinking-levels.ts';
 import { parsePermissionMode, PERMISSION_MODE_ORDER } from '../agent/mode-types.ts';
 import { type ConfigDefaults } from './config-defaults-schema.ts';
 import { isValidThemeFile } from './validators.ts';
+import type { NetworkProxySettings } from './types.ts';
 
 // Re-export CONFIG_DIR for convenience (centralized in paths.ts)
 export { CONFIG_DIR } from './paths.ts';
@@ -67,6 +68,8 @@ export interface StoredConfig {
   spellCheck?: boolean;  // Enable spell check in input (default: false)
   // Power settings
   keepAwakeWhileRunning?: boolean;  // Prevent screen sleep while sessions are running (default: false)
+  // Network settings
+  networkProxy?: NetworkProxySettings;  // App-level proxy settings for Node/Electron requests
   // Tool metadata
   richToolDescriptions?: boolean;  // Add intent/action metadata to all tool calls (default: true)
   // Windows: path to Git Bash (bash.exe) for the SDK subprocess
@@ -349,6 +352,43 @@ export function setKeepAwakeWhileRunning(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.keepAwakeWhileRunning = enabled;
+  saveConfig(config);
+}
+
+function normalizeNetworkProxySettings(
+  settings?: Partial<NetworkProxySettings> | null
+): NetworkProxySettings {
+  return {
+    enabled: Boolean(settings?.enabled),
+    httpProxy: settings?.httpProxy?.trim() || undefined,
+    httpsProxy: settings?.httpsProxy?.trim() || undefined,
+    noProxy: settings?.noProxy?.trim() || undefined,
+  };
+}
+
+/**
+ * Get app-level proxy settings for Node/Electron network requests.
+ * Defaults to disabled if not configured.
+ */
+export function getNetworkProxySettings(): NetworkProxySettings {
+  const config = loadStoredConfig();
+  return normalizeNetworkProxySettings(config?.networkProxy);
+}
+
+/**
+ * Persist app-level proxy settings for Node/Electron network requests.
+ */
+export function setNetworkProxySettings(settings: NetworkProxySettings): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+
+  const normalized = normalizeNetworkProxySettings(settings);
+  if (!normalized.enabled && !normalized.httpProxy && !normalized.httpsProxy && !normalized.noProxy) {
+    delete config.networkProxy;
+  } else {
+    config.networkProxy = normalized;
+  }
+
   saveConfig(config);
 }
 
