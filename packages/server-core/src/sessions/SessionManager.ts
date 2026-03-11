@@ -3377,29 +3377,6 @@ export class SessionManager implements ISessionManager {
         return true
       }
 
-      // Wire up onOAuthRefreshRequest to verify token validity before allowing re-auth triggers
-      managed.agent.onOAuthRefreshRequest = async (sourceSlug: string): Promise<boolean> => {
-        sessionLog.debug(`[OAuth guard] Refresh check for source "${sourceSlug}" in session ${managed.id}`)
-
-        const workspaceRootPath = managed.workspace.rootPath
-        const sources = getSourcesBySlugs(workspaceRootPath, [sourceSlug])
-        if (sources.length === 0) {
-          sessionLog.debug(`[OAuth guard] Source "${sourceSlug}" not found — allowing re-auth`)
-          return false
-        }
-
-        const source = sources[0]
-        const result = await managed.tokenRefreshManager.ensureFreshToken(source)
-
-        if (result.success) {
-          sessionLog.debug(`[OAuth guard] Token valid/refreshed for "${sourceSlug}" — blocking re-auth`)
-          return true
-        }
-
-        sessionLog.debug(`[OAuth guard] Token refresh failed for "${sourceSlug}": ${result.reason} — allowing re-auth`)
-        return false
-      }
-
       // NOTE: Source reloading is now handled by ConfigWatcher callbacks
       // which detect filesystem changes and update all affected sessions.
       // See setupConfigWatcher() for the full reload logic.
