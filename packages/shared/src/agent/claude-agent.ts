@@ -1188,7 +1188,8 @@ export class ClaudeAgent extends BaseAgent {
       };
 
       // Track whether we're trying to resume a session (for error handling)
-      const wasResuming = !_isRetry && !!this.sessionId;
+      // Also covers branch fork attempts where sessionId is null but branchFromSdkSessionId is set
+      const wasResuming = !_isRetry && (!!this.sessionId || !!this.branchFromSdkSessionId);
 
       // Log resume attempt for debugging session failures
       if (wasResuming) {
@@ -1522,6 +1523,11 @@ export class ClaudeAgent extends BaseAgent {
         // The SDK's internal Claude Code process exits with code 1 for various API errors
         const isProcessError = errorMsg.includes('process exited with code');
 
+        // Include captured stderr in diagnostics (used by multiple checks below)
+        const stderrContext = this.lastStderrOutput.length > 0
+          ? this.lastStderrOutput.join('\n')
+          : undefined;
+
         // [SESSION_DEBUG] Comprehensive logging for session recovery investigation
         debug('[SESSION_DEBUG] === ERROR HANDLER ENTRY ===');
         debug('[SESSION_DEBUG] errorMsg:', errorMsg);
@@ -1533,34 +1539,37 @@ export class ClaudeAgent extends BaseAgent {
         debug('[SESSION_DEBUG] lastStderrOutput length:', this.lastStderrOutput.length);
         debug('[SESSION_DEBUG] lastStderrOutput:', this.lastStderrOutput.join('\n'));
 
+        // Check for expired session error - SDK session no longer exists server-side.
+        // This happens when sessions expire (TTL) or are cleaned up by Anthropic.
+        // Check error message, raw error, AND stderr — the SDK may propagate the error
+        // through different paths depending on version/timing.
+        const SESSION_EXPIRED_MARKER = 'No conversation found with session ID';
+        const isSessionExpired =
+          errorMsg.includes(SESSION_EXPIRED_MARKER) ||
+          (rawErrorMsg || '').includes(SESSION_EXPIRED_MARKER) ||
+          (stderrContext || '').includes(SESSION_EXPIRED_MARKER);
+        debug('[SESSION_DEBUG] isSessionExpired:', isSessionExpired);
+
+        if (isSessionExpired && wasResuming && !_isRetry) {
+          debug('[SESSION_DEBUG] >>> TAKING PATH: Session expired recovery');
+          console.error('[ClaudeAgent] SDK session expired server-side, clearing and retrying fresh');
+          debug('[ClaudeAgent] SDK session expired server-side, clearing and retrying fresh');
+          this.sessionId = null;
+          this.branchFromSdkSessionId = null; // prevent retry from re-attempting fork with dead parent
+          this.config.onSdkSessionIdCleared?.(); // persist cleared ID to JSONL header
+          // Clear pinned state so retry captures fresh values
+          this.pinnedPreferencesPrompt = null;
+          this.preferencesDriftNotified = false;
+          // Use 'info' instead of 'status' to show message without spinner
+          yield { type: 'info', message: 'Session expired, restoring context...' };
+          // Recursively call with isRetry=true (yield* delegates all events)
+          yield* this.chat(userMessage, attachments, { isRetry: true });
+          return;
+        }
+
         if (isProcessError) {
-          // Include captured stderr in diagnostics - this is often where the real error is
-          const stderrContext = this.lastStderrOutput.length > 0
-            ? this.lastStderrOutput.join('\n')
-            : undefined;
           if (stderrContext) {
             debug('[SDK process error] Captured stderr:', stderrContext);
-          }
-
-          // Check for expired session error - SDK session no longer exists server-side
-          // This happens when sessions expire (TTL) or are cleaned up by Anthropic
-          const isSessionExpired = stderrContext?.includes('No conversation found with session ID');
-          debug('[SESSION_DEBUG] isSessionExpired:', isSessionExpired);
-
-          if (isSessionExpired && wasResuming && !_isRetry) {
-            debug('[SESSION_DEBUG] >>> TAKING PATH: Session expired recovery');
-            console.error('[ClaudeAgent] SDK session expired server-side, clearing and retrying fresh');
-            debug('[ClaudeAgent] SDK session expired server-side, clearing and retrying fresh');
-            this.sessionId = null;
-            this.config.onSdkSessionIdCleared?.(); // persist cleared ID to JSONL header
-            // Clear pinned state so retry captures fresh values
-            this.pinnedPreferencesPrompt = null;
-            this.preferencesDriftNotified = false;
-            // Use 'info' instead of 'status' to show message without spinner
-            yield { type: 'info', message: 'Session expired, restoring context...' };
-            // Recursively call with isRetry=true (yield* delegates all events)
-            yield* this.chat(userMessage, attachments, { isRetry: true });
-            return;
           }
 
           // Check for Windows SDK setup error (missing .claude/skills directory)
@@ -1661,6 +1670,7 @@ export class ClaudeAgent extends BaseAgent {
         if (wasResuming && !_isRetry) {
           debug('[SESSION_DEBUG] >>> TAKING PATH: wasResuming fallback retry');
           this.sessionId = null;
+          this.branchFromSdkSessionId = null; // prevent retry from re-attempting fork with dead parent
           // Clear pinned state so retry captures fresh values
           this.pinnedPreferencesPrompt = null;
           this.preferencesDriftNotified = false;
@@ -2361,27 +2371,27 @@ export class ClaudeAgent extends BaseAgent {
       throw new Error('Claude branch preflight failed: missing parent SDK session ID');
     }
 
-    const options: Options = {
+    const forkOptions: Options = {
       ...getDefaultOptions(this.config.envOverrides),
       model: this.getModel(),
-      // We only need session initialization/fork; no assistant turn required.
-      maxTurns: 0,
-      resume: this.branchFromSdkSessionId,
-      forkSession: true,
-      // Keep behavior aligned with normal chat options (permissions are enforced via hooks there).
       permissionMode: 'bypassPermissions',
       allowDangerouslySkipPermissions: true,
       tools: { type: 'preset', preset: 'claude_code' },
+      // Single query: fork parent + compact in one step.
+      // /compact triggers context compaction, which creates real API activity
+      // and prevents the forked session from being garbage-collected.
+      maxTurns: 1,
+      resume: this.branchFromSdkSessionId,
+      forkSession: true,
     };
 
-    const BRANCH_PREFLIGHT_TIMEOUT = 15_000;
+    const BRANCH_PREFLIGHT_TIMEOUT = 60_000;
     let capturedSessionId: string | null = null;
     let preflightQuery: Query | null = null;
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
     try {
-      // Anthropic rejects whitespace-only text blocks. Use a minimal non-whitespace prompt.
-      preflightQuery = query({ prompt: '.', options });
+      preflightQuery = query({ prompt: '/compact', options: forkOptions });
 
       capturedSessionId = await Promise.race([
         (async () => {
@@ -2392,32 +2402,25 @@ export class ClaudeAgent extends BaseAgent {
         })(),
         new Promise<never>((_, reject) => {
           timeoutHandle = setTimeout(
-            () => reject(new Error('Branch preflight timed out after 15s')),
+            () => reject(new Error('Branch preflight timed out after 60s')),
             BRANCH_PREFLIGHT_TIMEOUT
           );
         }),
       ]);
+
+      if (!capturedSessionId) {
+        throw new Error('No forked session ID received from SDK');
+      }
     } catch (error) {
-      // On error/timeout: interrupt() is needed to kill the SDK subprocess
-      // and stop the detached async iterator. Race it against a 2s timeout
-      // so a stuck subprocess can't block the catch path indefinitely.
+      // On error/timeout: interrupt the query to kill the SDK subprocess.
       if (preflightQuery) {
-        // Temporarily suppress ERR_STREAM_WRITE_AFTER_END that the SDK may
-        // emit during interrupt — it has no stdin error handler (SDK bug).
-        const suppress = (err: Error & { code?: string }) => {
-          if (err.code === 'ERR_STREAM_WRITE_AFTER_END') return;
-          throw err;
-        };
-        process.prependOnceListener('uncaughtException', suppress);
         try {
           await Promise.race([
             preflightQuery.interrupt(),
             new Promise<void>(r => setTimeout(r, 2000)),
           ]);
         } catch {
-          // Best-effort cleanup — ignore errors
-        } finally {
-          process.removeListener('uncaughtException', suppress);
+          // Best-effort cleanup
         }
       }
       throw new Error(
@@ -2425,15 +2428,6 @@ export class ClaudeAgent extends BaseAgent {
       );
     } finally {
       if (timeoutHandle) clearTimeout(timeoutHandle);
-      // On SUCCESS: skip interrupt(). The query completed and will clean up
-      // naturally. Calling interrupt() here races with the SDK's internal
-      // stream teardown — if the subprocess exits between the interrupt
-      // request write and stdin.end(), the SDK emits ERR_STREAM_WRITE_AFTER_END
-      // as an uncaught exception (SDK bug: no 'error' handler on processStdin).
-    }
-
-    if (!capturedSessionId) {
-      throw new Error('Failed to establish branch context during creation: no forked session ID received');
     }
 
     this.sessionId = capturedSessionId;
