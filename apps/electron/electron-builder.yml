@@ -99,7 +99,7 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extraResources:
-    - from: node_modules/@anthropic-ai/claude-agent-sdk
+    - from: ../../node_modules/@anthropic-ai/claude-agent-sdk
       to: app/node_modules/@anthropic-ai/claude-agent-sdk
       filter:
         - "**/*"
@@ -168,7 +168,7 @@ win:
     - "!**/resources/bin/win32-x64/**"
   # Copy executables as extraResources to avoid EBUSY file locking (see comment above)
   extraResources:
-    - from: node_modules/@anthropic-ai/claude-agent-sdk
+    - from: ../../node_modules/@anthropic-ai/claude-agent-sdk
       to: app/node_modules/@anthropic-ai/claude-agent-sdk
       filter:
         - "**/*"
@@ -202,7 +202,7 @@ linux:
         - x64
   artifactName: "Craft-Agent-${arch}.${ext}"
   extraResources:
-    - from: node_modules/@anthropic-ai/claude-agent-sdk
+    - from: ../../node_modules/@anthropic-ai/claude-agent-sdk
       to: app/node_modules/@anthropic-ai/claude-agent-sdk
       filter:
         - "**/*"

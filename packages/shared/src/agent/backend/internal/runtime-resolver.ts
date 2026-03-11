@@ -134,8 +134,10 @@ function resolveCopilotCliPath(hostRuntime: BackendHostRuntimeContext): string |
 
 function resolveServerPath(hostRuntime: BackendHostRuntimeContext, serverName: string): string | undefined {
   if (hostRuntime.isPackaged) {
-    const packaged = join(hostRuntime.appRootPath, 'resources', serverName, 'index.js');
-    return existsSync(packaged) ? packaged : undefined;
+    return firstExistingPath([
+      join(hostRuntime.appRootPath, 'resources', serverName, 'index.js'),
+      join(hostRuntime.appRootPath, 'dist', 'resources', serverName, 'index.js'),
+    ]);
   }
   return resolveUpwards(
     hostRuntime.appRootPath,
@@ -230,4 +232,3 @@ export function applyAnthropicRuntimeBootstrap(
     }
   }
 }
-

@@ -8,6 +8,8 @@
  * - Available providers list
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   detectProvider,
@@ -25,6 +27,7 @@ import {
   testBackendConnection,
   validateStoredBackendConnection,
 } from '../factory.ts';
+import { resolveBackendRuntimePaths } from '../internal/runtime-resolver.ts';
 import type { BackendConfig } from '../types.ts';
 import type { Workspace, LlmConnection } from '../../../config/storage.ts';
 import type { SessionConfig as Session } from '../../../sessions/storage.ts';
@@ -289,6 +292,25 @@ describe('isValidProviderAuthCombination', () => {
 });
 
 describe('phase4 backend abstraction APIs', () => {
+  it('resolveBackendRuntimePaths finds packaged pi server under dist/resources fallback', () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'craft-runtime-'));
+
+    try {
+      const piDir = join(tempRoot, 'dist', 'resources', 'pi-agent-server');
+      mkdirSync(piDir, { recursive: true });
+      writeFileSync(join(piDir, 'index.js'), 'console.log("pi");');
+
+      const paths = resolveBackendRuntimePaths({
+        appRootPath: tempRoot,
+        isPackaged: true,
+      });
+
+      expect(paths.piServerPath).toBe(join(piDir, 'index.js'));
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it('initializeBackendHostRuntime bootstraps without throwing in dev runtime', () => {
     expect(() => initializeBackendHostRuntime({
       hostRuntime: {
