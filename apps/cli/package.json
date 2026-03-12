@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/cli",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "description": "Terminal client for Craft Agent server",
   "type": "module",
   "main": "src/index.ts",

@@ -27,6 +27,7 @@ export interface BaseEventPayload {
   sessionName?: string;
   workspaceId: string;
   timestamp: number;
+  labels?: string[];
 }
 
 /** Label events payload */

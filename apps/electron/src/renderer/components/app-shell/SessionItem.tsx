@@ -56,15 +56,16 @@ export function SessionItem({
       if (ctx.isMultiSelectActive && !isInMultiSelect && onToggleSelect) onToggleSelect()
       return
     }
-    if ((e.metaKey || e.ctrlKey)) {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey) {
+      // Cmd+Shift+Click: open session in a new panel
       e.preventDefault()
-      if (ctx.isMultiSelectActive && onToggleSelect) {
-        // Multi-select active: keep existing Cmd+Click toggle behavior
-        onToggleSelect()
-      } else {
-        // No multi-select: open session in a new panel
-        navigate(routes.view.allSessions(item.id), { newPanel: true })
-      }
+      navigate(routes.view.allSessions(item.id), { newPanel: true })
+      return
+    }
+    if ((e.metaKey || e.ctrlKey) && onToggleSelect) {
+      // Cmd+Click: always toggle multi-select (standard OS behavior)
+      e.preventDefault()
+      onToggleSelect()
       return
     }
     if (e.shiftKey && onRangeSelect) {

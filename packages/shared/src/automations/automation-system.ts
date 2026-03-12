@@ -341,8 +341,9 @@ export class AutomationSystem implements AutomationsConfigProvider {
     const emittedEvents: AppEvent[] = [];
     const timestamp = Date.now();
 
-    // Session name for all events
+    // Common fields for all events
     const sessionName = next.sessionName;
+    const labels = next.labels ?? [];
 
     // Permission mode change
     if (prev.permissionMode !== next.permissionMode) {
@@ -351,6 +352,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
         sessionName,
         workspaceId: this.options.workspaceId,
         timestamp,
+        labels,
         oldMode: prev.permissionMode ?? '',
         newMode: next.permissionMode ?? '',
       });
@@ -368,6 +370,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
           sessionName,
           workspaceId: this.options.workspaceId,
           timestamp,
+          labels: [...nextLabels],
           label,
         });
         emittedEvents.push('LabelAdd');
@@ -381,6 +384,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
           sessionName,
           workspaceId: this.options.workspaceId,
           timestamp,
+          labels: [...nextLabels],
           label,
         });
         emittedEvents.push('LabelRemove');
@@ -396,6 +400,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
         sessionName,
         workspaceId: this.options.workspaceId,
         timestamp,
+        labels,
         isFlagged,
       });
       emittedEvents.push('FlagChange');
@@ -408,6 +413,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
         sessionName,
         workspaceId: this.options.workspaceId,
         timestamp,
+        labels,
         oldState: prev.sessionStatus ?? '',
         newState: next.sessionStatus ?? '',
       });

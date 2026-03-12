@@ -80,7 +80,8 @@ function subsequenceMatch(target: string, query: string): boolean {
  *  Uses substring matching first (score 2), then subsequence matching as
  *  fallback (score 1) so queries like "appav" find "app availability.md". */
 function filterCacheResults(cache: FileSearchResult[], query: string): MentionItem[] {
-  const lowerQuery = query.toLowerCase()
+  const lowerQuery = query.trimEnd().toLowerCase()
+  if (!lowerQuery) return []
 
   const scored = cache
     .map(f => {
@@ -133,7 +134,8 @@ function getMatchScore(text: string, filter: string): number {
 
 function filterSections(sections: MentionSection[], filter: string): MentionSection[] {
   if (!filter) return sections
-  const lowerFilter = filter.toLowerCase()
+  const lowerFilter = filter.trimEnd().toLowerCase()
+  if (!lowerFilter) return sections
 
   // Collect all matching items across sections
   const allItems = sections.flatMap(section => section.items)
@@ -552,9 +554,10 @@ export function useInlineMention({
     currentInputRef.current = { value, cursorPosition }
 
     const textBeforeCursor = value.slice(0, cursorPosition)
-    // Match @ anywhere, followed by optional word chars, hyphens, slashes, and dots
-    // (dots needed for file extensions like @main.ts)
-    const atMatch = textBeforeCursor.match(/@([\w\-\/.]+)?$/)
+    // Match @ followed by up to 100 chars (word chars, hyphens, slashes, dots, and spaces).
+    // Spaces are allowed so users can type filenames with spaces (e.g. @app availability.md).
+    // The menu auto-closes when a space produces no matches (Slack-style behavior).
+    const atMatch = textBeforeCursor.match(/@([\w\-\/.\s]{0,100})?$/)
 
     // Check if this is a valid @ mention trigger
     const matchStart = atMatch ? textBeforeCursor.lastIndexOf('@') : -1
@@ -562,6 +565,29 @@ export function useInlineMention({
 
     if (isValidTrigger) {
       const filterText = atMatch[1] || ''
+
+      // Slack-style auto-close: if the query contains a space and the file cache is
+      // populated but produces zero matches, close the menu. This prevents the
+      // "infinite spaces" problem while still allowing multi-word queries like
+      // "app availability.md". Skills/sources rarely have spaces in names, so
+      // file cache is the authoritative signal here.
+      if (filterText.includes(' ') && fileCache.current.length > 0) {
+        const fileMatches = filterCacheResults(fileCache.current, filterText)
+        if (fileMatches.length === 0) {
+          setIsOpen(false)
+          setFilter('')
+          setCommittedFilter('')
+          setAtStart(-1)
+          if (fileSearchTimeout.current) {
+            clearTimeout(fileSearchTimeout.current)
+            fileSearchTimeout.current = null
+          }
+          setFileResults([])
+          fileCache.current = []
+          return
+        }
+      }
+
       setAtStart(matchStart)
       setFilter(filterText)
 
