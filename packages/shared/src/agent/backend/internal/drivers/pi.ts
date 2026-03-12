@@ -199,7 +199,11 @@ export const piDriver: ProviderDriver = {
     }
 
     // Strip Pi SDK's 'pi/' prefix — Anthropic-compatible endpoints only accept bare model IDs
-    const bareModel = args.model.startsWith('pi/') ? args.model.slice(3) : args.model;
+    let bareModel = args.model.startsWith('pi/') ? args.model.slice(3) : args.model;
+    // MiniMax CN API doesn't accept the 'MiniMax-' prefix on model names
+    if (piAuthProvider === 'minimax-cn' && bareModel.startsWith('MiniMax-')) {
+      bareModel = bareModel.slice('MiniMax-'.length);
+    }
     return testAnthropicCompatible(args.apiKey, baseUrl, bareModel, args.timeoutMs);
   },
   validateStoredConnection: async () => ({ success: true }),
