@@ -125,9 +125,10 @@ export function detectLinks(text: string): DetectedLink[] {
 
   // 1. Detect URLs and emails with linkify-it
   const urlMatches = linkify.match(text) || []
-  // linkify-it doesn't strip trailing markdown formatting chars (* _ ~),
-  // which causes broken links when URLs are wrapped in bold/italic/strikethrough
-  const trailingMarkdownRe = /[*_~]+$/
+  // linkify-it doesn't strip trailing asterisks from bold/italic markdown,
+  // which causes broken links when URLs are wrapped like **url** or *url*
+  // Note: _ and ~ are valid URL chars so we only strip *
+  const trailingMarkdownRe = /\*+$/
   for (const match of urlMatches) {
     let matchText = match.text
     let matchUrl = match.url

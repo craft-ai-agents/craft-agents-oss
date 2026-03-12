@@ -220,8 +220,8 @@ describe('detectLinks', () => {
   it('strips trailing ** from bold-wrapped URL', () => {
     const links = detectLinks('**https://github.com/org/repo/pull/42**')
     expect(links).toHaveLength(1)
-    expect(links[0].url).toBe('https://github.com/org/repo/pull/42')
-    expect(links[0].text).toBe('https://github.com/org/repo/pull/42')
+    expect(links[0]!.url).toBe('https://github.com/org/repo/pull/42')
+    expect(links[0]!.text).toBe('https://github.com/org/repo/pull/42')
   })
 
   it('detects file paths', () => {
