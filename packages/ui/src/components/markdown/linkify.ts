@@ -125,13 +125,29 @@ export function detectLinks(text: string): DetectedLink[] {
 
   // 1. Detect URLs and emails with linkify-it
   const urlMatches = linkify.match(text) || []
+  // linkify-it doesn't strip trailing asterisks from bold/italic markdown,
+  // which causes broken links when URLs are wrapped like **url** or *url*
+  // Note: _ and ~ are valid URL chars so we only strip *
+  const trailingMarkdownRe = /\*+$/
   for (const match of urlMatches) {
+    let matchText = match.text
+    let matchUrl = match.url
+    let matchEnd = match.lastIndex
+
+    const stripped = matchText.replace(trailingMarkdownRe, '')
+    if (stripped !== matchText) {
+      const diff = matchText.length - stripped.length
+      matchText = stripped
+      matchUrl = matchUrl.replace(trailingMarkdownRe, '')
+      matchEnd -= diff
+    }
+
     links.push({
       type: match.schema === 'mailto:' ? 'email' : 'url',
-      text: match.text,
-      url: match.url,
+      text: matchText,
+      url: matchUrl,
       start: match.index,
-      end: match.lastIndex
+      end: matchEnd
     })
   }
 
@@ -167,10 +183,53 @@ export function detectLinks(text: string): DetectedLink[] {
 }
 
 /**
+ * Detect placeholder/fabricated URLs that the AI generated without knowing the real URL.
+ * These are URLs like `https://github.com/...` or `https://example.com/...`
+ * that should be stripped back to inline code instead of rendered as links.
+ */
+const PLACEHOLDER_URL_PATTERN = /\/\.\.\.(?:[)/\s#?]|$)/
+
+/**
+ * Check if a URL looks like a placeholder/fabricated URL.
+ * Returns true for URLs containing path segments like `/...`
+ */
+export function isPlaceholderUrl(url: string): boolean {
+  return PLACEHOLDER_URL_PATTERN.test(url)
+}
+
+/**
+ * Strip markdown links with placeholder URLs back to plain text.
+ * Converts `[text](https://github.com/...)` → `text`
+ * Respects code blocks — links inside fenced or inline code are not touched.
+ */
+function stripPlaceholderLinks(text: string): string {
+  const codeRanges = findCodeRanges(text)
+  // Match markdown links [text](url) where url contains placeholder patterns
+  return text.replace(
+    /\[([^\[\]]*)\]\(([^)]*)\)/g,
+    (fullMatch, linkText: string, url: string, offset: number) => {
+      // Don't modify links inside code blocks
+      if (isInsideCode(offset, codeRanges)) return fullMatch
+
+      if (isPlaceholderUrl(url)) {
+        // Strip the link, keep just the display text as plain text
+        if (!linkText.trim()) return fullMatch
+        return linkText
+      }
+      return fullMatch
+    }
+  )
+}
+
+/**
  * Preprocess text to convert raw URLs and file paths into markdown links
  * Skips code blocks and already-linked content
  */
 export function preprocessLinks(text: string): string {
+  // First pass: strip markdown links with placeholder/fabricated URLs
+  // (e.g., AI-generated `[commit](https://github.com/...)` → `\`commit\``)
+  text = stripPlaceholderLinks(text)
+
   // Quick check - if no potential links, return early
   if (!linkify.pretest(text) && !FILE_PATH_PRETEST_REGEX.test(text)) {
     return text
