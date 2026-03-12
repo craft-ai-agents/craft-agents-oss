@@ -4,6 +4,12 @@
  * Parses NO_PROXY rules and determines whether a given URL should bypass the proxy.
  */
 
+/** Split a comma-separated string into trimmed, non-empty entries. */
+export function splitCommaSeparated(str: string | undefined): string[] {
+  if (!str) return [];
+  return str.split(',').map(s => s.trim()).filter(Boolean);
+}
+
 export interface NoProxyRule {
   /** Exact hostname or domain suffix (without leading dot). */
   host: string;
@@ -26,10 +32,8 @@ export interface NoProxyRule {
 export function parseNoProxyRules(noProxy: string | undefined): NoProxyRule[] {
   if (!noProxy) return [];
 
-  return noProxy
-    .split(',')
-    .map(entry => entry.trim().toLowerCase())
-    .filter(Boolean)
+  return splitCommaSeparated(noProxy)
+    .map(entry => entry.toLowerCase())
     .map(entry => {
       if (entry === '*') {
         return { host: '*', wildcard: true };

@@ -8,9 +8,10 @@
  * use AutomationActionRow instead.
  */
 
-import { MessageSquare, Webhook } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AutomationAction } from './types'
+import { ActionTypeIcon } from './ActionTypeIcon'
+import { DEFAULT_WEBHOOK_METHOD } from './constants'
 
 export interface AutomationActionPreviewProps {
   actions: AutomationAction[]
@@ -22,14 +23,10 @@ export function AutomationActionPreview({ actions, className }: AutomationAction
     <div className={cn('space-y-1', className)}>
       {actions.map((action, i) => (
         <div key={i} className="flex items-start gap-2 text-xs">
-          {action.type === 'webhook' ? (
-            <Webhook className="h-3 w-3 text-foreground/50 mt-0.5 shrink-0" />
-          ) : (
-            <MessageSquare className="h-3 w-3 text-foreground/50 mt-0.5 shrink-0" />
-          )}
+          <ActionTypeIcon type={action.type} className="h-3 w-3 mt-0.5 shrink-0" />
           <span className="text-foreground/70 break-words line-clamp-2">
             {action.type === 'webhook'
-              ? `${action.method ?? 'POST'} ${action.url}`
+              ? `${action.method ?? DEFAULT_WEBHOOK_METHOD} ${action.url}`
               : action.prompt}
           </span>
         </div>

@@ -8,6 +8,53 @@
 
 import type { WebhookAction, WebhookActionResult } from './types.ts';
 import { expandEnvVars } from './utils.ts';
+import { DEFAULT_WEBHOOK_METHOD } from './constants.ts';
+
+/**
+ * Redact a URL for safe logging. Webhook URLs may contain secrets
+ * (e.g., Slack webhook paths). Keep scheme + host, truncate long paths.
+ */
+export function redactUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.pathname.length > 20) {
+      return `${parsed.origin}${parsed.pathname.slice(0, 15)}...`;
+    }
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return url.slice(0, 30) + '...';
+  }
+}
+
+/**
+ * Create a webhook history entry for appending to the history JSONL file.
+ */
+export function createWebhookHistoryEntry(opts: {
+  matcherId: string;
+  ok: boolean;
+  method?: string;
+  url: string;
+  statusCode: number;
+  durationMs: number;
+  attempts?: number;
+  error?: string;
+  responseBody?: string;
+}): Record<string, unknown> {
+  return {
+    id: opts.matcherId,
+    ts: Date.now(),
+    ok: opts.ok,
+    webhook: {
+      method: opts.method ?? DEFAULT_WEBHOOK_METHOD,
+      url: redactUrl(opts.url),
+      statusCode: opts.statusCode,
+      durationMs: opts.durationMs,
+      ...(opts.attempts && opts.attempts > 1 ? { attempts: opts.attempts } : {}),
+      ...(opts.error ? { error: opts.error.slice(0, 200) } : {}),
+      ...(opts.responseBody ? { responseBody: opts.responseBody.slice(0, 500) } : {}),
+    },
+  };
+}
 
 /** Default fetch timeout in milliseconds (30 seconds, matching Claude Code's HTTP hook default) */
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -48,7 +95,7 @@ export async function executeWebhookRequest(
   const env = options?.env;
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
-  const method = action.method ?? 'POST';
+  const method = action.method ?? DEFAULT_WEBHOOK_METHOD;
   const url = env ? expandEnvVars(action.url, env) : action.url;
 
   // Validate URL scheme after expansion
@@ -191,7 +238,7 @@ export async function executeWebhookRequest(
  * - 4xx client errors: not retryable (bad request, auth issues, etc.)
  * - 2xx success: obviously not
  */
-function isTransientFailure(result: WebhookActionResult): boolean {
+export function isTransientFailure(result: WebhookActionResult): boolean {
   if (result.success) return false;
   // 4xx = client error, not retryable
   if (result.statusCode >= 400 && result.statusCode < 500) return false;

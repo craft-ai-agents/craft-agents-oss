@@ -15,7 +15,7 @@
 import { readFile, writeFile, appendFile } from 'fs/promises';
 import { join } from 'path';
 import { createLogger } from '../utils/debug.ts';
-import { executeWebhookRequest } from './webhook-utils.ts';
+import { executeWebhookRequest, createWebhookHistoryEntry } from './webhook-utils.ts';
 import { AUTOMATIONS_RETRY_QUEUE_FILE, AUTOMATIONS_HISTORY_FILE } from './constants.ts';
 import type { WebhookAction, WebhookActionResult } from './types.ts';
 
@@ -183,37 +183,31 @@ export class RetryScheduler {
         if (result.success) {
           // Success — write history entry and drop from queue
           log.debug(`[RetryScheduler] ${entry.id} succeeded on deferred attempt ${entry.deferredAttempt + 1}`);
-          const historyEntry = {
-            id: entry.matcherId,
-            ts: Date.now(),
+          const historyEntry = createWebhookHistoryEntry({
+            matcherId: entry.matcherId,
             ok: true,
-            webhook: {
-              method: entry.action.method ?? 'POST',
-              url: this.redactUrl(entry.expandedUrl),
-              statusCode: result.statusCode,
-              durationMs: result.durationMs ?? 0,
-              attempts: entry.deferredAttempt + 1,
-            },
-          };
+            method: entry.action.method,
+            url: entry.expandedUrl,
+            statusCode: result.statusCode,
+            durationMs: result.durationMs ?? 0,
+            attempts: entry.deferredAttempt + 1,
+          });
           appendFile(historyPath, JSON.stringify(historyEntry) + '\n', 'utf-8')
             .catch(e => log.debug(`[RetryScheduler] Failed to write history: ${e}`));
           // Don't add to remaining — drop from queue
         } else if (entry.deferredAttempt + 1 >= MAX_DEFERRED_ATTEMPTS) {
           // Final attempt failed — write permanent failure to history
           log.debug(`[RetryScheduler] ${entry.id} permanently failed after ${MAX_DEFERRED_ATTEMPTS} deferred attempts`);
-          const historyEntry = {
-            id: entry.matcherId,
-            ts: Date.now(),
+          const historyEntry = createWebhookHistoryEntry({
+            matcherId: entry.matcherId,
             ok: false,
-            webhook: {
-              method: entry.action.method ?? 'POST',
-              url: this.redactUrl(entry.expandedUrl),
-              statusCode: result.statusCode,
-              durationMs: result.durationMs ?? 0,
-              attempts: entry.deferredAttempt + 1,
-              error: (result.error ?? 'Unknown error').slice(0, 200),
-            },
-          };
+            method: entry.action.method,
+            url: entry.expandedUrl,
+            statusCode: result.statusCode,
+            durationMs: result.durationMs ?? 0,
+            attempts: entry.deferredAttempt + 1,
+            error: result.error ?? 'Unknown error',
+          });
           appendFile(historyPath, JSON.stringify(historyEntry) + '\n', 'utf-8')
             .catch(e => log.debug(`[RetryScheduler] Failed to write history: ${e}`));
           // Don't add to remaining — drop from queue
@@ -244,15 +238,4 @@ export class RetryScheduler {
     }
   }
 
-  private redactUrl(url: string): string {
-    try {
-      const parsed = new URL(url);
-      if (parsed.pathname.length > 20) {
-        return `${parsed.origin}${parsed.pathname.slice(0, 15)}...`;
-      }
-      return `${parsed.origin}${parsed.pathname}`;
-    } catch {
-      return url.slice(0, 30) + '...';
-    }
-  }
 }

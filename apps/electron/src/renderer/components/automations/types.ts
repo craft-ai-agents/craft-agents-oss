@@ -12,6 +12,7 @@
 
 import { computeNextRuns } from './utils'
 import type { PermissionMode } from '../../../shared/types'
+import { DEFAULT_WEBHOOK_METHOD } from './constants'
 
 // ============================================================================
 // Automation System Types (mirrored from packages/shared/src/automations/types.ts)
@@ -256,7 +257,7 @@ function deriveAutomationName(event: string, matcher: AutomationsConfigMatcher):
   if (!firstAction) return getEventDisplayName(event as AutomationTrigger)
 
   if (firstAction.type === 'webhook') {
-    const label = `Webhook ${firstAction.method ?? 'POST'} ${firstAction.url}`
+    const label = `Webhook ${firstAction.method ?? DEFAULT_WEBHOOK_METHOD} ${firstAction.url}`
     return label.length > 40 ? label.slice(0, 40) + '...' : label
   }
 

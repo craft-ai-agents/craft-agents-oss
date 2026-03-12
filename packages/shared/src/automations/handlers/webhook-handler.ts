@@ -13,7 +13,7 @@ import type { EventBus, BaseEventPayload } from '../event-bus.ts';
 import type { AutomationHandler, AutomationsConfigProvider } from './types.ts';
 import { APP_EVENTS, type AutomationEvent, type WebhookAction, type WebhookActionResult, type AppEvent } from '../types.ts';
 import { matcherMatches, buildWebhookEnv, expandEnvVars } from '../utils.ts';
-import { executeWithRetry } from '../webhook-utils.ts';
+import { executeWithRetry, redactUrl, isTransientFailure, createWebhookHistoryEntry } from '../webhook-utils.ts';
 import { RetryScheduler } from '../retry-scheduler.ts';
 import { AUTOMATIONS_HISTORY_FILE } from '../constants.ts';
 
@@ -38,26 +38,6 @@ export interface WebhookHandlerOptions {
 interface WebhookTask {
   action: WebhookAction;
   matcherId: string;
-}
-
-// ============================================================================
-// Utilities
-// ============================================================================
-
-/**
- * Redact a URL for safe logging. Webhook URLs may contain secrets
- * (e.g., Slack webhook paths). Keep scheme + host, truncate long paths.
- */
-function redactUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    if (parsed.pathname.length > 20) {
-      return `${parsed.origin}${parsed.pathname.slice(0, 15)}...`;
-    }
-    return `${parsed.origin}${parsed.pathname}`;
-  } catch {
-    return url.slice(0, 30) + '...';
-  }
 }
 
 // ============================================================================
@@ -244,26 +224,23 @@ export class WebhookHandler implements AutomationHandler {
       }
 
       // Write history entry for each webhook execution
-      const entry = {
-        id: task.matcherId,
-        ts: Date.now(),
+      const entry = createWebhookHistoryEntry({
+        matcherId: task.matcherId,
         ok: result.success,
-        webhook: {
-          method: task.action.method ?? 'POST',
-          url: redactUrl(result.url),
-          statusCode: result.statusCode,
-          durationMs: result.durationMs ?? 0,
-          ...(result.attempts && result.attempts > 1 ? { attempts: result.attempts } : {}),
-          ...(result.error ? { error: result.error.slice(0, 200) } : {}),
-          ...(result.responseBody ? { responseBody: result.responseBody.slice(0, 500) } : {}),
-        },
-      };
+        method: task.action.method,
+        url: result.url,
+        statusCode: result.statusCode,
+        durationMs: result.durationMs ?? 0,
+        attempts: result.attempts,
+        error: result.error,
+        responseBody: result.responseBody,
+      });
       appendFile(historyPath, JSON.stringify(entry) + '\n', 'utf-8')
         .catch(e => log.debug(`[WebhookHandler] Failed to write history: ${e}`));
 
       // Enqueue for deferred retry if it's a transient failure (5xx / timeout)
       // and immediate retries were exhausted (attempts > 1 means retries ran)
-      if (!result.success && result.statusCode !== 0 ? result.statusCode >= 500 : result.statusCode === 0) {
+      if (isTransientFailure(result)) {
         if (result.attempts && result.attempts > 1) {
           this.retryScheduler.enqueue(task.matcherId, task.action, result.url, result.error)
             .catch(e => log.debug(`[WebhookHandler] Failed to enqueue for deferred retry: ${e}`));

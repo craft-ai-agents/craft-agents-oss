@@ -951,6 +951,19 @@ export function FreeFormInput({
   // Check if running in Electron environment (has electronAPI)
   const hasElectronAPI = typeof window !== 'undefined' && !!window.electronAPI
 
+  // Shared helper: read a File, add as attachment, decrement loading count
+  const processFileAttachment = async (file: File, overrideName?: string) => {
+    try {
+      const attachment = await readFileAsAttachment(file, overrideName)
+      if (attachment) {
+        setAttachments(prev => [...prev, attachment])
+      }
+    } catch (error) {
+      console.error('[FreeFormInput] Failed to read file:', error)
+    }
+    setLoadingCount(prev => prev - 1)
+  }
+
   // File attachment handlers
   const handleAttachClick = () => {
     if (disabled) return
@@ -965,15 +978,7 @@ export function FreeFormInput({
     setLoadingCount(prev => prev + fileList.length)
 
     for (const file of fileList) {
-      try {
-        const attachment = await readFileAsAttachment(file)
-        if (attachment) {
-          setAttachments(prev => [...prev, attachment])
-        }
-      } catch (error) {
-        console.error('[FreeFormInput] Failed to attach file:', error)
-      }
-      setLoadingCount(prev => prev - 1)
+      await processFileAttachment(file)
     }
 
     // Reset input so re-selecting the same file triggers onChange again
@@ -1083,15 +1088,7 @@ export function FreeFormInput({
     })
 
     for (let i = 0; i < files.length; i++) {
-      try {
-        const attachment = await readFileAsAttachment(files[i], fileNames[i])
-        if (attachment) {
-          setAttachments(prev => [...prev, attachment])
-        }
-      } catch (error) {
-        console.error('[FreeFormInput] Failed to read pasted file:', error)
-      }
-      setLoadingCount(prev => prev - 1)
+      await processFileAttachment(files[i], fileNames[i])
     }
   }
 
@@ -1123,18 +1120,7 @@ export function FreeFormInput({
     setLoadingCount(files.length)
 
     for (const file of files) {
-      try {
-        // Always read via browser FileReader — works in both local and thin client modes.
-        // Previously tried server-side readFileAttachment first, but that fails in thin client
-        // mode because local file paths don't exist on the remote server.
-        const attachment = await readFileAsAttachment(file)
-        if (attachment) {
-          setAttachments(prev => [...prev, attachment])
-        }
-      } catch (error) {
-        console.error('[FreeFormInput] Failed to read dropped file:', error)
-      }
-      setLoadingCount(prev => prev - 1)
+      await processFileAttachment(file)
     }
   }
 
