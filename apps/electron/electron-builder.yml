@@ -200,6 +200,9 @@ linux:
     - target: AppImage
       arch:
         - x64
+    - target: dir
+      arch:
+        - x64
   artifactName: "Craft-Agent-${arch}.${ext}"
   extraResources:
     - from: node_modules/@anthropic-ai/claude-agent-sdk
