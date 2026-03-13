@@ -1143,6 +1143,25 @@ export function getValidateSteps(): ValidateStep[] {
           90_000, false, undefined, ctx.onEvent)
       },
     },
+    {
+      name: 'mcp:stitch-mcp (header-auth)',
+      fn: async (client, ctx) => {
+        if (!ctx.createdSessionId) return 'skipped (no session)'
+        const apiKey = process.env.STITCH_API_KEY
+        if (!apiKey) return 'skipped (no STITCH_API_KEY)'
+        // Inject credential into store (multi-header JSON format, same as API headerNames)
+        await client.invoke('sources:saveCredentials', ctx.workspaceId, 'stitch-mcp', JSON.stringify({ 'X-Goog-Api-Key': apiKey }))
+        // Enable stitch-mcp + existing sources on session
+        const enableSlugs = [ctx.createdSourceSlug, 'craft-public', 'stitch-mcp'].filter(Boolean) as string[]
+        await client.invoke('sessions:command', ctx.createdSessionId, {
+          type: 'setSources',
+          sourceSlugs: enableSlugs,
+        })
+        return await waitForSendEvents(client, ctx.createdSessionId,
+          `[source:stitch-mcp] List available tools from this MCP server.`,
+          90_000, false, undefined, ctx.onEvent)
+      },
+    },
     // ----- Skill lifecycle -----
     {
       name: 'send + skill create',
