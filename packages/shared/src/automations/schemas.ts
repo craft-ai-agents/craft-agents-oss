@@ -83,6 +83,34 @@ export const StateConditionSchema = z.object({
   to: z.unknown().optional(),
   contains: z.string().optional(),
   not_value: z.unknown().optional(),
+}).superRefine((data, ctx) => {
+  const hasValue = data.value !== undefined;
+  const hasFromOrTo = data.from !== undefined || data.to !== undefined;
+  const hasContains = data.contains !== undefined;
+  const hasNotValue = data.not_value !== undefined;
+
+  const operatorCount =
+    (hasValue ? 1 : 0) +
+    (hasFromOrTo ? 1 : 0) +
+    (hasContains ? 1 : 0) +
+    (hasNotValue ? 1 : 0);
+
+  if (operatorCount === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'State condition must have at least one operator (value, from/to, contains, or not_value)',
+      path: ['field'],
+    });
+    return;
+  }
+
+  if (operatorCount > 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'State condition must use exactly one operator group (value, from/to, contains, or not_value)',
+      path: ['field'],
+    });
+  }
 });
 
 export const AutomationConditionSchema: z.ZodType = z.lazy(() =>

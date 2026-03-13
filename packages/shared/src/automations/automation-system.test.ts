@@ -68,6 +68,28 @@ describe('AutomationSystem', () => {
 
       await system.dispose();
     });
+
+    it('should reject semantically invalid conditions at load time', async () => {
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: {
+          LabelAdd: [
+            {
+              conditions: [{ condition: 'time', after: '25:99' }],
+              actions: [{ type: 'prompt', prompt: 'echo hello' }],
+            },
+          ],
+        },
+      }));
+
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+
+      expect(system.getConfig()).toEqual({ automations: {} });
+
+      await system.dispose();
+    });
   });
 
   describe('reloadConfig', () => {
@@ -117,6 +139,30 @@ describe('AutomationSystem', () => {
       const result = system.reloadConfig();
       expect(result.success).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
+
+      await system.dispose();
+    });
+
+    it('should return errors for semantically invalid conditions', async () => {
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: {
+          LabelAdd: [
+            {
+              conditions: [{ condition: 'time', before: '99:00' }],
+              actions: [{ type: 'prompt', prompt: 'echo hello' }],
+            },
+          ],
+        },
+      }));
+
+      const result = system.reloadConfig();
+      expect(result.success).toBe(false);
+      expect(result.errors.some(e => e.includes('Invalid time value'))).toBe(true);
 
       await system.dispose();
     });

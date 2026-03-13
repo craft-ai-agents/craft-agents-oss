@@ -39,9 +39,14 @@ function truncate(str: string, max: number): string {
   return str.length > max ? str.slice(0, max - 1) + '…' : str
 }
 
-/** Escape characters that break Mermaid labels */
+/** Escape characters that can break Mermaid labels */
 function esc(str: string): string {
-  return str.replace(/"/g, "'").replace(/[#&;{}]/g, ' ')
+  return str
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/"/g, "'")
+    .replace(/[\[\](){}|#&;<>`\\]/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
 }
 
 function describeTimeCondition(c: { after?: string; before?: string; weekday?: string[] }): string {
@@ -245,15 +250,17 @@ export function buildFlowDiagram(automation: AutomationListItem): string | null 
     // Merge node classes
     for (const [k, v] of condState.nodeClasses) state.nodeClasses.set(k, v)
 
-    // Trigger → CONDS subgraph
-    lines.push(`    E["${triggerLabel}"] -->${matcherLabel} CONDS`)
+    lines.push(`    E["${triggerLabel}"]`)
     lines.push(`    subgraph CONDS["Conditions"]`)
     lines.push(`        direction LR`)
     lines.push(...condState.lines)
     lines.push(`    end`)
 
-    // Output gate → actions
     if (outputId) {
+      // Explicit trigger → condition-tree root path
+      lines.push(`    E -->${matcherLabel} ${outputId}`)
+
+      // Output gate → actions
       for (let i = 0; i < displayedActions.length; i++) {
         lines.push(`    ${outputId} --> ${actionIds[i]}["${esc(truncate(describeAction(displayedActions[i]), MAX_LABEL_LENGTH))}"]`)
       }

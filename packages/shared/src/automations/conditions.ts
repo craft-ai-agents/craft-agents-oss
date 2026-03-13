@@ -11,13 +11,11 @@
  */
 
 import type { AutomationCondition, TimeCondition, StateCondition, LogicalCondition } from './types.ts';
+import { MAX_CONDITION_DEPTH_EXCLUSIVE } from './conditions-constants.ts';
 
 // ============================================================================
 // Constants
 // ============================================================================
-
-/** Maximum nesting depth for logical conditions */
-const MAX_DEPTH = 8;
 
 /**
  * Maps user-facing field names to internal payload field pairs for transition events.
@@ -69,7 +67,8 @@ export function evaluateConditions(conditions: AutomationCondition[], context: C
 // ============================================================================
 
 function evaluateCondition(condition: AutomationCondition, context: ConditionContext, depth: number): boolean {
-  if (depth >= MAX_DEPTH) return false;
+  // Depth starts at 0 at top-level; allowed depth indexes are 0..MAX_CONDITION_DEPTH_EXCLUSIVE-1.
+  if (depth >= MAX_CONDITION_DEPTH_EXCLUSIVE) return false;
 
   switch (condition.condition) {
     case 'time':

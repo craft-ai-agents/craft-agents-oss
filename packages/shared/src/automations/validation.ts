@@ -18,6 +18,7 @@ import type { ModelDefinition } from '../config/models.ts';
 import { Cron } from 'croner';
 import type { ValidationResult, ValidationIssue } from '../config/validators.ts';
 import type { AutomationsConfig, AutomationsValidationResult } from './types.ts';
+import { MAX_CONDITION_DEPTH_EXCLUSIVE, CONDITION_DEPTH_WARNING_THRESHOLD } from './conditions-constants.ts';
 
 /**
  * Validate automations config (internal - returns parsed config)
@@ -25,92 +26,36 @@ import type { AutomationsConfig, AutomationsValidationResult } from './types.ts'
 export function validateAutomationsConfig(content: unknown): AutomationsValidationResult {
   const result = AutomationsConfigSchema.safeParse(content);
 
-  if (result.success) {
-    return { valid: true, errors: [], config: result.data as AutomationsConfig };
+  if (!result.success) {
+    const errors = result.error.issues.map((issue) => {
+      const path = issue.path.join('.');
+      return path ? `${path}: ${issue.message}` : issue.message;
+    });
+    return { valid: false, errors, config: null };
   }
 
-  const errors = result.error.issues.map((issue) => {
-    const path = issue.path.join('.');
-    return path ? `${path}: ${issue.message}` : issue.message;
-  });
+  const schemaConfig = result.data as AutomationsConfig;
+  const semanticErrors: ValidationIssue[] = [];
+  runMatcherSemanticValidations(schemaConfig, AUTOMATIONS_CONFIG_FILE, semanticErrors, []);
 
-  return { valid: false, errors, config: null };
+  if (semanticErrors.length > 0) {
+    const errors = semanticErrors.map((issue) => issue.path ? `${issue.path}: ${issue.message}` : issue.message);
+    return { valid: false, errors, config: null };
+  }
+
+  return { valid: true, errors: [], config: schemaConfig };
 }
 
 /**
- * Validate automations config from a JSON string (no disk reads).
- * Used by PreToolUse automation to validate before writing to disk.
- * Follows the same pattern as other config validators in validators.ts.
+ * Run semantic validation checks for matcher definitions.
+ * Shared by both object-based runtime validation and JSON-content validation.
  */
-export function validateAutomationsContent(jsonString: string, fileName?: string): ValidationResult {
-  const file = fileName ?? AUTOMATIONS_CONFIG_FILE;
-  const errors: ValidationIssue[] = [];
-  const warnings: ValidationIssue[] = [];
-
-  // Parse JSON
-  let content: unknown;
-  try {
-    content = JSON.parse(jsonString);
-  } catch (e) {
-    return {
-      valid: false,
-      errors: [{
-        file,
-        path: '',
-        message: `Invalid JSON: ${e instanceof Error ? e.message : 'Unknown error'}`,
-        severity: 'error',
-      }],
-      warnings: [],
-    };
-  }
-
-  // Validate schema
-  const result = AutomationsConfigSchema.safeParse(content);
-  if (!result.success) {
-    errors.push(...zodErrorToIssues(result.error, file));
-    return { valid: false, errors, warnings };
-  }
-
-  // Semantic validations
-  const config = result.data;
-
-  // Check for empty automations
-  const matcherCount = Object.values(config.automations).reduce(
-    (sum, matchers) => sum + (matchers?.length ?? 0),
-    0
-  );
-  if (matcherCount === 0) {
-    warnings.push({
-      file,
-      path: 'automations',
-      message: 'No automations configured',
-      severity: 'warning',
-      suggestion: 'Add automation definitions under event names like SessionStatusChange, LabelAdd, etc.',
-    });
-  }
-
-  // Check for deprecated event aliases in the raw JSON (before transform rewrites them)
-  try {
-    const rawConfig = JSON.parse(jsonString) as { automations?: Record<string, unknown> };
-    if (rawConfig.automations) {
-      for (const event of Object.keys(rawConfig.automations)) {
-        const canonical = DEPRECATED_EVENT_ALIASES[event];
-        if (canonical) {
-          warnings.push({
-            file,
-            path: `automations.${event}`,
-            message: `Event '${event}' has been renamed to '${canonical}'. The old name still works but is deprecated.`,
-            severity: 'warning',
-            suggestion: `Rename '${event}' to '${canonical}' in your config`,
-          });
-        }
-      }
-    }
-  } catch {
-    // JSON already validated above, this shouldn't happen
-  }
-
-  // Validate regex patterns, cron expressions, and timezones in matchers
+function runMatcherSemanticValidations(
+  config: AutomationsConfig,
+  file: string,
+  errors: ValidationIssue[],
+  warnings: ValidationIssue[],
+): void {
   for (const [event, matchers] of Object.entries(config.automations)) {
     if (!matchers) continue;
     for (let i = 0; i < matchers.length; i++) {
@@ -220,9 +165,9 @@ export function validateAutomationsContent(jsonString: string, fileName?: string
         warnings.push({
           file,
           path: `automations.${event}[${i}].cron`,
-          message: `Cron expressions are only used for SchedulerTick events`,
+          message: 'Cron expressions are only used for SchedulerTick events',
           severity: 'warning',
-          suggestion: `Move this automation to the SchedulerTick event or use matcher instead`,
+          suggestion: 'Move this automation to the SchedulerTick event or use matcher instead',
         });
       }
 
@@ -232,6 +177,82 @@ export function validateAutomationsContent(jsonString: string, fileName?: string
       }
     }
   }
+}
+
+/**
+ * Validate automations config from a JSON string (no disk reads).
+ * Used by PreToolUse automation to validate before writing to disk.
+ * Follows the same pattern as other config validators in validators.ts.
+ */
+export function validateAutomationsContent(jsonString: string, fileName?: string): ValidationResult {
+  const file = fileName ?? AUTOMATIONS_CONFIG_FILE;
+  const errors: ValidationIssue[] = [];
+  const warnings: ValidationIssue[] = [];
+
+  // Parse JSON
+  let content: unknown;
+  try {
+    content = JSON.parse(jsonString);
+  } catch (e) {
+    return {
+      valid: false,
+      errors: [{
+        file,
+        path: '',
+        message: `Invalid JSON: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        severity: 'error',
+      }],
+      warnings: [],
+    };
+  }
+
+  // Validate schema
+  const result = AutomationsConfigSchema.safeParse(content);
+  if (!result.success) {
+    errors.push(...zodErrorToIssues(result.error, file));
+    return { valid: false, errors, warnings };
+  }
+
+  // Semantic validations
+  const config = result.data;
+
+  // Check for empty automations
+  const matcherCount = Object.values(config.automations).reduce(
+    (sum, matchers) => sum + (matchers?.length ?? 0),
+    0
+  );
+  if (matcherCount === 0) {
+    warnings.push({
+      file,
+      path: 'automations',
+      message: 'No automations configured',
+      severity: 'warning',
+      suggestion: 'Add automation definitions under event names like SessionStatusChange, LabelAdd, etc.',
+    });
+  }
+
+  // Check for deprecated event aliases in the raw JSON (before transform rewrites them)
+  try {
+    const rawConfig = JSON.parse(jsonString) as { automations?: Record<string, unknown> };
+    if (rawConfig.automations) {
+      for (const event of Object.keys(rawConfig.automations)) {
+        const canonical = DEPRECATED_EVENT_ALIASES[event];
+        if (canonical) {
+          warnings.push({
+            file,
+            path: `automations.${event}`,
+            message: `Event '${event}' has been renamed to '${canonical}'. The old name still works but is deprecated.`,
+            severity: 'warning',
+            suggestion: `Rename '${event}' to '${canonical}' in your config`,
+          });
+        }
+      }
+    }
+  } catch {
+    // JSON already validated above, this shouldn't happen
+  }
+
+  runMatcherSemanticValidations(config, file, errors, warnings);
 
   return {
     valid: errors.length === 0,
@@ -406,7 +427,9 @@ function validateConditionsArray(
   warnings: ValidationIssue[],
   depth: number,
 ): void {
-  if (depth > 4) {
+  // Depth starts at 0 for top-level conditions; allowed depth indexes are
+  // 0..MAX_CONDITION_DEPTH_EXCLUSIVE-1.
+  if (depth > CONDITION_DEPTH_WARNING_THRESHOLD) {
     warnings.push({
       file,
       path: basePath,
@@ -414,11 +437,11 @@ function validateConditionsArray(
       severity: 'warning',
     });
   }
-  if (depth >= 8) {
+  if (depth >= MAX_CONDITION_DEPTH_EXCLUSIVE) {
     errors.push({
       file,
       path: basePath,
-      message: 'Condition nesting exceeds maximum depth of 8',
+      message: `Condition nesting exceeds maximum depth of ${MAX_CONDITION_DEPTH_EXCLUSIVE}`,
       severity: 'error',
     });
     return;
