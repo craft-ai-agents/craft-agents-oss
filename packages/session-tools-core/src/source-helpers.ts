@@ -202,12 +202,12 @@ export type { CredentialInputMode } from './types.ts';
  * @returns Effective mode to use
  */
 export function detectCredentialMode(
-  source: { api?: { headerNames?: string[] } } | null,
+  source: { api?: { headerNames?: string[] }; mcp?: { headerNames?: string[] } } | null,
   requestedMode: CredentialInputMode,
   requestedHeaderNames?: string[]
 ): CredentialInputMode {
-  // Use provided headerNames or fall back to source config
-  const effectiveHeaderNames = requestedHeaderNames || source?.api?.headerNames;
+  // Use provided headerNames or fall back to source config (API or MCP)
+  const effectiveHeaderNames = requestedHeaderNames || source?.api?.headerNames || source?.mcp?.headerNames;
 
   // If we have headerNames, always use multi-header mode
   if (effectiveHeaderNames && effectiveHeaderNames.length > 0) {
@@ -225,8 +225,8 @@ export function detectCredentialMode(
  * @returns Array of header names or undefined
  */
 export function getEffectiveHeaderNames(
-  source: { api?: { headerNames?: string[] } } | null,
+  source: { api?: { headerNames?: string[] }; mcp?: { headerNames?: string[] } } | null,
   requestedHeaderNames?: string[]
 ): string[] | undefined {
-  return requestedHeaderNames || source?.api?.headerNames;
+  return requestedHeaderNames || source?.api?.headerNames || source?.mcp?.headerNames;
 }

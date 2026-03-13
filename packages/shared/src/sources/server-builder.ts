@@ -12,7 +12,7 @@
  */
 
 import type { LoadedSource, ApiConfig } from './types.ts';
-import type { ApiCredential } from './credential-manager.ts';
+import { isMultiHeaderCredential, type ApiCredential } from './credential-manager.ts';
 import { isSourceUsable } from './storage.ts';
 import { createApiServer, type SummarizeCallback } from './api-tools.ts';
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
@@ -80,8 +80,9 @@ export class SourceServerBuilder {
    *
    * @param source - The source configuration
    * @param token - Authentication token (null for public/stdio sources)
+   * @param credential - Multi-header credential from credential store (null if not set)
    */
-  buildMcpServer(source: LoadedSource, token: string | null): McpServerConfig | null {
+  buildMcpServer(source: LoadedSource, token: string | null, credential?: ApiCredential | null): McpServerConfig | null {
     if (source.config.type !== 'mcp' || !source.config.mcp) {
       return null;
     }
@@ -115,16 +116,35 @@ export class SourceServerBuilder {
       url,
     };
 
-    // Handle authentication for HTTP/SSE
-    // Note: Direct isAuthenticated check is safe here because we're inside authType !== 'none' block
+    // Layer headers with increasing precedence:
+    // 1. Static headers from config (non-secret)
+    // 2. Credential-store headers (secret API keys via headerNames)
+    // 3. Authorization bearer token (OAuth/bearer auth — highest priority)
+    let mergedHeaders: Record<string, string> = {};
+
+    // 1. Static headers from config (e.g., X-Custom-Header: value)
+    if (mcp.headers) {
+      mergedHeaders = { ...mcp.headers };
+    }
+
+    // 2. Credential-store headers (e.g., X-API-Key from credential store)
+    if (credential && isMultiHeaderCredential(credential)) {
+      mergedHeaders = { ...mergedHeaders, ...credential };
+    }
+
+    // 3. Auth token (highest priority — OAuth/bearer overrides everything)
     if (mcp.authType !== 'none') {
       if (token) {
-        (config as { headers?: Record<string, string> }).headers = { Authorization: `Bearer ${token}` };
+        mergedHeaders = { ...mergedHeaders, Authorization: `Bearer ${token}` };
       } else if (source.config.isAuthenticated) {
         // Source claims to be authenticated but token is missing - needs re-auth
         debug(`[SourceServerBuilder] Source ${source.config.slug} needs re-authentication`);
         return null;
       }
+    }
+
+    if (Object.keys(mergedHeaders).length > 0) {
+      (config as { headers?: Record<string, string> }).headers = mergedHeaders;
     }
 
     return config;
@@ -258,7 +278,7 @@ export class SourceServerBuilder {
 
       try {
         if (source.config.type === 'mcp') {
-          const config = this.buildMcpServer(source, token ?? null);
+          const config = this.buildMcpServer(source, token ?? null, credential);
           if (config) {
             debug(`[SourceServerBuilder] Built MCP server for ${source.config.slug}`);
             mcpServers[source.config.slug] = config;

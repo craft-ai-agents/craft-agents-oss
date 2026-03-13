@@ -220,17 +220,20 @@ export class SourceCredentialManager {
    */
   async getApiCredential(source: LoadedSource): Promise<ApiCredential | null> {
     const cred = await this.load(source);
-    debug(`[SourceCredentialManager] getApiCredential for ${source.config.slug}: cred.value exists=${!!cred?.value}, headerNames=${JSON.stringify(source.config.api?.headerNames)}`);
+    // Check both API and MCP headerNames (same credential store pattern)
+    const headerNames = source.config.api?.headerNames || source.config.mcp?.headerNames;
+    debug(`[SourceCredentialManager] getApiCredential for ${source.config.slug}: cred.value exists=${!!cred?.value}, headerNames=${JSON.stringify(headerNames)}`);
     if (!cred?.value) return null;
 
     // Check for multi-header auth (JSON with header names as keys)
-    if (source.config.api?.headerNames?.length) {
+    // Works for both API sources (api.headerNames) and MCP sources (mcp.headerNames)
+    if (headerNames?.length) {
       debug(`[SourceCredentialManager] Attempting multi-header parse for ${source.config.slug}, raw value length=${cred.value.length}`);
       try {
         const parsed = JSON.parse(cred.value);
         debug(`[SourceCredentialManager] Parsed JSON keys: ${Object.keys(parsed).join(', ')}`);
         // Validate all required headers are present
-        const hasAllHeaders = source.config.api.headerNames.every((h) => h in parsed);
+        const hasAllHeaders = headerNames.every((h) => h in parsed);
         debug(`[SourceCredentialManager] hasAllHeaders=${hasAllHeaders}`);
         if (hasAllHeaders) {
           return parsed as MultiHeaderCredential;

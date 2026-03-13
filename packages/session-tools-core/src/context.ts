@@ -14,6 +14,7 @@ import type {
   GoogleService,
   SlackService,
   MicrosoftService,
+  McpSourceConfig,
 } from './types.ts';
 
 // ============================================================
@@ -336,12 +337,10 @@ export interface StdioMcpConfig {
 }
 
 /**
- * Config for HTTP/SSE MCP connection validation
+ * Config for HTTP/SSE MCP connection validation.
+ * Derived from McpSourceConfig to stay in sync automatically (DRY).
  */
-export interface HttpMcpConfig {
-  url: string;
-  authType?: string;
-}
+export type HttpMcpConfig = Required<Pick<McpSourceConfig, 'url'>> & Pick<McpSourceConfig, 'authType' | 'headers' | 'headerNames'>;
 
 /**
  * Result from stdio MCP validation

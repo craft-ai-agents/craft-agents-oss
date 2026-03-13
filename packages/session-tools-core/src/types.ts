@@ -245,6 +245,9 @@ export interface McpSourceConfig {
   command?: string;
   args?: string[];
   env?: Record<string, string>;
+  headers?: Record<string, string>;
+  /** Header names for credential-store auth (e.g., ["X-API-Key"]) */
+  headerNames?: string[];
 }
 
 /**

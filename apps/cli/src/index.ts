@@ -687,7 +687,7 @@ async function cmdValidate(args: CliArgs): Promise<void> {
   }
 
   try {
-    const exitCode = await runValidation(client, args.json, args.noSpinner)
+    const exitCode = await runValidation(client, args.json, args.noSpinner, args.workspaceDir)
     client.destroy()
     if (server) await server.stop()
     process.exit(exitCode)
@@ -763,6 +763,8 @@ export interface ValidateStep {
 }
 
 export interface ValidateContext {
+  /** Pre-existing workspace directory (from --workspace-dir) */
+  workspaceDir?: string
   workspaceId?: string
   workspaceRootPath?: string
   createdWorkspace?: boolean
@@ -960,6 +962,16 @@ export function getValidateSteps(): ValidateStep[] {
     {
       name: 'workspaces:get',
       fn: async (client, ctx) => {
+        // Register workspace from --workspace-dir if provided
+        if (ctx.workspaceDir) {
+          const { resolve } = await import('path')
+          const absPath = resolve(ctx.workspaceDir)
+          const ws = (await client.invoke('workspaces:create', absPath, 'ci-workspace')) as { id: string }
+          ctx.workspaceId = ws.id
+          ctx.workspaceRootPath = absPath
+          await client.invoke('window:switchWorkspace', ws.id)
+          return `registered: ${absPath}`
+        }
         const r = (await client.invoke('workspaces:get')) as any[]
         if (r?.length > 0) {
           ctx.workspaceId = r[0].id
@@ -1125,6 +1137,41 @@ export function getValidateSteps(): ValidateStep[] {
         })
         return await waitForSendEvents(client, ctx.createdSessionId,
           `[source:${ctx.createdSourceSlug}] Get me a cat fact`, 90_000, false, undefined, ctx.onEvent)
+      },
+    },
+    // ----- MCP source validation (pre-committed in .github/agents/sources/) -----
+    {
+      name: 'mcp:craft-public (auth:none)',
+      fn: async (client, ctx) => {
+        if (!ctx.createdSessionId) return 'skipped (no session)'
+        // Enable the pre-committed craft-public MCP source on the session
+        const enableSlugs = [ctx.createdSourceSlug, 'craft-public'].filter(Boolean) as string[]
+        await client.invoke('sessions:command', ctx.createdSessionId, {
+          type: 'setSources',
+          sourceSlugs: enableSlugs,
+        })
+        return await waitForSendEvents(client, ctx.createdSessionId,
+          `[source:craft-public] List the documents under the "CraftAgents E2E Tests" folder. Just list their names.`,
+          90_000, false, undefined, ctx.onEvent)
+      },
+    },
+    {
+      name: 'mcp:stitch-mcp (header-auth)',
+      fn: async (client, ctx) => {
+        if (!ctx.createdSessionId) return 'skipped (no session)'
+        const apiKey = process.env.STITCH_API_KEY
+        if (!apiKey) return 'skipped (no STITCH_API_KEY)'
+        // Inject credential into store (multi-header JSON format, same as API headerNames)
+        await client.invoke('sources:saveCredentials', ctx.workspaceId, 'stitch-mcp', JSON.stringify({ 'X-Goog-Api-Key': apiKey }))
+        // Enable stitch-mcp + existing sources on session
+        const enableSlugs = [ctx.createdSourceSlug, 'craft-public', 'stitch-mcp'].filter(Boolean) as string[]
+        await client.invoke('sessions:command', ctx.createdSessionId, {
+          type: 'setSources',
+          sourceSlugs: enableSlugs,
+        })
+        return await waitForSendEvents(client, ctx.createdSessionId,
+          `Use the source_test tool to test the stitch-mcp source. Report the result.`,
+          90_000, false, undefined, ctx.onEvent)
       },
     },
     // ----- Skill lifecycle -----
@@ -1407,10 +1454,10 @@ SKILLEOF`, 90_000, true, undefined, ctx.onEvent)
   ]
 }
 
-export async function runValidation(client: CliRpcClient, jsonMode: boolean, noSpinner?: boolean): Promise<number> {
+export async function runValidation(client: CliRpcClient, jsonMode: boolean, noSpinner?: boolean, workspaceDir?: string): Promise<number> {
   const steps = getValidateSteps()
   const total = steps.length
-  const ctx: ValidateContext = {}
+  const ctx: ValidateContext = { workspaceDir }
   let passed = 0
   let failed = 0
   const results: Array<{ step: string; status: string; detail: string; elapsed: number }> = []

@@ -626,7 +626,7 @@ async function testApiConnectionBasic(
 async function testMcpConnection(
   ctx: SessionToolContext,
   source: SourceConfig,
-  _sourceSlug: string
+  sourceSlug: string
 ): Promise<{ lines: string[]; success: boolean; hasError: boolean; error?: string }> {
   const lines: string[] = [];
   let success = false;
@@ -688,9 +688,30 @@ async function testMcpConnection(
     if (ctx.validateMcpConnection) {
       lines.push(`ℹ Testing MCP server: ${source.mcp.url}`);
       try {
+        // Merge static headers with credential-store headers (if headerNames configured)
+        let headers = source.mcp.headers ? { ...source.mcp.headers } : undefined;
+        if (source.mcp.headerNames?.length && ctx.credentialManager) {
+          const workspaceId = basename(ctx.workspacePath) || '';
+          const loadedSource = {
+            config: source,
+            folderPath: getSourcePath(ctx.workspacePath, sourceSlug),
+            workspaceRootPath: ctx.workspacePath,
+            workspaceId,
+          };
+          try {
+            const rawCred = await ctx.credentialManager.getToken(loadedSource);
+            if (rawCred) {
+              const parsed = JSON.parse(rawCred) as Record<string, string>;
+              headers = { ...headers, ...parsed };
+            }
+          } catch {
+            // Not JSON or no credential — continue without credential headers
+          }
+        }
         const result = await ctx.validateMcpConnection({
           url: source.mcp.url,
           authType: source.mcp.authType,
+          headers,
         });
         if (result.success) {
           success = true;
