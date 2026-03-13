@@ -691,6 +691,7 @@ async function testMcpConnection(
         const result = await ctx.validateMcpConnection({
           url: source.mcp.url,
           authType: source.mcp.authType,
+          headers: source.mcp.headers,
         });
         if (result.success) {
           success = true;

@@ -115,11 +115,18 @@ export class SourceServerBuilder {
       url,
     };
 
-    // Handle authentication for HTTP/SSE
-    // Note: Direct isAuthenticated check is safe here because we're inside authType !== 'none' block
+    // Custom headers from config (e.g., X-Api-Key, X-Goog-Api-Key)
+    if (mcp.headers) {
+      (config as { headers?: Record<string, string> }).headers = { ...mcp.headers };
+    }
+
+    // Auth headers override custom headers (auth takes precedence)
     if (mcp.authType !== 'none') {
       if (token) {
-        (config as { headers?: Record<string, string> }).headers = { Authorization: `Bearer ${token}` };
+        (config as { headers?: Record<string, string> }).headers = {
+          ...(config as { headers?: Record<string, string> }).headers,
+          Authorization: `Bearer ${token}`,
+        };
       } else if (source.config.isAuthenticated) {
         // Source claims to be authenticated but token is missing - needs re-auth
         debug(`[SourceServerBuilder] Source ${source.config.slug} needs re-authentication`);

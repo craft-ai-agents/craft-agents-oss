@@ -249,6 +249,13 @@ export interface McpSourceConfig {
    * Environment variables for the spawned process.
    */
   env?: Record<string, string>;
+
+  // === HTTP/SSE custom headers ===
+  /**
+   * Custom headers to include in every MCP request.
+   * Auth headers (e.g. Authorization) are merged on top when authType is set.
+   */
+  headers?: Record<string, string>;
 }
 
 /**

@@ -245,6 +245,7 @@ export interface McpSourceConfig {
   command?: string;
   args?: string[];
   env?: Record<string, string>;
+  headers?: Record<string, string>;
 }
 
 /**

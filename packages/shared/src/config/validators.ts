@@ -376,6 +376,8 @@ const McpSourceConfigSchema = z.object({
   command: z.string().optional(),
   args: z.array(z.string()).optional(),
   env: z.record(z.string(), z.string()).optional(),
+  // Custom headers for HTTP/SSE transport (e.g., API keys, custom auth)
+  headers: z.record(z.string(), z.string()).optional(),
 }).refine(
   (data) => {
     if (data.transport === 'stdio') {
