@@ -61,6 +61,45 @@ export const ActionDefinitionSchema = z.union([
   z.object({ type: z.string() }).passthrough(),
 ]);
 
+// ============================================================================
+// Condition Schemas
+// ============================================================================
+
+const VALID_WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+
+export const TimeConditionSchema = z.object({
+  condition: z.literal('time'),
+  after: z.string().regex(/^\d{2}:\d{2}$/, 'Must be HH:MM format').optional(),
+  before: z.string().regex(/^\d{2}:\d{2}$/, 'Must be HH:MM format').optional(),
+  weekday: z.array(z.enum(VALID_WEEKDAYS)).optional(),
+  timezone: z.string().optional(),
+});
+
+export const StateConditionSchema = z.object({
+  condition: z.literal('state'),
+  field: z.string().min(1, 'Field name cannot be empty'),
+  value: z.unknown().optional(),
+  from: z.unknown().optional(),
+  to: z.unknown().optional(),
+  contains: z.string().optional(),
+  not_value: z.unknown().optional(),
+});
+
+export const AutomationConditionSchema: z.ZodType = z.lazy(() =>
+  z.discriminatedUnion('condition', [
+    TimeConditionSchema,
+    StateConditionSchema,
+    z.object({
+      condition: z.enum(['and', 'or', 'not']),
+      conditions: z.array(AutomationConditionSchema).min(1, 'Logical condition must have at least one sub-condition'),
+    }),
+  ])
+);
+
+// ============================================================================
+// Matcher Schema
+// ============================================================================
+
 export const AutomationMatcherSchema = z.object({
   id: z.string().optional(),
   name: z.string().optional(),
@@ -70,6 +109,7 @@ export const AutomationMatcherSchema = z.object({
   permissionMode: z.enum(['safe', 'ask', 'allow-all']).optional(),
   labels: z.array(z.string()).optional(),
   enabled: z.boolean().optional(),
+  conditions: z.array(AutomationConditionSchema).optional(),
   actions: z.array(ActionDefinitionSchema).min(1, 'At least one action required'),
 });
 

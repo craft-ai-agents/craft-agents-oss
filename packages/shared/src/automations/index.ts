@@ -38,6 +38,10 @@ export type {
   SdkAutomationCallback,
   SdkAutomationCallbackMatcher,
   SessionMetadataSnapshot,
+  TimeCondition,
+  StateCondition,
+  LogicalCondition,
+  AutomationCondition,
 } from './types.ts';
 
 export { APP_EVENTS, AGENT_EVENTS } from './types.ts';
@@ -72,7 +76,10 @@ export { parsePromptReferences } from './utils.ts';
 export { AutomationEventLogger, type LoggedAutomationEvent, type LoggedAutomationEventInput } from './event-logger.ts';
 
 // Schemas
-export { AutomationsConfigSchema, zodErrorToIssues, VALID_EVENTS } from './schemas.ts';
+export { AutomationsConfigSchema, AutomationConditionSchema, TimeConditionSchema, StateConditionSchema, zodErrorToIssues, VALID_EVENTS } from './schemas.ts';
+
+// Condition evaluator
+export { evaluateConditions, type ConditionContext } from './conditions.ts';
 
 // Security utilities
 export { sanitizeForShell } from './security.ts';

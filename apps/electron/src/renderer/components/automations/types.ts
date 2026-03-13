@@ -75,6 +75,35 @@ export interface WebhookAction {
 export type AutomationAction = PromptAction | WebhookAction
 
 // ============================================================================
+// Conditions (mirrored from packages/shared/src/automations/types.ts)
+// ============================================================================
+
+export interface TimeConditionUI {
+  condition: 'time'
+  after?: string
+  before?: string
+  weekday?: string[]
+  timezone?: string
+}
+
+export interface StateConditionUI {
+  condition: 'state'
+  field: string
+  value?: unknown
+  from?: unknown
+  to?: unknown
+  contains?: string
+  not_value?: unknown
+}
+
+export interface LogicalConditionUI {
+  condition: 'and' | 'or' | 'not'
+  conditions: AutomationConditionUI[]
+}
+
+export type AutomationConditionUI = TimeConditionUI | StateConditionUI | LogicalConditionUI
+
+// ============================================================================
 // List Item (flattened from automations.json for display)
 // ============================================================================
 
@@ -101,6 +130,8 @@ export interface AutomationListItem {
   permissionMode?: PermissionMode
   /** Labels for prompt sessions */
   labels?: string[]
+  /** Conditions that must pass before actions run */
+  conditions?: AutomationConditionUI[]
   /** The actions this automation performs */
   actions: AutomationAction[]
   /** Timestamp of last execution (ms since epoch) */
@@ -257,6 +288,7 @@ interface AutomationsConfigMatcher {
   timezone?: string
   permissionMode?: PermissionMode
   labels?: string[]
+  conditions?: AutomationConditionUI[]
   enabled?: boolean
   actions?: RawAction[]
 }
@@ -345,6 +377,7 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
         timezone: matcher.timezone,
         permissionMode: matcher.permissionMode,
         labels: matcher.labels,
+        conditions: matcher.conditions,
         actions,
       })
       index++

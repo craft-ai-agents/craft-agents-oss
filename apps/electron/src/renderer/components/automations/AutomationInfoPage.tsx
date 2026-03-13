@@ -25,6 +25,7 @@ import { AutomationEventTimeline } from './AutomationEventTimeline'
 import { PhaseBadge } from './PhaseBadge'
 import { getEventDisplayName, getPermissionDisplayName, type AutomationListItem, type ExecutionEntry, type TestResult } from './types'
 import { describeCron, computeNextRuns } from './utils'
+import { buildFlowDiagram } from './buildFlowDiagram'
 
 // ============================================================================
 // Component
@@ -55,6 +56,7 @@ export function AutomationInfoPage({
 }: AutomationInfoPageProps) {
   const workspace = useActiveWorkspace()
   const nextRuns = automation.cron ? computeNextRuns(automation.cron) : []
+  const flowDiagram = React.useMemo(() => buildFlowDiagram(automation), [automation])
 
   const editActions = workspace?.rootPath ? (
     <EditPopover
@@ -151,6 +153,18 @@ export function AutomationInfoPage({
           </Info_Table>
         </Info_Section>
 
+        {/* Section: Automation Flow Diagram */}
+        {flowDiagram && (
+          <Info_Section
+            title="Automation Flow"
+            description="How this automation processes events"
+          >
+            <Info_Markdown mode="full" fullscreen>
+              {`\`\`\`mermaid\n${flowDiagram}\n\`\`\``}
+            </Info_Markdown>
+          </Info_Section>
+        )}
+
         {/* Section: Then */}
         <Info_Section
           title="Then"
@@ -205,6 +219,7 @@ export function AutomationInfoPage({
               {`\`\`\`json\n${JSON.stringify({
                 event: automation.event,
                 matcher: automation.matcher,
+                conditions: automation.conditions,
                 cron: automation.cron,
                 timezone: automation.timezone,
                 permissionMode: automation.permissionMode,

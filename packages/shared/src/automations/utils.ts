@@ -9,6 +9,7 @@ import type { BaseEventPayload } from './event-bus.ts';
 import type { AutomationEvent, AutomationMatcher, PromptReferences, AgentEvent, SdkAutomationInput } from './types.ts';
 import { matchesCron } from './cron-matcher.ts';
 import { sanitizeForShell } from './security.ts';
+import { evaluateConditions } from './conditions.ts';
 
 // ============================================================================
 // String Utilities
@@ -153,7 +154,14 @@ export function testMatcherAgainst(matcher: AutomationMatcher, event: Automation
  * Check if a matcher matches the given event and data (event-bus payloads).
  */
 export function matcherMatches(matcher: AutomationMatcher, event: AutomationEvent, data: Record<string, unknown>): boolean {
-  return testMatcherAgainst(matcher, event, getMatchValue(event, data));
+  if (!testMatcherAgainst(matcher, event, getMatchValue(event, data))) return false;
+  if (matcher.conditions?.length) {
+    return evaluateConditions(matcher.conditions, {
+      payload: data,
+      matcherTimezone: matcher.timezone,
+    });
+  }
+  return true;
 }
 
 // ============================================================================
