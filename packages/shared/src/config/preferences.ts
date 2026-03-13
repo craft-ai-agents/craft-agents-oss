@@ -30,6 +30,8 @@ export interface UserPreferences {
   notes?: string;
   // Diff viewer display preferences
   diffViewer?: DiffViewerPreferences;
+  // Whether to default tool activity steps panel to expanded
+  defaultExpandToolSteps?: boolean;
   // When the preferences were last updated
   updatedAt?: number;
 }
@@ -162,7 +164,7 @@ export function formatPreferencesDisplay(): string {
     lines.push('');
   }
 
-  lines.push('**How to update:** Just tell the assistant (e.g., "My name is Alex" or "I\'m in London, GMT timezone").');
+  lines.push("**How to update:** Just tell the assistant (e.g., \"My name is Alex\" or \"I'm in London, GMT timezone\").");
   lines.push(`**Config file:** \`${PREFERENCES_FILE}\``);
 
   return lines.join('\n');
