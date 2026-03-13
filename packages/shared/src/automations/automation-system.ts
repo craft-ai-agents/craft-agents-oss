@@ -24,7 +24,7 @@ import { WorkspaceEventBus, type EventPayloadMap } from './event-bus.ts';
 import { PromptHandler, EventLogHandler, WebhookHandler, type AutomationsConfigProvider } from './handlers/index.ts';
 import { type AutomationsConfig, type AutomationEvent, type AutomationMatcher, type PendingPrompt, type WebhookActionResult, type AppEvent, type AgentEvent, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from './types.ts';
 import { validateAutomationsConfig } from './validation.ts';
-import { testMatcherAgainst, getMatchValueForSdkInput } from './utils.ts';
+import { matcherMatchesSdk } from './utils.ts';
 import { SchedulerService, type SchedulerTickPayload } from '../scheduler/scheduler-service.ts';
 
 const log = createLogger('automation-system');
@@ -491,23 +491,28 @@ export class AutomationSystem implements AutomationsConfigProvider {
    * Catches all errors — automations must never break the agent flow.
    *
    * @param signal - Optional AbortSignal for cancelling automation execution on abort
+   * @returns Number of matched matchers (for diagnostics/testing)
    */
-  async executeAgentEvent(event: AgentEvent, input: SdkAutomationInput, signal?: AbortSignal): Promise<void> {
-    if (!this.config) return;
+  async executeAgentEvent(event: AgentEvent, input: SdkAutomationInput, signal?: AbortSignal): Promise<number> {
+    if (!this.config) return 0;
 
     const matchers = this.config.automations[event];
-    if (!matchers?.length) return;
+    if (!matchers?.length) return 0;
 
-    const matchValue = getMatchValueForSdkInput(event, input);
+    let matchedCount = 0;
 
     for (const matcher of matchers) {
-      if (!testMatcherAgainst(matcher, event, matchValue)) continue;
+      if (!matcherMatchesSdk(matcher, event, input)) continue;
+
+      matchedCount++;
 
       // Note: Command execution has been removed. Prompt-based execution for
       // non-Claude backends is not yet implemented. This method currently only
-      // validates matching — actual execution is a no-op.
+      // validates matching (including condition gating) — actual execution is a no-op.
       log.debug(`[AutomationSystem] Matched ${event} automation (prompt-based execution pending)`);
     }
+
+    return matchedCount;
   }
 
   // ============================================================================

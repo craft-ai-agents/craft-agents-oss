@@ -16,7 +16,7 @@ function makeAutomation(overrides: Partial<AutomationListItem> = {}): Automation
 }
 
 describe('buildFlowDiagram', () => {
-  it('connects trigger directly to condition root node', () => {
+  it('connects trigger directly to condition root node without subgraph wrapper', () => {
     const automation = makeAutomation({
       matcher: 'urgent',
       conditions: [
@@ -26,9 +26,8 @@ describe('buildFlowDiagram', () => {
 
     const diagram = buildFlowDiagram(automation)
     expect(diagram).not.toBeNull()
-    expect(diagram).toContain('subgraph CONDS["Conditions"]')
     expect(diagram!).toMatch(/E -->\|"urgent"\| C\d+/)
-    expect(diagram).not.toContain('-->|"urgent"| CONDS')
+    expect(diagram).not.toContain('subgraph CONDS')
   })
 
   it('renders explicit logical gate roots for nested conditions', () => {

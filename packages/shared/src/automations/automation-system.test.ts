@@ -427,6 +427,64 @@ describe('AutomationSystem', () => {
     });
   });
 
+  describe('executeAgentEvent', () => {
+    it('should match agent events when matcher and conditions pass', async () => {
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: {
+          PreToolUse: [
+            {
+              matcher: '^Bash$',
+              conditions: [{ condition: 'state', field: 'hook_event_name', value: 'PreToolUse' }],
+              actions: [{ type: 'prompt', prompt: 'check this' }],
+            },
+          ],
+        },
+      }));
+
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+
+      const matched = await system.executeAgentEvent('PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'echo hi' },
+      });
+
+      expect(matched).toBe(1);
+      await system.dispose();
+    });
+
+    it('should not match agent events when conditions fail', async () => {
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: {
+          PreToolUse: [
+            {
+              matcher: '^Bash$',
+              conditions: [{ condition: 'state', field: 'hook_event_name', value: 'PostToolUse' }],
+              actions: [{ type: 'prompt', prompt: 'check this' }],
+            },
+          ],
+        },
+      }));
+
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+
+      const matched = await system.executeAgentEvent('PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'echo hi' },
+      });
+
+      expect(matched).toBe(0);
+      await system.dispose();
+    });
+  });
+
   describe('buildSdkHooks', () => {
     it('should return empty object (command execution removed)', async () => {
       writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({

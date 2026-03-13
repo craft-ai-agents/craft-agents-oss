@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { evaluateConditions } from './conditions.ts';
-import { matcherMatches } from './utils.ts';
+import { matcherMatches, matcherMatchesSdk } from './utils.ts';
 import type { AutomationCondition } from './types.ts';
 import type { ConditionContext } from './conditions.ts';
 
@@ -495,5 +495,54 @@ describe('matcherMatches with conditions', () => {
       actions: [{ type: 'prompt' as const, prompt: 'test' }],
     };
     expect(matcherMatches(matcher, 'SessionStatusChange', { newState: 'done' })).toBe(true);
+  });
+});
+
+describe('matcherMatchesSdk with conditions', () => {
+  it('should pass when SDK matcher and conditions both pass', () => {
+    const matcher = {
+      matcher: '^Bash$',
+      conditions: [
+        { condition: 'state' as const, field: 'hook_event_name', value: 'PreToolUse' },
+      ],
+      actions: [{ type: 'prompt' as const, prompt: 'test' }],
+    };
+
+    expect(matcherMatchesSdk(matcher, 'PreToolUse', {
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Bash',
+      tool_input: { command: 'echo hi' },
+    })).toBe(true);
+  });
+
+  it('should fail when SDK matcher passes but conditions fail', () => {
+    const matcher = {
+      matcher: '^Bash$',
+      conditions: [
+        { condition: 'state' as const, field: 'hook_event_name', value: 'PostToolUse' },
+      ],
+      actions: [{ type: 'prompt' as const, prompt: 'test' }],
+    };
+
+    expect(matcherMatchesSdk(matcher, 'PreToolUse', {
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Bash',
+      tool_input: { command: 'echo hi' },
+    })).toBe(false);
+  });
+
+  it('should fail when SDK matcher does not match regardless of conditions', () => {
+    const matcher = {
+      matcher: '^Read$',
+      conditions: [
+        { condition: 'state' as const, field: 'tool_name', value: 'Read' },
+      ],
+      actions: [{ type: 'prompt' as const, prompt: 'test' }],
+    };
+
+    expect(matcherMatchesSdk(matcher, 'PreToolUse', {
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Bash',
+    })).toBe(false);
   });
 });

@@ -29,8 +29,6 @@ const CLASS_DEFS = [
   'classDef action fill:#f472b6,color:#000,stroke:#ec4899',
 ].join('\n    ')
 
-const CONDS_STYLE = 'style CONDS fill:#f0fdf4,stroke:#86efac,color:#166534'
-
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -237,7 +235,6 @@ export function buildFlowDiagram(automation: AutomationListItem): string | null 
   const lines: string[] = ['graph LR']
 
   if (hasConditions) {
-    // Emit conditions inside a subgraph
     const condState: DiagramState = {
       lines: [],
       nodeClasses: new Map(),
@@ -247,20 +244,17 @@ export function buildFlowDiagram(automation: AutomationListItem): string | null 
     const outputId = emitConditionTree(automation.conditions!, condState, 0)
     state.nextId = condState.nextId
 
-    // Merge node classes
+    // Merge condition nodes and classes into the main graph (no subgraph box)
     for (const [k, v] of condState.nodeClasses) state.nodeClasses.set(k, v)
 
     lines.push(`    E["${triggerLabel}"]`)
-    lines.push(`    subgraph CONDS["Conditions"]`)
-    lines.push(`        direction LR`)
     lines.push(...condState.lines)
-    lines.push(`    end`)
 
     if (outputId) {
-      // Explicit trigger → condition-tree root path
+      // Trigger → condition-tree root path
       lines.push(`    E -->${matcherLabel} ${outputId}`)
 
-      // Output gate → actions
+      // Condition root → actions
       for (let i = 0; i < displayedActions.length; i++) {
         lines.push(`    ${outputId} --> ${actionIds[i]}["${esc(truncate(describeAction(displayedActions[i]), MAX_LABEL_LENGTH))}"]`)
       }
@@ -296,10 +290,6 @@ export function buildFlowDiagram(automation: AutomationListItem): string | null 
   }
   for (const [cls, ids] of byClass) {
     lines.push(`    class ${ids.join(',')} ${cls}`)
-  }
-
-  if (hasConditions) {
-    lines.push(`    ${CONDS_STYLE}`)
   }
 
   return lines.join('\n')
