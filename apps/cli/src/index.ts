@@ -1127,6 +1127,22 @@ export function getValidateSteps(): ValidateStep[] {
           `[source:${ctx.createdSourceSlug}] Get me a cat fact`, 90_000, false, undefined, ctx.onEvent)
       },
     },
+    // ----- MCP source validation (pre-committed in .github/agents/sources/) -----
+    {
+      name: 'mcp:craft-public (auth:none)',
+      fn: async (client, ctx) => {
+        if (!ctx.createdSessionId) return 'skipped (no session)'
+        // Enable the pre-committed craft-public MCP source on the session
+        const enableSlugs = [ctx.createdSourceSlug, 'craft-public'].filter(Boolean) as string[]
+        await client.invoke('sessions:command', ctx.createdSessionId, {
+          type: 'setSources',
+          sourceSlugs: enableSlugs,
+        })
+        return await waitForSendEvents(client, ctx.createdSessionId,
+          `[source:craft-public] List the documents under the "CraftAgents E2E Tests" folder. Just list their names.`,
+          90_000, false, undefined, ctx.onEvent)
+      },
+    },
     // ----- Skill lifecycle -----
     {
       name: 'send + skill create',

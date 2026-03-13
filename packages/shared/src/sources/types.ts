@@ -256,6 +256,13 @@ export interface McpSourceConfig {
    * Auth headers (e.g. Authorization) are merged on top when authType is set.
    */
   headers?: Record<string, string>;
+
+  /**
+   * Header names for credential-store auth (e.g., ["X-API-Key"]).
+   * Values are stored as JSON in the credential store, same as API multi-header auth.
+   * Precedence: static headers < credential-store headerNames < Authorization bearer.
+   */
+  headerNames?: string[];
 }
 
 /**

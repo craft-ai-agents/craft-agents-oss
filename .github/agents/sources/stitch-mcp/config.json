@@ -1,0 +1,15 @@
+{
+  "id": "stitch-mcp_ci_test",
+  "name": "Google Stitch",
+  "slug": "stitch-mcp",
+  "type": "mcp",
+  "provider": "google",
+  "enabled": true,
+  "mcp": {
+    "transport": "http",
+    "url": "https://stitch.googleapis.com/mcp",
+    "authType": "none",
+    "headerNames": ["X-Goog-Api-Key"]
+  },
+  "tagline": "CI test source for MCP header-auth validation"
+}

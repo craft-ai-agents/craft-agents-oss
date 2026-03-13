@@ -340,7 +340,7 @@ export interface StdioMcpConfig {
  * Config for HTTP/SSE MCP connection validation.
  * Derived from McpSourceConfig to stay in sync automatically (DRY).
  */
-export type HttpMcpConfig = Required<Pick<McpSourceConfig, 'url'>> & Pick<McpSourceConfig, 'authType' | 'headers'>;
+export type HttpMcpConfig = Required<Pick<McpSourceConfig, 'url'>> & Pick<McpSourceConfig, 'authType' | 'headers' | 'headerNames'>;
 
 /**
  * Result from stdio MCP validation
