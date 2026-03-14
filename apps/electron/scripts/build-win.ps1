@@ -165,15 +165,23 @@ Write-Host "Copying SDK..."
 New-Item -ItemType Directory -Force -Path "$ElectronDir\node_modules\@anthropic-ai" | Out-Null
 Copy-Item -Recurse -Force $SdkSource "$ElectronDir\node_modules\@anthropic-ai\"
 
-# 5. Copy interceptor
-$InterceptorSource = "$RootDir\packages\shared\src\network-interceptor.ts"
-if (-not (Test-Path $InterceptorSource)) {
-    Write-Host "ERROR: Interceptor not found at $InterceptorSource" -ForegroundColor Red
-    exit 1
-}
-Write-Host "Copying interceptor..."
+# 5. Copy interceptor sources required at runtime
+$InterceptorFiles = @(
+    "unified-network-interceptor.ts",
+    "interceptor-common.ts",
+    "feature-flags.ts",
+    "interceptor-request-utils.ts"
+)
+Write-Host "Copying interceptor sources..."
 New-Item -ItemType Directory -Force -Path "$ElectronDir\packages\shared\src" | Out-Null
-Copy-Item $InterceptorSource "$ElectronDir\packages\shared\src\"
+foreach ($InterceptorFile in $InterceptorFiles) {
+    $InterceptorSource = "$RootDir\packages\shared\src\$InterceptorFile"
+    if (-not (Test-Path $InterceptorSource)) {
+        Write-Host "ERROR: Interceptor source not found at $InterceptorSource" -ForegroundColor Red
+        exit 1
+    }
+    Copy-Item $InterceptorSource "$ElectronDir\packages\shared\src\"
+}
 
 # 6. Build Electron app
 Write-Host "Building Electron app..."
