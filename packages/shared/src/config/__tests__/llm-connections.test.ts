@@ -81,6 +81,14 @@ describe('getDefaultModelForConnection', () => {
     expect(modelIds).toContain(defaultModel)
   })
 
+  it('Pi OpenCode Zen prefers Claude Sonnet 4.6 by default', () => {
+    expect(getDefaultModelForConnection('pi', 'opencode')).toBe('pi/claude-sonnet-4-6')
+  })
+
+  it('Pi OpenCode Go prefers Kimi K2.5 by default', () => {
+    expect(getDefaultModelForConnection('pi', 'opencode-go')).toBe('pi/kimi-k2.5')
+  })
+
   it('returns empty string for anthropic_compat (dynamic provider)', () => {
     const defaultModel = getDefaultModelForConnection('anthropic_compat')
     expect(defaultModel).toBe('')

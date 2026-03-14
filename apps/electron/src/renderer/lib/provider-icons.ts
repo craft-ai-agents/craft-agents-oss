@@ -65,6 +65,8 @@ export function getProviderDisplayName(providerType: string, baseUrl?: string | 
   // Try URL detection first for compat providers
   if (baseUrl) {
     const url = baseUrl.toLowerCase()
+    if (url.includes('opencode.ai/zen/go')) return 'OpenCode Go'
+    if (url.includes('opencode.ai/zen')) return 'OpenCode Zen'
     if (url.includes('openrouter.ai')) return 'OpenRouter'
     if (url.includes('ollama')) return 'Ollama'
     if (url.includes('kimi.com')) return 'Kimi'
@@ -140,6 +142,8 @@ function piAuthProviderToIcon(piAuthProvider: string): ProviderIconKey | null {
  */
 const PI_AUTH_PROVIDER_DOMAINS: Record<string, string> = {
   groq: 'groq.com',
+  opencode: 'opencode.ai',
+  'opencode-go': 'opencode.ai',
   xai: 'x.ai',
   cerebras: 'cerebras.ai',
   zai: 'z.ai',

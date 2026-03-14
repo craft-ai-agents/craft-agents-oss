@@ -4,6 +4,7 @@ import {
   createBuiltInConnection,
   validateModelList,
   validateSetupTestInput,
+  piAuthProviderDisplayName,
   BUILT_IN_CONNECTION_TEMPLATES,
 } from '@craft-agent/server-core/domain'
 import type { ModelDefinition } from '@craft-agent/shared/config/models'
@@ -130,6 +131,11 @@ describe('createBuiltInConnection', () => {
   it('sets piAuthProvider for github-copilot', () => {
     const conn = createBuiltInConnection('github-copilot')
     expect(conn.piAuthProvider).toBe('github-copilot')
+  })
+
+  it('maps OpenCode provider IDs to human-readable names', () => {
+    expect(piAuthProviderDisplayName('opencode')).toBe('OpenCode Zen')
+    expect(piAuthProviderDisplayName('opencode-go')).toBe('OpenCode Go')
   })
 })
 
