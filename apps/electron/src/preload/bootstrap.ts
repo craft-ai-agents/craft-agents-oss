@@ -19,6 +19,7 @@ import { buildClientApi } from '../transport/build-api'
 import { CHANNEL_MAP } from '../transport/channel-map'
 import { createCallbackServer } from '@craft-agent/shared/auth/callback-server'
 import { CHATGPT_OAUTH_CONFIG } from '@craft-agent/shared/auth/chatgpt-oauth-config'
+import { openUrl } from '@craft-agent/shared/utils/open-url'
 import {
   CLIENT_OPEN_EXTERNAL,
   CLIENT_OPEN_PATH,
@@ -193,7 +194,7 @@ if (wsMode === 'remote') {
     state = startResult.state
 
     // 3. Open browser for user consent (local — must open on the user's machine, not remote server)
-    await shell.openExternal(startResult.authUrl)
+    await openUrl(startResult.authUrl)
 
     // 4. Wait for OAuth provider to redirect to our callback server
     const callback = await callbackServer.promise
@@ -240,7 +241,7 @@ if (wsMode === 'remote') {
   try {
     const result = await client.invoke('onboarding:startClaudeOAuth')
     if (result.success && result.authUrl) {
-      await shell.openExternal(result.authUrl)
+      await openUrl(result.authUrl)
     }
     return result
   } catch (err) {
@@ -276,7 +277,7 @@ if (wsMode === 'remote') {
     state = startResult.state
 
     // 3. Open browser for user consent
-    await shell.openExternal(startResult.authUrl)
+    await openUrl(startResult.authUrl)
 
     // 4. Wait for OpenAI to redirect to our callback server
     const callback = await callbackServer.promise
