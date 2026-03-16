@@ -606,6 +606,14 @@ export class ClaudeAgent extends BaseAgent {
       process.env[key] = value;
     }
 
+    // Pass mini model to SDK subprocess so built-in tools like WebFetch
+    // use the correct summarization model (instead of hardcoded Haiku).
+    // This is critical for custom providers where the default Haiku model ID
+    // doesn't exist on the provider's endpoint.
+    if (this.config.miniModel) {
+      process.env.ANTHROPIC_SMALL_FAST_MODEL = this.config.miniModel;
+    }
+
     return { authInjected: true };
   }
 

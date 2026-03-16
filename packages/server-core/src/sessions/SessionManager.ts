@@ -2505,8 +2505,12 @@ export class SessionManager implements ISessionManager {
       }
 
       // Per-session env overrides
+      const miniModel = connection ? (getMiniModel(connection) ?? connection.defaultModel) : undefined
       const envOverrides: Record<string, string> = {
         CRAFT_WORKSPACE_PATH: managed.workspace.rootPath,
+        // Pass mini model to SDK subprocess so built-in tools like WebFetch
+        // use the correct model for summarization (instead of hardcoded Haiku)
+        ...(miniModel ? { ANTHROPIC_SMALL_FAST_MODEL: miniModel } : {}),
       }
       managed.envOverrides = envOverrides
 
@@ -2599,7 +2603,7 @@ export class SessionManager implements ISessionManager {
         hostRuntime: buildBackendHostRuntimeContext(),
         coreConfig: {
         workspace: managed.workspace,
-        miniModel: connection ? (getMiniModel(connection) ?? connection.defaultModel) : undefined,
+        miniModel,
         thinkingLevel: managed.thinkingLevel,
         session: sessionConfig,
         onSdkSessionIdUpdate,
