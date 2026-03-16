@@ -63,6 +63,10 @@ export const GOOGLE_SERVICE_SCOPES: Record<GoogleService, string[]> = {
     'https://www.googleapis.com/auth/webmasters.readonly', // Read-only Search Console access
     'https://www.googleapis.com/auth/userinfo.email',
   ],
+  youtube: [
+    'https://www.googleapis.com/auth/youtube.readonly', // Read-only YouTube access
+    'https://www.googleapis.com/auth/userinfo.email',
+  ],
 };
 
 /**
