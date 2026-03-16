@@ -18,32 +18,14 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Create discussion points skill
-        timeout-minutes: 5
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          # 4.5 min — Craft source reads can be slow; default 120s was timing out
-          bun run apps/cli/src/index.ts run \
-            --workspace-dir .github/agents \
-            --source craft-public \
-            --send-timeout 270000 \
-            --output-format stream-json \
-            "Read the 'Daily Team Discussion Points' document from the Craft \
-             source. Extract the AI Instructions section and create a local \
-             skill file at skills/daily-discussion-points/SKILL.md with those \
-             instructions as the skill content. Use the name 'Daily Team \
-             Discussion Points' and description from the document."
-
       - name: Run discussion points agent
         timeout-minutes: 10
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          # 9 min — full skill run involves multiple Craft reads + writes; default was timing out
           bun run apps/cli/src/index.ts run \
             --workspace-dir .github/agents \
             --source craft-public \
             --send-timeout 540000 \
             --output-format stream-json \
-            "[skill:daily-discussion-points] Run the skill on today's daily note"
+            "[skill:daily-discussion] Run the skill on today's daily note"
