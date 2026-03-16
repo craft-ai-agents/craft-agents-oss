@@ -38,6 +38,8 @@ export interface ModelDefinition {
   contextWindow: number;
   /** Whether this model supports thinking/reasoning effort. Defaults to true when undefined. */
   supportsThinking?: boolean;
+  /** User-defined display alias. When set, UI shows this instead of name/shortName. */
+  displayAlias?: string;
 }
 
 // ============================================
@@ -172,7 +174,7 @@ export function getModelById(modelId: string): ModelDefinition | undefined {
  */
 export function getModelDisplayName(modelId: string): string {
   const model = getModelById(modelId);
-  if (model) return model.name;
+  if (model) return model.displayAlias || model.name;
   // Fallback: strip prefix and date suffix, format nicely
   // e.g., "claude-opus-4-5-20251101" → "Opus 4.5"
   const stripped = modelId
@@ -192,7 +194,7 @@ export function getModelDisplayName(modelId: string): string {
  */
 export function getModelShortName(modelId: string): string {
   const model = getModelById(modelId);
-  if (model) return model.shortName;
+  if (model) return model.displayAlias || model.shortName;
   // For provider-prefixed IDs (e.g. "openai/gpt-5"), show just the model part
   if (modelId.includes('/')) {
     return modelId.split('/').pop() || modelId;

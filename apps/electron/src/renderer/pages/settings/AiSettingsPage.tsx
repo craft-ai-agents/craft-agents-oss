@@ -63,12 +63,14 @@ function getModelOptionsForConnection(
   // If connection has explicit models, use those
   if (connection.models && connection.models.length > 0) {
     return connection.models.map((m) => {
+      const modelId = typeof m === 'string' ? m : m.id
+      const alias = connection.modelAliases?.[modelId]
       if (typeof m === 'string') {
-        return { value: m, label: getModelShortName(m), description: '' }
+        return { value: m, label: alias || getModelShortName(m), description: '' }
       }
       // ModelDefinition object
       const def = m as ModelDefinition
-      return { value: def.id, label: def.name, description: def.description }
+      return { value: def.id, label: alias || def.displayAlias || def.name, description: def.description }
     })
   }
 
@@ -76,7 +78,7 @@ function getModelOptionsForConnection(
   const registryModels = getModelsForProviderType(connection.providerType, connection.piAuthProvider)
   return registryModels.map((m) => ({
     value: m.id,
-    label: m.name,
+    label: connection.modelAliases?.[m.id] || m.name,
     description: m.description,
   }))
 }
@@ -733,9 +735,13 @@ export default function AiSettingsPage() {
       // IPC method may not exist if app wasn't restarted after code change
     }
 
-    // Build model string from connection's models array
+    // Build model string from connection's models array (including aliases)
     const modelStr = connection.models
-      ?.map((m: string | ModelDefinition) => typeof m === 'string' ? m : m.id)
+      ?.map((m: string | ModelDefinition) => {
+        const id = typeof m === 'string' ? m : m.id
+        const alias = connection.modelAliases?.[id]
+        return alias ? `${id}:${alias}` : id
+      })
       .join(', ') || connection.defaultModel || ''
 
     // Set initial values before opening overlay so ApiKeyInput mounts with them

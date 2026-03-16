@@ -141,6 +141,7 @@ export function apiSetupMethodToConnectionSetup(
     piAuthProvider?: string
     modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
     customEndpoint?: CustomEndpointConfig
+    modelAliases?: Record<string, string>
   },
   editingSlug: string | null,
   existingSlugs: Set<string>,
@@ -156,6 +157,7 @@ export function apiSetupMethodToConnectionSetup(
         defaultModel: options.connectionDefaultModel,
         models: options.models,
         customEndpoint: options.customEndpoint,
+        modelAliases: options.modelAliases,
       }
     case 'claude_oauth':
       return {
@@ -178,6 +180,7 @@ export function apiSetupMethodToConnectionSetup(
         piAuthProvider: options.piAuthProvider,
         modelSelectionMode: options.modelSelectionMode,
         customEndpoint: options.customEndpoint,
+        modelAliases: options.modelAliases,
       }
   }
 }
@@ -240,6 +243,7 @@ export function useOnboarding({
       piAuthProvider?: string
       modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
       customEndpoint?: CustomEndpointConfig
+      modelAliases?: Record<string, string>
     },
     methodOverride?: ApiSetupMethod,
     connectionSlugOverride?: string,
@@ -262,6 +266,7 @@ export function useOnboarding({
         piAuthProvider: options?.piAuthProvider,
         modelSelectionMode: options?.modelSelectionMode,
         customEndpoint: options?.customEndpoint,
+        modelAliases: options?.modelAliases,
       }, connectionSlugOverride ?? editingSlug, existingSlugs)
       // Use new unified API
       const result = await window.electronAPI.setupLlmConnection(
@@ -377,6 +382,7 @@ export function useOnboarding({
           piAuthProvider: data.piAuthProvider,
           modelSelectionMode: data.modelSelectionMode,
           customEndpoint: data.customEndpoint,
+          modelAliases: data.modelAliases,
         })
         if (saved) {
           setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
@@ -438,6 +444,7 @@ export function useOnboarding({
         piAuthProvider: data.piAuthProvider,
         modelSelectionMode: data.modelSelectionMode,
         customEndpoint: data.customEndpoint,
+        modelAliases: data.modelAliases,
       })
 
       if (saved) {
