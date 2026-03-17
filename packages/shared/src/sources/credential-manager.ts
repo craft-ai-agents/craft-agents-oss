@@ -622,7 +622,7 @@ export class SourceCredentialManager {
         if (!service) {
           return {
             success: false,
-            error: `Cannot determine Google service for source '${source.config.slug}'. Set googleService ('gmail', 'calendar', or 'drive') in api config.`,
+            error: `Cannot determine Google service for source '${source.config.slug}'. Set googleService ('gmail', 'calendar', 'drive', 'docs', 'sheets', 'youtube', or 'searchconsole') in api config.`,
           };
         }
       }

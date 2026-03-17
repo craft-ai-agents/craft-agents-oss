@@ -59,6 +59,15 @@ export const GOOGLE_SERVICE_SCOPES: Record<GoogleService, string[]> = {
     'https://www.googleapis.com/auth/spreadsheets', // Full Sheets access
     'https://www.googleapis.com/auth/userinfo.email',
   ],
+  youtube: [
+    'https://www.googleapis.com/auth/youtube.readonly', // Read channel, video, playlist data
+    'https://www.googleapis.com/auth/youtube.force-ssl', // Manage content (comments, playlists, etc.)
+    'https://www.googleapis.com/auth/userinfo.email',
+  ],
+  searchconsole: [
+    'https://www.googleapis.com/auth/webmasters.readonly', // Read Search Console data
+    'https://www.googleapis.com/auth/userinfo.email',
+  ],
 };
 
 /**

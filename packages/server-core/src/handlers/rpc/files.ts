@@ -1,7 +1,8 @@
-import { readFile, writeFile, unlink, mkdir, readdir } from 'fs/promises'
-import { join } from 'path'
+import { readFile, writeFile, unlink, mkdir, readdir, stat } from 'fs/promises'
+import { join, resolve, dirname, parse as parsePath } from 'path'
+import { validatePathFormat } from '../../utils/path-validation'
 import { randomUUID } from 'crypto'
-import { RPC_CHANNELS, type FileAttachment } from '@craft-agent/shared/protocol'
+import { RPC_CHANNELS, type FileAttachment, type DirectoryListingResult } from '@craft-agent/shared/protocol'
 import type { StoredAttachment } from '@craft-agent/core/types'
 import { readFileAttachment, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
 import { getSessionAttachmentsPath, validateSessionId } from '@craft-agent/shared/sessions'
@@ -25,6 +26,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.file.STORE_ATTACHMENT,
   RPC_CHANNELS.file.GENERATE_THUMBNAIL,
   RPC_CHANNELS.fs.SEARCH,
+  RPC_CHANNELS.fs.LIST_DIRECTORY,
 ] as const
 
 export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -454,5 +456,71 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
       deps.platform.logger.error('[FS_SEARCH] error:', err)
       return []
     }
+  })
+
+  // List directories in a given path (for remote directory browsing).
+  // Returns only directories (not files) — this is a folder picker.
+  server.handle(RPC_CHANNELS.fs.LIST_DIRECTORY, async (_ctx, dirPath: string) => {
+    // Reject cross-platform and relative paths before resolve() can concatenate with cwd
+    const pathCheck = validatePathFormat(dirPath)
+    if (!pathCheck.valid) {
+      throw new Error(pathCheck.reason!)
+    }
+
+    // Normalize (collapses .. segments, trailing slashes, etc.)
+    const resolved = resolve(dirPath)
+
+    // Read entries, filter to directories
+    const raw = await readdir(resolved, { withFileTypes: true })
+
+    const entries: Array<{ name: string; path: string; isSymlink: boolean }> = []
+    for (const entry of raw) {
+      const fullPath = join(resolved, entry.name)
+      const isSymlink = entry.isSymbolicLink()
+
+      if (entry.isDirectory()) {
+        entries.push({ name: entry.name, path: fullPath, isSymlink: false })
+      } else if (isSymlink) {
+        // Follow symlink — check if target is a directory
+        try {
+          const target = await stat(fullPath)
+          if (target.isDirectory()) {
+            entries.push({ name: entry.name, path: fullPath, isSymlink: true })
+          }
+        } catch {
+          // Broken symlink — skip silently
+        }
+      }
+    }
+
+    // Sort alphabetically (case-insensitive), cap at 500
+    entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+    const totalEntries = entries.length
+    const truncated = totalEntries > 500
+    if (truncated) entries.length = 500
+
+    // Compute parent path
+    const parentPath = resolved === parsePath(resolved).root ? null : dirname(resolved)
+
+    // Compute breadcrumbs server-side
+    const breadcrumbs: Array<{ name: string; path: string }> = []
+    let current = resolved
+    while (true) {
+      const parsed = parsePath(current)
+      const name = parsed.base || parsed.root
+      breadcrumbs.unshift({ name, path: current })
+      if (current === parsed.root) break
+      current = dirname(current)
+    }
+
+    return {
+      currentPath: resolved,
+      parentPath,
+      breadcrumbs,
+      platform: process.platform as DirectoryListingResult['platform'],
+      truncated,
+      totalEntries,
+      entries,
+    } satisfies DirectoryListingResult
   })
 }

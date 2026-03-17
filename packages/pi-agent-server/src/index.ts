@@ -203,6 +203,18 @@ const pendingSessionToolCalls = new Map<string, { toolName: string; arguments: R
 // Proxy tool definitions from main process
 let proxyToolDefs: ProxyToolDef[] = [];
 
+// Speculative prefetch for read-only tools (enables parallel execution despite Pi SDK's sequential loop).
+// When the LLM emits multiple call_llm tool calls in a single message, we fire all requests
+// to the main process in parallel on message_end (before executeToolCalls iterates sequentially).
+// Each proxy tool's execute() then hits the cache instead of sending a new request.
+const PREFETCHABLE_TOOLS = new Set(['call_llm']);
+const prefetchCache = new Map<string, Promise<{ content: string; isError: boolean }>>();
+
+function isPrefetchableTool(toolName: string): boolean {
+  const stripped = toolName.replace(/^(mcp__session__|session__)/, '');
+  return PREFETCHABLE_TOOLS.has(stripped);
+}
+
 // Flag: proxy tools changed since last session creation — session needs recreation
 let toolsChanged = false;
 
@@ -747,6 +759,20 @@ function buildProxyTools(): AgentTool<any>[] {
       toolCallId: string,
       params: any,
     ): Promise<AgentToolResult<any>> => {
+      // Check speculative prefetch cache first (parallel call_llm optimization).
+      // If this tool was prefetched on message_end, the request is already in-flight —
+      // just await the result instead of sending a duplicate request.
+      const prefetched = prefetchCache.get(toolCallId);
+      if (prefetched) {
+        prefetchCache.delete(toolCallId);
+        debugLog(`Prefetch cache hit for ${def.name} (toolCallId: ${toolCallId})`);
+        const result = await prefetched;
+        return {
+          content: [{ type: 'text', text: result.content }],
+          details: result.isError ? { isError: true } : undefined,
+        };
+      }
+
       const inputObj = params as Record<string, unknown>;
 
       // Permission checking via main process
@@ -809,13 +835,17 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
 
   // If piAuth is set, ensure the mini model uses the same provider.
   // Pi SDK will fail with "No API key found" if the model requires a different provider.
+  // Exception: 'custom-endpoint' provider is always compatible because it has its own
+  // API key configured via resolveCustomEndpointApiKey() and doesn't use authStorage.
   if (initConfig.piAuth) {
     const authProvider = initConfig.piAuth.provider;
     const bareModel = model.startsWith('pi/') ? model.slice(3) : model;
     const resolved = resolvePiModel(modelRegistry, bareModel, authProvider, shouldPreferCustomEndpoint());
-    if (!resolved || (resolved as any).provider !== authProvider || isDeniedMiniModelId(model)) {
+    const resolvedProvider = (resolved as any)?.provider;
+    const isCompatible = resolvedProvider === authProvider || resolvedProvider === 'custom-endpoint';
+    if (!resolved || !isCompatible || isDeniedMiniModelId(model)) {
       const fallback = getDefaultSummarizationModel();
-      debugLog(`[queryLlm] Model ${bareModel} incompatible with ${authProvider}, falling back to ${fallback}`);
+      debugLog(`[queryLlm] Model ${bareModel} incompatible with ${authProvider} (resolved: ${resolvedProvider}), falling back to ${fallback}`);
       model = fallback;
     }
   }
@@ -952,8 +982,11 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
         try {
           const resolved = resolvePiModel(modelRegistry, candidate, initConfig.piAuth?.provider, shouldPreferCustomEndpoint());
           if (!resolved) return false;
-          if (initConfig.piAuth && (resolved as any).provider !== initConfig.piAuth.provider) {
-            return false;
+          if (initConfig.piAuth) {
+            const rp = (resolved as any).provider;
+            if (rp !== initConfig.piAuth.provider && rp !== 'custom-endpoint') {
+              return false;
+            }
           }
           return true;
         } catch {
@@ -1027,6 +1060,32 @@ function handleSessionEvent(event: AgentSessionEvent): void {
           ...(event as Record<string, unknown>),
           sdkTurnAnchor,
         } as OutboundAgentEvent;
+      }
+
+      // Speculative prefetch: if the assistant message contains 2+ prefetchable tool calls,
+      // fire all requests to the main process in parallel NOW, before executeToolCalls
+      // iterates sequentially. Each proxy tool's execute() will hit the cache.
+      const content = (msg as { content?: Array<{ type: string; id?: string; name?: string; arguments?: unknown }> }).content;
+      if (Array.isArray(content)) {
+        const prefetchableToolCalls = content.filter(
+          (c) => c.type === 'toolCall' && c.name && isPrefetchableTool(c.name),
+        );
+        if (prefetchableToolCalls.length >= 2) {
+          debugLog(`Prefetching ${prefetchableToolCalls.length} parallel ${prefetchableToolCalls[0].name} calls`);
+          for (const tc of prefetchableToolCalls) {
+            const requestId = `prefetch-${tc.id}`;
+            const promise = new Promise<{ content: string; isError: boolean }>((resolve) => {
+              pendingToolExecutions.set(requestId, { resolve });
+            });
+            send({
+              type: 'tool_execute_request',
+              requestId,
+              toolName: tc.name!,
+              args: (tc.arguments ?? {}) as Record<string, unknown>,
+            });
+            prefetchCache.set(tc.id!, promise);
+          }
+        }
       }
     }
   }
@@ -1238,6 +1297,9 @@ async function handleAbort(): Promise<void> {
     pending.resolve({ action: 'block', reason: 'Aborted' });
   }
   pendingPreToolUse.clear();
+
+  // Clear speculative prefetch cache — in-flight prefetches will resolve but never be consumed
+  prefetchCache.clear();
 }
 
 async function handleMiniCompletion(msg: Extract<InboundMessage, { type: 'mini_completion' }>): Promise<void> {
@@ -1353,12 +1415,7 @@ async function handleSetThinkingLevel(msg: Extract<InboundMessage, { type: 'set_
     return;
   }
 
-  if (msg.level !== 'off' && msg.level !== 'think' && msg.level !== 'max') {
-    debugLog(`[set_thinking_level] Invalid level: ${msg.level}`);
-    return;
-  }
-
-  const piLevel = THINKING_TO_PI[msg.level];
+  const piLevel = THINKING_TO_PI[msg.level as keyof typeof THINKING_TO_PI];
   if (!piLevel) {
     debugLog(`[set_thinking_level] No Pi mapping for level: ${msg.level}`);
     return;

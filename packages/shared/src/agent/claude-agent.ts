@@ -61,7 +61,7 @@ import {
   type PreToolUseCheckResult,
   BUILT_IN_TOOLS,
 } from './core/pre-tool-use.ts';
-import { type ThinkingLevel, getThinkingTokens, DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
+import { type ThinkingLevel, THINKING_TO_EFFORT, getThinkingTokens, DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
 import type { LoadedSource } from '../sources/types.ts';
 import { sourceNeedsAuthentication } from '../sources/credential-manager.ts';
 import type {
@@ -119,12 +119,42 @@ const CONVERTIBLE_FILE_HINTS: Record<string, string> = {
   ics: 'ical-tool read',
 };
 
+export function resolveClaudeThinkingOptions(args: {
+  thinkingLevel: ThinkingLevel;
+  model: string;
+  providerType?: BackendConfig['providerType'];
+  minimizeThinking: boolean;
+}): Partial<Options> {
+  const { thinkingLevel, model, providerType, minimizeThinking } = args;
+  const isClaude = isClaudeModel(model);
+  const effort = THINKING_TO_EFFORT[thinkingLevel];
+  const isHaiku = model.toLowerCase().includes('haiku');
+  const supportsAdaptiveThinking = isClaude && !isHaiku && providerType !== 'anthropic_compat';
+
+  if (minimizeThinking || !isClaude || !effort) {
+    return supportsAdaptiveThinking
+      ? { thinking: { type: 'disabled' as const } }
+      : { maxThinkingTokens: 0 };
+  }
+
+  if (supportsAdaptiveThinking) {
+    return {
+      thinking: { type: 'adaptive' as const },
+      effort,
+    };
+  }
+
+  return {
+    maxThinkingTokens: getThinkingTokens(thinkingLevel, model),
+  };
+}
+
 export interface ClaudeAgentConfig {
   workspace: Workspace;
   session?: Session;           // Current session (primary isolation boundary)
   mcpToken?: string;           // Override token (for testing)
   model?: string;
-  thinkingLevel?: ThinkingLevel; // Initial thinking level (defaults to 'think')
+  thinkingLevel?: ThinkingLevel; // Initial thinking level (defaults to 'medium')
   onSdkSessionIdUpdate?: (sdkSessionId: string) => void;  // Callback when SDK session ID is captured
   onSdkSessionIdCleared?: () => void;  // Callback when SDK session ID is cleared (e.g., after failed resume)
   /**
@@ -606,6 +636,14 @@ export class ClaudeAgent extends BaseAgent {
       process.env[key] = value;
     }
 
+    // Pass mini model to SDK subprocess so built-in tools like WebFetch
+    // use the correct summarization model (instead of hardcoded Haiku).
+    // This is critical for custom providers where the default Haiku model ID
+    // doesn't exist on the provider's endpoint.
+    if (this.config.miniModel) {
+      process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = this.config.miniModel;
+    }
+
     return { authInjected: true };
   }
 
@@ -804,18 +842,25 @@ export class ClaudeAgent extends BaseAgent {
         debug(`[chat] Custom provider: baseUrl=${activeBaseUrl}, model=${model}, hasApiKey=${!!process.env.ANTHROPIC_API_KEY}`);
       }
 
-      const thinkingTokens = getThinkingTokens(this._thinkingLevel, model);
-      debug(`[chat] Thinking: level=${this._thinkingLevel}, tokens=${thinkingTokens}`);
+      const thinkingOptions = resolveClaudeThinkingOptions({
+        thinkingLevel: this._thinkingLevel,
+        model,
+        providerType: this.config.providerType,
+        minimizeThinking: miniConfig.minimizeThinking,
+      });
+      if ('effort' in thinkingOptions && thinkingOptions.effort) {
+        debug(`[chat] Thinking: level=${this._thinkingLevel}, effort=${thinkingOptions.effort}`);
+      } else if ('maxThinkingTokens' in thinkingOptions) {
+        debug(`[chat] Thinking: level=${this._thinkingLevel}, tokens=${thinkingOptions.maxThinkingTokens}`);
+      } else {
+        debug(`[chat] Thinking: level=${this._thinkingLevel}, disabled`);
+      }
 
       // NOTE: Parent-child tracking for subagents is documented below (search for
       // "PARENT-CHILD TOOL TRACKING"). The SDK's parent_tool_use_id is authoritative.
 
       // Clear stderr buffer at start of each query
       this.lastStderrOutput = [];
-
-      // Detect if resolved model is Claude — non-Claude models (via OpenRouter/Ollama) don't
-      // support Anthropic-specific betas or extended thinking parameters
-      const isClaude = isClaudeModel(model);
 
       // Log mini agent mode details (using centralized config)
       if (miniConfig.enabled) {
@@ -844,10 +889,11 @@ export class ClaudeAgent extends BaseAgent {
             this.lastStderrOutput.shift();
           }
         },
-        // Extended thinking: tokens based on session thinking level
-        // Non-Claude models don't support extended thinking, so pass 0 to disable
-        // Mini agents also disable thinking for efficiency (quick config edits don't need deep reasoning)
-        maxThinkingTokens: miniConfig.minimizeThinking ? 0 : (isClaude ? thinkingTokens : 0),
+        // Thinking config is provider-aware:
+        // - true Anthropic backends use adaptive thinking + effort
+        // - anthropic_compat/custom endpoints fall back to token budgets
+        // - non-Claude models disable thinking entirely
+        ...thinkingOptions,
         // System prompt configuration:
         // - Mini agents: Use custom (lean) system prompt without Claude Code preset
         // - Normal agents: Append to Claude Code's system prompt (recommended by docs)
@@ -2294,6 +2340,26 @@ This is a branched conversation. All prior messages in this conversation are par
   }
 
   /**
+   * Interrupt the current query because control is being handed to the UI.
+   *
+   * For Claude, handoff boundaries (auth requests, plan submission) should use
+   * the SDK's cooperative interrupt path instead of aborting the underlying
+   * AbortController mid-control-write.
+   */
+  override interruptForHandoff(reason: AbortReason): void {
+    this.lastAbortReason = reason;
+    this.pendingSteerMessage = null; // Clear any undelivered steer
+
+    if (!this.currentQuery) {
+      return;
+    }
+
+    void this.currentQuery.interrupt().catch((error) => {
+      this.debug(`Claude handoff interrupt failed: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  }
+
+  /**
    * Force-abort the current query using the SDK's AbortController.
    * This immediately stops processing (SIGTERM/SIGKILL) without waiting for graceful shutdown.
    * Use this when you need instant termination (e.g., queuing a new message).
@@ -2519,6 +2585,7 @@ This is a branched conversation. All prior messages in this conversation are par
       model,
       maxTurns: 1,
       systemPrompt: 'Reply with ONLY the requested text. No explanation.', // Minimal - no Claude Code preset
+      thinking: { type: 'disabled' as const },
     };
 
     let result = '';

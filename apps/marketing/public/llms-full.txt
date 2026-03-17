@@ -15,7 +15,7 @@ Craft Agent can connect to various data sources:
 - **MCP Servers**: Linear, GitHub, Notion, Slack, and custom MCP servers
 - **REST APIs**: Any API with bearer, header, query, or basic authentication
 - **Local Filesystems**: Obsidian vaults, code repositories, data directories
-- **Google Services**: Gmail, Calendar, Drive (via OAuth)
+- **Google Services**: Gmail, Calendar, Drive, YouTube, Search Console (via OAuth)
 - **Microsoft Services**: Outlook, Teams, SharePoint, OneDrive (via OAuth)
 
 ### 2. AI-Powered Assistance

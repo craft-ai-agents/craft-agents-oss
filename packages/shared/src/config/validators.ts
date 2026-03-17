@@ -91,7 +91,7 @@ export const StoredConfigSchema = z.object({
   activeSessionId: z.string().nullable(),
   llmConnections: z.array(LlmConnectionSchema).optional(),
   defaultLlmConnection: z.string().optional(),
-  defaultThinkingLevel: z.enum(['off', 'think', 'max']).optional(),
+  defaultThinkingLevel: z.enum(['off', 'think', 'low', 'medium', 'high', 'max']).transform(v => v === 'think' ? 'medium' : v).optional(),
   // Note: tokenDisplay, showCost, cumulativeUsage, defaultPermissionMode removed
   // Permission mode and cyclable modes are now per-workspace in workspace config.json
 });
@@ -409,7 +409,7 @@ const ApiSourceConfigSchema = z.object({
       headers: z.record(z.string(), z.string()).optional(),
     })
     .optional(),
-  googleService: z.enum(['gmail', 'calendar', 'drive', 'docs', 'sheets']).optional(),
+  googleService: z.enum(['gmail', 'calendar', 'drive', 'docs', 'sheets', 'youtube', 'searchconsole']).optional(),
   googleScopes: z.array(z.string()).optional(),
 });
 

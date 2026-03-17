@@ -280,6 +280,18 @@ export class WsRpcClient implements RpcClient {
       this.connectTimer = null
     }
 
+    // Close and detach any existing socket before creating a new one.
+    // Prevents orphaned connections and stale event handler interference.
+    if (this.ws) {
+      const oldWs = this.ws
+      this.ws = null
+      oldWs.onopen = null
+      oldWs.onmessage = null
+      oldWs.onclose = null
+      oldWs.onerror = null
+      try { oldWs.close() } catch { /* best effort */ }
+    }
+
     this.connectTimer = setTimeout(() => {
       if (!this.connected) {
         const err = this.createConnectionError('timeout', `Connection timeout after ${this.connectTimeout}ms`, 'HANDSHAKE_TIMEOUT')
@@ -294,9 +306,11 @@ export class WsRpcClient implements RpcClient {
       }
     }, this.connectTimeout)
 
-    this.ws = new WebSocket(this.url)
+    const ws = new WebSocket(this.url)
+    this.ws = ws
 
-    this.ws.onopen = () => {
+    ws.onopen = () => {
+      if (this.ws !== ws) return // stale socket — ignore
       // Send handshake
       const handshake: MessageEnvelope = {
         id: crypto.randomUUID(),
@@ -307,18 +321,21 @@ export class WsRpcClient implements RpcClient {
         token: this.token,
         clientCapabilities: this.clientCapabilities.length > 0 ? this.clientCapabilities : undefined,
       }
-      this.ws!.send(serializeEnvelope(handshake))
+      ws.send(serializeEnvelope(handshake))
     }
 
-    this.ws.onmessage = (event) => {
+    ws.onmessage = (event) => {
+      if (this.ws !== ws) return // stale socket — ignore
       this.onMessage(typeof event.data === 'string' ? event.data : event.data.toString())
     }
 
-    this.ws.onclose = (event) => {
+    ws.onclose = (event) => {
+      if (this.ws !== ws) return // stale socket — ignore
       this.onDisconnect(event)
     }
 
-    this.ws.onerror = () => {
+    ws.onerror = () => {
+      if (this.ws !== ws) return // stale socket — ignore
       // Error is typically followed by close event, handled there.
       // Capture this early for more actionable state while connecting.
       if (!this.connected && !this.connectError) {

@@ -134,6 +134,13 @@ export function processEvent(
     case 'working_directory_changed':
       return handleWorkingDirectoryChanged(state, event)
 
+    case 'working_directory_error':
+      // No state change — just emit a toast effect
+      return {
+        state: { ...state, session: { ...state.session } },
+        effects: [{ type: 'toast_error', message: event.error }],
+      }
+
     case 'permission_mode_changed':
       return handlePermissionModeChanged(state, event)
 

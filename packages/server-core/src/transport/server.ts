@@ -20,6 +20,7 @@ import {
 } from '@craft-agent/shared/protocol'
 import type { RpcServer, HandlerFn, RequestContext } from './types'
 import { serializeEnvelope, deserializeEnvelope } from './codec'
+import { createLogger } from '@craft-agent/shared/utils'
 
 // ---------------------------------------------------------------------------
 // Client connection state
@@ -75,6 +76,8 @@ export interface WsRpcServerOptions {
   /** Called when a client disconnects. */
   onClientDisconnected?: (clientId: string) => void
 }
+
+const transportLog = createLogger('ws-rpc-server')
 
 // ---------------------------------------------------------------------------
 // WsRpcServer
@@ -362,6 +365,11 @@ export class WsRpcServer implements RpcServer {
         this.safeSend(ws, serializeEnvelope(ack))
 
         // Notify lifecycle listener
+        transportLog.info('Client connected', {
+          clientId,
+          webContentsId: client.webContentsId,
+          workspaceId: client.workspaceId,
+        })
         this.onClientConnected?.({
           clientId,
           webContentsId: client.webContentsId,
@@ -370,6 +378,7 @@ export class WsRpcServer implements RpcServer {
 
         // Setup close handler
         ws.on('close', () => {
+          transportLog.info('Client disconnected', { clientId })
           this.clients.delete(clientId)
           this.rejectPendingInvokesForClient(clientId)
           this.onClientDisconnected?.(clientId)

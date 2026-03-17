@@ -1,0 +1,108 @@
+---
+title: "Google Search Console"
+description: "Connect Google Search Console for search analytics and site management in Craft Agents"
+---
+
+# Google Search Console
+
+Access search performance data and site management through the Google Search Console API.
+
+<Note>
+**Bring Your Own Google OAuth Credentials**
+
+Craft Agents does not include pre-configured Google OAuth credentials. See [Google OAuth Setup](/source-guides/google-oauth-setup) for a 5-minute setup guide.
+
+**Alternatives:** [Zapier MCP](https://zapier.com/mcp) or [Composio](https://composio.dev) can connect Search Console without your own credentials.
+</Note>
+
+## API Reference
+
+This source provides a single flexible `api_search-console` tool that accepts:
+- `path`: API endpoint (e.g., "/webmasters/v3/sites")
+- `method`: HTTP method (GET, POST)
+- `params`: Request body or query parameters
+
+### Common Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| /webmasters/v3/sites | GET | List verified sites |
+| /webmasters/v3/sites/{siteUrl} | GET | Get site details |
+| /webmasters/v3/sites/{siteUrl}/searchAnalytics/query | POST | Query search analytics data |
+| /webmasters/v3/sites/{siteUrl}/sitemaps | GET | List sitemaps |
+| /webmasters/v3/sites/{siteUrl}/urlInspection/index:inspect | POST | Inspect a URL |
+
+### Search Analytics Query
+
+The search analytics endpoint is the most powerful. POST body example:
+
+```json
+{
+  "startDate": "2026-01-01",
+  "endDate": "2026-03-17",
+  "dimensions": ["query", "page"],
+  "rowLimit": 25,
+  "dimensionFilterGroups": [{
+    "filters": [{
+      "dimension": "country",
+      "expression": "hun"
+    }]
+  }]
+}
+```
+
+**Available dimensions:** `query`, `page`, `country`, `device`, `date`, `searchAppearance`
+
+**Response fields:** `clicks`, `impressions`, `ctr`, `position`
+
+## Guidelines
+
+- **Site URLs**: Must be URL-encoded. Use `https://example.com/` or `sc-domain:example.com` for domain properties.
+- **Date range**: Search analytics data is available with a 2-3 day delay. Don't query for today or yesterday.
+- **Privacy**: This source accesses search performance data. All data remains local.
+
+---
+
+## Setup Guide
+
+### Configuration
+
+**Required config.json:**
+```json
+{
+  "name": "Google Search Console",
+  "slug": "search-console",
+  "enabled": true,
+  "provider": "google",
+  "type": "api",
+  "api": {
+    "baseUrl": "https://searchconsole.googleapis.com/",
+    "authType": "bearer",
+    "googleService": "searchconsole",
+    "googleOAuthClientId": "your-client-id.apps.googleusercontent.com",
+    "googleOAuthClientSecret": "your-client-secret"
+  }
+}
+```
+
+### Authentication
+
+See [Google OAuth Setup](/source-guides/google-oauth-setup) for instructions on creating OAuth credentials, then use `source_google_oauth_trigger` to start the OAuth flow.
+
+### Troubleshooting
+
+#### "Google Search Console API has not been used in project" error
+
+The Search Console API needs to be enabled in your Google Cloud project:
+
+1. Visit the [Search Console API page](https://console.developers.google.com/apis/api/searchconsole.googleapis.com/overview)
+2. Click **Enable**
+3. Wait 1-2 minutes for changes to propagate
+
+#### "Google OAuth credentials not configured" error
+
+Add your OAuth client ID and secret to the source's `config.json` under the `api` section.
+
+### Rate Limits
+- 1,200 queries per minute
+- Search analytics queries return up to 25,000 rows per request

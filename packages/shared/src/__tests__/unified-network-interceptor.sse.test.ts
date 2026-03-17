@@ -7,6 +7,7 @@ import { toolMetadataStore } from '../interceptor-common.ts';
 let createOpenAiSseStrippingStream: typeof import('../unified-network-interceptor.ts').createOpenAiSseStrippingStream;
 let createOpenAiResponsesSseStrippingStream: typeof import('../unified-network-interceptor.ts').createOpenAiResponsesSseStrippingStream;
 let createAnthropicSseStrippingStream: typeof import('../unified-network-interceptor.ts').createAnthropicSseStrippingStream;
+let stripMetadataFieldsFromRawJson: typeof import('../unified-network-interceptor.ts').stripMetadataFieldsFromRawJson;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -43,6 +44,7 @@ describe('unified-network-interceptor SSE processors', () => {
     createOpenAiSseStrippingStream = mod.createOpenAiSseStrippingStream;
     createOpenAiResponsesSseStrippingStream = mod.createOpenAiResponsesSseStrippingStream;
     createAnthropicSseStrippingStream = mod.createAnthropicSseStrippingStream;
+    stripMetadataFieldsFromRawJson = mod.stripMetadataFieldsFromRawJson;
   });
 
   afterAll(() => {
@@ -146,5 +148,45 @@ describe('unified-network-interceptor SSE processors', () => {
     expect(meta?.displayName).toBe('Read Tmp');
 
     rmSync(sessionDir, { recursive: true, force: true });
+  });
+
+  describe('stripMetadataFieldsFromRawJson', () => {
+    it('strips _intent and _displayName from valid JSON', () => {
+      const input = '{"path":"/tmp","_intent":"Read file","_displayName":"Read Tmp"}';
+      const result = stripMetadataFieldsFromRawJson(input);
+      expect(result).toBe('{"path":"/tmp"}');
+      expect(result).not.toContain('_intent');
+      expect(result).not.toContain('_displayName');
+    });
+
+    it('strips metadata fields at the beginning of the object', () => {
+      const input = '{"_intent":"do thing","_displayName":"Do Thing","path":"/tmp"}';
+      const result = stripMetadataFieldsFromRawJson(input);
+      expect(result).toBe('{"path":"/tmp"}');
+    });
+
+    it('strips metadata fields in the middle of the object', () => {
+      const input = '{"a":1,"_intent":"do thing","_displayName":"Do Thing","b":2}';
+      const result = stripMetadataFieldsFromRawJson(input);
+      expect(result).toBe('{"a":1,"b":2}');
+    });
+
+    it('handles escaped quotes in metadata values', () => {
+      const input = '{"path":"/tmp","_intent":"Read \\"special\\" file","_displayName":"Read"}';
+      const result = stripMetadataFieldsFromRawJson(input);
+      expect(result).toBe('{"path":"/tmp"}');
+    });
+
+    it('returns unchanged JSON when no metadata fields present', () => {
+      const input = '{"path":"/tmp","limit":10}';
+      const result = stripMetadataFieldsFromRawJson(input);
+      expect(result).toBe('{"path":"/tmp","limit":10}');
+    });
+
+    it('handles JSON with only metadata fields', () => {
+      const input = '{"_intent":"do thing","_displayName":"Do Thing"}';
+      const result = stripMetadataFieldsFromRawJson(input);
+      expect(result).toBe('{}');
+    });
   });
 });

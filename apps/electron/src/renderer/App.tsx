@@ -26,6 +26,7 @@ import { NavigationProvider } from '@/contexts/NavigationContext'
 import { navigate, routes } from './lib/navigate'
 import { stripMarkdown } from './utils/text'
 import { extractWorkspaceSlugFromPath } from '@craft-agent/shared/utils/workspace-slug'
+import { DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
 import { initRendererPerf } from './lib/perf'
 import {
   initializeSessionsAtom,
@@ -453,11 +454,11 @@ export default function App() {
       for (const s of loadedSessions) {
         // Only store non-default options to keep the map lean
         const hasNonDefaultMode = s.permissionMode && s.permissionMode !== 'ask'
-        const hasNonDefaultThinking = s.thinkingLevel && s.thinkingLevel !== 'think'
+        const hasNonDefaultThinking = s.thinkingLevel && s.thinkingLevel !== DEFAULT_THINKING_LEVEL
         if (hasNonDefaultMode || hasNonDefaultThinking) {
           optionsMap.set(s.id, {
             permissionMode: s.permissionMode ?? 'ask',
-            thinkingLevel: s.thinkingLevel ?? 'think',
+            thinkingLevel: s.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
           })
         }
       }
@@ -611,6 +612,10 @@ export default function App() {
             window.dispatchEvent(new CustomEvent('craft:restore-input', {
               detail: { sessionId, text: restored },
             }))
+            break
+          }
+          case 'toast_error': {
+            toast.error(effect.message, { duration: 5000 })
             break
           }
         }
@@ -797,13 +802,13 @@ export default function App() {
   // Centralised helper used by all session creation paths (create, branch, event handler).
   const populateSessionOptions = useCallback((session: Session) => {
     const hasNonDefaultMode = session.permissionMode && session.permissionMode !== 'ask'
-    const hasNonDefaultThinking = session.thinkingLevel && session.thinkingLevel !== 'think'
+    const hasNonDefaultThinking = session.thinkingLevel && session.thinkingLevel !== DEFAULT_THINKING_LEVEL
     if (hasNonDefaultMode || hasNonDefaultThinking) {
       setSessionOptions(prev => {
         const next = new Map(prev)
         next.set(session.id, {
           permissionMode: session.permissionMode ?? 'ask',
-          thinkingLevel: session.thinkingLevel ?? 'think',
+          thinkingLevel: session.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
         })
         return next
       })

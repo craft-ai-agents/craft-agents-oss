@@ -19,7 +19,7 @@ import type { StoredAttachment, StoredMessage } from '@craft-agent/core/types';
 import type { Plan } from '../agent/plan-types.ts';
 import type { PermissionMode } from '../agent/mode-manager.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
-import { isValidThinkingLevel } from '../agent/thinking-levels.ts';
+import { isValidThinkingLevel, normalizeThinkingLevel } from '../agent/thinking-levels.ts';
 import { parsePermissionMode, PERMISSION_MODE_ORDER } from '../agent/mode-types.ts';
 import { type ConfigDefaults } from './config-defaults-schema.ts';
 import { isValidThemeFile } from './validators.ts';
@@ -2299,11 +2299,12 @@ export function setDefaultLlmConnection(slug: string): boolean {
  */
 export function getDefaultThinkingLevel(): ThinkingLevel {
   const config = loadStoredConfig();
-  if (config?.defaultThinkingLevel && isValidThinkingLevel(config.defaultThinkingLevel)) {
-    return config.defaultThinkingLevel;
+  if (config?.defaultThinkingLevel) {
+    const normalized = normalizeThinkingLevel(config.defaultThinkingLevel);
+    if (normalized) return normalized;
   }
   const defaults = loadConfigDefaults();
-  return defaults.workspaceDefaults.thinkingLevel;
+  return normalizeThinkingLevel(defaults.workspaceDefaults.thinkingLevel) ?? 'medium';
 }
 
 /**

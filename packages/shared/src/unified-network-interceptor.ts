@@ -120,6 +120,20 @@ function captureMetadataFromInput(toolId: string, toolName: string, parsed: Reco
   return false;
 }
 
+/**
+ * Best-effort regex removal of metadata fields from raw JSON string.
+ * Used as fallback when JSON.parse fails — ensures _intent/_displayName
+ * never leak to the SDK even with malformed JSON.
+ *
+ * Exported for focused unit tests.
+ */
+export function stripMetadataFieldsFromRawJson(json: string): string {
+  return json
+    .replace(/"_intent"\s*:\s*"(?:[^"\\]|\\.)*"\s*,?\s*/g, '')
+    .replace(/"_displayName"\s*:\s*"(?:[^"\\]|\\.)*"\s*,?\s*/g, '')
+    .replace(/,\s*}/g, '}');
+}
+
 // ============================================================================
 // ANTHROPIC ADAPTER
 // ============================================================================
@@ -307,13 +321,14 @@ export function createAnthropicSseStrippingStream(): TransformStream<Uint8Array,
       };
       emitSseEvent('content_block_delta', JSON.stringify(deltaEvent), controller);
     } catch {
-      debugLog(`[SSE Strip] Failed to parse buffered JSON for ${block.name} (${block.id}), passing through`);
+      debugLog(`[SSE Strip] Failed to parse buffered JSON for ${block.name} (${block.id}), stripping via regex`);
+      const stripped = stripMetadataFieldsFromRawJson(block.bufferedJson);
       const deltaEvent = {
         type: 'content_block_delta',
         index,
         delta: {
           type: 'input_json_delta',
-          partial_json: block.bufferedJson,
+          partial_json: stripped,
         },
       };
       emitSseEvent('content_block_delta', JSON.stringify(deltaEvent), controller);
@@ -1323,6 +1338,17 @@ async function interceptedFetch(
             headers: response.headers,
           });
           return logResponse(processedResponse, url, startTime, adapter);
+        }
+
+        // Non-SSE response — strip metadata from JSON body if present
+        if (contentType.includes('application/json') && response.body) {
+          const text = await response.text();
+          const stripped = stripMetadataFieldsFromRawJson(text);
+          return logResponse(new Response(stripped, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+          }), url, startTime, adapter);
         }
 
         return logResponse(response, url, startTime, adapter);

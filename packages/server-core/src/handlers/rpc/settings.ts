@@ -2,11 +2,12 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel } from '@craft-agent/shared/config'
-import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
+import { isValidThinkingLevel, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { getWorkspaceOrThrow } from '@craft-agent/server-core/handlers'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
+import { isValidWorkingDirectory } from '../../utils/path-validation'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workspace.SETTINGS_GET,
@@ -30,6 +31,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sessions.SET_MODEL,
   RPC_CHANNELS.settings.GET_DEFAULT_THINKING_LEVEL,
   RPC_CHANNELS.settings.SET_DEFAULT_THINKING_LEVEL,
+  RPC_CHANNELS.settings.GET_NETWORK_PROXY,
   RPC_CHANNELS.dialog.OPEN_FOLDER,
 ] as const
 
@@ -44,7 +46,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
 
   server.handle(RPC_CHANNELS.settings.SET_DEFAULT_THINKING_LEVEL, async (_ctx, level: string) => {
     if (!isValidThinkingLevel(level)) {
-      throw new Error(`Invalid thinking level: ${level}. Valid values: 'off', 'think', 'max'`)
+      throw new Error(`Invalid thinking level: ${level}. Valid values: 'off', 'low', 'medium', 'high', 'max'`)
     }
     const success = setDefaultThinkingLevel(level)
     if (!success) {
@@ -98,7 +100,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       model: config?.defaults?.model,
       permissionMode: config?.defaults?.permissionMode,
       cyclablePermissionModes: config?.defaults?.cyclablePermissionModes,
-      thinkingLevel: config?.defaults?.thinkingLevel,
+      thinkingLevel: normalizeThinkingLevel(config?.defaults?.thinkingLevel),
       workingDirectory: config?.defaults?.workingDirectory,
       localMcpEnabled: config?.localMcpServers?.enabled ?? true,
       defaultLlmConnection: config?.defaults?.defaultLlmConnection,
@@ -109,6 +111,9 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
   // Update a workspace setting
   server.handle(RPC_CHANNELS.workspace.SETTINGS_UPDATE, async (_ctx, workspaceId: string, key: string, value: unknown) => {
     const workspace = getWorkspaceOrThrow(workspaceId)
+    const normalizedValue = key === 'workingDirectory' && typeof value === 'string'
+      ? value.trim()
+      : value
 
     // Validate key is a known workspace setting
     const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled', 'defaultLlmConnection']
@@ -117,10 +122,17 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     }
 
     // Validate defaultLlmConnection exists before saving
-    if (key === 'defaultLlmConnection' && value !== undefined && value !== null) {
+    if (key === 'defaultLlmConnection' && normalizedValue !== undefined && normalizedValue !== null) {
       const { getLlmConnection } = await import('@craft-agent/shared/config/storage')
-      if (!getLlmConnection(value as string)) {
-        throw new Error(`LLM connection "${value}" not found`)
+      if (!getLlmConnection(normalizedValue as string)) {
+        throw new Error(`LLM connection "${normalizedValue}" not found`)
+      }
+    }
+
+    if (key === 'workingDirectory' && normalizedValue !== undefined && normalizedValue !== null) {
+      const validation = isValidWorkingDirectory(String(normalizedValue))
+      if (!validation.valid) {
+        throw new Error(validation.reason!)
       }
     }
 
@@ -132,20 +144,20 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
 
     // Handle 'name' specially - it's a top-level config property, not in defaults
     if (key === 'name') {
-      config.name = String(value).trim()
+      config.name = String(normalizedValue).trim()
     } else if (key === 'localMcpEnabled') {
       // Store in localMcpServers.enabled (top-level, not in defaults)
       config.localMcpServers = config.localMcpServers || { enabled: true }
-      config.localMcpServers.enabled = Boolean(value)
+      config.localMcpServers.enabled = Boolean(normalizedValue)
     } else {
       // Update the setting in defaults
       config.defaults = config.defaults || {}
-      ;(config.defaults as Record<string, unknown>)[key] = value
+      ;(config.defaults as Record<string, unknown>)[key] = normalizedValue
     }
 
     // Save the config
     saveWorkspaceConfig(workspace.rootPath, config)
-    deps.platform.logger.info(`Workspace setting updated: ${key} = ${JSON.stringify(value)}`)
+    deps.platform.logger.info(`Workspace setting updated: ${key} = ${JSON.stringify(normalizedValue)}`)
   })
 
   // ============================================================
@@ -262,5 +274,15 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
   server.handle(RPC_CHANNELS.appearance.SET_RICH_TOOL_DESCRIPTIONS, async (_ctx, enabled: boolean) => {
     const { setRichToolDescriptions } = await import('@craft-agent/shared/config/storage')
     setRichToolDescriptions(enabled)
+  })
+
+  // ============================================================
+  // Network Proxy Settings
+  // ============================================================
+
+  // Get network proxy settings
+  server.handle(RPC_CHANNELS.settings.GET_NETWORK_PROXY, async () => {
+    const { getNetworkProxySettings } = await import('@craft-agent/shared/config/storage')
+    return getNetworkProxySettings()
   })
 }

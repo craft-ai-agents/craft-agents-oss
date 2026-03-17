@@ -79,7 +79,7 @@ Connect external data sources to your workspace:
 | Type | Examples |
 |------|----------|
 | **MCP Servers** | Craft, Linear, GitHub, Notion, custom servers |
-| **REST APIs** | Google (Gmail, Calendar, Drive), Slack, Microsoft |
+| **REST APIs** | Google (Gmail, Calendar, Drive, YouTube, Search Console), Slack, Microsoft |
 | **Local Files** | Filesystem, Obsidian vaults, Git repos |
 
 ### Permission Modes

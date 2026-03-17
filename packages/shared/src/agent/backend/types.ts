@@ -316,11 +316,22 @@ export interface AgentBackend {
 
   /**
    * Force abort with specific reason.
-   * Used for auth requests, plan submissions where we need synchronous abort.
+   * Used for true hard-stop semantics (user stop, redirect fallback, teardown).
    *
    * @param reason - AbortReason enum value
    */
   forceAbort(reason: AbortReason): void;
+
+  /**
+   * Interrupt the current turn because control is being handed to the UI.
+   *
+   * Used for pause points like plan submission and auth requests, where the
+   * session should stop cleanly without necessarily using the backend's
+   * hardest abort primitive.
+   *
+   * @param reason - AbortReason enum value for the handoff boundary
+   */
+  interruptForHandoff(reason: AbortReason): void;
 
   /**
    * Redirect the agent mid-stream with a new user message.

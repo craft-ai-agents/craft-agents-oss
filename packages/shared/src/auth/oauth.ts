@@ -26,7 +26,7 @@ export interface OAuthCallbacks {
 const CALLBACK_PORT_START = 8914;
 const CALLBACK_PORT_END = 8924;
 const CALLBACK_PATH = '/oauth/callback';
-const CLIENT_NAME = 'Craft Agent';
+const CLIENT_NAME = 'Claude Code (Craft Agent)';
 
 // Generate PKCE code verifier and challenge
 function generatePKCE(): { verifier: string; challenge: string } {
@@ -448,25 +448,45 @@ export class CraftOAuth {
  * Register an MCP OAuth client dynamically.
  * Extracted from CraftOAuth.registerClient for reuse in prepareMcpOAuth.
  */
+class McpClientRegistrationError extends Error {
+  status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = 'McpClientRegistrationError';
+    this.status = status;
+  }
+}
+
+function shouldFallbackToDefaultMcpClient(error: unknown): boolean {
+  return error instanceof McpClientRegistrationError && (error.status === 401 || error.status === 403);
+}
+
 async function registerMcpOAuthClient(
   registrationEndpoint: string,
   redirectUri: string
 ): Promise<{ client_id: string; client_secret?: string }> {
-  const response = await fetch(registrationEndpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      client_name: CLIENT_NAME,
-      redirect_uris: [redirectUri],
-      grant_types: ['authorization_code', 'refresh_token'],
-      response_types: ['code'],
-      token_endpoint_auth_method: 'none',
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(registrationEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_name: CLIENT_NAME,
+        redirect_uris: [redirectUri],
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'none',
+      }),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    throw new McpClientRegistrationError(`Failed to register OAuth client: ${message}`);
+  }
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Failed to register OAuth client: ${error}`);
+    throw new McpClientRegistrationError(`Failed to register OAuth client: ${error}`, response.status);
   }
 
   return response.json() as Promise<{ client_id: string; client_secret?: string }>;
@@ -536,9 +556,22 @@ export async function prepareMcpOAuth(mcpUrl: string, callbackPort: number): Pro
   const redirectUri = `http://localhost:${callbackPort}${CALLBACK_PATH}`;
 
   let clientId: string;
+  let clientSecret: string | undefined;
   if (metadata.registration_endpoint) {
-    const client = await registerMcpOAuthClient(metadata.registration_endpoint, redirectUri);
-    clientId = client.client_id;
+    try {
+      const client = await registerMcpOAuthClient(metadata.registration_endpoint, redirectUri);
+      clientId = client.client_id;
+      clientSecret = client.client_secret;
+    } catch (error) {
+      if (!shouldFallbackToDefaultMcpClient(error)) {
+        throw error;
+      }
+
+      // Dynamic client registration can be intentionally gated by providers
+      // (for example returning 403 for unapproved clients). In that case,
+      // fall back to a default client ID and proceed with the flow.
+      clientId = 'craft-agent';
+    }
   } else {
     clientId = 'craft-agent';
   }
@@ -557,6 +590,7 @@ export async function prepareMcpOAuth(mcpUrl: string, callbackPort: number): Pro
     codeVerifier: pkce.verifier,
     tokenEndpoint: metadata.token_endpoint,
     clientId,
+    clientSecret,
     redirectUri,
     provider: 'mcp',
   };

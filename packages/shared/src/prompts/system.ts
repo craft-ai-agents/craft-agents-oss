@@ -602,7 +602,7 @@ The \`session\` MCP server provides tools for managing external sources:
 |------|---------|
 | \`source_test\` | Validate config, test connection, check auth status |
 | \`source_oauth_trigger\` | Start OAuth for MCP sources (Linear, Notion, etc.) |
-| \`source_google_oauth_trigger\` | Google OAuth (Gmail, Calendar, Drive) |
+| \`source_google_oauth_trigger\` | Google OAuth (Gmail, Calendar, Drive, Docs, Sheets, YouTube, Search Console) |
 | \`source_slack_oauth_trigger\` | Slack OAuth |
 | \`source_microsoft_oauth_trigger\` | Microsoft OAuth (Outlook, Teams, OneDrive) |
 | \`source_credential_prompt\` | Prompt user for API key / bearer token |

@@ -713,6 +713,7 @@ For large files (>2000 lines), use {path, startLine, endLine} to select a portio
         }
         throw error;
       }
-    }
+    },
+    { annotations: { readOnlyHint: true } }
   );
 }

@@ -1,0 +1,97 @@
+---
+title: "YouTube"
+description: "Connect YouTube for channel and video data management in Craft Agents"
+---
+
+# YouTube
+
+Access and manage YouTube data through the YouTube Data API v3.
+
+<Note>
+**Bring Your Own Google OAuth Credentials**
+
+Craft Agents does not include pre-configured Google OAuth credentials. See [Google OAuth Setup](/source-guides/google-oauth-setup) for a 5-minute setup guide.
+
+**Alternatives:** [Zapier MCP](https://zapier.com/mcp) or [Composio](https://composio.dev) can connect YouTube without your own credentials.
+</Note>
+
+## API Reference
+
+This source provides a single flexible `api_youtube` tool that accepts:
+- `path`: API endpoint (e.g., "/youtube/v3/channels")
+- `method`: HTTP method (GET, POST, etc.)
+- `params`: Request body or query parameters
+
+### Common Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| /youtube/v3/channels | GET | List channels (use `mine=true` for your channel) |
+| /youtube/v3/videos | GET | List videos by ID or chart |
+| /youtube/v3/search | GET | Search for videos, channels, playlists |
+| /youtube/v3/playlists | GET | List playlists |
+| /youtube/v3/playlistItems | GET | List videos in a playlist |
+| /youtube/v3/commentThreads | GET | List comment threads on a video |
+| /youtube/v3/subscriptions | GET | List subscriptions |
+
+### Key Parameters
+
+- `part` (required): Comma-separated list of resource parts (e.g., `snippet`, `statistics`, `contentDetails`)
+- `mine=true`: Filter to your own channel's resources
+- `channelId`: Filter by specific channel
+- `maxResults`: Number of results (1-50, default 5)
+- `pageToken`: Pagination token from previous response
+
+## Guidelines
+
+- **Quota**: YouTube API has a daily quota of 10,000 units. Search costs 100 units, most other reads cost 1-3 units. Be mindful of quota usage.
+- **Parts**: Always specify only the `part` values you need to minimize quota cost.
+- **Privacy**: This source accesses YouTube account data. All data remains local.
+
+---
+
+## Setup Guide
+
+### Configuration
+
+**Required config.json:**
+```json
+{
+  "name": "YouTube",
+  "slug": "youtube",
+  "enabled": true,
+  "provider": "google",
+  "type": "api",
+  "api": {
+    "baseUrl": "https://youtube.googleapis.com/",
+    "authType": "bearer",
+    "googleService": "youtube",
+    "googleOAuthClientId": "your-client-id.apps.googleusercontent.com",
+    "googleOAuthClientSecret": "your-client-secret"
+  }
+}
+```
+
+### Authentication
+
+See [Google OAuth Setup](/source-guides/google-oauth-setup) for instructions on creating OAuth credentials, then use `source_google_oauth_trigger` to start the OAuth flow.
+
+### Troubleshooting
+
+#### "YouTube Data API v3 has not been used in project" error
+
+The YouTube Data API needs to be enabled in your Google Cloud project:
+
+1. Visit the [YouTube Data API page](https://console.developers.google.com/apis/api/youtube.googleapis.com/overview)
+2. Click **Enable**
+3. Wait 1-2 minutes for changes to propagate
+
+#### "Google OAuth credentials not configured" error
+
+Add your OAuth client ID and secret to the source's `config.json` under the `api` section.
+
+### Rate Limits
+- 10,000 quota units per day
+- Search requests cost 100 units each
+- Most read requests cost 1-3 units
+- Write requests cost 50 units each

@@ -98,8 +98,28 @@ describe('default thinking level storage', () => {
 
   it('round-trips persisted value across processes', () => {
     const { configDir } = setupWorkspaceConfigDir()
-    runEval(configDir, "setDefaultThinkingLevel('think')")
+    runEval(configDir, "setDefaultThinkingLevel('medium')")
     const output = runEval(configDir, "console.log(String(getDefaultThinkingLevel()))")
-    expect(output).toBe('think')
+    expect(output).toBe('medium')
+  })
+
+  it('supports all five thinking levels', () => {
+    const { configDir } = setupWorkspaceConfigDir()
+    for (const level of ['off', 'low', 'medium', 'high', 'max']) {
+      runEval(configDir, `setDefaultThinkingLevel('${level}')`)
+      const output = runEval(configDir, "console.log(String(getDefaultThinkingLevel()))")
+      expect(output).toBe(level)
+    }
+  })
+
+  it('migrates legacy "think" value to "medium"', () => {
+    const { configDir, configPath } = setupWorkspaceConfigDir()
+    // Manually write the legacy 'think' value to config
+    const config = JSON.parse(readFileSync(configPath, 'utf-8'))
+    config.defaultThinkingLevel = 'think'
+    writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+
+    const output = runEval(configDir, "console.log(String(getDefaultThinkingLevel()))")
+    expect(output).toBe('medium')
   })
 })

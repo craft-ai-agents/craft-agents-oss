@@ -21,7 +21,7 @@ export type CredentialInputMode = 'bearer' | 'basic' | 'header' | 'query' | 'mul
 /**
  * Google service types for OAuth
  */
-export type GoogleService = 'gmail' | 'calendar' | 'drive' | 'docs' | 'sheets';
+export type GoogleService = 'gmail' | 'calendar' | 'drive' | 'docs' | 'sheets' | 'youtube' | 'searchconsole';
 
 /**
  * Slack service types for OAuth

@@ -556,6 +556,26 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     return this.instances.get(id)
   }
 
+  private cleanupDestroyedInstance(instance: BrowserInstance, reason: string): void {
+    this.finalizeDestroyedInstance(instance, 'closed')
+    mainLog.info(`[browser-pane] cleaned up stale instance ${instance.id}: ${reason}`)
+  }
+
+  /**
+   * Get an instance that is confirmed alive (window not destroyed).
+   * Throws a clear error if the instance is missing or its window was closed.
+   * Automatically cleans up stale entries from the instance map.
+   */
+  private requireAliveInstance(id: string): BrowserInstance {
+    const instance = this.instances.get(id)
+    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    if (instance.window.isDestroyed()) {
+      this.cleanupDestroyedInstance(instance, `lookup by id ${id}`)
+      throw new Error(`Browser window was closed (instance: ${id})`)
+    }
+    return instance
+  }
+
   async handleEmptyStateLaunchFromRenderer(
     senderWebContentsId: number,
     payload: BrowserEmptyStateLaunchPayload,
@@ -640,7 +660,15 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   listInstances(): BrowserInstanceInfo[] {
-    return Array.from(this.instances.values()).map(i => this.toInfo(i))
+    const infos: BrowserInstanceInfo[] = []
+    for (const instance of this.instances.values()) {
+      if (instance.window.isDestroyed()) {
+        this.cleanupDestroyedInstance(instance, 'listInstances')
+        continue
+      }
+      infos.push(this.toInfo(instance))
+    }
+    return infos
   }
 
   getWindowCount(): number {
@@ -654,8 +682,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   async navigate(id: string, url: string): Promise<{ url: string; title: string }> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
 
     let normalizedUrl = url.trim()
     const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(normalizedUrl)
@@ -689,16 +716,14 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   async goBack(id: string): Promise<void> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
     if (instance.pageView.webContents.canGoBack()) {
       instance.pageView.webContents.goBack()
     }
   }
 
   async goForward(id: string): Promise<void> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
     if (instance.pageView.webContents.canGoForward()) {
       instance.pageView.webContents.goForward()
     }
@@ -706,13 +731,13 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
   reload(id: string): void {
     const instance = this.instances.get(id)
-    if (!instance) return
+    if (!instance || instance.window.isDestroyed()) return
     instance.pageView.webContents.reload()
   }
 
   stop(id: string): void {
     const instance = this.instances.get(id)
-    if (!instance) return
+    if (!instance || instance.window.isDestroyed()) return
     instance.pageView.webContents.stop()
   }
 
@@ -763,14 +788,12 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   async getAccessibilitySnapshot(id: string): Promise<AccessibilitySnapshot> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
     return instance.cdp.getAccessibilitySnapshot()
   }
 
   async clickAtCoordinates(id: string, x: number, y: number): Promise<void> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
 
     try {
       await instance.cdp.clickAtCoordinates(x, y)
@@ -790,8 +813,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   async drag(id: string, x1: number, y1: number, x2: number, y2: number): Promise<void> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
 
     try {
       await instance.cdp.drag(x1, y1, x2, y2)
@@ -811,8 +833,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   async typeText(id: string, text: string): Promise<void> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
 
     try {
       await instance.cdp.typeText(text)
@@ -832,14 +853,12 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   async setClipboard(id: string, text: string): Promise<void> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
     await instance.cdp.setClipboard(text)
   }
 
   async getClipboard(id: string): Promise<string> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
     return instance.cdp.getClipboard()
   }
 
@@ -848,8 +867,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     ref: string,
     options?: { waitFor?: 'none' | 'navigation' | 'network-idle'; timeoutMs?: number }
   ): Promise<void> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
 
     try {
       const geometry = await instance.cdp.clickElement(ref)
@@ -902,8 +920,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   async fillElement(id: string, ref: string, value: string): Promise<void> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
 
     try {
       const geometry = await instance.cdp.fillElement(ref, value)
@@ -926,8 +943,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   async selectOption(id: string, ref: string, value: string): Promise<void> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
 
     try {
       const geometry = await instance.cdp.selectOption(ref, value)
@@ -965,8 +981,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   async screenshot(id: string, options?: BrowserScreenshotOptions): Promise<BrowserScreenshotResult> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
 
     // Hide native agent overlay so it doesn't appear in captures
     const suspendedOverlay = this.suspendOverlayForCapture(instance)
@@ -1379,8 +1394,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   getConsoleLogs(id: string, options?: BrowserConsoleOptions): BrowserConsoleEntry[] {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
 
     const level = options?.level ?? 'all'
     const limit = Math.max(1, Math.min(500, Number(options?.limit ?? 50)))
@@ -1393,8 +1407,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   getNetworkLogs(id: string, options?: BrowserNetworkOptions): BrowserNetworkEntry[] {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
 
     const statusFilter = options?.status ?? 'all'
     const limit = Math.max(1, Math.min(500, Number(options?.limit ?? 50)))
@@ -1418,8 +1431,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   async waitFor(id: string, args: BrowserWaitArgs): Promise<BrowserWaitResult> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
 
     const timeoutMs = Math.max(100, args.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS)
     const pollMs = Math.max(25, args.pollMs ?? DEFAULT_WAIT_POLL_MS)
@@ -1484,8 +1496,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   async sendKey(id: string, args: BrowserKeyArgs): Promise<void> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
 
     const key = args.key?.trim()
     if (!key) throw new Error('browser_key requires key')
@@ -1505,8 +1516,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   async getDownloads(id: string, options?: BrowserDownloadOptions): Promise<BrowserDownloadEntry[]> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
 
     const action = options?.action ?? 'list'
     const limit = Math.max(1, Math.min(200, Number(options?.limit ?? 20)))
@@ -1573,8 +1583,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   async uploadFile(id: string, ref: string, filePaths: string[]): Promise<ElementGeometry> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
 
     const safePaths: string[] = []
     for (const p of filePaths) {
@@ -1587,8 +1596,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   windowResize(id: string, width: number, height: number): { width: number; height: number } {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
 
     const requestedViewportWidth = Math.max(320, Math.floor(width))
     const requestedViewportHeight = Math.max(240, Math.floor(height))
@@ -1605,14 +1613,13 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   async evaluate(id: string, expression: string): Promise<unknown> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
     return instance.pageView.webContents.executeJavaScript(expression)
   }
 
   async detectSecurityChallenge(id: string): Promise<{ detected: boolean; provider: string; signals: string[] }> {
     const instance = this.instances.get(id)
-    if (!instance) return { detected: false, provider: 'none', signals: [] }
+    if (!instance || instance.window.isDestroyed()) return { detected: false, provider: 'none', signals: [] }
 
     const signals: string[] = []
     const title = instance.title || ''
@@ -1682,8 +1689,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   async scroll(id: string, direction: 'up' | 'down' | 'left' | 'right', amount = 500): Promise<void> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
 
     const deltaX = direction === 'left' ? -amount : direction === 'right' ? amount : 0
     const deltaY = direction === 'up' ? -amount : direction === 'down' ? amount : 0
@@ -1728,6 +1734,10 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   getBoundForSession(sessionId: string): string | null {
     for (const instance of this.instances.values()) {
       if (instance.ownerType === 'session' && instance.ownerSessionId === sessionId) {
+        if (instance.window.isDestroyed()) {
+          this.cleanupDestroyedInstance(instance, `getBoundForSession(${sessionId})`)
+          continue
+        }
         return instance.id
       }
     }
@@ -1782,7 +1792,13 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
   getBoundInstanceId(sessionId: string): string | null {
     for (const [id, instance] of this.instances) {
-      if (instance.boundSessionId === sessionId) return id
+      if (instance.boundSessionId === sessionId) {
+        if (instance.window.isDestroyed()) {
+          this.cleanupDestroyedInstance(instance, `getBoundInstanceId(${sessionId})`)
+          continue
+        }
+        return id
+      }
     }
     return null
   }

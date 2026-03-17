@@ -3,6 +3,8 @@ import { ArrowLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "../ui/input"
 import { AddWorkspaceContainer, AddWorkspaceStepHeader, AddWorkspaceSecondaryButton, AddWorkspacePrimaryButton } from "./primitives"
+import { useDirectoryPicker } from "@/hooks/useDirectoryPicker"
+import { ServerDirectoryBrowser } from "@/components/ServerDirectoryBrowser"
 
 interface AddWorkspaceStep_OpenFolderProps {
   onBack: () => void
@@ -21,15 +23,20 @@ export function AddWorkspaceStep_OpenFolder({
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [workspaceName, setWorkspaceName] = useState('')
 
-  const handleBrowse = useCallback(async () => {
-    const path = await window.electronAPI.openFolderDialog()
-    if (path) {
-      setSelectedPath(path)
-      // Extract folder name for workspace name
-      const folderName = path.split(/[\\/]/).pop() || path
-      setWorkspaceName(folderName)
-    }
+  const handleFolderSelected = useCallback((path: string) => {
+    setSelectedPath(path)
+    // Extract folder name for workspace name
+    const folderName = path.split(/[\\/]/).pop() || path
+    setWorkspaceName(folderName)
   }, [])
+
+  const {
+    pickDirectory,
+    showServerBrowser,
+    serverBrowserMode,
+    cancelServerBrowser,
+    confirmServerBrowser,
+  } = useDirectoryPicker(handleFolderSelected)
 
   const handleOpen = useCallback(async () => {
     if (!selectedPath || !workspaceName.trim()) return
@@ -75,7 +82,7 @@ export function AddWorkspaceStep_OpenFolder({
             )}
           </div>
           <AddWorkspaceSecondaryButton
-            onClick={handleBrowse}
+            onClick={pickDirectory}
             disabled={isCreating}
           >
             Browse
@@ -107,6 +114,13 @@ export function AddWorkspaceStep_OpenFolder({
           Open
         </AddWorkspacePrimaryButton>
       </div>
+
+      <ServerDirectoryBrowser
+        open={showServerBrowser}
+        mode={serverBrowserMode}
+        onSelect={confirmServerBrowser}
+        onCancel={cancelServerBrowser}
+      />
     </AddWorkspaceContainer>
   )
 }

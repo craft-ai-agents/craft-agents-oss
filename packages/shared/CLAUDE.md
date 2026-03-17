@@ -28,6 +28,9 @@ cd packages/shared && bun run tsc --noEmit
 ## Notes
 - `ClaudeAgent` is the primary class in `src/agent/claude-agent.ts`.
 - Backward alias export (`CraftAgent`) exists for compatibility.
+- Session lifecycle distinguishes **hard aborts** from **UI handoff interrupts**:
+  - use hard aborts for true cancellation/teardown (`UserStop`, redirect fallback)
+  - use handoff interrupts for pause points where control moves to the UI (`AuthRequest`, `PlanSubmitted`)
 - Automations matching is unified through canonical matcher adapters in `src/automations/utils.ts` (`matcherMatches*`). Avoid direct primitive-only matcher checks in feature code so condition gating stays consistent across app and agent events.
 
 ## Source of truth
