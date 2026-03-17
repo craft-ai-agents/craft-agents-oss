@@ -19,7 +19,7 @@ import { join } from 'node:path';
 import type { AgentEvent } from '@craft-agent/core/types';
 import type { FileAttachment } from '../utils/files.ts';
 import type { ThinkingLevel } from './thinking-levels.ts';
-import { DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
+import { DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from './thinking-levels.ts';
 import type { PermissionMode } from './mode-manager.ts';
 import type { LoadedSource } from '../sources/types.ts';
 import { buildCallLlmRequest, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
@@ -222,7 +222,7 @@ export abstract class BaseAgent implements AgentBackend {
     this.workingDirectory = config.session?.workingDirectory ?? config.workspace.rootPath ?? process.cwd();
     this._sessionId = config.session?.id || `agent-${Date.now()}`;
     this._model = config.model || defaultModel;
-    this._thinkingLevel = config.thinkingLevel || DEFAULT_THINKING_LEVEL;
+    this._thinkingLevel = normalizeThinkingLevel(config.thinkingLevel) ?? DEFAULT_THINKING_LEVEL;
 
     // Initialize core modules
     // PermissionManager: handles permission evaluation, mode management, and command whitelisting

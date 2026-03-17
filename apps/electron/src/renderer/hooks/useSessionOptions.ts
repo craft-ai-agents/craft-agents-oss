@@ -22,14 +22,14 @@ export interface SessionOptions {
   permissionMode: PermissionMode
   /** Monotonic version from backend permission mode state (used to ignore stale events) */
   permissionModeVersion?: number
-  /** Session-level thinking level ('off', 'think', 'max') - sticky, persisted */
+  /** Session-level thinking level ('off', 'low', 'medium', 'high', 'max') - sticky, persisted */
   thinkingLevel: ThinkingLevel
 }
 
 /** Default values for new sessions */
 export const defaultSessionOptions: SessionOptions = {
   permissionMode: 'ask', // Default to ask mode (prompt for permissions)
-  thinkingLevel: DEFAULT_THINKING_LEVEL, // Default to 'think' level
+  thinkingLevel: DEFAULT_THINKING_LEVEL, // Default to 'medium' level
 }
 
 /** Type for partial updates to session options */

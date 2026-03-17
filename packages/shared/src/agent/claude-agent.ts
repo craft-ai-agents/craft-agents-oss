@@ -61,7 +61,7 @@ import {
   type PreToolUseCheckResult,
   BUILT_IN_TOOLS,
 } from './core/pre-tool-use.ts';
-import { type ThinkingLevel, getThinkingTokens, DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
+import { type ThinkingLevel, THINKING_TO_EFFORT, DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
 import type { LoadedSource } from '../sources/types.ts';
 import { sourceNeedsAuthentication } from '../sources/credential-manager.ts';
 import type {
@@ -812,8 +812,8 @@ export class ClaudeAgent extends BaseAgent {
         debug(`[chat] Custom provider: baseUrl=${activeBaseUrl}, model=${model}, hasApiKey=${!!process.env.ANTHROPIC_API_KEY}`);
       }
 
-      const thinkingTokens = getThinkingTokens(this._thinkingLevel, model);
-      debug(`[chat] Thinking: level=${this._thinkingLevel}, tokens=${thinkingTokens}`);
+      const effort = THINKING_TO_EFFORT[this._thinkingLevel];
+      debug(`[chat] Thinking: level=${this._thinkingLevel}, effort=${effort ?? 'disabled'}`);
 
       // NOTE: Parent-child tracking for subagents is documented below (search for
       // "PARENT-CHILD TOOL TRACKING"). The SDK's parent_tool_use_id is authoritative.
@@ -852,10 +852,13 @@ export class ClaudeAgent extends BaseAgent {
             this.lastStderrOutput.shift();
           }
         },
-        // Extended thinking: tokens based on session thinking level
-        // Non-Claude models don't support extended thinking, so pass 0 to disable
-        // Mini agents also disable thinking for efficiency (quick config edits don't need deep reasoning)
-        maxThinkingTokens: miniConfig.minimizeThinking ? 0 : (isClaude ? thinkingTokens : 0),
+        // Adaptive thinking: Claude decides when and how much to think, guided by effort level.
+        // Non-Claude models don't support thinking, so disable entirely.
+        // Mini agents also disable thinking for efficiency (quick config edits don't need deep reasoning).
+        thinking: (miniConfig.minimizeThinking || !isClaude || !effort)
+          ? { type: 'disabled' as const }
+          : { type: 'adaptive' as const },
+        effort: (!miniConfig.minimizeThinking && isClaude && effort) ? effort : undefined,
         // System prompt configuration:
         // - Mini agents: Use custom (lean) system prompt without Claude Code preset
         // - Normal agents: Append to Claude Code's system prompt (recommended by docs)

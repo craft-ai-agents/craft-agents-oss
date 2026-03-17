@@ -488,7 +488,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   pendingCredential,
   onRespondToCredential,
   // Thinking level
-  thinkingLevel = 'think',
+  thinkingLevel = 'medium',
   onThinkingLevelChange,
   // Advanced options
   permissionMode = 'ask',

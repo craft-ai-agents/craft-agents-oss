@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel } from '@craft-agent/shared/config'
-import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
+import { isValidThinkingLevel, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { getWorkspaceOrThrow } from '@craft-agent/server-core/handlers'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -46,7 +46,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
 
   server.handle(RPC_CHANNELS.settings.SET_DEFAULT_THINKING_LEVEL, async (_ctx, level: string) => {
     if (!isValidThinkingLevel(level)) {
-      throw new Error(`Invalid thinking level: ${level}. Valid values: 'off', 'think', 'max'`)
+      throw new Error(`Invalid thinking level: ${level}. Valid values: 'off', 'low', 'medium', 'high', 'max'`)
     }
     const success = setDefaultThinkingLevel(level)
     if (!success) {
@@ -100,7 +100,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       model: config?.defaults?.model,
       permissionMode: config?.defaults?.permissionMode,
       cyclablePermissionModes: config?.defaults?.cyclablePermissionModes,
-      thinkingLevel: config?.defaults?.thinkingLevel,
+      thinkingLevel: normalizeThinkingLevel(config?.defaults?.thinkingLevel),
       workingDirectory: config?.defaults?.workingDirectory,
       localMcpEnabled: config?.localMcpServers?.enabled ?? true,
       defaultLlmConnection: config?.defaults?.defaultLlmConnection,

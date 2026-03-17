@@ -46,7 +46,7 @@ export interface WorkspaceConfig {
     permissionMode?: PermissionMode; // Default permission mode ('safe', 'ask', 'allow-all')
     cyclablePermissionModes?: PermissionMode[]; // Which modes can be cycled with SHIFT+TAB (min 2, default: all 3)
     workingDirectory?: string;
-    thinkingLevel?: ThinkingLevel; // Default thinking level ('off', 'think', 'max') - default: 'think'
+    thinkingLevel?: ThinkingLevel; // Default thinking level ('off', 'low', 'medium', 'high', 'max') - default: 'medium'
     colorTheme?: string; // Color theme override for this workspace (preset ID). Undefined = inherit from app default.
   };
 

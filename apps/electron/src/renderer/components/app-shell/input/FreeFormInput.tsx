@@ -257,7 +257,7 @@ export function FreeFormInput({
   inputRef: externalInputRef,
   currentModel,
   onModelChange,
-  thinkingLevel = 'think',
+  thinkingLevel = 'medium',
   onThinkingLevelChange,
   permissionMode = 'ask',
   onPermissionModeChange,

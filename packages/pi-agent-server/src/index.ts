@@ -1415,12 +1415,7 @@ async function handleSetThinkingLevel(msg: Extract<InboundMessage, { type: 'set_
     return;
   }
 
-  if (msg.level !== 'off' && msg.level !== 'think' && msg.level !== 'max') {
-    debugLog(`[set_thinking_level] Invalid level: ${msg.level}`);
-    return;
-  }
-
-  const piLevel = THINKING_TO_PI[msg.level];
+  const piLevel = THINKING_TO_PI[msg.level as keyof typeof THINKING_TO_PI];
   if (!piLevel) {
     debugLog(`[set_thinking_level] No Pi mapping for level: ${msg.level}`);
     return;

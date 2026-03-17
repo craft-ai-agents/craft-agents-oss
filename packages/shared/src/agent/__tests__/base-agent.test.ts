@@ -34,7 +34,7 @@ describe('BaseAgent', () => {
 
   describe('Thinking Level Configuration', () => {
     it('should initialize with config thinking level', () => {
-      expect(agent.getThinkingLevel()).toBe('think');
+      expect(agent.getThinkingLevel()).toBe('medium');
     });
 
     it('should allow setting thinking level', () => {

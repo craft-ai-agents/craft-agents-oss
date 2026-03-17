@@ -73,7 +73,7 @@ import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlA
 import { loadAllSkills, loadSkillBySlug, type LoadedSkill } from '@craft-agent/shared/skills'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
-import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
+import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels } from '@craft-agent/shared/labels/storage'
 import { extractLabelId } from '@craft-agent/shared/labels'
@@ -2062,7 +2062,7 @@ export class SessionManager implements ISessionManager {
 
     const userDefaultWorkingDir = wsConfig?.defaults?.workingDirectory || undefined
     // Get default thinking level from workspace config, fallback to app-level default
-    const defaultThinkingLevel = wsConfig?.defaults?.thinkingLevel ?? getDefaultThinkingLevel()
+    const defaultThinkingLevel = normalizeThinkingLevel(wsConfig?.defaults?.thinkingLevel) ?? getDefaultThinkingLevel()
     // Get default model from workspace config (used when no session-specific model is set)
     const defaultModel = wsConfig?.defaults?.model
     // Get default enabled sources from workspace config
@@ -5623,7 +5623,7 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
-   * Set the thinking level for a session ('off', 'think', 'max')
+   * Set the thinking level for a session ('off', 'low', 'medium', 'high', 'max')
    * This is sticky and persisted across messages.
    */
   setSessionThinkingLevel(sessionId: string, level: ThinkingLevel): void {
