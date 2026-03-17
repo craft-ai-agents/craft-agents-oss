@@ -282,7 +282,7 @@ export function parseError(error: unknown): AgentError {
     code = 'rate_limited';
   } else if (lowerMessage.includes('500') || lowerMessage.includes('502') || lowerMessage.includes('503') || lowerMessage.includes('504') || lowerMessage.includes('internal server error') || lowerMessage.includes('service unavailable')) {
     code = 'service_error';
-  } else if (lowerMessage.includes('proxy error') || (lowerMessage.includes('proxy') && lowerMessage.includes('settings'))) {
+  } else if (lowerMessage.includes('unexpected html error page') || lowerMessage.includes('network proxy')) {
     code = 'network_error';
   } else if (lowerMessage.includes('network') || lowerMessage.includes('econnrefused') || lowerMessage.includes('enotfound') || lowerMessage.includes('fetch failed') || lowerMessage.includes('connection')) {
     code = 'network_error';

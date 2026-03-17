@@ -1201,12 +1201,15 @@ async function captureApiError(response: Response, url: string): Promise<void> {
       }
     }
 
-    // When the response is HTML (not a JSON API error) and a proxy is configured,
-    // this is almost certainly a proxy misconfiguration (e.g. Cloudflare 400/502).
-    // Replace the raw HTML with a helpful message pointing to Settings.
-    if (isHtmlResponse && PROXY_URL) {
-      errorMessage = `Proxy error (${response.status}): The configured proxy "${PROXY_URL}" returned an error. Check your proxy settings in Settings > Network.`;
-      debugLog(`[Detected HTML error with proxy configured — rewriting as proxy error]`);
+    // An HTML response to a JSON API call means something intercepted the request —
+    // a proxy, CDN, captive portal, or firewall. Never show raw HTML to the user.
+    if (isHtmlResponse) {
+      if (PROXY_URL) {
+        errorMessage = `Received an unexpected HTML error page (HTTP ${response.status}) instead of a JSON API response. This may be caused by your network proxy (${PROXY_URL}). Check your proxy settings in Settings > Network.`;
+      } else {
+        errorMessage = `Received an unexpected HTML error page (HTTP ${response.status}) instead of a JSON API response. This could be caused by a firewall, captive portal, or network issue.`;
+      }
+      debugLog(`[Detected HTML error response — replaced raw HTML with clean message]`);
     }
 
     setStoredError({
