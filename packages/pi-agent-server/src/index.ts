@@ -835,13 +835,17 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
 
   // If piAuth is set, ensure the mini model uses the same provider.
   // Pi SDK will fail with "No API key found" if the model requires a different provider.
+  // Exception: 'custom-endpoint' provider is always compatible because it has its own
+  // API key configured via resolveCustomEndpointApiKey() and doesn't use authStorage.
   if (initConfig.piAuth) {
     const authProvider = initConfig.piAuth.provider;
     const bareModel = model.startsWith('pi/') ? model.slice(3) : model;
     const resolved = resolvePiModel(modelRegistry, bareModel, authProvider, shouldPreferCustomEndpoint());
-    if (!resolved || (resolved as any).provider !== authProvider || isDeniedMiniModelId(model)) {
+    const resolvedProvider = (resolved as any)?.provider;
+    const isCompatible = resolvedProvider === authProvider || resolvedProvider === 'custom-endpoint';
+    if (!resolved || !isCompatible || isDeniedMiniModelId(model)) {
       const fallback = getDefaultSummarizationModel();
-      debugLog(`[queryLlm] Model ${bareModel} incompatible with ${authProvider}, falling back to ${fallback}`);
+      debugLog(`[queryLlm] Model ${bareModel} incompatible with ${authProvider} (resolved: ${resolvedProvider}), falling back to ${fallback}`);
       model = fallback;
     }
   }
@@ -978,8 +982,11 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
         try {
           const resolved = resolvePiModel(modelRegistry, candidate, initConfig.piAuth?.provider, shouldPreferCustomEndpoint());
           if (!resolved) return false;
-          if (initConfig.piAuth && (resolved as any).provider !== initConfig.piAuth.provider) {
-            return false;
+          if (initConfig.piAuth) {
+            const rp = (resolved as any).provider;
+            if (rp !== initConfig.piAuth.provider && rp !== 'custom-endpoint') {
+              return false;
+            }
           }
           return true;
         } catch {
