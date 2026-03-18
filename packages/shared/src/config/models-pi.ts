@@ -130,6 +130,8 @@ const PI_PROVIDER_DISPLAY: Partial<Record<KnownProvider, { label: string; placeh
   'huggingface':            { label: 'Hugging Face',       placeholder: 'hf_...' },
   'minimax':                { label: 'Minimax',            placeholder: 'Paste your key here...' },
   'kimi-coding':            { label: 'Kimi (Coding)',      placeholder: 'sk-kimi-...' },
+  'opencode':               { label: 'OpenCode Zen',       placeholder: 'Paste your key here...' },
+  'opencode-go':            { label: 'OpenCode Go',        placeholder: 'Paste your key here...' },
   'zai':                    { label: 'z.ai (GLM)',         placeholder: 'Paste your key here...' },
 };
 

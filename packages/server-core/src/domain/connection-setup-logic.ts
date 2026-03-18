@@ -156,6 +156,8 @@ const PI_AUTH_PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   minimax: 'Minimax',
   'minimax-cn': 'Minimax CN',
   'kimi-coding': 'Kimi (Coding)',
+  opencode: 'OpenCode Zen',
+  'opencode-go': 'OpenCode Go',
   'vercel-ai-gateway': 'Vercel AI Gateway',
 }
 

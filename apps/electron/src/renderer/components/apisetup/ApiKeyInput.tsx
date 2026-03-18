@@ -98,6 +98,8 @@ const ANTHROPIC_PRESETS: Preset[] = [
   { key: 'minimax-global', label: 'Minimax Global', url: 'https://api.minimax.io/anthropic', placeholder: 'Paste your key here...' },
   { key: 'minimax-cn', label: 'Minimax CN', url: 'https://api.minimaxi.com/anthropic', placeholder: 'Paste your key here...' },
   { key: 'kimi-coding', label: 'Kimi (Coding)', url: 'https://api.kimi.com/coding', placeholder: 'sk-kimi-...' },
+  { key: 'opencode', label: 'OpenCode Zen', url: '', placeholder: 'Paste your key here...' },
+  { key: 'opencode-go', label: 'OpenCode Go', url: '', placeholder: 'Paste your key here...' },
   { key: 'vercel-ai-gateway', label: 'Vercel AI Gateway', url: 'https://ai-gateway.vercel.sh', placeholder: 'Paste your key here...' },
   { key: 'custom', label: 'Custom', url: '', placeholder: 'Paste your key here...' },
 ]
@@ -122,7 +124,9 @@ const GOOGLE_PRESETS: Preset[] = [
 ]
 
 /** Presets that require the Pi SDK for authentication — hidden in Anthropic API Key mode */
-const PI_ONLY_PRESET_KEYS: ReadonlySet<string> = new Set(['minimax-global', 'minimax-cn'])
+const PI_ONLY_PRESET_KEYS: ReadonlySet<string> = new Set(['minimax-global', 'minimax-cn', 'opencode', 'opencode-go'])
+const PI_AUTO_SYNC_PRESET_KEYS: ReadonlySet<string> = new Set(['anthropic', 'openai', 'pi', 'google'])
+const PI_MANAGED_ENDPOINT_PRESET_KEYS: ReadonlySet<string> = new Set([...PI_AUTO_SYNC_PRESET_KEYS, 'opencode', 'opencode-go'])
 
 const COMPAT_ANTHROPIC_DEFAULTS = 'claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5'
 const COMPAT_OPENAI_DEFAULTS = 'openai/gpt-5.2-codex, openai/gpt-5.1-codex-mini'
@@ -197,12 +201,10 @@ export function ApiKeyInput({
   const isDisabled = disabled || status === 'validating'
 
   const isPiApiKeyFlow = providerType === 'pi_api_key'
-  // Hide endpoint/model fields for providers with well-known endpoints handled by the SDK
-  const DEFAULT_ENDPOINT_PROVIDERS = new Set(['anthropic', 'openai', 'pi', 'google'])
-  const isDefaultProviderPreset = DEFAULT_ENDPOINT_PROVIDERS.has(activePreset)
-
   // Provider-specific placeholders from the active preset
   const activePresetObj = presets.find(p => p.key === activePreset)
+  const isAutoSyncPreset = PI_AUTO_SYNC_PRESET_KEYS.has(activePreset)
+  const isManagedEndpointPreset = PI_MANAGED_ENDPOINT_PRESET_KEYS.has(activePreset)
   const apiKeyPlaceholder = activePresetObj?.placeholder
     ?? (providerType === 'google' ? 'AIza...'
     : providerType === 'pi' ? 'pi-...'
@@ -212,7 +214,7 @@ export function ApiKeyInput({
   // Fetch Pi SDK models when a provider is selected in pi_api_key flow.
   // Returns all models sorted by cost (expensive-first) for the searchable tier dropdowns.
   const loadPiModels = useCallback(async (provider: string) => {
-    if (!isPiApiKeyFlow || !provider || provider === 'custom' || DEFAULT_ENDPOINT_PROVIDERS.has(provider)) {
+    if (!isPiApiKeyFlow || !provider || provider === 'custom' || PI_AUTO_SYNC_PRESET_KEYS.has(provider)) {
       setPiModels([])
       return
     }
@@ -241,7 +243,7 @@ export function ApiKeyInput({
   }, [activePreset, loadPiModels])
 
   // Whether to show 3 tier dropdowns instead of text input
-  const hasPiModels = isPiApiKeyFlow && piModels.length > 0 && !isDefaultProviderPreset && activePreset !== 'custom'
+  const hasPiModels = isPiApiKeyFlow && piModels.length > 0 && !isAutoSyncPreset && activePreset !== 'custom'
 
   const handlePresetSelect = (preset: Preset) => {
     setActivePreset(preset.key)
@@ -326,8 +328,8 @@ export function ApiKeyInput({
 
     const parsedModels = parseModelList(connectionDefaultModel)
 
-    const isUsingDefaultEndpoint = isDefaultProviderPreset || !effectiveBaseUrl
-    const requiresModel = !isDefaultProviderPreset && !!effectiveBaseUrl
+    const isUsingDefaultEndpoint = isManagedEndpointPreset || !effectiveBaseUrl
+    const requiresModel = !isManagedEndpointPreset && !!effectiveBaseUrl
     if (requiresModel && parsedModels.length === 0) {
       setModelError('Default model is required for custom endpoints.')
       return
@@ -424,8 +426,8 @@ export function ApiKeyInput({
             </StyledDropdownMenuContent>
           </DropdownMenu>
         </div>
-        {/* Base URL input - hidden for default provider presets (Anthropic/OpenAI) */}
-        {!isDefaultProviderPreset && (
+        {/* Base URL input - hidden for providers whose endpoint is managed by the SDK */}
+        {!isManagedEndpointPreset && (
           <div className={cn(
             "rounded-md shadow-minimal transition-colors",
             "bg-foreground-2 focus-within:bg-background"
@@ -445,7 +447,7 @@ export function ApiKeyInput({
       )}
 
       {/* Protocol Toggle — visible as soon as Custom preset is selected */}
-      {activePreset === 'custom' && !isDefaultProviderPreset && (
+      {activePreset === 'custom' && !isManagedEndpointPreset && (
         <div className="space-y-2">
           <Label>Protocol</Label>
           <div className={cn(
@@ -589,7 +591,7 @@ export function ApiKeyInput({
             </>
           )}
         </div>
-      ) : !isDefaultProviderPreset && (
+      ) : !isManagedEndpointPreset && (
         <div className="space-y-2">
           <Label htmlFor="connection-default-model" className="text-muted-foreground font-normal">
             Default Model{' '}
