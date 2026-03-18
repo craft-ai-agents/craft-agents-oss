@@ -44,6 +44,8 @@ export interface ApiKeySubmitData {
   modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
   /** Custom endpoint protocol — set when user configures an arbitrary API endpoint */
   customEndpoint?: CustomEndpointConfig
+  /** User-defined display aliases for models (from "model_id:alias" format) */
+  modelAliases?: Record<string, string>
 }
 
 export interface ApiKeyInputProps {
@@ -148,6 +150,31 @@ function parseModelList(value: string): string[] {
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean)
+    .map((entry) => {
+      // Support "model_id:alias" format — extract just the model ID
+      const colonIdx = entry.indexOf(':')
+      return colonIdx > 0 ? entry.substring(0, colonIdx).trim() : entry
+    })
+}
+
+/**
+ * Parse model aliases from a comma-separated model string.
+ * Entries with "model_id:alias" format produce alias mappings.
+ * Returns a Record<modelId, alias> (empty if no aliases found).
+ */
+function parseModelAliases(value: string): Record<string, string> {
+  const aliases: Record<string, string> = {}
+  for (const entry of value.split(',').map(e => e.trim()).filter(Boolean)) {
+    const colonIdx = entry.indexOf(':')
+    if (colonIdx > 0) {
+      const id = entry.substring(0, colonIdx).trim()
+      const alias = entry.substring(colonIdx + 1).trim()
+      if (id && alias) {
+        aliases[id] = alias
+      }
+    }
+  }
+  return aliases
 }
 
 // ============================================================
@@ -325,6 +352,7 @@ export function ApiKeyInput({
     const effectiveBaseUrl = baseUrl.trim()
 
     const parsedModels = parseModelList(connectionDefaultModel)
+    const parsedAliases = parseModelAliases(connectionDefaultModel)
 
     const isUsingDefaultEndpoint = isDefaultProviderPreset || !effectiveBaseUrl
     const requiresModel = !isDefaultProviderPreset && !!effectiveBaseUrl
@@ -350,6 +378,7 @@ export function ApiKeyInput({
         ? (parsedModels.length > 0 ? 'userDefined3Tier' : 'automaticallySyncedFromProvider')
         : undefined,
       customEndpoint,
+      modelAliases: Object.keys(parsedAliases).length > 0 ? parsedAliases : undefined,
     })
   }
 

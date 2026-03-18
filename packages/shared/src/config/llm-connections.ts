@@ -183,6 +183,14 @@ export interface LlmConnection {
 
   /** Timestamp when connection was last used */
   lastUsedAt?: number;
+
+  /**
+   * User-defined display aliases for models, keyed by model ID.
+   * When set, UI shows the alias instead of the model's default name.
+   * Does not affect the model ID sent to the provider.
+   * e.g., { "claude-sonnet-4-6": "My Sonnet", "gpt-5.2": "GPT5" }
+   */
+  modelAliases?: Record<string, string>;
 }
 
 /**

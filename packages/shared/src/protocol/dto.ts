@@ -333,6 +333,8 @@ export interface LlmConnectionSetup {
   updateOnly?: boolean
   /** Custom endpoint protocol for arbitrary OpenAI/Anthropic-compatible APIs */
   customEndpoint?: CustomEndpointConfig
+  /** User-defined display aliases for models, keyed by model ID */
+  modelAliases?: Record<string, string>
 }
 
 export interface TestLlmConnectionParams {

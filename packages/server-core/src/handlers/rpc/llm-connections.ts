@@ -99,6 +99,9 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       if (setup.modelSelectionMode !== undefined) {
         updates.modelSelectionMode = setup.modelSelectionMode
       }
+      if (setup.modelAliases !== undefined) {
+        updates.modelAliases = setup.modelAliases
+      }
 
       const customEndpoint = hasConfiguredBaseUrl ? setup.customEndpoint : undefined
       const isCustomEndpointCompat = !!customEndpoint

@@ -338,6 +338,9 @@ export function FreeFormInput({
   // Get display name for current model (full name, not short name)
   const currentModelDisplayName = React.useMemo(() => {
     const modelToDisplay = connectionDefaultModel ?? currentModel
+    // Check connection-level alias first
+    const alias = effectiveConnectionDetails?.modelAliases?.[modelToDisplay]
+    if (alias) return alias
     const model = availableModels.find(m =>
       typeof m === 'string' ? m === modelToDisplay : m.id === modelToDisplay
     )
@@ -345,8 +348,8 @@ export function FreeFormInput({
       // Fallback: use helper function to format unknown model IDs nicely
       return stripPiPrefixForDisplay(getModelDisplayName(modelToDisplay))
     }
-    return typeof model === 'string' ? stripPiPrefixForDisplay(model) : model.name
-  }, [availableModels, currentModel, connectionDefaultModel])
+    return typeof model === 'string' ? stripPiPrefixForDisplay(model) : (model.displayAlias || model.name)
+  }, [availableModels, currentModel, connectionDefaultModel, effectiveConnectionDetails])
 
   // Group connections by provider type for hierarchical dropdown
   // Each provider (Anthropic, Pi) can have multiple connections (API Key, OAuth, etc.)
@@ -1836,7 +1839,7 @@ Model
                               {/* Show models for this connection - use provider-specific models as fallback */}
                               {(conn.models || ANTHROPIC_MODELS).map((model) => {
                                 const modelId = typeof model === 'string' ? model : model.id
-                                const modelName = typeof model === 'string' ? stripPiPrefixForDisplay(getModelShortName(model)) : model.name
+                                const modelName = conn.modelAliases?.[modelId] || (typeof model === 'string' ? stripPiPrefixForDisplay(getModelShortName(model)) : (model.displayAlias || model.name))
                                 const isSelectedModel = isCurrentConnection && currentModel === modelId
                                 return (
                                   <StyledDropdownMenuItem
@@ -1883,7 +1886,7 @@ Model
                   {/* Model options based on effective connection's provider type */}
                   {availableModels.map((model) => {
                     const modelId = typeof model === 'string' ? model : model.id
-                    const modelName = typeof model === 'string' ? stripPiPrefixForDisplay(getModelShortName(model)) : model.name
+                    const modelName = effectiveConnectionDetails?.modelAliases?.[modelId] || (typeof model === 'string' ? stripPiPrefixForDisplay(getModelShortName(model)) : (model.displayAlias || model.name))
                     const isSelected = currentModel === modelId
                     const description = typeof model !== 'string' && 'description' in model ? (model.description as string) : ''
                     return (
