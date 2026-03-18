@@ -145,32 +145,12 @@ Each session locks to a connection after the first message. To change connection
 }
 ```
 
-### AWS Bedrock (IAM Credentials)
+### AWS Bedrock
 
 ```json
 {
   "slug": "bedrock",
   "name": "AWS Bedrock",
-  "providerType": "bedrock",
-  "authType": "iam_credentials",
-  "awsRegion": "us-east-1",
-  "defaultModel": "claude-sonnet-4-6",
-  "createdAt": 1737451800000
-}
-```
-
-When using `iam_credentials`, enter your AWS Access Key ID, Secret Access Key, and (optionally) Session Token in the UI. Credentials are encrypted and stored per connection. The subprocess receives them as scoped environment variables — they are **not** written to `~/.aws/credentials`.
-
-<Note>
-If you use AWS STS temporary credentials (session tokens), they expire after ~1 hour. You'll need to update them when they expire.
-</Note>
-
-### AWS Bedrock (Environment Auth)
-
-```json
-{
-  "slug": "bedrock-env",
-  "name": "AWS Bedrock (Environment)",
   "providerType": "bedrock",
   "authType": "environment",
   "awsRegion": "us-east-1",
@@ -179,7 +159,13 @@ If you use AWS STS temporary credentials (session tokens), they expire after ~1 
 }
 ```
 
-With `environment` auth, the subprocess inherits your shell's AWS credential chain — `~/.aws/credentials`, `AWS_PROFILE`, IAM roles, SSO sessions, etc. No credentials are stored in Craft Agents.
+Bedrock uses your existing AWS credential chain — `~/.aws/credentials`, `AWS_PROFILE`, IAM roles, SSO sessions, and environment variables all work. The subprocess inherits your shell's AWS credentials automatically. No credentials are stored in Craft Agents.
+
+Set `awsRegion` to the region where you have Bedrock model access enabled (e.g., `us-east-1`, `us-west-2`, `eu-west-1`).
+
+<Note>
+The `iam_credentials` auth type is also supported at the backend level for programmatic credential injection, but there is currently no UI form for entering IAM credentials directly. Use `environment` auth for the recommended setup.
+</Note>
 
 ### Codex / OpenAI (OAuth)
 
