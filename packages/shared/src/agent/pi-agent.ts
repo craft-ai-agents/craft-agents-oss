@@ -314,28 +314,33 @@ export class PiAgent extends BaseAgent {
       args.unshift('--require', interceptorPath);
     }
 
-    // Build AWS env vars for Bedrock IAM credentials.
-    // The Pi SDK's Bedrock provider reads from the AWS default credential chain
-    // (env vars), not from Pi AuthStorage. Inject at spawn time so credentials
-    // are scoped to this subprocess and don't leak to the main process.
-    const awsEnv: Record<string, string> = {};
-    if (runtime.piAuthProvider === 'amazon-bedrock' && this.config.authType === 'iam_credentials') {
+    // Resolve credentials before spawning so we can derive AWS env vars
+    // from the same fetch that produces piAuth (single source of truth).
+
+    // For Copilot OAuth: preemptively refresh the short-lived Copilot token
+    // before fetching credentials, so getPiAuth() picks up a fresh token.
+    // refreshAndPushTokens guards this.subprocess internally — safe to call pre-spawn.
+    if (this.config.authType === 'oauth' && runtime.piAuthProvider === 'github-copilot') {
       const slug = this.config.connectionSlug || 'pi';
-      const iam = await getCredentialManager().getLlmIamCredentials(slug);
-      if (iam) {
-        awsEnv.AWS_ACCESS_KEY_ID = iam.accessKeyId;
-        awsEnv.AWS_SECRET_ACCESS_KEY = iam.secretAccessKey;
-        if (iam.region) awsEnv.AWS_REGION = iam.region;
-        if (iam.sessionToken) awsEnv.AWS_SESSION_TOKEN = iam.sessionToken;
-        this.debug('Injecting IAM credentials into subprocess env for AWS SDK');
+      const stored = await getCredentialManager().getLlmOAuth(slug);
+      if (stored?.refreshToken && (!stored.expiresAt || stored.expiresAt < Date.now() + 5 * 60_000)) {
+        this.debug('Copilot token expired or expiring soon — refreshing before session start');
+        await this.refreshAndPushTokens();
       }
     }
-    // Defensive: force HTTP/1.1 for Bedrock. AWS SDK v3 defaults to HTTP/2
-    // (NodeHttp2Handler) which can be incompatible with Bun/Electron runtimes.
-    // The Pi SDK's amazon-bedrock.js already checks this env var.
-    if (runtime.piAuthProvider === 'amazon-bedrock' && !process.env.AWS_BEDROCK_FORCE_HTTP1) {
-      awsEnv.AWS_BEDROCK_FORCE_HTTP1 = '1';
+
+    // Retrieve auth credentials for the subprocess.
+    // Custom endpoint mode must NOT fall back to global API keys — keyless local endpoints
+    // are valid, and non-local endpoints should fail explicitly instead of using unrelated creds.
+    const piAuth = await this.getPiAuth();
+    const isCustomEndpointMode = !!runtime.customEndpoint;
+    const legacyApiKey = (!piAuth && !isCustomEndpointMode) ? await this.getApiKey() : undefined;
+    if (isCustomEndpointMode && !piAuth) {
+      this.debug('Custom endpoint mode: no provider credential configured, sending empty API key');
     }
+
+    // Derive AWS env vars from the piAuth credential (single fetch, no race).
+    const awsEnv = this.buildAwsEnv(piAuth, runtime);
 
     // Spawn the subprocess
     const child = spawn(nodePath, args, {
@@ -384,27 +389,6 @@ export class PiAgent extends BaseAgent {
       this.eventQueue.complete();
     });
 
-    // For Copilot OAuth: preemptively refresh the short-lived Copilot token
-    // before sending it to the subprocess, so we always start with a valid token.
-    const piAuthProvider = getBackendRuntime(this.config).piAuthProvider;
-    if (this.config.authType === 'oauth' && piAuthProvider === 'github-copilot') {
-      const slug = this.config.connectionSlug || 'pi';
-      const stored = await getCredentialManager().getLlmOAuth(slug);
-      if (stored?.refreshToken && (!stored.expiresAt || stored.expiresAt < Date.now() + 5 * 60_000)) {
-        this.debug('Copilot token expired or expiring soon — refreshing before session start');
-        await this.refreshAndPushTokens();
-      }
-    }
-
-    // Retrieve auth credentials for the subprocess.
-    // Custom endpoint mode must NOT fall back to global API keys — keyless local endpoints
-    // are valid, and non-local endpoints should fail explicitly instead of using unrelated creds.
-    const piAuth = await this.getPiAuth();
-    const isCustomEndpointMode = !!runtime.customEndpoint;
-    const legacyApiKey = (!piAuth && !isCustomEndpointMode) ? await this.getApiKey() : undefined;
-    if (isCustomEndpointMode && !piAuth) {
-      this.debug('Custom endpoint mode: no provider credential configured, sending empty API key');
-    }
     const sessionPath = this.config.session
       ? getSessionPath(this.config.workspace.rootPath, sessionId)
       : '';
@@ -558,7 +542,10 @@ export class PiAgent extends BaseAgent {
           };
         }
       } else {
-        // API key-based connections
+        // API key-based connections.
+        // NOTE: authType === 'environment' (e.g. Bedrock with ~/.aws/credentials)
+        // intentionally falls through here, finds no API key, and returns null.
+        // The subprocess inherits process.env which contains the AWS credential chain.
         const apiKey = await credentialManager.getLlmApiKey(slug);
         if (apiKey) {
           this.debug(`Retrieved API key credential for Pi provider: ${piAuthProvider}`);
@@ -575,6 +562,42 @@ export class PiAgent extends BaseAgent {
       this.debug(`Failed to retrieve Pi auth: ${error}`);
       return null;
     }
+  }
+
+  /**
+   * Build AWS environment variables from piAuth credentials for the subprocess.
+   *
+   * The Pi SDK's Bedrock provider reads from the AWS default credential chain
+   * (env vars), not from Pi AuthStorage. We inject at spawn time so credentials
+   * are scoped to the subprocess and don't leak to the main process.
+   *
+   * NOTE: IAM credentials (especially STS session tokens) are immutable after
+   * spawn — they cannot be refreshed in a running subprocess. Long sessions
+   * with temporary credentials (~1h STS tokens) will fail on expiry.
+   */
+  private buildAwsEnv(
+    piAuth: Awaited<ReturnType<PiAgent['getPiAuth']>>,
+    runtime: { piAuthProvider?: string },
+  ): Record<string, string> {
+    if (runtime.piAuthProvider !== 'amazon-bedrock') return {};
+
+    const env: Record<string, string> = {};
+
+    if (piAuth?.credential.type === 'iam') {
+      env.AWS_ACCESS_KEY_ID = piAuth.credential.accessKeyId;
+      env.AWS_SECRET_ACCESS_KEY = piAuth.credential.secretAccessKey;
+      if (piAuth.credential.region) env.AWS_REGION = piAuth.credential.region;
+      if (piAuth.credential.sessionToken) env.AWS_SESSION_TOKEN = piAuth.credential.sessionToken;
+      this.debug('Injecting IAM credentials into subprocess env for AWS SDK');
+    }
+
+    // Defensive: force HTTP/1.1 for Bedrock. AWS SDK v3 defaults to HTTP/2
+    // (NodeHttp2Handler) which can be incompatible with Bun/Electron runtimes.
+    if (!process.env.AWS_BEDROCK_FORCE_HTTP1) {
+      env.AWS_BEDROCK_FORCE_HTTP1 = '1';
+    }
+
+    return env;
   }
 
   /**
