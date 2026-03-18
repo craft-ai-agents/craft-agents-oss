@@ -44,6 +44,9 @@ export interface BroadcastEventMap {
   [RPC_CHANNELS.badge.DRAW]: [data: { count: number; iconDataUrl: string }]
   [RPC_CHANNELS.badge.DRAW_WINDOWS]: [data: { count: number }]
 
+  // Workspace remote connection status (per-client)
+  [RPC_CHANNELS.workspace.REMOTE_STATUS_CHANGED]: [data: { workspaceId: string; status: string } | null]
+
   // Window events (per-window)
   [RPC_CHANNELS.window.FOCUS_STATE]: [isFocused: boolean]
   [RPC_CHANNELS.window.CLOSE_REQUESTED]: []

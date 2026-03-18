@@ -39,10 +39,48 @@ function rewriteWorkspaceIds(data: unknown, remoteId: string, localId: string): 
 }
 
 export class RoutedServer implements RpcServer {
+  /** Per-client unsubscribe callbacks for bridge connection state listeners. */
+  private connectionUnsubs = new Map<string, () => void>()
+
   constructor(
     private inner: RpcServer,
     private bridgeManager: BridgeManager,
-  ) {}
+  ) {
+    // Register local-only handler: query current bridge connection status
+    this.inner.handle(RPC_CHANNELS.workspace.GET_REMOTE_STATUS, async (ctx: RequestContext) => {
+      const bridge = this.bridgeManager.get(ctx.clientId)
+      if (!bridge) return null
+      return { workspaceId: bridge.workspaceId, status: bridge.connectionState.status }
+    })
+  }
+
+  /**
+   * Subscribe to a bridge's connection state changes and push updates to the client.
+   * Unsubscribes any previous listener for this client first.
+   */
+  private subscribeToBridgeState(clientId: string, workspaceId: string): void {
+    // Clean up previous subscription
+    this.connectionUnsubs.get(clientId)?.()
+
+    const bridge = this.bridgeManager.get(clientId)
+    if (!bridge) return
+
+    const unsub = bridge.onConnectionStateChanged((state) => {
+      this.inner.push(
+        RPC_CHANNELS.workspace.REMOTE_STATUS_CHANGED,
+        { to: 'client', clientId },
+        { workspaceId, status: state.status },
+      )
+    })
+    this.connectionUnsubs.set(clientId, unsub)
+
+    // Push initial state immediately
+    this.inner.push(
+      RPC_CHANNELS.workspace.REMOTE_STATUS_CHANGED,
+      { to: 'client', clientId },
+      { workspaceId, status: bridge.connectionState.status },
+    )
+  }
 
   handle(channel: string, handler: HandlerFn): void {
     if (channel === SWITCH_WORKSPACE_CHANNEL) {
@@ -57,9 +95,19 @@ export class RoutedServer implements RpcServer {
         if (workspace?.remoteServer) {
           // Pre-warm bridge for remote workspace (connect is fire-and-forget)
           this.bridgeManager.getOrCreate(ctx.clientId, workspaceId, workspace.remoteServer)
+          this.subscribeToBridgeState(ctx.clientId, workspaceId)
         } else {
-          // Switching to local workspace — tear down bridge
+          // Switching to local workspace — tear down bridge + subscription
+          this.connectionUnsubs.get(ctx.clientId)?.()
+          this.connectionUnsubs.delete(ctx.clientId)
           this.bridgeManager.dispose(ctx.clientId)
+
+          // Notify renderer: no remote connection
+          this.inner.push(
+            RPC_CHANNELS.workspace.REMOTE_STATUS_CHANGED,
+            { to: 'client', clientId: ctx.clientId },
+            null,
+          )
         }
 
         return result
@@ -88,6 +136,11 @@ export class RoutedServer implements RpcServer {
         workspace.id,
         workspace.remoteServer,
       )
+
+      // Ensure we're subscribed to connection state (covers on-demand bridge creation)
+      if (!this.connectionUnsubs.has(ctx.clientId)) {
+        this.subscribeToBridgeState(ctx.clientId, workspace.id)
+      }
 
       // Rewrite workspace ID in args: many handlers take workspaceId as the
       // first parameter (statuses:list, labels:list, etc.). The local workspace

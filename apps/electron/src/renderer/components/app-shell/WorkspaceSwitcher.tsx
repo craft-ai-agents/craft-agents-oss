@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useState } from "react"
-import { Check, FolderPlus, ExternalLink, ChevronDown, Cloud } from "lucide-react"
+import { Check, FolderPlus, ExternalLink, ChevronDown, Cloud, CloudOff } from "lucide-react"
 import { AnimatePresence } from "motion/react"
 import { useSetAtom } from "jotai"
 import { toast } from "sonner"
@@ -18,6 +18,7 @@ import { CrossfadeAvatar } from "@/components/ui/avatar"
 import { FadingText } from "@/components/ui/fading-text"
 import { WorkspaceCreationScreen } from "@/components/workspace"
 import { useWorkspaceIcons } from "@/hooks/useWorkspaceIcon"
+import { useRemoteConnectionStatus } from "@/hooks/useRemoteConnectionStatus"
 import type { Workspace } from "../../../shared/types"
 
 interface WorkspaceSwitcherProps {
@@ -51,6 +52,14 @@ export function WorkspaceSwitcher({
   const setFullscreenOverlayOpen = useSetAtom(fullscreenOverlayOpenAtom)
   const selectedWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
   const workspaceIconMap = useWorkspaceIcons(workspaces)
+  const remoteStatus = useRemoteConnectionStatus()
+
+  /** True when we know the bridge is in a disconnected/failed state. */
+  const isRemoteDisconnected = (workspaceId: string) =>
+    remoteStatus?.workspaceId === workspaceId &&
+    remoteStatus.status !== 'connected' &&
+    remoteStatus.status !== 'connecting' &&
+    remoteStatus.status !== 'idle'
 
   const hasUnreadInOtherWorkspaces = React.useMemo(() => {
     if (!activeWorkspaceId || !workspaceUnreadMap) return false
@@ -103,6 +112,11 @@ export function WorkspaceSwitcher({
                 fallback={selectedWorkspace?.name?.charAt(0) || 'W'}
               />
               <span className="truncate min-w-0 flex-1 text-left">{selectedWorkspace?.name || 'Workspace'}</span>
+              {selectedWorkspace?.remoteServer && (
+                isRemoteDisconnected(selectedWorkspace.id)
+                  ? <CloudOff className="h-3 w-3 text-destructive shrink-0" />
+                  : <Cloud className="h-3 w-3 opacity-60 shrink-0" />
+              )}
               <ChevronDown className="h-3 w-3 opacity-60 shrink-0" />
               {hasUnreadInOtherWorkspaces && <span className="h-2 w-2 rounded-full bg-accent shrink-0" />}
             </button>
@@ -129,7 +143,9 @@ export function WorkspaceSwitcher({
                     {selectedWorkspace?.name || 'Select workspace'}
                   </FadingText>
                   {selectedWorkspace?.remoteServer && (
-                    <Cloud className="h-3 w-3 text-muted-foreground shrink-0" />
+                    isRemoteDisconnected(selectedWorkspace.id)
+                      ? <CloudOff className="h-3 w-3 text-destructive shrink-0" />
+                      : <Cloud className="h-3 w-3 text-muted-foreground shrink-0" />
                   )}
                   <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
                 </>
@@ -143,53 +159,60 @@ export function WorkspaceSwitcher({
           sideOffset={variant === 'topbar' ? 6 : 4}
           minWidth={variant === 'topbar' ? 'min-w-64' : undefined}
         >
-          {workspaces.map((workspace) => (
-            <StyledDropdownMenuItem
-              key={workspace.id}
-              onClick={(e) => {
-                // Cmd/Ctrl+Click opens in new window
-                const openInNewWindow = e.metaKey || e.ctrlKey
-                onSelect(workspace.id, openInNewWindow)
-              }}
-              className={cn(
-                "justify-between group",
-                activeWorkspaceId === workspace.id && "bg-foreground/10"
-              )}
-            >
-              <div className="flex items-center gap-3 font-sans min-w-0 flex-1">
-                <CrossfadeAvatar
-                  src={workspaceIconMap.get(workspace.id)}
-                  alt={workspace.name}
-                  className="h-5 w-5 rounded-full ring-1 ring-border/50"
-                  fallbackClassName="bg-muted text-xs rounded-full"
-                  fallback={workspace.name.charAt(0)}
-                />
-                <span className="truncate">{workspace.name}</span>
-                {workspace.remoteServer && (
-                  <Cloud className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          {workspaces.map((workspace) => {
+            const disconnected = isRemoteDisconnected(workspace.id)
+            return (
+              <StyledDropdownMenuItem
+                key={workspace.id}
+                disabled={disconnected}
+                onClick={(e) => {
+                  if (disconnected) return
+                  // Cmd/Ctrl+Click opens in new window
+                  const openInNewWindow = e.metaKey || e.ctrlKey
+                  onSelect(workspace.id, openInNewWindow)
+                }}
+                className={cn(
+                  "justify-between group",
+                  activeWorkspaceId === workspace.id && "bg-foreground/10",
                 )}
-                {workspaceUnreadMap?.[workspace.id] && <span className="h-2 w-2 rounded-full bg-accent shrink-0" />}
-              </div>
-              <div className="flex items-center gap-1">
-                {/* Open in new window button - only visible on hover for non-active workspaces */}
-                {activeWorkspaceId !== workspace.id && (
-                  <button
-                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-foreground/10 transition-opacity"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onSelect(workspace.id, true)
-                    }}
-                    title="Open in new window"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                {activeWorkspaceId === workspace.id && (
-                  <Check className="h-3.5 w-3.5" />
-                )}
-              </div>
-            </StyledDropdownMenuItem>
-          ))}
+              >
+                <div className="flex items-center gap-3 font-sans min-w-0 flex-1">
+                  <CrossfadeAvatar
+                    src={workspaceIconMap.get(workspace.id)}
+                    alt={workspace.name}
+                    className="h-5 w-5 rounded-full ring-1 ring-border/50"
+                    fallbackClassName="bg-muted text-xs rounded-full"
+                    fallback={workspace.name.charAt(0)}
+                  />
+                  <span className="truncate">{workspace.name}</span>
+                  {workspace.remoteServer && (
+                    disconnected
+                      ? <CloudOff className="h-3.5 w-3.5 text-destructive shrink-0" />
+                      : <Cloud className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  )}
+                  {workspaceUnreadMap?.[workspace.id] && <span className="h-2 w-2 rounded-full bg-accent shrink-0" />}
+                </div>
+                <div className="flex items-center gap-1">
+                  {/* Open in new window button - only visible on hover for non-active workspaces */}
+                  {activeWorkspaceId !== workspace.id && !disconnected && (
+                    <button
+                      className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-foreground/10 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onSelect(workspace.id, true)
+                      }}
+                      title="Open in new window"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {activeWorkspaceId === workspace.id && (
+                    <Check className="h-3.5 w-3.5" />
+                  )}
+                </div>
+              </StyledDropdownMenuItem>
+            )
+          })}
 
           {/* Separator and New Workspace option */}
           <StyledDropdownMenuSeparator />

@@ -152,6 +152,10 @@ export const CHANNEL_MAP = {
   getWorkspaceSettings: invoke(RPC_CHANNELS.workspace.SETTINGS_GET),
   updateWorkspaceSetting: invoke(RPC_CHANNELS.workspace.SETTINGS_UPDATE),
 
+  // Remote workspace connection status
+  getRemoteConnectionStatus: invoke(RPC_CHANNELS.workspace.GET_REMOTE_STATUS),
+  onRemoteConnectionStatusChanged: listener(RPC_CHANNELS.workspace.REMOTE_STATUS_CHANGED),
+
   // Folder dialog
   openFolderDialog: invoke(RPC_CHANNELS.dialog.OPEN_FOLDER),
 

@@ -171,6 +171,10 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.gitbash.BROWSE,
   RPC_CHANNELS.gitbash.SET_PATH,
 
+  // workspace — remote connection status (bridge lives in local Electron)
+  RPC_CHANNELS.workspace.GET_REMOTE_STATUS,
+  RPC_CHANNELS.workspace.REMOTE_STATUS_CHANGED,
+
   // debug — local debug logging
   RPC_CHANNELS.debug.LOG,
 
@@ -182,6 +186,7 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.onboarding.EXCHANGE_CLAUDE_CODE,
   RPC_CHANNELS.onboarding.HAS_CLAUDE_OAUTH_STATE,
   RPC_CHANNELS.onboarding.CLEAR_CLAUDE_OAUTH_STATE,
+  RPC_CHANNELS.onboarding.DEFER_SETUP,
 
   // settings — local config (setup involves browser OAuth)
   RPC_CHANNELS.settings.SETUP_LLM_CONNECTION,
@@ -234,6 +239,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
 
   // fs — workspace filesystem
   RPC_CHANNELS.fs.SEARCH,
+  RPC_CHANNELS.fs.LIST_DIRECTORY,
 
   // credentials — remote server's credential state
   RPC_CHANNELS.credentials.HEALTH_CHECK,

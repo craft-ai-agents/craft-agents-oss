@@ -225,6 +225,8 @@ export const RPC_CHANNELS = {
     WRITE_IMAGE: 'workspace:writeImage',
     SETTINGS_GET: 'workspaceSettings:get',
     SETTINGS_UPDATE: 'workspaceSettings:update',
+    GET_REMOTE_STATUS: 'workspace:getRemoteStatus',
+    REMOTE_STATUS_CHANGED: 'workspace:remoteStatusChanged',
   },
   permissions: {
     GET_DEFAULTS: 'permissions:getDefaults',
