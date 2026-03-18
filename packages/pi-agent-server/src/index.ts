@@ -435,6 +435,33 @@ function createAuthenticatedRegistry(): {
     const { provider, credential } = initConfig.piAuth;
     authStorage.set(provider, credential);
     debugLog(`Injected ${credential.type} credential for provider: ${provider}`);
+
+    // Bedrock ABSK API key support: the Pi SDK's Bedrock provider reads credentials
+    // from AWS SDK's default credential chain (env vars / profiles), not from
+    // options.apiKey. When the UI passes an ABSK token, decode it and set standard
+    // AWS env vars so the SDK can find them.
+    if (provider === 'amazon-bedrock' && credential.type === 'api_key' && credential.key) {
+      const abskKey = credential.key;
+      try {
+        const raw = abskKey.startsWith('ABSK') ? abskKey.slice(4) : abskKey;
+        const decoded = Buffer.from(raw, 'base64').toString('utf-8');
+        const colonIdx = decoded.indexOf(':');
+        if (colonIdx > 0) {
+          process.env.AWS_ACCESS_KEY_ID = decoded.substring(0, colonIdx);
+          process.env.AWS_SECRET_ACCESS_KEY = decoded.substring(colonIdx + 1);
+          debugLog('Decoded ABSK token into AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY');
+        }
+      } catch {
+        // Not an ABSK token — fall through to default credential chain
+      }
+
+      // Electron's http2 module is incompatible with AWS SDK v3's NodeHttp2Handler.
+      // Force HTTP/1.1 to avoid "http2 request did not get a response" errors.
+      if (!process.env.AWS_BEDROCK_FORCE_HTTP1) {
+        process.env.AWS_BEDROCK_FORCE_HTTP1 = '1';
+        debugLog('Auto-set AWS_BEDROCK_FORCE_HTTP1=1 (Electron HTTP/2 compatibility)');
+      }
+    }
   } else if (initConfig?.apiKey) {
     authStorage.set('anthropic', { type: 'api_key', key: initConfig.apiKey });
     debugLog('Injected API key into auth storage (legacy fallback)');
