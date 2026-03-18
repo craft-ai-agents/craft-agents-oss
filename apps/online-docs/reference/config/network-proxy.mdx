@@ -1,0 +1,257 @@
+---
+title: "Network Proxy"
+description: "Route traffic through an HTTP/HTTPS proxy for corporate networks and firewalls"
+---
+
+Craft Agents can route all network traffic through an HTTP or HTTPS proxy. This is useful for corporate networks that require proxy access, firewalls that block direct connections, or environments where network inspection is required.
+
+## Configuration
+
+Open **Settings → Network** and configure:
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| **Enable Proxy** | Toggle proxy routing on/off | — |
+| **HTTP Proxy** | Proxy URL for HTTP requests | `http://proxy.corp.com:8080` |
+| **HTTPS Proxy** | Proxy URL for HTTPS requests (uses HTTP Proxy as fallback if not set) | `http://proxy.corp.com:8080` |
+| **No Proxy** | Comma-separated list of hosts/domains to bypass | `localhost,127.0.0.1,.internal.com` |
+
+Settings are stored in `~/.craft-agent/config.json` under the `networkProxy` key:
+
+```json
+{
+  "networkProxy": {
+    "enabled": true,
+    "httpProxy": "http://proxy.corp.com:8080",
+    "httpsProxy": "http://proxy.corp.com:8080",
+    "noProxy": "localhost,127.0.0.1,.internal.com"
+  }
+}
+```
+
+Changes take effect immediately — no restart required.
+
+## How It Works
+
+When proxy is enabled, Craft Agents routes traffic at two levels:
+
+1. **Node.js (main process)** — All `fetch()` calls (OAuth flows, MCP server connections, API requests) are routed through an [undici](https://github.com/nodejs/undici) `ProxyAgent` that uses HTTPS CONNECT tunneling for secure connections.
+
+2. **Electron (browser windows)** — Browser pane requests and OAuth browser windows use Chromium's built-in proxy support via `session.setProxy()`.
+
+3. **SDK subprocesses** — The Claude Code subprocess receives `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` environment variables automatically.
+
+## Proxy Authentication
+
+For proxies that require authentication, include credentials in the URL:
+
+```
+http://username:password@proxy.corp.com:8080
+```
+
+<Warning>
+Proxy credentials are stored in plain text in `config.json`. Use environment-level proxy configuration if your security policy requires encrypted credential storage.
+</Warning>
+
+## No Proxy Rules
+
+The **No Proxy** field accepts a comma-separated list of bypass rules:
+
+| Pattern | Matches |
+|---------|---------|
+| `*` | All hosts (effectively disables proxy) |
+| `example.com` | Exact hostname |
+| `.example.com` | All subdomains of example.com |
+| `example.com:8080` | Specific host and port |
+| `192.168.1.1` | Exact IP address |
+| `[::1]` | IPv6 address |
+| `[::1]:8080` | IPv6 address with port |
+
+<Note>
+`localhost` and `127.0.0.1` are **not** automatically bypassed. If your setup requires direct access to local services (e.g., local MCP servers), add them to the No Proxy list explicitly.
+</Note>
+
+## TLS-Intercepting Proxies (Corporate Firewalls)
+
+Many corporate proxies perform TLS inspection by re-signing HTTPS traffic with an internal Certificate Authority (CA). This causes `fetch failed` errors because Node.js does not trust the proxy's CA by default.
+
+### Symptoms
+
+- OAuth sign-in fails with **"fetch failed"** or returns silently with no browser window
+- MCP server connections fail behind the corporate network but work on personal networks
+- Browser pane requests work fine (Chromium uses the system certificate store) but agent-initiated requests fail
+
+### Solution
+
+Set the `NODE_EXTRA_CA_CERTS` environment variable to point to your corporate proxy's CA certificate before launching Craft Agents:
+
+<Tabs>
+  <Tab title="macOS">
+**One-time launch from terminal:**
+
+```bash
+NODE_EXTRA_CA_CERTS=/path/to/corporate-ca.pem open -a "Craft Agents"
+```
+
+**Permanent (all apps, including Dock/Spotlight launches):**
+
+Shell profile variables (`~/.zshrc`) only apply to terminal sessions. To set environment variables for packaged apps launched from Dock or Spotlight, use `launchctl`:
+
+```bash
+# Set for the current user session (survives reboots on modern macOS)
+launchctl setenv NODE_EXTRA_CA_CERTS /path/to/corporate-ca.pem
+```
+
+Then relaunch Craft Agents. To verify it took effect:
+
+```bash
+launchctl getenv NODE_EXTRA_CA_CERTS
+```
+
+To remove it later:
+
+```bash
+launchctl unsetenv NODE_EXTRA_CA_CERTS
+```
+
+<Note>
+On macOS 10.10+ `launchctl setenv` persists across reboots for GUI sessions. If your organisation uses an MDM, your IT department can also deploy this via a LaunchAgent plist:
+
+```xml
+<!-- ~/Library/LaunchAgents/com.craft.proxy-ca.plist -->
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.craft.proxy-ca</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/launchctl</string>
+    <string>setenv</string>
+    <string>NODE_EXTRA_CA_CERTS</string>
+    <string>/path/to/corporate-ca.pem</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>
+```
+</Note>
+  </Tab>
+  <Tab title="Windows">
+**One-time launch from PowerShell:**
+
+```powershell
+$env:NODE_EXTRA_CA_CERTS = "C:\path\to\corporate-ca.pem"
+& "$env:LOCALAPPDATA\craft-agents\Craft Agents.exe"
+```
+
+**Permanent (all apps, including Start Menu/desktop launches):**
+
+**Option A — via System Properties UI:**
+
+1. Press **Win + R**, type `sysdm.cpl`, press Enter
+2. Go to the **Advanced** tab → click **Environment Variables**
+3. Under **User variables**, click **New**
+4. Variable name: `NODE_EXTRA_CA_CERTS`
+5. Variable value: `C:\path\to\corporate-ca.pem`
+6. Click **OK** on all dialogs
+7. Sign out and back in (or reboot) for the change to take effect
+
+**Option B — via PowerShell:**
+
+```powershell
+[System.Environment]::SetEnvironmentVariable(
+  "NODE_EXTRA_CA_CERTS",
+  "C:\path\to\corporate-ca.pem",
+  "User"
+)
+```
+
+<Note>
+You must **sign out and back in** (or reboot) for the change to take effect in Explorer-launched apps. Terminal sessions pick it up immediately after opening a new window.
+</Note>
+
+To remove it later, delete the variable from System Properties, or run:
+
+```powershell
+[System.Environment]::SetEnvironmentVariable("NODE_EXTRA_CA_CERTS", $null, "User")
+```
+
+For organisation-wide deployment, IT can set this as a **Machine-level** variable (via the System Properties UI or Group Policy).
+  </Tab>
+  <Tab title="Linux">
+**One-time launch from terminal:**
+
+```bash
+NODE_EXTRA_CA_CERTS=/path/to/corporate-ca.pem craft-agents
+```
+
+**Permanent (all apps, including desktop launches):**
+
+Add to `~/.profile` (read by login shells) **and** `~/.config/environment.d/proxy-ca.conf` (read by systemd user sessions, which most modern desktop environments use):
+
+```bash
+# ~/.config/environment.d/proxy-ca.conf
+NODE_EXTRA_CA_CERTS=/path/to/corporate-ca.pem
+```
+
+Then log out and back in. To verify:
+
+```bash
+systemctl --user show-environment | grep NODE_EXTRA_CA_CERTS
+```
+
+<Note>
+On older desktop environments that don't use systemd user sessions, `~/.pam_environment` or `~/.xprofile` may be needed instead.
+</Note>
+  </Tab>
+</Tabs>
+
+### Obtaining the CA Certificate
+
+Your IT department should provide the corporate proxy CA certificate. If you need to extract it yourself:
+
+```bash
+# Connect through the proxy and capture the certificate chain
+openssl s_client -connect api.anthropic.com:443 -proxy proxy.corp.com:8080 -showcerts </dev/null 2>/dev/null | openssl x509 -outform PEM > corporate-ca.pem
+```
+
+<Note>
+The certificate must be in PEM format (begins with `-----BEGIN CERTIFICATE-----`). If you receive a `.cer` or `.der` file, convert it:
+
+```bash
+openssl x509 -inform DER -in corporate-ca.cer -out corporate-ca.pem
+```
+</Note>
+
+## Troubleshooting
+
+### "Fetch failed" on OAuth sign-in
+
+This typically indicates a TLS-intercepting proxy. See the [TLS-Intercepting Proxies](#tls-intercepting-proxies-corporate-firewalls) section above.
+
+### Proxy works for browsing but not for OAuth
+
+The browser pane uses Chromium's certificate store (which includes system-installed CAs), while OAuth discovery and token exchange use Node.js `fetch()` (which only trusts Node's built-in CA bundle). Set `NODE_EXTRA_CA_CERTS` to bridge this gap.
+
+### MCP servers fail to connect
+
+Ensure the MCP server's hostname is not in the No Proxy list (unless you want direct access). For local MCP servers (stdio transport), proxy settings do not apply — they run as local subprocesses.
+
+### Proxy authentication fails
+
+- Verify credentials work with `curl`: `curl -v --proxy http://user:pass@proxy:8080 https://api.anthropic.com`
+- URL-encode special characters in the password (e.g., `p%40ss` for `p@ss`)
+- Some corporate proxies use NTLM authentication, which is not supported directly. Consider using [cntlm](http://cntlm.sourceforge.net/) as a local NTLM-to-Basic proxy bridge.
+
+### Verifying proxy is active
+
+Check the application log for proxy configuration at startup:
+
+```
+[proxy] Applying proxy settings: { enabled: true, hasHttpProxy: true, hasHttpsProxy: true, hasNoProxy: true }
+```
+
+Log location: `~/Library/Logs/@craft-agent/electron/main.log` (macOS)

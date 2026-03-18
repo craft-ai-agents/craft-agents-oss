@@ -114,7 +114,7 @@ Automations are listed in the sidebar under **Automations**. From here you can:
 - **Duplicate** — Create a copy of an existing automation with a "Copy" suffix
 - **Delete** — Remove an automation permanently
 - **Test** — Manually trigger an automation to verify it works before waiting for the real event. The test runner resolves `@mentions`, enables sources, and uses the configured `llmConnection`/`model` — the same code path as the scheduler.
-- **Execution history** — Each automation records success and failure to a timeline, viewable in the detail page. History is stored in `automations-history.jsonl` and rotated to the last 1000 entries.
+- **Execution history** — Each automation records success and failure to a timeline, viewable in the detail page. History is stored in `automations-history.jsonl` and retained to the last 20 runs per automation (max 1000 entries total).
 
 Batch operations are supported — select multiple automations and enable, disable, or delete them together. The list is sorted by most recent execution for quick access to active automations.
 

@@ -161,7 +161,7 @@ export function mapClaudeSdkAssistantError(
       return {
         code: 'invalid_api_key',
         title: 'Authentication Failed',
-        message: 'Unable to authenticate with Anthropic. Your API key may be invalid or expired.',
+        message: 'Unable to authenticate. Your API key may be invalid or expired.',
         details: ['Check your API key in settings', 'Ensure your API key has not been revoked'],
         actions: [
           { key: 's', label: 'Settings', action: 'settings' },
@@ -176,7 +176,7 @@ export function mapClaudeSdkAssistantError(
         code: 'billing_error',
         title: 'Billing Error',
         message: 'Your account has a billing issue.',
-        details: ['Check your Anthropic account billing status'],
+        details: ['Check your account billing status'],
         actions: [{ key: 's', label: 'Update credentials', action: 'settings' }],
         canRetry: false,
       };

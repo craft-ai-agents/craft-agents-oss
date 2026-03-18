@@ -6,8 +6,6 @@
  * method, headers, and body format (JSON or raw).
  */
 
-import { appendFile } from 'fs/promises';
-import { join } from 'path';
 import { createLogger } from '../../utils/debug.ts';
 import type { EventBus, BaseEventPayload } from '../event-bus.ts';
 import type { AutomationHandler, AutomationsConfigProvider } from './types.ts';
@@ -15,7 +13,7 @@ import { APP_EVENTS, type AutomationEvent, type WebhookAction, type WebhookActio
 import { matcherMatches, buildWebhookEnv, expandEnvVars } from '../utils.ts';
 import { executeWithRetry, redactUrl, isTransientFailure, createWebhookHistoryEntry, expandWebhookAction } from '../webhook-utils.ts';
 import { RetryScheduler } from '../retry-scheduler.ts';
-import { AUTOMATIONS_HISTORY_FILE } from '../constants.ts';
+import { appendAutomationHistoryEntry } from '../history-store.ts';
 
 const log = createLogger('webhook-handler');
 
@@ -214,7 +212,6 @@ export class WebhookHandler implements AutomationHandler {
     }
 
     // Log failures and write history entries
-    const historyPath = join(this.options.workspaceRootPath, AUTOMATIONS_HISTORY_FILE);
     for (let i = 0; i < results.length; i++) {
       const result = results[i]!;
       const task = webhookTasks[i]!;
@@ -237,7 +234,7 @@ export class WebhookHandler implements AutomationHandler {
         responseBody: result.responseBody,
       });
       try {
-        await appendFile(historyPath, JSON.stringify(entry) + '\n', 'utf-8');
+        await appendAutomationHistoryEntry(this.options.workspaceRootPath, entry);
       } catch (e) {
         log.debug(`[WebhookHandler] Failed to write history: ${e}`);
       }
