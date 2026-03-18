@@ -2,10 +2,11 @@
  * History Store — single source of truth for automations-history.jsonl writes.
  *
  * Provides:
- * - `appendAutomationHistoryEntry()` — serialized append (no inline compaction)
+ * - `appendAutomationHistoryEntry()` — serialized append, triggers compaction at the global cap
  * - `compactAutomationHistory()` — two-tier retention: per-automation + global cap
  *
- * Compaction runs on startup (AutomationSystem.rotateHistory) to enforce caps.
+ * Compaction runs on startup (AutomationSystem.rotateHistory) and at runtime when
+ * appends reach the global cap (AUTOMATION_HISTORY_MAX_ENTRIES).
  * All history writes across the codebase should go through `appendAutomationHistoryEntry`
  * so the mutex prevents concurrent file corruption.
  */
@@ -40,7 +41,14 @@ function withMutex<T>(key: string, fn: () => Promise<T>): Promise<T> {
 // ============================================================================
 
 /**
+ * Appends since startup per workspace. Startup compaction guarantees ≤ MAX_ENTRIES,
+ * so this counter tells us when the file has grown enough to need compaction again.
+ */
+const appendCounters = new Map<string, number>();
+
+/**
  * Append a history entry to the JSONL file.
+ * Triggers compaction when appends since startup reach the global cap.
  *
  * The entry must already be a fully-formed history object (use `createWebhookHistoryEntry`
  * or `createPromptHistoryEntry` from `webhook-utils.ts` to build one).
@@ -53,6 +61,14 @@ export async function appendAutomationHistoryEntry(
 
   await withMutex(workspaceRootPath, async () => {
     await appendFile(historyPath, JSON.stringify(entry) + '\n', 'utf-8');
+
+    const count = (appendCounters.get(workspaceRootPath) ?? 0) + 1;
+    appendCounters.set(workspaceRootPath, count);
+
+    if (count >= AUTOMATION_HISTORY_MAX_ENTRIES) {
+      appendCounters.set(workspaceRootPath, 0);
+      await runCompaction(historyPath);
+    }
   });
 }
 
