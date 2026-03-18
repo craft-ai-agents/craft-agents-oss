@@ -19,7 +19,7 @@ import { getValidClaudeOAuthToken } from '../auth/state.ts';
 import { resolveAuthEnvVars } from '../config/llm-connections.ts';
 import type { McpClientPool } from '../mcp/mcp-pool.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
-import { DEFAULT_MODEL, isClaudeModel, getDefaultSummarizationModel } from '../config/models.ts';
+import { DEFAULT_MODEL, isClaudeModel, getDefaultSummarizationModel, getModelContextWindow } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { loadPreferences, formatPreferencesForPrompt } from '../config/preferences.ts';
 import type { FileAttachment } from '../utils/files.ts';
@@ -519,8 +519,8 @@ export class ClaudeAgent extends BaseAgent {
     const model = config.session?.model ?? config.model!;
 
     // Build BackendConfig for BaseAgent
-    // Context window for Anthropic models is 200k tokens
-    const CLAUDE_CONTEXT_WINDOW = 200_000;
+    // Context window from registry (1M for Opus/Sonnet 4.6, 200K for others)
+    const CLAUDE_CONTEXT_WINDOW = getModelContextWindow(model) ?? 200_000;
     const backendConfig: BackendConfig = {
       provider: 'anthropic',
       workspace: config.workspace,

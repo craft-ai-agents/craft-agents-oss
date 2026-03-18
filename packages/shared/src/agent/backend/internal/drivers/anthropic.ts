@@ -1,6 +1,7 @@
 import type { ProviderDriver } from '../driver-types.ts';
 import { applyAnthropicRuntimeBootstrap } from '../runtime-resolver.ts';
 import { validateAnthropicConnection } from '../../../../config/llm-validation.ts';
+import { getModelContextWindow } from '../../../../config/models.ts';
 
 export const anthropicDriver: ProviderDriver = {
   provider: 'anthropic',
@@ -95,7 +96,7 @@ export const anthropicDriver: ProviderDriver = {
         })(),
         description: '',
         provider: 'anthropic' as const,
-        contextWindow: 200_000,
+        contextWindow: getModelContextWindow(m.id) ?? 200_000,
       }));
 
     return { models };
