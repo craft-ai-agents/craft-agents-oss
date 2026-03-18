@@ -4,6 +4,9 @@
  * Key paths are internal and may be reorganized freely.
  */
 export const RPC_CHANNELS = {
+  remote: {
+    TEST_CONNECTION: 'remote:testConnection',
+  },
   sessions: {
     GET: 'sessions:get',
     GET_UNREAD_SUMMARY: 'sessions:getUnreadSummary',
@@ -329,3 +332,17 @@ export const RPC_CHANNELS = {
 } as const
 
 // IPC_CHANNELS compat alias removed — all consumers now use RPC_CHANNELS
+
+/**
+ * Flatten all channel string values from the nested RPC_CHANNELS object.
+ * Used by the exhaustive routing test to ensure every channel is classified.
+ */
+export function getAllChannelValues(): string[] {
+  const values: string[] = []
+  for (const namespace of Object.values(RPC_CHANNELS)) {
+    for (const channel of Object.values(namespace)) {
+      values.push(channel)
+    }
+  }
+  return values
+}

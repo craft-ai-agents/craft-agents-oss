@@ -8,9 +8,10 @@ import { overlayTransitionIn } from "@/lib/animations"
 import { AddWorkspaceStep_Choice } from "./AddWorkspaceStep_Choice"
 import { AddWorkspaceStep_CreateNew } from "./AddWorkspaceStep_CreateNew"
 import { AddWorkspaceStep_OpenFolder } from "./AddWorkspaceStep_OpenFolder"
+import { AddWorkspaceStep_ConnectRemote } from "./AddWorkspaceStep_ConnectRemote"
 import type { Workspace } from "../../../shared/types"
 
-type CreationStep = 'choice' | 'create' | 'open'
+type CreationStep = 'choice' | 'create' | 'open' | 'remote'
 
 interface WorkspaceCreationScreenProps {
   /** Callback when a workspace is created successfully */
@@ -55,10 +56,10 @@ export function WorkspaceCreationScreen({
     }
   }, [isCreating, onClose])
 
-  const handleCreateWorkspace = useCallback(async (folderPath: string, name: string) => {
+  const handleCreateWorkspace = useCallback(async (folderPath: string, name: string, remoteServer?: { url: string; token: string; remoteWorkspaceId: string }) => {
     setIsCreating(true)
     try {
-      const workspace = await window.electronAPI.createWorkspace(folderPath, name)
+      const workspace = await window.electronAPI.createWorkspace(folderPath, name, remoteServer)
       onWorkspaceCreated(workspace)
     } finally {
       setIsCreating(false)
@@ -72,6 +73,7 @@ export function WorkspaceCreationScreen({
           <AddWorkspaceStep_Choice
             onCreateNew={() => setStep('create')}
             onOpenFolder={() => setStep('open')}
+            onConnectRemote={() => setStep('remote')}
           />
         )
 
@@ -87,6 +89,15 @@ export function WorkspaceCreationScreen({
       case 'open':
         return (
           <AddWorkspaceStep_OpenFolder
+            onBack={() => setStep('choice')}
+            onCreate={handleCreateWorkspace}
+            isCreating={isCreating}
+          />
+        )
+
+      case 'remote':
+        return (
+          <AddWorkspaceStep_ConnectRemote
             onBack={() => setStep('choice')}
             onCreate={handleCreateWorkspace}
             isCreating={isCreating}

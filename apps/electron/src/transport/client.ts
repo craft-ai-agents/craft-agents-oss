@@ -104,6 +104,7 @@ export class WsRpcClient implements RpcClient {
   private listeners = new Map<string, Set<(...args: any[]) => void>>()
   private capabilityHandlers = new Map<string, (...args: any[]) => Promise<any> | any>()
   private connectionStateListeners = new Set<(state: TransportConnectionState) => void>()
+  private anyEventListeners = new Set<(channel: string, ...args: any[]) => void>()
   private clientId: string | null = null
   private connected = false
   private reconnectAttempt = 0
@@ -225,6 +226,14 @@ export class WsRpcClient implements RpcClient {
     callback(this.getConnectionState())
     return () => {
       this.connectionStateListeners.delete(callback)
+    }
+  }
+
+  /** Subscribe to all push events regardless of channel. Used by RemoteClientBridge for event forwarding. */
+  onAnyEvent(callback: (channel: string, ...args: any[]) => void): () => void {
+    this.anyEventListeners.add(callback)
+    return () => {
+      this.anyEventListeners.delete(callback)
     }
   }
 
@@ -352,6 +361,7 @@ export class WsRpcClient implements RpcClient {
       req.reject(new Error('Client destroyed'))
     }
     this.pending.clear()
+    this.anyEventListeners.clear()
 
     this.ws?.close()
     this.ws = null
@@ -462,6 +472,14 @@ export class WsRpcClient implements RpcClient {
               } catch {
                 // Listener errors shouldn't break the client
               }
+            }
+          }
+          // Wildcard listeners (used by RemoteClientBridge for event forwarding)
+          for (const cb of this.anyEventListeners) {
+            try {
+              cb(envelope.channel, ...(envelope.args ?? []))
+            } catch {
+              // Listener errors shouldn't break the client
             }
           }
         }

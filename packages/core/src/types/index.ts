@@ -5,6 +5,7 @@
 // Workspace and config types
 export type {
   Workspace,
+  RemoteServerConfig,
   McpAuthType,
   AuthType,
   OAuthCredentials,

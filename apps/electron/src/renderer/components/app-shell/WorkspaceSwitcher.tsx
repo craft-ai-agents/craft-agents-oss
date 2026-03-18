@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useState } from "react"
-import { Check, FolderPlus, ExternalLink, ChevronDown } from "lucide-react"
+import { Check, FolderPlus, ExternalLink, ChevronDown, Cloud } from "lucide-react"
 import { AnimatePresence } from "motion/react"
 import { useSetAtom } from "jotai"
 import { toast } from "sonner"
@@ -128,6 +128,9 @@ export function WorkspaceSwitcher({
                   <FadingText className="ml-1 font-sans min-w-0 text-sm" fadeWidth={36}>
                     {selectedWorkspace?.name || 'Select workspace'}
                   </FadingText>
+                  {selectedWorkspace?.remoteServer && (
+                    <Cloud className="h-3 w-3 text-muted-foreground shrink-0" />
+                  )}
                   <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
                 </>
               )}
@@ -162,6 +165,9 @@ export function WorkspaceSwitcher({
                   fallback={workspace.name.charAt(0)}
                 />
                 <span className="truncate">{workspace.name}</span>
+                {workspace.remoteServer && (
+                  <Cloud className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                )}
                 {workspaceUnreadMap?.[workspace.id] && <span className="h-2 w-2 rounded-full bg-accent shrink-0" />}
               </div>
               <div className="flex items-center gap-1">

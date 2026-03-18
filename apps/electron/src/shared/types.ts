@@ -229,8 +229,9 @@ export interface ElectronAPI {
 
   // Workspace management
   getWorkspaces(): Promise<Workspace[]>
-  createWorkspace(folderPath: string, name: string): Promise<Workspace>
+  createWorkspace(folderPath: string, name: string, remoteServer?: { url: string; token: string; remoteWorkspaceId: string }): Promise<Workspace>
   checkWorkspaceSlug(slug: string): Promise<{ exists: boolean; path: string }>
+  testRemoteConnection(url: string, token: string): Promise<{ ok: boolean; error?: string; remoteWorkspaceId?: string; remoteWorkspaceName?: string }>
 
   // Window management
   getWindowWorkspace(): Promise<string | null>

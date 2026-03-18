@@ -91,6 +91,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
   server.handle(RPC_CHANNELS.skills.OPEN_EDITOR, async (_ctx, workspaceId: string, skillSlug: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
+    if (workspace.remoteServer) throw new Error('Open in editor is not available for remote workspaces')
 
     const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
 
@@ -103,6 +104,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
   server.handle(RPC_CHANNELS.skills.OPEN_FINDER, async (_ctx, workspaceId: string, skillSlug: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
+    if (workspace.remoteServer) throw new Error('Show in Finder is not available for remote workspaces')
 
     const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
 

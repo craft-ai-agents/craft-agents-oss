@@ -8,6 +8,16 @@
  */
 export type McpAuthType = 'workspace_oauth' | 'workspace_bearer' | 'public';
 
+/**
+ * Configuration for a remote Craft Agent Server.
+ * When set on a workspace, handler calls are proxied over WebSocket.
+ */
+export interface RemoteServerConfig {
+  url: string;              // ws://host:port or wss://host:port
+  token: string;            // Auth token for the remote server
+  remoteWorkspaceId: string; // ID of the workspace on the remote server
+}
+
 export interface Workspace {
   id: string;
   name: string;            // Read from workspace folder config (not stored in global config)
@@ -17,6 +27,7 @@ export interface Workspace {
   iconUrl?: string;
   mcpUrl?: string;
   mcpAuthType?: McpAuthType;
+  remoteServer?: RemoteServerConfig; // If set, proxy handler calls to this remote server
 }
 
 /**

@@ -67,6 +67,8 @@ import { join, delimiter } from 'path'
 import { existsSync } from 'fs'
 import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
 import { registerAllRpcHandlers } from './handlers/index'
+import { BridgeManager } from './remote-bridge-manager'
+import { RoutedServer } from './routed-server'
 import { cleanupSessionFileWatchForClient } from '@craft-agent/server-core/handlers/rpc'
 import type { PlatformServices } from '../runtime/platform'
 import type { HandlerDeps } from './handlers/handler-deps'
@@ -625,6 +627,10 @@ app.whenReady().then(async () => {
       const resolveClientId = (wcId: number) => clientMap.get(wcId)
       const localToken = randomUUID()
 
+      // BridgeManager is declared before WsRpcServer so onClientDisconnected can reference it.
+      // It's initialized after listen() with the actual server instance.
+      let bridgeManager: BridgeManager | null = null
+
       const wsServer = new WsRpcServer({
         host: rpcHost,
         port: rpcPort,
@@ -639,11 +645,18 @@ app.whenReady().then(async () => {
             if (cId === clientId) { clientMap.delete(wcId); break }
           }
           cleanupSessionFileWatchForClient(clientId)
+          bridgeManager?.dispose(clientId)
         },
       })
       await wsServer.listen()
       const server: RpcServer = wsServer
       mainLog.info(`WS RPC server listening on ${rpcHost}:${wsServer.port}`)
+
+      // Create BridgeManager + RoutedServer wrapper for hybrid local/remote routing.
+      // Handlers register on `routed` which transparently routes REMOTE_ELIGIBLE channels
+      // through per-client bridges when the workspace has a remoteServer config.
+      bridgeManager = new BridgeManager(server)
+      const routed = new RoutedServer(server, bridgeManager)
 
       // In headless mode, print connection details so a remote client can connect
       if (isHeadless) {
@@ -681,8 +694,10 @@ app.whenReady().then(async () => {
         oauthFlowStore,
       }
 
-      // Register RPC handlers (must happen before window creation)
-      registerAllRpcHandlers(server, deps)
+      // Register RPC handlers on the RoutedServer wrapper (must happen before window creation).
+      // The wrapper intercepts handle() calls: LOCAL_ONLY channels run locally as-is,
+      // REMOTE_ELIGIBLE channels are proxied through per-client bridges for remote workspaces.
+      registerAllRpcHandlers(routed, deps)
 
       // Wire EventSink so SessionManager pushes events via the RPC server
       sessionManager!.setEventSink(server.push.bind(server))
