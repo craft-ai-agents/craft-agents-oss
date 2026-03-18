@@ -217,6 +217,48 @@ describe('discoverOAuthMetadata', () => {
       expect(result).toEqual(authServerMetadata);
     });
 
+    it('falls back to POST when both HEAD and GET return 405 (Streamable HTTP)', async () => {
+      const protectedResourceMetadata = {
+        resource: 'https://example.com/api',
+        authorization_servers: ['https://example.com/auth'],
+      };
+
+      const authServerMetadata = {
+        authorization_endpoint: 'https://example.com/auth/authorize',
+        token_endpoint: 'https://example.com/auth/token',
+      };
+
+      mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+        // HEAD returns 405
+        if (options?.method === 'HEAD') {
+          return Promise.resolve(new Response(null, { status: 405 }));
+        }
+        // GET also returns 405 (Streamable HTTP servers only accept POST)
+        if (url === 'https://example.com/mcp' && options?.method === 'GET') {
+          return Promise.resolve(new Response(null, { status: 405 }));
+        }
+        // POST returns 401 with resource_metadata
+        if (url === 'https://example.com/mcp' && options?.method === 'POST') {
+          return Promise.resolve(new Response(null, {
+            status: 401,
+            headers: {
+              'WWW-Authenticate': 'Bearer resource_metadata="https://example.com/.well-known/oauth-protected-resource"',
+            },
+          }));
+        }
+        if (url === 'https://example.com/.well-known/oauth-protected-resource') {
+          return Promise.resolve(new Response(JSON.stringify(protectedResourceMetadata), { status: 200 }));
+        }
+        if (url === 'https://example.com/auth/.well-known/oauth-authorization-server') {
+          return Promise.resolve(new Response(JSON.stringify(authServerMetadata), { status: 200 }));
+        }
+        return Promise.resolve(new Response('Not Found', { status: 404 }));
+      });
+
+      const result = await discoverOAuthMetadata('https://example.com/mcp');
+      expect(result).toEqual(authServerMetadata);
+    });
+
     it('falls back when authorization_servers is empty array', async () => {
       const protectedResourceMetadata = {
         resource: 'https://example.com/api',

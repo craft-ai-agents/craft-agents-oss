@@ -62,7 +62,7 @@ export interface AgentError {
 const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalError' | 'details'>> = {
   invalid_api_key: {
     title: 'Invalid API Key',
-    message: 'Your Anthropic API key was rejected. It may be invalid or expired.',
+    message: 'Your API key was rejected. It may be invalid or expired.',
     actions: [
       { key: 's', label: 'Update API key', command: '/settings', action: 'settings' },
     ],
@@ -158,7 +158,7 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
   },
   billing_error: {
     title: 'Payment Required',
-    message: 'Your account has a billing issue. Check your Anthropic account status.',
+    message: 'Your account has a billing issue. Check your provider account status.',
     actions: [
       { key: 's', label: 'Update credentials', command: '/settings', action: 'settings' },
     ],

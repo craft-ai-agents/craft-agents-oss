@@ -132,6 +132,7 @@
               "reference/config/preferences",
               "reference/config/credentials",
               "reference/config/custom-endpoint",
+              "reference/config/network-proxy",
               "reference/config/environment-variables"
             ]
           },

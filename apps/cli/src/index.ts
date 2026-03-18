@@ -546,24 +546,23 @@ async function setupLlmConnection(
   let authType: string
   const setupPayload: Record<string, unknown> = { slug: connectionSlug, credential: key }
 
-  if (provider === 'anthropic') {
-    if (baseUrl) {
-      providerType = 'anthropic_compat'
-      authType = 'api_key_with_endpoint'
-      setupPayload.endpoint = baseUrl
-    } else {
-      providerType = 'anthropic'
-      authType = 'api_key'
+  if (baseUrl) {
+    // Custom endpoint — send the same payload shape as the desktop UI.
+    // The server handler (llm-connections.ts:102-110) detects customEndpoint + baseUrl
+    // and sets providerType='pi_compat', piAuthProvider, etc.
+    providerType = 'pi_compat'
+    authType = 'api_key_with_endpoint'
+    setupPayload.baseUrl = baseUrl
+    setupPayload.customEndpoint = {
+      api: provider === 'anthropic' ? 'anthropic-messages' : 'openai-completions',
     }
+    setupPayload.defaultModel = provider === 'anthropic' ? 'claude-sonnet-4-6' : 'gpt-4o'
+  } else if (provider === 'anthropic') {
+    providerType = 'anthropic'
+    authType = 'api_key'
   } else {
-    if (baseUrl) {
-      providerType = 'pi_compat'
-      authType = 'api_key_with_endpoint'
-      setupPayload.endpoint = baseUrl
-    } else {
-      providerType = 'pi'
-      authType = 'api_key'
-    }
+    providerType = 'pi'
+    authType = 'api_key'
     setupPayload.piAuthProvider = provider
   }
 
@@ -574,7 +573,10 @@ async function setupLlmConnection(
     authType,
     createdAt: Date.now(),
   })
-  await client.invoke('settings:setupLlmConnection', setupPayload)
+  const setupResult = await client.invoke('settings:setupLlmConnection', setupPayload) as { success: boolean; error?: string }
+  if (!setupResult?.success) {
+    throw new Error(`LLM connection setup failed: ${setupResult?.error ?? 'unknown error'}`)
+  }
   await client.invoke('LLM_Connection:setDefault', connectionSlug)
   process.stderr.write(`LLM connection configured: ${provider}${baseUrl ? ` (${baseUrl})` : ''}\n`)
 
@@ -625,10 +627,12 @@ async function cmdRun(args: CliArgs): Promise<void> {
       process.stderr.write(`Workspace registered: ${absPath}\n`)
     }
 
-    // Auto-setup LLM connection from flags / env vars
+    // Auto-setup LLM connection from flags / env vars.
+    // When --base-url is provided, always create the custom endpoint connection
+    // (even if other connections exist) so the session routes through it.
     const connections = (await client.invoke('LLM_Connection:list')) as any[]
     let connectionSlug: string | undefined
-    if (!connections?.length) {
+    if (!connections?.length || args.baseUrl) {
       const result = await setupLlmConnection(client, args)
       connectionSlug = result.connectionSlug
     }
@@ -687,7 +691,11 @@ async function cmdValidate(args: CliArgs): Promise<void> {
   }
 
   try {
-    const exitCode = await runValidation(client, args.json, args.noSpinner, args.workspaceDir)
+    const exitCode = await runValidation(client, args.json, args.noSpinner, args.workspaceDir, {
+      baseUrl: args.baseUrl,
+      apiKey: args.apiKey,
+      provider: args.provider,
+    })
     client.destroy()
     if (server) await server.stop()
     process.exit(exitCode)
@@ -765,6 +773,12 @@ export interface ValidateStep {
 export interface ValidateContext {
   /** Pre-existing workspace directory (from --workspace-dir) */
   workspaceDir?: string
+  /** Custom endpoint URL (from --base-url) */
+  baseUrl?: string
+  /** API key override (from --api-key) */
+  apiKey?: string
+  /** Provider hint (from --provider, default 'anthropic') */
+  provider?: string
   workspaceId?: string
   workspaceRootPath?: string
   createdWorkspace?: boolean
@@ -1008,8 +1022,34 @@ export function getValidateSteps(): ValidateStep[] {
     },
     {
       name: 'LLM_Connection:list',
-      fn: async (client) => {
+      fn: async (client, ctx) => {
         const r = (await client.invoke('LLM_Connection:list')) as any[]
+
+        // Custom endpoint: always create/update when --base-url is provided
+        if (ctx.baseUrl) {
+          const provider = ctx.provider || 'anthropic'
+          const key = ctx.apiKey || process.env.ANTHROPIC_API_KEY || ''
+          const slug = `${provider}-cli`
+          const isAnthropicApi = provider === 'anthropic'
+          await client.invoke('LLM_Connection:save', {
+            slug,
+            name: `${provider.charAt(0).toUpperCase() + provider.slice(1)} (Custom Endpoint)`,
+            providerType: 'pi_compat',
+            authType: 'api_key_with_endpoint',
+            createdAt: Date.now(),
+          })
+          const result = await client.invoke('settings:setupLlmConnection', {
+            slug,
+            credential: key,
+            baseUrl: ctx.baseUrl,
+            customEndpoint: { api: isAnthropicApi ? 'anthropic-messages' : 'openai-completions' },
+            defaultModel: isAnthropicApi ? 'claude-sonnet-4-6' : 'gpt-4o',
+          }) as { success: boolean; error?: string }
+          if (!result?.success) return `setup failed: ${result?.error ?? 'unknown'}`
+          await client.invoke('LLM_Connection:setDefault', slug)
+          return `${r?.length ?? 0} existing + custom endpoint via ${ctx.baseUrl}`
+        }
+
         if (r?.length > 0) return `${r.length} connections`
         // Auto-setup from env for CI environments
         const envKey = process.env.ANTHROPIC_API_KEY
@@ -1022,7 +1062,8 @@ export function getValidateSteps(): ValidateStep[] {
           authType: 'api_key',
           createdAt: Date.now(),
         })
-        await client.invoke('settings:setupLlmConnection', { slug, credential: envKey })
+        const result = await client.invoke('settings:setupLlmConnection', { slug, credential: envKey }) as { success: boolean; error?: string }
+        if (!result?.success) return `setup failed: ${result?.error ?? 'unknown'}`
         await client.invoke('LLM_Connection:setDefault', slug)
         return `0 found → created from env`
       },
@@ -1514,10 +1555,21 @@ SKILLEOF`, 90_000, true, undefined, ctx.onEvent)
   ]
 }
 
-export async function runValidation(client: CliRpcClient, jsonMode: boolean, noSpinner?: boolean, workspaceDir?: string): Promise<number> {
+export async function runValidation(
+  client: CliRpcClient,
+  jsonMode: boolean,
+  noSpinner?: boolean,
+  workspaceDir?: string,
+  validateOptions?: { baseUrl?: string; apiKey?: string; provider?: string },
+): Promise<number> {
   const steps = getValidateSteps()
   const total = steps.length
-  const ctx: ValidateContext = { workspaceDir }
+  const ctx: ValidateContext = {
+    workspaceDir,
+    baseUrl: validateOptions?.baseUrl,
+    apiKey: validateOptions?.apiKey,
+    provider: validateOptions?.provider,
+  }
   let passed = 0
   let failed = 0
   const results: Array<{ step: string; status: string; detail: string; elapsed: number }> = []
