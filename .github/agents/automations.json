@@ -17,7 +17,8 @@
             "type": "prompt",
             "prompt": "Reply with exactly: AUTOMATION_SHOULD_NOT_TRIGGER"
           }
-        ]
+        ],
+        "id": "d6b772"
       },
       {
         "name": "CLI Validate Condition Pass",
@@ -47,7 +48,8 @@
               "session": "$CRAFT_SESSION_ID"
             }
           }
-        ]
+        ],
+        "id": "c82346"
       }
     ]
   }
