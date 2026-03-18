@@ -4,7 +4,6 @@ import type { HandlerDeps } from './handler-deps'
 
 export const GUI_HANDLED_CHANNELS = [
   RPC_CHANNELS.remote.TEST_CONNECTION,
-  RPC_CHANNELS.remote.CREATE_WORKSPACE,
   RPC_CHANNELS.window.OPEN_WORKSPACE,
   RPC_CHANNELS.window.OPEN_SESSION_IN_NEW_WINDOW,
   RPC_CHANNELS.window.CLOSE,
@@ -49,17 +48,32 @@ async function connectToRemote(url: string, token: string) {
 export function registerWorkspaceGuiHandlers(server: RpcServer, deps: HandlerDeps): void {
   const windowManager = deps.windowManager
 
-  // Test connection to a remote Craft Agent Server — just verifies connectivity + discovers workspace
-  server.handle(RPC_CHANNELS.remote.TEST_CONNECTION, async (_ctx, url: string, token: string) => {
+  // Test connection to a remote Craft Agent Server.
+  // - Without workspaceName: discovers existing workspace or returns needsWorkspace flag
+  // - With workspaceName: creates a workspace on the remote server if none exists
+  server.handle(RPC_CHANNELS.remote.TEST_CONNECTION, async (_ctx, url: string, token: string, workspaceName?: string) => {
     const { client, error } = await connectToRemote(url, token)
     if (!client) return { ok: false, error }
 
     try {
-      const workspaces = await client.invoke('workspaces:get') as Array<{ id: string; name: string }>
+      let workspaces = await client.invoke('workspaces:get') as Array<{ id: string; name: string }>
 
       if (workspaces.length === 0) {
-        // Fresh server — no workspace yet, caller needs to create one
-        return { ok: true, needsWorkspace: true }
+        if (!workspaceName) {
+          // Fresh server, no name provided — tell the caller to provide one
+          return { ok: true, needsWorkspace: true }
+        }
+
+        // Create workspace on remote with the user's chosen name.
+        // Use checkSlug to get the platform-correct default path on the remote machine.
+        const slug = workspaceName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'workspace'
+        const slugCheck = await client.invoke('workspaces:checkSlug', slug) as { exists: boolean; path: string }
+        await client.invoke('workspaces:create', slugCheck.path, workspaceName)
+        workspaces = await client.invoke('workspaces:get') as Array<{ id: string; name: string }>
+      }
+
+      if (workspaces.length === 0) {
+        return { ok: false, error: 'Failed to create workspace on remote server' }
       }
       if (workspaces.length > 1) {
         return { ok: false, error: 'Multiple workspaces not supported yet' }
@@ -69,40 +83,6 @@ export function registerWorkspaceGuiHandlers(server: RpcServer, deps: HandlerDep
         ok: true,
         remoteWorkspaceId: workspaces[0].id,
         remoteWorkspaceName: workspaces[0].name,
-      }
-    } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : 'Unknown error' }
-    } finally {
-      client.destroy()
-    }
-  })
-
-  // Create a workspace on a remote server with the user's chosen name
-  server.handle(RPC_CHANNELS.remote.CREATE_WORKSPACE, async (_ctx, url: string, token: string, name: string) => {
-    const { client, error } = await connectToRemote(url, token)
-    if (!client) return { ok: false, error }
-
-    try {
-      // Ask the remote server to resolve the default workspace path for this slug.
-      // checkWorkspaceSlug returns { exists, path } where path is the platform-correct
-      // default location on the remote machine.
-      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'workspace'
-      const slugCheck = await client.invoke('workspaces:checkSlug', slug) as { exists: boolean; path: string }
-      const remotePath = slugCheck.path
-
-      await client.invoke('workspaces:create', remotePath, name)
-
-      const workspaces = await client.invoke('workspaces:get') as Array<{ id: string; name: string }>
-      if (workspaces.length === 0) {
-        return { ok: false, error: 'Failed to create workspace on remote server' }
-      }
-
-      // Return the workspace we just created (last one if multiple)
-      const ws = workspaces.find(w => w.name === name) ?? workspaces[workspaces.length - 1]
-      return {
-        ok: true,
-        remoteWorkspaceId: ws.id,
-        remoteWorkspaceName: ws.name,
       }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : 'Unknown error' }

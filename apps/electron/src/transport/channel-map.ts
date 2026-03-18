@@ -43,7 +43,6 @@ export const CHANNEL_MAP = {
   createWorkspace: invoke(RPC_CHANNELS.workspaces.CREATE),
   checkWorkspaceSlug: invoke(RPC_CHANNELS.workspaces.CHECK_SLUG),
   testRemoteConnection: invoke(RPC_CHANNELS.remote.TEST_CONNECTION),
-  createRemoteWorkspace: invoke(RPC_CHANNELS.remote.CREATE_WORKSPACE),
 
   // Window management
   getWindowWorkspace: invoke(RPC_CHANNELS.window.GET_WORKSPACE),

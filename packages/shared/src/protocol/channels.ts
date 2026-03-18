@@ -6,7 +6,6 @@
 export const RPC_CHANNELS = {
   remote: {
     TEST_CONNECTION: 'remote:testConnection',
-    CREATE_WORKSPACE: 'remote:createWorkspace',
   },
   sessions: {
     GET: 'sessions:get',

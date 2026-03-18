@@ -108,15 +108,16 @@ export function AddWorkspaceStep_ConnectRemote({
 
     let wsId = remoteWorkspaceId
 
-    // If the remote server needs a workspace, create one with the user's name
+    // If the remote server needs a workspace, call testRemoteConnection again with the name
+    // to create one on the remote server
     if (needsWorkspace && !wsId) {
-      const result = await window.electronAPI.createRemoteWorkspace(serverUrl, token, effectiveName)
-      if (!result.ok) {
+      const result = await window.electronAPI.testRemoteConnection(serverUrl, token, effectiveName)
+      if (!result.ok || !result.remoteWorkspaceId) {
         setTestState('error')
         setTestError(result.error || 'Failed to create workspace on remote server')
         return
       }
-      wsId = result.remoteWorkspaceId ?? null
+      wsId = result.remoteWorkspaceId
     }
 
     if (!wsId) return
