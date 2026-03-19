@@ -113,6 +113,8 @@ export class WsRpcClient implements RpcClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private connectTimer: ReturnType<typeof setTimeout> | null = null
   private destroyed = false
+  /** Set when server sends shuttingDown — prevents reconnection attempts. */
+  private permanentlyClosed = false
   private connectStarted = false
   private connectError: Error | null = null
   private readyPromise: Promise<void> | null = null
@@ -515,6 +517,15 @@ export class WsRpcClient implements RpcClient {
 
       case 'event': {
         if (envelope.channel) {
+          // Server is shutting down — stop reconnection before dispatching
+          if (envelope.channel === 'server:shuttingDown') {
+            this.permanentlyClosed = true
+            this.setConnectionState({
+              status: 'disconnected',
+              lastError: { kind: 'server', message: 'Server is shutting down', code: 'SERVER_SHUTDOWN' },
+            })
+          }
+
           const set = this.listeners.get(envelope.channel)
           if (set) {
             for (const cb of set) {
@@ -632,12 +643,14 @@ export class WsRpcClient implements RpcClient {
       })
     }
 
-    if (!this.destroyed && this.autoReconnect) {
+    if (!this.destroyed && !this.permanentlyClosed && this.autoReconnect) {
       this.scheduleReconnect()
     }
   }
 
   private scheduleReconnect(): void {
+    if (this.permanentlyClosed) return
+
     const delay = Math.min(
       1000 * Math.pow(2, this.reconnectAttempt),
       this.maxReconnectDelay,

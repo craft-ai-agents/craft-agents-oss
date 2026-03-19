@@ -37,7 +37,7 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   const { sessionManager } = deps
   const windowManager = deps.windowManager
 
-  // Get workspaces
+  // Get workspaces (LOCAL_ONLY — includes rootPath for local Electron renderer)
   server.handle(RPC_CHANNELS.workspaces.GET, async () => {
     return sessionManager.getWorkspaces()
   })
@@ -125,6 +125,13 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
       sessionManager.setupConfigWatcher(workspace.rootPath, workspaceId)
     }
     end()
+
+    // Return connection details so the preload RoutedClient can decide
+    // whether to connect directly to a remote server for this workspace.
+    return {
+      workspaceId,
+      remoteServer: workspace?.remoteServer ?? null,
+    }
   })
 
   // ============================================================

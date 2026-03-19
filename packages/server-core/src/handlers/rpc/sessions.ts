@@ -100,6 +100,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sessions.SET_NOTES,
   RPC_CHANNELS.sessions.WATCH_FILES,
   RPC_CHANNELS.sessions.UNWATCH_FILES,
+  RPC_CHANNELS.sessions.EXPORT,
+  RPC_CHANNELS.sessions.IMPORT,
 ] as const
 
 export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -450,5 +452,30 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
       log.error('Failed to save session notes:', error)
       throw error
     }
+  })
+
+  // ============================================
+  // Export / Import / Dispatch
+  // ============================================
+
+  // Export a session as a portable bundle
+  server.handle(RPC_CHANNELS.sessions.EXPORT, async (ctx, sessionId: string) => {
+    await sessionManager.waitForInit()
+    const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
+    if (!workspaceId) throw new Error('No workspace context')
+
+    const bundle = await sessionManager.exportSession(sessionId, workspaceId)
+    if (!bundle) throw new Error(`Failed to export session ${sessionId}`)
+    return bundle
+  })
+
+  // Import a session bundle into the target workspace
+  server.handle(RPC_CHANNELS.sessions.IMPORT, async (ctx, bundle: unknown, mode: string) => {
+    await sessionManager.waitForInit()
+    const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
+    if (!workspaceId) throw new Error('No workspace context')
+    if (mode !== 'move' && mode !== 'fork') throw new Error(`Invalid dispatch mode: ${mode}`)
+
+    return sessionManager.importSession(workspaceId, bundle as import('@craft-agent/shared/sessions').SessionBundle, mode)
   })
 }

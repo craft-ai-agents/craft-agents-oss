@@ -1,8 +1,8 @@
 import { Button } from '@/components/ui/button'
 import type { TransportConnectionState } from '../../../shared/types'
 
-export function shouldShowTransportConnectionBanner(isRemote: boolean, state: TransportConnectionState | null): boolean {
-  if (!isRemote || !state) return false
+export function shouldShowTransportConnectionBanner(state: TransportConnectionState | null): boolean {
+  if (!state || state.mode === 'local') return false
   return state.status !== 'connected' && state.status !== 'idle'
 }
 

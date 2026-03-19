@@ -22,7 +22,13 @@
 import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
 import { enableDebug } from '@craft-agent/shared/utils/debug'
-import { startHeadlessServer } from '@craft-agent/server-core/bootstrap'
+import { bootstrapServer, startHealthHttpServer, generateServerToken } from '@craft-agent/server-core/bootstrap'
+
+// --generate-token: print a crypto-random token and exit
+if (process.argv.includes('--generate-token')) {
+  console.log(generateServerToken())
+  process.exit(0)
+}
 import type { WsRpcTlsOptions } from '@craft-agent/server-core/transport'
 import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient } from '@craft-agent/server-core/handlers/rpc'
 import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
@@ -59,7 +65,7 @@ if (tlsCertPath || tlsKeyPath) {
 
 const instance = await (async () => {
   try {
-    return await startHeadlessServer<SessionManager, HandlerDeps>({
+    return await bootstrapServer<SessionManager, HandlerDeps>({
       bundledAssetsRoot,
       tls,
       applyPlatformToSubsystems: (platform) => {
@@ -117,20 +123,43 @@ const instance = await (async () => {
   }
 })()
 
+// Start HTTP health endpoint if CRAFT_HEALTH_PORT is set
+const healthPort = parseInt(process.env.CRAFT_HEALTH_PORT ?? '0', 10)
+const healthServer = await startHealthHttpServer({
+  port: healthPort,
+  deps: { sessionManager: instance.sessionManager },
+  wsServer: instance.wsServer,
+  platform: instance.platform,
+})
+
 console.log(`CRAFT_SERVER_URL=${instance.protocol}://${instance.host}:${instance.port}`)
 console.log(`CRAFT_SERVER_TOKEN=${instance.token}`)
 
-// Warn if binding to a non-localhost address without TLS — tokens would be sent in cleartext
+// Block binding to a non-localhost address without TLS — tokens would be sent in cleartext.
+// Override with --allow-insecure-bind for explicitly trusted networks.
 const isLocalBind = instance.host === '127.0.0.1' || instance.host === 'localhost' || instance.host === '::1'
 if (!isLocalBind && instance.protocol === 'ws') {
-  console.warn(
-    '\n⚠️  WARNING: Server is listening on a network address without TLS.\n' +
-    '   Authentication tokens will be sent in cleartext.\n' +
-    '   Set CRAFT_RPC_TLS_CERT and CRAFT_RPC_TLS_KEY to enable wss://.\n'
-  )
+  if (process.argv.includes('--allow-insecure-bind')) {
+    console.warn(
+      '\n⚠️  WARNING: Server is listening on a network address without TLS.\n' +
+      '   Authentication tokens will be sent in cleartext.\n' +
+      '   Set CRAFT_RPC_TLS_CERT and CRAFT_RPC_TLS_KEY to enable wss://.\n'
+    )
+  } else {
+    console.error(
+      '\n❌  Refusing to bind to a network address without TLS.\n' +
+      '   Authentication tokens would be sent in cleartext.\n\n' +
+      '   Options:\n' +
+      '     1. Set CRAFT_RPC_TLS_CERT and CRAFT_RPC_TLS_KEY to enable wss://\n' +
+      '     2. Pass --allow-insecure-bind to override (NOT recommended for production)\n'
+    )
+    await instance.stop()
+    process.exit(1)
+  }
 }
 
 const shutdown = async () => {
+  healthServer?.stop()
   await instance.stop()
   process.exit(0)
 }

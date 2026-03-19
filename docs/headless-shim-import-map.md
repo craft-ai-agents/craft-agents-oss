@@ -1,8 +1,8 @@
 # Headless Shim Import Map
 
 Generated for Phase 2 from the static import roots:
-- `apps/electron/src/server/index.ts`
-- `apps/electron/src/server/start.ts`
+- `packages/server/src/index.ts` (standalone Bun server)
+- `apps/electron/src/main/index.ts` (Electron headless via `CRAFT_HEADLESS=1`)
 
 This map tracks shim drivers for the Bun headless entrypoint.
 

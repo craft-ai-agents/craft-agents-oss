@@ -14,9 +14,6 @@ import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
 
-// Re-export from server-core for backward compatibility
-export { sanitizeFilename, validateFilePath } from '@craft-agent/server-core/handlers'
-
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.file.READ,
   RPC_CHANNELS.file.READ_DATA_URL,

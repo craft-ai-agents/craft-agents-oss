@@ -18,16 +18,28 @@ export interface RemoteServerConfig {
   remoteWorkspaceId: string; // ID of the workspace on the remote server
 }
 
-export interface Workspace {
+/**
+ * Client-facing workspace DTO — safe to send over RPC to remote clients.
+ * Does not expose server-internal filesystem paths.
+ */
+export interface WorkspaceInfo {
   id: string;
-  name: string;            // Read from workspace folder config (not stored in global config)
-  rootPath: string;        // Absolute path to local workspace folder (metadata, config). Auto-created for remote workspaces.
-  createdAt: number;
-  lastAccessedAt?: number; // For sorting recent workspaces
+  name: string;
+  slug: string;              // Server-computed from rootPath basename
+  lastAccessedAt?: number;
   iconUrl?: string;
   mcpUrl?: string;
   mcpAuthType?: McpAuthType;
-  remoteServer?: RemoteServerConfig; // If set, proxy handler calls to this remote server
+  remoteServer?: RemoteServerConfig;
+}
+
+/**
+ * Full workspace with server-internal details.
+ * Used by server code and local Electron renderer (LOCAL_ONLY channels).
+ */
+export interface Workspace extends WorkspaceInfo {
+  rootPath: string;        // Absolute path to local workspace folder (metadata, config). Auto-created for remote workspaces.
+  createdAt: number;
 }
 
 /**

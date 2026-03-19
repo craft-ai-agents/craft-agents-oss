@@ -33,8 +33,7 @@
     "dist:mac:x64": "bash scripts/build-dmg.sh x64",
     "dist:win": "powershell -ExecutionPolicy Bypass -File scripts/build-win.ps1",
     "lint": "eslint src/",
-    "lint:fix": "eslint src/ --fix",
-    "server:start": "bun run src/server/index.ts"
+    "lint:fix": "eslint src/ --fix"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",

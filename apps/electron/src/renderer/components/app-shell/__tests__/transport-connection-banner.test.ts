@@ -18,23 +18,23 @@ function state(overrides: Partial<TransportConnectionState>): TransportConnectio
 
 describe('shouldShowTransportConnectionBanner', () => {
   it('is hidden for null state', () => {
-    expect(shouldShowTransportConnectionBanner(true, null)).toBe(false)
+    expect(shouldShowTransportConnectionBanner(null)).toBe(false)
   })
 
-  it('is hidden when not remote', () => {
-    expect(shouldShowTransportConnectionBanner(false, state({ status: 'failed' }))).toBe(false)
+  it('is hidden when mode is local', () => {
+    expect(shouldShowTransportConnectionBanner(state({ mode: 'local', status: 'failed' }))).toBe(false)
   })
 
   it('is hidden when remote connection is healthy', () => {
-    expect(shouldShowTransportConnectionBanner(true, state({ status: 'connected' }))).toBe(false)
+    expect(shouldShowTransportConnectionBanner(state({ status: 'connected' }))).toBe(false)
   })
 
   it('is shown when remote connection is reconnecting', () => {
-    expect(shouldShowTransportConnectionBanner(true, state({ status: 'reconnecting' }))).toBe(true)
+    expect(shouldShowTransportConnectionBanner(state({ status: 'reconnecting' }))).toBe(true)
   })
 
   it('is shown when remote connection failed', () => {
-    expect(shouldShowTransportConnectionBanner(true, state({ status: 'failed' }))).toBe(true)
+    expect(shouldShowTransportConnectionBanner(state({ status: 'failed' }))).toBe(true)
   })
 })
 

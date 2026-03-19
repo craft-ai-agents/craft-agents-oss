@@ -44,6 +44,10 @@ export const CHANNEL_MAP = {
   checkWorkspaceSlug: invoke(RPC_CHANNELS.workspaces.CHECK_SLUG),
   testRemoteConnection: invoke(RPC_CHANNELS.remote.TEST_CONNECTION),
 
+  // Server-level workspace operations (REMOTE_ELIGIBLE)
+  getServerWorkspaces: invoke(RPC_CHANNELS.server.GET_WORKSPACES),
+  createServerWorkspace: invoke(RPC_CHANNELS.server.CREATE_WORKSPACE),
+
   // Window management
   getWindowWorkspace: invoke(RPC_CHANNELS.window.GET_WORKSPACE),
   getWindowMode: invoke(RPC_CHANNELS.window.GET_MODE),
@@ -151,11 +155,6 @@ export const CHANNEL_MAP = {
   // Workspace Settings
   getWorkspaceSettings: invoke(RPC_CHANNELS.workspace.SETTINGS_GET),
   updateWorkspaceSetting: invoke(RPC_CHANNELS.workspace.SETTINGS_UPDATE),
-
-  // Remote workspace connection status + reconnect
-  getRemoteConnectionStatus: invoke(RPC_CHANNELS.workspace.GET_REMOTE_STATUS),
-  onRemoteConnectionStatusChanged: listener(RPC_CHANNELS.workspace.REMOTE_STATUS_CHANGED),
-  reconnectRemoteBridge: invoke(RPC_CHANNELS.workspace.RECONNECT_REMOTE),
 
   // Folder dialog
   openFolderDialog: invoke(RPC_CHANNELS.dialog.OPEN_FOLDER),

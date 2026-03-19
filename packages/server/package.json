@@ -7,8 +7,21 @@
   "bin": {
     "craft-server": "src/index.ts"
   },
+  "files": [
+    "src/"
+  ],
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "author": {
+    "name": "Craft Docs Ltd.",
+    "email": "support@craft.do"
+  },
+  "license": "MIT",
+  "homepage": "https://agents.craft.do",
   "scripts": {
     "start": "bun run src/index.ts",
+    "generate-token": "bun run src/index.ts --generate-token",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -18,6 +31,7 @@
   },
   "devDependencies": {
     "typescript": "^5.8.2",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "ws": "^8.16.0"
   }
 }

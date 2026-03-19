@@ -71,6 +71,8 @@ export interface WsRpcServerOptions {
   serverId?: string
   /** TLS configuration. When provided, the server listens on wss:// instead of ws://. */
   tls?: WsRpcTlsOptions
+  /** Maximum concurrent clients. 0 = unlimited. Default: 50 */
+  maxClients?: number
   /** Called when a client completes handshake. */
   onClientConnected?: (info: { clientId: string; webContentsId: number | null; workspaceId: string | null }) => void
   /** Called when a client disconnects. */
@@ -99,6 +101,7 @@ export class WsRpcServer implements RpcServer {
   private readonly validateToken: ((token: string) => Promise<boolean>) | null
   private readonly serverId: string
   private readonly tlsOptions: WsRpcTlsOptions | null
+  private readonly maxClients: number
   private readonly onClientConnected: WsRpcServerOptions['onClientConnected']
   private readonly onClientDisconnected: WsRpcServerOptions['onClientDisconnected']
 
@@ -109,6 +112,7 @@ export class WsRpcServer implements RpcServer {
     this.validateToken = opts?.validateToken ?? null
     this.serverId = opts?.serverId ?? 'local'
     this.tlsOptions = opts?.tls ?? null
+    this.maxClients = opts?.maxClients ?? 50
     this.onClientConnected = opts?.onClientConnected
     this.onClientDisconnected = opts?.onClientDisconnected
   }
@@ -121,6 +125,11 @@ export class WsRpcServer implements RpcServer {
   /** The protocol the server is using: 'wss' when TLS is configured, 'ws' otherwise. */
   get protocol(): 'ws' | 'wss' {
     return this._protocol
+  }
+
+  /** Number of currently connected (handshake-completed) clients. */
+  getConnectedClientCount(): number {
+    return this.clients.size
   }
 
   // -------------------------------------------------------------------------
@@ -276,6 +285,16 @@ export class WsRpcServer implements RpcServer {
   // -------------------------------------------------------------------------
 
   private onConnection(ws: WebSocket): void {
+    // Reject if at capacity
+    if (this.maxClients > 0 && this.clients.size >= this.maxClients) {
+      transportLog.warn('Connection rejected: at capacity', {
+        maxClients: this.maxClients,
+        current: this.clients.size,
+      })
+      ws.close(4008, 'Server at capacity')
+      return
+    }
+
     let handshakeCompleted = false
     let handshakeTimeout: ReturnType<typeof setTimeout> | null = null
 
@@ -415,6 +434,9 @@ export class WsRpcServer implements RpcServer {
   // Request dispatching
   // -------------------------------------------------------------------------
 
+  /** Server-side timeout for RPC handler execution (ms). */
+  private static readonly HANDLER_TIMEOUT_MS = 60_000
+
   private async onRequest(client: ClientConnection, envelope: MessageEnvelope): Promise<void> {
     const { channel, id, args } = envelope
 
@@ -436,7 +458,13 @@ export class WsRpcServer implements RpcServer {
     }
 
     try {
-      const result = await handler(ctx, ...(args ?? []))
+      const result = await Promise.race([
+        handler(ctx, ...(args ?? [])),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Handler timeout: ${channel} (${WsRpcServer.HANDLER_TIMEOUT_MS}ms)`)),
+            WsRpcServer.HANDLER_TIMEOUT_MS),
+        ),
+      ])
       const response: MessageEnvelope = {
         id,
         type: 'response',

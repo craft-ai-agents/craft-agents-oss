@@ -18,7 +18,7 @@ import { CrossfadeAvatar } from "@/components/ui/avatar"
 import { FadingText } from "@/components/ui/fading-text"
 import { WorkspaceCreationScreen } from "@/components/workspace"
 import { useWorkspaceIcons } from "@/hooks/useWorkspaceIcon"
-import { useWorkspaceConnectionState } from "@/hooks/useWorkspaceConnectionState"
+import { useTransportConnectionState } from "@/hooks/useTransportConnectionState"
 import type { Workspace } from "../../../shared/types"
 
 interface WorkspaceSwitcherProps {
@@ -52,16 +52,14 @@ export function WorkspaceSwitcher({
   const setFullscreenOverlayOpen = useSetAtom(fullscreenOverlayOpenAtom)
   const selectedWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
   const workspaceIconMap = useWorkspaceIcons(workspaces)
-  const { isRemote, connectionState: remoteConnectionState } = useWorkspaceConnectionState()
+  const connectionState = useTransportConnectionState()
+  const isRemote = connectionState?.mode === 'remote'
 
-  /** True when we know the bridge is in a disconnected/failed state. */
+  /** True when we know the transport is in a disconnected/failed state. */
   const isRemoteDisconnected = (workspaceId: string) => {
-    if (!isRemote || !remoteConnectionState) return false
-    // In thin client mode, the active workspace is always remote.
-    // In hybrid mode, the bridge only tracks the active workspace.
-    // Either way, if we're remote and the status is unhealthy, the active workspace is disconnected.
+    if (!isRemote || !connectionState) return false
     if (workspaceId !== activeWorkspaceId) return false
-    const { status } = remoteConnectionState
+    const { status } = connectionState
     return status !== 'connected' && status !== 'connecting' && status !== 'idle'
   }
 

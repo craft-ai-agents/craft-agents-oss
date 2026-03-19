@@ -7,6 +7,15 @@ export const RPC_CHANNELS = {
   remote: {
     TEST_CONNECTION: 'remote:testConnection',
   },
+  server: {
+    GET_WORKSPACES: 'server:getWorkspaces',
+    CREATE_WORKSPACE: 'server:createWorkspace',
+    GET_STATUS: 'server:getStatus',
+    GET_HEALTH: 'server:getHealth',
+    GET_ACTIVE_SESSIONS: 'server:getActiveSessions',
+    SHUTTING_DOWN: 'server:shuttingDown',
+    STATUS_CHANGED: 'server:statusChanged',
+  },
   sessions: {
     GET: 'sessions:get',
     GET_UNREAD_SUMMARY: 'sessions:getUnreadSummary',
@@ -33,6 +42,8 @@ export const RPC_CHANNELS = {
     UNWATCH_FILES: 'sessions:unwatchFiles',
     FILES_CHANGED: 'sessions:filesChanged',
     SEARCH_CONTENT: 'sessions:searchContent',
+    EXPORT: 'sessions:export',
+    IMPORT: 'sessions:import',
   },
   tasks: {
     GET_OUTPUT: 'tasks:getOutput',
@@ -225,9 +236,6 @@ export const RPC_CHANNELS = {
     WRITE_IMAGE: 'workspace:writeImage',
     SETTINGS_GET: 'workspaceSettings:get',
     SETTINGS_UPDATE: 'workspaceSettings:update',
-    GET_REMOTE_STATUS: 'workspace:getRemoteStatus',
-    REMOTE_STATUS_CHANGED: 'workspace:remoteStatusChanged',
-    RECONNECT_REMOTE: 'workspace:reconnectRemote',
   },
   permissions: {
     GET_DEFAULTS: 'permissions:getDefaults',

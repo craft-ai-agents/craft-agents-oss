@@ -17,8 +17,6 @@ import { Icon_Home, Icon_Folder, Spinner } from '@craft-agent/ui'
 import * as storage from '@/lib/local-storage'
 import { useDirectoryPicker } from '@/hooks/useDirectoryPicker'
 import { ServerDirectoryBrowser } from '@/components/ServerDirectoryBrowser'
-import { extractWorkspaceSlugFromPath } from '@craft-agent/shared/utils/workspace-slug'
-
 import { Button } from '@/components/ui/button'
 import {
   InlineSlashCommand,
@@ -395,12 +393,12 @@ export function FreeFormInput({
     return appShellCtx.workspaces.find(w => w.id === workspaceId)?.rootPath ?? null
   }, [appShellCtx, workspaceId])
 
-  // Compute workspace slug from rootPath for SDK skill qualification
+  // Workspace slug for SDK skill qualification (server-computed)
   // SDK expects "workspaceSlug:skillSlug" format, NOT UUID
   const workspaceSlug = React.useMemo(() => {
-    if (!workspaceRootPath) return workspaceId // Fallback to ID if no path
-    return extractWorkspaceSlugFromPath(workspaceRootPath, workspaceId ?? '')
-  }, [workspaceRootPath, workspaceId])
+    if (!appShellCtx || !workspaceId) return workspaceId
+    return appShellCtx.workspaces.find(w => w.id === workspaceId)?.slug ?? workspaceId
+  }, [appShellCtx, workspaceId])
 
   // Read panel focus state from context (for multi-panel unfocused styling)
   const appShellContext = useOptionalAppShellContext()

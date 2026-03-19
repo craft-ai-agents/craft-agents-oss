@@ -11,6 +11,7 @@ import type { AgentEvent, Effect } from './event-processor'
 import { AppShell } from '@/components/app-shell/AppShell'
 import type { AppShellContextType } from '@/context/AppShellContext'
 import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
+import { WorkspacePicker } from '@/components/workspace'
 import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
 import { SplashScreen } from '@/components/SplashScreen'
 import { TooltipProvider } from '@craft-agent/ui'
@@ -25,7 +26,6 @@ import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { NavigationProvider } from '@/contexts/NavigationContext'
 import { navigate, routes } from './lib/navigate'
 import { stripMarkdown } from './utils/text'
-import { extractWorkspaceSlugFromPath } from '@craft-agent/shared/utils/workspace-slug'
 import { DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
 import { initRendererPerf } from './lib/perf'
 import {
@@ -55,13 +55,13 @@ import {
   JSONPreviewOverlay,
 } from '@craft-agent/ui'
 import { useLinkInterceptor, type FilePreviewState } from '@/hooks/useLinkInterceptor'
-import { useWorkspaceConnectionState } from '@/hooks/useWorkspaceConnectionState'
+import { useTransportConnectionState } from '@/hooks/useTransportConnectionState'
 import { TransportConnectionBanner, shouldShowTransportConnectionBanner } from '@/components/app-shell/TransportConnectionBanner'
 import { getFileManagerName } from '@/lib/platform'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
 
-type AppState = 'loading' | 'onboarding' | 'reauth' | 'ready'
+type AppState = 'loading' | 'onboarding' | 'reauth' | 'workspace-picker' | 'ready'
 
 /** Type for the Jotai store returned by useStore() */
 type JotaiStore = ReturnType<typeof getDefaultStore>
@@ -192,12 +192,11 @@ export default function App() {
   // Window's workspace ID — shared atom so Root/ThemeProvider stays in sync on switch
   const [windowWorkspaceId, setWindowWorkspaceId] = useAtom(windowWorkspaceIdAtom)
 
-  // Derive workspace slug from path for SDK skill qualification
+  // Derive workspace slug for SDK skill qualification
   const windowWorkspaceSlug = useMemo(() => {
     if (!windowWorkspaceId) return null
     const workspace = workspaces.find(w => w.id === windowWorkspaceId)
-    if (!workspace?.rootPath) return windowWorkspaceId // Fallback to ID
-    return extractWorkspaceSlugFromPath(workspace.rootPath, windowWorkspaceId)
+    return workspace?.slug ?? windowWorkspaceId
   }, [windowWorkspaceId, workspaces])
 
   // LLM connections with authentication status (for provider selection)
@@ -407,7 +406,13 @@ export default function App() {
         setSetupNeeds(needs)
 
         if (needs.isFullyConfigured) {
-          setAppState('ready')
+          // If no workspace is selected (thin client without CRAFT_WORKSPACE_ID),
+          // show workspace picker before entering the main app
+          if (!wsId) {
+            setAppState('workspace-picker')
+          } else {
+            setAppState('ready')
+          }
         } else {
           // New user or needs setup - show onboarding
           setAppState('onboarding')
@@ -1271,20 +1276,15 @@ export default function App() {
     readFileBinary: (path) => window.electronAPI.readFileBinary(path),
   })
 
-  const { isRemote, connectionState: remoteConnectionState } = useWorkspaceConnectionState()
-  const showTransportConnectionBanner = shouldShowTransportConnectionBanner(isRemote, remoteConnectionState)
+  const connectionState = useTransportConnectionState()
+  const showTransportConnectionBanner = shouldShowTransportConnectionBanner(connectionState)
 
   const handleReconnectTransport = useCallback(() => {
-    // Thin client: reconnect the preload WS client directly
-    // Hybrid: reconnect the bridge via RPC
-    const reconnect = remoteConnectionState?.mode === 'remote'
-      ? window.electronAPI.reconnectTransport()
-      : window.electronAPI.reconnectRemoteBridge?.() ?? Promise.resolve()
-    void reconnect.catch((error) => {
+    void window.electronAPI.reconnectTransport().catch((error) => {
       const message = error instanceof Error ? error.message : 'Unknown error'
       toast.error('Reconnect failed', { description: message })
     })
-  }, [remoteConnectionState?.mode])
+  }, [])
 
   const handleOpenFile = linkInterceptor.handleOpenFile
   const handleOpenUrl = linkInterceptor.handleOpenUrl
@@ -1386,10 +1386,7 @@ export default function App() {
 
   // Handle workspace switch by slug (called by NavigationContext on popstate when ?ws= changes)
   const handleSwitchWorkspaceBySlug = useCallback((slug: string) => {
-    const target = workspaces.find(w => {
-      const wsSlug = extractWorkspaceSlugFromPath(w.rootPath, w.id)
-      return wsSlug === slug
-    })
+    const target = workspaces.find(w => w.slug === slug)
     if (target) {
       handleSelectWorkspace(target.id)
     }
@@ -1578,6 +1575,24 @@ export default function App() {
     )
   }
 
+  // Workspace picker — thin client with no workspace selected
+  if (appState === 'workspace-picker') {
+    return (
+      <DismissibleLayerProvider>
+        <ModalProvider>
+          <WindowCloseHandler />
+          <WorkspacePicker
+            onSelectWorkspace={async (id) => {
+              await window.electronAPI.switchWorkspace(id)
+              setWindowWorkspaceId(id)
+              setAppState('ready')
+            }}
+          />
+        </ModalProvider>
+      </DismissibleLayerProvider>
+    )
+  }
+
   // Show splash until exit animation completes
   const showSplash = !splashHidden
 
@@ -1614,9 +1629,9 @@ export default function App() {
 
           {/* Main UI - always rendered, splash fades away to reveal it */}
           <div className="h-full flex flex-col pt-[48px] text-foreground">
-            {showTransportConnectionBanner && remoteConnectionState && (
+            {showTransportConnectionBanner && connectionState && (
               <TransportConnectionBanner
-                state={remoteConnectionState}
+                state={connectionState}
                 onRetry={handleReconnectTransport}
               />
             )}

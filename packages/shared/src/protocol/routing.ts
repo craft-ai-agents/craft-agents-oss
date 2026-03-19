@@ -171,11 +171,6 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.gitbash.BROWSE,
   RPC_CHANNELS.gitbash.SET_PATH,
 
-  // workspace — remote connection status + reconnect (bridge lives in local Electron)
-  RPC_CHANNELS.workspace.GET_REMOTE_STATUS,
-  RPC_CHANNELS.workspace.REMOTE_STATUS_CHANGED,
-  RPC_CHANNELS.workspace.RECONNECT_REMOTE,
-
   // debug — local debug logging
   RPC_CHANNELS.debug.LOG,
 
@@ -200,6 +195,15 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
 // ---------------------------------------------------------------------------
 
 export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
+  // server — server-level operations (no workspace context needed)
+  RPC_CHANNELS.server.GET_WORKSPACES,
+  RPC_CHANNELS.server.CREATE_WORKSPACE,
+  RPC_CHANNELS.server.GET_STATUS,
+  RPC_CHANNELS.server.GET_HEALTH,
+  RPC_CHANNELS.server.GET_ACTIVE_SESSIONS,
+  RPC_CHANNELS.server.SHUTTING_DOWN,
+  RPC_CHANNELS.server.STATUS_CHANGED,
+
   // sessions — core session runtime
   RPC_CHANNELS.sessions.GET,
   RPC_CHANNELS.sessions.GET_UNREAD_SUMMARY,
@@ -226,6 +230,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.sessions.UNWATCH_FILES,
   RPC_CHANNELS.sessions.FILES_CHANGED,
   RPC_CHANNELS.sessions.SEARCH_CONTENT,
+  RPC_CHANNELS.sessions.EXPORT,
+  RPC_CHANNELS.sessions.IMPORT,
 
   // tasks — workspace content
   RPC_CHANNELS.tasks.GET_OUTPUT,

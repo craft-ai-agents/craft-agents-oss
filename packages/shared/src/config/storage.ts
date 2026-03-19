@@ -10,6 +10,7 @@ import {
   isValidWorkspace,
 } from '../workspaces/storage.ts';
 import { findIconFile } from '../utils/icon.ts';
+import { extractWorkspaceSlugFromPath } from '../utils/workspace-slug.ts';
 import { initializeDocs } from '../docs/index.ts';
 import { expandPath, toPortablePath, getBundledAssetsDir } from '../utils/paths.ts';
 import { debug } from '../utils/debug.ts';
@@ -29,6 +30,7 @@ export { CONFIG_DIR } from './paths.ts';
 
 // Re-export base types from core (single source of truth)
 export type {
+  WorkspaceInfo,
   Workspace,
   McpAuthType,
   AuthType,
@@ -498,7 +500,8 @@ export function getWorkspaces(): Workspace[] {
       }
     }
 
-    return { ...w, name, iconUrl };
+    const slug = extractWorkspaceSlugFromPath(w.rootPath, w.id);
+    return { ...w, name, slug, iconUrl };
   });
 }
 
@@ -562,11 +565,13 @@ export async function switchWorkspaceAtomic(workspaceId: string): Promise<{ work
  * Add a workspace to the global config.
  * @param workspace - Workspace data (must include rootPath)
  */
-export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Workspace {
+export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt' | 'slug'>): Workspace {
   const config = loadStoredConfig();
   if (!config) {
     throw new Error('No config found');
   }
+
+  const slug = extractWorkspaceSlugFromPath(workspace.rootPath, '');
 
   // Check if workspace with same rootPath already exists
   const existing = config.workspaces.find(w => w.rootPath === workspace.rootPath);
@@ -575,6 +580,7 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Wo
     const updated: Workspace = {
       ...existing,
       ...workspace,
+      slug,
       id: existing.id,
       createdAt: existing.createdAt,
     };
@@ -586,6 +592,7 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Wo
 
   const newWorkspace: Workspace = {
     ...workspace,
+    slug,
     id: generateWorkspaceId(),
     createdAt: Date.now(),
   };
@@ -629,6 +636,7 @@ export function syncWorkspaces(): void {
     const newWorkspace: Workspace = {
       id: wsConfig.id || generateWorkspaceId(),
       name: wsConfig.name,
+      slug: extractWorkspaceSlugFromPath(rootPath, ''),
       rootPath,
       createdAt: wsConfig.createdAt || Date.now(),
     };

@@ -13,6 +13,7 @@ import type {
   MessageRole as CoreMessageRole,
   TypedError,
   TokenUsage as CoreTokenUsage,
+  WorkspaceInfo as CoreWorkspaceInfo,
   Workspace as CoreWorkspace,
   SessionMetadata as CoreSessionMetadata,
   StoredAttachment as CoreStoredAttachment,
@@ -36,6 +37,7 @@ export type {
   CoreMessageRole as MessageRole,
   TypedError,
   CoreTokenUsage as TokenUsage,
+  CoreWorkspaceInfo as WorkspaceInfo,
   CoreWorkspace as Workspace,
   CoreSessionMetadata as SessionMetadata,
   CoreStoredAttachment as StoredAttachment,
@@ -167,7 +169,7 @@ export interface TransportConnectionState {
 // =============================================================================
 
 // Re-import types for ElectronAPI
-import type { Workspace, SessionMetadata, StoredAttachment as StoredAttachmentType } from '@craft-agent/core/types';
+import type { WorkspaceInfo, Workspace, SessionMetadata, StoredAttachment as StoredAttachmentType } from '@craft-agent/core/types';
 
 // Import protocol types used by ElectronAPI (they come through the `export *` above,
 // but we need them in scope for the interface definition)
@@ -232,6 +234,11 @@ export interface ElectronAPI {
   getWorkspaces(): Promise<Workspace[]>
   createWorkspace(folderPath: string, name: string, remoteServer?: { url: string; token: string; remoteWorkspaceId: string }): Promise<Workspace>
   checkWorkspaceSlug(slug: string): Promise<{ exists: boolean; path: string }>
+
+  // Server-level workspace operations (for thin client / remote workspace discovery)
+  getServerWorkspaces(): Promise<WorkspaceInfo[]>
+  createServerWorkspace(name: string): Promise<WorkspaceInfo>
+
   testRemoteConnection(url: string, token: string, workspaceName?: string): Promise<{
     ok: boolean
     error?: string
@@ -292,12 +299,6 @@ export interface ElectronAPI {
   getTransportConnectionState(): Promise<TransportConnectionState>
   onTransportConnectionStateChanged(callback: (state: TransportConnectionState) => void): () => void
   reconnectTransport(): Promise<void>
-
-  // Remote workspace bridge connection status (via RPC channels)
-  getRemoteConnectionStatus(): Promise<{ workspaceId: string; connectionState: TransportConnectionState } | null>
-  onRemoteConnectionStatusChanged(callback: (data: { workspaceId: string; connectionState: TransportConnectionState } | null) => void): () => void
-  /** Manually trigger reconnection of the remote workspace bridge. */
-  reconnectRemoteBridge(): Promise<void>
 
   /** Check whether the server registered a handler for a given RPC channel. */
   isChannelAvailable(channel: string): boolean

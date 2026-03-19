@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test'
-import { getAllChannelValues } from '../channels'
+import { getAllChannelValues, RPC_CHANNELS } from '../channels'
 import { LOCAL_ONLY_CHANNELS, REMOTE_ELIGIBLE_CHANNELS } from '../routing'
 
 describe('channel routing exhaustiveness', () => {
@@ -38,5 +38,34 @@ describe('channel routing exhaustiveness', () => {
 
   test('total classified equals total channels', () => {
     expect(LOCAL_ONLY_CHANNELS.size + REMOTE_ELIGIBLE_CHANNELS.size).toBe(all.length)
+  })
+})
+
+describe('channel routing behavior', () => {
+  test('LOCAL_ONLY and REMOTE_ELIGIBLE have zero intersection', () => {
+    const intersection: string[] = []
+    for (const ch of LOCAL_ONLY_CHANNELS) {
+      if (REMOTE_ELIGIBLE_CHANNELS.has(ch)) {
+        intersection.push(ch)
+      }
+    }
+    expect(intersection).toEqual([])
+  })
+
+  test('all server:* channels are REMOTE_ELIGIBLE', () => {
+    const serverChannels = Object.values(RPC_CHANNELS.server)
+    expect(serverChannels.length).toBeGreaterThan(0)
+
+    for (const ch of serverChannels) {
+      expect(REMOTE_ELIGIBLE_CHANNELS.has(ch)).toBe(true)
+    }
+  })
+
+  test('no LOCAL_ONLY channel starts with server:', () => {
+    for (const ch of LOCAL_ONLY_CHANNELS) {
+      if (ch.startsWith('server:')) {
+        throw new Error(`server:* channel "${ch}" must be REMOTE_ELIGIBLE, not LOCAL_ONLY`)
+      }
+    }
   })
 })

@@ -10,7 +10,7 @@ over WebSocket RPC.
 ### 1. Start the headless server
 
 ```bash
-bun run apps/electron/src/server/index.ts
+bun run packages/server/src/index.ts
 ```
 
 Output (two lines):
@@ -89,4 +89,4 @@ that window, the call rejects with a timeout error.
   max-attempt cutoff.
 
 These are acceptable for the current dev/staging use case. Production hardening
-(token refresh, connection state UI, retry limits) is planned for Phase 4.
+(token entropy, connection limits, host binding safety) is being addressed in Phase 5.
