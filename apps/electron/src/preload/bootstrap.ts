@@ -310,4 +310,9 @@ if (wsMode === 'remote') {
   }
 }
 
+// System warnings — expose env-based flags set during main process startup
+;(api as any).getSystemWarnings = async (): Promise<{ vcredistMissing: boolean }> => ({
+  vcredistMissing: process.env.CRAFT_VCREDIST_MISSING === '1',
+})
+
 contextBridge.exposeInMainWorld('electronAPI', api)

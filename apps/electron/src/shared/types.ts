@@ -301,6 +301,9 @@ export interface ElectronAPI {
   getReleaseNotes(): Promise<string>
   getLatestReleaseVersion(): Promise<string | undefined>
 
+  // System warnings (startup checks)
+  getSystemWarnings(): Promise<{ vcredistMissing: boolean }>
+
   // Shell operations
   openUrl(url: string): Promise<void>
   openFile(path: string): Promise<void>

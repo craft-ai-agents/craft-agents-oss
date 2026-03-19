@@ -445,6 +445,20 @@ export default function App() {
 
     window.electronAPI.getWorkspaces().then(setWorkspaces)
     window.electronAPI.getNotificationsEnabled().then(setNotificationsEnabled)
+
+    // Show actionable toast for missing system dependencies (Windows only)
+    window.electronAPI.getSystemWarnings().then((warnings) => {
+      if (warnings.vcredistMissing) {
+        toast.warning('Microsoft Visual C++ Redistributable not found', {
+          description: 'Document tools (PDF, PPTX, DOCX, XLSX) require it to work. Restart after installing.',
+          duration: Infinity,
+          action: {
+            label: 'Install',
+            onClick: () => window.electronAPI.openUrl('https://aka.ms/vs/17/release/vc_redist.x64.exe'),
+          },
+        })
+      }
+    })
     window.electronAPI.getSessions().then(async (loadedSessions) => {
       // Initialize per-session atoms and metadata map
       // NOTE: No sessionsAtom used - sessions are only in per-session atoms
