@@ -11,6 +11,7 @@ const MESSAGE_TYPES = new Set([
   'response',
   'event',
   'error',
+  'sequence_ack',
 ])
 
 type EncodedUint8Array = {
