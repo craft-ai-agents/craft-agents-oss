@@ -1404,8 +1404,13 @@ function backfillAllConnectionModels(config: StoredConfig): boolean {
     const providerDefaultModelIds = normalizeModelIds(defaultModels as Array<{ id: string } | string>);
 
     if (isPiProvider(connection.providerType) && connection.piAuthProvider) {
-      const mode = connection.modelSelectionMode
-        ?? inferModelSelectionMode(connection, providerDefaultModelIds);
+      // Copilot models are always server-managed (GitHub policy controls which
+      // models are enabled), so force automaticallySyncedFromProvider regardless
+      // of what inferModelSelectionMode would compute from stale static SDK data.
+      const isCopilot = connection.piAuthProvider === 'github-copilot';
+      const mode = isCopilot
+        ? 'automaticallySyncedFromProvider' as const
+        : (connection.modelSelectionMode ?? inferModelSelectionMode(connection, providerDefaultModelIds));
       if (connection.modelSelectionMode !== mode) {
         debug('[storage] backfill mode inferred', {
           slug: connection.slug,
