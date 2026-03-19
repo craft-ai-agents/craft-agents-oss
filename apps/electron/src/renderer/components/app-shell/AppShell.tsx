@@ -84,7 +84,7 @@ import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useSetAtom } from "jotai"
 import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter, AutomationFilter } from "../../../shared/types"
-import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
+import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
 import { panelStackAtom, panelCountAtom, focusedPanelIdAtom, focusedSessionIdAtom, focusNextPanelAtom, focusPrevPanelAtom, parseSessionIdFromRoute } from "@/atoms/panel-stack"
@@ -118,6 +118,7 @@ import { APP_EVENTS, AGENT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO
 import { useAutomations } from "@/hooks/useAutomations"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { PanelHeader } from "./PanelHeader"
+import { SendToWorkspaceDialog } from "./SendToWorkspaceDialog"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import {
@@ -801,6 +802,13 @@ function AppShellContent({
   }, [skills, setSkillsAtom])
   // Automations — state, handlers, loading, subscriptions
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
+
+  // Send to Workspace dialog state (driven by sendToWorkspaceAtom set from SessionMenu/BatchSessionMenu)
+  const sendToWorkspaceIds = useAtomValue(sendToWorkspaceAtom)
+  const setSendToWorkspaceIds = useSetAtom(sendToWorkspaceAtom)
+  const handleTransferComplete = useCallback((targetWorkspaceId: string, _newSessionIds: string[]) => {
+    onSelectWorkspace(targetWorkspaceId)
+  }, [onSelectWorkspace])
   const {
     automations, automationTestResults,
     automationPendingDelete, pendingDeleteAutomation, setAutomationPendingDelete,
@@ -3485,6 +3493,16 @@ function AppShellContent({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Send to Workspace dialog (driven by sendToWorkspaceAtom) */}
+      <SendToWorkspaceDialog
+        open={sendToWorkspaceIds.length > 0}
+        onOpenChange={(open) => { if (!open) setSendToWorkspaceIds([]) }}
+        sessionIds={sendToWorkspaceIds}
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
+        onTransferComplete={handleTransferComplete}
+      />
 
     </AppShellProvider>
   )

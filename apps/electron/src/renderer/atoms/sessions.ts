@@ -556,3 +556,9 @@ export const backgroundTasksAtomFamily = atomFamily(
  * Written by App on workspace switch, read by Root to keep the theme in sync.
  */
 export const windowWorkspaceIdAtom = atom<string | null>(null)
+
+/**
+ * State for "Send to Workspace" dialog.
+ * Set session IDs to open; clear to close.
+ */
+export const sendToWorkspaceAtom = atom<string[]>([])

@@ -469,13 +469,14 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
     return bundle
   })
 
-  // Import a session bundle into the target workspace
-  server.handle(RPC_CHANNELS.sessions.IMPORT, async (ctx, bundle: unknown, mode: string) => {
+  // Import a session bundle into a target workspace
+  // targetWorkspaceId is passed explicitly (not from context) so the renderer
+  // can import into any workspace the server manages, not just the active one.
+  server.handle(RPC_CHANNELS.sessions.IMPORT, async (_ctx, targetWorkspaceId: string, bundle: unknown, mode: string) => {
     await sessionManager.waitForInit()
-    const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
-    if (!workspaceId) throw new Error('No workspace context')
+    if (!targetWorkspaceId || typeof targetWorkspaceId !== 'string') throw new Error('targetWorkspaceId is required')
     if (mode !== 'move' && mode !== 'fork') throw new Error(`Invalid dispatch mode: ${mode}`)
 
-    return sessionManager.importSession(workspaceId, bundle as import('@craft-agent/shared/sessions').SessionBundle, mode)
+    return sessionManager.importSession(targetWorkspaceId, bundle as import('@craft-agent/shared/sessions').SessionBundle, mode)
   })
 }

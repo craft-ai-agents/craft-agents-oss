@@ -12,6 +12,7 @@ import { SessionStatusIcon } from "./SessionStatusIcon"
 import { SessionBadges } from "./SessionBadges"
 import { getSessionTitle, highlightMatch, hasUnreadMeta, shortTimeLocale } from "@/utils/session"
 import { useSessionListContext } from "@/context/SessionListContext"
+import { useAppShellContext } from "@/context/AppShellContext"
 import { navigate, routes } from "@/lib/navigate"
 import type { SessionMeta } from "@/atoms/sessions"
 import { extractLabelId } from "@craft-agent/shared/labels"
@@ -39,6 +40,8 @@ export function SessionItem({
   onRangeSelect,
 }: SessionItemProps) {
   const ctx = useSessionListContext()
+  const { workspaces } = useAppShellContext()
+  const hasMultipleWorkspaces = (workspaces?.length ?? 0) > 1
   const { hotkey: nextHotkey } = useActionLabel('chat.nextSearchMatch')
   const { hotkey: prevHotkey } = useActionLabel('chat.prevSearchMatch')
   const title = getSessionTitle(item)
@@ -107,6 +110,8 @@ export function SessionItem({
           onMarkUnread={() => ctx.onMarkUnread(item.id)}
           onSessionStatusChange={(s) => ctx.onSessionStatusChange(item.id, s)}
           onOpenInNewWindow={() => ctx.onOpenInNewWindow(item)}
+          onSendToWorkspace={ctx.onSendToWorkspace ? () => ctx.onSendToWorkspace!([item.id]) : undefined}
+          hasMultipleWorkspaces={hasMultipleWorkspaces}
           onDelete={() => ctx.onDelete(item.id)}
         />
       }
