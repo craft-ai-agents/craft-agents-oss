@@ -23,20 +23,23 @@ async function listModelsViaCli(
 ): Promise<RawCopilotModel[]> {
   const { CopilotClient } = await import('@github/copilot-sdk');
 
-  // When a token is supplied, inject it via env so the CLI uses it
-  // instead of its own auth. Restore the env afterwards.
+  // Manage COPILOT_GITHUB_TOKEN env var:
+  // - With token: inject it so the CLI uses this specific token
+  // - Without token (tier 1): CLEAR the env var so the CLI uses its
+  //   own auth (gh CLI, stored creds) instead of inheriting a stale
+  //   token from the Electron process environment
   const prevToken = process.env.COPILOT_GITHUB_TOKEN;
   if (githubToken) {
     process.env.COPILOT_GITHUB_TOKEN = githubToken;
+  } else {
+    delete process.env.COPILOT_GITHUB_TOKEN;
   }
 
   const restoreEnv = () => {
-    if (githubToken) {
-      if (prevToken !== undefined) {
-        process.env.COPILOT_GITHUB_TOKEN = prevToken;
-      } else {
-        delete process.env.COPILOT_GITHUB_TOKEN;
-      }
+    if (prevToken !== undefined) {
+      process.env.COPILOT_GITHUB_TOKEN = prevToken;
+    } else {
+      delete process.env.COPILOT_GITHUB_TOKEN;
     }
   };
 
