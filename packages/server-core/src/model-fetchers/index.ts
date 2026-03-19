@@ -136,19 +136,6 @@ class ModelRefreshService {
       return
     }
 
-    // Guard: don't replace a substantially larger model list with a tiny one.
-    // This protects against stale/scoped API tokens that return partial results
-    // (e.g. Copilot CLI returning 2 models when the connection has 21 from the
-    // Pi SDK catalog set during OAuth setup).
-    const existingCount = connection.models?.length ?? 0
-    if (existingCount > 0 && newModels.length < existingCount && newModels.length <= 2) {
-      handlerLog.warn(
-        `Model refresh [${slug}]: API returned ${newModels.length} models but connection has ${existingCount} — ` +
-        `keeping existing list (possible stale token). Returned: ${newModels.map(m => m.id).join(', ')}`,
-      )
-      return
-    }
-
     // Preserve user's defaultModel if still valid
     const currentDefault = connection.defaultModel
     const stillValid = currentDefault && newModels.some(m => m.id === currentDefault)
