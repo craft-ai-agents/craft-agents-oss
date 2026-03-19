@@ -42,10 +42,11 @@ if (process.env.CRAFT_DEBUG === 'true' || process.env.CRAFT_DEBUG === '1') {
   enableDebug()
 }
 
-// In dev (monorepo), bundled assets root is the repo root (4 levels up from this file).
+// In dev (monorepo), bundled assets root is apps/electron/ (4 levels up, then into apps/electron).
+// That's where resources/config-defaults.json and other bundled assets live.
 // In packaged mode, use CRAFT_BUNDLED_ASSETS_ROOT env or cwd.
 const bundledAssetsRoot = process.env.CRAFT_BUNDLED_ASSETS_ROOT
-  ?? join(import.meta.dir, '..', '..', '..', '..')
+  ?? join(import.meta.dir, '..', '..', '..', '..', 'apps', 'electron')
 
 // TLS configuration — when cert + key paths are provided, server listens on wss://
 let tls: WsRpcTlsOptions | undefined
