@@ -311,108 +311,52 @@ function copyProductionDeps(config: ServerBuildConfig): void {
   const srcModules = join(rootDir, 'node_modules');
   const destModules = join(outputDir, 'node_modules');
 
-  // Explicit list of production dependencies needed by the server.
-  // This is intentionally explicit to avoid shipping devDependencies (~1.5 GB).
-  const PRODUCTION_DEPS = [
-    // SDK (core AI functionality + ripgrep)
-    '@anthropic-ai/claude-agent-sdk',
-    // MCP protocol
-    '@modelcontextprotocol/sdk',
-    // Schema validation
-    'zod',
-    'zod-to-json-schema',
-    // Image processing (sharp + platform-specific native binary)
-    'sharp',
-    `@img/sharp-${platform === 'darwin' ? 'darwin' : 'linux'}-${arch}`,
-    `@img/sharp-libvips-${platform === 'darwin' ? 'darwin' : 'linux'}-${arch}`,
-    '@img/colour',
-    // WebSocket
-    'ws',
-    // Caching
-    '@isaacs/ttlcache',
-    // Fuzzy search
-    '@leeoniya/ufuzzy',
-    // Shell parsing
-    'bash-parser',
-    'shell-quote',
-    // Cron scheduling
-    'croner',
-    // Expression filtering
-    'filtrex',
-    // Incremental regex
-    'incr-regex-package',
-    // YAML frontmatter
-    'gray-matter',
-    // Mermaid diagrams
-    'beautiful-mermaid',
-    // JSON/YAML utilities
-    'js-yaml',
-    // Content type
-    'content-type',
-    // Raw body parsing
-    'raw-body',
-    // PKI (transitive via MCP SDK — only copy if present)
-    'pkijs',
-    'asn1js',
-    'pvutils',
-    'bytestreamjs',
-    'pvtsutils',
-    // Additional transitive deps
-    'eventsource',
-    'cross-spawn',
-    'shebang-command',
-    'shebang-regex',
-    'isexe',
-    'which',
-    'path-key',
-    'js-tokens',
-    'section-matter',
-    'strip-bom-string',
-    'kind-of',
-  ];
-
-  // Packages with deep dependency trees — copied recursively (package + all transitive deps)
-  const PRODUCTION_DEPS_RECURSIVE = [
-    // Document conversion (has ~18 direct deps: mammoth, turndown, xlsx, pdf-parse, etc.)
-    'markitdown-js',
-  ];
-
   // Track all copied packages to avoid duplicates
   const copied = new Set<string>();
 
-  // For deps like @anthropic-ai/claude-agent-sdk, copy the whole scope if needed
-  const copiedScopes = new Set<string>();
+  // -------------------------------------------------------------------------
+  // 1. Automatically resolve deps from workspace packages
+  //    This is the primary mechanism — reads each workspace package's
+  //    package.json and recursively copies all declared dependencies.
+  //    Workspace refs (workspace:*) are skipped (they live in packages/).
+  // -------------------------------------------------------------------------
+  const SERVER_PACKAGES = ['server', 'server-core', 'shared', 'core', 'session-tools-core', 'session-mcp-server'];
 
-  for (const dep of PRODUCTION_DEPS) {
-    const src = join(srcModules, dep);
-    const dest = join(destModules, dep);
+  for (const pkg of SERVER_PACKAGES) {
+    const pkgJsonPath = join(rootDir, 'packages', pkg, 'package.json');
+    if (!existsSync(pkgJsonPath)) continue;
 
-    if (!existsSync(src)) {
-      // Could be a platform-specific package not installed on this OS
-      if (dep.startsWith('@img/sharp-') || dep.startsWith('@img/sharp-libvips-')) {
-        console.log(`  Skipping ${dep} (not installed for current platform)`);
-        continue;
+    try {
+      const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
+      const deps = Object.entries(pkgJson.dependencies || {}) as [string, string][];
+      for (const [dep, version] of deps) {
+        // Skip workspace references — those are in packages/, not node_modules
+        if (typeof version === 'string' && version.startsWith('workspace:')) continue;
+        copyDependencyTree(dep, srcModules, destModules, copied);
       }
-      console.warn(`  Warning: dependency ${dep} not found in node_modules`);
-      continue;
+    } catch {
+      console.warn(`  Warning: could not parse ${pkgJsonPath}`);
     }
-
-    // Ensure scope directory exists
-    if (dep.startsWith('@')) {
-      const scope = dep.split('/')[0];
-      if (!copiedScopes.has(scope)) {
-        mkdirSync(join(destModules, scope), { recursive: true });
-        copiedScopes.add(scope);
-      }
-    }
-
-    mkdirSync(dirname(dest), { recursive: true });
-    cpSync(src, dest, { recursive: true, dereference: true });
-    copied.add(dep);
   }
+  console.log(`  Workspace package deps: ${copied.size} packages`);
 
-  // Recursively copy packages with deep dependency trees
-  for (const dep of PRODUCTION_DEPS_RECURSIVE) {
+  // -------------------------------------------------------------------------
+  // 2. Root-level deps used by server code but only declared in root package.json
+  //    (not in any workspace package's dependencies)
+  // -------------------------------------------------------------------------
+  const ROOT_LEVEL_DEPS = [
+    // SDK (core AI functionality + ripgrep)
+    '@anthropic-ai/claude-agent-sdk',
+    // Document conversion (used by server-core/handlers/rpc/files.ts)
+    'markitdown-js',
+    // Content type / raw body parsing (used by server-core HTTP handling)
+    'content-type',
+    'raw-body',
+    // JS-YAML (used by shared config parsing at runtime)
+    'js-yaml',
+  ];
+
+  for (const dep of ROOT_LEVEL_DEPS) {
     const before = copied.size;
     copyDependencyTree(dep, srcModules, destModules, copied);
     const added = copied.size - before;
@@ -420,6 +364,33 @@ function copyProductionDeps(config: ServerBuildConfig): void {
       console.log(`  ${dep}: copied ${added} packages (recursive)`);
     }
   }
+
+  // -------------------------------------------------------------------------
+  // 3. Platform-specific native binaries (optionalDependencies, not in dep trees)
+  // -------------------------------------------------------------------------
+  const PLATFORM_DEPS = [
+    `@img/sharp-${platform === 'darwin' ? 'darwin' : 'linux'}-${arch}`,
+    `@img/sharp-libvips-${platform === 'darwin' ? 'darwin' : 'linux'}-${arch}`,
+    '@img/colour',
+  ];
+
+  for (const dep of PLATFORM_DEPS) {
+    if (copied.has(dep)) continue;
+    const src = join(srcModules, dep);
+    if (!existsSync(src)) {
+      console.log(`  Skipping ${dep} (not installed for current platform)`);
+      continue;
+    }
+    if (dep.startsWith('@')) {
+      const scope = dep.split('/')[0]!;
+      mkdirSync(join(destModules, scope), { recursive: true });
+    }
+    mkdirSync(dirname(join(destModules, dep)), { recursive: true });
+    cpSync(src, join(destModules, dep), { recursive: true, dereference: true });
+    copied.add(dep);
+  }
+
+  console.log(`  Total: ${copied.size} packages copied to node_modules`);
 
   // Filter ripgrep to target platform only
   filterRipgrep(config);
