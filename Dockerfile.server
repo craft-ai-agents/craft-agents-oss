@@ -3,6 +3,7 @@
 #
 # Build:
 #   docker buildx build -f Dockerfile.server -t craft-agent-server .
+#   docker buildx build -f Dockerfile.server --build-arg UID=1001 -t craft-agent-server .
 #
 # Run:
 #   docker run --rm -p 9100:9100 \
@@ -24,13 +25,17 @@ LABEL org.opencontainers.image.source="https://github.com/lukilabs/craft-agents-
 LABEL org.opencontainers.image.description="Craft Agent Server — headless AI workflow server"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 
+# UID/GID should match the host user that owns mounted volumes
+ARG UID=1000
+ARG GID=1000
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates git && \
     rm -rf /var/lib/apt/lists/*
 
-# Create non-root user (Claude Code SDK refuses to run as root)
-RUN groupadd -r craftagents && \
-    useradd -r -g craftagents -m -d /home/craftagents -s /bin/bash craftagents
+# Create non-root user with matching UID/GID (Claude Code SDK refuses root)
+RUN groupadd -g ${GID} craftagents && \
+    useradd -u ${UID} -g craftagents -m -d /home/craftagents -s /bin/bash craftagents
 
 WORKDIR /app
 
@@ -62,7 +67,7 @@ RUN bun build packages/session-mcp-server/src/index.ts \
     bun build packages/pi-agent-server/src/index.ts \
       --outfile packages/pi-agent-server/dist/index.js --target node --format cjs
 
-# Give craftagents ownership of the app and its home directory
+# Give craftagents ownership of the app
 RUN chown -R craftagents:craftagents /app /home/craftagents
 
 USER craftagents
