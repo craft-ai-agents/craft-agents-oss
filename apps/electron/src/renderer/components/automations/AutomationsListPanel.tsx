@@ -269,10 +269,6 @@ export function AutomationsListPanel({
         <SessionSearchHeader
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          onSearchClose={() => {
-            setSearchActive(false)
-            setSearchQuery('')
-          }}
           placeholder="Search automations..."
           resultCount={isSearchMode ? filteredAutomations.length : undefined}
         />

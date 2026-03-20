@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Search, X } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { Spinner } from '@craft-agent/ui'
 
 /**
@@ -17,8 +17,6 @@ export interface SessionSearchHeaderProps {
   searchQuery: string
   /** Called when search query changes */
   onSearchChange?: (query: string) => void
-  /** Called when search is closed (X button) */
-  onSearchClose?: () => void
   /** Called on keydown in the search input */
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void
   /** Called when input gains focus */
@@ -42,7 +40,6 @@ export interface SessionSearchHeaderProps {
 export function SessionSearchHeader({
   searchQuery,
   onSearchChange,
-  onSearchClose,
   onKeyDown,
   onFocus,
   onBlur,
@@ -69,17 +66,8 @@ export function SessionSearchHeader({
           onBlur={onBlur}
           readOnly={readOnly}
           placeholder={placeholder}
-          className="w-full h-8 pl-8 pr-8 text-sm bg-transparent border-0 rounded-[8px] outline-none focus-visible:ring-0 focus-visible:outline-none placeholder:text-muted-foreground/50"
+          className="w-full h-8 pl-8 pr-3 text-sm bg-transparent border-0 rounded-[8px] outline-none focus-visible:ring-0 focus-visible:outline-none placeholder:text-muted-foreground/50"
         />
-        {onSearchClose && (
-          <button
-            onClick={onSearchClose}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-foreground/10 rounded"
-            title="Close search"
-          >
-            <X className="h-3.5 w-3.5 text-muted-foreground" />
-          </button>
-        )}
       </div>
 
       {/* Search status row - shown when search mode is active (2+ characters) */}
