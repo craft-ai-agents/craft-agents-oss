@@ -239,7 +239,7 @@ export function AddWorkspaceStep_ConnectRemote({
         )}
 
         {/* Workspace selector — pick existing or create new */}
-        {testState === 'ok' && remoteWorkspaces.length > 0 && (
+        {testState === 'ok' && remoteWorkspaces.length > 0 && !isCreateNew && (
           <div className="space-y-2">
             <label className="block text-sm font-medium text-foreground">
               Workspace
@@ -259,16 +259,18 @@ export function AddWorkspaceStep_ConnectRemote({
                       {ws.name}
                     </SelectItem>
                   ))}
-                  <SelectSeparator />
-                  <SelectItem value={CREATE_NEW_VALUE}>
-                    <span className="flex items-center gap-1.5">
-                      <Plus className="h-3.5 w-3.5" />
-                      Create new workspace
-                    </span>
-                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            <button
+              type="button"
+              onClick={() => setSelectedValue(CREATE_NEW_VALUE)}
+              disabled={isCreating}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Plus className="h-3 w-3" />
+              Create new workspace on server
+            </button>
           </div>
         )}
 
@@ -290,6 +292,20 @@ export function AddWorkspaceStep_ConnectRemote({
             <p className="text-xs text-muted-foreground">
               A workspace will be created on the remote server with this name.
             </p>
+            {isCreateNew && remoteWorkspaces.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedValue(remoteWorkspaces.length === 1 ? remoteWorkspaces[0]!.id : null)
+                  setNewWorkspaceName('')
+                }}
+                disabled={isCreating}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ArrowLeft className="h-3 w-3" />
+                Use existing workspace
+              </button>
+            )}
           </div>
         )}
 
