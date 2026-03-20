@@ -64,7 +64,8 @@ const machineId = createHash('sha256').update(hostname() + homedir()).digest('he
 Sentry.setUser({ id: machineId })
 
 import { join, delimiter } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
+import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
 import { registerAllRpcHandlers } from './handlers/index'
 import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient } from '@craft-agent/server-core/handlers/rpc'
@@ -554,13 +555,45 @@ app.whenReady().then(async () => {
       const clientMap = new Map<number, string>()
       const resolveClientId = (wcId: number) => clientMap.get(wcId)
 
+      // Read embedded server config (Server settings page)
+      const { getServerConfig } = await import('@craft-agent/shared/config')
+      const embeddedServerConfig = getServerConfig()
+      const serverModeEnabled = embeddedServerConfig.enabled && !isClientOnly
+
+      // Derive host/port/token from server config (or env overrides)
+      const serverToken = serverModeEnabled && embeddedServerConfig.token
+        ? embeddedServerConfig.token
+        : randomUUID()
+      const rpcHost = process.env.CRAFT_RPC_HOST
+        ?? (serverModeEnabled ? '0.0.0.0' : '127.0.0.1')
+      const rpcPort = process.env.CRAFT_RPC_PORT
+        ? parseInt(process.env.CRAFT_RPC_PORT, 10)
+        : (serverModeEnabled ? embeddedServerConfig.port : 0)
+
+      // Load TLS certificates if configured
+      let tls: import('@craft-agent/server-core/transport').WsRpcTlsOptions | undefined
+      if (serverModeEnabled && embeddedServerConfig.tlsCertPath && embeddedServerConfig.tlsKeyPath) {
+        try {
+          tls = {
+            cert: readFileSync(embeddedServerConfig.tlsCertPath),
+            key: readFileSync(embeddedServerConfig.tlsKeyPath),
+          }
+          mainLog.info('[server-mode] TLS enabled')
+        } catch (err) {
+          mainLog.error('[server-mode] Failed to load TLS certificates:', err)
+        }
+      }
+
+      if (serverModeEnabled) {
+        mainLog.info(`[server-mode] Enabled — binding ${rpcHost}:${rpcPort}${tls ? ' (TLS)' : ''}`)
+      }
+
       // Bootstrap the WS RPC server via shared bootstrap function.
-      // This replaces ~90 lines of inline server creation, handler registration,
-      // session manager init, model refresh, and config bootstrapping.
       const instance = await bootstrapServer<SessionManager, HandlerDeps>({
-        serverToken: randomUUID(),
-        rpcHost: process.env.CRAFT_RPC_HOST ?? '127.0.0.1',
-        rpcPort: process.env.CRAFT_RPC_PORT ? parseInt(process.env.CRAFT_RPC_PORT, 10) : 0,
+        serverToken,
+        rpcHost,
+        rpcPort,
+        tls,
         bundledAssetsRoot: __dirname,
         serverId: 'local',
         platformFactory: () => platform,
@@ -645,6 +678,74 @@ app.whenReady().then(async () => {
         if (!wsId) { e.returnValue = null; return }
         const ws = getWorkspaceByNameOrId(wsId)
         e.returnValue = ws?.remoteServer ?? null
+      })
+
+      // Server config RPC handlers (LOCAL_ONLY — Electron-specific)
+      const runningServerState = {
+        host: rpcHost,
+        port: instance.port,
+        tls: !!tls,
+        token: serverToken,
+        enabled: serverModeEnabled,
+      }
+
+      instance.wsServer.handle(RPC_CHANNELS.serverConfig.GET_CONFIG, async () => {
+        const { getServerConfig: getConfig } = await import('@craft-agent/shared/config')
+        return getConfig()
+      })
+
+      instance.wsServer.handle(RPC_CHANNELS.serverConfig.SET_CONFIG, async (_ctx: unknown, config: unknown) => {
+        const { setServerConfig: setConfig } = await import('@craft-agent/shared/config')
+        const cfg = config as import('@craft-agent/shared/config/server-config').ServerConfig
+        // Validate port range
+        if (cfg.port < 1024 || cfg.port > 65535) {
+          throw new Error(`Port must be between 1024 and 65535, got ${cfg.port}`)
+        }
+        // Validate cert/key files exist if provided
+        if (cfg.tlsCertPath && !existsSync(cfg.tlsCertPath)) {
+          throw new Error(`Certificate file not found: ${cfg.tlsCertPath}`)
+        }
+        if (cfg.tlsKeyPath && !existsSync(cfg.tlsKeyPath)) {
+          throw new Error(`Private key file not found: ${cfg.tlsKeyPath}`)
+        }
+        setConfig(cfg)
+      })
+
+      instance.wsServer.handle(RPC_CHANNELS.serverConfig.GET_STATUS, async () => {
+        const { getServerConfig: getConfig } = await import('@craft-agent/shared/config')
+        const saved = getConfig()
+        const protocol = runningServerState.tls ? 'wss' : 'ws'
+
+        // Determine display host (LAN IP if bound to 0.0.0.0)
+        let displayHost = runningServerState.host
+        if (displayHost === '0.0.0.0' || displayHost === '::') {
+          const os = await import('os')
+          const nets = os.networkInterfaces()
+          for (const name of Object.keys(nets)) {
+            for (const net of nets[name] ?? []) {
+              if (net.family === 'IPv4' && !net.internal) {
+                displayHost = net.address
+                break
+              }
+            }
+            if (displayHost !== '0.0.0.0' && displayHost !== '::') break
+          }
+        }
+
+        const needsRestart = saved.enabled !== runningServerState.enabled
+          || saved.port !== runningServerState.port
+          || (!!saved.tlsCertPath) !== runningServerState.tls
+          || (saved.token ?? '') !== runningServerState.token
+
+        return {
+          running: true,
+          host: runningServerState.host,
+          port: runningServerState.port,
+          tls: runningServerState.tls,
+          url: `${protocol}://${displayHost}:${runningServerState.port}`,
+          token: runningServerState.token,
+          needsRestart,
+        }
       })
 
       // Wire EventSink to Electron-specific services

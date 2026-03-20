@@ -332,6 +332,11 @@ export const RPC_CHANNELS = {
     REMOVED: 'browser-pane:removed',
     INTERACTED: 'browser-pane:interacted',
   },
+  serverConfig: {
+    GET_CONFIG: 'serverConfig:getConfig',
+    SET_CONFIG: 'serverConfig:setConfig',
+    GET_STATUS: 'serverConfig:getStatus',
+  },
   automations: {
     TEST: 'automations:test',
     SET_ENABLED: 'automations:setEnabled',

@@ -225,6 +225,11 @@ export interface ElectronAPI {
   // Consolidated session command handler
   sessionCommand(sessionId: string, command: SessionCommand): Promise<void | ShareResult | RefreshTitleResult | { count: number }>
 
+  // Server mode configuration
+  getServerConfig(): Promise<import('@craft-agent/shared/config/server-config').ServerConfig>
+  setServerConfig(config: import('@craft-agent/shared/config/server-config').ServerConfig): Promise<void>
+  getServerStatus(): Promise<import('@craft-agent/shared/config/server-config').ServerStatus>
+
   // Session export/import (cross-workspace transfer)
   exportSession(sessionId: string): Promise<unknown>
   importSession(targetWorkspaceId: string, bundle: unknown, mode: 'move' | 'fork'): Promise<{ sessionId: string; warnings?: string[] }>

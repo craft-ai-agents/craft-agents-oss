@@ -77,6 +77,8 @@ export interface StoredConfig {
   gitBashPath?: string;
   // User chose "Setup later" during onboarding — skip showing onboarding on next launch
   setupDeferred?: boolean;
+  // Server mode — embedded remote server settings
+  serverConfig?: import('./server-config.ts').ServerConfig;
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -2499,4 +2501,37 @@ export function ensureToolIcons(): void {
   } catch {
     // Ignore errors — tool icons are optional enhancement
   }
+}
+
+// ============================================
+// Server Mode Configuration
+// ============================================
+
+import { DEFAULT_SERVER_CONFIG, type ServerConfig } from './server-config.ts';
+import { randomUUID } from 'crypto';
+
+/**
+ * Get the current server configuration.
+ * Returns defaults if not yet configured.
+ */
+export function getServerConfig(): ServerConfig {
+  const config = loadStoredConfig();
+  return config?.serverConfig ?? { ...DEFAULT_SERVER_CONFIG };
+}
+
+/**
+ * Persist server configuration.
+ * Auto-generates a stable auth token on first enable if none exists.
+ */
+export function setServerConfig(serverConfig: ServerConfig): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+
+  // Generate a stable token when first enabled (or if token is missing)
+  if (serverConfig.enabled && !serverConfig.token) {
+    serverConfig.token = randomUUID();
+  }
+
+  config.serverConfig = serverConfig;
+  saveConfig(config);
 }

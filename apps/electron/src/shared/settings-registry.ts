@@ -39,6 +39,7 @@ export const SETTINGS_PAGES = [
   { id: 'workspace', label: 'Workspace', description: 'Name, icon, working directory' },
   { id: 'permissions', label: 'Permissions', description: 'Explore mode rules' },
   { id: 'labels', label: 'Labels', description: 'Manage session labels' },
+  { id: 'server', label: 'Server', description: 'Remote server access' },
   { id: 'shortcuts', label: 'Shortcuts', description: 'Keyboard shortcuts' },
   { id: 'preferences', label: 'Preferences', description: 'User preferences' },
 ] as const satisfies readonly SettingsPageDefinition[]

@@ -188,6 +188,11 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.settings.SETUP_LLM_CONNECTION,
   RPC_CHANNELS.settings.GET_NETWORK_PROXY,
   RPC_CHANNELS.settings.SET_NETWORK_PROXY,
+
+  // serverConfig — local embedded server settings
+  RPC_CHANNELS.serverConfig.GET_CONFIG,
+  RPC_CHANNELS.serverConfig.SET_CONFIG,
+  RPC_CHANNELS.serverConfig.GET_STATUS,
 ])
 
 // ---------------------------------------------------------------------------
