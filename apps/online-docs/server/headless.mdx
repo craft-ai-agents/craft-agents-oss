@@ -7,30 +7,55 @@ description: Run Craft Agents as a headless server on a remote machine
 
 Craft Agents can run as a headless server without the desktop GUI. This lets you keep long-running sessions alive on a remote machine, access them from multiple clients, and run compute-heavy tasks on a powerful server.
 
-## Quick Start
+## Prerequisites
 
-From the monorepo root:
+Install [Bun](https://bun.sh) (v1.3+):
 
 ```bash
-# Generate a token and start the server
-CRAFT_SERVER_TOKEN=$(openssl rand -hex 32) bun run packages/server/src/index.ts
+curl -fsSL https://bun.sh/install | bash
+```
+
+Clone the repository and install dependencies:
+
+```bash
+git clone https://github.com/lukilabs/craft-agents-oss.git
+cd craft-agents-oss
+bun install
+```
+
+## Quick Start
+
+```bash
+# Generate a secure token
+export CRAFT_SERVER_TOKEN=$(openssl rand -hex 32)
+
+# Start the server (localhost only)
+bun run packages/server/src/index.ts
 ```
 
 The server prints connection details on startup:
 
 ```
-CRAFT_SERVER_URL=ws://203.0.113.5:9100
+CRAFT_SERVER_URL=ws://127.0.0.1:9100
 CRAFT_SERVER_TOKEN=<generated-token>
+```
+
+To accept remote connections, bind to all interfaces:
+
+```bash
+CRAFT_SERVER_TOKEN=<token> \
+CRAFT_RPC_HOST=0.0.0.0 \
+bun run packages/server/src/index.ts
 ```
 
 ## Connecting Clients
 
 ### Desktop App (Thin Client)
 
-Launch the Electron app in thin-client mode:
+Launch the Electron app in thin-client mode by setting the server URL:
 
 ```bash
-CRAFT_SERVER_URL=wss://203.0.113.5:9100 \
+CRAFT_SERVER_URL=wss://your-server:9100 \
 CRAFT_SERVER_TOKEN=<token> \
 bun run electron:start
 ```
@@ -87,27 +112,106 @@ bun run packages/server/src/index.ts
 
 Use certificates from a trusted CA (e.g., Let's Encrypt) or place the server behind a reverse proxy (nginx, Caddy) that terminates TLS.
 
-## Docker
+## Running at Startup
 
-```bash
-docker run -d \
-  -p 9100:9100 \
-  -e CRAFT_SERVER_TOKEN=<token> \
-  -e CRAFT_RPC_HOST=0.0.0.0 \
-  -v craft-data:/root/.craft-agent \
-  craft-agents-server
+### Linux (systemd)
+
+Create a service file at `/etc/systemd/system/craft-agents.service`:
+
+```ini
+[Unit]
+Description=Craft Agents Server
+After=network.target
+
+[Service]
+Type=simple
+User=<your-user>
+WorkingDirectory=/path/to/craft-agents-oss
+EnvironmentFile=/path/to/craft-agents-oss/.env
+ExecStart=/home/<your-user>/.bun/bin/bun run packages/server/src/index.ts
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-With TLS:
+Create the `.env` file:
 
 ```bash
-docker run -d \
-  -p 9100:9100 \
-  -e CRAFT_SERVER_TOKEN=<token> \
-  -e CRAFT_RPC_HOST=0.0.0.0 \
-  -e CRAFT_RPC_TLS_CERT=/certs/cert.pem \
-  -e CRAFT_RPC_TLS_KEY=/certs/key.pem \
-  -v ./certs:/certs:ro \
-  -v craft-data:/root/.craft-agent \
-  craft-agents-server
+CRAFT_SERVER_TOKEN=<your-token>
+CRAFT_RPC_HOST=0.0.0.0
+CRAFT_RPC_PORT=9100
+CRAFT_RPC_TLS_CERT=/path/to/cert.pem
+CRAFT_RPC_TLS_KEY=/path/to/key.pem
+```
+
+Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable craft-agents
+sudo systemctl start craft-agents
+
+# Check status
+sudo systemctl status craft-agents
+
+# View logs
+journalctl -u craft-agents -f
+```
+
+### macOS (launchd)
+
+Create a plist at `~/Library/LaunchAgents/com.craft.agents-server.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.craft.agents-server</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/YOU/.bun/bin/bun</string>
+    <string>run</string>
+    <string>packages/server/src/index.ts</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/path/to/craft-agents-oss</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CRAFT_SERVER_TOKEN</key>
+    <string>YOUR_TOKEN</string>
+    <key>CRAFT_RPC_HOST</key>
+    <string>0.0.0.0</string>
+    <key>CRAFT_RPC_PORT</key>
+    <string>9100</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/craft-agents.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/craft-agents.log</string>
+</dict>
+</plist>
+```
+
+Load and start:
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.craft.agents-server.plist
+
+# Check status
+launchctl list | grep craft
+
+# View logs
+tail -f /tmp/craft-agents.log
+
+# Stop and unload
+launchctl unload ~/Library/LaunchAgents/com.craft.agents-server.plist
 ```
