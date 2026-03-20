@@ -17,13 +17,17 @@
  *   CRAFT_IS_PACKAGED    — 'true' for production (default: false)
  *   CRAFT_VERSION        — app version (default: 0.0.0-dev)
  *   CRAFT_DEBUG          — 'true' for debug logging
+ *   CRAFT_WEBUI_DIR      — path to built web UI assets (enables web UI)
+ *   CRAFT_WEBUI_PORT     — HTTP port for web UI (default: 3100)
+ *   CRAFT_WEBUI_PASSWORD — optional shorter password for web login (falls back to CRAFT_SERVER_TOKEN)
  */
 
 import { join } from 'node:path'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { version as packageVersion } from '../package.json'
 import { enableDebug } from '@craft-agent/shared/utils/debug'
 import { bootstrapServer, startHealthHttpServer, generateServerToken } from '@craft-agent/server-core/bootstrap'
+import { validateSession } from '@craft-agent/server-core/webui'
 
 // --generate-token: print a crypto-random token and exit
 if (process.argv.includes('--generate-token')) {
@@ -64,12 +68,24 @@ if (tlsCertPath || tlsKeyPath) {
   }
 }
 
+// Web UI configuration
+const webuiDir = process.env.CRAFT_WEBUI_DIR || undefined
+const webuiEnabled = webuiDir && existsSync(webuiDir)
+const serverToken = process.env.CRAFT_SERVER_TOKEN
+
 const instance = await (async () => {
   try {
     return await bootstrapServer<SessionManager, HandlerDeps>({
       bundledAssetsRoot,
       serverVersion: process.env.CRAFT_VERSION ?? packageVersion,
       tls,
+      // When web UI is enabled, accept JWT session cookies on WebSocket upgrade
+      validateSessionCookie: webuiEnabled && serverToken
+        ? async (cookieHeader) => {
+            const session = await validateSession(cookieHeader, serverToken)
+            return session !== null
+          }
+        : undefined,
       applyPlatformToSubsystems: (platform) => {
         setFetcherPlatform(platform)
         setSessionPlatform(platform)
@@ -134,6 +150,28 @@ const healthServer = await startHealthHttpServer({
   platform: instance.platform,
 })
 
+// Start Web UI HTTP server if CRAFT_WEBUI_DIR is set
+let webuiServer: { stop: () => void } | null = null
+if (webuiEnabled && serverToken) {
+  const { startWebuiHttpServer } = await import('@craft-agent/server-core/webui')
+  const { getHealthCheck } = await import('@craft-agent/server-core/handlers/rpc/server')
+  const depsLike = { sessionManager: instance.sessionManager } as any
+  const webuiPort = parseInt(process.env.CRAFT_WEBUI_PORT ?? '3100', 10)
+
+  webuiServer = await startWebuiHttpServer({
+    port: webuiPort,
+    webuiDir: webuiDir!,
+    secret: serverToken,
+    password: process.env.CRAFT_WEBUI_PASSWORD || undefined,
+    secure: instance.protocol === 'wss',
+    wsUrl: `${instance.protocol}://${instance.host}:${instance.port}`,
+    getHealthCheck: () => getHealthCheck(depsLike),
+    logger: instance.platform.logger,
+  })
+
+  console.log(`CRAFT_WEBUI_URL=http://0.0.0.0:${webuiPort}`)
+}
+
 console.log(`CRAFT_SERVER_URL=${instance.protocol}://${instance.host}:${instance.port}`)
 console.log(`CRAFT_SERVER_TOKEN=${instance.token}`)
 
@@ -161,6 +199,7 @@ if (!isLocalBind && instance.protocol === 'ws') {
 }
 
 const shutdown = async () => {
+  webuiServer?.stop()
   healthServer?.stop()
   await instance.stop()
   process.exit(0)

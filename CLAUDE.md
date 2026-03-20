@@ -18,7 +18,8 @@ craft-agent/
 │   ├── electron/    # Desktop GUI (primary interface)
 │   ├── marketing/   # Marketing site
 │   ├── online-docs/ # Online documentation
-│   └── viewer/      # Web viewer for session transcripts
+│   ├── viewer/      # Web viewer for session transcripts
+│   └── webui/       # Browser UI for remote server access
 └── packages/
     ├── core/                # @craft-agent/core - Shared types
     ├── pi-agent-server/     # Pi SDK agent server (subprocess)
@@ -43,6 +44,8 @@ import type { AgentBackend, BackendConfig } from '@craft-agent/shared/agent'
 bun install
 bun run electron:dev
 bun run viewer:dev
+bun run webui:dev
+bun run server:dev:webui
 bun run validate:dev
 bun run typecheck:all
 bun run test:doc-tools
@@ -59,6 +62,7 @@ bun run test:doc-tools
 - Shared logic guidance: `packages/shared/CLAUDE.md`
 - Core types guidance: `packages/core/CLAUDE.md`
 - Viewer guidance: `apps/viewer/claude.md`
+- Web UI guidance: `apps/webui/CLAUDE.md`
 - Main process logs (debug): `~/Library/Logs/@craft-agent/electron/main.log`
 
 ## Doc style policy

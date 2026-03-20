@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Craft Agents — Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #f8f8fa;
+      color: #1a1a2e;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0f0f14; color: #e0e0e8; }
+      .card { background: #1a1a22; border-color: #2a2a35; }
+      input { background: #0f0f14; border-color: #2a2a35; color: #e0e0e8; }
+      input:focus { border-color: #6d5dfc; }
+      .error { background: #2d1a1a; border-color: #5a2020; color: #f5a0a0; }
+    }
+    .card {
+      width: 100%;
+      max-width: 380px;
+      padding: 40px 32px;
+      background: white;
+      border: 1px solid #e4e4e8;
+      border-radius: 16px;
+      text-align: center;
+    }
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 28px;
+    }
+    label {
+      display: block;
+      text-align: left;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-family: 'JetBrains Mono', monospace;
+      border: 1px solid #d4d4d8;
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus { border-color: #6d5dfc; box-shadow: 0 0 0 3px rgba(109, 93, 252, 0.1); }
+    button {
+      width: 100%;
+      margin-top: 20px;
+      padding: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      color: white;
+      background: #6d5dfc;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button:hover { background: #5a4be0; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .error {
+      display: none;
+      margin-top: 16px;
+      padding: 10px 12px;
+      font-size: 13px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      color: #b91c1c;
+    }
+    .error.visible { display: block; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Craft Agents</h1>
+    <p class="subtitle">Enter your server token to continue</p>
+
+    <form id="login-form">
+      <label for="password">Server Token</label>
+      <input
+        id="password"
+        name="password"
+        type="password"
+        placeholder="Enter CRAFT_SERVER_TOKEN"
+        autocomplete="current-password"
+        autofocus
+        required
+      >
+      <button type="submit" id="submit-btn">Sign In</button>
+    </form>
+
+    <div id="error" class="error"></div>
+  </div>
+
+  <script>
+    const form = document.getElementById('login-form');
+    const errorEl = document.getElementById('error');
+    const submitBtn = document.getElementById('submit-btn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.classList.remove('visible');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Signing in...';
+
+      try {
+        const password = document.getElementById('password').value;
+        const res = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        });
+
+        if (res.ok) {
+          // Cookie is set by the response — redirect to app
+          window.location.href = '/';
+          return;
+        }
+
+        const data = await res.json().catch(() => ({}));
+        errorEl.textContent = data.error || 'Authentication failed';
+        errorEl.classList.add('visible');
+      } catch (err) {
+        errorEl.textContent = 'Network error — is the server running?';
+        errorEl.classList.add('visible');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Sign In';
+      }
+    });
+  </script>
+</body>
+</html>

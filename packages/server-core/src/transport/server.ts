@@ -83,6 +83,12 @@ export interface WsRpcServerOptions {
   requireAuth?: boolean
   /** Token validator. Called when requireAuth is true. */
   validateToken?: (token: string) => Promise<boolean>
+  /**
+   * Optional cookie-based session validator (for web UI auth).
+   * Called with the Cookie header from the HTTP upgrade request.
+   * If provided, a valid session cookie is accepted as an alternative to a bearer token.
+   */
+  validateSessionCookie?: (cookieHeader: string | null) => Promise<boolean>
   /** Server identity stamp on outgoing events. Default: 'local' */
   serverId?: string
   /** TLS configuration. When provided, the server listens on wss:// instead of ws://. */
@@ -120,6 +126,7 @@ export class WsRpcServer implements RpcServer {
   private readonly requestedPort: number
   private readonly requireAuth: boolean
   private readonly validateToken: ((token: string) => Promise<boolean>) | null
+  private readonly validateSessionCookie: ((cookieHeader: string | null) => Promise<boolean>) | null
   private readonly serverId: string
   private readonly tlsOptions: WsRpcTlsOptions | null
   private readonly serverVersion: string
@@ -132,6 +139,7 @@ export class WsRpcServer implements RpcServer {
     this.requestedPort = opts?.port ?? 0
     this.requireAuth = opts?.requireAuth ?? false
     this.validateToken = opts?.validateToken ?? null
+    this.validateSessionCookie = opts?.validateSessionCookie ?? null
     this.serverId = opts?.serverId ?? 'local'
     this.serverVersion = opts?.serverVersion ?? ''
     this.tlsOptions = opts?.tls ?? null
@@ -271,8 +279,8 @@ export class WsRpcServer implements RpcServer {
         })
       }
 
-      this.wss.on('connection', (ws) => {
-        this.onConnection(ws)
+      this.wss.on('connection', (ws, req) => {
+        this.onConnection(ws, req.headers.cookie ?? null)
       })
     })
   }
@@ -309,7 +317,7 @@ export class WsRpcServer implements RpcServer {
   // Connection handling
   // -------------------------------------------------------------------------
 
-  private onConnection(ws: WebSocket): void {
+  private onConnection(ws: WebSocket, upgradeRequestCookie: string | null): void {
     // Reject if at capacity
     if (this.maxClients > 0 && this.clients.size >= this.maxClients) {
       transportLog.warn('Connection rejected: at capacity', {
@@ -367,20 +375,25 @@ export class WsRpcServer implements RpcServer {
           return
         }
 
-        // Auth check
+        // Auth check — bearer token OR session cookie (web UI)
         if (this.requireAuth) {
-          if (!envelope.token) {
-            this.sendError(ws, envelope.id, 'AUTH_FAILED', 'Token required')
+          let authenticated = false
+
+          // 1. Try bearer token (standard path)
+          if (envelope.token && this.validateToken) {
+            authenticated = await this.validateToken(envelope.token)
+          }
+
+          // 2. Fallback: try session cookie from HTTP upgrade request (web UI path)
+          if (!authenticated && this.validateSessionCookie && upgradeRequestCookie) {
+            authenticated = await this.validateSessionCookie(upgradeRequestCookie)
+          }
+
+          if (!authenticated) {
+            const reason = envelope.token ? 'Invalid token' : 'Token required'
+            this.sendError(ws, envelope.id, 'AUTH_FAILED', reason)
             ws.close(4005, 'Auth failed')
             return
-          }
-          if (this.validateToken) {
-            const valid = await this.validateToken(envelope.token)
-            if (!valid) {
-              this.sendError(ws, envelope.id, 'AUTH_FAILED', 'Invalid token')
-              ws.close(4005, 'Auth failed')
-              return
-            }
           }
         }
 

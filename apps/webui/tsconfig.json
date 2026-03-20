@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "paths": {
+      "@/*": ["../electron/src/renderer/*"],
+      "@webui/*": ["./src/*"],
+      "@config/*": ["../../packages/shared/src/config/*"]
+    },
+    "baseUrl": "."
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "../electron/src/renderer/**/*.ts",
+    "../electron/src/renderer/**/*.tsx",
+    "../electron/src/shared/**/*.ts",
+    "../electron/src/transport/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

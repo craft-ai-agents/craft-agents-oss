@@ -1,0 +1,12 @@
+{
+  "name": "@craft-agent/webui",
+  "version": "0.7.10",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview"
+  }
+}
