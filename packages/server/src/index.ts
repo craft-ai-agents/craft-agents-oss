@@ -67,6 +67,7 @@ const instance = await (async () => {
   try {
     return await bootstrapServer<SessionManager, HandlerDeps>({
       bundledAssetsRoot,
+      serverVersion: process.env.CRAFT_VERSION ?? '0.0.0-dev',
       tls,
       applyPlatformToSubsystems: (platform) => {
         setFetcherPlatform(platform)

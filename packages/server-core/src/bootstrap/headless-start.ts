@@ -35,6 +35,8 @@ export interface ServerBootstrapOptions<TSessionManager, THandlerDeps> {
   cleanupClientResources?: (clientId: string) => void
   onClientConnected?: (info: { clientId: string; webContentsId: number | null; workspaceId: string | null }) => void
   serverId?: string
+  /** App version string, included in handshake_ack for client compatibility checks. */
+  serverVersion?: string
   /** TLS configuration. When provided, the server listens on wss:// instead of ws://. */
   tls?: WsRpcTlsOptions
 }
@@ -218,6 +220,7 @@ export async function bootstrapServer<TSessionManager, THandlerDeps>(
     requireAuth: true,
     validateToken: async (t) => t === serverToken,
     serverId: options.serverId ?? 'headless',
+    serverVersion: options.serverVersion,
     tls: options.tls,
     onClientConnected: options.onClientConnected,
     onClientDisconnected: (clientId) => {

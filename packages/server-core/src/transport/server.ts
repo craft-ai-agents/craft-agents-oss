@@ -87,6 +87,8 @@ export interface WsRpcServerOptions {
   serverId?: string
   /** TLS configuration. When provided, the server listens on wss:// instead of ws://. */
   tls?: WsRpcTlsOptions
+  /** App version string, included in handshake_ack for client compatibility checks. */
+  serverVersion?: string
   /** Maximum concurrent clients. 0 = unlimited. Default: 50 */
   maxClients?: number
   /** Called when a client completes handshake. */
@@ -120,6 +122,7 @@ export class WsRpcServer implements RpcServer {
   private readonly validateToken: ((token: string) => Promise<boolean>) | null
   private readonly serverId: string
   private readonly tlsOptions: WsRpcTlsOptions | null
+  private readonly serverVersion: string
   private readonly maxClients: number
   private readonly onClientConnected: WsRpcServerOptions['onClientConnected']
   private readonly onClientDisconnected: WsRpcServerOptions['onClientDisconnected']
@@ -130,6 +133,7 @@ export class WsRpcServer implements RpcServer {
     this.requireAuth = opts?.requireAuth ?? false
     this.validateToken = opts?.validateToken ?? null
     this.serverId = opts?.serverId ?? 'local'
+    this.serverVersion = opts?.serverVersion ?? ''
     this.tlsOptions = opts?.tls ?? null
     this.maxClients = opts?.maxClients ?? 50
     this.onClientConnected = opts?.onClientConnected
@@ -424,6 +428,7 @@ export class WsRpcServer implements RpcServer {
                   id: envelope.id,
                   type: 'handshake_ack',
                   protocolVersion: PROTOCOL_VERSION,
+                  serverVersion: this.serverVersion || undefined,
                   clientId: prevClient.id,
                   registeredChannels: [...this.handlers.keys()],
                   reconnected: true,
@@ -446,6 +451,7 @@ export class WsRpcServer implements RpcServer {
                   id: envelope.id,
                   type: 'handshake_ack',
                   protocolVersion: PROTOCOL_VERSION,
+                  serverVersion: this.serverVersion || undefined,
                   clientId: prevClient.id,
                   registeredChannels: [...this.handlers.keys()],
                   reconnected: true,
@@ -505,6 +511,7 @@ export class WsRpcServer implements RpcServer {
           id: envelope.id,
           type: 'handshake_ack',
           protocolVersion: PROTOCOL_VERSION,
+          serverVersion: this.serverVersion || undefined,
           clientId,
           registeredChannels: [...this.handlers.keys()],
         }

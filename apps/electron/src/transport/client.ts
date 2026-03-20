@@ -109,6 +109,7 @@ export class WsRpcClient implements RpcClient {
   private connectionStateListeners = new Set<(state: TransportConnectionState) => void>()
   private anyEventListeners = new Set<(channel: string, ...args: any[]) => void>()
   private clientId: string | null = null
+  private _serverVersion: string | null = null
   private connected = false
   private reconnectAttempt = 0
   private lastSeenSeq = 0
@@ -227,6 +228,11 @@ export class WsRpcClient implements RpcClient {
   isChannelAvailable(channel: string): boolean {
     if (!this.serverChannels) return true // server didn't advertise — assume available
     return this.serverChannels.has(channel)
+  }
+
+  /** Server version from handshake_ack (null if server didn't send one / not yet connected). */
+  getServerVersion(): string | null {
+    return this._serverVersion
   }
 
   getConnectionState(): TransportConnectionState {
@@ -493,6 +499,7 @@ export class WsRpcClient implements RpcClient {
         this.currentHandshakeWasReconnect = false
         this.pendingReconnect = null
         this.clientId = envelope.clientId ?? null
+        this._serverVersion = envelope.serverVersion ?? null
         this.serverChannels = envelope.registeredChannels
           ? new Set(envelope.registeredChannels)
           : null

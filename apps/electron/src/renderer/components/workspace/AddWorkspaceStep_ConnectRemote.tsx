@@ -60,6 +60,7 @@ export function AddWorkspaceStep_ConnectRemote({
   const [remoteWorkspaces, setRemoteWorkspaces] = useState<Array<{ id: string; name: string }>>([])
   const [selectedValue, setSelectedValue] = useState<string | null>(null) // workspace ID or CREATE_NEW_VALUE
   const [newWorkspaceName, setNewWorkspaceName] = useState('')
+  const [serverVersion, setServerVersion] = useState<string | null>(null)
 
   useEffect(() => {
     window.electronAPI.getHomeDir().then(setHomeDir)
@@ -87,6 +88,7 @@ export function AddWorkspaceStep_ConnectRemote({
       const result = await window.electronAPI.testRemoteConnection(serverUrl, token)
       if (result.ok) {
         setTestState('ok')
+        setServerVersion(result.serverVersion ?? null)
         if (result.needsWorkspace) {
           // Fresh server — no workspaces, go straight to create mode
           setRemoteWorkspaces([])
@@ -211,13 +213,13 @@ export function AddWorkspaceStep_ConnectRemote({
           {testState === 'ok' && !isFreshServer && (
             <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
               <CheckCircle className="h-3.5 w-3.5" />
-              Connected
+              Connected{serverVersion ? ` — v${serverVersion}` : ''}
             </span>
           )}
           {testState === 'ok' && isFreshServer && (
             <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
               <CheckCircle className="h-3.5 w-3.5" />
-              Connected — no workspaces yet
+              Connected{serverVersion ? ` — v${serverVersion}` : ''} — no workspaces yet
             </span>
           )}
           {testState === 'error' && (

@@ -261,6 +261,7 @@ export interface ElectronAPI {
     remoteWorkspaces?: Array<{ id: string; name: string }>
     remoteWorkspaceId?: string   // auto-set when exactly one workspace
     remoteWorkspaceName?: string // auto-set when exactly one workspace
+    serverVersion?: string       // server app version from handshake
   }>
 
   // Window management

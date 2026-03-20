@@ -596,6 +596,7 @@ app.whenReady().then(async () => {
         tls,
         bundledAssetsRoot: __dirname,
         serverId: 'local',
+        serverVersion: app.getVersion(),
         platformFactory: () => platform,
         applyPlatformToSubsystems: (p) => {
           setFetcherPlatform(p)

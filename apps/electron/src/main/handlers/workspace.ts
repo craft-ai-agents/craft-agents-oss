@@ -55,13 +55,16 @@ export function registerWorkspaceGuiHandlers(server: RpcServer, deps: HandlerDep
     const { client, error } = await connectToRemote(url, token)
     if (!client) return { ok: false, error }
 
+    // Read server version from handshake_ack (null for old servers)
+    const serverVersion = client.getServerVersion() ?? undefined
+
     try {
       let workspaces = await client.invoke('workspaces:get') as Array<{ id: string; name: string }>
 
       if (workspaces.length === 0) {
         if (!workspaceName) {
           // Fresh server, no name provided — tell the caller to provide one
-          return { ok: true, needsWorkspace: true }
+          return { ok: true, needsWorkspace: true, serverVersion }
         }
 
         // Create workspace on remote with the user's chosen name.
@@ -78,6 +81,7 @@ export function registerWorkspaceGuiHandlers(server: RpcServer, deps: HandlerDep
 
       return {
         ok: true,
+        serverVersion,
         remoteWorkspaces: workspaces,
         // Convenience: auto-select if exactly one
         remoteWorkspaceId: workspaces.length === 1 ? workspaces[0].id : undefined,
