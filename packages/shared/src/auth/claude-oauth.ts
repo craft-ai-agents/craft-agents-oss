@@ -10,6 +10,7 @@
 import { randomBytes, createHash } from 'node:crypto'
 import { CLAUDE_OAUTH_CONFIG } from './claude-oauth-config'
 import { openUrl } from '../utils/open-url.ts'
+import { APP_VERSION } from '../version/index.ts'
 
 // OAuth configuration from shared config
 const CLAUDE_CLIENT_ID = CLAUDE_OAUTH_CONFIG.CLIENT_ID
@@ -170,12 +171,8 @@ export async function exchangeClaudeCode(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        Accept: 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        Referer: 'https://claude.ai/',
-        Origin: 'https://claude.ai',
+        'User-Agent': `CraftAgents/${APP_VERSION}`,
+        Accept: 'application/json',
       },
       body: JSON.stringify(params),
     })
