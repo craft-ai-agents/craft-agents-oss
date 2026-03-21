@@ -261,7 +261,11 @@ function findSmallModel(connection: Pick<LlmConnection, 'models' | 'providerType
   const keywords: string[] = [];
 
   if (isAnthropicProvider(connection.providerType)) {
-    keywords.push('haiku');
+    if (connection.providerType === 'bedrock') {
+      keywords.push('global.anthropic.claude-haiku');
+    } else {
+      keywords.push('haiku');
+    }
   } else if (isPiProvider(connection.providerType)) {
     keywords.push('mini', 'flash');
   } else {
@@ -572,6 +576,18 @@ export function isValidProviderAuthCombination(
   return validCombinations[providerType]?.includes(authType) ?? false;
 }
 
+export function normalizeBedrockModelId(
+  modelId: string | undefined,
+): string {
+  if (!modelId) return '';
+
+  if (modelId.startsWith('pi/')) {
+    return modelId.slice(3)
+  }
+
+  return modelId
+}
+
 // ============================================================
 // Migration Helpers
 // ============================================================
@@ -633,6 +649,49 @@ export interface ResolvedAuthEnvVars {
   warning?: string;
 }
 
+const MANAGED_ANTHROPIC_AUTH_ENV_KEYS = [
+  'ANTHROPIC_API_KEY',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'ANTHROPIC_BASE_URL',
+  'CLAUDE_CODE_USE_BEDROCK',
+  'AWS_BEARER_TOKEN_BEDROCK',
+  'ANTHROPIC_BEDROCK_BASE_URL',
+  'AWS_REGION',
+  'AWS_ACCESS_KEY_ID',
+  'AWS_SECRET_ACCESS_KEY',
+  'AWS_SESSION_TOKEN',
+] as const
+
+function getRuntimeEnvValue(key: string): string | undefined {
+  if (typeof process === 'undefined' || !process?.env) {
+    return undefined
+  }
+  return process.env[key]
+}
+
+const MANAGED_ANTHROPIC_AUTH_ENV_BASELINE: Record<string, string | undefined> =
+  Object.fromEntries(
+    MANAGED_ANTHROPIC_AUTH_ENV_KEYS.map((key) => [
+      key,
+      getRuntimeEnvValue(key),
+    ]),
+  )
+
+export function resetManagedAnthropicAuthEnvVars(): void {
+  if (typeof process === 'undefined' || !process?.env) {
+    return
+  }
+
+  for (const key of MANAGED_ANTHROPIC_AUTH_ENV_KEYS) {
+    const originalValue = MANAGED_ANTHROPIC_AUTH_ENV_BASELINE[key]
+    if (originalValue === undefined) {
+      delete process.env[key]
+    } else {
+      process.env[key] = originalValue
+    }
+  }
+}
+
 /**
  * Resolve authentication environment variables for an LLM connection.
  *
@@ -662,6 +721,73 @@ export async function resolveAuthEnvVars(
   // OpenAI (Codex), Copilot, and Pi handle auth internally in their postInit()
   if (!isAnthropicProvider(connection.providerType)) {
     return { envVars, success: true };
+  }
+
+  if (connection.providerType === 'bedrock') {
+    envVars.CLAUDE_CODE_USE_BEDROCK = '1'
+
+    if (connection.baseUrl) {
+      envVars.ANTHROPIC_BEDROCK_BASE_URL = connection.baseUrl
+    }
+
+    const configuredRegion =
+      connection.awsRegion ||
+      getRuntimeEnvValue('AWS_REGION') ||
+      getRuntimeEnvValue('AWS_DEFAULT_REGION')
+    if (!configuredRegion) {
+      return {
+        envVars,
+        success: false,
+        warning: `No AWS region found for Bedrock connection: ${connectionSlug}`,
+      }
+    }
+
+    envVars.AWS_REGION = configuredRegion
+
+    if (connection.authType === 'bearer_token') {
+      const bearerToken = await credentialManager.getLlmApiKey(connectionSlug)
+      if (!bearerToken) {
+        return {
+          envVars,
+          success: false,
+          warning: `No Bedrock bearer token found for: ${connectionSlug}`,
+        }
+      }
+
+      envVars.AWS_BEARER_TOKEN_BEDROCK = bearerToken
+      return { envVars, success: true }
+    }
+
+    if (connection.authType === 'iam_credentials') {
+      const iamCredentials =
+        await credentialManager.getLlmIamCredentials(connectionSlug)
+      if (!iamCredentials?.accessKeyId || !iamCredentials.secretAccessKey) {
+        return {
+          envVars,
+          success: false,
+          warning: `No IAM credentials found for: ${connectionSlug}`,
+        }
+      }
+
+      envVars.AWS_ACCESS_KEY_ID = iamCredentials.accessKeyId
+      envVars.AWS_SECRET_ACCESS_KEY = iamCredentials.secretAccessKey
+      if (iamCredentials.sessionToken) {
+        envVars.AWS_SESSION_TOKEN = iamCredentials.sessionToken
+      }
+      envVars.AWS_REGION = iamCredentials.region || configuredRegion
+
+      return { envVars, success: true }
+    }
+
+    if (connection.authType === 'environment') {
+      return { envVars, success: true }
+    }
+
+    return {
+      envVars,
+      success: false,
+      warning: `Unsupported Bedrock auth type: ${connection.authType}`,
+    }
   }
 
   // Set base URL if configured

@@ -40,7 +40,7 @@ import type { Workspace, AuthType } from '@craft-agent/core/types';
 
 // Import LLM connection types and constants
 import type { LlmConnection } from './llm-connections.ts';
-import { isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider } from './llm-connections.ts';
+import { isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, normalizeBedrockModelId } from './llm-connections.ts';
 import {
   getModelProvider,
 } from './models.ts';
@@ -1402,6 +1402,28 @@ function backfillAllConnectionModels(config: StoredConfig): boolean {
     const defaultModels = getDefaultModelsForConnection(connection.providerType, connection.piAuthProvider);
     const defaultModel = getDefaultModelForConnection(connection.providerType, connection.piAuthProvider);
     const providerDefaultModelIds = normalizeModelIds(defaultModels as Array<{ id: string } | string>);
+
+    if (connection.providerType === 'bedrock') {
+      const currentIds = normalizeModelIds(connection.models)
+      const normalizedIds = currentIds.map((id) =>
+        normalizeBedrockModelId(id),
+      )
+
+      if (!modelSetEquals(currentIds, normalizedIds)) {
+        connection.models = [...new Set(normalizedIds)]
+        changed = true
+      }
+
+      if (connection.defaultModel) {
+        const normalizedDefaultModel = normalizeBedrockModelId(
+          connection.defaultModel,
+        )
+        if (normalizedDefaultModel !== connection.defaultModel) {
+          connection.defaultModel = normalizedDefaultModel
+          changed = true
+        }
+      }
+    }
 
     if (isPiProvider(connection.providerType) && connection.piAuthProvider) {
       // Copilot models are always server-managed (GitHub policy controls which

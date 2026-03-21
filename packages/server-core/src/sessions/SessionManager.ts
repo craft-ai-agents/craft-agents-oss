@@ -18,7 +18,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getDefaultLlmConnection, getDefaultThinkingLevel } from '@craft-agent/shared/config'
+import { getLlmConnection, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
@@ -1498,10 +1498,8 @@ export class SessionManager implements ISessionManager {
       }
       const connection = slug ? getLlmConnection(slug) : null
 
-      // Clear all auth env vars first to ensure clean state
-      delete process.env.ANTHROPIC_API_KEY
-      delete process.env.CLAUDE_CODE_OAUTH_TOKEN
-      delete process.env.ANTHROPIC_BASE_URL
+      // Restore managed auth env vars to their baseline before applying this connection.
+      resetManagedAnthropicAuthEnvVars()
 
       if (!connection) {
         sessionLog.error(`No LLM connection found for slug: ${slug}`)

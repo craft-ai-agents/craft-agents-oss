@@ -1,5 +1,5 @@
 import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
-import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus } from '@craft-agent/shared/config'
+import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, normalizeBedrockModelId } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { setSetupDeferred } from '@craft-agent/shared/config/storage'
 import {
@@ -151,6 +151,15 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         }
         if (updates.defaultModel) {
           updates.defaultModel = toPiModelId(updates.defaultModel)
+        }
+      } else if (effectiveProviderType === 'bedrock') {
+        if (updates.models) {
+          updates.models = updates.models.map(m => typeof m === 'string'
+            ? normalizeBedrockModelId(m)
+            : { ...m, id: normalizeBedrockModelId(m.id) })
+        }
+        if (updates.defaultModel) {
+          updates.defaultModel = normalizeBedrockModelId(updates.defaultModel)
         }
       }
 
