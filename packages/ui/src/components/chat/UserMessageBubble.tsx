@@ -11,7 +11,7 @@
  * - Pending/queued states (Electron only)
  */
 
-import type { ReactNode } from 'react'
+import { type ReactNode, useCallback, useState } from 'react'
 import type { StoredAttachment, ContentBadge } from '@craft-agent/core'
 import { normalizePath } from '@craft-agent/core/utils'
 import { cn } from '../../lib/utils'
@@ -19,6 +19,7 @@ import { Markdown } from '../markdown'
 import { FileTypeIcon, getFileTypeLabel } from './attachment-helpers'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '../tooltip'
 import { useTranslation } from 'react-i18next'
+import { Copy, Check } from 'lucide-react'
 
 // Fallback text icons for badges without iconDataUrl
 // Using simple characters since SVG rendering may not work in all contexts
@@ -334,6 +335,17 @@ export function UserMessageBubble({
   compactMode,
 }: UserMessageBubbleProps) {
   const { t } = useTranslation()
+  const [copied, setCopied] = useState(false)
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }, [content])
+
   const hasAttachments = attachments && attachments.length > 0
 
   // Separate edit_request badges (rendered above bubble) from other badges (rendered inline)
@@ -425,27 +437,43 @@ export function UserMessageBubble({
         </div>
       )}
 
-      {/* Text content bubble */}
-      <div
-        className={cn(
-          "max-w-[80%] bg-user-message-bubble rounded-[16px] break-words min-w-0 select-text [&_p]:m-0",
-          compactMode ? "px-4 py-2" : "px-5 py-3.5",
-          isPending && "animate-shimmer"
+      {/* Text content bubble with hover copy button */}
+      <div className="group/user-msg relative max-w-[80%]">
+        {!compactMode && (
+          <button
+            onClick={handleCopy}
+            className={cn(
+              "absolute -left-9 top-1/2 -translate-y-1/2 flex items-center justify-center w-7 h-7 rounded-[6px] transition-opacity",
+              "opacity-0 group-hover/user-msg:opacity-100",
+              copied ? "text-success" : "text-muted-foreground hover:text-foreground hover:bg-foreground/5",
+              "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            )}
+            title={copied ? "Copied!" : "Copy message"}
+          >
+            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
         )}
-      >
-        {hasInlineBadges
-          ? renderContentWithBadges(displayContent, inlineBadges, onUrlClick, onFileClick)
-          : (
-            <Markdown
-              mode="minimal"
-              onUrlClick={onUrlClick}
-              onFileClick={onFileClick}
-              className="text-sm [&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap"
-            >
-              {displayContent}
-            </Markdown>
-          )
-        }
+        <div
+          className={cn(
+            "bg-user-message-bubble rounded-[16px] break-words min-w-0 select-text [&_p]:m-0",
+            compactMode ? "px-4 py-2" : "px-5 py-3.5",
+            isPending && "animate-shimmer"
+          )}
+        >
+          {hasInlineBadges
+            ? renderContentWithBadges(displayContent, inlineBadges, onUrlClick, onFileClick)
+            : (
+              <Markdown
+                mode="minimal"
+                onUrlClick={onUrlClick}
+                onFileClick={onFileClick}
+                className="text-sm [&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap"
+              >
+                {displayContent}
+              </Markdown>
+            )
+          }
+        </div>
       </div>
 
       {/* Queued badge */}
