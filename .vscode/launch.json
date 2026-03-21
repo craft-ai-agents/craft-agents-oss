@@ -1,0 +1,38 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Attach Electron Main",
+      "type": "node",
+      "request": "attach",
+      "port": 43229,
+      "restart": true,
+      "timeout": 30000,
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/apps/electron/dist/**/*.cjs"
+      ],
+      "preLaunchTask": "craft: electron dev (debug)"
+    },
+    {
+      "name": "Attach Electron Renderer",
+      "type": "chrome",
+      "request": "attach",
+      "port": 43222,
+      "webRoot": "${workspaceFolder}/apps/electron/src/renderer",
+      "timeout": 30000
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Electron Main + Renderer",
+      "configurations": [
+        "Attach Electron Main",
+        "Attach Electron Renderer"
+      ],
+      "stopAll": true
+    }
+  ]
+}
