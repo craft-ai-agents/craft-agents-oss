@@ -116,20 +116,23 @@ export function AddWorkspaceStep_ConnectRemote({
     const defaultBasePath = `${homeDir}/.craft-agent/workspaces`
 
     if (isCreateNew || isFreshServer) {
-      // Create new workspace on server, then connect
+      // Create new workspace on remote server via direct RPC, then connect locally
       const name = newWorkspaceName.trim()
       if (!name) return
 
-      const result = await window.electronAPI.testRemoteConnection(serverUrl, token, name)
-      if (!result.ok || !result.remoteWorkspaceId) {
+      try {
+        const created = await window.electronAPI.invokeOnServer(
+          serverUrl, token, 'server:createWorkspace', name
+        ) as { id: string; name: string }
+
+        const { slug, path } = await resolveUniqueSlug(name)
+        const finalPath = path || `${defaultBasePath}/${slug}`
+        await onCreate(finalPath, name, { url: serverUrl, token, remoteWorkspaceId: created.id })
+      } catch (err) {
         setTestState('error')
-        setTestError(result.error || 'Failed to create workspace on remote server')
+        setTestError(err instanceof Error ? err.message : 'Failed to create workspace on remote server')
         return
       }
-
-      const { slug, path } = await resolveUniqueSlug(name)
-      const finalPath = path || `${defaultBasePath}/${slug}`
-      await onCreate(finalPath, name, { url: serverUrl, token, remoteWorkspaceId: result.remoteWorkspaceId })
     } else if (selectedWorkspace) {
       // Connect to existing workspace — auto-resolve local slug
       const { slug, path } = await resolveUniqueSlug(selectedWorkspace.name)

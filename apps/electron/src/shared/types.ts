@@ -256,7 +256,7 @@ export interface ElectronAPI {
   getServerWorkspaces(): Promise<WorkspaceInfo[]>
   createServerWorkspace(name: string): Promise<WorkspaceInfo>
 
-  testRemoteConnection(url: string, token: string, workspaceName?: string): Promise<{
+  testRemoteConnection(url: string, token: string): Promise<{
     ok: boolean
     error?: string
     needsWorkspace?: boolean

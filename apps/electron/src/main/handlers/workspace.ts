@@ -49,9 +49,9 @@ export function registerWorkspaceGuiHandlers(server: RpcServer, deps: HandlerDep
   const windowManager = deps.windowManager
 
   // Test connection to a remote Craft Agent Server.
-  // - Without workspaceName: discovers existing workspace or returns needsWorkspace flag
-  // - With workspaceName: creates a workspace on the remote server if none exists
-  server.handle(RPC_CHANNELS.remote.TEST_CONNECTION, async (_ctx, url: string, token: string, workspaceName?: string) => {
+  // Pure discovery — returns list of existing workspaces or needsWorkspace flag.
+  // Workspace creation is handled separately via invokeOnServer → server:createWorkspace.
+  server.handle(RPC_CHANNELS.remote.TEST_CONNECTION, async (_ctx, url: string, token: string) => {
     const { client, error } = await connectToRemote(url, token)
     if (!client) return { ok: false, error }
 
@@ -59,24 +59,10 @@ export function registerWorkspaceGuiHandlers(server: RpcServer, deps: HandlerDep
     const serverVersion = client.getServerVersion() ?? undefined
 
     try {
-      let workspaces = await client.invoke('workspaces:get') as Array<{ id: string; name: string }>
+      const workspaces = await client.invoke('workspaces:get') as Array<{ id: string; name: string }>
 
       if (workspaces.length === 0) {
-        if (!workspaceName) {
-          // Fresh server, no name provided — tell the caller to provide one
-          return { ok: true, needsWorkspace: true, serverVersion }
-        }
-
-        // Create workspace on remote with the user's chosen name.
-        // Use checkSlug to get the platform-correct default path on the remote machine.
-        const slug = workspaceName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'workspace'
-        const slugCheck = await client.invoke('workspaces:checkSlug', slug) as { exists: boolean; path: string }
-        await client.invoke('workspaces:create', slugCheck.path, workspaceName)
-        workspaces = await client.invoke('workspaces:get') as Array<{ id: string; name: string }>
-      }
-
-      if (workspaces.length === 0) {
-        return { ok: false, error: 'Failed to create workspace on remote server' }
+        return { ok: true, needsWorkspace: true, serverVersion }
       }
 
       return {
