@@ -112,7 +112,7 @@ export class SourceServerBuilder {
     const url = normalizeMcpUrl(mcp.url);
 
     const config: McpServerConfig = {
-      type: url.includes('/sse') ? 'sse' : 'http',
+      type: mcp.transport === 'sse' ? 'sse' : 'http',
       url,
     };
 
@@ -312,23 +312,10 @@ export class SourceServerBuilder {
 /**
  * Normalize MCP URL to standard format
  * - Removes trailing slashes
- * - Preserves /sse suffix for SSE type detection
- * - Ensures /mcp suffix for HTTP type
+ * - Preserves the user-configured path as-is (no /mcp suffix appended)
  */
 export function normalizeMcpUrl(url: string): string {
-  url = url.replace(/\/+$/, '');
-
-  // If URL ends with /sse, keep it for SSE type detection
-  if (url.endsWith('/sse')) {
-    return url;
-  }
-
-  // Ensure /mcp suffix for HTTP type
-  if (!url.endsWith('/mcp')) {
-    url = url + '/mcp';
-  }
-
-  return url;
+  return url.replace(/\/+$/, '');
 }
 
 // Singleton instance

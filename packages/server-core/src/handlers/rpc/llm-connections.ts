@@ -1,5 +1,5 @@
 import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
-import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus } from '@craft-agent/shared/config'
+import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { setSetupDeferred } from '@craft-agent/shared/config/storage'
 import {
@@ -136,21 +136,45 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         }
       }
 
-      // Bedrock auth method override — set providerType and authType
+      // Bedrock auth method override — set authType and region.
+      // providerType stays 'pi' when piAuthProvider==='amazon-bedrock' (Pi SDK Bedrock path).
+      // Only set providerType='bedrock' when there's no Pi auth provider.
       if (setup.bedrockAuthMethod) {
         updates.authType = setup.bedrockAuthMethod
-        updates.providerType = 'bedrock'
+        const hasPiBedrockAuth = (updates.piAuthProvider ?? connection.piAuthProvider) === 'amazon-bedrock'
+        if (!hasPiBedrockAuth) {
+          updates.providerType = 'bedrock'
+        }
         if (setup.awsRegion) updates.awsRegion = setup.awsRegion
       }
 
       const effectiveProviderType = updates.providerType ?? connection.providerType
       if (effectiveProviderType === 'pi') {
-        const toPiModelId = (id: string) => id.startsWith('pi/') ? id : `pi/${id}`
+        const isBedrockPi = (updates.piAuthProvider ?? connection.piAuthProvider) === 'amazon-bedrock'
+        // For Pi+Bedrock, normalize bare Anthropic IDs to Bedrock-native before adding pi/ prefix
+        // so that resolvePiModel() can find them in the amazon-bedrock registry.
+        const toPiModelId = (id: string) => {
+          const bare = id.startsWith('pi/') ? id.slice(3) : id
+          const normalized = isBedrockPi ? toBedrockNativeId(bare) : bare
+          return `pi/${normalized}`
+        }
         if (updates.models) {
           updates.models = updates.models.map(m => typeof m === 'string' ? toPiModelId(m) : { ...m, id: toPiModelId(m.id) })
         }
         if (updates.defaultModel) {
           updates.defaultModel = toPiModelId(updates.defaultModel)
+        }
+      } else if (effectiveProviderType === 'bedrock') {
+        // providerType==='bedrock' goes through ClaudeAgent → Anthropic API,
+        // which uses bare Anthropic IDs. Only strip the pi/ prefix.
+        const stripPiPrefix = (id: string) => id.startsWith('pi/') ? id.slice(3) : id
+        if (updates.models) {
+          updates.models = updates.models.map(m => typeof m === 'string'
+            ? stripPiPrefix(m)
+            : { ...m, id: stripPiPrefix(m.id) })
+        }
+        if (updates.defaultModel) {
+          updates.defaultModel = stripPiPrefix(updates.defaultModel)
         }
       }
 

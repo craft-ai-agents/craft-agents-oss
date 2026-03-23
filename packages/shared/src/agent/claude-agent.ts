@@ -16,7 +16,10 @@ import { mapClaudeSdkAssistantError, type ClaudeSdkApiError } from './claude-sdk
 import { runErrorDiagnostics } from './diagnostics.ts';
 import { loadStoredConfig, loadConfigDefaults, type Workspace, type AuthType, getDefaultLlmConnection, getLlmConnection } from '../config/storage.ts';
 import { getValidClaudeOAuthToken } from '../auth/state.ts';
-import { resolveAuthEnvVars } from '../config/llm-connections.ts';
+import {
+  clearClaudeBedrockRoutingEnvVars,
+  resolveAuthEnvVars,
+} from '../config/llm-connections.ts';
 import type { McpClientPool } from '../mcp/mcp-pool.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
 import { DEFAULT_MODEL, isClaudeModel, getDefaultSummarizationModel, getModelContextWindow } from '../config/models.ts';
@@ -165,6 +168,8 @@ export interface ClaudeAgentConfig {
    * Returns last N user/assistant message pairs for context injection.
    */
   getRecoveryMessages?: () => RecoveryMessage[];
+  /** All parent messages for branch fork fallback (summarized via mini on fork failure). */
+  getBranchFallbackMessages?: () => RecoveryMessage[];
   isHeadless?: boolean;        // Running in headless mode (disables interactive tools)
   debugMode?: {                // Debug mode configuration (when running in dev)
     enabled: boolean;          // Whether debug mode is active
@@ -186,6 +191,8 @@ export interface ClaudeAgentConfig {
   mcpPool?: McpClientPool;
   /** LLM connection slug for credential lookup in postInit(). */
   connectionSlug?: string;
+  /** Enable 1M context window for Opus 4.6. Default: true. Set false to use 200K and conserve usage limits. */
+  enable1MContext?: boolean;
 }
 
 // Permission request tracking
@@ -534,6 +541,7 @@ export class ClaudeAgent extends BaseAgent {
       onSdkSessionIdUpdate: config.onSdkSessionIdUpdate,
       onSdkSessionIdCleared: config.onSdkSessionIdCleared,
       getRecoveryMessages: config.getRecoveryMessages,
+      getBranchFallbackMessages: config.getBranchFallbackMessages,
       envOverrides: config.envOverrides,
       miniModel: config.miniModel,
       mcpPool: config.mcpPool,
@@ -620,10 +628,13 @@ export class ClaudeAgent extends BaseAgent {
       return { authInjected: false, authWarning: `Connection not found: ${slug}`, authWarningLevel: 'error' };
     }
 
-    // Clear all auth env vars first for clean state
+    // Clear all auth env vars first for clean state.
+    // Claude subprocesses must never inherit Bedrock-routing toggles from a
+    // previous connection or parent process environment.
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
     delete process.env.ANTHROPIC_BASE_URL;
+    clearClaudeBedrockRoutingEnvVars();
 
     // Resolve auth env vars via shared utility
     const manager = getCredentialManager();
@@ -881,7 +892,10 @@ export class ClaudeAgent extends BaseAgent {
       // without an explicit opt-in. The betas header only works for API key users;
       // for OAuth the [1m] model suffix is the way. Use the suffix unconditionally
       // since it works for both auth paths. See: anthropics/claude-agent-sdk-typescript#238
-      const effectiveModel = getModelContextWindow(model) === 1_000_000
+      // Gated by enable1MContext in global config (~/.craft-agent/config.json).
+      // The interceptor also reads this to strip the SDK-injected beta header.
+      const use1M = this.config.enable1MContext !== false;
+      const effectiveModel = use1M && getModelContextWindow(model) === 1_000_000
         ? `${model}[1m]`
         : model;
 
@@ -1523,7 +1537,8 @@ This is a branched conversation. All prior messages in this conversation are par
         debug('[SESSION_DEBUG] Post-loop check: wasResuming=', wasResuming, 'receivedAssistantContent=', receivedAssistantContent, '_isRetry=', _isRetry);
         if (wasResuming && !receivedAssistantContent && !_isRetry) {
           debug('[SESSION_DEBUG] >>> DETECTED EMPTY RESPONSE - triggering recovery');
-          if (this.branchFromSdkSessionId) {
+          const wasBranchFork = !!this.branchFromSdkSessionId;
+          if (wasBranchFork) {
             debug(`[ClaudeAgent] Branch fork failed (empty response) before child session establishment (parent=${this.branchFromSdkSessionId}), recovering as fresh session`);
           }
           // SDK resume failed silently - clear session and retry with context
@@ -1537,17 +1552,25 @@ This is a branched conversation. All prior messages in this conversation are par
           this.pinnedPreferencesPrompt = null;
           this.preferencesDriftNotified = false;
 
-          // Build recovery context from previous messages to inject into retry
-          // Skip for branch failures — the messages are already in the UI, and
-          // injecting 300+ messages as recovery context overflows the SDK.
-          const recoveryContext = this.buildRecoveryContext();
-          const messageWithContext = recoveryContext
-            ? recoveryContext + userMessage
-            : userMessage;
+          // Build fallback context: for branch failures, summarize parent conversation
+          // via mini completion; for regular resume failures, use last 6 raw messages.
+          let retryMessage = userMessage;
+          if (wasBranchFork) {
+            const summary = await this.generateBranchFallbackContext();
+            if (summary) {
+              retryMessage = `<branch_context_summary>\nThis is a branched conversation. The SDK-level fork failed, but here is a summary of the parent conversation:\n\n${summary}\n</branch_context_summary>\n\n${userMessage}`;
+            } else {
+              const recoveryContext = this.buildRecoveryContext();
+              if (recoveryContext) retryMessage = recoveryContext + userMessage;
+            }
+          } else {
+            const recoveryContext = this.buildRecoveryContext();
+            if (recoveryContext) retryMessage = recoveryContext + userMessage;
+          }
 
-          yield { type: 'info', message: 'Restoring conversation context...' };
+          yield { type: 'info', message: wasBranchFork ? 'Branch fork failed, restoring context from history...' : 'Restoring conversation context...' };
           // Retry with fresh session, injecting conversation history into the message
-          yield* this.chat(messageWithContext, attachments, { isRetry: true });
+          yield* this.chat(retryMessage, attachments, { isRetry: true });
           return;
         }
 
@@ -1725,7 +1748,8 @@ This is a branched conversation. All prior messages in this conversation are par
 
         if (isSessionExpired && wasResuming && !_isRetry) {
           debug('[SESSION_DEBUG] >>> TAKING PATH: Session expired recovery');
-          if (this.branchFromSdkSessionId) {
+          const wasBranchFork = !!this.branchFromSdkSessionId;
+          if (wasBranchFork) {
             debug(`[ClaudeAgent] Branch fork failed (session expired) before child session establishment (parent=${this.branchFromSdkSessionId}), recovering as fresh session`);
           }
           console.error('[ClaudeAgent] SDK session expired server-side, clearing and retrying fresh');
@@ -1738,10 +1762,24 @@ This is a branched conversation. All prior messages in this conversation are par
           // Clear pinned state so retry captures fresh values
           this.pinnedPreferencesPrompt = null;
           this.preferencesDriftNotified = false;
-          // Use 'info' instead of 'status' to show message without spinner
-          yield { type: 'info', message: 'Session expired, restoring context...' };
-          // Recursively call with isRetry=true (yield* delegates all events)
-          yield* this.chat(userMessage, attachments, { isRetry: true });
+
+          // Inject fallback context for branch failures, recovery context for regular resume
+          let retryMessage = userMessage;
+          if (wasBranchFork) {
+            const summary = await this.generateBranchFallbackContext();
+            if (summary) {
+              retryMessage = `<branch_context_summary>\nThis is a branched conversation. The SDK-level fork failed, but here is a summary of the parent conversation:\n\n${summary}\n</branch_context_summary>\n\n${userMessage}`;
+            } else {
+              const recoveryContext = this.buildRecoveryContext();
+              if (recoveryContext) retryMessage = recoveryContext + userMessage;
+            }
+          } else {
+            const recoveryContext = this.buildRecoveryContext();
+            if (recoveryContext) retryMessage = recoveryContext + userMessage;
+          }
+
+          yield { type: 'info', message: wasBranchFork ? 'Branch fork failed, restoring context from history...' : 'Session expired, restoring context...' };
+          yield* this.chat(retryMessage, attachments, { isRetry: true });
           return;
         }
 
@@ -1847,7 +1885,8 @@ This is a branched conversation. All prior messages in this conversation are par
         debug('[SESSION_DEBUG] isProcessError=false, checking wasResuming fallback');
         if (wasResuming && !_isRetry) {
           debug('[SESSION_DEBUG] >>> TAKING PATH: wasResuming fallback retry');
-          if (this.branchFromSdkSessionId) {
+          const wasBranchFork = !!this.branchFromSdkSessionId;
+          if (wasBranchFork) {
             debug(`[ClaudeAgent] Branch fork failed (generic error) before child session establishment (parent=${this.branchFromSdkSessionId}), recovering as fresh session`);
           }
           this.sessionId = null;
@@ -1859,21 +1898,30 @@ This is a branched conversation. All prior messages in this conversation are par
           this.pinnedPreferencesPrompt = null;
           this.preferencesDriftNotified = false;
 
-          // Provide context-aware message (conservative: only match explicit session/resume terms)
-          const isSessionError =
-            errorMsg.includes('session') ||
-            errorMsg.includes('resume');
+          // Inject fallback context for branch failures, recovery context for regular resume
+          let retryMessage = userMessage;
+          if (wasBranchFork) {
+            const summary = await this.generateBranchFallbackContext();
+            if (summary) {
+              retryMessage = `<branch_context_summary>\nThis is a branched conversation. The SDK-level fork failed, but here is a summary of the parent conversation:\n\n${summary}\n</branch_context_summary>\n\n${userMessage}`;
+            } else {
+              const recoveryContext = this.buildRecoveryContext();
+              if (recoveryContext) retryMessage = recoveryContext + userMessage;
+            }
+          } else {
+            const recoveryContext = this.buildRecoveryContext();
+            if (recoveryContext) retryMessage = recoveryContext + userMessage;
+          }
 
-          debug('[SESSION_DEBUG] isSessionError (for message):', isSessionError);
+          // Provide context-aware message
+          const statusMessage = wasBranchFork
+            ? 'Branch fork failed, restoring context from history...'
+            : errorMsg.includes('session') || errorMsg.includes('resume')
+              ? 'Conversation sync failed, restoring context...'
+              : 'Request failed, retrying with context...';
 
-          const statusMessage = isSessionError
-            ? 'Conversation sync failed, starting fresh...'
-            : 'Request failed, retrying without history...';
-
-          // Use 'info' instead of 'status' to show message without spinner
           yield { type: 'info', message: statusMessage };
-          // Recursively call with isRetry=true (yield* delegates all events)
-          yield* this.chat(userMessage, attachments, { isRetry: true });
+          yield* this.chat(retryMessage, attachments, { isRetry: true });
           return;
         }
 
@@ -2530,6 +2578,35 @@ This is a branched conversation. All prior messages in this conversation are par
     }
 
     return result.trim() || null;
+  }
+
+  /**
+   * Generate a mini-summarized fallback context from parent conversation messages.
+   * Called when SDK-level branch fork fails and we need to inject parent context
+   * into the retry without overflowing the context window with raw messages.
+   */
+  private async generateBranchFallbackContext(): Promise<string | null> {
+    const messages = this.config.getBranchFallbackMessages?.();
+    if (!messages || messages.length === 0) return null;
+
+    // Format transcript, truncating individual messages to stay within mini limits
+    const transcript = messages
+      .map(m => `${m.type === 'user' ? 'User' : 'Assistant'}: ${m.content.slice(0, 500)}`)
+      .join('\n\n');
+
+    // Cap total transcript to ~12K chars for mini input
+    const bounded = transcript.slice(0, 12_000);
+
+    try {
+      const summary = await this.runMiniCompletion(
+        `Summarize this conversation concisely. Preserve: key decisions, ongoing tasks, ` +
+        `technical context, and the user's current goal. Be specific, not generic.\n\n${bounded}`
+      );
+      return summary;
+    } catch (error) {
+      debug(`[ClaudeAgent] Branch fallback mini summary failed: ${error}`);
+      return null;
+    }
   }
 
   // ============================================================

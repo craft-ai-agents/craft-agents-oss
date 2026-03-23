@@ -49,7 +49,7 @@ Each session locks to a connection after the first message. To change connection
 | `providerType` | Yes | Provider backend (see list below) |
 | `authType` | Yes | Auth mechanism (see list below) |
 | `baseUrl` | No | Custom base URL for compatible providers |
-| `models` | No | Explicit model list (used by compatible providers). Accepts provider-prefixed IDs like `anthropic/claude-sonnet-4.6`. |
+| `models` | No | Explicit model list. Accepts strings (`"gpt-5.4"`) or objects with optional `contextWindow` override (see [Custom Context Window](#custom-context-window)). |
 | `defaultModel` | No | Default model for this connection |
 | `codexPath` | No | Path to Codex binary (OpenAI/Codex only) |
 | `awsRegion` | No | AWS region for Bedrock |
@@ -196,6 +196,30 @@ Set `awsRegion` to the region where you have Bedrock model access enabled (e.g.,
   "createdAt": 1737451800000
 }
 ```
+
+## Custom Context Window
+
+Custom endpoints default to a **128K context window** for all models. If your model supports a larger context, set `contextWindow` on the model object to enable proper auto-compaction behavior:
+
+```json
+{
+  "slug": "my-proxy",
+  "name": "My Proxy",
+  "providerType": "anthropic_compat",
+  "authType": "api_key_with_endpoint",
+  "baseUrl": "https://my-proxy.example.com/v1",
+  "models": [
+    { "id": "gpt-5.4", "name": "GPT 5.4", "contextWindow": 1000000 },
+    { "id": "gpt-5.2", "name": "GPT 5.2", "contextWindow": 272000 }
+  ],
+  "defaultModel": "gpt-5.4",
+  "createdAt": 1737451800000
+}
+```
+
+<Note>
+Plain string model entries (e.g., `"gpt-5.4"`) continue to use the 128K default. Use object entries with `contextWindow` only when you need a different value.
+</Note>
 
 ## Managing Connections
 

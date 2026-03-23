@@ -39,10 +39,50 @@ describe('isClaudeModel', () => {
     expect(isClaudeModel('gemma2')).toBe(false);
   });
 
+  // Bedrock-native model IDs
+  it('detects Bedrock-native Claude model IDs', () => {
+    expect(isClaudeModel('anthropic.claude-opus-4-6-v1')).toBe(true);
+    expect(isClaudeModel('anthropic.claude-sonnet-4-6')).toBe(true);
+    expect(isClaudeModel('anthropic.claude-haiku-4-5-20251001-v1:0')).toBe(true);
+  });
+
   // Case insensitivity
   it('handles case variations', () => {
     expect(isClaudeModel('Claude-Sonnet-4-6')).toBe(true);
     expect(isClaudeModel('CLAUDE-OPUS-4-6')).toBe(true);
     expect(isClaudeModel('Anthropic/Claude-Sonnet-4')).toBe(true);
+  });
+});
+
+describe('getModelShortName', () => {
+  it('returns registry shortName for known models', () => {
+    expect(getModelShortName('claude-opus-4-6')).toBe('Opus');
+    expect(getModelShortName('claude-sonnet-4-6')).toBe('Sonnet');
+    expect(getModelShortName('claude-haiku-4-5-20251001')).toBe('Haiku');
+  });
+
+  it('strips provider prefix for slash-separated IDs', () => {
+    expect(getModelShortName('openai/gpt-5.4')).toBe('gpt-5.4');
+    expect(getModelShortName('anthropic/claude-sonnet-4')).toBe('claude-sonnet-4');
+  });
+
+  it('preserves version numbers for custom endpoint models', () => {
+    expect(getModelShortName('gpt-5.4')).toBe('Gpt 5.4');
+    expect(getModelShortName('gpt-5.2')).toBe('Gpt 5.2');
+    expect(getModelShortName('glm-4.7')).toBe('Glm 4.7');
+  });
+
+  it('humanizes bare model names without versions', () => {
+    expect(getModelShortName('mistral')).toBe('Mistral');
+    expect(getModelShortName('gemma2')).toBe('Gemma2');
+  });
+
+  it('humanizes multi-part model names', () => {
+    expect(getModelShortName('mistral-large')).toBe('Mistral large');
+    expect(getModelShortName('deepseek-r1')).toBe('Deepseek r1');
+  });
+
+  it('strips date suffix for unknown claude models', () => {
+    expect(getModelShortName('claude-sonnet-3-5-20241022')).toBe('Sonnet 3.5');
   });
 });

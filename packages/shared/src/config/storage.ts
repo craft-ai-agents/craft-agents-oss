@@ -42,7 +42,7 @@ import type { Workspace, AuthType } from '@craft-agent/core/types';
 
 // Import LLM connection types and constants
 import type { LlmConnection } from './llm-connections.ts';
-import { isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider } from './llm-connections.ts';
+import { isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, normalizeBedrockModelId, toBedrockNativeId, fromBedrockNativeId } from './llm-connections.ts';
 import {
   getModelProvider,
 } from './models.ts';
@@ -71,6 +71,9 @@ export interface StoredConfig {
   keepAwakeWhileRunning?: boolean;  // Prevent screen sleep while sessions are running (default: false)
   // Tool metadata
   richToolDescriptions?: boolean;  // Add intent/action metadata to all tool calls (default: true)
+  // Prompt caching & context
+  extendedPromptCache?: boolean;  // Use 1h prompt cache TTL instead of 5m (default: false)
+  enable1MContext?: boolean;  // Enable 1M context window for supported models (default: true)
   // Network proxy
   networkProxy?: import('./types.ts').NetworkProxySettings;
   // Windows: path to Git Bash (bash.exe) for the SDK subprocess
@@ -407,6 +410,46 @@ export function setRichToolDescriptions(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.richToolDescriptions = enabled;
+  saveConfig(config);
+}
+
+/**
+ * Get whether extended prompt cache (1h TTL) is enabled.
+ * When enabled, the interceptor upgrades cache_control TTL from 5m to 1h.
+ * Defaults to false if not set.
+ */
+export function getExtendedPromptCache(): boolean {
+  const config = loadStoredConfig();
+  return config?.extendedPromptCache ?? false;
+}
+
+/**
+ * Set whether extended prompt cache (1h TTL) is enabled.
+ */
+export function setExtendedPromptCache(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.extendedPromptCache = enabled;
+  saveConfig(config);
+}
+
+/**
+ * Get whether 1M context window is enabled.
+ * When disabled, models use 200K context and the interceptor strips the context-1m beta header.
+ * Defaults to true if not set.
+ */
+export function getEnable1MContext(): boolean {
+  const config = loadStoredConfig();
+  return config?.enable1MContext !== false;
+}
+
+/**
+ * Set whether 1M context window is enabled.
+ */
+export function setEnable1MContext(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.enable1MContext = enabled;
   saveConfig(config);
 }
 
@@ -1440,6 +1483,28 @@ function backfillAllConnectionModels(config: StoredConfig): boolean {
     const defaultModel = getDefaultModelForConnection(connection.providerType, connection.piAuthProvider);
     const providerDefaultModelIds = normalizeModelIds(defaultModels as Array<{ id: string } | string>);
 
+    if (connection.providerType === 'bedrock') {
+      const currentIds = normalizeModelIds(connection.models)
+      const normalizedIds = currentIds.map((id) =>
+        normalizeBedrockModelId(id),
+      )
+
+      if (!modelSetEquals(currentIds, normalizedIds)) {
+        connection.models = [...new Set(normalizedIds)]
+        changed = true
+      }
+
+      if (connection.defaultModel) {
+        const normalizedDefaultModel = normalizeBedrockModelId(
+          connection.defaultModel,
+        )
+        if (normalizedDefaultModel !== connection.defaultModel) {
+          connection.defaultModel = normalizedDefaultModel
+          changed = true
+        }
+      }
+    }
+
     if (isPiProvider(connection.providerType) && connection.piAuthProvider) {
       // Copilot models are always server-managed (GitHub policy controls which
       // models are enabled), so force automaticallySyncedFromProvider regardless
@@ -1690,6 +1755,93 @@ function migrateWorkspaceOpus45ToOpus46(config: StoredConfig): void {
 }
 
 /**
+ * Fix Bedrock connections and normalize model IDs.
+ *
+ * 1. Connections with providerType==='bedrock' + piAuthProvider==='amazon-bedrock'
+ *    are misconfigured: providerType should be 'pi' so PiAgent routes to Bedrock.
+ *    Fix the providerType and normalize model IDs to Bedrock-native (pi-prefixed).
+ *
+ * 2. Pure piAuthProvider==='amazon-bedrock' connections (already providerType==='pi')
+ *    get model IDs normalized to Bedrock-native for Pi SDK resolution.
+ *
+ * 3. Pure providerType==='bedrock' without piAuthProvider==='amazon-bedrock'
+ *    get Bedrock-native IDs reverted to bare (reverse previous incorrect migration).
+ */
+function migrateBedrockModelIds(config: StoredConfig): boolean {
+  if (!config.llmConnections) return false;
+
+  let changed = false;
+
+  for (const connection of config.llmConnections) {
+    // Fix misconfigured connections: bedrock providerType should be 'pi' when piAuthProvider is set
+    if (connection.providerType === 'bedrock' && connection.piAuthProvider === 'amazon-bedrock') {
+      connection.providerType = 'pi';
+      changed = true;
+    }
+
+    // Forward: Pi+Bedrock connections need Bedrock-native IDs (pi-prefixed) for Pi SDK resolution
+    if (connection.providerType === 'pi' && connection.piAuthProvider === 'amazon-bedrock') {
+      if (connection.defaultModel) {
+        const normalized = normalizePiBedrockId(connection.defaultModel);
+        if (normalized !== connection.defaultModel) {
+          connection.defaultModel = normalized;
+          changed = true;
+        }
+      }
+      if (connection.models && Array.isArray(connection.models)) {
+        for (let i = 0; i < connection.models.length; i++) {
+          const model = connection.models[i];
+          if (typeof model === 'string') {
+            const normalized = normalizePiBedrockId(model);
+            if (normalized !== model) { connection.models[i] = normalized; changed = true; }
+          } else if (model && typeof model === 'object') {
+            const normalized = normalizePiBedrockId(model.id);
+            if (normalized !== model.id) { model.id = normalized; changed = true; }
+          }
+        }
+      }
+      continue;
+    }
+
+    // Reverse: providerType==='bedrock' without piAuthProvider was incorrectly
+    // normalized in a previous migration — revert to bare Anthropic IDs
+    if (connection.providerType === 'bedrock') {
+      if (connection.defaultModel) {
+        const bare = fromBedrockNativeId(connection.defaultModel);
+        if (bare !== connection.defaultModel) {
+          connection.defaultModel = bare;
+          changed = true;
+        }
+      }
+      if (connection.models && Array.isArray(connection.models)) {
+        for (let i = 0; i < connection.models.length; i++) {
+          const model = connection.models[i];
+          if (typeof model === 'string') {
+            const bare = fromBedrockNativeId(model);
+            if (bare !== model) { connection.models[i] = bare; changed = true; }
+          } else if (model && typeof model === 'object') {
+            const bare = fromBedrockNativeId(model.id);
+            if (bare !== model.id) { model.id = bare; changed = true; }
+          }
+        }
+      }
+    }
+  }
+
+  return changed;
+}
+
+/** Normalize a pi/-prefixed model ID for Bedrock: pi/claude-opus-4-6 → pi/anthropic.claude-opus-4-6-v1 */
+function normalizePiBedrockId(id: string): string {
+  if (id.startsWith('pi/')) {
+    const bare = id.slice(3);
+    const native = toBedrockNativeId(bare);
+    return native !== bare ? `pi/${native}` : id;
+  }
+  return id;
+}
+
+/**
  * Migrate modelDefaults onto connection.defaultModel, then delete modelDefaults.
  * If user had set modelDefaults.anthropic, apply it to the default anthropic connection.
  * Same for openai. Then remove modelDefaults from config.
@@ -1859,6 +2011,10 @@ export function migrateLegacyLlmConnectionsConfig(): void {
     }
     // Phase 1g: Migrate Sonnet 4.5 → Sonnet 4.6 in workspace default models
     migrateWorkspaceSonnet45ToSonnet46(config);
+    // Phase 1h: Normalize Bedrock model IDs (bare Anthropic → Bedrock-native)
+    if (migrateBedrockModelIds(config)) {
+      needsSave = true;
+    }
 
     if (needsSave) {
       saveConfig(config);

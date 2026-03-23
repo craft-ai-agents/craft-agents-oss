@@ -19,6 +19,8 @@ README_FOR_OSS.md
 CODE_OF_CONDUCT.md
 CONTRIBUTING.md
 SECURITY.md
+Dockerfile.server
+.dockerignore
 
 # GitHub Issue Templates
 .github/ISSUE_TEMPLATE/**/*
@@ -156,6 +158,7 @@ scripts/electron-dev.ts
 # Server build + distribution scripts
 scripts/build-server.ts
 scripts/generate-dev-cert.sh
+scripts/docker-smoke-test.sh
 
 # Build common utilities (shared by electron-dev.ts and build-server.ts)
 scripts/build/**/*

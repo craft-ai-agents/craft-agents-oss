@@ -47,9 +47,16 @@ import type { TextContent as PiTextContent } from '@mariozechner/pi-ai';
 // Pre-register the Bedrock provider module so the Pi SDK doesn't attempt a
 // dynamic import of "./amazon-bedrock.js" — which fails in the bundled output
 // because bun collapses everything into a single file.
+// Both @mariozechner/pi-ai AND the nested copy inside @mariozechner/pi-agent-core
+// have separate module-scoped state, so we must register with both.
 import { setBedrockProviderModule } from '@mariozechner/pi-ai';
 import { bedrockProviderModule } from '@mariozechner/pi-ai/bedrock-provider';
 setBedrockProviderModule(bedrockProviderModule);
+
+// Register for the pi-agent-core's nested pi-ai copy (separate module scope in bundle)
+import { setBedrockProviderModule as setBedrockProviderModule2 } from '@mariozechner/pi-agent-core/node_modules/@mariozechner/pi-ai/dist/providers/register-builtins.js';
+import { bedrockProviderModule as bedrockProviderModule2 } from '@mariozechner/pi-agent-core/node_modules/@mariozechner/pi-ai/bedrock-provider';
+setBedrockProviderModule2(bedrockProviderModule2);
 
 // Model resolution (extracted for testability + custom-endpoint precedence)
 import { resolvePiModel } from './model-resolution.ts';
@@ -100,7 +107,7 @@ interface InitMessage {
   branchFromSessionPath?: string;
   branchFromSdkTurnId?: string;
   customEndpoint?: { api: CustomEndpointApi };
-  customModels?: string[];
+  customModels?: Array<string | { id: string; contextWindow?: number }>;
   piAuth?: { provider: string; credential: PiCredential };
 }
 
@@ -350,18 +357,18 @@ function setInterceptorApiHints(model: { api?: string; provider?: string; baseUr
 /**
  * Build a synthetic model definition for a custom endpoint.
  * Uses reasonable defaults for context window and max tokens since we can't
- * query the endpoint for its actual capabilities.
+ * query the endpoint for its actual capabilities. Users can override
+ * contextWindow via model objects in their connection config.
  */
-function buildCustomEndpointModelDef(id: string) {
+function buildCustomEndpointModelDef(id: string, overrides?: { contextWindow?: number }) {
   return {
     id,
     name: id,
     reasoning: false,
     input: ['text'] as ('text' | 'image')[],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    // Sensible defaults — actual limits depend on the model behind the endpoint.
-    // The Pi SDK uses these for context window management and output truncation.
-    contextWindow: 131_072,
+    // Default 128K — users can override via contextWindow in model config.
+    contextWindow: overrides?.contextWindow ?? 131_072,
     maxTokens: 8_192,
   };
 }
@@ -401,25 +408,35 @@ function isLocalhostUrl(url: string): boolean {
 /** Model IDs currently registered under the custom-endpoint provider */
 let customEndpointModelIds: Set<string> = new Set();
 
+interface CustomModelEntry {
+  id: string;
+  contextWindow?: number;
+}
+
 /**
- * Register (or re-register) the custom-endpoint provider with the given model IDs.
+ * Register (or re-register) the custom-endpoint provider with the given models.
  * Note: registerProvider replaces the entire provider, so we maintain a Set of all
  * known model IDs and always pass the full set.
  */
+const customModelOverrides = new Map<string, { contextWindow?: number }>();
+
 function registerCustomEndpointModels(
   registry: PiModelRegistry,
   api: CustomEndpointApi,
   baseUrl: string,
-  modelIds: string[],
+  models: CustomModelEntry[],
 ): void {
-  for (const id of modelIds) customEndpointModelIds.add(id);
+  for (const m of models) {
+    customEndpointModelIds.add(m.id);
+    if (m.contextWindow) customModelOverrides.set(m.id, { contextWindow: m.contextWindow });
+  }
   const allIds = [...customEndpointModelIds];
   registry.registerProvider('custom-endpoint', {
     baseUrl,
     apiKey: resolveCustomEndpointApiKey(),
     api,
     authHeader: true,
-    models: allIds.map(buildCustomEndpointModelDef),
+    models: allIds.map(id => buildCustomEndpointModelDef(id, customModelOverrides.get(id))),
   });
   debugLog(`Registered custom endpoint: ${baseUrl} with ${allIds.length} model(s) [${allIds.join(', ')}], api: ${api}`);
 }
@@ -456,11 +473,14 @@ function createAuthenticatedRegistry(): {
   const hasCustomEndpoint = !!initConfig?.baseUrl?.trim();
   if (hasCustomEndpoint && initConfig?.customEndpoint) {
     const { api } = initConfig.customEndpoint;
-    const modelIds = initConfig.customModels?.length
-      ? initConfig.customModels.map(stripPiPrefix)
-      : [initConfig.model || 'default'].map(stripPiPrefix);
+    const modelEntries: CustomModelEntry[] = (initConfig.customModels?.length
+      ? initConfig.customModels
+      : [initConfig.model || 'default']
+    ).map(m => typeof m === 'string'
+      ? { id: stripPiPrefix(m) }
+      : { id: stripPiPrefix(m.id), contextWindow: m.contextWindow });
     customEndpointModelIds = new Set();  // Reset on fresh registry creation
-    registerCustomEndpointModels(modelRegistry, api, initConfig.baseUrl!.trim(), modelIds);
+    registerCustomEndpointModels(modelRegistry, api, initConfig.baseUrl!.trim(), modelEntries);
   } else if (hasCustomEndpoint && !initConfig?.customEndpoint) {
     debugLog('Custom endpoint without protocol config — models may not resolve. Set customEndpoint.api for proper routing.');
   }
@@ -1182,6 +1202,27 @@ function isContextOverflowErrorMessage(message: string): boolean {
   );
 }
 
+/**
+ * Wait for any in-flight compaction to finish before sending a prompt.
+ * Prevents a race in the Pi SDK where concurrent _runAutoCompaction calls
+ * crash on a shared AbortController (see craft-agents-oss#464).
+ */
+async function waitForCompaction(session: { isCompacting: boolean }, timeoutMs = 60_000): Promise<void> {
+  if (!session.isCompacting) return;
+  debugLog('Waiting for in-flight compaction to finish before prompt...');
+  const start = Date.now();
+  while (session.isCompacting) {
+    if (Date.now() - start > timeoutMs) {
+      debugLog('Compaction wait timed out after 60s, proceeding anyway');
+      break;
+    }
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  if (Date.now() - start < timeoutMs) {
+    debugLog('Compaction finished, proceeding with prompt');
+  }
+}
+
 async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): Promise<void> {
   currentUserMessage = msg.message;
 
@@ -1212,6 +1253,9 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
     }
     unsubscribeEvents = session.subscribe(handleSessionEvent);
 
+    // Wait for any in-flight auto-compaction to avoid race (craft-agents-oss#464)
+    await waitForCompaction(session);
+
     // Fire prompt — use followUp when session is already streaming so the
     // message is queued instead of throwing "Agent is already processing".
     await session.prompt(msg.message, {
@@ -1228,6 +1272,7 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
       try {
         const session = await ensureSession();
         await session.compact();
+        await waitForCompaction(session);
         await session.prompt(msg.message, {
           images: msg.images && msg.images.length > 0 ? msg.images : undefined,
           streamingBehavior: 'followUp',

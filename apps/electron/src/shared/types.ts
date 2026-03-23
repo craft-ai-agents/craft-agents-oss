@@ -522,6 +522,12 @@ export interface ElectronAPI {
   getRichToolDescriptions(): Promise<boolean>
   setRichToolDescriptions(enabled: boolean): Promise<void>
 
+  // Prompt caching & context
+  getExtendedPromptCache(): Promise<boolean>
+  setExtendedPromptCache(enabled: boolean): Promise<void>
+  getEnable1MContext(): Promise<boolean>
+  setEnable1MContext(enabled: boolean): Promise<void>
+
   // Network proxy settings
   getNetworkProxySettings(): Promise<NetworkProxySettings | undefined>
   setNetworkProxySettings(settings: NetworkProxySettings): Promise<void>

@@ -23,6 +23,8 @@ import {
   DEBUG,
   debugLog,
   isRichToolDescriptionsEnabled,
+  isExtendedPromptCacheEnabled,
+  is1MContextEnabled,
   setStoredError,
   toolMetadataStore,
   displayNameSchema,
@@ -235,6 +237,108 @@ export function sanitizeEmptyTextCacheControl(body: Record<string, unknown>): nu
 }
 
 /**
+ * Strip explicit TTL from all ephemeral cache_control blocks.
+ *
+ * When extendedPromptCache is disabled, the SDK may still send ttl: "1h"
+ * natively (via prompt-caching-scope beta). This function removes the ttl
+ * field so blocks fall back to the API default (5 min).
+ */
+function stripPromptCacheTtl(body: Record<string, unknown>): number {
+  let stripped = 0;
+
+  const system = body.system as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(system)) {
+    for (const block of system) {
+      const cc = block.cache_control as Record<string, unknown> | undefined;
+      if (cc?.type === 'ephemeral' && 'ttl' in cc) {
+        delete cc.ttl;
+        stripped++;
+      }
+    }
+  }
+
+  const messages = body.messages as Array<{ content?: unknown }> | undefined;
+  if (messages) {
+    for (const message of messages) {
+      if (!Array.isArray(message.content)) continue;
+      for (const block of message.content as Array<Record<string, unknown>>) {
+        const cc = block.cache_control as Record<string, unknown> | undefined;
+        if (cc?.type === 'ephemeral' && 'ttl' in cc) {
+          delete cc.ttl;
+          stripped++;
+        }
+      }
+    }
+  }
+
+  const topLevel = body.cache_control as Record<string, unknown> | undefined;
+  if (topLevel?.type === 'ephemeral' && 'ttl' in topLevel) {
+    delete topLevel.ttl;
+    stripped++;
+  }
+
+  if (stripped > 0) {
+    debugLog(`[Anthropic] Stripped TTL from ${stripped} cache_control block(s) (extendedPromptCache=false)`);
+  }
+  return stripped;
+}
+
+/**
+ * Upgrade all cache_control blocks from 5m (default) to 1h TTL.
+ * Only active when extendedPromptCache is enabled in config.
+ * When disabled, actively strips any SDK-injected TTL so blocks
+ * fall back to the API default (5 min).
+ *
+ * Walks system prompt blocks, message content blocks, and the top-level
+ * cache_control field (auto-caching mode). Only upgrades blocks with
+ * type: "ephemeral" — leaves other types untouched.
+ *
+ * Exported for focused unit tests.
+ */
+export function upgradePromptCacheTtl(body: Record<string, unknown>): number {
+  if (!isExtendedPromptCacheEnabled()) return stripPromptCacheTtl(body);
+
+  let upgraded = 0;
+
+  // Upgrade system prompt cache_control
+  const system = body.system as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(system)) {
+    for (const block of system) {
+      if (block.cache_control && (block.cache_control as Record<string, unknown>).type === 'ephemeral') {
+        (block.cache_control as Record<string, unknown>).ttl = '1h';
+        upgraded++;
+      }
+    }
+  }
+
+  // Upgrade message content cache_control
+  const messages = body.messages as Array<{ content?: unknown }> | undefined;
+  if (messages) {
+    for (const message of messages) {
+      if (!Array.isArray(message.content)) continue;
+      for (const block of message.content as Array<Record<string, unknown>>) {
+        if (block.cache_control && (block.cache_control as Record<string, unknown>).type === 'ephemeral') {
+          (block.cache_control as Record<string, unknown>).ttl = '1h';
+          upgraded++;
+        }
+      }
+    }
+  }
+
+  // Upgrade top-level cache_control (auto-caching mode)
+  const topLevel = body.cache_control as Record<string, unknown> | undefined;
+  if (topLevel?.type === 'ephemeral') {
+    topLevel.ttl = '1h';
+    upgraded++;
+  }
+
+  if (upgraded > 0) {
+    debugLog(`[Anthropic] Upgraded ${upgraded} cache_control block(s) to 1h TTL`);
+  }
+  return upgraded;
+}
+
+/**
  * Check if fast mode should be enabled for this request.
  * Only activates for Opus 4.6 on Anthropic's API when the feature flag is on.
  */
@@ -260,6 +364,29 @@ function appendBetaHeader(headers: HeadersInitType | undefined, beta: string): R
 
   const existing = headerObj['anthropic-beta'];
   headerObj['anthropic-beta'] = existing ? `${existing},${beta}` : beta;
+
+  return headerObj;
+}
+
+/**
+ * Remove a beta value from the anthropic-beta header, preserving other values.
+ */
+function stripBetaHeader(headers: HeadersInitType | undefined, beta: string): Record<string, string> {
+  let headerObj: Record<string, string> = {};
+  if (headers instanceof Headers) {
+    headers.forEach((value, key) => { headerObj[key] = value; });
+  } else if (Array.isArray(headers)) {
+    for (const [key, value] of headers) {
+      headerObj[key as string] = value as string;
+    }
+  } else if (headers) {
+    headerObj = { ...headers };
+  }
+
+  const existing = headerObj['anthropic-beta'];
+  if (existing) {
+    headerObj['anthropic-beta'] = existing.split(',').filter(b => b.trim() !== beta).join(',');
+  }
 
   return headerObj;
 }
@@ -575,6 +702,18 @@ const anthropicAdapter: ApiAdapter = {
 
   modifyRequest(_url: string, init: RequestInit, body: Record<string, unknown>): { init: RequestInit; body: Record<string, unknown> } {
     sanitizeEmptyTextCacheControl(body);
+    upgradePromptCacheTtl(body);
+
+    // Strip SDK-injected 1M context beta when setting disables it.
+    // The SDK adds this header automatically for Opus/Sonnet 4.6 models,
+    // but the user may want 200K context to conserve usage limits.
+    if (!is1MContextEnabled()) {
+      debugLog('[Anthropic] Stripping context-1m beta header (enable1MContext=false)');
+      init = {
+        ...init,
+        headers: stripBetaHeader(init?.headers as HeadersInitType | undefined, 'context-1m-2025-08-07'),
+      };
+    }
 
     const fastMode = shouldEnableFastMode(body.model);
     if (fastMode) {

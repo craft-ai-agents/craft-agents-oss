@@ -7,30 +7,69 @@ description: Run Craft Agents as a headless server on a remote machine
 
 Craft Agents can run as a headless server without the desktop GUI. This lets you keep long-running sessions alive on a remote machine, access them from multiple clients, and run compute-heavy tasks on a powerful server.
 
-## Quick Start
+## Prerequisites
 
-From the monorepo root:
+Install [Bun](https://bun.sh) (v1.3+):
 
 ```bash
-# Generate a token and start the server
-CRAFT_SERVER_TOKEN=$(openssl rand -hex 32) bun run packages/server/src/index.ts
+curl -fsSL https://bun.sh/install | bash
+```
+
+Clone the repository and install dependencies:
+
+```bash
+git clone https://github.com/lukilabs/craft-agents-oss.git
+cd craft-agents-oss
+bun install
+```
+
+## Setup
+
+### 1. Generate a token
+
+```bash
+export CRAFT_SERVER_TOKEN=$(openssl rand -hex 32)
+echo $CRAFT_SERVER_TOKEN  # Save this — clients need it to connect
+```
+
+### 2. Generate TLS certificates
+
+TLS is required for remote connections. The server token and all session data are transmitted over the WebSocket connection — **never run without TLS on a network**.
+
+For development, generate a self-signed certificate:
+
+```bash
+./scripts/generate-dev-cert.sh
+# Creates certs/cert.pem and certs/key.pem (valid 365 days)
+```
+
+For production, use certificates from a trusted CA (e.g., Let's Encrypt) or place the server behind a reverse proxy (nginx, Caddy) that terminates TLS.
+
+### 3. Start the server
+
+```bash
+CRAFT_SERVER_TOKEN=$CRAFT_SERVER_TOKEN \
+CRAFT_RPC_HOST=0.0.0.0 \
+CRAFT_RPC_TLS_CERT=certs/cert.pem \
+CRAFT_RPC_TLS_KEY=certs/key.pem \
+bun run packages/server/src/index.ts
 ```
 
 The server prints connection details on startup:
 
 ```
-CRAFT_SERVER_URL=ws://203.0.113.5:9100
-CRAFT_SERVER_TOKEN=<generated-token>
+CRAFT_SERVER_URL=wss://0.0.0.0:9100
+CRAFT_SERVER_TOKEN=<your-token>
 ```
 
 ## Connecting Clients
 
 ### Desktop App (Thin Client)
 
-Launch the Electron app in thin-client mode:
+Launch the Electron app in thin-client mode by setting the server URL:
 
 ```bash
-CRAFT_SERVER_URL=wss://203.0.113.5:9100 \
+CRAFT_SERVER_URL=wss://your-server:9100 \
 CRAFT_SERVER_TOKEN=<token> \
 bun run electron:start
 ```
@@ -42,7 +81,7 @@ The desktop app renders the UI but all session logic, tool execution, and LLM ca
 Use the terminal client for scripting and automation:
 
 ```bash
-export CRAFT_SERVER_URL=ws://127.0.0.1:9100
+export CRAFT_SERVER_URL=wss://your-server:9100
 export CRAFT_SERVER_TOKEN=<token>
 
 craft-cli ping
@@ -59,55 +98,117 @@ See the [CLI guide](/server/cli) for the full command reference.
 | `CRAFT_SERVER_TOKEN` | Yes | — | Bearer token for authentication |
 | `CRAFT_RPC_HOST` | No | `127.0.0.1` | Bind address (`0.0.0.0` for remote) |
 | `CRAFT_RPC_PORT` | No | `9100` | Bind port |
-| `CRAFT_RPC_TLS_CERT` | No | — | PEM certificate file (enables `wss://`) |
-| `CRAFT_RPC_TLS_KEY` | No | — | PEM private key file |
+| `CRAFT_RPC_TLS_CERT` | Yes* | — | PEM certificate file (enables `wss://`) |
+| `CRAFT_RPC_TLS_KEY` | Yes* | — | PEM private key file |
 | `CRAFT_RPC_TLS_CA` | No | — | PEM CA chain file (optional) |
 | `CRAFT_DEBUG` | No | `false` | Enable debug logging |
 
-## TLS
+\* Required for remote connections. Can be omitted for `localhost`-only development.
 
-When exposing the server over the network, TLS encrypts the WebSocket connection (`wss://` instead of `ws://`).
+## Running at Startup
 
-### Self-Signed (Development)
+### Linux (systemd)
+
+Create the environment file at `/path/to/craft-agents-oss/.env`:
 
 ```bash
-./scripts/generate-dev-cert.sh
-# Creates certs/cert.pem and certs/key.pem (valid 365 days)
+CRAFT_SERVER_TOKEN=<your-token>
+CRAFT_RPC_HOST=0.0.0.0
+CRAFT_RPC_PORT=9100
+CRAFT_RPC_TLS_CERT=/path/to/cert.pem
+CRAFT_RPC_TLS_KEY=/path/to/key.pem
 ```
 
-```bash
-CRAFT_SERVER_TOKEN=<token> \
-CRAFT_RPC_HOST=0.0.0.0 \
-CRAFT_RPC_TLS_CERT=certs/cert.pem \
-CRAFT_RPC_TLS_KEY=certs/key.pem \
-bun run packages/server/src/index.ts
+Create a service file at `/etc/systemd/system/craft-agents.service`:
+
+```ini
+[Unit]
+Description=Craft Agents Server
+After=network.target
+
+[Service]
+Type=simple
+User=<your-user>
+WorkingDirectory=/path/to/craft-agents-oss
+EnvironmentFile=/path/to/craft-agents-oss/.env
+ExecStart=/home/<your-user>/.bun/bin/bun run packages/server/src/index.ts
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-### Production
-
-Use certificates from a trusted CA (e.g., Let's Encrypt) or place the server behind a reverse proxy (nginx, Caddy) that terminates TLS.
-
-## Docker
+Enable and start:
 
 ```bash
-docker run -d \
-  -p 9100:9100 \
-  -e CRAFT_SERVER_TOKEN=<token> \
-  -e CRAFT_RPC_HOST=0.0.0.0 \
-  -v craft-data:/root/.craft-agent \
-  craft-agents-server
+sudo systemctl daemon-reload
+sudo systemctl enable craft-agents
+sudo systemctl start craft-agents
+
+# Check status
+sudo systemctl status craft-agents
+
+# View logs
+journalctl -u craft-agents -f
 ```
 
-With TLS:
+### macOS (launchd)
+
+Create a plist at `~/Library/LaunchAgents/com.craft.agents-server.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.craft.agents-server</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/YOU/.bun/bin/bun</string>
+    <string>run</string>
+    <string>packages/server/src/index.ts</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/path/to/craft-agents-oss</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CRAFT_SERVER_TOKEN</key>
+    <string>YOUR_TOKEN</string>
+    <key>CRAFT_RPC_HOST</key>
+    <string>0.0.0.0</string>
+    <key>CRAFT_RPC_PORT</key>
+    <string>9100</string>
+    <key>CRAFT_RPC_TLS_CERT</key>
+    <string>/path/to/cert.pem</string>
+    <key>CRAFT_RPC_TLS_KEY</key>
+    <string>/path/to/key.pem</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/craft-agents.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/craft-agents.log</string>
+</dict>
+</plist>
+```
+
+Load and start:
 
 ```bash
-docker run -d \
-  -p 9100:9100 \
-  -e CRAFT_SERVER_TOKEN=<token> \
-  -e CRAFT_RPC_HOST=0.0.0.0 \
-  -e CRAFT_RPC_TLS_CERT=/certs/cert.pem \
-  -e CRAFT_RPC_TLS_KEY=/certs/key.pem \
-  -v ./certs:/certs:ro \
-  -v craft-data:/root/.craft-agent \
-  craft-agents-server
+launchctl load ~/Library/LaunchAgents/com.craft.agents-server.plist
+
+# Check status
+launchctl list | grep craft
+
+# View logs
+tail -f /tmp/craft-agents.log
+
+# Stop and unload
+launchctl unload ~/Library/LaunchAgents/com.craft.agents-server.plist
 ```

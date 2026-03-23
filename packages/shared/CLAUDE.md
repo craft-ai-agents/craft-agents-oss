@@ -27,6 +27,7 @@ cd packages/shared && bun run tsc --noEmit
 
 ## Notes
 - `ClaudeAgent` is the primary class in `src/agent/claude-agent.ts`.
+- Claude SDK subprocess env is sanitized to strip Claude-specific Bedrock routing vars (`CLAUDE_CODE_USE_BEDROCK`, `AWS_BEARER_TOKEN_BEDROCK`, `ANTHROPIC_BEDROCK_BASE_URL`). Pi Bedrock uses its own AWS env path instead.
 - Backward alias export (`CraftAgent`) exists for compatibility.
 - Session lifecycle distinguishes **hard aborts** from **UI handoff interrupts**:
   - use hard aborts for true cancellation/teardown (`UserStop`, redirect fallback)

@@ -18,7 +18,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getDefaultLlmConnection, getDefaultThinkingLevel } from '@craft-agent/shared/config'
+import { getLlmConnection, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
@@ -1508,10 +1508,8 @@ export class SessionManager implements ISessionManager {
       }
       const connection = slug ? getLlmConnection(slug) : null
 
-      // Clear all auth env vars first to ensure clean state
-      delete process.env.ANTHROPIC_API_KEY
-      delete process.env.CLAUDE_CODE_OAUTH_TOKEN
-      delete process.env.ANTHROPIC_BASE_URL
+      // Restore managed auth env vars to their baseline before applying this connection.
+      resetManagedAnthropicAuthEnvVars()
 
       if (!connection) {
         sessionLog.error(`No LLM connection found for slug: ${slug}`)
@@ -2650,6 +2648,17 @@ export class SessionManager implements ISessionManager {
         }))
       }
 
+      const getBranchFallbackMessages = () => {
+        if (!managed.branchFromMessageId) return []
+        return managed.messages
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .filter(m => !m.isIntermediate)
+          .map(m => ({
+            type: m.role as 'user' | 'assistant',
+            content: m.content,
+          }))
+      }
+
       const getBranchSeedMessages = () => {
         if (managed.branchContextStrategy !== 'seeded-fresh-session') return []
         if (managed.branchSeedApplied) return []
@@ -2689,6 +2698,7 @@ export class SessionManager implements ISessionManager {
         onSdkSessionIdUpdate,
         onSdkSessionIdCleared,
         getRecoveryMessages,
+        getBranchFallbackMessages,
         getBranchSeedMessages,
         markBranchSeedApplied,
         mcpPool: managed.mcpPool,
@@ -2699,6 +2709,7 @@ export class SessionManager implements ISessionManager {
         automationSystem: this.automationSystems.get(managed.workspace.rootPath),
         systemPromptPreset: managed.systemPromptPreset,
         debugMode: _platform?.isDebugMode ? { enabled: true, logFilePath: _platform.getLogFilePath?.() } : undefined,
+        enable1MContext: await (async () => { const { getEnable1MContext } = await import('@craft-agent/shared/config/storage'); return getEnable1MContext(); })(),
         // Image resize callback — prevents oversized images from entering conversation history
         onImageResize: async (filePath: string, maxSizeBytes: number): Promise<string | null> => {
           try {

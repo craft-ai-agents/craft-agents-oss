@@ -235,7 +235,10 @@ export const piDriver: ProviderDriver = {
     piAuthProvider: providerOptions?.piAuthProvider || context.connection?.piAuthProvider,
     baseUrl: context.connection?.baseUrl,
     customEndpoint: context.connection?.customEndpoint,
-    customModels: context.connection?.models?.map(m => typeof m === 'string' ? m : m.id),
+    customModels: context.connection?.models?.map(m => {
+      if (typeof m === 'string') return m;
+      return m.contextWindow ? { id: m.id, contextWindow: m.contextWindow } : m.id;
+    }),
   }),
   fetchModels: async ({ connection, credentials, timeoutMs }) => {
     // Copilot OAuth: fetch models directly from the Copilot API via HTTP.

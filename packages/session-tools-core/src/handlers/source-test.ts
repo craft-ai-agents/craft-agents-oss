@@ -710,6 +710,7 @@ async function testMcpConnection(
         }
         const result = await ctx.validateMcpConnection({
           url: source.mcp.url,
+          transport: source.mcp.transport,
           authType: source.mcp.authType,
           headers,
         });

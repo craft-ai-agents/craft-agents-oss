@@ -13,6 +13,8 @@ import { debug } from '../utils/debug.ts';
 import { getDefaultSummarizationModel } from '../config/models.ts';
 import { parseError, type AgentError } from '../agent/errors.ts';
 import { getLastApiError } from '../interceptor-common.ts';
+import { normalizeMcpUrl } from '../sources/server-builder.ts';
+import type { McpTransport } from '../sources/types.ts';
 
 export interface InvalidProperty {
   toolName: string;
@@ -117,6 +119,8 @@ function findInvalidProperties(
 export interface McpValidationConfig {
   /** MCP server URL */
   mcpUrl: string;
+  /** Transport type ('http' or 'sse'). Defaults to 'http'. */
+  mcpTransport?: McpTransport;
   /** Custom headers for MCP requests (merged before auth headers) */
   mcpHeaders?: Record<string, string>;
   /** Access token for MCP server (OAuth or bearer) */
@@ -156,11 +160,8 @@ export async function validateMcpConnection(
       delete process.env.ANTHROPIC_API_KEY;
     }
 
-    // Normalize MCP URL (ensure /mcp suffix)
-    let mcpUrl = config.mcpUrl;
-    if (!mcpUrl.endsWith('/mcp')) {
-      mcpUrl = mcpUrl.replace(/\/$/, '') + '/mcp';
-    }
+    const mcpUrl = normalizeMcpUrl(config.mcpUrl);
+    const mcpType = config.mcpTransport === 'sse' ? 'sse' as const : 'http' as const;
 
     // Build MCP server config (custom headers first, auth headers override)
     const headers = {
@@ -169,7 +170,7 @@ export async function validateMcpConnection(
     };
     const mcpServers = {
       validation_target: {
-        type: 'http' as const,
+        type: mcpType,
         url: mcpUrl,
         ...(Object.keys(headers).length > 0 ? { headers } : {}),
       },
