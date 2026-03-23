@@ -69,8 +69,9 @@ export interface StoredConfig {
   keepAwakeWhileRunning?: boolean;  // Prevent screen sleep while sessions are running (default: false)
   // Tool metadata
   richToolDescriptions?: boolean;  // Add intent/action metadata to all tool calls (default: true)
-  // Prompt caching
+  // Prompt caching & context
   extendedPromptCache?: boolean;  // Use 1h prompt cache TTL instead of 5m (default: false)
+  enable1MContext?: boolean;  // Enable 1M context window for supported models (default: true)
   // Network proxy
   networkProxy?: import('./types.ts').NetworkProxySettings;
   // Windows: path to Git Bash (bash.exe) for the SDK subprocess
@@ -398,6 +399,26 @@ export function setExtendedPromptCache(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.extendedPromptCache = enabled;
+  saveConfig(config);
+}
+
+/**
+ * Get whether 1M context window is enabled.
+ * When disabled, models use 200K context and the interceptor strips the context-1m beta header.
+ * Defaults to true if not set.
+ */
+export function getEnable1MContext(): boolean {
+  const config = loadStoredConfig();
+  return config?.enable1MContext !== false;
+}
+
+/**
+ * Set whether 1M context window is enabled.
+ */
+export function setEnable1MContext(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.enable1MContext = enabled;
   saveConfig(config);
 }
 

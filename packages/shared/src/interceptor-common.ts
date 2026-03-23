@@ -138,6 +138,16 @@ export function isExtendedPromptCacheEnabled(): boolean {
   return config?.extendedPromptCache === true;
 }
 
+/**
+ * Check if 1M context window is enabled.
+ * When disabled, the interceptor strips the context-1m beta header.
+ * Defaults to true if config is unreadable or field is not set.
+ */
+export function is1MContextEnabled(): boolean {
+  const config = getInterceptorConfig();
+  return config?.enable1MContext !== false;
+}
+
 // ============================================================================
 // LAST API ERROR
 // ============================================================================

@@ -605,13 +605,8 @@ export default function AiSettingsPage() {
         const extendedCache = await window.electronAPI.getExtendedPromptCache()
         setExtendedPromptCache(extendedCache)
 
-        // Load workspace-level 1M context setting for the active workspace
-        if (activeWorkspaceId) {
-          const wsSettings = await window.electronAPI.getWorkspaceSettings(activeWorkspaceId)
-          if (wsSettings) {
-            setEnable1MContext(wsSettings.enable1MContext ?? true)
-          }
-        }
+        const enable1M = await window.electronAPI.getEnable1MContext()
+        setEnable1MContext(enable1M)
 
         // Check credential health for potential issues (corruption, machine migration)
         const health = await window.electronAPI.getCredentialHealth()
@@ -882,10 +877,8 @@ export default function AiSettingsPage() {
 
   const handleEnable1MContextChange = useCallback(async (enabled: boolean) => {
     setEnable1MContext(enabled)
-    if (activeWorkspaceId) {
-      await window.electronAPI?.updateWorkspaceSetting(activeWorkspaceId, 'enable1MContext', enabled)
-    }
-  }, [activeWorkspaceId])
+    await window.electronAPI?.setEnable1MContext(enabled)
+  }, [])
 
   // Refresh callback for workspace cards
   const handleWorkspaceSettingsChange = useCallback(() => {

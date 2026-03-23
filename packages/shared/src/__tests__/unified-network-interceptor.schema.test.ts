@@ -161,7 +161,7 @@ describe('upgradePromptCacheTtl', () => {
     _resetConfigCacheForTesting();
   }
 
-  it('returns 0 when extendedPromptCache is disabled', () => {
+  it('leaves blocks without ttl untouched when disabled', () => {
     disableExtendedCache();
     const body = {
       messages: [{
@@ -172,10 +172,57 @@ describe('upgradePromptCacheTtl', () => {
       }],
     };
 
-    const upgraded = upgradePromptCacheTtl(body);
+    const result = upgradePromptCacheTtl(body);
 
-    expect(upgraded).toBe(0);
+    expect(result).toBe(0);
     expect((body.messages[0]!.content as any[])[0].cache_control).toEqual({ type: 'ephemeral' });
+  });
+
+  it('strips ttl from message content when disabled', () => {
+    disableExtendedCache();
+    const body = {
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'hello', cache_control: { type: 'ephemeral', ttl: '1h' } },
+          { type: 'text', text: 'world', cache_control: { type: 'ephemeral', ttl: '1h' } },
+        ],
+      }],
+    };
+
+    const stripped = upgradePromptCacheTtl(body);
+
+    expect(stripped).toBe(2);
+    expect((body.messages[0]!.content as any[])[0].cache_control).toEqual({ type: 'ephemeral' });
+    expect((body.messages[0]!.content as any[])[1].cache_control).toEqual({ type: 'ephemeral' });
+  });
+
+  it('strips ttl from system prompt when disabled', () => {
+    disableExtendedCache();
+    const body = {
+      system: [
+        { type: 'text', text: 'You are helpful', cache_control: { type: 'ephemeral', ttl: '1h' } },
+      ],
+      messages: [],
+    };
+
+    const stripped = upgradePromptCacheTtl(body);
+
+    expect(stripped).toBe(1);
+    expect((body.system as any[])[0].cache_control).toEqual({ type: 'ephemeral' });
+  });
+
+  it('strips ttl from top-level cache_control when disabled', () => {
+    disableExtendedCache();
+    const body = {
+      cache_control: { type: 'ephemeral', ttl: '1h' },
+      messages: [],
+    };
+
+    const stripped = upgradePromptCacheTtl(body);
+
+    expect(stripped).toBe(1);
+    expect(body.cache_control as any).toEqual({ type: 'ephemeral' });
   });
 
   it('upgrades message content cache_control to 1h when enabled', () => {

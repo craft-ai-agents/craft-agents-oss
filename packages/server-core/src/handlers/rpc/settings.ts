@@ -107,7 +107,6 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       localMcpEnabled: config?.localMcpServers?.enabled ?? true,
       defaultLlmConnection: config?.defaults?.defaultLlmConnection,
       enabledSourceSlugs: config?.defaults?.enabledSourceSlugs ?? [],
-      enable1MContext: config?.defaults?.enable1MContext ?? true,
     }
   })
 
@@ -119,7 +118,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       : value
 
     // Validate key is a known workspace setting
-    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled', 'defaultLlmConnection', 'enable1MContext']
+    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled', 'defaultLlmConnection']
     if (!validKeys.includes(key)) {
       throw new Error(`Invalid workspace setting key: ${key}. Valid keys: ${validKeys.join(', ')}`)
     }
@@ -293,6 +292,18 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
   server.handle(RPC_CHANNELS.caching.SET_EXTENDED_PROMPT_CACHE, async (_ctx, enabled: boolean) => {
     const { setExtendedPromptCache } = await import('@craft-agent/shared/config/storage')
     setExtendedPromptCache(enabled)
+  })
+
+  // Get 1M context window setting
+  server.handle(RPC_CHANNELS.caching.GET_ENABLE_1M_CONTEXT, async () => {
+    const { getEnable1MContext } = await import('@craft-agent/shared/config/storage')
+    return getEnable1MContext()
+  })
+
+  // Set 1M context window setting
+  server.handle(RPC_CHANNELS.caching.SET_ENABLE_1M_CONTEXT, async (_ctx, enabled: boolean) => {
+    const { setEnable1MContext } = await import('@craft-agent/shared/config/storage')
+    setEnable1MContext(enabled)
   })
 
   // ============================================================
