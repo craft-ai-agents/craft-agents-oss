@@ -91,6 +91,8 @@
     min-width: 0 !important;
     max-width: 100% !important;
     flex: 1 1 auto !important;
+    padding-top: 40px;
+    box-sizing: border-box;
   }
 
   html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll > div > :nth-child(3) > div {
@@ -99,11 +101,6 @@
 
   html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll > div > :nth-child(n + 4) {
     display: none !important;
-  }
-
-  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll > div > :nth-child(3) {
-    padding-top: 40px;
-    box-sizing: border-box;
   }
 
   html[data-webui-mobile="true"] .webui-mobile-nav-button {
@@ -126,5 +123,77 @@
     line-height: 1;
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
+  }
+
+  /* Mobile settings/detail rows: stack desktop two-column rows vertically and allow controls to shrink. */
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll .rounded-xl.bg-background.shadow-minimal.overflow-hidden > .flex.items-center.justify-between,
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll .rounded-xl.bg-background.shadow-minimal.overflow-hidden > button.flex.items-center.justify-between,
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll .rounded-xl.bg-background.shadow-minimal.overflow-hidden > .w-full.flex.items-center.justify-between,
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll .rounded-xl.bg-background.shadow-minimal.overflow-hidden > button.w-full.flex.items-center.justify-between {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll .rounded-xl.bg-background.shadow-minimal.overflow-hidden > .flex.items-center.justify-between > .ml-4.shrink-0,
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll .rounded-xl.bg-background.shadow-minimal.overflow-hidden > button.flex.items-center.justify-between > .ml-4.shrink-0,
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll .rounded-xl.bg-background.shadow-minimal.overflow-hidden > .w-full.flex.items-center.justify-between > .ml-4.shrink-0,
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll .rounded-xl.bg-background.shadow-minimal.overflow-hidden > button.w-full.flex.items-center.justify-between > .ml-4.shrink-0,
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll .rounded-xl.bg-background.shadow-minimal.overflow-hidden > .flex.items-center.justify-between > .flex.items-center.gap-3.ml-4.shrink-0,
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll .rounded-xl.bg-background.shadow-minimal.overflow-hidden > button.flex.items-center.justify-between > .flex.items-center.gap-3.ml-4.shrink-0,
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll .rounded-xl.bg-background.shadow-minimal.overflow-hidden > .w-full.flex.items-center.justify-between > .flex.items-center.gap-3.ml-4.shrink-0,
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll .rounded-xl.bg-background.shadow-minimal.overflow-hidden > button.w-full.flex.items-center.justify-between > .flex.items-center.gap-3.ml-4.shrink-0 {
+    width: 100% !important;
+    min-width: 0 !important;
+    margin-left: 0 !important;
+    flex-wrap: wrap !important;
+    justify-content: flex-start !important;
+  }
+
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll [data-slot="select-trigger"],
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll .w-\[180px\].bg-muted\/50,
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll .w-\[200px\].bg-muted\/50 {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll [data-slot="select-trigger"] > span,
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll [data-slot="dropdown-menu-trigger"] > span,
+  html[data-webui-mobile="true"][data-webui-mobile-view="content"] .panel-scroll .truncate {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  html[data-webui-mobile="true"] [data-slot="dropdown-menu-content"],
+  html[data-webui-mobile="true"] [data-slot="dropdown-menu-sub-content"],
+  html[data-webui-mobile="true"] [data-slot="select-content"] {
+    width: min(320px, calc(100vw - 24px)) !important;
+    max-width: calc(100vw - 24px) !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+  }
+
+  html[data-webui-mobile="true"] [data-slot="dropdown-menu-sub-content"] {
+    left: auto !important;
+    right: 12px !important;
+  }
+
+  html[data-webui-mobile="true"] [data-slot="dropdown-menu-item"],
+  html[data-webui-mobile="true"] [data-slot="dropdown-menu-sub-trigger"],
+  html[data-webui-mobile="true"] [data-slot="select-item"] {
+    min-width: 0 !important;
+  }
+
+  html[data-webui-mobile="true"] [data-slot="dropdown-menu-item"] > span,
+  html[data-webui-mobile="true"] [data-slot="dropdown-menu-sub-trigger"] > span,
+  html[data-webui-mobile="true"] [data-slot="dropdown-menu-shortcut"],
+  html[data-webui-mobile="true"] [data-slot="select-item"] {
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
   }
 }
