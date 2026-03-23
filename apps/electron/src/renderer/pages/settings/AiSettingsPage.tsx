@@ -994,7 +994,7 @@ export default function AiSettingsPage() {
                 <SettingsCard>
                   <SettingsToggle
                     label="Extended prompt cache (1 hour)"
-                    description="Cache prompts for 1 hour instead of 5 minutes. Reduces cost for long sessions but increases cache write cost. Recommended for sessions longer than 10 minutes."
+                    description="Cache prompts for 1 hour instead of 5 minutes. Only applies to Claude models via Anthropic API. Reduces cost for long sessions but increases cache write cost."
                     checked={extendedPromptCache}
                     onCheckedChange={handleExtendedPromptCacheChange}
                   />
