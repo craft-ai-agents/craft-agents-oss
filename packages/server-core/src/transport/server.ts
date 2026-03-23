@@ -8,6 +8,7 @@
  */
 
 import { WebSocketServer, type WebSocket } from 'ws'
+import { createServer as createHttpServer, type Server as HttpServer } from 'node:http'
 import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https'
 import { randomUUID } from 'node:crypto'
 import {
@@ -101,6 +102,14 @@ export interface WsRpcServerOptions {
   onClientConnected?: (info: { clientId: string; webContentsId: number | null; workspaceId: string | null }) => void
   /** Called when a client disconnects. */
   onClientDisconnected?: (clientId: string) => void
+  /**
+   * Optional HTTP request handler for non-WebSocket requests.
+   * When provided, regular HTTP requests to the server's port are
+   * routed here instead of being rejected. This enables serving the
+   * WebUI from the same port as the WebSocket server.
+   * Must use Node.js HTTP callback signature (IncomingMessage, ServerResponse).
+   */
+  httpHandler?: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void
 }
 
 const transportLog = createLogger('ws-rpc-server')
@@ -111,6 +120,7 @@ const transportLog = createLogger('ws-rpc-server')
 
 export class WsRpcServer implements RpcServer {
   private wss: WebSocketServer | null = null
+  private httpServer: HttpServer | null = null
   private httpsServer: HttpsServer | null = null
   private clients = new Map<string, ClientConnection>()
   private handlers = new Map<string, HandlerFn>()
@@ -133,6 +143,7 @@ export class WsRpcServer implements RpcServer {
   private readonly maxClients: number
   private readonly onClientConnected: WsRpcServerOptions['onClientConnected']
   private readonly onClientDisconnected: WsRpcServerOptions['onClientDisconnected']
+  private readonly httpHandler: WsRpcServerOptions['httpHandler']
 
   constructor(opts?: WsRpcServerOptions) {
     this.host = opts?.host ?? '127.0.0.1'
@@ -146,6 +157,7 @@ export class WsRpcServer implements RpcServer {
     this.maxClients = opts?.maxClients ?? 50
     this.onClientConnected = opts?.onClientConnected
     this.onClientDisconnected = opts?.onClientDisconnected
+    this.httpHandler = opts?.httpHandler
   }
 
   /** The actual port the server is listening on (available after listen()). */
@@ -236,14 +248,19 @@ export class WsRpcServer implements RpcServer {
   async listen(): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.tlsOptions) {
-        // TLS mode: create HTTPS server, attach WebSocketServer to it
+        // TLS mode: create HTTPS server, attach WebSocketServer to it.
+        // When httpHandler is set, regular HTTP requests are served by it
+        // (e.g. WebUI), while ws intercepts WebSocket upgrade requests.
         this._protocol = 'wss'
-        this.httpsServer = createHttpsServer({
-          cert: this.tlsOptions.cert,
-          key: this.tlsOptions.key,
-          ca: this.tlsOptions.ca,
-          passphrase: this.tlsOptions.passphrase,
-        })
+        this.httpsServer = createHttpsServer(
+          {
+            cert: this.tlsOptions.cert,
+            key: this.tlsOptions.key,
+            ca: this.tlsOptions.ca,
+            passphrase: this.tlsOptions.passphrase,
+          },
+          this.httpHandler,
+        )
 
         this.wss = new WebSocketServer({ server: this.httpsServer })
 
@@ -257,8 +274,24 @@ export class WsRpcServer implements RpcServer {
           this.startHeartbeat()
           resolve()
         })
+      } else if (this.httpHandler) {
+        // Plain WS + HTTP handler: create an HTTP server for both.
+        this._protocol = 'ws'
+        this.httpServer = createHttpServer(this.httpHandler)
+        this.wss = new WebSocketServer({ server: this.httpServer })
+
+        this.httpServer.on('error', (err) => reject(err))
+
+        this.httpServer.listen(this.requestedPort, this.host, () => {
+          const addr = this.httpServer!.address()
+          if (typeof addr === 'object' && addr) {
+            this._port = addr.port
+          }
+          this.startHeartbeat()
+          resolve()
+        })
       } else {
-        // Plain WS mode (unchanged)
+        // Plain WS mode, no HTTP handler
         this._protocol = 'ws'
         this.wss = new WebSocketServer({
           host: this.host,
@@ -309,6 +342,8 @@ export class WsRpcServer implements RpcServer {
     this.disconnectedClients.clear()
     this.wss?.close()
     this.wss = null
+    this.httpServer?.close()
+    this.httpServer = null
     this.httpsServer?.close()
     this.httpsServer = null
   }

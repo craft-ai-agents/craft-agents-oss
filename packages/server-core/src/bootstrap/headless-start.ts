@@ -41,6 +41,11 @@ export interface ServerBootstrapOptions<TSessionManager, THandlerDeps> {
   tls?: WsRpcTlsOptions
   /** Cookie-based session validator for web UI auth on WebSocket upgrade. */
   validateSessionCookie?: (cookieHeader: string | null) => Promise<boolean>
+  /**
+   * Optional HTTP request handler for non-WebSocket requests on the RPC port.
+   * When provided, the WsRpcServer serves HTTP (e.g. WebUI) on the same port.
+   */
+  httpHandler?: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void
 }
 
 export interface ServerHandlerContext {
@@ -225,6 +230,7 @@ export async function bootstrapServer<TSessionManager, THandlerDeps>(
     serverId: options.serverId ?? 'headless',
     serverVersion: options.serverVersion,
     tls: options.tls,
+    httpHandler: options.httpHandler,
     onClientConnected: options.onClientConnected,
     onClientDisconnected: (clientId) => {
       options.cleanupClientResources?.(clientId)

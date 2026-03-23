@@ -450,18 +450,21 @@ export default function App() {
 
   // Handle onboarding completion
   const handleOnboardingComplete = useCallback(async () => {
-    // Reload workspaces after onboarding
-    const ws = await window.electronAPI.getWorkspaces()
-    if (ws.length > 0) {
-      // Switch to workspace in-place (no window close/reopen)
-      await window.electronAPI.switchWorkspace(ws[0].id)
-      setWindowWorkspaceId(ws[0].id)
-      setWorkspaces(ws)
-      setAppState('ready')
-      return
+    try {
+      // Reload workspaces after onboarding
+      const ws = await window.electronAPI.getWorkspaces()
+      if (ws.length > 0) {
+        // Switch to workspace in-place (no window close/reopen)
+        await window.electronAPI.switchWorkspace(ws[0].id)
+        setWindowWorkspaceId(ws[0].id)
+        setWorkspaces(ws)
+      } else {
+        setWorkspaces(ws)
+      }
+    } catch (error) {
+      console.error('[App] Failed to load workspaces after onboarding:', error)
+      // Still transition to ready — the app can recover via reconnect
     }
-    // Fallback: no workspaces (shouldn't happen after onboarding)
-    setWorkspaces(ws)
     setAppState('ready')
   }, [])
 

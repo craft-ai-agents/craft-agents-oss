@@ -16,12 +16,11 @@ From repo root:
 bun run webui:dev          # Vite dev server on :5175
 bun run webui:build        # Production build → apps/webui/dist/
 bun run webui:typecheck    # TypeScript check
-bun run server:dev:webui   # Build webui + start headless server with web UI on :3100
+bun run server:dev:webui   # Build webui + start headless server with web UI
 ```
 
 ## Environment variables (on the headless server)
-- `CRAFT_WEBUI_DIR` — path to built web UI dist/ (enables web UI)
-- `CRAFT_WEBUI_PORT` — HTTP port for web UI (default: 3100)
+- `CRAFT_WEBUI_DIR` — path to built web UI dist/ (enables web UI on the RPC port)
 - `CRAFT_WEBUI_PASSWORD` — optional shorter password for web login (falls back to `CRAFT_SERVER_TOKEN`)
 - `CRAFT_WEBUI_SECURE_COOKIE` — optional `true` / `false` override for the session cookie `Secure` flag
 - `CRAFT_WEBUI_WS_URL` — optional browser-facing `ws://` or `wss://` URL returned by `/api/config` (useful behind proxies)

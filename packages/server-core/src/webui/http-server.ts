@@ -1,11 +1,13 @@
 /**
- * Web UI HTTP server.
+ * Web UI HTTP handler and standalone server.
  *
- * Extends the existing health endpoint with:
- * - Static login page (no auth)
- * - POST /api/auth (verify password, set session cookie)
- * - POST /api/auth/logout (clear session cookie)
- * - SPA static file serving (requires valid session cookie)
+ * The core logic lives in `createWebuiHandler()` which returns a web-standard
+ * fetch handler `(Request) => Promise<Response>`. This handler can be:
+ *
+ * 1. **Embedded** — attached to the WsRpcServer's HTTPS server via the
+ *    node-adapter so that HTTP and WSS share a single port.
+ * 2. **Standalone** — wrapped in `Bun.serve()` via `startWebuiHttpServer()`
+ *    for separate-port deployments or development.
  */
 
 import { join, extname } from 'node:path'
@@ -103,12 +105,10 @@ export function resolveWebSocketUrl(
 }
 
 // ---------------------------------------------------------------------------
-// Options
+// Handler options (shared between embedded and standalone modes)
 // ---------------------------------------------------------------------------
 
-export interface WebuiHttpServerOptions {
-  /** Port to bind on. Use 0 for an ephemeral port in tests. */
-  port: number
+export interface WebuiHandlerOptions {
   /** Path to built web UI dist/ directory. */
   webuiDir: string
   /** Secret used to sign JWTs — typically CRAFT_SERVER_TOKEN. */
@@ -130,14 +130,24 @@ export interface WebuiHttpServerOptions {
 }
 
 // ---------------------------------------------------------------------------
-// Server
+// Handler factory — the core request handler
 // ---------------------------------------------------------------------------
 
-export async function startWebuiHttpServer(
-  options: WebuiHttpServerOptions,
-): Promise<{ port: number, stop: () => void }> {
+export interface WebuiHandler {
+  /** Web-standard fetch handler. */
+  fetch: (req: Request) => Promise<Response>
+  /** Call on shutdown to release timers. */
+  dispose: () => void
+}
+
+/**
+ * Create a web-standard fetch handler for the WebUI.
+ *
+ * This handler can be used directly with `Bun.serve({ fetch })`,
+ * or adapted for Node's HTTP server via `nodeHttpAdapter()`.
+ */
+export function createWebuiHandler(options: WebuiHandlerOptions): WebuiHandler {
   const {
-    port,
     webuiDir,
     secret,
     password,
@@ -152,155 +162,171 @@ export async function startWebuiHttpServer(
   const rateLimiter = new RateLimiter(5, 60_000)
   const cleanupTimer = setInterval(() => rateLimiter.cleanup(), 120_000)
 
-  // The password used for the login form — separate web password or the server token
   const loginPassword = password || secret
 
-  const server = Bun.serve({
-    port,
-    async fetch(req: Request): Promise<Response> {
-      const url = new URL(req.url)
-      const path = url.pathname
-      const useSecureCookies = shouldUseSecureCookies(req, secureCookies)
+  async function fetch(req: Request): Promise<Response> {
+    const url = new URL(req.url)
+    const path = url.pathname
+    const useSecureCookies = shouldUseSecureCookies(req, secureCookies)
 
-      // ── Health endpoint (no auth) ──
-      if (path === '/health') {
-        const health = getHealthCheck()
-        return Response.json(health, {
-          status: health.status === 'ok' ? 200 : 503,
-        })
-      }
+    // ── Health endpoint (no auth) ──
+    if (path === '/health') {
+      const health = getHealthCheck()
+      return Response.json(health, {
+        status: health.status === 'ok' ? 200 : 503,
+      })
+    }
 
-      // ── Login page (no auth) ──
-      if (path === '/login' || path === '/login/') {
-        const loginFile = Bun.file(join(webuiDir, 'login.html'))
-        if (await loginFile.exists()) {
-          return new Response(loginFile, {
-            headers: { 'Content-Type': 'text/html; charset=utf-8' },
-          })
-        }
-        return new Response('Login page not found', { status: 404 })
-      }
-
-      // ── Static assets that login page needs (no auth) ──
-      // Allow favicon and any /login-assets/ path without auth
-      if (path === '/favicon.ico' || path.startsWith('/login-assets/')) {
-        const file = Bun.file(join(webuiDir, path))
-        if (await file.exists()) {
-          return new Response(file, {
-            headers: { 'Content-Type': getMimeType(path) },
-          })
-        }
-        return new Response('Not Found', { status: 404 })
-      }
-
-      // ── Auth endpoint ──
-      if (path === '/api/auth' && req.method === 'POST') {
-        const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-          ?? req.headers.get('x-real-ip')
-          ?? 'unknown'
-
-        if (!rateLimiter.check(ip)) {
-          logger.warn(`[webui] Rate limited auth attempt from ${ip}`)
-          return Response.json(
-            { error: 'Too many attempts. Try again later.' },
-            { status: 429 },
-          )
-        }
-
-        let body: { password?: string }
-        try {
-          body = await req.json() as { password?: string }
-        } catch {
-          return Response.json({ error: 'Invalid request body' }, { status: 400 })
-        }
-
-        if (!body.password || typeof body.password !== 'string') {
-          return Response.json({ error: 'Password is required' }, { status: 400 })
-        }
-
-        if (!verifyPassword(body.password, loginPassword)) {
-          logger.warn(`[webui] Failed auth attempt from ${ip}`)
-          return Response.json({ error: 'Invalid credentials' }, { status: 401 })
-        }
-
-        const jwt = await createSessionToken(secret)
-        logger.info(`[webui] Successful auth from ${ip}`)
-
-        return Response.json({ ok: true }, {
-          status: 200,
-          headers: {
-            'Set-Cookie': buildSessionCookie(jwt, useSecureCookies),
-          },
-        })
-      }
-
-      // ── Logout endpoint ──
-      if (path === '/api/auth/logout' && req.method === 'POST') {
-        return new Response(null, {
-          status: 204,
-          headers: {
-            'Set-Cookie': buildLogoutCookie(useSecureCookies),
-          },
-        })
-      }
-
-      // ── Config endpoint (requires session cookie) ──
-      // Returns WS URL and other client configuration
-      if (path === '/api/config' && req.method === 'GET') {
-        const configSession = await validateSession(req.headers.get('cookie'), secret)
-        if (!configSession) {
-          return Response.json({ error: 'Unauthorized' }, { status: 401 })
-        }
-        return Response.json({
-          wsUrl: resolveWebSocketUrl(req, { publicWsUrl, wsProtocol, wsPort }),
-        })
-      }
-
-      // ── Everything below requires a valid session cookie ──
-      const cookieHeader = req.headers.get('cookie')
-      const session = await validateSession(cookieHeader, secret)
-
-      if (!session) {
-        // For HTML requests (browser navigation), redirect to login
-        const accept = req.headers.get('accept') ?? ''
-        if (accept.includes('text/html') || path === '/' || path === '') {
-          return Response.redirect('/login', 302)
-        }
-        // For API/asset requests, return 401
-        return Response.json({ error: 'Unauthorized' }, { status: 401 })
-      }
-
-      // ── Serve SPA static files ──
-      // Try exact file match first
-      if (path !== '/') {
-        const file = Bun.file(join(webuiDir, path))
-        if (await file.exists()) {
-          return new Response(file, {
-            headers: { 'Content-Type': getMimeType(path) },
-          })
-        }
-      }
-
-      // SPA fallback — serve index.html for all non-file routes
-      const indexFile = Bun.file(join(webuiDir, 'index.html'))
-      if (await indexFile.exists()) {
-        return new Response(indexFile, {
+    // ── Login page (no auth) ──
+    if (path === '/login' || path === '/login/') {
+      const loginFile = Bun.file(join(webuiDir, 'login.html'))
+      if (await loginFile.exists()) {
+        return new Response(loginFile, {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         })
       }
+      return new Response('Login page not found', { status: 404 })
+    }
 
+    // ── Static assets that login page needs (no auth) ──
+    if (path === '/favicon.ico' || path.startsWith('/login-assets/')) {
+      const file = Bun.file(join(webuiDir, path))
+      if (await file.exists()) {
+        return new Response(file, {
+          headers: { 'Content-Type': getMimeType(path) },
+        })
+      }
       return new Response('Not Found', { status: 404 })
-    },
+    }
+
+    // ── Auth endpoint ──
+    if (path === '/api/auth' && req.method === 'POST') {
+      const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+        ?? req.headers.get('x-real-ip')
+        ?? 'unknown'
+
+      if (!rateLimiter.check(ip)) {
+        logger.warn(`[webui] Rate limited auth attempt from ${ip}`)
+        return Response.json(
+          { error: 'Too many attempts. Try again later.' },
+          { status: 429 },
+        )
+      }
+
+      let body: { password?: string }
+      try {
+        body = await req.json() as { password?: string }
+      } catch {
+        return Response.json({ error: 'Invalid request body' }, { status: 400 })
+      }
+
+      if (!body.password || typeof body.password !== 'string') {
+        return Response.json({ error: 'Password is required' }, { status: 400 })
+      }
+
+      if (!verifyPassword(body.password, loginPassword)) {
+        logger.warn(`[webui] Failed auth attempt from ${ip}`)
+        return Response.json({ error: 'Invalid credentials' }, { status: 401 })
+      }
+
+      const jwt = await createSessionToken(secret)
+      logger.info(`[webui] Successful auth from ${ip}`)
+
+      return Response.json({ ok: true }, {
+        status: 200,
+        headers: {
+          'Set-Cookie': buildSessionCookie(jwt, useSecureCookies),
+        },
+      })
+    }
+
+    // ── Logout endpoint ──
+    if (path === '/api/auth/logout' && req.method === 'POST') {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Set-Cookie': buildLogoutCookie(useSecureCookies),
+        },
+      })
+    }
+
+    // ── Config endpoint (requires session cookie) ──
+    if (path === '/api/config' && req.method === 'GET') {
+      const configSession = await validateSession(req.headers.get('cookie'), secret)
+      if (!configSession) {
+        return Response.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      return Response.json({
+        wsUrl: resolveWebSocketUrl(req, { publicWsUrl, wsProtocol, wsPort }),
+      })
+    }
+
+    // ── Everything below requires a valid session cookie ──
+    const cookieHeader = req.headers.get('cookie')
+    const session = await validateSession(cookieHeader, secret)
+
+    if (!session) {
+      const accept = req.headers.get('accept') ?? ''
+      if (accept.includes('text/html') || path === '/' || path === '') {
+        return Response.redirect('/login', 302)
+      }
+      return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // ── Serve SPA static files ──
+    if (path !== '/') {
+      const file = Bun.file(join(webuiDir, path))
+      if (await file.exists()) {
+        return new Response(file, {
+          headers: { 'Content-Type': getMimeType(path) },
+        })
+      }
+    }
+
+    // SPA fallback — serve index.html for all non-file routes
+    const indexFile = Bun.file(join(webuiDir, 'index.html'))
+    if (await indexFile.exists()) {
+      return new Response(indexFile, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      })
+    }
+
+    return new Response('Not Found', { status: 404 })
+  }
+
+  return {
+    fetch,
+    dispose: () => clearInterval(cleanupTimer),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Standalone server (backwards-compatible, uses Bun.serve)
+// ---------------------------------------------------------------------------
+
+export interface WebuiHttpServerOptions extends WebuiHandlerOptions {
+  /** Port to bind on. Use 0 for an ephemeral port in tests. */
+  port: number
+}
+
+export async function startWebuiHttpServer(
+  options: WebuiHttpServerOptions,
+): Promise<{ port: number, stop: () => void }> {
+  const { port, logger, ...handlerOpts } = options
+  const handler = createWebuiHandler({ ...handlerOpts, logger })
+
+  const server = Bun.serve({
+    port,
+    fetch: handler.fetch,
   })
 
   const boundPort = server.port ?? port
-
   logger.info(`[webui] Web UI server listening on http://0.0.0.0:${boundPort}`)
 
   return {
     port: boundPort,
     stop: () => {
-      clearInterval(cleanupTimer)
+      handler.dispose()
       server.stop()
     },
   }

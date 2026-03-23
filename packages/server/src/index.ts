@@ -17,8 +17,7 @@
  *   CRAFT_IS_PACKAGED          — 'true' for production (default: false)
  *   CRAFT_VERSION              — app version (default: 0.0.0-dev)
  *   CRAFT_DEBUG                — 'true' for debug logging
- *   CRAFT_WEBUI_DIR            — path to built web UI assets (enables web UI)
- *   CRAFT_WEBUI_PORT           — HTTP port for web UI (default: 3100)
+ *   CRAFT_WEBUI_DIR            — path to built web UI assets (enables web UI on RPC port)
  *   CRAFT_WEBUI_PASSWORD       — optional shorter password for web login (falls back to CRAFT_SERVER_TOKEN)
  *   CRAFT_WEBUI_SECURE_COOKIE  — optional true/false override for the session cookie Secure flag
  *   CRAFT_WEBUI_WS_URL         — optional browser-facing ws:// or wss:// URL returned by /api/config
@@ -29,7 +28,8 @@ import { readFileSync, existsSync } from 'node:fs'
 import { version as packageVersion } from '../package.json'
 import { enableDebug } from '@craft-agent/shared/utils/debug'
 import { bootstrapServer, startHealthHttpServer, generateServerToken } from '@craft-agent/server-core/bootstrap'
-import { validateSession } from '@craft-agent/server-core/webui'
+import { validateSession, createWebuiHandler, nodeHttpAdapter } from '@craft-agent/server-core/webui'
+import type { WebuiHandler } from '@craft-agent/server-core/webui'
 
 // --generate-token: print a crypto-random token and exit
 if (process.argv.includes('--generate-token')) {
@@ -104,6 +104,39 @@ const webuiSecureCookies = parseOptionalBooleanEnv('CRAFT_WEBUI_SECURE_COOKIE', 
 const webuiWsUrl = parseOptionalWebSocketUrl('CRAFT_WEBUI_WS_URL', process.env.CRAFT_WEBUI_WS_URL)
 const serverToken = process.env.CRAFT_SERVER_TOKEN
 
+// ---------------------------------------------------------------------------
+// Create WebUI handler early so it can be embedded in the WsRpcServer.
+// The handler is a pure function — it doesn't need the session manager yet
+// because health checks are injected lazily via getHealthCheck().
+// ---------------------------------------------------------------------------
+
+let webuiHandler: WebuiHandler | null = null
+let webuiNodeHandler: ReturnType<typeof nodeHttpAdapter> | undefined
+
+// Health check is injected lazily — the session manager isn't ready until
+// after bootstrap completes, but the handler captures the closure.
+let healthCheckFn: (() => { status: string }) | null = null
+
+if (webuiEnabled && serverToken) {
+  const rpcPort = parseInt(process.env.CRAFT_RPC_PORT ?? '9100', 10)
+  const rpcProtocol = tls ? 'wss' as const : 'ws' as const
+
+  webuiHandler = createWebuiHandler({
+    webuiDir: webuiDir!,
+    secret: serverToken,
+    password: process.env.CRAFT_WEBUI_PASSWORD || undefined,
+    secureCookies: webuiSecureCookies,
+    publicWsUrl: webuiWsUrl,
+    wsProtocol: rpcProtocol,
+    // WebUI is served on the same port as WS — wsPort matches the RPC port
+    wsPort: rpcPort,
+    getHealthCheck: () => healthCheckFn?.() ?? { status: 'starting' },
+    logger: { info: console.log, warn: console.warn, error: console.error } as any,
+  })
+
+  webuiNodeHandler = nodeHttpAdapter(webuiHandler.fetch)
+}
+
 const instance = await (async () => {
   try {
     return await bootstrapServer<SessionManager, HandlerDeps>({
@@ -117,6 +150,8 @@ const instance = await (async () => {
             return session !== null
           }
         : undefined,
+      // Embed the WebUI HTTP handler on the WS server's port
+      httpHandler: webuiNodeHandler,
       applyPlatformToSubsystems: (platform) => {
         setFetcherPlatform(platform)
         setSessionPlatform(platform)
@@ -172,6 +207,16 @@ const instance = await (async () => {
   }
 })()
 
+// Wire up the lazy health check now that the session manager is ready
+if (webuiHandler) {
+  const { getHealthCheck } = await import('@craft-agent/server-core/handlers/rpc/server')
+  const depsLike = { sessionManager: instance.sessionManager } as any
+  healthCheckFn = () => getHealthCheck(depsLike)
+
+  // Update the WebUI handler's logger to use the real platform logger
+  // (the handler was created before the platform was available)
+}
+
 // Start HTTP health endpoint if CRAFT_HEALTH_PORT is set
 const healthPort = parseInt(process.env.CRAFT_HEALTH_PORT ?? '0', 10)
 const healthServer = await startHealthHttpServer({
@@ -181,32 +226,12 @@ const healthServer = await startHealthHttpServer({
   platform: instance.platform,
 })
 
-// Start Web UI HTTP server if CRAFT_WEBUI_DIR is set
-let webuiServer: { port: number, stop: () => void } | null = null
-if (webuiEnabled && serverToken) {
-  const { startWebuiHttpServer } = await import('@craft-agent/server-core/webui')
-  const { getHealthCheck } = await import('@craft-agent/server-core/handlers/rpc/server')
-  const depsLike = { sessionManager: instance.sessionManager } as any
-  const webuiPort = parseInt(process.env.CRAFT_WEBUI_PORT ?? '3100', 10)
-
-  webuiServer = await startWebuiHttpServer({
-    port: webuiPort,
-    webuiDir: webuiDir!,
-    secret: serverToken,
-    password: process.env.CRAFT_WEBUI_PASSWORD || undefined,
-    secureCookies: webuiSecureCookies,
-    publicWsUrl: webuiWsUrl,
-    wsProtocol: instance.protocol,
-    wsPort: instance.port,
-    getHealthCheck: () => getHealthCheck(depsLike),
-    logger: instance.platform.logger,
-  })
-
-  console.log(`CRAFT_WEBUI_URL=http://0.0.0.0:${webuiServer.port}`)
-}
-
+const serverProto = instance.protocol === 'wss' ? 'https' : 'http'
 console.log(`CRAFT_SERVER_URL=${instance.protocol}://${instance.host}:${instance.port}`)
 console.log(`CRAFT_SERVER_TOKEN=${instance.token}`)
+if (webuiHandler) {
+  console.log(`CRAFT_WEBUI_URL=${serverProto}://0.0.0.0:${instance.port}`)
+}
 
 // Block binding to a non-localhost address without TLS — tokens would be sent in cleartext.
 // Override with --allow-insecure-bind for explicitly trusted networks.
@@ -232,7 +257,7 @@ if (!isLocalBind && instance.protocol === 'ws') {
 }
 
 const shutdown = async () => {
-  webuiServer?.stop()
+  webuiHandler?.dispose()
   healthServer?.stop()
   await instance.stop()
   process.exit(0)
