@@ -43,3 +43,10 @@ html, body, #root {
 body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+
+/* 120% zoom on mobile viewports for better readability */
+@media (max-width: 768px) {
+  html {
+    zoom: 1.2;
+  }
+}
