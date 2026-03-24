@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'bun:test'
-import { preprocessLinks, detectLinks, isPlaceholderUrl, isFilePathTarget } from '../linkify'
+import { preprocessLinks, detectLinks, isPlaceholderUrl, isFilePathTarget, decodeFilePathHref } from '../linkify'
 
 // ============================================================================
 // preprocessLinks — existing markdown links should NOT be corrupted
@@ -268,5 +268,74 @@ describe('isFilePathTarget', () => {
 
   it('rejects non-file strings', () => {
     expect(isFilePathTarget('not a link at all')).toBe(false)
+  })
+
+  // Unicode / CJK / special character file paths
+  it('accepts paths with CJK characters', () => {
+    expect(isFilePathTarget('/Users/foo/项目/设计文档.md')).toBe(true)
+  })
+
+  it('accepts paths with spaces', () => {
+    expect(isFilePathTarget('/Users/foo/my project/README.md')).toBe(true)
+  })
+
+  it('accepts paths with brackets and CJK', () => {
+    expect(isFilePathTarget('/Users/foo/[设计] 前端架构文档.md')).toBe(true)
+  })
+
+  it('accepts paths with full-width parentheses', () => {
+    expect(isFilePathTarget('/Users/foo/文档（修订版）.md')).toBe(true)
+  })
+
+  it('accepts complex paths with CJK, brackets, spaces, and full-width parens', () => {
+    const path = '/Users/foo/notes/1. 项目/my-app/[设计] 架构文档（修订版）.md'
+    expect(isFilePathTarget(path)).toBe(true)
+  })
+
+  it('accepts paths with Korean characters', () => {
+    expect(isFilePathTarget('/Users/foo/문서/설계.md')).toBe(true)
+  })
+
+  it('accepts paths with accented Latin characters', () => {
+    expect(isFilePathTarget('/Users/foo/café/résumé.md')).toBe(true)
+  })
+})
+
+// ============================================================================
+// decodeFilePathHref — URL-decode percent-encoded markdown href values
+// ============================================================================
+
+describe('decodeFilePathHref', () => {
+  it('decodes percent-encoded spaces', () => {
+    expect(decodeFilePathHref('/Users/foo/bar%20baz.md')).toBe('/Users/foo/bar baz.md')
+  })
+
+  it('decodes percent-encoded brackets', () => {
+    expect(decodeFilePathHref('/Users/foo/%5Bdesign%5D.md')).toBe('/Users/foo/[design].md')
+  })
+
+  it('decodes percent-encoded CJK characters', () => {
+    const encoded = '/Users/foo/%E9%A1%B9%E7%9B%AE/bar.md'
+    expect(decodeFilePathHref(encoded)).toBe('/Users/foo/项目/bar.md')
+  })
+
+  it('decodes mixed encoded and plain characters', () => {
+    const encoded = '/Users/foo/1.%20项目/[设计]%20卡片.md'
+    expect(decodeFilePathHref(encoded)).toBe('/Users/foo/1. 项目/[设计] 卡片.md')
+  })
+
+  it('returns original on malformed percent encoding', () => {
+    expect(decodeFilePathHref('/Users/foo/%ZZ/bar.md')).toBe('/Users/foo/%ZZ/bar.md')
+  })
+
+  it('handles already-decoded paths (no-op)', () => {
+    const path = '/Users/foo/bar baz.md'
+    expect(decodeFilePathHref(path)).toBe(path)
+  })
+
+  it('decodes a complex encoded path with CJK, brackets, spaces, and full-width parens', () => {
+    const encoded = '/Users/foo/notes/1.%20%E9%A1%B9%E7%9B%AE/my-app/%5B%E8%AE%BE%E8%AE%A1%5D%20%E6%9E%B6%E6%9E%84%E6%96%87%E6%A1%A3%EF%BC%88%E4%BF%AE%E8%AE%A2%E7%89%88%EF%BC%89.md'
+    const expected = '/Users/foo/notes/1. 项目/my-app/[设计] 架构文档（修订版）.md'
+    expect(decodeFilePathHref(encoded)).toBe(expected)
   })
 })
