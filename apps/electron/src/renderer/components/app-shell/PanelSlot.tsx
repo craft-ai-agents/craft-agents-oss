@@ -67,7 +67,7 @@ export function PanelSlot({
   const handleBack = useCallback(() => {
     if (!navState) return
     const listState = { ...navState, details: null }
-    navigate(buildRouteFromNavigationState(listState) as unknown as Route)
+    navigate(buildRouteFromNavigationState(listState) as unknown as Route, { skipAutoSelect: true })
   }, [navState])
 
   // Build close button for PanelHeader (via context override)
