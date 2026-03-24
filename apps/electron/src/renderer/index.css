@@ -1316,3 +1316,11 @@ html.dark[data-scenic] .fullscreen-overlay-background {
     min-width: 0;
   }
 }
+
+/* Larger touch targets for header buttons on narrow panels (mobile) */
+@container panel (max-width: 448px) {
+  .panel-header-btn {
+    padding: 10px;
+    border-radius: 8px;
+  }
+}

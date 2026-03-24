@@ -85,6 +85,7 @@ import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useSetAtom } from "jotai"
 import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter, AutomationFilter } from "../../../shared/types"
+import { buildRouteFromNavigationState } from "../../../shared/route-parser"
 import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
@@ -101,7 +102,7 @@ import type { LabelConfig, LabelTreeNode } from "@craft-agent/shared/labels"
 import { resolveEntityColor } from "@craft-agent/shared/colors"
 import * as storage from "@/lib/local-storage"
 import { toast } from "sonner"
-import { navigate, routes } from "@/lib/navigate"
+import { navigate, routes, type Route } from "@/lib/navigate"
 import {
   useNavigation,
   useNavigationState,
@@ -2206,11 +2207,15 @@ function AppShellContent({
           onAddBrowserPanel={() => { void handleNewBrowserWindow() }}
         />
 
-      {/* Mobile back button — shown in compact mode when viewing content */}
-      {isAutoCompact && canGoBack && (
+      {/* Mobile back button — shown in compact mode when viewing a session */}
+      {isAutoCompact && focusedSessionId && (
         <button
           type="button"
-          onClick={goBack}
+          onClick={() => {
+            // Navigate to the list route (same filter, no session selected)
+            const listState = { ...navState, details: null } as typeof navState
+            navigate(buildRouteFromNavigationState(listState) as unknown as Route)
+          }}
           className="fixed z-panel inline-flex items-center gap-1 h-[30px] px-2.5 rounded-full
             border border-foreground/10 bg-background/95 shadow-minimal
             text-foreground/75 text-xs font-medium backdrop-blur-sm"
