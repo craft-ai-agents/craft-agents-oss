@@ -53,6 +53,8 @@ export interface PanelHeaderProps {
   badge?: React.ReactNode
   /** Optional dropdown menu content for interactive title (renders chevron when provided) */
   titleMenu?: React.ReactNode
+  /** Optional leading action rendered before the title (e.g., back button in compact mode) */
+  leadingAction?: React.ReactNode
   /** Optional center button rendered between title and right actions */
   centerButton?: React.ReactNode
   /** Optional action buttons rendered on the right */
@@ -76,6 +78,7 @@ export function PanelHeader({
   title,
   badge,
   titleMenu,
+  leadingAction,
   centerButton,
   actions,
   rightSidebarButton,
@@ -110,6 +113,11 @@ export function PanelHeader({
 
   const content = (
     <>
+      {leadingAction && (
+        <div className="titlebar-no-drag shrink-0">
+          {leadingAction}
+        </div>
+      )}
       <div className="flex-1 min-w-0 flex items-center select-none">
         <div className="mx-auto w-fit">
           {titleMenu ? (

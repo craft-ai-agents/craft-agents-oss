@@ -126,6 +126,9 @@ export interface AppShellContextType {
   // Right sidebar button (for page headers)
   rightSidebarButton?: React.ReactNode
 
+  // Leading action button for panel header (e.g., back button in compact mode)
+  leadingAction?: React.ReactNode
+
   /** Whether this panel is the focused panel (for multi-panel visual differentiation) */
   isFocusedPanel?: boolean
 

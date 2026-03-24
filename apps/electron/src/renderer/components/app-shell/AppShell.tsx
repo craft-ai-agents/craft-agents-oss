@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "motion/react"
 import {
   Archive,
   Settings,
-  ChevronLeft,
   ChevronRight,
   ChevronDown,
   MoreHorizontal,
@@ -85,7 +84,6 @@ import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useSetAtom } from "jotai"
 import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter, AutomationFilter } from "../../../shared/types"
-import { buildRouteFromNavigationState } from "../../../shared/route-parser"
 import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
@@ -102,7 +100,7 @@ import type { LabelConfig, LabelTreeNode } from "@craft-agent/shared/labels"
 import { resolveEntityColor } from "@craft-agent/shared/colors"
 import * as storage from "@/lib/local-storage"
 import { toast } from "sonner"
-import { navigate, routes, type Route } from "@/lib/navigate"
+import { navigate, routes } from "@/lib/navigate"
 import {
   useNavigation,
   useNavigationState,
@@ -2206,26 +2204,6 @@ function AppShellContent({
           onAddSessionPanel={() => handleNewChat(true)}
           onAddBrowserPanel={() => { void handleNewBrowserWindow() }}
         />
-
-      {/* Mobile back button — shown in compact mode when viewing a session */}
-      {isAutoCompact && focusedSessionId && (
-        <button
-          type="button"
-          onClick={() => {
-            // Navigate to the list route (same filter, no session selected)
-            const listState = { ...navState, details: null } as typeof navState
-            navigate(buildRouteFromNavigationState(listState) as unknown as Route)
-          }}
-          className="fixed z-panel inline-flex items-center gap-1 h-[30px] px-2.5 rounded-full
-            border border-foreground/10 bg-background/95 shadow-minimal
-            text-foreground/75 text-xs font-medium backdrop-blur-sm"
-          style={{ top: 'calc(env(safe-area-inset-top, 0px) + 62px)', left: 14 }}
-          aria-label="Back to list"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          <span>Back</span>
-        </button>
-      )}
 
       {/* === OUTER LAYOUT: Unified Panel Stack | Right Sidebar === */}
       <div
