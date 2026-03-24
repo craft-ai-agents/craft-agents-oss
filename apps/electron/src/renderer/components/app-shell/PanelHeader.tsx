@@ -119,14 +119,14 @@ export function PanelHeader({
         </div>
       )}
       <div className="flex-1 min-w-0 flex items-center select-none">
-        <div className="mx-auto max-w-full overflow-hidden">
+        <div className={cn("max-w-full overflow-hidden", !leadingAction && "mx-auto")}>
           {titleMenu ? (
             <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
               {/* Wrapper button for the whole clickable area */}
               <button
                 onClick={() => setDropdownOpen(true)}
                 className={cn(
-                  "flex items-center gap-1 px-2 py-1 rounded-md titlebar-no-drag",
+                  "flex items-center gap-1 px-2 py-1 rounded-md titlebar-no-drag min-w-0",
                   "hover:bg-foreground/[0.03] transition-colors",
                   "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                   dropdownOpen && "bg-foreground/[0.03]"
@@ -167,13 +167,13 @@ export function PanelHeader({
     </>
   )
 
-  // Base padding (16px = pl-4, reduced to 8px when leading action present)
-  const basePadding = leadingAction ? 8 : 16
+  // Base padding (16px = pl-4, reduced to 4px when leading action present)
+  const basePadding = leadingAction ? 4 : 16
 
   const baseClassName = cn(
     'flex shrink-0 items-center pr-2 min-w-0 gap-1.5 relative z-panel h-[42px]',
     // Only use static paddingLeft class when not animating
-    !shouldCompensate && (paddingLeft || (leadingAction ? 'pl-2' : 'pl-4')),
+    !shouldCompensate && (paddingLeft || (leadingAction ? 'pl-1' : 'pl-4')),
     className
   )
 
