@@ -119,7 +119,7 @@ export function PanelHeader({
         </div>
       )}
       <div className="flex-1 min-w-0 flex items-center select-none">
-        <div className="mx-auto w-fit">
+        <div className="mx-auto max-w-full overflow-hidden">
           {titleMenu ? (
             <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
               {/* Wrapper button for the whole clickable area */}
