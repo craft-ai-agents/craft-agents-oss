@@ -122,12 +122,15 @@ export function SendToWorkspaceDialog({
         // 2. Generate conversation summary so the AI has context after fork
         //    (forked sessions lose SDK context — the AI starts fresh without this)
         try {
+          console.log(`[SendToWorkspace] Generating summary for session ${sessionId}...`)
           const transferPayload = await window.electronAPI.exportRemoteSessionTransfer(sessionId)
+          console.log(`[SendToWorkspace] Summary result: ${transferPayload?.summary ? `${transferPayload.summary.length} chars` : 'null/empty'}`)
           if (transferPayload?.summary && bundle.session?.header) {
             bundle.session.header.transferredSessionSummary = transferPayload.summary
             bundle.session.header.transferredSessionSummaryApplied = false
           }
-        } catch {
+        } catch (err) {
+          console.error('[SendToWorkspace] Summary generation failed:', err)
           // Summary generation failed — transfer without AI context (messages still visible)
         }
 

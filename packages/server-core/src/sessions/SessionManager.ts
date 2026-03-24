@@ -2087,6 +2087,9 @@ export class SessionManager implements ISessionManager {
       if (storedSession.connectionLocked) {
         managed.connectionLocked = storedSession.connectionLocked
       }
+      // Sync transferred session summary state from disk
+      managed.transferredSessionSummary = storedSession.transferredSessionSummary
+      managed.transferredSessionSummaryApplied = storedSession.transferredSessionSummaryApplied
       sessionLog.debug(`Lazy-loaded ${managed.messages.length} messages for session ${managed.id}`)
 
       // Queue recovery: find orphaned queued messages from crash/restart and re-queue them
@@ -2689,8 +2692,9 @@ export class SessionManager implements ISessionManager {
       }
 
       const getTransferredSessionSummary = () => {
-        if (managed.transferredSessionSummaryApplied) return null
-        return managed.transferredSessionSummary ?? null
+        const summary = managed.transferredSessionSummaryApplied ? null : (managed.transferredSessionSummary ?? null)
+        sessionLog.info(`[transfer-context] getTransferredSessionSummary for ${managed.id}: applied=${managed.transferredSessionSummaryApplied}, has_summary=${!!managed.transferredSessionSummary}, returning=${summary ? `${summary.length} chars` : 'null'}`)
+        return summary
       }
 
       const markTransferredSessionSummaryApplied = () => {
@@ -6935,7 +6939,7 @@ export class SessionManager implements ISessionManager {
     // Emit session_created so renderer picks it up
     this.sendEvent({ type: 'session_created', sessionId }, workspaceId)
 
-    sessionLog.info(`[import] Complete: sessionId=${sessionId}, warnings=${warnings.length > 0 ? warnings.join('; ') : 'none'}`)
+    sessionLog.info(`[import] Complete: sessionId=${sessionId}, transferredSummary=${managed.transferredSessionSummary ? `${managed.transferredSessionSummary.length} chars` : 'none'}, applied=${managed.transferredSessionSummaryApplied}, warnings=${warnings.length > 0 ? warnings.join('; ') : 'none'}`)
     return { sessionId, warnings: warnings.length > 0 ? warnings : undefined }
   }
 
