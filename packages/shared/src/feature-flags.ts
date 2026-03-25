@@ -42,6 +42,17 @@ export function isCraftAgentsCliEnabled(): boolean {
   return false;
 }
 
+/**
+ * Runtime-evaluated check for embedded server settings page.
+ *
+ * Defaults to disabled. Override with CRAFT_FEATURE_EMBEDDED_SERVER=1|0.
+ */
+export function isEmbeddedServerEnabled(): boolean {
+  const override = parseBooleanEnv(process.env.CRAFT_FEATURE_EMBEDDED_SERVER);
+  if (override !== undefined) return override;
+  return false;
+}
+
 export const FEATURE_FLAGS = {
   /** Enable Opus 4.6 fast mode (speed:"fast" + beta header). 6x pricing. */
   fastMode: false,
@@ -61,5 +72,13 @@ export const FEATURE_FLAGS = {
    */
   get craftAgentsCli(): boolean {
     return isCraftAgentsCliEnabled();
+  },
+  /**
+   * Enable embedded server settings page.
+   *
+   * Defaults to disabled. Override with CRAFT_FEATURE_EMBEDDED_SERVER=1|0.
+   */
+  get embeddedServer(): boolean {
+    return isEmbeddedServerEnabled();
   },
 } as const;
