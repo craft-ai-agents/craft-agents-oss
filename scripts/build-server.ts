@@ -43,6 +43,7 @@ import {
   readFileSync,
   writeFileSync,
   chmodSync,
+  symlinkSync,
 } from 'fs';
 import { $ } from 'bun';
 import {
@@ -265,100 +266,154 @@ async function downloadBunForServer(config: ServerBuildConfig): Promise<void> {
 // Production node_modules
 // ---------------------------------------------------------------------------
 
+/**
+ * Recursively resolve and copy a package and its entire dependency tree.
+ * Reads each package's package.json to discover transitive deps.
+ */
+function copyDependencyTree(
+  dep: string,
+  srcModules: string,
+  destModules: string,
+  visited: Set<string>,
+): void {
+  if (visited.has(dep)) return;
+  visited.add(dep);
+
+  const src = join(srcModules, dep);
+  if (!existsSync(src)) return;
+
+  // Ensure scope directory exists
+  if (dep.startsWith('@')) {
+    const scope = dep.split('/')[0]!;
+    mkdirSync(join(destModules, scope), { recursive: true });
+  }
+
+  const dest = join(destModules, dep);
+  mkdirSync(dirname(dest), { recursive: true });
+  cpSync(src, dest, { recursive: true, dereference: true });
+
+  // Recurse into dependencies
+  const pkgPath = join(src, 'package.json');
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+      for (const childDep of Object.keys(pkg.dependencies || {})) {
+        copyDependencyTree(childDep, srcModules, destModules, visited);
+      }
+    } catch {
+      // Skip if package.json is malformed
+    }
+  }
+}
+
+/**
+ * Scan all .ts files in a directory tree for import/require statements
+ * and return the set of external npm package names (not relative paths,
+ * not node: builtins, not workspace @craft-agent/* packages).
+ */
+function scanImports(dir: string): Set<string> {
+  const packages = new Set<string>();
+  // Match: import ... from 'pkg', require('pkg'), import('pkg')
+  const importRe = /(?:from\s+['"]|require\s*\(\s*['"]|import\s*\(\s*['"])([^'"]+)['"]/g;
+
+  function walk(d: string): void {
+    if (!existsSync(d)) return;
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      const full = join(d, entry.name);
+      if (entry.isDirectory() && entry.name !== 'node_modules' && entry.name !== 'tests' && entry.name !== '__tests__') {
+        walk(full);
+      } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.js'))) {
+        const content = readFileSync(full, 'utf-8');
+        let match: RegExpExecArray | null;
+        while ((match = importRe.exec(content)) !== null) {
+          const spec = match[1]!;
+          // Skip relative imports, node: builtins, workspace packages
+          if (spec.startsWith('.') || spec.startsWith('node:') || spec.startsWith('@craft-agent/')) continue;
+          // Extract package name (handle scoped: @scope/name)
+          const parts = spec.split('/');
+          const pkgName = spec.startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0]!;
+          packages.add(pkgName);
+        }
+      }
+    }
+  }
+
+  walk(dir);
+  return packages;
+}
+
 function copyProductionDeps(config: ServerBuildConfig): void {
   const { rootDir, outputDir, platform, arch } = config;
   const srcModules = join(rootDir, 'node_modules');
   const destModules = join(outputDir, 'node_modules');
 
-  // Explicit list of production dependencies needed by the server.
-  // This is intentionally explicit to avoid shipping devDependencies (~1.5 GB).
-  const PRODUCTION_DEPS = [
-    // SDK (core AI functionality + ripgrep)
-    '@anthropic-ai/claude-agent-sdk',
-    // MCP protocol
-    '@modelcontextprotocol/sdk',
-    // Schema validation
-    'zod',
-    'zod-to-json-schema',
-    // Image processing (sharp + platform-specific native binary)
-    'sharp',
+  // Track all copied packages to avoid duplicates
+  const copied = new Set<string>();
+
+  // -------------------------------------------------------------------------
+  // 1. Scan source code for ALL external imports across server packages
+  //    This catches everything — declared deps, undeclared deps, transitive
+  //    imports that happen to work due to hoisting. No more whack-a-mole.
+  // -------------------------------------------------------------------------
+  const SERVER_PACKAGES = ['server', 'server-core', 'shared', 'core', 'session-tools-core', 'session-mcp-server'];
+
+  const allImports = new Set<string>();
+  for (const pkg of SERVER_PACKAGES) {
+    const pkgSrc = join(rootDir, 'packages', pkg, 'src');
+    const imports = scanImports(pkgSrc);
+    for (const imp of imports) allImports.add(imp);
+  }
+  console.log(`  Found ${allImports.size} external packages referenced in source`);
+
+  // Also include declared dependencies (catches deps used only at runtime / dynamically)
+  for (const pkg of SERVER_PACKAGES) {
+    const pkgJsonPath = join(rootDir, 'packages', pkg, 'package.json');
+    if (!existsSync(pkgJsonPath)) continue;
+    try {
+      const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
+      for (const [dep, version] of Object.entries(pkgJson.dependencies || {}) as [string, string][]) {
+        if (typeof version === 'string' && version.startsWith('workspace:')) continue;
+        allImports.add(dep);
+      }
+      // Also peer dependencies (they're real runtime deps)
+      for (const dep of Object.keys(pkgJson.peerDependencies || {})) {
+        allImports.add(dep);
+      }
+    } catch { /* skip */ }
+  }
+
+  // Copy each discovered package and its full transitive dependency tree
+  for (const dep of allImports) {
+    copyDependencyTree(dep, srcModules, destModules, copied);
+  }
+  console.log(`  Source imports + declared deps: ${copied.size} packages`);
+
+  // -------------------------------------------------------------------------
+  // 2. Platform-specific native binaries (optionalDependencies, not in dep trees)
+  // -------------------------------------------------------------------------
+  const PLATFORM_DEPS = [
     `@img/sharp-${platform === 'darwin' ? 'darwin' : 'linux'}-${arch}`,
     `@img/sharp-libvips-${platform === 'darwin' ? 'darwin' : 'linux'}-${arch}`,
     '@img/colour',
-    // WebSocket
-    'ws',
-    // Caching
-    '@isaacs/ttlcache',
-    // Fuzzy search
-    '@leeoniya/ufuzzy',
-    // Shell parsing
-    'bash-parser',
-    'shell-quote',
-    // Cron scheduling
-    'croner',
-    // Expression filtering
-    'filtrex',
-    // Incremental regex
-    'incr-regex-package',
-    // YAML frontmatter
-    'gray-matter',
-    // Mermaid diagrams
-    'beautiful-mermaid',
-    // JSON/YAML utilities
-    'js-yaml',
-    // Content type
-    'content-type',
-    // Raw body parsing
-    'raw-body',
-    // PKI (transitive via MCP SDK — only copy if present)
-    'pkijs',
-    'asn1js',
-    'pvutils',
-    'bytestreamjs',
-    'pvtsutils',
-    // Additional transitive deps
-    'eventsource',
-    'cross-spawn',
-    'shebang-command',
-    'shebang-regex',
-    'isexe',
-    'which',
-    'path-key',
-    'js-tokens',
-    'section-matter',
-    'strip-bom-string',
-    'kind-of',
   ];
 
-  // For deps like @anthropic-ai/claude-agent-sdk, copy the whole scope if needed
-  const copiedScopes = new Set<string>();
-
-  for (const dep of PRODUCTION_DEPS) {
+  for (const dep of PLATFORM_DEPS) {
+    if (copied.has(dep)) continue;
     const src = join(srcModules, dep);
-    const dest = join(destModules, dep);
-
     if (!existsSync(src)) {
-      // Could be a platform-specific package not installed on this OS
-      if (dep.startsWith('@img/sharp-') || dep.startsWith('@img/sharp-libvips-')) {
-        console.log(`  Skipping ${dep} (not installed for current platform)`);
-        continue;
-      }
-      console.warn(`  Warning: dependency ${dep} not found in node_modules`);
+      console.log(`  Skipping ${dep} (not installed for current platform)`);
       continue;
     }
-
-    // Ensure scope directory exists
     if (dep.startsWith('@')) {
-      const scope = dep.split('/')[0];
-      if (!copiedScopes.has(scope)) {
-        mkdirSync(join(destModules, scope), { recursive: true });
-        copiedScopes.add(scope);
-      }
+      const scope = dep.split('/')[0]!;
+      mkdirSync(join(destModules, scope), { recursive: true });
     }
-
-    mkdirSync(dirname(dest), { recursive: true });
-    cpSync(src, dest, { recursive: true, dereference: true });
+    mkdirSync(dirname(join(destModules, dep)), { recursive: true });
+    cpSync(src, join(destModules, dep), { recursive: true, dereference: true });
+    copied.add(dep);
   }
+
+  console.log(`  Total: ${copied.size} packages copied to node_modules`);
 
   // Filter ripgrep to target platform only
   filterRipgrep(config);
@@ -478,6 +533,35 @@ function createRootConfig(config: ServerBuildConfig): void {
     },
   };
   writeFileSync(join(outputDir, 'tsconfig.json'), JSON.stringify(rootTsconfig, null, 2) + '\n');
+
+  // Create workspace symlinks in node_modules/@craft-agent/
+  // Bun needs these to resolve workspace package imports at runtime
+  const scopeDir = join(outputDir, 'node_modules', '@craft-agent');
+  mkdirSync(scopeDir, { recursive: true });
+
+  const packagesDir = join(outputDir, 'packages');
+  if (existsSync(packagesDir)) {
+    for (const pkg of readdirSync(packagesDir)) {
+      const pkgJsonPath = join(packagesDir, pkg, 'package.json');
+      if (!existsSync(pkgJsonPath)) continue;
+
+      try {
+        const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
+        const name: string = pkgJson.name || '';
+        if (name.startsWith('@craft-agent/')) {
+          const shortName = name.replace('@craft-agent/', '');
+          const linkPath = join(scopeDir, shortName);
+          const target = join('..', '..', 'packages', pkg);
+          if (!existsSync(linkPath)) {
+            symlinkSync(target, linkPath, 'dir');
+            console.log(`  Symlink: ${name} -> packages/${pkg}`);
+          }
+        }
+      } catch {
+        // Skip if package.json is malformed
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

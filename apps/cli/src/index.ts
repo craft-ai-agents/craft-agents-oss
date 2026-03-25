@@ -546,24 +546,23 @@ async function setupLlmConnection(
   let authType: string
   const setupPayload: Record<string, unknown> = { slug: connectionSlug, credential: key }
 
-  if (provider === 'anthropic') {
-    if (baseUrl) {
-      providerType = 'anthropic_compat'
-      authType = 'api_key_with_endpoint'
-      setupPayload.endpoint = baseUrl
-    } else {
-      providerType = 'anthropic'
-      authType = 'api_key'
+  if (baseUrl) {
+    // Custom endpoint — send the same payload shape as the desktop UI.
+    // The server handler (llm-connections.ts:102-110) detects customEndpoint + baseUrl
+    // and sets providerType='pi_compat', piAuthProvider, etc.
+    providerType = 'pi_compat'
+    authType = 'api_key_with_endpoint'
+    setupPayload.baseUrl = baseUrl
+    setupPayload.customEndpoint = {
+      api: provider === 'anthropic' ? 'anthropic-messages' : 'openai-completions',
     }
+    setupPayload.defaultModel = provider === 'anthropic' ? 'claude-sonnet-4-6' : 'gpt-4o'
+  } else if (provider === 'anthropic') {
+    providerType = 'anthropic'
+    authType = 'api_key'
   } else {
-    if (baseUrl) {
-      providerType = 'pi_compat'
-      authType = 'api_key_with_endpoint'
-      setupPayload.endpoint = baseUrl
-    } else {
-      providerType = 'pi'
-      authType = 'api_key'
-    }
+    providerType = 'pi'
+    authType = 'api_key'
     setupPayload.piAuthProvider = provider
   }
 
@@ -574,7 +573,10 @@ async function setupLlmConnection(
     authType,
     createdAt: Date.now(),
   })
-  await client.invoke('settings:setupLlmConnection', setupPayload)
+  const setupResult = await client.invoke('settings:setupLlmConnection', setupPayload) as { success: boolean; error?: string }
+  if (!setupResult?.success) {
+    throw new Error(`LLM connection setup failed: ${setupResult?.error ?? 'unknown error'}`)
+  }
   await client.invoke('LLM_Connection:setDefault', connectionSlug)
   process.stderr.write(`LLM connection configured: ${provider}${baseUrl ? ` (${baseUrl})` : ''}\n`)
 
@@ -625,10 +627,12 @@ async function cmdRun(args: CliArgs): Promise<void> {
       process.stderr.write(`Workspace registered: ${absPath}\n`)
     }
 
-    // Auto-setup LLM connection from flags / env vars
+    // Auto-setup LLM connection from flags / env vars.
+    // When --base-url is provided, always create the custom endpoint connection
+    // (even if other connections exist) so the session routes through it.
     const connections = (await client.invoke('LLM_Connection:list')) as any[]
     let connectionSlug: string | undefined
-    if (!connections?.length) {
+    if (!connections?.length || args.baseUrl) {
       const result = await setupLlmConnection(client, args)
       connectionSlug = result.connectionSlug
     }
@@ -687,7 +691,11 @@ async function cmdValidate(args: CliArgs): Promise<void> {
   }
 
   try {
-    const exitCode = await runValidation(client, args.json, args.noSpinner)
+    const exitCode = await runValidation(client, args.json, args.noSpinner, args.workspaceDir, {
+      baseUrl: args.baseUrl,
+      apiKey: args.apiKey,
+      provider: args.provider,
+    })
     client.destroy()
     if (server) await server.stop()
     process.exit(exitCode)
@@ -763,6 +771,14 @@ export interface ValidateStep {
 }
 
 export interface ValidateContext {
+  /** Pre-existing workspace directory (from --workspace-dir) */
+  workspaceDir?: string
+  /** Custom endpoint URL (from --base-url) */
+  baseUrl?: string
+  /** API key override (from --api-key) */
+  apiKey?: string
+  /** Provider hint (from --provider, default 'anthropic') */
+  provider?: string
   workspaceId?: string
   workspaceRootPath?: string
   createdWorkspace?: boolean
@@ -771,7 +787,10 @@ export interface ValidateContext {
   createdSkillSlug?: string
   createdAutomation?: boolean
   automationTestSessionId?: string
+  /** Session created by automation that should be blocked by failing condition (if bug occurs) */
+  automationBlockedSessionId?: string
   automationName?: string
+  automationBlockedName?: string
   createdLabelId?: string
   /** Backup of existing automations.json before overwrite (undefined = didn't exist) */
   automationsJsonBackup?: string | null
@@ -904,12 +923,14 @@ async function cleanupAutomationArtifacts(
     } catch { /* best effort */ }
   }
 
-  // Delete automation-triggered session
-  if (ctx.automationTestSessionId && client.isConnected) {
+  // Delete automation-triggered sessions
+  for (const key of ['automationTestSessionId', 'automationBlockedSessionId'] as const) {
+    const id = ctx[key]
+    if (!id || !client.isConnected) continue
     try {
-      await client.invoke('sessions:delete', ctx.automationTestSessionId)
-      cleaned.push(`session ${ctx.automationTestSessionId}`)
-      ctx.automationTestSessionId = undefined
+      await client.invoke('sessions:delete', id)
+      cleaned.push(`session ${id}`)
+      ctx[key] = undefined
     } catch { /* best effort */ }
   }
 
@@ -960,6 +981,16 @@ export function getValidateSteps(): ValidateStep[] {
     {
       name: 'workspaces:get',
       fn: async (client, ctx) => {
+        // Register workspace from --workspace-dir if provided
+        if (ctx.workspaceDir) {
+          const { resolve } = await import('path')
+          const absPath = resolve(ctx.workspaceDir)
+          const ws = (await client.invoke('workspaces:create', absPath, 'ci-workspace')) as { id: string }
+          ctx.workspaceId = ws.id
+          ctx.workspaceRootPath = absPath
+          await client.invoke('window:switchWorkspace', ws.id)
+          return `registered: ${absPath}`
+        }
         const r = (await client.invoke('workspaces:get')) as any[]
         if (r?.length > 0) {
           ctx.workspaceId = r[0].id
@@ -991,8 +1022,34 @@ export function getValidateSteps(): ValidateStep[] {
     },
     {
       name: 'LLM_Connection:list',
-      fn: async (client) => {
+      fn: async (client, ctx) => {
         const r = (await client.invoke('LLM_Connection:list')) as any[]
+
+        // Custom endpoint: always create/update when --base-url is provided
+        if (ctx.baseUrl) {
+          const provider = ctx.provider || 'anthropic'
+          const key = ctx.apiKey || process.env.ANTHROPIC_API_KEY || ''
+          const slug = `${provider}-cli`
+          const isAnthropicApi = provider === 'anthropic'
+          await client.invoke('LLM_Connection:save', {
+            slug,
+            name: `${provider.charAt(0).toUpperCase() + provider.slice(1)} (Custom Endpoint)`,
+            providerType: 'pi_compat',
+            authType: 'api_key_with_endpoint',
+            createdAt: Date.now(),
+          })
+          const result = await client.invoke('settings:setupLlmConnection', {
+            slug,
+            credential: key,
+            baseUrl: ctx.baseUrl,
+            customEndpoint: { api: isAnthropicApi ? 'anthropic-messages' : 'openai-completions' },
+            defaultModel: isAnthropicApi ? 'claude-sonnet-4-6' : 'gpt-4o',
+          }) as { success: boolean; error?: string }
+          if (!result?.success) return `setup failed: ${result?.error ?? 'unknown'}`
+          await client.invoke('LLM_Connection:setDefault', slug)
+          return `${r?.length ?? 0} existing + custom endpoint via ${ctx.baseUrl}`
+        }
+
         if (r?.length > 0) return `${r.length} connections`
         // Auto-setup from env for CI environments
         const envKey = process.env.ANTHROPIC_API_KEY
@@ -1005,7 +1062,8 @@ export function getValidateSteps(): ValidateStep[] {
           authType: 'api_key',
           createdAt: Date.now(),
         })
-        await client.invoke('settings:setupLlmConnection', { slug, credential: envKey })
+        const result = await client.invoke('settings:setupLlmConnection', { slug, credential: envKey }) as { success: boolean; error?: string }
+        if (!result?.success) return `setup failed: ${result?.error ?? 'unknown'}`
         await client.invoke('LLM_Connection:setDefault', slug)
         return `0 found → created from env`
       },
@@ -1127,6 +1185,41 @@ export function getValidateSteps(): ValidateStep[] {
           `[source:${ctx.createdSourceSlug}] Get me a cat fact`, 90_000, false, undefined, ctx.onEvent)
       },
     },
+    // ----- MCP source validation (pre-committed in .github/agents/sources/) -----
+    {
+      name: 'mcp:craft-public (auth:none)',
+      fn: async (client, ctx) => {
+        if (!ctx.createdSessionId) return 'skipped (no session)'
+        // Enable the pre-committed craft-public MCP source on the session
+        const enableSlugs = [ctx.createdSourceSlug, 'craft-public'].filter(Boolean) as string[]
+        await client.invoke('sessions:command', ctx.createdSessionId, {
+          type: 'setSources',
+          sourceSlugs: enableSlugs,
+        })
+        return await waitForSendEvents(client, ctx.createdSessionId,
+          `[source:craft-public] List the documents under the "CraftAgents E2E Tests" folder. Just list their names.`,
+          90_000, false, undefined, ctx.onEvent)
+      },
+    },
+    {
+      name: 'mcp:stitch-mcp (header-auth)',
+      fn: async (client, ctx) => {
+        if (!ctx.createdSessionId) return 'skipped (no session)'
+        const apiKey = process.env.STITCH_API_KEY
+        if (!apiKey) return 'skipped (no STITCH_API_KEY)'
+        // Inject credential into store (multi-header JSON format, same as API headerNames)
+        await client.invoke('sources:saveCredentials', ctx.workspaceId, 'stitch-mcp', JSON.stringify({ 'X-Goog-Api-Key': apiKey }))
+        // Enable stitch-mcp + existing sources on session
+        const enableSlugs = [ctx.createdSourceSlug, 'craft-public', 'stitch-mcp'].filter(Boolean) as string[]
+        await client.invoke('sessions:command', ctx.createdSessionId, {
+          type: 'setSources',
+          sourceSlugs: enableSlugs,
+        })
+        return await waitForSendEvents(client, ctx.createdSessionId,
+          `Use the source_test tool to test the stitch-mcp source. Report the result.`,
+          90_000, false, undefined, ctx.onEvent)
+      },
+    },
     // ----- Skill lifecycle -----
     {
       name: 'send + skill create',
@@ -1190,44 +1283,40 @@ SKILLEOF`, 90_000, true, undefined, ctx.onEvent)
         const historyPath = `${ctx.workspaceRootPath}/automations-history.jsonl`
         const { readFile, writeFile } = await import('fs/promises')
 
-        // Check if config already exists (CI case — .github/agents/automations.json committed)
+        // Always backup + overwrite with deterministic validation config,
+        // then restore during cleanup.
         const existingConfig = await readFile(configPath, 'utf-8').catch(() => null)
-        if (existingConfig) {
-          try {
-            const parsed = JSON.parse(existingConfig)
-            const entries = parsed?.automations?.SessionStatusChange
-            if (Array.isArray(entries) && entries.length > 0) {
-              ctx.automationName = entries[0].name
-              return `config already loaded (${ctx.automationName})`
-            }
-          } catch { /* parse failed, overwrite below */ }
-        }
-
-        // Non-CI: backup + write directly (no LLM call needed)
         ctx.automationsJsonBackup = existingConfig
         ctx.automationsHistoryBackup = await readFile(historyPath, 'utf-8').catch(() => null)
-        ctx.automationName = `CLI Validate Automation ${Date.now()}`
-        const config = JSON.stringify({
-          version: 2,
-          automations: {
-            SessionStatusChange: [{
-              name: ctx.automationName,
-              matcher: 'in-progress',
-              labels: ['cli-validate-label'],
-              actions: [
-                { type: 'prompt', prompt: 'Reply with exactly: AUTOMATION_TRIGGERED' },
-                { type: 'webhook', url: 'http://127.0.0.1:19999/validate-webhook',
-                  method: 'POST', bodyFormat: 'json',
-                  body: { event: '$CRAFT_EVENT', session: '$CRAFT_SESSION_ID' } },
-              ],
-            }],
-          },
-        }, null, 2)
-        await writeFile(configPath, config)
+
+        const templatePath = `${process.cwd()}/.github/agents/automations.json`
+        const templateConfig = await readFile(templatePath, 'utf-8').catch(() => null)
+        if (!templateConfig) {
+          throw new Error(`Missing automation template at ${templatePath}`)
+        }
+
+        const parsed = JSON.parse(templateConfig) as {
+          automations?: { SessionStatusChange?: Array<{ name?: string }> }
+        }
+        const entries = parsed?.automations?.SessionStatusChange
+        if (!Array.isArray(entries) || entries.length === 0) {
+          throw new Error('Automation template missing automations.SessionStatusChange entries')
+        }
+
+        const blocked = entries.find((e) => e.name === 'CLI Validate Condition Blocked')
+        const pass = entries.find((e) => e.name === 'CLI Validate Condition Pass')
+        if (!blocked?.name || !pass?.name) {
+          throw new Error('Automation template must define both "CLI Validate Condition Blocked" and "CLI Validate Condition Pass"')
+        }
+
+        ctx.automationBlockedName = blocked.name
+        ctx.automationName = pass.name
+
+        await writeFile(configPath, templateConfig)
         ctx.createdAutomation = true
         // ConfigWatcher auto-detects automations.json changes (debounced)
         await new Promise((r) => setTimeout(r, 2000))
-        return `wrote config (${ctx.automationName})`
+        return `wrote config from template (blocked=${ctx.automationBlockedName}, pass=${ctx.automationName})`
       },
     },
     {
@@ -1242,28 +1331,51 @@ SKILLEOF`, 90_000, true, undefined, ctx.onEvent)
         )
         const statusValue = inProgress?.id ?? 'in-progress'
 
-        // Change session status to trigger the automation
+        // Change session status to trigger the automations
         await client.invoke('sessions:command', ctx.createdSessionId, {
           type: 'setSessionStatus',
           state: statusValue,
         })
 
-        // Poll for the automation-created session (automation fires asynchronously)
+        // Poll for expected automation behavior:
+        // - pass automation MUST create a session
+        // - blocked automation MUST NOT create a session
         let delay = 1000
         const deadline = Date.now() + 60_000
         while (Date.now() < deadline) {
           await new Promise((r) => setTimeout(r, delay))
           delay = Math.min(delay * 1.5, 10_000)
           const sessions = (await client.invoke('sessions:get', ctx.workspaceId)) as ValidateSession[]
-          const automationSession = sessions?.find((s) =>
+
+          const blockedSession = sessions?.find((s) =>
+            s.name === ctx.automationBlockedName && s.id !== ctx.createdSessionId
+          )
+          if (blockedSession) {
+            ctx.automationBlockedSessionId = blockedSession.id
+            throw new Error(`Blocked automation unexpectedly triggered (session=${blockedSession.id})`)
+          }
+
+          const passSession = sessions?.find((s) =>
             s.name === ctx.automationName && s.id !== ctx.createdSessionId
           )
-          if (automationSession) {
-            ctx.automationTestSessionId = automationSession.id
-            return `triggered → session ${automationSession.id} (status=${statusValue})`
+          if (passSession) {
+            ctx.automationTestSessionId = passSession.id
+
+            // Guard against delayed blocked-automation session creation.
+            await new Promise((r) => setTimeout(r, 2000))
+            const sessionsAfter = (await client.invoke('sessions:get', ctx.workspaceId)) as ValidateSession[]
+            const blockedAfter = sessionsAfter?.find((s) =>
+              s.name === ctx.automationBlockedName && s.id !== ctx.createdSessionId
+            )
+            if (blockedAfter) {
+              ctx.automationBlockedSessionId = blockedAfter.id
+              throw new Error(`Blocked automation unexpectedly triggered after delay (session=${blockedAfter.id})`)
+            }
+
+            return `pass triggered → session ${passSession.id}; blocked automation did not trigger (status=${statusValue})`
           }
         }
-        throw new Error('Automation-created session not found within 60s')
+        throw new Error('Passing automation-created session not found within 60s')
       },
     },
     {
@@ -1350,18 +1462,54 @@ SKILLEOF`, 90_000, true, undefined, ctx.onEvent)
         if (!ctx.workspaceRootPath) return 'skipped (no workspace root)'
         const { readFile } = await import('fs/promises')
         const historyPath = `${ctx.workspaceRootPath}/automations-history.jsonl`
-        const content = await readFile(historyPath, 'utf-8').catch(() => '')
-        const lines = content.trim().split('\n').filter(Boolean)
-        const entries = lines.map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
-        const webhookEntries = entries.filter((e: any) => e.webhook)
-        if (webhookEntries.length === 0) throw new Error('No webhook history entries found')
-        // Find a recent failed webhook entry (within last 2 minutes)
-        const recentThreshold = Date.now() - 120_000
-        const recentFailed = webhookEntries.find((e: any) =>
-          !e.ok && e.ts > recentThreshold && e.webhook?.method === 'POST'
+
+        const start = Date.now()
+        const deadline = start + 15_000
+        let delay = 200
+
+        let lastLineCount = 0
+        let lastWebhookCount = 0
+        let lastSummary = 'no entries'
+
+        while (Date.now() < deadline) {
+          const content = await readFile(historyPath, 'utf-8').catch(() => '')
+          const lines = content.trim().split('\n').filter(Boolean)
+          lastLineCount = lines.length
+
+          const entries = lines
+            .map((l) => {
+              try {
+                return JSON.parse(l)
+              } catch {
+                return null
+              }
+            })
+            .filter(Boolean) as Array<Record<string, unknown>>
+
+          const webhookEntries = entries.filter((e) => !!e.webhook)
+          lastWebhookCount = webhookEntries.length
+
+          if (webhookEntries.length > 0) {
+            const recentThreshold = Date.now() - 120_000
+            const recentFailed = webhookEntries.find((e: any) =>
+              !e.ok && e.ts > recentThreshold && e.webhook?.method === 'POST'
+            )
+            if (recentFailed) {
+              return `webhook failure recorded: method=${recentFailed.webhook.method}, url=${recentFailed.webhook.url?.slice(0, 50)}`
+            }
+
+            const latest = webhookEntries[webhookEntries.length - 1] as any
+            lastSummary = `latest: ok=${String(latest?.ok)} method=${String(latest?.webhook?.method ?? 'n/a')} ts=${String(latest?.ts ?? 'n/a')}`
+          }
+
+          await new Promise((r) => setTimeout(r, delay))
+          delay = Math.min(Math.round(delay * 1.8), 1500)
+        }
+
+        const waitedMs = Date.now() - start
+        throw new Error(
+          `No recent failed POST webhook history entry after ${waitedMs}ms (lines=${lastLineCount}, webhookEntries=${lastWebhookCount}, ${lastSummary})`,
         )
-        if (!recentFailed) throw new Error('No recent failed webhook entry found in history')
-        return `webhook failure recorded: method=${recentFailed.webhook.method}, url=${recentFailed.webhook.url?.slice(0, 50)}`
       },
     },
     {
@@ -1407,10 +1555,21 @@ SKILLEOF`, 90_000, true, undefined, ctx.onEvent)
   ]
 }
 
-export async function runValidation(client: CliRpcClient, jsonMode: boolean, noSpinner?: boolean): Promise<number> {
+export async function runValidation(
+  client: CliRpcClient,
+  jsonMode: boolean,
+  noSpinner?: boolean,
+  workspaceDir?: string,
+  validateOptions?: { baseUrl?: string; apiKey?: string; provider?: string },
+): Promise<number> {
   const steps = getValidateSteps()
   const total = steps.length
-  const ctx: ValidateContext = {}
+  const ctx: ValidateContext = {
+    workspaceDir,
+    baseUrl: validateOptions?.baseUrl,
+    apiKey: validateOptions?.apiKey,
+    provider: validateOptions?.provider,
+  }
   let passed = 0
   let failed = 0
   const results: Array<{ step: string; status: string; detail: string; elapsed: number }> = []

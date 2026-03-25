@@ -428,7 +428,10 @@ export function getModelsForProviderType(providerType: LlmProviderType, piAuthPr
     return _piModelResolver(piAuthProvider);
   }
 
-  // Anthropic, Bedrock, Vertex all use Claude models
+  // Anthropic, Bedrock, Vertex use Claude models with bare Anthropic IDs.
+  // Note: providerType==='bedrock' goes through ClaudeAgent → Anthropic API,
+  // which requires bare IDs. Pi+amazon-bedrock goes through PiAgent and
+  // gets Bedrock-native IDs via the Pi SDK model resolver.
   return ANTHROPIC_MODELS;
 }
 
@@ -457,6 +460,7 @@ export const PI_PREFERRED_DEFAULTS: Record<string, string[]> = {
   'openai-codex': ['gpt-5.2', 'gpt-5.1', 'gpt-5', 'o4-mini', 'o3', 'gpt-4o'],
   google: ['gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview', 'gemini-2.5-pro', 'gemini-2.5-flash'],
   'github-copilot': ['claude-sonnet-4-6', 'gpt-5', 'o4-mini', 'claude-haiku-4-5'],
+  'amazon-bedrock': ['us.anthropic.claude-opus-4-6-v1', 'us.anthropic.claude-sonnet-4-6', 'us.anthropic.claude-haiku-4-5-20251001-v1:0'],
 };
 
 export function getDefaultModelsForConnection(providerType: LlmProviderType, piAuthProvider?: string): Array<ModelDefinition | string> {
@@ -572,6 +576,78 @@ export function isValidProviderAuthCombination(
   return validCombinations[providerType]?.includes(authType) ?? false;
 }
 
+/**
+ * Maps bare Anthropic model IDs → Bedrock cross-region inference profile IDs.
+ * Uses US inference profiles (us.*) — required for on-demand throughput with
+ * newer Claude models. Direct model IDs (anthropic.claude-*) are rejected
+ * by Bedrock with "Retry your request with the ID or ARN of an inference profile".
+ *
+ * Source: Pi SDK registry (models.generated.js) — us.* variants
+ */
+const BEDROCK_MODEL_MAP: Record<string, string> = {
+  'claude-opus-4-6': 'us.anthropic.claude-opus-4-6-v1',
+  'claude-sonnet-4-6': 'us.anthropic.claude-sonnet-4-6',
+  'claude-haiku-4-5-20251001': 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+  // Older models (for migration of existing connections)
+  'claude-opus-4-5-20251101': 'us.anthropic.claude-opus-4-5-20251101-v1:0',
+  'claude-sonnet-4-5-20250929': 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+  // Also map base IDs (without region prefix) to US inference profiles
+  'anthropic.claude-opus-4-6-v1': 'us.anthropic.claude-opus-4-6-v1',
+  'anthropic.claude-sonnet-4-6': 'us.anthropic.claude-sonnet-4-6',
+  'anthropic.claude-haiku-4-5-20251001-v1:0': 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+  'anthropic.claude-opus-4-5-20251101-v1:0': 'us.anthropic.claude-opus-4-5-20251101-v1:0',
+  'anthropic.claude-sonnet-4-5-20250929-v1:0': 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+}
+
+/** Reverse map: all known Bedrock ID variants → bare Anthropic ID */
+const BEDROCK_REVERSE_MAP: Record<string, string> = {
+  // US inference profiles
+  'us.anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
+  'us.anthropic.claude-sonnet-4-6': 'claude-sonnet-4-6',
+  'us.anthropic.claude-haiku-4-5-20251001-v1:0': 'claude-haiku-4-5-20251001',
+  'us.anthropic.claude-opus-4-5-20251101-v1:0': 'claude-opus-4-5-20251101',
+  'us.anthropic.claude-sonnet-4-5-20250929-v1:0': 'claude-sonnet-4-5-20250929',
+  // EU inference profiles
+  'eu.anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
+  'eu.anthropic.claude-sonnet-4-6': 'claude-sonnet-4-6',
+  'eu.anthropic.claude-haiku-4-5-20251001-v1:0': 'claude-haiku-4-5-20251001',
+  'eu.anthropic.claude-opus-4-5-20251101-v1:0': 'claude-opus-4-5-20251101',
+  'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': 'claude-sonnet-4-5-20250929',
+  // Global inference profiles
+  'global.anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
+  'global.anthropic.claude-sonnet-4-6': 'claude-sonnet-4-6',
+  'global.anthropic.claude-haiku-4-5-20251001-v1:0': 'claude-haiku-4-5-20251001',
+  // Base IDs (no region prefix)
+  'anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
+  'anthropic.claude-sonnet-4-6': 'claude-sonnet-4-6',
+  'anthropic.claude-haiku-4-5-20251001-v1:0': 'claude-haiku-4-5-20251001',
+  'anthropic.claude-opus-4-5-20251101-v1:0': 'claude-opus-4-5-20251101',
+  'anthropic.claude-sonnet-4-5-20250929-v1:0': 'claude-sonnet-4-5-20250929',
+}
+
+/** Map a bare Anthropic model ID to its Bedrock-native equivalent. Pass-through if already native or unknown. */
+export function toBedrockNativeId(modelId: string): string {
+  return BEDROCK_MODEL_MAP[modelId] ?? modelId
+}
+
+/** Map a Bedrock-native model ID back to its bare Anthropic equivalent. Pass-through if already bare or unknown. */
+export function fromBedrockNativeId(modelId: string): string {
+  return BEDROCK_REVERSE_MAP[modelId] ?? modelId
+}
+
+/**
+ * Normalize a model ID for Bedrock storage/usage.
+ * Strips pi/ prefix and maps bare Anthropic IDs to Bedrock-native format.
+ * Idempotent — already-native IDs pass through unchanged.
+ */
+export function normalizeBedrockModelId(
+  modelId: string | undefined,
+): string {
+  if (!modelId) return '';
+  const bare = modelId.startsWith('pi/') ? modelId.slice(3) : modelId
+  return toBedrockNativeId(bare)
+}
+
 // ============================================================
 // Migration Helpers
 // ============================================================
@@ -621,6 +697,67 @@ export function migrateAuthType(
 // Auth Environment Variable Resolution
 // ============================================================
 
+const CLAUDE_BEDROCK_ROUTING_ENV_KEYS = [
+  'CLAUDE_CODE_USE_BEDROCK',
+  'AWS_BEARER_TOKEN_BEDROCK',
+  'ANTHROPIC_BEDROCK_BASE_URL',
+] as const
+
+const CLAUDE_BEDROCK_ROUTING_ENV_KEY_SET = new Set<string>(
+  CLAUDE_BEDROCK_ROUTING_ENV_KEYS,
+)
+
+const MANAGED_ANTHROPIC_AUTH_ENV_KEYS = [
+  'ANTHROPIC_API_KEY',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'ANTHROPIC_BASE_URL',
+  ...CLAUDE_BEDROCK_ROUTING_ENV_KEYS,
+  'AWS_REGION',
+  'AWS_ACCESS_KEY_ID',
+  'AWS_SECRET_ACCESS_KEY',
+  'AWS_SESSION_TOKEN',
+] as const
+
+function getRuntimeEnvValue(key: string): string | undefined {
+  if (typeof process === 'undefined' || !process?.env) {
+    return undefined
+  }
+  return process.env[key]
+}
+
+const MANAGED_ANTHROPIC_AUTH_ENV_BASELINE: Record<string, string | undefined> =
+  Object.fromEntries(
+    MANAGED_ANTHROPIC_AUTH_ENV_KEYS.map((key) => [
+      key,
+      CLAUDE_BEDROCK_ROUTING_ENV_KEY_SET.has(key)
+        ? undefined
+        : getRuntimeEnvValue(key),
+    ]),
+  )
+
+export function clearClaudeBedrockRoutingEnvVars(
+  targetEnv: Record<string, string | undefined> = process.env,
+): void {
+  for (const key of CLAUDE_BEDROCK_ROUTING_ENV_KEYS) {
+    delete targetEnv[key]
+  }
+}
+
+export function resetManagedAnthropicAuthEnvVars(): void {
+  if (typeof process === 'undefined' || !process?.env) {
+    return
+  }
+
+  for (const key of MANAGED_ANTHROPIC_AUTH_ENV_KEYS) {
+    const originalValue = MANAGED_ANTHROPIC_AUTH_ENV_BASELINE[key]
+    if (originalValue === undefined) {
+      delete process.env[key]
+    } else {
+      process.env[key] = originalValue
+    }
+  }
+}
+
 /**
  * Result of resolving auth env vars for an LLM connection.
  */
@@ -662,6 +799,74 @@ export async function resolveAuthEnvVars(
   // OpenAI (Codex), Copilot, and Pi handle auth internally in their postInit()
   if (!isAnthropicProvider(connection.providerType)) {
     return { envVars, success: true };
+  }
+
+  if (connection.providerType === 'bedrock') {
+    // Bedrock is handled by the Pi SDK in product architecture.
+    // Do not enable Claude SDK Bedrock routing here.
+
+    if (connection.baseUrl) {
+      envVars.ANTHROPIC_BEDROCK_BASE_URL = connection.baseUrl
+    }
+
+    const configuredRegion =
+      connection.awsRegion ||
+      getRuntimeEnvValue('AWS_REGION') ||
+      getRuntimeEnvValue('AWS_DEFAULT_REGION')
+    if (!configuredRegion) {
+      return {
+        envVars,
+        success: false,
+        warning: `No AWS region found for Bedrock connection: ${connectionSlug}`,
+      }
+    }
+
+    envVars.AWS_REGION = configuredRegion
+
+    if (connection.authType === 'bearer_token') {
+      const bearerToken = await credentialManager.getLlmApiKey(connectionSlug)
+      if (!bearerToken) {
+        return {
+          envVars,
+          success: false,
+          warning: `No Bedrock bearer token found for: ${connectionSlug}`,
+        }
+      }
+
+      envVars.AWS_BEARER_TOKEN_BEDROCK = bearerToken
+      return { envVars, success: true }
+    }
+
+    if (connection.authType === 'iam_credentials') {
+      const iamCredentials =
+        await credentialManager.getLlmIamCredentials(connectionSlug)
+      if (!iamCredentials?.accessKeyId || !iamCredentials.secretAccessKey) {
+        return {
+          envVars,
+          success: false,
+          warning: `No IAM credentials found for: ${connectionSlug}`,
+        }
+      }
+
+      envVars.AWS_ACCESS_KEY_ID = iamCredentials.accessKeyId
+      envVars.AWS_SECRET_ACCESS_KEY = iamCredentials.secretAccessKey
+      if (iamCredentials.sessionToken) {
+        envVars.AWS_SESSION_TOKEN = iamCredentials.sessionToken
+      }
+      envVars.AWS_REGION = iamCredentials.region || configuredRegion
+
+      return { envVars, success: true }
+    }
+
+    if (connection.authType === 'environment') {
+      return { envVars, success: true }
+    }
+
+    return {
+      envVars,
+      success: false,
+      warning: `Unsupported Bedrock auth type: ${connection.authType}`,
+    }
   }
 
   // Set base URL if configured

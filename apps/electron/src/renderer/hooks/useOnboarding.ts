@@ -76,6 +76,9 @@ interface UseOnboardingReturn {
   handleRecheckGitBash: () => void
   handleClearError: () => void
 
+  // Skip setup ("Setup later")
+  handleSkipSetup: () => void
+
   // Completion
   handleFinish: () => void
   handleCancel: () => void
@@ -141,6 +144,9 @@ export function apiSetupMethodToConnectionSetup(
     piAuthProvider?: string
     modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
     customEndpoint?: CustomEndpointConfig
+    iamCredentials?: { accessKeyId: string; secretAccessKey: string; sessionToken?: string }
+    awsRegion?: string
+    bedrockAuthMethod?: 'iam_credentials' | 'environment'
   },
   editingSlug: string | null,
   existingSlugs: Set<string>,
@@ -178,6 +184,9 @@ export function apiSetupMethodToConnectionSetup(
         piAuthProvider: options.piAuthProvider,
         modelSelectionMode: options.modelSelectionMode,
         customEndpoint: options.customEndpoint,
+        iamCredentials: options.iamCredentials,
+        awsRegion: options.awsRegion,
+        bedrockAuthMethod: options.bedrockAuthMethod,
       }
   }
 }
@@ -240,6 +249,9 @@ export function useOnboarding({
       piAuthProvider?: string
       modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
       customEndpoint?: CustomEndpointConfig
+      iamCredentials?: { accessKeyId: string; secretAccessKey: string; sessionToken?: string }
+      awsRegion?: string
+      bedrockAuthMethod?: 'iam_credentials' | 'environment'
     },
     methodOverride?: ApiSetupMethod,
     connectionSlugOverride?: string,
@@ -262,6 +274,9 @@ export function useOnboarding({
         piAuthProvider: options?.piAuthProvider,
         modelSelectionMode: options?.modelSelectionMode,
         customEndpoint: options?.customEndpoint,
+        iamCredentials: options?.iamCredentials,
+        awsRegion: options?.awsRegion,
+        bedrockAuthMethod: options?.bedrockAuthMethod,
       }, connectionSlugOverride ?? editingSlug, existingSlugs)
       // Use new unified API
       const result = await window.electronAPI.setupLlmConnection(
@@ -368,6 +383,26 @@ export function useOnboarding({
     const isPiApiKeyFlow = state.apiSetupMethod === 'pi_api_key'
 
     try {
+      // Bedrock — skip API key validation and connection test
+      if (data.bedrockAuthMethod) {
+        const saved = await handleSaveConfig(undefined, {
+          baseUrl: data.baseUrl,
+          connectionDefaultModel: data.connectionDefaultModel,
+          models: data.models,
+          piAuthProvider: data.piAuthProvider,
+          modelSelectionMode: data.modelSelectionMode,
+          iamCredentials: data.iamCredentials,
+          awsRegion: data.awsRegion,
+          bedrockAuthMethod: data.bedrockAuthMethod,
+        })
+        if (saved) {
+          setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
+        } else {
+          setState(s => ({ ...s, credentialStatus: 'error' }))
+        }
+        return
+      }
+
       // When editing an existing connection, API key is optional (empty = keep existing credential)
       if (!data.apiKey.trim() && editingSlug) {
         const saved = await handleSaveConfig(undefined, {
@@ -738,6 +773,16 @@ export function useOnboarding({
     setState(s => ({ ...s, errorMessage: undefined }))
   }, [])
 
+  // Skip setup — user chose "Setup later"
+  const handleSkipSetup = useCallback(async () => {
+    try {
+      await window.electronAPI.deferSetup()
+    } catch (error) {
+      console.error('[Onboarding] Failed to defer setup:', error)
+    }
+    onComplete()
+  }, [onComplete])
+
   // Finish onboarding
   const handleFinish = useCallback(() => {
     onComplete()
@@ -797,6 +842,7 @@ export function useOnboarding({
     handleUseGitBashPath,
     handleRecheckGitBash,
     handleClearError,
+    handleSkipSetup,
     handleFinish,
     handleCancel,
     jumpToCredentials,

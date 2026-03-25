@@ -37,6 +37,7 @@ function createTestWorkspace(): Workspace {
   return {
     id: 'test-workspace',
     name: 'Test Workspace',
+    slug: 'workspace',
     rootPath: '/test/workspace',
     createdAt: Date.now(),
   };

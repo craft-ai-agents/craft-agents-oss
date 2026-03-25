@@ -1,7 +1,9 @@
-import { appendFile, readFile, writeFile } from 'fs/promises'
+import { readFile, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
+import { appendAutomationHistoryEntry } from '@craft-agent/shared/automations/history-store'
+import { AUTOMATION_HISTORY_MAX_RUNS_PER_MATCHER } from '@craft-agent/shared/automations/constants'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
@@ -98,7 +100,11 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
             error: result.error,
             responseBody: result.responseBody,
           })
-          appendFile(join(workspace.rootPath, HISTORY_FILE), JSON.stringify(entry) + '\n', 'utf-8').catch(e => log.warn('[Automations] Failed to write history:', e))
+          try {
+            await appendAutomationHistoryEntry(workspace.rootPath, entry)
+          } catch (e) {
+            log.warn('[Automations] Failed to write history:', e)
+          }
         }
         continue
       }
@@ -129,7 +135,11 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
         // Write history entry for test runs
         if (payload.automationId) {
           const entry = createPromptHistoryEntry({ matcherId: payload.automationId, ok: true, sessionId, prompt: action.prompt })
-          appendFile(join(workspace.rootPath, HISTORY_FILE), JSON.stringify(entry) + '\n', 'utf-8').catch(e => log.warn('[Automations] Failed to write history:', e))
+          try {
+            await appendAutomationHistoryEntry(workspace.rootPath, entry)
+          } catch (e) {
+            log.warn('[Automations] Failed to write history:', e)
+          }
         }
       } catch (err: unknown) {
         results.push({
@@ -142,7 +152,11 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
         // Write failed history entry
         if (payload.automationId) {
           const entry = createPromptHistoryEntry({ matcherId: payload.automationId, ok: false, error: (err as Error).message, prompt: action.prompt })
-          appendFile(join(workspace.rootPath, HISTORY_FILE), JSON.stringify(entry) + '\n', 'utf-8').catch(e => log.warn('[Automations] Failed to write history:', e))
+          try {
+            await appendAutomationHistoryEntry(workspace.rootPath, entry)
+          } catch (e) {
+            log.warn('[Automations] Failed to write history:', e)
+          }
         }
       }
     }
@@ -183,10 +197,11 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
   })
 
   // Read execution history for a specific automation
-  server.handle(RPC_CHANNELS.automations.GET_HISTORY, async (_ctx, workspaceId: string, automationId: string, limit = 20) => {
+  server.handle(RPC_CHANNELS.automations.GET_HISTORY, async (_ctx, workspaceId: string, automationId: string, limit = AUTOMATION_HISTORY_MAX_RUNS_PER_MATCHER) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
+    const clampedLimit = Math.max(1, Math.min(limit, AUTOMATION_HISTORY_MAX_RUNS_PER_MATCHER))
     const historyPath = join(workspace.rootPath, HISTORY_FILE)
     try {
       const content = await readFile(historyPath, 'utf-8')
@@ -195,7 +210,7 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
       return lines
         .map(line => { try { return JSON.parse(line) } catch { return null } })
         .filter((e): e is HistoryEntry => e?.id === automationId)
-        .slice(-limit)
+        .slice(-clampedLimit)
         .reverse()
     } catch {
       return [] // File doesn't exist yet
@@ -237,8 +252,11 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
         durationMs: result.durationMs ?? 0,
         error: result.error,
       })
-      appendFile(join(workspace.rootPath, HISTORY_FILE), JSON.stringify(entry) + '\n', 'utf-8')
-        .catch(e => log.warn('[Automations] Failed to write replay history:', e))
+      try {
+        await appendAutomationHistoryEntry(workspace.rootPath, entry)
+      } catch (e) {
+        log.warn('[Automations] Failed to write replay history:', e)
+      }
     }
 
     return { results: results.map(r => ({ ...r, duration: r.durationMs ?? 0 })) }

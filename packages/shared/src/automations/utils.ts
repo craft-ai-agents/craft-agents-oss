@@ -9,6 +9,7 @@ import type { BaseEventPayload } from './event-bus.ts';
 import type { AutomationEvent, AutomationMatcher, PromptReferences, AgentEvent, SdkAutomationInput } from './types.ts';
 import { matchesCron } from './cron-matcher.ts';
 import { sanitizeForShell } from './security.ts';
+import { evaluateConditions } from './conditions.ts';
 
 // ============================================================================
 // String Utilities
@@ -132,11 +133,22 @@ export function getMatchValueForSdkInput(event: AgentEvent, input: SdkAutomation
   }
 }
 
+export interface MatcherContext {
+  /** Precomputed value used for regex matching */
+  matchValue: string;
+  /** Payload used for condition evaluation */
+  payload: Record<string, unknown>;
+  /** Fallback timezone source for time conditions */
+  matcherTimezone?: string;
+}
+
 /**
- * Test if a matcher matches against a pre-computed match value.
- * Shared core: used by both event-bus matching (matcherMatches) and SDK matching (executeAgentEvent).
+ * Base matcher predicate (enabled flag + regex/cron). Intentionally internal.
+ *
+ * Do not call directly from feature code. Use matcherMatchesWithContext()/adapters
+ * so condition gating is never bypassed.
  */
-export function testMatcherAgainst(matcher: AutomationMatcher, event: AutomationEvent, matchValue: string): boolean {
+function matchesBasePredicate(matcher: AutomationMatcher, event: AutomationEvent, matchValue: string): boolean {
   if (matcher.enabled === false) return false;
   if (event === 'SchedulerTick') {
     return !!matcher.cron && matchesCron(matcher.cron, matcher.timezone);
@@ -150,10 +162,45 @@ export function testMatcherAgainst(matcher: AutomationMatcher, event: Automation
 }
 
 /**
- * Check if a matcher matches the given event and data (event-bus payloads).
+ * Canonical matcher evaluation pipeline used by all automation entry points.
+ */
+export function matcherMatchesWithContext(
+  matcher: AutomationMatcher,
+  event: AutomationEvent,
+  context: MatcherContext,
+): boolean {
+  if (!matchesBasePredicate(matcher, event, context.matchValue)) return false;
+
+  if (matcher.conditions?.length) {
+    return evaluateConditions(matcher.conditions, {
+      payload: context.payload,
+      matcherTimezone: context.matcherTimezone ?? matcher.timezone,
+    });
+  }
+
+  return true;
+}
+
+/**
+ * App-event adapter for canonical matcher evaluation.
  */
 export function matcherMatches(matcher: AutomationMatcher, event: AutomationEvent, data: Record<string, unknown>): boolean {
-  return testMatcherAgainst(matcher, event, getMatchValue(event, data));
+  return matcherMatchesWithContext(matcher, event, {
+    matchValue: getMatchValue(event, data),
+    payload: data,
+    matcherTimezone: matcher.timezone,
+  });
+}
+
+/**
+ * SDK agent-event adapter for canonical matcher evaluation.
+ */
+export function matcherMatchesSdk(matcher: AutomationMatcher, event: AgentEvent, input: SdkAutomationInput): boolean {
+  return matcherMatchesWithContext(matcher, event, {
+    matchValue: getMatchValueForSdkInput(event, input),
+    payload: input as unknown as Record<string, unknown>,
+    matcherTimezone: matcher.timezone,
+  });
 }
 
 // ============================================================================

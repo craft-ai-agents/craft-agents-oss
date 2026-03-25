@@ -273,6 +273,43 @@ const mockAutomations: AutomationListItem[] = [
     permissionMode: 'allow-all',
     lastExecutedAt: now - 86400_000, // 1 day ago
   },
+  {
+    id: 'automation-9',
+    event: 'SessionStatusChange',
+    matcherIndex: 0,
+    name: 'Done after 9 AM (priority)',
+    summary: 'When status → done, if after 9 AM and has priority label',
+    enabled: true,
+    matcher: '^done$',
+    conditions: [
+      { condition: 'time', after: '09:00', timezone: 'Europe/Budapest' },
+      {
+        condition: 'or',
+        conditions: [
+          { condition: 'state', field: 'labels', contains: 'priority' },
+          { condition: 'state', field: 'labels', contains: 'invoices' },
+        ],
+      },
+    ],
+    actions: [{ type: 'prompt', prompt: 'Session $CRAFT_SESSION_NAME was marked as done. Summarise what was accomplished.' }],
+    lastExecutedAt: now - 600_000,
+  },
+  {
+    id: 'automation-10',
+    event: 'SchedulerTick',
+    matcherIndex: 2,
+    name: 'Morning AI News (Weekdays)',
+    summary: 'Daily at 9:00 AM, weekdays only',
+    enabled: true,
+    cron: '0 9 * * *',
+    timezone: 'Europe/Budapest',
+    conditions: [
+      { condition: 'time', weekday: ['mon', 'tue', 'wed', 'thu', 'fri'], timezone: 'Europe/Budapest' },
+    ],
+    labels: ['Scheduled', 'ai-news'],
+    actions: [{ type: 'prompt', prompt: 'Run the @ai-news skill and summarize today\'s AI developments' }],
+    lastExecutedAt: now - 86400_000,
+  },
 ]
 
 const mockExecutions: ExecutionEntry[] = [
@@ -416,6 +453,16 @@ export const automationComponents: ComponentEntry[] = [
         name: 'Error Handler',
         description: 'Runs when a tool fails',
         props: { automation: mockAutomations[7], executions: [] },
+      },
+      {
+        name: 'With Conditions (Status + State)',
+        description: 'SessionStatusChange with time and state conditions (If section visible)',
+        props: { automation: mockAutomations[8], executions: [] },
+      },
+      {
+        name: 'With Conditions (Weekday)',
+        description: 'SchedulerTick with weekday time condition (If section visible)',
+        props: { automation: mockAutomations[9], executions: [] },
       },
       {
         name: 'With Full History',

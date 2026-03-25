@@ -4,6 +4,19 @@
  * Key paths are internal and may be reorganized freely.
  */
 export const RPC_CHANNELS = {
+  remote: {
+    TEST_CONNECTION: 'remote:testConnection',
+  },
+  server: {
+    GET_WORKSPACES: 'server:getWorkspaces',
+    CREATE_WORKSPACE: 'server:createWorkspace',
+    GET_STATUS: 'server:getStatus',
+    GET_HEALTH: 'server:getHealth',
+    GET_ACTIVE_SESSIONS: 'server:getActiveSessions',
+    SHUTTING_DOWN: 'server:shuttingDown',
+    STATUS_CHANGED: 'server:statusChanged',
+    HOME_DIR: 'server:homeDir',
+  },
   sessions: {
     GET: 'sessions:get',
     GET_UNREAD_SUMMARY: 'sessions:getUnreadSummary',
@@ -30,6 +43,10 @@ export const RPC_CHANNELS = {
     UNWATCH_FILES: 'sessions:unwatchFiles',
     FILES_CHANGED: 'sessions:filesChanged',
     SEARCH_CONTENT: 'sessions:searchContent',
+    EXPORT: 'sessions:export',
+    IMPORT: 'sessions:import',
+    EXPORT_REMOTE_TRANSFER: 'sessions:exportRemoteTransfer',
+    IMPORT_REMOTE_TRANSFER: 'sessions:importRemoteTransfer',
   },
   tasks: {
     GET_OUTPUT: 'tasks:getOutput',
@@ -64,6 +81,7 @@ export const RPC_CHANNELS = {
   },
   fs: {
     SEARCH: 'fs:search',
+    LIST_DIRECTORY: 'fs:listDirectory',
   },
   debug: {
     LOG: 'debug:log',
@@ -144,6 +162,7 @@ export const RPC_CHANNELS = {
     EXCHANGE_CLAUDE_CODE: 'onboarding:exchangeClaudeCode',
     HAS_CLAUDE_OAUTH_STATE: 'onboarding:hasClaudeOAuthState',
     CLEAR_CLAUDE_OAUTH_STATE: 'onboarding:clearClaudeOAuthState',
+    DEFER_SETUP: 'onboarding:deferSetup',
   },
   llmConnections: {
     LIST: 'LLM_Connection:list',
@@ -179,6 +198,9 @@ export const RPC_CHANNELS = {
     SET_DEFAULT_THINKING_LEVEL: 'settings:setDefaultThinkingLevel',
     GET_NETWORK_PROXY: 'settings:getNetworkProxy',
     SET_NETWORK_PROXY: 'settings:setNetworkProxy',
+    GET_SERVER_CONFIG: 'settings:getServerConfig',
+    SET_SERVER_CONFIG: 'settings:setServerConfig',
+    GET_SERVER_STATUS: 'settings:getServerStatus',
   },
   pi: {
     GET_API_KEY_PROVIDERS: 'pi:getApiKeyProviders',
@@ -276,6 +298,12 @@ export const RPC_CHANNELS = {
     GET_RICH_TOOL_DESCRIPTIONS: 'appearance:getRichToolDescriptions',
     SET_RICH_TOOL_DESCRIPTIONS: 'appearance:setRichToolDescriptions',
   },
+  caching: {
+    GET_EXTENDED_PROMPT_CACHE: 'caching:getExtendedPromptCache',
+    SET_EXTENDED_PROMPT_CACHE: 'caching:setExtendedPromptCache',
+    GET_ENABLE_1M_CONTEXT: 'caching:getEnable1MContext',
+    SET_ENABLE_1M_CONTEXT: 'caching:setEnable1MContext',
+  },
   badge: {
     REFRESH: 'badge:refresh',
     SET_ICON: 'badge:setIcon',
@@ -329,3 +357,17 @@ export const RPC_CHANNELS = {
 } as const
 
 // IPC_CHANNELS compat alias removed — all consumers now use RPC_CHANNELS
+
+/**
+ * Flatten all channel string values from the nested RPC_CHANNELS object.
+ * Used by the exhaustive routing test to ensure every channel is classified.
+ */
+export function getAllChannelValues(): string[] {
+  const values: string[] = []
+  for (const namespace of Object.values(RPC_CHANNELS)) {
+    for (const channel of Object.values(namespace)) {
+      values.push(channel)
+    }
+  }
+  return values
+}

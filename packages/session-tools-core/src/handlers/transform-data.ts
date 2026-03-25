@@ -54,13 +54,21 @@ export async function handleTransformData(
     );
   }
 
-  // Resolve and validate input files (relative to session dir)
+  // Resolve and validate input files.
+  // Allowed directories: session dir (tool results) and skills dir (skill assets).
+  const allowedInputDirs = [sessionDir];
+  if (ctx.skillsPath) {
+    allowedInputDirs.push(resolve(ctx.skillsPath));
+  }
+
   const resolvedInputs: string[] = [];
   for (const inputFile of args.inputFiles) {
+    // Try resolving relative to session dir first; if it's absolute, resolve() returns it as-is
     const resolvedInput = resolve(sessionDir, inputFile);
-    if (!isPathWithinDirectory(resolvedInput, sessionDir)) {
+    const isAllowed = allowedInputDirs.some(dir => isPathWithinDirectory(resolvedInput, dir));
+    if (!isAllowed) {
       return errorResponse(
-        `inputFile must be within the session directory. Got: ${inputFile}`
+        `inputFile must be within the session or skills directory. Got: ${inputFile}`
       );
     }
     if (!existsSync(resolvedInput)) {

@@ -123,7 +123,7 @@ Connect external data sources to your workspace:
 | Type | Examples |
 |------|----------|
 | **MCP Servers** | Craft, Linear, GitHub, Notion, custom servers |
-| **REST APIs** | Google (Gmail, Calendar, Drive), Slack, Microsoft |
+| **REST APIs** | Google (Gmail, Calendar, Drive, YouTube, Search Console), Slack, Microsoft |
 | **Local Files** | Filesystem, Obsidian vaults, Git repos |
 
 ### Permission Modes
@@ -392,7 +392,7 @@ SLACK_OAUTH_CLIENT_SECRET=your-slack-client-secret
 
 **Note:** Google OAuth credentials are NOT baked into the build. Users provide their own credentials via source configuration. See the [Google OAuth Setup](#google-oauth-setup-gmail-calendar-drive) section below.
 
-### Google OAuth Setup (Gmail, Calendar, Drive)
+### Google OAuth Setup (Gmail, Calendar, Drive, YouTube, Search Console)
 
 Google integrations require you to create your own OAuth credentials. This is a one-time setup.
 
@@ -432,7 +432,7 @@ Go to **APIs & Services → Library** and enable the APIs you need:
 
 #### 5. Configure in Craft Agent
 
-When setting up a Google source (Gmail, Calendar, Drive), add these fields to your source's `config.json`:
+When setting up a Google source (Gmail, Calendar, Drive, YouTube, Search Console, etc.), add these fields to your source's `config.json`:
 
 ```json
 {

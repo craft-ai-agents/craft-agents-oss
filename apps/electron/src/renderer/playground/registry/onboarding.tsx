@@ -45,6 +45,7 @@ export const onboardingComponents: ComponentEntry[] = [
     variants: [],
     mockData: () => ({
       onSelect: (choice: string) => console.log('[Playground] Provider selected:', choice),
+      onSkip: () => console.log('[Playground] Setup deferred'),
     }),
   },
   {
@@ -435,6 +436,7 @@ export const onboardingComponents: ComponentEntry[] = [
       onUseGitBashPath: (path: string) => console.log('[Playground] Use Git Bash path:', path),
       onRecheckGitBash: noopHandler,
       onClearError: noopHandler,
+      onSkipSetup: () => console.log('[Playground] Setup deferred'),
     }),
   },
 ]

@@ -1,83 +1,182 @@
-import { existsSync } from 'node:fs';
 import type { ProviderDriver, DriverTestConnectionArgs } from '../driver-types.ts';
 import type { ModelDefinition } from '../../../../config/models.ts';
 import { getAllPiModels, getPiModelsForAuthProvider } from '../../../../config/models-pi.ts';
 import { getPiProviderBaseUrl } from '../../../../config/models-pi.ts';
 
+// ── Copilot model types ────────────────────────────────────────────────
+type RawCopilotModel = {
+  id: string;
+  name: string;
+  supportedReasoningEfforts?: string[];
+  policy?: { state: string };
+  contextWindow?: number;
+};
+
+// ── Direct HTTP approach ─────────────────────────────────────────────
+
+/** Headers that identify us as a VS Code Copilot client (same as Pi SDK). */
+const COPILOT_HEADERS = {
+  'User-Agent': 'GitHubCopilotChat/0.35.0',
+  'Editor-Version': 'vscode/1.107.0',
+  'Editor-Plugin-Version': 'copilot-chat/0.35.0',
+  'Copilot-Integration-Id': 'vscode-chat',
+} as const;
+
+/** Extract API base URL from a Copilot API token's proxy-ep field. */
+function getBaseUrlFromToken(token: string): string | null {
+  const match = token.match(/proxy-ep=([^;]+)/);
+  if (!match?.[1]) return null;
+  const apiHost = match[1].replace(/^proxy\./, 'api.');
+  return `https://${apiHost}`;
+}
+
 /**
- * Fetch models dynamically from the GitHub Copilot API using @github/copilot-sdk.
- * Requires a valid OAuth access token from the Copilot device flow.
+ * Fetch models directly from the Copilot API via HTTP.
+ *
+ * 1. Exchange GitHub OAuth token → Copilot API token (via Pi SDK)
+ * 2. Extract base URL from token's proxy-ep field
+ * 3. GET /models to list available models with policy state
+ *
+ * No CLI subprocess, no PATH issues, no env contamination.
  */
-async function fetchCopilotModels(
-  accessToken: string,
-  copilotCliPath: string | undefined,
+async function listModelsViaHttp(
+  githubToken: string,
   timeoutMs: number,
-): Promise<ModelDefinition[]> {
-  const { CopilotClient } = await import('@github/copilot-sdk');
+): Promise<RawCopilotModel[]> {
+  const { refreshGitHubCopilotToken } = await import('@mariozechner/pi-ai/oauth');
 
-  const prevToken = process.env.COPILOT_GITHUB_TOKEN;
-  process.env.COPILOT_GITHUB_TOKEN = accessToken;
+  // Step 1: Exchange GitHub OAuth token → Copilot API token
+  const creds = await refreshGitHubCopilotToken(githubToken);
+  const copilotToken = creds.access;
 
-  const client = new CopilotClient({
-    useStdio: true,
-    autoStart: true,
-    logLevel: 'debug',
-    ...(copilotCliPath && existsSync(copilotCliPath) ? { cliPath: copilotCliPath } : {}),
-  });
+  // Step 2: Extract base URL from token
+  const baseUrl = getBaseUrlFromToken(copilotToken);
+  if (!baseUrl) {
+    throw new Error('Could not extract API base URL from Copilot token (missing proxy-ep)');
+  }
 
-  const restoreEnv = () => {
-    if (prevToken !== undefined) {
-      process.env.COPILOT_GITHUB_TOKEN = prevToken;
-    } else {
-      delete process.env.COPILOT_GITHUB_TOKEN;
-    }
-  };
+  console.warn(`[listModelsViaHttp] token exchange OK, baseUrl=${baseUrl}`);
 
-  let models: Array<{ id: string; name: string; supportedReasoningEfforts?: string[]; policy?: { state: string } }>;
+  // Step 3: GET /models
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    await Promise.race([
-      client.start(),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(
-        'Copilot client failed to start within timeout. Check your network connection and GitHub Copilot subscription.',
-      )), timeoutMs)),
-    ]);
+    const res = await fetch(`${baseUrl}/models`, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: {
+        'Authorization': `Bearer ${copilotToken}`,
+        ...COPILOT_HEADERS,
+      },
+    });
 
-    models = await Promise.race([
-      client.listModels(),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(
-        'Copilot model listing timed out. Your GitHub token may be invalid or expired.',
-      )), timeoutMs)),
-    ]);
-  } catch (error) {
-    restoreEnv();
-    try { await client.stop(); } catch { /* ignore cleanup errors */ }
-    throw error;
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Copilot API ${res.status}: ${text.slice(0, 300)}`);
+    }
+
+    const data = await res.json() as Record<string, unknown>;
+    // Handle both { models: [...] } and { data: [...] } response formats
+    const models = (data.models || data.data || []) as Record<string, unknown>[];
+
+    console.warn(`[listModelsViaHttp] GET /models returned ${models.length} models`);
+
+    return models.map(m => ({
+      id: m.id as string,
+      name: (m.name || m.id) as string,
+      supportedReasoningEfforts: (m.supportedReasoningEfforts || m.supported_reasoning_efforts) as string[] | undefined,
+      policy: m.policy as { state: string } | undefined,
+      contextWindow: ((m.capabilities as Record<string, unknown>)?.limits as Record<string, unknown>)?.max_context_window_tokens as number | undefined,
+    }));
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      throw new Error('Copilot models API timed out');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
+}
 
-  try { await client.stop(); } catch { /* ignore cleanup errors */ }
-  restoreEnv();
+/** Model ID prefixes to exclude — legacy models that clutter the selector. */
+const EXCLUDED_MODEL_PREFIXES = ['gpt-4', 'gpt-3.5'];
 
-  if (!models || models.length === 0) {
-    throw new Error('No models returned from Copilot API.');
-  }
+/** Filter raw models to only those explicitly enabled by policy, excluding legacy models. */
+function filterEnabledModels(models: RawCopilotModel[]): RawCopilotModel[] {
+  return models.filter(m =>
+    m.policy?.state === 'enabled'
+    && !EXCLUDED_MODEL_PREFIXES.some(prefix => m.id.startsWith(prefix)),
+  );
+}
 
-  // Only include models the user has enabled in their Copilot settings.
-  // Models without policy info are kept (API may not always report policy).
-  const enabledModels = models.filter(m => !m.policy || m.policy.state === 'enabled');
-
-  if (enabledModels.length === 0) {
-    throw new Error('No enabled models found. Enable models in your GitHub Copilot settings.');
-  }
-
-  return enabledModels.map(m => ({
+/** Convert raw Copilot models to our ModelDefinition format. */
+function toModelDefinitions(models: RawCopilotModel[]): ModelDefinition[] {
+  return models.map(m => ({
     id: m.id,
     name: m.name,
     shortName: m.name,
     description: '',
     provider: 'pi' as const,
-    contextWindow: 200_000,
+    contextWindow: m.contextWindow || 200_000,
     supportsThinking: !!(m.supportedReasoningEfforts && m.supportedReasoningEfforts.length > 0),
   }));
+}
+
+/** Log a breakdown of models by policy state. */
+function logModelBreakdown(tag: string, models: RawCopilotModel[]): void {
+  const byState = new Map<string, string[]>();
+  for (const m of models) {
+    const state = m.policy?.state ?? 'no-policy';
+    const list = byState.get(state) ?? [];
+    list.push(m.id);
+    byState.set(state, list);
+  }
+  const breakdown = [...byState.entries()].map(([s, ids]) => `${s}=${ids.length}(${ids.join(',')})`).join('; ');
+  console.warn(`[fetchCopilotModels] ${tag}: total=${models.length} enabled=${filterEnabledModels(models).length} | ${breakdown}`);
+}
+
+/**
+ * Fetch Copilot models with a 2-tier fallback chain:
+ *
+ * 1. **Direct HTTP API** – exchange the Pi SDK's GitHub OAuth token for
+ *    a Copilot API token, then GET /models. Returns the live model list
+ *    with policy state, so we show only enabled models. No CLI subprocess,
+ *    no PATH issues, no env contamination.
+ * 2. **Pi SDK static catalog** – hardcoded model registry shipped with
+ *    the Pi SDK. Not filtered by the user's policy but always available
+ *    as a last resort.
+ */
+async function fetchCopilotModels(
+  piSdkGitHubToken: string,
+  timeoutMs: number,
+): Promise<ModelDefinition[]> {
+
+  // ── Tier 1: Direct HTTP API ──────────────────────────────────────
+  try {
+    const raw = await listModelsViaHttp(piSdkGitHubToken, timeoutMs);
+    if (raw.length > 0) {
+      logModelBreakdown('tier1-httpApi', raw);
+      const enabled = filterEnabledModels(raw);
+      if (enabled.length > 0) {
+        return toModelDefinitions(enabled);
+      }
+      // All models disabled by policy — unusual but possible.
+      // Log it clearly and fall through to static catalog.
+      console.warn(`[fetchCopilotModels] tier1-httpApi: ${raw.length} models returned but 0 enabled by policy`);
+    }
+  } catch (err) {
+    console.warn(`[fetchCopilotModels] tier1-httpApi failed: ${(err as Error).message}`);
+  }
+
+  // ── Tier 2: Pi SDK static catalog (last resort) ──────────────────
+  const staticModels = getPiModelsForAuthProvider('github-copilot');
+  if (staticModels.length > 0) {
+    console.warn(`[fetchCopilotModels] tier2-staticCatalog: falling back to ${staticModels.length} Pi SDK models`);
+    return staticModels;
+  }
+
+  throw new Error('No Copilot models available from any source.');
 }
 
 /**
@@ -136,19 +235,18 @@ export const piDriver: ProviderDriver = {
     piAuthProvider: providerOptions?.piAuthProvider || context.connection?.piAuthProvider,
     baseUrl: context.connection?.baseUrl,
     customEndpoint: context.connection?.customEndpoint,
-    customModels: context.connection?.models?.map(m => typeof m === 'string' ? m : m.id),
+    customModels: context.connection?.models?.map(m => {
+      if (typeof m === 'string') return m;
+      return m.contextWindow ? { id: m.id, contextWindow: m.contextWindow } : m.id;
+    }),
   }),
-  fetchModels: async ({ connection, credentials, resolvedPaths, timeoutMs }) => {
-    // Copilot OAuth: fetch models dynamically from the Copilot API
-    // The CopilotClient CLI binary expects the GitHub OAuth token (our refreshToken),
-    // NOT the Copilot API token (our accessToken). The CLI does its own token exchange.
+  fetchModels: async ({ connection, credentials, timeoutMs }) => {
+    // Copilot OAuth: fetch models directly from the Copilot API via HTTP.
+    // Uses the GitHub OAuth token (our refreshToken) to exchange for a
+    // Copilot API token, then queries GET /models for the live model list.
     const copilotGitHubToken = credentials.oauthRefreshToken || credentials.oauthAccessToken;
     if (connection.piAuthProvider === 'github-copilot' && copilotGitHubToken) {
-      const models = await fetchCopilotModels(
-        copilotGitHubToken,
-        resolvedPaths.copilotCliPath,
-        timeoutMs,
-      );
+      const models = await fetchCopilotModels(copilotGitHubToken, timeoutMs);
       return { models };
     }
 

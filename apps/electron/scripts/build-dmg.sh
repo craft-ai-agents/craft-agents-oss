@@ -78,7 +78,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Configuration
-BUN_VERSION="bun-v1.3.5"  # Pinned version for reproducible builds
+BUN_VERSION="bun-v1.3.9"  # Pinned version for reproducible builds
 
 echo "=== Building Craft Agents DMG (${ARCH}) using electron-builder ==="
 if [ "$UPLOAD" = true ]; then
@@ -131,11 +131,17 @@ mkdir -p "$ELECTRON_DIR/node_modules/@anthropic-ai"
 cp -r "$SDK_SOURCE" "$ELECTRON_DIR/node_modules/@anthropic-ai/"
 
 # 5. Copy interceptor
-INTERCEPTOR_SOURCE="$ROOT_DIR/packages/shared/src/network-interceptor.ts"
-require_path "$INTERCEPTOR_SOURCE" "Interceptor" "Ensure packages/shared/src/network-interceptor.ts exists."
+INTERCEPTOR_SOURCE="$ROOT_DIR/packages/shared/src/unified-network-interceptor.ts"
+require_path "$INTERCEPTOR_SOURCE" "Interceptor" "Ensure packages/shared/src/unified-network-interceptor.ts exists."
 echo "Copying interceptor..."
 mkdir -p "$ELECTRON_DIR/packages/shared/src"
 cp "$INTERCEPTOR_SOURCE" "$ELECTRON_DIR/packages/shared/src/"
+# Also copy dependencies imported by the interceptor at runtime
+for dep in interceptor-common.ts feature-flags.ts interceptor-request-utils.ts; do
+  if [ -f "$ROOT_DIR/packages/shared/src/$dep" ]; then
+    cp "$ROOT_DIR/packages/shared/src/$dep" "$ELECTRON_DIR/packages/shared/src/"
+  fi
+done
 
 # 6. Build Electron app
 echo "Building Electron app..."

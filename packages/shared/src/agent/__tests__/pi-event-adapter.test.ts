@@ -478,6 +478,22 @@ describe('PiEventAdapter', () => {
       });
     });
 
+    it('should emit typed_error for raw HTML proxy pages', () => {
+      const events = collect(adapter.adaptEvent({
+        type: 'message_end',
+        message: {
+          role: 'assistant',
+          stopReason: 'error',
+          errorMessage: '<html><head><title>400 Bad Request</title></head><body><center><h1>400 Bad Request</h1></center><hr><center>cloudflare</center></body></html>',
+        },
+      } as any));
+
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe('typed_error');
+      expect((events[0] as any).error.code).toBe('proxy_error');
+      expect((events[0] as any).error.message.toLowerCase()).not.toContain('<html');
+    });
+
     it('should emit typed_error for auth-expiry error messages', () => {
       const events = collect(adapter.adaptEvent({
         type: 'message_end',

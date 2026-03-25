@@ -762,7 +762,7 @@ Technical steps:
 
 6. If auth is required, trigger the appropriate flow:
    - `source_oauth_trigger` for MCP OAuth
-   - `source_google_oauth_trigger` for Google services (Gmail, Calendar, Drive, Docs, Sheets)
+   - `source_google_oauth_trigger` for Google services (Gmail, Calendar, Drive, Docs, Sheets, YouTube, Search Console)
    - `source_microsoft_oauth_trigger` for Microsoft services
    - `source_slack_oauth_trigger` for Slack
    - `source_credential_prompt` for API keys/tokens

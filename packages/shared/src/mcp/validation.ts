@@ -13,6 +13,8 @@ import { debug } from '../utils/debug.ts';
 import { getDefaultSummarizationModel } from '../config/models.ts';
 import { parseError, type AgentError } from '../agent/errors.ts';
 import { getLastApiError } from '../interceptor-common.ts';
+import { normalizeMcpUrl } from '../sources/server-builder.ts';
+import type { McpTransport } from '../sources/types.ts';
 
 export interface InvalidProperty {
   toolName: string;
@@ -117,6 +119,10 @@ function findInvalidProperties(
 export interface McpValidationConfig {
   /** MCP server URL */
   mcpUrl: string;
+  /** Transport type ('http' or 'sse'). Defaults to 'http'. */
+  mcpTransport?: McpTransport;
+  /** Custom headers for MCP requests (merged before auth headers) */
+  mcpHeaders?: Record<string, string>;
   /** Access token for MCP server (OAuth or bearer) */
   mcpAccessToken?: string;
   /** Anthropic API key (for API key auth) */
@@ -154,20 +160,19 @@ export async function validateMcpConnection(
       delete process.env.ANTHROPIC_API_KEY;
     }
 
-    // Normalize MCP URL (ensure /mcp suffix)
-    let mcpUrl = config.mcpUrl;
-    if (!mcpUrl.endsWith('/mcp')) {
-      mcpUrl = mcpUrl.replace(/\/$/, '') + '/mcp';
-    }
+    const mcpUrl = normalizeMcpUrl(config.mcpUrl);
+    const mcpType = config.mcpTransport === 'sse' ? 'sse' as const : 'http' as const;
 
-    // Build MCP server config
+    // Build MCP server config (custom headers first, auth headers override)
+    const headers = {
+      ...config.mcpHeaders,
+      ...(config.mcpAccessToken ? { Authorization: `Bearer ${config.mcpAccessToken}` } : {}),
+    };
     const mcpServers = {
       validation_target: {
-        type: 'http' as const,
+        type: mcpType,
         url: mcpUrl,
-        ...(config.mcpAccessToken
-          ? { headers: { Authorization: `Bearer ${config.mcpAccessToken}` } }
-          : {}),
+        ...(Object.keys(headers).length > 0 ? { headers } : {}),
       },
     };
 
@@ -204,12 +209,14 @@ export async function validateMcpConnection(
       if (status.status === 'connected') {
         // Connection successful - now validate tool schemas
         // Use direct MCP client to fetch tools (SDK already validated connection)
+        const clientHeaders = {
+          ...config.mcpHeaders,
+          ...(config.mcpAccessToken ? { Authorization: `Bearer ${config.mcpAccessToken}` } : {}),
+        };
         const mcpClient = new CraftMcpClient({
           transport: 'http',
           url: mcpUrl,
-          headers: config.mcpAccessToken
-            ? { Authorization: `Bearer ${config.mcpAccessToken}` }
-            : undefined,
+          headers: Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined,
         });
 
         try {

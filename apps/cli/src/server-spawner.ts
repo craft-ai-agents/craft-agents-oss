@@ -35,16 +35,16 @@ export interface SpawnServerOptions {
 
 function findServerEntry(): string {
   // Walk up from this file's directory to find the monorepo root.
-  // Expected layout: apps/cli/src/server-spawner.ts → root/apps/electron/src/server/index.ts
+  // Expected layout: apps/cli/src/server-spawner.ts → root/packages/server/src/index.ts
   let dir = import.meta.dir
   for (let i = 0; i < 10; i++) {
-    const candidate = join(dir, 'apps', 'electron', 'src', 'server', 'index.ts')
+    const candidate = join(dir, 'packages', 'server', 'src', 'index.ts')
     if (Bun.file(candidate).size > 0) return candidate
     dir = resolve(dir, '..')
   }
   throw new Error(
     'Could not auto-detect server entry. ' +
-    'Pass --server-entry or ensure the monorepo layout includes apps/electron/src/server/index.ts',
+    'Pass --server-entry or ensure the monorepo layout includes packages/server/src/index.ts',
   )
 }
 
@@ -57,9 +57,12 @@ export async function spawnServer(opts?: SpawnServerOptions): Promise<SpawnedSer
   const startupTimeout = opts?.startupTimeout ?? 30_000
   const token = crypto.randomUUID()
 
+  // Strip CLAUDECODE to avoid the Claude Agent SDK's nesting guard rejecting
+  // subprocess launches when the CLI is invoked from within a Claude Code session.
+  const { CLAUDECODE: _, ...parentEnv } = process.env
   const proc: Subprocess = Bun.spawn(['bun', 'run', serverEntry], {
     env: {
-      ...process.env,
+      ...parentEnv,
       ...opts?.env,
       CRAFT_SERVER_TOKEN: token,
       CRAFT_RPC_PORT: '0',

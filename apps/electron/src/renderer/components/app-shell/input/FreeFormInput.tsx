@@ -15,8 +15,8 @@ import {
 import { Icon_Home, Icon_Folder, Spinner } from '@craft-agent/ui'
 
 import * as storage from '@/lib/local-storage'
-import { extractWorkspaceSlugFromPath } from '@craft-agent/shared/utils/workspace-slug'
-
+import { useDirectoryPicker } from '@/hooks/useDirectoryPicker'
+import { ServerDirectoryBrowser } from '@/components/ServerDirectoryBrowser'
 import { Button } from '@/components/ui/button'
 import {
   InlineSlashCommand,
@@ -255,7 +255,7 @@ export function FreeFormInput({
   inputRef: externalInputRef,
   currentModel,
   onModelChange,
-  thinkingLevel = 'think',
+  thinkingLevel = 'medium',
   onThinkingLevelChange,
   permissionMode = 'ask',
   onPermissionModeChange,
@@ -393,12 +393,12 @@ export function FreeFormInput({
     return appShellCtx.workspaces.find(w => w.id === workspaceId)?.rootPath ?? null
   }, [appShellCtx, workspaceId])
 
-  // Compute workspace slug from rootPath for SDK skill qualification
+  // Workspace slug for SDK skill qualification (server-computed)
   // SDK expects "workspaceSlug:skillSlug" format, NOT UUID
   const workspaceSlug = React.useMemo(() => {
-    if (!workspaceRootPath) return workspaceId // Fallback to ID if no path
-    return extractWorkspaceSlugFromPath(workspaceRootPath, workspaceId ?? '')
-  }, [workspaceRootPath, workspaceId])
+    if (!appShellCtx || !workspaceId) return workspaceId
+    return appShellCtx.workspaces.find(w => w.id === workspaceId)?.slug ?? workspaceId
+  }, [appShellCtx, workspaceId])
 
   // Read panel focus state from context (for multi-panel unfocused styling)
   const appShellContext = useOptionalAppShellContext()
@@ -834,21 +834,21 @@ export function FreeFormInput({
   // Handle folder selection from slash command menu
   const handleSlashFolderSelect = React.useCallback((path: string) => {
     if (onWorkingDirectoryChange) {
-      setRecentFolders(addRecentWorkingDir(path))
+      setRecentFolders(addRecentWorkingDir(path, workspaceId))
       onWorkingDirectoryChange(path)
     }
-  }, [onWorkingDirectoryChange])
+  }, [onWorkingDirectoryChange, workspaceId])
 
   // Get recent folders and home directory for slash menu and mention menu
   const [recentFolders, setRecentFolders] = React.useState<string[]>([])
   const [homeDir, setHomeDir] = React.useState<string>('')
 
   React.useEffect(() => {
-    setRecentFolders(getRecentWorkingDirs())
+    setRecentFolders(getRecentWorkingDirs(workspaceId))
     window.electronAPI?.getHomeDir?.().then((dir: string) => {
       if (dir) setHomeDir(dir)
     })
-  }, [])
+  }, [workspaceId])
 
   // Inline slash command hook (modes, features, and folders)
   const inlineSlash = useInlineSlashCommand({
@@ -1733,6 +1733,7 @@ export function FreeFormInput({
               onWorkingDirectoryChange={onWorkingDirectoryChange}
               sessionFolderPath={sessionFolderPath}
               isEmptySession={isEmptySession}
+              workspaceId={workspaceId}
             />
           )}
           </div>
@@ -1752,7 +1753,7 @@ export function FreeFormInput({
                   <button
                     type="button"
                     className={cn(
-                      "inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors select-none",
+                      "input-toolbar-btn inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors select-none",
                       modelDropdownOpen && "bg-foreground/5",
                       connectionUnavailable && "text-destructive",
                     )}
@@ -2019,7 +2020,7 @@ Model
               type="button"
               size="icon"
               variant="secondary"
-              className="h-7 w-7 rounded-full shrink-0 hover:bg-foreground/15 active:bg-foreground/20 ml-2"
+              className="send-btn h-7 w-7 rounded-full shrink-0 hover:bg-foreground/15 active:bg-foreground/20 ml-2"
               onClick={() => handleStop(false)}
             >
               <Square className="h-3 w-3 fill-current" />
@@ -2028,7 +2029,7 @@ Model
             <Button
               type="submit"
               size="icon"
-              className="h-7 w-7 rounded-full shrink-0 ml-2"
+              className="send-btn h-7 w-7 rounded-full shrink-0 ml-2"
               disabled={!hasContent || disabled || disableSend}
               data-tutorial="send-button"
             >
@@ -2067,11 +2068,13 @@ function WorkingDirectoryBadge({
   onWorkingDirectoryChange,
   sessionFolderPath,
   isEmptySession = false,
+  workspaceId,
 }: {
   workingDirectory?: string
   onWorkingDirectoryChange: (path: string) => void
   sessionFolderPath?: string
   isEmptySession?: boolean
+  workspaceId?: string
 }) {
   const [recentDirs, setRecentDirs] = React.useState<string[]>([])
   const [popoverOpen, setPopoverOpen] = React.useState(false)
@@ -2082,11 +2085,11 @@ function WorkingDirectoryBadge({
 
   // Load home directory and recent directories on mount
   React.useEffect(() => {
-    setRecentDirs(getRecentWorkingDirs())
+    setRecentDirs(getRecentWorkingDirs(workspaceId))
     window.electronAPI?.getHomeDir?.().then((dir: string) => {
       if (dir) setHomeDir(dir)
     })
-  }, [])
+  }, [workspaceId])
 
   // Fetch git branch when working directory changes
   React.useEffect(() => {
@@ -2103,27 +2106,35 @@ function WorkingDirectoryBadge({
   React.useEffect(() => {
     if (popoverOpen) {
       setFilter('')
-      setRecentDirs(getRecentWorkingDirs())
+      setRecentDirs(getRecentWorkingDirs(workspaceId))
       // Focus input after popover animation completes (only if filter is shown)
       const timer = setTimeout(() => {
         inputRef.current?.focus()
       }, 0)
       return () => clearTimeout(timer)
     }
-  }, [popoverOpen])
+  }, [popoverOpen, workspaceId])
 
-  const handleChooseFolder = async () => {
-    if (!window.electronAPI) return
+  const handleFolderSelected = React.useCallback((selectedPath: string) => {
+    setRecentDirs(addRecentWorkingDir(selectedPath, workspaceId))
+    onWorkingDirectoryChange(selectedPath)
+  }, [onWorkingDirectoryChange, workspaceId])
+
+  const {
+    pickDirectory,
+    showServerBrowser,
+    serverBrowserMode,
+    cancelServerBrowser,
+    confirmServerBrowser,
+  } = useDirectoryPicker(handleFolderSelected)
+
+  const handleChooseFolder = () => {
     setPopoverOpen(false)
-    const selectedPath = await window.electronAPI.openFolderDialog()
-    if (selectedPath) {
-      setRecentDirs(addRecentWorkingDir(selectedPath))
-      onWorkingDirectoryChange(selectedPath)
-    }
+    pickDirectory()
   }
 
   const handleSelectRecent = (path: string) => {
-    setRecentDirs(addRecentWorkingDir(path)) // Move to top of recent list
+    setRecentDirs(addRecentWorkingDir(path, workspaceId)) // Move to top of recent list
     onWorkingDirectoryChange(path)
     setPopoverOpen(false)
   }
@@ -2137,7 +2148,7 @@ function WorkingDirectoryBadge({
 
   const handleRemoveRecent = (e: React.MouseEvent, path: string) => {
     e.stopPropagation() // Don't trigger the item's onSelect
-    setRecentDirs(removeRecentWorkingDir(path))
+    setRecentDirs(removeRecentWorkingDir(path, workspaceId))
   }
 
   // Filter out current directory from recent list and sort alphabetically by folder name
@@ -2164,6 +2175,7 @@ function WorkingDirectoryBadge({
   const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-2 rounded-[6px] px-3 py-1.5 text-[13px] outline-none'
 
   return (
+    <>
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
       <PopoverTrigger asChild>
         <span className="shrink min-w-0 overflow-hidden">
@@ -2279,5 +2291,13 @@ function WorkingDirectoryBadge({
         </CommandPrimitive>
       </PopoverContent>
     </Popover>
+    <ServerDirectoryBrowser
+      open={showServerBrowser}
+      mode={serverBrowserMode}
+      onSelect={confirmServerBrowser}
+      onCancel={cancelServerBrowser}
+      initialPath={workingDirectory}
+    />
+    </>
   )
 }

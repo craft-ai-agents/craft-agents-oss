@@ -16,7 +16,8 @@ import { readFile, writeFile, appendFile } from 'fs/promises';
 import { join } from 'path';
 import { createLogger } from '../utils/debug.ts';
 import { executeWebhookRequest, createWebhookHistoryEntry } from './webhook-utils.ts';
-import { AUTOMATIONS_RETRY_QUEUE_FILE, AUTOMATIONS_HISTORY_FILE } from './constants.ts';
+import { AUTOMATIONS_RETRY_QUEUE_FILE } from './constants.ts';
+import { appendAutomationHistoryEntry } from './history-store.ts';
 import type { WebhookAction, WebhookActionResult } from './types.ts';
 
 const log = createLogger('retry-scheduler');
@@ -130,7 +131,6 @@ export class RetryScheduler {
 
     try {
       const queuePath = join(this.workspaceRootPath, AUTOMATIONS_RETRY_QUEUE_FILE);
-      const historyPath = join(this.workspaceRootPath, AUTOMATIONS_HISTORY_FILE);
 
       // Read queue
       let raw: string;
@@ -192,8 +192,11 @@ export class RetryScheduler {
             durationMs: result.durationMs ?? 0,
             attempts: entry.deferredAttempt + 1,
           });
-          appendFile(historyPath, JSON.stringify(historyEntry) + '\n', 'utf-8')
-            .catch(e => log.debug(`[RetryScheduler] Failed to write history: ${e}`));
+          try {
+            await appendAutomationHistoryEntry(this.workspaceRootPath, historyEntry);
+          } catch (e) {
+            log.debug(`[RetryScheduler] Failed to write history: ${e}`);
+          }
           // Don't add to remaining — drop from queue
         } else if (entry.deferredAttempt + 1 >= MAX_DEFERRED_ATTEMPTS) {
           // Final attempt failed — write permanent failure to history
@@ -208,8 +211,11 @@ export class RetryScheduler {
             attempts: entry.deferredAttempt + 1,
             error: result.error ?? 'Unknown error',
           });
-          appendFile(historyPath, JSON.stringify(historyEntry) + '\n', 'utf-8')
-            .catch(e => log.debug(`[RetryScheduler] Failed to write history: ${e}`));
+          try {
+            await appendAutomationHistoryEntry(this.workspaceRootPath, historyEntry);
+          } catch (e) {
+            log.debug(`[RetryScheduler] Failed to write history: ${e}`);
+          }
           // Don't add to remaining — drop from queue
         } else {
           // Still retryable — schedule next deferred attempt

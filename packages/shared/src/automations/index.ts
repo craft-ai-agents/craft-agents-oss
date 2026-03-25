@@ -38,6 +38,10 @@ export type {
   SdkAutomationCallback,
   SdkAutomationCallbackMatcher,
   SessionMetadataSnapshot,
+  TimeCondition,
+  StateCondition,
+  LogicalCondition,
+  AutomationCondition,
 } from './types.ts';
 
 export { APP_EVENTS, AGENT_EVENTS } from './types.ts';
@@ -72,7 +76,10 @@ export { parsePromptReferences } from './utils.ts';
 export { AutomationEventLogger, type LoggedAutomationEvent, type LoggedAutomationEventInput } from './event-logger.ts';
 
 // Schemas
-export { AutomationsConfigSchema, zodErrorToIssues, VALID_EVENTS } from './schemas.ts';
+export { AutomationsConfigSchema, AutomationConditionSchema, TimeConditionSchema, StateConditionSchema, zodErrorToIssues, VALID_EVENTS } from './schemas.ts';
+
+// Condition evaluator
+export { evaluateConditions, type ConditionContext } from './conditions.ts';
 
 // Security utilities
 export { sanitizeForShell } from './security.ts';
@@ -84,7 +91,10 @@ export { executeWebhookRequest, executeWithRetry, createWebhookHistoryEntry, cre
 export { RetryScheduler, type RetryQueueEntry, type RetrySchedulerOptions } from './retry-scheduler.ts';
 
 // Config constants
-export { AUTOMATIONS_CONFIG_FILE, AUTOMATIONS_HISTORY_FILE, AUTOMATIONS_RETRY_QUEUE_FILE, HISTORY_FIELD_MAX_LENGTH } from './constants.ts';
+export { AUTOMATIONS_CONFIG_FILE, AUTOMATIONS_HISTORY_FILE, AUTOMATIONS_RETRY_QUEUE_FILE, HISTORY_FIELD_MAX_LENGTH, AUTOMATION_HISTORY_MAX_RUNS_PER_MATCHER, AUTOMATION_HISTORY_MAX_ENTRIES } from './constants.ts';
+
+// History store
+export { appendAutomationHistoryEntry, compactAutomationHistory, compactAutomationHistorySync } from './history-store.ts';
 
 // Config path resolution
 export { resolveAutomationsConfigPath, generateShortId } from './resolve-config-path.ts';

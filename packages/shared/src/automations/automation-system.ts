@@ -18,13 +18,13 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveAutomationsConfigPath, generateShortId } from './resolve-config-path.ts';
-import { AUTOMATIONS_HISTORY_FILE } from './constants.ts';
+import { compactAutomationHistorySync } from './history-store.ts';
 import { createLogger } from '../utils/debug.ts';
 import { WorkspaceEventBus, type EventPayloadMap } from './event-bus.ts';
 import { PromptHandler, EventLogHandler, WebhookHandler, type AutomationsConfigProvider } from './handlers/index.ts';
 import { type AutomationsConfig, type AutomationEvent, type AutomationMatcher, type PendingPrompt, type WebhookActionResult, type AppEvent, type AgentEvent, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from './types.ts';
 import { validateAutomationsConfig } from './validation.ts';
-import { testMatcherAgainst, getMatchValueForSdkInput } from './utils.ts';
+import { matcherMatchesSdk } from './utils.ts';
 import { SchedulerService, type SchedulerTickPayload } from '../scheduler/scheduler-service.ts';
 
 const log = createLogger('automation-system');
@@ -200,22 +200,16 @@ export class AutomationSystem implements AutomationsConfigProvider {
   }
 
   /**
-   * Rotate automations-history.jsonl on startup: keep only the last 1000 entries.
+   * Compact automations-history.jsonl on startup: two-tier retention.
+   * 1) Keep only the last N entries per automation ID.
+   * 2) If total still exceeds the global cap, drop oldest globally.
    * Runs synchronously during init — single-threaded, no race with concurrent appends.
    */
-  private rotateHistory(maxEntries = 1000): void {
-    const historyPath = join(this.options.workspaceRootPath, AUTOMATIONS_HISTORY_FILE);
+  private rotateHistory(): void {
     try {
-      if (!existsSync(historyPath)) return;
-      const content = readFileSync(historyPath, 'utf-8');
-      const lines = content.trim().split('\n').filter(Boolean);
-      if (lines.length <= maxEntries) return;
-
-      const trimmed = lines.slice(-maxEntries).join('\n') + '\n';
-      writeFileSync(historyPath, trimmed, 'utf-8');
-      log.debug(`[AutomationSystem] Rotated automations-history.jsonl: ${lines.length} → ${maxEntries} entries`);
+      compactAutomationHistorySync(this.options.workspaceRootPath);
     } catch {
-      // Non-critical — rotation failure doesn't affect functionality
+      // Non-critical — compaction failure doesn't affect functionality
     }
   }
 
@@ -491,23 +485,28 @@ export class AutomationSystem implements AutomationsConfigProvider {
    * Catches all errors — automations must never break the agent flow.
    *
    * @param signal - Optional AbortSignal for cancelling automation execution on abort
+   * @returns Number of matched matchers (for diagnostics/testing)
    */
-  async executeAgentEvent(event: AgentEvent, input: SdkAutomationInput, signal?: AbortSignal): Promise<void> {
-    if (!this.config) return;
+  async executeAgentEvent(event: AgentEvent, input: SdkAutomationInput, signal?: AbortSignal): Promise<number> {
+    if (!this.config) return 0;
 
     const matchers = this.config.automations[event];
-    if (!matchers?.length) return;
+    if (!matchers?.length) return 0;
 
-    const matchValue = getMatchValueForSdkInput(event, input);
+    let matchedCount = 0;
 
     for (const matcher of matchers) {
-      if (!testMatcherAgainst(matcher, event, matchValue)) continue;
+      if (!matcherMatchesSdk(matcher, event, input)) continue;
+
+      matchedCount++;
 
       // Note: Command execution has been removed. Prompt-based execution for
       // non-Claude backends is not yet implemented. This method currently only
-      // validates matching — actual execution is a no-op.
+      // validates matching (including condition gating) — actual execution is a no-op.
       log.debug(`[AutomationSystem] Matched ${event} automation (prompt-based execution pending)`);
     }
+
+    return matchedCount;
   }
 
   // ============================================================================

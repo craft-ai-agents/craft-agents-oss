@@ -101,6 +101,13 @@ export function OnboardingFlowDemo() {
     setErrorMessage(undefined)
   }, [])
 
+  const handleSkip = useCallback(() => {
+    console.log('[Playground] Setup deferred — dismissing onboarding')
+    // In the real app this calls onComplete() which dismisses onboarding
+    // and shows the main app. In the playground we restart the demo.
+    handleRestart()
+  }, [handleRestart])
+
   // Step labels for the breadcrumb
   const activeStepLabel = step === 'local-model' ? 'Local Model' : 'Credentials'
   const STEP_ORDER: { key: DemoStep; label: string }[] = [
@@ -152,7 +159,7 @@ export function OnboardingFlowDemo() {
         )}
 
         {step === 'provider-select' && (
-          <ProviderSelectStep onSelect={handleProviderSelect} />
+          <ProviderSelectStep onSelect={handleProviderSelect} onSkip={handleSkip} />
         )}
 
         {step === 'credentials' && method && (

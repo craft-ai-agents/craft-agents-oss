@@ -6,6 +6,7 @@
  * and lifecycle management.
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
+import { AbortReason } from '../backend/types.ts';
 import {
   TestAgent,
   createMockBackendConfig,
@@ -33,7 +34,7 @@ describe('BaseAgent', () => {
 
   describe('Thinking Level Configuration', () => {
     it('should initialize with config thinking level', () => {
-      expect(agent.getThinkingLevel()).toBe('think');
+      expect(agent.getThinkingLevel()).toBe('medium');
     });
 
     it('should allow setting thinking level', () => {
@@ -87,6 +88,7 @@ describe('BaseAgent', () => {
       agent.setWorkspace({
         id: 'new-workspace',
         name: 'New Workspace',
+        slug: 'path',
         rootPath: '/new/path',
         createdAt: Date.now(),
       });
@@ -188,6 +190,12 @@ describe('BaseAgent', () => {
       await agent.abort('test reason');
       expect(agent.abortCalls).toHaveLength(1);
       expect(agent.abortCalls[0]?.reason).toBe('test reason');
+    });
+
+    it('should delegate handoff interrupts to forceAbort by default', () => {
+      agent.interruptForHandoff(AbortReason.AuthRequest);
+      expect(agent.forceAbortCalls).toHaveLength(1);
+      expect(agent.forceAbortCalls[0]?.reason).toBe(AbortReason.AuthRequest);
     });
 
     it('should track respondToPermission calls', () => {

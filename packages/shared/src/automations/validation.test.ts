@@ -81,6 +81,67 @@ describe('validation', () => {
       const result = validateAutomationsConfig(config);
       expect(result.valid).toBe(true);
     });
+
+    it('should reject state conditions with no operator', () => {
+      const config = {
+        automations: {
+          LabelAdd: [{
+            conditions: [{ condition: 'state', field: 'mode' }],
+            actions: [{ type: 'prompt', prompt: 'test' }],
+          }],
+        },
+      };
+      const result = validateAutomationsConfig(config);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('at least one operator'))).toBe(true);
+    });
+
+    it('should reject state conditions with conflicting operator groups', () => {
+      const config = {
+        automations: {
+          LabelAdd: [{
+            conditions: [{ condition: 'state', field: 'mode', value: 'ask', not_value: 'safe' }],
+            actions: [{ type: 'prompt', prompt: 'test' }],
+          }],
+        },
+      };
+      const result = validateAutomationsConfig(config);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('exactly one operator group'))).toBe(true);
+    });
+
+    it('should reject semantically invalid time values in object validation path', () => {
+      const config = {
+        automations: {
+          LabelAdd: [{
+            conditions: [{ condition: 'time', after: '25:61' }],
+            actions: [{ type: 'prompt', prompt: 'test' }],
+          }],
+        },
+      };
+      const result = validateAutomationsConfig(config);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('Invalid time value'))).toBe(true);
+    });
+
+    it('should reject condition nesting beyond maximum depth', () => {
+      let nested: unknown = { condition: 'state', field: 'mode', value: 'ask' };
+      for (let i = 0; i < 9; i++) {
+        nested = { condition: 'and', conditions: [nested] };
+      }
+
+      const config = {
+        automations: {
+          LabelAdd: [{
+            conditions: [nested],
+            actions: [{ type: 'prompt', prompt: 'test' }],
+          }],
+        },
+      };
+      const result = validateAutomationsConfig(config);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('exceeds maximum depth'))).toBe(true);
+    });
   });
 
   describe('validateAutomationsContent', () => {

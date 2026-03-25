@@ -438,6 +438,7 @@ export type ErrorCode =
   | 'service_error'
   | 'service_unavailable'
   | 'network_error'
+  | 'proxy_error'           // Proxy/firewall/captive portal intercepted the request
   | 'mcp_auth_required'
   | 'mcp_unreachable'
   | 'billing_error'

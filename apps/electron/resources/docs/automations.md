@@ -337,6 +337,114 @@ For `SchedulerTick` events, use cron expressions instead of regex:
 
 **Timezone:** Use IANA timezone names (e.g., `Europe/Budapest`, `America/New_York`). Defaults to system timezone if not specified.
 
+## Conditions
+
+Conditions are optional filters that run **after** the matcher/cron matches but **before** actions fire. All conditions in the array must pass (implicit AND). If the array is empty or omitted, actions fire unconditionally.
+
+```json
+{
+  "cron": "0 9 * * *",
+  "timezone": "Europe/Budapest",
+  "conditions": [
+    {
+      "condition": "time",
+      "weekday": ["mon", "tue", "wed", "thu", "fri"]
+    }
+  ],
+  "actions": [
+    { "type": "prompt", "prompt": "Good morning! Here's your daily briefing." }
+  ]
+}
+```
+
+### Time Conditions
+
+Check time-of-day and day-of-week in a given timezone.
+
+```json
+{
+  "condition": "time",
+  "after": "09:00",
+  "before": "17:00",
+  "weekday": ["mon", "tue", "wed", "thu", "fri"],
+  "timezone": "Europe/Budapest"
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `after` | `"HH:MM"` | Start of time window (inclusive) |
+| `before` | `"HH:MM"` | End of time window (exclusive) |
+| `weekday` | `string[]` | Allowed days: `mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun` |
+| `timezone` | string | IANA timezone. Falls back to matcher timezone, then system local |
+
+**Overnight ranges:** If `after` is later than `before` (e.g., `"after": "22:00", "before": "06:00"`), the range wraps across midnight.
+
+### State Conditions
+
+Check fields from the event payload. Useful for filtering on specific transitions or values.
+
+```json
+{
+  "condition": "state",
+  "field": "permissionMode",
+  "from": "safe",
+  "to": "allow-all"
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `field` | string | Payload field name (e.g., `permissionMode`, `sessionStatus`, `labels`, `isFlagged`) |
+| `value` | any | Exact match |
+| `from` | any | Previous value (for transition events) |
+| `to` | any | New value (for transition events) |
+| `contains` | string | Array membership check (e.g., check if a label is present) |
+| `not_value` | any | Matches anything except this value |
+
+**Transition fields:** For `permissionMode` and `sessionStatus`, `from`/`to` automatically resolve to the correct payload keys (`oldMode`/`newMode`, `oldState`/`newState`).
+
+### Logical Composition
+
+Combine conditions with `and`, `or`, and `not`:
+
+```json
+{
+  "condition": "and",
+  "conditions": [
+    { "condition": "time", "weekday": ["mon", "tue", "wed", "thu", "fri"] },
+    { "condition": "time", "after": "09:00", "before": "17:00" }
+  ]
+}
+```
+
+```json
+{
+  "condition": "or",
+  "conditions": [
+    { "condition": "state", "field": "permissionMode", "value": "allow-all" },
+    { "condition": "state", "field": "isFlagged", "value": true }
+  ]
+}
+```
+
+```json
+{
+  "condition": "not",
+  "conditions": [
+    { "condition": "time", "weekday": ["sat", "sun"] }
+  ]
+}
+```
+
+| Type | Behaviour |
+|------|-----------|
+| `and` | All sub-conditions must pass |
+| `or` | At least one sub-condition must pass |
+| `not` | None of the sub-conditions may pass |
+
+**Nesting depth:** Conditions can be nested up to 8 levels deep. A simplification warning is emitted at depth 4. Unknown condition types fail closed (evaluate to false).
+
 ## Permission Mode
 
 The `permissionMode` field controls the permission level of sessions created by prompt actions.
@@ -388,6 +496,68 @@ This creates a session with the "Scheduled" and "morning-briefing" labels applie
         "labels": ["Scheduled", "weather"],
         "actions": [
           { "type": "prompt", "prompt": "Run the @weather skill and give me today's forecast" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Weekday-Only AI News (with Conditions)
+
+Use a `time` condition to restrict a daily schedule to weekdays only:
+
+```json
+{
+  "version": 2,
+  "automations": {
+    "SchedulerTick": [
+      {
+        "name": "Morning AI news",
+        "cron": "0 9 * * *",
+        "timezone": "Europe/Budapest",
+        "conditions": [
+          {
+            "condition": "time",
+            "weekday": ["mon", "tue", "wed", "thu", "fri"],
+            "timezone": "Europe/Budapest"
+          }
+        ],
+        "labels": ["Scheduled", "ai-news"],
+        "actions": [
+          { "type": "prompt", "prompt": "Run the @ai-news skill and summarize today's AI developments" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Permission Mode Gate (with Conditions)
+
+Only notify when permission mode changes specifically from `safe` to `allow-all`:
+
+```json
+{
+  "version": 2,
+  "automations": {
+    "PermissionModeChange": [
+      {
+        "conditions": [
+          {
+            "condition": "state",
+            "field": "permissionMode",
+            "from": "safe",
+            "to": "allow-all"
+          }
+        ],
+        "actions": [
+          {
+            "type": "webhook",
+            "url": "${CRAFT_WH_SLACK_URL}",
+            "method": "POST",
+            "body": { "text": ":warning: Permission escalated from safe to allow-all in *${CRAFT_SESSION_NAME}*" }
+          }
         ]
       }
     ]

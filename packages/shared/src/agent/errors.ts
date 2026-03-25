@@ -14,6 +14,7 @@ export type ErrorCode =
   | 'service_error'
   | 'service_unavailable'    // Service unavailable (from diagnostics)
   | 'network_error'
+  | 'proxy_error'           // Proxy/firewall/captive portal intercepted the request
   | 'mcp_auth_required'
   | 'mcp_unreachable'        // MCP server unreachable (from diagnostics)
   | 'billing_error'          // HTTP 402 Payment Required
@@ -61,7 +62,7 @@ export interface AgentError {
 const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalError' | 'details'>> = {
   invalid_api_key: {
     title: 'Invalid API Key',
-    message: 'Your Anthropic API key was rejected. It may be invalid or expired.',
+    message: 'Your API key was rejected. It may be invalid or expired.',
     actions: [
       { key: 's', label: 'Update API key', command: '/settings', action: 'settings' },
     ],
@@ -77,7 +78,7 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
   },
   expired_oauth_token: {
     title: 'Session Expired',
-    message: 'Your Claude Max session has expired.',
+    message: 'Your session has expired. Please try signing in again.',
     actions: [
       { key: 'r', label: 'Re-authenticate', action: 'reauth' },
       { key: 's', label: 'Switch API setup', command: '/settings', action: 'settings' },
@@ -128,6 +129,16 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
     canRetry: true,
     retryDelayMs: 1000,
   },
+  proxy_error: {
+    title: 'Network Proxy Error',
+    message: 'A proxy, firewall, or captive portal intercepted the API request and returned an HTML page instead of the expected response.',
+    actions: [
+      { key: 'r', label: 'Retry', action: 'retry' },
+      { key: 's', label: 'Check proxy settings', command: '/settings', action: 'settings' },
+    ],
+    canRetry: true,
+    retryDelayMs: 2000,
+  },
   mcp_auth_required: {
     title: 'Workspace Authentication Required',
     message: 'Your workspace connection needs to be re-authenticated.',
@@ -147,7 +158,7 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
   },
   billing_error: {
     title: 'Payment Required',
-    message: 'Your account has a billing issue. Check your Anthropic account status.',
+    message: 'Your account has a billing issue. Check your provider account status.',
     actions: [
       { key: 's', label: 'Update credentials', command: '/settings', action: 'settings' },
     ],
@@ -236,6 +247,85 @@ function extractErrorMessages(error: unknown): string {
   return messages.join(' ');
 }
 
+const HTML_DOC_HINTS = ['<html', '<!doctype html', '<head', '<body', '<title', '<h1'] as const;
+const HTML_PROXY_HINTS = [
+  'cloudflare',
+  'cf-ray',
+  'captcha',
+  'security check',
+  'access denied',
+  'attention required',
+  'web application firewall',
+  'waf',
+  'proxy authentication required',
+  'sucuri',
+  'imperva',
+  'akamai',
+] as const;
+const HTML_STATUS_PATTERN = /\b(400|401|403|407|408|409|429|500|502|503|504)\b/;
+
+function looksLikeHtmlPayload(textLower: string): boolean {
+  if (textLower.includes('<!doctype html') || textLower.includes('<html')) {
+    return true;
+  }
+
+  let hintCount = 0;
+  for (const hint of HTML_DOC_HINTS) {
+    if (textLower.includes(hint)) hintCount++;
+  }
+
+  return hintCount >= 3;
+}
+
+function hasHtmlErrorPageSignals(textLower: string): boolean {
+  const hasKnownHttpTitle =
+    textLower.includes('bad request') ||
+    textLower.includes('unauthorized') ||
+    textLower.includes('forbidden') ||
+    textLower.includes('service unavailable') ||
+    textLower.includes('bad gateway') ||
+    textLower.includes('gateway timeout') ||
+    textLower.includes('proxy authentication required');
+
+  return HTML_STATUS_PATTERN.test(textLower) && hasKnownHttpTitle;
+}
+
+function isLikelyProxyInterception(textLower: string): boolean {
+  if (textLower.includes('unexpected html error page') || textLower.includes('network proxy')) {
+    return true;
+  }
+
+  if (!looksLikeHtmlPayload(textLower)) {
+    return false;
+  }
+
+  if (HTML_PROXY_HINTS.some((hint) => textLower.includes(hint))) {
+    return true;
+  }
+
+  return hasHtmlErrorPageSignals(textLower);
+}
+
+function buildProxyErrorMessage(errorMessage: string, fullErrorText: string): string {
+  const lowerErrorMessage = errorMessage.toLowerCase();
+  if (!looksLikeHtmlPayload(lowerErrorMessage)) {
+    // Interceptor-produced proxy messages are already user-safe and actionable.
+    return errorMessage;
+  }
+
+  const details: string[] = [];
+  const statusMatch = fullErrorText.match(HTML_STATUS_PATTERN);
+  if (statusMatch?.[1]) {
+    details.push(`HTTP ${statusMatch[1]}`);
+  }
+  if (fullErrorText.toLowerCase().includes('cloudflare')) {
+    details.push('Cloudflare');
+  }
+
+  const suffix = details.length > 0 ? ` (${details.join(', ')})` : '';
+  return `Received an unexpected HTML error page${suffix} instead of a JSON API response. This is usually caused by a proxy, firewall, or captive portal intercepting the request. Check your proxy settings in Settings > Network.`;
+}
+
 /**
  * Parse an error and return a typed AgentError with user-friendly info
  */
@@ -268,6 +358,11 @@ export function parseError(error: unknown): AgentError {
     code = 'model_no_tool_support';
   } else if (lowerMessage.includes('is not a valid model') || lowerMessage.includes('model not found') || lowerMessage.includes('invalid model')) {
     code = 'invalid_model';
+  // HTML-intercepted responses (proxy/firewall/captive portal).
+  // Must be checked BEFORE status codes: a 502 Cloudflare page or 401 proxy login
+  // page would otherwise be misclassified as service_error or invalid_api_key.
+  } else if (isLikelyProxyInterception(lowerMessage)) {
+    code = 'proxy_error';
   // Check for specific HTTP status codes or patterns
   } else if (lowerMessage.includes('402') || lowerMessage.includes('payment required')) {
     code = 'billing_error';
@@ -303,6 +398,16 @@ export function parseError(error: unknown): AgentError {
   }
 
   const definition = ERROR_DEFINITIONS[code];
+
+  // For proxy_error, prefer safe user-facing text over raw HTML payloads.
+  if (code === 'proxy_error') {
+    return {
+      code,
+      ...definition,
+      message: buildProxyErrorMessage(errorMessage, fullErrorText),
+      originalError: errorMessage,
+    };
+  }
 
   // For model_no_tool_support errors, try to extract the model name for a more helpful message
   if (code === 'model_no_tool_support') {

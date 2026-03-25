@@ -21,7 +21,7 @@ export type CredentialInputMode = 'bearer' | 'basic' | 'header' | 'query' | 'mul
 /**
  * Google service types for OAuth
  */
-export type GoogleService = 'gmail' | 'calendar' | 'drive' | 'docs' | 'sheets';
+export type GoogleService = 'gmail' | 'calendar' | 'drive' | 'docs' | 'sheets' | 'youtube' | 'searchconsole';
 
 /**
  * Slack service types for OAuth
@@ -245,6 +245,9 @@ export interface McpSourceConfig {
   command?: string;
   args?: string[];
   env?: Record<string, string>;
+  headers?: Record<string, string>;
+  /** Header names for credential-store auth (e.g., ["X-API-Key"]) */
+  headerNames?: string[];
 }
 
 /**

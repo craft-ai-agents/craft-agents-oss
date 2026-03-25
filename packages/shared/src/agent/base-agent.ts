@@ -18,8 +18,9 @@ import { join } from 'node:path';
 
 import type { AgentEvent } from '@craft-agent/core/types';
 import type { FileAttachment } from '../utils/files.ts';
+import { buildTransferredSessionContext } from './conversation-summary.ts';
 import type { ThinkingLevel } from './thinking-levels.ts';
-import { DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
+import { DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from './thinking-levels.ts';
 import type { PermissionMode } from './mode-manager.ts';
 import type { LoadedSource } from '../sources/types.ts';
 import { buildCallLlmRequest, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
@@ -62,7 +63,7 @@ import { getMiniAgentSystemPrompt } from '../prompts/system.ts';
 import { buildTitlePrompt, buildRegenerateTitlePrompt, validateTitle } from '../utils/title-generator.ts';
 
 // Skill extraction for Codex/Copilot backends (Claude uses native SDK Skill tool)
-import { parseMentions, stripAllMentions, resolveFileMentions } from '../mentions/index.ts';
+import { parseMentions, resolveSkillMentions, resolveSourceMentions, resolveFileMentions } from '../mentions/index.ts';
 import { loadAllSkills } from '../skills/storage.ts';
 
 // ============================================================
@@ -222,7 +223,7 @@ export abstract class BaseAgent implements AgentBackend {
     this.workingDirectory = config.session?.workingDirectory ?? config.workspace.rootPath ?? process.cwd();
     this._sessionId = config.session?.id || `agent-${Date.now()}`;
     this._model = config.model || defaultModel;
-    this._thinkingLevel = config.thinkingLevel || DEFAULT_THINKING_LEVEL;
+    this._thinkingLevel = normalizeThinkingLevel(config.thinkingLevel) ?? DEFAULT_THINKING_LEVEL;
 
     // Initialize core modules
     // PermissionManager: handles permission evaluation, mode management, and command whitelisting
@@ -369,9 +370,9 @@ export abstract class BaseAgent implements AgentBackend {
    *
    * CALLBACKS FIRED:
    * - SubmitPlan → this.onPlanSubmitted(planPath)
-   *   → Electron reads plan file, shows plan card, calls forceAbort(PlanSubmitted)
+   *   → Electron reads plan file, shows plan card, calls interruptForHandoff(PlanSubmitted)
    * - Auth tools → this.onAuthRequest(authRequest)
-   *   → Electron shows auth dialog, calls forceAbort(AuthRequest)
+   *   → Electron shows auth dialog, calls interruptForHandoff(AuthRequest)
    */
   protected handleSessionMcpToolCompletion(
     toolName: string,
@@ -382,7 +383,7 @@ export abstract class BaseAgent implements AgentBackend {
     //   1. Read the plan file content
     //   2. Create a plan message (role: 'plan')
     //   3. Send plan_submitted event to renderer
-    //   4. Call forceAbort(AbortReason.PlanSubmitted) → turn terminates
+    //   4. Call interruptForHandoff(AbortReason.PlanSubmitted) → turn terminates
     if (toolName === 'SubmitPlan' && args.planPath) {
       this.debug(`SubmitPlan completed: ${args.planPath}`);
       this.onPlanSubmitted?.(args.planPath as string);
@@ -907,12 +908,14 @@ ${formattedMessages}
       }
     }
 
-    // Strip control mentions (skills, sources) from the message text
-    const stripped = stripAllMentions(message);
-
-    // Resolve [file:path] and [folder:path] to absolute paths
+    // Resolve mentions to semantic markers (like file mentions) instead of stripping them.
+    // This preserves sentence structure: "find the bug in [skill:datadog-api]"
+    // becomes "find the bug in [Mentioned skill: Datadog API (slug: datadog-api)]"
+    const skillNames = new Map(skills.map(s => [s.slug, s.metadata.name]));
+    const withSkills = resolveSkillMentions(message, skillNames);
+    const withSources = resolveSourceMentions(withSkills);
     const workDir = this.config.session?.workingDirectory ?? this.workingDirectory;
-    const resolved = resolveFileMentions(stripped, workDir).trim();
+    const resolved = resolveFileMentions(withSources, workDir).trim();
 
     // If user sent only skill mentions with no other text, add a directive
     const cleanMessage = (!resolved && skillPaths.size > 0)
@@ -967,15 +970,23 @@ ${formattedMessages}
       this.prerequisiteManager.registerSkillPrerequisites([...skillPaths.values()]);
     }
 
-    // Prepend branch seed context (for seeded branch sessions) and skill directive.
+    // Prepend branch seed context (for seeded branch sessions) and transferred-session summary.
     const branchSeedContext = this.buildBranchSeedContext(this.config.getBranchSeedMessages?.());
     if (branchSeedContext) {
       this.config.markBranchSeedApplied?.();
     }
 
+    const transferredSessionSummary = this.config.getTransferredSessionSummary?.();
+    const transferredSessionContext = transferredSessionSummary
+      ? buildTransferredSessionContext(transferredSessionSummary)
+      : null;
+    if (transferredSessionContext) {
+      this.config.markTransferredSessionSummaryApplied?.();
+    }
+
     // Prepend read directive to the message so the model reads SKILL.md first.
     const directive = this.formatSkillDirective(skillPaths);
-    const messageParts = [branchSeedContext, directive, cleanMessage].filter(Boolean);
+    const messageParts = [branchSeedContext, transferredSessionContext, directive, cleanMessage].filter(Boolean);
     const effectiveMessage = messageParts.join('\n\n');
 
     yield* this.chatImpl(effectiveMessage, attachments, options);
@@ -1008,9 +1019,19 @@ ${formattedMessages}
 
   /**
    * Force abort with specific reason.
-   * Used for auth requests, plan submissions where we need synchronous abort.
+   * Used for true hard-stop semantics (user stop, redirect fallback, teardown).
    */
   abstract forceAbort(reason: AbortReason): void;
+
+  /**
+   * Interrupt the current turn because control is being handed to the UI.
+   *
+   * Default implementation delegates to forceAbort(); backends can override
+   * when handoff semantics differ from hard abort semantics.
+   */
+  interruptForHandoff(reason: AbortReason): void {
+    this.forceAbort(reason);
+  }
 
   /**
    * Redirect the agent mid-stream. Default: abort and let session layer re-send.

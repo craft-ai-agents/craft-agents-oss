@@ -10,19 +10,23 @@ describe('transform_data path containment', () => {
   let sessionDir: string;
   let dataDir: string;
   let siblingDir: string;
+  let skillsDir: string;
 
   beforeEach(() => {
     rootDir = mkdtempSync(join(tmpdir(), 'transform-data-boundary-'));
     sessionDir = join(rootDir, 'session');
     dataDir = join(sessionDir, 'data');
     siblingDir = join(rootDir, 'session-evil');
+    skillsDir = join(rootDir, 'skills');
 
     mkdirSync(sessionDir, { recursive: true });
     mkdirSync(dataDir, { recursive: true });
     mkdirSync(siblingDir, { recursive: true });
+    mkdirSync(join(skillsDir, 'branding', 'assets'), { recursive: true });
 
     writeFileSync(join(sessionDir, 'in.txt'), 'hello');
     writeFileSync(join(siblingDir, 'outside.txt'), 'evil');
+    writeFileSync(join(skillsDir, 'branding', 'assets', 'template.pptx'), 'fake-pptx');
   });
 
   afterEach(() => {
@@ -76,7 +80,7 @@ describe('transform_data path containment', () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('inputFile must be within the session directory');
+    expect(result.content[0]?.text).toContain('inputFile must be within the session or skills directory');
   });
 
   it('rejects output path that escapes via symlink', async () => {
@@ -109,5 +113,66 @@ describe('transform_data path containment', () => {
 
     expect(result.isError).toBe(false);
     expect(existsSync(join(dataDir, 'out.json'))).toBe(true);
+  });
+
+  it('allows input files from skills directory (absolute path)', async () => {
+    const skillAsset = join(skillsDir, 'branding', 'assets', 'template.pptx');
+    const result = await handleTransformData(ctx(), {
+      language: 'node',
+      script: "const fs=require('node:fs');const data=fs.readFileSync(process.argv.at(-2),'utf-8');fs.writeFileSync(process.argv.at(-1), JSON.stringify({content:data}));",
+      inputFiles: [skillAsset],
+      outputFile: 'out.json',
+    });
+
+    expect(result.isError).toBe(false);
+    expect(existsSync(join(dataDir, 'out.json'))).toBe(true);
+  });
+
+  it('still rejects input files outside both session and skills directories', async () => {
+    const result = await handleTransformData(ctx(), {
+      language: 'node',
+      script: "require('node:fs').writeFileSync(process.argv.at(-1), 'ok')",
+      inputFiles: [join(siblingDir, 'outside.txt')],
+      outputFile: 'out.json',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('inputFile must be within the session or skills directory');
+  });
+
+  it('rejects input path in skills dir that escapes via symlink', async () => {
+    if (process.platform === 'win32') {
+      return; // symlink creation requires elevated privileges on Windows
+    }
+
+    const outsideDir = join(rootDir, 'outside-skills');
+    mkdirSync(outsideDir, { recursive: true });
+    writeFileSync(join(outsideDir, 'secret.txt'), 'sensitive');
+    symlinkSync(outsideDir, join(skillsDir, 'escape-link'), 'dir');
+
+    const result = await handleTransformData(ctx(), {
+      language: 'node',
+      script: "require('node:fs').writeFileSync(process.argv.at(-1), 'ok')",
+      inputFiles: [join(skillsDir, 'escape-link', 'secret.txt')],
+      outputFile: 'out.json',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('inputFile must be within the session or skills directory');
+  });
+
+  it('rejects skills path when skillsPath is not available in context', async () => {
+    // skillsPath is a required getter on SessionToolContext, but at runtime
+    // it could theoretically be empty. Verify the handler falls back safely.
+    const ctxNoSkills = { ...ctx(), skillsPath: undefined } as unknown as SessionToolContext;
+    const result = await handleTransformData(ctxNoSkills, {
+      language: 'node',
+      script: "require('node:fs').writeFileSync(process.argv.at(-1), 'ok')",
+      inputFiles: [join(skillsDir, 'branding', 'assets', 'template.pptx')],
+      outputFile: 'out.json',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('inputFile must be within the session or skills directory');
   });
 });

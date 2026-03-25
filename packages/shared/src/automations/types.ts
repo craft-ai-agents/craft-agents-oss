@@ -95,6 +95,53 @@ export interface WebhookAction {
 
 export type AutomationAction = PromptAction | WebhookAction;
 
+// ============================================================================
+// Condition Types
+// ============================================================================
+
+/** Time-of-day and day-of-week condition */
+export interface TimeCondition {
+  condition: 'time';
+  /** Start time in 24h HH:MM format */
+  after?: string;
+  /** End time in 24h HH:MM format */
+  before?: string;
+  /** Days of week (3-letter lowercase: mon, tue, wed, thu, fri, sat, sun) */
+  weekday?: string[];
+  /** IANA timezone (falls back to matcher timezone, then system local) */
+  timezone?: string;
+}
+
+/** State/field check condition with HA-style from/to for transitions */
+export interface StateCondition {
+  condition: 'state';
+  /** Field name to check (e.g. 'permissionMode', 'sessionStatus', 'labels', 'isFlagged') */
+  field: string;
+  /** Exact value match */
+  value?: unknown;
+  /** Transition: previous value (mapped via TRANSITION_FIELDS) */
+  from?: unknown;
+  /** Transition: new value (mapped via TRANSITION_FIELDS) */
+  to?: unknown;
+  /** Array membership check */
+  contains?: string;
+  /** Negation: matches anything except this value */
+  not_value?: unknown;
+}
+
+/** Logical composition condition (and/or/not) */
+export interface LogicalCondition {
+  condition: 'and' | 'or' | 'not';
+  conditions: AutomationCondition[];
+}
+
+/** Union of all condition types */
+export type AutomationCondition = TimeCondition | StateCondition | LogicalCondition;
+
+// ============================================================================
+// Matcher Definition
+// ============================================================================
+
 export interface AutomationMatcher {
   /** Short 6-character hex ID for stable identification across config changes. */
   id?: string;
@@ -112,6 +159,8 @@ export interface AutomationMatcher {
   labels?: string[];
   /** Whether this automation matcher is enabled. Defaults to true. Set to false to disable without removing. */
   enabled?: boolean;
+  /** Optional conditions that must all pass (AND) after matcher matches, before actions fire */
+  conditions?: AutomationCondition[];
   actions: AutomationAction[];
 }
 

@@ -44,6 +44,16 @@ export interface ApiKeySubmitData {
   modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
   /** Custom endpoint protocol — set when user configures an arbitrary API endpoint */
   customEndpoint?: CustomEndpointConfig
+  /** Bedrock IAM credentials — set when user configures AWS IAM auth */
+  iamCredentials?: {
+    accessKeyId: string
+    secretAccessKey: string
+    sessionToken?: string
+  }
+  /** AWS region for Bedrock */
+  awsRegion?: string
+  /** Bedrock authentication method */
+  bedrockAuthMethod?: 'iam_credentials' | 'environment'
 }
 
 export interface ApiKeyInputProps {
@@ -124,7 +134,7 @@ const GOOGLE_PRESETS: Preset[] = [
 /** Presets that require the Pi SDK for authentication — hidden in Anthropic API Key mode */
 const PI_ONLY_PRESET_KEYS: ReadonlySet<string> = new Set(['minimax-global', 'minimax-cn'])
 
-const COMPAT_ANTHROPIC_DEFAULTS = 'anthropic/claude-opus-4.6, anthropic/claude-sonnet-4.6, anthropic/claude-haiku-4.5'
+const COMPAT_ANTHROPIC_DEFAULTS = 'claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5'
 const COMPAT_OPENAI_DEFAULTS = 'openai/gpt-5.2-codex, openai/gpt-5.1-codex-mini'
 const COMPAT_MINIMAX_DEFAULTS = 'MiniMax-M2.5, MiniMax-M2.5-highspeed'
 const COMPAT_KIMI_DEFAULTS = 'k2p5, kimi-k2-thinking'
@@ -182,6 +192,13 @@ export function ApiKeyInput({
   const [customApi, setCustomApi] = useState<CustomEndpointApi>(initialValues?.customApi ?? 'openai-completions')
   const [modelError, setModelError] = useState<string | null>(null)
 
+  // Bedrock auth state
+  const [bedrockAuthMethod, setBedrockAuthMethod] = useState<'iam_credentials' | 'environment'>('iam_credentials')
+  const [awsAccessKeyId, setAwsAccessKeyId] = useState('')
+  const [awsSecretAccessKey, setAwsSecretAccessKey] = useState('')
+  const [awsSessionToken, setAwsSessionToken] = useState('')
+  const [awsRegion, setAwsRegion] = useState('us-east-1')
+
   // Pi model tier state (for providers with many models like OpenRouter, Vercel)
   const [piModels, setPiModels] = useState<PiModelInfo[]>([])
   const [piModelsLoading, setPiModelsLoading] = useState(false)
@@ -197,6 +214,7 @@ export function ApiKeyInput({
   const isDisabled = disabled || status === 'validating'
 
   const isPiApiKeyFlow = providerType === 'pi_api_key'
+  const isBedrock = activePreset === 'amazon-bedrock'
   // Hide endpoint/model fields for providers with well-known endpoints handled by the SDK
   const DEFAULT_ENDPOINT_PROVIDERS = new Set(['anthropic', 'openai', 'pi', 'google'])
   const isDefaultProviderPreset = DEFAULT_ENDPOINT_PROVIDERS.has(activePreset)
@@ -241,7 +259,7 @@ export function ApiKeyInput({
   }, [activePreset, loadPiModels])
 
   // Whether to show 3 tier dropdowns instead of text input
-  const hasPiModels = isPiApiKeyFlow && piModels.length > 0 && !isDefaultProviderPreset && activePreset !== 'custom'
+  const hasPiModels = isPiApiKeyFlow && piModels.length > 0 && !isDefaultProviderPreset && activePreset !== 'custom' && !isBedrock
 
   const handlePresetSelect = (preset: Preset) => {
     setActivePreset(preset.key)
@@ -322,6 +340,35 @@ export function ApiKeyInput({
       return
     }
 
+    // Bedrock — submit with auth method and optional IAM credentials
+    if (isBedrock) {
+      if (bedrockAuthMethod === 'iam_credentials' && !awsAccessKeyId.trim()) {
+        setModelError('Access Key ID is required for IAM authentication.')
+        return
+      }
+      if (bedrockAuthMethod === 'iam_credentials' && !awsSecretAccessKey.trim()) {
+        setModelError('Secret Access Key is required for IAM authentication.')
+        return
+      }
+      const parsedModels = parseModelList(connectionDefaultModel)
+      onSubmit({
+        apiKey: '',
+        piAuthProvider: effectivePiAuthProvider,
+        bedrockAuthMethod,
+        awsRegion: awsRegion.trim() || 'us-east-1',
+        ...(bedrockAuthMethod === 'iam_credentials' ? {
+          iamCredentials: {
+            accessKeyId: awsAccessKeyId.trim(),
+            secretAccessKey: awsSecretAccessKey.trim(),
+            ...(awsSessionToken.trim() ? { sessionToken: awsSessionToken.trim() } : {}),
+          },
+        } : {}),
+        connectionDefaultModel: parsedModels[0],
+        models: parsedModels.length > 0 ? parsedModels : undefined,
+      })
+      return
+    }
+
     const effectiveBaseUrl = baseUrl.trim()
 
     const parsedModels = parseModelList(connectionDefaultModel)
@@ -362,8 +409,8 @@ export function ApiKeyInput({
 
   return (
     <form id={formId} onSubmit={handleSubmit} className="space-y-6">
-      {/* API Key */}
-      <div className="space-y-2">
+      {/* API Key — hidden for Bedrock (uses IAM/Environment auth) */}
+      {!isBedrock && (<div className="space-y-2">
         <Label htmlFor="api-key">API Key</Label>
         <div className={cn(
           "relative rounded-md shadow-minimal transition-colors",
@@ -395,7 +442,7 @@ export function ApiKeyInput({
             )}
           </button>
         </div>
-      </div>
+      </div>)}
 
       {/* Endpoint/Provider Preset Selector - hidden when only one preset (e.g. Codex/OpenAI direct) */}
       {presets.length > 1 && (
@@ -424,8 +471,8 @@ export function ApiKeyInput({
             </StyledDropdownMenuContent>
           </DropdownMenu>
         </div>
-        {/* Base URL input - hidden for default provider presets (Anthropic/OpenAI) */}
-        {!isDefaultProviderPreset && (
+        {/* Base URL input - hidden for default provider presets (Anthropic/OpenAI) and Bedrock */}
+        {!isDefaultProviderPreset && !isBedrock && (
           <div className={cn(
             "rounded-md shadow-minimal transition-colors",
             "bg-foreground-2 focus-within:bg-background"
@@ -477,6 +524,131 @@ export function ApiKeyInput({
             Most third-party APIs (Ollama, vLLM, DashScope) use OpenAI Compatible.
           </p>
         </div>
+      )}
+
+      {/* Bedrock Auth Section */}
+      {isBedrock && (
+        <>
+          {/* Auth Method Toggle */}
+          <div className="space-y-2">
+            <Label>Authentication</Label>
+            <div className={cn(
+              "flex rounded-md shadow-minimal overflow-hidden",
+              "bg-foreground-2",
+              isDisabled && "opacity-50 pointer-events-none"
+            )}>
+              {([
+                { value: 'iam_credentials' as const, label: 'IAM Credentials' },
+                { value: 'environment' as const, label: 'Environment (AWS CLI)' },
+              ]).map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  disabled={isDisabled}
+                  onClick={() => setBedrockAuthMethod(value)}
+                  className={cn(
+                    "flex-1 py-1.5 text-[12px] font-medium transition-colors",
+                    bedrockAuthMethod === value
+                      ? "bg-background text-foreground shadow-minimal"
+                      : "text-foreground/50 hover:text-foreground/70"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* IAM Credential Fields */}
+          {bedrockAuthMethod === 'iam_credentials' && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="aws-access-key-id" className="text-muted-foreground font-normal text-xs">
+                  Access Key ID
+                </Label>
+                <div className={cn("rounded-md shadow-minimal transition-colors", "bg-foreground-2 focus-within:bg-background")}>
+                  <Input
+                    id="aws-access-key-id"
+                    type="text"
+                    value={awsAccessKeyId}
+                    onChange={(e) => setAwsAccessKeyId(e.target.value)}
+                    placeholder="AKIA..."
+                    className="border-0 bg-transparent shadow-none"
+                    disabled={isDisabled}
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="aws-secret-key" className="text-muted-foreground font-normal text-xs">
+                  Secret Access Key
+                </Label>
+                <div className={cn("relative rounded-md shadow-minimal transition-colors", "bg-foreground-2 focus-within:bg-background")}>
+                  <Input
+                    id="aws-secret-key"
+                    type={showValue ? 'text' : 'password'}
+                    value={awsSecretAccessKey}
+                    onChange={(e) => setAwsSecretAccessKey(e.target.value)}
+                    placeholder="Your secret access key"
+                    className="pr-10 border-0 bg-transparent shadow-none"
+                    disabled={isDisabled}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowValue(!showValue)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    tabIndex={-1}
+                  >
+                    {showValue ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="aws-session-token" className="text-muted-foreground font-normal text-xs">
+                  Session Token <span className="text-foreground/30">· optional</span>
+                </Label>
+                <div className={cn("rounded-md shadow-minimal transition-colors", "bg-foreground-2 focus-within:bg-background")}>
+                  <Input
+                    id="aws-session-token"
+                    type="text"
+                    value={awsSessionToken}
+                    onChange={(e) => setAwsSessionToken(e.target.value)}
+                    placeholder="For temporary credentials (STS)"
+                    className="border-0 bg-transparent shadow-none"
+                    disabled={isDisabled}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Environment info */}
+          {bedrockAuthMethod === 'environment' && (
+            <div className="rounded-md bg-foreground-2 p-3">
+              <p className="text-xs text-foreground/50">
+                Uses your existing AWS credential chain — <code className="text-foreground/70">~/.aws/credentials</code>, <code className="text-foreground/70">AWS_PROFILE</code>, IAM roles, SSO sessions, and environment variables.
+              </p>
+            </div>
+          )}
+
+          {/* AWS Region */}
+          <div className="space-y-1.5">
+            <Label htmlFor="aws-region" className="text-muted-foreground font-normal text-xs">
+              AWS Region
+            </Label>
+            <div className={cn("rounded-md shadow-minimal transition-colors", "bg-foreground-2 focus-within:bg-background")}>
+              <Input
+                id="aws-region"
+                type="text"
+                value={awsRegion}
+                onChange={(e) => setAwsRegion(e.target.value)}
+                placeholder="us-east-1"
+                className="border-0 bg-transparent shadow-none"
+                disabled={isDisabled}
+              />
+            </div>
+          </div>
+        </>
       )}
 
       {/* Model Selection — 3 tier dropdowns for Pi providers, text input for custom/compat */}
@@ -594,7 +766,7 @@ export function ApiKeyInput({
           <Label htmlFor="connection-default-model" className="text-muted-foreground font-normal">
             Default Model{' '}
             <span className="text-foreground/30">
-              · {baseUrl.trim() ? 'required' : 'optional'}
+              · {!isBedrock && baseUrl.trim() ? 'required' : 'optional'}
             </span>
           </Label>
           <div className={cn(
@@ -610,7 +782,7 @@ export function ApiKeyInput({
                 setConnectionDefaultModel(e.target.value)
                 setModelError(null)
               }}
-              placeholder="e.g. anthropic/claude-opus-4.6, anthropic/claude-haiku-4.5"
+              placeholder="e.g. claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5"
               className="border-0 bg-transparent shadow-none"
               disabled={isDisabled}
             />

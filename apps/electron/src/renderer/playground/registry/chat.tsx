@@ -17,6 +17,7 @@ import type { SessionStatus } from '@/config/session-status-config'
 import type { FileAttachment, PermissionRequest, PermissionMode } from '../../../shared/types'
 import { cn } from '@/lib/utils'
 import { AppShellProvider } from '@/context/AppShellContext'
+import { ModalProvider } from '@/context/ModalContext'
 import {
   ensureMockElectronAPI,
   mockInputCallbacks,
@@ -727,6 +728,7 @@ function InputContainerPlayground({
   }, [inputMode])
 
   return (
+    <ModalProvider>
     <AppShellProvider value={playgroundAppShellContext as any}>
       <div className="w-full h-full flex flex-col bg-background">
         <div className="flex-1" />
@@ -773,6 +775,7 @@ function InputContainerPlayground({
         />
       </div>
     </AppShellProvider>
+    </ModalProvider>
   )
 }
 

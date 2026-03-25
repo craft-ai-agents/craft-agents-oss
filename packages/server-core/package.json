@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/server-core",
-  "version": "0.7.5",
+  "version": "0.8.0",
   "description": "Reusable headless server infrastructure for Craft Agent",
   "type": "module",
   "main": "src/index.ts",
@@ -16,7 +16,8 @@
     "./services": "./src/services/index.ts",
     "./handlers/rpc": "./src/handlers/rpc/index.ts",
     "./handlers/rpc/*": "./src/handlers/rpc/*.ts",
-    "./sessions": "./src/sessions/index.ts"
+    "./sessions": "./src/sessions/index.ts",
+    "./webui": "./src/webui/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

@@ -17,6 +17,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createInterface, type Interface as ReadlineInterface } from 'node:readline';
 import type { AgentEvent } from '@craft-agent/core/types';
 import type { FileAttachment } from '../utils/files.ts';
+import { getProxyEnvVars } from '../config/proxy-env.ts';
 
 import type {
   BackendConfig,
@@ -313,13 +314,43 @@ export class PiAgent extends BaseAgent {
       args.unshift('--require', interceptorPath);
     }
 
+    // Resolve credentials before spawning so we can derive AWS env vars
+    // from the same fetch that produces piAuth (single source of truth).
+
+    // For Copilot OAuth: preemptively refresh the short-lived Copilot token
+    // before fetching credentials, so getPiAuth() picks up a fresh token.
+    // refreshAndPushTokens guards this.subprocess internally — safe to call pre-spawn.
+    if (this.config.authType === 'oauth' && runtime.piAuthProvider === 'github-copilot') {
+      const slug = this.config.connectionSlug || 'pi';
+      const stored = await getCredentialManager().getLlmOAuth(slug);
+      if (stored?.refreshToken && (!stored.expiresAt || stored.expiresAt < Date.now() + 5 * 60_000)) {
+        this.debug('Copilot token expired or expiring soon — refreshing before session start');
+        await this.refreshAndPushTokens();
+      }
+    }
+
+    // Retrieve auth credentials for the subprocess.
+    // Custom endpoint mode must NOT fall back to global API keys — keyless local endpoints
+    // are valid, and non-local endpoints should fail explicitly instead of using unrelated creds.
+    const piAuth = await this.getPiAuth();
+    const isCustomEndpointMode = !!runtime.customEndpoint;
+    const legacyApiKey = (!piAuth && !isCustomEndpointMode) ? await this.getApiKey() : undefined;
+    if (isCustomEndpointMode && !piAuth) {
+      this.debug('Custom endpoint mode: no provider credential configured, sending empty API key');
+    }
+
+    // Derive AWS env vars from the piAuth credential (single fetch, no race).
+    const awsEnv = this.buildAwsEnv(piAuth, runtime);
+
     // Spawn the subprocess
     const child = spawn(nodePath, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...process.env,
+        ...getProxyEnvVars(),
         ...this.config.envOverrides,
+        ...awsEnv,
         // Pass session dir for cross-process toolMetadataStore
         ...(sessionDir ? { CRAFT_SESSION_DIR: sessionDir } : {}),
         // Propagate debug mode
@@ -358,27 +389,6 @@ export class PiAgent extends BaseAgent {
       this.eventQueue.complete();
     });
 
-    // For Copilot OAuth: preemptively refresh the short-lived Copilot token
-    // before sending it to the subprocess, so we always start with a valid token.
-    const piAuthProvider = getBackendRuntime(this.config).piAuthProvider;
-    if (this.config.authType === 'oauth' && piAuthProvider === 'github-copilot') {
-      const slug = this.config.connectionSlug || 'pi';
-      const stored = await getCredentialManager().getLlmOAuth(slug);
-      if (stored?.refreshToken && (!stored.expiresAt || stored.expiresAt < Date.now() + 5 * 60_000)) {
-        this.debug('Copilot token expired or expiring soon — refreshing before session start');
-        await this.refreshAndPushTokens();
-      }
-    }
-
-    // Retrieve auth credentials for the subprocess.
-    // Custom endpoint mode must NOT fall back to global API keys — keyless local endpoints
-    // are valid, and non-local endpoints should fail explicitly instead of using unrelated creds.
-    const piAuth = await this.getPiAuth();
-    const isCustomEndpointMode = !!runtime.customEndpoint;
-    const legacyApiKey = (!piAuth && !isCustomEndpointMode) ? await this.getApiKey() : undefined;
-    if (isCustomEndpointMode && !piAuth) {
-      this.debug('Custom endpoint mode: no provider credential configured, sending empty API key');
-    }
     const sessionPath = this.config.session
       ? getSessionPath(this.config.workspace.rootPath, sessionId)
       : '';
@@ -473,7 +483,13 @@ export class PiAgent extends BaseAgent {
    * modules use directly. The OAuth exchange happens on the Craft side; by the time
    * it reaches Pi, it's just an access token.
    */
-  private async getPiAuth(): Promise<{ provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } | null> {
+  private async getPiAuth(): Promise<{
+    provider: string;
+    credential:
+      | { type: 'api_key'; key: string }
+      | { type: 'oauth'; access: string; refresh: string; expires: number }
+      | { type: 'iam'; accessKeyId: string; secretAccessKey: string; region?: string; sessionToken?: string }
+  } | null> {
     const piAuthProvider = getBackendRuntime(this.config).piAuthProvider;
     if (!piAuthProvider) return null;
 
@@ -507,8 +523,29 @@ export class PiAgent extends BaseAgent {
             credential: { type: 'api_key', key: oauth.accessToken },
           };
         }
+      } else if (this.config.authType === 'iam_credentials') {
+        // AWS IAM credentials — pass structured fields so the subprocess can
+        // identify the credential type. Actual AWS env var injection happens
+        // at spawn time (see spawnSubprocess) for proper process isolation.
+        const iam = await credentialManager.getLlmIamCredentials(slug);
+        if (iam) {
+          this.debug(`Retrieved IAM credentials for Pi provider: ${piAuthProvider}`);
+          return {
+            provider: piAuthProvider,
+            credential: {
+              type: 'iam',
+              accessKeyId: iam.accessKeyId,
+              secretAccessKey: iam.secretAccessKey,
+              region: iam.region,
+              sessionToken: iam.sessionToken,
+            },
+          };
+        }
       } else {
-        // API key-based connections
+        // API key-based connections.
+        // NOTE: authType === 'environment' (e.g. Bedrock with ~/.aws/credentials)
+        // intentionally falls through here, finds no API key, and returns null.
+        // The subprocess inherits process.env which contains the AWS credential chain.
         const apiKey = await credentialManager.getLlmApiKey(slug);
         if (apiKey) {
           this.debug(`Retrieved API key credential for Pi provider: ${piAuthProvider}`);
@@ -525,6 +562,42 @@ export class PiAgent extends BaseAgent {
       this.debug(`Failed to retrieve Pi auth: ${error}`);
       return null;
     }
+  }
+
+  /**
+   * Build AWS environment variables from piAuth credentials for the subprocess.
+   *
+   * The Pi SDK's Bedrock provider reads from the AWS default credential chain
+   * (env vars), not from Pi AuthStorage. We inject at spawn time so credentials
+   * are scoped to the subprocess and don't leak to the main process.
+   *
+   * NOTE: IAM credentials (especially STS session tokens) are immutable after
+   * spawn — they cannot be refreshed in a running subprocess. Long sessions
+   * with temporary credentials (~1h STS tokens) will fail on expiry.
+   */
+  private buildAwsEnv(
+    piAuth: Awaited<ReturnType<PiAgent['getPiAuth']>>,
+    runtime: { piAuthProvider?: string },
+  ): Record<string, string> {
+    if (runtime.piAuthProvider !== 'amazon-bedrock') return {};
+
+    const env: Record<string, string> = {};
+
+    if (piAuth?.credential.type === 'iam') {
+      env.AWS_ACCESS_KEY_ID = piAuth.credential.accessKeyId;
+      env.AWS_SECRET_ACCESS_KEY = piAuth.credential.secretAccessKey;
+      if (piAuth.credential.region) env.AWS_REGION = piAuth.credential.region;
+      if (piAuth.credential.sessionToken) env.AWS_SESSION_TOKEN = piAuth.credential.sessionToken;
+      this.debug('Injecting IAM credentials into subprocess env for AWS SDK');
+    }
+
+    // Defensive: force HTTP/1.1 for Bedrock. AWS SDK v3 defaults to HTTP/2
+    // (NodeHttp2Handler) which can be incompatible with Bun/Electron runtimes.
+    if (!process.env.AWS_BEDROCK_FORCE_HTTP1) {
+      env.AWS_BEDROCK_FORCE_HTTP1 = '1';
+    }
+
+    return env;
   }
 
   /**
@@ -746,8 +819,11 @@ export class PiAgent extends BaseAgent {
         break;
 
       case 'error': {
-        this.debug(`Subprocess error: ${msg.message}`);
-        const errorMsg = String(msg.message || '').toLowerCase();
+        const errorCode = typeof msg.code === 'string' ? msg.code : undefined;
+        const rawMessage = String(msg.message || 'Unknown subprocess error');
+
+        this.debug(`Subprocess error${errorCode ? ` (${errorCode})` : ''}: ${rawMessage}`);
+        const errorMsg = rawMessage.toLowerCase();
 
         // Detect auth errors and attempt token refresh for OAuth connections
         if (this.config.authType === 'oauth' && (
@@ -764,29 +840,45 @@ export class PiAgent extends BaseAgent {
           });
         }
 
-        // Reject any pending mini completions so errors propagate immediately
+        // Reject any pending mini completions so errors propagate immediately.
+        // mini_completion_error is an internal utility-path failure (title/summarization)
+        // and should not surface as a user-visible chat error.
         for (const [id, pending] of this.pendingMiniCompletions) {
-          pending.reject(new Error(String(msg.message)));
+          pending.reject(new Error(rawMessage));
           this.pendingMiniCompletions.delete(id);
         }
+
+        if (errorCode === 'mini_completion_error') {
+          this.debug('Ignoring mini completion subprocess error in chat stream');
+          break;
+        }
+
         // Reject pending ensure_session_ready requests (used by branch preflight)
         for (const [id, pending] of this.pendingEnsureSessionReady) {
-          pending.reject(new Error(String(msg.message)));
+          pending.reject(new Error(rawMessage));
           this.pendingEnsureSessionReady.delete(id);
         }
+
         // Reject pending compact/toggle requests
         for (const [id, pending] of this.pendingCompactions) {
-          pending.reject(new Error(String(msg.message)));
+          pending.reject(new Error(rawMessage));
           this.pendingCompactions.delete(id);
         }
         for (const [id, pending] of this.pendingAutoCompactionToggles) {
-          pending.reject(new Error(String(msg.message)));
+          pending.reject(new Error(rawMessage));
           this.pendingAutoCompactionToggles.delete(id);
         }
-        this.eventQueue.enqueue({
-          type: 'error',
-          message: `Pi subprocess error: ${msg.message}`,
-        });
+
+        const parsed = parseError(new Error(rawMessage));
+        if (parsed.code !== 'unknown_error') {
+          this.eventQueue.enqueue({ type: 'typed_error', error: parsed });
+        } else {
+          this.eventQueue.enqueue({
+            type: 'error',
+            message: `Pi subprocess error: ${rawMessage}`,
+          });
+        }
+
         // Note: The subprocess should follow this with a synthetic agent_end event
         // which will call eventQueue.complete(). If it doesn't, handleSubprocessExit()
         // will complete the queue when the process exits.

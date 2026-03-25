@@ -1,6 +1,7 @@
 import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
-import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus } from '@craft-agent/shared/config'
+import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
+import { setSetupDeferred } from '@craft-agent/shared/config/storage'
 import {
   resolveSetupTestConnectionHint,
   testBackendConnection,
@@ -135,14 +136,45 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         }
       }
 
+      // Bedrock auth method override — set authType and region.
+      // providerType stays 'pi' when piAuthProvider==='amazon-bedrock' (Pi SDK Bedrock path).
+      // Only set providerType='bedrock' when there's no Pi auth provider.
+      if (setup.bedrockAuthMethod) {
+        updates.authType = setup.bedrockAuthMethod
+        const hasPiBedrockAuth = (updates.piAuthProvider ?? connection.piAuthProvider) === 'amazon-bedrock'
+        if (!hasPiBedrockAuth) {
+          updates.providerType = 'bedrock'
+        }
+        if (setup.awsRegion) updates.awsRegion = setup.awsRegion
+      }
+
       const effectiveProviderType = updates.providerType ?? connection.providerType
       if (effectiveProviderType === 'pi') {
-        const toPiModelId = (id: string) => id.startsWith('pi/') ? id : `pi/${id}`
+        const isBedrockPi = (updates.piAuthProvider ?? connection.piAuthProvider) === 'amazon-bedrock'
+        // For Pi+Bedrock, normalize bare Anthropic IDs to Bedrock-native before adding pi/ prefix
+        // so that resolvePiModel() can find them in the amazon-bedrock registry.
+        const toPiModelId = (id: string) => {
+          const bare = id.startsWith('pi/') ? id.slice(3) : id
+          const normalized = isBedrockPi ? toBedrockNativeId(bare) : bare
+          return `pi/${normalized}`
+        }
         if (updates.models) {
           updates.models = updates.models.map(m => typeof m === 'string' ? toPiModelId(m) : { ...m, id: toPiModelId(m.id) })
         }
         if (updates.defaultModel) {
           updates.defaultModel = toPiModelId(updates.defaultModel)
+        }
+      } else if (effectiveProviderType === 'bedrock') {
+        // providerType==='bedrock' goes through ClaudeAgent → Anthropic API,
+        // which uses bare Anthropic IDs. Only strip the pi/ prefix.
+        const stripPiPrefix = (id: string) => id.startsWith('pi/') ? id.slice(3) : id
+        if (updates.models) {
+          updates.models = updates.models.map(m => typeof m === 'string'
+            ? stripPiPrefix(m)
+            : { ...m, id: stripPiPrefix(m.id) })
+        }
+        if (updates.defaultModel) {
+          updates.defaultModel = stripPiPrefix(updates.defaultModel)
         }
       }
 
@@ -217,15 +249,29 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         }
       }
 
+      // Bedrock IAM credentials — stored separately from API keys
+      if (setup.iamCredentials) {
+        await manager.setLlmIamCredentials(setup.slug, {
+          ...setup.iamCredentials,
+          region: setup.awsRegion,
+        })
+        deps.platform.logger?.info('Saved IAM credentials to LLM connection')
+      }
+
       // Set as default only if no default exists yet (first connection)
       if (!getDefaultLlmConnection()) {
         setDefaultLlmConnection(setup.slug)
         deps.platform.logger?.info(`Set default LLM connection: ${setup.slug}`)
       }
 
-      // Fetch available models (non-blocking — validation will also trigger refresh)
-      // Skip when user explicitly provided models (tier selection) to avoid overwriting their choices
-      if (!setup.models?.length) {
+      // Fetch available models (non-blocking).
+      // Always refresh for auto-synced connections (e.g. Copilot) — the static
+      // catalog from setup is just a seed that needs replacing with live API data
+      // filtered by the user's policy. For user-defined connections, only refresh
+      // when no models were populated during setup.
+      const pendingModels = Array.isArray(pendingConnection.models) ? pendingConnection.models : []
+      const isAutoSynced = pendingConnection.modelSelectionMode === 'automaticallySyncedFromProvider'
+      if (!pendingModels.length || isAutoSynced) {
         getModelRefreshService().refreshNow(setup.slug).catch(err => {
           deps.platform.logger?.warn(`Model refresh after setup failed for ${setup.slug}: ${err instanceof Error ? err.message : err}`)
         })
@@ -235,6 +281,9 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       // not the global default (which may be a different connection).
       await sessionManager.reinitializeAuth(setup.slug)
       deps.platform.logger?.info('Reinitialized auth after LLM connection setup')
+
+      // Clear "Setup later" flag now that user has configured a provider
+      setSetupDeferred(false)
 
       return { success: true }
     } catch (error) {

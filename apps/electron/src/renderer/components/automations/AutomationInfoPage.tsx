@@ -23,7 +23,7 @@ import { AutomationActionRow } from './AutomationActionRow'
 import { AutomationTestPanel } from './AutomationTestPanel'
 import { AutomationEventTimeline } from './AutomationEventTimeline'
 import { PhaseBadge } from './PhaseBadge'
-import { getEventDisplayName, getPermissionDisplayName, type AutomationListItem, type ExecutionEntry, type TestResult } from './types'
+import { getEventDisplayName, getPermissionDisplayName, flattenConditions, type AutomationListItem, type ExecutionEntry, type TestResult } from './types'
 import { describeCron, computeNextRuns } from './utils'
 
 // ============================================================================
@@ -55,7 +55,6 @@ export function AutomationInfoPage({
 }: AutomationInfoPageProps) {
   const workspace = useActiveWorkspace()
   const nextRuns = automation.cron ? computeNextRuns(automation.cron) : []
-
   const editActions = workspace?.rootPath ? (
     <EditPopover
       trigger={<EditButton />}
@@ -151,6 +150,25 @@ export function AutomationInfoPage({
           </Info_Table>
         </Info_Section>
 
+        {/* Section: If (conditions) — hidden when empty */}
+        {automation.conditions && automation.conditions.length > 0 && (
+          <Info_Section
+            title="If"
+            description="Conditions that must pass before actions run"
+            actions={editActions}
+          >
+            <Info_Table>
+              {flattenConditions(automation.conditions).map((row, i) => (
+                <Info_Table.Row key={i} label={row.label}>
+                  <span className="text-sm text-foreground/70">
+                    {row.description}
+                  </span>
+                </Info_Table.Row>
+              ))}
+            </Info_Table>
+          </Info_Section>
+        )}
+
         {/* Section: Then */}
         <Info_Section
           title="Then"
@@ -205,6 +223,7 @@ export function AutomationInfoPage({
               {`\`\`\`json\n${JSON.stringify({
                 event: automation.event,
                 matcher: automation.matcher,
+                conditions: automation.conditions,
                 cron: automation.cron,
                 timezone: automation.timezone,
                 permissionMode: automation.permissionMode,

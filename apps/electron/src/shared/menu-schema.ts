@@ -9,6 +9,7 @@
  */
 
 import { RPC_CHANNELS } from './types'
+import { FEATURE_FLAGS } from '@craft-agent/shared/feature-flags'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -233,6 +234,7 @@ const SETTINGS_ICONS: Record<SettingsSubpage, string> = {
   workspace: 'Building2',
   permissions: 'ShieldCheck',
   labels: 'Tag',
+  server: 'Server',
   shortcuts: 'Keyboard',
   preferences: 'UserCircle',
 }
@@ -241,12 +243,14 @@ const SETTINGS_ICONS: Record<SettingsSubpage, string> = {
  * All settings pages - derived from settings-registry (single source of truth)
  * Order is determined by SETTINGS_PAGES in settings-registry.ts
  */
-export const SETTINGS_ITEMS: SettingsMenuItem[] = SETTINGS_PAGES.map(page => ({
-  id: page.id,
-  label: page.label,
-  icon: SETTINGS_ICONS[page.id],
-  description: page.description,
-}))
+export const SETTINGS_ITEMS: SettingsMenuItem[] = SETTINGS_PAGES
+  .filter(page => page.id !== 'server' || FEATURE_FLAGS.embeddedServer)
+  .map(page => ({
+    id: page.id,
+    label: page.label,
+    icon: SETTINGS_ICONS[page.id],
+    description: page.description,
+  }))
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers

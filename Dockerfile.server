@@ -1,0 +1,82 @@
+# =============================================================================
+# Craft Agents Server — multi-platform Docker image
+#
+# Build:
+#   docker buildx build -f Dockerfile.server -t craft-agent-server .
+#
+# Run (use --user to match host UID/GID for volume permissions):
+#   docker run --rm -p 9100:9100 \
+#     --user $(id -u):$(id -g) \
+#     -e HOME=/home/craftagents \
+#     -e CRAFT_SERVER_TOKEN=<secret> \
+#     craft-agent-server
+#
+# Run with TLS + mounted config:
+#   docker run --rm -p 9100:9100 \
+#     --user $(id -u):$(id -g) \
+#     -e HOME=/home/craftagents \
+#     -e CRAFT_SERVER_TOKEN=<secret> \
+#     -e CRAFT_RPC_TLS_CERT=/certs/cert.pem \
+#     -e CRAFT_RPC_TLS_KEY=/certs/key.pem \
+#     -v /path/to/certs:/certs:ro \
+#     -v ~/.craft-agent:/home/craftagents/.craft-agent \
+#     craft-agent-server
+# =============================================================================
+
+FROM oven/bun:1.3-slim
+
+LABEL org.opencontainers.image.source="https://github.com/lukilabs/craft-agents-oss"
+LABEL org.opencontainers.image.description="Craft Agents Server — headless AI workflow server"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates git && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create non-root user (Claude Code SDK refuses to run as root).
+# At runtime, override with --user $(id -u):$(id -g) to match host permissions.
+RUN groupadd -r craftagents && \
+    useradd -r -g craftagents -m -d /home/craftagents -s /bin/bash craftagents
+
+WORKDIR /app
+
+# Copy dependency manifests first for layer caching
+COPY package.json bun.lock ./
+COPY packages/server/package.json packages/server/
+COPY packages/server-core/package.json packages/server-core/
+COPY packages/shared/package.json packages/shared/
+COPY packages/core/package.json packages/core/
+COPY packages/session-tools-core/package.json packages/session-tools-core/
+COPY packages/session-mcp-server/package.json packages/session-mcp-server/
+COPY packages/pi-agent-server/package.json packages/pi-agent-server/
+COPY packages/craft-agents-commands/package.json packages/craft-agents-commands/
+COPY packages/craft-cli/package.json packages/craft-cli/
+COPY packages/ui/package.json packages/ui/
+COPY apps/electron/package.json apps/electron/
+COPY apps/cli/package.json apps/cli/
+COPY apps/marketing/package.json apps/marketing/
+COPY apps/viewer/package.json apps/viewer/
+
+RUN bun install --frozen-lockfile
+
+# Copy source
+COPY . .
+
+# Build MCP helper servers (bundled CJS — required by runtime-resolver.ts)
+RUN bun build packages/session-mcp-server/src/index.ts \
+      --outfile packages/session-mcp-server/dist/index.js --target node --format cjs && \
+    bun build packages/pi-agent-server/src/index.ts \
+      --outfile packages/pi-agent-server/dist/index.js --target node --format cjs
+
+# Make app world-readable so any --user can run it. Home dir is writable for .craft-agent.
+RUN chmod -R a+rX /app && \
+    chmod -R 777 /home/craftagents
+
+USER craftagents
+
+ENV CRAFT_RPC_HOST=0.0.0.0
+ENV CRAFT_RPC_PORT=9100
+
+EXPOSE 9100
+
+ENTRYPOINT ["bun", "run", "packages/server/src/index.ts"]

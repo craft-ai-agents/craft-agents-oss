@@ -9,6 +9,7 @@
 import {
   PROTOCOL_VERSION,
   REQUEST_TIMEOUT_MS,
+  SEQUENCE_ACK_INTERVAL_MS,
   type MessageEnvelope,
 } from '@craft-agent/shared/protocol'
 import type { RpcClient } from '@craft-agent/server-core/transport'
@@ -92,6 +93,8 @@ export interface WsRpcClientOptions {
   clientCapabilities?: string[]
   /** Runtime mode — local embedded or remote thin-client connection. */
   mode?: TransportMode
+  /** Accept self-signed TLS certificates for wss:// connections. Default: false. Only works in Node.js (main process). */
+  tlsRejectUnauthorized?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -104,12 +107,22 @@ export class WsRpcClient implements RpcClient {
   private listeners = new Map<string, Set<(...args: any[]) => void>>()
   private capabilityHandlers = new Map<string, (...args: any[]) => Promise<any> | any>()
   private connectionStateListeners = new Set<(state: TransportConnectionState) => void>()
+  private anyEventListeners = new Set<(channel: string, ...args: any[]) => void>()
   private clientId: string | null = null
+  private _serverVersion: string | null = null
   private connected = false
   private reconnectAttempt = 0
+  private lastSeenSeq = 0
+  private ackTimer: ReturnType<typeof setInterval> | null = null
+  private pendingReconnect: { clientId: string; lastSeq: number } | null = null
+  private currentHandshakeWasReconnect = false
+  private manualReconnectRequested = false
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private connectTimer: ReturnType<typeof setTimeout> | null = null
+  private backoffResetTimer: ReturnType<typeof setTimeout> | null = null
   private destroyed = false
+  /** Set when server sends shuttingDown — prevents reconnection attempts. */
+  private permanentlyClosed = false
   private connectStarted = false
   private connectError: Error | null = null
   private readyPromise: Promise<void> | null = null
@@ -128,6 +141,7 @@ export class WsRpcClient implements RpcClient {
   private readonly autoReconnect: boolean
   private readonly connectTimeout: number
   private readonly mode: TransportMode
+  private readonly tlsRejectUnauthorized: boolean
 
   constructor(url: string, opts?: WsRpcClientOptions) {
     this.url = url
@@ -140,6 +154,7 @@ export class WsRpcClient implements RpcClient {
     this.autoReconnect = opts?.autoReconnect ?? true
     this.connectTimeout = opts?.connectTimeout ?? 10_000
     this.mode = opts?.mode ?? this.inferMode(url)
+    this.tlsRejectUnauthorized = opts?.tlsRejectUnauthorized ?? true
 
     this.connectionState = {
       mode: this.mode,
@@ -178,7 +193,11 @@ export class WsRpcClient implements RpcClient {
         args,
       }
 
-      this.ws.send(serializeEnvelope(envelope))
+      if (!this.trySendEnvelope(this.ws, envelope)) {
+        this.pending.delete(id)
+        clearTimeout(timeout)
+        reject(new Error(`Not connected (channel: ${channel})`))
+      }
     })
   }
 
@@ -212,6 +231,11 @@ export class WsRpcClient implements RpcClient {
     return this.serverChannels.has(channel)
   }
 
+  /** Server version from handshake_ack (null if server didn't send one / not yet connected). */
+  getServerVersion(): string | null {
+    return this._serverVersion
+  }
+
   getConnectionState(): TransportConnectionState {
     return {
       ...this.connectionState,
@@ -228,37 +252,93 @@ export class WsRpcClient implements RpcClient {
     }
   }
 
+  /** Subscribe to all push events regardless of channel. Used by RemoteClientBridge for event forwarding. */
+  onAnyEvent(callback: (channel: string, ...args: any[]) => void): () => void {
+    this.anyEventListeners.add(callback)
+    return () => {
+      this.anyEventListeners.delete(callback)
+    }
+  }
+
+  /** Emit a synthetic __transport:reconnected event. Used by RoutedClient after workspace swap to trigger stale recovery. */
+  emitReconnected(isStale: boolean): void {
+    const set = this.listeners.get('__transport:reconnected')
+    if (set) {
+      for (const cb of set) {
+        try { cb(isStale) } catch { /* listener errors must not break transport */ }
+      }
+    }
+  }
+
   reconnectNow(): void {
     if (this.destroyed) return
+
+    if (this.clientId) {
+      this.pendingReconnect = {
+        clientId: this.clientId,
+        lastSeq: this.lastSeenSeq,
+      }
+    }
 
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
 
-    try {
-      this.ws?.close()
-    } catch {
-      // best effort
-    }
-
-    this.connected = false
-    this.clientId = null
     this.connectStarted = false
     this.connectError = null
 
-    this.setConnectionState({
-      status: 'connecting',
-      attempt: this.reconnectAttempt,
-      nextRetryInMs: undefined,
-    })
+    if (!this.ws) {
+      this.setConnectionState({
+        status: 'reconnecting',
+        attempt: this.reconnectAttempt,
+        nextRetryInMs: undefined,
+      })
+      this.connect()
+      return
+    }
 
-    this.connect()
+    this.manualReconnectRequested = true
+
+    try {
+      this.ws.close()
+    } catch {
+      this.manualReconnectRequested = false
+      this.setConnectionState({
+        status: 'reconnecting',
+        attempt: this.reconnectAttempt,
+        nextRetryInMs: undefined,
+      })
+      this.connect()
+    }
   }
 
   // -------------------------------------------------------------------------
   // Connection lifecycle
   // -------------------------------------------------------------------------
+
+  /**
+   * Create a WebSocket instance. In Node.js (main process), uses the `ws` library
+   * to support TLS options (e.g. rejectUnauthorized for self-signed certs).
+   * In the renderer (browser), falls back to the global WebSocket.
+   */
+  private createWebSocket(url: string): WebSocket {
+    const needsTlsOptions = url.startsWith('wss://') && !this.tlsRejectUnauthorized
+
+    if (needsTlsOptions && typeof process !== 'undefined' && process.versions?.node) {
+      // Node.js / Electron main process — use `ws` library for TLS options
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { WebSocket: WsWebSocket } = require('ws') as typeof import('ws')
+        return new WsWebSocket(url, { rejectUnauthorized: false }) as unknown as WebSocket
+      } catch {
+        // Fallback if ws not available
+        return new WebSocket(url)
+      }
+    }
+
+    return new WebSocket(url)
+  }
 
   connect(): void {
     if (this.destroyed) return
@@ -267,7 +347,8 @@ export class WsRpcClient implements RpcClient {
     this.connectError = null
     this.createReadyPromise()
 
-    const status: TransportConnectionStatus = this.reconnectAttempt > 0 ? 'reconnecting' : 'connecting'
+    const isReconnectAttempt = this.reconnectAttempt > 0 || this.pendingReconnect !== null
+    const status: TransportConnectionStatus = isReconnectAttempt ? 'reconnecting' : 'connecting'
     this.setConnectionState({
       status,
       attempt: this.reconnectAttempt,
@@ -278,6 +359,18 @@ export class WsRpcClient implements RpcClient {
     if (this.connectTimer) {
       clearTimeout(this.connectTimer)
       this.connectTimer = null
+    }
+
+    // Close and detach any existing socket before creating a new one.
+    // Prevents orphaned connections and stale event handler interference.
+    if (this.ws) {
+      const oldWs = this.ws
+      this.ws = null
+      oldWs.onopen = null
+      oldWs.onmessage = null
+      oldWs.onclose = null
+      oldWs.onerror = null
+      try { oldWs.close() } catch { /* best effort */ }
     }
 
     this.connectTimer = setTimeout(() => {
@@ -294,10 +387,15 @@ export class WsRpcClient implements RpcClient {
       }
     }, this.connectTimeout)
 
-    this.ws = new WebSocket(this.url)
+    const ws = this.createWebSocket(this.url)
+    this.ws = ws
 
-    this.ws.onopen = () => {
-      // Send handshake
+    ws.onopen = () => {
+      if (this.ws !== ws) return // stale socket — ignore
+      const reconnectSnapshot = this.pendingReconnect
+      this.currentHandshakeWasReconnect = reconnectSnapshot !== null
+
+      // Send handshake (includes reconnection info if available)
       const handshake: MessageEnvelope = {
         id: crypto.randomUUID(),
         type: 'handshake',
@@ -306,23 +404,35 @@ export class WsRpcClient implements RpcClient {
         webContentsId: this.webContentsId,
         token: this.token,
         clientCapabilities: this.clientCapabilities.length > 0 ? this.clientCapabilities : undefined,
+        reconnectClientId: reconnectSnapshot?.clientId,
+        lastSeq: reconnectSnapshot?.lastSeq,
       }
-      this.ws!.send(serializeEnvelope(handshake))
+      this.trySendEnvelope(ws, handshake)
     }
 
-    this.ws.onmessage = (event) => {
+    ws.onmessage = (event) => {
+      if (this.ws !== ws) return // stale socket — ignore
       this.onMessage(typeof event.data === 'string' ? event.data : event.data.toString())
     }
 
-    this.ws.onclose = (event) => {
+    ws.onclose = (event) => {
+      if (this.ws !== ws) return // stale socket — ignore
       this.onDisconnect(event)
     }
 
-    this.ws.onerror = () => {
+    ws.onerror = (event: Event | { message?: string; error?: Error }) => {
+      if (this.ws !== ws) return // stale socket — ignore
       // Error is typically followed by close event, handled there.
       // Capture this early for more actionable state while connecting.
       if (!this.connected && !this.connectError) {
-        const err = this.createConnectionError('network', 'WebSocket error during connection setup', 'WS_ERROR')
+        // Extract actual error message when available (Node.js ws library provides it)
+        const detail = ('message' in event && event.message)
+          || ('error' in event && event.error?.message)
+          || undefined
+        const message = detail
+          ? `WebSocket error: ${detail}`
+          : 'WebSocket error during connection setup'
+        const err = this.createConnectionError('network', message, 'WS_ERROR')
         this.connectError = err
         this.setConnectionState({
           status: 'failed',
@@ -343,7 +453,18 @@ export class WsRpcClient implements RpcClient {
       clearTimeout(this.connectTimer)
       this.connectTimer = null
     }
+    if (this.ackTimer) {
+      clearInterval(this.ackTimer)
+      this.ackTimer = null
+    }
+    if (this.backoffResetTimer) {
+      clearTimeout(this.backoffResetTimer)
+      this.backoffResetTimer = null
+    }
 
+    this.manualReconnectRequested = false
+    this.currentHandshakeWasReconnect = false
+    this.pendingReconnect = null
     this.failReady(new Error('Client destroyed'))
 
     // Reject all pending requests
@@ -352,6 +473,7 @@ export class WsRpcClient implements RpcClient {
       req.reject(new Error('Client destroyed'))
     }
     this.pending.clear()
+    this.anyEventListeners.clear()
 
     this.ws?.close()
     this.ws = null
@@ -385,14 +507,28 @@ export class WsRpcClient implements RpcClient {
     }
 
     switch (envelope.type) {
-      case 'handshake_ack':
+      case 'handshake_ack': {
+        const wasReconnectAttempt = this.currentHandshakeWasReconnect
+        const serverRecognizedReconnect = envelope.reconnected === true
+
+        this.currentHandshakeWasReconnect = false
+        this.pendingReconnect = null
         this.clientId = envelope.clientId ?? null
+        this._serverVersion = envelope.serverVersion ?? null
         this.serverChannels = envelope.registeredChannels
           ? new Set(envelope.registeredChannels)
           : null
         this.connected = true
-        this.reconnectAttempt = 0
         this.connectError = null
+        // Delay backoff reset — only reset after 10s of stable connection.
+        // Immediate reset causes rapid reconnect loops when the server
+        // accepts the handshake but drops the connection right after.
+        this.scheduleBackoffReset()
+
+        if (!serverRecognizedReconnect) {
+          this.lastSeenSeq = 0
+        }
+
         if (this.connectTimer) {
           clearTimeout(this.connectTimer)
           this.connectTimer = null
@@ -404,11 +540,27 @@ export class WsRpcClient implements RpcClient {
           lastError: undefined,
           lastClose: undefined,
         })
+        this.startAckTimer()
         this.resolveReady?.()
         this.resolveReady = null
         this.rejectReady = null
         this.readyPromise = null
+
+        // Notify listeners about reconnection AFTER resolveReady
+        if (wasReconnectAttempt) {
+          // envelope.reconnected === true means server recognized the previous client.
+          // If absent, the reconnect fell back to a fresh connection — treat as stale.
+          const isStale = !serverRecognizedReconnect || !!envelope.stale
+
+          const set = this.listeners.get('__transport:reconnected')
+          if (set) {
+            for (const cb of set) {
+              try { cb(isStale) } catch { /* listener errors must not break transport */ }
+            }
+          }
+        }
         break
+      }
 
       case 'response': {
         const req = this.pending.get(envelope.id)
@@ -453,7 +605,24 @@ export class WsRpcClient implements RpcClient {
       }
 
       case 'event': {
+        // Track sequence numbers for reliable delivery
+        if (typeof envelope.seq === 'number') {
+          if (this.lastSeenSeq > 0 && envelope.seq > this.lastSeenSeq + 1) {
+            console.warn(`[WsRpc] Sequence gap: expected ${this.lastSeenSeq + 1}, got ${envelope.seq}`)
+          }
+          this.lastSeenSeq = envelope.seq
+        }
+
         if (envelope.channel) {
+          // Server is shutting down — stop reconnection before dispatching
+          if (envelope.channel === 'server:shuttingDown') {
+            this.permanentlyClosed = true
+            this.setConnectionState({
+              status: 'disconnected',
+              lastError: { kind: 'server', message: 'Server is shutting down', code: 'SERVER_SHUTDOWN' },
+            })
+          }
+
           const set = this.listeners.get(envelope.channel)
           if (set) {
             for (const cb of set) {
@@ -462,6 +631,14 @@ export class WsRpcClient implements RpcClient {
               } catch {
                 // Listener errors shouldn't break the client
               }
+            }
+          }
+          // Wildcard listeners (used by RemoteClientBridge for event forwarding)
+          for (const cb of this.anyEventListeners) {
+            try {
+              cb(envelope.channel, ...(envelope.args ?? []))
+            } catch {
+              // Listener errors shouldn't break the client
             }
           }
         }
@@ -479,7 +656,7 @@ export class WsRpcClient implements RpcClient {
         channel: envelope.channel,
         error: { code: 'CHANNEL_NOT_FOUND', message: `No handler for: ${envelope.channel}` },
       }
-      this.ws?.send(serializeEnvelope(response))
+      this.trySendEnvelope(this.ws, response)
       return
     }
 
@@ -491,7 +668,7 @@ export class WsRpcClient implements RpcClient {
         channel: envelope.channel,
         result,
       }
-      this.ws?.send(serializeEnvelope(response))
+      this.trySendEnvelope(this.ws, response)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       const response: MessageEnvelope = {
@@ -500,7 +677,7 @@ export class WsRpcClient implements RpcClient {
         channel: envelope.channel,
         error: { code: 'HANDLER_ERROR', message },
       }
-      this.ws?.send(serializeEnvelope(response))
+      this.trySendEnvelope(this.ws, response)
     }
   }
 
@@ -509,14 +686,36 @@ export class WsRpcClient implements RpcClient {
   // -------------------------------------------------------------------------
 
   private onDisconnect(closeEvent?: { code?: number; reason?: string; wasClean?: boolean }): void {
+    if (this.clientId) {
+      this.pendingReconnect = {
+        clientId: this.clientId,
+        lastSeq: this.lastSeenSeq,
+      }
+    }
+
+    const manualReconnect = this.manualReconnectRequested
+    this.manualReconnectRequested = false
+
     const wasConnected = this.connected
     this.connected = false
     this.clientId = null
     this.ws = null
 
+    // Stop ack timer
+    if (this.ackTimer) {
+      clearInterval(this.ackTimer)
+      this.ackTimer = null
+    }
+
     if (this.connectTimer) {
       clearTimeout(this.connectTimer)
       this.connectTimer = null
+    }
+
+    // Cancel backoff reset — counter carries over across short-lived connections
+    if (this.backoffResetTimer) {
+      clearTimeout(this.backoffResetTimer)
+      this.backoffResetTimer = null
     }
 
     const closeInfo: TransportCloseInfo | undefined = closeEvent
@@ -563,12 +762,19 @@ export class WsRpcClient implements RpcClient {
       })
     }
 
-    if (!this.destroyed && this.autoReconnect) {
+    if (manualReconnect && !this.destroyed) {
+      this.connect()
+      return
+    }
+
+    if (!this.destroyed && !this.permanentlyClosed && this.autoReconnect) {
       this.scheduleReconnect()
     }
   }
 
   private scheduleReconnect(): void {
+    if (this.permanentlyClosed) return
+
     const delay = Math.min(
       1000 * Math.pow(2, this.reconnectAttempt),
       this.maxReconnectDelay,
@@ -586,6 +792,41 @@ export class WsRpcClient implements RpcClient {
       this.reconnectTimer = null
       this.connect()
     }, delay)
+  }
+
+  private scheduleBackoffReset(): void {
+    if (this.backoffResetTimer) clearTimeout(this.backoffResetTimer)
+    this.backoffResetTimer = setTimeout(() => {
+      this.backoffResetTimer = null
+      this.reconnectAttempt = 0
+    }, 10_000)
+  }
+
+  /** Best-effort send that skips closing/closed sockets and swallows send races. */
+  private trySendEnvelope(ws: WebSocket | null, envelope: MessageEnvelope): boolean {
+    if (!ws || ws.readyState !== ws.OPEN) return false
+
+    try {
+      ws.send(serializeEnvelope(envelope))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /** Periodically send sequence_ack so server can evict acknowledged events. */
+  private startAckTimer(): void {
+    if (this.ackTimer) clearInterval(this.ackTimer)
+    this.ackTimer = setInterval(() => {
+      if (this.connected && this.lastSeenSeq > 0) {
+        const ack: MessageEnvelope = {
+          id: crypto.randomUUID(),
+          type: 'sequence_ack',
+          lastSeq: this.lastSeenSeq,
+        }
+        this.trySendEnvelope(this.ws, ack)
+      }
+    }, SEQUENCE_ACK_INTERVAL_MS)
   }
 
   private createReadyPromise(): void {

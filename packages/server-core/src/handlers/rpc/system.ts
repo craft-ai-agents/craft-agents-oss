@@ -3,7 +3,7 @@ import { join } from 'path'
 import { homedir } from 'os'
 import { execSync } from 'child_process'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getGitBashPath, setGitBashPath, clearGitBashPath } from '@craft-agent/shared/config'
+import { getWorkspaceByNameOrId, getGitBashPath, setGitBashPath, clearGitBashPath } from '@craft-agent/shared/config'
 import { isUsableGitBashPath, validateGitBashPath } from '@craft-agent/server-core/services'
 import { validateFilePath } from '@craft-agent/server-core/handlers'
 import type { RpcServer } from '@craft-agent/server-core/transport'
@@ -132,6 +132,14 @@ function parseInternalCraftAgentsDeepLink(parsed: URL): ParsedInternalDeepLink |
   return null
 }
 
+/** Guard: reject filesystem-path actions on remote workspaces where local paths are meaningless. */
+function assertLocalWorkspace(ctx: { workspaceId: string | null }, action: string): void {
+  const ws = getWorkspaceByNameOrId(ctx.workspaceId ?? '')
+  if (ws?.remoteServer) {
+    throw new Error(`${action} is not available for remote workspaces`)
+  }
+}
+
 export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps): void {
   const windowManager = deps.windowManager
 
@@ -144,8 +152,8 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
   server.handle(RPC_CHANNELS.system.VERSIONS, async () => {
     return {
       node: process.versions.node,
-      chrome: process.versions.chrome,
-      electron: process.versions.electron,
+      chrome: process.versions.chrome ?? undefined,
+      electron: process.versions.electron ?? undefined,
     }
   })
 
@@ -320,6 +328,7 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
   })
 
   server.handle(RPC_CHANNELS.shell.OPEN_FILE, async (ctx, path: string) => {
+    assertLocalWorkspace(ctx, 'Open file')
     try {
       const absolutePath = resolve(path)
       const safePath = await validateFilePath(absolutePath)
@@ -333,6 +342,7 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
   })
 
   server.handle(RPC_CHANNELS.shell.SHOW_IN_FOLDER, async (ctx, path: string) => {
+    assertLocalWorkspace(ctx, 'Show in folder')
     try {
       const absolutePath = resolve(path)
       const safePath = await validateFilePath(absolutePath)

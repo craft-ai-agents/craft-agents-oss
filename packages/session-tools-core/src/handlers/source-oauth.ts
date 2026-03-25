@@ -56,9 +56,10 @@ export async function handleSourceOAuthTrigger(
     );
   }
 
-  // Try silent refresh before triggering full re-auth popup.
-  // Uses server-side refresh (not local expiry check) so a revoked token won't block re-auth.
-  if (ctx.credentialManager) {
+  // Try silent refresh only if source is already authenticated.
+  // If connectionStatus is 'needs_auth' or isAuthenticated is false,
+  // skip refresh and go straight to browser authorization flow.
+  if (source.isAuthenticated && ctx.credentialManager) {
     const workspaceId = basename(ctx.workspacePath) || '';
     const loadedSource = {
       config: source,

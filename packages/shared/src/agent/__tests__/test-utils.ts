@@ -23,6 +23,7 @@ export function createMockWorkspace(overrides: Partial<Workspace> = {}): Workspa
   return {
     id: 'test-workspace-id',
     name: 'Test Workspace',
+    slug: 'workspace',
     rootPath: '/test/workspace',
     createdAt: Date.now(),
     ...overrides,
@@ -86,7 +87,7 @@ export function createMockBackendConfig(overrides: Partial<BackendConfig> = {}):
     workspace: createMockWorkspace(),
     session: createMockSession(),
     model: 'test-model',
-    thinkingLevel: 'think',
+    thinkingLevel: 'medium',
     isHeadless: true, // Headless mode to avoid config watcher
     ...overrides,
   };

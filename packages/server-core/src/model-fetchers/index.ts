@@ -22,6 +22,9 @@ import {
 import { MODEL_FETCHERS } from './registry'
 import { handlerLog } from './runtime'
 
+/** Copilot models are server-managed — refresh every 10 minutes to pick up policy changes. */
+const COPILOT_REFRESH_INTERVAL_MS = 10 * 60 * 1000
+
 // ============================================================
 // Types
 // ============================================================
@@ -88,18 +91,19 @@ class ModelRefreshService {
     // Layer 1: Provider API/SDK
     try {
       const credentials = await this.getCredentials(slug)
+      handlerLog.info(`Model refresh [${slug}]: fetching (provider=${connection.providerType}, piAuth=${connection.piAuthProvider}, hasOAuthRefresh=${!!credentials.oauthRefreshToken}, hasOAuthAccess=${!!credentials.oauthAccessToken})`)
       const result = await fetcher.fetchModels(connection, credentials)
       newModels = result.models
       serverDefault = result.serverDefault
-      handlerLog.info(`Model refresh [${slug}]: fetched ${newModels.length} models from provider`)
+      handlerLog.info(`Model refresh [${slug}]: fetched ${newModels.length} models from provider: ${newModels.map(m => m.id).join(', ')}`)
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
-      handlerLog.info(`Model refresh [${slug}]: provider fetch failed: ${msg}`)
+      handlerLog.warn(`Model refresh [${slug}]: provider fetch failed: ${msg}`)
     }
 
     // Layer 2: Persisted connection.models (keep what we have)
     if (!newModels && connection.models && connection.models.length > 0) {
-      handlerLog.info(`Model refresh [${slug}]: keeping ${connection.models.length} persisted models`)
+      handlerLog.warn(`Model refresh [${slug}]: keeping ${connection.models.length} stale persisted models (live fetch failed)`)
       return // Nothing to update
     }
 
@@ -119,7 +123,11 @@ class ModelRefreshService {
 
     // For Pi connections with explicit user-owned 3-tier selection,
     // never overwrite model lists from background refresh.
-    if (connection.providerType === 'pi' && connection.modelSelectionMode === 'userDefined3Tier') {
+    // Exception: Copilot connections are always server-managed — GitHub's
+    // model policy controls which models are enabled, so we must always
+    // accept the live API result.
+    const isCopilot = connection.providerType === 'pi' && connection.piAuthProvider === 'github-copilot'
+    if (connection.providerType === 'pi' && connection.modelSelectionMode === 'userDefined3Tier' && !isCopilot) {
       const modelCount = connection.models?.length ?? 0
       handlerLog.info(`Model refresh [${slug}]: preserving user-defined Pi model list (${modelCount} models)`)
       if (modelCount > 10) {
@@ -161,8 +169,13 @@ class ModelRefreshService {
         handlerLog.warn(`Initial model refresh failed for ${conn.slug}: ${err instanceof Error ? err.message : err}`)
       })
 
-      // Set up periodic refresh if the fetcher supports it
-      if (fetcher.refreshIntervalMs > 0) {
+      // Set up periodic refresh: Copilot connections get their own interval
+      // (models are server-managed by GitHub policy), other providers use
+      // the fetcher's generic interval (0 = no periodic refresh for static SDK models).
+      const isCopilot = conn.providerType === 'pi' && conn.piAuthProvider === 'github-copilot'
+      if (isCopilot) {
+        this.startTimer(conn.slug, COPILOT_REFRESH_INTERVAL_MS)
+      } else if (fetcher.refreshIntervalMs > 0) {
         this.startTimer(conn.slug, fetcher.refreshIntervalMs)
       }
     }
@@ -193,7 +206,10 @@ class ModelRefreshService {
 
     const providerType = connection.providerType as FetchableProvider
     const fetcher = this.fetchers[providerType]
-    if (fetcher && fetcher.refreshIntervalMs > 0 && !this.timers.has(slug)) {
+    const isCopilot = connection.providerType === 'pi' && connection.piAuthProvider === 'github-copilot'
+    if (isCopilot && !this.timers.has(slug)) {
+      this.startTimer(slug, COPILOT_REFRESH_INTERVAL_MS)
+    } else if (fetcher && fetcher.refreshIntervalMs > 0 && !this.timers.has(slug)) {
       this.startTimer(slug, fetcher.refreshIntervalMs)
     }
   }

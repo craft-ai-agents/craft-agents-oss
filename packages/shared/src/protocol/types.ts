@@ -15,6 +15,7 @@ export type MessageType =
   | 'response'
   | 'event'
   | 'error'
+  | 'sequence_ack'
 
 export interface MessageEnvelope {
   /** Correlation ID. UUIDv4 for requests; echoed in responses. */
@@ -44,6 +45,21 @@ export interface MessageEnvelope {
   clientCapabilities?: string[]
   /** Server-registered channels, sent in handshake_ack. Clients use this to avoid calling unavailable channels. */
   registeredChannels?: string[]
+
+  // -- Reliable delivery fields --
+
+  /** Per-client monotonic delivery sequence number, assigned when an event is targeted to that client. */
+  seq?: number
+  /** Client's last processed per-client seq — sent in sequence_ack and reconnect handshake. */
+  lastSeq?: number
+  /** Previous clientId — sent by client on reconnect handshake. */
+  reconnectClientId?: string
+  /** True when handshake_ack is for a reconnection (vs fresh connect). */
+  reconnected?: boolean
+  /** True when server buffer was evicted — client must do a full state refresh. */
+  stale?: boolean
+  /** Server app version, sent in handshake_ack. Clients can use this for compatibility checks. */
+  serverVersion?: string
 }
 
 export interface WireError {
@@ -95,3 +111,17 @@ export const HEARTBEAT_MAX_MISSED = 2
 
 /** Default request timeout in ms. */
 export const REQUEST_TIMEOUT_MS = 30_000
+
+// -- Reliable delivery constants --
+
+/** Max events to retain per client in the ring buffer. */
+export const EVENT_BUFFER_MAX_SIZE = 500
+
+/** Events older than this are evicted from the buffer. */
+export const EVENT_BUFFER_TTL_MS = 30_000
+
+/** How long to retain a disconnected client's buffer for potential reconnect. */
+export const DISCONNECTED_CLIENT_TTL_MS = 60_000
+
+/** Client sends a sequence_ack every N ms. */
+export const SEQUENCE_ACK_INTERVAL_MS = 5_000

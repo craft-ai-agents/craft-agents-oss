@@ -1,6 +1,7 @@
 import type { ProviderDriver } from '../driver-types.ts';
 import { applyAnthropicRuntimeBootstrap } from '../runtime-resolver.ts';
 import { validateAnthropicConnection } from '../../../../config/llm-validation.ts';
+import { getModelContextWindow } from '../../../../config/models.ts';
 
 export const anthropicDriver: ProviderDriver = {
   provider: 'anthropic',
@@ -95,7 +96,7 @@ export const anthropicDriver: ProviderDriver = {
         })(),
         description: '',
         provider: 'anthropic' as const,
-        contextWindow: 200_000,
+        contextWindow: getModelContextWindow(m.id) ?? 200_000,
       }));
 
     return { models };
@@ -103,6 +104,38 @@ export const anthropicDriver: ProviderDriver = {
   validateStoredConnection: async ({ slug, connection, credentialManager }) => {
     const isAnthropicProvider =
       connection.providerType === 'anthropic' || connection.providerType === 'anthropic_compat';
+
+    if (connection.providerType === 'bedrock') {
+      if (connection.authType === 'iam_credentials') {
+        return { success: true };
+      }
+
+      if (connection.authType === 'bearer_token') {
+        const bearerToken = await credentialManager.getLlmApiKey(slug);
+        if (!bearerToken) {
+          return {
+            success: false,
+            error: 'Could not retrieve Bedrock bearer token',
+          };
+        }
+        return { success: true };
+      }
+
+      if (connection.authType === 'environment') {
+        const hasRegion =
+          !!connection.awsRegion ||
+          !!process.env.AWS_REGION ||
+          !!process.env.AWS_DEFAULT_REGION;
+        if (!hasRegion) {
+          return {
+            success: false,
+            error: 'AWS region is required for Bedrock environment auth.',
+          };
+        }
+
+        return { success: true };
+      }
+    }
 
     if (isAnthropicProvider && connection.authType === 'oauth') {
       const { getValidClaudeOAuthToken } = await import('../../../../auth/state.ts');

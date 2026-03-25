@@ -44,6 +44,20 @@ import type {
 // Pi AI types
 import type { TextContent as PiTextContent } from '@mariozechner/pi-ai';
 
+// Pre-register the Bedrock provider module so the Pi SDK doesn't attempt a
+// dynamic import of "./amazon-bedrock.js" — which fails in the bundled output
+// because bun collapses everything into a single file.
+// Both @mariozechner/pi-ai AND the nested copy inside @mariozechner/pi-agent-core
+// have separate module-scoped state, so we must register with both.
+import { setBedrockProviderModule } from '@mariozechner/pi-ai';
+import { bedrockProviderModule } from '@mariozechner/pi-ai/bedrock-provider';
+setBedrockProviderModule(bedrockProviderModule);
+
+// Register for the pi-agent-core's nested pi-ai copy (separate module scope in bundle)
+import { setBedrockProviderModule as setBedrockProviderModule2 } from '@mariozechner/pi-agent-core/node_modules/@mariozechner/pi-ai/dist/providers/register-builtins.js';
+import { bedrockProviderModule as bedrockProviderModule2 } from '@mariozechner/pi-agent-core/node_modules/@mariozechner/pi-ai/bedrock-provider';
+setBedrockProviderModule2(bedrockProviderModule2);
+
 // Model resolution (extracted for testability + custom-endpoint precedence)
 import { resolvePiModel } from './model-resolution.ts';
 
@@ -65,7 +79,8 @@ import { createSearchTool } from './tools/search/create-search-tool.ts';
 /** Credential union used in init and token_update messages */
 type PiCredential =
   | { type: 'api_key'; key: string }
-  | { type: 'oauth'; access: string; refresh: string; expires: number };
+  | { type: 'oauth'; access: string; refresh: string; expires: number }
+  | { type: 'iam'; accessKeyId: string; secretAccessKey: string; region?: string; sessionToken?: string };
 
 /** Custom endpoint protocol — determines which streaming adapter Pi SDK uses */
 type CustomEndpointApi = 'openai-completions' | 'anthropic-messages';
@@ -92,7 +107,7 @@ interface InitMessage {
   branchFromSessionPath?: string;
   branchFromSdkTurnId?: string;
   customEndpoint?: { api: CustomEndpointApi };
-  customModels?: string[];
+  customModels?: Array<string | { id: string; contextWindow?: number }>;
   piAuth?: { provider: string; credential: PiCredential };
 }
 
@@ -202,6 +217,18 @@ const pendingSessionToolCalls = new Map<string, { toolName: string; arguments: R
 
 // Proxy tool definitions from main process
 let proxyToolDefs: ProxyToolDef[] = [];
+
+// Speculative prefetch for read-only tools (enables parallel execution despite Pi SDK's sequential loop).
+// When the LLM emits multiple call_llm tool calls in a single message, we fire all requests
+// to the main process in parallel on message_end (before executeToolCalls iterates sequentially).
+// Each proxy tool's execute() then hits the cache instead of sending a new request.
+const PREFETCHABLE_TOOLS = new Set(['call_llm']);
+const prefetchCache = new Map<string, Promise<{ content: string; isError: boolean }>>();
+
+function isPrefetchableTool(toolName: string): boolean {
+  const stripped = toolName.replace(/^(mcp__session__|session__)/, '');
+  return PREFETCHABLE_TOOLS.has(stripped);
+}
 
 // Flag: proxy tools changed since last session creation — session needs recreation
 let toolsChanged = false;
@@ -330,18 +357,18 @@ function setInterceptorApiHints(model: { api?: string; provider?: string; baseUr
 /**
  * Build a synthetic model definition for a custom endpoint.
  * Uses reasonable defaults for context window and max tokens since we can't
- * query the endpoint for its actual capabilities.
+ * query the endpoint for its actual capabilities. Users can override
+ * contextWindow via model objects in their connection config.
  */
-function buildCustomEndpointModelDef(id: string) {
+function buildCustomEndpointModelDef(id: string, overrides?: { contextWindow?: number }) {
   return {
     id,
     name: id,
     reasoning: false,
     input: ['text'] as ('text' | 'image')[],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    // Sensible defaults — actual limits depend on the model behind the endpoint.
-    // The Pi SDK uses these for context window management and output truncation.
-    contextWindow: 131_072,
+    // Default 128K — users can override via contextWindow in model config.
+    contextWindow: overrides?.contextWindow ?? 131_072,
     maxTokens: 8_192,
   };
 }
@@ -381,25 +408,35 @@ function isLocalhostUrl(url: string): boolean {
 /** Model IDs currently registered under the custom-endpoint provider */
 let customEndpointModelIds: Set<string> = new Set();
 
+interface CustomModelEntry {
+  id: string;
+  contextWindow?: number;
+}
+
 /**
- * Register (or re-register) the custom-endpoint provider with the given model IDs.
+ * Register (or re-register) the custom-endpoint provider with the given models.
  * Note: registerProvider replaces the entire provider, so we maintain a Set of all
  * known model IDs and always pass the full set.
  */
+const customModelOverrides = new Map<string, { contextWindow?: number }>();
+
 function registerCustomEndpointModels(
   registry: PiModelRegistry,
   api: CustomEndpointApi,
   baseUrl: string,
-  modelIds: string[],
+  models: CustomModelEntry[],
 ): void {
-  for (const id of modelIds) customEndpointModelIds.add(id);
+  for (const m of models) {
+    customEndpointModelIds.add(m.id);
+    if (m.contextWindow) customModelOverrides.set(m.id, { contextWindow: m.contextWindow });
+  }
   const allIds = [...customEndpointModelIds];
   registry.registerProvider('custom-endpoint', {
     baseUrl,
     apiKey: resolveCustomEndpointApiKey(),
     api,
     authHeader: true,
-    models: allIds.map(buildCustomEndpointModelDef),
+    models: allIds.map(id => buildCustomEndpointModelDef(id, customModelOverrides.get(id))),
   });
   debugLog(`Registered custom endpoint: ${baseUrl} with ${allIds.length} model(s) [${allIds.join(', ')}], api: ${api}`);
 }
@@ -436,11 +473,14 @@ function createAuthenticatedRegistry(): {
   const hasCustomEndpoint = !!initConfig?.baseUrl?.trim();
   if (hasCustomEndpoint && initConfig?.customEndpoint) {
     const { api } = initConfig.customEndpoint;
-    const modelIds = initConfig.customModels?.length
-      ? initConfig.customModels.map(stripPiPrefix)
-      : [initConfig.model || 'default'].map(stripPiPrefix);
+    const modelEntries: CustomModelEntry[] = (initConfig.customModels?.length
+      ? initConfig.customModels
+      : [initConfig.model || 'default']
+    ).map(m => typeof m === 'string'
+      ? { id: stripPiPrefix(m) }
+      : { id: stripPiPrefix(m.id), contextWindow: m.contextWindow });
     customEndpointModelIds = new Set();  // Reset on fresh registry creation
-    registerCustomEndpointModels(modelRegistry, api, initConfig.baseUrl!.trim(), modelIds);
+    registerCustomEndpointModels(modelRegistry, api, initConfig.baseUrl!.trim(), modelEntries);
   } else if (hasCustomEndpoint && !initConfig?.customEndpoint) {
     debugLog('Custom endpoint without protocol config — models may not resolve. Set customEndpoint.api for proper routing.');
   }
@@ -747,6 +787,20 @@ function buildProxyTools(): AgentTool<any>[] {
       toolCallId: string,
       params: any,
     ): Promise<AgentToolResult<any>> => {
+      // Check speculative prefetch cache first (parallel call_llm optimization).
+      // If this tool was prefetched on message_end, the request is already in-flight —
+      // just await the result instead of sending a duplicate request.
+      const prefetched = prefetchCache.get(toolCallId);
+      if (prefetched) {
+        prefetchCache.delete(toolCallId);
+        debugLog(`Prefetch cache hit for ${def.name} (toolCallId: ${toolCallId})`);
+        const result = await prefetched;
+        return {
+          content: [{ type: 'text', text: result.content }],
+          details: result.isError ? { isError: true } : undefined,
+        };
+      }
+
       const inputObj = params as Record<string, unknown>;
 
       // Permission checking via main process
@@ -809,13 +863,17 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
 
   // If piAuth is set, ensure the mini model uses the same provider.
   // Pi SDK will fail with "No API key found" if the model requires a different provider.
+  // Exception: 'custom-endpoint' provider is always compatible because it has its own
+  // API key configured via resolveCustomEndpointApiKey() and doesn't use authStorage.
   if (initConfig.piAuth) {
     const authProvider = initConfig.piAuth.provider;
     const bareModel = model.startsWith('pi/') ? model.slice(3) : model;
     const resolved = resolvePiModel(modelRegistry, bareModel, authProvider, shouldPreferCustomEndpoint());
-    if (!resolved || (resolved as any).provider !== authProvider || isDeniedMiniModelId(model)) {
+    const resolvedProvider = (resolved as any)?.provider;
+    const isCompatible = resolvedProvider === authProvider || resolvedProvider === 'custom-endpoint';
+    if (!resolved || !isCompatible || isDeniedMiniModelId(model)) {
       const fallback = getDefaultSummarizationModel();
-      debugLog(`[queryLlm] Model ${bareModel} incompatible with ${authProvider}, falling back to ${fallback}`);
+      debugLog(`[queryLlm] Model ${bareModel} incompatible with ${authProvider} (resolved: ${resolvedProvider}), falling back to ${fallback}`);
       model = fallback;
     }
   }
@@ -952,8 +1010,11 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
         try {
           const resolved = resolvePiModel(modelRegistry, candidate, initConfig.piAuth?.provider, shouldPreferCustomEndpoint());
           if (!resolved) return false;
-          if (initConfig.piAuth && (resolved as any).provider !== initConfig.piAuth.provider) {
-            return false;
+          if (initConfig.piAuth) {
+            const rp = (resolved as any).provider;
+            if (rp !== initConfig.piAuth.provider && rp !== 'custom-endpoint') {
+              return false;
+            }
           }
           return true;
         } catch {
@@ -1027,6 +1088,32 @@ function handleSessionEvent(event: AgentSessionEvent): void {
           ...(event as Record<string, unknown>),
           sdkTurnAnchor,
         } as OutboundAgentEvent;
+      }
+
+      // Speculative prefetch: if the assistant message contains 2+ prefetchable tool calls,
+      // fire all requests to the main process in parallel NOW, before executeToolCalls
+      // iterates sequentially. Each proxy tool's execute() will hit the cache.
+      const content = (msg as { content?: Array<{ type: string; id?: string; name?: string; arguments?: unknown }> }).content;
+      if (Array.isArray(content)) {
+        const prefetchableToolCalls = content.filter(
+          (c) => c.type === 'toolCall' && c.name && isPrefetchableTool(c.name),
+        );
+        if (prefetchableToolCalls.length >= 2) {
+          debugLog(`Prefetching ${prefetchableToolCalls.length} parallel ${prefetchableToolCalls[0].name} calls`);
+          for (const tc of prefetchableToolCalls) {
+            const requestId = `prefetch-${tc.id}`;
+            const promise = new Promise<{ content: string; isError: boolean }>((resolve) => {
+              pendingToolExecutions.set(requestId, { resolve });
+            });
+            send({
+              type: 'tool_execute_request',
+              requestId,
+              toolName: tc.name!,
+              args: (tc.arguments ?? {}) as Record<string, unknown>,
+            });
+            prefetchCache.set(tc.id!, promise);
+          }
+        }
       }
     }
   }
@@ -1115,6 +1202,27 @@ function isContextOverflowErrorMessage(message: string): boolean {
   );
 }
 
+/**
+ * Wait for any in-flight compaction to finish before sending a prompt.
+ * Prevents a race in the Pi SDK where concurrent _runAutoCompaction calls
+ * crash on a shared AbortController (see craft-agents-oss#464).
+ */
+async function waitForCompaction(session: { isCompacting: boolean }, timeoutMs = 60_000): Promise<void> {
+  if (!session.isCompacting) return;
+  debugLog('Waiting for in-flight compaction to finish before prompt...');
+  const start = Date.now();
+  while (session.isCompacting) {
+    if (Date.now() - start > timeoutMs) {
+      debugLog('Compaction wait timed out after 60s, proceeding anyway');
+      break;
+    }
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  if (Date.now() - start < timeoutMs) {
+    debugLog('Compaction finished, proceeding with prompt');
+  }
+}
+
 async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): Promise<void> {
   currentUserMessage = msg.message;
 
@@ -1145,6 +1253,9 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
     }
     unsubscribeEvents = session.subscribe(handleSessionEvent);
 
+    // Wait for any in-flight auto-compaction to avoid race (craft-agents-oss#464)
+    await waitForCompaction(session);
+
     // Fire prompt — use followUp when session is already streaming so the
     // message is queued instead of throwing "Agent is already processing".
     await session.prompt(msg.message, {
@@ -1161,6 +1272,7 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
       try {
         const session = await ensureSession();
         await session.compact();
+        await waitForCompaction(session);
         await session.prompt(msg.message, {
           images: msg.images && msg.images.length > 0 ? msg.images : undefined,
           streamingBehavior: 'followUp',
@@ -1238,6 +1350,9 @@ async function handleAbort(): Promise<void> {
     pending.resolve({ action: 'block', reason: 'Aborted' });
   }
   pendingPreToolUse.clear();
+
+  // Clear speculative prefetch cache — in-flight prefetches will resolve but never be consumed
+  prefetchCache.clear();
 }
 
 async function handleMiniCompletion(msg: Extract<InboundMessage, { type: 'mini_completion' }>): Promise<void> {
@@ -1250,7 +1365,7 @@ async function handleMiniCompletion(msg: Extract<InboundMessage, { type: 'mini_c
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     debugLog(`[handleMiniCompletion] Error: ${errorMsg}`);
-    send({ type: 'error', message: errorMsg });
+    send({ type: 'error', message: errorMsg, code: 'mini_completion_error' });
   }
 }
 
@@ -1353,12 +1468,7 @@ async function handleSetThinkingLevel(msg: Extract<InboundMessage, { type: 'set_
     return;
   }
 
-  if (msg.level !== 'off' && msg.level !== 'think' && msg.level !== 'max') {
-    debugLog(`[set_thinking_level] Invalid level: ${msg.level}`);
-    return;
-  }
-
-  const piLevel = THINKING_TO_PI[msg.level];
+  const piLevel = THINKING_TO_PI[msg.level as keyof typeof THINKING_TO_PI];
   if (!piLevel) {
     debugLog(`[set_thinking_level] No Pi mapping for level: ${msg.level}`);
     return;

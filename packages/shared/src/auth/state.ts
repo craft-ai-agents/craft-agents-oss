@@ -23,6 +23,23 @@ import {
 import { refreshClaudeToken, isTokenExpired } from './claude-token.ts';
 import { debug } from '../utils/debug.ts';
 
+function toLegacyBillingType(
+  authType: NonNullable<ReturnType<typeof getLlmConnection>>['authType'],
+): AuthType {
+  switch (authType) {
+    case 'oauth':
+      return 'oauth_token'
+    case 'api_key':
+    case 'api_key_with_endpoint':
+    case 'bearer_token':
+    case 'iam_credentials':
+    case 'service_account_file':
+    case 'environment':
+    case 'none':
+      return 'api_key'
+  }
+}
+
 // ============================================
 // Types
 // ============================================
@@ -257,15 +274,9 @@ export async function getAuthState(): Promise<AuthState> {
   // Determine auth type from connection (no legacy fallback - migration ensures all users have connections)
   let effectiveAuthType: AuthType | null = null;
   if (connection) {
-    // Map connection authType to legacy AuthType format for backwards compatibility
-    // New auth types (api_key, api_key_with_endpoint, bearer_token) map to 'api_key'
-    // OAuth maps to 'oauth_token'
-    if (connection.authType === 'api_key' || connection.authType === 'api_key_with_endpoint' || connection.authType === 'bearer_token') {
-      effectiveAuthType = 'api_key';
-    } else if (connection.authType === 'oauth') {
-      effectiveAuthType = 'oauth_token';
-    }
-    // Other auth types (iam_credentials, service_account_file, environment, none) don't map to legacy types
+    // Any configured default connection counts as billing-configured,
+    // including environment/IAM auth (Bedrock, Vertex).
+    effectiveAuthType = toLegacyBillingType(connection.authType)
   }
   // No fallback to legacy config.authType - if no connection, return unauthenticated state
 
@@ -318,7 +329,7 @@ export async function getAuthState(): Promise<AuthState> {
 /**
  * Derive what setup steps are needed based on current auth state
  */
-export function getSetupNeeds(state: AuthState): SetupNeeds {
+export function getSetupNeeds(state: AuthState, setupDeferred?: boolean): SetupNeeds {
   // Need billing config if no billing type is set
   const needsBillingConfig = state.billing.type === null;
 
@@ -328,7 +339,8 @@ export function getSetupNeeds(state: AuthState): SetupNeeds {
   return {
     needsBillingConfig,
     needsCredentials,
-    isFullyConfigured: !needsBillingConfig && !needsCredentials,
+    // Fully configured if setup is complete OR user chose "Setup later"
+    isFullyConfigured: (!needsBillingConfig && !needsCredentials) || !!setupDeferred,
     needsMigration: state.billing.migrationRequired,
   };
 }

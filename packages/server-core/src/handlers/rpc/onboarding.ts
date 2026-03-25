@@ -5,6 +5,7 @@
  */
 import { getAuthState, getSetupNeeds } from '@craft-agent/shared/auth'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
+import { setSetupDeferred } from '@craft-agent/shared/config'
 import { prepareClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState, prepareMcpOAuth } from '@craft-agent/shared/auth'
 import { validateMcpConnection } from '@craft-agent/shared/mcp'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
@@ -23,6 +24,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.onboarding.EXCHANGE_CLAUDE_CODE,
   RPC_CHANNELS.onboarding.HAS_CLAUDE_OAUTH_STATE,
   RPC_CHANNELS.onboarding.CLEAR_CLAUDE_OAUTH_STATE,
+  RPC_CHANNELS.onboarding.DEFER_SETUP,
 ] as const
 
 export function registerOnboardingHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -156,6 +158,13 @@ export function registerOnboardingHandlers(server: RpcServer, deps: HandlerDeps)
   // Clear OAuth state (for cancel/reset)
   server.handle(RPC_CHANNELS.onboarding.CLEAR_CLAUDE_OAUTH_STATE, async () => {
     clearOAuthState()
+    return { success: true }
+  })
+
+  // User chose "Setup later" — persist so onboarding doesn't re-show on next launch
+  server.handle(RPC_CHANNELS.onboarding.DEFER_SETUP, async () => {
+    setSetupDeferred(true)
+    log?.info('[Onboarding] User deferred setup')
     return { success: true }
   })
 }

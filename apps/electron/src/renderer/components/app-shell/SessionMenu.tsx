@@ -35,6 +35,7 @@ import {
   CloudUpload,
   RefreshCw,
   Tag,
+  Send,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { navigate, routes } from '@/lib/navigate'
@@ -57,6 +58,8 @@ export interface SessionMenuProps {
   labels?: LabelConfig[]
   /** Callback when labels are toggled (receives full updated labels array) */
   onLabelsChange?: (labels: string[]) => void
+  /** Whether multiple workspaces exist (enables "Send to Workspace" item) */
+  hasRemoteWorkspaces?: boolean
   /** Callbacks */
   onRename: () => void
   onFlag: () => void
@@ -66,6 +69,7 @@ export interface SessionMenuProps {
   onMarkUnread: () => void
   onSessionStatusChange: (state: SessionStatusId) => void
   onOpenInNewWindow: () => void
+  onSendToWorkspace?: () => void
   onDelete: () => void
 }
 
@@ -86,7 +90,9 @@ export function SessionMenu({
   onMarkUnread,
   onSessionStatusChange,
   onOpenInNewWindow,
+  onSendToWorkspace,
   onDelete,
+  hasRemoteWorkspaces,
 }: SessionMenuProps) {
   // Derive display state from item
   const sessionId = item.id
@@ -181,6 +187,15 @@ export function SessionMenu({
           </SubContent>
         </Sub>
       )}
+
+      {/* Send to Workspace — visible when at least one other workspace exists */}
+      {hasRemoteWorkspaces && onSendToWorkspace && (
+        <MenuItem onClick={onSendToWorkspace}>
+          <Send className="h-3.5 w-3.5" />
+          <span className="flex-1">Send to Workspace...</span>
+        </MenuItem>
+      )}
+
       <Separator />
 
       {/* Status submenu - includes all statuses plus Flag/Unflag at the bottom */}

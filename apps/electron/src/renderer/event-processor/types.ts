@@ -281,6 +281,15 @@ export interface WorkingDirectoryChangedEvent {
 }
 
 /**
+ * Working directory error event - server rejected the path (cross-platform, not found, etc.)
+ */
+export interface WorkingDirectoryErrorEvent {
+  type: 'working_directory_error'
+  sessionId: string
+  error: string
+}
+
+/**
  * Permission mode changed event
  */
 export interface PermissionModeChangedEvent {
@@ -489,6 +498,7 @@ export type AgentEvent =
   | TitleRegeneratingEvent
   | AsyncOperationEvent
   | WorkingDirectoryChangedEvent
+  | WorkingDirectoryErrorEvent
   | PermissionModeChangedEvent
   | SessionModelChangedEvent
   | LLMConnectionChangedEvent
@@ -515,6 +525,7 @@ export type Effect =
   | { type: 'permission_mode_changed'; sessionId: string; permissionMode: PermissionMode; previousPermissionMode?: PermissionMode; transitionDisplay?: string; modeVersion?: number; changedAt?: string; changedBy?: 'user' | 'system' | 'restore' | 'automation' | 'unknown' }
   | { type: 'auto_retry'; sessionId: string; originalMessage: string; sourceSlug: string }
   | { type: 'restore_input'; text: string }
+  | { type: 'toast_error'; message: string }
 
 /**
  * Result of processing an event

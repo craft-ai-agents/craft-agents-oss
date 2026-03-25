@@ -8,22 +8,34 @@
  */
 
 import { WebSocketServer, type WebSocket } from 'ws'
+import { createServer as createHttpServer, type Server as HttpServer } from 'node:http'
 import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https'
 import { randomUUID } from 'node:crypto'
 import {
   PROTOCOL_VERSION,
   HEARTBEAT_INTERVAL_MS,
   HEARTBEAT_MAX_MISSED,
+  EVENT_BUFFER_MAX_SIZE,
+  EVENT_BUFFER_TTL_MS,
+  DISCONNECTED_CLIENT_TTL_MS,
   type MessageEnvelope,
   type PushTarget,
   type ErrorCode,
 } from '@craft-agent/shared/protocol'
 import type { RpcServer, HandlerFn, RequestContext } from './types'
 import { serializeEnvelope, deserializeEnvelope } from './codec'
+import { createLogger } from '@craft-agent/shared/utils'
 
 // ---------------------------------------------------------------------------
 // Client connection state
 // ---------------------------------------------------------------------------
+
+interface BufferedEvent {
+  seq: number
+  /** Shared serialized envelope — one allocation referenced by all client buffers. */
+  data: string
+  timestamp: number
+}
 
 interface ClientConnection {
   id: string
@@ -33,6 +45,12 @@ interface ClientConnection {
   capabilities: Set<string>
   missedPongs: number
   alive: boolean
+  /** Ring buffer of recent events for replay on reconnect. */
+  eventBuffer: BufferedEvent[]
+  /** Highest per-client seq the client has acknowledged. */
+  lastAckedSeq: number
+  /** Highest per-client seq assigned to this client. */
+  lastSentSeq: number
 }
 
 interface PendingInvoke {
@@ -66,15 +84,35 @@ export interface WsRpcServerOptions {
   requireAuth?: boolean
   /** Token validator. Called when requireAuth is true. */
   validateToken?: (token: string) => Promise<boolean>
+  /**
+   * Optional cookie-based session validator (for web UI auth).
+   * Called with the Cookie header from the HTTP upgrade request.
+   * If provided, a valid session cookie is accepted as an alternative to a bearer token.
+   */
+  validateSessionCookie?: (cookieHeader: string | null) => Promise<boolean>
   /** Server identity stamp on outgoing events. Default: 'local' */
   serverId?: string
   /** TLS configuration. When provided, the server listens on wss:// instead of ws://. */
   tls?: WsRpcTlsOptions
+  /** App version string, included in handshake_ack for client compatibility checks. */
+  serverVersion?: string
+  /** Maximum concurrent clients. 0 = unlimited. Default: 50 */
+  maxClients?: number
   /** Called when a client completes handshake. */
   onClientConnected?: (info: { clientId: string; webContentsId: number | null; workspaceId: string | null }) => void
   /** Called when a client disconnects. */
   onClientDisconnected?: (clientId: string) => void
+  /**
+   * Optional HTTP request handler for non-WebSocket requests.
+   * When provided, regular HTTP requests to the server's port are
+   * routed here instead of being rejected. This enables serving the
+   * WebUI from the same port as the WebSocket server.
+   * Must use Node.js HTTP callback signature (IncomingMessage, ServerResponse).
+   */
+  httpHandler?: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void
 }
+
+const transportLog = createLogger('ws-rpc-server')
 
 // ---------------------------------------------------------------------------
 // WsRpcServer
@@ -82,6 +120,7 @@ export interface WsRpcServerOptions {
 
 export class WsRpcServer implements RpcServer {
   private wss: WebSocketServer | null = null
+  private httpServer: HttpServer | null = null
   private httpsServer: HttpsServer | null = null
   private clients = new Map<string, ClientConnection>()
   private handlers = new Map<string, HandlerFn>()
@@ -90,24 +129,35 @@ export class WsRpcServer implements RpcServer {
   private _port = 0
   private _protocol: 'ws' | 'wss' = 'ws'
 
+  /** Recently disconnected clients retained for reconnect replay. */
+  private disconnectedClients = new Map<string, { client: ClientConnection; timer: ReturnType<typeof setTimeout> }>()
+
   private readonly host: string
   private readonly requestedPort: number
   private readonly requireAuth: boolean
   private readonly validateToken: ((token: string) => Promise<boolean>) | null
+  private readonly validateSessionCookie: ((cookieHeader: string | null) => Promise<boolean>) | null
   private readonly serverId: string
   private readonly tlsOptions: WsRpcTlsOptions | null
+  private readonly serverVersion: string
+  private readonly maxClients: number
   private readonly onClientConnected: WsRpcServerOptions['onClientConnected']
   private readonly onClientDisconnected: WsRpcServerOptions['onClientDisconnected']
+  private readonly httpHandler: WsRpcServerOptions['httpHandler']
 
   constructor(opts?: WsRpcServerOptions) {
     this.host = opts?.host ?? '127.0.0.1'
     this.requestedPort = opts?.port ?? 0
     this.requireAuth = opts?.requireAuth ?? false
     this.validateToken = opts?.validateToken ?? null
+    this.validateSessionCookie = opts?.validateSessionCookie ?? null
     this.serverId = opts?.serverId ?? 'local'
+    this.serverVersion = opts?.serverVersion ?? ''
     this.tlsOptions = opts?.tls ?? null
+    this.maxClients = opts?.maxClients ?? 50
     this.onClientConnected = opts?.onClientConnected
     this.onClientDisconnected = opts?.onClientDisconnected
+    this.httpHandler = opts?.httpHandler
   }
 
   /** The actual port the server is listening on (available after listen()). */
@@ -118,6 +168,11 @@ export class WsRpcServer implements RpcServer {
   /** The protocol the server is using: 'wss' when TLS is configured, 'ws' otherwise. */
   get protocol(): 'ws' | 'wss' {
     return this._protocol
+  }
+
+  /** Number of currently connected (handshake-completed) clients. */
+  getConnectedClientCount(): number {
+    return this.clients.size
   }
 
   // -------------------------------------------------------------------------
@@ -132,19 +187,16 @@ export class WsRpcServer implements RpcServer {
   }
 
   push(channel: string, target: PushTarget, ...args: any[]): void {
-    const envelope: MessageEnvelope = {
-      id: randomUUID(),
-      type: 'event',
-      channel,
-      args,
-      serverId: this.serverId,
-    }
-    const data = serializeEnvelope(envelope)
+    const timestamp = Date.now()
 
     for (const client of this.clients.values()) {
-      if (this.matchesTarget(client, target)) {
-        this.safeSend(client.ws, data)
-      }
+      if (!this.matchesTarget(client, target)) continue
+      this.bufferAndMaybeSendEvent(client, channel, args, timestamp, true)
+    }
+
+    for (const { client } of this.disconnectedClients.values()) {
+      if (!this.matchesTarget(client, target)) continue
+      this.bufferAndMaybeSendEvent(client, channel, args, timestamp, false)
     }
   }
 
@@ -196,14 +248,19 @@ export class WsRpcServer implements RpcServer {
   async listen(): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.tlsOptions) {
-        // TLS mode: create HTTPS server, attach WebSocketServer to it
+        // TLS mode: create HTTPS server, attach WebSocketServer to it.
+        // When httpHandler is set, regular HTTP requests are served by it
+        // (e.g. WebUI), while ws intercepts WebSocket upgrade requests.
         this._protocol = 'wss'
-        this.httpsServer = createHttpsServer({
-          cert: this.tlsOptions.cert,
-          key: this.tlsOptions.key,
-          ca: this.tlsOptions.ca,
-          passphrase: this.tlsOptions.passphrase,
-        })
+        this.httpsServer = createHttpsServer(
+          {
+            cert: this.tlsOptions.cert,
+            key: this.tlsOptions.key,
+            ca: this.tlsOptions.ca,
+            passphrase: this.tlsOptions.passphrase,
+          },
+          this.httpHandler,
+        )
 
         this.wss = new WebSocketServer({ server: this.httpsServer })
 
@@ -217,8 +274,24 @@ export class WsRpcServer implements RpcServer {
           this.startHeartbeat()
           resolve()
         })
+      } else if (this.httpHandler) {
+        // Plain WS + HTTP handler: create an HTTP server for both.
+        this._protocol = 'ws'
+        this.httpServer = createHttpServer(this.httpHandler)
+        this.wss = new WebSocketServer({ server: this.httpServer })
+
+        this.httpServer.on('error', (err) => reject(err))
+
+        this.httpServer.listen(this.requestedPort, this.host, () => {
+          const addr = this.httpServer!.address()
+          if (typeof addr === 'object' && addr) {
+            this._port = addr.port
+          }
+          this.startHeartbeat()
+          resolve()
+        })
       } else {
-        // Plain WS mode (unchanged)
+        // Plain WS mode, no HTTP handler
         this._protocol = 'ws'
         this.wss = new WebSocketServer({
           host: this.host,
@@ -239,8 +312,8 @@ export class WsRpcServer implements RpcServer {
         })
       }
 
-      this.wss.on('connection', (ws) => {
-        this.onConnection(ws)
+      this.wss.on('connection', (ws, req) => {
+        this.onConnection(ws, req.headers.cookie ?? null)
       })
     })
   }
@@ -262,8 +335,15 @@ export class WsRpcServer implements RpcServer {
       client.ws.terminate()
     }
     this.clients.clear()
+    // Clean up disconnected client timers
+    for (const entry of this.disconnectedClients.values()) {
+      clearTimeout(entry.timer)
+    }
+    this.disconnectedClients.clear()
     this.wss?.close()
     this.wss = null
+    this.httpServer?.close()
+    this.httpServer = null
     this.httpsServer?.close()
     this.httpsServer = null
   }
@@ -272,7 +352,17 @@ export class WsRpcServer implements RpcServer {
   // Connection handling
   // -------------------------------------------------------------------------
 
-  private onConnection(ws: WebSocket): void {
+  private onConnection(ws: WebSocket, upgradeRequestCookie: string | null): void {
+    // Reject if at capacity
+    if (this.maxClients > 0 && this.clients.size >= this.maxClients) {
+      transportLog.warn('Connection rejected: at capacity', {
+        maxClients: this.maxClients,
+        current: this.clients.size,
+      })
+      ws.close(4008, 'Server at capacity')
+      return
+    }
+
     let handshakeCompleted = false
     let handshakeTimeout: ReturnType<typeof setTimeout> | null = null
 
@@ -320,24 +410,134 @@ export class WsRpcServer implements RpcServer {
           return
         }
 
-        // Auth check
+        // Auth check — bearer token OR session cookie (web UI)
         if (this.requireAuth) {
-          if (!envelope.token) {
-            this.sendError(ws, envelope.id, 'AUTH_FAILED', 'Token required')
+          let authenticated = false
+
+          // 1. Try bearer token (standard path)
+          if (envelope.token && this.validateToken) {
+            authenticated = await this.validateToken(envelope.token)
+          }
+
+          // 2. Fallback: try session cookie from HTTP upgrade request (web UI path)
+          if (!authenticated && this.validateSessionCookie && upgradeRequestCookie) {
+            authenticated = await this.validateSessionCookie(upgradeRequestCookie)
+          }
+
+          if (!authenticated) {
+            const reason = envelope.token ? 'Invalid token' : 'Token required'
+            this.sendError(ws, envelope.id, 'AUTH_FAILED', reason)
             ws.close(4005, 'Auth failed')
             return
           }
-          if (this.validateToken) {
-            const valid = await this.validateToken(envelope.token)
-            if (!valid) {
-              this.sendError(ws, envelope.id, 'AUTH_FAILED', 'Invalid token')
-              ws.close(4005, 'Auth failed')
-              return
-            }
-          }
         }
 
-        // Register client
+        // ── Reconnect attempt ──
+        if (envelope.reconnectClientId && envelope.lastSeq != null) {
+          const entry = this.disconnectedClients.get(envelope.reconnectClientId)
+          if (entry) {
+            const prevClient = entry.client
+
+            // Identity must match (workspace + webContentsId)
+            const identityMatch =
+              prevClient.workspaceId === (envelope.workspaceId ?? null) &&
+              prevClient.webContentsId === (envelope.webContentsId ?? null)
+
+            if (identityMatch) {
+              // Valid reconnect — prepare client state but do NOT add to
+              // this.clients yet. The client stays in disconnectedClients
+              // during replay so that push() can't interleave new events
+              // between replayed ones. (Currently safe due to Node.js
+              // single-threading, but this ordering makes the invariant
+              // explicit and future-proof.)
+              clearTimeout(entry.timer)
+
+              prevClient.ws = ws
+              prevClient.alive = true
+              prevClient.missedPongs = 0
+              handshakeCompleted = true
+
+              // Determine replay vs stale using the per-client delivery sequence.
+              // Retained buffers continue collecting events while the client is disconnected,
+              // but TTL eviction still applies during the reconnect window.
+              this.evictBuffer(prevClient)
+
+              const lastSeq = envelope.lastSeq as number
+              const hasMissedEvents = lastSeq < prevClient.lastSentSeq
+              const firstBufferedSeq = prevClient.eventBuffer[0]?.seq
+              const canReplay = !hasMissedEvents
+                ? true
+                : firstBufferedSeq != null && lastSeq >= firstBufferedSeq - 1
+
+              if (canReplay) {
+                const replayEvents = prevClient.eventBuffer.filter(e => e.seq > lastSeq)
+
+                const ack: MessageEnvelope = {
+                  id: envelope.id,
+                  type: 'handshake_ack',
+                  protocolVersion: PROTOCOL_VERSION,
+                  serverVersion: this.serverVersion || undefined,
+                  clientId: prevClient.id,
+                  registeredChannels: [...this.handlers.keys()],
+                  reconnected: true,
+                }
+                this.safeSend(ws, serializeEnvelope(ack))
+
+                // Replay missed events in order
+                for (const event of replayEvents) {
+                  this.safeSend(ws, event.data)
+                }
+
+                transportLog.info('Client reconnected with replay', {
+                  clientId: prevClient.id,
+                  replayedCount: replayEvents.length,
+                  lastSeq,
+                })
+              } else {
+                // Buffer evicted — client must full-refresh
+                const ack: MessageEnvelope = {
+                  id: envelope.id,
+                  type: 'handshake_ack',
+                  protocolVersion: PROTOCOL_VERSION,
+                  serverVersion: this.serverVersion || undefined,
+                  clientId: prevClient.id,
+                  registeredChannels: [...this.handlers.keys()],
+                  reconnected: true,
+                  stale: true,
+                }
+                this.safeSend(ws, serializeEnvelope(ack))
+
+                transportLog.info('Client reconnected as stale', {
+                  clientId: prevClient.id,
+                  lastSeq,
+                  firstBufferedSeq,
+                  lastSentSeq: prevClient.lastSentSeq,
+                })
+              }
+
+              // Atomic state transition: move from disconnected → active
+              // AFTER replay is complete so push() can't target this client mid-replay.
+              this.disconnectedClients.delete(envelope.reconnectClientId)
+              this.clients.set(prevClient.id, prevClient)
+
+              this.setupClientHandlers(ws, prevClient)
+              this.onClientConnected?.({
+                clientId: prevClient.id,
+                webContentsId: prevClient.webContentsId,
+                workspaceId: prevClient.workspaceId,
+              })
+              return
+            }
+
+            // Identity mismatch — fall through to fresh connect
+            transportLog.warn('Reconnect identity mismatch', {
+              reconnectClientId: envelope.reconnectClientId,
+            })
+          }
+          // reconnectClientId not found — fall through to fresh connect
+        }
+
+        // ── Normal fresh connect ──
         const clientId = randomUUID()
         const client: ClientConnection = {
           id: clientId,
@@ -347,6 +547,9 @@ export class WsRpcServer implements RpcServer {
           capabilities: new Set(envelope.clientCapabilities ?? []),
           missedPongs: 0,
           alive: true,
+          eventBuffer: [],
+          lastAckedSeq: 0,
+          lastSentSeq: 0,
         }
         this.clients.set(clientId, client)
         handshakeCompleted = true
@@ -356,30 +559,25 @@ export class WsRpcServer implements RpcServer {
           id: envelope.id,
           type: 'handshake_ack',
           protocolVersion: PROTOCOL_VERSION,
+          serverVersion: this.serverVersion || undefined,
           clientId,
           registeredChannels: [...this.handlers.keys()],
         }
         this.safeSend(ws, serializeEnvelope(ack))
 
         // Notify lifecycle listener
+        transportLog.info('Client connected', {
+          clientId,
+          webContentsId: client.webContentsId,
+          workspaceId: client.workspaceId,
+        })
         this.onClientConnected?.({
           clientId,
           webContentsId: client.webContentsId,
           workspaceId: client.workspaceId,
         })
 
-        // Setup close handler
-        ws.on('close', () => {
-          this.clients.delete(clientId)
-          this.rejectPendingInvokesForClient(clientId)
-          this.onClientDisconnected?.(clientId)
-        })
-
-        // Setup pong handler
-        ws.on('pong', () => {
-          client.alive = true
-          client.missedPongs = 0
-        })
+        this.setupClientHandlers(ws, client)
         return
       }
 
@@ -394,6 +592,20 @@ export class WsRpcServer implements RpcServer {
         await this.onRequest(client, envelope)
       } else if (envelope.type === 'response') {
         this.onClientResponse(envelope)
+      } else if (envelope.type === 'sequence_ack') {
+        const ackSeq = envelope.lastSeq
+        if (typeof ackSeq === 'number' && ackSeq > client.lastAckedSeq) {
+          client.lastAckedSeq = ackSeq
+          // Evict acknowledged events
+          const buf = client.eventBuffer
+          let removeCount = 0
+          while (removeCount < buf.length && buf[removeCount].seq <= ackSeq) {
+            removeCount++
+          }
+          if (removeCount > 0) {
+            buf.splice(0, removeCount)
+          }
+        }
       }
     })
 
@@ -405,6 +617,9 @@ export class WsRpcServer implements RpcServer {
   // -------------------------------------------------------------------------
   // Request dispatching
   // -------------------------------------------------------------------------
+
+  /** Server-side timeout for RPC handler execution (ms). */
+  private static readonly HANDLER_TIMEOUT_MS = 60_000
 
   private async onRequest(client: ClientConnection, envelope: MessageEnvelope): Promise<void> {
     const { channel, id, args } = envelope
@@ -427,7 +642,13 @@ export class WsRpcServer implements RpcServer {
     }
 
     try {
-      const result = await handler(ctx, ...(args ?? []))
+      const result = await Promise.race([
+        handler(ctx, ...(args ?? [])),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Handler timeout: ${channel} (${WsRpcServer.HANDLER_TIMEOUT_MS}ms)`)),
+            WsRpcServer.HANDLER_TIMEOUT_MS),
+        ),
+      ])
       const response: MessageEnvelope = {
         id,
         type: 'response',
@@ -448,13 +669,16 @@ export class WsRpcServer implements RpcServer {
 
   private startHeartbeat(): void {
     this.heartbeatTimer = setInterval(() => {
-      for (const [id, client] of this.clients) {
+      for (const [, client] of this.clients) {
+        // Skip sockets that are already closing/closed (e.g. terminated on a previous tick)
+        if (client.ws.readyState !== client.ws.OPEN) continue
+
         if (!client.alive) {
           client.missedPongs++
           if (client.missedPongs >= HEARTBEAT_MAX_MISSED) {
+            // Let the close handler (setupClientHandlers) handle all cleanup:
+            // clients.delete, buffer retention for reconnect, onClientDisconnected.
             client.ws.terminate()
-            this.clients.delete(id)
-            this.onClientDisconnected?.(id)
             continue
           }
         }
@@ -467,6 +691,93 @@ export class WsRpcServer implements RpcServer {
   // -------------------------------------------------------------------------
   // Helpers
   // -------------------------------------------------------------------------
+
+  /** Wire up close + pong handlers for a WebSocket ↔ ClientConnection pair. */
+  private setupClientHandlers(ws: WebSocket, client: ClientConnection): void {
+    ws.on('close', () => {
+      transportLog.info('Client disconnected', { clientId: client.id })
+      this.clients.delete(client.id)
+
+      // Retain buffer for potential reconnect
+      const timer = setTimeout(() => {
+        this.disconnectedClients.delete(client.id)
+      }, DISCONNECTED_CLIENT_TTL_MS)
+      this.disconnectedClients.set(client.id, { client, timer })
+
+      // Cap disconnectedClients to prevent unbounded growth
+      if (this.disconnectedClients.size > 50) {
+        const oldestKey = this.disconnectedClients.keys().next().value
+        if (oldestKey) {
+          const oldest = this.disconnectedClients.get(oldestKey)
+          if (oldest) clearTimeout(oldest.timer)
+          this.disconnectedClients.delete(oldestKey)
+        }
+      }
+
+      this.rejectPendingInvokesForClient(client.id)
+      this.onClientDisconnected?.(client.id)
+    })
+
+    ws.on('pong', () => {
+      client.alive = true
+      client.missedPongs = 0
+    })
+  }
+
+  /** Assign a per-client seq, retain the event for replay, and optionally send it immediately. */
+  private bufferAndMaybeSendEvent(
+    client: ClientConnection,
+    channel: string,
+    args: any[],
+    timestamp: number,
+    shouldSend: boolean,
+  ): void {
+    client.lastSentSeq += 1
+    const seq = client.lastSentSeq
+
+    const envelope: MessageEnvelope = {
+      id: randomUUID(),
+      type: 'event',
+      channel,
+      args,
+      serverId: this.serverId,
+      seq,
+    }
+
+    const data = serializeEnvelope(envelope)
+    client.eventBuffer.push({ seq, data, timestamp })
+    this.evictBuffer(client)
+
+    if (shouldSend) {
+      this.safeSend(client.ws, data)
+    }
+  }
+
+  /** Evict stale/oversized entries from a client's event buffer via batch splice. */
+  private evictBuffer(client: ClientConnection): void {
+    const buf = client.eventBuffer
+    if (buf.length === 0) return
+
+    const now = Date.now()
+    let removeCount = 0
+
+    // Evict by TTL
+    while (removeCount < buf.length &&
+           now - buf[removeCount].timestamp > EVENT_BUFFER_TTL_MS) {
+      removeCount++
+    }
+
+    // Evict by size (keep at most EVENT_BUFFER_MAX_SIZE after TTL eviction)
+    const remaining = buf.length - removeCount
+    if (remaining > EVENT_BUFFER_MAX_SIZE) {
+      removeCount += remaining - EVENT_BUFFER_MAX_SIZE
+    }
+
+    // Single splice instead of O(n) shift loop
+    if (removeCount > 0) {
+      buf.splice(0, removeCount)
+    }
+  }
 
   private matchesTarget(client: ClientConnection, target: PushTarget): boolean {
     switch (target.to) {

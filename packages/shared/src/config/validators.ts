@@ -91,7 +91,7 @@ export const StoredConfigSchema = z.object({
   activeSessionId: z.string().nullable(),
   llmConnections: z.array(LlmConnectionSchema).optional(),
   defaultLlmConnection: z.string().optional(),
-  defaultThinkingLevel: z.enum(['off', 'think', 'max']).optional(),
+  defaultThinkingLevel: z.enum(['off', 'think', 'low', 'medium', 'high', 'max']).transform(v => v === 'think' ? 'medium' : v).optional(),
   // Note: tokenDisplay, showCost, cumulativeUsage, defaultPermissionMode removed
   // Permission mode and cyclable modes are now per-workspace in workspace config.json
 });
@@ -376,6 +376,10 @@ const McpSourceConfigSchema = z.object({
   command: z.string().optional(),
   args: z.array(z.string()).optional(),
   env: z.record(z.string(), z.string()).optional(),
+  // Custom headers for HTTP/SSE transport (e.g., API keys, custom auth)
+  headers: z.record(z.string(), z.string()).optional(),
+  // Header names for credential-store auth (values stored in credential store as JSON)
+  headerNames: z.array(z.string()).optional(),
 }).refine(
   (data) => {
     if (data.transport === 'stdio') {
@@ -405,7 +409,7 @@ const ApiSourceConfigSchema = z.object({
       headers: z.record(z.string(), z.string()).optional(),
     })
     .optional(),
-  googleService: z.enum(['gmail', 'calendar', 'drive', 'docs', 'sheets', 'search-console', 'youtube', 'ads', 'tag-manager', 'analytics', 'slides']).optional(),
+  googleService: z.enum(['gmail', 'calendar', 'drive', 'docs', 'sheets', 'youtube', 'searchconsole', 'ads', 'tag-manager', 'analytics', 'slides']).optional(),
   googleScopes: z.array(z.string()).optional(),
 });
 

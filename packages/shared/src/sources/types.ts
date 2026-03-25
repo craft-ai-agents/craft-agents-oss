@@ -29,7 +29,7 @@ export type ApiAuthType = 'bearer' | 'header' | 'query' | 'basic' | 'oauth' | 'n
 /**
  * Google service types for OAuth scope selection
  */
-export type GoogleService = 'gmail' | 'calendar' | 'drive' | 'docs' | 'sheets' | 'search-console' | 'youtube' | 'ads' | 'tag-manager' | 'analytics' | 'slides';
+export type GoogleService = 'gmail' | 'calendar' | 'drive' | 'docs' | 'sheets' | 'youtube' | 'searchconsole' | 'ads' | 'tag-manager' | 'analytics' | 'slides';
 
 /**
  * Slack service types for OAuth scope selection
@@ -66,6 +66,8 @@ export function inferGoogleServiceFromUrl(baseUrl: string | undefined): GoogleSe
   if (hostname === 'gmail.googleapis.com') return 'gmail';
   if (hostname === 'docs.googleapis.com') return 'docs';
   if (hostname === 'sheets.googleapis.com') return 'sheets';
+  if (hostname === 'youtube.googleapis.com') return 'youtube';
+  if (hostname === 'searchconsole.googleapis.com' || hostname === 'webmasters.googleapis.com') return 'searchconsole';
 
   // Fallback: check path patterns only on googleapis.com domains
   if (hostname === 'www.googleapis.com' || hostname === 'googleapis.com') {
@@ -74,6 +76,8 @@ export function inferGoogleServiceFromUrl(baseUrl: string | undefined): GoogleSe
     if (pathname.startsWith('/gmail/')) return 'gmail';
     if (pathname.startsWith('/v1/documents') || pathname.startsWith('/documents/')) return 'docs';
     if (pathname.startsWith('/v4/spreadsheets') || pathname.startsWith('/spreadsheets/')) return 'sheets';
+    if (pathname.startsWith('/youtube/')) return 'youtube';
+    if (pathname.startsWith('/webmasters/')) return 'searchconsole';
   }
 
   return undefined;
@@ -249,6 +253,20 @@ export interface McpSourceConfig {
    * Environment variables for the spawned process.
    */
   env?: Record<string, string>;
+
+  // === HTTP/SSE custom headers ===
+  /**
+   * Custom headers to include in every MCP request.
+   * Auth headers (e.g. Authorization) are merged on top when authType is set.
+   */
+  headers?: Record<string, string>;
+
+  /**
+   * Header names for credential-store auth (e.g., ["X-API-Key"]).
+   * Values are stored as JSON in the credential store, same as API multi-header auth.
+   * Precedence: static headers < credential-store headerNames < Authorization bearer.
+   */
+  headerNames?: string[];
 }
 
 /**

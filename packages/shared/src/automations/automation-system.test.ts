@@ -68,6 +68,28 @@ describe('AutomationSystem', () => {
 
       await system.dispose();
     });
+
+    it('should reject semantically invalid conditions at load time', async () => {
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: {
+          LabelAdd: [
+            {
+              conditions: [{ condition: 'time', after: '25:99' }],
+              actions: [{ type: 'prompt', prompt: 'echo hello' }],
+            },
+          ],
+        },
+      }));
+
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+
+      expect(system.getConfig()).toEqual({ automations: {} });
+
+      await system.dispose();
+    });
   });
 
   describe('reloadConfig', () => {
@@ -117,6 +139,30 @@ describe('AutomationSystem', () => {
       const result = system.reloadConfig();
       expect(result.success).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
+
+      await system.dispose();
+    });
+
+    it('should return errors for semantically invalid conditions', async () => {
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: {
+          LabelAdd: [
+            {
+              conditions: [{ condition: 'time', before: '99:00' }],
+              actions: [{ type: 'prompt', prompt: 'echo hello' }],
+            },
+          ],
+        },
+      }));
+
+      const result = system.reloadConfig();
+      expect(result.success).toBe(false);
+      expect(result.errors.some(e => e.includes('Invalid time value'))).toBe(true);
 
       await system.dispose();
     });
@@ -377,6 +423,64 @@ describe('AutomationSystem', () => {
         workspaceId: 'test-workspace',
       }));
 
+      await system.dispose();
+    });
+  });
+
+  describe('executeAgentEvent', () => {
+    it('should match agent events when matcher and conditions pass', async () => {
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: {
+          PreToolUse: [
+            {
+              matcher: '^Bash$',
+              conditions: [{ condition: 'state', field: 'hook_event_name', value: 'PreToolUse' }],
+              actions: [{ type: 'prompt', prompt: 'check this' }],
+            },
+          ],
+        },
+      }));
+
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+
+      const matched = await system.executeAgentEvent('PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'echo hi' },
+      });
+
+      expect(matched).toBe(1);
+      await system.dispose();
+    });
+
+    it('should not match agent events when conditions fail', async () => {
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: {
+          PreToolUse: [
+            {
+              matcher: '^Bash$',
+              conditions: [{ condition: 'state', field: 'hook_event_name', value: 'PostToolUse' }],
+              actions: [{ type: 'prompt', prompt: 'check this' }],
+            },
+          ],
+        },
+      }));
+
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+
+      const matched = await system.executeAgentEvent('PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'echo hi' },
+      });
+
+      expect(matched).toBe(0);
       await system.dispose();
     });
   });

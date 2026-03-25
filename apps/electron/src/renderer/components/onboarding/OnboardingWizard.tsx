@@ -60,6 +60,8 @@ interface OnboardingWizardProps {
 
   // Provider select (new flow)
   onSelectProvider?: (choice: ProviderChoice) => void
+  /** Called when user chooses "Setup later" on provider select */
+  onSkipSetup?: () => void
 
   // Local model
   onSubmitLocalModel?: (data: LocalModelSubmitData) => void
@@ -107,6 +109,7 @@ export function OnboardingWizard({
   onClearError,
   // Provider select (new flow)
   onSelectProvider,
+  onSkipSetup,
   // Local model
   onSubmitLocalModel,
   // Edit mode
@@ -142,6 +145,7 @@ export function OnboardingWizard({
         return (
           <ProviderSelectStep
             onSelect={onSelectProvider!}
+            onSkip={onSkipSetup}
           />
         )
 

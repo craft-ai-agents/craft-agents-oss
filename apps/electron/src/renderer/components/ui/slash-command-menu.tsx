@@ -230,7 +230,9 @@ export function SlashCommandMenu({
   const defaultValue = activeCommands[0] ?? allFilteredCommands[0]?.id
 
   React.useEffect(() => {
-    if (showFilter && inputRef.current) {
+    // Don't auto-focus the filter on touch devices — it pulls up the virtual keyboard
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+    if (showFilter && inputRef.current && !isTouchDevice) {
       inputRef.current.focus()
     }
   }, [showFilter])

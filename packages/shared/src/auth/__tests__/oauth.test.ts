@@ -1,5 +1,5 @@
 import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
-import { getMcpBaseUrl, discoverOAuthMetadata } from '../oauth';
+import { getMcpBaseUrl, discoverOAuthMetadata, prepareMcpOAuth } from '../oauth';
 
 // ============================================================
 // Unit tests for internal helpers exported only for testing
@@ -197,6 +197,48 @@ describe('discoverOAuthMetadata', () => {
         }
         // GET returns 401 with resource_metadata
         if (url === 'https://example.com/mcp' && options?.method === 'GET') {
+          return Promise.resolve(new Response(null, {
+            status: 401,
+            headers: {
+              'WWW-Authenticate': 'Bearer resource_metadata="https://example.com/.well-known/oauth-protected-resource"',
+            },
+          }));
+        }
+        if (url === 'https://example.com/.well-known/oauth-protected-resource') {
+          return Promise.resolve(new Response(JSON.stringify(protectedResourceMetadata), { status: 200 }));
+        }
+        if (url === 'https://example.com/auth/.well-known/oauth-authorization-server') {
+          return Promise.resolve(new Response(JSON.stringify(authServerMetadata), { status: 200 }));
+        }
+        return Promise.resolve(new Response('Not Found', { status: 404 }));
+      });
+
+      const result = await discoverOAuthMetadata('https://example.com/mcp');
+      expect(result).toEqual(authServerMetadata);
+    });
+
+    it('falls back to POST when both HEAD and GET return 405 (Streamable HTTP)', async () => {
+      const protectedResourceMetadata = {
+        resource: 'https://example.com/api',
+        authorization_servers: ['https://example.com/auth'],
+      };
+
+      const authServerMetadata = {
+        authorization_endpoint: 'https://example.com/auth/authorize',
+        token_endpoint: 'https://example.com/auth/token',
+      };
+
+      mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+        // HEAD returns 405
+        if (options?.method === 'HEAD') {
+          return Promise.resolve(new Response(null, { status: 405 }));
+        }
+        // GET also returns 405 (Streamable HTTP servers only accept POST)
+        if (url === 'https://example.com/mcp' && options?.method === 'GET') {
+          return Promise.resolve(new Response(null, { status: 405 }));
+        }
+        // POST returns 401 with resource_metadata
+        if (url === 'https://example.com/mcp' && options?.method === 'POST') {
           return Promise.resolve(new Response(null, {
             status: 401,
             headers: {
@@ -1092,5 +1134,94 @@ describe('discoverOAuthMetadata', () => {
       const result = await discoverOAuthMetadata('https://example.com/mcp');
       expect(result).toEqual(fallbackMetadata);
     });
+  });
+});
+
+describe('prepareMcpOAuth', () => {
+  const originalFetch = globalThis.fetch;
+  let mockFetch: ReturnType<typeof mock>;
+
+  beforeEach(() => {
+    mockFetch = mock(() => Promise.resolve(new Response('Not Found', { status: 404 })));
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('falls back to the default client ID when registration is forbidden', async () => {
+    mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (options?.method === 'HEAD') {
+        return Promise.resolve(new Response(null, { status: 200 }));
+      }
+      if (url === 'https://example.com/.well-known/oauth-authorization-server') {
+        return Promise.resolve(new Response(JSON.stringify({
+          authorization_endpoint: 'https://example.com/oauth/authorize',
+          token_endpoint: 'https://example.com/oauth/token',
+          registration_endpoint: 'https://example.com/oauth/register',
+        }), { status: 200 }));
+      }
+      if (url === 'https://example.com/oauth/register') {
+        return Promise.resolve(new Response('Forbidden', { status: 403 }));
+      }
+      return Promise.resolve(new Response('Not Found', { status: 404 }));
+    });
+
+    const result = await prepareMcpOAuth('https://example.com/mcp', 8914);
+
+    expect(result.clientId).toBe('craft-agent');
+    expect(result.clientSecret).toBeUndefined();
+    expect(result.authUrl).toContain('client_id=craft-agent');
+    expect(result.provider).toBe('mcp');
+  });
+
+  it('keeps the dynamically registered client when registration succeeds', async () => {
+    mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (options?.method === 'HEAD') {
+        return Promise.resolve(new Response(null, { status: 200 }));
+      }
+      if (url === 'https://example.com/.well-known/oauth-authorization-server') {
+        return Promise.resolve(new Response(JSON.stringify({
+          authorization_endpoint: 'https://example.com/oauth/authorize',
+          token_endpoint: 'https://example.com/oauth/token',
+          registration_endpoint: 'https://example.com/oauth/register',
+        }), { status: 200 }));
+      }
+      if (url === 'https://example.com/oauth/register') {
+        return Promise.resolve(new Response(JSON.stringify({
+          client_id: 'dynamic-client',
+          client_secret: 'secret-123',
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('Not Found', { status: 404 }));
+    });
+
+    const result = await prepareMcpOAuth('https://example.com/mcp', 8914);
+
+    expect(result.clientId).toBe('dynamic-client');
+    expect(result.clientSecret).toBe('secret-123');
+    expect(result.authUrl).toContain('client_id=dynamic-client');
+  });
+
+  it('throws on unexpected registration failures instead of silently falling back', async () => {
+    mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (options?.method === 'HEAD') {
+        return Promise.resolve(new Response(null, { status: 200 }));
+      }
+      if (url === 'https://example.com/.well-known/oauth-authorization-server') {
+        return Promise.resolve(new Response(JSON.stringify({
+          authorization_endpoint: 'https://example.com/oauth/authorize',
+          token_endpoint: 'https://example.com/oauth/token',
+          registration_endpoint: 'https://example.com/oauth/register',
+        }), { status: 200 }));
+      }
+      if (url === 'https://example.com/oauth/register') {
+        return Promise.resolve(new Response('Server error', { status: 500 }));
+      }
+      return Promise.resolve(new Response('Not Found', { status: 404 }));
+    });
+
+    await expect(prepareMcpOAuth('https://example.com/mcp', 8914)).rejects.toThrow('Failed to register OAuth client: Server error');
   });
 });

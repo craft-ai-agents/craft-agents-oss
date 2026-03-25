@@ -52,28 +52,28 @@ export function normalizeRecentWorkingDirs(
   return unique
 }
 
-/** Read recent working directories from local storage. */
-export function getRecentWorkingDirs(): string[] {
-  return storage.get<string[]>(storage.KEYS.recentWorkingDirs, [])
+/** Read recent working directories from local storage (workspace-scoped when workspaceId provided). */
+export function getRecentWorkingDirs(workspaceId?: string): string[] {
+  return storage.get<string[]>(storage.KEYS.recentWorkingDirs, [], workspaceId)
 }
 
 /** Persist a full recent working directory list. */
-export function setRecentWorkingDirs(paths: string[]): string[] {
+export function setRecentWorkingDirs(paths: string[], workspaceId?: string): string[] {
   const normalized = normalizeRecentWorkingDirs(paths)
-  storage.set(storage.KEYS.recentWorkingDirs, normalized)
+  storage.set(storage.KEYS.recentWorkingDirs, normalized, workspaceId)
   return normalized
 }
 
 /** Add one path to recent working directory history and persist. */
-export function addRecentWorkingDir(path: string): string[] {
-  const updated = addPathToRecentWorkingDirs(getRecentWorkingDirs(), path)
-  storage.set(storage.KEYS.recentWorkingDirs, updated)
+export function addRecentWorkingDir(path: string, workspaceId?: string): string[] {
+  const updated = addPathToRecentWorkingDirs(getRecentWorkingDirs(workspaceId), path)
+  storage.set(storage.KEYS.recentWorkingDirs, updated, workspaceId)
   return updated
 }
 
 /** Remove one path from recent working directory history and persist. */
-export function removeRecentWorkingDir(path: string): string[] {
-  const updated = removePathFromRecentWorkingDirs(getRecentWorkingDirs(), path)
-  storage.set(storage.KEYS.recentWorkingDirs, updated)
+export function removeRecentWorkingDir(path: string, workspaceId?: string): string[] {
+  const updated = removePathFromRecentWorkingDirs(getRecentWorkingDirs(workspaceId), path)
+  storage.set(storage.KEYS.recentWorkingDirs, updated, workspaceId)
   return updated
 }

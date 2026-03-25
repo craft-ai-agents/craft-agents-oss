@@ -308,7 +308,7 @@ export function getSessionScopedTools(
       return tool(name, TOOL_DESCRIPTIONS[name] || def.description, schema, async (args: any) => {
         const result = await def.handler!(ctx, args);
         return convertResult(result);
-      });
+      }, def.readOnly ? { annotations: { readOnlyHint: true } } : undefined);
     }
 
     // Ensure backend-mode tool wiring is in sync with core metadata.

@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/electron",
-  "version": "0.7.5",
+  "version": "0.8.0",
   "description": "Electron desktop app for Craft Agents",
   "main": "dist/main.cjs",
   "private": true,
@@ -33,8 +33,7 @@
     "dist:mac:x64": "bash scripts/build-dmg.sh x64",
     "dist:win": "powershell -ExecutionPolicy Bypass -File scripts/build-win.ps1",
     "lint": "eslint src/",
-    "lint:fix": "eslint src/ --fix",
-    "server:start": "bun run src/server/index.ts"
+    "lint:fix": "eslint src/ --fix"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",

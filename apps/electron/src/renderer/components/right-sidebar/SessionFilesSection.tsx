@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils'
 import * as storage from '@/lib/local-storage'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { getFileManagerName } from '@/lib/platform'
+import { restoreSessionFileWatch } from './session-files-watch'
 
 /**
  * Stagger animation variants for child items - matches LeftSidebar pattern
@@ -461,19 +462,25 @@ export function SessionFilesSection({ sessionId, className, sessionFolderPath, h
 
     if (sessionId) {
       // Start watching for file changes
-      window.electronAPI.watchSessionFiles(sessionId)
+      void window.electronAPI.watchSessionFiles(sessionId)
 
       // Listen for file change events
       const unsubscribe = window.electronAPI.onSessionFilesChanged((changedSessionId) => {
         if (changedSessionId === sessionId && mountedRef.current) {
-          loadFiles()
+          void loadFiles()
         }
+      })
+
+      const unsubscribeReconnect = window.electronAPI.onReconnected(() => {
+        if (!mountedRef.current) return
+        void restoreSessionFileWatch(sessionId, loadFiles)
       })
 
       return () => {
         mountedRef.current = false
         unsubscribe()
-        window.electronAPI.unwatchSessionFiles()
+        unsubscribeReconnect()
+        void window.electronAPI.unwatchSessionFiles()
       }
     }
 

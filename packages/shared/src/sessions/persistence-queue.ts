@@ -135,7 +135,7 @@ class SessionPersistenceQueue {
         debug(`[PersistenceQueue] Session ${sessionId} metadata mismatch detected (${mode}${baseline})`)
       }
 
-      const persistableMessages = storageSession.messages.filter(m => !m.isIntermediate)
+      const persistableMessages = storageSession.messages
       // Use original absolute sessionDir (before toPortablePath) for path replacement
       const sessionDir = dirname(filePath)
       const lines = [
