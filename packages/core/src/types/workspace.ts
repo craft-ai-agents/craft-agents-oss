@@ -17,6 +17,16 @@ export interface Workspace {
   iconUrl?: string;
   mcpUrl?: string;
   mcpAuthType?: McpAuthType;
+  /** True when this workspace is hosted on a configured remote server. */
+  isRemote?: boolean;
+  /** Stable remote server profile ID when isRemote is true. */
+  remoteServerId?: string;
+  /** Human-readable remote server name for UI labels. */
+  remoteServerName?: string;
+  /** Original server-side workspace ID before client-side target rewriting. */
+  remoteWorkspaceId?: string;
+  /** Remote server URL for diagnostics and badges. */
+  remoteServerUrl?: string;
 }
 
 /**
@@ -48,4 +58,3 @@ export interface StoredConfig {
   activeSessionId: string | null;  // Currently active session (primary scope)
   model?: string;
 }
-

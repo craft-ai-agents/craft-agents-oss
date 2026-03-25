@@ -8,6 +8,8 @@ import { EntityListEmptyScreen } from '@/components/ui/entity-list-empty'
 import { sourceSelection } from '@/hooks/useEntitySelection'
 import { SourceMenu } from './SourceMenu'
 import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
+import { useAppShellContext } from '@/context/AppShellContext'
+import { toast } from 'sonner'
 import type { LoadedSource, SourceConnectionStatus, SourceFilter } from '../../../shared/types'
 
 const SOURCE_TYPE_CONFIG: Record<string, { label: string; colorClass: string }> = {
@@ -33,6 +35,7 @@ const SOURCE_TYPE_FILTER_LABELS: Record<string, string> = {
 export interface SourcesListPanelProps {
   sources: LoadedSource[]
   sourceFilter?: SourceFilter | null
+  workspaceId?: string
   workspaceRootPath?: string
   onDeleteSource: (sourceSlug: string) => void
   onSourceClick: (source: LoadedSource) => void
@@ -44,6 +47,7 @@ export interface SourcesListPanelProps {
 export function SourcesListPanel({
   sources,
   sourceFilter,
+  workspaceId,
   workspaceRootPath,
   onDeleteSource,
   onSourceClick,
@@ -51,6 +55,22 @@ export function SourcesListPanel({
   localMcpEnabled = true,
   className,
 }: SourcesListPanelProps) {
+  const { workspaces } = useAppShellContext()
+  const currentWorkspace = React.useMemo(
+    () => workspaces.find(workspace => workspace.id === workspaceId) ?? null,
+    [workspaceId, workspaces],
+  )
+  const canRevealPaths = !currentWorkspace?.isRemote
+  const shareDestinations = React.useMemo(() => {
+    return workspaces
+      .filter(workspace => workspace.id !== workspaceId)
+      .map(workspace => ({
+        key: workspace.id,
+        label: workspace.name,
+        description: workspace.isRemote ? `${workspace.remoteServerName || 'Remote server'}` : 'This device',
+      }))
+  }, [workspaceId, workspaces])
+
   const filteredSources = React.useMemo(() => {
     if (!sourceFilter) return sources
     return sources.filter(s => s.config.type === sourceFilter.sourceType)
@@ -99,6 +119,7 @@ export function SourcesListPanel({
         const typeConfig = SOURCE_TYPE_CONFIG[source.config.type]
         const statusConfig = SOURCE_STATUS_CONFIG[connectionStatus]
         const subtitle = source.config.tagline || source.config.provider || ''
+        const canShareSource = source.config.type !== 'local'
         return {
           icon: <SourceAvatar source={source} size="sm" />,
           title: source.config.name,
@@ -118,7 +139,18 @@ export function SourcesListPanel({
               sourceSlug={source.config.slug}
               sourceName={source.config.name}
               onOpenInNewWindow={() => window.electronAPI.openUrl(`craftagents://sources/source/${source.config.slug}?window=focused`)}
-              onShowInFinder={() => window.electronAPI.showInFolder(source.folderPath)}
+              onShowInFinder={canRevealPaths ? () => window.electronAPI.showInFolder(source.folderPath) : undefined}
+              shareDestinations={workspaceId && canShareSource ? shareDestinations : []}
+              onShare={workspaceId && canShareSource ? async (destinationWorkspaceId) => {
+                const result = await window.electronAPI.shareSourceToWorkspace(workspaceId, source.config.slug, destinationWorkspaceId)
+                if (!result.success) {
+                  toast.error('Failed to share source', {
+                    description: result.error || 'Unknown error',
+                  })
+                  return
+                }
+                toast.success('Source shared')
+              } : undefined}
               onDelete={() => onDeleteSource(source.config.slug)}
             />
           ),

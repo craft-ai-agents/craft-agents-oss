@@ -1,8 +1,9 @@
 import { existsSync } from 'node:fs'
 import { join } from 'path'
-import { homedir } from 'os'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace } from '@craft-agent/shared/config'
+import { getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, removeWorkspace } from '@craft-agent/shared/config'
+import { getDefaultWorkspacesDir } from '@craft-agent/shared/workspaces'
+import { isRemoteWorkspaceTargetId } from '@craft-agent/shared/workspaces'
 import { perf } from '@craft-agent/shared/utils'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -11,6 +12,7 @@ import { isValidWorkspaceRootPath } from '../../utils/path-validation'
 export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.workspaces.GET,
   RPC_CHANNELS.workspaces.CREATE,
+  RPC_CHANNELS.workspaces.DELETE,
   RPC_CHANNELS.workspaces.CHECK_SLUG,
   RPC_CHANNELS.window.GET_WORKSPACE,
   RPC_CHANNELS.window.GET_MODE,
@@ -43,23 +45,27 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   })
 
   // Create a new workspace at a folder path (Obsidian-style: folder IS the workspace)
-  server.handle(RPC_CHANNELS.workspaces.CREATE, async (_ctx, folderPath: string, name: string) => {
+  server.handle(RPC_CHANNELS.workspaces.CREATE, async (_ctx, folderPath: string, name: string, options?: { managedByApp?: boolean }) => {
     const rootPath = folderPath.trim()
     const validation = isValidWorkspaceRootPath(rootPath)
     if (!validation.valid) {
       throw new Error(validation.reason!)
     }
 
-    const workspace = addWorkspace({ name, rootPath })
+    const workspace = addWorkspace({ name, rootPath }, { managedByApp: options?.managedByApp === true })
     // Make it active
     setActiveWorkspace(workspace.id)
     deps.platform.logger.info(`Created workspace "${name}" at ${rootPath}`)
     return workspace
   })
 
+  server.handle(RPC_CHANNELS.workspaces.DELETE, async (_ctx, workspaceId: string) => {
+    return await removeWorkspace(workspaceId)
+  })
+
   // Check if a workspace slug already exists (for validation before creation)
   server.handle(RPC_CHANNELS.workspaces.CHECK_SLUG, async (_ctx, slug: string) => {
-    const defaultWorkspacesDir = join(homedir(), '.craft-agent', 'workspaces')
+    const defaultWorkspacesDir = getDefaultWorkspacesDir()
     const workspacePath = join(defaultWorkspacesDir, slug)
     const exists = existsSync(workspacePath)
     return { exists, path: workspacePath }
@@ -69,7 +75,7 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   server.handle(RPC_CHANNELS.window.GET_WORKSPACE, (ctx) => {
     const workspaceId = ctx.workspaceId ?? windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
     // Set up ConfigWatcher for live updates (labels, statuses, sources, themes)
-    if (workspaceId) {
+    if (workspaceId && !isRemoteWorkspaceTargetId(workspaceId)) {
       const workspace = getWorkspaceByNameOrId(workspaceId)
       if (workspace) {
         sessionManager.setupConfigWatcher(workspace.rootPath, workspaceId)
@@ -111,7 +117,7 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
 
       // Clear activeViewingSession for old workspace if no other windows are viewing it
       // This ensures read/unread state is correct after workspace switch
-      if (oldWorkspaceId && oldWorkspaceId !== workspaceId) {
+      if (oldWorkspaceId && oldWorkspaceId !== workspaceId && !isRemoteWorkspaceTargetId(oldWorkspaceId)) {
         const otherWindows = windowManager.getAllWindowsForWorkspace(oldWorkspaceId)
         if (otherWindows.length === 0) {
           sessionManager.clearActiveViewingSession(oldWorkspaceId)
@@ -120,7 +126,9 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     }
 
     // Set up ConfigWatcher for the new workspace
-    const workspace = getWorkspaceByNameOrId(workspaceId)
+    const workspace = !isRemoteWorkspaceTargetId(workspaceId)
+      ? getWorkspaceByNameOrId(workspaceId)
+      : null
     if (workspace) {
       sessionManager.setupConfigWatcher(workspace.rootPath, workspaceId)
     }

@@ -622,6 +622,29 @@ export function NavigationProvider({
         }
       }
 
+      // Validate source exists in current workspace
+      if (isSourcesNavigation(nextState) && nextState.details) {
+        const selectedSourceSlug = nextState.details.sourceSlug
+        const sourceFilter = nextState.filter
+        const sourceExists = sources.some((source) => {
+          if (source.config.slug !== selectedSourceSlug) return false
+          if (!sourceFilter) return true
+          return source.config.type === sourceFilter.sourceType
+        })
+        if (!sourceExists) {
+          nextState = { ...nextState, details: null }
+        }
+      }
+
+      // Validate skill exists in current workspace
+      if (isSkillsNavigation(nextState) && nextState.details?.type === 'skill') {
+        const selectedSkillSlug = nextState.details.skillSlug
+        const skillExists = skills.some(skill => skill.slug === selectedSkillSlug)
+        if (!skillExists) {
+          nextState = { ...nextState, details: null }
+        }
+      }
+
       // Sessions: auto-select last/first session
       if (isSessionsNavigation(nextState) && !nextState.details && !options?.skipAutoSelect) {
         const lastSelectedSessionId = getLastSelectedSessionId(nextState.filter)
@@ -1136,7 +1159,12 @@ export function NavigationProvider({
       const customEvent = event as CustomEvent<{ route: Route; newPanel?: boolean; targetLaneId?: 'main' }>
       if (customEvent.detail?.route) {
         const { route: r, newPanel, targetLaneId } = customEvent.detail
-        navigate(r, newPanel ? { newPanel, targetLaneId } : undefined)
+        Promise.resolve(navigate(r, newPanel ? { newPanel, targetLaneId } : undefined)).catch((error) => {
+          const message = error instanceof Error ? error.message : 'Unknown error'
+          toast.error('Navigation failed', {
+            description: message,
+          })
+        })
       }
     }
 
@@ -1238,6 +1266,72 @@ export function NavigationProvider({
     getLastSelectedSessionId,
     getFirstSessionId,
     navigateToSession,
+  ])
+
+  useEffect(() => {
+    if (suppressAutoSelectRef.current) return
+    if (!isReady || !workspaceId) return
+    if (!isSourcesNavigation(navigationState)) return
+
+    const selectedSourceSlug = navigationState.details?.sourceSlug ?? null
+    const selectedSourceExists = selectedSourceSlug
+      ? sources.some((source) => {
+          if (source.config.slug !== selectedSourceSlug) return false
+          if (!navigationState.filter) return true
+          return source.config.type === navigationState.filter.sourceType
+        })
+      : false
+
+    if (selectedSourceExists) return
+
+    const fallbackSourceSlug = getFirstSourceSlug(navigationState.filter)
+    if (fallbackSourceSlug) {
+      navigateToSource(fallbackSourceSlug)
+      return
+    }
+
+    if (navigationState.details) {
+      navigateToSource(undefined)
+    }
+  }, [
+    getFirstSourceSlug,
+    isReady,
+    navigateToSource,
+    navigationState,
+    sources,
+    workspaceId,
+  ])
+
+  useEffect(() => {
+    if (suppressAutoSelectRef.current) return
+    if (!isReady || !workspaceId) return
+    if (!isSkillsNavigation(navigationState)) return
+
+    const selectedSkillSlug = navigationState.details?.type === 'skill'
+      ? navigationState.details.skillSlug
+      : null
+    const selectedSkillExists = selectedSkillSlug
+      ? skills.some(skill => skill.slug === selectedSkillSlug)
+      : false
+
+    if (selectedSkillExists) return
+
+    const fallbackSkillSlug = getFirstSkillSlug()
+    if (fallbackSkillSlug) {
+      navigate(routes.view.skills(fallbackSkillSlug))
+      return
+    }
+
+    if (navigationState.details) {
+      navigate(routes.view.skills())
+    }
+  }, [
+    getFirstSkillSlug,
+    isReady,
+    navigate,
+    navigationState,
+    skills,
+    workspaceId,
   ])
 
   // =========================================================================

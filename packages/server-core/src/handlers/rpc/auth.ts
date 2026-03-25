@@ -1,7 +1,7 @@
 import { unlink } from 'fs/promises'
 import { join } from 'path'
-import { homedir } from 'os'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { CONFIG_DIR } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -59,7 +59,7 @@ export function registerAuthHandlers(server: RpcServer, deps: HandlerDeps): void
       }
 
       // Delete the config file
-      const configPath = join(homedir(), '.craft-agent', 'config.json')
+      const configPath = join(CONFIG_DIR, 'config.json')
       await unlink(configPath).catch(() => {
         // Ignore if file doesn't exist
       })

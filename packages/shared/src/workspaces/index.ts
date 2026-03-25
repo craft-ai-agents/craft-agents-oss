@@ -12,6 +12,13 @@ export type {
   WorkspaceSummary,
 } from './types.ts';
 
+export {
+  buildRemoteWorkspaceTargetId,
+  isRemoteWorkspaceTargetId,
+  parseRemoteWorkspaceTargetId,
+  isRemoteWorkspace,
+} from './remote-target.ts';
+
 // Storage functions
 export {
   // Path utilities

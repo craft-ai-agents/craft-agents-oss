@@ -1,0 +1,53 @@
+{
+  "automations": {
+    "SessionStatusChange": [
+      {
+        "id": "cli-pass",
+        "name": "CLI Validate Condition Pass",
+        "conditions": [
+          {
+            "condition": "state",
+            "field": "sessionStatus",
+            "to": "in-progress"
+          }
+        ],
+        "labels": [
+          "cli-validate-label"
+        ],
+        "actions": [
+          {
+            "type": "prompt",
+            "prompt": "Reply with exactly AUTOMATION_VALIDATE_OK"
+          },
+          {
+            "type": "webhook",
+            "url": "http://127.0.0.1:19999/validate-automation",
+            "method": "POST",
+            "bodyFormat": "json",
+            "body": {
+              "source": "craft-cli-validate",
+              "event": "SessionStatusChange"
+            }
+          }
+        ]
+      },
+      {
+        "id": "cli-blocked",
+        "name": "CLI Validate Condition Blocked",
+        "conditions": [
+          {
+            "condition": "state",
+            "field": "sessionStatus",
+            "to": "done"
+          }
+        ],
+        "actions": [
+          {
+            "type": "prompt",
+            "prompt": "Reply with exactly SHOULD_NOT_RUN"
+          }
+        ]
+      }
+    ]
+  }
+}

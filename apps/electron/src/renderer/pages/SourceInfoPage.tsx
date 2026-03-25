@@ -14,6 +14,7 @@ import { SourceMenu } from '@/components/app-shell/SourceMenu'
 import { cn } from '@/lib/utils'
 import { routes, navigate } from '@/lib/navigate'
 import { useNavigation } from '@/contexts/NavigationContext'
+import { useAppShellContext } from '@/context/AppShellContext'
 import { toast } from 'sonner'
 import {
   Info_Page,
@@ -169,6 +170,7 @@ function getPermissionsDescription(source: LoadedSource): string {
 
 export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: SourceInfoPageProps) {
   const { navigateToSource } = useNavigation()
+  const { workspaces } = useAppShellContext()
   const [source, setSource] = useState<LoadedSource | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -177,6 +179,11 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
   const [mcpToolsLoading, setMcpToolsLoading] = useState(false)
   const [mcpToolsError, setMcpToolsError] = useState<string | null>(null)
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
+  const currentWorkspace = useMemo(
+    () => workspaces.find(workspace => workspace.id === workspaceId) ?? null,
+    [workspaceId, workspaces],
+  )
+  const canRevealPaths = !currentWorkspace?.isRemote
 
 
   // Load source data
@@ -354,6 +361,37 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
 
   // Get source name for header
   const sourceName = source?.config.name || sourceSlug
+  const canShareSource = source?.config.type !== 'local'
+  const shareDestinations = useMemo(() => {
+    if (!canShareSource) return []
+
+    return workspaces
+      .filter(workspace => workspace.id !== workspaceId)
+      .map(workspace => ({
+        key: workspace.id,
+        label: workspace.name,
+        description: workspace.isRemote
+          ? `${workspace.remoteServerName || 'Remote server'}`
+          : 'This device',
+      }))
+  }, [canShareSource, workspaceId, workspaces])
+
+  const handleShare = useCallback(async (destinationWorkspaceId: string) => {
+    try {
+      const result = await window.electronAPI.shareSourceToWorkspace(workspaceId, sourceSlug, destinationWorkspaceId)
+      if (!result.success) {
+        toast.error('Failed to share source', {
+          description: result.error || 'Unknown error',
+        })
+        return
+      }
+      toast.success('Source shared')
+    } catch (error) {
+      toast.error('Failed to share source', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  }, [sourceSlug, workspaceId])
 
   return (
     <Info_Page
@@ -368,7 +406,9 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
             sourceSlug={sourceSlug}
             sourceName={sourceName}
             onOpenInNewWindow={handleOpenInNewWindow}
-            onShowInFinder={handleOpenSourceFolder}
+            onShowInFinder={canRevealPaths ? handleOpenSourceFolder : undefined}
+            shareDestinations={shareDestinations}
+            onShare={canShareSource ? handleShare : undefined}
             onDelete={handleDelete}
           />
         }
@@ -403,10 +443,10 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
               <EditPopover
                 trigger={<EditButton />}
                 {...getEditConfig('source-config', source.folderPath)}
-                secondaryAction={{
+                secondaryAction={canRevealPaths ? {
                   label: 'Edit File',
                   filePath: `${source.folderPath}/config.json`,
-                }}
+                } : undefined}
               />
             }
           >
@@ -445,10 +485,10 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
                 <EditPopover
                   trigger={<EditButton />}
                   {...getEditConfig('source-permissions', source.folderPath)}
-                  secondaryAction={{
+                  secondaryAction={canRevealPaths ? {
                     label: 'Edit File',
                     filePath: `${source.folderPath}/permissions.json`,
-                  }}
+                  } : undefined}
                 />
               }
             >
@@ -466,10 +506,10 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
                 <EditPopover
                   trigger={<EditButton />}
                   {...getEditConfig('source-tool-permissions', source.folderPath)}
-                  secondaryAction={{
+                  secondaryAction={canRevealPaths ? {
                     label: 'Edit File',
                     filePath: `${source.folderPath}/permissions.json`,
-                  }}
+                  } : undefined}
                 />
               }
             >
@@ -491,10 +531,10 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
                 <EditPopover
                   trigger={<EditButton />}
                   {...getEditConfig('source-permissions', source.folderPath)}
-                  secondaryAction={{
+                  secondaryAction={canRevealPaths ? {
                     label: 'Edit File',
                     filePath: `${source.folderPath}/permissions.json`,
-                  }}
+                  } : undefined}
                 />
               }
             >
@@ -512,10 +552,10 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
                 <EditPopover
                   trigger={<EditButton />}
                   {...getEditConfig('source-guide', source.folderPath)}
-                  secondaryAction={{
+                  secondaryAction={canRevealPaths ? {
                     label: 'Edit File',
                     filePath: `${source.folderPath}/guide.md`,
-                  }}
+                  } : undefined}
                 />
               }
             >

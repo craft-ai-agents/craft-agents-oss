@@ -17,6 +17,15 @@ import { contextBridge, ipcRenderer, shell } from 'electron'
 import { WsRpcClient, type TransportConnectionState } from '../transport/client'
 import { buildClientApi } from '../transport/build-api'
 import { CHANNEL_MAP } from '../transport/channel-map'
+import { WorkspaceTransportBroker } from './workspace-transport-broker'
+import type { WorkspaceCreationTarget } from '../shared/types'
+import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import {
+  getRemoteServerProfiles as getLocalRemoteServerProfiles,
+  saveRemoteServerProfile as saveLocalRemoteServerProfile,
+  deleteRemoteServerProfile as deleteLocalRemoteServerProfile,
+} from '@craft-agent/shared/config'
+import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { createCallbackServer } from '@craft-agent/shared/auth/callback-server'
 import { CHATGPT_OAUTH_CONFIG } from '@craft-agent/shared/auth/chatgpt-oauth-config'
 import {
@@ -102,7 +111,204 @@ client.connect()
 
 // Build the full ElectronAPI proxy — identical shape to the IPC preload.
 // Methods return promises (via client.invoke), listeners return unsubscribe fns.
-const api = buildClientApi(client, CHANNEL_MAP, (ch) => client.isChannelAvailable(ch))
+let api = buildClientApi(client, CHANNEL_MAP, (ch) => client.isChannelAvailable(ch))
+let broker: WorkspaceTransportBroker | null = null
+let validateDirectCreationTarget: ((target: WorkspaceCreationTarget, operation: string) => Promise<void>) | null = null
+
+if (wsMode === 'local') {
+  broker = new WorkspaceTransportBroker(api, client, workspaceId)
+  api = broker.install()
+}
+
+if (!broker) {
+  let matchedDirectRemoteServerIdPromise: Promise<string | null> | null = null
+  const directRemoteServerListeners = new Set<() => void>()
+  const emitDirectRemoteServersChanged = () => {
+    for (const listener of directRemoteServerListeners) {
+      try {
+        listener()
+      } catch {
+        // Ignore renderer listener errors.
+      }
+    }
+  }
+
+  const getMatchedDirectRemoteServerId = async (): Promise<string | null> => {
+    if (wsMode !== 'remote') return null
+    if (!matchedDirectRemoteServerIdPromise) {
+      matchedDirectRemoteServerIdPromise = (async () => {
+        const normalizeUrl = (value: string) => {
+          try {
+            const parsed = new URL(value)
+            parsed.hash = ''
+            parsed.search = ''
+            return parsed.toString().replace(/\/+$/, '')
+          } catch {
+            return value.replace(/\/+$/, '')
+          }
+        }
+
+        const profiles = await (api as any).listRemoteServers()
+        const currentUrl = normalizeUrl(wsUrl)
+        return profiles.find((profile: { id: string; url: string }) => normalizeUrl(profile.url) === currentUrl)?.id ?? null
+      })()
+    }
+    return matchedDirectRemoteServerIdPromise
+  }
+
+  const assertDirectTargetSupported = async (target: WorkspaceCreationTarget, operation: string): Promise<void> => {
+    if (wsMode === 'local') {
+      if (target.mode !== 'local') {
+        throw new Error(`${operation} is only available for local targets in desktop mode`)
+      }
+      return
+    }
+
+    if (target.mode !== 'remote') {
+      throw new Error(`${operation} is only available for the connected remote server in direct remote mode`)
+    }
+
+    if (!target.serverId) return
+
+    const matchedServerId = await getMatchedDirectRemoteServerId()
+    if (!matchedServerId || target.serverId !== matchedServerId) {
+      throw new Error(`${operation} cannot target a different server in direct remote mode`)
+    }
+  }
+  validateDirectCreationTarget = assertDirectTargetSupported
+
+  ;(api as any).listRemoteServers = async () => {
+    return await getLocalRemoteServerProfiles()
+  }
+  ;(api as any).saveRemoteServerProfile = async (input: any) => {
+    const saved = await saveLocalRemoteServerProfile(input)
+    matchedDirectRemoteServerIdPromise = null
+    emitDirectRemoteServersChanged()
+    return saved
+  }
+  ;(api as any).deleteRemoteServerProfile = async (serverId: string) => {
+    const deleted = await deleteLocalRemoteServerProfile(serverId)
+    matchedDirectRemoteServerIdPromise = null
+    if (deleted) {
+      emitDirectRemoteServersChanged()
+    }
+    return deleted
+  }
+  ;(api as any).saveRemoteServerToken = async (serverId: string, token: string) => {
+    await getCredentialManager().setRemoteServerToken(serverId, token)
+    matchedDirectRemoteServerIdPromise = null
+    emitDirectRemoteServersChanged()
+  }
+  ;(api as any).clearRemoteServerToken = async (serverId: string) => {
+    await getCredentialManager().deleteRemoteServerToken(serverId)
+    matchedDirectRemoteServerIdPromise = null
+    emitDirectRemoteServersChanged()
+  }
+  ;(api as any).getRemoteServerRuntimeStates = async () => ({})
+  ;(api as any).onRemoteServersChanged = (callback: () => void) => {
+    directRemoteServerListeners.add(callback)
+    return () => {
+      directRemoteServerListeners.delete(callback)
+    }
+  }
+
+  ;(api as any).createWorkspaceAtTarget = async (target: WorkspaceCreationTarget, folderPath: string, name: string, options?: { managedByApp?: boolean }) => {
+    await assertDirectTargetSupported(target, 'Workspace creation')
+    return (api as any).createWorkspace(folderPath, name, options)
+  }
+  ;(api as any).checkWorkspaceSlugAtTarget = async (target: WorkspaceCreationTarget, slug: string) => {
+    await assertDirectTargetSupported(target, 'Workspace slug validation')
+    return (api as any).checkWorkspaceSlug(slug)
+  }
+  ;(api as any).getHomeDirForTarget = async (target: WorkspaceCreationTarget) => {
+    await assertDirectTargetSupported(target, 'Home directory lookup')
+    return (api as any).getHomeDir()
+  }
+  ;(api as any).listServerDirectoryForTarget = async (target: WorkspaceCreationTarget, dirPath: string) => {
+    await assertDirectTargetSupported(target, 'Server directory browsing')
+    return (api as any).listServerDirectory(dirPath)
+  }
+  ;(api as any).listLlmConnectionsForTarget = async (target: WorkspaceCreationTarget) => {
+    await assertDirectTargetSupported(target, 'LLM connection listing')
+    return (api as any).listLlmConnections()
+  }
+  ;(api as any).listLlmConnectionsWithStatusForTarget = async (target: WorkspaceCreationTarget) => {
+    await assertDirectTargetSupported(target, 'LLM connection listing')
+    return (api as any).listLlmConnectionsWithStatus()
+  }
+  ;(api as any).getLlmConnectionForTarget = async (target: WorkspaceCreationTarget, slug: string) => {
+    await assertDirectTargetSupported(target, 'LLM connection lookup')
+    return (api as any).getLlmConnection(slug)
+  }
+  ;(api as any).getLlmConnectionApiKeyForTarget = async (target: WorkspaceCreationTarget, slug: string) => {
+    await assertDirectTargetSupported(target, 'LLM API key lookup')
+    return (api as any).getLlmConnectionApiKey(slug)
+  }
+  ;(api as any).saveLlmConnectionForTarget = async (target: WorkspaceCreationTarget, connection: any) => {
+    await assertDirectTargetSupported(target, 'LLM connection save')
+    return (api as any).saveLlmConnection(connection)
+  }
+  ;(api as any).deleteLlmConnectionForTarget = async (target: WorkspaceCreationTarget, slug: string) => {
+    await assertDirectTargetSupported(target, 'LLM connection delete')
+    return (api as any).deleteLlmConnection(slug)
+  }
+  ;(api as any).testLlmConnectionForTarget = async (target: WorkspaceCreationTarget, slug: string) => {
+    await assertDirectTargetSupported(target, 'LLM connection test')
+    return (api as any).testLlmConnection(slug)
+  }
+  ;(api as any).setDefaultLlmConnectionForTarget = async (target: WorkspaceCreationTarget, slug: string) => {
+    await assertDirectTargetSupported(target, 'LLM default selection')
+    return (api as any).setDefaultLlmConnection(slug)
+  }
+  ;(api as any).getDefaultThinkingLevelForTarget = async (target: WorkspaceCreationTarget) => {
+    await assertDirectTargetSupported(target, 'Default thinking level lookup')
+    return (api as any).getDefaultThinkingLevel()
+  }
+  ;(api as any).setDefaultThinkingLevelForTarget = async (target: WorkspaceCreationTarget, level: any) => {
+    await assertDirectTargetSupported(target, 'Default thinking level save')
+    return (api as any).setDefaultThinkingLevel(level)
+  }
+  ;(api as any).shareLlmConnectionToTarget = async () => {
+    throw new Error('Cross-target sharing is only available in desktop mode')
+  }
+  ;(api as any).shareSourceToWorkspace = async () => {
+    throw new Error('Cross-target sharing is only available in desktop mode')
+  }
+  ;(api as any).shareSkillToWorkspace = async () => {
+    throw new Error('Cross-target sharing is only available in desktop mode')
+  }
+}
+
+const invokeTarget = (channel: string, ...args: any[]) => {
+  if (broker) {
+    return broker.invokeOnActiveTarget(channel, ...args)
+  }
+  return client.invoke(channel, ...args)
+}
+
+const invokeCreationTarget = async (target: WorkspaceCreationTarget, channel: string, ...args: any[]) => {
+  if (broker) {
+    return broker.invokeOnTarget(target, channel, ...args)
+  }
+  if (validateDirectCreationTarget) {
+    await validateDirectCreationTarget(target, channel)
+  }
+  return client.invoke(channel, ...args)
+}
+
+const listenCreationTarget = async (
+  target: WorkspaceCreationTarget,
+  channel: string,
+  callback: (...args: any[]) => void,
+) => {
+  if (broker) {
+    return broker.listenOnTarget(target, channel, callback)
+  }
+  if (validateDirectCreationTarget) {
+    await validateDirectCreationTarget(target, channel)
+  }
+  return client.on(channel, callback)
+}
 
 function formatTransportReason(state: TransportConnectionState): string {
   const err = state.lastError
@@ -155,14 +361,13 @@ if (wsMode === 'remote') {
       emitToMain('error', message)
     }
   })
-}
-
-;(api as any).getTransportConnectionState = async () => client.getConnectionState()
-;(api as any).onTransportConnectionStateChanged = (callback: (state: TransportConnectionState) => void) => {
-  return client.onConnectionStateChanged(callback)
-}
-;(api as any).reconnectTransport = async () => {
-  client.reconnectNow()
+  ;(api as any).getTransportConnectionState = async () => client.getConnectionState()
+  ;(api as any).onTransportConnectionStateChanged = (callback: (state: TransportConnectionState) => void) => {
+    return client.onConnectionStateChanged(callback)
+  }
+  ;(api as any).reconnectTransport = async () => {
+    client.reconnectNow()
+  }
 }
 
 // ── performOAuth ─────────────────────────────────────────────────────────
@@ -184,7 +389,7 @@ if (wsMode === 'remote') {
     const port = parseInt(new URL(callbackServer.url).port, 10)
 
     // 2. Ask server to prepare the flow (PKCE, auth URL, store in flow store)
-    const startResult = await client.invoke('oauth:start', {
+    const startResult = await invokeTarget('oauth:start', {
       sourceSlug: args.sourceSlug,
       callbackPort: port,
       sessionId: args.sessionId,
@@ -202,23 +407,23 @@ if (wsMode === 'remote') {
     // 5. Check for errors from the provider
     if (callback.query.error) {
       const error = callback.query.error_description || callback.query.error
-      await client.invoke('oauth:cancel', { flowId, state })
+      await invokeTarget('oauth:cancel', { flowId, state })
       return { success: false, error }
     }
 
     const code = callback.query.code
     if (!code) {
-      await client.invoke('oauth:cancel', { flowId, state })
+      await invokeTarget('oauth:cancel', { flowId, state })
       return { success: false, error: 'No authorization code received' }
     }
 
     // 6. Send code to server for token exchange + credential storage
-    const result = await client.invoke('oauth:complete', { flowId, code, state })
+    const result = await invokeTarget('oauth:complete', { flowId, code, state })
     return { success: result.success, error: result.error, email: result.email }
   } catch (err) {
     // Clean up server-side flow on error
     if (flowId && state) {
-      client.invoke('oauth:cancel', { flowId, state }).catch(() => {})
+      invokeTarget('oauth:cancel', { flowId, state }).catch(() => {})
     }
     return {
       success: false,
@@ -233,13 +438,15 @@ if (wsMode === 'remote') {
 // Override the channel-map stub: the server now returns authUrl without opening
 // the browser. We open it locally so it works in remote mode.
 // Claude OAuth is two-step: browser opens → user copies code → pastes in UI.
-;(api as any).startClaudeOAuth = async (): Promise<{
+;(api as any).startClaudeOAuthForTarget = async (
+  target: WorkspaceCreationTarget,
+): Promise<{
   success: boolean
   authUrl?: string
   error?: string
 }> => {
   try {
-    const result = await client.invoke('onboarding:startClaudeOAuth')
+    const result = await invokeCreationTarget(target, RPC_CHANNELS.onboarding.START_CLAUDE_OAUTH)
     if (result.success && result.authUrl) {
       await shell.openExternal(result.authUrl)
     }
@@ -251,11 +458,92 @@ if (wsMode === 'remote') {
     }
   }
 }
+;(api as any).startClaudeOAuth = async (): Promise<{
+  success: boolean
+  authUrl?: string
+  error?: string
+}> => {
+  try {
+    const result = await invokeTarget(RPC_CHANNELS.onboarding.START_CLAUDE_OAUTH)
+    if (result.success && result.authUrl) {
+      await shell.openExternal(result.authUrl)
+    }
+    return result
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Claude OAuth failed',
+    }
+  }
+}
+;(api as any).exchangeClaudeCodeForTarget = async (
+  target: WorkspaceCreationTarget,
+  code: string,
+  connectionSlug: string,
+) => invokeCreationTarget(target, RPC_CHANNELS.onboarding.EXCHANGE_CLAUDE_CODE, code, connectionSlug)
+;(api as any).clearClaudeOAuthStateForTarget = async (target: WorkspaceCreationTarget) => {
+  return invokeCreationTarget(target, RPC_CHANNELS.onboarding.CLEAR_CLAUDE_OAUTH_STATE)
+}
+;(api as any).setupLlmConnectionForTarget = async (target: WorkspaceCreationTarget, setup: any) => {
+  return invokeCreationTarget(target, RPC_CHANNELS.settings.SETUP_LLM_CONNECTION, setup)
+}
+;(api as any).testLlmConnectionSetupForTarget = async (target: WorkspaceCreationTarget, params: any) => {
+  return invokeCreationTarget(target, RPC_CHANNELS.settings.TEST_LLM_CONNECTION_SETUP, params)
+}
 
 // ── performChatGptOAuth ──────────────────────────────────────────────────
 // Same shape as performOAuth: callback server (port 1455) → chatgpt:startOAuth →
 // browser → callback → chatgpt:completeOAuth.
 // Overrides the startChatGptOAuth API method so the renderer call is unchanged.
+;(api as any).startChatGptOAuthForTarget = async (
+  target: WorkspaceCreationTarget,
+  connectionSlug: string,
+): Promise<{ success: boolean; error?: string }> => {
+  let callbackServer: Awaited<ReturnType<typeof createCallbackServer>> | null = null
+  let flowId: string | undefined
+  let state: string | undefined
+
+  try {
+    callbackServer = await createCallbackServer({
+      appType: 'electron',
+      port: CHATGPT_OAUTH_CONFIG.CALLBACK_PORT,
+      callbackPaths: ['/auth/callback'],
+    })
+
+    const startResult = await invokeCreationTarget(target, RPC_CHANNELS.chatgpt.START_OAUTH, connectionSlug)
+    flowId = startResult.flowId
+    state = startResult.state
+
+    await shell.openExternal(startResult.authUrl)
+
+    const callback = await callbackServer.promise
+
+    if (callback.query.error) {
+      const error = callback.query.error_description || callback.query.error
+      await invokeCreationTarget(target, RPC_CHANNELS.chatgpt.CANCEL_OAUTH, { state })
+      return { success: false, error }
+    }
+
+    const code = callback.query.code
+    if (!code) {
+      await invokeCreationTarget(target, RPC_CHANNELS.chatgpt.CANCEL_OAUTH, { state })
+      return { success: false, error: 'No authorization code received' }
+    }
+
+    const result = await invokeCreationTarget(target, RPC_CHANNELS.chatgpt.COMPLETE_OAUTH, { flowId, code, state })
+    return { success: result.success, error: result.error }
+  } catch (err) {
+    if (state) {
+      invokeCreationTarget(target, RPC_CHANNELS.chatgpt.CANCEL_OAUTH, { state }).catch(() => {})
+    }
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'ChatGPT OAuth flow failed',
+    }
+  } finally {
+    callbackServer?.close()
+  }
+}
 ;(api as any).startChatGptOAuth = async (
   connectionSlug: string,
 ): Promise<{ success: boolean; error?: string }> => {
@@ -272,7 +560,7 @@ if (wsMode === 'remote') {
     })
 
     // 2. Ask server to prepare the flow (PKCE, auth URL, store pending flow)
-    const startResult = await client.invoke('chatgpt:startOAuth', connectionSlug)
+    const startResult = await invokeTarget('chatgpt:startOAuth', connectionSlug)
     flowId = startResult.flowId
     state = startResult.state
 
@@ -285,22 +573,22 @@ if (wsMode === 'remote') {
     // 5. Check for errors from the provider
     if (callback.query.error) {
       const error = callback.query.error_description || callback.query.error
-      await client.invoke('chatgpt:cancelOAuth', { state })
+      await invokeTarget('chatgpt:cancelOAuth', { state })
       return { success: false, error }
     }
 
     const code = callback.query.code
     if (!code) {
-      await client.invoke('chatgpt:cancelOAuth', { state })
+      await invokeTarget('chatgpt:cancelOAuth', { state })
       return { success: false, error: 'No authorization code received' }
     }
 
     // 6. Send code to server for token exchange + credential storage
-    const result = await client.invoke('chatgpt:completeOAuth', { flowId, code, state })
+    const result = await invokeTarget('chatgpt:completeOAuth', { flowId, code, state })
     return { success: result.success, error: result.error }
   } catch (err) {
     if (state) {
-      client.invoke('chatgpt:cancelOAuth', { state }).catch(() => {})
+      invokeTarget('chatgpt:cancelOAuth', { state }).catch(() => {})
     }
     return {
       success: false,
@@ -308,6 +596,21 @@ if (wsMode === 'remote') {
     }
   } finally {
     callbackServer?.close()
+  }
+}
+;(api as any).startCopilotOAuthForTarget = async (
+  target: WorkspaceCreationTarget,
+  connectionSlug: string,
+  onDeviceCode?: (data: { userCode: string; verificationUri: string }) => void,
+): Promise<{ success: boolean; error?: string }> => {
+  const cleanup = await listenCreationTarget(target, RPC_CHANNELS.copilot.DEVICE_CODE, (data: { userCode: string; verificationUri: string }) => {
+    onDeviceCode?.(data)
+  })
+
+  try {
+    return await invokeCreationTarget(target, RPC_CHANNELS.copilot.START_OAUTH, connectionSlug)
+  } finally {
+    cleanup()
   }
 }
 

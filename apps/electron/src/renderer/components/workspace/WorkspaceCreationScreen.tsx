@@ -9,7 +9,10 @@ import { AddWorkspaceStep_Choice } from "./AddWorkspaceStep_Choice"
 import { AddWorkspaceStep_CreateNew } from "./AddWorkspaceStep_CreateNew"
 import { AddWorkspaceStep_OpenFolder } from "./AddWorkspaceStep_OpenFolder"
 import type { Workspace } from "../../../shared/types"
+import type { WorkspaceCreationTarget, RemoteServerProfile } from "../../../shared/types"
 import { toast } from "sonner"
+import { useTransportConnectionState } from "@/hooks/useTransportConnectionState"
+import type { RemoteServerRuntimeState } from "../../../shared/types"
 
 type CreationStep = 'choice' | 'create' | 'open'
 
@@ -18,6 +21,7 @@ interface WorkspaceCreationScreenProps {
   onWorkspaceCreated: (workspace: Workspace) => void
   /** Callback when the screen is dismissed */
   onClose: () => void
+  initialTarget?: WorkspaceCreationTarget
   className?: string
 }
 
@@ -32,11 +36,32 @@ interface WorkspaceCreationScreenProps {
 export function WorkspaceCreationScreen({
   onWorkspaceCreated,
   onClose,
+  initialTarget = { mode: 'local' },
   className
 }: WorkspaceCreationScreenProps) {
+  const transportState = useTransportConnectionState()
   const [step, setStep] = useState<CreationStep>('choice')
   const [isCreating, setIsCreating] = useState(false)
   const [dimensions, setDimensions] = useState({ width: 1920, height: 1080 })
+  const [remoteServers, setRemoteServers] = useState<RemoteServerProfile[]>([])
+  const [remoteRuntimeStates, setRemoteRuntimeStates] = useState<Record<string, RemoteServerRuntimeState>>({})
+  const isDirectRemoteMode = useMemo(() => {
+    return transportState?.mode === 'remote' && Object.keys(remoteRuntimeStates).length === 0
+  }, [remoteRuntimeStates, transportState?.mode])
+  const [targetMode, setTargetMode] = useState<'local' | 'remote'>(isDirectRemoteMode ? 'remote' : initialTarget.mode)
+  const [selectedServerId, setSelectedServerId] = useState<string | null>(initialTarget.serverId ?? null)
+
+  const normalizeServerUrl = useCallback((value: string | null | undefined) => {
+    if (!value) return ''
+    try {
+      const parsed = new URL(value)
+      parsed.hash = ''
+      parsed.search = ''
+      return parsed.toString().replace(/\/+$/, '')
+    } catch {
+      return value.replace(/\/+$/, '')
+    }
+  }, [])
 
   // Track window dimensions for shader
   useEffect(() => {
@@ -48,6 +73,67 @@ export function WorkspaceCreationScreen({
     return () => window.removeEventListener('resize', updateDimensions)
   }, [])
 
+  useEffect(() => {
+    let mounted = true
+
+    const loadServers = async () => {
+      try {
+        const [profiles, runtimeStates] = await Promise.all([
+          window.electronAPI.listRemoteServers(),
+          window.electronAPI.getRemoteServerRuntimeStates?.() ?? Promise.resolve({}),
+        ])
+        if (!mounted) return
+        setRemoteRuntimeStates(runtimeStates)
+        const selectable = profiles.filter(profile => profile.enabled && profile.hasToken)
+        setRemoteServers(selectable)
+        const directRemoteProfile = isDirectRemoteMode
+          ? selectable.find(profile => normalizeServerUrl(profile.url) === normalizeServerUrl(transportState?.url))
+          : null
+        setSelectedServerId(prev => {
+          if (prev && selectable.some(profile => profile.id === prev)) return prev
+          if (directRemoteProfile) return directRemoteProfile.id
+          return selectable[0]?.id ?? null
+        })
+      } catch {
+        if (mounted) {
+          setRemoteServers([])
+          setRemoteRuntimeStates({})
+          setSelectedServerId(null)
+        }
+      }
+    }
+
+    void loadServers()
+    const unsubscribe = window.electronAPI.onRemoteServersChanged?.(() => {
+      void loadServers()
+    })
+
+    return () => {
+      mounted = false
+      unsubscribe?.()
+    }
+  }, [isDirectRemoteMode, normalizeServerUrl, transportState?.url])
+
+  useEffect(() => {
+    if (isDirectRemoteMode && targetMode !== 'remote') {
+      setTargetMode('remote')
+    }
+  }, [isDirectRemoteMode, targetMode])
+
+  const currentTarget = useMemo<WorkspaceCreationTarget | null>(() => {
+    if (targetMode === 'local' && !isDirectRemoteMode) return { mode: 'local' }
+    if (isDirectRemoteMode && targetMode === 'remote') {
+      return selectedServerId ? { mode: 'remote', serverId: selectedServerId } : { mode: 'remote' }
+    }
+    if (!selectedServerId) return null
+    return { mode: 'remote', serverId: selectedServerId }
+  }, [isDirectRemoteMode, targetMode, selectedServerId])
+
+  const directRemoteProfile = useMemo(() => {
+    if (!isDirectRemoteMode) return null
+    return remoteServers.find(profile => normalizeServerUrl(profile.url) === normalizeServerUrl(transportState?.url)) ?? null
+  }, [isDirectRemoteMode, normalizeServerUrl, remoteServers, transportState?.url])
+
   // Wrap onClose to prevent closing during creation
   // FullscreenOverlayBase handles ESC key, this wrapper prevents closing when busy
   const handleClose = useCallback(() => {
@@ -56,10 +142,14 @@ export function WorkspaceCreationScreen({
     }
   }, [isCreating, onClose])
 
-  const handleCreateWorkspace = useCallback(async (folderPath: string, name: string) => {
+  const handleCreateWorkspace = useCallback(async (folderPath: string, name: string, options?: { managedByApp?: boolean }) => {
+    if (!currentTarget) {
+      toast.error('Select a workspace target first')
+      return
+    }
     setIsCreating(true)
     try {
-      const workspace = await window.electronAPI.createWorkspace(folderPath, name)
+      const workspace = await window.electronAPI.createWorkspaceAtTarget(currentTarget, folderPath, name, options)
       onWorkspaceCreated(workspace)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -69,33 +159,63 @@ export function WorkspaceCreationScreen({
     } finally {
       setIsCreating(false)
     }
-  }, [onWorkspaceCreated])
+  }, [currentTarget, onWorkspaceCreated])
 
   const renderStep = () => {
+    const targetStepKey = `${targetMode}:${selectedServerId ?? 'none'}`
+
     switch (step) {
       case 'choice':
         return (
           <AddWorkspaceStep_Choice
             onCreateNew={() => setStep('create')}
             onOpenFolder={() => setStep('open')}
+            targetMode={targetMode}
+            onTargetModeChange={setTargetMode}
+            remoteServers={remoteServers}
+            selectedServerId={selectedServerId}
+            onSelectedServerIdChange={setSelectedServerId}
+            allowLocalTarget={!isDirectRemoteMode}
+            connectedRemoteName={directRemoteProfile?.name ?? 'Connected server'}
+            connectedRemoteUrl={directRemoteProfile?.url ?? transportState?.url ?? null}
           />
         )
 
       case 'create':
         return (
           <AddWorkspaceStep_CreateNew
+            key={`create:${targetStepKey}`}
             onBack={() => setStep('choice')}
             onCreate={handleCreateWorkspace}
             isCreating={isCreating}
+            targetMode={targetMode}
+            target={currentTarget}
+            onTargetModeChange={setTargetMode}
+            remoteServers={remoteServers}
+            selectedServerId={selectedServerId}
+            onSelectedServerIdChange={setSelectedServerId}
+            allowLocalTarget={!isDirectRemoteMode}
+            connectedRemoteName={directRemoteProfile?.name ?? 'Connected server'}
+            connectedRemoteUrl={directRemoteProfile?.url ?? transportState?.url ?? null}
           />
         )
 
       case 'open':
         return (
           <AddWorkspaceStep_OpenFolder
+            key={`open:${targetStepKey}`}
             onBack={() => setStep('choice')}
             onCreate={handleCreateWorkspace}
             isCreating={isCreating}
+            targetMode={targetMode}
+            target={currentTarget}
+            onTargetModeChange={setTargetMode}
+            remoteServers={remoteServers}
+            selectedServerId={selectedServerId}
+            onSelectedServerIdChange={setSelectedServerId}
+            allowLocalTarget={!isDirectRemoteMode}
+            connectedRemoteName={directRemoteProfile?.name ?? 'Connected server'}
+            connectedRemoteUrl={directRemoteProfile?.url ?? transportState?.url ?? null}
           />
         )
 

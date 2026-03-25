@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { getSessionsToRefreshAfterStaleReconnect } from '../reconnect-recovery'
+import { getSessionsToRefreshAfterReconnect, getSessionsToRefreshAfterStaleReconnect } from '../reconnect-recovery'
 import type { SessionMeta } from '@/atoms/sessions'
 
 function meta(overrides: Partial<SessionMeta> = {}): SessionMeta {
@@ -31,5 +31,28 @@ describe('getSessionsToRefreshAfterStaleReconnect', () => {
     ])
 
     expect(getSessionsToRefreshAfterStaleReconnect(metaMap, 'active')).toEqual(['active'])
+  })
+})
+
+describe('getSessionsToRefreshAfterReconnect', () => {
+  it('refreshes the active session even when replay succeeds', () => {
+    const metaMap = new Map<string, SessionMeta>([
+      ['active', meta({ id: 'active' })],
+      ['processing', meta({ id: 'processing', isProcessing: true })],
+    ])
+
+    expect(getSessionsToRefreshAfterReconnect(metaMap, 'active', false)).toEqual(['active'])
+  })
+
+  it('refreshes processing sessions on stale reconnects', () => {
+    const metaMap = new Map<string, SessionMeta>([
+      ['active', meta({ id: 'active' })],
+      ['processing', meta({ id: 'processing', isProcessing: true })],
+    ])
+
+    expect(getSessionsToRefreshAfterReconnect(metaMap, 'active', true)).toEqual([
+      'active',
+      'processing',
+    ])
   })
 })

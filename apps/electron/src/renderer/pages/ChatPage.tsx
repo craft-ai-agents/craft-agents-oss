@@ -187,7 +187,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     }
   }, [sessionId, activeWorkspaceId])
 
-  // Session connection change handler - can only change before first message
+  // Session connection change handler for explicit connection-only actions
   const handleConnectionChange = React.useCallback(async (connectionSlug: string) => {
     try {
       await window.electronAPI.sessionCommand(sessionId, { type: 'setConnection', connectionSlug })

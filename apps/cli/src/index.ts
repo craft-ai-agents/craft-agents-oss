@@ -1197,7 +1197,7 @@ export function getValidateSteps(): ValidateStep[] {
           sourceSlugs: enableSlugs,
         })
         return await waitForSendEvents(client, ctx.createdSessionId,
-          `[source:craft-public] List the documents under the "CraftAgents E2E Tests" folder. Just list their names.`,
+          `Use the source_test tool to test the craft-public source. Report the result.`,
           90_000, false, undefined, ctx.onEvent)
       },
     },
@@ -1228,11 +1228,7 @@ export function getValidateSteps(): ValidateStep[] {
         ctx.createdSkillSlug = '__cli-validate-skill'
         const sourceSlug = ctx.createdSourceSlug ?? 'cat-facts'
         const skillDir = `${ctx.workspaceRootPath}/skills/${ctx.createdSkillSlug}`
-        // Use bash to create the skill file deterministically
-        return await waitForSendEvents(client, ctx.createdSessionId,
-          `Use the Bash tool to run this exact command:
-mkdir -p "${skillDir}" && cat > "${skillDir}/SKILL.md" << 'SKILLEOF'
----
+        const skillMarkdown = `---
 name: "CLI Validate Skill"
 description: "Validation skill created by craft-cli"
 requiredSources:
@@ -1244,7 +1240,12 @@ This skill does two things:
 2. Use the Cat Facts source to get a random cat fact
 
 Always perform both steps when this skill is invoked.
-SKILLEOF`, 90_000, true, undefined, ctx.onEvent)
+`
+        const skillMarkdownBase64 = Buffer.from(skillMarkdown, 'utf-8').toString('base64')
+        // Use a deterministic node-based write to avoid shell heredoc quoting issues across environments
+        return await waitForSendEvents(client, ctx.createdSessionId,
+          `Use the Bash tool to run this exact command:
+mkdir -p "${skillDir}" && node -e "require('fs').writeFileSync(process.argv[1], Buffer.from(process.argv[2], 'base64'))" "${skillDir}/SKILL.md" "${skillMarkdownBase64}"`, 90_000, true, undefined, ctx.onEvent)
       },
     },
     {
@@ -1810,7 +1811,37 @@ Examples:
 export async function main(argv: string[] = process.argv): Promise<void> {
   const args = parseArgs(argv)
 
-  // Set custom CA before any WS connections
+  // NODE_EXTRA_CA_CERTS must be present when the runtime starts.
+  // Re-exec once with the requested CA path so TLS/WebSocket trust picks it up reliably.
+  if (
+    args.tlsCa &&
+    process.env.NODE_EXTRA_CA_CERTS !== args.tlsCa &&
+    process.env.CRAFT_TLS_CA_BOOTSTRAPPED !== '1'
+  ) {
+    const { spawn } = await import('node:child_process')
+    const child = spawn(argv[0]!, argv.slice(1), {
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        NODE_EXTRA_CA_CERTS: args.tlsCa,
+        CRAFT_TLS_CA_BOOTSTRAPPED: '1',
+      },
+    })
+
+    const exitCode = await new Promise<number>((resolve, reject) => {
+      child.on('error', reject)
+      child.on('exit', (code, signal) => {
+        if (signal) {
+          resolve(1)
+          return
+        }
+        resolve(code ?? 0)
+      })
+    })
+
+    process.exit(exitCode)
+  }
+
   if (args.tlsCa) {
     process.env.NODE_EXTRA_CA_CERTS = args.tlsCa
   }

@@ -19,6 +19,7 @@ import {
   Trash2,
   FolderOpen,
   AppWindow,
+  ChevronRight,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getFileManagerName } from '@/lib/platform'
@@ -30,7 +31,9 @@ export interface SourceMenuProps {
   sourceName: string
   /** Callbacks */
   onOpenInNewWindow: () => void
-  onShowInFinder: () => void
+  onShowInFinder?: () => void
+  shareDestinations?: Array<{ key: string; label: string; description: string }>
+  onShare?: (targetKey: string) => void
   onDelete: () => void
 }
 
@@ -43,10 +46,12 @@ export function SourceMenu({
   sourceName,
   onOpenInNewWindow,
   onShowInFinder,
+  shareDestinations = [],
+  onShare,
   onDelete,
 }: SourceMenuProps) {
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
-  const { MenuItem, Separator } = useMenuComponents()
+  const { MenuItem, Separator, Sub, SubTrigger, SubContent } = useMenuComponents()
 
   return (
     <>
@@ -57,10 +62,31 @@ export function SourceMenu({
       </MenuItem>
 
       {/* Show in file manager */}
-      <MenuItem onClick={onShowInFinder}>
-        <FolderOpen className="h-3.5 w-3.5" />
-        <span className="flex-1">{`Show in ${getFileManagerName()}`}</span>
-      </MenuItem>
+      {onShowInFinder && (
+        <MenuItem onClick={onShowInFinder}>
+          <FolderOpen className="h-3.5 w-3.5" />
+          <span className="flex-1">{`Show in ${getFileManagerName()}`}</span>
+        </MenuItem>
+      )}
+
+      {shareDestinations.length > 0 && onShare && (
+        <Sub>
+          <SubTrigger>
+            <ChevronRight className="h-3.5 w-3.5" />
+            <span className="flex-1">Share to…</span>
+          </SubTrigger>
+          <SubContent>
+            {shareDestinations.map((target) => (
+              <MenuItem key={target.key} onClick={() => onShare(target.key)}>
+                <div className="flex min-w-0 flex-col">
+                  <span>{target.label}</span>
+                  <span className="text-xs text-muted-foreground">{target.description}</span>
+                </div>
+              </MenuItem>
+            ))}
+          </SubContent>
+        </Sub>
+      )}
 
       <Separator />
 

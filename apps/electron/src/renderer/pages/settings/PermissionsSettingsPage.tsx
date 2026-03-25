@@ -132,6 +132,7 @@ function buildCustomPermissionsData(config: PermissionsConfigFile): PermissionRo
 export default function PermissionsSettingsPage() {
   const { activeWorkspaceId } = useAppShellContext()
   const activeWorkspace = useActiveWorkspace()
+  const canOpenLocalWorkspaceFiles = !!activeWorkspace && !activeWorkspace.isRemote
 
   // Loading and data state
   const [isLoading, setIsLoading] = useState(true)
@@ -233,7 +234,7 @@ export default function PermissionsSettingsPage() {
                     description="App-level patterns allowed in Explore mode. Commands not on this list are blocked."
                     action={
                       // EditPopover for AI-assisted default permissions editing
-                      defaultPermissionsPath ? (
+                      defaultPermissionsPath && canOpenLocalWorkspaceFiles ? (
                         <EditPopover
                           trigger={<EditButton />}
                           {...getEditConfig('default-permissions', defaultPermissionsPath)}
@@ -278,7 +279,7 @@ export default function PermissionsSettingsPage() {
                             trigger={<EditButton />}
                             example={example}
                             context={context}
-                            secondaryAction={activeWorkspace ? {
+                            secondaryAction={canOpenLocalWorkspaceFiles ? {
                               label: 'Edit File',
                               filePath: `${activeWorkspace.rootPath}/permissions.json`,
                             } : undefined}

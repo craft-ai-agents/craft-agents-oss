@@ -1,0 +1,21 @@
+{
+  "id": "stitch-mcp-fixture",
+  "name": "Stitch MCP",
+  "slug": "stitch-mcp",
+  "enabled": true,
+  "provider": "stitch",
+  "type": "mcp",
+  "mcp": {
+    "transport": "http",
+    "url": "https://agents.craft.do/docs/mcp",
+    "authType": "bearer",
+    "headerNames": [
+      "X-Goog-Api-Key"
+    ]
+  },
+  "icon": "🧵",
+  "tagline": "Header-auth MCP validation fixture",
+  "connectionStatus": "untested",
+  "createdAt": 1774000000001,
+  "updatedAt": 1774000000001
+}

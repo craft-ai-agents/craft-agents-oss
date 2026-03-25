@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "labels": [
+    {
+      "id": "development",
+      "name": "Development",
+      "color": {
+        "light": "#3B82F6",
+        "dark": "#60A5FA"
+      },
+      "children": [
+        {
+          "id": "code",
+          "name": "Code",
+          "color": {
+            "light": "#4F46E5",
+            "dark": "#818CF8"
+          }
+        },
+        {
+          "id": "bug",
+          "name": "Bug",
+          "color": {
+            "light": "#0EA5E9",
+            "dark": "#38BDF8"
+          }
+        },
+        {
+          "id": "automation",
+          "name": "Automation",
+          "color": {
+            "light": "#06B6D4",
+            "dark": "#22D3EE"
+          }
+        }
+      ]
+    },
+    {
+      "id": "content",
+      "name": "Content",
+      "color": {
+        "light": "#8B5CF6",
+        "dark": "#A78BFA"
+      },
+      "children": [
+        {
+          "id": "writing",
+          "name": "Writing",
+          "color": {
+            "light": "#7C3AED",
+            "dark": "#C4B5FD"
+          }
+        },
+        {
+          "id": "research",
+          "name": "Research",
+          "color": {
+            "light": "#A855F7",
+            "dark": "#C084FC"
+          }
+        },
+        {
+          "id": "design",
+          "name": "Design",
+          "color": {
+            "light": "#D946EF",
+            "dark": "#E879F9"
+          }
+        }
+      ]
+    },
+    {
+      "id": "priority",
+      "name": "Priority",
+      "color": {
+        "light": "#F59E0B",
+        "dark": "#FBBF24"
+      },
+      "valueType": "number"
+    },
+    {
+      "id": "project",
+      "name": "Project",
+      "color": "foreground/50",
+      "valueType": "string"
+    }
+  ]
+}

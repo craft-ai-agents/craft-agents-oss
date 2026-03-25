@@ -32,6 +32,7 @@ export const CHANNEL_MAP = {
   respondToCredential: invoke(RPC_CHANNELS.sessions.RESPOND_TO_CREDENTIAL),
   sessionCommand: invoke(RPC_CHANNELS.sessions.COMMAND),
   getPendingPlanExecution: invoke(RPC_CHANNELS.sessions.GET_PENDING_PLAN_EXECUTION),
+  getPendingPermissions: invoke(RPC_CHANNELS.sessions.GET_PENDING_PERMISSIONS),
   getSessionPermissionModeState: invoke(RPC_CHANNELS.sessions.GET_PERMISSION_MODE_STATE),
 
   // Event listeners
@@ -44,7 +45,14 @@ export const CHANNEL_MAP = {
   // Workspace management
   getWorkspaces: invoke(RPC_CHANNELS.workspaces.GET),
   createWorkspace: invoke(RPC_CHANNELS.workspaces.CREATE),
+  deleteWorkspace: invoke(RPC_CHANNELS.workspaces.DELETE),
   checkWorkspaceSlug: invoke(RPC_CHANNELS.workspaces.CHECK_SLUG),
+  listRemoteServers: invoke(RPC_CHANNELS.remoteServers.LIST),
+  saveRemoteServerProfile: invoke(RPC_CHANNELS.remoteServers.SAVE),
+  deleteRemoteServerProfile: invoke(RPC_CHANNELS.remoteServers.DELETE),
+  saveRemoteServerToken: invoke(RPC_CHANNELS.remoteServers.SAVE_TOKEN),
+  clearRemoteServerToken: invoke(RPC_CHANNELS.remoteServers.CLEAR_TOKEN),
+  onRemoteServersChanged: listener(RPC_CHANNELS.remoteServers.CHANGED),
 
   // Window management
   getWindowWorkspace: invoke(RPC_CHANNELS.window.GET_WORKSPACE),

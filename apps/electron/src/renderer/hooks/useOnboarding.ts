@@ -19,7 +19,7 @@ import type { ProviderChoice } from '@/components/onboarding/ProviderSelectStep'
 import type { LocalModelSubmitData } from '@/components/onboarding/LocalModelStep'
 import type { ApiKeySubmitData } from '@/components/apisetup'
 import type { CustomEndpointConfig } from '@config/llm-connections'
-import type { SetupNeeds, LlmConnectionSetup } from '../../shared/types'
+import type { SetupNeeds, LlmConnectionSetup, TestLlmConnectionParams, WorkspaceCreationTarget } from '../../shared/types'
 
 interface UseOnboardingOptions {
   /** Called when onboarding is complete */
@@ -39,6 +39,8 @@ interface UseOnboardingOptions {
   editingSlug?: string | null
   /** Set of slugs already in use (for generating unique slugs when creating new) */
   existingSlugs?: Set<string>
+  /** Optional explicit target scope for AI setup/edit flows */
+  target?: WorkspaceCreationTarget
 }
 
 interface UseOnboardingReturn {
@@ -200,6 +202,7 @@ export function useOnboarding({
   onConfigSaved,
   editingSlug = null,
   existingSlugs = new Set(),
+  target,
 }: UseOnboardingOptions): UseOnboardingReturn {
   // Main wizard state
   const [state, setState] = useState<OnboardingState>({
@@ -279,9 +282,14 @@ export function useOnboarding({
         bedrockAuthMethod: options?.bedrockAuthMethod,
       }, connectionSlugOverride ?? editingSlug, existingSlugs)
       // Use new unified API
-      const result = await window.electronAPI.setupLlmConnection(
-        updateOnly ? { ...setup, updateOnly: true } : setup
-      )
+      const result = target
+        ? await window.electronAPI.setupLlmConnectionForTarget(
+            target,
+            updateOnly ? { ...setup, updateOnly: true } : setup,
+          )
+        : await window.electronAPI.setupLlmConnection(
+            updateOnly ? { ...setup, updateOnly: true } : setup,
+          )
 
       if (result.success) {
         setState(s => ({ ...s, completionStatus: 'complete' }))
@@ -305,7 +313,7 @@ export function useOnboarding({
       }))
       return false
     }
-  }, [state.apiSetupMethod, onConfigSaved, editingSlug, existingSlugs])
+  }, [state.apiSetupMethod, onConfigSaved, editingSlug, existingSlugs, target])
 
   // Continue to next step
   const handleContinue = useCallback(async () => {
@@ -448,14 +456,17 @@ export function useOnboarding({
       // Validate connection by spawning a lightweight subprocess test.
       // Custom endpoint protocol routes through PiAgent at runtime, so test with Pi too.
       const setupTestProvider = data.customEndpoint ? 'pi' : (isPiApiKeyFlow ? 'pi' : 'anthropic')
-      const testResult = await window.electronAPI.testLlmConnectionSetup({
+      const testParams = {
         provider: setupTestProvider,
         apiKey: data.apiKey,
         baseUrl: data.baseUrl,
         model: data.models?.[0],
         piAuthProvider: data.piAuthProvider,
         customEndpoint: data.customEndpoint,
-      })
+      } satisfies TestLlmConnectionParams
+      const testResult = target
+        ? await window.electronAPI.testLlmConnectionSetupForTarget(target, testParams)
+        : await window.electronAPI.testLlmConnectionSetup(testParams)
 
       if (!testResult.success) {
         setState(s => ({
@@ -492,7 +503,7 @@ export function useOnboarding({
         errorMessage: error instanceof Error ? error.message : 'Validation failed',
       }))
     }
-  }, [handleSaveConfig, state.apiSetupMethod])
+  }, [handleSaveConfig, state.apiSetupMethod, editingSlug, target])
 
   // Save config, validate the connection, and update state accordingly.
   // Shared by all OAuth flows after tokens are captured.
@@ -505,7 +516,9 @@ export function useOnboarding({
       setState(s => ({ ...s, credentialStatus: 'error' }))
       return false
     }
-    const testResult = await window.electronAPI.testLlmConnection(connectionSlug)
+    const testResult = target
+      ? await window.electronAPI.testLlmConnectionForTarget(target, connectionSlug)
+      : await window.electronAPI.testLlmConnection(connectionSlug)
     if (testResult.success) {
       setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
       return true
@@ -513,7 +526,7 @@ export function useOnboarding({
       setState(s => ({ ...s, credentialStatus: 'error', errorMessage: testResult.error || 'Connection test failed' }))
       return false
     }
-  }, [handleSaveConfig])
+  }, [handleSaveConfig, target])
 
   // Two-step OAuth flow state
   const [isWaitingForCode, setIsWaitingForCode] = useState(false)
@@ -552,7 +565,9 @@ export function useOnboarding({
         const effectiveEditingSlug = connectionSlugOverride ?? editingSlug
         const isReauth = !!effectiveEditingSlug
         const connectionSlug = apiSetupMethodToConnectionSetup(effectiveMethod, {}, effectiveEditingSlug, existingSlugs).slug
-        const result = await window.electronAPI.startChatGptOAuth(connectionSlug)
+        const result = target
+          ? await window.electronAPI.startChatGptOAuthForTarget(target, connectionSlug)
+          : await window.electronAPI.startChatGptOAuth(connectionSlug)
 
         if (result.success) {
           await saveAndValidateConnection(connectionSlug, effectiveMethod, undefined, isReauth)
@@ -573,12 +588,12 @@ export function useOnboarding({
         const connectionSlug = apiSetupMethodToConnectionSetup(effectiveMethod, {}, effectiveEditingSlug, existingSlugs).slug
 
         // Subscribe to device code event before starting the flow
-        const cleanup = window.electronAPI.onCopilotDeviceCode((data) => {
-          setCopilotDeviceCode(data)
-        })
-
         try {
-          const result = await window.electronAPI.startCopilotOAuth(connectionSlug)
+          const result = target
+            ? await window.electronAPI.startCopilotOAuthForTarget(target, connectionSlug, (data) => {
+                setCopilotDeviceCode(data)
+              })
+            : await window.electronAPI.startCopilotOAuth(connectionSlug)
 
           if (result.success) {
             await saveAndValidateConnection(connectionSlug, effectiveMethod, undefined, isReauth)
@@ -590,7 +605,6 @@ export function useOnboarding({
             }))
           }
         } finally {
-          cleanup()
           setCopilotDeviceCode(undefined)
         }
         return
@@ -607,7 +621,9 @@ export function useOnboarding({
         return
       }
 
-      const result = await window.electronAPI.startClaudeOAuth()
+      const result = target
+        ? await window.electronAPI.startClaudeOAuthForTarget(target)
+        : await window.electronAPI.startClaudeOAuth()
 
       if (result.success) {
         // Browser opened successfully, now waiting for user to copy the code
@@ -627,7 +643,7 @@ export function useOnboarding({
         errorMessage: error instanceof Error ? error.message : 'OAuth failed',
       }))
     }
-  }, [state.apiSetupMethod, saveAndValidateConnection, editingSlug, existingSlugs])
+  }, [state.apiSetupMethod, saveAndValidateConnection, editingSlug, existingSlugs, target])
 
   // Map ProviderChoice → ApiSetupMethod and navigate to the right step
   const handleSelectProvider = useCallback((choice: ProviderChoice) => {
@@ -675,7 +691,9 @@ export function useOnboarding({
 
     try {
       const connectionSlug = apiSetupMethodToConnectionSetup('claude_oauth', {}, editingSlug, existingSlugs).slug
-      const result = await window.electronAPI.exchangeClaudeCode(code.trim(), connectionSlug)
+      const result = target
+        ? await window.electronAPI.exchangeClaudeCodeForTarget(target, code.trim(), connectionSlug)
+        : await window.electronAPI.exchangeClaudeCode(code.trim(), connectionSlug)
 
       if (result.success && result.token) {
         setIsWaitingForCode(false)
@@ -694,7 +712,7 @@ export function useOnboarding({
         errorMessage: error instanceof Error ? error.message : 'Failed to exchange code',
       }))
     }
-  }, [saveAndValidateConnection, editingSlug, existingSlugs])
+  }, [saveAndValidateConnection, editingSlug, existingSlugs, target])
 
   // Submit local model configuration (Ollama or any OpenAI-compatible local server)
   const handleSubmitLocalModel = useCallback(async (data: LocalModelSubmitData) => {
@@ -727,8 +745,12 @@ export function useOnboarding({
     setIsWaitingForCode(false)
     setState(s => ({ ...s, credentialStatus: 'idle', errorMessage: undefined }))
     // Clear OAuth state on backend
-    await window.electronAPI.clearClaudeOAuthState()
-  }, [])
+    if (target) {
+      await window.electronAPI.clearClaudeOAuthStateForTarget(target)
+    } else {
+      await window.electronAPI.clearClaudeOAuthState()
+    }
+  }, [target])
 
   // Git Bash handlers (Windows only)
   const handleBrowseGitBash = useCallback(async () => {

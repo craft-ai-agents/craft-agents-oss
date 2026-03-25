@@ -1,0 +1,18 @@
+{
+  "id": "ws_ccf40575",
+  "name": "ci-workspace",
+  "slug": "ci-workspace",
+  "defaults": {
+    "permissionMode": "safe",
+    "cyclablePermissionModes": [
+      "safe",
+      "allow-all"
+    ],
+    "enabledSourceSlugs": []
+  },
+  "localMcpServers": {
+    "enabled": true
+  },
+  "createdAt": 1774008011765,
+  "updatedAt": 1774008011766
+}

@@ -5,11 +5,16 @@ import { safeJsonParse } from '@craft-agent/shared/utils/files'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { randomUUID } from 'node:crypto'
+import { dirname } from 'path'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sources.GET,
   RPC_CHANNELS.sources.CREATE,
   RPC_CHANNELS.sources.DELETE,
+  RPC_CHANNELS.sources.EXPORT_BUNDLE,
+  RPC_CHANNELS.sources.IMPORT_BUNDLE,
   RPC_CHANNELS.sources.START_OAUTH,
   RPC_CHANNELS.sources.SAVE_CREDENTIALS,
   RPC_CHANNELS.sources.GET_PERMISSIONS,
@@ -60,6 +65,89 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     if (config?.defaults?.enabledSourceSlugs?.includes(sourceSlug)) {
       config.defaults.enabledSourceSlugs = config.defaults.enabledSourceSlugs.filter(s => s !== sourceSlug)
       saveWorkspaceConfig(workspace.rootPath, config)
+    }
+  })
+
+  server.handle(RPC_CHANNELS.sources.EXPORT_BUNDLE, async (_ctx, workspaceId: string, sourceSlug: string): Promise<import('@craft-agent/shared/protocol').SourceBundle> => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+
+    const { loadSource, loadSourceGuide, getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+    const source = loadSource(workspace.rootPath, sourceSlug)
+    if (!source) {
+      throw new Error(`Source not found: ${sourceSlug}`)
+    }
+    if (source.config.type === 'local') {
+      throw new Error('Local folder sources cannot be shared between targets')
+    }
+
+    const guide = loadSourceGuide(workspace.rootPath, sourceSlug)
+    const credential = await getSourceCredentialManager().load(source)
+
+    const { getSourcePermissionsPath } = await import('@craft-agent/shared/agent')
+    const permissionsPath = getSourcePermissionsPath(workspace.rootPath, sourceSlug)
+    let permissionsConfig: unknown
+    if (existsSync(permissionsPath)) {
+      permissionsConfig = safeJsonParse(readFileSync(permissionsPath, 'utf-8'))
+    }
+
+    return {
+      config: source.config,
+      guideMarkdown: guide?.raw,
+      permissionsConfig,
+      credential,
+    }
+  })
+
+  server.handle(RPC_CHANNELS.sources.IMPORT_BUNDLE, async (_ctx, workspaceId: string, bundle: import('@craft-agent/shared/protocol').SourceBundle): Promise<{ success: boolean; slug: string; error?: string }> => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+
+    const { sourceExists, generateSourceSlug, saveSourceConfig, saveSourceGuide, loadSource, getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+    const { getSourcePermissionsPath } = await import('@craft-agent/shared/agent')
+
+    try {
+      if (bundle.config.type === 'local') {
+        return { success: false, slug: bundle.config.slug, error: 'Local folder sources cannot be shared between targets' }
+      }
+
+      const slug = sourceExists(workspace.rootPath, bundle.config.slug)
+        ? generateSourceSlug(workspace.rootPath, bundle.config.name)
+        : bundle.config.slug
+
+      const config: import('@craft-agent/shared/sources').FolderSourceConfig = {
+        ...bundle.config,
+        slug,
+        id: slug === bundle.config.slug ? bundle.config.id : `${slug}_${randomUUID().slice(0, 8)}`,
+        updatedAt: Date.now(),
+      }
+
+      saveSourceConfig(workspace.rootPath, config)
+
+      if (bundle.guideMarkdown) {
+        saveSourceGuide(workspace.rootPath, slug, { raw: bundle.guideMarkdown })
+      }
+
+      if (bundle.permissionsConfig !== undefined) {
+        const permissionsPath = getSourcePermissionsPath(workspace.rootPath, slug)
+        mkdirSync(dirname(permissionsPath), { recursive: true })
+        writeFileSync(permissionsPath, JSON.stringify(bundle.permissionsConfig, null, 2))
+      }
+
+      if (bundle.credential) {
+        const importedSource = loadSource(workspace.rootPath, slug)
+        if (importedSource) {
+          await getSourceCredentialManager().save(importedSource, bundle.credential)
+        }
+      }
+
+      return { success: true, slug }
+    } catch (error) {
+      return {
+        success: false,
+        slug: bundle.config.slug,
+        error: error instanceof Error ? error.message : 'Failed to import source',
+      }
     }
   })
 

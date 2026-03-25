@@ -5,11 +5,22 @@ import { Input } from "../ui/input"
 import { AddWorkspaceContainer, AddWorkspaceStepHeader, AddWorkspaceSecondaryButton, AddWorkspacePrimaryButton } from "./primitives"
 import { useDirectoryPicker } from "@/hooks/useDirectoryPicker"
 import { ServerDirectoryBrowser } from "@/components/ServerDirectoryBrowser"
+import type { RemoteServerProfile, WorkspaceCreationTarget } from "../../../shared/types"
+import { WorkspaceTargetSelector } from "./WorkspaceTargetSelector"
 
 interface AddWorkspaceStep_OpenFolderProps {
   onBack: () => void
-  onCreate: (folderPath: string, name: string) => Promise<void>
+  onCreate: (folderPath: string, name: string, options?: { managedByApp?: boolean }) => Promise<void>
   isCreating: boolean
+  targetMode: 'local' | 'remote'
+  target: WorkspaceCreationTarget | null
+  onTargetModeChange: (mode: 'local' | 'remote') => void
+  remoteServers: RemoteServerProfile[]
+  selectedServerId: string | null
+  onSelectedServerIdChange: (serverId: string | null) => void
+  allowLocalTarget?: boolean
+  connectedRemoteName?: string | null
+  connectedRemoteUrl?: string | null
 }
 
 /**
@@ -18,7 +29,16 @@ interface AddWorkspaceStep_OpenFolderProps {
 export function AddWorkspaceStep_OpenFolder({
   onBack,
   onCreate,
-  isCreating
+  isCreating,
+  targetMode,
+  target,
+  onTargetModeChange,
+  remoteServers,
+  selectedServerId,
+  onSelectedServerIdChange,
+  allowLocalTarget = true,
+  connectedRemoteName,
+  connectedRemoteUrl,
 }: AddWorkspaceStep_OpenFolderProps) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [workspaceName, setWorkspaceName] = useState('')
@@ -36,11 +56,11 @@ export function AddWorkspaceStep_OpenFolder({
     serverBrowserMode,
     cancelServerBrowser,
     confirmServerBrowser,
-  } = useDirectoryPicker(handleFolderSelected)
+  } = useDirectoryPicker(handleFolderSelected, target)
 
   const handleOpen = useCallback(async () => {
     if (!selectedPath || !workspaceName.trim()) return
-    await onCreate(selectedPath, workspaceName.trim())
+    await onCreate(selectedPath, workspaceName.trim(), { managedByApp: false })
   }, [selectedPath, workspaceName, onCreate])
 
   const canOpen = selectedPath && workspaceName.trim()
@@ -61,8 +81,21 @@ export function AddWorkspaceStep_OpenFolder({
         Back
       </button>
 
+      <WorkspaceTargetSelector
+        targetMode={targetMode}
+        onTargetModeChange={onTargetModeChange}
+        remoteServers={remoteServers}
+        selectedServerId={selectedServerId}
+        onSelectedServerIdChange={onSelectedServerIdChange}
+        allowLocalTarget={allowLocalTarget}
+        connectedRemoteName={connectedRemoteName}
+        connectedRemoteUrl={connectedRemoteUrl}
+        disabled={isCreating}
+      />
+
       <AddWorkspaceStepHeader
         title="Choose existing folder"
+        className="mt-6"
         description="Choose any folder to use as workspace."
       />
 
@@ -83,11 +116,25 @@ export function AddWorkspaceStep_OpenFolder({
           </div>
           <AddWorkspaceSecondaryButton
             onClick={pickDirectory}
-            disabled={isCreating}
+            disabled={isCreating || !target}
           >
             Browse
           </AddWorkspaceSecondaryButton>
         </div>
+        {!target && (
+          <p className="text-xs text-muted-foreground">Select a target above before browsing folders.</p>
+        )}
+        {showServerBrowser && (
+          <ServerDirectoryBrowser
+            open={showServerBrowser}
+            presentation="inline"
+            mode={serverBrowserMode}
+            onSelect={confirmServerBrowser}
+            onCancel={cancelServerBrowser}
+            initialPath={selectedPath ?? undefined}
+            target={target}
+          />
+        )}
 
         {/* Workspace name input - shown after folder is selected */}
         {selectedPath && (
@@ -114,13 +161,6 @@ export function AddWorkspaceStep_OpenFolder({
           Open
         </AddWorkspacePrimaryButton>
       </div>
-
-      <ServerDirectoryBrowser
-        open={showServerBrowser}
-        mode={serverBrowserMode}
-        onSelect={confirmServerBrowser}
-        onCancel={cancelServerBrowser}
-      />
     </AddWorkspaceContainer>
   )
 }

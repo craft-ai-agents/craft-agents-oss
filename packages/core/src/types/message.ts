@@ -322,6 +322,11 @@ export interface Message {
   authError?: string;             // Error message if auth failed
   authEmail?: string;             // Authenticated email (for OAuth)
   authWorkspace?: string;         // Authenticated workspace (for Slack)
+  // Assistant-response metadata (captured at generation time)
+  responseModel?: string;
+  responseConnectionName?: string;
+  responseConnectionSlug?: string;
+  responseRuntimeChanged?: boolean;
 }
 
 /**
@@ -394,6 +399,11 @@ export interface StoredMessage {
   authError?: string;
   authEmail?: string;
   authWorkspace?: string;
+  // Assistant-response metadata (persisted for turn chrome / auditing)
+  responseModel?: string;
+  responseConnectionName?: string;
+  responseConnectionSlug?: string;
+  responseRuntimeChanged?: boolean;
   // Queued: user message that is waiting to be processed (persisted for recovery)
   isQueued?: boolean;
 }

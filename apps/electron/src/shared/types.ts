@@ -2,6 +2,7 @@
 // Protocol re-exports (channels, DTOs, events, wire types)
 // =============================================================================
 export * from '@craft-agent/shared/protocol'
+import type { PermissionRequest } from '@craft-agent/shared/protocol'
 
 // =============================================================================
 // Package re-exports (convenience for renderer imports)
@@ -162,6 +163,11 @@ export interface TransportConnectionState {
   updatedAt: number
 }
 
+export interface WorkspaceCreationTarget {
+  mode: 'local' | 'remote'
+  serverId?: string
+}
+
 // =============================================================================
 // ElectronAPI — type-safe IPC API exposed to renderer
 // =============================================================================
@@ -203,6 +209,9 @@ import type {
   TestAutomationResult,
   WindowCloseRequest,
   DirectoryListingResult,
+  RemoteServerProfile,
+  SaveRemoteServerProfileInput,
+  RemoteServerRuntimeState,
 } from '@craft-agent/shared/protocol'
 
 export interface ElectronAPI {
@@ -225,13 +234,25 @@ export interface ElectronAPI {
 
   // Pending plan execution (for reload recovery)
   getPendingPlanExecution(sessionId: string): Promise<{ planPath: string; draftInputSnapshot?: string; awaitingCompaction: boolean } | null>
+  getPendingPermissions(sessionId: string): Promise<PermissionRequest[]>
   // Permission mode reconciliation
   getSessionPermissionModeState(sessionId: string): Promise<PermissionModeState | null>
 
   // Workspace management
   getWorkspaces(): Promise<Workspace[]>
-  createWorkspace(folderPath: string, name: string): Promise<Workspace>
+  createWorkspace(folderPath: string, name: string, options?: { managedByApp?: boolean }): Promise<Workspace>
+  deleteWorkspace(workspaceId: string): Promise<boolean>
+  createWorkspaceAtTarget(target: WorkspaceCreationTarget, folderPath: string, name: string, options?: { managedByApp?: boolean }): Promise<Workspace>
   checkWorkspaceSlug(slug: string): Promise<{ exists: boolean; path: string }>
+  checkWorkspaceSlugAtTarget(target: WorkspaceCreationTarget, slug: string): Promise<{ exists: boolean; path: string }>
+  listRemoteServers(): Promise<RemoteServerProfile[]>
+  saveRemoteServerProfile(input: SaveRemoteServerProfileInput): Promise<RemoteServerProfile>
+  deleteRemoteServerProfile(serverId: string): Promise<boolean>
+  saveRemoteServerToken(serverId: string, token: string): Promise<void>
+  clearRemoteServerToken(serverId: string): Promise<void>
+  getRemoteServerRuntimeStates(): Promise<Record<string, RemoteServerRuntimeState>>
+  onRemoteServersChanged(callback: () => void): () => void
+  onWorkspacesChanged(callback: () => void): () => void
 
   // Window management
   getWindowWorkspace(): Promise<string | null>
@@ -268,6 +289,7 @@ export interface ElectronAPI {
 
   // Server filesystem browsing (remote mode)
   listServerDirectory(dirPath: string): Promise<DirectoryListingResult>
+  listServerDirectoryForTarget(target: WorkspaceCreationTarget, dirPath: string): Promise<DirectoryListingResult>
   // Debug: send renderer logs to main process log file
   debugLog(...args: unknown[]): void
 
@@ -278,6 +300,7 @@ export interface ElectronAPI {
   // System
   getVersions(): { node: string; chrome: string; electron: string }
   getHomeDir(): Promise<string>
+  getHomeDirForTarget(target: WorkspaceCreationTarget): Promise<string>
   isDebugMode(): Promise<boolean>
 
   // Transport connection status (preload-local, not RPC channels)
@@ -339,6 +362,9 @@ export interface ElectronAPI {
   exchangeClaudeCode(code: string, connectionSlug: string): Promise<ClaudeOAuthResult>
   hasClaudeOAuthState(): Promise<boolean>
   clearClaudeOAuthState(): Promise<{ success: boolean }>
+  startClaudeOAuthForTarget(target: WorkspaceCreationTarget): Promise<{ success: boolean; authUrl?: string; error?: string }>
+  exchangeClaudeCodeForTarget(target: WorkspaceCreationTarget, code: string, connectionSlug: string): Promise<ClaudeOAuthResult>
+  clearClaudeOAuthStateForTarget(target: WorkspaceCreationTarget): Promise<{ success: boolean }>
   /** Defer onboarding setup — user chose "Setup later" */
   deferSetup(): Promise<{ success: boolean }>
 
@@ -359,6 +385,8 @@ export interface ElectronAPI {
   setupLlmConnection(setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }>
   /** Unified connection test — spawns a lightweight agent subprocess to validate credentials */
   testLlmConnectionSetup(params: TestLlmConnectionParams): Promise<TestLlmConnectionResult>
+  setupLlmConnectionForTarget(target: WorkspaceCreationTarget, setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }>
+  testLlmConnectionSetupForTarget(target: WorkspaceCreationTarget, params: TestLlmConnectionParams): Promise<TestLlmConnectionResult>
   // Pi provider discovery (main process only — Pi SDK can't run in renderer)
   getPiApiKeyProviders(): Promise<Array<{ key: string; label: string; placeholder: string }>>
   getPiProviderBaseUrl(provider: string): Promise<string | undefined>
@@ -565,8 +593,27 @@ export interface ElectronAPI {
   deleteLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   testLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   setDefaultLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
+  listLlmConnectionsForTarget(target: WorkspaceCreationTarget): Promise<LlmConnection[]>
+  listLlmConnectionsWithStatusForTarget(target: WorkspaceCreationTarget): Promise<LlmConnectionWithStatus[]>
+  getLlmConnectionForTarget(target: WorkspaceCreationTarget, slug: string): Promise<LlmConnection | null>
+  getLlmConnectionApiKeyForTarget(target: WorkspaceCreationTarget, slug: string): Promise<string | null>
+  saveLlmConnectionForTarget(target: WorkspaceCreationTarget, connection: LlmConnection): Promise<{ success: boolean; error?: string }>
+  deleteLlmConnectionForTarget(target: WorkspaceCreationTarget, slug: string): Promise<{ success: boolean; error?: string }>
+  testLlmConnectionForTarget(target: WorkspaceCreationTarget, slug: string): Promise<{ success: boolean; error?: string }>
+  setDefaultLlmConnectionForTarget(target: WorkspaceCreationTarget, slug: string): Promise<{ success: boolean; error?: string }>
   getDefaultThinkingLevel(): Promise<ThinkingLevel>
   setDefaultThinkingLevel(level: ThinkingLevel): Promise<{ success: boolean; error?: string }>
+  getDefaultThinkingLevelForTarget(target: WorkspaceCreationTarget): Promise<ThinkingLevel>
+  setDefaultThinkingLevelForTarget(target: WorkspaceCreationTarget, level: ThinkingLevel): Promise<{ success: boolean; error?: string }>
+  startChatGptOAuthForTarget(target: WorkspaceCreationTarget, connectionSlug: string): Promise<{ success: boolean; error?: string }>
+  startCopilotOAuthForTarget(
+    target: WorkspaceCreationTarget,
+    connectionSlug: string,
+    onDeviceCode?: (data: { userCode: string; verificationUri: string }) => void,
+  ): Promise<{ success: boolean; error?: string }>
+  shareLlmConnectionToTarget(sourceTarget: WorkspaceCreationTarget, connectionSlug: string, destinationTarget: WorkspaceCreationTarget): Promise<{ success: boolean; slug: string; warning?: string; error?: string }>
+  shareSourceToWorkspace(sourceWorkspaceId: string, sourceSlug: string, destinationWorkspaceId: string): Promise<{ success: boolean; slug: string; error?: string }>
+  shareSkillToWorkspace(sourceWorkspaceId: string, skillSlug: string, destinationWorkspaceId: string): Promise<{ success: boolean; slug: string; error?: string }>
   setWorkspaceDefaultLlmConnection(workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }>
 
   // Automation testing (manual trigger)

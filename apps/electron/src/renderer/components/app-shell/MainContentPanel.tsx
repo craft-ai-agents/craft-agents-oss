@@ -117,12 +117,23 @@ export function MainContentPanel({
   // Source multi-select state
   const isSourceMultiSelectActive = sourceSelection.useIsMultiSelectActive()
   const sourceSelectionCount = sourceSelection.useSelectionCount()
-  const { clearMultiSelect: clearSourceSelection } = sourceSelection.useSelection()
+  const {
+    clearMultiSelect: clearSourceSelection,
+    reset: resetSourceSelection,
+  } = sourceSelection.useSelection()
 
   // Skill multi-select state
   const isSkillMultiSelectActive = skillSelection.useIsMultiSelectActive()
   const skillSelectionCount = skillSelection.useSelectionCount()
-  const { clearMultiSelect: clearSkillSelection } = skillSelection.useSelection()
+  const {
+    clearMultiSelect: clearSkillSelection,
+    reset: resetSkillSelection,
+  } = skillSelection.useSelection()
+
+  useEffect(() => {
+    resetSourceSelection()
+    resetSkillSelection()
+  }, [activeWorkspaceId, resetSourceSelection, resetSkillSelection])
 
   const selectedMetas = useMemo(() => {
     const metas: SessionMeta[] = []
@@ -195,9 +206,12 @@ export function MainContentPanel({
   // Settings navigator - uses component map from settings-pages.ts
   if (isSettingsNavigation(navState)) {
     const SettingsPageComponent = getSettingsPageComponent(navState.subpage)
+    const settingsPageKey = navState.subpage === 'ai'
+      ? navState.subpage
+      : `${navState.subpage}:${activeWorkspaceId ?? 'none'}`
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <SettingsPageComponent />
+        <SettingsPageComponent key={settingsPageKey} />
       </Panel>
     )
   }
@@ -219,6 +233,7 @@ export function MainContentPanel({
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
           <SourceInfoPage
+            key={`${activeWorkspaceId || 'none'}:${navState.details.sourceSlug}`}
             sourceSlug={navState.details.sourceSlug}
             workspaceId={activeWorkspaceId || ''}
           />
@@ -252,6 +267,7 @@ export function MainContentPanel({
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
           <SkillInfoPage
+            key={`${activeWorkspaceId || 'none'}:${navState.details.skillSlug}`}
             skillSlug={navState.details.skillSlug}
             workspaceId={activeWorkspaceId || ''}
           />

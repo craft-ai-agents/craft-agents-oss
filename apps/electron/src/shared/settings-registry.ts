@@ -33,6 +33,7 @@ export interface SettingsPageDefinition {
  */
 export const SETTINGS_PAGES = [
   { id: 'app', label: 'App', description: 'Notifications and updates' },
+  { id: 'servers', label: 'Servers', description: 'Remote headless server profiles' },
   { id: 'ai', label: 'AI', description: 'Model, thinking, connections' },
   { id: 'appearance', label: 'Appearance', description: 'Theme, font, tool icons' },
   { id: 'input', label: 'Input', description: 'Send key, spell check' },

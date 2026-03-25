@@ -25,7 +25,7 @@ import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { NavigationProvider } from '@/contexts/NavigationContext'
 import { navigate, routes } from './lib/navigate'
 import { stripMarkdown } from './utils/text'
-import { getSessionsToRefreshAfterStaleReconnect } from './lib/reconnect-recovery'
+import { getSessionsToRefreshAfterReconnect } from './lib/reconnect-recovery'
 import { extractWorkspaceSlugFromPath } from '@craft-agent/shared/utils/workspace-slug'
 import { DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
 import { initRendererPerf } from './lib/perf'
@@ -65,9 +65,14 @@ import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
 
 type AppState = 'loading' | 'onboarding' | 'reauth' | 'ready'
+const REMOTE_WORKSPACE_PREFIX = 'remote:'
 
 /** Type for the Jotai store returned by useStore() */
 type JotaiStore = ReturnType<typeof getDefaultStore>
+
+function isRemoteWorkspaceTargetId(workspaceId: string | null | undefined): workspaceId is string {
+  return typeof workspaceId === 'string' && workspaceId.startsWith(REMOTE_WORKSPACE_PREFIX)
+}
 
 /**
  * Helper to handle background task events from the agent.
@@ -209,6 +214,8 @@ export default function App() {
   const [workspaceDefaultLlmConnection, setWorkspaceDefaultLlmConnection] = useState<string | undefined>()
   // Global default LLM connection slug (from app config)
   const [defaultLlmConnectionSlug, setDefaultLlmConnectionSlug] = useState<string | undefined>()
+  const llmConnectionsRequestIdRef = useRef(0)
+  const readyLoadRequestIdRef = useRef(0)
 
   // Derive connection default model override from the default LLM connection
   const defaultConnection = useMemo(() => {
@@ -226,6 +233,7 @@ export default function App() {
   const sessionDraftsRef = useRef<Map<string, string>>(new Map())
   // Unified session options for all session-scoped settings
   const [sessionOptions, setSessionOptions] = useState<Map<string, SessionOptions>>(new Map())
+  const postSendRefreshTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   // Theme state (app-level only)
   const [appTheme, setAppTheme] = useState<ThemeOverrides | null>(null)
@@ -326,6 +334,30 @@ export default function App() {
     }
   }, [applyPermissionModeState])
 
+  const replacePendingPermissions = useCallback((sessionId: string, requests: PermissionRequest[]) => {
+    setPendingPermissions(prevPerms => {
+      const next = new Map(prevPerms)
+      if (requests.length === 0) {
+        next.delete(sessionId)
+      } else {
+        next.set(sessionId, requests)
+      }
+      return next
+    })
+  }, [])
+
+  const reconcilePendingPermissions = useCallback(async (sessionId: string) => {
+    try {
+      const requests = await window.electronAPI.getPendingPermissions(sessionId)
+      replacePendingPermissions(sessionId, requests)
+    } catch (error) {
+      window.electronAPI.debugLog('[PermissionSync] Failed to reconcile pending permissions', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }, [replacePendingPermissions])
+
   // Event processor hook - handles all agent events through pure functions
   const { processAgentEvent, clearStreamingState } = useEventProcessor()
 
@@ -361,13 +393,14 @@ export default function App() {
       clearStreamingState(sessionId)
       updateSessionDirect(sessionId, () => fresh)
       syncSessionOptionsFromSession(fresh)
+      void reconcilePendingPermissions(sessionId)
       void reconcilePermissionModeState(sessionId)
       return true
     } catch (err) {
       console.error(`[App] Failed to refresh session ${sessionId}:`, err)
       return false
     }
-  }, [clearStreamingState, updateSessionDirect, syncSessionOptionsFromSession, reconcilePermissionModeState])
+  }, [clearStreamingState, updateSessionDirect, syncSessionOptionsFromSession, reconcilePendingPermissions, reconcilePermissionModeState])
 
   const refreshSessionListMetadataFromServer = useCallback(async (): Promise<Map<string, SessionMeta> | null> => {
     try {
@@ -417,11 +450,50 @@ export default function App() {
     }
   }, [store, removeSession, syncSessionOptionsFromSession, reconcilePermissionModeState])
 
+  const clearPostSendRefresh = useCallback((sessionId: string) => {
+    const existingTimeout = postSendRefreshTimeoutsRef.current.get(sessionId)
+    if (existingTimeout) {
+      clearTimeout(existingTimeout)
+      postSendRefreshTimeoutsRef.current.delete(sessionId)
+    }
+  }, [])
+
+  const scheduleRemoteSessionRefresh = useCallback((sessionId: string, attempt = 0) => {
+    const delaysMs = [1500, 5000, 15000]
+    const delayMs = delaysMs[attempt]
+    if (delayMs == null) return
+
+    clearPostSendRefresh(sessionId)
+
+    const timeout = setTimeout(async () => {
+      postSendRefreshTimeoutsRef.current.delete(sessionId)
+
+      const metaBeforeRefresh = store.get(sessionMetaMapAtom).get(sessionId)
+      if (!metaBeforeRefresh) return
+
+      await refreshSessionFromServer(sessionId)
+
+      const metaAfterRefresh = store.get(sessionMetaMapAtom).get(sessionId)
+      if (metaAfterRefresh?.isProcessing) {
+        scheduleRemoteSessionRefresh(sessionId, attempt + 1)
+      }
+    }, delayMs)
+
+    postSendRefreshTimeoutsRef.current.set(sessionId, timeout)
+  }, [clearPostSendRefresh, refreshSessionFromServer, store])
+
   // Stale session watchdog — catches stuck sessions that the reconnect protocol misses
   const { trackSessionActivity } = useStaleSessionRecovery({
     store,
     refreshSessionFromServer,
   })
+
+  useEffect(() => {
+    return () => {
+      postSendRefreshTimeoutsRef.current.forEach(clearTimeout)
+      postSendRefreshTimeoutsRef.current.clear()
+    }
+  }, [])
 
   const DRAFT_SAVE_DEBOUNCE_MS = 500
 
@@ -431,12 +503,15 @@ export default function App() {
 
   // Refresh LLM connections from config (called on workspace change and after connection updates)
   const refreshLlmConnections = useCallback(async () => {
+    const requestId = ++llmConnectionsRequestIdRef.current
     const connections = await window.electronAPI.listLlmConnectionsWithStatus()
+    if (requestId !== llmConnectionsRequestIdRef.current) return
     setLlmConnections(connections)
     setDefaultLlmConnectionSlug(resolveDefaultConnectionSlug(connections))
     // Also refresh workspace default
     if (windowWorkspaceId) {
       const settings = await window.electronAPI.getWorkspaceSettings(windowWorkspaceId)
+      if (requestId !== llmConnectionsRequestIdRef.current) return
       setWorkspaceDefaultLlmConnection(settings?.defaultLlmConnection)
     }
   }, [resolveDefaultConnectionSlug, windowWorkspaceId])
@@ -540,8 +615,7 @@ export default function App() {
   useEffect(() => {
     if (appState !== 'ready') return
 
-    window.electronAPI.getWorkspaces().then(setWorkspaces)
-    window.electronAPI.getNotificationsEnabled().then(setNotificationsEnabled)
+    const requestId = ++readyLoadRequestIdRef.current
 
     // Show actionable toast for missing system dependencies (Windows only)
     window.electronAPI.getSystemWarnings().then((warnings) => {
@@ -556,55 +630,94 @@ export default function App() {
         })
       }
     }).catch(() => { /* non-fatal startup check */ })
-    window.electronAPI.getSessions().then(async (loadedSessions) => {
-      // Initialize per-session atoms and metadata map
-      // NOTE: No sessionsAtom used - sessions are only in per-session atoms
-      initializeSessions(loadedSessions)
-      // Initialize unified sessionOptions from session data
-      const optionsMap = new Map<string, SessionOptions>()
-      for (const s of loadedSessions) {
-        // Only store non-default options to keep the map lean
-        const hasNonDefaultMode = s.permissionMode && s.permissionMode !== 'ask'
-        const hasNonDefaultThinking = s.thinkingLevel && s.thinkingLevel !== DEFAULT_THINKING_LEVEL
-        if (hasNonDefaultMode || hasNonDefaultThinking) {
-          optionsMap.set(s.id, {
-            permissionMode: s.permissionMode ?? 'ask',
-            thinkingLevel: s.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
-          })
-        }
-      }
-      setSessionOptions(optionsMap)
 
-      // Reconcile permission mode state from backend diagnostics (mode + modeVersion)
-      await Promise.allSettled(
-        loadedSessions.map((s) => reconcilePermissionModeState(s.id))
-      )
-
-      // Mark sessions as loaded for splash screen
-      setSessionsLoaded(true)
-
-      // If window was opened with a specific session (via "Open in New Window"), select it
-      if (initialSessionId && windowWorkspaceId) {
-        const session = loadedSessions.find(s => s.id === initialSessionId)
-        if (session) {
-          navigate(routes.view.allSessions(session.id))
-        }
-      }
+    window.electronAPI.getWorkspaces().then((loaded) => {
+      if (requestId !== readyLoadRequestIdRef.current) return
+      setWorkspaces(loaded)
     })
+    window.electronAPI.getNotificationsEnabled().then((enabled) => {
+      if (requestId !== readyLoadRequestIdRef.current) return
+      setNotificationsEnabled(enabled)
+    })
+    window.electronAPI.getSessions()
+      .then(async (loadedSessions) => {
+        if (requestId !== readyLoadRequestIdRef.current) return
+        // Initialize per-session atoms and metadata map
+        // NOTE: No sessionsAtom used - sessions are only in per-session atoms
+        initializeSessions(loadedSessions)
+        // Initialize unified sessionOptions from session data
+        const optionsMap = new Map<string, SessionOptions>()
+        for (const s of loadedSessions) {
+          // Only store non-default options to keep the map lean
+          const hasNonDefaultMode = s.permissionMode && s.permissionMode !== 'ask'
+          const hasNonDefaultThinking = s.thinkingLevel && s.thinkingLevel !== DEFAULT_THINKING_LEVEL
+          if (hasNonDefaultMode || hasNonDefaultThinking) {
+            optionsMap.set(s.id, {
+              permissionMode: s.permissionMode ?? 'ask',
+              thinkingLevel: s.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
+            })
+          }
+        }
+        setSessionOptions(optionsMap)
+
+        // Reconcile permission mode state from backend diagnostics (mode + modeVersion)
+        await Promise.allSettled(
+          loadedSessions.map((s) => reconcilePermissionModeState(s.id))
+        )
+        if (requestId !== readyLoadRequestIdRef.current) return
+
+        // Mark sessions as loaded for splash screen
+        setSessionsLoaded(true)
+
+        // If window was opened with a specific session (via "Open in New Window"), select it
+        if (initialSessionId && windowWorkspaceId) {
+          const session = loadedSessions.find(s => s.id === initialSessionId)
+          if (session) {
+            navigate(routes.view.allSessions(session.id))
+          }
+        }
+      })
+      .catch((error) => {
+        if (requestId !== readyLoadRequestIdRef.current) return
+        console.error('Failed to load sessions for active workspace:', error)
+        initializeSessions([])
+        setSessionOptions(new Map())
+        setSessionsLoaded(true)
+      })
     // Load LLM connections with authentication status
     window.electronAPI.listLlmConnectionsWithStatus().then((connections) => {
+      if (requestId !== readyLoadRequestIdRef.current) return
       setLlmConnections(connections)
       setDefaultLlmConnectionSlug(resolveDefaultConnectionSlug(connections))
     })
     // Load persisted input drafts into ref (no re-render needed)
     window.electronAPI.getAllDrafts().then((drafts) => {
+      if (requestId !== readyLoadRequestIdRef.current) return
       if (Object.keys(drafts).length > 0) {
         sessionDraftsRef.current = new Map(Object.entries(drafts))
       }
     })
     // Load app-level theme
-    window.electronAPI.getAppTheme().then(setAppTheme)
+    window.electronAPI.getAppTheme().then((theme) => {
+      if (requestId !== readyLoadRequestIdRef.current) return
+      setAppTheme(theme)
+    })
   }, [appState, initialSessionId, windowWorkspaceId, initializeSessions, resolveDefaultConnectionSlug, reconcilePermissionModeState])
+
+  useEffect(() => {
+    if (appState !== 'ready' || !window.electronAPI.onWorkspacesChanged) return
+
+    const refresh = () => {
+      window.electronAPI.getWorkspaces().then(setWorkspaces).catch((error) => {
+        console.error('Failed to refresh workspaces:', error)
+      })
+    }
+
+    const unsubscribe = window.electronAPI.onWorkspacesChanged(refresh)
+    return () => {
+      unsubscribe?.()
+    }
+  }, [appState])
 
   // Subscribe to theme change events (live updates when theme.json changes)
   useEffect(() => {
@@ -656,6 +769,9 @@ export default function App() {
             setPendingPermissions(prevPerms => {
               const next = new Map(prevPerms)
               const existingQueue = next.get(sessionId) || []
+              if (existingQueue.some(request => request.requestId === effect.request.requestId)) {
+                return prevPerms
+              }
               next.set(sessionId, [...existingQueue, effect.request])
               return next
             })
@@ -832,6 +948,7 @@ export default function App() {
         // For handoff events, update metadata map for list display
         // NOTE: No sessionsAtom to sync - atom and metadata are the source of truth
         if (isHandoff) {
+          clearPostSendRefresh(sessionId)
           // Update metadata map
           const metaMap = store.get(sessionMetaMapAtom)
           const newMetaMap = new Map(metaMap)
@@ -894,26 +1011,23 @@ export default function App() {
     syncSessionOptionsFromSession,
     applyPermissionModeState,
     reconcilePermissionModeState,
+    clearPostSendRefresh,
   ])
 
   // Transport reconnect recovery — refresh session metadata plus active/processing
   // session content after stale reconnects.
   useEffect(() => {
     const cleanup = window.electronAPI.onReconnected(async (isStale: boolean) => {
-      if (!isStale) {
-        // Server replayed buffered events — we're caught up, nothing to do
-        console.info('[App] Reconnected with event replay — no refresh needed')
-        return
-      }
-
-      console.warn('[App] Stale reconnect — refreshing session metadata and active/processing sessions')
+      console.info(
+        isStale
+          ? '[App] Stale reconnect — refreshing active and processing sessions'
+          : '[App] Reconnected with replay — refreshing active session for consistency'
+      )
 
       const refreshedMetaMap = await refreshSessionListMetadataFromServer()
       const metaMap = refreshedMetaMap ?? store.get(sessionMetaMapAtom)
-      const refreshIds = getSessionsToRefreshAfterStaleReconnect(metaMap, sessionSelection.selected)
+      const refreshIds = getSessionsToRefreshAfterReconnect(metaMap, sessionSelection.selected, isStale)
 
-      // Refresh full message content only for the active session plus any
-      // session still marked processing after the metadata refresh.
       for (const sessionId of refreshIds) {
         await refreshSessionFromServer(sessionId)
       }
@@ -921,6 +1035,15 @@ export default function App() {
 
     return cleanup
   }, [store, sessionSelection.selected, refreshSessionFromServer, refreshSessionListMetadataFromServer])
+
+  useEffect(() => {
+    if (!sessionSelection.selected) {
+      return
+    }
+
+    void reconcilePendingPermissions(sessionSelection.selected)
+    void reconcilePermissionModeState(sessionSelection.selected)
+  }, [sessionSelection.selected, reconcilePendingPermissions, reconcilePermissionModeState])
 
   // Listen for menu bar events
   useEffect(() => {
@@ -1045,6 +1168,9 @@ export default function App() {
 
   const handleSendMessage = useCallback(async (sessionId: string, message: string, attachments?: FileAttachment[], skillSlugs?: string[], externalBadges?: ContentBadge[]) => {
     try {
+      const currentSession = store.get(sessionAtomFamily(sessionId))
+      const isRemoteSession = isRemoteWorkspaceTargetId(currentSession?.workspaceId ?? windowWorkspaceId)
+
       // Step 1: Store attachments and get persistent metadata
       let storedAttachments: StoredAttachment[] | undefined
       let processedAttachments: FileAttachment[] | undefined
@@ -1180,8 +1306,13 @@ export default function App() {
         badges: badges.length > 0 ? badges : undefined,
         optimisticMessageId: userMessage.id,
       })
+
+      if (isRemoteSession) {
+        scheduleRemoteSessionRefresh(sessionId)
+      }
     } catch (error) {
       console.error('Failed to send message:', error)
+      clearPostSendRefresh(sessionId)
       updateSessionById(sessionId, (s) => ({
         isProcessing: false,
         messages: [
@@ -1195,7 +1326,7 @@ export default function App() {
         ]
       }))
     }
-  }, [sessionOptions, updateSessionById, skills, sources, windowWorkspaceId])
+  }, [store, windowWorkspaceId, updateSessionById, skills, sources, scheduleRemoteSessionRefresh, clearPostSendRefresh])
 
   /**
    * Unified handler for all session option changes.
@@ -1289,36 +1420,22 @@ export default function App() {
   ) => {
     const success = await window.electronAPI.respondToPermission(sessionId, requestId, allowed, alwaysAllow, options)
 
-    if (success) {
-      // Remove only the first permission from the queue (the one we just responded to)
-      setPendingPermissions(prev => {
-        const next = new Map(prev)
-        const queue = next.get(sessionId) || []
-        const remainingQueue = queue.slice(1) // Remove first item
-        if (remainingQueue.length === 0) {
-          next.delete(sessionId)
-        } else {
-          next.set(sessionId, remainingQueue)
-        }
-        return next
-      })
-      // Note: No need to force session refresh - per-session atoms update automatically
-    } else {
-      // Response failed (agent/session gone) - clear the permission anyway
-      // to avoid UI being stuck with stale permission
-      setPendingPermissions(prev => {
-        const next = new Map(prev)
-        const queue = next.get(sessionId) || []
-        const remainingQueue = queue.slice(1)
-        if (remainingQueue.length === 0) {
-          next.delete(sessionId)
-        } else {
-          next.set(sessionId, remainingQueue)
-        }
-        return next
-      })
+    setPendingPermissions(prev => {
+      const next = new Map(prev)
+      const queue = next.get(sessionId) || []
+      const remainingQueue = queue.filter(request => request.requestId !== requestId)
+      if (remainingQueue.length === 0) {
+        next.delete(sessionId)
+      } else {
+        next.set(sessionId, remainingQueue)
+      }
+      return next
+    })
+
+    if (!success) {
+      void reconcilePendingPermissions(sessionId)
     }
-  }, [])
+  }, [reconcilePendingPermissions])
 
   const handleRespondToCredential = useCallback(async (sessionId: string, requestId: string, response: CredentialResponse) => {
     const success = await window.electronAPI.respondToCredential(sessionId, requestId, response)

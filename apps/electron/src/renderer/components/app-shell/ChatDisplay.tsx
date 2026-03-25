@@ -40,7 +40,7 @@ import {
 } from "@craft-agent/ui"
 import { useFocusZone } from "@/hooks/keyboard"
 import { useTheme } from "@/hooks/useTheme"
-import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
+import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill, LlmConnectionWithStatus } from "../../../shared/types"
 import type { PermissionMode } from "@craft-agent/shared/agent/modes"
 import type { ThinkingLevel } from "@craft-agent/shared/agent/thinking-levels"
 import {
@@ -70,6 +70,8 @@ import { useNavigation } from "@/contexts/NavigationContext"
 import { useAppShellContext } from "@/context/AppShellContext"
 import { routes } from "@/lib/navigate"
 import { CHAT_LAYOUT } from "@/config/layout"
+import { getModelDisplayName, getModelShortName } from '@config/models'
+import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { resolveBranchNewPanelOption } from "./branching"
 
 // ============================================================================
@@ -120,8 +122,8 @@ interface ChatDisplayProps {
   // Model selection
   currentModel: string
   onModelChange: (model: string, connection?: string) => void
-  // Connection selection (locked after first message)
-  /** Callback when LLM connection changes (only works when session is empty) */
+  // Connection selection
+  /** Callback when LLM connection changes */
   onConnectionChange?: (connectionSlug: string) => void
   /** Ref for the input, used for external focus control */
   textareaRef?: React.RefObject<RichTextInputHandle>
@@ -365,6 +367,18 @@ function formatElapsed(seconds: number): string {
   return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
 }
 
+function stripPiPrefixForDisplay(value: string): string {
+  return value.startsWith('pi/') ? value.slice(3) : value
+}
+
+function formatResponseModelLabel(modelId: string): string {
+  const displayName = stripPiPrefixForDisplay(getModelDisplayName(modelId))
+  if (displayName && displayName !== modelId && !displayName.includes('/')) {
+    return displayName
+  }
+  return stripPiPrefixForDisplay(getModelShortName(modelId))
+}
+
 interface ProcessingIndicatorProps {
   /** Start timestamp (persists across remounts) */
   startTime?: number
@@ -438,6 +452,67 @@ function ProcessingIndicator({ startTime, statusMessage }: ProcessingIndicatorPr
           </span>
         )}
       </span>
+    </div>
+  )
+}
+
+function getResponseRuntimeLabel(response?: AssistantTurn['response']): string | null {
+  if (!response?.responseModel) return null
+  const modelLabel = formatResponseModelLabel(response.responseModel)
+  return response.responseConnectionName
+    ? `${response.responseConnectionName} · ${modelLabel}`
+    : modelLabel
+}
+
+function ResponseRuntimeBadge({
+  response,
+  connection,
+  className,
+}: {
+  response: NonNullable<AssistantTurn['response']>
+  connection?: Pick<LlmConnectionWithStatus, 'name' | 'providerType' | 'baseUrl' | 'piAuthProvider'> & { type?: string; defaultModel?: string } | null
+  className?: string
+}) {
+  const modelLabel = response.responseModel ? formatResponseModelLabel(response.responseModel) : null
+  if (!modelLabel) return null
+
+  const title = response.responseConnectionName
+    ? `${response.responseConnectionName} · ${response.responseModel}`
+    : response.responseModel
+
+  return (
+    <div
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/85 px-2.5 py-1 text-[11px] leading-none normal-case tracking-normal text-foreground/80 shadow-minimal",
+        className,
+      )}
+      title={title}
+      aria-label={`Response model ${title}`}
+    >
+      {connection && <ConnectionIcon connection={connection} size={12} />}
+      <span className="max-w-[240px] truncate">{modelLabel}</span>
+    </div>
+  )
+}
+
+function ModelChangeDivider({
+  response,
+  connection,
+}: {
+  response: NonNullable<AssistantTurn['response']>
+  connection?: Pick<LlmConnectionWithStatus, 'name' | 'providerType' | 'baseUrl' | 'piAuthProvider'> & { type?: string; defaultModel?: string } | null
+}) {
+  const label = getResponseRuntimeLabel(response)
+  if (!label) return null
+
+  return (
+    <div className="flex items-center gap-3 px-1 py-2 text-[11px] uppercase tracking-[0.16em] text-muted-foreground/75 select-none">
+      <div className="h-px flex-1 bg-border/60" />
+      <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-2 py-1 shadow-minimal">
+        <span className="font-medium normal-case tracking-normal text-[11px] text-foreground/80">Model changed</span>
+        <ResponseRuntimeBadge response={response} connection={connection} className="border-0 bg-transparent px-0 py-0 shadow-none" />
+      </div>
+      <div className="h-px flex-1 bg-border/60" />
     </div>
   )
 }
@@ -1804,9 +1879,22 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
                     // Assistant turns - render with TurnCard (buffered streaming)
                     const assistantUiKey = getAssistantTurnUiKey(turn, index)
+                    const previousAssistantTurn = [...turns.slice(0, index)].reverse().find((candidate): candidate is AssistantTurn => candidate.type === 'assistant')
+                    const currentRuntimeLabel = getResponseRuntimeLabel(turn.response)
+                    const previousRuntimeLabel = previousAssistantTurn ? getResponseRuntimeLabel(previousAssistantTurn.response) : null
+                    const currentResponseConnection = turn.response?.responseConnectionSlug
+                      ? appShellContext.llmConnections.find((connection) => connection.slug === turn.response?.responseConnectionSlug) ?? null
+                      : null
+                    const showModelChangeDivider = !!currentRuntimeLabel && (
+                      !!turn.response?.responseRuntimeChanged
+                      || (!!previousRuntimeLabel && currentRuntimeLabel !== previousRuntimeLabel)
+                    )
                     return (
+                      <React.Fragment key={turnKey}>
+                      {showModelChangeDivider && turn.response && (
+                        <ModelChangeDivider response={turn.response} connection={currentResponseConnection} />
+                      )}
                       <div
-                        key={turnKey}
                         ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
                         className={cn(
                           "pt-2",
@@ -1909,6 +1997,12 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                           }
                         }}
                         onSaveAndSendFollowUp={handleSaveAndSendFollowUp}
+                        renderResponseMeta={(response) => {
+                          const responseConnection = response.responseConnectionSlug
+                            ? appShellContext.llmConnections.find((connection) => connection.slug === response.responseConnectionSlug) ?? null
+                            : null
+                          return <ResponseRuntimeBadge response={response} connection={responseConnection} />
+                        }}
                         onAcceptPlan={() => {
                           const planMessage = session?.messages.findLast(m => m.role === 'plan')
                           const planPath = planMessage?.planPath
@@ -1995,6 +2089,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         }}
                       />
                       </div>
+                      </React.Fragment>
                     )
                   })}
                     </motion.div>

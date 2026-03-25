@@ -313,6 +313,13 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
     return sessionManager.getPendingPlanExecution(sessionId)
   })
 
+  server.handle(RPC_CHANNELS.sessions.GET_PENDING_PERMISSIONS, async (
+    _ctx,
+    sessionId: string
+  ) => {
+    return sessionManager.getPendingPermissionRequests(sessionId)
+  })
+
   // Get authoritative permission mode diagnostics for renderer reconciliation
   server.handle(RPC_CHANNELS.sessions.GET_PERMISSION_MODE_STATE, async (
     _ctx,

@@ -868,12 +868,17 @@ function AppShellContent({
     previousWorkspaceRef.current = activeWorkspaceId
   }, [activeWorkspaceId])
 
+  const sourcesLoadRequestIdRef = React.useRef(0)
+
   // Load sources from backend on mount
   React.useEffect(() => {
     if (!activeWorkspaceId) return
+    const requestId = ++sourcesLoadRequestIdRef.current
     window.electronAPI.getSources(activeWorkspaceId).then((loaded) => {
+      if (requestId !== sourcesLoadRequestIdRef.current) return
       setSources(loaded || [])
     }).catch(err => {
+      if (requestId !== sourcesLoadRequestIdRef.current) return
       console.error('[Chat] Failed to load sources:', err)
     })
   }, [activeWorkspaceId])
@@ -1275,6 +1280,8 @@ function AppShellContent({
   // Workspace-level unread indicators (needed for workspace selectors across all workspaces)
   const [workspaceUnreadMap, setWorkspaceUnreadMap] = useState<Record<string, boolean>>({})
 
+  const skillsLoadRequestIdRef = React.useRef(0)
+
   // Reload skills when active session's workingDirectory changes (for project-level skills)
   // Skills are loaded from: global (~/.agents/skills/), workspace, and project ({workingDirectory}/.agents/skills/)
   const activeSessionWorkingDirectory = session.selected
@@ -1282,9 +1289,12 @@ function AppShellContent({
     : undefined
   React.useEffect(() => {
     if (!activeWorkspaceId) return
+    const requestId = ++skillsLoadRequestIdRef.current
     window.electronAPI.getSkills(activeWorkspaceId, activeSessionWorkingDirectory).then((loaded) => {
+      if (requestId !== skillsLoadRequestIdRef.current) return
       setSkills(loaded || [])
     }).catch(err => {
+      if (requestId !== skillsLoadRequestIdRef.current) return
       console.error('[Chat] Failed to load skills:', err)
     })
   }, [activeWorkspaceId, activeSessionWorkingDirectory])
@@ -1847,10 +1857,15 @@ function AppShellContent({
     setSearchQuery('')
 
     // Delegate to NavigationContext which handles session creation
-    navigate(
+    Promise.resolve(navigate(
       routes.action.newSession(),
       newPanel ? { newPanel: true, targetLaneId: 'main' } : undefined
-    )
+    )).catch((error) => {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      toast.error('Failed to create session', {
+        description: message,
+      })
+    })
 
     // Focus the chat input after navigation completes
     setTimeout(() => focusZone('chat', { intent: 'programmatic' }), 50)
@@ -3108,8 +3123,10 @@ function AppShellContent({
             {isSourcesNavigation(navState) && (
               /* Sources List - filtered by type if sourceFilter is active */
               <SourcesListPanel
+                key={`sources:${activeWorkspaceId ?? 'none'}`}
                 sources={sources}
                 sourceFilter={sourceFilter}
+                workspaceId={activeWorkspaceId ?? undefined}
                 workspaceRootPath={activeWorkspace?.rootPath}
                 onDeleteSource={handleDeleteSource}
                 onSourceClick={handleSourceSelect}
@@ -3120,6 +3137,7 @@ function AppShellContent({
             {isSkillsNavigation(navState) && activeWorkspaceId && (
               /* Skills List */
               <SkillsListPanel
+                key={`skills:${activeWorkspaceId}`}
                 skills={skills}
                 workspaceId={activeWorkspaceId}
                 workspaceRootPath={activeWorkspace?.rootPath}

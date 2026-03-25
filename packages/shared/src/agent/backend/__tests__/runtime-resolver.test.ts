@@ -55,4 +55,30 @@ describe('resolveServerPath fallback', () => {
     const paths = resolveBackendRuntimePaths(hostRuntime);
     expect(paths.piServerPath).toBe(join(primaryDir, 'index.js'));
   });
+
+  it('falls back to src/index.ts in non-packaged runtime when dist is missing', () => {
+    const appRoot = join(tmpBase, 'app3');
+    const serverDir = join(appRoot, 'packages', 'pi-agent-server', 'src');
+    mkdirSync(serverDir, { recursive: true });
+    writeFileSync(join(serverDir, 'index.ts'), '// source entry');
+
+    const hostRuntime: BackendHostRuntimeContext = {
+      appRootPath: appRoot,
+      isPackaged: false,
+    };
+
+    const paths = resolveBackendRuntimePaths(hostRuntime);
+    expect(paths.piServerPath).toBe(join(serverDir, 'index.ts'));
+  });
+
+  it('uses the current Bun executable for non-packaged runtime fallback', () => {
+    const appRoot = join(tmpBase, 'app4');
+    const hostRuntime: BackendHostRuntimeContext = {
+      appRootPath: appRoot,
+      isPackaged: false,
+    };
+
+    const paths = resolveBackendRuntimePaths(hostRuntime);
+    expect(paths.nodeRuntimePath).toBe(process.execPath);
+  });
 });

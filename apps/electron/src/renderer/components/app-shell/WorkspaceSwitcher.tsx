@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useState } from "react"
-import { Check, FolderPlus, ExternalLink, ChevronDown } from "lucide-react"
+import { Check, FolderPlus, ExternalLink, ChevronDown, HardDrive, Server } from "lucide-react"
 import { AnimatePresence } from "motion/react"
 import { useSetAtom } from "jotai"
 import { toast } from "sonner"
@@ -75,6 +75,21 @@ export function WorkspaceSwitcher({
     setFullscreenOverlayOpen(false)
   }
 
+  const getWorkspaceBadge = (workspace: Workspace) => {
+    if (workspace.isRemote) {
+      return {
+        label: workspace.remoteServerName ? `Remote · ${workspace.remoteServerName}` : 'Remote',
+        icon: Server,
+        className: 'bg-blue-500/10 text-blue-700 dark:text-blue-300',
+      }
+    }
+    return {
+      label: 'Local',
+      icon: HardDrive,
+      className: 'bg-muted text-muted-foreground',
+    }
+  }
+
   return (
     <>
       {/* Full-screen workspace creation overlay */}
@@ -83,6 +98,9 @@ export function WorkspaceSwitcher({
           <WorkspaceCreationScreen
             onWorkspaceCreated={handleWorkspaceCreated}
             onClose={handleCloseCreationScreen}
+            initialTarget={selectedWorkspace?.isRemote
+              ? { mode: 'remote', serverId: selectedWorkspace.remoteServerId }
+              : { mode: 'local' }}
           />
         )}
       </AnimatePresence>
@@ -103,6 +121,14 @@ export function WorkspaceSwitcher({
                 fallback={selectedWorkspace?.name?.charAt(0) || 'W'}
               />
               <span className="truncate min-w-0 flex-1 text-left">{selectedWorkspace?.name || 'Workspace'}</span>
+              {selectedWorkspace && (
+                <span className={cn(
+                  'hidden md:inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium shrink-0',
+                  getWorkspaceBadge(selectedWorkspace).className,
+                )}>
+                  {selectedWorkspace.isRemote ? 'Remote' : 'Local'}
+                </span>
+              )}
               <ChevronDown className="h-3 w-3 opacity-60 shrink-0" />
               {hasUnreadInOtherWorkspaces && <span className="h-2 w-2 rounded-full bg-accent shrink-0" />}
             </button>
@@ -161,7 +187,23 @@ export function WorkspaceSwitcher({
                   fallbackClassName="bg-muted text-xs rounded-full"
                   fallback={workspace.name.charAt(0)}
                 />
-                <span className="truncate">{workspace.name}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="truncate">{workspace.name}</span>
+                    <span className={cn(
+                      'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium shrink-0',
+                      getWorkspaceBadge(workspace).className,
+                    )}>
+                      {React.createElement(getWorkspaceBadge(workspace).icon, { className: 'h-2.5 w-2.5' })}
+                      {workspace.isRemote ? 'Remote' : 'Local'}
+                    </span>
+                  </div>
+                  {workspace.isRemote && workspace.remoteServerName && (
+                    <div className="truncate text-[11px] text-muted-foreground">
+                      {workspace.remoteServerName}
+                    </div>
+                  )}
+                </div>
                 {workspaceUnreadMap?.[workspace.id] && <span className="h-2 w-2 rounded-full bg-accent shrink-0" />}
               </div>
               <div className="flex items-center gap-1">

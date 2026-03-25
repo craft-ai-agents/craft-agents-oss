@@ -244,6 +244,11 @@ export interface ActivityItem {
   messageId?: string
   /** Optional persisted annotations (used by plan activities) */
   annotations?: AnnotationV1[]
+  /** Response model metadata for plan activities */
+  responseModel?: string
+  responseConnectionName?: string
+  responseConnectionSlug?: string
+  responseRuntimeChanged?: boolean
   displayName?: string  // LLM-generated human-friendly tool name (for MCP tools)
   toolDisplayMeta?: ToolDisplayMeta  // Embedded metadata with base64 icon (for viewer compatibility)
   timestamp: number
@@ -270,6 +275,14 @@ export interface ResponseContent {
   messageId?: string
   /** Persisted annotations attached to the response message */
   annotations?: AnnotationV1[]
+  /** Model that generated this response */
+  responseModel?: string
+  /** Human-readable connection/provider label captured at response time */
+  responseConnectionName?: string
+  /** Resolved connection slug captured at response time */
+  responseConnectionSlug?: string
+  /** Marks the first assistant response after an explicit runtime switch */
+  responseRuntimeChanged?: boolean
 }
 
 // ============================================================================
@@ -360,6 +373,8 @@ export interface TurnCardProps {
   openAnnotationRequest?: OpenAnnotationRequest | null
   /** Annotation interaction mode (viewer uses tooltip-only to suppress the island) */
   annotationInteractionMode?: AnnotationInteractionMode
+  /** Optional custom runtime metadata renderer for response footer chrome */
+  renderResponseMeta?: (response: ResponseContent) => React.ReactNode
 }
 
 // ============================================================================
@@ -1391,6 +1406,12 @@ export interface ResponseCardProps {
   messageId?: string
   /** Persisted annotations for this response */
   annotations?: AnnotationV1[]
+  /** Model that generated this response */
+  responseModel?: string
+  /** Human-readable connection/provider label captured at response time */
+  responseConnectionName?: string
+  /** Resolved connection slug captured at response time */
+  responseConnectionSlug?: string
   /** Callback when user accepts the plan (plan variant only) */
   onAccept?: () => void
   /** Callback when user accepts the plan with compaction (compact first, then execute) */
@@ -1419,6 +1440,32 @@ export interface ResponseCardProps {
   openAnnotationRequest?: OpenAnnotationRequest | null
   /** Annotation interaction mode (viewer uses tooltip-only to suppress the island) */
   annotationInteractionMode?: AnnotationInteractionMode
+  /** Optional custom runtime metadata renderer for response footer chrome */
+  renderResponseMeta?: (response: ResponseContent) => React.ReactNode
+}
+
+interface ResponseModelBadgeProps {
+  responseModel: string
+  responseConnectionName?: string
+}
+
+function ResponseModelBadge({ responseModel, responseConnectionName }: ResponseModelBadgeProps) {
+  const label = responseConnectionName
+    ? `${responseConnectionName} · ${responseModel}`
+    : responseModel
+
+  return (
+    <div
+      className={cn(
+        "inline-flex items-center rounded-full border border-border/50 bg-background/70 px-2 py-1",
+        "text-[11px] leading-none text-muted-foreground"
+      )}
+      title={label}
+      aria-label={`Response model: ${label}`}
+    >
+      <span className="max-w-[240px] truncate">{label}</span>
+    </div>
+  )
 }
 
 interface BranchDropdownProps {
@@ -1644,6 +1691,9 @@ export function ResponseCard({
   sessionId,
   messageId,
   annotations,
+  responseModel,
+  responseConnectionName,
+  responseConnectionSlug,
   onAccept,
   onAcceptWithCompact,
   isLastResponse = true,
@@ -1658,6 +1708,7 @@ export function ResponseCard({
   hasActiveFollowUpAnnotations = false,
   openAnnotationRequest,
   annotationInteractionMode = 'interactive',
+  renderResponseMeta,
 }: ResponseCardProps) {
   // Throttled content for display - updates every CONTENT_THROTTLE_MS during streaming
   const [displayedText, setDisplayedText] = useState(text)
@@ -2528,6 +2579,23 @@ export function ResponseCard({
                     />
                   </div>
                 )}
+                {renderResponseMeta ? renderResponseMeta({
+                  text,
+                  isStreaming,
+                  streamStartTime,
+                  isPlan,
+                  messageId,
+                  annotations,
+                  responseModel,
+                  responseConnectionName,
+                  responseConnectionSlug,
+                  responseRuntimeChanged: false,
+                }) : responseModel && (
+                  <ResponseModelBadge
+                    responseModel={responseModel}
+                    responseConnectionName={responseConnectionName}
+                  />
+                )}
                 {onBranch && <BranchDropdown onBranch={onBranch} />}
               </div>
             </div>
@@ -2732,6 +2800,7 @@ export const TurnCard = React.memo(function TurnCard({
   hasActiveFollowUpAnnotations = false,
   openAnnotationRequest,
   annotationInteractionMode = 'interactive',
+  renderResponseMeta,
 }: TurnCardProps) {
   // Derive the turn phase from props using the state machine.
   // This provides a single source of truth for lifecycle state,
@@ -3081,6 +3150,8 @@ export const TurnCard = React.memo(function TurnCard({
             variant="plan"
             messageId={planActivity.messageId}
             annotations={planActivity.annotations}
+            responseModel={planActivity.responseModel}
+            responseConnectionName={planActivity.responseConnectionName}
             onAddAnnotation={onAddAnnotation}
             onRemoveAnnotation={onRemoveAnnotation}
             onUpdateAnnotation={onUpdateAnnotation}
@@ -3090,6 +3161,7 @@ export const TurnCard = React.memo(function TurnCard({
             isLastResponse={isLastResponse && index === planActivities.length - 1}
             compactMode={compactMode}
             onBranch={onBranch ? (options?: { newPanel?: boolean }) => onBranch(planActivity.messageId ?? planActivity.id, options) : undefined}
+            renderResponseMeta={renderResponseMeta}
             sendMessageKey={sendMessageKey}
             hasActiveFollowUpAnnotations={hasActiveFollowUpAnnotations}
             openAnnotationRequest={openAnnotationRequest}
@@ -3120,6 +3192,8 @@ export const TurnCard = React.memo(function TurnCard({
                 variant={response.isPlan ? 'plan' : 'response'}
                 messageId={response.messageId}
                 annotations={response.annotations}
+                responseModel={response.responseModel}
+                responseConnectionName={response.responseConnectionName}
                 onAddAnnotation={onAddAnnotation}
                 onRemoveAnnotation={onRemoveAnnotation}
                 onUpdateAnnotation={onUpdateAnnotation}
@@ -3129,6 +3203,7 @@ export const TurnCard = React.memo(function TurnCard({
                 isLastResponse={isLastResponse}
                 compactMode={compactMode}
                 onBranch={onBranch && response.messageId ? (options?: { newPanel?: boolean }) => onBranch(response.messageId!, options) : undefined}
+                renderResponseMeta={renderResponseMeta}
                 sendMessageKey={sendMessageKey}
                 hasActiveFollowUpAnnotations={hasActiveFollowUpAnnotations}
                 openAnnotationRequest={openAnnotationRequest}
@@ -3152,6 +3227,9 @@ export const TurnCard = React.memo(function TurnCard({
             variant={response.isPlan ? 'plan' : 'response'}
             messageId={response.messageId}
             annotations={response.annotations}
+            responseModel={response.responseModel}
+            responseConnectionName={response.responseConnectionName}
+            responseConnectionSlug={response.responseConnectionSlug}
             onAddAnnotation={onAddAnnotation}
             onRemoveAnnotation={onRemoveAnnotation}
             onUpdateAnnotation={onUpdateAnnotation}
@@ -3161,6 +3239,7 @@ export const TurnCard = React.memo(function TurnCard({
             isLastResponse={isLastResponse}
             compactMode={compactMode}
             onBranch={onBranch && response.messageId ? (options?: { newPanel?: boolean }) => onBranch(response.messageId!, options) : undefined}
+            renderResponseMeta={renderResponseMeta}
             sendMessageKey={sendMessageKey}
             hasActiveFollowUpAnnotations={hasActiveFollowUpAnnotations}
             openAnnotationRequest={openAnnotationRequest}

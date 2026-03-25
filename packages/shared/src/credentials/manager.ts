@@ -267,6 +267,28 @@ export class CredentialManager {
     }
   }
 
+  /**
+   * Get bearer token for a configured remote server profile.
+   */
+  async getRemoteServerToken(serverId: string): Promise<string | null> {
+    const cred = await this.get({ type: 'remote_server_token', serverId });
+    return cred?.value || null;
+  }
+
+  /**
+   * Persist bearer token for a configured remote server profile.
+   */
+  async setRemoteServerToken(serverId: string, token: string): Promise<void> {
+    await this.set({ type: 'remote_server_token', serverId }, { value: token });
+  }
+
+  /**
+   * Delete bearer token for a configured remote server profile.
+   */
+  async deleteRemoteServerToken(serverId: string): Promise<boolean> {
+    return this.delete({ type: 'remote_server_token', serverId });
+  }
+
   // Note: OpenAI API key methods removed - Codex uses native ChatGPT OAuth flow
 
   // ============================================================

@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { useTransportConnectionState } from './useTransportConnectionState'
 import { toast } from 'sonner'
+import type { WorkspaceCreationTarget } from '../../shared/types'
 
 type ServerBrowserMode = 'browse' | 'manual'
 
@@ -21,16 +21,15 @@ interface DirectoryPickerResult {
 }
 
 export function useDirectoryPicker(
-  onSelect: (path: string) => void
+  onSelect: (path: string) => void,
+  target?: WorkspaceCreationTarget | null,
 ): DirectoryPickerResult {
   const transport = useTransportConnectionState()
-  const isRemote = transport?.mode === 'remote'
-  const canBrowse = isRemote &&
-    window.electronAPI.isChannelAvailable(RPC_CHANNELS.fs.LIST_DIRECTORY)
+  const isRemote = target?.mode === 'remote' || (target == null && transport?.mode === 'remote')
 
   const [showServerBrowser, setShowServerBrowser] = useState(false)
 
-  const serverBrowserMode: ServerBrowserMode = canBrowse ? 'browse' : 'manual'
+  const serverBrowserMode: ServerBrowserMode = isRemote ? 'browse' : 'manual'
 
   const pickDirectory = useCallback(async () => {
     if (isRemote) {

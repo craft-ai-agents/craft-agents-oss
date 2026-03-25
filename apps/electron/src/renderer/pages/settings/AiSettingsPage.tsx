@@ -9,11 +9,12 @@
  * Follows the Appearance settings pattern: app-level defaults + workspace overrides.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { routes } from '@/lib/navigate'
 import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw, Settings2 } from 'lucide-react'
 import type { CredentialHealthStatus, CredentialHealthIssue } from '../../../shared/types'
@@ -21,17 +22,20 @@ import { Spinner, FullscreenOverlayBase } from '@craft-agent/ui'
 import { useSetAtom } from 'jotai'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
 import { motion, AnimatePresence } from 'motion/react'
-import type { LlmConnectionWithStatus, ThinkingLevel, WorkspaceSettings, Workspace } from '../../../shared/types'
+import type { LlmConnectionWithStatus, ThinkingLevel, WorkspaceSettings, Workspace, WorkspaceCreationTarget, RemoteServerProfile, RemoteServerRuntimeState } from '../../../shared/types'
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVELS } from '@craft-agent/shared/agent/thinking-levels'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import {
   DropdownMenu,
+  DropdownMenuSub,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
   StyledDropdownMenuContent,
   StyledDropdownMenuItem,
   StyledDropdownMenuSeparator,
+  StyledDropdownMenuSubContent,
+  StyledDropdownMenuSubTrigger,
 } from '@/components/ui/styled-dropdown'
 import { cn } from '@/lib/utils'
 import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
@@ -45,6 +49,7 @@ import {
 } from '@/components/settings'
 import { useOnboarding } from '@/hooks/useOnboarding'
 import { useWorkspaceIcon } from '@/hooks/useWorkspaceIcon'
+import { useTransportConnectionState } from '@/hooks/useTransportConnectionState'
 import { OnboardingWizard, type ApiSetupMethod } from '@/components/onboarding'
 import { RenameDialog } from '@/components/ui/rename-dialog'
 import { useAppShellContext } from '@/context/AppShellContext'
@@ -85,6 +90,15 @@ function getModelOptionsForConnection(
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
   slug: 'ai',
+}
+
+interface AiSettingsScope {
+  key: string
+  label: string
+  description: string
+  target: WorkspaceCreationTarget
+  serverId?: string
+  serverUrl?: string
 }
 
 // ============================================
@@ -169,17 +183,19 @@ type ValidationState = 'idle' | 'validating' | 'success' | 'error'
 interface ConnectionRowProps {
   connection: LlmConnectionWithStatus
   isLastConnection: boolean
+  shareDestinations: Array<{ key: string; label: string; description: string; target: WorkspaceCreationTarget }>
   onRenameClick: () => void
   onDelete: () => void
   onSetDefault: () => void
   onValidate: () => void
   onReauthenticate: () => void
   onEdit: () => void
+  onShare: (target: WorkspaceCreationTarget) => void
   validationState: ValidationState
   validationError?: string
 }
 
-function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onReauthenticate, onEdit, validationState, validationError }: ConnectionRowProps) {
+function ConnectionRow({ connection, isLastConnection, shareDestinations, onRenameClick, onDelete, onSetDefault, onValidate, onReauthenticate, onEdit, onShare, validationState, validationError }: ConnectionRowProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [piBaseUrl, setPiBaseUrl] = useState<string | undefined>(undefined)
 
@@ -311,6 +327,27 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
             <CheckCircle2 className="h-3.5 w-3.5" />
             <span>Validate Connection</span>
           </StyledDropdownMenuItem>
+          {shareDestinations.length > 0 && (
+            <DropdownMenuSub>
+              <StyledDropdownMenuSubTrigger>
+                <ChevronRight className="h-3.5 w-3.5" />
+                <span>Share to…</span>
+              </StyledDropdownMenuSubTrigger>
+              <StyledDropdownMenuSubContent>
+                {shareDestinations.map((destination) => (
+                  <StyledDropdownMenuItem
+                    key={destination.key}
+                    onClick={() => onShare(destination.target)}
+                  >
+                    <div className="flex min-w-0 flex-col">
+                      <span>{destination.label}</span>
+                      <span className="text-xs text-muted-foreground">{destination.description}</span>
+                    </div>
+                  </StyledDropdownMenuItem>
+                ))}
+              </StyledDropdownMenuSubContent>
+            </DropdownMenuSub>
+          )}
           <StyledDropdownMenuSeparator />
           <StyledDropdownMenuItem
             onClick={onDelete}
@@ -548,12 +585,35 @@ function getApiKeyMethodForConnection(conn: LlmConnectionWithStatus): ApiSetupMe
   return 'anthropic_api_key'
 }
 
+function getWorkspaceScopeKey(workspace: Workspace | null | undefined): string {
+  if (!workspace?.isRemote) return 'local'
+  return `remote:${workspace.remoteServerId ?? 'unknown'}`
+}
+
+function getTargetScopeKey(target: WorkspaceCreationTarget): string {
+  return target.mode === 'remote' ? `remote:${target.serverId ?? 'connected'}` : 'local'
+}
+
+function normalizeRemoteServerUrl(value: string | null | undefined): string {
+  if (!value) return ''
+  try {
+    const parsed = new URL(value)
+    parsed.hash = ''
+    parsed.search = ''
+    return parsed.toString().replace(/\/+$/, '')
+  } catch {
+    return value.replace(/\/+$/, '')
+  }
+}
+
 // ============================================
 // Main Component
 // ============================================
 
 export default function AiSettingsPage() {
-  const { llmConnections, refreshLlmConnections, activeWorkspaceId } = useAppShellContext()
+  const appShellContext = useAppShellContext()
+  const { refreshLlmConnections, activeWorkspaceId } = appShellContext
+  const transportState = useTransportConnectionState()
 
   // API Setup overlay state
   const [showApiSetup, setShowApiSetup] = useState(false)
@@ -571,6 +631,20 @@ export default function AiSettingsPage() {
 
   // Workspaces for override cards
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [remoteServers, setRemoteServers] = useState<RemoteServerProfile[]>([])
+  const [remoteRuntimeStates, setRemoteRuntimeStates] = useState<Record<string, RemoteServerRuntimeState>>({})
+  const isDirectRemoteMode = transportState?.mode === 'remote' && Object.keys(remoteRuntimeStates).length === 0
+  const activeWorkspace = appShellContext.workspaces.find(workspace => workspace.id === appShellContext.activeWorkspaceId) ?? null
+  const connectedRemoteProfile = useMemo(() => {
+    if (!isDirectRemoteMode) return null
+    return remoteServers.find(profile => normalizeRemoteServerUrl(profile.url) === normalizeRemoteServerUrl(transportState?.url)) ?? null
+  }, [isDirectRemoteMode, remoteServers, transportState?.url])
+  const connectedRemoteScopeKey = connectedRemoteProfile ? `remote:${connectedRemoteProfile.id}` : 'remote:connected'
+  const activeScopeKey = isDirectRemoteMode ? connectedRemoteScopeKey : getWorkspaceScopeKey(activeWorkspace)
+  const [selectedScopeKey, setSelectedScopeKey] = useState(activeScopeKey)
+  const [scopedConnections, setScopedConnections] = useState<LlmConnectionWithStatus[]>([])
+  const [isLoadingScope, setIsLoadingScope] = useState(true)
+  const scopeLoadRequestIdRef = useRef(0)
 
   // Default settings state (app-level)
   const [defaultThinking, setDefaultThinking] = useState<ThinkingLevel>(DEFAULT_THINKING_LEVEL)
@@ -590,35 +664,153 @@ export default function AiSettingsPage() {
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [renamingConnection, setRenamingConnection] = useState<{ slug: string; name: string } | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [shareAllTargetKey, setShareAllTargetKey] = useState<string | null>(null)
 
-  // Load workspaces, default settings, and credential health
+  // Load global AI performance settings that are not target-scoped.
   useEffect(() => {
-    const load = async () => {
+    const loadGlobalSettings = async () => {
       if (!window.electronAPI) return
       try {
-        const ws = await window.electronAPI.getWorkspaces()
-        setWorkspaces(ws)
-
-        const defaultThinkingLevel = await window.electronAPI.getDefaultThinkingLevel()
-        setDefaultThinking(defaultThinkingLevel)
-
         const extendedCache = await window.electronAPI.getExtendedPromptCache()
         setExtendedPromptCache(extendedCache)
 
         const enable1M = await window.electronAPI.getEnable1MContext()
         setEnable1MContext(enable1M)
-
-        // Check credential health for potential issues (corruption, machine migration)
-        const health = await window.electronAPI.getCredentialHealth()
-        if (!health.healthy) {
-          setCredentialHealthIssues(health.issues)
-        }
       } catch (error) {
-        console.error('Failed to load settings:', error)
+        console.error('Failed to load global AI settings:', error)
       }
     }
-    load()
+    void loadGlobalSettings()
   }, [activeWorkspaceId])
+
+  const scopes = useMemo<AiSettingsScope[]>(() => {
+    if (isDirectRemoteMode) {
+      return [{
+        key: connectedRemoteScopeKey,
+        label: connectedRemoteProfile?.name ?? 'Connected Server',
+        description: 'Manage connections used by the currently connected remote server.',
+        target: connectedRemoteProfile ? { mode: 'remote', serverId: connectedRemoteProfile.id } : { mode: 'remote' },
+        serverId: connectedRemoteProfile?.id,
+        serverUrl: connectedRemoteProfile?.url ?? transportState?.url,
+      }]
+    }
+
+    return [
+      {
+        key: 'local',
+        label: 'Local',
+        description: 'Manage connections used by local workspaces on this device.',
+        target: { mode: 'local' },
+      },
+      ...remoteServers
+        .filter(profile => profile.enabled)
+        .map((profile) => ({
+          key: `remote:${profile.id}`,
+          label: profile.name,
+          description: 'Manage connections used by workspaces on this remote server.',
+          target: { mode: 'remote' as const, serverId: profile.id },
+          serverId: profile.id,
+          serverUrl: profile.url,
+        })),
+    ]
+  }, [connectedRemoteProfile, connectedRemoteScopeKey, isDirectRemoteMode, remoteServers, transportState?.url])
+
+  const selectedScope = useMemo(() => {
+    return scopes.find(scope => scope.key === selectedScopeKey) ?? scopes[0]
+  }, [scopes, selectedScopeKey])
+
+  const selectedTarget = selectedScope?.target ?? (isDirectRemoteMode ? { mode: 'remote' as const } : { mode: 'local' as const })
+  const isViewingActiveScope = selectedScope?.key === activeScopeKey
+  const scopeRenderKey = selectedScope?.key ?? 'none'
+  const refreshScopeMetadata = useCallback(async () => {
+    if (!window.electronAPI) return
+
+    const [loadedWorkspaces, loadedServers] = await Promise.all([
+      window.electronAPI.getWorkspaces(),
+      window.electronAPI.listRemoteServers(),
+    ])
+    const runtimeStates = await window.electronAPI.getRemoteServerRuntimeStates?.() ?? {}
+
+    setWorkspaces(loadedWorkspaces)
+    setRemoteServers(loadedServers)
+    setRemoteRuntimeStates(runtimeStates)
+  }, [])
+
+  const refreshScopedAiSettings = useCallback(async () => {
+    if (!window.electronAPI || !selectedScope) return
+
+    const requestId = ++scopeLoadRequestIdRef.current
+    setIsLoadingScope(true)
+    try {
+      const [connections, defaultThinkingLevel] = await Promise.all([
+        window.electronAPI.listLlmConnectionsWithStatusForTarget(selectedScope.target),
+        window.electronAPI.getDefaultThinkingLevelForTarget(selectedScope.target),
+      ])
+
+      if (requestId !== scopeLoadRequestIdRef.current) return
+      setScopedConnections(connections)
+      setDefaultThinking(defaultThinkingLevel)
+
+      if (selectedScope.target.mode === 'local') {
+        const health = await window.electronAPI.getCredentialHealth()
+        if (requestId !== scopeLoadRequestIdRef.current) return
+        setCredentialHealthIssues(health.healthy ? [] : health.issues)
+      } else {
+        setCredentialHealthIssues([])
+      }
+    } catch (error) {
+      if (requestId !== scopeLoadRequestIdRef.current) return
+      console.error('Failed to load scoped AI settings:', error)
+      setScopedConnections([])
+      setCredentialHealthIssues([])
+    } finally {
+      if (requestId !== scopeLoadRequestIdRef.current) return
+      setIsLoadingScope(false)
+    }
+  }, [selectedScope, scopeLoadRequestIdRef])
+
+  const refreshActiveScopeIfNeeded = useCallback(() => {
+    if (isViewingActiveScope) {
+      refreshLlmConnections?.()
+    }
+  }, [isViewingActiveScope, refreshLlmConnections])
+
+  // Load workspaces, available scopes, and the selected scope state
+  useEffect(() => {
+    void refreshScopeMetadata()
+  }, [refreshScopeMetadata])
+
+  useEffect(() => {
+    if (!scopes.some(scope => scope.key === selectedScopeKey)) {
+      setSelectedScopeKey(scopes.some(scope => scope.key === activeScopeKey) ? activeScopeKey : scopes[0]?.key ?? 'local')
+    }
+  }, [activeScopeKey, scopes, selectedScopeKey])
+
+  useEffect(() => {
+    setValidationStates({})
+    setRenameDialogOpen(false)
+    setRenamingConnection(null)
+  }, [scopeRenderKey])
+
+  useEffect(() => {
+    void refreshScopedAiSettings()
+  }, [refreshScopedAiSettings])
+
+  useEffect(() => {
+    if (!window.electronAPI) return
+
+    const unsubWorkspaces = window.electronAPI.onWorkspacesChanged?.(() => {
+      void refreshScopeMetadata()
+    })
+    const unsubRemoteServers = window.electronAPI.onRemoteServersChanged?.(() => {
+      void refreshScopeMetadata()
+    })
+
+    return () => {
+      unsubWorkspaces?.()
+      unsubRemoteServers?.()
+    }
+  }, [refreshScopeMetadata])
 
   // Helpers to open/close the fullscreen API setup overlay
   const openApiSetup = useCallback((connectionSlug?: string) => {
@@ -635,8 +827,8 @@ export default function AiSettingsPage() {
 
   // Derive existing slugs for unique slug generation
   const existingSlugs = useMemo(
-    () => new Set(llmConnections.map(c => c.slug)),
-    [llmConnections],
+    () => new Set(scopedConnections.map(c => c.slug)),
+    [scopedConnections],
   )
 
   // OnboardingWizard hook for editing API connection
@@ -654,17 +846,19 @@ export default function AiSettingsPage() {
     },
     editingSlug: editingConnectionSlug,
     existingSlugs,
+    target: selectedTarget,
   })
 
   const handleApiSetupFinish = useCallback(() => {
     closeApiSetup()
-    refreshLlmConnections?.()
+    void refreshScopedAiSettings()
+    refreshActiveScopeIfNeeded()
     apiSetupOnboarding.reset()
     // Clear any credential health issues after successful re-authentication
     setCredentialHealthIssues([])
     setIsDirectEdit(false)
     setEditInitialValues(undefined)
-  }, [closeApiSetup, refreshLlmConnections, apiSetupOnboarding])
+  }, [apiSetupOnboarding, closeApiSetup, refreshActiveScopeIfNeeded, refreshScopedAiSettings])
 
   // Handler for closing the modal via X button or Escape - resets state and cancels OAuth
   const handleCloseApiSetup = useCallback(() => {
@@ -677,13 +871,13 @@ export default function AiSettingsPage() {
   // Handler for re-authenticate button in credential health banner
   const handleReauthenticate = useCallback(() => {
     // Open API setup for the default connection (or first connection if available)
-    const defaultConn = llmConnections.find(c => c.isDefault) || llmConnections[0]
+    const defaultConn = scopedConnections.find(c => c.isDefault) || scopedConnections[0]
     if (defaultConn) {
       openApiSetup(defaultConn.slug)
     } else {
       openApiSetup()
     }
-  }, [llmConnections, openApiSetup])
+  }, [openApiSetup, scopedConnections])
 
   // Connection action handlers
   const handleRenameClick = useCallback((connection: LlmConnectionWithStatus) => {
@@ -704,11 +898,12 @@ export default function AiSettingsPage() {
     }
     try {
       // Get the full connection, update name, and save
-      const connection = await window.electronAPI.getLlmConnection(renamingConnection.slug)
+      const connection = await window.electronAPI.getLlmConnectionForTarget(selectedTarget, renamingConnection.slug)
       if (connection) {
-        const result = await window.electronAPI.saveLlmConnection({ ...connection, name: trimmedName })
+        const result = await window.electronAPI.saveLlmConnectionForTarget(selectedTarget, { ...connection, name: trimmedName })
         if (result.success) {
-          refreshLlmConnections?.()
+          await refreshScopedAiSettings()
+          refreshActiveScopeIfNeeded()
         } else {
           console.error('Failed to rename connection:', result.error)
         }
@@ -719,14 +914,14 @@ export default function AiSettingsPage() {
     setRenameDialogOpen(false)
     setRenamingConnection(null)
     setRenameValue('')
-  }, [renamingConnection, renameValue, refreshLlmConnections])
+  }, [refreshActiveScopeIfNeeded, refreshScopedAiSettings, renameValue, renamingConnection, selectedTarget])
 
   const handleReauthenticateConnection = useCallback((connection: LlmConnectionWithStatus) => {
     openApiSetup(connection.slug)
     apiSetupOnboarding.reset()
 
     if (connection.authType === 'oauth') {
-      const method = connection.providerType === 'pi'
+        const method = connection.providerType === 'pi'
                    ? (connection.piAuthProvider === 'github-copilot' ? 'pi_copilot_oauth' : 'pi_chatgpt_oauth')
                    : 'claude_oauth'
       apiSetupOnboarding.handleStartOAuth(method, connection.slug)
@@ -737,7 +932,7 @@ export default function AiSettingsPage() {
     // Fetch stored API key (best-effort — if IPC not available yet, skip pre-fill)
     let apiKey: string | undefined
     try {
-      apiKey = (await window.electronAPI.getLlmConnectionApiKey(connection.slug)) ?? undefined
+      apiKey = (await window.electronAPI.getLlmConnectionApiKeyForTarget(selectedTarget, connection.slug)) ?? undefined
     } catch {
       // IPC method may not exist if app wasn't restarted after code change
     }
@@ -768,21 +963,22 @@ export default function AiSettingsPage() {
     setIsDirectEdit(true)
     const method = getApiKeyMethodForConnection(connection)
     apiSetupOnboarding.jumpToCredentials(method)
-  }, [apiSetupOnboarding, openApiSetup])
+  }, [apiSetupOnboarding, openApiSetup, selectedTarget])
 
   const handleDeleteConnection = useCallback(async (slug: string) => {
     if (!window.electronAPI) return
     try {
-      const result = await window.electronAPI.deleteLlmConnection(slug)
+      const result = await window.electronAPI.deleteLlmConnectionForTarget(selectedTarget, slug)
       if (result.success) {
-        refreshLlmConnections?.()
+        await refreshScopedAiSettings()
+        refreshActiveScopeIfNeeded()
       } else {
         console.error('Failed to delete connection:', result.error)
       }
     } catch (error) {
       console.error('Failed to delete connection:', error)
     }
-  }, [refreshLlmConnections])
+  }, [refreshActiveScopeIfNeeded, refreshScopedAiSettings, selectedTarget])
 
   const handleValidateConnection = useCallback(async (slug: string) => {
     if (!window.electronAPI) return
@@ -791,7 +987,7 @@ export default function AiSettingsPage() {
     setValidationStates(prev => ({ ...prev, [slug]: { state: 'validating' } }))
 
     try {
-      const result = await window.electronAPI.testLlmConnection(slug)
+      const result = await window.electronAPI.testLlmConnectionForTarget(selectedTarget, slug)
 
       if (result.success) {
         setValidationStates(prev => ({ ...prev, [slug]: { state: 'success' } }))
@@ -818,26 +1014,152 @@ export default function AiSettingsPage() {
         setValidationStates(prev => ({ ...prev, [slug]: { state: 'idle' } }))
       }, 5000)
     }
-  }, [])
+  }, [selectedTarget])
 
   const handleSetDefaultConnection = useCallback(async (slug: string) => {
     if (!window.electronAPI) return
     try {
-      const result = await window.electronAPI.setDefaultLlmConnection(slug)
+      const result = await window.electronAPI.setDefaultLlmConnectionForTarget(selectedTarget, slug)
       if (result.success) {
-        refreshLlmConnections?.()
+        await refreshScopedAiSettings()
+        refreshActiveScopeIfNeeded()
       } else {
         console.error('Failed to set default connection:', result.error)
       }
     } catch (error) {
       console.error('Failed to set default connection:', error)
     }
-  }, [refreshLlmConnections])
+  }, [refreshActiveScopeIfNeeded, refreshScopedAiSettings, selectedTarget])
+
+  const shareDestinations = useMemo(() => {
+    return scopes
+      .filter(scope => scope.key !== selectedScope?.key)
+      .map(scope => ({
+        key: scope.key,
+        label: scope.label,
+        description: scope.serverUrl ?? scope.description,
+        target: scope.target,
+      }))
+  }, [scopes, selectedScope?.key])
+
+  const bulkShareDestinations = useMemo(() => {
+    if (selectedTarget.mode !== 'local') return []
+
+    return scopes
+      .filter(scope => scope.target.mode === 'remote')
+      .map(scope => ({
+        key: scope.key,
+        label: scope.label,
+        description: scope.serverUrl ?? scope.description,
+        target: scope.target,
+      }))
+  }, [scopes, selectedTarget.mode])
+
+  const handleShareConnection = useCallback(async (slug: string, target: WorkspaceCreationTarget) => {
+    if (!window.electronAPI) return
+
+    try {
+      const result = await window.electronAPI.shareLlmConnectionToTarget(selectedTarget, slug, target)
+      if (!result.success) {
+        toast.error('Failed to share connection', {
+          description: result.error || 'Unknown error',
+        })
+        return
+      }
+
+      await refreshScopedAiSettings()
+      refreshActiveScopeIfNeeded()
+
+      if (result.warning) {
+        toast.warning('Connection shared with warning', {
+          description: result.warning,
+        })
+      } else {
+        toast.success('Connection shared')
+      }
+    } catch (error) {
+      toast.error('Failed to share connection', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  }, [refreshActiveScopeIfNeeded, refreshScopedAiSettings, selectedTarget])
+
+  const handleShareAllConnections = useCallback(async (destination: {
+    key: string
+    label: string
+    description: string
+    target: WorkspaceCreationTarget
+  }) => {
+    if (!window.electronAPI || scopedConnections.length === 0) return
+
+    setShareAllTargetKey(destination.key)
+    try {
+      const results: Array<{
+        name: string
+        success: boolean
+        slug: string
+        warning?: string
+        error?: string
+      }> = []
+
+      for (const connection of scopedConnections) {
+        try {
+          const result = await window.electronAPI.shareLlmConnectionToTarget(
+            selectedTarget,
+            connection.slug,
+            destination.target,
+          )
+          results.push({
+            name: connection.name,
+            ...result,
+          })
+        } catch (error) {
+          results.push({
+            name: connection.name,
+            success: false,
+            slug: connection.slug,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          })
+        }
+      }
+
+      const successCount = results.filter(result => result.success).length
+      const warnings = results.filter(result => result.success && result.warning)
+      const failures = results.filter(result => !result.success)
+
+      if (successCount > 0) {
+        const descriptionParts = [`${successCount} of ${results.length} connection${results.length === 1 ? '' : 's'} shared to ${destination.label}.`]
+        if (warnings.length > 0) {
+          descriptionParts.push(`${warnings.length} may need endpoint updates on the remote server.`)
+        }
+
+        toast.success('Connections shared', {
+          description: descriptionParts.join(' '),
+        })
+      }
+
+      if (failures.length > 0) {
+        const preview = failures
+          .slice(0, 3)
+          .map(result => `${result.name}: ${result.error || 'Unknown error'}`)
+          .join('  ')
+        toast.error('Some connections failed to share', {
+          description: failures.length > 3 ? `${preview}  +${failures.length - 3} more.` : preview,
+        })
+      }
+
+      if (getTargetScopeKey(destination.target) === activeScopeKey) {
+        refreshLlmConnections?.()
+      }
+    } finally {
+      setShareAllTargetKey(null)
+    }
+  }, [activeScopeKey, refreshLlmConnections, scopedConnections, selectedTarget])
 
   // Get the default connection for display
   const defaultConnection = useMemo(() => {
-    return llmConnections.find(c => c.isDefault)
-  }, [llmConnections])
+    return scopedConnections.find(c => c.isDefault)
+  }, [scopedConnections])
 
   const defaultModel = defaultConnection?.defaultModel ?? ''
 
@@ -848,9 +1170,10 @@ export default function AiSettingsPage() {
     const updated = { ...defaultConnection, defaultModel: model }
     // Remove status fields that aren't part of LlmConnection
     const { isAuthenticated: _a, authError: _b, isDefault: _c, ...connectionData } = updated
-    await window.electronAPI.saveLlmConnection(connectionData as import('../../../shared/types').LlmConnection)
-    await refreshLlmConnections()
-  }, [defaultConnection, refreshLlmConnections])
+    await window.electronAPI.saveLlmConnectionForTarget(selectedTarget, connectionData as import('../../../shared/types').LlmConnection)
+    await refreshScopedAiSettings()
+    refreshActiveScopeIfNeeded()
+  }, [defaultConnection, refreshActiveScopeIfNeeded, refreshScopedAiSettings, selectedTarget])
 
   const handleDefaultThinkingChange = useCallback(async (level: ThinkingLevel) => {
     if (!window.electronAPI) return
@@ -859,7 +1182,7 @@ export default function AiSettingsPage() {
     setDefaultThinking(level)
 
     try {
-      const result = await window.electronAPI.setDefaultThinkingLevel(level)
+      const result = await window.electronAPI.setDefaultThinkingLevelForTarget(selectedTarget, level)
       if (!result.success) {
         console.error('Failed to set default thinking level:', result.error)
         setDefaultThinking(previous)
@@ -868,7 +1191,8 @@ export default function AiSettingsPage() {
       console.error('Failed to set default thinking level:', error)
       setDefaultThinking(previous)
     }
-  }, [defaultThinking])
+    refreshActiveScopeIfNeeded()
+  }, [defaultThinking, refreshActiveScopeIfNeeded, selectedTarget])
 
   const handleExtendedPromptCacheChange = useCallback(async (enabled: boolean) => {
     setExtendedPromptCache(enabled)
@@ -883,8 +1207,16 @@ export default function AiSettingsPage() {
   // Refresh callback for workspace cards
   const handleWorkspaceSettingsChange = useCallback(() => {
     // Refresh context so changes propagate immediately
-    refreshLlmConnections?.()
-  }, [refreshLlmConnections])
+    refreshActiveScopeIfNeeded()
+  }, [refreshActiveScopeIfNeeded])
+
+  const scopedWorkspaces = useMemo(() => {
+    if (!selectedScope) return []
+    if (selectedScope.target.mode === 'local') {
+      return workspaces.filter(workspace => !workspace.isRemote)
+    }
+    return workspaces.filter(workspace => workspace.remoteServerId === selectedScope.serverId)
+  }, [selectedScope, workspaces])
 
   return (
     <div className="h-full flex flex-col">
@@ -899,104 +1231,172 @@ export default function AiSettingsPage() {
             />
 
             <div className="space-y-8">
-              {/* Default Settings - only show if connections exist */}
-              {llmConnections.length > 0 && (
-              <SettingsSection title="Default" description="Settings for new chats when no workspace override is set.">
-                <SettingsCard>
-                  <SettingsMenuSelectRow
-                    label="Connection"
-                    description="API connection for new chats"
-                    value={defaultConnection?.slug || ''}
-                    onValueChange={handleSetDefaultConnection}
-                    options={llmConnections.map((conn) => ({
-                      value: conn.slug,
-                      label: conn.name,
-                      description: conn.providerType === 'anthropic' ? 'Anthropic API' :
-                                   conn.providerType === 'bedrock' ? 'AWS Bedrock' :
-                                   conn.providerType === 'vertex' ? 'Google Vertex' :
-                                   conn.providerType === 'pi' ? 'Craft Agents Backend' :
-                                   conn.providerType === 'pi_compat' ? 'Craft Agents Backend Compatible' :
-                                   conn.providerType || 'Unknown',
-                    }))}
-                  />
-                  <SettingsMenuSelectRow
-                    label="Model"
-                    description="AI model for new chats"
-                    value={defaultModel}
-                    onValueChange={handleDefaultModelChange}
-                    options={getModelOptionsForConnection(defaultConnection)}
-                  />
-                  <SettingsMenuSelectRow
-                    label="Thinking"
-                    description="Reasoning depth for new chats"
-                    value={defaultThinking}
-                    onValueChange={(v) => handleDefaultThinkingChange(v as ThinkingLevel)}
-                    options={THINKING_LEVELS.map(({ id, name, description }) => ({
-                      value: id,
-                      label: name,
-                      description,
-                    }))}
-                  />
+              <SettingsSection title="Scope" description="Manage local and remote AI configurations separately.">
+                <SettingsCard divided={false}>
+                  <div className="px-4 py-4 space-y-3">
+                    <Tabs value={selectedScope?.key} onValueChange={setSelectedScopeKey}>
+                      <TabsList className="h-auto w-full justify-start overflow-x-auto bg-background shadow-minimal">
+                        {scopes.map((scope) => (
+                          <TabsTrigger key={scope.key} value={scope.key} className="min-w-fit">
+                            {scope.label}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                    </Tabs>
+                    <div className="space-y-1">
+                      <p className="text-sm text-foreground/80">
+                        {selectedScope?.description}
+                      </p>
+                      {selectedScope?.serverUrl && (
+                        <p className="text-xs text-muted-foreground">
+                          {selectedScope.serverUrl}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </SettingsCard>
               </SettingsSection>
-              )}
 
-              {/* Workspace Overrides - only show if connections exist */}
-              {workspaces.length > 0 && llmConnections.length > 0 && (
-                <SettingsSection title="Workspace Overrides" description="Override default settings per workspace.">
-                  <div className="space-y-2">
-                    {workspaces.map((workspace) => (
-                      <WorkspaceOverrideCard
-                        key={workspace.id}
-                        workspace={workspace}
-                        llmConnections={llmConnections}
-                        onSettingsChange={handleWorkspaceSettingsChange}
-                      />
-                    ))}
+              <div key={scopeRenderKey} className="space-y-8">
+                {/* Default Settings - only show if connections exist */}
+                {scopedConnections.length > 0 && (
+                <SettingsSection title="Default" description="Settings for new chats when no workspace override is set.">
+                  <SettingsCard>
+                    <SettingsMenuSelectRow
+                      label="Connection"
+                      description="API connection for new chats"
+                      value={defaultConnection?.slug || ''}
+                      onValueChange={handleSetDefaultConnection}
+                      options={scopedConnections.map((conn) => ({
+                        value: conn.slug,
+                        label: conn.name,
+                        description: conn.providerType === 'anthropic' ? 'Anthropic API' :
+                                     conn.providerType === 'bedrock' ? 'AWS Bedrock' :
+                                     conn.providerType === 'vertex' ? 'Google Vertex' :
+                                     conn.providerType === 'pi' ? 'Craft Agents Backend' :
+                                     conn.providerType === 'pi_compat' ? 'Craft Agents Backend Compatible' :
+                                     conn.providerType || 'Unknown',
+                      }))}
+                    />
+                    <SettingsMenuSelectRow
+                      label="Model"
+                      description="AI model for new chats"
+                      value={defaultModel}
+                      onValueChange={handleDefaultModelChange}
+                      options={getModelOptionsForConnection(defaultConnection)}
+                    />
+                    <SettingsMenuSelectRow
+                      label="Thinking"
+                      description="Reasoning depth for new chats"
+                      value={defaultThinking}
+                      onValueChange={(v) => handleDefaultThinkingChange(v as ThinkingLevel)}
+                      options={THINKING_LEVELS.map(({ id, name, description }) => ({
+                        value: id,
+                        label: name,
+                        description,
+                      }))}
+                    />
+                  </SettingsCard>
+                </SettingsSection>
+                )}
+
+                {/* Workspace Overrides - only show if connections exist */}
+                {scopedWorkspaces.length > 0 && scopedConnections.length > 0 && (
+                  <SettingsSection title="Workspace Overrides" description="Override default settings per workspace.">
+                    <div className="space-y-2">
+                      {scopedWorkspaces.map((workspace) => (
+                        <WorkspaceOverrideCard
+                          key={workspace.id}
+                          workspace={workspace}
+                          llmConnections={scopedConnections}
+                          onSettingsChange={handleWorkspaceSettingsChange}
+                        />
+                      ))}
+                    </div>
+                  </SettingsSection>
+                )}
+
+                {/* Connections Management */}
+                <SettingsSection
+                  title="Connections"
+                  description="Manage your AI provider connections."
+                  action={bulkShareDestinations.length > 0 && scopedConnections.length > 0 ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-1.5"
+                          disabled={shareAllTargetKey !== null}
+                        >
+                          Share All
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <StyledDropdownMenuContent align="end" minWidth="min-w-64">
+                        {bulkShareDestinations.map((destination) => (
+                          <StyledDropdownMenuItem
+                            key={destination.key}
+                            onClick={() => handleShareAllConnections(destination)}
+                            disabled={shareAllTargetKey !== null}
+                          >
+                            <div className="flex min-w-0 flex-col">
+                              <span>{destination.label}</span>
+                              <span className="text-xs text-muted-foreground">{destination.description}</span>
+                            </div>
+                          </StyledDropdownMenuItem>
+                        ))}
+                      </StyledDropdownMenuContent>
+                    </DropdownMenu>
+                  ) : undefined}
+                >
+                  <SettingsCard>
+                    {isLoadingScope ? (
+                      <div className="px-4 py-6 flex items-center justify-center text-sm text-muted-foreground">
+                        <Spinner className="text-muted-foreground" />
+                      </div>
+                    ) : scopedConnections.length === 0 ? (
+                      <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                        No connections configured. Add a connection to get started.
+                      </div>
+                    ) : (
+                      [...scopedConnections]
+                        .sort((a, b) => {
+                          if (a.isDefault && !b.isDefault) return -1
+                          if (!a.isDefault && b.isDefault) return 1
+                          return a.name.localeCompare(b.name)
+                        })
+                        .map((conn) => (
+                        <ConnectionRow
+                          key={conn.slug}
+                          connection={conn}
+                          isLastConnection={scopedConnections.length === 1}
+                          shareDestinations={shareDestinations}
+                          onRenameClick={() => handleRenameClick(conn)}
+                          onDelete={() => handleDeleteConnection(conn.slug)}
+                          onSetDefault={() => handleSetDefaultConnection(conn.slug)}
+                          onValidate={() => handleValidateConnection(conn.slug)}
+                          onReauthenticate={() => handleReauthenticateConnection(conn)}
+                          onEdit={() => handleEditConnection(conn)}
+                          onShare={(target) => handleShareConnection(conn.slug, target)}
+                          validationState={validationStates[conn.slug]?.state || 'idle'}
+                          validationError={validationStates[conn.slug]?.error}
+                        />
+                      ))
+                    )}
+                  </SettingsCard>
+                  <div className="pt-0">
+                    <button
+                      onClick={() => {
+                        openApiSetup()
+                      }}
+                      className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
+                    >
+                      + Add Connection
+                    </button>
                   </div>
                 </SettingsSection>
-              )}
-
-              {/* Connections Management */}
-              <SettingsSection title="Connections" description="Manage your AI provider connections.">
-                <SettingsCard>
-                  {llmConnections.length === 0 ? (
-                    <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                      No connections configured. Add a connection to get started.
-                    </div>
-                  ) : (
-                    [...llmConnections]
-                      .sort((a, b) => {
-                        if (a.isDefault && !b.isDefault) return -1
-                        if (!a.isDefault && b.isDefault) return 1
-                        return a.name.localeCompare(b.name)
-                      })
-                      .map((conn) => (
-                      <ConnectionRow
-                        key={conn.slug}
-                        connection={conn}
-                        isLastConnection={false}
-                        onRenameClick={() => handleRenameClick(conn)}
-                        onDelete={() => handleDeleteConnection(conn.slug)}
-                        onSetDefault={() => handleSetDefaultConnection(conn.slug)}
-                        onValidate={() => handleValidateConnection(conn.slug)}
-                        onReauthenticate={() => handleReauthenticateConnection(conn)}
-                        onEdit={() => handleEditConnection(conn)}
-                        validationState={validationStates[conn.slug]?.state || 'idle'}
-                        validationError={validationStates[conn.slug]?.error}
-                      />
-                    ))
-                  )}
-                </SettingsCard>
-                <div className="pt-0">
-                  <button
-                    onClick={() => openApiSetup()}
-                    className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
-                  >
-                    + Add Connection
-                  </button>
-                </div>
-              </SettingsSection>
+              </div>
 
               {/* Performance */}
               <SettingsSection title="Performance" description="Cost and caching options.">

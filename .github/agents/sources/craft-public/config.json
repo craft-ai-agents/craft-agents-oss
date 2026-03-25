@@ -1,0 +1,18 @@
+{
+  "id": "craft-public-fixture",
+  "name": "Craft Public",
+  "slug": "craft-public",
+  "enabled": true,
+  "provider": "craft",
+  "type": "mcp",
+  "mcp": {
+    "transport": "http",
+    "url": "https://agents.craft.do/docs/mcp",
+    "authType": "none"
+  },
+  "icon": "📚",
+  "tagline": "Public Craft Agents documentation over MCP",
+  "connectionStatus": "untested",
+  "createdAt": 1774000000000,
+  "updatedAt": 1774000000000
+}

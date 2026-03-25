@@ -1,13 +1,14 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel } from '@craft-agent/shared/config'
+import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel, getRemoteServerProfiles, saveRemoteServerProfile, deleteRemoteServerProfile, getStoredRemoteServerProfiles } from '@craft-agent/shared/config'
 import { isValidThinkingLevel, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { getWorkspaceOrThrow } from '@craft-agent/server-core/handlers'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
 import { isValidWorkingDirectory } from '../../utils/path-validation'
+import { getCredentialManager } from '@craft-agent/shared/credentials'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workspace.SETTINGS_GET,
@@ -35,9 +36,27 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.settings.SET_DEFAULT_THINKING_LEVEL,
   RPC_CHANNELS.settings.GET_NETWORK_PROXY,
   RPC_CHANNELS.dialog.OPEN_FOLDER,
+  RPC_CHANNELS.remoteServers.LIST,
+  RPC_CHANNELS.remoteServers.SAVE,
+  RPC_CHANNELS.remoteServers.DELETE,
+  RPC_CHANNELS.remoteServers.SAVE_TOKEN,
+  RPC_CHANNELS.remoteServers.CLEAR_TOKEN,
+  RPC_CHANNELS.remoteServers.GET_AUTH_MATERIAL,
 ] as const
 
 export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): void {
+  const requireTrustedLocalSettingsClient = (ctx: { webContentsId: number | null; workspaceId: string | null }) => {
+    if (!deps.windowManager || ctx.webContentsId == null) {
+      throw new Error('This operation is only available to trusted local desktop clients')
+    }
+
+    const trackedWindow = deps.windowManager.getWindowByWebContentsId(ctx.webContentsId)
+    const trackedWorkspaceId = deps.windowManager.getWorkspaceForWindow(ctx.webContentsId)
+    if (!trackedWindow || !trackedWorkspaceId) {
+      throw new Error('This operation is only available to trusted local desktop clients')
+    }
+  }
+
   // ============================================================
   // Settings - Default Thinking Level (App-Level)
   // ============================================================
@@ -79,6 +98,55 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       title: 'Select Working Directory',
     })
     return result.canceled ? null : result.filePaths[0]
+  })
+
+  // ============================================================
+  // Remote Server Profiles (host-local)
+  // ============================================================
+
+  server.handle(RPC_CHANNELS.remoteServers.LIST, async () => {
+    return getRemoteServerProfiles()
+  })
+
+  server.handle(RPC_CHANNELS.remoteServers.SAVE, async (_ctx, input: import('@craft-agent/shared/protocol').SaveRemoteServerProfileInput) => {
+    const saved = await saveRemoteServerProfile(input)
+    pushTyped(server, RPC_CHANNELS.remoteServers.CHANGED, { to: 'all' })
+    return saved
+  })
+
+  server.handle(RPC_CHANNELS.remoteServers.DELETE, async (_ctx, serverId: string) => {
+    const deleted = await deleteRemoteServerProfile(serverId)
+    if (deleted) {
+      pushTyped(server, RPC_CHANNELS.remoteServers.CHANGED, { to: 'all' })
+    }
+    return deleted
+  })
+
+  server.handle(RPC_CHANNELS.remoteServers.SAVE_TOKEN, async (_ctx, serverId: string, token: string) => {
+    const manager = getCredentialManager()
+    await manager.setRemoteServerToken(serverId, token.trim())
+    pushTyped(server, RPC_CHANNELS.remoteServers.CHANGED, { to: 'all' })
+  })
+
+  server.handle(RPC_CHANNELS.remoteServers.CLEAR_TOKEN, async (_ctx, serverId: string) => {
+    const manager = getCredentialManager()
+    await manager.deleteRemoteServerToken(serverId)
+    pushTyped(server, RPC_CHANNELS.remoteServers.CHANGED, { to: 'all' })
+  })
+
+  // Internal preload-only channel. Deliberately omitted from ElectronAPI/channel-map
+  // so renderer components cannot read remote server bearer tokens back out.
+  server.handle(RPC_CHANNELS.remoteServers.GET_AUTH_MATERIAL, async (ctx) => {
+    requireTrustedLocalSettingsClient(ctx)
+    const manager = getCredentialManager()
+    const profiles = getStoredRemoteServerProfiles()
+    return Promise.all(profiles.map(async (profile) => ({
+      id: profile.id,
+      name: profile.name,
+      url: profile.url,
+      enabled: profile.enabled,
+      token: await manager.getRemoteServerToken(profile.id),
+    })))
   })
 
   // ============================================================

@@ -25,6 +25,7 @@ export type CredentialType =
   | 'llm_oauth'          // OAuth token for LLM connection
   | 'llm_iam'            // AWS IAM credentials (accessKeyId + secretAccessKey)
   | 'llm_service_account' // GCP service account JSON
+  | 'remote_server_token' // Bearer token for remote Craft server profile
   // Workspace credentials
   | 'workspace_oauth'    // Workspace MCP OAuth token
   // Source credentials (stored at ~/.craft-agent/workspaces/{ws}/sources/{slug}/)
@@ -41,6 +42,7 @@ const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
   'llm_oauth',
   'llm_iam',
   'llm_service_account',
+  'remote_server_token',
   'workspace_oauth',
   'source_oauth',
   'source_bearer',
@@ -66,6 +68,8 @@ export interface CredentialId {
   workspaceId?: string;
   /** Source ID for source credentials */
   sourceId?: string;
+  /** Remote server profile ID for remote_server_token credentials */
+  serverId?: string;
   /** Server name or API name */
   name?: string;
 }
@@ -166,6 +170,11 @@ export function credentialIdToAccount(id: CredentialId): string {
     return parts.join(CREDENTIAL_DELIMITER);
   }
 
+  if (id.type === 'remote_server_token' && id.serverId) {
+    parts.push(id.serverId);
+    return parts.join(CREDENTIAL_DELIMITER);
+  }
+
   // Workspace-scoped format (no source):
   // workspace_oauth::{workspaceId}
   if (id.type === 'workspace_oauth' && id.workspaceId) {
@@ -229,6 +238,10 @@ export function accountToCredentialId(account: string): CredentialId | null {
   // llm_oauth::{connectionSlug}
   if (isLlmCredential(type) && parts.length === 2) {
     return { type, connectionSlug: parts[1] };
+  }
+
+  if (type === 'remote_server_token' && parts.length === 2 && parts[1]) {
+    return { type, serverId: parts[1] };
   }
 
   // Workspace-scoped format (no source):

@@ -6,6 +6,8 @@ import { EntityListEmptyScreen } from '@/components/ui/entity-list-empty'
 import { skillSelection } from '@/hooks/useEntitySelection'
 import { SkillMenu } from './SkillMenu'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
+import { useAppShellContext } from '@/context/AppShellContext'
+import { toast } from 'sonner'
 import type { LoadedSkill } from '../../../shared/types'
 
 export interface SkillsListPanelProps {
@@ -27,6 +29,17 @@ export function SkillsListPanel({
   workspaceRootPath,
   className,
 }: SkillsListPanelProps) {
+  const { workspaces } = useAppShellContext()
+  const currentWorkspace = workspaces.find(workspace => workspace.id === workspaceId) ?? null
+  const canRevealPaths = !currentWorkspace?.isRemote
+  const shareDestinations = workspaces
+    .filter(workspace => workspace.id !== workspaceId)
+    .map(workspace => ({
+      key: workspace.id,
+      label: workspace.name,
+      description: workspace.isRemote ? `${workspace.remoteServerName || 'Remote server'}` : 'This device',
+    }))
+
   return (
     <EntityPanel<LoadedSkill>
       items={skills}
@@ -64,7 +77,18 @@ export function SkillsListPanel({
             skillSlug={skill.slug}
             skillName={skill.metadata.name}
             onOpenInNewWindow={() => window.electronAPI.openUrl(`craftagents://skills/skill/${skill.slug}?window=focused`)}
-            onShowInFinder={() => { if (workspaceId) window.electronAPI.openSkillInFinder(workspaceId, skill.slug) }}
+            onShowInFinder={canRevealPaths ? () => { if (workspaceId) window.electronAPI.openSkillInFinder(workspaceId, skill.slug) } : undefined}
+            shareDestinations={skill.source === 'workspace' ? shareDestinations : []}
+            onShare={skill.source === 'workspace' && workspaceId ? async (destinationWorkspaceId) => {
+              const result = await window.electronAPI.shareSkillToWorkspace(workspaceId, skill.slug, destinationWorkspaceId)
+              if (!result.success) {
+                toast.error('Failed to share skill', {
+                  description: result.error || 'Unknown error',
+                })
+                return
+              }
+              toast.success('Skill shared')
+            } : undefined}
             onDelete={() => onDeleteSkill(skill.slug)}
           />
         ),

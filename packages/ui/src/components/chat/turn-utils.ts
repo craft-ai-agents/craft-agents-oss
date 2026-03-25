@@ -519,6 +519,10 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
         content: message.content,
         messageId: message.id,
         annotations: message.annotations,
+        responseModel: message.responseModel,
+        responseConnectionName: message.responseConnectionName,
+        responseConnectionSlug: message.responseConnectionSlug,
+        responseRuntimeChanged: message.responseRuntimeChanged,
         displayName: 'Plan',
         timestamp: message.timestamp,
       })
@@ -621,6 +625,10 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
         streamStartTime: message.isStreaming ? message.timestamp : undefined,
         messageId: message.id,
         annotations: message.annotations,
+        responseModel: message.responseModel,
+        responseConnectionName: message.responseConnectionName,
+        responseConnectionSlug: message.responseConnectionSlug,
+        responseRuntimeChanged: message.responseRuntimeChanged,
       }
       currentTurn.isStreaming = !!message.isStreaming
       currentTurn.isComplete = !message.isStreaming

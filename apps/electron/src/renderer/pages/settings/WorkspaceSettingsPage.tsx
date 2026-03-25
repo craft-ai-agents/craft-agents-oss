@@ -17,9 +17,18 @@ import { motion, AnimatePresence } from 'motion/react'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { cn } from '@/lib/utils'
-import { routes } from '@/lib/navigate'
+import { navigate, routes } from '@/lib/navigate'
 import { Spinner } from '@craft-agent/ui'
 import { RenameDialog } from '@/components/ui/rename-dialog'
 import type { PermissionMode, WorkspaceSettings, LoadedSource } from '../../../shared/types'
@@ -51,6 +60,7 @@ export default function WorkspaceSettingsPage() {
   // Get active workspace from context
   const appShellContext = useAppShellContext()
   const activeWorkspaceId = appShellContext.activeWorkspaceId
+  const activeWorkspace = appShellContext.workspaces.find(workspace => workspace.id === activeWorkspaceId) ?? null
   const onRefreshWorkspaces = appShellContext.onRefreshWorkspaces
 
   // Workspace settings state
@@ -63,6 +73,9 @@ export default function WorkspaceSettingsPage() {
   const [workingDirectory, setWorkingDirectory] = useState('')
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false)
+  const workspaceSettingsLoadRequestIdRef = React.useRef(0)
 
   // Default sources state
   const [availableSources, setAvailableSources] = useState<LoadedSource[]>([])
@@ -80,9 +93,11 @@ export default function WorkspaceSettingsPage() {
         return
       }
 
+      const requestId = ++workspaceSettingsLoadRequestIdRef.current
       setIsLoadingWorkspace(true)
       try {
         const settings = await window.electronAPI.getWorkspaceSettings(activeWorkspaceId)
+        if (requestId !== workspaceSettingsLoadRequestIdRef.current) return
         if (settings) {
           setWsName(settings.name || '')
           setWsNameEditing(settings.name || '')
@@ -99,6 +114,7 @@ export default function WorkspaceSettingsPage() {
 
           // Load available sources and auto-heal stale slugs
           const sources = await window.electronAPI.getSources(activeWorkspaceId)
+          if (requestId !== workspaceSettingsLoadRequestIdRef.current) return
           setAvailableSources(sources)
           const validSlugs = new Set(sources.map(s => s.config.slug))
           const healedSlugs = savedSlugs.filter(s => validSlugs.has(s))
@@ -116,6 +132,7 @@ export default function WorkspaceSettingsPage() {
         for (const ext of ICON_EXTENSIONS) {
           try {
             const iconData = await window.electronAPI.readWorkspaceImage(activeWorkspaceId, `./icon.${ext}`)
+            if (requestId !== workspaceSettingsLoadRequestIdRef.current) return
             // IPC returns null for missing files - continue to next extension
             if (!iconData) {
               continue
@@ -136,8 +153,10 @@ export default function WorkspaceSettingsPage() {
           setWsIconUrl(null)
         }
       } catch (error) {
+        if (requestId !== workspaceSettingsLoadRequestIdRef.current) return
         console.error('Failed to load workspace settings:', error)
       } finally {
+        if (requestId !== workspaceSettingsLoadRequestIdRef.current) return
         setIsLoadingWorkspace(false)
       }
     }
@@ -320,6 +339,38 @@ export default function WorkspaceSettingsPage() {
     },
     [enabledModes, updateWorkspaceSetting]
   )
+
+  const handleDeleteWorkspace = useCallback(async () => {
+    if (!window.electronAPI || !activeWorkspaceId || !activeWorkspace) return
+
+    const remainingWorkspaces = appShellContext.workspaces.filter(workspace => workspace.id !== activeWorkspaceId)
+    const fallbackWorkspace = remainingWorkspaces[0] ?? null
+
+    if (!fallbackWorkspace) {
+      toast.error('At least one workspace must remain')
+      return
+    }
+
+    setIsDeletingWorkspace(true)
+    try {
+      const deleted = await window.electronAPI.deleteWorkspace(activeWorkspaceId)
+      if (!deleted) {
+        throw new Error('Workspace could not be deleted')
+      }
+      await appShellContext.onSelectWorkspace(fallbackWorkspace.id)
+      onRefreshWorkspaces?.()
+      navigate(routes.view.settings('workspace'))
+      toast.success(`Deleted ${activeWorkspace.name}`)
+      setDeleteDialogOpen(false)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      toast.error('Failed to delete workspace', {
+        description: message,
+      })
+    } finally {
+      setIsDeletingWorkspace(false)
+    }
+  }, [activeWorkspace, activeWorkspaceId, appShellContext.workspaces, onRefreshWorkspaces])
 
   // Show empty state if no workspace is active
   if (!activeWorkspaceId) {
@@ -541,6 +592,28 @@ export default function WorkspaceSettingsPage() {
               </SettingsCard>
             </SettingsSection>
 
+            <SettingsSection
+              title="Delete Workspace"
+              description={
+                activeWorkspace?.isRemote
+                  ? 'Deletes this workspace from the remote server. Managed Craft workspace folders are removed; external folders are left in place.'
+                  : 'Deletes this workspace from Craft. Managed Craft workspace folders are removed; external folders are left in place.'
+              }
+              variant="danger"
+            >
+              <SettingsCard>
+                <SettingsRow
+                  label={activeWorkspace?.name || 'Current workspace'}
+                  description={activeWorkspace?.rootPath || 'Workspace path unavailable'}
+                  action={
+                    <Button variant="destructive" size="sm" onClick={() => setDeleteDialogOpen(true)}>
+                      Delete
+                    </Button>
+                  }
+                />
+              </SettingsCard>
+            </SettingsSection>
+
           </div>
         </div>
         </ScrollArea>
@@ -552,6 +625,24 @@ export default function WorkspaceSettingsPage() {
         onCancel={cancelWdBrowser}
         initialPath={workingDirectory || undefined}
       />
+      <Dialog open={deleteDialogOpen} onOpenChange={(open) => { if (!isDeletingWorkspace) setDeleteDialogOpen(open) }}>
+        <DialogContent showCloseButton={!isDeletingWorkspace}>
+          <DialogHeader>
+            <DialogTitle>Delete Workspace</DialogTitle>
+            <DialogDescription>
+              Delete <strong>{activeWorkspace?.name || 'this workspace'}</strong>? Sessions and Craft-managed workspace files will be removed. External folders are not deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={isDeletingWorkspace}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteWorkspace} disabled={isDeletingWorkspace}>
+              {isDeletingWorkspace ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

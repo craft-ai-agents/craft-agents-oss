@@ -40,6 +40,7 @@ export default function LabelsSettingsPage() {
   const { activeWorkspaceId } = useAppShellContext()
   const activeWorkspace = useActiveWorkspace()
   const { labels, isLoading } = useLabels(activeWorkspaceId)
+  const canOpenLocalFiles = !!activeWorkspace && !activeWorkspace.isRemote
 
   // Resolve edit configs using the workspace root path
   const rootPath = activeWorkspace?.rootPath || ''
@@ -47,7 +48,7 @@ export default function LabelsSettingsPage() {
   const autoRulesEditConfig = getEditConfig('edit-auto-rules', rootPath)
 
   // Secondary action: open the labels config file directly in system editor
-  const editFileAction = rootPath ? {
+  const editFileAction = canOpenLocalFiles && rootPath ? {
     label: 'Edit File',
     filePath: `${rootPath}/labels/config.json`,
   } : undefined

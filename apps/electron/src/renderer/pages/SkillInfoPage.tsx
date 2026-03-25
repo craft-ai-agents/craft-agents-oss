@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import { SkillMenu } from '@/components/app-shell/SkillMenu'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { routes, navigate } from '@/lib/navigate'
+import { useAppShellContext } from '@/context/AppShellContext'
 import {
   Info_Page,
   Info_Section,
@@ -28,9 +29,12 @@ interface SkillInfoPageProps {
 }
 
 export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageProps) {
+  const { workspaces } = useAppShellContext()
   const [skill, setSkill] = useState<LoadedSkill | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const currentWorkspace = workspaces.find(workspace => workspace.id === workspaceId) ?? null
+  const canRevealPaths = !currentWorkspace?.isRemote
 
   // Load skill data
   useEffect(() => {
@@ -109,6 +113,13 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
 
   // Get skill name for header
   const skillName = skill?.metadata.name || skillSlug
+  const shareDestinations = workspaces
+    .filter(workspace => workspace.id !== workspaceId)
+    .map(workspace => ({
+      key: workspace.id,
+      label: workspace.name,
+      description: workspace.isRemote ? `${workspace.remoteServerName || 'Remote server'}` : 'This device',
+    }))
 
   // Format path to show just the skill-relative portion (skills/{slug}/)
   const formatPath = (path: string) => {
@@ -121,10 +132,27 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
 
   // Open the skill folder in Finder with SKILL.md selected
   const handleLocationClick = () => {
-    if (!skill) return
+    if (!skill || !canRevealPaths) return
     // Show the SKILL.md file in Finder (this reveals the enclosing folder with file focused)
     window.electronAPI.showInFolder(`${skill.path}/SKILL.md`)
   }
+
+  const handleShare = useCallback(async (destinationWorkspaceId: string) => {
+    try {
+      const result = await window.electronAPI.shareSkillToWorkspace(workspaceId, skillSlug, destinationWorkspaceId)
+      if (!result.success) {
+        toast.error('Failed to share skill', {
+          description: result.error || 'Unknown error',
+        })
+        return
+      }
+      toast.success('Skill shared')
+    } catch (error) {
+      toast.error('Failed to share skill', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  }, [skillSlug, workspaceId])
 
   return (
     <Info_Page
@@ -139,7 +167,9 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
             skillSlug={skillSlug}
             skillName={skillName}
             onOpenInNewWindow={handleOpenInNewWindow}
-            onShowInFinder={handleOpenInFinder}
+            onShowInFinder={canRevealPaths ? handleOpenInFinder : undefined}
+            shareDestinations={skill?.source === 'workspace' ? shareDestinations : []}
+            onShare={skill?.source === 'workspace' ? handleShare : undefined}
             onDelete={handleDelete}
           />
         }
@@ -162,10 +192,10 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
               <EditPopover
                 trigger={<EditButton />}
                 {...getEditConfig('skill-metadata', skill.path)}
-                secondaryAction={{
+                secondaryAction={canRevealPaths ? {
                   label: 'Edit File',
                   filePath: `${skill.path}/SKILL.md`,
-                }}
+                } : undefined}
               />
             }
           >
@@ -178,7 +208,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
               <Info_Table.Row label="Location">
                 <button
                   onClick={handleLocationClick}
-                  className="hover:underline cursor-pointer text-left"
+                  className={canRevealPaths ? 'hover:underline cursor-pointer text-left' : 'text-left cursor-default'}
                 >
                   {formatPath(skill.path)}
                 </button>
@@ -237,10 +267,10 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
               <EditPopover
                 trigger={<EditButton />}
                 {...getEditConfig('skill-instructions', skill.path)}
-                secondaryAction={{
+                secondaryAction={canRevealPaths ? {
                   label: 'Edit File',
                   filePath: `${skill.path}/SKILL.md`,
-                }}
+                } : undefined}
               />
             }
           >

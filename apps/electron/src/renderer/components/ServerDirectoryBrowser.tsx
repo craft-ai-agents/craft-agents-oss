@@ -10,8 +10,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useRegisterModal } from '@/context/ModalContext'
 import type { DirectoryListingResult } from '../../shared/types'
-import { FolderIcon, FolderSymlinkIcon, ChevronRightIcon } from 'lucide-react'
+import { FolderIcon, FolderSymlinkIcon, ChevronRightIcon, ServerIcon, FolderSearchIcon } from 'lucide-react'
 import { Spinner } from '@craft-agent/ui'
+import type { WorkspaceCreationTarget } from '../../shared/types'
+import { cn } from '@/lib/utils'
 
 /**
  * Detect paths that are clearly from the wrong platform.
@@ -35,6 +37,8 @@ interface ServerDirectoryBrowserProps {
   onSelect: (path: string) => void
   onCancel: () => void
   initialPath?: string
+  presentation?: 'dialog' | 'inline'
+  target?: WorkspaceCreationTarget | null
 }
 
 export function ServerDirectoryBrowser({
@@ -43,8 +47,10 @@ export function ServerDirectoryBrowser({
   onSelect,
   onCancel,
   initialPath,
+  presentation = 'dialog',
+  target,
 }: ServerDirectoryBrowserProps) {
-  useRegisterModal(open, onCancel)
+  useRegisterModal(open && presentation === 'dialog', onCancel)
 
   const [listing, setListing] = useState<DirectoryListingResult | null>(null)
   const [loading, setLoading] = useState(false)
@@ -52,6 +58,7 @@ export function ServerDirectoryBrowser({
   const [pathInput, setPathInput] = useState('')
   const [selectedEntry, setSelectedEntry] = useState<string | null>(null)
   const [serverHomePath, setServerHomePath] = useState<string | null>(null)
+  const [effectiveMode, setEffectiveMode] = useState<'browse' | 'manual'>(mode)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Navigate to a directory (for browse mode)
@@ -60,12 +67,27 @@ export function ServerDirectoryBrowser({
     setError(null)
     setSelectedEntry(null)
     try {
-      const result = await window.electronAPI.listServerDirectory(dirPath)
+      const result = target
+        ? await window.electronAPI.listServerDirectoryForTarget(target, dirPath)
+        : await window.electronAPI.listServerDirectory(dirPath)
       setListing(result)
       setPathInput(result.currentPath)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to list directory'
-      setError(message)
+      const normalized = message.toLowerCase()
+      const unsupported = normalized.includes('unknown channel')
+        || normalized.includes('not available')
+        || normalized.includes('not supported')
+        || normalized.includes('method not found')
+
+      if (unsupported) {
+        setEffectiveMode('manual')
+        setListing(null)
+        setPathInput(dirPath)
+        setError('Directory browsing is unavailable on this server. Enter a path manually.')
+      } else {
+        setError(message)
+      }
     } finally {
       setLoading(false)
     }
@@ -80,13 +102,17 @@ export function ServerDirectoryBrowser({
       setSelectedEntry(null)
       setPathInput('')
       setServerHomePath(null)
+      setEffectiveMode(mode)
       return
     }
 
     const init = async () => {
       // Always fetch server home dir — needed for platform detection in both modes
-      const homeDir = await window.electronAPI.getHomeDir()
+      const homeDir = target
+        ? await window.electronAPI.getHomeDirForTarget(target)
+        : await window.electronAPI.getHomeDir()
       setServerHomePath(homeDir)
+      setEffectiveMode(mode)
 
       if (mode === 'browse') {
         // Only use initialPath if it matches the server's platform
@@ -95,7 +121,7 @@ export function ServerDirectoryBrowser({
       }
     }
     void init()
-  }, [open, mode, initialPath, navigateTo])
+  }, [open, mode, initialPath, navigateTo, target])
 
   // Handle path input submission (Enter key or navigate button)
   const handlePathSubmit = useCallback(() => {
@@ -108,17 +134,17 @@ export function ServerDirectoryBrowser({
       return
     }
 
-    if (mode === 'browse') {
+    if (effectiveMode === 'browse') {
       void navigateTo(trimmed)
     } else {
       // Manual mode — just select the path
       onSelect(trimmed)
     }
-  }, [pathInput, mode, navigateTo, onSelect, serverHomePath])
+  }, [pathInput, effectiveMode, navigateTo, onSelect, serverHomePath])
 
   // Handle selecting the current directory (or highlighted entry)
   const handleSelect = useCallback(() => {
-    if (mode === 'manual') {
+    if (effectiveMode === 'manual') {
       handlePathSubmit()
       return
     }
@@ -130,7 +156,7 @@ export function ServerDirectoryBrowser({
     } else if (pathInput.trim()) {
       onSelect(pathInput.trim())
     }
-  }, [mode, selectedEntry, listing, pathInput, onSelect, handlePathSubmit])
+  }, [effectiveMode, selectedEntry, listing, pathInput, onSelect, handlePathSubmit])
 
   // Handle double-click on an entry to navigate into it
   const handleEntryDoubleClick = useCallback((entryPath: string) => {
@@ -253,28 +279,84 @@ export function ServerDirectoryBrowser({
     </>
   )
 
-  return (
-    <Dialog open={open} onOpenChange={isOpen => { if (!isOpen) onCancel() }}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Select Server Directory</DialogTitle>
-        </DialogHeader>
+  const content = (
+    <>
+      <DialogHeader>
+        <DialogTitle>Select Server Directory</DialogTitle>
+      </DialogHeader>
 
-        <div className="flex flex-col gap-2">
-          {mode === 'browse' ? renderBrowseMode() : renderManualMode()}
+      <div className="flex flex-col gap-2">
+        {effectiveMode === 'browse' ? renderBrowseMode() : renderManualMode()}
+      </div>
+
+      <DialogFooter>
+        <Button variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          onClick={handleSelect}
+          disabled={effectiveMode === 'manual' ? !pathInput.trim() : (!listing && !pathInput.trim())}
+        >
+          Select
+        </Button>
+      </DialogFooter>
+    </>
+  )
+
+  if (!open) return null
+
+  if (presentation === 'inline') {
+    return (
+      <div className="w-full rounded-2xl border border-border/50 bg-muted/35 p-4">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-background shadow-minimal">
+                {target?.mode === 'remote'
+                  ? <ServerIcon className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+                  : <FolderSearchIcon className="h-4 w-4 text-muted-foreground" />
+                }
+              </span>
+              <span>Select a folder</span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {effectiveMode === 'browse'
+                ? 'Browse directories on the selected server and choose the folder you want to use.'
+                : 'Enter the full path for a folder on the selected server.'
+              }
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={onCancel} className="shrink-0">
+            Close
+          </Button>
         </div>
 
-        <DialogFooter>
+        <div className="flex flex-col gap-3">
+          {effectiveMode === 'browse' ? renderBrowseMode() : renderManualMode()}
+        </div>
+
+        <div className="mt-4 flex items-center justify-end gap-2">
           <Button variant="outline" onClick={onCancel}>
             Cancel
           </Button>
           <Button
             onClick={handleSelect}
-            disabled={mode === 'manual' ? !pathInput.trim() : (!listing && !pathInput.trim())}
+            disabled={effectiveMode === 'manual' ? !pathInput.trim() : (!listing && !pathInput.trim())}
           >
-            Select
+            Use folder
           </Button>
-        </DialogFooter>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={isOpen => { if (!isOpen) onCancel() }}>
+      <DialogContent
+        className="z-[var(--z-floating-menu)] max-w-lg"
+        overlayClassName="z-[var(--z-floating-backdrop)]"
+      >
+        {content}
       </DialogContent>
     </Dialog>
   )

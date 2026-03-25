@@ -23,6 +23,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.llmConnections.LIST_WITH_STATUS,
   RPC_CHANNELS.llmConnections.GET,
   RPC_CHANNELS.llmConnections.GET_API_KEY,
+  RPC_CHANNELS.llmConnections.EXPORT_BUNDLE,
+  RPC_CHANNELS.llmConnections.IMPORT_BUNDLE,
   RPC_CHANNELS.llmConnections.SAVE,
   RPC_CHANNELS.llmConnections.DELETE,
   RPC_CHANNELS.llmConnections.TEST,
@@ -44,6 +46,19 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.pi.GET_PROVIDER_BASE_URL,
   RPC_CHANNELS.pi.GET_PROVIDER_MODELS,
 ] as const
+
+function getCredentialIdForConnection(connection: LlmConnection) {
+  if (connection.providerType === 'bedrock') {
+    return { type: 'llm_iam' as const, connectionSlug: connection.slug }
+  }
+  if (connection.providerType === 'vertex') {
+    return { type: 'llm_service_account' as const, connectionSlug: connection.slug }
+  }
+  if (connection.authType === 'oauth') {
+    return { type: 'llm_oauth' as const, connectionSlug: connection.slug }
+  }
+  return { type: 'llm_api_key' as const, connectionSlug: connection.slug }
+}
 
 export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerDeps): void {
   const { sessionManager } = deps
@@ -412,6 +427,56 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       return key.slice(0, 7) + '••••••••' + key.slice(-4)
     }
     return '••••••••'
+  })
+
+  server.handle(RPC_CHANNELS.llmConnections.EXPORT_BUNDLE, async (_ctx, slug: string): Promise<import('@craft-agent/shared/protocol').LlmConnectionBundle> => {
+    const connection = getLlmConnection(slug)
+    if (!connection) {
+      throw new Error(`Connection not found: ${slug}`)
+    }
+
+    const manager = getCredentialManager()
+    const credential = await manager.get(getCredentialIdForConnection(connection))
+    return { connection, credential }
+  })
+
+  server.handle(RPC_CHANNELS.llmConnections.IMPORT_BUNDLE, async (_ctx, bundle: import('@craft-agent/shared/protocol').LlmConnectionBundle): Promise<{ success: boolean; slug: string; error?: string }> => {
+    const { connection, credential } = bundle
+
+    try {
+      const existing = getLlmConnection(connection.slug)
+      const success = existing
+        ? updateLlmConnection(connection.slug, connection)
+        : addLlmConnection(connection)
+
+      if (!success) {
+        return { success: false, slug: connection.slug, error: 'Failed to save connection' }
+      }
+
+      const manager = getCredentialManager()
+      await manager.deleteLlmCredentials(connection.slug)
+      if (credential) {
+        await manager.set(getCredentialIdForConnection(connection), credential)
+      }
+
+      if (!getDefaultLlmConnection()) {
+        setDefaultLlmConnection(connection.slug)
+      }
+
+      await sessionManager.reinitializeAuth(connection.slug)
+
+      getModelRefreshService().refreshNow(connection.slug).catch(err => {
+        deps.platform.logger?.warn(`Model refresh after import failed for ${connection.slug}: ${err instanceof Error ? err.message : err}`)
+      })
+
+      return { success: true, slug: connection.slug }
+    } catch (error) {
+      return {
+        success: false,
+        slug: connection.slug,
+        error: error instanceof Error ? error.message : 'Failed to import connection',
+      }
+    }
   })
 
   // Save (create or update) an LLM connection

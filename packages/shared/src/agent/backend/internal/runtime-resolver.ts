@@ -139,9 +139,21 @@ function resolveServerPath(hostRuntime: BackendHostRuntimeContext, serverName: s
       join(hostRuntime.appRootPath, 'dist', 'resources', serverName, 'index.js'),
     ]);
   }
-  return resolveUpwards(
-    hostRuntime.appRootPath,
-    join('packages', serverName, 'dist', 'index.js'),
+  return (
+    resolveUpwards(
+      hostRuntime.appRootPath,
+      join('packages', serverName, 'dist', 'index.js'),
+    )
+    // Headless/dev installs often run straight from source via Bun without a
+    // package-local build step, so the TS entrypoint is the real server path.
+    ?? resolveUpwards(
+      hostRuntime.appRootPath,
+      join('packages', serverName, 'src', 'index.ts'),
+    )
+    ?? resolveUpwards(
+      hostRuntime.appRootPath,
+      join('packages', serverName, 'src', 'index.js'),
+    )
   );
 }
 
@@ -178,6 +190,9 @@ function resolveRipgrepPath(hostRuntime: BackendHostRuntimeContext): string | un
 
 export function resolveBackendRuntimePaths(hostRuntime: BackendHostRuntimeContext): ResolvedBackendRuntimePaths {
   const bundledRuntimePath = hostRuntime.nodeRuntimePath || resolveBundledRuntimePath(hostRuntime);
+  const currentBunRuntimePath = process.versions?.bun && process.execPath && existsSync(process.execPath)
+    ? process.execPath
+    : undefined;
 
   return {
     claudeCliPath: resolveClaudeCliPath(hostRuntime),
@@ -187,7 +202,7 @@ export function resolveBackendRuntimePaths(hostRuntime: BackendHostRuntimeContex
     sessionServerPath: resolveServerPath(hostRuntime, 'session-mcp-server'),
     bridgeServerPath: resolveServerPath(hostRuntime, 'bridge-mcp-server'),
     piServerPath: resolveServerPath(hostRuntime, 'pi-agent-server'),
-    nodeRuntimePath: hostRuntime.nodeRuntimePath || bundledRuntimePath || 'bun',
+    nodeRuntimePath: hostRuntime.nodeRuntimePath || bundledRuntimePath || currentBunRuntimePath || 'bun',
     bundledRuntimePath,
   };
 }
@@ -232,4 +247,3 @@ export function applyAnthropicRuntimeBootstrap(
     }
   }
 }
-

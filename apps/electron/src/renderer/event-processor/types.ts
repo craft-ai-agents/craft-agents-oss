@@ -48,6 +48,14 @@ export interface TextCompleteEvent {
   timestamp?: number
   /** Authoritative message ID from main process for persistence/branching parity */
   messageId?: string
+  /** Model that generated this response (captured at completion time) */
+  responseModel?: string
+  /** Human-readable connection/provider label for the generating backend */
+  responseConnectionName?: string
+  /** Resolved connection slug that produced this response */
+  responseConnectionSlug?: string
+  /** Marks the first assistant response after an explicit runtime switch */
+  responseRuntimeChanged?: boolean
 }
 
 /**

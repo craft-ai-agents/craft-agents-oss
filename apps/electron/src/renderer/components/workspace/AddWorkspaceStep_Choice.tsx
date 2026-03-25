@@ -1,10 +1,20 @@
 import { FolderPlus, FolderOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
+import type { RemoteServerProfile } from "../../../shared/types"
 import { AddWorkspaceContainer, AddWorkspaceStepHeader } from "./primitives"
+import { WorkspaceTargetSelector } from "./WorkspaceTargetSelector"
 
 interface AddWorkspaceStep_ChoiceProps {
   onCreateNew: () => void
   onOpenFolder: () => void
+  targetMode: 'local' | 'remote'
+  onTargetModeChange: (mode: 'local' | 'remote') => void
+  remoteServers: RemoteServerProfile[]
+  selectedServerId: string | null
+  onSelectedServerIdChange: (serverId: string | null) => void
+  allowLocalTarget?: boolean
+  connectedRemoteName?: string | null
+  connectedRemoteUrl?: string | null
 }
 
 interface ChoiceCardProps {
@@ -54,13 +64,32 @@ function ChoiceCard({ icon, title, description, onClick, variant = 'secondary' }
  */
 export function AddWorkspaceStep_Choice({
   onCreateNew,
-  onOpenFolder
+  onOpenFolder,
+  targetMode,
+  onTargetModeChange,
+  remoteServers,
+  selectedServerId,
+  onSelectedServerIdChange,
+  allowLocalTarget = true,
+  connectedRemoteName,
+  connectedRemoteUrl,
 }: AddWorkspaceStep_ChoiceProps) {
   return (
     <AddWorkspaceContainer>
       <div className="mt-2" />
+      <WorkspaceTargetSelector
+        targetMode={targetMode}
+        onTargetModeChange={onTargetModeChange}
+        remoteServers={remoteServers}
+        selectedServerId={selectedServerId}
+        onSelectedServerIdChange={onSelectedServerIdChange}
+        allowLocalTarget={allowLocalTarget}
+        connectedRemoteName={connectedRemoteName}
+        connectedRemoteUrl={connectedRemoteUrl}
+      />
       <AddWorkspaceStepHeader
         title="Add Workspace"
+        className="mt-6"
         description="Where your ideas meet the tools to make them happen."
       />
 

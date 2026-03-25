@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync } from 'fs';
-import { join, dirname, basename } from 'path';
+import { join, dirname, basename, resolve, sep } from 'path';
 import { getCredentialManager } from '../credentials/index.ts';
 import { getOrCreateLatestSession, type SessionConfig } from '../sessions/index.ts';
 import {
@@ -8,6 +8,8 @@ import {
   saveWorkspaceConfig,
   createWorkspaceAtPath,
   isValidWorkspace,
+  deleteWorkspaceFolder,
+  getDefaultWorkspacesDir,
 } from '../workspaces/storage.ts';
 import { findIconFile } from '../utils/icon.ts';
 import { initializeDocs } from '../docs/index.ts';
@@ -23,6 +25,7 @@ import { isValidThinkingLevel, normalizeThinkingLevel } from '../agent/thinking-
 import { parsePermissionMode, PERMISSION_MODE_ORDER } from '../agent/mode-types.ts';
 import { type ConfigDefaults } from './config-defaults-schema.ts';
 import { isValidThemeFile } from './validators.ts';
+import type { RemoteServerProfile, SaveRemoteServerProfileInput } from '../protocol/dto.ts';
 
 // Re-export CONFIG_DIR for convenience (centralized in paths.ts)
 export { CONFIG_DIR } from './paths.ts';
@@ -52,7 +55,7 @@ export interface StoredConfig {
   defaultLlmConnection?: string;  // Slug of default connection for new sessions
   defaultThinkingLevel?: ThinkingLevel;  // App-level default thinking level for new sessions
 
-  workspaces: Workspace[];
+  workspaces: StoredWorkspace[];
   activeWorkspaceId: string | null;
   activeSessionId: string | null;  // Currently active session (primary scope)
   // Notifications
@@ -76,8 +79,24 @@ export interface StoredConfig {
   networkProxy?: import('./types.ts').NetworkProxySettings;
   // Windows: path to Git Bash (bash.exe) for the SDK subprocess
   gitBashPath?: string;
+  // Configured remote Craft server profiles (token stored separately in credential store)
+  remoteServers?: StoredRemoteServerProfile[];
   // User chose "Setup later" during onboarding — skip showing onboarding on next launch
   setupDeferred?: boolean;
+}
+
+interface StoredRemoteServerProfile {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  allowInsecureWs: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface StoredWorkspace extends Workspace {
+  managedByApp?: boolean;
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -187,10 +206,37 @@ export function loadStoredConfig(): StoredConfig | null {
       return null;
     }
 
+    if (!Array.isArray(config.remoteServers)) {
+      config.remoteServers = [];
+    }
+
     // Expand path variables (~ and ${HOME}) for portability
     for (const workspace of config.workspaces) {
       workspace.rootPath = expandPath(workspace.rootPath);
     }
+
+    config.remoteServers = config.remoteServers
+      .filter((server): server is StoredRemoteServerProfile => {
+        return !!server
+          && typeof server.id === 'string'
+          && typeof server.name === 'string'
+          && typeof server.url === 'string';
+      })
+      .flatMap((server) => {
+        try {
+          return [{
+            ...server,
+            url: normalizeRemoteServerUrl(server.url),
+            enabled: server.enabled !== false,
+            allowInsecureWs: server.allowInsecureWs === true,
+            createdAt: typeof server.createdAt === 'number' ? server.createdAt : Date.now(),
+            updatedAt: typeof server.updatedAt === 'number' ? server.updatedAt : Date.now(),
+          }];
+        } catch (error) {
+          debug('[config] Skipping invalid remote server profile:', server.id, error instanceof Error ? error.message : error);
+          return [];
+        }
+      });
 
     // Validate active workspace exists
     const activeWorkspace = config.workspaces.find(w => w.id === config.activeWorkspaceId);
@@ -235,6 +281,32 @@ export function saveConfig(config: StoredConfig): void {
   };
 
   writeFileSync(CONFIG_FILE, JSON.stringify(storageConfig, null, 2), 'utf-8');
+}
+
+function normalizeRemoteServerUrl(url: string): string {
+  const parsed = new URL(url.trim());
+  if (parsed.protocol !== 'ws:' && parsed.protocol !== 'wss:') {
+    throw new Error('Remote server URL must use ws:// or wss://');
+  }
+  return parsed.toString().replace(/\/$/, '');
+}
+
+function isLocalhostHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+}
+
+function requiresInsecureWsOptIn(url: string): boolean {
+  const parsed = new URL(url);
+  return parsed.protocol === 'ws:' && !isLocalhostHostname(parsed.hostname);
+}
+
+function generateRemoteServerId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `rs_${crypto.randomUUID().slice(0, 8)}`;
+  }
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return `rs_${Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 8)}`;
 }
 
 // Legacy updateApiKey() removed - use setupLlmConnection IPC handler instead.
@@ -514,21 +586,26 @@ export function findWorkspaceIcon(rootPath: string): string | null {
   return findIconFile(rootPath) ?? null;
 }
 
+function normalizeWorkspaceRootPath(rootPath: string): string {
+  return expandPath(rootPath);
+}
+
 export function getWorkspaces(): Workspace[] {
   const config = loadStoredConfig();
   const workspaces = config?.workspaces || [];
 
   // Resolve workspace names from folder config and local icons
   return workspaces.map(w => {
+    const rootPath = normalizeWorkspaceRootPath(w.rootPath);
     // Read name from workspace folder config (single source of truth)
-    const wsConfig = loadWorkspaceConfig(w.rootPath);
-    const name = wsConfig?.name || basename(w.rootPath) || 'Untitled';
+    const wsConfig = loadWorkspaceConfig(rootPath);
+    const name = wsConfig?.name || basename(rootPath) || 'Untitled';
 
     // If workspace has a stored iconUrl that's a remote URL, use it
     // Otherwise check for local icon file
     let iconUrl = w.iconUrl;
     if (!iconUrl || (!iconUrl.startsWith('http://') && !iconUrl.startsWith('https://'))) {
-      const localIcon = findWorkspaceIcon(w.rootPath);
+      const localIcon = findWorkspaceIcon(rootPath);
       if (localIcon) {
         // Convert absolute path to file:// URL for Electron renderer
         // Append mtime as cache-buster so UI refreshes when icon changes
@@ -541,16 +618,16 @@ export function getWorkspaces(): Workspace[] {
       }
     }
 
-    return { ...w, name, iconUrl };
+    return { ...w, rootPath, name, iconUrl };
   });
 }
 
 export function getActiveWorkspace(): Workspace | null {
   const config = loadStoredConfig();
   if (!config || !config.activeWorkspaceId) {
-    return config?.workspaces[0] || null;
+    return getWorkspaces()[0] || null;
   }
-  return config.workspaces.find(w => w.id === config.activeWorkspaceId) || config.workspaces[0] || null;
+  return getWorkspaces().find(w => w.id === config.activeWorkspaceId) || getWorkspaces()[0] || null;
 }
 
 /**
@@ -591,7 +668,7 @@ export async function switchWorkspaceAtomic(workspaceId: string): Promise<{ work
   if (!workspace) return null;
 
   // Get or create the latest session for this workspace
-  const session = await getOrCreateLatestSession(workspace.rootPath);
+  const session = await getOrCreateLatestSession(normalizeWorkspaceRootPath(workspace.rootPath));
 
   // Update active workspace in config
   config.activeWorkspaceId = workspaceId;
@@ -605,7 +682,11 @@ export async function switchWorkspaceAtomic(workspaceId: string): Promise<{ work
  * Add a workspace to the global config.
  * @param workspace - Workspace data (must include rootPath)
  */
-export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Workspace {
+export interface AddWorkspaceOptions {
+  managedByApp?: boolean;
+}
+
+export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>, options?: AddWorkspaceOptions): Workspace {
   const config = loadStoredConfig();
   if (!config) {
     throw new Error('No config found');
@@ -614,12 +695,13 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Wo
   // Check if workspace with same rootPath already exists
   const existing = config.workspaces.find(w => w.rootPath === workspace.rootPath);
   if (existing) {
-    // Update existing workspace with new settings
-    const updated: Workspace = {
+    const existingStored = existing as StoredWorkspace
+    const updated: StoredWorkspace = {
       ...existing,
       ...workspace,
       id: existing.id,
       createdAt: existing.createdAt,
+      managedByApp: options?.managedByApp ?? existingStored.managedByApp,
     };
     const existingIndex = config.workspaces.indexOf(existing);
     config.workspaces[existingIndex] = updated;
@@ -627,10 +709,11 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Wo
     return updated;
   }
 
-  const newWorkspace: Workspace = {
+  const newWorkspace: StoredWorkspace = {
     ...workspace,
     id: generateWorkspaceId(),
     createdAt: Date.now(),
+    managedByApp: options?.managedByApp ?? false,
   };
 
   // Create workspace folder structure if it doesn't exist
@@ -659,7 +742,7 @@ export function syncWorkspaces(): void {
   if (!config) return;
 
   const discoveredPaths = discoverWorkspacesInDefaultLocation();
-  const trackedPaths = new Set(config.workspaces.map(w => w.rootPath));
+  const trackedPaths = new Set(config.workspaces.map(w => normalizeWorkspaceRootPath(w.rootPath)));
 
   let added = false;
   for (const rootPath of discoveredPaths) {
@@ -695,6 +778,8 @@ export async function removeWorkspace(workspaceId: string): Promise<boolean> {
 
   const index = config.workspaces.findIndex(w => w.id === workspaceId);
   if (index === -1) return false;
+  const workspace = config.workspaces[index] as StoredWorkspace;
+  const workspaceRootPath = normalizeWorkspaceRootPath(workspace.rootPath);
 
   config.workspaces.splice(index, 1);
 
@@ -719,11 +804,115 @@ export async function removeWorkspace(workspaceId: string): Promise<boolean> {
     }
   }
 
+  const resolvedWorkspaceRootPath = resolve(workspaceRootPath);
+  const isManagedWorkspace = workspace.managedByApp === true;
+
+  if (isManagedWorkspace && existsSync(resolvedWorkspaceRootPath)) {
+    try {
+      deleteWorkspaceFolder(resolvedWorkspaceRootPath);
+    } catch (error) {
+      console.error(`[storage] Failed to delete managed workspace folder: ${resolvedWorkspaceRootPath}`, error);
+    }
+  }
+
   return true;
 }
 
 // Note: renameWorkspace() was removed - workspace names are now stored only in folder config
 // Use updateWorkspaceSetting('name', ...) to rename workspaces via the folder config
+
+// ============================================
+// Remote Server Profiles
+// ============================================
+
+function toRemoteServerProfile(profile: StoredRemoteServerProfile, hasToken: boolean): RemoteServerProfile {
+  return {
+    ...profile,
+    hasToken,
+  };
+}
+
+export function getStoredRemoteServerProfiles(): StoredRemoteServerProfile[] {
+  const config = loadStoredConfig();
+  return [...(config?.remoteServers ?? [])];
+}
+
+export function getRemoteServerProfile(serverId: string): StoredRemoteServerProfile | null {
+  const config = loadStoredConfig();
+  return config?.remoteServers?.find(server => server.id === serverId) ?? null;
+}
+
+export async function getRemoteServerProfiles(): Promise<RemoteServerProfile[]> {
+  const profiles = getStoredRemoteServerProfiles();
+  const manager = getCredentialManager();
+
+  const withTokens = await Promise.all(profiles.map(async (profile) => {
+    const hasToken = !!(await manager.getRemoteServerToken(profile.id));
+    return toRemoteServerProfile(profile, hasToken);
+  }));
+
+  return withTokens.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function saveRemoteServerProfile(input: SaveRemoteServerProfileInput): Promise<RemoteServerProfile> {
+  const config = loadStoredConfig();
+  if (!config) {
+    throw new Error('No config found');
+  }
+
+  const now = Date.now();
+  const normalizedUrl = normalizeRemoteServerUrl(input.url);
+  const normalizedName = input.name.trim();
+  if (!normalizedName) {
+    throw new Error('Remote server name is required');
+  }
+  const existingIndex = config.remoteServers?.findIndex(server => server.id === input.id) ?? -1;
+  const existing = existingIndex >= 0 ? config.remoteServers?.[existingIndex] : null;
+  const allowInsecureWs = input.allowInsecureWs ?? existing?.allowInsecureWs ?? false;
+  if (requiresInsecureWsOptIn(normalizedUrl) && !allowInsecureWs) {
+    throw new Error('Unsecured ws:// connections require explicit opt-in');
+  }
+
+  const profile: StoredRemoteServerProfile = {
+    id: existing?.id ?? input.id ?? generateRemoteServerId(),
+    name: normalizedName,
+    url: normalizedUrl,
+    enabled: input.enabled ?? existing?.enabled ?? true,
+    allowInsecureWs,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  };
+
+  const servers = [...(config.remoteServers ?? [])];
+  if (existingIndex >= 0) {
+    servers[existingIndex] = profile;
+  } else {
+    servers.push(profile);
+  }
+  config.remoteServers = servers;
+  saveConfig(config);
+
+  const manager = getCredentialManager();
+  const hasToken = !!(await manager.getRemoteServerToken(profile.id));
+  return toRemoteServerProfile(profile, hasToken);
+}
+
+export async function deleteRemoteServerProfile(serverId: string): Promise<boolean> {
+  const config = loadStoredConfig();
+  if (!config) return false;
+
+  const servers = config.remoteServers ?? [];
+  const index = servers.findIndex(server => server.id === serverId);
+  if (index === -1) return false;
+
+  servers.splice(index, 1);
+  config.remoteServers = servers;
+  saveConfig(config);
+
+  const manager = getCredentialManager();
+  await manager.deleteRemoteServerToken(serverId);
+  return true;
+}
 
 // ============================================
 // Workspace Conversation Persistence

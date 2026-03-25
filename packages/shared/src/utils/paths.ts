@@ -205,13 +205,21 @@ export function setBundledAssetsRoot(dir: string): void {
  * @param subfolder - Name of the assets subdirectory (e.g. 'docs', 'tool-icons', 'themes', 'permissions')
  */
 export function getBundledAssetsDir(subfolder: string): string | undefined {
-  const candidates = [
-    // Electron packaged app (set via setBundledAssetsRoot at startup)
-    ...(_assetsRoot ? [join(_assetsRoot, 'resources', subfolder)] : []),
-    // Dev: electron app resources folder (when cwd is apps/electron)
-    join(process.cwd(), 'resources', subfolder),
-    // Dev: dist output (after build:copy)
-    join(process.cwd(), 'dist', 'resources', subfolder),
-  ];
+  const roots = [...new Set([
+    _assetsRoot,
+    process.cwd(),
+  ].filter((value): value is string => !!value))];
+
+  const candidates = roots.flatMap((root) => ([
+    // Packaged / direct app root.
+    join(root, 'resources', subfolder),
+    // Monorepo root running standalone headless server.
+    join(root, 'apps', 'electron', 'resources', subfolder),
+    // Dist output (after build:copy).
+    join(root, 'dist', 'resources', subfolder),
+    // Root already points at a resources directory.
+    join(root, subfolder),
+  ]));
+
   return candidates.find(p => existsSync(p));
 }

@@ -17,6 +17,7 @@ import type {
   CreateSessionOptions,
   FileAttachment,
   SendMessageOptions,
+  PermissionRequest,
   PermissionResponseOptions,
   CredentialResponse,
   PermissionModeState,
@@ -109,6 +110,7 @@ export interface ISessionManager {
     options?: PermissionResponseOptions,
   ): boolean
   respondToCredential(sessionId: string, requestId: string, response: CredentialResponse): Promise<boolean>
+  getPendingPermissionRequests(sessionId: string): PermissionRequest[]
   getSessionPermissionModeState(sessionId: string): PermissionModeState | null
 
   // ---------------------------------------------------------------------------

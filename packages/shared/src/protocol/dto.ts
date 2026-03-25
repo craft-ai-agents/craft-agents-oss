@@ -16,7 +16,9 @@ import type {
 } from '@craft-agent/core/types'
 import type { PermissionMode } from '../agent/mode-types'
 import type { ThinkingLevel } from '../agent/thinking-levels'
-import type { CustomEndpointConfig } from '../config/llm-connections'
+import type { CustomEndpointConfig, LlmConnection } from '../config/llm-connections'
+import type { StoredCredential } from '../credentials/types'
+import type { FolderSourceConfig } from '../sources/types'
 import type {
   AuthRequest as SharedAuthRequest,
   CredentialInputMode as SharedCredentialInputMode,
@@ -146,7 +148,7 @@ export interface PermissionModeState {
 // turnId: Correlation ID from the API's message.id, groups all events in an assistant turn
 export type SessionEvent =
   | { type: 'text_delta'; sessionId: string; delta: string; turnId?: string }
-  | { type: 'text_complete'; sessionId: string; text: string; isIntermediate?: boolean; turnId?: string; parentToolUseId?: string; timestamp?: number; messageId?: string }
+  | { type: 'text_complete'; sessionId: string; text: string; isIntermediate?: boolean; turnId?: string; parentToolUseId?: string; timestamp?: number; messageId?: string; responseModel?: string; responseConnectionName?: string; responseConnectionSlug?: string; responseRuntimeChanged?: boolean }
   | { type: 'tool_start'; sessionId: string; toolName: string; toolUseId: string; toolInput: Record<string, unknown>; toolIntent?: string; toolDisplayName?: string; toolDisplayMeta?: ToolDisplayMeta; turnId?: string; parentToolUseId?: string; timestamp?: number }
   | { type: 'tool_result'; sessionId: string; toolUseId: string; toolName: string; result: string; turnId?: string; parentToolUseId?: string; isError?: boolean; timestamp?: number }
   | { type: 'error'; sessionId: string; error: string; timestamp?: number }
@@ -394,6 +396,28 @@ export interface McpToolsResult {
   tools?: McpToolWithPermission[]
 }
 
+export interface LlmConnectionBundle {
+  connection: LlmConnection
+  credential: StoredCredential | null
+}
+
+export interface SourceBundle {
+  config: FolderSourceConfig
+  guideMarkdown?: string
+  permissionsConfig?: unknown
+  credential: StoredCredential | null
+}
+
+export interface SkillBundleFile {
+  relativePath: string
+  contentBase64: string
+}
+
+export interface SkillBundle {
+  slug: string
+  files: SkillBundleFile[]
+}
+
 // ---------------------------------------------------------------------------
 // Search types
 // ---------------------------------------------------------------------------
@@ -487,6 +511,45 @@ export interface WorkspaceSettings {
   localMcpEnabled?: boolean
   defaultLlmConnection?: string
   enabledSourceSlugs?: string[]
+}
+
+// ---------------------------------------------------------------------------
+// Remote Server Profiles
+// ---------------------------------------------------------------------------
+
+export interface RemoteServerProfile {
+  id: string
+  name: string
+  url: string
+  enabled: boolean
+  allowInsecureWs: boolean
+  createdAt: number
+  updatedAt: number
+  hasToken: boolean
+}
+
+export interface SaveRemoteServerProfileInput {
+  id?: string
+  name: string
+  url: string
+  enabled?: boolean
+  allowInsecureWs?: boolean
+}
+
+export type RemoteServerConnectionStatus =
+  | 'idle'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'disconnected'
+  | 'failed'
+
+export interface RemoteServerRuntimeState {
+  serverId: string
+  status: RemoteServerConnectionStatus
+  workspaceCount: number
+  updatedAt: number
+  error?: string
 }
 
 // ---------------------------------------------------------------------------

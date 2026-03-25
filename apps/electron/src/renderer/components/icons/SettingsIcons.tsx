@@ -45,6 +45,23 @@ export const AppSettingsIcon = ({ className }: IconProps) => (
   </svg>
 )
 
+/** Server rack icon for remote server settings */
+export const ServersIcon = ({ className }: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M5.75 3.5C4.23122 3.5 3 4.73122 3 6.25C3 7.76878 4.23122 9 5.75 9H18.25C19.7688 9 21 7.76878 21 6.25C21 4.73122 19.7688 3.5 18.25 3.5H5.75ZM6 5.5C5.44772 5.5 5 5.94772 5 6.5C5 7.05228 5.44772 7.5 6 7.5C6.55228 7.5 7 7.05228 7 6.5C7 5.94772 6.55228 5.5 6 5.5ZM8.75 5.75C8.75 5.33579 9.08579 5 9.5 5H17.5C17.9142 5 18.25 5.33579 18.25 5.75C18.25 6.16421 17.9142 6.5 17.5 6.5H9.5C9.08579 6.5 8.75 6.16421 8.75 5.75ZM5.75 10.5C4.23122 10.5 3 11.7312 3 13.25C3 14.7688 4.23122 16 5.75 16H18.25C19.7688 16 21 14.7688 21 13.25C21 11.7312 19.7688 10.5 18.25 10.5H5.75ZM5 13.5C5 12.9477 5.44772 12.5 6 12.5C6.55228 12.5 7 12.9477 7 13.5C7 14.0523 6.55228 14.5 6 14.5C5.44772 14.5 5 14.0523 5 13.5ZM9.5 12C9.08579 12 8.75 12.3358 8.75 12.75C8.75 13.1642 9.08579 13.5 9.5 13.5H17.5C17.9142 13.5 18.25 13.1642 18.25 12.75C18.25 12.3358 17.9142 12 17.5 12H9.5ZM3 20.25C3 19.8358 3.33579 19.5 3.75 19.5H20.25C20.6642 19.5 21 19.8358 21 20.25C21 20.6642 20.6642 21 20.25 21H3.75C3.33579 21 3 20.6642 3 20.25Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
 /** Palette icon for appearance settings */
 export const AppearanceIcon = ({ className }: IconProps) => (
   <svg
@@ -164,6 +181,7 @@ export const PreferencesIcon = ({ className }: IconProps) => (
  */
 export const SETTINGS_ICONS: Record<SettingsSubpage, React.ComponentType<IconProps>> = {
   app: AppSettingsIcon,
+  servers: ServersIcon,
   ai: AiSettingsIcon,
   appearance: AppearanceIcon,
   input: InputIcon,

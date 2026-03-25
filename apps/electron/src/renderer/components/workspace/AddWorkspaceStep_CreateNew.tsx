@@ -8,13 +8,24 @@ import { AddWorkspaceContainer, AddWorkspaceStepHeader, AddWorkspaceSecondaryBut
 import { AddWorkspace_RadioOption } from "./AddWorkspace_RadioOption"
 import { useDirectoryPicker } from "@/hooks/useDirectoryPicker"
 import { ServerDirectoryBrowser } from "@/components/ServerDirectoryBrowser"
+import type { RemoteServerProfile, WorkspaceCreationTarget } from "../../../shared/types"
+import { WorkspaceTargetSelector } from "./WorkspaceTargetSelector"
 
 type LocationOption = 'default' | 'custom'
 
 interface AddWorkspaceStep_CreateNewProps {
   onBack: () => void
-  onCreate: (folderPath: string, name: string) => Promise<void>
+  onCreate: (folderPath: string, name: string, options?: { managedByApp?: boolean }) => Promise<void>
   isCreating: boolean
+  targetMode: 'local' | 'remote'
+  target: WorkspaceCreationTarget | null
+  onTargetModeChange: (mode: 'local' | 'remote') => void
+  remoteServers: RemoteServerProfile[]
+  selectedServerId: string | null
+  onSelectedServerIdChange: (serverId: string | null) => void
+  allowLocalTarget?: boolean
+  connectedRemoteName?: string | null
+  connectedRemoteUrl?: string | null
 }
 
 /**
@@ -27,7 +38,16 @@ interface AddWorkspaceStep_CreateNewProps {
 export function AddWorkspaceStep_CreateNew({
   onBack,
   onCreate,
-  isCreating
+  isCreating,
+  targetMode,
+  target,
+  onTargetModeChange,
+  remoteServers,
+  selectedServerId,
+  onSelectedServerIdChange,
+  allowLocalTarget = true,
+  connectedRemoteName,
+  connectedRemoteUrl,
 }: AddWorkspaceStep_CreateNewProps) {
   const [name, setName] = useState('')
   const [locationOption, setLocationOption] = useState<LocationOption>('default')
@@ -38,8 +58,12 @@ export function AddWorkspaceStep_CreateNew({
 
   // Get home directory on mount
   useEffect(() => {
-    window.electronAPI.getHomeDir().then(setHomeDir)
-  }, [])
+    if (!target) {
+      setHomeDir('')
+      return
+    }
+    window.electronAPI.getHomeDirForTarget(target).then(setHomeDir).catch(() => setHomeDir(''))
+  }, [target])
 
   const slug = slugify(name)
   const defaultBasePath = homeDir ? `${homeDir}/.craft-agent/workspaces` : null
@@ -59,7 +83,9 @@ export function AddWorkspaceStep_CreateNew({
     const validateSlug = async () => {
       setIsValidating(true)
       try {
-        const result = await window.electronAPI.checkWorkspaceSlug(slug)
+        const result = target
+          ? await window.electronAPI.checkWorkspaceSlugAtTarget(target, slug)
+          : await window.electronAPI.checkWorkspaceSlug(slug)
         if (result.exists) {
           setError(`A workspace named "${slug}" already exists`)
         } else {
@@ -75,7 +101,7 @@ export function AddWorkspaceStep_CreateNew({
     // Debounce validation
     const timeout = setTimeout(validateSlug, 300)
     return () => clearTimeout(timeout)
-  }, [slug])
+  }, [slug, target])
 
   const handleFolderSelected = useCallback((path: string) => {
     setCustomPath(path)
@@ -87,14 +113,14 @@ export function AddWorkspaceStep_CreateNew({
     serverBrowserMode,
     cancelServerBrowser,
     confirmServerBrowser,
-  } = useDirectoryPicker(handleFolderSelected)
+  } = useDirectoryPicker(handleFolderSelected, target)
 
   const handleCreate = useCallback(async () => {
     if (!name.trim() || !finalPath || error) return
-    await onCreate(finalPath, name.trim())
-  }, [name, finalPath, error, onCreate])
+    await onCreate(finalPath, name.trim(), { managedByApp: locationOption === 'default' })
+  }, [name, finalPath, error, onCreate, locationOption])
 
-  const canCreate = name.trim() && finalPath && !error && !isValidating && !isCreating
+  const canCreate = !!target && !!name.trim() && !!finalPath && !error && !isValidating && !isCreating
 
   return (
     <AddWorkspaceContainer>
@@ -112,8 +138,21 @@ export function AddWorkspaceStep_CreateNew({
         Back
       </button>
 
+      <WorkspaceTargetSelector
+        targetMode={targetMode}
+        onTargetModeChange={onTargetModeChange}
+        remoteServers={remoteServers}
+        selectedServerId={selectedServerId}
+        onSelectedServerIdChange={onSelectedServerIdChange}
+        allowLocalTarget={allowLocalTarget}
+        connectedRemoteName={connectedRemoteName}
+        connectedRemoteUrl={connectedRemoteUrl}
+        disabled={isCreating}
+      />
+
       <AddWorkspaceStepHeader
         title="Create workspace"
+        className="mt-6"
         description="Enter a name and choose where to store your workspace."
       />
 
@@ -151,7 +190,7 @@ export function AddWorkspaceStep_CreateNew({
             onChange={() => setLocationOption('default')}
             disabled={isCreating}
             title="Default location"
-            subtitle="under .craft-agent folder"
+            subtitle={targetMode === 'remote' ? "under the selected server's .craft-agent folder" : "under .craft-agent folder"}
           />
 
           {/* Custom location option */}
@@ -168,12 +207,28 @@ export function AddWorkspaceStep_CreateNew({
                   e.preventDefault()
                   pickDirectory()
                 }}
-                disabled={isCreating}
+                disabled={isCreating || !target}
               >
                 Browse
               </AddWorkspaceSecondaryButton>
             ) : undefined}
           />
+          {!target && (
+            <p className="text-xs text-muted-foreground">
+              Select a target above before choosing a location.
+            </p>
+          )}
+          {showServerBrowser && (
+            <ServerDirectoryBrowser
+              open={showServerBrowser}
+              presentation="inline"
+              mode={serverBrowserMode}
+              onSelect={confirmServerBrowser}
+              onCancel={cancelServerBrowser}
+              initialPath={customPath ?? undefined}
+              target={target}
+            />
+          )}
         </div>
 
         {/* Create button */}
@@ -186,12 +241,6 @@ export function AddWorkspaceStep_CreateNew({
           Create
         </AddWorkspacePrimaryButton>
       </div>
-      <ServerDirectoryBrowser
-        open={showServerBrowser}
-        mode={serverBrowserMode}
-        onSelect={confirmServerBrowser}
-        onCancel={cancelServerBrowser}
-      />
     </AddWorkspaceContainer>
   )
 }
