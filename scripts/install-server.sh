@@ -55,6 +55,12 @@ info "Installing dependencies..."
 cd "$REPO_ROOT"
 bun install --frozen-lockfile 2>/dev/null || bun install
 
+info "Building subprocess servers..."
+bun run server:build:subprocess
+
+info "Building Web UI..."
+bun run webui:build
+
 # ---------------------------------------------------------------------------
 # Generate token
 # ---------------------------------------------------------------------------
@@ -71,13 +77,18 @@ echo "===================================="
 echo "  Craft Agent Server Ready"
 echo "===================================="
 echo ""
-echo "Start the server:"
+echo "Start the server (with Web UI):"
 echo ""
-echo "  CRAFT_SERVER_TOKEN=$TOKEN bun run $REPO_ROOT/packages/server/src/index.ts"
+echo "  CRAFT_SERVER_TOKEN=$TOKEN \\"
+echo "  CRAFT_WEBUI_DIR=$REPO_ROOT/apps/webui/dist \\"
+echo "  CRAFT_BUNDLED_ASSETS_ROOT=$REPO_ROOT/apps/electron \\"
+echo "  bun run $REPO_ROOT/packages/server/src/index.ts"
 echo ""
 echo "Or with custom host/port:"
 echo ""
 echo "  CRAFT_SERVER_TOKEN=$TOKEN \\"
+echo "  CRAFT_WEBUI_DIR=$REPO_ROOT/apps/webui/dist \\"
+echo "  CRAFT_BUNDLED_ASSETS_ROOT=$REPO_ROOT/apps/electron \\"
 echo "  CRAFT_RPC_HOST=0.0.0.0 \\"
 echo "  CRAFT_RPC_PORT=9100 \\"
 echo "  bun run $REPO_ROOT/packages/server/src/index.ts"
@@ -85,6 +96,8 @@ echo ""
 echo "For TLS (recommended for non-localhost):"
 echo ""
 echo "  CRAFT_SERVER_TOKEN=$TOKEN \\"
+echo "  CRAFT_WEBUI_DIR=$REPO_ROOT/apps/webui/dist \\"
+echo "  CRAFT_BUNDLED_ASSETS_ROOT=$REPO_ROOT/apps/electron \\"
 echo "  CRAFT_RPC_TLS_CERT=/path/to/cert.pem \\"
 echo "  CRAFT_RPC_TLS_KEY=/path/to/key.pem \\"
 echo "  bun run $REPO_ROOT/packages/server/src/index.ts"

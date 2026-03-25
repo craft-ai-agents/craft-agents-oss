@@ -74,15 +74,22 @@ const INVALID_TAG_DESCRIPTOR: PropertyDescriptor = {
  * // <sq+qr> → rendered as text by UnknownTag
  */
 export function wrapWithSafeProxy(components: Partial<Components>): Partial<Components> {
+  const fallbackCache = new Map<string, React.FC<{ children?: React.ReactNode }>>()
+
   return new Proxy(components, {
     get(target, prop) {
       if (typeof prop === 'symbol') return Reflect.get(target, prop)
       if (prop in target) return target[prop as keyof typeof target]
       if (!shouldUseFallback(prop, target)) return undefined
 
-      return ({ children }: { children?: React.ReactNode }) => (
-        <UnknownTag tagName={prop}>{children}</UnknownTag>
-      )
+      if (!fallbackCache.has(prop)) {
+        const Fallback: React.FC<{ children?: React.ReactNode }> = ({ children }) => (
+          <UnknownTag tagName={prop}>{children}</UnknownTag>
+        )
+        Fallback.displayName = `UnknownTag(${prop})`
+        fallbackCache.set(prop, Fallback)
+      }
+      return fallbackCache.get(prop)
     },
 
     has(target, prop) {

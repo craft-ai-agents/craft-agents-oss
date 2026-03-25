@@ -105,6 +105,59 @@ Enable debug logging for troubleshooting. When set, additional diagnostic inform
 export CRAFT_DEBUG="true"
 ```
 
+## Server Mode Variables
+
+These configure the [remote server](/server/headless) when running in standalone or embedded mode.
+
+### CRAFT_SERVER_TOKEN
+
+Bearer token for server authentication. Required for both server and client.
+
+```bash
+export CRAFT_SERVER_TOKEN=$(openssl rand -hex 32)
+```
+
+### CRAFT_SERVER_URL
+
+Server URL for client connections. Set this on the client side to connect to a remote server.
+
+```bash
+export CRAFT_SERVER_URL=wss://your-server:9100
+```
+
+### CRAFT_RPC_HOST
+
+Bind address for the server. Defaults to `127.0.0.1` (localhost only). Set to `0.0.0.0` to accept remote connections.
+
+```bash
+export CRAFT_RPC_HOST=0.0.0.0
+```
+
+### CRAFT_RPC_PORT
+
+Server port. Defaults to `9100`.
+
+```bash
+export CRAFT_RPC_PORT=9100
+```
+
+### CRAFT_RPC_TLS_CERT / CRAFT_RPC_TLS_KEY
+
+PEM certificate and private key files for TLS. Required for remote connections (`wss://`). Can be omitted for localhost development.
+
+```bash
+export CRAFT_RPC_TLS_CERT=/path/to/cert.pem
+export CRAFT_RPC_TLS_KEY=/path/to/key.pem
+```
+
+### CRAFT_RPC_TLS_CA
+
+Optional PEM CA chain file for custom certificate authorities.
+
+```bash
+export CRAFT_RPC_TLS_CA=/path/to/ca.pem
+```
+
 ## Development Variables
 
 These variables are primarily used for development and multi-instance scenarios.

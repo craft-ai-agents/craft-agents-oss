@@ -1,21 +1,33 @@
 ---
-title: Headless Server
-description: Run Craft Agents as a headless server on a remote machine
+title: Remote Server
+description: Run Craft Agents as a remote server with browser, desktop, and CLI access
 ---
 
-# Headless Server
+# Remote Server
 
-Craft Agents can run as a headless server without the desktop GUI. This lets you keep long-running sessions alive on a remote machine, access them from multiple clients, and run compute-heavy tasks on a powerful server.
+Craft Agents can run as a remote server, letting you keep long-running sessions alive on a remote machine, access them from multiple clients (desktop app, browser, or CLI), and run compute-heavy tasks on a powerful server.
 
 ## Prerequisites
 
-Install [Bun](https://bun.sh) (v1.3+):
+Install [Bun](https://bun.sh) (v1.0+):
 
 ```bash
 curl -fsSL https://bun.sh/install | bash
 ```
 
-Clone the repository and install dependencies:
+### Quick setup
+
+Clone and run the install script:
+
+```bash
+git clone https://github.com/lukilabs/craft-agents-oss.git
+cd craft-agents-oss
+./scripts/install-server.sh
+```
+
+The script installs dependencies, generates a token, and prints the run command. **Save your token — it cannot be recovered.**
+
+### Manual setup
 
 ```bash
 git clone https://github.com/lukilabs/craft-agents-oss.git
@@ -23,20 +35,20 @@ cd craft-agents-oss
 bun install
 ```
 
-## Setup
-
-### 1. Generate a token
+Generate a token and start:
 
 ```bash
 export CRAFT_SERVER_TOKEN=$(openssl rand -hex 32)
-echo $CRAFT_SERVER_TOKEN  # Save this — clients need it to connect
+echo $CRAFT_SERVER_TOKEN  # Save this
+
+CRAFT_SERVER_TOKEN=$CRAFT_SERVER_TOKEN \
+CRAFT_RPC_HOST=0.0.0.0 \
+CRAFT_RPC_TLS_CERT=certs/cert.pem \
+CRAFT_RPC_TLS_KEY=certs/key.pem \
+bun run packages/server/src/index.ts
 ```
 
-### 2. Generate TLS certificates
-
-TLS is required for remote connections. The server token and all session data are transmitted over the WebSocket connection — **never run without TLS on a network**.
-
-For development, generate a self-signed certificate:
+For development TLS, generate a self-signed certificate:
 
 ```bash
 ./scripts/generate-dev-cert.sh
@@ -45,16 +57,6 @@ For development, generate a self-signed certificate:
 
 For production, use certificates from a trusted CA (e.g., Let's Encrypt) or place the server behind a reverse proxy (nginx, Caddy) that terminates TLS.
 
-### 3. Start the server
-
-```bash
-CRAFT_SERVER_TOKEN=$CRAFT_SERVER_TOKEN \
-CRAFT_RPC_HOST=0.0.0.0 \
-CRAFT_RPC_TLS_CERT=certs/cert.pem \
-CRAFT_RPC_TLS_KEY=certs/key.pem \
-bun run packages/server/src/index.ts
-```
-
 The server prints connection details on startup:
 
 ```
@@ -62,11 +64,63 @@ CRAFT_SERVER_URL=wss://0.0.0.0:9100
 CRAFT_SERVER_TOKEN=<your-token>
 ```
 
+## Web UI
+
+The server can serve a browser-accessible web UI on the same port. Build and enable it with:
+
+```bash
+# Build the web UI assets
+bun run webui:build
+
+# Start the server with Web UI enabled
+CRAFT_SERVER_TOKEN=$CRAFT_SERVER_TOKEN \
+CRAFT_WEBUI_DIR=apps/webui/dist \
+CRAFT_RPC_HOST=0.0.0.0 \
+bun run packages/server/src/index.ts
+```
+
+Or use the convenience script that builds everything:
+
+```bash
+bun run server:prod
+```
+
+### Accessing the Web UI
+
+Open `https://your-server:9100` (or `http://` without TLS) in any browser. You'll see a login page.
+
+### Authentication
+
+Enter the server token as the password. The server issues a session cookie on successful login.
+
+- Login attempts are rate-limited to **5 per 60 seconds** per IP
+- The session persists until you log out or the cookie expires
+
+### What you can do
+
+The web UI provides the same session interface as the desktop app — create sessions, send messages, manage workspaces. OAuth flows for Claude and Copilot work directly in the browser.
+
+<Warning>
+**Never run without TLS on a network.** The server token and all session data are transmitted over the WebSocket connection. Without TLS, anyone on the network can intercept them.
+</Warning>
+
 ## Connecting Clients
+
+### Desktop App (Hybrid Mode)
+
+Connect to a remote server while keeping local workspaces:
+
+1. Click the workspace dropdown in the sidebar
+2. Select **Add Workspace...** → **Connect to Remote Server**
+3. Enter the server URL (e.g., `wss://192.168.1.100:9100`) and token
+4. Click **Test Connection** to verify
+5. Select an existing workspace or create a new one on the server
+
+Once connected, remote workspaces appear in your workspace switcher alongside local ones. A CloudOff icon indicates when a remote workspace is unreachable.
 
 ### Desktop App (Thin Client)
 
-Launch the Electron app in thin-client mode by setting the server URL:
+Launch the app as a pure thin client — all logic runs on the server:
 
 ```bash
 CRAFT_SERVER_URL=wss://your-server:9100 \
@@ -74,7 +128,9 @@ CRAFT_SERVER_TOKEN=<token> \
 bun run electron:start
 ```
 
-The desktop app renders the UI but all session logic, tool execution, and LLM calls run on the remote server.
+### Web UI
+
+Open the server URL in any browser and log in with the token. See [Web UI](#web-ui) above.
 
 ### CLI Client
 
@@ -96,6 +152,7 @@ See the [CLI guide](/server/cli) for the full command reference.
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `CRAFT_SERVER_TOKEN` | Yes | — | Bearer token for authentication |
+| `CRAFT_SERVER_URL` | No | — | Server URL for client connections |
 | `CRAFT_RPC_HOST` | No | `127.0.0.1` | Bind address (`0.0.0.0` for remote) |
 | `CRAFT_RPC_PORT` | No | `9100` | Bind port |
 | `CRAFT_RPC_TLS_CERT` | Yes* | — | PEM certificate file (enables `wss://`) |
@@ -212,3 +269,69 @@ tail -f /tmp/craft-agents.log
 # Stop and unload
 launchctl unload ~/Library/LaunchAgents/com.craft.agents-server.plist
 ```
+
+## Secure Access
+
+Exposing the server directly to the internet is not recommended. Instead, use one of these approaches:
+
+### Tailscale (recommended)
+
+[Tailscale](https://tailscale.com) creates a private mesh network between your devices. Install it on both the server and client machines — no port forwarding, no certificates, no firewall rules needed.
+
+```bash
+# On the server: bind to Tailscale IP only
+CRAFT_RPC_HOST=100.x.y.z \
+CRAFT_SERVER_TOKEN=$TOKEN \
+bun run packages/server/src/index.ts
+```
+
+Traffic is encrypted end-to-end by Tailscale, so you can skip TLS certificate setup entirely. The server is only reachable from your Tailscale network.
+
+### Reverse proxy (nginx, Caddy)
+
+Place the server behind a reverse proxy that handles TLS termination and access control. This is the standard approach for production deployments.
+
+**Caddy** (automatic HTTPS):
+
+```
+craft.example.com {
+    reverse_proxy localhost:9100
+}
+```
+
+**nginx**:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name craft.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/craft.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/craft.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://localhost:9100;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+}
+```
+
+When using a reverse proxy, bind the server to localhost only (`CRAFT_RPC_HOST=127.0.0.1`) and let the proxy handle external access.
+
+### SSH tunnel
+
+For quick, ad-hoc access without any setup:
+
+```bash
+# On the client: forward local port 9100 to the remote server
+ssh -L 9100:localhost:9100 user@your-server
+```
+
+Then connect to `ws://localhost:9100` from the desktop app or browser. The tunnel encrypts all traffic over SSH.
+
+## Version Compatibility
+
+The server includes its version in the connection handshake. When a client connects to an older server (pre-0.8.0), it shows a warning that some features may not be available.

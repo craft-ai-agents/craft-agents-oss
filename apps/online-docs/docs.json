@@ -113,7 +113,7 @@
             ]
           },
           {
-            "group": "Server & CLI",
+            "group": "Server",
             "pages": [
               "server/headless",
               "server/cli"

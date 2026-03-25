@@ -104,6 +104,53 @@ Resolution order for connections:
 3. **Global default** (`defaultLlmConnection` in `config.json`)
 4. **First connection in the list**
 
+## Remote Workspaces
+
+You can connect to workspaces running on a [remote server](/server/headless). Remote workspaces appear in your workspace switcher alongside local ones.
+
+### Connecting to a remote server
+
+1. Click the workspace dropdown in the sidebar
+2. Select **Add Workspace...** → **Connect to Remote Server**
+3. Enter the server URL (e.g., `wss://192.168.1.100:9100`) and the server token
+4. Click **Test Connection** — a green checkmark confirms connectivity
+5. Select an existing workspace from the dropdown, or create a new one
+
+### Multiple remote workspaces
+
+A single remote server can host multiple workspaces. When connecting, you can choose which workspace to add to your switcher. You can also connect to multiple servers — each remote workspace is independent.
+
+### Connection state
+
+Remote workspaces show their connectivity status in the switcher:
+
+| Indicator | Meaning |
+|-----------|---------|
+| Normal icon | Connected and healthy |
+| CloudOff icon | Unreachable — server is down or network issue |
+
+The app health-checks remote workspaces when you open the workspace switcher.
+
+### Managing remote workspaces
+
+- **Remove:** Right-click a workspace in the switcher and select **Remove**, or hover and click the trash icon. This disconnects the local reference — it does not delete the workspace on the server.
+- **Switch:** Click any workspace (local or remote) to switch to it. The session list, sources, and skills load from that workspace.
+
+### Session transfer
+
+You can fork a session from one workspace to another using **Send to Workspace**:
+
+1. Open the session menu (right-click or header menu)
+2. Select **Send to Workspace**
+3. Choose a remote workspace from the list
+4. The session is copied to the target workspace with a conversation summary for context
+
+This creates an independent copy — changes in one workspace don't sync to the other.
+
+<Note>
+Session transfer is currently available from local to remote workspaces. The target workspace must be reachable at the time of transfer.
+</Note>
+
 ## Use Cases
 
 <AccordionGroup>
