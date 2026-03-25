@@ -385,6 +385,35 @@ export function FreeFormInput({
     return llmConnections.find(c => c.slug === effectiveConnection) ?? null
   }, [llmConnections, effectiveConnection])
 
+  // ── Copilot Premium Request Usage ───────────────────────────────────
+  const isCopilotConnection = effectiveConnectionDetails?.piAuthProvider === 'github-copilot'
+  const [copilotUsage, setCopilotUsage] = React.useState<{
+    used: number; limit: number; percentRemaining: number; resetDate: string; plan?: string; unlimited?: boolean; overageEnabled?: boolean; error?: string
+  } | null>(null)
+
+  const [copilotUsageRefreshKey, setCopilotUsageRefreshKey] = React.useState(0)
+  const wasProcessingRef = React.useRef(false)
+  React.useEffect(() => {
+    if (wasProcessingRef.current && !isProcessing) {
+      // Response just completed — trigger a refresh
+      setCopilotUsageRefreshKey(k => k + 1)
+    }
+    wasProcessingRef.current = isProcessing ?? false
+  }, [isProcessing])
+
+  React.useEffect(() => {
+    if (!isCopilotConnection) { setCopilotUsage(null); return }
+    let cancelled = false
+    const fetchUsage = async () => {
+      try {
+        const result = await window.electronAPI.getCopilotPremiumUsage()
+        if (!cancelled) setCopilotUsage(result)
+      } catch { /* silently fail */ }
+    }
+    fetchUsage()
+    const interval = setInterval(fetchUsage, 60 * 1000) // poll every 60s
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [isCopilotConnection, copilotUsageRefreshKey])
 
   // Access sessionStatuses and onSessionStatusChange from context for the # menu state picker
   const sessionStatuses = appShellCtx?.sessionStatuses ?? []
@@ -1768,6 +1797,28 @@ export function FreeFormInput({
                     ) : (
                       <>
                         {effectiveConnectionDetails && llmConnections.length > 1 && storage.get(storage.KEYS.showConnectionIcons, true) && <ConnectionIcon connection={effectiveConnectionDetails} size={14} showTooltip />}
+                        {copilotUsage && !copilotUsage.error && !copilotUsage.unlimited && copilotUsage.limit > 0 && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className={cn(
+                                "text-[11px] font-mono tabular-nums shrink-0 pr-1",
+                                copilotUsage.percentRemaining <= 10 ? "text-red-500" :
+                                copilotUsage.percentRemaining <= 25 ? "text-yellow-500" :
+                                "text-muted-foreground/70"
+                              )}>
+                                {Math.round(100 - copilotUsage.percentRemaining)}%
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                              <div className="text-xs">
+                                <div>Premium requests: {copilotUsage.used} of {copilotUsage.limit} used ({Math.round(100 - copilotUsage.percentRemaining)}%)</div>
+                                {copilotUsage.plan && <div className="text-muted-foreground capitalize">Plan: Copilot {copilotUsage.plan}</div>}
+                                {copilotUsage.overageEnabled && <div className="text-muted-foreground">Overages enabled</div>}
+                                {copilotUsage.resetDate && <div className="text-muted-foreground">Resets {new Date(copilotUsage.resetDate).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}</div>}
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
                         {currentModelDisplayName}
                         {!connectionDefaultModel && <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />}
                       </>

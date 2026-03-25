@@ -132,6 +132,7 @@ export const CHANNEL_MAP = {
   getCopilotAuthStatus: invoke(RPC_CHANNELS.copilot.GET_AUTH_STATUS),
   copilotLogout: invoke(RPC_CHANNELS.copilot.LOGOUT),
   onCopilotDeviceCode: listener(RPC_CHANNELS.copilot.DEVICE_CODE),
+  getCopilotPremiumUsage: invoke(RPC_CHANNELS.copilot.GET_PREMIUM_USAGE),
 
   // Settings - API Setup
   setupLlmConnection: invoke(RPC_CHANNELS.settings.SETUP_LLM_CONNECTION),
