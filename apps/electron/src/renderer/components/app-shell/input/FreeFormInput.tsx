@@ -1024,9 +1024,15 @@ export function FreeFormInput({
       const reader = new FileReader()
       reader.onload = async () => {
         const result = reader.result as ArrayBuffer
-        const base64 = btoa(
-          new Uint8Array(result).reduce((data, byte) => data + String.fromCharCode(byte), '')
-        )
+        // Chunked base64 encoding — btoa + reduce fails on large files (>1MB)
+        // due to O(n²) string concatenation and browser string-length limits
+        const bytes = new Uint8Array(result)
+        let binary = ''
+        const chunkSize = 8192
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunkSize, bytes.length)))
+        }
+        const base64 = btoa(binary)
 
         let type: FileAttachment['type'] = 'unknown'
         const fileName = overrideName || file.name
