@@ -443,7 +443,7 @@ export function UserMessageBubble({
           <button
             onClick={handleCopy}
             className={cn(
-              "absolute -left-9 top-1/2 -translate-y-1/2 flex items-center justify-center w-7 h-7 rounded-[6px] transition-opacity",
+              "absolute -left-9 top-4 flex items-center justify-center w-7 h-7 rounded-[6px] transition-opacity",
               "opacity-0 group-hover/user-msg:opacity-100",
               copied ? "text-success" : "text-muted-foreground hover:text-foreground hover:bg-foreground/5",
               "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
