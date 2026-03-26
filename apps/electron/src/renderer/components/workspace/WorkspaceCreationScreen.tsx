@@ -20,6 +20,10 @@ interface WorkspaceCreationScreenProps {
   /** Callback when the screen is dismissed */
   onClose: () => void
   className?: string
+  /** When set, skip choice step and open ConnectRemote in reconnect mode */
+  reconnectWorkspace?: Workspace
+  /** Called when a workspace's remote config is successfully updated */
+  onWorkspaceReconnected?: (workspaceId: string) => void
 }
 
 /**
@@ -33,9 +37,12 @@ interface WorkspaceCreationScreenProps {
 export function WorkspaceCreationScreen({
   onWorkspaceCreated,
   onClose,
-  className
+  className,
+  reconnectWorkspace,
+  onWorkspaceReconnected,
 }: WorkspaceCreationScreenProps) {
-  const [step, setStep] = useState<CreationStep>('choice')
+  // Start at 'remote' step directly when reconnecting
+  const [step, setStep] = useState<CreationStep>(reconnectWorkspace ? 'remote' : 'choice')
   const [isCreating, setIsCreating] = useState(false)
   const [dimensions, setDimensions] = useState({ width: 1920, height: 1080 })
 
@@ -104,9 +111,22 @@ export function WorkspaceCreationScreen({
       case 'remote':
         return (
           <AddWorkspaceStep_ConnectRemote
-            onBack={() => setStep('choice')}
+            onBack={reconnectWorkspace ? onClose : () => setStep('choice')}
             onCreate={handleCreateWorkspace}
             isCreating={isCreating}
+            initialUrl={reconnectWorkspace?.remoteServer?.url}
+            initialToken={reconnectWorkspace?.remoteServer?.token}
+            reconnectWorkspace={reconnectWorkspace?.remoteServer ? {
+              id: reconnectWorkspace.id,
+              name: reconnectWorkspace.name,
+              remoteWorkspaceId: reconnectWorkspace.remoteServer.remoteWorkspaceId,
+            } : undefined}
+            onUpdate={async (workspaceId, remoteServer) => {
+              await window.electronAPI.updateWorkspaceRemoteServer(workspaceId, remoteServer)
+              await window.electronAPI.reconnectTransport()
+              onWorkspaceReconnected?.(workspaceId)
+              onClose()
+            }}
           />
         )
 

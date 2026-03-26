@@ -51,6 +51,7 @@ export function WorkspaceSwitcher({
   workspaceUnreadMap,
 }: WorkspaceSwitcherProps) {
   const [showCreationScreen, setShowCreationScreen] = useState(false)
+  const [reconnectTarget, setReconnectTarget] = useState<Workspace | null>(null)
   const setFullscreenOverlayOpen = useSetAtom(fullscreenOverlayOpenAtom)
   const selectedWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
   const workspaceIconMap = useWorkspaceIcons(workspaces)
@@ -91,6 +92,17 @@ export function WorkspaceSwitcher({
         })
     }
   }, [workspaces, activeWorkspaceId])
+
+  /** Tooltip for disconnected remote workspaces — shows error kind. */
+  const getDisconnectTooltip = (workspaceId: string): string => {
+    if (workspaceId === activeWorkspaceId && connectionState?.lastError) {
+      const { kind } = connectionState.lastError
+      if (kind === 'auth') return 'Authentication failed — click to reconnect'
+      if (kind === 'timeout') return 'Server unreachable — click to reconnect'
+      if (kind === 'network') return 'Server unreachable — click to reconnect'
+    }
+    return 'Disconnected — click to reconnect'
+  }
 
   /** True when we know a remote workspace is unreachable. */
   const isRemoteDisconnected = (workspaceId: string) => {
@@ -136,7 +148,14 @@ export function WorkspaceSwitcher({
 
   const handleCloseCreationScreen = () => {
     setShowCreationScreen(false)
+    setReconnectTarget(null)
     setFullscreenOverlayOpen(false)
+  }
+
+  const handleWorkspaceReconnected = (workspaceId: string) => {
+    handleCloseCreationScreen()
+    toast.success('Workspace reconnected')
+    onSelect(workspaceId)
   }
 
   return (
@@ -147,6 +166,8 @@ export function WorkspaceSwitcher({
           <WorkspaceCreationScreen
             onWorkspaceCreated={handleWorkspaceCreated}
             onClose={handleCloseCreationScreen}
+            reconnectWorkspace={reconnectTarget ?? undefined}
+            onWorkspaceReconnected={handleWorkspaceReconnected}
           />
         )}
       </AnimatePresence>
@@ -220,6 +241,12 @@ export function WorkspaceSwitcher({
               <StyledDropdownMenuItem
                 key={workspace.id}
                 onClick={(e) => {
+                  if (disconnected && workspace.remoteServer) {
+                    setReconnectTarget(workspace)
+                    setShowCreationScreen(true)
+                    setFullscreenOverlayOpen(true)
+                    return
+                  }
                   if (disconnected) return
                   const openInNewWindow = e.metaKey || e.ctrlKey
                   onSelect(workspace.id, openInNewWindow)
@@ -241,7 +268,7 @@ export function WorkspaceSwitcher({
                   <span className="truncate">{workspace.name}</span>
                   {workspace.remoteServer && (
                     disconnected
-                      ? <CloudOff className="h-3.5 w-3.5 text-destructive shrink-0" />
+                      ? <span title={getDisconnectTooltip(workspace.id)} className="shrink-0"><CloudOff className="h-3.5 w-3.5 text-destructive" /></span>
                       : <Cloud className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   )}
                   {workspaceUnreadMap?.[workspace.id] && <span className="h-2 w-2 rounded-full bg-accent shrink-0" />}

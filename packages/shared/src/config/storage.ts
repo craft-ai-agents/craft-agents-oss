@@ -598,6 +598,18 @@ export function getWorkspaceByNameOrId(nameOrId: string): Workspace | null {
   ) || null;
 }
 
+export function updateWorkspaceRemoteServer(
+  workspaceId: string,
+  remoteServer: { url: string; token: string; remoteWorkspaceId: string },
+): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  const ws = config.workspaces.find(w => w.id === workspaceId);
+  if (!ws) throw new Error('Workspace not found');
+  ws.remoteServer = remoteServer;
+  saveConfig(config);
+}
+
 export function setActiveWorkspace(workspaceId: string): void {
   const config = loadStoredConfig();
   if (!config) return;
