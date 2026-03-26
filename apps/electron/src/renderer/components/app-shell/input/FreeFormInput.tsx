@@ -10,6 +10,7 @@ import {
   DatabaseZap,
   ChevronDown,
   AlertCircle,
+  Info,
   X,
 } from 'lucide-react'
 import { Icon_Home, Icon_Folder, Spinner } from '@craft-agent/ui'
@@ -1818,6 +1819,27 @@ export function FreeFormInput({
                               </div>
                             </TooltipContent>
                           </Tooltip>
+                        )}
+                        {isCopilotConnection && copilotUsage?.error && (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button type="button" className="shrink-0 pr-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                                <Info className="h-3.5 w-3.5" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent side="top" align="end" className="w-80 text-xs space-y-2">
+                              <div className="font-medium text-sm">Copilot Usage Indicator</div>
+                              <p className="text-muted-foreground">
+                                To see your premium request usage, add a GitHub fine-grained PAT with <span className="font-medium text-foreground">Copilot (read)</span> permission.
+                              </p>
+                              <p className="text-muted-foreground">
+                                Ask me to set it up:
+                              </p>
+                              <code className="block bg-muted rounded px-2 py-1.5 text-[11px] select-all">
+                                Save my GitHub PAT for the copilot usage indicator: github_pat_...
+                              </code>
+                            </PopoverContent>
+                          </Popover>
                         )}
                         {currentModelDisplayName}
                         {!connectionDefaultModel && <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />}
