@@ -606,6 +606,21 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const turnRefs = React.useRef<Map<string, HTMLDivElement>>(new Map())
   // CSS Custom Highlight API handle — cast once (TS lib types are incomplete)
   const cssHighlightsRef = React.useRef(typeof CSS !== 'undefined' ? CSS.highlights as unknown as Map<string, Highlight> | undefined : undefined)
+
+  // Inject ::highlight() styles at runtime to avoid LightningCSS build warnings
+  // (the optimizer doesn't recognize ::highlight as a valid pseudo-element yet)
+  React.useEffect(() => {
+    if (!cssHighlightsRef.current) return
+    const id = 'search-highlight-styles'
+    if (document.getElementById(id)) return
+    const style = document.createElement('style')
+    style.id = id
+    style.textContent = `
+      ::highlight(search-passive) { background-color: rgb(253 224 71 / 0.3); color: inherit; }
+      ::highlight(search-active) { background-color: rgb(253 224 71); color: rgb(0 0 0 / 0.9); }
+    `
+    document.head.appendChild(style)
+  }, [])
   // Flag to control when scrolling to matches should happen
   // Only scroll when: session changes with search active, or user clicks navigation
   const shouldScrollToMatchRef = React.useRef(false)

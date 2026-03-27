@@ -15,15 +15,8 @@
 @source "../../../../packages/ui/src/components/**/*.{ts,tsx,jsx}";
 @source "../../../../packages/ui/src/lib/**/*.{ts,tsx,jsx}";
 
-/* CSS Custom Highlight API styles for search highlighting */
-::highlight(search-passive) {
-  background-color: rgb(253 224 71 / 0.3);
-  color: inherit;
-}
-::highlight(search-active) {
-  background-color: rgb(253 224 71);
-  color: rgb(0 0 0 / 0.9);
-}
+/* CSS Custom Highlight API styles are injected at runtime via ChatDisplay.tsx
+   to avoid LightningCSS warnings (::highlight is not yet recognized by the optimizer) */
 
 /* =============================================================================
    ANIMATABLE CSS CUSTOM PROPERTIES
