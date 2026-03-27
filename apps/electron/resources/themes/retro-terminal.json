@@ -14,13 +14,5 @@
   "accent": "#39ff14",
   "info": "#ffaa00",
   "success": "#00ffaa",
-  "destructive": "#ff3333",
-  "dark": {
-    "background": "#070d07",
-    "foreground": "#00ff41",
-    "accent": "#39ff14",
-    "info": "#ffaa00",
-    "success": "#00ffaa",
-    "destructive": "#ff3333"
-  }
+  "destructive": "#ff3333"
 }
