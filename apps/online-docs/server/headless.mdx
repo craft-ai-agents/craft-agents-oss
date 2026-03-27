@@ -75,6 +75,49 @@ volumes:
   craft-agents-data:
 ```
 
+### Docker troubleshooting
+
+**Sessions return empty responses (no errors)**
+
+When running with `--user` and a custom `HOME` directory, the Claude Agent SDK needs `$HOME/.claude/` to be writable. If the HOME directory is read-only (e.g., owned by root), the SDK silently returns empty responses with no error logged.
+
+**Fix:** Mount a writable volume at the HOME path. For example, if running as a host user whose home is `/Users/alice`:
+
+```bash
+docker run -d \
+  --name craft-agents-server \
+  --user $(id -u):$(id -g) \
+  -e HOME=/Users/alice \
+  -e CRAFT_SERVER_TOKEN=$CRAFT_SERVER_TOKEN \
+  -p 9100:9100 \
+  -v /Users/alice/.craft-agent/docker-home:/Users/alice \
+  -v /Users/alice/.craft-agent:/Users/alice/.craft-agent \
+  ghcr.io/lukilabs/craft-agents-server:latest
+```
+
+The volume stack works in layers:
+1. `docker-home` → `/Users/alice` — writable HOME for the SDK (`~/.claude/`)
+2. `.craft-agent` → `/Users/alice/.craft-agent` — workspace data (overlays on top)
+
+<Note>
+The default Docker image uses `HOME=/home/craftagents` with a pre-created writable directory. This issue only occurs when overriding `HOME` to match a host user path.
+</Note>
+
+**Web UI not loading**
+
+If the server starts but `http://your-server:9100` returns a 404 or connection error:
+
+- **`CRAFT_WEBUI_DIR` not set** — The Docker image sets this to `/app/apps/webui/dist` by default. If your `docker-compose.yml` or `.env` file overrides environment variables, make sure `CRAFT_WEBUI_DIR` is included or not overridden to empty.
+- **Volume shadows the app directory** — Mounting a volume over `/app` replaces the built WebUI assets. Only mount volumes to `/home/craftagents/.craft-agent` (or your custom HOME path), not to `/app`.
+- **Older image tag** — Pre-0.8.0 images don't include the WebUI. Use `latest` or `0.8.0+`.
+
+Verify inside the container:
+
+```bash
+docker exec craft-agents-server ls /app/apps/webui/dist/index.html
+docker exec craft-agents-server echo $CRAFT_WEBUI_DIR
+```
+
 ### Manual setup from source
 
 ```bash
