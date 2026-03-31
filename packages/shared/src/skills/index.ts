@@ -10,6 +10,7 @@ export {
   PROJECT_AGENT_SKILLS_DIR,
   loadSkill,
   loadAllSkills,
+  invalidateSkillsCache,
   loadSkillBySlug,
   getSkillIconPath,
   deleteSkill,

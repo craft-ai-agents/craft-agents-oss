@@ -193,7 +193,11 @@ export function ensureConfigDefaults(): void {
   syncConfigDefaults();
 }
 
+let configDirInitialized = false;
+
 export function ensureConfigDir(): void {
+  if (configDirInitialized) return;
+
   if (!existsSync(CONFIG_DIR)) {
     mkdirSync(CONFIG_DIR, { recursive: true });
   }
@@ -205,6 +209,8 @@ export function ensureConfigDir(): void {
 
   // Initialize tool icons (CLI tool icons for turn card display)
   ensureToolIcons();
+
+  configDirInitialized = true;
 }
 
 export function loadStoredConfig(): StoredConfig | null {

@@ -70,12 +70,43 @@ export function findProjectContextFile(directory: string): string | null {
   return null;
 }
 
+// ── Context file cache ──────────────────────────────────────────────────
+// The glob walk is expensive (~7s in large monorepos). The result (a list of
+// file paths like "CLAUDE.md", "apps/electron/CLAUDE.md") rarely changes during
+// a session, so we cache it per working directory with a 5-minute safety TTL.
+// Explicit invalidation happens on working directory changes.
+
+const contextFileCache = new Map<string, { files: string[]; ts: number }>();
+const CONTEXT_FILE_CACHE_TTL = 5 * 60_000; // 5 minutes
+
+/** Invalidate the cached context file list for a directory (or all directories). */
+export function invalidateContextFileCache(directory?: string): void {
+  if (directory) {
+    contextFileCache.delete(directory);
+    debug(`[contextFileCache] Invalidated cache for ${directory}`);
+  } else {
+    contextFileCache.clear();
+    debug(`[contextFileCache] Cleared all cached entries`);
+  }
+}
+
 /**
  * Find all project context files (AGENTS.md or CLAUDE.md) recursively in a directory.
  * Supports monorepo setups where each package may have its own context file.
  * Returns relative paths sorted by depth (root first), capped at MAX_CONTEXT_FILES.
+ *
+ * Results are cached per directory. Call invalidateContextFileCache() on working
+ * directory changes. A 5-minute TTL acts as a safety net for cache staleness.
  */
 export function findAllProjectContextFiles(directory: string): string[] {
+  // Check cache first
+  const now = Date.now();
+  const cached = contextFileCache.get(directory);
+  if (cached && now - cached.ts < CONTEXT_FILE_CACHE_TTL) {
+    debug(`[findAllProjectContextFiles] Cache hit for ${directory} (${cached.files.length} files)`);
+    return cached.files;
+  }
+
   try {
     // Build glob ignore patterns from excluded directories
     const ignorePatterns = EXCLUDED_DIRECTORIES.map((dir) => `**/${dir}/**`);
@@ -90,6 +121,7 @@ export function findAllProjectContextFiles(directory: string): string[] {
     });
 
     if (matches.length === 0) {
+      contextFileCache.set(directory, { files: [], ts: now });
       return [];
     }
 
@@ -106,6 +138,7 @@ export function findAllProjectContextFiles(directory: string): string[] {
     const capped = sorted.slice(0, MAX_CONTEXT_FILES);
 
     debug(`[findAllProjectContextFiles] Found ${matches.length} files, returning ${capped.length}`);
+    contextFileCache.set(directory, { files: capped, ts: now });
     return capped;
   } catch (error) {
     debug(`[findAllProjectContextFiles] Error searching directory:`, error);
