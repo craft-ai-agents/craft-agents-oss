@@ -18,7 +18,7 @@
 
 services:
   server:
-    image: ghcr.io/lukilabs/craft-agents-server:0.8.0
+    image: ghcr.io/lukilabs/craft-agents-server:0.8.2
     build:
       context: .
       dockerfile: Dockerfile.server
