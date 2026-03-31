@@ -7,37 +7,13 @@
  * - Rate limiting: per-IP brute-force protection on /api/auth
  */
 
+import { SignJWT, jwtVerify } from 'jose'
+
 // ---------------------------------------------------------------------------
-// JWT helpers (HMAC-SHA256 via Web Crypto)
+// JWT helpers (via jose library)
 // ---------------------------------------------------------------------------
 
 const JWT_EXPIRY_SECONDS = 86_400 // 24 hours
-
-function base64UrlEncode(data: Uint8Array): string {
-  let binary = ''
-  for (const byte of data) binary += String.fromCharCode(byte)
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-
-function base64UrlDecode(str: string): Uint8Array {
-  const padded = str.replace(/-/g, '+').replace(/_/g, '/') + '=='.slice(0, (4 - (str.length % 4)) % 4)
-  const binary = atob(padded)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return bytes
-}
-
-const encoder = new TextEncoder()
-
-async function getHmacKey(secret: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    'raw',
-    encoder.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign', 'verify'],
-  )
-}
 
 export interface JwtPayload {
   sub: string
@@ -46,28 +22,23 @@ export interface JwtPayload {
 }
 
 export async function signJwt(payload: JwtPayload, secret: string): Promise<string> {
-  const header = base64UrlEncode(encoder.encode(JSON.stringify({ alg: 'HS256', typ: 'JWT' })))
-  const body = base64UrlEncode(encoder.encode(JSON.stringify(payload)))
-  const sigInput = encoder.encode(`${header}.${body}`)
-  const key = await getHmacKey(secret)
-  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, sigInput))
-  return `${header}.${body}.${base64UrlEncode(sig)}`
+  const key = new TextEncoder().encode(secret)
+  return new SignJWT({ sub: payload.sub } as Record<string, unknown>)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt(payload.iat)
+    .setExpirationTime(payload.exp)
+    .sign(key)
 }
 
 export async function verifyJwt(token: string, secret: string): Promise<JwtPayload | null> {
-  const parts = token.split('.')
-  if (parts.length !== 3) return null
-
   try {
-    const sigInput = encoder.encode(`${parts[0]}.${parts[1]}`)
-    const sig = base64UrlDecode(parts[2])
-    const key = await getHmacKey(secret)
-    const valid = await crypto.subtle.verify('HMAC', key, sig, sigInput)
-    if (!valid) return null
-
-    const payload = JSON.parse(new TextDecoder().decode(base64UrlDecode(parts[1]))) as JwtPayload
-    if (payload.exp < Math.floor(Date.now() / 1000)) return null // expired
-    return payload
+    const key = new TextEncoder().encode(secret)
+    const { payload } = await jwtVerify(token, key, { algorithms: ['HS256'] })
+    return {
+      sub: payload.sub as string,
+      iat: payload.iat as number,
+      exp: payload.exp as number,
+    }
   } catch {
     return null
   }
@@ -118,29 +89,30 @@ export function extractSessionCookie(cookieHeader: string | null): string | null
 }
 
 // ---------------------------------------------------------------------------
-// Password verification (constant-time)
+// Password verification (argon2id via Bun.password)
 // ---------------------------------------------------------------------------
 
-export function verifyPassword(input: string, expected: string): boolean {
-  const inputBuf = encoder.encode(input)
-  const expectedBuf = encoder.encode(expected)
+let hashedPassword: string | null = null
 
-  // Constant-time compare — pad shorter buffer to prevent timing leak on length
-  const maxLen = Math.max(inputBuf.length, expectedBuf.length)
-  const a = new Uint8Array(maxLen)
-  const b = new Uint8Array(maxLen)
-  a.set(inputBuf)
-  b.set(expectedBuf)
+/**
+ * Hash the login password at startup. Must be called before any auth requests.
+ * The hash is stored in memory — the raw password is not retained.
+ */
+export async function initPasswordHash(plaintext: string): Promise<void> {
+  hashedPassword = await Bun.password.hash(plaintext, { algorithm: 'argon2id' })
+}
 
-  let mismatch = inputBuf.length ^ expectedBuf.length
-  for (let i = 0; i < maxLen; i++) {
-    mismatch |= a[i] ^ b[i]
-  }
-  return mismatch === 0
+/**
+ * Verify a user-supplied password against the pre-hashed password.
+ * Uses Bun's built-in argon2id verification (constant-time).
+ */
+export async function verifyPassword(input: string): Promise<boolean> {
+  if (!hashedPassword) return false
+  return Bun.password.verify(input, hashedPassword)
 }
 
 // ---------------------------------------------------------------------------
-// Rate limiter (per-IP, sliding window)
+// Rate limiter (per-IP + global, sliding window)
 // ---------------------------------------------------------------------------
 
 interface RateLimitEntry {
@@ -152,15 +124,32 @@ export class RateLimiter {
   private entries = new Map<string, RateLimitEntry>()
   private readonly maxAttempts: number
   private readonly windowMs: number
+  /** Global counter — blocks all IPs after too many total failures (defeats IP spoofing). */
+  private readonly maxGlobalAttempts: number
+  private globalAttempts = 0
+  private globalWindowStart = Date.now()
 
-  constructor(maxAttempts = 5, windowMs = 60_000) {
+  constructor(maxAttempts = 5, windowMs = 60_000, maxGlobalAttempts = 20) {
     this.maxAttempts = maxAttempts
     this.windowMs = windowMs
+    this.maxGlobalAttempts = maxGlobalAttempts
   }
 
   /** Returns true if the request should be allowed, false if rate-limited. */
   check(ip: string): boolean {
     const now = Date.now()
+
+    // Reset global window if expired
+    if (now - this.globalWindowStart > this.windowMs) {
+      this.globalAttempts = 0
+      this.globalWindowStart = now
+    }
+
+    // Global rate limit — blocks everyone if too many total attempts
+    this.globalAttempts++
+    if (this.globalAttempts > this.maxGlobalAttempts) return false
+
+    // Per-IP rate limit
     const entry = this.entries.get(ip)
 
     if (!entry || now - entry.windowStart > this.windowMs) {

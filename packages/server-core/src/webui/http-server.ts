@@ -13,6 +13,7 @@
 import { join, extname } from 'node:path'
 import {
   RateLimiter,
+  initPasswordHash,
   verifyPassword,
   createSessionToken,
   validateSession,
@@ -138,6 +139,12 @@ export interface WebuiHandlerOptions {
   logger: PlatformServices['logger']
   /** OAuth callback deps — when provided, enables /api/oauth/callback route. */
   oauthCallbackDeps?: OAuthCallbackDeps
+  /**
+   * Trusted proxy IPs/CIDRs. When set, proxy headers (x-forwarded-for, x-forwarded-proto)
+   * are only trusted from these sources. When empty/unset, proxy headers are ignored
+   * and 'direct' is used as the rate-limit key.
+   */
+  trustedProxies?: string[]
 }
 
 // ---------------------------------------------------------------------------
@@ -170,12 +177,27 @@ export function createWebuiHandler(options: WebuiHandlerOptions): WebuiHandler {
     wsPort,
     getHealthCheck,
     logger,
+    trustedProxies,
   } = options
 
   const rateLimiter = new RateLimiter(5, 60_000)
   const cleanupTimer = setInterval(() => rateLimiter.cleanup(), 120_000)
 
   const loginPassword = password || secret
+  const trustedProxySet = new Set(trustedProxies ?? [])
+
+  // Hash the login password at startup (async, but resolves before first auth attempt in practice)
+  const passwordReady = initPasswordHash(loginPassword)
+
+  /** Extract client IP — only trusts proxy headers when trustedProxies is configured. */
+  function getClientIp(req: Request): string {
+    if (trustedProxySet.size > 0) {
+      return req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+        ?? req.headers.get('x-real-ip')
+        ?? 'direct'
+    }
+    return 'direct'
+  }
 
   async function fetch(req: Request): Promise<Response> {
     const url = new URL(req.url)
@@ -214,9 +236,8 @@ export function createWebuiHandler(options: WebuiHandlerOptions): WebuiHandler {
 
     // ── Auth endpoint ──
     if (path === '/api/auth' && req.method === 'POST') {
-      const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-        ?? req.headers.get('x-real-ip')
-        ?? 'unknown'
+      await passwordReady
+      const ip = getClientIp(req)
 
       if (!rateLimiter.check(ip)) {
         logger.warn(`[webui] Rate limited auth attempt from ${ip}`)
@@ -237,7 +258,7 @@ export function createWebuiHandler(options: WebuiHandlerOptions): WebuiHandler {
         return Response.json({ error: 'Password is required' }, { status: 400 })
       }
 
-      if (!verifyPassword(body.password, loginPassword)) {
+      if (!await verifyPassword(body.password)) {
         logger.warn(`[webui] Failed auth attempt from ${ip}`)
         return Response.json({ error: 'Invalid credentials' }, { status: 401 })
       }
