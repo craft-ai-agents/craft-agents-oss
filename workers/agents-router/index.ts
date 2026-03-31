@@ -7,7 +7,8 @@
  * - /codex-beta/* → R2 bucket (Codex beta builds)
  * - /install-app.sh → R2 bucket (macOS/Linux install script)
  * - /install-app.ps1 → R2 bucket (Windows install script)
- * - /auth/slack/callback → OAuth callback relay (redirects to localhost)
+ * - /auth/callback → Generic OAuth callback relay (redirects to return_to URL)
+ * - /auth/slack/callback → Legacy Slack OAuth callback relay (redirects to localhost)
  * - /docs/* → Mintlify documentation site
  * - /s/* → Session viewer Pages site
  * - /mermaid/* → Mermaid visual test suite Pages site
@@ -72,7 +73,33 @@ export default {
       return fetch(`https://craft-agents-mermaid.pages.dev${mermaidPath}${url.search}`);
     }
 
-    // Auth callback relay: /auth/slack/callback
+    // Generic OAuth callback relay: /auth/callback
+    // Forwards OAuth params (code, state, error) to the return_to URL.
+    // Used by both Electron (return_to=http://localhost:{port}/callback)
+    // and WebUI (return_to=https://server/api/oauth/callback).
+    if (path === '/auth/callback') {
+      const returnTo = url.searchParams.get('return_to');
+      if (!returnTo) {
+        return new Response('Missing return_to parameter', { status: 400 });
+      }
+      let parsed: URL;
+      try {
+        parsed = new URL(returnTo);
+      } catch {
+        return new Response('Invalid return_to URL', { status: 400 });
+      }
+      // Only allow localhost (any port) or HTTPS targets
+      if (parsed.hostname !== 'localhost' && parsed.protocol !== 'https:') {
+        return new Response('Invalid return_to URL: must be localhost or HTTPS', { status: 400 });
+      }
+      const params = new URLSearchParams(url.search);
+      params.delete('return_to');
+      const separator = returnTo.includes('?') ? '&' : '?';
+      return Response.redirect(`${returnTo}${separator}${params.toString()}`, 302);
+    }
+
+    // Legacy Slack OAuth callback relay: /auth/slack/callback
+    // Kept for backward compatibility — new flows use /auth/callback.
     if (path === '/auth/slack/callback') {
       const port = url.searchParams.get('port') || '6477';
       const portNum = parseInt(port, 10);

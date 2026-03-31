@@ -274,7 +274,10 @@ export function getGoogleScopes(options: GoogleOAuthOptions): string[] {
 export interface PrepareGoogleOAuthOptions {
   service?: GoogleService;
   scopes?: string[];
-  callbackPort: number;
+  /** Port for the local callback server (Electron). One of callbackPort or callbackUrl required. */
+  callbackPort?: number;
+  /** Full callback URL (WebUI). Takes precedence over callbackPort. */
+  callbackUrl?: string;
   clientId?: string;
   clientSecret?: string;
 }
@@ -297,7 +300,8 @@ export function prepareGoogleOAuth(options: PrepareGoogleOAuthOptions): Prepared
   const scopes = getGoogleScopes(options);
   const pkce = generatePKCE();
   const state = generateState();
-  const redirectUri = `http://localhost:${options.callbackPort}/callback`;
+  const redirectUri = options.callbackUrl
+    ?? `http://localhost:${options.callbackPort}/callback`;
 
   const authUrl = new URL(GOOGLE_AUTH_URL);
   authUrl.searchParams.set('client_id', clientId);

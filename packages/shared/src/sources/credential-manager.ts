@@ -369,13 +369,17 @@ export class SourceCredentialManager {
    * Prepare an OAuth flow for a source (server-side).
    *
    * Generates PKCE, state, and auth URL without opening a browser or starting
-   * a callback server. The caller provides the callbackPort; this function
-   * builds the provider-specific redirectUri.
+   * a callback server. The caller provides either callbackPort (Electron local
+   * server) or callbackUrl (WebUI server endpoint) for the redirect URI.
    *
    * Returns a PreparedOAuthFlow that should be stored in the flow store
    * and partially returned to the client (authUrl, state, flowId).
    */
-  async prepareOAuth(source: LoadedSource, callbackPort: number): Promise<PreparedOAuthFlow> {
+  async prepareOAuth(
+    source: LoadedSource,
+    options: { callbackPort?: number; callbackUrl?: string },
+  ): Promise<PreparedOAuthFlow> {
+    const { callbackPort, callbackUrl } = options;
     const provider = this.detectProvider(source);
 
     switch (provider) {
@@ -402,6 +406,7 @@ export class SourceCredentialManager {
           service,
           scopes,
           callbackPort,
+          callbackUrl,
           clientId: api?.googleOAuthClientId,
           clientSecret: api?.googleOAuthClientSecret,
         });
@@ -420,7 +425,7 @@ export class SourceCredentialManager {
           service = inferSlackServiceFromUrl(api?.baseUrl) || 'full';
         }
 
-        return prepareSlackOAuth({ service, userScopes, callbackPort });
+        return prepareSlackOAuth({ service, userScopes, callbackPort, callbackUrl });
       }
 
       case 'microsoft': {
@@ -442,14 +447,14 @@ export class SourceCredentialManager {
           }
         }
 
-        return prepareMicrosoftOAuth({ service, scopes, callbackPort });
+        return prepareMicrosoftOAuth({ service, scopes, callbackPort, callbackUrl });
       }
 
       case 'mcp': {
         if (!source.config.mcp?.url) {
           throw new Error('MCP URL not configured');
         }
-        return prepareMcpOAuth(source.config.mcp.url, callbackPort);
+        return prepareMcpOAuth(source.config.mcp.url, { callbackPort, callbackUrl });
       }
     }
   }

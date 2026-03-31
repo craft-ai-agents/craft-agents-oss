@@ -1168,7 +1168,7 @@ describe('prepareMcpOAuth', () => {
       return Promise.resolve(new Response('Not Found', { status: 404 }));
     });
 
-    const result = await prepareMcpOAuth('https://example.com/mcp', 8914);
+    const result = await prepareMcpOAuth('https://example.com/mcp', { callbackPort: 8914 });
 
     expect(result.clientId).toBe('craft-agent');
     expect(result.clientSecret).toBeUndefined();
@@ -1197,7 +1197,7 @@ describe('prepareMcpOAuth', () => {
       return Promise.resolve(new Response('Not Found', { status: 404 }));
     });
 
-    const result = await prepareMcpOAuth('https://example.com/mcp', 8914);
+    const result = await prepareMcpOAuth('https://example.com/mcp', { callbackPort: 8914 });
 
     expect(result.clientId).toBe('dynamic-client');
     expect(result.clientSecret).toBe('secret-123');
@@ -1222,6 +1222,6 @@ describe('prepareMcpOAuth', () => {
       return Promise.resolve(new Response('Not Found', { status: 404 }));
     });
 
-    await expect(prepareMcpOAuth('https://example.com/mcp', 8914)).rejects.toThrow('Failed to register OAuth client: Server error');
+    await expect(prepareMcpOAuth('https://example.com/mcp', { callbackPort: 8914 })).rejects.toThrow('Failed to register OAuth client: Server error');
   });
 });

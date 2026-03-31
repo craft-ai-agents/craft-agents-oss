@@ -13,6 +13,68 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.oauth.REVOKE,
 ] as const
 
+/**
+ * Complete an OAuth flow: validate state, exchange code for tokens, store credentials.
+ *
+ * Shared between the `oauth:complete` RPC handler (called by Electron) and the
+ * `/api/oauth/callback` HTTP route (called by the relay for WebUI).
+ *
+ * @param opts.clientId - RPC client ID (for ownership validation). Omit for HTTP callback.
+ * @param opts.workspaceId - Workspace ID (for ownership validation). Omit for HTTP callback.
+ */
+export async function completeOAuthFlow(opts: {
+  code: string
+  state: string
+  flowStore: { getByState(state: string): any; remove(state: string): void }
+  credManager: { exchangeAndStore(...args: any[]): Promise<any> }
+  sessionManager: { completeAuthRequest(...args: any[]): Promise<void> }
+  pushSourcesChanged: (workspaceId: string) => void
+  logger: { info(msg: string): void; }
+  clientId?: string
+  workspaceId?: string | null
+}): Promise<{ success: boolean; error?: string; email?: string }> {
+  const { code, state, flowStore, credManager, sessionManager, pushSourcesChanged, logger } = opts
+
+  const flow = flowStore.getByState(state)
+  if (!flow) throw new Error('Unknown or expired OAuth flow')
+
+  // When called via RPC, enforce ownership. HTTP callbacks skip this (state is sufficient auth).
+  if (opts.clientId !== undefined) {
+    if (flow.ownerClientId !== opts.clientId) throw new Error('OAuth flow owned by different client')
+  }
+  if (opts.workspaceId != null) {
+    if (flow.workspaceId !== opts.workspaceId) throw new Error('Workspace mismatch')
+  }
+
+  const result = await credManager.exchangeAndStore(flow.source, flow.provider, {
+    code,
+    codeVerifier: flow.codeVerifier,
+    tokenEndpoint: flow.tokenEndpoint,
+    clientId: flow.clientId,
+    clientSecret: flow.clientSecret,
+    redirectUri: flow.redirectUri,
+  })
+
+  flowStore.remove(state)
+
+  // If this was triggered from a session auth card, complete it
+  if (flow.sessionId && flow.authRequestId) {
+    await sessionManager.completeAuthRequest(flow.sessionId, {
+      requestId: flow.authRequestId,
+      sourceSlug: flow.sourceSlug,
+      success: result.success,
+      email: result.email,
+      error: result.error,
+    })
+  }
+
+  // Push source status update to all clients in this workspace
+  pushSourcesChanged(flow.workspaceId)
+
+  logger.info(`[OAuth] Flow complete for ${flow.sourceSlug} (success=${result.success})`)
+  return result
+}
+
 export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): void {
   const log = deps.platform.logger
   const flowStore = deps.oauthFlowStore
@@ -21,11 +83,12 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
   // ── oauth:start ──────────────────────────────────────────────
   server.handle(RPC_CHANNELS.oauth.START, async (ctx, args: {
     sourceSlug: string
-    callbackPort: number
+    callbackPort?: number
+    callbackUrl?: string
     sessionId?: string
     authRequestId?: string
   }) => {
-    const { sourceSlug, callbackPort, sessionId, authRequestId } = args
+    const { sourceSlug, callbackPort, callbackUrl, sessionId, authRequestId } = args
 
     if (!ctx.workspaceId) {
       throw new Error('No workspace bound to this client')
@@ -41,7 +104,7 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
       throw new Error(`Source not found: ${sourceSlug}`)
     }
 
-    const prepared = await credManager.prepareOAuth(source, callbackPort)
+    const prepared = await credManager.prepareOAuth(source, { callbackPort, callbackUrl })
 
     const flowId = randomUUID()
     flowStore.store(createPendingFlow({
@@ -73,41 +136,26 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
   }) => {
     const { flowId, code, state } = args
 
+    // Validate flowId match before delegating
     const flow = flowStore.getByState(state)
     if (!flow) throw new Error('Unknown or expired OAuth flow')
     if (flow.flowId !== flowId) throw new Error('Flow ID mismatch')
-    if (flow.ownerClientId !== ctx.clientId) throw new Error('OAuth flow owned by different client')
-    if (flow.workspaceId !== ctx.workspaceId) throw new Error('Workspace mismatch')
 
-    const result = await credManager.exchangeAndStore(flow.source, flow.provider, {
+    return completeOAuthFlow({
       code,
-      codeVerifier: flow.codeVerifier,
-      tokenEndpoint: flow.tokenEndpoint,
-      clientId: flow.clientId,
-      clientSecret: flow.clientSecret,
-      redirectUri: flow.redirectUri,
+      state,
+      flowStore,
+      credManager,
+      sessionManager: deps.sessionManager,
+      pushSourcesChanged: (workspaceId) => {
+        const ws = getWorkspaceByNameOrId(workspaceId)
+        const sources = ws ? loadWorkspaceSources(ws.rootPath) : []
+        pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, sources)
+      },
+      logger: log,
+      clientId: ctx.clientId,
+      workspaceId: ctx.workspaceId,
     })
-
-    flowStore.remove(state)
-
-    // If this was triggered from a session auth card, complete it
-    if (flow.sessionId && flow.authRequestId) {
-      await deps.sessionManager.completeAuthRequest(flow.sessionId, {
-        requestId: flow.authRequestId,
-        sourceSlug: flow.sourceSlug,
-        success: result.success,
-        email: result.email,
-        error: result.error,
-      })
-    }
-
-    // Push source status update to all clients in this workspace
-    const completeWorkspace = getWorkspaceByNameOrId(flow.workspaceId)
-    const completeSources = completeWorkspace ? loadWorkspaceSources(completeWorkspace.rootPath) : []
-    pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId: flow.workspaceId }, flow.workspaceId, completeSources)
-
-    log.info(`[OAuth] Flow complete for ${flow.sourceSlug} (success=${result.success})`)
-    return result
   })
 
   // ── oauth:cancel ─────────────────────────────────────────────
