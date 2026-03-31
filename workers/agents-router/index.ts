@@ -7,7 +7,7 @@
  * - /codex-beta/* → R2 bucket (Codex beta builds)
  * - /install-app.sh → R2 bucket (macOS/Linux install script)
  * - /install-app.ps1 → R2 bucket (Windows install script)
- * - /auth/callback → Generic OAuth callback relay (redirects to return_to URL)
+ * - /auth/callback → Generic OAuth callback relay (redirects via return_to or relay state)
  * - /auth/slack/callback → Legacy Slack OAuth callback relay (redirects to localhost)
  * - /docs/* → Mintlify documentation site
  * - /s/* → Session viewer Pages site
@@ -15,8 +15,14 @@
  * - /* → Proxy to Pages marketing site
  */
 
+import { decodeOAuthRelayState, isOAuthRelayState } from '../../packages/shared/src/auth/oauth-relay.ts';
+
 interface Env {
   DOWNLOADS: R2Bucket;
+}
+
+function isAllowedReturnToTarget(parsed: URL): boolean {
+  return parsed.hostname === 'localhost' || parsed.protocol === 'https:';
 }
 
 export default {
@@ -74,26 +80,43 @@ export default {
     }
 
     // Generic OAuth callback relay: /auth/callback
-    // Forwards OAuth params (code, state, error) to the return_to URL.
-    // Used by both Electron (return_to=http://localhost:{port}/callback)
-    // and WebUI (return_to=https://server/api/oauth/callback).
+    // Supports both:
+    // - legacy query routing via return_to=...
+    // - stable redirect_uri routing where the real callback target is encoded in state
     if (path === '/auth/callback') {
-      const returnTo = url.searchParams.get('return_to');
+      const rawState = url.searchParams.get('state');
+      let relayState: ReturnType<typeof decodeOAuthRelayState> | null = null;
+
+      if (rawState && isOAuthRelayState(rawState)) {
+        try {
+          relayState = decodeOAuthRelayState(rawState);
+        } catch {
+          return new Response('Invalid relay state', { status: 400 });
+        }
+      }
+
+      const returnTo = relayState?.returnTo || url.searchParams.get('return_to');
       if (!returnTo) {
         return new Response('Missing return_to parameter', { status: 400 });
       }
+
       let parsed: URL;
       try {
         parsed = new URL(returnTo);
       } catch {
         return new Response('Invalid return_to URL', { status: 400 });
       }
-      // Only allow localhost (any port) or HTTPS targets
-      if (parsed.hostname !== 'localhost' && parsed.protocol !== 'https:') {
+
+      if (!isAllowedReturnToTarget(parsed)) {
         return new Response('Invalid return_to URL: must be localhost or HTTPS', { status: 400 });
       }
+
       const params = new URLSearchParams(url.search);
       params.delete('return_to');
+      if (relayState) {
+        params.set('state', relayState.innerState);
+      }
+
       const separator = returnTo.includes('?') ? '&' : '?';
       return Response.redirect(`${returnTo}${separator}${params.toString()}`, 302);
     }

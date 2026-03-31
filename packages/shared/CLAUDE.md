@@ -33,6 +33,7 @@ cd packages/shared && bun run tsc --noEmit
   - use hard aborts for true cancellation/teardown (`UserStop`, redirect fallback)
   - use handoff interrupts for pause points where control moves to the UI (`AuthRequest`, `PlanSubmitted`)
 - Remote workspace handoff summaries are injected as one-shot hidden context on the destination session's first turn.
+- WebUI source OAuth uses a stable relay redirect URI (`https://agents.craft.do/auth/callback`); the deployment-specific callback target is carried in a relay-owned outer `state` envelope and unwrapped by the router worker.
 - Automations matching is unified through canonical matcher adapters in `src/automations/utils.ts` (`matcherMatches*`). Avoid direct primitive-only matcher checks in feature code so condition gating stays consistent across app and agent events.
 
 ## Source of truth

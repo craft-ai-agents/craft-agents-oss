@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 
+import { encodeOAuthRelayState } from '../../../packages/shared/src/auth/oauth-relay'
+
 /**
  * Tests for the generic /auth/callback relay route in the agents-router worker.
  *
@@ -44,6 +46,68 @@ describe('/auth/callback relay', () => {
     expect(location).toStartWith('https://my-server.com/api/oauth/callback?')
     expect(location).toContain('code=abc')
     expect(location).toContain('state=def')
+  })
+
+  it('redirects using relay state and forwards the inner state', async () => {
+    const relayState = encodeOAuthRelayState(
+      'https://ghalmos.craftdocs-cf-t1.com/api/oauth/callback',
+      'inner-state-123',
+    )
+
+    const res = await worker.fetch(
+      makeRequest(`/auth/callback?code=abc123&state=${encodeURIComponent(relayState)}`),
+      env,
+    )
+
+    expect(res.status).toBe(302)
+    const location = res.headers.get('location')!
+    expect(location).toStartWith('https://ghalmos.craftdocs-cf-t1.com/api/oauth/callback?')
+    expect(location).toContain('code=abc123')
+    expect(location).toContain('state=inner-state-123')
+    expect(location).not.toContain(encodeURIComponent(relayState))
+  })
+
+  it('forwards provider error params when using relay state', async () => {
+    const relayState = encodeOAuthRelayState(
+      'https://ghalmos.craftdocs-cf-t1.com/api/oauth/callback',
+      'inner-state-456',
+    )
+
+    const res = await worker.fetch(
+      makeRequest(`/auth/callback?error=access_denied&error_description=User+denied&state=${encodeURIComponent(relayState)}`),
+      env,
+    )
+
+    expect(res.status).toBe(302)
+    const location = res.headers.get('location')!
+    expect(location).toContain('error=access_denied')
+    expect(location).toContain('error_description=User+denied')
+    expect(location).toContain('state=inner-state-456')
+  })
+
+  it('returns 400 for malformed relay state', async () => {
+    const res = await worker.fetch(
+      makeRequest('/auth/callback?code=abc&state=ca1.not-valid-base64'),
+      env,
+    )
+
+    expect(res.status).toBe(400)
+    expect(await res.text()).toContain('Invalid relay state')
+  })
+
+  it('returns 400 for invalid returnTo inside relay state', async () => {
+    const relayState = encodeOAuthRelayState(
+      'http://evil.com/steal',
+      'inner-state-789',
+    )
+
+    const res = await worker.fetch(
+      makeRequest(`/auth/callback?code=abc&state=${encodeURIComponent(relayState)}`),
+      env,
+    )
+
+    expect(res.status).toBe(400)
+    expect(await res.text()).toContain('must be localhost or HTTPS')
   })
 
   it('returns 400 when return_to is missing', async () => {
