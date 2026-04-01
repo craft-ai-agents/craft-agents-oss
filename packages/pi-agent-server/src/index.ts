@@ -427,6 +427,56 @@ function registerCustomEndpointModels(
 }
 
 /**
+ * Dynamically register a model that isn't in the Pi SDK's static registry.
+ * Clones properties (api, baseUrl, compat, etc.) from an existing model in the
+ * same provider, then re-registers the full set via registerProvider().
+ *
+ * Returns the newly-registered model, or undefined if registration isn't possible
+ * (no existing models for the provider, or no API key credential available).
+ */
+function registerDynamicPiModel(
+  registry: PiModelRegistry,
+  bareId: string,
+  piAuthProvider: string,
+): ReturnType<PiModelRegistry['find']> | undefined {
+  // Find all existing models for this provider to preserve them
+  const existing = registry.getAll().filter(m => m.provider === piAuthProvider);
+  if (existing.length === 0) return undefined;
+
+  // Need API key for registerProvider (required when defining models)
+  const apiKey = initConfig?.piAuth?.credential?.type === 'api_key'
+    ? initConfig.piAuth.credential.key
+    : undefined;
+  if (!apiKey) return undefined;
+
+  const ref = existing[0];
+
+  // Preserve all existing models and add the new one
+  const allModels = existing.map(m => ({
+    id: m.id, name: m.name, reasoning: m.reasoning,
+    input: m.input, cost: m.cost, contextWindow: m.contextWindow,
+    maxTokens: m.maxTokens,
+    ...(m.compat ? { compat: m.compat } : {}),
+  }));
+  allModels.push({
+    id: bareId, name: bareId, reasoning: ref.reasoning,
+    input: [...ref.input], cost: { ...ref.cost },
+    contextWindow: ref.contextWindow, maxTokens: ref.maxTokens,
+    ...(ref.compat ? { compat: ref.compat } : {}),
+  });
+
+  registry.registerProvider(piAuthProvider, {
+    baseUrl: ref.baseUrl,
+    api: ref.api,
+    apiKey,
+    models: allModels,
+  });
+  debugLog(`Dynamically registered model '${bareId}' under provider '${piAuthProvider}' (${allModels.length} total models)`);
+
+  return registry.find(piAuthProvider, bareId) ?? undefined;
+}
+
+/**
  * Create an in-memory auth storage pre-loaded with the user's credentials
  * and a model registry backed by it. Used by both the main session and
  * ephemeral queryLlm sessions.
@@ -566,7 +616,15 @@ async function ensureSession(): Promise<AgentSession> {
   // Set model if specified
   if (initConfig.model) {
     try {
-      const piModel = resolvePiModel(modelRegistry, initConfig.model, initConfig.piAuth?.provider, shouldPreferCustomEndpoint());
+      let piModel = resolvePiModel(modelRegistry, initConfig.model, initConfig.piAuth?.provider, shouldPreferCustomEndpoint());
+
+      // Fallback: if the model isn't in the SDK's static registry, dynamically register it
+      // by cloning properties from an existing model in the same provider.
+      if (!piModel && initConfig.piAuth?.provider) {
+        const bareId = stripPiPrefix(initConfig.model);
+        piModel = registerDynamicPiModel(modelRegistry, bareId, initConfig.piAuth.provider);
+      }
+
       if (piModel) {
         // Verify resolved model's provider is compatible with the authenticated provider.
         // Without this, a model that resolves to a different provider (e.g. azure-openai-responses
@@ -1443,6 +1501,12 @@ async function handleSetModel(msg: Extract<InboundMessage, { type: 'set_model' }
     registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint.api, initConfig.baseUrl!.trim(), [bareId]);
     piModel = piModelRegistry.find('custom-endpoint', bareId) ?? undefined;
     debugLog(`[set_model] Dynamically registered custom endpoint model: ${bareId}`);
+  }
+
+  // Fallback: dynamically register unknown models for provider-based connections
+  if (!piModel && initConfig?.piAuth?.provider) {
+    const bareId = stripPiPrefix(msg.model);
+    piModel = registerDynamicPiModel(piModelRegistry, bareId, initConfig.piAuth.provider);
   }
 
   if (!piModel) {
