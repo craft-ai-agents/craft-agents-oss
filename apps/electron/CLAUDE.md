@@ -1105,7 +1105,7 @@ Messages are rendered with full markdown support using custom components in `com
 **Features:**
 - GitHub-flavored markdown (tables, task lists, strikethrough)
 - Syntax highlighting for 100+ languages via Shiki
-- Clickable file paths (opens in default app via `shell.openPath`)
+- Clickable file paths and `file://` local links (opens in default app via `shell.openPath`)
 - Clickable URLs (opens in browser via `shell.openExternal`)
 - Copy button on code blocks
 
