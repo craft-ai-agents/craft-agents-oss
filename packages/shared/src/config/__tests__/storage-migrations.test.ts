@@ -88,4 +88,14 @@ describe('inferModelSelectionMode', () => {
     const mode = inferModelSelectionMode({ models: [] }, providerDefaults)
     expect(mode).toBe('automaticallySyncedFromProvider')
   })
+
+  it('infers userDefined3Tier when user adds models unknown to the SDK', () => {
+    // Models like glm-5-turbo that exist at the provider but are not yet in the SDK
+    const providerDefaults = ['pi/zai-best', 'pi/zai-balanced', 'pi/zai-fast']
+    const mode = inferModelSelectionMode(
+      { models: ['pi/zai-best', 'pi/zai-fast', 'pi/zai-new-model'] },
+      providerDefaults,
+    )
+    expect(mode).toBe('userDefined3Tier')
+  })
 })

@@ -1563,6 +1563,10 @@ function backfillAllConnectionModels(config: StoredConfig): boolean {
           changed = true;
         }
       } else {
+        // userDefined3Tier: user has customized their model list.
+        // Only canonicalize IDs (add pi/ prefix where needed), but do NOT filter
+        // out models unknown to the SDK. This preserves user-added models that may
+        // be newer than the bundled SDK model registry (e.g. glm-5-turbo, glm-5.1).
         const currentIds = normalizeModelIds(connection.models);
         if (providerDefaultModelIds.length > 0) {
           const allowedIds = new Set(providerDefaultModelIds);
@@ -1574,29 +1578,17 @@ function backfillAllConnectionModels(config: StoredConfig): boolean {
             }
             return id;
           });
-          const filtered = canonicalCurrentIds.filter(id => allowedIds.has(id));
 
-          if (!modelSetEquals(canonicalCurrentIds, currentIds) || filtered.length !== currentIds.length) {
-            debug('[storage] backfill userDefined filtered', {
+          if (!modelSetEquals(canonicalCurrentIds, currentIds)) {
+            debug('[storage] backfill userDefined canonicalized', {
               slug: connection.slug,
               piAuthProvider: connection.piAuthProvider,
               beforeCount: currentIds.length,
-              canonicalCount: canonicalCurrentIds.length,
-              afterCount: filtered.length,
+              afterCount: canonicalCurrentIds.length,
               beforeFirst5: currentIds.slice(0, 5),
-              afterFirst5: filtered.slice(0, 5),
+              afterFirst5: canonicalCurrentIds.slice(0, 5),
             });
-            connection.models = filtered;
-            changed = true;
-          }
-
-          if (filtered.length === 0) {
-            debug('[storage] backfill userDefined fallback-to-defaults', {
-              slug: connection.slug,
-              piAuthProvider: connection.piAuthProvider,
-              defaultCount: providerDefaultModelIds.length,
-            });
-            connection.models = defaultModels;
+            connection.models = canonicalCurrentIds;
             changed = true;
           }
         }
