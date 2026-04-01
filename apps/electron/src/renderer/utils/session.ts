@@ -53,6 +53,31 @@ export function getSessionTitle(session: SessionLike | SessionMeta): string {
 }
 
 /**
+ * Get a compact preview line for session-list rows.
+ * Prefers the stored preview/first user message, but avoids duplicating the title.
+ */
+export function getSessionPreviewText(session: SessionLike | SessionMeta, maxLength = 88): string | null {
+  const source = session.preview
+    || (('messages' in session && session.messages)
+      ? session.messages.find(m => m.role === 'user')?.content
+      : undefined)
+
+  if (!source) return null
+
+  const sanitized = sanitizePreview(source)
+  if (!sanitized) return null
+
+  const title = getSessionTitle(session).replace(/…$/, '').trim()
+  const normalizedTitle = sanitizePreview(title)
+  if (normalizedTitle && sanitized.toLowerCase() === normalizedTitle.toLowerCase()) {
+    return null
+  }
+
+  const trimmed = sanitized.slice(0, maxLength)
+  return trimmed.length < sanitized.length ? `${trimmed.trimEnd()}…` : trimmed
+}
+
+/**
  * Get the ID of the last final assistant or plan message (not intermediate)
  * Used for unread message tracking
  */

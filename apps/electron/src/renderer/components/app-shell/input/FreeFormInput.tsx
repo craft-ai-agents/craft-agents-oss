@@ -404,11 +404,27 @@ export function FreeFormInput({
   const appShellContext = useOptionalAppShellContext()
   const isFocusedPanel = appShellContext?.isFocusedPanel ?? true
 
-  // Shuffle placeholder order once per mount so each session feels fresh
+  // Shuffle placeholder order once per mount so each session feels fresh.
+  // In compact mode, suppress desktop-keyboard guidance that is noisy or misleading
+  // on narrow/mobile-like layouts.
+  const placeholderOptions = React.useMemo(() => {
+    if (!Array.isArray(placeholder)) return placeholder
+    if (!compactMode) return placeholder
+    return placeholder.filter((entry) => {
+      const lower = entry.toLowerCase()
+      return !lower.includes('shift + tab')
+        && !lower.includes('shift + return')
+        && !lower.includes('toggle the sidebar')
+        && !lower.includes('focus mode')
+        && !lower.includes('⌘')
+        && !lower.includes('ctrl')
+    })
+  }, [placeholder, compactMode])
+
   // Hide placeholder entirely when panel is unfocused in multi-panel layout
   const shuffledPlaceholder = React.useMemo(
-    () => Array.isArray(placeholder) ? shuffleArray(placeholder) : placeholder,
-    [] // eslint-disable-line react-hooks/exhaustive-deps -- intentionally shuffle only on mount
+    () => Array.isArray(placeholderOptions) ? shuffleArray(placeholderOptions) : placeholderOptions,
+    [placeholderOptions]
   )
   const effectivePlaceholder = isFocusedPanel ? shuffledPlaceholder : ''
 
@@ -2026,6 +2042,7 @@ Model
               type="button"
               size="icon"
               variant="secondary"
+              aria-label="Stop response"
               className="send-btn h-7 w-7 rounded-full shrink-0 hover:bg-foreground/15 active:bg-foreground/20 ml-2"
               onClick={() => handleStop(false)}
             >
@@ -2035,6 +2052,7 @@ Model
             <Button
               type="submit"
               size="icon"
+              aria-label="Send message"
               className="send-btn h-7 w-7 rounded-full shrink-0 ml-2"
               disabled={!hasContent || disabled || disableSend}
               data-tutorial="send-button"

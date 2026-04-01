@@ -134,6 +134,9 @@ export interface AppShellContextType {
   /** Whether this panel is the focused panel (for multi-panel visual differentiation) */
   isFocusedPanel?: boolean
 
+  /** Whether the shell is currently in compact/narrow mode */
+  isCompactMode?: boolean
+
   // Session list search state (for ChatDisplay highlighting)
   /** Current search query from session list - used to highlight matches in ChatDisplay */
   sessionListSearchQuery?: string

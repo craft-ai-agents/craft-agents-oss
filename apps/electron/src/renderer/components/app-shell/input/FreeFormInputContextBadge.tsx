@@ -68,6 +68,7 @@ export const FreeFormInputContextBadge = React.forwardRef<HTMLButtonElement, Fre
       <button
         ref={mergedRef as React.Ref<HTMLButtonElement>}
         type="button"
+        aria-label={label}
         onClick={onClick}
         disabled={disabled}
         data-tutorial={dataTutorial}

@@ -87,14 +87,14 @@ export function PanelStackContainer({
       requestAnimationFrame(() => {
         scrollRef.current?.scrollTo({
           left: scrollRef.current.scrollWidth,
-          behavior: 'smooth',
+          behavior: isCompact ? 'instant' : 'smooth',
         })
       })
     }
     prevCountRef.current = contentPanels.length
-  }, [contentPanels.length])
+  }, [contentPanels.length, isCompact])
 
-  const transition = isResizing ? { duration: 0 } : PANEL_SPRING
+  const transition = (isResizing || isCompact) ? { duration: 0 } : PANEL_SPRING
 
   return (
     <div

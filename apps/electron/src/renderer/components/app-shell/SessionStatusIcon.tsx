@@ -24,14 +24,14 @@ export function SessionStatusIcon({ item }: SessionStatusIconProps) {
   return (
     <Popover modal={true} open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <div
+        <button
+          type="button"
           className={cn(
-            "flex items-center justify-center rounded-full transition-colors cursor-pointer",
-            "hover:bg-foreground/5",
+            "!h-5 !w-5 flex items-center justify-center rounded-full transition-colors cursor-pointer",
+            "hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             "[&>svg]:w-full [&>svg]:h-full [&>img]:w-full [&>img]:h-full [&>span]:text-base",
           )}
           style={getStateIconStyle(status, ctx.sessionStatuses)}
-          role="button"
           aria-haspopup="menu"
           aria-expanded={open}
           aria-label="Change todo state"
@@ -41,7 +41,7 @@ export function SessionStatusIcon({ item }: SessionStatusIconProps) {
           }}
         >
           {getStateIcon(status, ctx.sessionStatuses)}
-        </div>
+        </button>
       </PopoverTrigger>
       <PopoverContent
         className="w-auto p-0 border-0 shadow-none bg-transparent"

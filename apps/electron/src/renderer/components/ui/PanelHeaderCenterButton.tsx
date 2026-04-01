@@ -16,6 +16,7 @@ export const PanelHeaderCenterButton = forwardRef<HTMLButtonElement, PanelHeader
       <button
         ref={ref}
         type="button"
+        aria-label={props['aria-label'] ?? tooltip}
         className={cn(
           "panel-header-btn inline-flex items-center justify-center",
           "p-1.5 shrink-0 rounded-[6px] titlebar-no-drag",

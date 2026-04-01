@@ -42,6 +42,8 @@ export interface EntityRowProps {
   /** Content rendered inline after the title (e.g. timestamp). On hover, swapped with the more button.
    *  When set, the title row becomes single-line (truncated) and the absolute more button is hidden. */
   titleTrailing?: React.ReactNode
+  /** Optional subtitle line beneath the title */
+  subtitle?: React.ReactNode
   /** Badge/subtitle row beneath the title */
   badges?: React.ReactNode
   /** Right-aligned content in the badge row (timestamp, child toggle) */
@@ -88,6 +90,7 @@ export function EntityRow({
   title,
   titleClassName,
   titleTrailing,
+  subtitle,
   badges,
   trailing,
   children,
@@ -184,7 +187,21 @@ export function EntityRow({
             </div>
           )}
 
-          {/* Badges / subtitle row */}
+          {/* Subtitle line */}
+          {subtitle && (
+            <div className="flex items-start gap-[10px] w-full text-[12px] text-foreground/55 min-w-0 -mt-1">
+              {icon && (
+                <div className="shrink-0 flex items-center gap-[10px] [&>*]:w-3 [&>*]:h-3 invisible" aria-hidden="true">
+                  {icon}
+                </div>
+              )}
+              <div className="min-w-0 flex-1 line-clamp-2 leading-[1.35]">
+                {subtitle}
+              </div>
+            </div>
+          )}
+
+          {/* Badges / metadata row */}
           {(badges || trailing) && (
             <div className="flex items-center gap-[10px] text-xs text-foreground/70 w-full -mb-[2px] min-w-0">
               {/* Invisible spacer matching icon container width */}

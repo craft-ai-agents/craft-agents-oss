@@ -12,6 +12,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@craft-agent/ui"
 import { CraftAgentsSymbol } from "../icons/CraftAgentsSymbol"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
 import { TopBarButton } from "../ui/TopBarButton"
+import { cn } from "@/lib/utils"
 import { isMac } from "@/lib/platform"
 import { useActionLabel } from "@/actions"
 import {
@@ -373,7 +374,7 @@ export function TopBar({
         </div>
 
         {/* Back / Forward / Workspace selector (moved from center) */}
-        <div className="ml-1 flex w-[clamp(220px,42vw,640px)] min-w-0 items-center gap-1">
+        <div className={cn("ml-1 flex min-w-0 items-center gap-1", isCompact ? "flex-1" : "w-[clamp(220px,42vw,640px)]")}>
           <Tooltip>
             <TooltipTrigger asChild>
               <TopBarButton onClick={onBack} disabled={!canGoBack} aria-label="Go back">
@@ -407,6 +408,7 @@ export function TopBar({
       </div>
 
       {/* === RIGHT: Browser strip + add + help === */}
+      {!isCompact && (
       <div ref={rightSlotRef} className="flex min-w-0 shrink-0 items-center justify-end gap-1" style={{ paddingRight: 12 }}>
         <div className="min-w-0">
           <BrowserTabStrip activeSessionId={activeSessionId} maxVisibleBadges={maxVisibleBrowserBadges} />
@@ -470,6 +472,7 @@ export function TopBar({
           </StyledDropdownMenuContent>
         </DropdownMenu>
       </div>
+      )}
       </div>
     </div>
   )

@@ -2410,7 +2410,8 @@ export function ResponseCard({
     return (
       <>
         <div className="bg-background shadow-minimal rounded-[8px] overflow-hidden relative group">
-          {/* Fullscreen button - top right corner, visible on hover */}
+          {/* Fullscreen button - desktop only; compact mode keeps message chrome minimal */}
+          {!compactMode && (
           <button
             onClick={() => setIsFullscreen(true)}
             className={cn(
@@ -2424,6 +2425,7 @@ export function ResponseCard({
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
+          )}
 
           {/* Plan header - only shown for plan variant */}
           {isPlan && (

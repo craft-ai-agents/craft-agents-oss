@@ -1580,18 +1580,22 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               }}
             >
               <ScrollArea className="h-full min-w-0" viewportRef={scrollViewportRef}>
-              <div className={cn(CHAT_LAYOUT.maxWidth, "mx-auto", CHAT_LAYOUT.containerPadding, CHAT_LAYOUT.messageSpacing, "min-w-0")}>
+              <div className={cn(
+                CHAT_LAYOUT.maxWidth,
+                "mx-auto min-w-0",
+                compactMode ? "px-3 py-4 space-y-2" : [CHAT_LAYOUT.containerPadding, CHAT_LAYOUT.messageSpacing]
+              )}>
                 {/* Session-level AnimatePresence: Prevents layout jump when switching sessions */}
-                <AnimatePresence mode="wait" initial={false}>
+                <AnimatePresence mode={compactMode ? "sync" : "wait"} initial={false}>
                   <motion.div
-                    key={session?.id}
+                    key={compactMode ? 'compact-session' : session?.id}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: 0.1, ease: 'easeOut' }}
+                    transition={compactMode ? { duration: 0 } : { duration: 0.1, ease: 'easeOut' }}
                   >
                     {/* Loading/Content AnimatePresence: Handles spinner ↔ content transition */}
-                    <AnimatePresence mode="wait" initial={false}>
+                    <AnimatePresence mode={compactMode ? "sync" : "wait"} initial={false}>
                     {messagesLoading ? (
                       /* Loading State: Show spinner while messages are being lazy loaded */
                       <motion.div
@@ -1599,7 +1603,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        transition={{ duration: 0.1 }}
+                        transition={compactMode ? { duration: 0 } : { duration: 0.1 }}
                         className="flex items-center justify-center h-64"
                       >
                         <Spinner className="text-foreground/30" />
@@ -1608,11 +1612,11 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                     /* Turn-based Message Display - memoized to avoid re-grouping on every render */
                     /* AnimatePresence handles the fade-in animation when transitioning from loading */
                     <motion.div
-                      key={`loaded-${session?.id}`}
+                      key={compactMode ? 'loaded-compact' : `loaded-${session?.id}`}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      transition={{ duration: 0.1, ease: 'easeOut' }}
+                      transition={compactMode ? { duration: 0 } : { duration: 0.1, ease: 'easeOut' }}
                     >
                   {/* Scroll to bottom before paint - fires via useLayoutEffect */}
                   {/* Skip when search is active on session switch - scroll to first match instead */}
@@ -1650,7 +1654,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                           key={turnKey}
                           ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
                           className={cn(
-                            CHAT_LAYOUT.userMessagePadding,
+                            compactMode ? "pt-2 pb-1" : CHAT_LAYOUT.userMessagePadding,
                             "rounded-lg transition-all duration-200",
                             isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
                             isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
