@@ -176,8 +176,8 @@ export default function ServerSettingsPage() {
           <SettingsSection title="Remote Access">
             <SettingsCard>
               <SettingsToggle
-                label="Enable Server Mode"
-                description="Allow connections from other machines on the network."
+                label={t("settings.server.enableServerMode")}
+                description={t("settings.server.allowRemoteConnections")}
                 checked={form.enabled}
                 onCheckedChange={(enabled) => setForm(f => ({ ...f, enabled }))}
               />
@@ -186,14 +186,14 @@ export default function ServerSettingsPage() {
             {needsRestart && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-warning/10 border border-warning/20 text-xs text-warning">
                 <RotateCw className="h-3.5 w-3.5 shrink-0" />
-                <span className="flex-1">Restart required to apply changes</span>
+                <span className="flex-1">{t("settings.server.restartRequired")}</span>
                 <Button
                   variant="outline"
                   size="sm"
                   className="h-6 text-[11px] px-2"
                   onClick={() => window.electronAPI.relaunchApp()}
                 >
-                  Restart Now
+                  {t("settings.server.restartNow")}
                 </Button>
               </div>
             )}
@@ -204,7 +204,7 @@ export default function ServerSettingsPage() {
             <SettingsSection title="Connection">
               <SettingsCard>
                 <SettingsInputRow
-                  label="Port"
+                  label={t("settings.server.port")}
                   value={form.port}
                   onChange={(port) => setForm(f => ({ ...f, port }))}
                   placeholder="9100"
@@ -267,8 +267,8 @@ export default function ServerSettingsPage() {
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                   <span>
                     {status?.insecureWarning
-                      ? 'Server is running without TLS. Auth tokens are sent in cleartext.'
-                      : 'Without TLS, connections will be unencrypted.'}
+                      ? t("settings.server.insecureWarning")
+                      : t("settings.server.noTlsWarning")}
                   </span>
                 </div>
               )}

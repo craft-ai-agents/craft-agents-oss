@@ -6,6 +6,7 @@
  */
 
 import * as React from 'react'
+import i18n from 'i18next'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Info_DataTable, SortableHeader } from './Info_DataTable'
 import { Info_Badge } from './Info_Badge'
@@ -33,7 +34,7 @@ interface ToolsDataTableProps {
 const columns: ColumnDef<ToolRow>[] = [
   {
     accessorKey: 'permission',
-    header: ({ column }) => <SortableHeader column={column} title="Access" />,
+    header: ({ column }) => <SortableHeader column={column} title={i18n.t("table.access")} />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
         <Info_StatusBadge status={row.original.permission} className="whitespace-nowrap" />
@@ -43,7 +44,7 @@ const columns: ColumnDef<ToolRow>[] = [
   },
   {
     accessorKey: 'name',
-    header: ({ column }) => <SortableHeader column={column} title="Tool" />,
+    header: ({ column }) => <SortableHeader column={column} title={i18n.t("table.tool")} />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
         <Info_Badge color="muted" className="whitespace-nowrap">
@@ -56,7 +57,7 @@ const columns: ColumnDef<ToolRow>[] = [
   {
     id: 'description',
     accessorKey: 'description',
-    header: () => <span className="p-1.5 pl-2.5">Description</span>,
+    header: () => <span className="p-1.5 pl-2.5">{i18n.t("common.description")}</span>,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5 min-w-0">
         <span className="truncate block">{row.original.description}</span>

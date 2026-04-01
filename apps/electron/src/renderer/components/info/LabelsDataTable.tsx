@@ -8,6 +8,8 @@
 
 import * as React from 'react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import i18n from 'i18next'
 import type { ColumnDef, Row } from '@tanstack/react-table'
 import { ChevronRight, Maximize2 } from 'lucide-react'
 import { Info_DataTable, SortableHeader } from './Info_DataTable'
@@ -91,14 +93,14 @@ const columns: ColumnDef<LabelConfig>[] = [
   },
   {
     accessorKey: 'name',
-    header: ({ column }) => <SortableHeader column={column} title="Name" />,
+    header: ({ column }) => <SortableHeader column={column} title={i18n.t("common.name")} />,
     cell: ({ row }) => <ExpandableNameCell row={row} />,
     meta: { fillWidth: true },
   },
   {
     id: 'valueType',
     accessorKey: 'valueType',
-    header: ({ column }) => <SortableHeader column={column} title="Type" />,
+    header: ({ column }) => <SortableHeader column={column} title={i18n.t("common.type")} />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
         {row.original.valueType ? (
@@ -130,6 +132,7 @@ export function LabelsDataTable({
   fullscreenTitle = 'Labels',
   className,
 }: LabelsDataTableProps) {
+  const { t } = useTranslation()
   const [isFullscreen, setIsFullscreen] = useState(false)
   const { isDark } = useTheme()
 
@@ -144,7 +147,7 @@ export function LabelsDataTable({
         'text-muted-foreground/50 hover:text-foreground',
         'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100'
       )}
-      title="View Fullscreen"
+      title={t("table.viewFullscreen")}
     >
       <Maximize2 className="w-3.5 h-3.5" />
     </button>

@@ -1886,7 +1886,7 @@ Model
                   {!isEmptySession && currentConnectionDetails && llmConnections.length > 1 && (
                     <>
                       <div className="flex items-center gap-2 px-2 py-1.5 text-xs select-none text-muted-foreground">
-                        <span>Using {currentConnectionDetails.name}</span>
+                        <span>{t('chat.usingConnection', { name: currentConnectionDetails.name })}</span>
                       </div>
                       <StyledDropdownMenuSeparator className="my-1" />
                     </>
@@ -1961,7 +1961,7 @@ Model
                   <StyledDropdownMenuSeparator className="my-1" />
                   <div className="px-2 py-1.5 select-none">
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Context</span>
+                      <span>{t('chat.context')}</span>
                       <span className="flex items-center gap-1.5">
                         {contextStatus.isCompacting && (
                           <Spinner className="h-3 w-3" />
@@ -2220,7 +2220,7 @@ function WorkingDirectoryBadge({
                 ref={inputRef}
                 value={filter}
                 onValueChange={setFilter}
-                placeholder="Filter folders..."
+                placeholder={t("chat.filterFolders")}
                 className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50 placeholder:select-none"
               />
             </div>

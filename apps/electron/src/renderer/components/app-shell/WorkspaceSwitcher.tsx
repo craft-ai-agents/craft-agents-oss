@@ -294,7 +294,7 @@ export function WorkspaceSwitcher({
                         e.stopPropagation()
                         handleRemoveWorkspace(workspace)
                       }}
-                      title="Remove workspace"
+                      title={t("workspace.removeWorkspace")}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -306,7 +306,7 @@ export function WorkspaceSwitcher({
                         e.stopPropagation()
                         onSelect(workspace.id, true)
                       }}
-                      title="Open in new window"
+                      title={t("sidebarMenu.openInNewWindow")}
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
                     </button>

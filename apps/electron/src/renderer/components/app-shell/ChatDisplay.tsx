@@ -2190,7 +2190,7 @@ function ErrorMessage({ message }: { message: Message }) {
               className="flex items-center gap-1 text-xs text-destructive/70 hover:text-destructive transition-colors"
             >
               {detailsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-              <span>{detailsOpen ? 'Hide' : 'Show'} technical details</span>
+              <span>{detailsOpen ? t('chat.hideTechnicalDetails') : t('chat.showTechnicalDetails')}</span>
             </button>
 
             <AnimatedCollapsibleContent isOpen={detailsOpen} className="overflow-hidden">

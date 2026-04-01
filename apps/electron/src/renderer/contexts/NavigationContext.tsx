@@ -36,6 +36,7 @@ import {
   useMemo,
   type ReactNode,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAtomValue, useSetAtom, useStore } from 'jotai'
 import { useSession } from '@/hooks/useSession'
@@ -160,6 +161,7 @@ export function NavigationProvider({
   isSessionsReady = true,
   remoteWorkspaceId,
 }: NavigationProviderProps) {
+  const { t } = useTranslation()
   const [, setSession] = useSession()
 
   // Read session metadata directly from atom (reactive to session changes)
@@ -1121,8 +1123,8 @@ export function NavigationProvider({
       if (route) {
         const navState = parseRouteToNavigationState(route)
         if (!navState && !route.startsWith('action/')) {
-          toast.error('Invalid link', {
-            description: 'The content may have been moved or deleted.',
+          toast.error(t('toast.invalidLink'), {
+            description: t('toast.invalidLinkDesc'),
           })
           return
         }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react"
+import { useTranslation } from "react-i18next"
 import { X } from "lucide-react"
 import { motion } from "motion/react"
 import { Dithering } from "@paper-design/shaders-react"
@@ -41,6 +42,7 @@ export function WorkspaceCreationScreen({
   reconnectWorkspace,
   onReconnectWorkspace,
 }: WorkspaceCreationScreenProps) {
+  const { t } = useTranslation()
   // Start at 'remote' step directly when reconnecting
   const [step, setStep] = useState<CreationStep>(reconnectWorkspace ? 'remote' : 'choice')
   const [isCreating, setIsCreating] = useState(false)
@@ -71,7 +73,7 @@ export function WorkspaceCreationScreen({
       onWorkspaceCreated(workspace)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
-      toast.error('Failed to create workspace', {
+      toast.error(t('toast.failedToCreateWorkspace'), {
         description: message,
       })
     } finally {

@@ -107,7 +107,7 @@ export function Info_DataTable<TData, TValue>({
     return (
       <div className="px-4 py-6 text-sm text-muted-foreground">
         {error === 'Source requires authentication' ? (
-          <span>Authenticate with this source to view available data</span>
+          <span>{t('sourceInfo.authenticateToViewData')}</span>
         ) : (
           <span>{error}</span>
         )}

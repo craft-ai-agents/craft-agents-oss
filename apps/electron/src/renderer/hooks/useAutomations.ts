@@ -10,6 +10,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useSetAtom } from 'jotai'
 import { toast } from 'sonner'
 import { automationsAtom } from '@/atoms/automations'
@@ -40,6 +41,7 @@ export function useAutomations(
   activeWorkspaceId: string | null | undefined,
   activeWorkspaceRootPath: string | undefined,
 ): UseAutomationsResult {
+  const { t } = useTranslation()
   const [automations, setAutomations] = useState<AutomationListItem[]>([])
   const [automationTestResults, setAutomationTestResults] = useState<Record<string, TestResult>>({})
   const [automationPendingDelete, setAutomationPendingDelete] = useState<string | null>(null)
@@ -132,7 +134,7 @@ export function useAutomations(
       automation.matcherIndex,
       !automation.enabled,
     ).catch(() => {
-      toast.error('Failed to toggle automation')
+      toast.error(t('toast.failedToToggleAutomation'))
     })
   }, [findAutomation, activeWorkspaceId])
 
@@ -140,7 +142,7 @@ export function useAutomations(
     const automation = findAutomation(automationId)
     if (!automation || !activeWorkspaceId) return
     window.electronAPI.duplicateAutomation(activeWorkspaceId, automation.event, automation.matcherIndex)
-      .catch(() => toast.error('Failed to duplicate automation'))
+      .catch(() => toast.error(t('toast.failedToDuplicateAutomation')))
   }, [findAutomation, activeWorkspaceId])
 
   // Delete: show confirmation dialog
@@ -153,7 +155,7 @@ export function useAutomations(
   const confirmDeleteAutomation = useCallback(() => {
     if (!pendingDeleteAutomation || !activeWorkspaceId) return
     window.electronAPI.deleteAutomation(activeWorkspaceId, pendingDeleteAutomation.event, pendingDeleteAutomation.matcherIndex)
-      .catch(() => toast.error('Failed to delete automation'))
+      .catch(() => toast.error(t('toast.failedToDeleteAutomation')))
     setAutomationPendingDelete(null)
   }, [pendingDeleteAutomation, activeWorkspaceId])
 
@@ -195,7 +197,7 @@ export function useAutomations(
     if (!activeWorkspaceId) return
     window.electronAPI.replayAutomation(activeWorkspaceId, automationId, event)
       .then(() => {
-        toast.success('Webhook replay completed')
+        toast.success(t('toast.webhookReplayCompleted'))
       })
       .catch((err: Error) => {
         toast.error(`Replay failed: ${err.message}`)

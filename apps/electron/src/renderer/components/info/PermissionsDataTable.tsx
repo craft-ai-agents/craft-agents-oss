@@ -7,6 +7,8 @@
 
 import * as React from 'react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import i18n from 'i18next'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Maximize2 } from 'lucide-react'
 import { Info_DataTable, SortableHeader } from './Info_DataTable'
@@ -51,12 +53,13 @@ interface PermissionsDataTableProps {
  * - Click to copy pattern to clipboard with toast notification
  */
 function PatternBadge({ pattern }: { pattern: string }) {
+  const { t } = useTranslation()
   const handleClick = async () => {
     try {
       await navigator.clipboard.writeText(pattern)
-      toast.success('Pattern copied to clipboard')
+      toast.success(t('toast.patternCopied'))
     } catch {
-      toast.error('Failed to copy pattern')
+      toast.error(t('toast.failedToCopyPattern'))
     }
   }
 
@@ -87,7 +90,7 @@ function PatternBadge({ pattern }: { pattern: string }) {
 const columnsWithType: ColumnDef<PermissionRow>[] = [
   {
     accessorKey: 'access',
-    header: ({ column }) => <SortableHeader column={column} title="Access" />,
+    header: ({ column }) => <SortableHeader column={column} title={i18n.t("table.access")} />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
         <Info_StatusBadge status={row.original.access} className="whitespace-nowrap" />
@@ -97,7 +100,7 @@ const columnsWithType: ColumnDef<PermissionRow>[] = [
   },
   {
     accessorKey: 'type',
-    header: ({ column }) => <SortableHeader column={column} title="Type" />,
+    header: ({ column }) => <SortableHeader column={column} title={i18n.t("common.type")} />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
         <Info_Badge color="muted" className="capitalize whitespace-nowrap">
@@ -109,7 +112,7 @@ const columnsWithType: ColumnDef<PermissionRow>[] = [
   },
   {
     accessorKey: 'pattern',
-    header: ({ column }) => <SortableHeader column={column} title="Pattern" />,
+    header: ({ column }) => <SortableHeader column={column} title={i18n.t("table.pattern")} />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
         <PatternBadge pattern={row.original.pattern} />
@@ -120,7 +123,7 @@ const columnsWithType: ColumnDef<PermissionRow>[] = [
   {
     id: 'comment',
     accessorKey: 'comment',
-    header: () => <span className="p-1.5 pl-2.5">Comment</span>,
+    header: () => <span className="p-1.5 pl-2.5">{i18n.t("table.comment")}</span>,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5 min-w-0">
         <span className="truncate block">
@@ -135,7 +138,7 @@ const columnsWithType: ColumnDef<PermissionRow>[] = [
 const columnsWithoutType: ColumnDef<PermissionRow>[] = [
   {
     accessorKey: 'access',
-    header: ({ column }) => <SortableHeader column={column} title="Access" />,
+    header: ({ column }) => <SortableHeader column={column} title={i18n.t("table.access")} />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
         <Info_StatusBadge status={row.original.access} className="whitespace-nowrap" />
@@ -145,7 +148,7 @@ const columnsWithoutType: ColumnDef<PermissionRow>[] = [
   },
   {
     accessorKey: 'pattern',
-    header: ({ column }) => <SortableHeader column={column} title="Pattern" />,
+    header: ({ column }) => <SortableHeader column={column} title={i18n.t("table.pattern")} />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
         <PatternBadge pattern={row.original.pattern} />
@@ -156,7 +159,7 @@ const columnsWithoutType: ColumnDef<PermissionRow>[] = [
   {
     id: 'comment',
     accessorKey: 'comment',
-    header: () => <span className="p-1.5 pl-2.5">Comment</span>,
+    header: () => <span className="p-1.5 pl-2.5">{i18n.t("table.comment")}</span>,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5 min-w-0">
         <span className="truncate block">
@@ -177,6 +180,7 @@ export function PermissionsDataTable({
   fullscreenTitle = 'Permissions',
   className,
 }: PermissionsDataTableProps) {
+  const { t } = useTranslation()
   const [isFullscreen, setIsFullscreen] = useState(false)
   const { isDark } = useTheme()
   const columns = hideTypeColumn ? columnsWithoutType : columnsWithType
@@ -192,7 +196,7 @@ export function PermissionsDataTable({
         'text-muted-foreground/50 hover:text-foreground',
         'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100'
       )}
-      title="View Fullscreen"
+      title={t("table.viewFullscreen")}
     >
       <Maximize2 className="w-3.5 h-3.5" />
     </button>
@@ -203,7 +207,7 @@ export function PermissionsDataTable({
       <Info_DataTable
         columns={columns}
         data={data}
-        searchable={searchable ? { placeholder: 'Search patterns...' } : false}
+        searchable={searchable ? { placeholder: t("table.searchPatterns") } : false}
         maxHeight={maxHeight}
         emptyContent="No permissions configured"
         floatingAction={fullscreenButton}

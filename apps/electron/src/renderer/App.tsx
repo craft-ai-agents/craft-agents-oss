@@ -648,8 +648,8 @@ export default function App() {
     // Show actionable toast for missing system dependencies (Windows only)
     window.electronAPI.getSystemWarnings().then((warnings) => {
       if (warnings.vcredistMissing) {
-        toast.warning('Microsoft Visual C++ Redistributable not found', {
-          description: 'Document tools (PDF, PPTX, DOCX, XLSX) require it to work. Restart after installing.',
+        toast.warning(t('toast.vcRedistNotFound'), {
+          description: t('toast.vcRedistNotFoundDesc'),
           duration: Infinity,
           action: {
             label: 'Install',
@@ -1432,7 +1432,7 @@ export default function App() {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
         console.error('Failed to open file:', error)
-        toast.error('Failed to open file', {
+        toast.error(t('toast.failedToOpenFile'), {
           description: message,
         })
       }
@@ -1443,7 +1443,7 @@ export default function App() {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
         console.error('Failed to open URL:', error)
-        toast.error('Failed to open link', {
+        toast.error(t('toast.failedToOpenLink'), {
           description: `${message}. If this is a local path, use Open File instead.`,
         })
       }
@@ -1470,7 +1470,7 @@ export default function App() {
   const handleReconnectTransport = useCallback(() => {
     void window.electronAPI.reconnectTransport().catch((error) => {
       const message = error instanceof Error ? error.message : 'Unknown error'
-      toast.error('Reconnect failed', { description: message })
+      toast.error(t('toast.reconnectFailed'), { description: message })
     })
   }, [])
 
