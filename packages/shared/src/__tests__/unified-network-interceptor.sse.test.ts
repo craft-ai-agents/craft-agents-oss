@@ -104,6 +104,129 @@ describe('unified-network-interceptor SSE processors', () => {
     rmSync(sessionDir, { recursive: true, force: true });
   });
 
+  it('OpenAI: decomposes hallucinated multi_tool_use.parallel into individual calls', async () => {
+    const sse = [
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_parallel_1","type":"function","function":{"name":"multi_tool_use.parallel","arguments":"{\\"tool_uses\\":[{\\"recipient_name\\":\\"web_search\\",\\"parameters\\":{\\"query\\":\\"sample query\\",\\"_intent\\":\\"Find sample\\",\\"_displayName\\":\\"Search Sample\\"}},{\\"recipient_name\\":\\"read\\",\\"parameters\\":{\\"path\\":\\"/tmp/sample.json\\",\\"_intent\\":\\"Read sample\\",\\"_displayName\\":\\"Read Sample\\"}}]}"}}]}}]}\n\n',
+      'data: {"choices":[{"index":0,"finish_reason":"tool_calls"}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const out = await runThroughProcessor(createOpenAiSseStrippingStream(), sse);
+
+    expect(out).not.toContain('multi_tool_use.parallel');
+    expect(out).toContain('"id":"call_parallel_1_parallel_0"');
+    expect(out).toContain('"id":"call_parallel_1_parallel_1"');
+    expect(out).toContain('"name":"web_search"');
+    expect(out).toContain('"name":"read"');
+    expect(out).toContain('"arguments":"{\\"query\\":\\"sample query\\"}"');
+    expect(out).toContain('"arguments":"{\\"path\\":\\"/tmp/sample.json\\"}"');
+    expect(out).not.toContain('_intent');
+    expect(out).not.toContain('_displayName');
+
+    expect(toolMetadataStore.get('call_parallel_1_parallel_0', sessionDir)?.intent).toBe('Find sample');
+    expect(toolMetadataStore.get('call_parallel_1_parallel_0', sessionDir)?.displayName).toBe('Search Sample');
+    expect(toolMetadataStore.get('call_parallel_1_parallel_1', sessionDir)?.intent).toBe('Read sample');
+    expect(toolMetadataStore.get('call_parallel_1_parallel_1', sessionDir)?.displayName).toBe('Read Sample');
+
+    rmSync(sessionDir, { recursive: true, force: true });
+  });
+
+  it('OpenAI: decomposes multi_tool_use.parallel streamed across multiple delta chunks', async () => {
+    const argsJson = '{"tool_uses":[{"recipient_name":"web_search","parameters":{"query":"query one","_intent":"Find sample","_displayName":"Search Sample"}},{"recipient_name":"web_search","parameters":{"query":"query two"}},{"recipient_name":"read","parameters":{"path":"/tmp/sample.json"}}]}';
+    const half = Math.floor(argsJson.length / 2);
+    const argsPart1 = argsJson.slice(0, half);
+    const argsPart2 = argsJson.slice(half);
+
+    const sse = [
+      `data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_stream_1","type":"function","function":{"name":"multi_tool_use.parallel","arguments":""}}]}}]}\n\n`,
+      `data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"${argsPart1.replace(/"/g, '\\"')}"}}]}}]}\n\n`,
+      `data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"${argsPart2.replace(/"/g, '\\"')}"}}]}}]}\n\n`,
+      'data: {"choices":[{"index":0,"finish_reason":"tool_calls"}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const out = await runThroughProcessor(createOpenAiSseStrippingStream(), sse);
+
+    expect(out).not.toContain('multi_tool_use.parallel');
+    expect(out).toContain('"id":"call_stream_1_parallel_0"');
+    expect(out).toContain('"id":"call_stream_1_parallel_1"');
+    expect(out).toContain('"id":"call_stream_1_parallel_2"');
+    expect(out).toContain('"name":"web_search"');
+    expect(out).toContain('"name":"read"');
+    expect(out).toContain('"arguments":"{\\"query\\":\\"query one\\"}"');
+    expect(out).toContain('"arguments":"{\\"query\\":\\"query two\\"}"');
+    expect(out).toContain('"arguments":"{\\"path\\":\\"/tmp/sample.json\\"}"');
+    expect(out).not.toContain('_intent');
+    expect(out).not.toContain('_displayName');
+
+    expect(toolMetadataStore.get('call_stream_1_parallel_0', sessionDir)?.intent).toBe('Find sample');
+    expect(toolMetadataStore.get('call_stream_1_parallel_0', sessionDir)?.displayName).toBe('Search Sample');
+    expect(toolMetadataStore.get('call_stream_1_parallel_1', sessionDir)).toBeUndefined();
+    expect(toolMetadataStore.get('call_stream_1_parallel_2', sessionDir)).toBeUndefined();
+
+    rmSync(sessionDir, { recursive: true, force: true });
+  });
+
+  it('OpenAI: handles multi_tool_use.parallel with empty/missing parameters gracefully', async () => {
+    const sse = [
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_empty_1","type":"function","function":{"name":"multi_tool_use.parallel","arguments":"{\\"tool_uses\\":[{\\"recipient_name\\":\\"web_search\\",\\"parameters\\":{}},{\\"recipient_name\\":\\"read\\"},{\\"recipient_name\\":\\"web_search\\",\\"parameters\\":{\\"query\\":\\"test\\"}}]}"}}]}}]}\n\n',
+      'data: {"choices":[{"index":0,"finish_reason":"tool_calls"}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const out = await runThroughProcessor(createOpenAiSseStrippingStream(), sse);
+
+    expect(out).not.toContain('multi_tool_use.parallel');
+    expect(out).toContain('"id":"call_empty_1_parallel_0"');
+    expect(out).toContain('"id":"call_empty_1_parallel_1"');
+    expect(out).toContain('"id":"call_empty_1_parallel_2"');
+    expect(out).toContain('"arguments":"{}"');
+    expect(out).toContain('"arguments":"{\\"query\\":\\"test\\"}"');
+
+    rmSync(sessionDir, { recursive: true, force: true });
+  });
+
+  it('OpenAI: handles repeated tc.id chunks correctly (dedup)', async () => {
+    // Simulates OpenAI/Codex SSE tool-call streams where every chunk includes
+    // id/call_id, including bridged Responses-based streams where call_id is
+    // present on every event.
+    const sse = [
+      // Init events from response.output_item.added (id + name, no args)
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_ws1","type":"function","function":{"name":"web_search"}}]}}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"call_rd1","type":"function","function":{"name":"read"}}]}}]}\n\n',
+      // Arg deltas from response.function_call_arguments.delta (id + partial args)
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_ws1","type":"function","function":{"arguments":"{\\"query\\":\\"sample"}}]}}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"call_rd1","type":"function","function":{"arguments":"{\\"path\\":\\"/tmp"}}]}}]}\n\n',
+      // More arg deltas
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_ws1","type":"function","function":{"arguments":" query\\",\\"_intent\\":\\"Find sample\\",\\"_displayName\\":\\"Search Sample\\"}"}}]}}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"call_rd1","type":"function","function":{"arguments":"/sample.json\\",\\"_intent\\":\\"Read sample\\",\\"_displayName\\":\\"Read Sample\\"}"}}]}}]}\n\n',
+      // Done events from response.function_call_arguments.done (id + name + full args)
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_ws1","type":"function","function":{"name":"web_search","arguments":"{\\"query\\":\\"sample query\\",\\"_intent\\":\\"Find sample\\",\\"_displayName\\":\\"Search Sample\\"}"}}]}}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"call_rd1","type":"function","function":{"name":"read","arguments":"{\\"path\\":\\"/tmp/sample.json\\",\\"_intent\\":\\"Read sample\\",\\"_displayName\\":\\"Read Sample\\"}"}}]}}]}\n\n',
+      // Finish
+      'data: {"choices":[{"index":0,"finish_reason":"tool_calls"}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const out = await runThroughProcessor(createOpenAiSseStrippingStream(), sse);
+
+    // Only ONE init event per tool call (dedup should prevent duplicates)
+    const initOccurrences = (out.match(/"id":"call_ws1"/g) || []).length;
+    expect(initOccurrences).toBeGreaterThanOrEqual(1);
+
+    // Args should be stripped of metadata and present (JSON-in-JSON escaping)
+    expect(out).toContain('\\"query\\":\\"sample query\\"');
+    expect(out).toContain('\\"path\\":\\"/tmp/sample.json\\"');
+    expect(out).not.toContain('_intent');
+    expect(out).not.toContain('_displayName');
+
+    // Metadata stored
+    expect(toolMetadataStore.get('call_ws1', sessionDir)?.intent).toBe('Find sample');
+    expect(toolMetadataStore.get('call_rd1', sessionDir)?.displayName).toBe('Read Sample');
+
+    rmSync(sessionDir, { recursive: true, force: true });
+  });
+
   it('OpenAI Responses: strips metadata on function_call done events', async () => {
     const sse = [
       'data: {"type":"response.function_call_arguments.done","call_id":"call_resp_1","arguments":"{\\"foo\\":1,\\"_intent\\":\\"do thing\\",\\"_displayName\\":\\"Do Thing\\"}"}\n\n',

@@ -742,6 +742,7 @@ interface TrackedToolCall {
   choiceIndex: number;
   toolIndex: number;
   arguments: string;
+  replaced?: boolean;
 }
 
 /**
@@ -763,6 +764,8 @@ export function createOpenAiSseStrippingStream(): TransformStream<Uint8Array, Ui
   let lineBuffer = '';
   /** Track whether we're currently buffering tool_call argument deltas */
   let bufferingToolCalls = false;
+  /** Base fields from the last SSE event (id, object, created, model) for constructing flush events */
+  let lastEventBase: Record<string, unknown> = {};
 
   function emitSseLine(dataStr: string, controller: TransformStreamDefaultController<Uint8Array>): void {
     controller.enqueue(encoder.encode(`data: ${dataStr}\n\n`));
@@ -774,34 +777,99 @@ export function createOpenAiSseStrippingStream(): TransformStream<Uint8Array, Ui
 
       try {
         const parsed = JSON.parse(tc.arguments);
+
+        // Decompose multi_tool_use.parallel — a hallucinated wrapper tool that
+        // GPT models sometimes emit instead of using native parallel tool calls.
+        if (tc.name === 'multi_tool_use.parallel' && Array.isArray((parsed as Record<string, unknown>).tool_uses)) {
+          const toolUses = (parsed as Record<string, unknown>).tool_uses as Array<{
+            recipient_name?: string;
+            parameters?: Record<string, unknown>;
+          }>;
+          debugLog(`[OpenAI SSE] Decomposing multi_tool_use.parallel into ${toolUses.length} individual tool calls`);
+
+          for (let i = 0; i < toolUses.length; i++) {
+            const use = toolUses[i];
+            if (!use?.recipient_name) continue;
+
+            const syntheticId = `${tc.id}_parallel_${i}`;
+            const subArgs = { ...(use.parameters ?? {}) };
+            captureMetadataFromInput(syntheticId, use.recipient_name, subArgs);
+            delete subArgs._intent;
+            delete subArgs._displayName;
+
+            // Emit init event (id + name)
+            const initEvent = {
+              ...lastEventBase,
+              choices: [{
+                index: tc.choiceIndex,
+                delta: {
+                  tool_calls: [{
+                    index: i,
+                    id: syntheticId,
+                    type: 'function',
+                    function: { name: use.recipient_name, arguments: '' },
+                  }],
+                },
+              }],
+            };
+            emitSseLine(JSON.stringify(initEvent), controller);
+
+            // Emit arguments event (include name for standalone block creation)
+            const argsEvent = {
+              ...lastEventBase,
+              choices: [{
+                index: tc.choiceIndex,
+                delta: {
+                  tool_calls: [{
+                    index: i,
+                    id: syntheticId,
+                    type: 'function' as const,
+                    function: { name: use.recipient_name, arguments: JSON.stringify(subArgs) },
+                  }],
+                },
+              }],
+            };
+            emitSseLine(JSON.stringify(argsEvent), controller);
+          }
+          continue;
+        }
+
         captureMetadataFromInput(tc.id, tc.name, parsed);
         delete parsed._intent;
         delete parsed._displayName;
         const cleanArgs = JSON.stringify(parsed);
 
-        // Re-emit as a single argument delta with the clean JSON
+        // Re-emit as a complete tool_call event with name, id, and clean args.
+        // This creates exactly one block per tool call in the Pi agent core's
+        // Chat Completions streaming handler (init events are suppressed).
         const deltaEvent = {
+          ...lastEventBase,
           choices: [{
             index: tc.choiceIndex,
             delta: {
               tool_calls: [{
                 index: tc.toolIndex,
-                function: { arguments: cleanArgs },
+                id: tc.id,
+                type: 'function' as const,
+                function: { name: tc.name, arguments: cleanArgs },
               }],
             },
           }],
         };
         emitSseLine(JSON.stringify(deltaEvent), controller);
-      } catch {
+      } catch (parseErr) {
         debugLog(`[OpenAI SSE] Failed to parse arguments for ${tc.name} (${tc.id}), passing through`);
         // Emit original buffered arguments on parse failure
         const deltaEvent = {
+          ...lastEventBase,
           choices: [{
             index: tc.choiceIndex,
             delta: {
               tool_calls: [{
                 index: tc.toolIndex,
-                function: { arguments: tc.arguments },
+                id: tc.id,
+                type: 'function' as const,
+                function: { name: tc.name, arguments: tc.arguments },
               }],
             },
           }],
@@ -826,6 +894,11 @@ export function createOpenAiSseStrippingStream(): TransformStream<Uint8Array, Ui
     } catch {
       emitSseLine(dataStr, controller);
       return;
+    }
+
+    if (data.id) {
+      const { choices: _, ...base } = data;
+      lastEventBase = base;
     }
 
     const choices = data.choices as Array<{
@@ -862,39 +935,47 @@ export function createOpenAiSseStrippingStream(): TransformStream<Uint8Array, Ui
         const key = `${choiceIndex}:${toolIndex}`;
 
         if (tc.id) {
-          // First chunk for a tool call — has id, name, maybe initial args
-          trackedCalls.set(key, {
-            id: tc.id,
-            name: tc.function?.name || 'unknown',
-            choiceIndex,
-            toolIndex,
-            arguments: tc.function?.arguments || '',
-          });
-          bufferingToolCalls = true;
+          const existing = trackedCalls.get(key);
+          if (existing) {
+            // Already tracking this tool call. Some OpenAI/Codex SSE streams
+            // and bridged flows set id/call_id on EVERY SSE chunk. Detect
+            // whether this is a "done" snapshot (has name + args → replace)
+            // or a streaming delta (args only → append).
+            if (tc.function?.name && tc.function?.arguments) {
+              existing.arguments = tc.function.arguments;
+              existing.replaced = true;
+            } else if (tc.function?.arguments) {
+              existing.arguments += tc.function.arguments;
+            }
+            if (tc.function?.name && existing.name === 'unknown') {
+              existing.name = tc.function.name;
+            }
+          } else {
+            // First chunk for a tool call — has id, name, maybe initial args
+            trackedCalls.set(key, {
+              id: tc.id,
+              name: tc.function?.name || 'unknown',
+              choiceIndex,
+              toolIndex,
+              arguments: tc.function?.arguments || '',
+              replaced: false,
+            });
+            bufferingToolCalls = true;
 
-          // Emit the initial tool_call event WITHOUT arguments (preserves id/name/type)
-          const initEvent = {
-            ...data,
-            choices: [{
-              ...choice,
-              delta: {
-                ...choice.delta,
-                tool_calls: [{
-                  ...tc,
-                  function: {
-                    name: tc.function?.name,
-                    // Omit arguments from initial event — we'll emit clean args on flush
-                    arguments: '',
-                  },
-                }],
-              },
-            }],
-          };
-          emitSseLine(JSON.stringify(initEvent), controller);
+            // Suppress init event for multi_tool_use.parallel — a hallucinated wrapper
+            // that GPT models sometimes emit instead of native parallel tool calls.
+            const toolName = tc.function?.name || '';
+            if (toolName === 'multi_tool_use.parallel') {
+              // Suppress multi_tool_use.parallel — handled at flush via decomposition
+            }
+            // Init events are suppressed; we emit a COMPLETE event per tool call
+            // at flush time (with name + id + clean args) so the Pi agent core's
+            // Chat Completions streaming handler creates exactly one block per tool.
+          }
         } else {
           // Subsequent argument delta — buffer and suppress
           const existing = trackedCalls.get(key);
-          if (existing && tc.function?.arguments) {
+          if (existing && tc.function?.arguments && !existing.replaced) {
             existing.arguments += tc.function.arguments;
           }
         }
