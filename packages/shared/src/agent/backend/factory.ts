@@ -250,14 +250,11 @@ export function isProviderAvailable(provider: AgentProvider): boolean {
  */
 export function providerTypeToAgentProvider(providerType: LlmProviderType): AgentProvider {
   switch (providerType) {
-    // Anthropic SDK backends
+    // Anthropic SDK backend (direct API only)
     case 'anthropic':
-    case 'anthropic_compat':
-    case 'bedrock':    // Bedrock uses Anthropic SDK with different auth
-    case 'vertex':     // Vertex uses Anthropic SDK with different auth
       return 'anthropic';
 
-    // Pi backends
+    // Pi backends (includes former bedrock/vertex/anthropic_compat via migration)
     case 'pi':
     case 'pi_compat':
       return 'pi';
@@ -408,7 +405,7 @@ export function resolveSetupTestConnectionHint(args: {
   }
 
   return {
-    providerType: args.baseUrl ? 'anthropic_compat' : 'anthropic',
+    providerType: args.baseUrl ? 'pi_compat' : 'anthropic',
   };
 }
 
@@ -697,7 +694,7 @@ export async function testBackendConnection(args: {
     const providerType = args.connection?.providerType ?? getDefaultProviderType(args.provider);
     const now = Date.now();
     const authType: LlmAuthType = (
-      providerType === 'anthropic_compat' || providerType === 'pi_compat'
+      providerType === 'pi_compat'
     )
       ? 'api_key_with_endpoint'
       : 'api_key';

@@ -1,4 +1,4 @@
-import { formatPreferencesForPrompt } from '../config/preferences.ts';
+import { formatPreferencesForPrompt, getCoAuthorPreference } from '../config/preferences.ts';
 import { debug } from '../utils/debug.ts';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join, relative, basename } from 'path';
@@ -348,7 +348,8 @@ export function getSystemPrompt(
   workspaceRootPath?: string,
   workingDirectory?: string,
   preset?: SystemPromptPreset | string,
-  backendName?: string
+  backendName?: string,
+  includeCoAuthoredBy?: boolean
 ): string {
   // Use mini agent prompt for quick edits (pass workspace root for config paths)
   if (preset === 'mini') {
@@ -366,7 +367,7 @@ export function getSystemPrompt(
   // Note: Date/time context is now added to user messages instead of system prompt
   // to enable prompt caching. The system prompt stays static and cacheable.
   // Safe Mode context is also in user messages for the same reason.
-  const basePrompt = getCraftAssistantPrompt(workspaceRootPath, backendName);
+  const basePrompt = getCraftAssistantPrompt(workspaceRootPath, backendName, includeCoAuthoredBy);
   const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
@@ -442,8 +443,9 @@ function getCraftAgentEnvironmentMarker(): string {
  *
  * @param workspaceRootPath - Root path of the workspace
  * @param backendName - Backend name for "powered by X" text (default: 'Claude Code')
+ * @param includeCoAuthoredBy - Whether to include the Co-Authored-By git trailer instruction (default: true)
  */
-function getCraftAssistantPrompt(workspaceRootPath?: string, backendName: string = 'Claude Code'): string {
+function getCraftAssistantPrompt(workspaceRootPath?: string, backendName: string = 'Claude Code', includeCoAuthoredBy: boolean = true): string {
   // Default to ${APP_ROOT}/workspaces/{id} if no path provided
   const workspacePath = workspaceRootPath || `${APP_ROOT}/workspaces/{id}`;
 
@@ -556,15 +558,14 @@ When you learn information about the user (their name, timezone, location, langu
 
 !!IMPORTANT!!. You must refer to yourself as Craft Agent when asked. You can acknowledge that you are powered by ${backendName}.
 
-## Git Conventions
+${includeCoAuthoredBy ? `## Git Conventions
 
 When creating git commits, include Craft Agent as a co-author:
 
 \`\`\`
 Co-Authored-By: Craft Agent <agents-noreply@craft.do>
 \`\`\`
-
-## Permission Modes
+` : ''}## Permission Modes
 
 | Mode | Description |
 |------|-------------|

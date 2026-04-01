@@ -9,12 +9,10 @@
 import type { ModelFetcherMap } from '@craft-agent/shared/config'
 import { AnthropicModelFetcher } from './anthropic'
 import { PiModelFetcher } from './pi'
-import { BedrockVertexModelFetcher } from './bedrock-vertex'
 
 // Shared instances — fetchers are stateless
 const anthropicFetcher = new AnthropicModelFetcher()
 const piFetcher = new PiModelFetcher()
-const bedrockVertexFetcher = new BedrockVertexModelFetcher()
 
 /**
  * Every FetchableProvider MUST have a fetcher entry.
@@ -24,6 +22,4 @@ const bedrockVertexFetcher = new BedrockVertexModelFetcher()
 export const MODEL_FETCHERS: ModelFetcherMap = {
   anthropic: anthropicFetcher,
   pi:        piFetcher,
-  bedrock:   bedrockVertexFetcher,
-  vertex:    bedrockVertexFetcher,
 }

@@ -1201,7 +1201,9 @@ export class SessionManager implements ISessionManager {
   /**
    * Set up ConfigWatcher for a workspace to broadcast live updates
    * (sources added/removed, guide.md changes, etc.)
-   * Called during window init (GET_WINDOW_WORKSPACE) and workspace switch.
+   * Called eagerly at boot for all workspaces (automations/scheduler) and
+   * on client connect (GET_WORKSPACE / SWITCH_WORKSPACE).
+   * Idempotent — returns immediately if already watching.
    * workspaceId must be the global config ID (what the renderer knows).
    */
   setupConfigWatcher(workspaceRootPath: string, workspaceId: string): void {
@@ -1560,6 +1562,15 @@ export class SessionManager implements ISessionManager {
 
       // Set up authentication environment variables (critical for SDK to work)
       await this.reinitializeAuth()
+
+      // Eagerly activate ConfigWatcher + AutomationSystem for every workspace so
+      // the scheduler and event handlers start at boot — not lazily on first
+      // client connect. This is critical for headless servers where no UI may
+      // ever connect, yet scheduled/event-driven automations must still fire.
+      const workspaces = getWorkspaces()
+      for (const workspace of workspaces) {
+        this.setupConfigWatcher(workspace.rootPath, workspace.id)
+      }
 
       // Load existing sessions from disk
       this.loadSessionsFromDisk()

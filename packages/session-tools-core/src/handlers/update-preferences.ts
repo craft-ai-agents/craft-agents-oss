@@ -17,6 +17,7 @@ export interface UpdatePreferencesArgs {
   country?: string;
   language?: string;
   notes?: string;
+  includeCoAuthoredBy?: boolean;
 }
 
 /**
@@ -64,6 +65,11 @@ export async function handleUpdatePreferences(
     // Handle notes (replace)
     if (args.notes && typeof args.notes === 'string') {
       updates.notes = args.notes;
+    }
+
+    // Handle co-author preference (explicit boolean)
+    if (typeof args.includeCoAuthoredBy === 'boolean') {
+      updates.includeCoAuthoredBy = args.includeCoAuthoredBy;
     }
 
     // Check if anything was actually updated

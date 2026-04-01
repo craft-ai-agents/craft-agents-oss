@@ -76,12 +76,15 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
 
         // Only mutate providerType for API key connections (not OAuth connections)
         if (isAnthropicProvider(connection.providerType) && connection.authType !== 'oauth') {
-          const pt = hasConfiguredBaseUrl ? 'anthropic_compat' as const : 'anthropic' as const
-          updates.providerType = pt
-          updates.authType = hasConfiguredBaseUrl ? 'api_key_with_endpoint' : 'api_key'
-          if (!hasConfiguredBaseUrl) {
-            updates.models = getDefaultModelsForConnection(pt)
-            updates.defaultModel = getDefaultModelForConnection(pt)
+          if (hasConfiguredBaseUrl) {
+            updates.providerType = 'pi_compat'
+            updates.authType = 'api_key_with_endpoint'
+            updates.customEndpoint = { api: 'anthropic-messages' }
+          } else {
+            updates.providerType = 'anthropic'
+            updates.authType = 'api_key'
+            updates.models = getDefaultModelsForConnection('anthropic')
+            updates.defaultModel = getDefaultModelForConnection('anthropic')
           }
         }
 
@@ -136,16 +139,10 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         }
       }
 
-      // Bedrock auth method override — set authType and region.
-      // providerType stays 'pi' when piAuthProvider==='amazon-bedrock' (Pi SDK Bedrock path).
-      // Only set providerType='bedrock' when there's no Pi auth provider.
+      // Pi+Bedrock auth method override — set authType for IAM or environment auth.
+      // providerType stays 'pi' (Bedrock routes through Pi SDK).
       if (setup.bedrockAuthMethod) {
         updates.authType = setup.bedrockAuthMethod
-        const hasPiBedrockAuth = (updates.piAuthProvider ?? connection.piAuthProvider) === 'amazon-bedrock'
-        if (!hasPiBedrockAuth) {
-          updates.providerType = 'bedrock'
-        }
-        if (setup.awsRegion) updates.awsRegion = setup.awsRegion
       }
 
       const effectiveProviderType = updates.providerType ?? connection.providerType
@@ -163,18 +160,6 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         }
         if (updates.defaultModel) {
           updates.defaultModel = toPiModelId(updates.defaultModel)
-        }
-      } else if (effectiveProviderType === 'bedrock') {
-        // providerType==='bedrock' goes through ClaudeAgent → Anthropic API,
-        // which uses bare Anthropic IDs. Only strip the pi/ prefix.
-        const stripPiPrefix = (id: string) => id.startsWith('pi/') ? id.slice(3) : id
-        if (updates.models) {
-          updates.models = updates.models.map(m => typeof m === 'string'
-            ? stripPiPrefix(m)
-            : { ...m, id: stripPiPrefix(m.id) })
-        }
-        if (updates.defaultModel) {
-          updates.defaultModel = stripPiPrefix(updates.defaultModel)
         }
       }
 
@@ -249,7 +234,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         }
       }
 
-      // Bedrock IAM credentials — stored separately from API keys
+      // Pi+Bedrock IAM credentials — stored separately from API keys
       if (setup.iamCredentials) {
         await manager.setLlmIamCredentials(setup.slug, {
           ...setup.iamCredentials,
@@ -264,17 +249,20 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         deps.platform.logger?.info(`Set default LLM connection: ${setup.slug}`)
       }
 
-      // Fetch available models (non-blocking).
-      // Always refresh for auto-synced connections (e.g. Copilot) — the static
+      // Fetch available models before returning to the UI.
+      // Always refresh for auto-synced connections (e.g. Copilot, Bedrock) — the static
       // catalog from setup is just a seed that needs replacing with live API data
       // filtered by the user's policy. For user-defined connections, only refresh
       // when no models were populated during setup.
+      // Awaited so the model selector shows real available models immediately.
       const pendingModels = Array.isArray(pendingConnection.models) ? pendingConnection.models : []
       const isAutoSynced = pendingConnection.modelSelectionMode === 'automaticallySyncedFromProvider'
       if (!pendingModels.length || isAutoSynced) {
-        getModelRefreshService().refreshNow(setup.slug).catch(err => {
+        try {
+          await getModelRefreshService().refreshNow(setup.slug)
+        } catch (err) {
           deps.platform.logger?.warn(`Model refresh after setup failed for ${setup.slug}: ${err instanceof Error ? err.message : err}`)
-        })
+        }
       }
 
       // Reinitialize auth for the connection that was just created/updated,

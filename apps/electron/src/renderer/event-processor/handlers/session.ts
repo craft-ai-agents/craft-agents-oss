@@ -165,6 +165,13 @@ export function handleTypedError(
     errorDetails: event.error.details,
     errorOriginal: event.error.originalError,
     errorCanRetry: event.error.canRetry,
+    errorActions: event.error.actions?.map(a => ({
+      key: a.key,
+      label: a.label,
+      action: a.action,
+      url: a.url,
+      sourceSlug: a.sourceSlug,
+    })),
   }
 
   return {

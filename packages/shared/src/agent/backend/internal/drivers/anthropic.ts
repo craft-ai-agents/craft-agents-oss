@@ -15,15 +15,8 @@ export const anthropicDriver: ProviderDriver = {
   },
   buildRuntime: () => ({}),
   fetchModels: async ({ connection, credentials }) => {
-    if (connection.providerType === 'bedrock' || connection.providerType === 'vertex') {
-      throw new Error('Dynamic model discovery not available for Bedrock/Vertex connections; using fallback chain.');
-    }
-    if (connection.authType === 'iam_credentials') {
-      throw new Error('Dynamic model discovery does not support iam_credentials auth; using fallback chain.');
-    }
-    if (connection.authType === 'service_account_file') {
-      throw new Error('Dynamic model discovery does not support service_account_file auth; using fallback chain.');
-    }
+    // After legacy migration, only direct 'anthropic' connections reach this driver.
+    // iam_credentials and service_account_file are no longer valid auth types for anthropic.
 
     const apiKey = credentials.apiKey;
     const oauthAccessToken = credentials.oauthAccessToken;
@@ -102,59 +95,15 @@ export const anthropicDriver: ProviderDriver = {
     return { models };
   },
   validateStoredConnection: async ({ slug, connection, credentialManager }) => {
-    const isAnthropicProvider =
-      connection.providerType === 'anthropic' || connection.providerType === 'anthropic_compat';
+    // After legacy migration, only direct 'anthropic' connections reach this driver.
 
-    if (connection.providerType === 'bedrock') {
-      if (connection.authType === 'iam_credentials') {
-        return { success: true };
-      }
-
-      if (connection.authType === 'bearer_token') {
-        const bearerToken = await credentialManager.getLlmApiKey(slug);
-        if (!bearerToken) {
-          return {
-            success: false,
-            error: 'Could not retrieve Bedrock bearer token',
-          };
-        }
-        return { success: true };
-      }
-
-      if (connection.authType === 'environment') {
-        const hasRegion =
-          !!connection.awsRegion ||
-          !!process.env.AWS_REGION ||
-          !!process.env.AWS_DEFAULT_REGION;
-        if (!hasRegion) {
-          return {
-            success: false,
-            error: 'AWS region is required for Bedrock environment auth.',
-          };
-        }
-
-        return { success: true };
-      }
-    }
-
-    if (isAnthropicProvider && connection.authType === 'oauth') {
+    if (connection.providerType === 'anthropic' && connection.authType === 'oauth') {
       const { getValidClaudeOAuthToken } = await import('../../../../auth/state.ts');
       const tokenResult = await getValidClaudeOAuthToken(slug);
       if (!tokenResult.accessToken) {
         const errorMsg = tokenResult.migrationRequired?.message || 'OAuth token expired. Please re-authenticate.';
         return { success: false, error: errorMsg };
       }
-      return { success: true };
-    }
-
-    if (connection.providerType === 'anthropic_compat' && !connection.defaultModel) {
-      return { success: false, error: 'Default model is required for Anthropic-compatible providers.' };
-    }
-
-    if (connection.authType === 'iam_credentials') {
-      return { success: true };
-    }
-    if (connection.authType === 'service_account_file') {
       return { success: true };
     }
 
@@ -176,28 +125,6 @@ export const anthropicDriver: ProviderDriver = {
 
     if (!apiKey && !oauthToken && connection.authType !== 'none') {
       return { success: false, error: 'Could not retrieve credentials' };
-    }
-
-    const modelIds = (connection.models ?? []).map(m => (typeof m === 'string' ? m : m.id)).filter(Boolean);
-
-    if (connection.providerType === 'anthropic_compat' && modelIds.length > 0) {
-      if (connection.defaultModel && !modelIds.includes(connection.defaultModel)) {
-        return { success: false, error: `Default model "${connection.defaultModel}" is not in the configured model list.` };
-      }
-
-      for (const modelId of modelIds) {
-        const result = await validateAnthropicConnection({
-          model: modelId,
-          apiKey: apiKey || undefined,
-          oauthToken: oauthToken || undefined,
-          baseUrl: connection.baseUrl || undefined,
-        });
-        if (!result.success) {
-          return { success: false, error: `Model "${modelId}" failed validation: ${result.error}` };
-        }
-      }
-
-      return { success: true };
     }
 
     const testModel = connection.defaultModel!;

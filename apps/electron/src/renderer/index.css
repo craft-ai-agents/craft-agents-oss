@@ -1111,13 +1111,20 @@ html.dark[data-scenic] .fullscreen-overlay-background {
   display: none !important;
 }
 
-/* Single line titles and descriptions with ellipsis overflow */
-[data-sonner-toast] [data-title],
-[data-sonner-toast] [data-description] {
+/* Single line title with ellipsis overflow */
+[data-sonner-toast] [data-title] {
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
-  /* Required for text truncation in flex containers */
+  min-width: 0 !important;
+}
+
+/* Description wraps up to 2 lines, then truncates */
+[data-sonner-toast] [data-description] {
+  display: -webkit-box !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: 2 !important;
+  overflow: hidden !important;
   min-width: 0 !important;
 }
 

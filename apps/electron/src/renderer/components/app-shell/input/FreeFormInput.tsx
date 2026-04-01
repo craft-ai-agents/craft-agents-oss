@@ -304,7 +304,7 @@ export function FreeFormInput({
 
   // Derive connectionDefaultModel per-session from the effective connection.
   // Only non-null for compat providers (custom endpoints with fixed models).
-  // Standard providers (anthropic, openai, bedrock, vertex) → null → normal model picker.
+  // Standard providers (anthropic, pi) → null → normal model picker.
   const connectionDefaultModel = React.useMemo(() => {
     const effectiveSlug = resolveEffectiveConnectionSlug(currentConnection, workspaceDefaultConnection, llmConnections)
     const conn = llmConnections.find(c => c.slug === effectiveSlug)
@@ -362,8 +362,8 @@ export function FreeFormInput({
     }
     for (const conn of llmConnections) {
       const provider = conn.providerType || 'anthropic'
-      // Group by SDK: anthropic/anthropic_compat/bedrock/vertex use Anthropic SDK
-      if (provider === 'anthropic' || provider === 'anthropic_compat' || provider === 'bedrock' || provider === 'vertex') {
+      // Group by SDK: only 'anthropic' uses Claude Agent SDK
+      if (provider === 'anthropic') {
         groups['Anthropic'].push(conn)
       } else if (provider === 'pi' || provider === 'pi_compat') {
         groups['Craft Agents Backend'].push(conn)

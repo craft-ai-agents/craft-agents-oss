@@ -32,30 +32,6 @@ describe('getMiniModel()', () => {
     expect(getMiniModel(conn)).toBe('claude-haiku-4-5-20251001');
   });
 
-  it('finds haiku for bedrock provider', () => {
-    const conn = makeConnection('bedrock', [
-      'anthropic.claude-opus-4-6',
-      'anthropic.claude-haiku-4-5-20251001',
-    ]);
-    expect(getMiniModel(conn)).toBe('anthropic.claude-haiku-4-5-20251001');
-  });
-
-  it('finds haiku for vertex provider', () => {
-    const conn = makeConnection('vertex', [
-      'claude-opus-4-6',
-      'claude-haiku-4-5-20251001',
-    ]);
-    expect(getMiniModel(conn)).toBe('claude-haiku-4-5-20251001');
-  });
-
-  it('finds haiku for anthropic_compat provider', () => {
-    const conn = makeConnection('anthropic_compat', [
-      'anthropic/claude-opus-4.6',
-      'anthropic/claude-haiku-4.5',
-    ]);
-    expect(getMiniModel(conn)).toBe('anthropic/claude-haiku-4.5');
-  });
-
   // --- Pi providers ---
 
   it('finds mini for pi provider', () => {

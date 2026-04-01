@@ -24,6 +24,7 @@ The preferences file stores personal settings that customize how the agent inter
   },
   "language": "English",
   "notes": "I prefer concise responses",
+  "includeCoAuthoredBy": true,
   "updatedAt": 1737451800000
 }
 ```
@@ -103,6 +104,16 @@ Free-form notes about your preferences.
 
 These notes are included in the agent's context and influence response style.
 
+### includeCoAuthoredBy
+
+Controls whether the agent appends a `Co-Authored-By: Craft Agent` trailer to git commits. Defaults to `true`.
+
+```json
+"includeCoAuthoredBy": false
+```
+
+Set to `false` to suppress the Craft Agent co-author trailer on all git commits. Changes take effect on the next session.
+
 ## Editing Preferences
 
 ### Using the Command
@@ -131,6 +142,7 @@ Preferences are included in the system prompt, so the agent knows:
 - Your current time and timezone
 - Where you're located
 - How to communicate with you
+- Whether to include a co-author trailer on git commits
 
 This context makes responses more relevant and personalized.
 

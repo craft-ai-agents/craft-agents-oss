@@ -113,6 +113,7 @@ export const UpdatePreferencesSchema = z.object({
   country: z.string().optional().describe("The user's country"),
   language: z.string().optional().describe("The user's preferred language for responses"),
   notes: z.string().optional().describe('Additional notes about the user that would be helpful to remember (preferences, context, etc.). Replaces any existing notes.'),
+  includeCoAuthoredBy: z.boolean().optional().describe("Whether to include 'Co-Authored-By: Craft Agent' trailer on git commits. Defaults to true."),
 });
 
 export const TransformDataSchema = z.object({

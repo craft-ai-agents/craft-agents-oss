@@ -23,6 +23,7 @@ export interface SchedulerTickPayload {
 export class SchedulerService {
   private timer: NodeJS.Timeout | null = null;
   private alignmentTimer: NodeJS.Timeout | null = null;
+  private isTicking = false;
   private onTick: (payload: SchedulerTickPayload) => Promise<void>;
 
   constructor(onTick: (payload: SchedulerTickPayload) => Promise<void>) {
@@ -55,25 +56,33 @@ export class SchedulerService {
   }
 
   private async tick(): Promise<void> {
-    const now = new Date();
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-    const payload: SchedulerTickPayload = {
-      timestamp: now.toISOString(),
-      localTime: now.toTimeString().slice(0, 5), // HH:MM
-      hour: now.getHours(),
-      minute: now.getMinutes(),
-      dayOfWeek: now.getDay(),
-      dayName: days[now.getDay()]!, // getDay() always returns 0-6
-    };
-
-    console.log('[SchedulerService] TICK at', payload.localTime, 'UTC:', payload.timestamp);
+    if (this.isTicking) {
+      console.warn('[SchedulerService] Previous tick still running, skipping');
+      return;
+    }
+    this.isTicking = true;
 
     try {
+      const now = new Date();
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+      const payload: SchedulerTickPayload = {
+        timestamp: now.toISOString(),
+        localTime: now.toTimeString().slice(0, 5), // HH:MM
+        hour: now.getHours(),
+        minute: now.getMinutes(),
+        dayOfWeek: now.getDay(),
+        dayName: days[now.getDay()]!, // getDay() always returns 0-6
+      };
+
+      console.log('[SchedulerService] TICK at', payload.localTime, 'UTC:', payload.timestamp);
+
       await this.onTick(payload);
       console.log('[SchedulerService] TICK callback completed');
     } catch (error) {
       console.error('[SchedulerService] Tick failed:', error);
+    } finally {
+      this.isTicking = false;
     }
   }
 }

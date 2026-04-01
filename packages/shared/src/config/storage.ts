@@ -42,7 +42,7 @@ import type { Workspace, AuthType } from '@craft-agent/core/types';
 
 // Import LLM connection types and constants
 import type { LlmConnection } from './llm-connections.ts';
-import { isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, normalizeBedrockModelId, toBedrockNativeId, fromBedrockNativeId } from './llm-connections.ts';
+import { isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
 import {
   getModelProvider,
 } from './models.ts';
@@ -1533,27 +1533,8 @@ function backfillAllConnectionModels(config: StoredConfig): boolean {
     const defaultModel = getDefaultModelForConnection(connection.providerType, connection.piAuthProvider);
     const providerDefaultModelIds = normalizeModelIds(defaultModels as Array<{ id: string } | string>);
 
-    if (connection.providerType === 'bedrock') {
-      const currentIds = normalizeModelIds(connection.models)
-      const normalizedIds = currentIds.map((id) =>
-        normalizeBedrockModelId(id),
-      )
-
-      if (!modelSetEquals(currentIds, normalizedIds)) {
-        connection.models = [...new Set(normalizedIds)]
-        changed = true
-      }
-
-      if (connection.defaultModel) {
-        const normalizedDefaultModel = normalizeBedrockModelId(
-          connection.defaultModel,
-        )
-        if (normalizedDefaultModel !== connection.defaultModel) {
-          connection.defaultModel = normalizedDefaultModel
-          changed = true
-        }
-      }
-    }
+    // Note: bedrock connections are migrated to pi + amazon-bedrock by migrateLegacyProviderTypes()
+    // before this function runs, so no bedrock-specific normalization needed here.
 
     if (isPiProvider(connection.providerType) && connection.piAuthProvider) {
       // Copilot models are always server-managed (GitHub policy controls which
@@ -1805,28 +1786,64 @@ function migrateWorkspaceOpus45ToOpus46(config: StoredConfig): void {
 }
 
 /**
- * Fix Bedrock connections and normalize model IDs.
+ * Migrate legacy provider types to the active set (anthropic, pi, pi_compat).
  *
- * 1. Connections with providerType==='bedrock' + piAuthProvider==='amazon-bedrock'
- *    are misconfigured: providerType should be 'pi' so PiAgent routes to Bedrock.
- *    Fix the providerType and normalize model IDs to Bedrock-native (pi-prefixed).
+ * 1. providerType==='bedrock' → 'pi' with piAuthProvider='amazon-bedrock'.
+ *    Model IDs are normalized to Bedrock-native (pi-prefixed) for Pi SDK resolution.
  *
- * 2. Pure piAuthProvider==='amazon-bedrock' connections (already providerType==='pi')
- *    get model IDs normalized to Bedrock-native for Pi SDK resolution.
+ * 2. providerType==='vertex' → 'pi' with piAuthProvider='google-vertex'.
  *
- * 3. Pure providerType==='bedrock' without piAuthProvider==='amazon-bedrock'
- *    get Bedrock-native IDs reverted to bare (reverse previous incorrect migration).
+ * 3. providerType==='anthropic_compat' → 'pi_compat' with customEndpoint.api='anthropic-messages'.
+ *    Preserves baseUrl and models; authType 'api_key_with_endpoint' stays the same.
+ *
+ * Also normalizes Pi+Bedrock connections that already have correct providerType.
  */
-function migrateBedrockModelIds(config: StoredConfig): boolean {
+function migrateLegacyProviderTypes(config: StoredConfig): boolean {
   if (!config.llmConnections) return false;
 
   let changed = false;
 
   for (const connection of config.llmConnections) {
-    // Fix misconfigured connections: bedrock providerType should be 'pi' when piAuthProvider is set
-    if (connection.providerType === 'bedrock' && connection.piAuthProvider === 'amazon-bedrock') {
-      connection.providerType = 'pi';
+    // Cast to string for legacy values removed from LlmProviderType
+    const providerStr = connection.providerType as string;
+
+    // --- bedrock → pi + amazon-bedrock ---
+    if (providerStr === 'bedrock') {
+      (connection as { providerType: LlmProviderType }).providerType = 'pi';
+      connection.piAuthProvider = connection.piAuthProvider || 'amazon-bedrock';
+      // Normalize model IDs to Bedrock-native (pi-prefixed) for Pi SDK
+      if (connection.defaultModel) {
+        connection.defaultModel = normalizePiBedrockId(connection.defaultModel);
+      }
+      if (connection.models && Array.isArray(connection.models)) {
+        for (let i = 0; i < connection.models.length; i++) {
+          const model = connection.models[i];
+          if (typeof model === 'string') {
+            connection.models[i] = normalizePiBedrockId(model);
+          } else if (model && typeof model === 'object') {
+            model.id = normalizePiBedrockId(model.id);
+          }
+        }
+      }
       changed = true;
+      continue;
+    }
+
+    // --- vertex → pi + google-vertex ---
+    if (providerStr === 'vertex') {
+      (connection as { providerType: LlmProviderType }).providerType = 'pi';
+      connection.piAuthProvider = 'google-vertex';
+      changed = true;
+      continue;
+    }
+
+    // --- anthropic_compat → pi_compat + customEndpoint ---
+    if (providerStr === 'anthropic_compat') {
+      (connection as { providerType: LlmProviderType }).providerType = 'pi_compat';
+      connection.customEndpoint = { api: 'anthropic-messages' };
+      // authType 'api_key_with_endpoint' stays; baseUrl and models are preserved
+      changed = true;
+      continue;
     }
 
     // Forward: Pi+Bedrock connections need Bedrock-native IDs (pi-prefixed) for Pi SDK resolution
@@ -1847,31 +1864,6 @@ function migrateBedrockModelIds(config: StoredConfig): boolean {
           } else if (model && typeof model === 'object') {
             const normalized = normalizePiBedrockId(model.id);
             if (normalized !== model.id) { model.id = normalized; changed = true; }
-          }
-        }
-      }
-      continue;
-    }
-
-    // Reverse: providerType==='bedrock' without piAuthProvider was incorrectly
-    // normalized in a previous migration — revert to bare Anthropic IDs
-    if (connection.providerType === 'bedrock') {
-      if (connection.defaultModel) {
-        const bare = fromBedrockNativeId(connection.defaultModel);
-        if (bare !== connection.defaultModel) {
-          connection.defaultModel = bare;
-          changed = true;
-        }
-      }
-      if (connection.models && Array.isArray(connection.models)) {
-        for (let i = 0; i < connection.models.length; i++) {
-          const model = connection.models[i];
-          if (typeof model === 'string') {
-            const bare = fromBedrockNativeId(model);
-            if (bare !== model) { connection.models[i] = bare; changed = true; }
-          } else if (model && typeof model === 'object') {
-            const bare = fromBedrockNativeId(model.id);
-            if (bare !== model.id) { model.id = bare; changed = true; }
           }
         }
       }
@@ -1906,9 +1898,9 @@ function migrateModelDefaultsToConnections(config: StoredConfig): boolean {
   if (configAny.modelDefaults.anthropic) {
     const defaultSlug = config.defaultLlmConnection;
     const anthropicConn = config.llmConnections.find(c =>
-      c.slug === defaultSlug && (c.providerType === 'anthropic' || c.providerType === 'anthropic_compat')
+      c.slug === defaultSlug && c.providerType === 'anthropic'
     ) || config.llmConnections.find(c =>
-      c.providerType === 'anthropic' || c.providerType === 'anthropic_compat'
+      c.providerType === 'anthropic'
     );
     if (anthropicConn) {
       anthropicConn.defaultModel = configAny.modelDefaults.anthropic;
@@ -1964,7 +1956,7 @@ export function migrateLegacyLlmConnectionsConfig(): void {
     for (const connection of target.llmConnections) {
       // Cast to string for legacy 'openai_compat' values that may still exist on disk
       const providerStr = connection.providerType as string;
-      if (providerStr !== 'anthropic_compat' && providerStr !== 'openai_compat') {
+      if (providerStr !== 'openai_compat') {
         continue;
       }
       const compatDefaults = getDefaultModelsForConnection(connection.providerType).map(
@@ -2061,8 +2053,8 @@ export function migrateLegacyLlmConnectionsConfig(): void {
     }
     // Phase 1g: Migrate Sonnet 4.5 → Sonnet 4.6 in workspace default models
     migrateWorkspaceSonnet45ToSonnet46(config);
-    // Phase 1h: Normalize Bedrock model IDs (bare Anthropic → Bedrock-native)
-    if (migrateBedrockModelIds(config)) {
+    // Phase 1h: Migrate legacy provider types (bedrock/vertex/anthropic_compat → pi/pi_compat)
+    if (migrateLegacyProviderTypes(config)) {
       needsSave = true;
     }
 
@@ -2121,17 +2113,28 @@ export function migrateLegacyLlmConnectionsConfig(): void {
         createdAt: Date.now(),
       };
     } else if (legacyAuthType === 'api_key') {
-      // Anthropic API Key - check if custom endpoint (compat mode)
+      // Anthropic API Key - check if custom endpoint (compat mode → pi_compat)
       const hasCustomEndpoint = !!legacyBaseUrl;
-      const providerType = hasCustomEndpoint ? 'anthropic_compat' as const : 'anthropic' as const;
-      migrated = {
-        slug: 'anthropic-api',
-        name: hasCustomEndpoint ? 'Custom Anthropic-Compatible' : 'Anthropic (API Key)',
-        providerType,
-        authType: hasCustomEndpoint ? 'api_key_with_endpoint' : 'api_key',
-        models: getDefaultModelsForConnection(providerType),
-        createdAt: Date.now(),
-      };
+      if (hasCustomEndpoint) {
+        migrated = {
+          slug: 'anthropic-api',
+          name: 'Custom Anthropic-Compatible',
+          providerType: 'pi_compat',
+          authType: 'api_key_with_endpoint',
+          customEndpoint: { api: 'anthropic-messages' },
+          models: getDefaultModelsForConnection('pi_compat'),
+          createdAt: Date.now(),
+        };
+      } else {
+        migrated = {
+          slug: 'anthropic-api',
+          name: 'Anthropic (API Key)',
+          providerType: 'anthropic',
+          authType: 'api_key',
+          models: getDefaultModelsForConnection('anthropic'),
+          createdAt: Date.now(),
+        };
+      }
     }
 
     if (migrated) {
@@ -2397,10 +2400,6 @@ export function updateLlmConnection(slug: string, updates: Partial<Omit<LlmConne
     models: updates.models !== undefined ? updates.models : existing.models,
     defaultModel: updates.defaultModel !== undefined ? updates.defaultModel : existing.defaultModel,
     modelSelectionMode: updates.modelSelectionMode !== undefined ? updates.modelSelectionMode : existing.modelSelectionMode,
-    // Cloud provider fields
-    awsRegion: updates.awsRegion !== undefined ? updates.awsRegion : existing.awsRegion,
-    gcpProjectId: updates.gcpProjectId !== undefined ? updates.gcpProjectId : existing.gcpProjectId,
-    gcpRegion: updates.gcpRegion !== undefined ? updates.gcpRegion : existing.gcpRegion,
     // Pi auth provider
     piAuthProvider: updates.piAuthProvider !== undefined ? updates.piAuthProvider : existing.piAuthProvider,
     // Custom endpoint protocol (Anthropic/OpenAI compatible)

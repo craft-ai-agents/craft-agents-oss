@@ -27,15 +27,6 @@ describe('getDefaultModelsForConnection', () => {
     expect(typeof (first as any).id).toBe('string')
   })
 
-  it('bedrock returns bare Anthropic models (same as anthropic)', () => {
-    // providerType==='bedrock' is not the Pi SDK Bedrock path — it keeps bare IDs
-    expect(getDefaultModelsForConnection('bedrock')).toEqual(ANTHROPIC_MODELS)
-  })
-
-  it('vertex returns same models as anthropic', () => {
-    expect(getDefaultModelsForConnection('vertex')).toEqual(ANTHROPIC_MODELS)
-  })
-
   it('pi with piAuthProvider returns filtered models', () => {
     const models = getDefaultModelsForConnection('pi', 'anthropic')
     expect(models.length).toBeGreaterThan(0)
@@ -51,10 +42,6 @@ describe('getDefaultModelsForConnection', () => {
     expect(models.length).toBeGreaterThan(0)
   })
 
-  it('anthropic_compat returns empty list (dynamic provider)', () => {
-    const models = getDefaultModelsForConnection('anthropic_compat')
-    expect(models).toEqual([])
-  })
 })
 
 // ============================================================
@@ -85,11 +72,6 @@ describe('getDefaultModelForConnection', () => {
     expect(modelIds).toContain(defaultModel)
   })
 
-  it('returns empty string for anthropic_compat (dynamic provider)', () => {
-    const defaultModel = getDefaultModelForConnection('anthropic_compat')
-    expect(defaultModel).toBe('')
-  })
-
   it('returns empty string for pi_compat (dynamic provider)', () => {
     const defaultModel = getDefaultModelForConnection('pi_compat')
     expect(defaultModel).toBe('')
@@ -101,10 +83,6 @@ describe('getDefaultModelForConnection', () => {
 // ============================================================
 
 describe('isCompatProvider', () => {
-  it('returns true for anthropic_compat', () => {
-    expect(isCompatProvider('anthropic_compat')).toBe(true)
-  })
-
   it('returns true for pi_compat', () => {
     expect(isCompatProvider('pi_compat')).toBe(true)
   })
@@ -121,18 +99,6 @@ describe('isCompatProvider', () => {
 describe('isAnthropicProvider', () => {
   it('returns true for anthropic', () => {
     expect(isAnthropicProvider('anthropic')).toBe(true)
-  })
-
-  it('returns true for anthropic_compat', () => {
-    expect(isAnthropicProvider('anthropic_compat')).toBe(true)
-  })
-
-  it('returns true for bedrock', () => {
-    expect(isAnthropicProvider('bedrock')).toBe(true)
-  })
-
-  it('returns true for vertex', () => {
-    expect(isAnthropicProvider('vertex')).toBe(true)
   })
 
   it('returns false for pi', () => {

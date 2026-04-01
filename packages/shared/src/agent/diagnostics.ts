@@ -135,9 +135,6 @@ function getProviderLabelFromType(providerType?: LlmProviderType, baseUrl?: stri
   if (providerType) {
     switch (providerType) {
       case 'anthropic': return 'Anthropic';
-      case 'anthropic_compat': return baseUrl ? getProviderLabel(baseUrl) : 'API endpoint';
-      case 'bedrock': return 'AWS Bedrock';
-      case 'vertex': return 'Google Vertex AI';
       case 'pi':
       case 'pi_compat': return 'Craft Agents Backend';
     }

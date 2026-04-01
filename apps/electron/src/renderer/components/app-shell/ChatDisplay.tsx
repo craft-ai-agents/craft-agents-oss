@@ -2164,10 +2164,14 @@ interface MessageBubbleProps {
 /**
  * ErrorMessage - Separate component for error messages to allow useState hook
  */
-function ErrorMessage({ message }: { message: Message }) {
+function ErrorMessage({ message, onOpenUrl }: { message: Message; onOpenUrl?: (url: string) => void }) {
   const { t } = useTranslation()
   const hasDetails = (message.errorDetails && message.errorDetails.length > 0) || message.errorOriginal
   const [detailsOpen, setDetailsOpen] = React.useState(false)
+  const actions = message.errorActions?.filter(a => {
+    if (a.action === 'open_url') return !!a.url && !!onOpenUrl
+    return true
+  })
 
   return (
     <div className="flex justify-start mt-4">
@@ -2183,6 +2187,26 @@ function ErrorMessage({ message }: { message: Message }) {
           {message.errorTitle || t('common.error')}
         </div>
         <p className="text-sm text-destructive">{message.content}</p>
+
+        {/* Action buttons */}
+        {actions && actions.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {actions.map((action) => (
+              <button
+                key={action.key}
+                onClick={() => {
+                  if (action.action === 'open_url' && action.url && onOpenUrl) {
+                    onOpenUrl(action.url)
+                  }
+                  // retry, settings, reauth are handled by existing mechanisms via keyboard shortcuts
+                }}
+                className="text-xs px-2 py-0.5 rounded border border-destructive/20 text-destructive/70 hover:text-destructive hover:border-destructive/40 transition-colors"
+              >
+                {action.label}{action.action === 'open_url' ? ' ↗' : ''}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Collapsible Details Toggle */}
         {hasDetails && (
@@ -2283,7 +2307,7 @@ function MessageBubble({
 
   // === ERROR MESSAGE: Red bordered bubble with warning icon and collapsible details ===
   if (message.role === 'error') {
-    return <ErrorMessage message={message} />
+    return <ErrorMessage message={message} onOpenUrl={onOpenUrl} />
   }
 
   // === STATUS MESSAGE: Matches ProcessingIndicator layout for visual consistency ===
