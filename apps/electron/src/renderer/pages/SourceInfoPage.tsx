@@ -40,7 +40,7 @@ interface SourceInfoPageProps {
 /**
  * Format timestamp to relative time
  */
-function formatRelativeTime(timestamp: number | undefined, t: (key: string) => string): string {
+function formatRelativeTime(timestamp: number | undefined, t: (key: string, options?: Record<string, unknown>) => string): string {
   if (!timestamp) return t('common.never')
 
   const now = Date.now()
@@ -50,9 +50,9 @@ function formatRelativeTime(timestamp: number | undefined, t: (key: string) => s
   const days = Math.floor(diff / 86400000)
 
   if (minutes < 1) return t('common.justNow')
-  if (minutes < 60) return `${minutes} minute${minutes !== 1 ? 's' : ''} ago`
-  if (hours < 24) return `${hours} hour${hours !== 1 ? 's' : ''} ago`
-  return `${days} day${days !== 1 ? 's' : ''} ago`
+  if (minutes < 60) return t('time.minutesAgo', { count: minutes })
+  if (hours < 24) return t('time.hoursAgo', { count: hours })
+  return t('time.daysAgo', { count: days })
 }
 
 /**

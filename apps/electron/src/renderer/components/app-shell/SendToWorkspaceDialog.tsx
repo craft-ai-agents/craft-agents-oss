@@ -108,10 +108,9 @@ export function SendToWorkspaceDialog({
     setIsTransferring(true)
     const targetName = targetWorkspace.name
     const count = sessionIds.length
-    const label = count === 1 ? 'session' : 'sessions'
     const { url, token, remoteWorkspaceId } = targetWorkspace.remoteServer
 
-    const toastId = toast.loading(t('sendToWorkspace.sending', { count, label, target: targetName }))
+    const toastId = toast.loading(t('sendToWorkspace.sending', { count, target: targetName }))
 
     try {
       const newSessionIds: string[] = []
@@ -146,7 +145,7 @@ export function SendToWorkspaceDialog({
         newSessionIds.push(result.sessionId)
       }
 
-      toast.success(t('sendToWorkspace.sent', { count, label, target: targetName }), {
+      toast.success(t('sendToWorkspace.sent', { count, target: targetName }), {
         id: toastId,
         action: onTransferComplete ? {
           label: t('sendToWorkspace.open'),
@@ -158,7 +157,7 @@ export function SendToWorkspaceDialog({
       setSelectedWorkspaceId(null)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
-      toast.error(t('sendToWorkspace.failedToSend', { label }), {
+      toast.error(t('sendToWorkspace.failedToSend', { count }), {
         id: toastId,
         description: message,
       })
@@ -168,7 +167,6 @@ export function SendToWorkspaceDialog({
   }, [selectedWorkspaceId, sessionIds, workspaces, onOpenChange, onTransferComplete])
 
   const count = sessionIds.length
-  const label = count === 1 ? 'session' : 'sessions'
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
@@ -184,7 +182,7 @@ export function SendToWorkspaceDialog({
             {t("sendToWorkspace.title")}
           </DialogTitle>
           <DialogDescription>
-            {t("sendToWorkspace.description", { count, label })}
+            {t("sendToWorkspace.description", { count })}
           </DialogDescription>
         </DialogHeader>
 

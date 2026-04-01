@@ -315,57 +315,57 @@ export interface ChatDisplayHandle {
  * Processing status messages - cycles through these randomly
  * Inspired by Claude Code's playful status messages
  */
-const PROCESSING_MESSAGES = [
-  'Thinking...',
-  'Pondering...',
-  'Contemplating...',
-  'Reasoning...',
-  'Processing...',
-  'Computing...',
-  'Considering...',
-  'Reflecting...',
-  'Deliberating...',
-  'Cogitating...',
-  'Ruminating...',
-  'Musing...',
-  'Working on it...',
-  'On it...',
-  'Crunching...',
-  'Brewing...',
-  'Connecting dots...',
-  'Mulling it over...',
-  'Deep in thought...',
-  'Hmm...',
-  'Let me see...',
-  'One moment...',
-  'Hold on...',
-  'Bear with me...',
-  'Just a sec...',
-  'Hang tight...',
-  'Getting there...',
-  'Almost...',
-  'Working...',
-  'Busy busy...',
-  'Whirring...',
-  'Churning...',
-  'Percolating...',
-  'Simmering...',
-  'Cooking...',
-  'Baking...',
-  'Stirring...',
-  'Spinning up...',
-  'Warming up...',
-  'Revving...',
-  'Buzzing...',
-  'Humming...',
-  'Ticking...',
-  'Clicking...',
-  'Whizzing...',
-  'Zooming...',
-  'Zipping...',
-  'Chugging...',
-  'Trucking...',
-  'Rolling...',
+const PROCESSING_MESSAGE_KEYS = [
+  'chat.processing.thinking',
+  'chat.processing.pondering',
+  'chat.processing.contemplating',
+  'chat.processing.reasoning',
+  'chat.processing.processing',
+  'chat.processing.computing',
+  'chat.processing.considering',
+  'chat.processing.reflecting',
+  'chat.processing.deliberating',
+  'chat.processing.cogitating',
+  'chat.processing.ruminating',
+  'chat.processing.musing',
+  'chat.processing.workingOnIt',
+  'chat.processing.onIt',
+  'chat.processing.crunching',
+  'chat.processing.brewing',
+  'chat.processing.connectingDots',
+  'chat.processing.mullingItOver',
+  'chat.processing.deepInThought',
+  'chat.processing.hmm',
+  'chat.processing.letMeSee',
+  'chat.processing.oneMoment',
+  'chat.processing.holdOn',
+  'chat.processing.bearWithMe',
+  'chat.processing.justASec',
+  'chat.processing.hangTight',
+  'chat.processing.gettingThere',
+  'chat.processing.almost',
+  'chat.processing.working',
+  'chat.processing.busyBusy',
+  'chat.processing.whirring',
+  'chat.processing.churning',
+  'chat.processing.percolating',
+  'chat.processing.simmering',
+  'chat.processing.cooking',
+  'chat.processing.baking',
+  'chat.processing.stirring',
+  'chat.processing.spinningUp',
+  'chat.processing.warmingUp',
+  'chat.processing.revving',
+  'chat.processing.buzzing',
+  'chat.processing.humming',
+  'chat.processing.ticking',
+  'chat.processing.clicking',
+  'chat.processing.whizzing',
+  'chat.processing.zooming',
+  'chat.processing.zipping',
+  'chat.processing.chugging',
+  'chat.processing.trucking',
+  'chat.processing.rolling',
 ]
 
 /**
@@ -390,9 +390,10 @@ interface ProcessingIndicatorProps {
  * Matches TurnCard header layout for visual continuity
  */
 function ProcessingIndicator({ startTime, statusMessage }: ProcessingIndicatorProps) {
+  const { t } = useTranslation()
   const [elapsed, setElapsed] = React.useState(0)
   const [messageIndex, setMessageIndex] = React.useState(() =>
-    Math.floor(Math.random() * PROCESSING_MESSAGES.length)
+    Math.floor(Math.random() * PROCESSING_MESSAGE_KEYS.length)
   )
 
   // Update elapsed time every second using provided startTime
@@ -413,9 +414,9 @@ function ProcessingIndicator({ startTime, statusMessage }: ProcessingIndicatorPr
     const interval = setInterval(() => {
       setMessageIndex(prev => {
         // Pick a random different message
-        let next = Math.floor(Math.random() * PROCESSING_MESSAGES.length)
-        while (next === prev && PROCESSING_MESSAGES.length > 1) {
-          next = Math.floor(Math.random() * PROCESSING_MESSAGES.length)
+        let next = Math.floor(Math.random() * PROCESSING_MESSAGE_KEYS.length)
+        while (next === prev && PROCESSING_MESSAGE_KEYS.length > 1) {
+          next = Math.floor(Math.random() * PROCESSING_MESSAGE_KEYS.length)
         }
         return next
       })
@@ -424,7 +425,7 @@ function ProcessingIndicator({ startTime, statusMessage }: ProcessingIndicatorPr
   }, [statusMessage])
 
   // Use status message if provided, otherwise cycle through default messages
-  const displayMessage = statusMessage || PROCESSING_MESSAGES[messageIndex]
+  const displayMessage = statusMessage || t(PROCESSING_MESSAGE_KEYS[messageIndex])
 
   return (
     <div className="flex items-center gap-2 px-3 py-1 -mb-1 text-[13px] text-muted-foreground">
@@ -1636,7 +1637,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                   {/* Load more indicator - shown when there are older messages */}
                   {hasMoreAbove && (
                     <div className="text-center text-muted-foreground/60 text-xs py-3 select-none">
-                      ↑ Scroll up for earlier messages ({startIndex} more)
+                      ↑ {t('chat.scrollUpForEarlier', { count: startIndex })}
                     </div>
                   )}
                   {turns.map((turn, index) => {
@@ -2139,7 +2140,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
  * - user:      Right-aligned, blue (bg-foreground), white text
  * - assistant: Left-aligned, gray (bg-muted), markdown rendered with clickable links
  * - error:     Left-aligned, red border/bg, warning icon + error message
- * - status:    Centered pill badge with pulsing dot (e.g., "Thinking...")
+ * - status:    Centered pill badge with pulsing dot (e.g., t("chat.processing.thinking"))
  *
  * Note: Tool messages are rendered by TurnCard, not MessageBubble
  */
@@ -2164,6 +2165,7 @@ interface MessageBubbleProps {
  * ErrorMessage - Separate component for error messages to allow useState hook
  */
 function ErrorMessage({ message }: { message: Message }) {
+  const { t } = useTranslation()
   const hasDetails = (message.errorDetails && message.errorDetails.length > 0) || message.errorOriginal
   const [detailsOpen, setDetailsOpen] = React.useState(false)
 
@@ -2178,7 +2180,7 @@ function ErrorMessage({ message }: { message: Message }) {
         } as React.CSSProperties}
       >
         <div className="text-xs text-destructive/50 mb-0.5 font-semibold">
-          {message.errorTitle || 'Error'}
+          {message.errorTitle || t('common.error')}
         </div>
         <p className="text-sm text-destructive">{message.content}</p>
 

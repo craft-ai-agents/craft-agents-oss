@@ -130,13 +130,13 @@ export async function rebuildMenu(): Promise<void> {
 
     // Edit menu (from shared schema)
     {
-      label: EDIT_MENU.label,
+      label: i18n.t(EDIT_MENU.labelKey),
       submenu: EDIT_MENU.items.map(toElectronMenuItem),
     },
 
     // View menu (from shared schema + dev-only items)
     {
-      label: VIEW_MENU.label,
+      label: i18n.t(VIEW_MENU.labelKey),
       submenu: [
         ...VIEW_MENU.items.map(toElectronMenuItem),
         // Dev tools only in development
@@ -178,7 +178,7 @@ export async function rebuildMenu(): Promise<void> {
 
     // Window menu (from shared schema + macOS-specific items)
     {
-      label: WINDOW_MENU.label,
+      label: i18n.t(WINDOW_MENU.labelKey),
       submenu: [
         ...WINDOW_MENU.items.map(toElectronMenuItem),
         ...(isMac ? [
@@ -281,7 +281,7 @@ function toElectronMenuItem(item: MenuItem): Electron.MenuItemConstructorOptions
 
   if (item.type === 'action') {
     return {
-      label: item.label,
+      label: i18n.t(item.labelKey),
       accelerator: item.shortcut,
       registerAccelerator: false,  // Action registry handles the keyboard shortcut
       click: () => sendToRenderer(item.ipcChannel as MenuBroadcastChannel),

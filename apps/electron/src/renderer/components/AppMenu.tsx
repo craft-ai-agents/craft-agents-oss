@@ -64,7 +64,8 @@ function getIcon(name: string): React.ComponentType<{ className?: string }> | nu
 function renderMenuItem(
   item: MenuItem,
   index: number,
-  actionHandlers: MenuActionHandlers
+  actionHandlers: MenuActionHandlers,
+  t: (key: string) => string,
 ): React.ReactNode {
   if (item.type === 'separator') {
     return <StyledDropdownMenuSeparator key={`sep-${index}`} />
@@ -82,7 +83,7 @@ function renderMenuItem(
     return (
       <StyledDropdownMenuItem key={item.role} onClick={safeHandler}>
         {Icon && <Icon className="h-3.5 w-3.5" />}
-        {item.label}
+        {t(item.labelKey)}
         {shortcut && <DropdownMenuShortcut className="pl-6">{shortcut}</DropdownMenuShortcut>}
       </StyledDropdownMenuItem>
     )
@@ -98,7 +99,7 @@ function renderMenuItem(
     return (
       <StyledDropdownMenuItem key={item.id} onClick={handler}>
         {Icon && <Icon className="h-3.5 w-3.5" />}
-        {item.label}
+        {t(item.labelKey)}
         {shortcut && <DropdownMenuShortcut className="pl-6">{shortcut}</DropdownMenuShortcut>}
       </StyledDropdownMenuItem>
     )
@@ -112,17 +113,18 @@ function renderMenuItem(
  */
 function renderMenuSection(
   section: MenuSection,
-  actionHandlers: MenuActionHandlers
+  actionHandlers: MenuActionHandlers,
+  t: (key: string) => string,
 ): React.ReactNode {
   const Icon = getIcon(section.icon)
   return (
     <DropdownMenuSub key={section.id}>
       <StyledDropdownMenuSubTrigger>
         {Icon && <Icon className="h-3.5 w-3.5" />}
-        {section.label}
+        {t(section.labelKey)}
       </StyledDropdownMenuSubTrigger>
       <StyledDropdownMenuSubContent>
-        {section.items.map((item, index) => renderMenuItem(item, index, actionHandlers))}
+        {section.items.map((item, index) => renderMenuItem(item, index, actionHandlers, t))}
       </StyledDropdownMenuSubContent>
     </DropdownMenuSub>
   )
@@ -224,9 +226,9 @@ export function AppMenu({
           <StyledDropdownMenuSeparator />
 
           {/* Edit, View, Window submenus from shared schema */}
-          {renderMenuSection(EDIT_MENU, actionHandlers)}
-          {renderMenuSection(VIEW_MENU, actionHandlers)}
-          {renderMenuSection(WINDOW_MENU, actionHandlers)}
+          {renderMenuSection(EDIT_MENU, actionHandlers, t)}
+          {renderMenuSection(VIEW_MENU, actionHandlers, t)}
+          {renderMenuSection(WINDOW_MENU, actionHandlers, t)}
 
           <StyledDropdownMenuSeparator />
 

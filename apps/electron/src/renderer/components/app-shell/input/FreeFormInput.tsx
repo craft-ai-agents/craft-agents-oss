@@ -1526,9 +1526,9 @@ export function FreeFormInput({
                   <AnimatePresence initial={false}>
                     {followUpItems.map((item, idx) => {
                       const chipIndex = item.index ?? idx + 1
-                      const tooltipText = item.selectedText.trim() || 'Selected text'
-                      const selectedExcerpt = formatFollowUpChipText(item.selectedText, 'Selected text', 50)
-                      const noteExcerpt = formatFollowUpChipText(item.noteLabel, 'Follow-up', 50)
+                      const tooltipText = item.selectedText.trim() || t('chat.selectedText')
+                      const selectedExcerpt = formatFollowUpChipText(item.selectedText, t('chat.selectedText'), 50)
+                      const noteExcerpt = formatFollowUpChipText(item.noteLabel, t('chat.followUp'), 50)
 
                       return (
                         <motion.button

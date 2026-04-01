@@ -282,8 +282,11 @@ export default function AppearanceSettingsPage() {
                   </SettingsRow>
                   <SettingsRow label={t("settings.appearance.language")}>
                     <SettingsMenuSelect
-                      value={i18n.language as LanguageCode}
-                      onValueChange={(value) => i18n.changeLanguage(value)}
+                      value={(i18n.resolvedLanguage ?? i18n.language) as LanguageCode}
+                      onValueChange={(value) => {
+                        i18n.changeLanguage(value)
+                        window.electronAPI?.changeLanguage?.(value)
+                      }}
                       options={Object.entries(LANGUAGES).map(([code, config]) => ({
                         value: code,
                         label: config.nativeName,

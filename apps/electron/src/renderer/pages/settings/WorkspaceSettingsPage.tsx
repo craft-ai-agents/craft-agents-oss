@@ -534,7 +534,7 @@ export default function WorkspaceSettingsPage() {
                         onClick={handleChangeWorkingDirectory}
                         className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
                       >
-                        {t("common.change")}...
+                        {t("common.change")}
                       </button>
                     </div>
                   }

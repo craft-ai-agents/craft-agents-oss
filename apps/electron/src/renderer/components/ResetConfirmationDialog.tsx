@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react"
-import { useTranslation } from "react-i18next"
+import { useTranslation, Trans } from "react-i18next"
 import {
   Dialog,
   DialogContent,
@@ -66,7 +66,7 @@ export function ResetConfirmationDialog({
             {t("dialog.reset.title")}
           </DialogTitle>
           <DialogDescription className="text-left pt-2">
-            {t("dialog.reset.description")}
+            <Trans i18nKey="dialog.reset.description" components={{ strong: <strong /> }} />
           </DialogDescription>
         </DialogHeader>
 

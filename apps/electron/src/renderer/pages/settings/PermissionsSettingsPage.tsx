@@ -220,7 +220,7 @@ export default function PermissionsSettingsPage() {
                     <SettingsCard className="px-4 py-3.5">
                       <div className="text-sm text-muted-foreground leading-relaxed space-y-1.5">
                         <p>
-                          {t("settings.permissions.aboutText1", { explore: "Explore", execute: "Execute" })}
+                          {t("settings.permissions.aboutText1")}
                         </p>
                         <p>
                           {t("settings.permissions.aboutText2")}

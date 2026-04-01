@@ -3,6 +3,8 @@ import en from "./locales/en.json";
 import es from "./locales/es.json";
 import { SUPPORTED_LANGUAGE_CODES } from "./languages";
 
+// Safe as a boolean guard because init is synchronous (initImmediate: false).
+// If async init is ever needed, replace with a promise-based singleton.
 let initialized = false;
 
 /**
