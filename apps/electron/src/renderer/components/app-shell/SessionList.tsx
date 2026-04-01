@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react"
+import { useTranslation } from "react-i18next"
 import { useSetAtom } from "jotai"
 import { isToday, isYesterday, format, startOfDay } from "date-fns"
 import { useAction } from "@/actions"
@@ -139,6 +140,7 @@ export function SessionList({
   hasPendingPrompt,
   activeChatMatchInfo,
 }: SessionListProps) {
+  const { t } = useTranslation()
   const setSendToWorkspace = useSetAtom(sendToWorkspaceAtom)
 
   // --- Selection (atom-backed, shared with ChatDisplay + BatchActionPanel) ---
@@ -612,8 +614,8 @@ export function SessionList({
     return (
       <EntityListEmptyScreen
         icon={<Inbox />}
-        title="No sessions yet"
-        description="Sessions with your agent appear here. Start one to get going."
+        title={t("session.noSessionsYet")}
+        description={t("session.noSessionsYetDesc")}
         className="h-full"
       >
         <button
@@ -625,7 +627,7 @@ export function SessionList({
           }}
           className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors"
         >
-          New Session
+          {t("session.newSession")}
         </button>
       </EntityListEmptyScreen>
     )
@@ -682,9 +684,9 @@ export function SessionList({
         emptyState={
           isSearchMode && !isSearchingContent ? (
             <div className="flex flex-col items-center justify-center py-12 px-4">
-              <p className="text-sm text-muted-foreground">No sessions found</p>
+              <p className="text-sm text-muted-foreground">{t("session.noSessionsFound")}</p>
               <p className="text-xs text-muted-foreground/60 mt-0.5">
-                Searched titles and message content
+                {t("session.noSessionsFoundDesc")}
               </p>
               <button
                 onClick={() => onSearchChange?.('')}

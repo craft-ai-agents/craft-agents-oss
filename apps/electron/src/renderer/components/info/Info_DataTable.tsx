@@ -6,6 +6,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from "react-i18next"
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTable, SortableHeader } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
@@ -77,19 +78,20 @@ export function Info_DataTable<TData, TValue>({
   getSubRows,
   className,
 }: Info_DataTableProps<TData, TValue>) {
+  const { t } = useTranslation()
   const [searchValue, setSearchValue] = React.useState('')
 
   // Parse searchable prop
   const searchConfig = React.useMemo(() => {
     if (!searchable) return null
     if (searchable === true) {
-      return { placeholder: 'Search...', column: undefined }
+      return { placeholder: t("common.search"), column: undefined }
     }
     return {
-      placeholder: searchable.placeholder ?? 'Search...',
+      placeholder: searchable.placeholder ?? t("common.search"),
       column: searchable.column,
     }
-  }, [searchable])
+  }, [searchable, t])
 
   // Loading state
   if (loading) {

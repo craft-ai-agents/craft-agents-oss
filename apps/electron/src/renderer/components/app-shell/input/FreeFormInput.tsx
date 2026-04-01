@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from "react-i18next"
 import { Command as CommandPrimitive } from 'cmdk'
 import { toast } from 'sonner'
 import { AnimatePresence, motion } from 'motion/react'
@@ -108,16 +109,7 @@ function formatFollowUpChipText(text: string, fallback: string, maxLength = 50):
 /** Platform-specific modifier key for keyboard shortcuts */
 const cmdKey = isMac ? '⌘' : 'Ctrl'
 
-/** Default rotating placeholders for onboarding/empty state */
-const DEFAULT_PLACEHOLDERS = [
-  'What would you like to work on?',
-  'Use Shift + Tab to switch between Explore and Execute',
-  'Type @ to mention files, folders, or skills',
-  'Type # to apply labels to this conversation',
-  'Press Shift + Return to add a new line',
-  `Press ${cmdKey} + B to toggle the sidebar`,
-  `Press ${cmdKey} + . for focus mode`,
-]
+/** Default rotating placeholders are now generated inside FreeFormInput via useMemo + t() */
 
 /** Fisher-Yates shuffle — returns a new array in random order */
 function shuffleArray<T>(array: T[]): T[] {
@@ -247,7 +239,7 @@ export interface FreeFormInputProps {
  * - Active option badges
  */
 export function FreeFormInput({
-  placeholder = DEFAULT_PLACEHOLDERS,
+  placeholder,
   disabled = false,
   isProcessing = false,
   onSubmit,
@@ -289,6 +281,21 @@ export function FreeFormInput({
   onConnectionChange,
   connectionUnavailable = false,
 }: FreeFormInputProps) {
+  const { t } = useTranslation()
+
+  // Default rotating placeholders for onboarding/empty state (i18n-aware)
+  const defaultPlaceholders = React.useMemo(() => [
+    t("chatInput.placeholder.workOn"),
+    t("chatInput.placeholder.shiftTab"),
+    t("chatInput.placeholder.mention"),
+    t("chatInput.placeholder.labels"),
+    t("chatInput.placeholder.newLine"),
+    t("chatInput.placeholder.sidebar", { key: cmdKey }),
+    t("chatInput.placeholder.focusMode", { key: cmdKey }),
+  ], [t])
+
+  const effectivePlaceholderProp = placeholder ?? defaultPlaceholders
+
   // Read connection default model, connections, and workspace info from context.
   // Uses optional variant so playground (no provider) doesn't crash.
   const appShellCtx = useOptionalAppShellContext()
@@ -407,7 +414,7 @@ export function FreeFormInput({
   // Shuffle placeholder order once per mount so each session feels fresh
   // Hide placeholder entirely when panel is unfocused in multi-panel layout
   const shuffledPlaceholder = React.useMemo(
-    () => Array.isArray(placeholder) ? shuffleArray(placeholder) : placeholder,
+    () => Array.isArray(effectivePlaceholderProp) ? shuffleArray(effectivePlaceholderProp) : effectivePlaceholderProp,
     [] // eslint-disable-line react-hooks/exhaustive-deps -- intentionally shuffle only on mount
   )
   const effectivePlaceholder = isFocusedPanel ? shuffledPlaceholder : ''

@@ -422,7 +422,7 @@ export function TopBar({
           <StyledDropdownMenuContent align="end" minWidth="min-w-56">
             <StyledDropdownMenuItem onClick={onAddSessionPanel}>
               <SquarePenRounded className="h-3.5 w-3.5" />
-              New Session in Panel
+              {t("session.newSessionInPanel")}
             </StyledDropdownMenuItem>
             <StyledDropdownMenuItem onClick={onAddBrowserPanel}>
               <Icons.Globe className="h-3.5 w-3.5" />
