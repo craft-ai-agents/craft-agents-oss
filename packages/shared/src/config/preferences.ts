@@ -30,6 +30,8 @@ export interface UserPreferences {
   notes?: string;
   // Diff viewer display preferences
   diffViewer?: DiffViewerPreferences;
+  // Whether to include Co-Authored-By trailer on git commits (default: true)
+  includeCoAuthoredBy?: boolean;
   // When the preferences were last updated
   updatedAt?: number;
 }
@@ -166,4 +168,13 @@ export function formatPreferencesDisplay(): string {
   lines.push(`**Config file:** \`${PREFERENCES_FILE}\``);
 
   return lines.join('\n');
+}
+
+/**
+ * Whether the Co-Authored-By trailer should be included on git commits.
+ * Defaults to true when the preference is not explicitly set.
+ */
+export function getCoAuthorPreference(): boolean {
+  const prefs = loadPreferences();
+  return prefs.includeCoAuthoredBy !== false;
 }
