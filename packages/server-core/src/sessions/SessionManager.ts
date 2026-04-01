@@ -3423,6 +3423,80 @@ export class SessionManager implements ISessionManager {
         }
       }
 
+      // Wire up session self-management tools (set_session_labels, set_session_status, etc.)
+      mergeSessionScopedToolCallbacks(managed.id, {
+        setSessionLabelsFn: (labels: string[]) => {
+          this.setSessionLabels(managed.id, labels)
+        },
+        setSessionStatusFn: (status: string) => {
+          this.setSessionStatus(managed.id, status as SessionStatus)
+        },
+        getSessionInfoFn: (sessionId?: string) => {
+          const targetId = sessionId ?? managed.id
+          const session = this.sessions.get(targetId)
+          if (!session) return null
+          return {
+            id: session.id,
+            name: session.name ?? session.id,
+            labels: session.labels ?? [],
+            status: session.sessionStatus ?? 'todo',
+            permissionMode: session.permissionMode ?? 'ask',
+            createdAt: session.createdAt ?? 0,
+            workingDirectory: session.workingDirectory,
+            llmConnection: session.llmConnection,
+            model: session.model,
+            isActive: session.agent != null,
+          }
+        },
+        listSessionsFn: (options) => {
+          const DEFAULT_LIMIT = 20
+          const MAX_LIMIT = 100
+          const limit = Math.min(options?.limit ?? DEFAULT_LIMIT, MAX_LIMIT)
+          const offset = options?.offset ?? 0
+
+          let sessions = this.getSessions(managed.workspace.id)
+
+          // Filter
+          if (options?.status) {
+            sessions = sessions.filter(s => s.sessionStatus === options.status)
+          }
+          if (options?.label) {
+            sessions = sessions.filter(s => s.labels?.includes(options.label!))
+          }
+          if (options?.search) {
+            const needle = options.search.toLowerCase()
+            sessions = sessions.filter(s => s.name?.toLowerCase().includes(needle))
+          }
+
+          // Sort
+          const sortBy = options?.sortBy ?? 'recent'
+          if (sortBy === 'recent') {
+            sessions.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+          } else if (sortBy === 'name') {
+            sessions.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
+          } else if (sortBy === 'status') {
+            sessions.sort((a, b) => (a.sessionStatus ?? '').localeCompare(b.sessionStatus ?? ''))
+          }
+
+          const total = sessions.length
+
+          // Paginate
+          const page = sessions.slice(offset, offset + limit)
+
+          return {
+            total,
+            returned: page.length,
+            sessions: page.map(s => ({
+              id: s.id,
+              name: s.name ?? s.id,
+              labels: s.labels ?? [],
+              status: s.sessionStatus ?? 'todo',
+              createdAt: s.createdAt ?? 0,
+            })),
+          }
+        },
+      })
+
       // Wire up onSourceActivationRequest to auto-enable sources when agent tries to use them
       managed.agent.onSourceActivationRequest = async (sourceSlug: string): Promise<boolean> => {
         sessionLog.info(`Source activation request for session ${managed.id}:`, sourceSlug)

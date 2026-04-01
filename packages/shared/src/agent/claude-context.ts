@@ -81,6 +81,11 @@ export interface ClaudeContextOptions {
   workspaceId: string;
   onPlanSubmitted: (planPath: string) => void;
   onAuthRequest: (request: unknown) => void;
+  // Session self-management callbacks (optional — injected by backend)
+  setSessionLabels?: (labels: string[]) => void;
+  setSessionStatus?: (status: string) => void;
+  getSessionInfo?: (sessionId?: string) => import('@craft-agent/session-tools-core').SessionInfo | null;
+  listSessions?: (options?: import('@craft-agent/session-tools-core').ListSessionsOptions) => import('@craft-agent/session-tools-core').ListSessionsResult;
 }
 
 /**
@@ -319,6 +324,12 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
       }
       return null;
     },
+
+    // Session self-management
+    setSessionLabels: options.setSessionLabels,
+    setSessionStatus: options.setSessionStatus,
+    getSessionInfo: options.getSessionInfo,
+    listSessions: options.listSessions,
   };
 
   return context;
