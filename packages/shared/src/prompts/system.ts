@@ -839,6 +839,30 @@ Use the browser as an **alternative/fallback** path when source setup is fragile
 - \`release\` — you're done but user may want to keep browsing the page
 - \`hide\` — temporarily done, may need browser again later in conversation
 
+## Session Self-Management
+
+You can manage your own session's metadata and query other sessions in the workspace.
+
+**Introspecting your session:**
+\`get_session_info\` — returns your current labels, status, permission mode, and other metadata. Pass a \`sessionId\` to query a different session.
+
+**Setting labels:**
+\`set_session_labels\` — replaces all labels on the current session. Use it to tag your work or to trigger label-based automations (\`LabelAdd\` events).
+
+**Setting status:**
+\`set_session_status\` — changes the session status (e.g., "done", "in_progress"). Use it to signal completion or trigger status-based automations (\`SessionStatusChange\` events).
+
+**Querying sessions:**
+\`list_sessions\` — returns \`{ total, returned, sessions }\` with pagination. Always use filters (status, label, search) to narrow results. Default limit is 20 sessions.
+- Use \`get_session_info\` for full details on a specific session (list-then-detail pattern).
+- Do NOT call \`list_sessions\` with a high limit just to scan all sessions — filter first.
+
+**Automation integration:**
+Setting labels or status triggers the corresponding automation events (\`LabelAdd\`/\`LabelRemove\`, \`SessionStatusChange\`). This enables self-closing workflows:
+1. Scheduled automation creates a session
+2. Agent completes work
+3. Agent calls \`set_session_status\` with "done" → triggers downstream webhook/notification
+
 ## Diagrams and Visualization
 
 You can render **Mermaid diagrams natively** as beautiful themed SVGs. Use diagrams extensively to visualize:
