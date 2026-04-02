@@ -85,10 +85,16 @@ describe('model resolution with null connection', () => {
 describe('orphaned llmConnection detection', () => {
   it('should clear llmConnection and connectionLocked when connection is orphaned', () => {
     // Simulate a managed session with an orphaned connection
-    const managed: { id: string; llmConnection: string | undefined; connectionLocked: boolean } = {
+    const managed: {
+      id: string
+      llmConnection: string | undefined
+      connectionLocked: boolean
+      backendId?: string
+    } = {
       id: 'test-session',
       llmConnection: 'deleted-connection-slug',
       connectionLocked: true,
+      backendId: 'anthropic',
     }
 
     // Simulate resolveSessionConnection returning null for orphaned slug
@@ -97,10 +103,12 @@ describe('orphaned llmConnection detection', () => {
     if (managed.llmConnection && !conn) {
       managed.llmConnection = undefined
       managed.connectionLocked = false
+      managed.backendId = undefined
     }
 
     expect(managed.llmConnection).toBeUndefined()
     expect(managed.connectionLocked).toBe(false)
+    expect(managed.backendId).toBeUndefined()
   })
 
   it('should preserve valid llmConnection', () => {

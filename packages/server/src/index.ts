@@ -29,7 +29,7 @@ import { version as packageVersion } from '../package.json'
 import { createBuiltInBackendPluginManifests } from '@craft-agent/shared/agent/backend'
 import { enableDebug } from '@craft-agent/shared/utils/debug'
 import { bootstrapServer, startHealthHttpServer, generateServerToken } from '@craft-agent/server-core/bootstrap'
-import { PluginHost, PLUGIN_API_VERSION } from '@craft-agent/server-core/plugins'
+import { PLUGIN_API_VERSION, bootstrapPluginHost } from '@craft-agent/server-core/plugins'
 import { validateSession, createWebuiHandler, nodeHttpAdapter } from '@craft-agent/server-core/webui'
 import type { WebuiHandler } from '@craft-agent/server-core/webui'
 
@@ -151,14 +151,15 @@ const serverVersion = process.env.CRAFT_VERSION ?? packageVersion
 
 const instance = await (async () => {
   try {
-    const pluginHost = new PluginHost({ appVersion: serverVersion })
-    await pluginHost.initialize()
-    for (const manifest of createBuiltInBackendPluginManifests({
+    const pluginHost = await bootstrapPluginHost({
       appVersion: serverVersion,
       pluginApiVersion: PLUGIN_API_VERSION,
-    })) {
-      pluginHost.registerBuiltInPlugin(manifest)
-    }
+      builtInManifests: createBuiltInBackendPluginManifests({
+        appVersion: serverVersion,
+        pluginApiVersion: PLUGIN_API_VERSION,
+      }),
+      logger: console,
+    })
 
     return await bootstrapServer<SessionManager, HandlerDeps>({
       bundledAssetsRoot,

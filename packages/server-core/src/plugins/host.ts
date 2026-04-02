@@ -34,6 +34,7 @@ export class PluginHost {
   private readonly pluginApiVersion: string
   private readonly pluginDirectory: string
   private readonly pluginStatePath: string
+  private readonly builtInPluginIds = new Set<string>()
   private state: PluginStateStore = { plugins: {} }
   private loadFailures: PluginManifestLoadFailure[] = []
 
@@ -49,7 +50,12 @@ export class PluginHost {
   }
 
   registerBuiltInPlugin(manifest: CraftPluginManifest): PluginDetails {
-    return this.registerManifest(manifest, { enabled: true })
+    this.builtInPluginIds.add(manifest.id)
+    return this.registerManifest(
+      manifest,
+      { enabled: true, status: 'active' },
+      { respectPersistedState: false },
+    )
   }
 
   async loadExternalPlugins(): Promise<PluginDetails[]> {
@@ -112,6 +118,9 @@ export class PluginHost {
   }
 
   async disablePlugin(pluginId: string): Promise<PluginDetails> {
+    if (this.builtInPluginIds.has(pluginId)) {
+      throw new Error(`Cannot disable built-in plugin: ${pluginId}`)
+    }
     const plugin = this.registry.updatePlugin(pluginId, {
       enabled: false,
       status: 'disabled',
@@ -137,8 +146,11 @@ export class PluginHost {
   private registerManifest(
     manifest: CraftPluginManifest,
     defaults?: PluginStateEntry,
+    options?: { respectPersistedState?: boolean },
   ): PluginDetails {
-    const state = this.state.plugins[manifest.id] ?? {}
+    const state = options?.respectPersistedState === false
+      ? {}
+      : (this.state.plugins[manifest.id] ?? {})
     const compatible = isPluginApiVersionSupported(manifest.apiVersion, this.pluginApiVersion)
       && isPluginEngineSatisfied(manifest, this.appVersion)
 

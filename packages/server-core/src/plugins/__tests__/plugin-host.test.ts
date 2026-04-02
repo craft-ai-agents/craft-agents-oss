@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { bootstrapPluginHost } from '../bootstrap'
 import { PluginHost } from '../host'
 import {
   getDefaultPluginDirectory,
@@ -110,6 +111,27 @@ describe('PluginHost', () => {
     expect(plugins[0]?.status).toBe('disabled')
   })
 
+  it('does not honor persisted disabled state for built-in plugins', async () => {
+    const pluginStatePath = join(tempRoot, 'plugin-state.json')
+    await writePluginState({
+      plugins: {
+        'codex-cli': { enabled: false, status: 'disabled' },
+      },
+    }, pluginStatePath)
+
+    const host = new PluginHost({
+      appVersion: '0.8.1',
+      pluginDirectory: join(tempRoot, 'plugins'),
+      pluginStatePath,
+    })
+    await host.initialize()
+
+    const plugin = host.registerBuiltInPlugin(createManifest() as any)
+
+    expect(plugin.enabled).toBe(true)
+    expect(plugin.status).toBe('active')
+  })
+
   it('removes quarantined plugin capabilities from active lookups', async () => {
     const host = createPluginHost()
     await host.initialize()
@@ -124,13 +146,31 @@ describe('PluginHost', () => {
   })
 
   it('removes disabled plugin capabilities from active lookups', async () => {
-    const host = createPluginHost()
+    const pluginDirectory = join(tempRoot, 'plugins')
+    await mkdir(join(pluginDirectory, 'codex-cli'), { recursive: true })
+    await writeFile(join(pluginDirectory, 'codex-cli', 'plugin.json'), JSON.stringify(createManifest()))
+
+    const host = new PluginHost({
+      appVersion: '0.8.1',
+      pluginDirectory,
+      pluginStatePath: join(tempRoot, 'plugin-state.json'),
+    })
     await host.initialize()
-    host.registerBuiltInPlugin(createManifest() as any)
+    await host.loadExternalPlugins()
 
     await host.disablePlugin('codex-cli')
 
     expect(host.listCapabilities('backend')).toHaveLength(0)
+  })
+
+  it('rejects disabling built-in plugins until runtime gating is implemented', async () => {
+    const host = createPluginHost()
+    await host.initialize()
+    host.registerBuiltInPlugin(createManifest() as any)
+
+    await expect(host.disablePlugin('codex-cli')).rejects.toThrow('Cannot disable built-in plugin: codex-cli')
+    expect(host.getPlugin('codex-cli')?.enabled).toBe(true)
+    expect(host.getPlugin('codex-cli')?.status).toBe('active')
   })
 
   it('marks incompatible plugins disabled during registration', async () => {
@@ -194,5 +234,32 @@ describe('PluginHost', () => {
     expect(host.listPlugins().map((plugin) => plugin.id)).toEqual(['codex-cli'])
     expect(host.listLoadFailures()).toHaveLength(1)
     expect(host.listLoadFailures()[0]?.pluginPath).toContain('broken-plugin/plugin.json')
+  })
+
+  it('bootstraps built-in and external plugins together', async () => {
+    const pluginDirectory = join(tempRoot, 'plugins')
+    await mkdir(join(pluginDirectory, 'codex-cli'), { recursive: true })
+    await writeFile(join(pluginDirectory, 'codex-cli', 'plugin.json'), JSON.stringify(createManifest({
+      id: 'external.codex-cli',
+      name: 'External Codex CLI',
+      contributions: { backends: ['codex-backend'] },
+    })))
+
+    const warnings: string[] = []
+    const host = await bootstrapPluginHost({
+      appVersion: '0.8.1',
+      pluginDirectory,
+      pluginStatePath: join(tempRoot, 'plugin-state.json'),
+      builtInManifests: [createManifest({
+        id: 'craft.anthropic',
+        name: 'Anthropic Backend',
+        contributions: { backends: ['anthropic'] },
+      }) as any],
+      logger: { warn: (message: string) => warnings.push(message) },
+    })
+
+    expect(host.listPlugins().map((plugin) => plugin.id).sort()).toEqual(['craft.anthropic', 'external.codex-cli'])
+    expect(host.listCapabilities('backend').map((capability) => capability.id).sort()).toEqual(['anthropic'])
+    expect(warnings).toEqual([])
   })
 })

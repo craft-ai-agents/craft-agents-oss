@@ -1,3 +1,4 @@
+export * from './bootstrap'
 export * from './host'
 export * from './loader'
 export * from './registry'

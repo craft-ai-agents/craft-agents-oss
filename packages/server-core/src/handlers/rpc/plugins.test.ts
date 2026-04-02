@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { mkdir, rm } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
@@ -40,13 +40,24 @@ function createMockServer() {
 }
 
 async function createPluginHost(root: string) {
+  const pluginDirectory = join(root, 'plugins')
+  await mkdir(join(pluginDirectory, 'external-tooling'), { recursive: true })
+  await writeFile(join(pluginDirectory, 'external-tooling', 'plugin.json'), JSON.stringify(createManifest({
+    id: 'external.tooling',
+    name: 'External Tooling',
+    contributions: {
+      composerActions: ['tooling-compose'],
+    },
+  })))
+
   const pluginHost = new PluginHost({
     appVersion: '0.8.1',
-    pluginDirectory: join(root, 'plugins'),
+    pluginDirectory,
     pluginStatePath: join(root, 'plugin-state.json'),
   })
   await pluginHost.initialize()
   pluginHost.registerBuiltInPlugin(createManifest() as any)
+  await pluginHost.loadExternalPlugins()
   return pluginHost
 }
 
@@ -107,7 +118,10 @@ describe('registerPluginsHandlers', () => {
     expect(listCapabilities).toBeDefined()
 
     await expect(list?.(ctx)).resolves.toEqual({
-      plugins: [expect.objectContaining({ id: 'craft.anthropic', enabled: true })],
+      plugins: expect.arrayContaining([
+        expect.objectContaining({ id: 'craft.anthropic', enabled: true }),
+        expect.objectContaining({ id: 'external.tooling', enabled: false }),
+      ]),
     })
     await expect(get?.(ctx, 'craft.anthropic')).resolves.toEqual({
       plugin: expect.objectContaining({ id: 'craft.anthropic', status: 'active' }),
@@ -119,19 +133,25 @@ describe('registerPluginsHandlers', () => {
       ],
     })
 
-    await expect(disable?.(ctx, 'craft.anthropic')).resolves.toEqual({
-      plugin: expect.objectContaining({ id: 'craft.anthropic', enabled: false, status: 'disabled' }),
-    })
-    await expect(listCapabilities?.(ctx)).resolves.toEqual({ capabilities: [] })
-
-    await expect(enable?.(ctx, 'craft.anthropic')).resolves.toEqual({
-      plugin: expect.objectContaining({ id: 'craft.anthropic', enabled: true, status: 'active' }),
+    await expect(disable?.(ctx, 'external.tooling')).resolves.toEqual({
+      plugin: expect.objectContaining({ id: 'external.tooling', enabled: false, status: 'disabled' }),
     })
     await expect(listCapabilities?.(ctx)).resolves.toEqual({
       capabilities: [
         { pluginId: 'craft.anthropic', id: 'anthropic', type: 'backend' },
         { pluginId: 'craft.anthropic', id: 'handoff-to-anthropic', type: 'sessionAction' },
       ],
+    })
+
+    await expect(enable?.(ctx, 'external.tooling')).resolves.toEqual({
+      plugin: expect.objectContaining({ id: 'external.tooling', enabled: true, status: 'active' }),
+    })
+    await expect(listCapabilities?.(ctx)).resolves.toEqual({
+      capabilities: expect.arrayContaining([
+        { pluginId: 'craft.anthropic', id: 'anthropic', type: 'backend' },
+        { pluginId: 'craft.anthropic', id: 'handoff-to-anthropic', type: 'sessionAction' },
+        { pluginId: 'external.tooling', id: 'tooling-compose', type: 'composerAction' },
+      ]),
     })
   })
 })

@@ -68,7 +68,7 @@ import { existsSync, readFileSync } from 'fs'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { createBuiltInBackendPluginManifests, initializeBackendHostRuntime } from '@craft-agent/shared/agent/backend'
 import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
-import { PluginHost, PLUGIN_API_VERSION } from '@craft-agent/server-core/plugins'
+import { PLUGIN_API_VERSION, bootstrapPluginHost } from '@craft-agent/server-core/plugins'
 import { registerAllRpcHandlers } from './handlers/index'
 import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient } from '@craft-agent/server-core/handlers/rpc'
 import type { PlatformServices } from '../runtime/platform'
@@ -590,14 +590,15 @@ app.whenReady().then(async () => {
       }
 
       // Bootstrap the WS RPC server via shared bootstrap function.
-      const pluginHost = new PluginHost({ appVersion: app.getVersion() })
-      await pluginHost.initialize()
-      for (const manifest of createBuiltInBackendPluginManifests({
+      const pluginHost = await bootstrapPluginHost({
         appVersion: app.getVersion(),
         pluginApiVersion: PLUGIN_API_VERSION,
-      })) {
-        pluginHost.registerBuiltInPlugin(manifest)
-      }
+        builtInManifests: createBuiltInBackendPluginManifests({
+          appVersion: app.getVersion(),
+          pluginApiVersion: PLUGIN_API_VERSION,
+        }),
+        logger: mainLog,
+      })
 
       const instance = await bootstrapServer<SessionManager, HandlerDeps>({
         serverToken,

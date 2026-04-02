@@ -974,6 +974,14 @@ export function createManagedSession(
   return managed
 }
 
+export function syncBackendIdFromConnection(
+  target: { llmConnection?: string; backendId?: string },
+): void {
+  target.backendId = target.llmConnection
+    ? inferBackendIdFromConnectionSlug(target.llmConnection)
+    : undefined
+}
+
 /**
  * Resolve supportsBranching for a managed session.
  * Prefers the live agent instance; falls back to true for all backends.
@@ -1609,6 +1617,7 @@ export class SessionManager implements ISessionManager {
               sessionLog.warn(`Session ${meta.id} has orphaned llmConnection "${managed.llmConnection}", clearing`)
               managed.llmConnection = undefined
               managed.connectionLocked = false
+              syncBackendIdFromConnection(managed)
             }
           }
 
@@ -3647,6 +3656,7 @@ export class SessionManager implements ISessionManager {
     }
 
     managed.llmConnection = connectionSlug
+    syncBackendIdFromConnection(managed)
     // Persist in-memory state directly to avoid race with pending queue writes
     this.persistSession(managed)
     await this.flushSession(managed.id)
@@ -4287,11 +4297,13 @@ export class SessionManager implements ISessionManager {
       // Also update connection if provided and not already locked
       if (connection && !managed.connectionLocked) {
         managed.llmConnection = connection
+        syncBackendIdFromConnection(managed)
       }
       // Persist to disk (include connection if it was updated)
-      const updates: { model?: string; llmConnection?: string } = { model: model ?? undefined }
+      const updates: { model?: string; llmConnection?: string; backendId?: string } = { model: model ?? undefined }
       if (connection && !managed.connectionLocked) {
         updates.llmConnection = connection
+        updates.backendId = managed.backendId
       }
       await updateSessionMetadata(managed.workspace.rootPath, sessionId, updates)
       // Update agent model if it already exists (takes effect on next query)
@@ -6855,6 +6867,7 @@ export class SessionManager implements ISessionManager {
       enabledSourceSlugs: header.enabledSourceSlugs,
       workingDirectory: header.workingDirectory,
       model: header.model,
+      backendId: header.backendId,
       llmConnection: header.llmConnection,
       connectionLocked: header.connectionLocked,
       thinkingLevel: header.thinkingLevel,
@@ -6892,6 +6905,7 @@ export class SessionManager implements ISessionManager {
         sessionLog.info(`[import] Fork: compatible ${sourceProviderType} connection "${compatibleConnection}" found — preserving sdkSessionId for resume`)
         storedSession.llmConnection = compatibleConnection
         storedSession.connectionLocked = false
+        syncBackendIdFromConnection(storedSession)
       } else {
         // Summary path: no compatible connection or no SDK session — clear for fresh start
         if (storedSession.llmConnection) {
@@ -6900,6 +6914,7 @@ export class SessionManager implements ISessionManager {
         storedSession.sdkSessionId = undefined
         storedSession.llmConnection = undefined
         storedSession.connectionLocked = false
+        syncBackendIdFromConnection(storedSession)
       }
       // Clear thinking level so the session inherits the workspace default
       storedSession.thinkingLevel = undefined
@@ -6928,6 +6943,7 @@ export class SessionManager implements ISessionManager {
         warnings.push(`LLM connection "${storedSession.llmConnection}" not found in target — session will use default`)
         storedSession.llmConnection = undefined
         storedSession.connectionLocked = false
+        syncBackendIdFromConnection(storedSession)
       } else {
         sessionLog.info(`[import] LLM connection "${storedSession.llmConnection}" resolved OK`)
       }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { createManagedSession } from './SessionManager.ts'
+import { createManagedSession, syncBackendIdFromConnection } from './SessionManager.ts'
 
 describe('createManagedSession', () => {
   const workspace = {
@@ -34,5 +34,19 @@ describe('createManagedSession', () => {
     } as any, workspace as any)
 
     expect(managed.backendId).toBe('pi')
+  })
+
+  it('clears stale backend ids when a connection is cleared or unknown', () => {
+    const managed = {
+      llmConnection: 'missing-connection',
+      backendId: 'anthropic',
+    } as { llmConnection?: string; backendId?: string }
+
+    syncBackendIdFromConnection(managed)
+    expect(managed.backendId).toBeUndefined()
+
+    managed.llmConnection = undefined
+    syncBackendIdFromConnection(managed)
+    expect(managed.backendId).toBeUndefined()
   })
 })
