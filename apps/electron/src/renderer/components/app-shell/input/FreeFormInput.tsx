@@ -63,6 +63,8 @@ import { SourceAvatar } from '@/components/ui/source-avatar'
 import { SourceSelectorPopover } from '@/components/ui/SourceSelectorPopover'
 import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
+import { groupConnectionsByProvider } from './llm-provider-groups'
+import { getCurrentModelDisplayName } from './llm-model-display'
 import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelName } from '@craft-agent/shared/agent/thinking-levels'
@@ -228,9 +230,9 @@ export interface FreeFormInputProps {
   /** Enable compact mode - hides attach, sources, working directory for popover embedding */
   compactMode?: boolean
   // Connection selection (hierarchical connection → model selector)
-  /** Current LLM connection slug (locked after first message) */
+  /** Current LLM connection slug */
   currentConnection?: string
-  /** Callback when connection changes (only works when session is empty) */
+  /** Callback when connection changes (used by dedicated connection-only flows) */
   onConnectionChange?: (connectionSlug: string) => void
   /** When true, the session's locked connection has been removed */
   connectionUnavailable?: boolean
@@ -286,7 +288,7 @@ export function FreeFormInput({
   onFollowUpIndexClick,
   compactMode = false,
   currentConnection,
-  onConnectionChange,
+  onConnectionChange: _onConnectionChange,
   connectionUnavailable = false,
 }: FreeFormInputProps) {
   // Read connection default model, connections, and workspace info from context.
@@ -335,35 +337,13 @@ export function FreeFormInput({
 
   // Get display name for current model (full name, not short name)
   const currentModelDisplayName = React.useMemo(() => {
-    const modelToDisplay = connectionDefaultModel ?? currentModel
-    const model = availableModels.find(m =>
-      typeof m === 'string' ? m === modelToDisplay : m.id === modelToDisplay
-    )
-    if (!model) {
-      // Fallback: use helper function to format unknown model IDs nicely
-      return stripPiPrefixForDisplay(getModelDisplayName(modelToDisplay))
-    }
-    return typeof model === 'string' ? stripPiPrefixForDisplay(model) : model.name
+    return getCurrentModelDisplayName(availableModels, currentModel, connectionDefaultModel)
   }, [availableModels, currentModel, connectionDefaultModel])
 
   // Group connections by provider type for hierarchical dropdown
-  // Each provider (Anthropic, Pi) can have multiple connections (API Key, OAuth, etc.)
+  // Each provider (Anthropic, Pi, etc.) can have multiple connections (API Key, OAuth, etc.)
   const connectionsByProvider = React.useMemo(() => {
-    const groups: Record<string, typeof llmConnections> = {
-      'Anthropic': [],
-      'Craft Agents Backend': [],
-    }
-    for (const conn of llmConnections) {
-      const provider = conn.providerType || 'anthropic'
-      // Group by SDK: anthropic/anthropic_compat/bedrock/vertex use Anthropic SDK
-      if (provider === 'anthropic' || provider === 'anthropic_compat' || provider === 'bedrock' || provider === 'vertex') {
-        groups['Anthropic'].push(conn)
-      } else if (provider === 'pi' || provider === 'pi_compat') {
-        groups['Craft Agents Backend'].push(conn)
-      }
-    }
-    // Return only non-empty groups
-    return Object.entries(groups).filter(([, conns]) => conns.length > 0)
+    return groupConnectionsByProvider(llmConnections)
   }, [llmConnections])
 
   // Find current connection details for display
@@ -1804,8 +1784,8 @@ Model
                   </div>
                   <Check className="h-3 w-3 text-foreground shrink-0 ml-3" />
                 </StyledDropdownMenuItem>
-              ) : isEmptySession && llmConnections.length > 1 ? (
-                /* Hierarchical view: Provider → Connection → Models (for new sessions with multiple connections) */
+              ) : llmConnections.length > 1 ? (
+                /* Hierarchical view: Provider → Connection → Models */
                 connectionsByProvider.map(([providerName, connections], index) => (
                   <React.Fragment key={providerName}>
                     {/* Provider group label */}
@@ -1846,11 +1826,8 @@ Model
                                   <StyledDropdownMenuItem
                                     key={modelId}
                                     onSelect={() => {
-                                      // If selecting a different connection, update both connection and model
-                                      if (!isCurrentConnection && onConnectionChange) {
-                                        onConnectionChange(conn.slug)
-                                      }
-                                      // Always pass connection with model for proper persistence
+                                      // Pass the selected connection with the model so the backend can
+                                      // retarget the session in one update path.
                                       onModelChange(modelId, conn.slug)
                                     }}
                                     className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"

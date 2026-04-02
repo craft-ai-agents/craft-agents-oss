@@ -867,6 +867,8 @@ interface ManagedSession {
   authRetryInProgress?: boolean
   // Whether this session is hidden from session list (e.g., mini edit sessions)
   hidden?: boolean
+  // Marks that the next final assistant response should show a runtime-change divider.
+  pendingResponseRuntimeChange?: boolean
   branchFromMessageId?: string
   // Branch context strategy:
   // - sdk-fork: provider-level fork from parent SDK session
@@ -971,6 +973,41 @@ export function createManagedSession(
  * Resolve supportsBranching for a managed session.
  * Prefers the live agent instance; falls back to true for all backends.
  */
+function getSessionSeedAnchorMessageId(messages: Message[]): string | undefined {
+  for (let idx = messages.length - 1; idx >= 0; idx--) {
+    const message = messages[idx]
+    if (!message) continue
+    if ((message.role === 'user' || message.role === 'assistant') && !message.isIntermediate) {
+      return message.id
+    }
+  }
+
+  return messages[messages.length - 1]?.id
+}
+
+function resolveResponseMessageMetadata(managed: ManagedSession): {
+  responseModel?: string
+  responseConnectionName?: string
+  responseConnectionSlug?: string
+} {
+  const wsConfig = loadWorkspaceConfig(managed.workspace.rootPath)
+  const resolvedConnection = resolveSessionConnection(
+    managed.llmConnection,
+    wsConfig?.defaults?.defaultLlmConnection,
+  )
+
+  const responseModel = managed.agent?.getModel()
+    ?? managed.model
+    ?? wsConfig?.defaults?.model
+    ?? resolvedConnection?.defaultModel
+
+  return {
+    responseModel,
+    responseConnectionName: resolvedConnection?.name,
+    responseConnectionSlug: resolvedConnection?.slug,
+  }
+}
+
 function resolveSupportsBranching(managed: ManagedSession): boolean {
   // If agent is live, use its instance property (authoritative)
   if (managed.agent) {
@@ -4268,35 +4305,104 @@ export class SessionManager implements ISessionManager {
   async updateSessionModel(sessionId: string, workspaceId: string, model: string | null, connection?: string): Promise<void> {
     sessionLog.info(`[updateSessionModel] sessionId=${sessionId}, model=${model}, connection=${connection}`)
     const managed = this.sessions.get(sessionId)
-    if (managed) {
-      managed.model = model ?? undefined
-      // Also update connection if provided and not already locked
-      if (connection && !managed.connectionLocked) {
-        managed.llmConnection = connection
+    if (!managed) {
+      return
+    }
+
+    const previousConnectionSlug = managed.llmConnection
+    const previousModel = managed.model
+    const requestedConnection = connection
+
+    let connectionSlug = managed.llmConnection
+    let connectionUpdated = false
+
+    if (requestedConnection) {
+      const existingConnection = getLlmConnection(requestedConnection)
+      if (!existingConnection) {
+        sessionLog.warn(`updateSessionModel: connection "${requestedConnection}" not found for session ${sessionId}`)
+      } else {
+        if (managed.llmConnection !== requestedConnection) {
+          if (managed.isProcessing) {
+            throw new Error('Cannot switch provider while session is processing')
+          }
+          managed.llmConnection = requestedConnection
+          connectionUpdated = true
+        }
+        connectionSlug = requestedConnection
       }
-      // Persist to disk (include connection if it was updated)
+    }
+
+    managed.model = model ?? undefined
+
+    const modelUpdated = previousModel !== managed.model
+    const hasConversationHistory = managed.messages.length > 0
+    if ((connectionUpdated || modelUpdated) && hasConversationHistory) {
+      managed.pendingResponseRuntimeChange = true
+    }
+
+    if (connectionUpdated) {
+      // Switching providers/connections mid-session must resume as a fresh backend
+      // seeded from the persisted conversation, not by trying to reuse the previous
+      // provider's SDK session/fork metadata.
+      if (managed.agent) {
+        sessionLog.info(`[updateSessionModel] Recreating live agent for session ${sessionId} after connection change ${previousConnectionSlug ?? '(default)'} -> ${connectionSlug ?? '(default)'}`)
+        managed.agent.dispose()
+        managed.agent = null
+        managed.agentReady = undefined
+        managed.agentReadyResolve = undefined
+      }
+
+      managed.sdkSessionId = undefined
+      const seedAnchorMessageId = getSessionSeedAnchorMessageId(managed.messages)
+      if (seedAnchorMessageId && !managed.branchFromMessageId) {
+        managed.branchFromMessageId = seedAnchorMessageId
+      }
+      managed.branchContextStrategy = 'seeded-fresh-session'
+      managed.branchSeedApplied = false
+      managed.branchFromSdkSessionId = undefined
+      managed.branchFromSessionPath = undefined
+      managed.branchFromSdkCwd = undefined
+      managed.branchFromSdkTurnId = undefined
+    }
+
+    if (managed.messagesLoaded) {
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
+    } else {
       const updates: { model?: string; llmConnection?: string } = { model: model ?? undefined }
-      if (connection && !managed.connectionLocked) {
-        updates.llmConnection = connection
+      if (connectionUpdated && requestedConnection) {
+        updates.llmConnection = requestedConnection
       }
       await updateSessionMetadata(managed.workspace.rootPath, sessionId, updates)
-      // Update agent model if it already exists (takes effect on next query)
-      if (managed.agent) {
-        // Fallback chain: session model > workspace default > connection default
-        const wsConfig = loadWorkspaceConfig(managed.workspace.rootPath)
-        const sessionConn = resolveSessionConnection(managed.llmConnection, wsConfig?.defaults?.defaultLlmConnection)
-        const effectiveModel = model ?? wsConfig?.defaults?.model ?? sessionConn?.defaultModel!
-        sessionLog.info(`[updateSessionModel] Calling agent.setModel(${effectiveModel}) [agent exists=${!!managed.agent}, connectionLocked=${managed.connectionLocked}]`)
-        managed.agent.setModel(effectiveModel)
-      } else {
-        sessionLog.info(`[updateSessionModel] No agent yet, model will apply on next agent creation`)
-      }
-      // Notify renderer of the model change
-      this.sendEvent({ type: 'session_model_changed', sessionId, model }, managed.workspace.id)
-      sessionLog.info(`Session ${sessionId} model updated to: ${model ?? '(global config)'}`)
     }
-  }
 
+    // Update agent model immediately when the live backend stays on the same connection.
+    if (managed.agent) {
+      // Fallback chain: session model > workspace default > connection default
+      const wsConfig = loadWorkspaceConfig(managed.workspace.rootPath)
+      const sessionConn = resolveSessionConnection(connectionSlug, wsConfig?.defaults?.defaultLlmConnection)
+      const effectiveModel = model ?? wsConfig?.defaults?.model ?? sessionConn?.defaultModel
+      sessionLog.info(`[updateSessionModel] Calling agent.setModel(${effectiveModel}) [agent exists=${!!managed.agent}, connectionLocked=${managed.connectionLocked}]`)
+      if (effectiveModel) {
+        managed.agent.setModel(effectiveModel)
+      }
+    } else {
+      sessionLog.info(`[updateSessionModel] No live agent, updated model/connection will apply on next agent creation`)
+    }
+
+    // Notify renderer of any explicit connection change first, then model change.
+    if (connectionUpdated && requestedConnection) {
+      this.sendEvent({
+        type: 'connection_changed',
+        sessionId,
+        connectionSlug: requestedConnection,
+        supportsBranching: resolveSupportsBranching(managed),
+      }, managed.workspace.id)
+    }
+
+    this.sendEvent({ type: 'session_model_changed', sessionId, model }, managed.workspace.id)
+    sessionLog.info(`Session ${sessionId} model updated to: ${model ?? '(global config)'}`)
+  }
   /**
    * Update the content of a specific message in a session
    * Used by preview window to save edited content back to the original message
@@ -5873,6 +5979,8 @@ export class SessionManager implements ISessionManager {
         // Flush any pending deltas before sending complete (ensures renderer has all content)
         this.flushDelta(sessionId, workspaceId)
 
+        const responseMetadata = resolveResponseMessageMetadata(managed)
+        const responseRuntimeChanged = !event.isIntermediate && !!managed.pendingResponseRuntimeChange
         const assistantMessage: Message = {
           id: generateMessageId(),
           role: 'assistant',
@@ -5881,12 +5989,15 @@ export class SessionManager implements ISessionManager {
           isIntermediate: event.isIntermediate,
           turnId: event.turnId,
           parentToolUseId: event.parentToolUseId,
+          responseRuntimeChanged,
+          ...responseMetadata,
         }
         managed.messages.push(assistantMessage)
         managed.streamingText = ''
 
         // Update lastMessageRole and lastFinalMessageId for badge/unread display (only for final messages)
         if (!event.isIntermediate) {
+          managed.pendingResponseRuntimeChange = false
           managed.lastMessageRole = 'assistant'
           managed.lastFinalMessageId = assistantMessage.id
 
@@ -5913,7 +6024,20 @@ export class SessionManager implements ISessionManager {
           }
         }
 
-        this.sendEvent({ type: 'text_complete', sessionId, text: event.text, isIntermediate: event.isIntermediate, turnId: event.turnId, parentToolUseId: event.parentToolUseId, timestamp: assistantMessage.timestamp, messageId: assistantMessage.id }, workspaceId)
+        this.sendEvent({
+          type: 'text_complete',
+          sessionId,
+          text: event.text,
+          isIntermediate: event.isIntermediate,
+          turnId: event.turnId,
+          parentToolUseId: event.parentToolUseId,
+          timestamp: assistantMessage.timestamp,
+          messageId: assistantMessage.id,
+          responseModel: assistantMessage.responseModel,
+          responseConnectionName: assistantMessage.responseConnectionName,
+          responseConnectionSlug: assistantMessage.responseConnectionSlug,
+          responseRuntimeChanged: assistantMessage.responseRuntimeChanged,
+        }, workspaceId)
 
         // Persist session after complete message to prevent data loss on quit
         this.persistSession(managed)

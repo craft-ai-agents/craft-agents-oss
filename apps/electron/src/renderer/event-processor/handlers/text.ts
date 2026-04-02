@@ -115,6 +115,10 @@ export function handleTextComplete(
       // Overwrite text_delta's Date.now() with main process monotonic timestamp
       // This ensures reload order matches live order
       ...(event.timestamp ? { timestamp: event.timestamp } : {}),
+      ...(event.responseModel ? { responseModel: event.responseModel } : {}),
+      ...(event.responseConnectionName ? { responseConnectionName: event.responseConnectionName } : {}),
+      ...(event.responseConnectionSlug ? { responseConnectionSlug: event.responseConnectionSlug } : {}),
+      ...(event.responseRuntimeChanged !== undefined ? { responseRuntimeChanged: event.responseRuntimeChanged } : {}),
     }, shouldUpdateTimestamp)
     return { session: updatedSession, streaming: null }
   }
@@ -132,6 +136,10 @@ export function handleTextComplete(
     isIntermediate: event.isIntermediate,
     turnId: event.turnId,
     parentToolUseId: event.parentToolUseId,
+    ...(event.responseModel ? { responseModel: event.responseModel } : {}),
+    ...(event.responseConnectionName ? { responseConnectionName: event.responseConnectionName } : {}),
+    ...(event.responseConnectionSlug ? { responseConnectionSlug: event.responseConnectionSlug } : {}),
+    ...(event.responseRuntimeChanged !== undefined ? { responseRuntimeChanged: event.responseRuntimeChanged } : {}),
   }
 
   // Only update lastMessageAt for final (non-intermediate) messages

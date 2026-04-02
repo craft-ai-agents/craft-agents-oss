@@ -180,7 +180,9 @@ export function getProviderIcon(
       return providerIcons.copilot
     case 'pi':
     case 'pi_compat': {
-      // Resolve to actual upstream provider icon
+      // Resolve to actual upstream provider icon.
+      // Prefer explicit Pi auth provider, then fall back to baseUrl detection for
+      // custom endpoint / migrated connections where piAuthProvider may be absent.
       if (piAuthProvider) {
         const iconKey = piAuthProviderToIcon(piAuthProvider)
         if (iconKey) return providerIcons[iconKey]
@@ -188,6 +190,12 @@ export function getProviderIcon(
         const domain = PI_AUTH_PROVIDER_DOMAINS[piAuthProvider]
         if (domain) {
           return `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&size=128&url=https://${domain}`
+        }
+      }
+      if (baseUrl) {
+        const detectedProvider = detectProviderFromUrl(baseUrl)
+        if (detectedProvider) {
+          return providerIcons[detectedProvider]
         }
       }
       return null  // Unknown/custom Pi provider — caller shows brain icon
