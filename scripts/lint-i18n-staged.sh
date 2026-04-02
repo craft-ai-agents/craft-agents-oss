@@ -17,10 +17,17 @@
 #
 set -euo pipefail
 
-# Only check staged .tsx files in renderer (where i18n applies)
+# Only check staged .tsx files (where i18n applies)
 staged_tsx="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.tsx$' | grep -v 'playground\|registry\|\.test\.' || true)"
 
 if [ -z "$staged_tsx" ]; then
+  exit 0
+fi
+
+# Quick check: do any staged diffs contain potential UI text patterns?
+# If not, skip entirely — no point scanning files with only logic/style changes.
+has_text_changes="$(git diff --cached -U0 -- $staged_tsx | grep -E '^\+.*(tooltip="|placeholder="|description="|title="|toast\.(error|success|warning|info)\()' | head -1 || true)"
+if [ -z "$has_text_changes" ]; then
   exit 0
 fi
 
