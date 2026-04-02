@@ -17,7 +17,7 @@ import { MarkdownImageBlock } from './MarkdownImageBlock'
 import { MarkdownLatexBlock } from './MarkdownLatexBlock'
 import { MarkdownPdfBlock } from './MarkdownPdfBlock'
 import { preprocessLinks } from './linkify'
-import { classifyMarkdownLinkTarget } from './link-target'
+import { classifyMarkdownLinkTarget, decodeFilePathHref } from './link-target'
 import remarkCollapsibleSections from './remarkCollapsibleSections'
 import { CollapsibleSection } from './CollapsibleSection'
 import { useCollapsibleMarkdown } from './CollapsibleMarkdownContext'
@@ -174,7 +174,9 @@ function createComponents(
 
         const targetType = classifyMarkdownLinkTarget(target)
         if (targetType === 'file' && onFileClick) {
-          onFileClick(target)
+          // Decode percent-encoded characters (e.g. %20 → space, %5B → [)
+          // so the filesystem receives the actual path.
+          onFileClick(decodeFilePathHref(target))
         } else if (onUrlClick) {
           onUrlClick(target)
         }

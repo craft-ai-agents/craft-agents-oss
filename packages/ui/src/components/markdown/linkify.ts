@@ -20,8 +20,11 @@ const FILE_PATH_PRETEST_REGEX = new RegExp(FILE_PATH_REGEX_SOURCE, 'i')
 
 // File-path regex for markdown anchor targets (entire href/text value)
 // Used by Markdown.tsx click handler to route file links to onFileClick.
+// Allows Unicode letters/numbers, spaces, brackets, parentheses, and other
+// common filename characters so that paths with CJK, accented, or special
+// characters (e.g. "/Users/x/项目/[设计] 卡片.md") are recognised as files.
 const FILE_PATH_TARGET_REGEX = new RegExp(
-  `^(?!https?://|mailto:|ftp://|data:)(?:/|~/|\./|\.\./|[A-Za-z0-9_][\\w\\-./@]*)[\\w\\-./@]*\\.(?:${FILE_EXTENSIONS_PATTERN})$`,
+  `^(?!https?://|mailto:|ftp://|data:)(?:/|~/|\\.\\./|\\./|[A-Za-z0-9_][\\w\\-./@]*)[\\w\\-./@\\s\\[\\](){}（）【】\\u00C0-\\u024F\\u0400-\\u04FF\\u4E00-\\u9FFF\\u3400-\\u4DBF\\uF900-\\uFAFF\\u3000-\\u303F\\uFF00-\\uFFEF\\uAC00-\\uD7AF\\u1100-\\u11FF]*\\.(?:${FILE_EXTENSIONS_PATTERN})$`,
   'i'
 )
 
@@ -281,4 +284,22 @@ export function hasLinks(text: string): boolean {
  */
 export function isFilePathTarget(target: string): boolean {
   return FILE_PATH_TARGET_REGEX.test(target.trim())
+}
+
+/**
+ * Decode a markdown link href that may contain percent-encoded characters.
+ *
+ * Markdown renderers (react-markdown / micromark) percent-encode special characters
+ * in link URLs (e.g. spaces → %20, brackets → %5B/%5D, CJK → %E4%B8%AD).
+ * File paths must be decoded before being passed to the filesystem or shell.openPath().
+ *
+ * Falls back to the original string if decoding fails (e.g. malformed percent sequence).
+ */
+export function decodeFilePathHref(href: string): string {
+  try {
+    return decodeURIComponent(href)
+  } catch {
+    // Malformed percent-encoding — return as-is
+    return href
+  }
 }
