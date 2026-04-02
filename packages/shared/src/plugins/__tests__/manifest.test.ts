@@ -33,6 +33,58 @@ describe('plugin manifest schema', () => {
     expect(listManifestCapabilityTypes(manifest)).toEqual(['backend', 'sessionAction'])
   })
 
+  it('parses declarative UI capability metadata', () => {
+    const manifest = parsePluginManifest({
+      id: 'plugin-ui',
+      name: 'Plugin UI',
+      version: '1.0.0',
+      apiVersion: '1.0.0',
+      engines: { craftAgents: '^0.8.1' },
+      permissions: ['ui.render'],
+      contributions: {
+        sessionActions: ['open-plugin-settings'],
+        composerActions: ['insert-checklist'],
+        chatCardTypes: ['tool-error-card'],
+      },
+      capabilityMetadata: {
+        sessionActions: {
+          'open-plugin-settings': {
+            title: 'Plugin Settings',
+            hook: 'session.actions',
+            placement: 'menu',
+            invoke: { type: 'navigate', route: 'settings/plugins' },
+          },
+        },
+        composerActions: {
+          'insert-checklist': {
+            title: 'Insert Checklist',
+            hook: 'composer.actions',
+            placement: 'toolbar',
+            invoke: { type: 'insertText', text: 'Review plugin hooks.', mode: 'append' },
+          },
+        },
+        chatCardTypes: {
+          'tool-error-card': {
+            title: 'Tool Error Card',
+            hook: 'chat.cards',
+            tone: 'warning',
+            matcher: { role: 'tool', isError: true },
+          },
+        },
+      },
+    })
+
+    expect(manifest.capabilityMetadata?.sessionActions?.['open-plugin-settings']?.invoke).toEqual({
+      type: 'navigate',
+      route: 'settings/plugins',
+    })
+    expect(manifest.capabilityMetadata?.composerActions?.['insert-checklist']?.placement).toBe('toolbar')
+    expect(manifest.capabilityMetadata?.chatCardTypes?.['tool-error-card']?.matcher).toEqual({
+      role: 'tool',
+      isError: true,
+    })
+  })
+
   it('rejects unknown permissions', () => {
     expect(() => parsePluginManifest({
       id: 'bad-plugin',

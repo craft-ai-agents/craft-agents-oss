@@ -237,6 +237,8 @@ export const CHANNEL_MAP = {
   getPlugin: invoke(RPC_CHANNELS.plugins.GET, r => r.plugin),
   enablePlugin: invoke(RPC_CHANNELS.plugins.ENABLE, r => r.plugin),
   disablePlugin: invoke(RPC_CHANNELS.plugins.DISABLE, r => r.plugin),
+  invokePluginSessionAction: invoke(RPC_CHANNELS.plugins.INVOKE_SESSION_ACTION),
+  invokePluginComposerAction: invoke(RPC_CHANNELS.plugins.INVOKE_COMPOSER_ACTION),
   listPluginCapabilities: invoke(RPC_CHANNELS.plugins.LIST_CAPABILITIES, r => r.capabilities),
   listPluginRoutes: invoke(RPC_CHANNELS.plugins.LIST_ROUTES),
   listPluginSettingsPanes: invoke(RPC_CHANNELS.plugins.LIST_SETTINGS_PANES),

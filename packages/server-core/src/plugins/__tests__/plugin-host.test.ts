@@ -18,11 +18,21 @@ function createManifest(overrides: Record<string, unknown> = {}) {
     version: '1.0.0',
     apiVersion: '1.0.0',
     engines: { craftAgents: '^0.8.1' },
-    permissions: ['network', 'session.read'],
+    permissions: ['network', 'session.read', 'ui.render'],
     contributions: {
       backends: ['codex-backend'],
       sessionActions: ['handoff-to-codex'],
       routes: ['codex-page'],
+    },
+    capabilityMetadata: {
+      sessionActions: {
+        'handoff-to-codex': {
+          title: 'Handoff to Codex',
+          hook: 'session.actions',
+          placement: 'menu',
+          invoke: { type: 'toast', message: 'Codex handoff ready.' },
+        },
+      },
     },
     ...overrides,
   }
@@ -77,7 +87,60 @@ describe('PluginHost', () => {
     expect(plugin.source).toBe('built-in')
     expect(host.listCapabilities('backend').map((item) => item.id)).toEqual(['codex-backend'])
     expect(host.listSessionActions().map((item) => item.id)).toEqual(['handoff-to-codex'])
+    expect(host.listSessionActions()[0]?.title).toBe('Handoff to Codex')
     expect(host.listRoutes().map((item) => item.id)).toEqual(['codex-page'])
+  })
+
+  it('invokes declarative session actions without a runtime handler', async () => {
+    const host = createPluginHost()
+    await host.initialize()
+    host.registerBuiltInPlugin(createManifest() as any)
+
+    await expect(host.invokeSessionAction({
+      pluginId: 'codex-cli',
+      actionId: 'handoff-to-codex',
+      sessionId: 'session-1',
+    })).resolves.toEqual({
+      type: 'toast',
+      message: 'Codex handoff ready.',
+    })
+  })
+
+  it('prefers registered runtime handlers for composer actions', async () => {
+    const host = createPluginHost()
+    await host.initialize()
+    host.registerBuiltInPlugin(createManifest({
+      contributions: {
+        composerActions: ['insert-checklist'],
+      },
+      capabilityMetadata: {
+        composerActions: {
+          'insert-checklist': {
+            title: 'Insert Checklist',
+            placement: 'toolbar',
+            hook: 'composer.actions',
+            invoke: { type: 'insertText', text: 'fallback' },
+          },
+        },
+      },
+    }) as any)
+
+    host.registerComposerActionHandler('codex-cli', 'insert-checklist', async () => ({
+      type: 'insertText',
+      text: 'runtime override',
+      mode: 'append',
+    }))
+
+    await expect(host.invokeComposerAction({
+      pluginId: 'codex-cli',
+      actionId: 'insert-checklist',
+      sessionId: 'session-1',
+      inputValue: 'draft',
+    })).resolves.toEqual({
+      type: 'insertText',
+      text: 'runtime override',
+      mode: 'append',
+    })
   })
 
   it('rejects duplicate registration', async () => {

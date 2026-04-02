@@ -3,7 +3,10 @@ import type {
   PluginCapabilityRef,
   PluginCapabilityType,
   PluginDetails,
+  PluginInvokeResult,
   PluginSource,
+  InvokePluginComposerActionArgs,
+  InvokePluginSessionActionArgs,
 } from '@craft-agent/shared/plugins'
 import {
   isPluginApiVersionSupported,
@@ -22,6 +25,9 @@ import { type PluginManifestLoadFailure, loadPluginManifestsFromDirectory } from
 
 export const PLUGIN_API_VERSION = '1.0.0'
 
+type SessionActionHandler = (args: InvokePluginSessionActionArgs) => Promise<PluginInvokeResult>
+type ComposerActionHandler = (args: InvokePluginComposerActionArgs) => Promise<PluginInvokeResult>
+
 interface PluginHostOptions {
   appVersion: string
   pluginApiVersion?: string
@@ -36,6 +42,8 @@ export class PluginHost {
   private readonly pluginDirectory: string
   private readonly pluginStatePath: string
   private readonly builtInPluginIds = new Set<string>()
+  private readonly sessionActionHandlers = new Map<string, SessionActionHandler>()
+  private readonly composerActionHandlers = new Map<string, ComposerActionHandler>()
   private state: PluginStateStore = { plugins: {} }
   private loadFailures: PluginManifestLoadFailure[] = []
 
@@ -90,15 +98,49 @@ export class PluginHost {
   }
 
   listSessionActions(): PluginCapabilityRef[] {
-    return this.listCapabilities('sessionAction')
+    return this.listCapabilitiesRequiringPermission('sessionAction', 'ui.render')
   }
 
   listComposerActions(): PluginCapabilityRef[] {
-    return this.listCapabilities('composerAction')
+    return this.listCapabilitiesRequiringPermission('composerAction', 'ui.render')
   }
 
   listChatCardTypes(): PluginCapabilityRef[] {
-    return this.listCapabilities('chatCardType')
+    return this.listCapabilitiesRequiringPermission('chatCardType', 'ui.render')
+  }
+
+  registerSessionActionHandler(
+    pluginId: string,
+    actionId: string,
+    handler: SessionActionHandler,
+  ): void {
+    this.sessionActionHandlers.set(this.actionKey(pluginId, actionId), handler)
+  }
+
+  registerComposerActionHandler(
+    pluginId: string,
+    actionId: string,
+    handler: ComposerActionHandler,
+  ): void {
+    this.composerActionHandlers.set(this.actionKey(pluginId, actionId), handler)
+  }
+
+  async invokeSessionAction(args: InvokePluginSessionActionArgs): Promise<PluginInvokeResult> {
+    const capability = this.requireCapability(args.pluginId, 'sessionAction', args.actionId)
+    const handler = this.sessionActionHandlers.get(this.actionKey(args.pluginId, args.actionId))
+    if (handler) {
+      return handler(args)
+    }
+    return capability.invoke ?? { type: 'noop' }
+  }
+
+  async invokeComposerAction(args: InvokePluginComposerActionArgs): Promise<PluginInvokeResult> {
+    const capability = this.requireCapability(args.pluginId, 'composerAction', args.actionId)
+    const handler = this.composerActionHandlers.get(this.actionKey(args.pluginId, args.actionId))
+    if (handler) {
+      return handler(args)
+    }
+    return capability.invoke ?? { type: 'noop' }
   }
 
   async enablePlugin(pluginId: string): Promise<PluginDetails> {
@@ -178,5 +220,41 @@ export class PluginHost {
       },
     }
     await writePluginState(this.state, this.pluginStatePath)
+  }
+
+  private actionKey(pluginId: string, actionId: string): string {
+    return `${pluginId}:${actionId}`
+  }
+
+  private requireCapability(
+    pluginId: string,
+    type: PluginCapabilityType,
+    capabilityId: string,
+  ): PluginCapabilityRef {
+    const capability = this.registry.getCapability(pluginId, type, capabilityId)
+    if (!capability) {
+      throw new Error(`Unknown plugin capability: ${pluginId}:${capabilityId}`)
+    }
+    const plugin = this.registry.getPlugin(pluginId)
+    if (!plugin || !plugin.enabled || !plugin.compatible || plugin.status !== 'active') {
+      throw new Error(`Plugin is not active: ${pluginId}`)
+    }
+    if (
+      (type === 'sessionAction' || type === 'composerAction' || type === 'chatCardType')
+      && !plugin.permissions.includes('ui.render')
+    ) {
+      throw new Error(`Plugin is missing required permission for ${type}: ui.render`)
+    }
+    return capability
+  }
+
+  private listCapabilitiesRequiringPermission(
+    type: PluginCapabilityType,
+    permission: 'ui.render',
+  ): PluginCapabilityRef[] {
+    return this.listCapabilities(type).filter((capability) => {
+      const plugin = this.registry.getPlugin(capability.pluginId)
+      return plugin?.permissions.includes(permission)
+    })
   }
 }

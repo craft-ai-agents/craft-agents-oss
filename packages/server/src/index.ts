@@ -27,6 +27,7 @@ import { join } from 'node:path'
 import { readFileSync, existsSync } from 'node:fs'
 import { version as packageVersion } from '../package.json'
 import { createBuiltInBackendPluginManifests } from '@craft-agent/shared/agent/backend'
+import { createBuiltInUiPluginManifest } from '@craft-agent/shared/plugins'
 import { enableDebug } from '@craft-agent/shared/utils/debug'
 import { bootstrapServer, startHealthHttpServer, generateServerToken } from '@craft-agent/server-core/bootstrap'
 import { PLUGIN_API_VERSION, bootstrapPluginHost } from '@craft-agent/server-core/plugins'
@@ -154,10 +155,16 @@ const instance = await (async () => {
     const pluginHost = await bootstrapPluginHost({
       appVersion: serverVersion,
       pluginApiVersion: PLUGIN_API_VERSION,
-      builtInManifests: createBuiltInBackendPluginManifests({
-        appVersion: serverVersion,
-        pluginApiVersion: PLUGIN_API_VERSION,
-      }),
+      builtInManifests: [
+        ...createBuiltInBackendPluginManifests({
+          appVersion: serverVersion,
+          pluginApiVersion: PLUGIN_API_VERSION,
+        }),
+        createBuiltInUiPluginManifest({
+          appVersion: serverVersion,
+          pluginApiVersion: PLUGIN_API_VERSION,
+        }),
+      ],
       logger: console,
     })
 

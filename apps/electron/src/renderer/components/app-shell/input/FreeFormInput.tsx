@@ -11,6 +11,7 @@ import {
   ChevronDown,
   AlertCircle,
   X,
+  Puzzle,
 } from 'lucide-react'
 import { Icon_Home, Icon_Folder, Spinner } from '@craft-agent/ui'
 
@@ -72,6 +73,7 @@ import { ToolbarStatusSlot } from './ToolbarStatusSlot'
 import { buildPlanApprovalMessage } from '../plan-approval-message'
 import { shouldHandleScopedInputEvent } from './input-event-guards'
 import { clearPendingFocusForSession, consumePendingFocusForSession } from './focus-input-events'
+import { executePluginInvokeResult, usePluginComposerActions } from '@/components/plugins'
 import {
   getRecentWorkingDirs,
   addRecentWorkingDir,
@@ -292,6 +294,7 @@ export function FreeFormInput({
   // Read connection default model, connections, and workspace info from context.
   // Uses optional variant so playground (no provider) doesn't crash.
   const appShellCtx = useOptionalAppShellContext()
+  const pluginComposerActions = usePluginComposerActions().filter((capability) => capability.placement !== 'menu')
   const llmConnections = appShellCtx?.llmConnections ?? []
   const workspaceDefaultConnection = appShellCtx?.workspaceDefaultLlmConnection
 
@@ -1304,6 +1307,30 @@ export function FreeFormInput({
     }
   }, [syncToParent, sources, optimisticSourceSlugs, onSourcesChange])
 
+  const handlePluginComposerAction = React.useCallback(async (pluginId: string, actionId: string) => {
+    try {
+      const result = await window.electronAPI.invokePluginComposerAction({
+        pluginId,
+        actionId,
+        sessionId,
+        inputValue: input,
+      })
+      executePluginInvokeResult(result, {
+        currentInput: input,
+        onInputChange: handleInputChange,
+      })
+      if (result.type === 'insertText') {
+        requestAnimationFrame(() => {
+          richInputRef.current?.focus()
+        })
+      }
+    } catch (error) {
+      toast.error('Plugin action failed', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  }, [handleInputChange, input, sessionId])
+
   // Handle input with cursor position (for menu detection)
   const handleRichInput = React.useCallback((value: string, cursorPosition: number) => {
     // Update inline slash command state
@@ -1750,6 +1777,37 @@ export function FreeFormInput({
 
           {/* Right side: Model + Send - never shrink so they're always visible */}
           <div className="flex items-center shrink-0">
+          {!compactMode && pluginComposerActions.length > 0 && (
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="input-toolbar-btn inline-flex items-center h-7 px-1.5 gap-1 rounded-[6px] hover:bg-foreground/5 transition-colors select-none"
+                    aria-label="Plugin actions"
+                  >
+                    <Puzzle className="h-3.5 w-3.5" />
+                    <ChevronDown className="h-3 w-3 opacity-50" />
+                  </button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="top">Plugin actions</TooltipContent>
+            </Tooltip>
+            <StyledDropdownMenuContent side="top" align="end" sideOffset={8}>
+              {pluginComposerActions.map((action) => (
+                <StyledDropdownMenuItem
+                  key={`${action.pluginId}:${action.id}`}
+                  onClick={() => void handlePluginComposerAction(action.pluginId, action.id)}
+                >
+                  <Puzzle className="h-3.5 w-3.5" />
+                  <span className="flex-1">{action.title ?? action.id}</span>
+                </StyledDropdownMenuItem>
+              ))}
+            </StyledDropdownMenuContent>
+          </DropdownMenu>
+          )}
+
           {/* 5. Model/Connection Selector - Hidden in compact mode (EditPopover embedding) */}
           {!compactMode && (
           <DropdownMenu open={modelDropdownOpen} onOpenChange={setModelDropdownOpen}>

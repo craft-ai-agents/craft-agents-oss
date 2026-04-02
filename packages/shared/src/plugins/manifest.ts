@@ -3,6 +3,7 @@ import type {
   CraftPluginManifest,
   PluginCapabilityType,
   PluginContributionRefs,
+  PluginHookNamespace,
   PluginPermission,
 } from './types'
 
@@ -55,8 +56,58 @@ export const CONTRIBUTION_KEYS = [
   'mcpAppProviders',
 ] as const satisfies readonly (keyof PluginContributionRefs)[]
 
+export const PLUGIN_HOOK_NAMESPACES = [
+  'backend.registry',
+  'routing.policy',
+  'source.catalog',
+  'settings.sections',
+  'navigation.routes',
+  'session.actions',
+  'composer.actions',
+  'chat.cards',
+  'event.pipeline',
+  'task.providers',
+  'automation.providers',
+  'voice.input',
+  'speech.output',
+  'mcp.app.surface',
+] as const satisfies readonly PluginHookNamespace[]
+
 const semverLike = /^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/
 const contributionRefSchema = z.array(z.string().min(1)).optional()
+const capabilityMetadataSchema = z.object({
+  title: z.string().min(1).optional(),
+  description: z.string().min(1).optional(),
+  hook: z.enum(PLUGIN_HOOK_NAMESPACES).optional(),
+  placement: z.enum(['menu', 'toolbar']).optional(),
+  invoke: z.discriminatedUnion('type', [
+    z.object({ type: z.literal('noop') }),
+    z.object({
+      type: z.literal('navigate'),
+      route: z.string().min(1),
+      newPanel: z.boolean().optional(),
+    }),
+    z.object({
+      type: z.literal('toast'),
+      level: z.enum(['info', 'success', 'warning', 'error']).optional(),
+      message: z.string().min(1),
+      description: z.string().min(1).optional(),
+    }),
+    z.object({
+      type: z.literal('insertText'),
+      text: z.string(),
+      mode: z.enum(['replace', 'append', 'prepend']).optional(),
+    }),
+  ]).optional(),
+  matcher: z.object({
+    role: z.enum(['assistant', 'tool', 'plan']).optional(),
+    toolName: z.string().min(1).optional(),
+    toolStatus: z.enum(['pending', 'executing', 'completed', 'error', 'backgrounded']).optional(),
+    isError: z.boolean().optional(),
+  }).optional(),
+  tone: z.enum(['neutral', 'info', 'success', 'warning', 'error']).optional(),
+}).strict()
+const contributionMetadataMapSchema = z.record(z.string().min(1), capabilityMetadataSchema).optional()
 
 export const pluginManifestSchema = z.object({
   id: z.string().min(1),
@@ -95,6 +146,22 @@ export const pluginManifestSchema = z.object({
     speechOutputProviders: contributionRefSchema,
     mcpAppProviders: contributionRefSchema,
   }).default({}),
+  capabilityMetadata: z.object({
+    backends: contributionMetadataMapSchema,
+    routingPolicies: contributionMetadataMapSchema,
+    sourceConnectors: contributionMetadataMapSchema,
+    settingsPanes: contributionMetadataMapSchema,
+    routes: contributionMetadataMapSchema,
+    sessionActions: contributionMetadataMapSchema,
+    composerActions: contributionMetadataMapSchema,
+    chatCardTypes: contributionMetadataMapSchema,
+    eventEnrichers: contributionMetadataMapSchema,
+    taskProviders: contributionMetadataMapSchema,
+    automationProviders: contributionMetadataMapSchema,
+    voiceInputProviders: contributionMetadataMapSchema,
+    speechOutputProviders: contributionMetadataMapSchema,
+    mcpAppProviders: contributionMetadataMapSchema,
+  }).optional(),
 }) satisfies z.ZodType<CraftPluginManifest>
 
 export function parsePluginManifest(input: unknown): CraftPluginManifest {

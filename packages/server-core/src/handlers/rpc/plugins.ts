@@ -8,6 +8,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.plugins.GET,
   RPC_CHANNELS.plugins.ENABLE,
   RPC_CHANNELS.plugins.DISABLE,
+  RPC_CHANNELS.plugins.INVOKE_SESSION_ACTION,
+  RPC_CHANNELS.plugins.INVOKE_COMPOSER_ACTION,
   RPC_CHANNELS.plugins.LIST_CAPABILITIES,
   RPC_CHANNELS.plugins.LIST_ROUTES,
   RPC_CHANNELS.plugins.LIST_SETTINGS_PANES,
@@ -43,6 +45,18 @@ export function registerPluginsHandlers(server: RpcServer, deps: HandlerDeps): v
   server.handle(RPC_CHANNELS.plugins.DISABLE, async (_ctx, pluginId: string) => ({
     plugin: await requirePluginHost(deps).disablePlugin(pluginId),
   }))
+
+  server.handle(
+    RPC_CHANNELS.plugins.INVOKE_SESSION_ACTION,
+    async (_ctx, args: import('@craft-agent/shared/plugins').InvokePluginSessionActionArgs) =>
+      requirePluginHost(deps).invokeSessionAction(args),
+  )
+
+  server.handle(
+    RPC_CHANNELS.plugins.INVOKE_COMPOSER_ACTION,
+    async (_ctx, args: import('@craft-agent/shared/plugins').InvokePluginComposerActionArgs) =>
+      requirePluginHost(deps).invokeComposerAction(args),
+  )
 
   server.handle(RPC_CHANNELS.plugins.LIST_CAPABILITIES, async () => ({
     capabilities: requirePluginHost(deps).listCapabilities(),

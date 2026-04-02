@@ -237,6 +237,8 @@ export const RPC_CHANNELS = {
     GET: 'plugins:get',
     ENABLE: 'plugins:enable',
     DISABLE: 'plugins:disable',
+    INVOKE_SESSION_ACTION: 'plugins:invokeSessionAction',
+    INVOKE_COMPOSER_ACTION: 'plugins:invokeComposerAction',
     LIST_CAPABILITIES: 'plugins:listCapabilities',
     LIST_ROUTES: 'plugins:listRoutes',
     LIST_SETTINGS_PANES: 'plugins:listSettingsPanes',

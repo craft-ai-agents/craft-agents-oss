@@ -57,11 +57,11 @@ function SurfaceCard({
           {capabilities.map((capability) => (
             <div key={`${capability.pluginId}:${capability.id}`} className="rounded-lg border border-border/60 px-3 py-2">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-medium text-foreground">{capability.id}</span>
+                <span className="text-sm font-medium text-foreground">{capability.title ?? capability.id}</span>
                 <Badge variant="secondary">{pluginNames.get(capability.pluginId) ?? capability.pluginId}</Badge>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                {capability.type} hook from <code>{capability.pluginId}</code>
+                {capability.description ?? `${capability.type} hook from ${capability.pluginId}`}
               </p>
             </div>
           ))}

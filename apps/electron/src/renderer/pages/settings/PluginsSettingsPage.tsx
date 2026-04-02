@@ -18,6 +18,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from '@/components/settings'
+import { invalidatePluginSurfaceCache } from '@/components/plugins'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -90,6 +91,7 @@ export default function PluginsSettingsPage() {
         await window.electronAPI.enablePlugin(plugin.id)
         toast.success(`${plugin.name} enabled`)
       }
+      invalidatePluginSurfaceCache()
       await loadData(true)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)

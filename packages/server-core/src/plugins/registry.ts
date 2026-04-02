@@ -38,6 +38,13 @@ export function manifestToCapabilities(manifest: CraftPluginManifest): PluginCap
       pluginId: manifest.id,
       id,
       type,
+      title: manifest.capabilityMetadata?.[key]?.[id]?.title,
+      description: manifest.capabilityMetadata?.[key]?.[id]?.description,
+      hook: manifest.capabilityMetadata?.[key]?.[id]?.hook,
+      placement: manifest.capabilityMetadata?.[key]?.[id]?.placement,
+      invoke: manifest.capabilityMetadata?.[key]?.[id]?.invoke,
+      matcher: manifest.capabilityMetadata?.[key]?.[id]?.matcher,
+      tone: manifest.capabilityMetadata?.[key]?.[id]?.tone,
     })),
   )
 }
@@ -67,6 +74,7 @@ export function manifestToPluginDetails(
 export class CapabilityRegistry {
   private readonly plugins = new Map<string, PluginDetails>()
   private readonly capabilities = new Map<PluginCapabilityType, PluginCapabilityRef[]>()
+  private readonly capabilityIndex = new Map<string, PluginCapabilityRef>()
 
   private isPluginActive(pluginId: string): boolean {
     const plugin = this.plugins.get(pluginId)
@@ -85,6 +93,7 @@ export class CapabilityRegistry {
       const list = this.capabilities.get(capability.type) ?? []
       list.push(capability)
       this.capabilities.set(capability.type, list)
+      this.capabilityIndex.set(this.capabilityKey(capability.pluginId, capability.type, capability.id), capability)
     }
 
     return details
@@ -119,5 +128,17 @@ export class CapabilityRegistry {
     return activeOnly
       ? capabilities.filter((capability) => this.isPluginActive(capability.pluginId))
       : capabilities
+  }
+
+  getCapability(
+    pluginId: string,
+    type: PluginCapabilityType,
+    capabilityId: string,
+  ): PluginCapabilityRef | undefined {
+    return this.capabilityIndex.get(this.capabilityKey(pluginId, type, capabilityId))
+  }
+
+  private capabilityKey(pluginId: string, type: PluginCapabilityType, capabilityId: string): string {
+    return `${pluginId}:${type}:${capabilityId}`
   }
 }

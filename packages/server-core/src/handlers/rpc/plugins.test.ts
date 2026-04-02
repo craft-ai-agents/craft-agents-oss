@@ -16,10 +16,20 @@ function createManifest(overrides: Record<string, unknown> = {}) {
     apiVersion: '1.0.0',
     description: 'Built-in Anthropic backend',
     engines: { craftAgents: '*' },
-    permissions: ['session.read', 'session.write'],
+    permissions: ['session.read', 'session.write', 'ui.render'],
     contributions: {
       backends: ['anthropic'],
       sessionActions: ['handoff-to-anthropic'],
+    },
+    capabilityMetadata: {
+      sessionActions: {
+        'handoff-to-anthropic': {
+          title: 'Handoff to Anthropic',
+          hook: 'session.actions',
+          placement: 'menu',
+          invoke: { type: 'toast', message: 'Anthropic handoff ready.' },
+        },
+      },
     },
     ...overrides,
   }
@@ -109,12 +119,14 @@ describe('registerPluginsHandlers', () => {
     const get = handlers.get(RPC_CHANNELS.plugins.GET)
     const disable = handlers.get(RPC_CHANNELS.plugins.DISABLE)
     const enable = handlers.get(RPC_CHANNELS.plugins.ENABLE)
+    const invokeSessionAction = handlers.get(RPC_CHANNELS.plugins.INVOKE_SESSION_ACTION)
     const listCapabilities = handlers.get(RPC_CHANNELS.plugins.LIST_CAPABILITIES)
 
     expect(list).toBeDefined()
     expect(get).toBeDefined()
     expect(disable).toBeDefined()
     expect(enable).toBeDefined()
+    expect(invokeSessionAction).toBeDefined()
     expect(listCapabilities).toBeDefined()
 
     await expect(list?.(ctx)).resolves.toEqual({
@@ -129,18 +141,37 @@ describe('registerPluginsHandlers', () => {
     await expect(listCapabilities?.(ctx)).resolves.toEqual({
       capabilities: [
         { pluginId: 'craft.anthropic', id: 'anthropic', type: 'backend' },
-        { pluginId: 'craft.anthropic', id: 'handoff-to-anthropic', type: 'sessionAction' },
+        expect.objectContaining({
+          pluginId: 'craft.anthropic',
+          id: 'handoff-to-anthropic',
+          type: 'sessionAction',
+          title: 'Handoff to Anthropic',
+        }),
       ],
+    })
+
+    await expect(invokeSessionAction?.(ctx, {
+      pluginId: 'craft.anthropic',
+      actionId: 'handoff-to-anthropic',
+      sessionId: 'session-1',
+    })).resolves.toEqual({
+      type: 'toast',
+      message: 'Anthropic handoff ready.',
     })
 
     await expect(disable?.(ctx, 'external.tooling')).resolves.toEqual({
       plugin: expect.objectContaining({ id: 'external.tooling', enabled: false, status: 'disabled' }),
     })
     await expect(listCapabilities?.(ctx)).resolves.toEqual({
-      capabilities: [
-        { pluginId: 'craft.anthropic', id: 'anthropic', type: 'backend' },
-        { pluginId: 'craft.anthropic', id: 'handoff-to-anthropic', type: 'sessionAction' },
-      ],
+      capabilities: expect.arrayContaining([
+        expect.objectContaining({ pluginId: 'craft.anthropic', id: 'anthropic', type: 'backend' }),
+        expect.objectContaining({
+          pluginId: 'craft.anthropic',
+          id: 'handoff-to-anthropic',
+          type: 'sessionAction',
+          title: 'Handoff to Anthropic',
+        }),
+      ]),
     })
 
     await expect(enable?.(ctx, 'external.tooling')).resolves.toEqual({
@@ -148,9 +179,9 @@ describe('registerPluginsHandlers', () => {
     })
     await expect(listCapabilities?.(ctx)).resolves.toEqual({
       capabilities: expect.arrayContaining([
-        { pluginId: 'craft.anthropic', id: 'anthropic', type: 'backend' },
-        { pluginId: 'craft.anthropic', id: 'handoff-to-anthropic', type: 'sessionAction' },
-        { pluginId: 'external.tooling', id: 'tooling-compose', type: 'composerAction' },
+        expect.objectContaining({ pluginId: 'craft.anthropic', id: 'anthropic', type: 'backend' }),
+        expect.objectContaining({ pluginId: 'craft.anthropic', id: 'handoff-to-anthropic', type: 'sessionAction' }),
+        expect.objectContaining({ pluginId: 'external.tooling', id: 'tooling-compose', type: 'composerAction' }),
       ]),
     })
   })

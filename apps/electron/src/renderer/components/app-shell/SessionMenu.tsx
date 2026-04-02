@@ -36,6 +36,7 @@ import {
   RefreshCw,
   Tag,
   Send,
+  Puzzle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { navigate, routes } from '@/lib/navigate'
@@ -48,6 +49,7 @@ import { LabelMenuItems, StatusMenuItems, ShareMenuItems } from './SessionMenuPa
 import { getFileManagerName } from '@/lib/platform'
 import type { SessionMeta } from '@/atoms/sessions'
 import { getSessionStatus, hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
+import { executePluginInvokeResult, usePluginSessionActions } from '@/components/plugins'
 
 export interface SessionMenuProps {
   /** Session data — display state is derived from this */
@@ -101,6 +103,7 @@ export function SessionMenu({
   const sharedUrl = item.sharedUrl
   const currentSessionStatus = getSessionStatus(item)
   const sessionLabels = item.labels ?? []
+  const pluginSessionActions = usePluginSessionActions().filter((capability) => capability.placement !== 'toolbar')
   const _hasMessages = hasMessagesMeta(item)
   const _hasUnread = hasUnreadMeta(item)
   // Share handlers
@@ -164,6 +167,21 @@ export function SessionMenu({
   const handleOpenInNewPanel = () => {
     navigate(routes.view.allSessions(sessionId), { newPanel: true })
   }
+
+  const handlePluginAction = React.useCallback(async (pluginId: string, actionId: string) => {
+    try {
+      const result = await window.electronAPI.invokePluginSessionAction({
+        pluginId,
+        actionId,
+        sessionId,
+      })
+      executePluginInvokeResult(result)
+    } catch (error) {
+      toast.error('Plugin action failed', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  }, [sessionId])
 
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator, Sub, SubTrigger, SubContent } = useMenuComponents()
@@ -317,6 +335,29 @@ export function SessionMenu({
         <Copy className="h-3.5 w-3.5" />
         <span className="flex-1">Copy Path</span>
       </MenuItem>
+
+      {pluginSessionActions.length > 0 && (
+        <>
+          <Separator />
+          <Sub>
+            <SubTrigger className="pr-2">
+              <Puzzle className="h-3.5 w-3.5" />
+              <span className="flex-1">Plugin Actions</span>
+            </SubTrigger>
+            <SubContent>
+              {pluginSessionActions.map((action) => (
+                <MenuItem
+                  key={`${action.pluginId}:${action.id}`}
+                  onClick={() => void handlePluginAction(action.pluginId, action.id)}
+                >
+                  <Puzzle className="h-3.5 w-3.5" />
+                  <span className="flex-1">{action.title ?? action.id}</span>
+                </MenuItem>
+              ))}
+            </SubContent>
+          </Sub>
+        </>
+      )}
 
       <Separator />
 

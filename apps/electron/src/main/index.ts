@@ -67,6 +67,7 @@ import { join, delimiter } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { createBuiltInBackendPluginManifests, initializeBackendHostRuntime } from '@craft-agent/shared/agent/backend'
+import { createBuiltInUiPluginManifest } from '@craft-agent/shared/plugins'
 import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
 import { PLUGIN_API_VERSION, bootstrapPluginHost } from '@craft-agent/server-core/plugins'
 import { registerAllRpcHandlers } from './handlers/index'
@@ -593,10 +594,16 @@ app.whenReady().then(async () => {
       const pluginHost = await bootstrapPluginHost({
         appVersion: app.getVersion(),
         pluginApiVersion: PLUGIN_API_VERSION,
-        builtInManifests: createBuiltInBackendPluginManifests({
-          appVersion: app.getVersion(),
-          pluginApiVersion: PLUGIN_API_VERSION,
-        }),
+        builtInManifests: [
+          ...createBuiltInBackendPluginManifests({
+            appVersion: app.getVersion(),
+            pluginApiVersion: PLUGIN_API_VERSION,
+          }),
+          createBuiltInUiPluginManifest({
+            appVersion: app.getVersion(),
+            pluginApiVersion: PLUGIN_API_VERSION,
+          }),
+        ],
         logger: mainLog,
       })
 

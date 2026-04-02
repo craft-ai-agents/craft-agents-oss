@@ -478,6 +478,8 @@ export interface ElectronAPI {
   getPlugin(pluginId: string): Promise<PluginDetailsResponse['plugin']>
   enablePlugin(pluginId: string): Promise<PluginToggleResult['plugin']>
   disablePlugin(pluginId: string): Promise<PluginToggleResult['plugin']>
+  invokePluginSessionAction(args: import('@craft-agent/shared/plugins').InvokePluginSessionActionArgs): Promise<import('@craft-agent/shared/plugins').PluginInvokeResult>
+  invokePluginComposerAction(args: import('@craft-agent/shared/plugins').InvokePluginComposerActionArgs): Promise<import('@craft-agent/shared/plugins').PluginInvokeResult>
   listPluginCapabilities(): Promise<PluginCapabilitiesResponse['capabilities']>
   listPluginRoutes(): Promise<import('@craft-agent/shared/plugins').PluginCapabilityRef[]>
   listPluginSettingsPanes(): Promise<import('@craft-agent/shared/plugins').PluginCapabilityRef[]>

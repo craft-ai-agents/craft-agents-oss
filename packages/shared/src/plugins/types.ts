@@ -46,6 +46,52 @@ export type PluginHookNamespace =
 
 export type PluginSource = 'built-in' | 'external'
 
+export type PluginActionPlacement = 'menu' | 'toolbar'
+
+export type PluginChatCardRole =
+  | 'assistant'
+  | 'tool'
+  | 'plan'
+
+export type PluginChatCardToolStatus =
+  | 'pending'
+  | 'executing'
+  | 'completed'
+  | 'error'
+  | 'backgrounded'
+
+export type PluginChatCardTone =
+  | 'neutral'
+  | 'info'
+  | 'success'
+  | 'warning'
+  | 'error'
+
+export type PluginInsertTextMode = 'replace' | 'append' | 'prepend'
+
+export type PluginInvokeResult =
+  | { type: 'noop' }
+  | { type: 'navigate'; route: string; newPanel?: boolean }
+  | { type: 'toast'; level?: 'info' | 'success' | 'warning' | 'error'; message: string; description?: string }
+  | { type: 'insertText'; text: string; mode?: PluginInsertTextMode }
+
+export interface PluginChatCardMatcher {
+  role?: PluginChatCardRole
+  toolName?: string
+  toolStatus?: PluginChatCardToolStatus
+  isError?: boolean
+}
+
+export interface PluginCapabilityMetadata {
+  title?: string
+  description?: string
+  hook?: PluginHookNamespace
+  placement?: PluginActionPlacement
+  invoke?: PluginInvokeResult
+  matcher?: PluginChatCardMatcher
+  tone?: PluginChatCardTone
+}
+
 export interface PluginEntrypoints {
   main?: string
   helper?: string
@@ -78,6 +124,23 @@ export interface PluginContributionRefs {
   mcpAppProviders?: string[]
 }
 
+export interface PluginContributionMetadata {
+  backends?: Record<string, PluginCapabilityMetadata>
+  routingPolicies?: Record<string, PluginCapabilityMetadata>
+  sourceConnectors?: Record<string, PluginCapabilityMetadata>
+  settingsPanes?: Record<string, PluginCapabilityMetadata>
+  routes?: Record<string, PluginCapabilityMetadata>
+  sessionActions?: Record<string, PluginCapabilityMetadata>
+  composerActions?: Record<string, PluginCapabilityMetadata>
+  chatCardTypes?: Record<string, PluginCapabilityMetadata>
+  eventEnrichers?: Record<string, PluginCapabilityMetadata>
+  taskProviders?: Record<string, PluginCapabilityMetadata>
+  automationProviders?: Record<string, PluginCapabilityMetadata>
+  voiceInputProviders?: Record<string, PluginCapabilityMetadata>
+  speechOutputProviders?: Record<string, PluginCapabilityMetadata>
+  mcpAppProviders?: Record<string, PluginCapabilityMetadata>
+}
+
 export interface CraftPluginManifest {
   id: string
   name: string
@@ -91,6 +154,7 @@ export interface CraftPluginManifest {
   permissions: PluginPermission[]
   entrypoints?: PluginEntrypoints
   contributions: PluginContributionRefs
+  capabilityMetadata?: PluginContributionMetadata
 }
 
 export interface PluginCapabilityRef {
@@ -100,6 +164,10 @@ export interface PluginCapabilityRef {
   title?: string
   description?: string
   hook?: PluginHookNamespace
+  placement?: PluginActionPlacement
+  invoke?: PluginInvokeResult
+  matcher?: PluginChatCardMatcher
+  tone?: PluginChatCardTone
 }
 
 export interface PluginSummary {
@@ -218,4 +286,17 @@ export interface PluginActivationContext {
   registerMcpAppProvider(def: McpAppContribution): void
   logger: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>
   host: PluginHostServices
+}
+
+export interface InvokePluginSessionActionArgs {
+  pluginId: string
+  actionId: string
+  sessionId: string
+}
+
+export interface InvokePluginComposerActionArgs {
+  pluginId: string
+  actionId: string
+  sessionId?: string
+  inputValue?: string
 }
