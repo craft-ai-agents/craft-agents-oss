@@ -13,6 +13,8 @@ import {
   resolveBackendContext,
   createBackendFromResolvedContext,
   cleanupSourceRuntimeArtifacts,
+  getBuiltInBackendId,
+  inferBackendIdFromConnectionSlug,
   providerTypeToAgentProvider,
   type AgentBackend,
   type BackendHostRuntimeContext,
@@ -810,6 +812,8 @@ interface ManagedSession {
   sharedId?: string
   // Model to use for this session (overrides global config if set)
   model?: string
+  // Backend identifier resolved for this session (plugin contribution id)
+  backendId?: string
   // LLM connection slug for this session (locked after first message)
   llmConnection?: string
   // Whether the connection is locked (cannot be changed after first agent creation)
@@ -926,6 +930,10 @@ export function createManagedSession(
     } else {
       delete sourceFields.thinkingLevel
     }
+  }
+
+  if (!sourceFields.backendId && typeof sourceFields.llmConnection === 'string') {
+    sourceFields.backendId = inferBackendIdFromConnectionSlug(sourceFields.llmConnection)
   }
 
   const managed = {
@@ -2430,6 +2438,7 @@ export class SessionManager implements ISessionManager {
       permissionMode: defaultPermissionMode,
       workingDirectory: resolvedWorkingDir,
       model: resolvedModel,
+      backendId: getBuiltInBackendId(resolvedContext.provider),
       llmConnection: options?.llmConnection,
       thinkingLevel: defaultThinkingLevel,
       systemPromptPreset: options?.systemPromptPreset,
@@ -2529,14 +2538,15 @@ export class SessionManager implements ISessionManager {
         managedModel: managed.model,
       })
       const connection = backendContext.connection
+      let shouldPersistSessionMetadata = false
 
       // Lock the connection after first resolution
       // This ensures the session always uses the same provider
       if (connection && !managed.connectionLocked) {
         managed.llmConnection = connection.slug
         managed.connectionLocked = true
+        shouldPersistSessionMetadata = true
         sessionLog.info(`Locked session ${managed.id} to connection "${connection.slug}"`)
-        this.persistSession(managed)
 
         // Keep renderer session capabilities in sync when auto-locking the connection.
         this.sendEvent({
@@ -2548,6 +2558,15 @@ export class SessionManager implements ISessionManager {
       }
 
       const provider = backendContext.provider
+      const backendId = getBuiltInBackendId(provider)
+      if (managed.backendId !== backendId) {
+        managed.backendId = backendId
+        shouldPersistSessionMetadata = true
+      }
+      if (shouldPersistSessionMetadata) {
+        this.persistSession(managed)
+      }
+
       if (connection) {
         sessionLog.info(`Using LLM connection "${connection.slug}" (${connection.providerType}) for session ${managed.id}`)
       } else {

@@ -26,4 +26,13 @@ describe('createManagedSession', () => {
 
     expect(managed.thinkingLevel).toBeUndefined()
   })
+
+  it('preserves persisted backend ids across restore', () => {
+    const managed = createManagedSession({
+      id: 'session_backend',
+      backendId: 'pi',
+    } as any, workspace as any)
+
+    expect(managed.backendId).toBe('pi')
+  })
 })

@@ -77,6 +77,7 @@ export interface Session {
   sharedUrl?: string
   sharedId?: string
   model?: string
+  backendId?: string
   llmConnection?: string
   thinkingLevel?: ThinkingLevel
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'

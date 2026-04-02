@@ -67,8 +67,11 @@ export {
   createBackendFromResolvedContext,
   initializeBackendHostRuntime,
   resolveBackendHostTooling,
+  createBuiltInBackendPluginManifests,
   fetchBackendModels,
+  getBuiltInBackendId,
   validateStoredBackendConnection,
+  inferBackendIdFromConnectionSlug,
   providerTypeToAgentProvider,
   // Capabilities and utilities
   BACKEND_CAPABILITIES,

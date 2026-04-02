@@ -232,6 +232,18 @@ export const CHANNEL_MAP = {
   openSkillInFinder: invoke(RPC_CHANNELS.skills.OPEN_FINDER),
   onSkillsChanged: listener(RPC_CHANNELS.skills.CHANGED),
 
+  // Plugins
+  listPlugins: invoke(RPC_CHANNELS.plugins.LIST, r => r.plugins),
+  getPlugin: invoke(RPC_CHANNELS.plugins.GET, r => r.plugin),
+  enablePlugin: invoke(RPC_CHANNELS.plugins.ENABLE, r => r.plugin),
+  disablePlugin: invoke(RPC_CHANNELS.plugins.DISABLE, r => r.plugin),
+  listPluginCapabilities: invoke(RPC_CHANNELS.plugins.LIST_CAPABILITIES, r => r.capabilities),
+  listPluginRoutes: invoke(RPC_CHANNELS.plugins.LIST_ROUTES),
+  listPluginSettingsPanes: invoke(RPC_CHANNELS.plugins.LIST_SETTINGS_PANES),
+  listPluginSessionActions: invoke(RPC_CHANNELS.plugins.LIST_SESSION_ACTIONS),
+  listPluginComposerActions: invoke(RPC_CHANNELS.plugins.LIST_COMPOSER_ACTIONS),
+  listPluginChatCardTypes: invoke(RPC_CHANNELS.plugins.LIST_CHAT_CARD_TYPES),
+
   // Statuses
   listStatuses: invoke(RPC_CHANNELS.statuses.LIST),
   reorderStatuses: invoke(RPC_CHANNELS.statuses.REORDER),

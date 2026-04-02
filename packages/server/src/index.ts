@@ -26,8 +26,10 @@
 import { join } from 'node:path'
 import { readFileSync, existsSync } from 'node:fs'
 import { version as packageVersion } from '../package.json'
+import { createBuiltInBackendPluginManifests } from '@craft-agent/shared/agent/backend'
 import { enableDebug } from '@craft-agent/shared/utils/debug'
 import { bootstrapServer, startHealthHttpServer, generateServerToken } from '@craft-agent/server-core/bootstrap'
+import { PluginHost, PLUGIN_API_VERSION } from '@craft-agent/server-core/plugins'
 import { validateSession, createWebuiHandler, nodeHttpAdapter } from '@craft-agent/server-core/webui'
 import type { WebuiHandler } from '@craft-agent/server-core/webui'
 
@@ -145,11 +147,22 @@ if (webuiEnabled && serverToken) {
   webuiNodeHandler = nodeHttpAdapter(webuiHandler.fetch)
 }
 
+const serverVersion = process.env.CRAFT_VERSION ?? packageVersion
+
 const instance = await (async () => {
   try {
+    const pluginHost = new PluginHost({ appVersion: serverVersion })
+    await pluginHost.initialize()
+    for (const manifest of createBuiltInBackendPluginManifests({
+      appVersion: serverVersion,
+      pluginApiVersion: PLUGIN_API_VERSION,
+    })) {
+      pluginHost.registerBuiltInPlugin(manifest)
+    }
+
     return await bootstrapServer<SessionManager, HandlerDeps>({
       bundledAssetsRoot,
-      serverVersion: process.env.CRAFT_VERSION ?? packageVersion,
+      serverVersion,
       tls,
       // When web UI is enabled, accept JWT session cookies on WebSocket upgrade
       validateSessionCookie: webuiEnabled && serverToken
@@ -192,6 +205,7 @@ const instance = await (async () => {
         sessionManager,
         platform,
         oauthFlowStore,
+        pluginHost,
       }),
       registerAllRpcHandlers: registerCoreRpcHandlers,
       setSessionEventSink: (sessionManager, sink) => {

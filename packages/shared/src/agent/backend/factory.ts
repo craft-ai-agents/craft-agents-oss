@@ -52,6 +52,7 @@ import type {
   ResolvedBackendConfig,
   StoredConnectionValidationResult,
 } from './internal/driver-types.ts';
+import type { CraftPluginManifest } from '../../plugins';
 import { getDefaultProviderType } from './internal/driver-types.ts';
 import {
   resolveBackendHostTooling as resolveHostToolingPaths,
@@ -64,6 +65,54 @@ const DRIVER_REGISTRY: Record<AgentProvider, ProviderDriver> = {
   anthropic: anthropicDriver,
   pi: piDriver,
 };
+
+const BUILTIN_BACKEND_PLUGIN_METADATA: Record<AgentProvider, {
+  pluginId: string
+  pluginName: string
+  description: string
+}> = {
+  anthropic: {
+    pluginId: 'craft.backend.anthropic',
+    pluginName: 'Anthropic Backend',
+    description: 'Built-in Anthropic backend support.',
+  },
+  pi: {
+    pluginId: 'craft.backend.pi',
+    pluginName: 'Pi Backend',
+    description: 'Built-in Pi backend support.',
+  },
+};
+
+export function getBuiltInBackendId(provider: AgentProvider): string {
+  return provider;
+}
+
+export function inferBackendIdFromConnectionSlug(connectionSlug?: string): string | undefined {
+  if (!connectionSlug) return undefined;
+  const connection = getLlmConnection(connectionSlug);
+  return connection ? providerTypeToAgentProvider(connection.providerType) : undefined;
+}
+
+export function createBuiltInBackendPluginManifests(args: {
+  appVersion: string;
+  pluginApiVersion: string;
+}): CraftPluginManifest[] {
+  return getAvailableProviders().map((provider) => {
+    const metadata = BUILTIN_BACKEND_PLUGIN_METADATA[provider];
+    return {
+      id: metadata.pluginId,
+      name: metadata.pluginName,
+      version: args.appVersion,
+      apiVersion: args.pluginApiVersion,
+      description: metadata.description,
+      engines: { craftAgents: '*' },
+      permissions: ['session.read', 'session.write'],
+      contributions: {
+        backends: [getBuiltInBackendId(provider)],
+      },
+    };
+  });
+}
 
 function getProviderDriver(provider: AgentProvider): ProviderDriver {
   const driver = DRIVER_REGISTRY[provider];

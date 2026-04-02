@@ -207,6 +207,10 @@ import type {
   DirectoryListingResult,
   RemoteSessionTransferPayload,
   ImportRemoteSessionTransferResult,
+  PluginCapabilitiesResponse,
+  PluginDetailsResponse,
+  PluginListResponse,
+  PluginToggleResult,
 } from '@craft-agent/shared/protocol'
 
 export interface ElectronAPI {
@@ -468,6 +472,18 @@ export interface ElectronAPI {
 
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (workspaceId: string, skills: LoadedSkill[]) => void): () => void
+
+  // Plugins
+  listPlugins(): Promise<PluginListResponse['plugins']>
+  getPlugin(pluginId: string): Promise<PluginDetailsResponse['plugin']>
+  enablePlugin(pluginId: string): Promise<PluginToggleResult['plugin']>
+  disablePlugin(pluginId: string): Promise<PluginToggleResult['plugin']>
+  listPluginCapabilities(): Promise<PluginCapabilitiesResponse['capabilities']>
+  listPluginRoutes(): Promise<import('@craft-agent/shared/plugins').PluginCapabilityRef[]>
+  listPluginSettingsPanes(): Promise<import('@craft-agent/shared/plugins').PluginCapabilityRef[]>
+  listPluginSessionActions(): Promise<import('@craft-agent/shared/plugins').PluginCapabilityRef[]>
+  listPluginComposerActions(): Promise<import('@craft-agent/shared/plugins').PluginCapabilityRef[]>
+  listPluginChatCardTypes(): Promise<import('@craft-agent/shared/plugins').PluginCapabilityRef[]>
 
   // Statuses (workspace-scoped)
   listStatuses(workspaceId: string): Promise<import('@craft-agent/shared/statuses').StatusConfig[]>

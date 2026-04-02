@@ -1,4 +1,5 @@
 import type { PlatformServices } from '../runtime/platform'
+import type { PluginHost } from '../plugins'
 import type { ISessionManager } from './session-manager-interface'
 import type { IOAuthFlowStore } from './oauth-flow-store-interface'
 import type { IBrowserPaneManager } from './browser-pane-manager-interface'
@@ -25,4 +26,5 @@ export interface HandlerDeps<
   windowManager?: TWindowManager
   browserPaneManager?: TBrowserPaneManager
   oauthFlowStore: TOAuthFlowStore
+  pluginHost?: PluginHost
 }

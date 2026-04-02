@@ -37,6 +37,13 @@ describe('session persistence header conflict helpers', () => {
     expect(getHeaderMetadataSignature(a)).not.toBe(getHeaderMetadataSignature(b))
   })
 
+  it('metadata signature includes backendId', () => {
+    const a = makeHeader({ backendId: 'anthropic' })
+    const b = makeHeader({ backendId: 'pi' })
+
+    expect(getHeaderMetadataSignature(a)).not.toBe(getHeaderMetadataSignature(b))
+  })
+
   it('merge preserves external metadata while keeping local computed fields', () => {
     const local = makeHeader({
       name: 'Local Name',
@@ -44,6 +51,7 @@ describe('session persistence header conflict helpers', () => {
       isFlagged: false,
       sessionStatus: 'todo',
       permissionMode: 'allow-all',
+      backendId: 'anthropic',
       hasUnread: true,
       lastReadMessageId: 'm-local',
       messageCount: 99,
@@ -56,6 +64,7 @@ describe('session persistence header conflict helpers', () => {
       isFlagged: true,
       sessionStatus: 'needs-review',
       permissionMode: 'safe',
+      backendId: 'pi',
       hasUnread: false,
       lastReadMessageId: 'm-disk',
       messageCount: 1,
@@ -69,6 +78,7 @@ describe('session persistence header conflict helpers', () => {
     expect(merged.isFlagged).toBe(true)
     expect(merged.sessionStatus).toBe('needs-review')
     expect(merged.permissionMode).toBe('safe')
+    expect(merged.backendId).toBe('pi')
     expect(merged.hasUnread).toBe(false)
     expect(merged.lastReadMessageId).toBe('m-disk')
 

@@ -15,10 +15,12 @@ import {
   createAgent,
   fetchBackendModels,
   getAvailableProviders,
+  getBuiltInBackendId,
   initializeBackendHostRuntime,
   isProviderAvailable,
   connectionTypeToProvider,
   connectionAuthTypeToBackendAuthType,
+  createBuiltInBackendPluginManifests,
   providerTypeToAgentProvider,
   resolveSetupTestConnectionHint,
   createBackendFromConnection,
@@ -124,6 +126,29 @@ describe('getAvailableProviders', () => {
     expect(providers).toContain('anthropic');
     expect(providers).toContain('pi');
     expect(providers).toHaveLength(2);
+  });
+});
+
+describe('built-in backend plugin manifests', () => {
+  it('uses stable backend ids that align with provider ids', () => {
+    expect(getBuiltInBackendId('anthropic')).toBe('anthropic');
+    expect(getBuiltInBackendId('pi')).toBe('pi');
+  });
+
+  it('builds built-in plugin manifests for the default providers', () => {
+    const manifests = createBuiltInBackendPluginManifests({
+      appVersion: '0.8.1',
+      pluginApiVersion: '1.0.0',
+    });
+
+    expect(manifests.map((manifest) => manifest.id)).toEqual([
+      'craft.backend.anthropic',
+      'craft.backend.pi',
+    ]);
+    expect(manifests.map((manifest) => manifest.contributions.backends?.[0])).toEqual([
+      'anthropic',
+      'pi',
+    ]);
   });
 });
 

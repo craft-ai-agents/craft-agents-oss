@@ -35,7 +35,7 @@ export const SESSION_PERSISTENT_FIELDS = [
   // Config
   'enabledSourceSlugs', 'permissionMode', 'previousPermissionMode', 'workingDirectory',
   // Model/Connection
-  'model', 'llmConnection', 'connectionLocked', 'thinkingLevel',
+  'model', 'backendId', 'llmConnection', 'connectionLocked', 'thinkingLevel',
   // Sharing
   'sharedUrl', 'sharedId',
   // Plan execution
@@ -139,6 +139,8 @@ export interface SessionConfig {
   sharedId?: string;
   /** Model to use for this session (overrides global config if set) */
   model?: string;
+  /** Backend identifier resolved for this session (plugin contribution id). */
+  backendId?: string;
   /** LLM connection slug for this session (locked after first message) */
   llmConnection?: string;
   /** Whether the connection is locked (cannot be changed after first agent creation) */
@@ -253,6 +255,8 @@ export interface SessionHeader {
   sharedId?: string;
   /** Model to use for this session (overrides global config if set) */
   model?: string;
+  /** Backend identifier resolved for this session (plugin contribution id). */
+  backendId?: string;
   /** LLM connection slug for this session (locked after first message) */
   llmConnection?: string;
   /** Whether the connection is locked (cannot be changed after first agent creation) */
@@ -336,6 +340,8 @@ export interface SessionMetadata {
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error';
   /** Model to use for this session (overrides global config if set) */
   model?: string;
+  /** Backend identifier resolved for this session (plugin contribution id). */
+  backendId?: string;
   /** LLM connection slug for this session (locked after first message) */
   llmConnection?: string;
   /** Whether the connection is locked (cannot be changed after first agent creation) */

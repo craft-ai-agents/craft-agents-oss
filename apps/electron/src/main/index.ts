@@ -66,7 +66,9 @@ Sentry.setUser({ id: machineId })
 import { join, delimiter } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { createBuiltInBackendPluginManifests, initializeBackendHostRuntime } from '@craft-agent/shared/agent/backend'
 import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
+import { PluginHost, PLUGIN_API_VERSION } from '@craft-agent/server-core/plugins'
 import { registerAllRpcHandlers } from './handlers/index'
 import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient } from '@craft-agent/server-core/handlers/rpc'
 import type { PlatformServices } from '../runtime/platform'
@@ -85,7 +87,6 @@ import { initializeReleaseNotes } from '@craft-agent/shared/release-notes'
 import { ensureDefaultPermissions } from '@craft-agent/shared/agent/permissions-config'
 import { ensureToolIcons, ensurePresetThemes } from '@craft-agent/shared/config'
 import { setBundledAssetsRoot } from '@craft-agent/shared/utils'
-import { initializeBackendHostRuntime } from '@craft-agent/shared/agent/backend'
 import { setPowerShellValidatorRoot } from '@craft-agent/shared/agent'
 import { handleDeepLink } from './deep-link'
 import { BrowserPaneManager } from './browser-pane-manager'
@@ -589,6 +590,15 @@ app.whenReady().then(async () => {
       }
 
       // Bootstrap the WS RPC server via shared bootstrap function.
+      const pluginHost = new PluginHost({ appVersion: app.getVersion() })
+      await pluginHost.initialize()
+      for (const manifest of createBuiltInBackendPluginManifests({
+        appVersion: app.getVersion(),
+        pluginApiVersion: PLUGIN_API_VERSION,
+      })) {
+        pluginHost.registerBuiltInPlugin(manifest)
+      }
+
       const instance = await bootstrapServer<SessionManager, HandlerDeps>({
         serverToken,
         rpcHost,
@@ -628,6 +638,7 @@ app.whenReady().then(async () => {
           windowManager: windowManager ?? undefined,
           browserPaneManager: browserPaneManager ?? undefined,
           oauthFlowStore: ofs,
+          pluginHost,
         }),
         // Headless: register only core handlers (no GUI handlers for browser, settings, etc.)
         // GUI: register all handlers (core + GUI)
