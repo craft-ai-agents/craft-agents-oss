@@ -14,6 +14,11 @@ import {
 } from '@craft-agent/shared/plugins'
 import { CapabilityRegistry } from './registry'
 import {
+  registerExternalPluginBackend,
+  unregisterExternalPluginBackend,
+  type ExternalPluginBackendRegistration,
+} from '@craft-agent/shared/agent/backend'
+import {
   type PluginStateEntry,
   type PluginStateStore,
   getDefaultPluginDirectory,
@@ -22,6 +27,7 @@ import {
   writePluginState,
 } from './storage'
 import { type PluginManifestLoadFailure, loadPluginManifestsFromDirectory } from './loader'
+import { PluginBridgeRuntime, type ExternalPluginPackage } from './bridge-runtime'
 
 export const PLUGIN_API_VERSION = '1.0.0'
 
@@ -32,6 +38,7 @@ interface PluginHostOptions {
   appVersion: string
   pluginApiVersion?: string
   pluginDirectory?: string
+  helperRuntimePath?: string
   pluginStatePath?: string
 }
 
@@ -41,7 +48,11 @@ export class PluginHost {
   private readonly pluginApiVersion: string
   private readonly pluginDirectory: string
   private readonly pluginStatePath: string
+  private readonly helperRuntimePath?: string
+  private readonly bridgeRuntime: PluginBridgeRuntime
   private readonly builtInPluginIds = new Set<string>()
+  private readonly externalPluginRoots = new Map<string, string>()
+  private readonly externalBackendRegistrations = new Map<string, ExternalPluginBackendRegistration[]>()
   private readonly sessionActionHandlers = new Map<string, SessionActionHandler>()
   private readonly composerActionHandlers = new Map<string, ComposerActionHandler>()
   private state: PluginStateStore = { plugins: {} }
@@ -52,6 +63,10 @@ export class PluginHost {
     this.pluginApiVersion = options.pluginApiVersion ?? PLUGIN_API_VERSION
     this.pluginDirectory = options.pluginDirectory ?? getDefaultPluginDirectory()
     this.pluginStatePath = options.pluginStatePath ?? getDefaultPluginStatePath()
+    this.helperRuntimePath = options.helperRuntimePath
+    this.bridgeRuntime = new PluginBridgeRuntime({
+      helperRuntimePath: options.helperRuntimePath,
+    })
   }
 
   async initialize(): Promise<void> {
@@ -70,7 +85,18 @@ export class PluginHost {
   async loadExternalPlugins(): Promise<PluginDetails[]> {
     const { manifests, failures } = await loadPluginManifestsFromDirectory(this.pluginDirectory)
     this.loadFailures = failures
-    return manifests.map((manifest) => this.registerManifest(manifest))
+    const plugins: PluginDetails[] = []
+
+    for (const entry of manifests) {
+      const plugin = this.registerManifest(entry.manifest, undefined, undefined, entry.pluginRoot)
+      if (plugin.enabled && plugin.status === 'active') {
+        plugins.push(await this.activateExternalPlugin(plugin.id))
+      } else {
+        plugins.push(plugin)
+      }
+    }
+
+    return plugins
   }
 
   listLoadFailures(): PluginManifestLoadFailure[] {
@@ -151,19 +177,20 @@ export class PluginHost {
     if (!current.compatible) {
       throw new Error(`Cannot enable incompatible plugin: ${pluginId}`)
     }
-    const plugin = this.registry.updatePlugin(pluginId, {
+    this.registry.updatePlugin(pluginId, {
       enabled: true,
       status: 'active',
       error: undefined,
     })
     await this.writeState(pluginId, { enabled: true, status: 'active', error: undefined })
-    return plugin
+    return this.activateExternalPlugin(pluginId)
   }
 
   async disablePlugin(pluginId: string): Promise<PluginDetails> {
     if (this.builtInPluginIds.has(pluginId)) {
       throw new Error(`Cannot disable built-in plugin: ${pluginId}`)
     }
+    this.unregisterExternalPluginBackends(pluginId)
     const plugin = this.registry.updatePlugin(pluginId, {
       enabled: false,
       status: 'disabled',
@@ -173,6 +200,7 @@ export class PluginHost {
   }
 
   async quarantinePlugin(pluginId: string, error: string): Promise<PluginDetails> {
+    this.unregisterExternalPluginBackends(pluginId)
     const plugin = this.registry.updatePlugin(pluginId, {
       enabled: false,
       status: 'quarantined',
@@ -190,6 +218,7 @@ export class PluginHost {
     manifest: CraftPluginManifest,
     defaults?: PluginStateEntry,
     options?: { respectPersistedState?: boolean; source?: PluginSource },
+    pluginRoot?: string,
   ): PluginDetails {
     const state = options?.respectPersistedState === false
       ? {}
@@ -203,13 +232,17 @@ export class PluginHost {
       ? (state.status ?? defaults?.status ?? (enabled ? 'active' : 'disabled'))
       : 'incompatible'
 
-    return this.registry.registerManifest(manifest, {
+    const plugin = this.registry.registerManifest(manifest, {
       enabled: compatible ? enabled : false,
       compatible,
       source,
       status,
       error: state.error ?? defaults?.error,
     })
+    if (pluginRoot) {
+      this.externalPluginRoots.set(plugin.id, pluginRoot)
+    }
+    return plugin
   }
 
   private async writeState(pluginId: string, entry: PluginStateEntry): Promise<void> {
@@ -256,5 +289,57 @@ export class PluginHost {
       const plugin = this.registry.getPlugin(capability.pluginId)
       return plugin?.permissions.includes(permission)
     })
+  }
+
+  private async activateExternalPlugin(pluginId: string): Promise<PluginDetails> {
+    const plugin = this.registry.getPlugin(pluginId)
+    if (!plugin || plugin.source !== 'external') {
+      return plugin as PluginDetails
+    }
+
+    this.unregisterExternalPluginBackends(pluginId)
+
+    const pluginRoot = this.externalPluginRoots.get(pluginId)
+    if (!pluginRoot) {
+      return plugin
+    }
+
+    try {
+      const packageInfo: ExternalPluginPackage = {
+        manifest: plugin,
+        pluginRoot,
+      }
+      const { helperPath } = await this.bridgeRuntime.activate(packageInfo)
+      if (helperPath) {
+        const registrations = (plugin.contributions.backends ?? []).map<ExternalPluginBackendRegistration>((backendId) => ({
+          backendId,
+          pluginId: plugin.id,
+          helperPath,
+          helperRuntimePath: this.helperRuntimePath,
+        }))
+
+        for (const registration of registrations) {
+          registerExternalPluginBackend(registration)
+        }
+        this.externalBackendRegistrations.set(plugin.id, registrations)
+      }
+
+      return this.registry.updatePlugin(plugin.id, {
+        enabled: true,
+        status: 'active',
+        error: undefined,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return this.quarantinePlugin(plugin.id, message)
+    }
+  }
+
+  private unregisterExternalPluginBackends(pluginId: string): void {
+    const registrations = this.externalBackendRegistrations.get(pluginId) ?? []
+    for (const registration of registrations) {
+      unregisterExternalPluginBackend(registration.backendId)
+    }
+    this.externalBackendRegistrations.delete(pluginId)
   }
 }

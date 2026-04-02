@@ -60,11 +60,24 @@ import {
 } from './internal/runtime-resolver.ts';
 import { anthropicDriver } from './internal/drivers/anthropic.ts';
 import { piDriver } from './internal/drivers/pi.ts';
+import { BridgePluginAgent } from '../plugin-bridge-agent.ts';
 
 const DRIVER_REGISTRY: Record<AgentProvider, ProviderDriver> = {
   anthropic: anthropicDriver,
   pi: piDriver,
 };
+
+export interface ExternalPluginBackendRegistration {
+  backendId: string
+  pluginId: string
+  helperPath: string
+  helperRuntimePath?: string
+  defaultModel?: string
+  supportsBranching?: boolean
+  needsHttpPoolServer?: boolean
+}
+
+const EXTERNAL_PLUGIN_BACKENDS = new Map<string, ExternalPluginBackendRegistration>()
 
 const BUILTIN_BACKEND_PLUGIN_METADATA: Record<AgentProvider, {
   pluginId: string
@@ -85,6 +98,80 @@ const BUILTIN_BACKEND_PLUGIN_METADATA: Record<AgentProvider, {
 
 export function getBuiltInBackendId(provider: AgentProvider): string {
   return provider;
+}
+
+export function registerExternalPluginBackend(
+  definition: ExternalPluginBackendRegistration,
+): void {
+  EXTERNAL_PLUGIN_BACKENDS.set(definition.backendId, definition)
+}
+
+export function unregisterExternalPluginBackend(backendId: string): void {
+  EXTERNAL_PLUGIN_BACKENDS.delete(backendId)
+}
+
+export function getExternalPluginBackend(
+  backendId: string,
+): ExternalPluginBackendRegistration | undefined {
+  return EXTERNAL_PLUGIN_BACKENDS.get(backendId)
+}
+
+export function listExternalPluginBackends(): ExternalPluginBackendRegistration[] {
+  return [...EXTERNAL_PLUGIN_BACKENDS.values()]
+}
+
+export function clearExternalPluginBackendsForTests(): void {
+  EXTERNAL_PLUGIN_BACKENDS.clear()
+}
+
+export function createExternalPluginBackend(args: {
+  backendId: string
+  coreConfig: CoreBackendConfig
+  hostRuntime: BackendHostRuntimeContext
+}): AgentBackend {
+  const definition = getExternalPluginBackend(args.backendId)
+  if (!definition) {
+    throw new Error(`External plugin backend not registered: ${args.backendId}`)
+  }
+
+  return new BridgePluginAgent({
+    provider: 'pi',
+    providerType: 'pi',
+    authType: 'oauth',
+    workspace: args.coreConfig.workspace,
+    session: args.coreConfig.session,
+    model: args.coreConfig.model || definition.defaultModel || 'gpt-5.4',
+    miniModel: args.coreConfig.miniModel,
+    thinkingLevel: args.coreConfig.thinkingLevel,
+    isHeadless: args.coreConfig.isHeadless,
+    debugMode: args.coreConfig.debugMode,
+    systemPromptPreset: args.coreConfig.systemPromptPreset,
+    automationSystem: args.coreConfig.automationSystem,
+    envOverrides: args.coreConfig.envOverrides,
+    mcpPool: args.coreConfig.mcpPool,
+    poolServerUrl: args.coreConfig.poolServerUrl,
+    onSdkSessionIdUpdate: args.coreConfig.onSdkSessionIdUpdate,
+    onSdkSessionIdCleared: args.coreConfig.onSdkSessionIdCleared,
+    getRecoveryMessages: args.coreConfig.getRecoveryMessages,
+    getBranchFallbackMessages: args.coreConfig.getBranchFallbackMessages,
+    getBranchSeedMessages: args.coreConfig.getBranchSeedMessages,
+    markBranchSeedApplied: args.coreConfig.markBranchSeedApplied,
+    getTransferredSessionSummary: args.coreConfig.getTransferredSessionSummary,
+    markTransferredSessionSummaryApplied: args.coreConfig.markTransferredSessionSummaryApplied,
+    onImageResize: args.coreConfig.onImageResize,
+    enable1MContext: args.coreConfig.enable1MContext,
+    initialSources: args.coreConfig.initialSources,
+    runtime: {
+      pluginBridge: {
+        pluginId: definition.pluginId,
+        backendId: definition.backendId,
+        helperPath: definition.helperPath,
+        helperRuntimePath: definition.helperRuntimePath
+          || args.hostRuntime.nodeRuntimePath
+          || process.execPath,
+      },
+    },
+  })
 }
 
 export function inferBackendIdFromConnectionSlug(connectionSlug?: string): string | undefined {
@@ -641,6 +728,16 @@ export const BACKEND_CAPABILITIES: Record<AgentProvider, {
   anthropic: { needsHttpPoolServer: false },
   pi: { needsHttpPoolServer: false },
 };
+
+export function getExternalBackendCapabilities(backendId: string): {
+  needsHttpPoolServer: boolean
+} | undefined {
+  const definition = getExternalPluginBackend(backendId)
+  if (!definition) return undefined
+  return {
+    needsHttpPoolServer: definition.needsHttpPoolServer ?? false,
+  }
+}
 
 // ============================================================
 // Auth Type Resolution

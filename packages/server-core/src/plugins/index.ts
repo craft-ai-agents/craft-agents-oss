@@ -1,4 +1,5 @@
 export * from './bootstrap'
+export * from './bridge-runtime'
 export * from './host'
 export * from './loader'
 export * from './registry'

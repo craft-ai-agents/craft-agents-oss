@@ -1,0 +1,35 @@
+{
+  "id": "external.codex-cli",
+  "name": "Codex CLI",
+  "version": "1.0.0",
+  "apiVersion": "1.0.0",
+  "description": "External backend plugin that runs Codex CLI through the Craft Agents bridge runtime.",
+  "author": "OpenAI",
+  "engines": {
+    "craftAgents": "*"
+  },
+  "permissions": [
+    "network",
+    "filesystem",
+    "session.read",
+    "session.write",
+    "tools.invoke"
+  ],
+  "entrypoints": {
+    "main": "main.mjs"
+  },
+  "contributions": {
+    "backends": [
+      "codex-cli"
+    ]
+  },
+  "capabilityMetadata": {
+    "backends": {
+      "codex-cli": {
+        "title": "Codex CLI",
+        "description": "Runs a Craft session through Codex CLI and normalizes JSON events back into host chat events.",
+        "hook": "backend.registry"
+      }
+    }
+  }
+}

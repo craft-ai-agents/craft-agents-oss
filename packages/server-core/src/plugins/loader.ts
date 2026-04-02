@@ -9,12 +9,12 @@ export interface PluginManifestLoadFailure {
 }
 
 export interface PluginManifestDirectoryLoadResult {
-  manifests: CraftPluginManifest[]
+  manifests: Array<{ manifest: CraftPluginManifest; pluginRoot: string }>
   failures: PluginManifestLoadFailure[]
 }
 
 type PluginManifestLoadResult
-  = | { manifest: CraftPluginManifest; pluginPath: string }
+  = | { manifest: CraftPluginManifest; pluginPath: string; pluginRoot: string }
     | PluginManifestLoadFailure
 
 export async function loadPluginManifest(filePath: string): Promise<CraftPluginManifest> {
@@ -33,9 +33,10 @@ export async function loadPluginManifestsFromDirectory(
   const pluginDirs = entries.filter((entry) => entry.isDirectory())
   const results: PluginManifestLoadResult[] = await Promise.all(
     pluginDirs.map(async (entry) => {
+      const pluginRoot = join(dirPath, entry.name)
       const pluginPath = join(dirPath, entry.name, 'plugin.json')
       try {
-        return { manifest: await loadPluginManifest(pluginPath), pluginPath }
+        return { manifest: await loadPluginManifest(pluginPath), pluginPath, pluginRoot }
       } catch (error) {
         return {
           pluginPath,
@@ -45,12 +46,12 @@ export async function loadPluginManifestsFromDirectory(
     }),
   )
 
-  const manifests: CraftPluginManifest[] = []
+  const manifests: Array<{ manifest: CraftPluginManifest; pluginRoot: string }> = []
   const failures: PluginManifestLoadFailure[] = []
 
   for (const result of results) {
     if ('manifest' in result) {
-      manifests.push(result.manifest)
+      manifests.push({ manifest: result.manifest, pluginRoot: result.pluginRoot })
       continue
     }
     failures.push(result)

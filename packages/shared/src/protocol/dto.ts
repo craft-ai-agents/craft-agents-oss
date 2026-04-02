@@ -120,6 +120,7 @@ export interface CreateSessionOptions {
    */
   workingDirectory?: string | 'user_default' | 'none'
   model?: string
+  backendId?: string
   llmConnection?: string
   systemPromptPreset?: 'default' | 'mini' | string
   hidden?: boolean

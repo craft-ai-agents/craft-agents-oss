@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 import { bootstrapPluginHost } from '../bootstrap'
 import { PluginHost } from '../host'
 import {
@@ -38,6 +39,13 @@ function createManifest(overrides: Record<string, unknown> = {}) {
   }
 }
 
+async function writeHelperScript(relativePath: string, body: string) {
+  const helperPath = join(tempRoot, relativePath)
+  await mkdir(join(helperPath, '..'), { recursive: true })
+  await writeFile(helperPath, body)
+  return helperPath
+}
+
 function createPluginHost() {
   return new PluginHost({
     appVersion: '0.8.1',
@@ -47,6 +55,7 @@ function createPluginHost() {
 }
 
 let tempRoot = ''
+const realPluginDirectory = fileURLToPath(new URL('../../../../../plugins', import.meta.url))
 
 beforeEach(async () => {
   tempRoot = join(tmpdir(), `plugin-host-test-${Date.now()}-${Math.random().toString(16).slice(2)}`)
@@ -301,6 +310,79 @@ describe('PluginHost', () => {
     expect(host.listLoadFailures()[0]?.pluginPath).toContain('broken-plugin/plugin.json')
   })
 
+  it('activates helper-backed plugins during external load', async () => {
+    const pluginDirectory = join(tempRoot, 'plugins')
+    const pluginStatePath = join(tempRoot, 'plugin-state.json')
+    const helperPath = await writeHelperScript('helpers/ready-helper.mjs', `
+      process.stdout.write(JSON.stringify({ type: 'ready' }) + '\\n')
+      setInterval(() => {}, 1_000)
+    `)
+
+    await mkdir(join(pluginDirectory, 'codex-cli'), { recursive: true })
+    await writeFile(join(pluginDirectory, 'codex-cli', 'plugin.json'), JSON.stringify(createManifest({
+      entrypoints: {
+        main: helperPath,
+      },
+    })))
+    await writePluginState({
+      plugins: {
+        'codex-cli': { enabled: true, status: 'active' },
+      },
+    }, pluginStatePath)
+
+    const host = new PluginHost({
+      appVersion: '0.8.1',
+      pluginDirectory,
+      pluginStatePath,
+      helperRuntimePath: process.execPath,
+    })
+    await host.initialize()
+
+    const plugins = await host.loadExternalPlugins()
+
+    expect(plugins).toHaveLength(1)
+    expect(plugins[0]?.status).toBe('active')
+    expect(plugins[0]?.enabled).toBe(true)
+    expect(host.listCapabilities('backend').map((item) => item.id)).toEqual(['codex-backend'])
+  })
+
+  it('quarantines helper-backed plugins when activation fails', async () => {
+    const pluginDirectory = join(tempRoot, 'plugins')
+    const pluginStatePath = join(tempRoot, 'plugin-state.json')
+    const helperPath = await writeHelperScript('helpers/broken-helper.mjs', `
+      process.stderr.write('broken helper\\n')
+      process.exit(1)
+    `)
+
+    await mkdir(join(pluginDirectory, 'codex-cli'), { recursive: true })
+    await writeFile(join(pluginDirectory, 'codex-cli', 'plugin.json'), JSON.stringify(createManifest({
+      entrypoints: {
+        main: helperPath,
+      },
+    })))
+    await writePluginState({
+      plugins: {
+        'codex-cli': { enabled: true, status: 'active' },
+      },
+    }, pluginStatePath)
+
+    const host = new PluginHost({
+      appVersion: '0.8.1',
+      pluginDirectory,
+      pluginStatePath,
+      helperRuntimePath: process.execPath,
+    })
+    await host.initialize()
+
+    const plugins = await host.loadExternalPlugins()
+
+    expect(plugins).toHaveLength(1)
+    expect(plugins[0]?.status).toBe('quarantined')
+    expect(plugins[0]?.enabled).toBe(false)
+    expect(plugins[0]?.error).toContain('broken helper')
+    expect(host.listCapabilities('backend')).toHaveLength(0)
+  })
+
   it('bootstraps built-in and external plugins together', async () => {
     const pluginDirectory = join(tempRoot, 'plugins')
     await mkdir(join(pluginDirectory, 'codex-cli'), { recursive: true })
@@ -315,6 +397,7 @@ describe('PluginHost', () => {
       appVersion: '0.8.1',
       pluginDirectory,
       pluginStatePath: join(tempRoot, 'plugin-state.json'),
+      helperRuntimePath: process.execPath,
       builtInManifests: [createManifest({
         id: 'craft.anthropic',
         name: 'Anthropic Backend',
@@ -326,5 +409,28 @@ describe('PluginHost', () => {
     expect(host.listPlugins().map((plugin) => plugin.id).sort()).toEqual(['craft.anthropic', 'external.codex-cli'])
     expect(host.listCapabilities('backend').map((capability) => capability.id).sort()).toEqual(['anthropic'])
     expect(warnings).toEqual([])
+  })
+
+  it('loads and activates the real codex-cli plugin package', async () => {
+    const pluginStatePath = join(tempRoot, 'plugin-state.json')
+    await writePluginState({
+      plugins: {
+        'external.codex-cli': { enabled: true, status: 'active' },
+      },
+    }, pluginStatePath)
+
+    const host = new PluginHost({
+      appVersion: '0.8.1',
+      pluginDirectory: realPluginDirectory,
+      pluginStatePath,
+      helperRuntimePath: '/opt/homebrew/bin/node',
+    })
+    await host.initialize()
+
+    const plugins = await host.loadExternalPlugins()
+
+    expect(plugins.map((plugin) => plugin.id)).toContain('external.codex-cli')
+    expect(host.listCapabilities('backend').map((capability) => capability.id)).toContain('codex-cli')
+    expect(plugins.find((plugin) => plugin.id === 'external.codex-cli')?.status).toBe('active')
   })
 })

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'bun:test'
-import { createManagedSession, syncBackendIdFromConnection } from './SessionManager.ts'
+import {
+  clearExternalPluginBackendsForTests,
+  registerExternalPluginBackend,
+} from '@craft-agent/shared/agent/backend'
+import {
+  createManagedSession,
+  resolveSessionBackendTarget,
+  syncBackendIdFromConnection,
+} from './SessionManager.ts'
 
 describe('createManagedSession', () => {
   const workspace = {
@@ -48,5 +56,50 @@ describe('createManagedSession', () => {
     managed.llmConnection = undefined
     syncBackendIdFromConnection(managed)
     expect(managed.backendId).toBeUndefined()
+  })
+})
+
+describe('resolveSessionBackendTarget', () => {
+  it('resolves registered external plugin backends without a connection', () => {
+    clearExternalPluginBackendsForTests()
+    registerExternalPluginBackend({
+      backendId: 'codex-cli',
+      pluginId: 'external.codex-cli',
+      helperPath: '/tmp/codex-helper.mjs',
+      defaultModel: 'gpt-5.4',
+      needsHttpPoolServer: true,
+      supportsBranching: false,
+    })
+
+    const target = resolveSessionBackendTarget({
+      backendId: 'codex-cli',
+      model: 'gpt-5.4-mini',
+    })
+
+    expect(target.kind).toBe('external')
+    expect(target.backendId).toBe('codex-cli')
+    expect(target.capabilities.needsHttpPoolServer).toBe(true)
+  })
+
+  it('rejects mixing external plugin backends with llm connections', () => {
+    clearExternalPluginBackendsForTests()
+    registerExternalPluginBackend({
+      backendId: 'codex-cli',
+      pluginId: 'external.codex-cli',
+      helperPath: '/tmp/codex-helper.mjs',
+    })
+
+    expect(() => resolveSessionBackendTarget({
+      backendId: 'codex-cli',
+      llmConnection: 'anthropic-default',
+    })).toThrow('External plugin backends do not support llmConnection selection')
+  })
+
+  it('rejects mismatched built-in backend requests', () => {
+    clearExternalPluginBackendsForTests()
+
+    expect(() => resolveSessionBackendTarget({
+      backendId: 'pi',
+    })).toThrow('Requested backend "pi" does not match the resolved connection backend "anthropic"')
   })
 })

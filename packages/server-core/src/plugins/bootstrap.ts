@@ -6,6 +6,7 @@ export interface BootstrapPluginHostOptions {
   builtInManifests?: CraftPluginManifest[]
   pluginApiVersion?: string
   pluginDirectory?: string
+  helperRuntimePath?: string
   pluginStatePath?: string
   logger?: Pick<Console, 'warn'>
 }
@@ -15,6 +16,7 @@ export async function bootstrapPluginHost(options: BootstrapPluginHostOptions): 
     appVersion: options.appVersion,
     pluginApiVersion: options.pluginApiVersion ?? PLUGIN_API_VERSION,
     pluginDirectory: options.pluginDirectory,
+    helperRuntimePath: options.helperRuntimePath,
     pluginStatePath: options.pluginStatePath,
   })
 
