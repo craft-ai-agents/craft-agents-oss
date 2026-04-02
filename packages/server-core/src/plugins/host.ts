@@ -17,7 +17,7 @@ import {
   readPluginState,
   writePluginState,
 } from './storage'
-import { loadPluginManifestsFromDirectory } from './loader'
+import { type PluginManifestLoadFailure, loadPluginManifestsFromDirectory } from './loader'
 
 export const PLUGIN_API_VERSION = '1.0.0'
 
@@ -35,6 +35,7 @@ export class PluginHost {
   private readonly pluginDirectory: string
   private readonly pluginStatePath: string
   private state: PluginStateStore = { plugins: {} }
+  private loadFailures: PluginManifestLoadFailure[] = []
 
   constructor(options: PluginHostOptions) {
     this.appVersion = options.appVersion
@@ -52,8 +53,13 @@ export class PluginHost {
   }
 
   async loadExternalPlugins(): Promise<PluginDetails[]> {
-    const { manifests } = await loadPluginManifestsFromDirectory(this.pluginDirectory)
+    const { manifests, failures } = await loadPluginManifestsFromDirectory(this.pluginDirectory)
+    this.loadFailures = failures
     return manifests.map((manifest) => this.registerManifest(manifest))
+  }
+
+  listLoadFailures(): PluginManifestLoadFailure[] {
+    return [...this.loadFailures]
   }
 
   listPlugins(): PluginDetails[] {
@@ -96,10 +102,6 @@ export class PluginHost {
     if (!current.compatible) {
       throw new Error(`Cannot enable incompatible plugin: ${pluginId}`)
     }
-    if (current.status === 'quarantined') {
-      throw new Error(`Cannot enable quarantined plugin: ${pluginId}`)
-    }
-
     const plugin = this.registry.updatePlugin(pluginId, {
       enabled: true,
       status: 'active',

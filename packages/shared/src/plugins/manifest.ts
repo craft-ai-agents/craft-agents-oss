@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { lte, major, satisfies, valid } from 'semver'
 import type {
   CraftPluginManifest,
   PluginCapabilityType,
@@ -108,6 +107,15 @@ function parseSemverLike(value: string): [number, number, number] | null {
   return [Number(match[1]), Number(match[2]), Number(match[3])]
 }
 
+function compareSemverLike(left: [number, number, number], right: [number, number, number]): number {
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return left[index]! < right[index]! ? -1 : 1
+    }
+  }
+  return 0
+}
+
 export function isPluginPermission(value: string): value is PluginPermission {
   return (PLUGIN_PERMISSIONS as readonly string[]).includes(value)
 }
@@ -145,11 +153,11 @@ export function isPluginApiVersionSupported(
   pluginApiVersion: string,
   supportedApiVersion: string,
 ): boolean {
-  const plugin = valid(pluginApiVersion)
-  const supported = valid(supportedApiVersion)
+  const plugin = parseSemverLike(pluginApiVersion)
+  const supported = parseSemverLike(supportedApiVersion)
   if (!plugin || !supported) return false
-  if (major(plugin) !== major(supported)) return false
-  return lte(plugin, supported)
+  if (plugin[0] !== supported[0]) return false
+  return compareSemverLike(plugin, supported) <= 0
 }
 
 export function isPluginEngineSatisfied(
@@ -158,7 +166,25 @@ export function isPluginEngineSatisfied(
 ): boolean {
   const requirement = manifest.engines.craftAgents.trim()
   if (!requirement) return false
-  const actual = valid(hostVersion)
+  if (requirement === '*') return true
+
+  const actual = parseSemverLike(hostVersion)
   if (!actual) return false
-  return satisfies(actual, requirement, { includePrerelease: true })
+
+  if (requirement.startsWith('^')) {
+    const minimum = parseSemverLike(requirement.slice(1))
+    if (!minimum) return false
+    if (compareSemverLike(actual, minimum) < 0) return false
+
+    if (minimum[0] > 0) {
+      return actual[0] === minimum[0]
+    }
+    if (minimum[1] > 0) {
+      return actual[0] === 0 && actual[1] === minimum[1]
+    }
+    return actual[0] === 0 && actual[1] === 0 && actual[2] === minimum[2]
+  }
+
+  const exact = parseSemverLike(requirement)
+  return exact ? compareSemverLike(actual, exact) === 0 : false
 }

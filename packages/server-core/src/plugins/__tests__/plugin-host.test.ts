@@ -159,14 +159,18 @@ describe('PluginHost', () => {
     expect(host.getPlugin('codex-cli')?.enabled).toBe(false)
   })
 
-  it('rejects enabling quarantined plugins without recovery', async () => {
+  it('allows quarantined plugins to recover through enablePlugin', async () => {
     const host = createPluginHost()
     await host.initialize()
     host.registerBuiltInPlugin(createManifest() as any)
     await host.quarantinePlugin('codex-cli', 'boom')
 
-    await expect(host.enablePlugin('codex-cli')).rejects.toThrow('Cannot enable quarantined plugin: codex-cli')
-    expect(host.getPlugin('codex-cli')?.status).toBe('quarantined')
+    const recovered = await host.enablePlugin('codex-cli')
+
+    expect(recovered.status).toBe('active')
+    expect(recovered.enabled).toBe(true)
+    expect(recovered.error).toBeUndefined()
+    expect(host.listCapabilities('backend').map((item) => item.id)).toEqual(['codex-backend'])
   })
 
   it('loads valid external plugins even when a neighbor manifest is broken', async () => {
@@ -188,5 +192,7 @@ describe('PluginHost', () => {
     expect(plugins).toHaveLength(1)
     expect(plugins[0]?.id).toBe('codex-cli')
     expect(host.listPlugins().map((plugin) => plugin.id)).toEqual(['codex-cli'])
+    expect(host.listLoadFailures()).toHaveLength(1)
+    expect(host.listLoadFailures()[0]?.pluginPath).toContain('broken-plugin/plugin.json')
   })
 })
