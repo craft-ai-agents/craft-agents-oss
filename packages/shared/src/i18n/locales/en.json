@@ -893,7 +893,7 @@
   "webui.connectingToServer": "Connecting to server...",
   "webui.connectionFailed": "Connection Failed",
   "webui.logOut": "Log Out",
-  "workspace.addWorkspace": "Add Workspace",
+  "workspace.addWorkspace": "Add Workspace…",
   "workspace.addWorkspaceDesc": "Where your ideas meet the tools to make them happen.",
   "workspace.chooseExistingFolder": "Choose existing folder",
   "workspace.chooseExistingFolderDesc": "Choose any folder to use as workspace.",

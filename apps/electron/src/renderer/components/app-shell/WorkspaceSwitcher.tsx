@@ -326,7 +326,7 @@ export function WorkspaceSwitcher({
             className="font-sans"
           >
             <FolderPlus className="h-4 w-4" />
-            Add Workspace...
+            {t("workspace.addWorkspace")}
           </StyledDropdownMenuItem>
         </StyledDropdownMenuContent>
       </DropdownMenu>

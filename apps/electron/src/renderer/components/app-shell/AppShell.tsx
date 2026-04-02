@@ -3079,7 +3079,7 @@ function AppShellContent({
                       trigger={
                         <HeaderIconButton
                           icon={<Plus className="h-4 w-4" />}
-                          tooltip="Add Source"
+                          tooltip={t("sidebarMenu.addSource")}
                           data-tutorial="add-source-button"
                         />
                       }
@@ -3095,7 +3095,7 @@ function AppShellContent({
                       trigger={
                         <HeaderIconButton
                           icon={<Plus className="h-4 w-4" />}
-                          tooltip="Add Skill"
+                          tooltip={t("sidebarMenu.addSkill")}
                           data-tutorial="add-skill-button"
                         />
                       }
@@ -3108,7 +3108,7 @@ function AppShellContent({
                       trigger={
                         <HeaderIconButton
                           icon={<Plus className="h-4 w-4" />}
-                          tooltip="Add Automation"
+                          tooltip={t("sidebarMenu.addAutomation")}
                         />
                       }
                       {...getEditConfig('automation-config', activeWorkspace.rootPath)}

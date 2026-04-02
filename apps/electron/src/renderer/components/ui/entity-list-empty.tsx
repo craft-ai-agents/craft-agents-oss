@@ -6,6 +6,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from './empty'
 import { getDocUrl, type DocFeature } from '@craft-agent/shared/docs/doc-links'
 
@@ -28,6 +29,7 @@ export function EntityListEmptyScreen({
   children,
   className = 'flex-1',
 }: EntityListEmptyScreenProps) {
+  const { t } = useTranslation()
   const hasActions = docKey || children
 
   return (
@@ -46,7 +48,7 @@ export function EntityListEmptyScreen({
               onClick={() => window.electronAPI.openUrl(getDocUrl(docKey))}
               className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-foreground/[0.02] shadow-minimal hover:bg-foreground/[0.05] transition-colors"
             >
-              Learn more
+              {t("common.learnMore")}
             </button>
           )}
           {children}
