@@ -65,6 +65,11 @@ export class CapabilityRegistry {
   private readonly plugins = new Map<string, PluginDetails>()
   private readonly capabilities = new Map<PluginCapabilityType, PluginCapabilityRef[]>()
 
+  private isPluginActive(pluginId: string): boolean {
+    const plugin = this.plugins.get(pluginId)
+    return Boolean(plugin?.enabled && plugin.compatible && plugin.status === 'active')
+  }
+
   registerManifest(manifest: CraftPluginManifest, state: RegisteredPluginState): PluginDetails {
     if (this.plugins.has(manifest.id)) {
       throw new Error(`Plugin already registered: ${manifest.id}`)
@@ -100,10 +105,16 @@ export class CapabilityRegistry {
     return [...this.plugins.values()].sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  listCapabilities(type?: PluginCapabilityType): PluginCapabilityRef[] {
+  listCapabilities(type?: PluginCapabilityType, activeOnly = false): PluginCapabilityRef[] {
     if (type) {
-      return [...(this.capabilities.get(type) ?? [])]
+      const capabilities = [...(this.capabilities.get(type) ?? [])]
+      return activeOnly
+        ? capabilities.filter((capability) => this.isPluginActive(capability.pluginId))
+        : capabilities
     }
-    return [...this.capabilities.values()].flat()
+    const capabilities = [...this.capabilities.values()].flat()
+    return activeOnly
+      ? capabilities.filter((capability) => this.isPluginActive(capability.pluginId))
+      : capabilities
   }
 }

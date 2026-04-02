@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { lte, major, satisfies, valid } from 'semver'
 import type {
   CraftPluginManifest,
   PluginCapabilityType,
@@ -144,10 +145,11 @@ export function isPluginApiVersionSupported(
   pluginApiVersion: string,
   supportedApiVersion: string,
 ): boolean {
-  const plugin = parseSemverLike(pluginApiVersion)
-  const supported = parseSemverLike(supportedApiVersion)
+  const plugin = valid(pluginApiVersion)
+  const supported = valid(supportedApiVersion)
   if (!plugin || !supported) return false
-  return plugin[0] === supported[0]
+  if (major(plugin) !== major(supported)) return false
+  return lte(plugin, supported)
 }
 
 export function isPluginEngineSatisfied(
@@ -156,18 +158,7 @@ export function isPluginEngineSatisfied(
 ): boolean {
   const requirement = manifest.engines.craftAgents.trim()
   if (!requirement) return false
-  if (requirement === hostVersion) return true
-  if (requirement === '*') return true
-  if (requirement.startsWith('^')) {
-    const minimum = parseSemverLike(requirement.slice(1))
-    const actual = parseSemverLike(hostVersion)
-    if (!minimum || !actual) return false
-    if (minimum[0] !== actual[0]) return false
-    if (actual[1] < minimum[1]) return false
-    if (actual[1] === minimum[1] && actual[2] < minimum[2]) return false
-    return true
-  }
-  const exact = parseSemverLike(requirement)
-  const actual = parseSemverLike(hostVersion)
-  return exact?.join('.') === actual?.join('.')
+  const actual = valid(hostVersion)
+  if (!actual) return false
+  return satisfies(actual, requirement, { includePrerelease: true })
 }

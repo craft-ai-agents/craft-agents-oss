@@ -27,6 +27,14 @@ function createManifest(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function createPluginHost() {
+  return new PluginHost({
+    appVersion: '0.8.1',
+    pluginDirectory: join(tempRoot, 'plugins'),
+    pluginStatePath: join(tempRoot, 'plugin-state.json'),
+  })
+}
+
 let tempRoot = ''
 
 beforeEach(async () => {
@@ -59,11 +67,7 @@ describe('plugin storage helpers', () => {
 
 describe('PluginHost', () => {
   it('registers built-in plugins and indexes capabilities', async () => {
-    const host = new PluginHost({
-      appVersion: '0.8.1',
-      pluginDirectory: join(tempRoot, 'plugins'),
-      pluginStatePath: join(tempRoot, 'plugin-state.json'),
-    })
+    const host = createPluginHost()
     await host.initialize()
 
     const plugin = host.registerBuiltInPlugin(createManifest() as any)
@@ -75,11 +79,7 @@ describe('PluginHost', () => {
   })
 
   it('rejects duplicate registration', async () => {
-    const host = new PluginHost({
-      appVersion: '0.8.1',
-      pluginDirectory: join(tempRoot, 'plugins'),
-      pluginStatePath: join(tempRoot, 'plugin-state.json'),
-    })
+    const host = createPluginHost()
     await host.initialize()
 
     host.registerBuiltInPlugin(createManifest() as any)
@@ -110,12 +110,8 @@ describe('PluginHost', () => {
     expect(plugins[0]?.status).toBe('disabled')
   })
 
-  it('quarantines a plugin without removing its capability record', async () => {
-    const host = new PluginHost({
-      appVersion: '0.8.1',
-      pluginDirectory: join(tempRoot, 'plugins'),
-      pluginStatePath: join(tempRoot, 'plugin-state.json'),
-    })
+  it('removes quarantined plugin capabilities from active lookups', async () => {
+    const host = createPluginHost()
     await host.initialize()
     host.registerBuiltInPlugin(createManifest() as any)
 
@@ -124,15 +120,21 @@ describe('PluginHost', () => {
     expect(updated.enabled).toBe(false)
     expect(updated.status).toBe('quarantined')
     expect(updated.error).toBe('boom')
-    expect(host.listCapabilities('backend')).toHaveLength(1)
+    expect(host.listCapabilities('backend')).toHaveLength(0)
+  })
+
+  it('removes disabled plugin capabilities from active lookups', async () => {
+    const host = createPluginHost()
+    await host.initialize()
+    host.registerBuiltInPlugin(createManifest() as any)
+
+    await host.disablePlugin('codex-cli')
+
+    expect(host.listCapabilities('backend')).toHaveLength(0)
   })
 
   it('marks incompatible plugins disabled during registration', async () => {
-    const host = new PluginHost({
-      appVersion: '0.8.1',
-      pluginDirectory: join(tempRoot, 'plugins'),
-      pluginStatePath: join(tempRoot, 'plugin-state.json'),
-    })
+    const host = createPluginHost()
     await host.initialize()
 
     const plugin = host.registerBuiltInPlugin(createManifest({
@@ -142,5 +144,49 @@ describe('PluginHost', () => {
     expect(plugin.enabled).toBe(false)
     expect(plugin.compatible).toBe(false)
     expect(plugin.status).toBe('incompatible')
+    expect(host.listCapabilities('backend')).toHaveLength(0)
+  })
+
+  it('rejects enabling incompatible plugins', async () => {
+    const host = createPluginHost()
+    await host.initialize()
+    host.registerBuiltInPlugin(createManifest({
+      apiVersion: '1.9.0',
+    }) as any)
+
+    await expect(host.enablePlugin('codex-cli')).rejects.toThrow('Cannot enable incompatible plugin: codex-cli')
+    expect(host.getPlugin('codex-cli')?.status).toBe('incompatible')
+    expect(host.getPlugin('codex-cli')?.enabled).toBe(false)
+  })
+
+  it('rejects enabling quarantined plugins without recovery', async () => {
+    const host = createPluginHost()
+    await host.initialize()
+    host.registerBuiltInPlugin(createManifest() as any)
+    await host.quarantinePlugin('codex-cli', 'boom')
+
+    await expect(host.enablePlugin('codex-cli')).rejects.toThrow('Cannot enable quarantined plugin: codex-cli')
+    expect(host.getPlugin('codex-cli')?.status).toBe('quarantined')
+  })
+
+  it('loads valid external plugins even when a neighbor manifest is broken', async () => {
+    const pluginDirectory = join(tempRoot, 'plugins')
+    await mkdir(join(pluginDirectory, 'codex-cli'), { recursive: true })
+    await writeFile(join(pluginDirectory, 'codex-cli', 'plugin.json'), JSON.stringify(createManifest()))
+    await mkdir(join(pluginDirectory, 'broken-plugin'), { recursive: true })
+    await writeFile(join(pluginDirectory, 'broken-plugin', 'plugin.json'), '{ not-json')
+
+    const host = new PluginHost({
+      appVersion: '0.8.1',
+      pluginDirectory,
+      pluginStatePath: join(tempRoot, 'plugin-state.json'),
+    })
+    await host.initialize()
+
+    const plugins = await host.loadExternalPlugins()
+
+    expect(plugins).toHaveLength(1)
+    expect(plugins[0]?.id).toBe('codex-cli')
+    expect(host.listPlugins().map((plugin) => plugin.id)).toEqual(['codex-cli'])
   })
 })

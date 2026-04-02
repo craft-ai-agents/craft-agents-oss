@@ -68,8 +68,10 @@ describe('plugin manifest schema', () => {
     expect(isPluginCapabilityType('bogus')).toBe(false)
   })
 
-  it('treats matching major API versions as compatible', () => {
+  it('requires plugin API versions to stay within the same major and not exceed the host contract', () => {
     expect(isPluginApiVersionSupported('1.0.0', '1.2.3')).toBe(true)
+    expect(isPluginApiVersionSupported('1.2.3', '1.2.3')).toBe(true)
+    expect(isPluginApiVersionSupported('1.9.0', '1.2.3')).toBe(false)
     expect(isPluginApiVersionSupported('2.0.0', '1.2.3')).toBe(false)
   })
 
@@ -94,7 +96,8 @@ describe('plugin manifest schema', () => {
     })
 
     expect(isPluginEngineSatisfied(ranged, '0.8.1')).toBe(true)
-    expect(isPluginEngineSatisfied(ranged, '0.9.0')).toBe(true)
+    expect(isPluginEngineSatisfied(ranged, '0.8.2')).toBe(true)
+    expect(isPluginEngineSatisfied(ranged, '0.9.0')).toBe(false)
     expect(isPluginEngineSatisfied(ranged, '1.0.0')).toBe(false)
     expect(isPluginEngineSatisfied(exact, '0.8.1')).toBe(true)
     expect(isPluginEngineSatisfied(exact, '0.8.2')).toBe(false)

@@ -73,7 +73,8 @@
     "incr-regex-package": "^1.0.4",
     "shell-quote": "^1.8.3",
     "@mariozechner/pi-ai": "0.56.2",
-    "glob": "^13.0.0"
+    "glob": "^13.0.0",
+    "semver": "^7.7.3"
   },
   "peerDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.19",

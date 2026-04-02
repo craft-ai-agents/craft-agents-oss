@@ -52,7 +52,7 @@ export class PluginHost {
   }
 
   async loadExternalPlugins(): Promise<PluginDetails[]> {
-    const manifests = await loadPluginManifestsFromDirectory(this.pluginDirectory)
+    const { manifests } = await loadPluginManifestsFromDirectory(this.pluginDirectory)
     return manifests.map((manifest) => this.registerManifest(manifest))
   }
 
@@ -65,7 +65,7 @@ export class PluginHost {
   }
 
   listCapabilities(type?: PluginCapabilityType): PluginCapabilityRef[] {
-    return this.registry.listCapabilities(type)
+    return this.registry.listCapabilities(type, true)
   }
 
   listRoutes(): PluginCapabilityRef[] {
@@ -89,6 +89,17 @@ export class PluginHost {
   }
 
   async enablePlugin(pluginId: string): Promise<PluginDetails> {
+    const current = this.registry.getPlugin(pluginId)
+    if (!current) {
+      throw new Error(`Unknown plugin: ${pluginId}`)
+    }
+    if (!current.compatible) {
+      throw new Error(`Cannot enable incompatible plugin: ${pluginId}`)
+    }
+    if (current.status === 'quarantined') {
+      throw new Error(`Cannot enable quarantined plugin: ${pluginId}`)
+    }
+
     const plugin = this.registry.updatePlugin(pluginId, {
       enabled: true,
       status: 'active',

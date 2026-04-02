@@ -3,21 +3,58 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parsePluginManifest, type CraftPluginManifest } from '@craft-agent/shared/plugins'
 
+export interface PluginManifestLoadFailure {
+  pluginPath: string
+  error: string
+}
+
+export interface PluginManifestDirectoryLoadResult {
+  manifests: CraftPluginManifest[]
+  failures: PluginManifestLoadFailure[]
+}
+
+type PluginManifestLoadResult
+  = | { manifest: CraftPluginManifest; pluginPath: string }
+    | PluginManifestLoadFailure
+
 export async function loadPluginManifest(filePath: string): Promise<CraftPluginManifest> {
   const raw = await readFile(filePath, 'utf-8')
   return parsePluginManifest(JSON.parse(raw))
 }
 
-export async function loadPluginManifestsFromDirectory(dirPath: string): Promise<CraftPluginManifest[]> {
+export async function loadPluginManifestsFromDirectory(
+  dirPath: string,
+): Promise<PluginManifestDirectoryLoadResult> {
   if (!existsSync(dirPath)) {
-    return []
+    return { manifests: [], failures: [] }
   }
 
   const entries = await readdir(dirPath, { withFileTypes: true })
   const pluginDirs = entries.filter((entry) => entry.isDirectory())
-  const manifests = await Promise.all(
-    pluginDirs.map(async (entry) => loadPluginManifest(join(dirPath, entry.name, 'plugin.json'))),
+  const results: PluginManifestLoadResult[] = await Promise.all(
+    pluginDirs.map(async (entry) => {
+      const pluginPath = join(dirPath, entry.name, 'plugin.json')
+      try {
+        return { manifest: await loadPluginManifest(pluginPath), pluginPath }
+      } catch (error) {
+        return {
+          pluginPath,
+          error: error instanceof Error ? error.message : String(error),
+        }
+      }
+    }),
   )
 
-  return manifests
+  const manifests: CraftPluginManifest[] = []
+  const failures: PluginManifestLoadFailure[] = []
+
+  for (const result of results) {
+    if ('manifest' in result) {
+      manifests.push(result.manifest)
+      continue
+    }
+    failures.push(result)
+  }
+
+  return { manifests, failures }
 }
