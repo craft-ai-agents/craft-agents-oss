@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/pi-agent-server",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "license": "Apache-2.0",
   "description": "Out-of-process Pi agent server communicating via JSONL over stdio",
   "type": "module",

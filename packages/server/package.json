@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/server",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "Standalone headless Craft Agent server (Bun runtime)",
   "type": "module",
   "main": "src/index.ts",

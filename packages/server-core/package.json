@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/server-core",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "license": "Apache-2.0",
   "description": "Reusable headless server infrastructure for Craft Agent",
   "type": "module",
