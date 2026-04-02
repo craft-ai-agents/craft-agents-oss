@@ -3,6 +3,8 @@ import {
   CONTRIBUTION_KEYS,
   PLUGIN_CAPABILITY_TYPES,
   PLUGIN_PERMISSIONS,
+  isPluginApiVersionSupported,
+  isPluginEngineSatisfied,
   isPluginCapabilityType,
   isPluginPermission,
   listManifestCapabilityTypes,
@@ -64,5 +66,37 @@ describe('plugin manifest schema', () => {
     expect(isPluginPermission('bogus')).toBe(false)
     expect(isPluginCapabilityType('backend')).toBe(true)
     expect(isPluginCapabilityType('bogus')).toBe(false)
+  })
+
+  it('treats matching major API versions as compatible', () => {
+    expect(isPluginApiVersionSupported('1.0.0', '1.2.3')).toBe(true)
+    expect(isPluginApiVersionSupported('2.0.0', '1.2.3')).toBe(false)
+  })
+
+  it('supports exact and caret engine requirements', () => {
+    const ranged = parsePluginManifest({
+      id: 'engines-plugin',
+      name: 'Engines Plugin',
+      version: '1.0.0',
+      apiVersion: '1.0.0',
+      engines: { craftAgents: '^0.8.1' },
+      permissions: [],
+      contributions: {},
+    })
+    const exact = parsePluginManifest({
+      id: 'exact-plugin',
+      name: 'Exact Plugin',
+      version: '1.0.0',
+      apiVersion: '1.0.0',
+      engines: { craftAgents: '0.8.1' },
+      permissions: [],
+      contributions: {},
+    })
+
+    expect(isPluginEngineSatisfied(ranged, '0.8.1')).toBe(true)
+    expect(isPluginEngineSatisfied(ranged, '0.9.0')).toBe(true)
+    expect(isPluginEngineSatisfied(ranged, '1.0.0')).toBe(false)
+    expect(isPluginEngineSatisfied(exact, '0.8.1')).toBe(true)
+    expect(isPluginEngineSatisfied(exact, '0.8.2')).toBe(false)
   })
 })
