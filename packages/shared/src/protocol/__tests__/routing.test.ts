@@ -68,4 +68,13 @@ describe('channel routing behavior', () => {
       }
     }
   })
+
+  test('all plugins:* channels are REMOTE_ELIGIBLE', () => {
+    const pluginChannels = Object.values(RPC_CHANNELS.plugins)
+    expect(pluginChannels.length).toBeGreaterThan(0)
+
+    for (const ch of pluginChannels) {
+      expect(REMOTE_ELIGIBLE_CHANNELS.has(ch)).toBe(true)
+    }
+  })
 })

@@ -59,6 +59,36 @@ export function isEmbeddedServerEnabled(): boolean {
   return false;
 }
 
+export function isPluginHostEnabled(): boolean {
+  const override = parseBooleanEnv(getEnv('CRAFT_FEATURE_PLUGIN_HOST'));
+  if (override !== undefined) return override;
+  return false;
+}
+
+export function isPluginRoutingUiEnabled(): boolean {
+  const override = parseBooleanEnv(getEnv('CRAFT_FEATURE_PLUGIN_ROUTING_UI'));
+  if (override !== undefined) return override;
+  return false;
+}
+
+export function isExternalPluginsEnabled(): boolean {
+  const override = parseBooleanEnv(getEnv('CRAFT_FEATURE_EXTERNAL_PLUGINS'));
+  if (override !== undefined) return override;
+  return false;
+}
+
+export function isPluginVoiceEnabled(): boolean {
+  const override = parseBooleanEnv(getEnv('CRAFT_FEATURE_PLUGIN_VOICE'));
+  if (override !== undefined) return override;
+  return false;
+}
+
+export function isPluginMcpAppsEnabled(): boolean {
+  const override = parseBooleanEnv(getEnv('CRAFT_FEATURE_PLUGIN_MCP_APPS'));
+  if (override !== undefined) return override;
+  return false;
+}
+
 export const FEATURE_FLAGS = {
   /** Enable Opus 4.6 fast mode (speed:"fast" + beta header). 6x pricing. */
   fastMode: false,
@@ -86,5 +116,20 @@ export const FEATURE_FLAGS = {
    */
   get embeddedServer(): boolean {
     return isEmbeddedServerEnabled();
+  },
+  get pluginHost(): boolean {
+    return isPluginHostEnabled();
+  },
+  get pluginRoutingUi(): boolean {
+    return isPluginRoutingUiEnabled();
+  },
+  get externalPlugins(): boolean {
+    return isExternalPluginsEnabled();
+  },
+  get pluginVoice(): boolean {
+    return isPluginVoiceEnabled();
+  },
+  get pluginMcpApps(): boolean {
+    return isPluginMcpAppsEnabled();
   },
 } as const;

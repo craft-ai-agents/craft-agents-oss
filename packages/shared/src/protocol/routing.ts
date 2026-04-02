@@ -145,6 +145,12 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.appearance.GET_RICH_TOOL_DESCRIPTIONS,
   RPC_CHANNELS.appearance.SET_RICH_TOOL_DESCRIPTIONS,
 
+  // caching — local app/runtime preferences
+  RPC_CHANNELS.caching.GET_EXTENDED_PROMPT_CACHE,
+  RPC_CHANNELS.caching.SET_EXTENDED_PROMPT_CACHE,
+  RPC_CHANNELS.caching.GET_ENABLE_1M_CONTEXT,
+  RPC_CHANNELS.caching.SET_ENABLE_1M_CONTEXT,
+
   // browserPane — Electron BrowserView
   RPC_CHANNELS.browserPane.CREATE,
   RPC_CHANNELS.browserPane.DESTROY,
@@ -319,6 +325,18 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.sources.CHANGED,
   RPC_CHANNELS.sources.GET_PERMISSIONS,
   RPC_CHANNELS.sources.GET_MCP_TOOLS,
+
+  // plugins — server-owned capability host
+  RPC_CHANNELS.plugins.LIST,
+  RPC_CHANNELS.plugins.GET,
+  RPC_CHANNELS.plugins.ENABLE,
+  RPC_CHANNELS.plugins.DISABLE,
+  RPC_CHANNELS.plugins.LIST_CAPABILITIES,
+  RPC_CHANNELS.plugins.LIST_ROUTES,
+  RPC_CHANNELS.plugins.LIST_SETTINGS_PANES,
+  RPC_CHANNELS.plugins.LIST_SESSION_ACTIONS,
+  RPC_CHANNELS.plugins.LIST_COMPOSER_ACTIONS,
+  RPC_CHANNELS.plugins.LIST_CHAT_CARD_TYPES,
 
   // oauth — OAuth state management
   RPC_CHANNELS.oauth.START,

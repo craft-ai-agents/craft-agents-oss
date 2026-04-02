@@ -232,6 +232,18 @@ export const RPC_CHANNELS = {
     GET_PERMISSIONS: 'sources:getPermissions',
     GET_MCP_TOOLS: 'sources:getMcpTools',
   },
+  plugins: {
+    LIST: 'plugins:list',
+    GET: 'plugins:get',
+    ENABLE: 'plugins:enable',
+    DISABLE: 'plugins:disable',
+    LIST_CAPABILITIES: 'plugins:listCapabilities',
+    LIST_ROUTES: 'plugins:listRoutes',
+    LIST_SETTINGS_PANES: 'plugins:listSettingsPanes',
+    LIST_SESSION_ACTIONS: 'plugins:listSessionActions',
+    LIST_COMPOSER_ACTIONS: 'plugins:listComposerActions',
+    LIST_CHAT_CARD_TYPES: 'plugins:listChatCardTypes',
+  },
   oauth: {
     START: 'oauth:start',
     COMPLETE: 'oauth:complete',

@@ -22,6 +22,11 @@ import type {
   CredentialInputMode as SharedCredentialInputMode,
   CredentialAuthRequest as SharedCredentialAuthRequest,
 } from '../agent/index'
+import type {
+  PluginCapabilityRef,
+  PluginDetails,
+  PluginSummary,
+} from '../plugins'
 
 // Re-export generateMessageId for handler convenience
 export { generateMessageId } from '@craft-agent/core/types'
@@ -245,6 +250,26 @@ export type SessionCommand =
 export interface NewChatActionParams {
   input?: string
   name?: string
+}
+
+// ---------------------------------------------------------------------------
+// Plugin host DTOs
+// ---------------------------------------------------------------------------
+
+export interface PluginToggleResult {
+  plugin: PluginDetails
+}
+
+export interface PluginListResponse {
+  plugins: PluginSummary[]
+}
+
+export interface PluginDetailsResponse {
+  plugin: PluginDetails
+}
+
+export interface PluginCapabilitiesResponse {
+  capabilities: PluginCapabilityRef[]
 }
 
 // ---------------------------------------------------------------------------

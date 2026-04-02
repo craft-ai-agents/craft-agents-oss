@@ -1,0 +1,68 @@
+import { describe, expect, it } from 'bun:test'
+import {
+  CONTRIBUTION_KEYS,
+  PLUGIN_CAPABILITY_TYPES,
+  PLUGIN_PERMISSIONS,
+  isPluginCapabilityType,
+  isPluginPermission,
+  listManifestCapabilityTypes,
+  listManifestContributionIds,
+  parsePluginManifest,
+} from '../manifest'
+
+describe('plugin manifest schema', () => {
+  it('parses a minimal valid manifest', () => {
+    const manifest = parsePluginManifest({
+      id: 'codex-cli',
+      name: 'Codex CLI',
+      version: '1.0.0',
+      apiVersion: '1.0.0',
+      engines: { craftAgents: '^0.8.1' },
+      permissions: ['network', 'session.read'],
+      contributions: {
+        backends: ['codex-cli-backend'],
+        sessionActions: ['handoff-to-codex'],
+      },
+    })
+
+    expect(manifest.id).toBe('codex-cli')
+    expect(manifest.permissions).toEqual(['network', 'session.read'])
+    expect(listManifestContributionIds(manifest)).toEqual(['codex-cli-backend', 'handoff-to-codex'])
+    expect(listManifestCapabilityTypes(manifest)).toEqual(['backend', 'sessionAction'])
+  })
+
+  it('rejects unknown permissions', () => {
+    expect(() => parsePluginManifest({
+      id: 'bad-plugin',
+      name: 'Bad Plugin',
+      version: '1.0.0',
+      apiVersion: '1.0.0',
+      engines: { craftAgents: '^0.8.1' },
+      permissions: ['network', 'root.shell'],
+      contributions: {},
+    })).toThrow()
+  })
+
+  it('rejects non-semver-like versions', () => {
+    expect(() => parsePluginManifest({
+      id: 'bad-version',
+      name: 'Bad Version',
+      version: 'latest',
+      apiVersion: '1.0.0',
+      engines: { craftAgents: '^0.8.1' },
+      permissions: [],
+      contributions: {},
+    })).toThrow('version must be semver-like')
+  })
+
+  it('exposes stable permission and capability enums', () => {
+    expect(PLUGIN_PERMISSIONS.length).toBeGreaterThan(5)
+    expect(PLUGIN_CAPABILITY_TYPES.length).toBeGreaterThan(5)
+    expect(CONTRIBUTION_KEYS).toContain('backends')
+    expect(CONTRIBUTION_KEYS).toContain('mcpAppProviders')
+    expect(isPluginPermission('network')).toBe(true)
+    expect(isPluginPermission('bogus')).toBe(false)
+    expect(isPluginCapabilityType('backend')).toBe(true)
+    expect(isPluginCapabilityType('bogus')).toBe(false)
+  })
+})
