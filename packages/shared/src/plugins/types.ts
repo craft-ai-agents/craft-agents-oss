@@ -44,6 +44,8 @@ export type PluginHookNamespace =
   | 'speech.output'
   | 'mcp.app.surface'
 
+export type PluginSource = 'built-in' | 'external'
+
 export interface PluginEntrypoints {
   main?: string
   helper?: string
@@ -106,6 +108,7 @@ export interface PluginSummary {
   version: string
   enabled: boolean
   apiVersion: string
+  source: PluginSource
   description?: string
 }
 

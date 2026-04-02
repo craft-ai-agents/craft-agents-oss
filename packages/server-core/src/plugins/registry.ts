@@ -4,6 +4,7 @@ import type {
   PluginCapabilityType,
   PluginContributionRefs,
   PluginDetails,
+  PluginSource,
 } from '@craft-agent/shared/plugins'
 
 const CONTRIBUTION_TO_CAPABILITY: Array<[keyof PluginContributionRefs, PluginCapabilityType]> = [
@@ -26,6 +27,7 @@ const CONTRIBUTION_TO_CAPABILITY: Array<[keyof PluginContributionRefs, PluginCap
 export interface RegisteredPluginState {
   enabled: boolean
   compatible: boolean
+  source: PluginSource
   status: NonNullable<PluginDetails['status']>
   error?: string
 }
@@ -51,6 +53,7 @@ export function manifestToPluginDetails(
     apiVersion: manifest.apiVersion,
     description: manifest.description,
     enabled: state.enabled,
+    source: state.source,
     permissions: [...manifest.permissions],
     entrypoints: manifest.entrypoints,
     contributions: manifest.contributions,

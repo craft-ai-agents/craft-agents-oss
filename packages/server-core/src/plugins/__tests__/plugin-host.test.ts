@@ -74,6 +74,7 @@ describe('PluginHost', () => {
     const plugin = host.registerBuiltInPlugin(createManifest() as any)
 
     expect(plugin.enabled).toBe(true)
+    expect(plugin.source).toBe('built-in')
     expect(host.listCapabilities('backend').map((item) => item.id)).toEqual(['codex-backend'])
     expect(host.listSessionActions().map((item) => item.id)).toEqual(['handoff-to-codex'])
     expect(host.listRoutes().map((item) => item.id)).toEqual(['codex-page'])
@@ -109,6 +110,7 @@ describe('PluginHost', () => {
     expect(plugins).toHaveLength(1)
     expect(plugins[0]?.enabled).toBe(false)
     expect(plugins[0]?.status).toBe('disabled')
+    expect(plugins[0]?.source).toBe('external')
   })
 
   it('does not honor persisted disabled state for built-in plugins', async () => {

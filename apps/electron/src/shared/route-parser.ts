@@ -16,7 +16,7 @@ import type {
   AutomationFilter,
   RightSidebarPanel,
 } from './types'
-import { isValidSettingsSubpage, type SettingsSubpage } from './settings-registry'
+import { isSettingsSubpageEnabled, isValidSettingsSubpage, type SettingsSubpage } from './settings-registry'
 
 // =============================================================================
 // Route Types
@@ -98,6 +98,7 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   if (first === 'settings') {
     const subpage = segments[1] || 'app'
     if (!isValidSettingsSubpage(subpage)) return null
+    if (!isSettingsSubpageEnabled(subpage)) return null
     return {
       navigator: 'settings',
       details: { type: subpage, id: subpage },

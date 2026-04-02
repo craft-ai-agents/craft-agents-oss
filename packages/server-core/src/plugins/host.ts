@@ -3,6 +3,7 @@ import type {
   PluginCapabilityRef,
   PluginCapabilityType,
   PluginDetails,
+  PluginSource,
 } from '@craft-agent/shared/plugins'
 import {
   isPluginApiVersionSupported,
@@ -54,7 +55,7 @@ export class PluginHost {
     return this.registerManifest(
       manifest,
       { enabled: true, status: 'active' },
-      { respectPersistedState: false },
+      { respectPersistedState: false, source: 'built-in' },
     )
   }
 
@@ -146,11 +147,12 @@ export class PluginHost {
   private registerManifest(
     manifest: CraftPluginManifest,
     defaults?: PluginStateEntry,
-    options?: { respectPersistedState?: boolean },
+    options?: { respectPersistedState?: boolean; source?: PluginSource },
   ): PluginDetails {
     const state = options?.respectPersistedState === false
       ? {}
       : (this.state.plugins[manifest.id] ?? {})
+    const source = options?.source ?? 'external'
     const compatible = isPluginApiVersionSupported(manifest.apiVersion, this.pluginApiVersion)
       && isPluginEngineSatisfied(manifest, this.appVersion)
 
@@ -162,6 +164,7 @@ export class PluginHost {
     return this.registry.registerManifest(manifest, {
       enabled: compatible ? enabled : false,
       compatible,
+      source,
       status,
       error: state.error ?? defaults?.error,
     })

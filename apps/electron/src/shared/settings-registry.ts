@@ -13,6 +13,8 @@
  * That's it - types, routes, and validation are derived automatically.
  */
 
+import { FEATURE_FLAGS } from '@craft-agent/shared/feature-flags'
+
 /**
  * Settings page definition
  */
@@ -34,6 +36,8 @@ export interface SettingsPageDefinition {
 export const SETTINGS_PAGES = [
   { id: 'app', label: 'App', description: 'Notifications and updates' },
   { id: 'ai', label: 'AI', description: 'Model, thinking, connections' },
+  { id: 'plugins', label: 'Plugins', description: 'Installed plugins and health' },
+  { id: 'routing', label: 'Routing', description: 'Plugin routes and extension surfaces' },
   { id: 'appearance', label: 'Appearance', description: 'Theme, font, tool icons' },
   { id: 'input', label: 'Input', description: 'Send key, spell check' },
   { id: 'workspace', label: 'Workspace', description: 'Name, icon, working directory' },
@@ -61,6 +65,15 @@ export const VALID_SETTINGS_SUBPAGES: readonly SettingsSubpage[] = SETTINGS_PAGE
 export function isValidSettingsSubpage(value: string): value is SettingsSubpage {
   return VALID_SETTINGS_SUBPAGES.includes(value as SettingsSubpage)
 }
+
+export function isSettingsSubpageEnabled(subpage: SettingsSubpage): boolean {
+  if (subpage === 'server') return FEATURE_FLAGS.embeddedServer
+  if (subpage === 'plugins') return FEATURE_FLAGS.pluginHost
+  if (subpage === 'routing') return FEATURE_FLAGS.pluginRoutingUi
+  return true
+}
+
+export const VISIBLE_SETTINGS_PAGES = SETTINGS_PAGES.filter((page) => isSettingsSubpageEnabled(page.id))
 
 /**
  * Get settings page definition by ID
