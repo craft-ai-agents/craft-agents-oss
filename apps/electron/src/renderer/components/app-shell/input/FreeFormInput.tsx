@@ -324,7 +324,17 @@ export function FreeFormInput({
       return ANTHROPIC_MODELS // Safety net — shouldn't happen
     }
 
-    return connection.models || ANTHROPIC_MODELS
+    const models = connection.models || ANTHROPIC_MODELS
+    // For GitHub Copilot, always surface 'auto' at the top — it may not be
+    // returned by the /models API with policy.state==='enabled' even though
+    // it's a valid model that gives a 10% discount on premium requests.
+    if (connection.piAuthProvider === 'github-copilot' && !models.some(m => typeof m !== 'string' && m.id === 'auto')) {
+      return [
+        { id: 'auto', name: 'Auto', shortName: 'Auto', description: '', provider: 'pi' as const, contextWindow: 200_000, supportsThinking: false },
+        ...models,
+      ]
+    }
+    return models
   }, [llmConnections, currentConnection, workspaceDefaultConnection, connectionUnavailable])
 
   const availableThinkingLevels = THINKING_LEVELS
