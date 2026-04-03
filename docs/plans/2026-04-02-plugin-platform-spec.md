@@ -1,5 +1,7 @@
 # Craft Agents Unified Plugin Platform Implementation Plan
 
+> Historical planning document. For the current implementation contract, use [../plugin-platform-standard.md](../plugin-platform-standard.md).
+
 > **For Claude:** REQUIRED SUB-SKILL: Use [skill:executing-plans] to implement this plan task-by-task.
 
 **Goal:** Build one host-owned plugin platform for Craft Agents so future backends, UI extensions, routing logic, chat surfaces, voice features, MCP-app integrations, and helper services can all flow through one stable extension spine instead of being bolted onto random code paths.
