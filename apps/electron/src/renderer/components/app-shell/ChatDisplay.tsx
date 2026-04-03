@@ -73,6 +73,19 @@ import { CHAT_LAYOUT } from "@/config/layout"
 import { resolveBranchNewPanelOption } from "./branching"
 
 // ============================================================================
+// CSS Custom Highlight API helper
+// ============================================================================
+
+/** Access CSS.highlights lazily — avoids stale ref from module-init / HMR timing */
+function getCSSHighlights(): Map<string, Highlight> | undefined {
+  try {
+    return (CSS as any).highlights as Map<string, Highlight> | undefined
+  } catch {
+    return undefined
+  }
+}
+
+// ============================================================================
 // Overlay State Types
 // ============================================================================
 
@@ -195,10 +208,8 @@ interface ChatDisplayProps {
   searchQuery?: string
   /** Whether search mode is active (prevents focus stealing to chat input) */
   isSearchModeActive?: boolean
-  /** Callback when match count changes - used by session list for navigation */
-  onMatchCountChange?: (count: number) => void
-  /** Callback when match info (count and index) changes - for immediate UI updates */
-  onMatchInfoChange?: (info: { count: number; index: number }) => void
+  /** Callback when match info changes - for immediate UI updates */
+  onMatchInfoChange?: (info: { count: number; index: number; isHighlighting: boolean; sessionId: string | null }) => void
   // Compact mode (for EditPopover embedding)
   /** Enable compact mode - hides non-essential UI elements for popover embedding */
   compactMode?: boolean
@@ -296,6 +307,7 @@ export interface ChatDisplayHandle {
   goToPrevMatch: () => void
   matchCount: number
   currentMatchIndex: number
+  isHighlighting: boolean
 }
 
 /**
@@ -520,7 +532,6 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Search highlighting
   searchQuery: externalSearchQuery,
   isSearchModeActive = false,
-  onMatchCountChange,
   onMatchInfoChange,
   // Compact mode (for EditPopover embedding)
   compactMode = false,
@@ -606,12 +617,19 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Current match index for navigation (internal state, exposed via ref)
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
   const turnRefs = React.useRef<Map<string, HTMLDivElement>>(new Map())
-  // Track actual match IDs created in DOM (state so it triggers re-renders)
-  const [actualMatchIds, setActualMatchIds] = useState<Set<string>>(new Set())
-  // Track which turn IDs have been highlighted (to avoid re-highlighting on pagination)
-  const highlightedTurnIdsRef = React.useRef<Set<string>>(new Set())
-  // Track previous search/session to detect when to clear vs accumulate highlights
-  const prevHighlightContextRef = React.useRef<{ searchQuery: string; sessionId: string | null }>({ searchQuery: '', sessionId: null })
+  // Inject ::highlight() styles at runtime to avoid LightningCSS build warnings
+  // (the optimizer doesn't recognize ::highlight as a valid pseudo-element yet)
+  React.useEffect(() => {
+    const id = 'search-highlight-styles'
+    if (document.getElementById(id)) return
+    const style = document.createElement('style')
+    style.id = id
+    style.textContent = `
+      ::highlight(search-passive) { background-color: rgb(253 224 71 / 0.3); color: inherit; }
+      ::highlight(search-active) { background-color: rgb(253 224 71); color: rgb(0 0 0 / 0.9); }
+    `
+    document.head.appendChild(style)
+  }, [])
   // Flag to control when scrolling to matches should happen
   // Only scroll when: session changes with search active, or user clicks navigation
   const shouldScrollToMatchRef = React.useRef(false)
@@ -619,7 +637,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
   // Use the external search query from props
   const searchQuery = externalSearchQuery || ''
-  const isSearchActive = Boolean(searchQuery.trim())
+  // Require 2+ characters to activate in-chat search (aligned with session list isSearchMode)
+  const isSearchActive = searchQuery.trim().length >= 2
 
   // Focus textarea when zone gains focus via keyboard (Tab, Cmd+3, ArrowRight)
   // Requires isFocused to be true - respects zone architecture
@@ -666,7 +685,6 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     }
 
     setCurrentMatchIndex(0)
-    setActualMatchIds(new Set()) // Clear stale match IDs to prevent incorrect counts
   }, [session?.id, searchQuery, isSearchActive])
 
   // Helper to count occurrences of a substring
@@ -696,9 +714,10 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       let textContent = ''
       let turnId = ''
 
+      // Use getTurnKey() for consistent IDs between text scan and DOM refs
+      turnId = getTurnKey(turn)
+
       if (turn.type === 'user') {
-        turnId = `user-${turn.message.id}`
-        // Extract text content from user message
         const content = turn.message.content as unknown
         if (typeof content === 'string') {
           textContent = content
@@ -709,14 +728,10 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             .join('\n')
         }
       } else if (turn.type === 'assistant') {
-        turnId = `turn-${turn.turnId}`
-        // Extract text content from assistant response
-        // turn.response is { text: string, isStreaming: boolean } object
         if (turn.response?.text) {
           textContent = turn.response.text
         }
       } else if (turn.type === 'system') {
-        turnId = `system-${turn.message.id}`
         textContent = turn.message.content
       }
 
@@ -739,8 +754,11 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   useEffect(() => {
     if (!isSearchActive || matchingOccurrences.length === 0) return
 
-    // Find the earliest matching turn index
-    const earliestMatchTurnIndex = Math.min(...matchingOccurrences.map(m => m.turnIndex))
+    // Find the earliest matching turn index (reduce to avoid RangeError on large arrays)
+    const earliestMatchTurnIndex = matchingOccurrences.reduce(
+      (min, m) => m.turnIndex < min ? m.turnIndex : min,
+      matchingOccurrences[0]!.turnIndex
+    )
     const totalTurns = groupMessagesByTurn(session?.messages || []).length
 
     // Calculate how many turns we need to show to include all matches
@@ -758,13 +776,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     return Array.from(uniqueTurnIds)
   }, [matchingOccurrences])
 
-  // Filter to only valid matches that exist in DOM (actualMatchIds is updated after highlighting)
-  const validMatches = useMemo(() => {
-    // Before highlighting runs, show all potential matches
-    // After highlighting, filter to only matches that exist in DOM
-    if (actualMatchIds.size === 0) return matchingOccurrences
-    return matchingOccurrences.filter(m => actualMatchIds.has(m.matchId))
-  }, [matchingOccurrences, actualMatchIds])
+  // With CSS Custom Highlight API, navigation is driven by logical matches — no DOM verification needed.
+  const validMatches = matchingOccurrences
 
   // Auto-scroll to match ONLY when there's exactly one match
   // Multiple matches: user navigates with chevrons to avoid jarring scroll
@@ -774,288 +787,184 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     }
   }, [validMatches.length, isSearchActive])
 
-  // Scroll to current match (with delay to wait for DOM rendering)
+  // Scroll to current match turn
   // Only scrolls when shouldScrollToMatchRef is true (single match auto-scroll or nav button click)
   useEffect(() => {
-    // Only scroll if explicitly requested (session change or navigation click)
     if (!shouldScrollToMatchRef.current) return
 
     if (validMatches.length > 0 && currentMatchIndex < validMatches.length) {
       const matchData = validMatches[currentMatchIndex]
-      const { matchId, turnIndex } = matchData
+      const { turnId, turnIndex } = matchData
       const totalTurns = totalTurnCountRef.current
 
-      // Calculate current visible range
-      const currentStartIndex = Math.max(0, totalTurns - visibleTurnCount)
-
       // Check if the match is outside the visible range
+      const currentStartIndex = Math.max(0, totalTurns - visibleTurnCount)
       if (turnIndex < currentStartIndex) {
-        // Expand visible turns to include this match (with some buffer)
-        const newVisibleCount = totalTurns - turnIndex + 5 // Add 5 turns buffer
+        const newVisibleCount = totalTurns - turnIndex + 5
         setVisibleTurnCount(newVisibleCount)
-        // Keep shouldScroll true - will scroll on next effect run after DOM updates
         return
       }
 
-      // Use multiple attempts to ensure DOM is ready (highlights are applied)
-      let attempts = 0
-      const maxAttempts = 5
-
-      const tryScroll = () => {
-        const matchEl = document.getElementById(matchId) as HTMLElement | null
-        if (matchEl) {
-          // Only scroll if match is not comfortably visible on screen (with 128px edge buffer)
-          const rect = matchEl.getBoundingClientRect()
-          const buffer = 128
-          const isVisible = rect.top >= buffer && rect.bottom <= window.innerHeight - buffer
-          if (!isVisible) {
-            matchEl.scrollIntoView({ behavior: 'instant', block: 'center' })
-          }
-          // Add active styling to current match (prominent yellow with shadow and ring)
-          // Using ring instead of border to avoid layout shift
-          matchEl.classList.remove('bg-yellow-300/30')
-          matchEl.classList.add('bg-yellow-300', 'shadow-tinted', 'text-black/90', 'ring-1', 'ring-yellow-500')
-          ;(matchEl as HTMLElement).style.setProperty('--shadow-color', '90, 50, 5') // dark amber for stronger shadow
-          // Remove active styling from other matches (revert to passive)
-          document.querySelectorAll('mark.search-highlight.bg-yellow-300').forEach(el => {
-            if (el.id !== matchId) {
-              el.classList.remove('bg-yellow-300', 'shadow-tinted', 'text-black/90', 'ring-1', 'ring-yellow-500')
-              el.classList.add('bg-yellow-300/30')
-              ;(el as HTMLElement).style.removeProperty('--shadow-color')
-            }
-          })
-          shouldScrollToMatchRef.current = false
-        } else if (attempts < maxAttempts) {
-          attempts++
-          setTimeout(tryScroll, 50)
-        } else {
-          // Give up - validMatches should only contain valid matches, but timing can cause this
-          shouldScrollToMatchRef.current = false
+      // Scroll the turn into view
+      const turnEl = turnRefs.current.get(turnId)
+      if (turnEl) {
+        const rect = turnEl.getBoundingClientRect()
+        const buffer = 128
+        const isVisible = rect.top >= buffer && rect.bottom <= window.innerHeight - buffer
+        if (!isVisible) {
+          turnEl.scrollIntoView({ behavior: 'instant', block: 'center' })
         }
       }
-
-      // Start with requestAnimationFrame for initial attempt
-      const rafId = requestAnimationFrame(tryScroll)
-      return () => cancelAnimationFrame(rafId)
+      shouldScrollToMatchRef.current = false
     }
   }, [validMatches, currentMatchIndex, session?.id, visibleTurnCount])
 
-  // Text highlighting within messages
-  // Uses DOM manipulation after render to highlight matching text
+  // ---------------------------------------------------------------------------
+  // CSS Custom Highlight API — non-destructive text highlighting
+  // Creates browser-native highlight ranges over matching text without
+  // modifying the DOM tree. Safe with React re-renders and streaming.
+  // Uses cross-node matching: concatenates text across node boundaries
+  // to find matches that span multiple DOM nodes (e.g. Shiki-split tokens).
+  // ---------------------------------------------------------------------------
+
+  const MAX_HIGHLIGHT_RANGES = 5000
+  // Store computed ranges so the active-match effect can restyle without re-walking the DOM
+  const highlightRangesRef = React.useRef<Range[]>([])
+
+  // Effect 1: Walk DOM and collect highlight ranges when search/session/pagination changes
   useEffect(() => {
+    const cssHighlights = getCSSHighlights()
+    highlightRangesRef.current = []
+
     // Clear previous highlights
-    const clearHighlights = () => {
-      const existingMarks = document.querySelectorAll('mark.search-highlight')
-      existingMarks.forEach(mark => {
-        const parent = mark.parentNode
-        if (parent) {
-          parent.replaceChild(document.createTextNode(mark.textContent || ''), mark)
-          parent.normalize() // Merge adjacent text nodes
-        }
-      })
-    }
+    try {
+      cssHighlights?.delete('search-passive')
+      cssHighlights?.delete('search-active')
+    } catch { /* API unavailable — no-op */ }
 
-    // Detect if search/session changed (need full clear) vs just pagination (accumulate)
-    const prevContext = prevHighlightContextRef.current
-    const contextChanged = prevContext.searchQuery !== searchQuery || prevContext.sessionId !== session?.id
-    prevHighlightContextRef.current = { searchQuery, sessionId: session?.id ?? null }
-
-    // Only clear highlights and reset state when search/session changes
-    // When just pagination changes, we accumulate new highlights
-    if (contextChanged) {
-      clearHighlights()
-      setActualMatchIds(new Set())
-      highlightedTurnIdsRef.current = new Set()
-    }
-
-    if (!searchQuery.trim() || !isSearchActive) return
+    if (!searchQuery.trim() || !isSearchActive || !cssHighlights) return
 
     const query = searchQuery.toLowerCase()
-    const createdMatchIds: string[] = [] // Collect IDs as we create marks
+    const matchingTurnIdSet = new Set(matchingTurnIds)
+    if (matchingTurnIdSet.size === 0) return
 
-    // Highlighting function - applies highlights only to MATCHING turn refs
-    // Assigns unique IDs to each mark for navigation
-    const applyHighlights = () => {
-      // Only highlight in turns that actually match, not all visible turns
-      const matchingTurnIdSet = new Set(matchingTurnIds)
-      // Track match counter per turn for unique IDs
-      const turnMatchCounters = new Map<string, number>()
+    const rafId = requestAnimationFrame(() => {
+      const allRanges: Range[] = []
 
-      turnRefs.current.forEach((container, turnId) => {
-        // Skip turns that don't contain matches
-        if (!matchingTurnIdSet.has(turnId)) return
+      turnRefs.current.forEach((container, turnKey) => {
+        if (allRanges.length >= MAX_HIGHLIGHT_RANGES) return
+        if (!matchingTurnIdSet.has(turnKey)) return
 
-        // Skip turns that have already been highlighted (pagination case)
-        if (highlightedTurnIdsRef.current.has(turnId)) return
+        // For assistant turns, narrow search to response content root
+        const searchRoot = container.querySelector('[data-search-root="response"]') || container
 
-        // Mark this turn as highlighted
-        highlightedTurnIdsRef.current.add(turnId)
-
-        // Initialize counter for this turn
-        turnMatchCounters.set(turnId, 0)
-
-        // Find all text nodes within the container
+        // Collect ALL eligible text nodes (no query filter — needed for cross-node matching)
         const walker = document.createTreeWalker(
-          container,
+          searchRoot,
           NodeFilter.SHOW_TEXT,
           {
             acceptNode: (node) => {
-              // Skip nodes in script, style, or already marked
               const parent = node.parentElement
               if (!parent) return NodeFilter.FILTER_REJECT
-              const tagName = parent.tagName.toLowerCase()
-              if (tagName === 'script' || tagName === 'style' || tagName === 'mark') {
-                return NodeFilter.FILTER_REJECT
-              }
-              // Skip nodes within elements marked as search-excluded (e.g., tool activities)
-              // This matches ripgrep behavior which only searches user/assistant text
-              if (parent.closest('[data-search-exclude="true"]')) {
-                return NodeFilter.FILTER_REJECT
-              }
-              // Only process nodes that contain the search text
-              if (node.textContent?.toLowerCase().includes(query)) {
-                return NodeFilter.FILTER_ACCEPT
-              }
-              return NodeFilter.FILTER_REJECT
-            }
+              const tag = parent.tagName.toLowerCase()
+              if (tag === 'script' || tag === 'style') return NodeFilter.FILTER_REJECT
+              if (parent.closest('[data-search-exclude="true"]')) return NodeFilter.FILTER_REJECT
+              return NodeFilter.FILTER_ACCEPT
+            },
           }
         )
 
+        // Build concatenated string with node offset mapping for cross-node matching
         const textNodes: Text[] = []
         let currentNode: Node | null
         while ((currentNode = walker.nextNode())) {
           textNodes.push(currentNode as Text)
         }
+        if (textNodes.length === 0) return
 
-        // Process text nodes in FORWARD order to assign IDs correctly
-        // (but we need to be careful about DOM manipulation)
-        // Actually, let's collect all matches first, then apply
-        const allMatches: { textNode: Text; start: number; end: number }[] = []
-        for (const textNode of textNodes) {
-          const text = textNode.textContent || ''
-          const lowerText = text.toLowerCase()
-          let pos = 0
-          let matchPos = lowerText.indexOf(query, pos)
-          while (matchPos !== -1) {
-            allMatches.push({ textNode, start: matchPos, end: matchPos + query.length })
-            pos = matchPos + query.length
-            matchPos = lowerText.indexOf(query, pos)
-          }
+        const nodeOffsets: { node: Text; start: number; end: number }[] = []
+        let totalLength = 0
+        for (const node of textNodes) {
+          const text = node.textContent || ''
+          nodeOffsets.push({ node, start: totalLength, end: totalLength + text.length })
+          totalLength += text.length
         }
+        const concatenated = textNodes.map(n => n.textContent || '').join('')
+        const lowerConcatenated = concatenated.toLowerCase()
 
-        // Process text nodes in reverse order to avoid invalidating positions
-        // But we need to assign IDs in forward order, so use a reverse counter
-        const totalMatchesInTurn = allMatches.length
-        let reverseCounter = totalMatchesInTurn - 1
+        // Find all matches in the concatenated string
+        let searchPos = 0
+        while (searchPos < lowerConcatenated.length && allRanges.length < MAX_HIGHLIGHT_RANGES) {
+          const idx = lowerConcatenated.indexOf(query, searchPos)
+          if (idx === -1) break
+          const matchEnd = idx + query.length
 
-        for (let i = textNodes.length - 1; i >= 0; i--) {
-          const textNode = textNodes[i]
-          const text = textNode.textContent || ''
-          const lowerText = text.toLowerCase()
+          // Create a Range spanning the match (may cross node boundaries)
+          try {
+            const range = new Range()
+            let startSet = false
 
-          // Find matches in this node (in reverse order for DOM manipulation)
-          const nodeMatches: number[] = []
-          let pos = 0
-          let matchPos = lowerText.indexOf(query, pos)
-          while (matchPos !== -1) {
-            nodeMatches.push(matchPos)
-            pos = matchPos + query.length
-            matchPos = lowerText.indexOf(query, pos)
-          }
+            for (const offset of nodeOffsets) {
+              if (offset.end <= idx) continue
+              if (offset.start >= matchEnd) break
 
-          if (nodeMatches.length === 0) continue
-
-          // Process in reverse to maintain positions
-          let lastIndex = text.length
-          const fragments: (string | HTMLElement)[] = []
-
-          for (let j = nodeMatches.length - 1; j >= 0; j--) {
-            const matchStart = nodeMatches[j]
-            const matchEnd = matchStart + query.length
-
-            // Text after match
-            if (matchEnd < lastIndex) {
-              fragments.unshift(text.slice(matchEnd, lastIndex))
+              if (!startSet) {
+                range.setStart(offset.node, idx - offset.start)
+                startSet = true
+              }
+              range.setEnd(offset.node, Math.min(offset.end - offset.start, matchEnd - offset.start))
             }
 
-            // Highlighted match with unique ID
-            const mark = document.createElement('mark')
-            const matchIdIndex = reverseCounter - (nodeMatches.length - 1 - j)
-            const markId = `${turnId}-match-${matchIdIndex}`
-            mark.id = markId
-            // All highlights start as passive (subtle 30% opacity yellow)
-            mark.className = 'search-highlight bg-yellow-300/30 rounded-[2px]'
-            mark.textContent = text.slice(matchStart, matchEnd)
-            fragments.unshift(mark)
-            createdMatchIds.push(markId)
-
-            lastIndex = matchStart
+            if (startSet) {
+              allRanges.push(range)
+            }
+          } catch {
+            // Range creation can fail if node was removed during walk
           }
 
-          // Update reverse counter
-          reverseCounter -= nodeMatches.length
-
-          // Text before first match
-          if (lastIndex > 0) {
-            fragments.unshift(text.slice(0, lastIndex))
-          }
-
-          // Replace text node with fragments
-          if (fragments.length > 0 && textNode.parentNode) {
-            const parent = textNode.parentNode
-            fragments.forEach(frag => {
-              if (typeof frag === 'string') {
-                parent.insertBefore(document.createTextNode(frag), textNode)
-              } else {
-                parent.insertBefore(frag, textNode)
-              }
-            })
-            parent.removeChild(textNode)
-          }
+          searchPos = matchEnd
         }
       })
-    }
 
-    // Retry logic: if no refs available yet, wait and try again
-    let attempts = 0
-    const maxAttempts = 5
-    let highlightTimeoutId: ReturnType<typeof setTimeout> | null = null
+      // Store ranges for the active-match effect to use
+      highlightRangesRef.current = allRanges
 
-    const tryHighlight = () => {
-      // If no turns to highlight, don't retry - there's nothing to wait for
-      if (matchingTurnIds.length === 0) {
-        return
+      if (allRanges.length === 0 && matchingTurnIdSet.size > 0) {
+        console.warn('[search-highlight] 0 ranges from', matchingTurnIdSet.size, 'matching turns — possible turn ID mismatch')
       }
 
-      // Only count turns that are in refs AND not already highlighted
-      const unhighlightedMatchingInRefs = matchingTurnIds.filter(id =>
-        turnRefs.current.has(id) && !highlightedTurnIdsRef.current.has(id)
-      ).length
-      if (unhighlightedMatchingInRefs > 0) {
-        applyHighlights()
-        // Accumulate match IDs (for pagination - adds new matches to existing)
-        setActualMatchIds(prev => {
-          const merged = new Set(prev)
-          createdMatchIds.forEach(id => merged.add(id))
-          return merged
-        })
-      } else if (attempts < maxAttempts) {
-        // Refs not ready yet - retry with increasing delay
-        attempts++
-        highlightTimeoutId = setTimeout(tryHighlight, 100)
+      if (allRanges.length === 0) return
+
+      try {
+        // Apply all ranges as passive initially — the active-match effect will restyle
+        cssHighlights.set('search-passive', new Highlight(...allRanges))
+      } catch {
+        // Highlight API call failed — degrade gracefully
       }
-    }
+    })
 
-    // Start with initial delay for DOM rendering
-    const timeoutId = setTimeout(tryHighlight, 50)
+    return () => cancelAnimationFrame(rafId)
+  }, [searchQuery, isSearchActive, matchingTurnIds, session?.id, visibleTurnCount])
 
-    // Cleanup function - only clear timeouts, not highlights
-    // Highlights are cleared in the effect body when search/session changes (contextChanged)
-    return () => {
-      clearTimeout(timeoutId)
-      if (highlightTimeoutId) clearTimeout(highlightTimeoutId)
-    }
-  }, [searchQuery, isSearchActive, matchingTurnIds, session?.id, visibleTurnCount]) // Added visibleTurnCount to re-highlight after pagination
+  // Effect 2: Update active/passive highlight split when navigation index changes
+  // Lightweight — just reshuffles existing Range objects between two Highlight instances
+  useEffect(() => {
+    const cssHighlights = getCSSHighlights()
+    const allRanges = highlightRangesRef.current
+    if (!cssHighlights || allRanges.length === 0) return
+
+    try {
+      const activeRange = allRanges[currentMatchIndex]
+      if (activeRange) {
+        const passiveRanges = allRanges.filter((_, i) => i !== currentMatchIndex)
+        cssHighlights.set('search-passive', new Highlight(...passiveRanges))
+        cssHighlights.set('search-active', new Highlight(activeRange))
+      } else {
+        cssHighlights.set('search-passive', new Highlight(...allRanges))
+        cssHighlights.delete('search-active')
+      }
+    } catch { /* graceful degradation */ }
+  }, [currentMatchIndex])
 
   // Navigate to next match (no looping - stops at last match)
   const goToNextMatch = useCallback(() => {
@@ -1079,23 +988,27 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     })
   }, [validMatches])
 
+  // With CSS Highlight API, highlighting is instant — no settling phase
+  const isHighlighting = false
+
   // Expose navigation via imperative handle (for session list navigation controls)
   React.useImperativeHandle(ref, () => ({
     goToNextMatch,
     goToPrevMatch,
     matchCount: validMatches.length,
     currentMatchIndex,
+    isHighlighting,
   }), [goToNextMatch, goToPrevMatch, validMatches.length, currentMatchIndex])
 
-  // Notify parent when match count changes
+  // Notify parent when match info (count, index, highlighting state) changes
   useEffect(() => {
-    onMatchCountChange?.(validMatches.length)
-  }, [validMatches.length, onMatchCountChange])
-
-  // Notify parent when match info (count and index) changes
-  useEffect(() => {
-    onMatchInfoChange?.({ count: validMatches.length, index: currentMatchIndex })
-  }, [validMatches.length, currentMatchIndex, session?.id, onMatchInfoChange])
+    onMatchInfoChange?.({
+      count: validMatches.length,
+      index: currentMatchIndex,
+      isHighlighting,
+      sessionId: session?.id ?? null,
+    })
+  }, [validMatches.length, currentMatchIndex, isHighlighting, session?.id, onMatchInfoChange])
 
   // ============================================================================
   // Overlay State Management
@@ -1667,18 +1580,22 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               }}
             >
               <ScrollArea className="h-full min-w-0" viewportRef={scrollViewportRef}>
-              <div className={cn(CHAT_LAYOUT.maxWidth, "mx-auto", CHAT_LAYOUT.containerPadding, CHAT_LAYOUT.messageSpacing, "min-w-0")}>
+              <div className={cn(
+                CHAT_LAYOUT.maxWidth,
+                "mx-auto min-w-0",
+                compactMode ? "px-3 py-4 space-y-2" : [CHAT_LAYOUT.containerPadding, CHAT_LAYOUT.messageSpacing]
+              )}>
                 {/* Session-level AnimatePresence: Prevents layout jump when switching sessions */}
-                <AnimatePresence mode="wait" initial={false}>
+                <AnimatePresence mode={compactMode ? "sync" : "wait"} initial={false}>
                   <motion.div
-                    key={session?.id}
+                    key={compactMode ? 'compact-session' : session?.id}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: 0.1, ease: 'easeOut' }}
+                    transition={compactMode ? { duration: 0 } : { duration: 0.1, ease: 'easeOut' }}
                   >
                     {/* Loading/Content AnimatePresence: Handles spinner ↔ content transition */}
-                    <AnimatePresence mode="wait" initial={false}>
+                    <AnimatePresence mode={compactMode ? "sync" : "wait"} initial={false}>
                     {messagesLoading ? (
                       /* Loading State: Show spinner while messages are being lazy loaded */
                       <motion.div
@@ -1686,7 +1603,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        transition={{ duration: 0.1 }}
+                        transition={compactMode ? { duration: 0 } : { duration: 0.1 }}
                         className="flex items-center justify-center h-64"
                       >
                         <Spinner className="text-foreground/30" />
@@ -1695,11 +1612,11 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                     /* Turn-based Message Display - memoized to avoid re-grouping on every render */
                     /* AnimatePresence handles the fade-in animation when transitioning from loading */
                     <motion.div
-                      key={`loaded-${session?.id}`}
+                      key={compactMode ? 'loaded-compact' : `loaded-${session?.id}`}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      transition={{ duration: 0.1, ease: 'easeOut' }}
+                      transition={compactMode ? { duration: 0 } : { duration: 0.1, ease: 'easeOut' }}
                     >
                   {/* Scroll to bottom before paint - fires via useLayoutEffect */}
                   {/* Skip when search is active on session switch - scroll to first match instead */}
@@ -1737,7 +1654,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                           key={turnKey}
                           ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
                           className={cn(
-                            CHAT_LAYOUT.userMessagePadding,
+                            compactMode ? "pt-2 pb-1" : CHAT_LAYOUT.userMessagePadding,
                             "rounded-lg transition-all duration-200",
                             isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
                             isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
@@ -2247,9 +2164,13 @@ interface MessageBubbleProps {
 /**
  * ErrorMessage - Separate component for error messages to allow useState hook
  */
-function ErrorMessage({ message }: { message: Message }) {
+function ErrorMessage({ message, onOpenUrl }: { message: Message; onOpenUrl?: (url: string) => void }) {
   const hasDetails = (message.errorDetails && message.errorDetails.length > 0) || message.errorOriginal
   const [detailsOpen, setDetailsOpen] = React.useState(false)
+  const actions = message.errorActions?.filter(a => {
+    if (a.action === 'open_url') return !!a.url && !!onOpenUrl
+    return true
+  })
 
   return (
     <div className="flex justify-start mt-4">
@@ -2265,6 +2186,26 @@ function ErrorMessage({ message }: { message: Message }) {
           {message.errorTitle || 'Error'}
         </div>
         <p className="text-sm text-destructive">{message.content}</p>
+
+        {/* Action buttons */}
+        {actions && actions.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {actions.map((action) => (
+              <button
+                key={action.key}
+                onClick={() => {
+                  if (action.action === 'open_url' && action.url && onOpenUrl) {
+                    onOpenUrl(action.url)
+                  }
+                  // retry, settings, reauth are handled by existing mechanisms via keyboard shortcuts
+                }}
+                className="text-xs px-2 py-0.5 rounded border border-destructive/20 text-destructive/70 hover:text-destructive hover:border-destructive/40 transition-colors"
+              >
+                {action.label}{action.action === 'open_url' ? ' ↗' : ''}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Collapsible Details Toggle */}
         {hasDetails && (
@@ -2363,7 +2304,7 @@ function MessageBubble({
 
   // === ERROR MESSAGE: Red bordered bubble with warning icon and collapsible details ===
   if (message.role === 'error') {
-    return <ErrorMessage message={message} />
+    return <ErrorMessage message={message} onOpenUrl={onOpenUrl} />
   }
 
   // === STATUS MESSAGE: Matches ProcessingIndicator layout for visual consistency ===

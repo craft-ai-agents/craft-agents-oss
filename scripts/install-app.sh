@@ -152,7 +152,7 @@ else
         error "Linux currently only supports x64 architecture. Your architecture: $arch"
     fi
     platform="linux-${arch}"
-    APP_NAME="Craft-Agent-x64.AppImage"
+    APP_NAME="Craft-Agents-x64.AppImage"
     INSTALL_DIR="$HOME/.local/bin"
     ext="AppImage"
     yml_file="latest-linux.yml"
@@ -201,7 +201,7 @@ fi
 
 # Use default filename if not found
 if [ -z "$filename" ]; then
-    filename="Craft-Agent-${arch}.${ext}"
+    filename="Craft-Agents-${arch}.${ext}"
 fi
 
 info "Expected sha512: ${checksum:0:20}..."
@@ -317,7 +317,7 @@ else
     # New paths
     APP_DIR="$HOME/.craft-agent/app"
     WRAPPER_PATH="$INSTALL_DIR/craft-agents"
-    APPIMAGE_INSTALL_PATH="$APP_DIR/Craft-Agent-x64.AppImage"
+    APPIMAGE_INSTALL_PATH="$APP_DIR/Craft-Agents-x64.AppImage"
 
     # Kill the app if it's running
     if pgrep -f "Craft-Agent.*AppImage" >/dev/null 2>&1; then
@@ -344,7 +344,7 @@ else
 #!/bin/bash
 # Craft Agent launcher - handles Linux-specific AppImage issues
 
-APPIMAGE_PATH="$HOME/.craft-agent/app/Craft-Agent-x64.AppImage"
+APPIMAGE_PATH="$HOME/.craft-agent/app/Craft-Agents-x64.AppImage"
 ELECTRON_CACHE="$HOME/.config/@craft-agent"
 ELECTRON_CACHE_ALT="$HOME/.cache/@craft-agent"
 
@@ -378,7 +378,7 @@ WRAPPER_EOF
     chmod +x "$WRAPPER_PATH"
 
     # Migrate old installation
-    OLD_APPIMAGE="$INSTALL_DIR/Craft-Agent-x64.AppImage"
+    OLD_APPIMAGE="$INSTALL_DIR/Craft-Agents-x64.AppImage"
     [ -f "$OLD_APPIMAGE" ] && rm -f "$OLD_APPIMAGE"
 
     echo ""

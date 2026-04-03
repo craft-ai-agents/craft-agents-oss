@@ -98,6 +98,9 @@ export default function AppSettingsPage() {
   // Power state
   const [keepAwakeEnabled, setKeepAwakeEnabled] = useState(false)
 
+  // Tools state
+  const [browserToolEnabled, setBrowserToolEnabled] = useState(true)
+
   // Proxy state
   const [proxyForm, setProxyForm] = useState<ProxyFormState>(EMPTY_PROXY_FORM)
   const [savedProxyForm, setSavedProxyForm] = useState<ProxyFormState>(EMPTY_PROXY_FORM)
@@ -121,13 +124,15 @@ export default function AppSettingsPage() {
   const loadSettings = useCallback(async () => {
     if (!window.electronAPI) return
     try {
-      const [notificationsOn, keepAwakeOn, proxySettings] = await Promise.all([
+      const [notificationsOn, keepAwakeOn, browserToolOn, proxySettings] = await Promise.all([
         window.electronAPI.getNotificationsEnabled(),
         window.electronAPI.getKeepAwakeWhileRunning(),
+        window.electronAPI.getBrowserToolEnabled(),
         window.electronAPI.getNetworkProxySettings(),
       ])
       setNotificationsEnabled(notificationsOn)
       setKeepAwakeEnabled(keepAwakeOn)
+      setBrowserToolEnabled(browserToolOn)
       const form = toProxyFormState(proxySettings)
       setProxyForm(form)
       setSavedProxyForm(form)
@@ -148,6 +153,11 @@ export default function AppSettingsPage() {
   const handleKeepAwakeEnabledChange = useCallback(async (enabled: boolean) => {
     setKeepAwakeEnabled(enabled)
     await window.electronAPI.setKeepAwakeWhileRunning(enabled)
+  }, [])
+
+  const handleBrowserToolEnabledChange = useCallback(async (enabled: boolean) => {
+    setBrowserToolEnabled(enabled)
+    await window.electronAPI.setBrowserToolEnabled(enabled)
   }, [])
 
   // Proxy handlers
@@ -212,6 +222,18 @@ export default function AppSettingsPage() {
                     description="Prevent the screen from turning off while sessions are running."
                     checked={keepAwakeEnabled}
                     onCheckedChange={handleKeepAwakeEnabledChange}
+                  />
+                </SettingsCard>
+              </SettingsSection>
+
+              {/* Tools */}
+              <SettingsSection title="Tools">
+                <SettingsCard>
+                  <SettingsToggle
+                    label="Built-in browser"
+                    description="Disable if you use external browser tools like Playwright, Puppeteer, or browser MCP servers."
+                    checked={browserToolEnabled}
+                    onCheckedChange={handleBrowserToolEnabledChange}
                   />
                 </SettingsCard>
               </SettingsSection>

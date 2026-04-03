@@ -20,6 +20,7 @@ export interface ConfigDefaults {
     keepAwakeWhileRunning: boolean;
     richToolDescriptions: boolean;
     extendedPromptCache: boolean;
+    browserToolEnabled: boolean;
   };
   workspaceDefaults: {
     thinkingLevel: ThinkingLevel;

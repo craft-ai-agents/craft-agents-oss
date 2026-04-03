@@ -156,8 +156,8 @@ else
     LINUX_ARCH="aarch64"
 fi
 
-# electron-builder outputs: Craft-Agent-x86_64.AppImage or Craft-Agent-aarch64.AppImage
-BUILT_APPIMAGE_NAME="Craft-Agent-${LINUX_ARCH}.AppImage"
+# electron-builder outputs: Craft-Agents-x86_64.AppImage or Craft-Agents-aarch64.AppImage
+BUILT_APPIMAGE_NAME="Craft-Agents-${LINUX_ARCH}.AppImage"
 BUILT_APPIMAGE_PATH="$ELECTRON_DIR/release/$BUILT_APPIMAGE_NAME"
 
 if [ ! -f "$BUILT_APPIMAGE_PATH" ]; then
@@ -167,8 +167,8 @@ if [ ! -f "$BUILT_APPIMAGE_PATH" ]; then
     exit 1
 fi
 
-# Rename to our standard naming convention: Craft-Agent-x64.AppImage, Craft-Agent-arm64.AppImage
-APPIMAGE_NAME="Craft-Agent-${ARCH}.AppImage"
+# Rename to our standard naming convention: Craft-Agents-x64.AppImage, Craft-Agents-arm64.AppImage
+APPIMAGE_NAME="Craft-Agents-${ARCH}.AppImage"
 APPIMAGE_PATH="$ELECTRON_DIR/release/$APPIMAGE_NAME"
 mv "$BUILT_APPIMAGE_PATH" "$APPIMAGE_PATH"
 echo "Renamed $BUILT_APPIMAGE_NAME -> $APPIMAGE_NAME"

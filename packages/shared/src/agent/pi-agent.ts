@@ -144,6 +144,17 @@ export class PiAgent extends BaseAgent {
   // Event queue for streaming (AsyncGenerator pattern -- shared with CodexAgent/CopilotAgent)
   private eventQueue = new EventQueue();
 
+  // Error deduplication — suppress identical consecutive errors after a threshold
+  // to prevent a broken subprocess from flooding the user's session.
+  private lastSubprocessError: string | null = null;
+  private subprocessErrorRepeatCount = 0;
+  private static readonly MAX_IDENTICAL_SUBPROCESS_ERRORS = 3;
+
+  private resetSubprocessErrorDedup(): void {
+    this.lastSubprocessError = null;
+    this.subprocessErrorRepeatCount = 0;
+  }
+
   // Pending permission requests (used by handlePreToolUseRequest for ask-mode prompting)
   private pendingPermissions: Map<string, {
     resolve: (allowed: boolean) => void;
@@ -294,6 +305,7 @@ export class PiAgent extends BaseAgent {
     const cwd = this.resolvedCwd();
 
     this.debug(`Spawning Pi subprocess: ${nodePath} ${piServerPath}`);
+    this.resetSubprocessErrorDedup();
 
     // Set up ready promise before spawning
     this.subprocessReady = new Promise<void>((resolve) => {
@@ -385,6 +397,7 @@ export class PiAgent extends BaseAgent {
 
     child.on('error', (error) => {
       this.debug(`Subprocess error: ${error.message}`);
+      this.resetSubprocessErrorDedup();
       this.eventQueue.enqueue({ type: 'error', message: `Pi subprocess error: ${error.message}` });
       this.eventQueue.complete();
     });
@@ -750,6 +763,10 @@ export class PiAgent extends BaseAgent {
 
     const type = msg.type as string;
 
+    if (type !== 'error') {
+      this.resetSubprocessErrorDedup();
+    }
+
     switch (type) {
       case 'ready':
         // Subprocess initialized, callback server listening
@@ -867,6 +884,19 @@ export class PiAgent extends BaseAgent {
         for (const [id, pending] of this.pendingAutoCompactionToggles) {
           pending.reject(new Error(rawMessage));
           this.pendingAutoCompactionToggles.delete(id);
+        }
+
+        // Suppress repeated identical errors to prevent a broken subprocess
+        // from flooding the user's session (e.g. EFAULT loop).
+        if (rawMessage === this.lastSubprocessError) {
+          this.subprocessErrorRepeatCount++;
+          if (this.subprocessErrorRepeatCount > PiAgent.MAX_IDENTICAL_SUBPROCESS_ERRORS) {
+            this.debug(`Suppressing repeated subprocess error (${this.subprocessErrorRepeatCount}x): ${rawMessage}`);
+            break;
+          }
+        } else {
+          this.lastSubprocessError = rawMessage;
+          this.subprocessErrorRepeatCount = 1;
         }
 
         const parsed = parseError(new Error(rawMessage));
@@ -1483,6 +1513,7 @@ export class PiAgent extends BaseAgent {
 
     this.subprocess = null;
     this.readline = null;
+    this.resetSubprocessErrorDedup();
     this.subprocessReady = null;
     this.subprocessReadyResolve = null;
 

@@ -44,15 +44,15 @@ export interface ApiKeySubmitData {
   modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
   /** Custom endpoint protocol — set when user configures an arbitrary API endpoint */
   customEndpoint?: CustomEndpointConfig
-  /** Bedrock IAM credentials — set when user configures AWS IAM auth */
+  /** IAM credentials for Pi+Bedrock (piAuthProvider='amazon-bedrock') setup */
   iamCredentials?: {
     accessKeyId: string
     secretAccessKey: string
     sessionToken?: string
   }
-  /** AWS region for Bedrock */
+  /** AWS region for Pi+Bedrock */
   awsRegion?: string
-  /** Bedrock authentication method */
+  /** Bedrock authentication method — determines auth type for Pi+Bedrock connections */
   bedrockAuthMethod?: 'iam_credentials' | 'environment'
 }
 
@@ -340,7 +340,8 @@ export function ApiKeyInput({
       return
     }
 
-    // Bedrock — submit with auth method and optional IAM credentials
+    // Bedrock — routes through Pi SDK with piAuthProvider='amazon-bedrock'.
+    // Submit with auth method and optional IAM credentials.
     if (isBedrock) {
       if (bedrockAuthMethod === 'iam_credentials' && !awsAccessKeyId.trim()) {
         setModelError('Access Key ID is required for IAM authentication.')

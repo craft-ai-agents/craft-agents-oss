@@ -10,6 +10,17 @@ import { existsSync } from 'fs';
 import { resolveBackendHostTooling } from '@craft-agent/shared/agent/backend';
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '../runtime/platform';
 
+/**
+ * Thrown when the search service cannot run (e.g. ripgrep binary not found).
+ * Clients should catch this and show an "unavailable" state instead of "0 results".
+ */
+export class SearchUnavailableError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = 'SearchUnavailableError';
+  }
+}
+
 // Track current search process to cancel on new search
 let currentSearchProcess: ChildProcess | null = null;
 
@@ -197,7 +208,7 @@ export async function searchSessions(
   handlerLog.debug('[search] Ripgrep path:', rgPath);
   if (!rgPath || !existsSync(rgPath)) {
     handlerLog.error('[search] ripgrep binary not found:', rgPath);
-    return [];
+    throw new SearchUnavailableError(`ripgrep binary not found: ${rgPath ?? 'undefined'}`);
   }
 
   handlerLog.debug('[search] Sessions directory:', sessionsDir);
@@ -225,8 +236,11 @@ export async function searchSessions(
     // 1. Only matches user/assistant message lines (skips huge tool_result lines)
     // 2. Requires the query to appear somewhere in the line
     // This filters at ripgrep level, avoiding 70x more data being sent to Node.js
+    //
+    // Note: "type" field position varies — messageToStored() uses rest-spread before
+    // adding type, so "type" can appear anywhere in the JSON line, not just after "id".
     const escapedQuery = escapeRegex(query);
-    args.push('-e', `^\\{"id":"[^"]*","type":"(user|assistant)".*${escapedQuery}`);
+    args.push('-e', `"type":"(user|assistant)".*${escapedQuery}|${escapedQuery}.*"type":"(user|assistant)"`);
     args.push(sessionsDir);
 
     // Cancel previous search if still running (user typed new query)
@@ -295,6 +309,11 @@ export async function searchSessions(
           // Skip intermediate messages using fast string search (no JSON.parse needed)
           // This is much faster than parsing the entire message JSON
           if (rawLine.includes('"isIntermediate":true')) continue;
+
+          // Skip messages with base64-encoded content (images, attachments)
+          // The query can match inside base64 noise, producing false positives.
+          // Covers both content blocks ("type":"base64") and attachment thumbnails.
+          if (rawLine.includes('base64')) continue;
 
           // Get or create session result
           let sessionResult = results.get(sessionId);

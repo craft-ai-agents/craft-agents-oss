@@ -48,6 +48,9 @@ export const SESSION_PERSISTENT_FIELDS = [
   'branchFromSessionPath',
   'branchFromSdkCwd',
   'branchFromSdkTurnId',
+  // Remote transfer handoff
+  'transferredSessionSummary',
+  'transferredSessionSummaryApplied',
   // Automation origin
   'triggeredBy',
 ] as const;
@@ -186,6 +189,10 @@ export interface SessionConfig {
    * - Pi: session entry ID (used with SessionManager.branch(anchor))
    */
   branchFromSdkTurnId?: string;
+  /** One-shot hidden summary injected on the first turn after a remote transfer. */
+  transferredSessionSummary?: string;
+  /** Whether the transferred-session summary has already been injected. */
+  transferredSessionSummaryApplied?: boolean;
   /** Metadata for sessions created by automations */
   triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
 }
@@ -271,6 +278,10 @@ export interface SessionHeader {
   isArchived?: boolean;
   /** Timestamp when session was archived (for retention policy) */
   archivedAt?: number;
+  /** One-shot hidden summary injected on the first turn after a remote transfer. */
+  transferredSessionSummary?: string;
+  /** Whether the transferred-session summary has already been injected. */
+  transferredSessionSummaryApplied?: boolean;
   /** Metadata for sessions created by automations */
   triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
   // Pre-computed fields for fast list loading

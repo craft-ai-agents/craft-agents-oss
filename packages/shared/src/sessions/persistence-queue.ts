@@ -146,12 +146,19 @@ class SessionPersistenceQueue {
       // Atomic write: write to .tmp then rename over the real file.
       // If the process crashes mid-write, only the .tmp is corrupted —
       // the original session.jsonl remains intact.
+      //
+      // Update signature BEFORE the write so that fs.watch events fired
+      // during unlink/rename are correctly identified as self-writes.
+      // Without this, onSessionMetadataChange sees the stale signature
+      // and reverts in-memory metadata on idle sessions.
+      const finalSignature = getHeaderMetadataSignature(header)
+      this.lastWrittenHeaderSignature.set(sessionId, finalSignature)
+
       const tmpFile = filePath + '.tmp'
       await writeFile(tmpFile, lines.join('\n') + '\n', 'utf-8')
       // On Windows, rename fails if target exists. Delete first for cross-platform compatibility.
       try { await unlink(filePath) } catch { /* ignore if doesn't exist */ }
       await rename(tmpFile, filePath)
-      this.lastWrittenHeaderSignature.set(sessionId, getHeaderMetadataSignature(header))
       debug(`[PersistenceQueue] Wrote session ${sessionId}`)
     } catch (error) {
       console.error(`[PersistenceQueue] Failed to write session ${sessionId}:`, error)

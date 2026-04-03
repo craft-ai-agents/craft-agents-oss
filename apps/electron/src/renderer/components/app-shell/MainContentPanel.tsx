@@ -76,6 +76,7 @@ export function MainContentPanel({
     onReplayAutomation,
     automationTestResults,
     getAutomationHistory,
+    activeSessionWorkingDirectory,
   } = useAppShellContext()
 
   // Session multi-select state
@@ -254,6 +255,7 @@ export function MainContentPanel({
           <SkillInfoPage
             skillSlug={navState.details.skillSlug}
             workspaceId={activeWorkspaceId || ''}
+            workingDirectory={activeSessionWorkingDirectory}
           />
         </Panel>
       )

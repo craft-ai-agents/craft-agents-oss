@@ -542,10 +542,13 @@ async function exchangeMcpCodeForTokens(
  * Prepare an MCP OAuth flow without starting a callback server or opening a browser.
  *
  * Performs metadata discovery, PKCE generation, optional client registration,
- * and auth URL construction. The caller provides callbackPort; this function
- * builds the provider-specific redirectUri from it.
+ * and auth URL construction. Accepts either callbackPort (Electron) or
+ * callbackUrl (WebUI) to construct the redirect URI.
  */
-export async function prepareMcpOAuth(mcpUrl: string, callbackPort: number): Promise<PreparedOAuthFlow> {
+export async function prepareMcpOAuth(
+  mcpUrl: string,
+  options: { callbackPort?: number; callbackUrl?: string },
+): Promise<PreparedOAuthFlow> {
   const metadata = await discoverOAuthMetadata(mcpUrl);
   if (!metadata) {
     throw new Error(`No OAuth metadata found for ${mcpUrl}`);
@@ -553,7 +556,8 @@ export async function prepareMcpOAuth(mcpUrl: string, callbackPort: number): Pro
 
   const pkce = generatePKCE();
   const state = generateState();
-  const redirectUri = `http://localhost:${callbackPort}${CALLBACK_PATH}`;
+  const redirectUri = options.callbackUrl
+    ?? `http://localhost:${options.callbackPort}${CALLBACK_PATH}`;
 
   let clientId: string;
   let clientSecret: string | undefined;

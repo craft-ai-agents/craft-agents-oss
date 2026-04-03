@@ -10,6 +10,7 @@ import {
   isValidWorkspace,
 } from '../workspaces/storage.ts';
 import { findIconFile } from '../utils/icon.ts';
+import { extractWorkspaceSlugFromPath } from '../utils/workspace-slug.ts';
 import { initializeDocs } from '../docs/index.ts';
 import { expandPath, toPortablePath, getBundledAssetsDir } from '../utils/paths.ts';
 import { debug } from '../utils/debug.ts';
@@ -29,6 +30,7 @@ export { CONFIG_DIR } from './paths.ts';
 
 // Re-export base types from core (single source of truth)
 export type {
+  WorkspaceInfo,
   Workspace,
   McpAuthType,
   AuthType,
@@ -40,7 +42,7 @@ import type { Workspace, AuthType } from '@craft-agent/core/types';
 
 // Import LLM connection types and constants
 import type { LlmConnection } from './llm-connections.ts';
-import { isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, normalizeBedrockModelId, toBedrockNativeId, fromBedrockNativeId } from './llm-connections.ts';
+import { isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
 import {
   getModelProvider,
 } from './models.ts';
@@ -69,6 +71,8 @@ export interface StoredConfig {
   keepAwakeWhileRunning?: boolean;  // Prevent screen sleep while sessions are running (default: false)
   // Tool metadata
   richToolDescriptions?: boolean;  // Add intent/action metadata to all tool calls (default: true)
+  // Tools
+  browserToolEnabled?: boolean;  // Enable built-in browser tool (default: true). Disable for Playwright/Puppeteer.
   // Prompt caching & context
   extendedPromptCache?: boolean;  // Use 1h prompt cache TTL instead of 5m (default: false)
   enable1MContext?: boolean;  // Enable 1M context window for supported models (default: true)
@@ -78,6 +82,8 @@ export interface StoredConfig {
   gitBashPath?: string;
   // User chose "Setup later" during onboarding — skip showing onboarding on next launch
   setupDeferred?: boolean;
+  // Server mode — embedded remote server settings
+  serverConfig?: import('./server-config.ts').ServerConfig;
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -93,6 +99,29 @@ let configDefaultsSynced = false;
  *
  * Source of truth: apps/electron/resources/config-defaults.json
  */
+/** Minimal config-defaults used when bundled assets aren't available (CI, standalone server). */
+const FALLBACK_CONFIG_DEFAULTS: ConfigDefaults = {
+  version: '1.0',
+  description: 'Default configuration values for Craft Agents',
+  defaults: {
+    notificationsEnabled: true,
+    colorTheme: 'default',
+    autoCapitalisation: true,
+    sendMessageKey: 'enter',
+    spellCheck: false,
+    keepAwakeWhileRunning: false,
+    richToolDescriptions: true,
+    extendedPromptCache: false,
+    browserToolEnabled: true,
+  },
+  workspaceDefaults: {
+    thinkingLevel: 'medium',
+    permissionMode: 'ask',
+    cyclablePermissionModes: ['safe', 'ask', 'allow-all'],
+    localMcpServers: { enabled: true },
+  },
+};
+
 function syncConfigDefaults(): void {
   if (configDefaultsSynced) return;
   configDefaultsSynced = true;
@@ -100,13 +129,19 @@ function syncConfigDefaults(): void {
   // Get bundled config-defaults.json from resources folder
   const bundledDir = getBundledAssetsDir('.');
   if (!bundledDir) {
-    debug('[config] No bundled assets dir found - config-defaults will not be synced');
+    debug('[config] No bundled assets dir found - using fallback config-defaults');
+    if (!existsSync(CONFIG_DEFAULTS_FILE)) {
+      writeFileSync(CONFIG_DEFAULTS_FILE, JSON.stringify(FALLBACK_CONFIG_DEFAULTS, null, 2), 'utf-8');
+    }
     return;
   }
 
   const bundledFile = join(bundledDir, 'config-defaults.json');
   if (!existsSync(bundledFile)) {
-    debug('[config] Bundled config-defaults.json not found at: ' + bundledFile);
+    debug('[config] Bundled config-defaults.json not found at: ' + bundledFile + ' - using fallback');
+    if (!existsSync(CONFIG_DEFAULTS_FILE)) {
+      writeFileSync(CONFIG_DEFAULTS_FILE, JSON.stringify(FALLBACK_CONFIG_DEFAULTS, null, 2), 'utf-8');
+    }
     return;
   }
 
@@ -161,7 +196,11 @@ export function ensureConfigDefaults(): void {
   syncConfigDefaults();
 }
 
+let configDirInitialized = false;
+
 export function ensureConfigDir(): void {
+  if (configDirInitialized) return;
+
   if (!existsSync(CONFIG_DIR)) {
     mkdirSync(CONFIG_DIR, { recursive: true });
   }
@@ -173,6 +212,8 @@ export function ensureConfigDir(): void {
 
   // Initialize tool icons (CLI tool icons for turn card display)
   ensureToolIcons();
+
+  configDirInitialized = true;
 }
 
 export function loadStoredConfig(): StoredConfig | null {
@@ -403,6 +444,34 @@ export function setExtendedPromptCache(enabled: boolean): void {
 }
 
 /**
+ * Get whether the built-in browser tool is enabled.
+ * When disabled, browser_tool is not included in session tools.
+ * Defaults to true if not set.
+ */
+export function getBrowserToolEnabled(): boolean {
+  const config = loadStoredConfig();
+  if (config?.browserToolEnabled !== undefined) {
+    return config.browserToolEnabled;
+  }
+  const defaults = loadConfigDefaults();
+  return defaults.defaults.browserToolEnabled;
+}
+
+/**
+ * Set whether the built-in browser tool is enabled.
+ */
+export function setBrowserToolEnabled(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.browserToolEnabled = enabled;
+  saveConfig(config);
+
+  // Clear session tool caches so all sessions pick up the change immediately.
+  // Lazy import to avoid circular dependency (storage ← session-scoped-tools ← storage).
+  import('../agent/session-scoped-tools.ts').then(m => m.invalidateAllSessionToolsCaches()).catch(() => {});
+}
+
+/**
  * Get whether 1M context window is enabled.
  * When disabled, models use 200K context and the interceptor strips the context-1m beta header.
  * Defaults to true if not set.
@@ -541,7 +610,8 @@ export function getWorkspaces(): Workspace[] {
       }
     }
 
-    return { ...w, name, iconUrl };
+    const slug = extractWorkspaceSlugFromPath(w.rootPath, w.id);
+    return { ...w, name, slug, iconUrl };
   });
 }
 
@@ -563,6 +633,18 @@ export function getWorkspaceByNameOrId(nameOrId: string): Workspace | null {
     w.id === nameOrId ||
     w.name.toLowerCase() === nameOrId.toLowerCase()
   ) || null;
+}
+
+export function updateWorkspaceRemoteServer(
+  workspaceId: string,
+  remoteServer: { url: string; token: string; remoteWorkspaceId: string },
+): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  const ws = config.workspaces.find(w => w.id === workspaceId);
+  if (!ws) throw new Error('Workspace not found');
+  ws.remoteServer = remoteServer;
+  saveConfig(config);
 }
 
 export function setActiveWorkspace(workspaceId: string): void {
@@ -605,11 +687,13 @@ export async function switchWorkspaceAtomic(workspaceId: string): Promise<{ work
  * Add a workspace to the global config.
  * @param workspace - Workspace data (must include rootPath)
  */
-export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Workspace {
+export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt' | 'slug'>): Workspace {
   const config = loadStoredConfig();
   if (!config) {
     throw new Error('No config found');
   }
+
+  const slug = extractWorkspaceSlugFromPath(workspace.rootPath, '');
 
   // Check if workspace with same rootPath already exists
   const existing = config.workspaces.find(w => w.rootPath === workspace.rootPath);
@@ -618,6 +702,7 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Wo
     const updated: Workspace = {
       ...existing,
       ...workspace,
+      slug,
       id: existing.id,
       createdAt: existing.createdAt,
     };
@@ -629,6 +714,7 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Wo
 
   const newWorkspace: Workspace = {
     ...workspace,
+    slug,
     id: generateWorkspaceId(),
     createdAt: Date.now(),
   };
@@ -672,6 +758,7 @@ export function syncWorkspaces(): void {
     const newWorkspace: Workspace = {
       id: wsConfig.id || generateWorkspaceId(),
       name: wsConfig.name,
+      slug: extractWorkspaceSlugFromPath(rootPath, ''),
       rootPath,
       createdAt: wsConfig.createdAt || Date.now(),
     };
@@ -1446,27 +1533,8 @@ function backfillAllConnectionModels(config: StoredConfig): boolean {
     const defaultModel = getDefaultModelForConnection(connection.providerType, connection.piAuthProvider);
     const providerDefaultModelIds = normalizeModelIds(defaultModels as Array<{ id: string } | string>);
 
-    if (connection.providerType === 'bedrock') {
-      const currentIds = normalizeModelIds(connection.models)
-      const normalizedIds = currentIds.map((id) =>
-        normalizeBedrockModelId(id),
-      )
-
-      if (!modelSetEquals(currentIds, normalizedIds)) {
-        connection.models = [...new Set(normalizedIds)]
-        changed = true
-      }
-
-      if (connection.defaultModel) {
-        const normalizedDefaultModel = normalizeBedrockModelId(
-          connection.defaultModel,
-        )
-        if (normalizedDefaultModel !== connection.defaultModel) {
-          connection.defaultModel = normalizedDefaultModel
-          changed = true
-        }
-      }
-    }
+    // Note: bedrock connections are migrated to pi + amazon-bedrock by migrateLegacyProviderTypes()
+    // before this function runs, so no bedrock-specific normalization needed here.
 
     if (isPiProvider(connection.providerType) && connection.piAuthProvider) {
       // Copilot models are always server-managed (GitHub policy controls which
@@ -1718,28 +1786,64 @@ function migrateWorkspaceOpus45ToOpus46(config: StoredConfig): void {
 }
 
 /**
- * Fix Bedrock connections and normalize model IDs.
+ * Migrate legacy provider types to the active set (anthropic, pi, pi_compat).
  *
- * 1. Connections with providerType==='bedrock' + piAuthProvider==='amazon-bedrock'
- *    are misconfigured: providerType should be 'pi' so PiAgent routes to Bedrock.
- *    Fix the providerType and normalize model IDs to Bedrock-native (pi-prefixed).
+ * 1. providerType==='bedrock' → 'pi' with piAuthProvider='amazon-bedrock'.
+ *    Model IDs are normalized to Bedrock-native (pi-prefixed) for Pi SDK resolution.
  *
- * 2. Pure piAuthProvider==='amazon-bedrock' connections (already providerType==='pi')
- *    get model IDs normalized to Bedrock-native for Pi SDK resolution.
+ * 2. providerType==='vertex' → 'pi' with piAuthProvider='google-vertex'.
  *
- * 3. Pure providerType==='bedrock' without piAuthProvider==='amazon-bedrock'
- *    get Bedrock-native IDs reverted to bare (reverse previous incorrect migration).
+ * 3. providerType==='anthropic_compat' → 'pi_compat' with customEndpoint.api='anthropic-messages'.
+ *    Preserves baseUrl and models; authType 'api_key_with_endpoint' stays the same.
+ *
+ * Also normalizes Pi+Bedrock connections that already have correct providerType.
  */
-function migrateBedrockModelIds(config: StoredConfig): boolean {
+function migrateLegacyProviderTypes(config: StoredConfig): boolean {
   if (!config.llmConnections) return false;
 
   let changed = false;
 
   for (const connection of config.llmConnections) {
-    // Fix misconfigured connections: bedrock providerType should be 'pi' when piAuthProvider is set
-    if (connection.providerType === 'bedrock' && connection.piAuthProvider === 'amazon-bedrock') {
-      connection.providerType = 'pi';
+    // Cast to string for legacy values removed from LlmProviderType
+    const providerStr = connection.providerType as string;
+
+    // --- bedrock → pi + amazon-bedrock ---
+    if (providerStr === 'bedrock') {
+      (connection as { providerType: LlmProviderType }).providerType = 'pi';
+      connection.piAuthProvider = connection.piAuthProvider || 'amazon-bedrock';
+      // Normalize model IDs to Bedrock-native (pi-prefixed) for Pi SDK
+      if (connection.defaultModel) {
+        connection.defaultModel = normalizePiBedrockId(connection.defaultModel);
+      }
+      if (connection.models && Array.isArray(connection.models)) {
+        for (let i = 0; i < connection.models.length; i++) {
+          const model = connection.models[i];
+          if (typeof model === 'string') {
+            connection.models[i] = normalizePiBedrockId(model);
+          } else if (model && typeof model === 'object') {
+            model.id = normalizePiBedrockId(model.id);
+          }
+        }
+      }
       changed = true;
+      continue;
+    }
+
+    // --- vertex → pi + google-vertex ---
+    if (providerStr === 'vertex') {
+      (connection as { providerType: LlmProviderType }).providerType = 'pi';
+      connection.piAuthProvider = 'google-vertex';
+      changed = true;
+      continue;
+    }
+
+    // --- anthropic_compat → pi_compat + customEndpoint ---
+    if (providerStr === 'anthropic_compat') {
+      (connection as { providerType: LlmProviderType }).providerType = 'pi_compat';
+      connection.customEndpoint = { api: 'anthropic-messages' };
+      // authType 'api_key_with_endpoint' stays; baseUrl and models are preserved
+      changed = true;
+      continue;
     }
 
     // Forward: Pi+Bedrock connections need Bedrock-native IDs (pi-prefixed) for Pi SDK resolution
@@ -1760,31 +1864,6 @@ function migrateBedrockModelIds(config: StoredConfig): boolean {
           } else if (model && typeof model === 'object') {
             const normalized = normalizePiBedrockId(model.id);
             if (normalized !== model.id) { model.id = normalized; changed = true; }
-          }
-        }
-      }
-      continue;
-    }
-
-    // Reverse: providerType==='bedrock' without piAuthProvider was incorrectly
-    // normalized in a previous migration — revert to bare Anthropic IDs
-    if (connection.providerType === 'bedrock') {
-      if (connection.defaultModel) {
-        const bare = fromBedrockNativeId(connection.defaultModel);
-        if (bare !== connection.defaultModel) {
-          connection.defaultModel = bare;
-          changed = true;
-        }
-      }
-      if (connection.models && Array.isArray(connection.models)) {
-        for (let i = 0; i < connection.models.length; i++) {
-          const model = connection.models[i];
-          if (typeof model === 'string') {
-            const bare = fromBedrockNativeId(model);
-            if (bare !== model) { connection.models[i] = bare; changed = true; }
-          } else if (model && typeof model === 'object') {
-            const bare = fromBedrockNativeId(model.id);
-            if (bare !== model.id) { model.id = bare; changed = true; }
           }
         }
       }
@@ -1819,9 +1898,9 @@ function migrateModelDefaultsToConnections(config: StoredConfig): boolean {
   if (configAny.modelDefaults.anthropic) {
     const defaultSlug = config.defaultLlmConnection;
     const anthropicConn = config.llmConnections.find(c =>
-      c.slug === defaultSlug && (c.providerType === 'anthropic' || c.providerType === 'anthropic_compat')
+      c.slug === defaultSlug && c.providerType === 'anthropic'
     ) || config.llmConnections.find(c =>
-      c.providerType === 'anthropic' || c.providerType === 'anthropic_compat'
+      c.providerType === 'anthropic'
     );
     if (anthropicConn) {
       anthropicConn.defaultModel = configAny.modelDefaults.anthropic;
@@ -1877,7 +1956,7 @@ export function migrateLegacyLlmConnectionsConfig(): void {
     for (const connection of target.llmConnections) {
       // Cast to string for legacy 'openai_compat' values that may still exist on disk
       const providerStr = connection.providerType as string;
-      if (providerStr !== 'anthropic_compat' && providerStr !== 'openai_compat') {
+      if (providerStr !== 'openai_compat') {
         continue;
       }
       const compatDefaults = getDefaultModelsForConnection(connection.providerType).map(
@@ -1974,8 +2053,8 @@ export function migrateLegacyLlmConnectionsConfig(): void {
     }
     // Phase 1g: Migrate Sonnet 4.5 → Sonnet 4.6 in workspace default models
     migrateWorkspaceSonnet45ToSonnet46(config);
-    // Phase 1h: Normalize Bedrock model IDs (bare Anthropic → Bedrock-native)
-    if (migrateBedrockModelIds(config)) {
+    // Phase 1h: Migrate legacy provider types (bedrock/vertex/anthropic_compat → pi/pi_compat)
+    if (migrateLegacyProviderTypes(config)) {
       needsSave = true;
     }
 
@@ -2034,17 +2113,28 @@ export function migrateLegacyLlmConnectionsConfig(): void {
         createdAt: Date.now(),
       };
     } else if (legacyAuthType === 'api_key') {
-      // Anthropic API Key - check if custom endpoint (compat mode)
+      // Anthropic API Key - check if custom endpoint (compat mode → pi_compat)
       const hasCustomEndpoint = !!legacyBaseUrl;
-      const providerType = hasCustomEndpoint ? 'anthropic_compat' as const : 'anthropic' as const;
-      migrated = {
-        slug: 'anthropic-api',
-        name: hasCustomEndpoint ? 'Custom Anthropic-Compatible' : 'Anthropic (API Key)',
-        providerType,
-        authType: hasCustomEndpoint ? 'api_key_with_endpoint' : 'api_key',
-        models: getDefaultModelsForConnection(providerType),
-        createdAt: Date.now(),
-      };
+      if (hasCustomEndpoint) {
+        migrated = {
+          slug: 'anthropic-api',
+          name: 'Custom Anthropic-Compatible',
+          providerType: 'pi_compat',
+          authType: 'api_key_with_endpoint',
+          customEndpoint: { api: 'anthropic-messages' },
+          models: getDefaultModelsForConnection('pi_compat'),
+          createdAt: Date.now(),
+        };
+      } else {
+        migrated = {
+          slug: 'anthropic-api',
+          name: 'Anthropic (API Key)',
+          providerType: 'anthropic',
+          authType: 'api_key',
+          models: getDefaultModelsForConnection('anthropic'),
+          createdAt: Date.now(),
+        };
+      }
     }
 
     if (migrated) {
@@ -2310,10 +2400,6 @@ export function updateLlmConnection(slug: string, updates: Partial<Omit<LlmConne
     models: updates.models !== undefined ? updates.models : existing.models,
     defaultModel: updates.defaultModel !== undefined ? updates.defaultModel : existing.defaultModel,
     modelSelectionMode: updates.modelSelectionMode !== undefined ? updates.modelSelectionMode : existing.modelSelectionMode,
-    // Cloud provider fields
-    awsRegion: updates.awsRegion !== undefined ? updates.awsRegion : existing.awsRegion,
-    gcpProjectId: updates.gcpProjectId !== undefined ? updates.gcpProjectId : existing.gcpProjectId,
-    gcpRegion: updates.gcpRegion !== undefined ? updates.gcpRegion : existing.gcpRegion,
     // Pi auth provider
     piAuthProvider: updates.piAuthProvider !== undefined ? updates.piAuthProvider : existing.piAuthProvider,
     // Custom endpoint protocol (Anthropic/OpenAI compatible)
@@ -2620,4 +2706,37 @@ export function ensureToolIcons(): void {
   } catch {
     // Ignore errors — tool icons are optional enhancement
   }
+}
+
+// ============================================
+// Server Mode Configuration
+// ============================================
+
+import { DEFAULT_SERVER_CONFIG, type ServerConfig } from './server-config.ts';
+import { randomUUID } from 'crypto';
+
+/**
+ * Get the current server configuration.
+ * Returns defaults if not yet configured.
+ */
+export function getServerConfig(): ServerConfig {
+  const config = loadStoredConfig();
+  return config?.serverConfig ?? { ...DEFAULT_SERVER_CONFIG };
+}
+
+/**
+ * Persist server configuration.
+ * Auto-generates a stable auth token on first enable if none exists.
+ */
+export function setServerConfig(serverConfig: ServerConfig): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+
+  // Generate a stable token when first enabled (or if token is missing)
+  if (serverConfig.enabled && !serverConfig.token) {
+    serverConfig.token = randomUUID();
+  }
+
+  config.serverConfig = serverConfig;
+  saveConfig(config);
 }

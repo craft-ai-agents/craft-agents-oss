@@ -523,6 +523,10 @@ function getToolDisplayName(name: string): string {
   // Friendly display names for specific tools
   const displayNames: Record<string, string> = {
     'TodoWrite': 'Todo List Updated',
+    'set_session_labels': 'Set Session Labels',
+    'set_session_status': 'Set Session Status',
+    'get_session_info': 'Get Session Info',
+    'list_sessions': 'List Sessions',
   }
 
   return displayNames[stripped] || stripped
@@ -2410,7 +2414,8 @@ export function ResponseCard({
     return (
       <>
         <div className="bg-background shadow-minimal rounded-[8px] overflow-hidden relative group">
-          {/* Fullscreen button - top right corner, visible on hover */}
+          {/* Fullscreen button - desktop only; compact mode keeps message chrome minimal */}
+          {!compactMode && (
           <button
             onClick={() => setIsFullscreen(true)}
             className={cn(
@@ -2424,6 +2429,7 @@ export function ResponseCard({
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
+          )}
 
           {/* Plan header - only shown for plan variant */}
           {isPlan && (
@@ -2441,6 +2447,7 @@ export function ResponseCard({
           {/* Scrollable content area with subtle fade at edges (dark mode only) */}
           <div
             ref={contentRef}
+            data-search-root="response"
             onMouseDown={handleSelectionPointerDown}
             onMouseUp={handleTextSelection}
             className="pl-[22px] pr-[16px] py-3 text-sm overflow-y-auto scrollbar-hover"
@@ -2476,7 +2483,7 @@ export function ResponseCard({
                 <button
                   onClick={handleCopy}
                   className={cn(
-                    "flex items-center gap-1.5 transition-colors select-none",
+                    "turn-action-btn flex items-center gap-1.5 transition-colors select-none",
                     copied ? "text-success" : "text-muted-foreground hover:text-foreground",
                     "focus:outline-none focus-visible:underline"
                   )}
@@ -2497,7 +2504,7 @@ export function ResponseCard({
                   <button
                     onClick={onPopOut}
                     className={cn(
-                      "flex items-center gap-1.5 transition-colors select-none",
+                      "turn-action-btn flex items-center gap-1.5 transition-colors select-none",
                       "text-muted-foreground hover:text-foreground",
                       "focus:outline-none focus-visible:underline"
                     )}
@@ -2565,6 +2572,7 @@ export function ResponseCard({
         {/* Subtle fade at top and bottom edges (dark mode only) */}
         <div
           ref={contentRef}
+          data-search-root="response"
           onMouseDown={handleSelectionPointerDown}
           onMouseUp={handleTextSelection}
           className="pl-[22px] pr-4 py-3 text-sm overflow-y-auto scrollbar-hover"

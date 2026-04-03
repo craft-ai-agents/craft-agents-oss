@@ -26,6 +26,7 @@ import type { CredentialId, StoredCredential } from '../credentials/types.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { CraftOAuth, getMcpBaseUrl, prepareMcpOAuth, exchangeMcpOAuth, type OAuthCallbacks, type OAuthTokens } from '../auth/oauth.ts';
 import { type OAuthSessionContext } from '../auth/types.ts';
+import { OAUTH_RELAY_CALLBACK_URL, wrapPreparedOAuthFlowForRelay } from '../auth/oauth-relay.ts';
 import type { PreparedOAuthFlow, OAuthExchangeParams, OAuthExchangeResult, OAuthProvider } from '../auth/oauth-flow-types.ts';
 import {
   startGoogleOAuth,
@@ -369,14 +370,27 @@ export class SourceCredentialManager {
    * Prepare an OAuth flow for a source (server-side).
    *
    * Generates PKCE, state, and auth URL without opening a browser or starting
-   * a callback server. The caller provides the callbackPort; this function
-   * builds the provider-specific redirectUri.
+   * a callback server. The caller provides either callbackPort (Electron local
+   * server) or callbackUrl (WebUI server endpoint) for the redirect URI.
    *
    * Returns a PreparedOAuthFlow that should be stored in the flow store
    * and partially returned to the client (authUrl, state, flowId).
    */
-  async prepareOAuth(source: LoadedSource, callbackPort: number): Promise<PreparedOAuthFlow> {
+  async prepareOAuth(
+    source: LoadedSource,
+    options: { callbackPort?: number; callbackUrl?: string },
+  ): Promise<PreparedOAuthFlow> {
+    const { callbackPort } = options;
+    const relayReturnTo = options.callbackUrl;
+    // When callbackUrl is provided (WebUI), keep the provider-facing redirect_uri
+    // stable so providers like Google only need a single registered callback.
+    // The relay unwraps the real server callback target from the outer state.
+    const providerCallbackUrl = relayReturnTo
+      ? OAUTH_RELAY_CALLBACK_URL
+      : undefined;
     const provider = this.detectProvider(source);
+
+    let prepared: PreparedOAuthFlow;
 
     switch (provider) {
       case 'google': {
@@ -398,13 +412,15 @@ export class SourceCredentialManager {
           }
         }
 
-        return prepareGoogleOAuth({
+        prepared = prepareGoogleOAuth({
           service,
           scopes,
           callbackPort,
+          callbackUrl: providerCallbackUrl,
           clientId: api?.googleOAuthClientId,
           clientSecret: api?.googleOAuthClientSecret,
         });
+        break;
       }
 
       case 'slack': {
@@ -420,7 +436,8 @@ export class SourceCredentialManager {
           service = inferSlackServiceFromUrl(api?.baseUrl) || 'full';
         }
 
-        return prepareSlackOAuth({ service, userScopes, callbackPort });
+        prepared = prepareSlackOAuth({ service, userScopes, callbackPort, callbackUrl: providerCallbackUrl });
+        break;
       }
 
       case 'microsoft': {
@@ -442,16 +459,22 @@ export class SourceCredentialManager {
           }
         }
 
-        return prepareMicrosoftOAuth({ service, scopes, callbackPort });
+        prepared = prepareMicrosoftOAuth({ service, scopes, callbackPort, callbackUrl: providerCallbackUrl });
+        break;
       }
 
       case 'mcp': {
         if (!source.config.mcp?.url) {
           throw new Error('MCP URL not configured');
         }
-        return prepareMcpOAuth(source.config.mcp.url, callbackPort);
+        prepared = await prepareMcpOAuth(source.config.mcp.url, { callbackPort, callbackUrl: providerCallbackUrl });
+        break;
       }
     }
+
+    return relayReturnTo
+      ? wrapPreparedOAuthFlowForRelay(prepared, relayReturnTo)
+      : prepared;
   }
 
   /**

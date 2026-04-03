@@ -31,6 +31,10 @@ export const CHANNEL_MAP = {
   respondToPermission: invoke(RPC_CHANNELS.sessions.RESPOND_TO_PERMISSION),
   respondToCredential: invoke(RPC_CHANNELS.sessions.RESPOND_TO_CREDENTIAL),
   sessionCommand: invoke(RPC_CHANNELS.sessions.COMMAND),
+  exportSession: invoke(RPC_CHANNELS.sessions.EXPORT),
+  importSession: invoke(RPC_CHANNELS.sessions.IMPORT),
+  exportRemoteSessionTransfer: invoke(RPC_CHANNELS.sessions.EXPORT_REMOTE_TRANSFER),
+  importRemoteSessionTransfer: invoke(RPC_CHANNELS.sessions.IMPORT_REMOTE_TRANSFER),
   getPendingPlanExecution: invoke(RPC_CHANNELS.sessions.GET_PENDING_PLAN_EXECUTION),
   getSessionPermissionModeState: invoke(RPC_CHANNELS.sessions.GET_PERMISSION_MODE_STATE),
 
@@ -45,6 +49,12 @@ export const CHANNEL_MAP = {
   getWorkspaces: invoke(RPC_CHANNELS.workspaces.GET),
   createWorkspace: invoke(RPC_CHANNELS.workspaces.CREATE),
   checkWorkspaceSlug: invoke(RPC_CHANNELS.workspaces.CHECK_SLUG),
+  updateWorkspaceRemoteServer: invoke(RPC_CHANNELS.workspaces.UPDATE_REMOTE),
+  testRemoteConnection: invoke(RPC_CHANNELS.remote.TEST_CONNECTION),
+
+  // Server-level workspace operations (REMOTE_ELIGIBLE)
+  getServerWorkspaces: invoke(RPC_CHANNELS.server.GET_WORKSPACES),
+  createServerWorkspace: invoke(RPC_CHANNELS.server.CREATE_WORKSPACE),
 
   // Window management
   getWindowWorkspace: invoke(RPC_CHANNELS.window.GET_WORKSPACE),
@@ -61,6 +71,7 @@ export const CHANNEL_MAP = {
   // File operations
   readFile: invoke(RPC_CHANNELS.file.READ),
   readFileDataUrl: invoke(RPC_CHANNELS.file.READ_DATA_URL),
+  readFilePreviewDataUrl: invoke(RPC_CHANNELS.file.READ_PREVIEW_DATA_URL),
   readFileBinary: invoke(RPC_CHANNELS.file.READ_BINARY),
   openFileDialog: invoke(RPC_CHANNELS.file.OPEN_DIALOG),
   readFileAttachment: invoke(RPC_CHANNELS.file.READ_ATTACHMENT),
@@ -135,6 +146,14 @@ export const CHANNEL_MAP = {
   getCopilotPremiumUsage: invoke(RPC_CHANNELS.copilot.GET_PREMIUM_USAGE),
   setCopilotBillingPat: invoke(RPC_CHANNELS.copilot.SET_BILLING_PAT),
   clearCopilotBillingPat: invoke(RPC_CHANNELS.copilot.CLEAR_BILLING_PAT),
+
+  // Server info (REMOTE_ELIGIBLE)
+  getServerHomeDir: invoke(RPC_CHANNELS.server.HOME_DIR),
+
+  // Server mode configuration
+  getServerConfig: invoke(RPC_CHANNELS.settings.GET_SERVER_CONFIG),
+  setServerConfig: invoke(RPC_CHANNELS.settings.SET_SERVER_CONFIG),
+  getServerStatus: invoke(RPC_CHANNELS.settings.GET_SERVER_STATUS),
 
   // Settings - API Setup
   setupLlmConnection: invoke(RPC_CHANNELS.settings.SETUP_LLM_CONNECTION),
@@ -277,6 +296,10 @@ export const CHANNEL_MAP = {
   // Appearance settings
   getRichToolDescriptions: invoke(RPC_CHANNELS.appearance.GET_RICH_TOOL_DESCRIPTIONS),
   setRichToolDescriptions: invoke(RPC_CHANNELS.appearance.SET_RICH_TOOL_DESCRIPTIONS),
+
+  // Tools settings
+  getBrowserToolEnabled: invoke(RPC_CHANNELS.tools.GET_BROWSER_TOOL_ENABLED),
+  setBrowserToolEnabled: invoke(RPC_CHANNELS.tools.SET_BROWSER_TOOL_ENABLED),
 
   // Prompt caching & context
   getExtendedPromptCache: invoke(RPC_CHANNELS.caching.GET_EXTENDED_PROMPT_CACHE),

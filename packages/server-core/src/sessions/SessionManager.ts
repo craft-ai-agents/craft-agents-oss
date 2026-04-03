@@ -1,12 +1,12 @@
 import type { EventSink } from '@craft-agent/server-core/transport'
 import type { ISessionManager, IBrowserPaneManager } from '@craft-agent/server-core/handlers'
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@craft-agent/server-core/runtime'
-import { basename, join, normalize, isAbsolute, sep } from 'path'
+import { basename, dirname, join, normalize, isAbsolute, sep } from 'path'
 import { existsSync } from 'fs'
 import { readFile, writeFile, mkdir, realpath } from 'fs/promises'
 import { homedir, tmpdir } from 'os'
 import { randomUUID } from 'node:crypto'
-import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns } from '@craft-agent/shared/agent'
+import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns, generateConversationSummary } from '@craft-agent/shared/agent'
 import {
   resolveSessionConnection,
   createBackendFromConnection,
@@ -18,7 +18,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars } from '@craft-agent/shared/config'
+import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
@@ -33,7 +33,9 @@ import {
   migrateOrphanedDefaultConnections,
   MODEL_REGISTRY,
   type Workspace,
+  type WorkspaceInfo,
 } from '@craft-agent/shared/config'
+import type { ActiveSessionInfo, SessionProcessingStatus } from '@craft-agent/core/types'
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
 import {
   // Session persistence functions
@@ -50,8 +52,16 @@ import {
   getPendingPlanExecution as getStoredPendingPlanExecution,
   getSessionAttachmentsPath,
   getSessionPath as getSessionStoragePath,
+  ensureSessionDir,
+  getSessionFilePath,
+  generateSessionId,
   sessionPersistenceQueue,
   getHeaderMetadataSignature,
+  writeSessionJsonl,
+  serializeSession,
+  validateBundle,
+  type SessionBundle,
+  type DispatchMode,
   type StoredSession,
   type StoredMessage,
   type SessionMetadata,
@@ -67,17 +77,21 @@ import { toolMetadataStore, getLastApiError } from '@craft-agent/shared/intercep
 import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/shared/mcp'
-import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
+import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
 import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
-import { loadAllSkills, loadSkillBySlug, type LoadedSkill } from '@craft-agent/shared/skills'
+import { loadAllSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
+import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
+import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
-import { listLabels } from '@craft-agent/shared/labels/storage'
+import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
 import { extractLabelId } from '@craft-agent/shared/labels'
 import { ensureLabelsExist } from '@craft-agent/shared/labels/crud'
+import { flattenLabels } from '@craft-agent/shared/labels/tree'
+import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
 import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
 
 // Import from server-core domain utilities
@@ -815,6 +829,9 @@ interface ManagedSession {
   turnStartFinalMessageId?: string
   // External session metadata updates seen while processing (applied after turn stop)
   pendingExternalMetadata?: SessionHeader
+  // Guard: suppress external metadata revert after programmatic writes (setSessionStatus/setSessionLabels).
+  // fs.watch fires during atomic write (unlink+rename) and can read stale data, reverting in-memory state.
+  _metadataWriteGuardUntil?: number
   // Whether an async operation is ongoing (sharing, updating share, revoking, title regeneration)
   // Used for shimmer effect on session title
   isAsyncOperationOngoing?: boolean
@@ -872,6 +889,10 @@ interface ManagedSession {
   branchFromSdkTurnId?: string
   // One-shot flag for seeded branch mode - set true after first turn seed injection.
   branchSeedApplied?: boolean
+  // One-shot hidden summary injected on the first turn after a remote transfer.
+  transferredSessionSummary?: string
+  // Whether the transferred-session summary has already been injected.
+  transferredSessionSummaryApplied?: boolean
   // Token refresh manager for OAuth token refresh with rate limiting
   tokenRefreshManager: TokenRefreshManager
   // Metadata for sessions created by automations
@@ -1185,7 +1206,9 @@ export class SessionManager implements ISessionManager {
   /**
    * Set up ConfigWatcher for a workspace to broadcast live updates
    * (sources added/removed, guide.md changes, etc.)
-   * Called during window init (GET_WINDOW_WORKSPACE) and workspace switch.
+   * Called eagerly at boot for all workspaces (automations/scheduler) and
+   * on client connect (GET_WORKSPACE / SWITCH_WORKSPACE).
+   * Idempotent — returns immediately if already watching.
    * workspaceId must be the global config ID (what the renderer knows).
    */
   setupConfigWatcher(workspaceRootPath: string, workspaceId: string): void {
@@ -1291,9 +1314,18 @@ export class SessionManager implements ISessionManager {
         // Skip for self-writes to avoid feedback loops (especially on Windows
         // where fs.watch fires aggressively: unlink + rename = 2+ events).
         if (!isSelfWrite) {
-          if (managed.isProcessing) {
+          // Defer external metadata application when:
+          // 1. Session is actively processing (agent running), OR
+          // 2. Session was just written programmatically (set_session_status/labels tool)
+          //    — fs.watch fires during atomic write (unlink+rename) and can read stale data
+          const hasWriteGuard = managed._metadataWriteGuardUntil && Date.now() < managed._metadataWriteGuardUntil
+          if (managed.isProcessing || hasWriteGuard) {
             managed.pendingExternalMetadata = header
-            sessionLog.info(`Deferred external metadata update for session ${sessionId} (processing active)`)
+            if (hasWriteGuard) {
+              sessionLog.info(`Deferred external metadata update for session ${sessionId} (recent programmatic write)`)
+            } else {
+              sessionLog.info(`Deferred external metadata update for session ${sessionId} (processing active)`)
+            }
           } else {
             this.applyExternalSessionMetadata(managed, header)
           }
@@ -1544,6 +1576,15 @@ export class SessionManager implements ISessionManager {
 
       // Set up authentication environment variables (critical for SDK to work)
       await this.reinitializeAuth()
+
+      // Eagerly activate ConfigWatcher + AutomationSystem for every workspace so
+      // the scheduler and event handlers start at boot — not lazily on first
+      // client connect. This is critical for headless servers where no UI may
+      // ever connect, yet scheduled/event-driven automations must still fire.
+      const workspaces = getWorkspaces()
+      for (const workspace of workspaces) {
+        this.setupConfigWatcher(workspace.rootPath, workspace.id)
+      }
 
       // Load existing sessions from disk
       this.loadSessionsFromDisk()
@@ -1873,6 +1914,64 @@ export class SessionManager implements ISessionManager {
     return getWorkspaces()
   }
 
+  getWorkspacesInfo(): WorkspaceInfo[] {
+    return getWorkspaces().map(({ rootPath, createdAt, ...info }) => info)
+  }
+
+  getActiveSessionCount(workspaceId?: string): number {
+    let count = 0
+    for (const managed of this.sessions.values()) {
+      if (workspaceId && managed.workspace.id !== workspaceId) continue
+      if (managed.isProcessing) count++
+    }
+    return count
+  }
+
+  getWorkspaceAutomationSummary(workspaceId: string): { automationCount: number; schedulerRunning: boolean } {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return { automationCount: 0, schedulerRunning: false }
+
+    const automationSystem = this.automationSystems.get(workspace.rootPath)
+    if (!automationSystem) return { automationCount: 0, schedulerRunning: false }
+
+    const config = automationSystem.getConfig()
+    let automationCount = 0
+    if (config) {
+      for (const matchers of Object.values(config.automations)) {
+        automationCount += matchers?.length ?? 0
+      }
+    }
+
+    return {
+      automationCount,
+      // SchedulerService is running if the system was created with enableScheduler
+      schedulerRunning: !automationSystem.isDisposed(),
+    }
+  }
+
+  getActiveSessionsInfo(): ActiveSessionInfo[] {
+    const result: ActiveSessionInfo[] = []
+    for (const managed of this.sessions.values()) {
+      if (!managed.isProcessing) continue
+
+      let status: SessionProcessingStatus = 'processing'
+      if (managed.stopRequested) status = 'idle'
+
+      result.push({
+        sessionId: managed.id,
+        workspaceId: managed.workspace.id,
+        workspaceName: managed.workspace.name,
+        title: managed.name || undefined,
+        status,
+        triggeredBy: managed.triggeredBy
+          ? { automationName: managed.triggeredBy.automationName ?? 'Unknown', timestamp: managed.triggeredBy.timestamp ?? 0 }
+          : undefined,
+        createdAt: managed.lastMessageAt,
+      })
+    }
+    return result
+  }
+
   /**
    * Reload all sessions from disk.
    * Used after importing sessions to refresh the in-memory session list.
@@ -2014,6 +2113,9 @@ export class SessionManager implements ISessionManager {
       if (storedSession.connectionLocked) {
         managed.connectionLocked = storedSession.connectionLocked
       }
+      // Sync transferred session summary state from disk
+      managed.transferredSessionSummary = storedSession.transferredSessionSummary
+      managed.transferredSessionSummaryApplied = storedSession.transferredSessionSummaryApplied
       sessionLog.debug(`Lazy-loaded ${managed.messages.length} messages for session ${managed.id}`)
 
       // Queue recovery: find orphaned queued messages from crash/restart and re-queue them
@@ -2615,6 +2717,21 @@ export class SessionManager implements ISessionManager {
         })
       }
 
+      const getTransferredSessionSummary = () => {
+        const summary = managed.transferredSessionSummaryApplied ? null : (managed.transferredSessionSummary ?? null)
+        sessionLog.info(`[transfer-context] getTransferredSessionSummary for ${managed.id}: applied=${managed.transferredSessionSummaryApplied}, has_summary=${!!managed.transferredSessionSummary}, returning=${summary ? `${summary.length} chars` : 'null'}`)
+        return summary
+      }
+
+      const markTransferredSessionSummaryApplied = () => {
+        if (managed.transferredSessionSummaryApplied || !managed.transferredSessionSummary) return
+        managed.transferredSessionSummaryApplied = true
+        this.persistSession(managed)
+        sessionLog.info('Transferred session summary applied', {
+          sessionId: managed.id,
+        })
+      }
+
       // ============================================================
       // Construct backend via factory
       // ============================================================
@@ -2633,6 +2750,8 @@ export class SessionManager implements ISessionManager {
         getBranchFallbackMessages,
         getBranchSeedMessages,
         markBranchSeedApplied,
+        getTransferredSessionSummary,
+        markTransferredSessionSummaryApplied,
         mcpPool: managed.mcpPool,
         poolServerUrl,
         envOverrides,
@@ -3318,6 +3437,114 @@ export class SessionManager implements ISessionManager {
         }
       }
 
+      // Wire up session self-management tools (set_session_labels, set_session_status, etc.)
+      mergeSessionScopedToolCallbacks(managed.id, {
+        setSessionLabelsFn: (sessionId: string | undefined, labels: string[]) => {
+          this.setSessionLabels(sessionId ?? managed.id, labels)
+        },
+        setSessionStatusFn: async (sessionId: string | undefined, status: string) => {
+          await this.setSessionStatus(sessionId ?? managed.id, status as SessionStatus)
+        },
+        getSessionInfoFn: (sessionId?: string) => {
+          const targetId = sessionId ?? managed.id
+          const session = this.sessions.get(targetId)
+          if (!session) return null
+          return {
+            id: session.id,
+            name: session.name ?? session.id,
+            labels: session.labels ?? [],
+            status: session.sessionStatus ?? 'todo',
+            permissionMode: session.permissionMode ?? 'ask',
+            createdAt: session.createdAt ?? 0,
+            workingDirectory: session.workingDirectory,
+            llmConnection: session.llmConnection,
+            model: session.model,
+            isActive: session.agent != null,
+          }
+        },
+        listSessionsFn: (options) => {
+          const DEFAULT_LIMIT = 20
+          const MAX_LIMIT = 100
+          const limit = Math.min(options?.limit ?? DEFAULT_LIMIT, MAX_LIMIT)
+          const offset = options?.offset ?? 0
+
+          let sessions = this.getSessions(managed.workspace.id)
+
+          // Filter
+          if (options?.status) {
+            sessions = sessions.filter(s => s.sessionStatus === options.status)
+          }
+          if (options?.label) {
+            sessions = sessions.filter(s => s.labels?.includes(options.label!))
+          }
+          if (options?.search) {
+            const needle = options.search.toLowerCase()
+            sessions = sessions.filter(s => s.name?.toLowerCase().includes(needle))
+          }
+
+          // Sort
+          const sortBy = options?.sortBy ?? 'recent'
+          if (sortBy === 'recent') {
+            sessions.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+          } else if (sortBy === 'name') {
+            sessions.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
+          } else if (sortBy === 'status') {
+            sessions.sort((a, b) => (a.sessionStatus ?? '').localeCompare(b.sessionStatus ?? ''))
+          }
+
+          const total = sessions.length
+
+          // Paginate
+          const page = sessions.slice(offset, offset + limit)
+
+          return {
+            total,
+            returned: page.length,
+            sessions: page.map(s => ({
+              id: s.id,
+              name: s.name ?? s.id,
+              labels: s.labels ?? [],
+              status: s.sessionStatus ?? 'todo',
+              createdAt: s.createdAt ?? 0,
+            })),
+          }
+        },
+        resolveLabelsFn: (labels: string[]) => {
+          const labelConfig = loadLabelConfig(managed.workspace.rootPath)
+          const allLabels = flattenLabels(labelConfig.labels)
+          const available = allLabels.map(l => l.id)
+
+          const resolved: string[] = []
+          const unknown: string[] = []
+
+          for (const input of labels) {
+            // Exact ID match
+            const byId = allLabels.find(l => l.id === input)
+            if (byId) { resolved.push(byId.id); continue }
+            // Case-insensitive name → ID
+            const byName = allLabels.find(l => l.name.toLowerCase() === input.toLowerCase())
+            if (byName) { resolved.push(byName.id); continue }
+            unknown.push(input)
+          }
+
+          return { resolved, unknown, available }
+        },
+        resolveStatusFn: (status: string) => {
+          const statusConfig = loadStatusConfig(managed.workspace.rootPath)
+          const allStatuses = statusConfig.statuses
+          const available = allStatuses.map(s => s.id)
+
+          // Exact ID match
+          const byId = allStatuses.find(s => s.id === status)
+          if (byId) return { resolved: byId.id, available }
+          // Case-insensitive label → ID
+          const byLabel = allStatuses.find(s => s.label.toLowerCase() === status.toLowerCase())
+          if (byLabel) return { resolved: byLabel.id, available }
+
+          return { resolved: null, available }
+        },
+      })
+
       // Wire up onSourceActivationRequest to auto-enable sources when agent tries to use them
       managed.agent.onSourceActivationRequest = async (sourceSlug: string): Promise<boolean> => {
         sessionLog.info(`Source activation request for session ${managed.id}:`, sourceSlug)
@@ -3495,6 +3722,8 @@ export class SessionManager implements ISessionManager {
     const managed = this.sessions.get(sessionId)
     if (managed) {
       managed.sessionStatus = sessionStatus
+      // Guard: suppress external metadata revert from fs.watch during atomic write
+      managed._metadataWriteGuardUntil = Date.now() + 5000
       // Persist in-memory state directly to avoid race with pending queue writes
       this.persistSession(managed)
       await this.flushSession(managed.id)
@@ -4133,6 +4362,10 @@ export class SessionManager implements ISessionManager {
       }
 
       managed.workingDirectory = path
+
+      // Invalidate filesystem caches that depend on working directory
+      invalidateContextFileCache(path)
+      invalidateSkillsCache()
 
       // Check if we can also update sdkCwd (safe if no SDK interaction yet)
       // Conditions: no messages sent AND no agent created yet (no SDK session)
@@ -5628,6 +5861,8 @@ export class SessionManager implements ISessionManager {
     const managed = this.sessions.get(sessionId)
     if (managed) {
       managed.labels = labels
+      // Guard: suppress external metadata revert from fs.watch during atomic write
+      managed._metadataWriteGuardUntil = Date.now() + 5000
 
       this.sendEvent({
         type: 'labels_changed',
@@ -6505,6 +6740,387 @@ export class SessionManager implements ISessionManager {
     }
 
     return (sourceSlugs.length > 0 || skillSlugs.length > 0) ? { sourceSlugs, skillSlugs } : undefined
+  }
+
+  // ============================================
+  // Export / Import / Dispatch
+  // ============================================
+
+  private async generateRemoteTransferSummary(managed: ManagedSession): Promise<string | null> {
+    await this.ensureMessagesLoaded(managed)
+
+    const messages = managed.messages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .filter(m => !m.isIntermediate)
+      .map(m => ({
+        type: m.role as 'user' | 'assistant',
+        content: m.content,
+      }))
+
+    if (messages.length === 0) return null
+
+    const workspaceRootPath = managed.workspace.rootPath
+    const wsConfig = loadWorkspaceConfig(workspaceRootPath)
+    const defaultModel = wsConfig?.defaults?.model
+    const backendContext = resolveBackendContext({
+      sessionConnectionSlug: managed.llmConnection,
+      workspaceDefaultConnectionSlug: wsConfig?.defaults?.defaultLlmConnection,
+      managedModel: managed.model || defaultModel,
+    })
+
+    const miniModel = backendContext.connection
+      ? (getMiniModel(backendContext.connection) ?? backendContext.connection.defaultModel ?? getDefaultSummarizationModel())
+      : getDefaultSummarizationModel()
+
+    const envOverrides: Record<string, string> = {
+      CRAFT_WORKSPACE_PATH: workspaceRootPath,
+      ...(miniModel ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: miniModel } : {}),
+    }
+
+    const agent = createBackendFromResolvedContext({
+      context: backendContext,
+      hostRuntime: buildBackendHostRuntimeContext(),
+      coreConfig: {
+        workspace: managed.workspace,
+        session: {
+          id: `${managed.id}-remote-transfer-summary`,
+          workspaceRootPath,
+          createdAt: Date.now(),
+          lastUsedAt: Date.now(),
+          workingDirectory: managed.workingDirectory,
+          sdkCwd: managed.sdkCwd,
+          model: managed.model,
+          llmConnection: managed.llmConnection,
+          permissionMode: managed.permissionMode,
+          previousPermissionMode: managed.previousPermissionMode,
+        },
+        miniModel,
+        envOverrides,
+        isHeadless: true,
+      },
+      providerOptions: { piAuthProvider: backendContext.connection?.piAuthProvider },
+    })
+
+    try {
+      return await generateConversationSummary(messages, agent.runMiniCompletion.bind(agent))
+    } finally {
+      agent.destroy()
+    }
+  }
+
+  async exportRemoteSessionTransfer(sessionId: string, workspaceId: string): Promise<RemoteSessionTransferPayload | null> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) {
+      sessionLog.warn(`[dispatch] Cannot export remote transfer: ${sessionId} not found`)
+      return null
+    }
+
+    if (managed.workspace.id !== workspaceId) {
+      sessionLog.warn(`[dispatch] Session ${sessionId} does not belong to workspace ${workspaceId}`)
+      return null
+    }
+
+    if (managed.isProcessing) {
+      sessionLog.warn(`[dispatch] Cannot export remote transfer ${sessionId}: still processing`)
+      return null
+    }
+
+    this.persistSession(managed)
+    await sessionPersistenceQueue.flush(sessionId)
+
+    const summary = await this.generateRemoteTransferSummary(managed)
+    if (!summary) {
+      sessionLog.warn(`[dispatch] Failed to generate remote transfer summary for ${sessionId}`)
+      return null
+    }
+
+    return {
+      sourceSessionId: managed.id,
+      name: managed.name,
+      sessionStatus: managed.sessionStatus,
+      labels: managed.labels,
+      permissionMode: managed.permissionMode,
+      summary,
+    }
+  }
+
+  async importRemoteSessionTransfer(
+    workspaceId: string,
+    payload: RemoteSessionTransferPayload,
+  ): Promise<ImportRemoteSessionTransferResult> {
+    if (!payload || typeof payload !== 'object' || typeof payload.summary !== 'string' || !payload.summary.trim()) {
+      throw new Error('Invalid remote session transfer payload')
+    }
+
+    const session = await this.createSession(workspaceId, {
+      name: payload.name,
+      permissionMode: payload.permissionMode,
+      sessionStatus: payload.sessionStatus,
+      labels: payload.labels,
+    })
+
+    const managed = this.sessions.get(session.id)
+    if (!managed) {
+      throw new Error(`Transferred session ${session.id} was not created`)
+    }
+
+    managed.transferredSessionSummary = payload.summary.trim()
+    managed.transferredSessionSummaryApplied = false
+    this.persistSession(managed)
+    await sessionPersistenceQueue.flush(session.id)
+
+    return { sessionId: session.id }
+  }
+
+  /**
+   * Export a session as a portable SessionBundle.
+   *
+   * Steps:
+   * 1. Validate session exists and resolve its workspace
+   * 2. If session is processing, refuse (caller must stop it first)
+   * 3. Flush pending persistence writes
+   * 4. Serialize session directory into a bundle
+   */
+  async exportSession(sessionId: string, workspaceId: string): Promise<SessionBundle | null> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) {
+      sessionLog.warn(`[dispatch] Cannot export session: ${sessionId} not found`)
+      return null
+    }
+
+    if (managed.workspace.id !== workspaceId) {
+      sessionLog.warn(`[dispatch] Session ${sessionId} does not belong to workspace ${workspaceId}`)
+      return null
+    }
+
+    if (managed.isProcessing) {
+      sessionLog.warn(`[dispatch] Cannot export session ${sessionId}: still processing`)
+      return null
+    }
+
+    // Flush pending writes to ensure JSONL is up to date
+    this.persistSession(managed)
+    await sessionPersistenceQueue.flush(sessionId)
+
+    const bundle = serializeSession(managed.workspace.rootPath, sessionId)
+    if (!bundle) {
+      sessionLog.error(`[dispatch] Failed to serialize session ${sessionId}`)
+      return null
+    }
+
+    return bundle
+  }
+
+  /**
+   * Import a session bundle into a target workspace.
+   *
+   * Steps:
+   * 1. Validate bundle structure and target workspace
+   * 2. Generate new session ID (fork) or use original (move)
+   * 3. Create session directory and write JSONL + files
+   * 4. Register session in-memory
+   * 5. Emit session_created event
+   * 6. Return new session ID and compatibility warnings
+   */
+  async importSession(
+    workspaceId: string,
+    bundle: SessionBundle,
+    mode: DispatchMode,
+  ): Promise<{ sessionId: string; warnings?: string[] }> {
+    sessionLog.info(`[import] Starting import: workspaceId=${workspaceId}, mode=${mode}, bundleSessionId=${bundle?.session?.header?.id ?? 'unknown'}, files=${bundle?.files?.length ?? 0}`)
+
+    if (!validateBundle(bundle)) {
+      throw new Error('Invalid session bundle')
+    }
+
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) {
+      throw new Error(`Workspace ${workspaceId} not found`)
+    }
+
+    sessionLog.info(`[import] Target workspace: "${workspace.name}" at ${workspace.rootPath}`)
+
+    const warnings: string[] = []
+    const workspaceRootPath = workspace.rootPath
+
+    // Determine session ID
+    const sessionId = mode === 'move'
+      ? bundle.session.header.id
+      : generateSessionId(workspaceRootPath)
+
+    // Check for ID collision on move
+    if (mode === 'move' && this.sessions.has(sessionId)) {
+      throw new Error(`Session ${sessionId} already exists in target workspace`)
+    }
+
+    // Create session directory with all subdirectories
+    const sessionDir = ensureSessionDir(workspaceRootPath, sessionId)
+
+    // Build the stored session from bundle data
+    const header = bundle.session.header
+    const storedSession: StoredSession = {
+      id: sessionId,
+      workspaceRootPath,
+      sdkSessionId: header.sdkSessionId, // Preserved initially; fork logic below may clear it
+      // Always regenerate sdkCwd for the target workspace.
+      // The source sdkCwd points to a path on the originating server
+      // which doesn't exist here (cross-server transfer).
+      sdkCwd: getSessionStoragePath(workspaceRootPath, sessionId),
+      name: header.name,
+      createdAt: header.createdAt,
+      lastUsedAt: Date.now(),
+      lastMessageAt: header.lastMessageAt,
+      isFlagged: header.isFlagged,
+      permissionMode: header.permissionMode,
+      previousPermissionMode: header.previousPermissionMode,
+      sessionStatus: header.sessionStatus,
+      labels: header.labels,
+      enabledSourceSlugs: header.enabledSourceSlugs,
+      workingDirectory: header.workingDirectory,
+      model: header.model,
+      llmConnection: header.llmConnection,
+      connectionLocked: header.connectionLocked,
+      thinkingLevel: header.thinkingLevel,
+      hidden: header.hidden,
+      transferredSessionSummary: header.transferredSessionSummary,
+      transferredSessionSummaryApplied: header.transferredSessionSummaryApplied,
+      messages: bundle.session.messages,
+      tokenUsage: header.tokenUsage ?? DEFAULT_TOKEN_USAGE,
+    }
+
+    // Fork-specific: set up SDK branching if branchInfo provided
+    if (mode === 'fork' && bundle.branchInfo) {
+      storedSession.branchFromSdkSessionId = bundle.branchInfo.sdkSessionId
+      storedSession.branchFromSdkTurnId = bundle.branchInfo.sdkTurnId
+      storedSession.branchFromSdkCwd = bundle.branchInfo.sdkCwd
+    }
+
+    // Fork-specific: clear sharing state and attempt resume-first strategy
+    if (mode === 'fork') {
+      storedSession.sharedUrl = undefined
+      storedSession.sharedId = undefined
+
+      // Resume-first: try to find a compatible LLM connection on the target workspace.
+      // If found and the session has an sdkSessionId, preserve it for API-level resume.
+      // If not, clear SDK state and fall back to transferred session summary.
+      const sourceProviderType = header.llmConnection
+        ? getLlmConnection(header.llmConnection)?.providerType
+        : undefined
+      const compatibleConnection = sourceProviderType
+        ? this.findCompatibleLlmConnection(workspaceRootPath, sourceProviderType)
+        : null
+
+      if (compatibleConnection && storedSession.sdkSessionId) {
+        // Resume path: compatible credentials exist — preserve SDK session ID
+        sessionLog.info(`[import] Fork: compatible ${sourceProviderType} connection "${compatibleConnection}" found — preserving sdkSessionId for resume`)
+        storedSession.llmConnection = compatibleConnection
+        storedSession.connectionLocked = false
+      } else {
+        // Summary path: no compatible connection or no SDK session — clear for fresh start
+        if (storedSession.llmConnection) {
+          sessionLog.info(`[import] Fork: no compatible ${sourceProviderType ?? 'unknown'} connection — clearing, will use summary context`)
+        }
+        storedSession.sdkSessionId = undefined
+        storedSession.llmConnection = undefined
+        storedSession.connectionLocked = false
+      }
+      // Clear thinking level so the session inherits the workspace default
+      storedSession.thinkingLevel = undefined
+      // Clear working directory — the source path won't exist on a different server.
+      // The user can set a new cwd after the session is transferred.
+      storedSession.workingDirectory = undefined
+    }
+
+    // Check source compatibility (before writing JSONL so fixes are persisted)
+    if (storedSession.enabledSourceSlugs?.length) {
+      const availableSources = loadWorkspaceSources(workspaceRootPath)
+      const availableSlugs = new Set(availableSources.map(s => s.config.slug))
+      const missingSources = storedSession.enabledSourceSlugs.filter(s => !availableSlugs.has(s))
+      if (missingSources.length > 0) {
+        sessionLog.warn(`[import] Sources not available: ${missingSources.join(', ')}`)
+        warnings.push(`Sources not available in target workspace: ${missingSources.join(', ')}`)
+      }
+    }
+
+    // Check LLM connection compatibility for move mode (fork already cleared above)
+    if (mode === 'move' && storedSession.llmConnection) {
+      sessionLog.info(`[import] Checking LLM connection: "${storedSession.llmConnection}"`)
+      const conn = resolveSessionConnection(storedSession.llmConnection, undefined)
+      if (!conn) {
+        sessionLog.warn(`[import] LLM connection "${storedSession.llmConnection}" not found — clearing to use default`)
+        warnings.push(`LLM connection "${storedSession.llmConnection}" not found in target — session will use default`)
+        storedSession.llmConnection = undefined
+        storedSession.connectionLocked = false
+      } else {
+        sessionLog.info(`[import] LLM connection "${storedSession.llmConnection}" resolved OK`)
+      }
+    } else if (mode === 'move' && !storedSession.llmConnection) {
+      sessionLog.info('[import] No LLM connection in bundle — will use default')
+    }
+
+    // Write JSONL file (after compatibility checks so remapped values are persisted)
+    const sessionFile = getSessionFilePath(workspaceRootPath, sessionId)
+    sessionLog.info(`[import] Writing JSONL: ${sessionFile} (llmConnection=${storedSession.llmConnection ?? 'default'}, messages=${storedSession.messages.length})`)
+    writeSessionJsonl(sessionFile, storedSession)
+
+    // Write all bundle files (attachments, plans, data, downloads, etc.)
+    for (const file of bundle.files) {
+      const targetPath = join(sessionDir, file.relativePath)
+      const targetDir = dirname(targetPath)
+      await mkdir(targetDir, { recursive: true })
+      await writeFile(targetPath, Buffer.from(file.contentBase64, 'base64'))
+    }
+
+    // Register in-memory — pass session metadata without messages to avoid
+    // StoredMessage[] vs Message[] type mismatch, then convert messages separately
+    const { messages: bundleMessages, ...sessionMeta } = storedSession
+    const managed = createManagedSession(sessionMeta, workspace, {
+      messagesLoaded: true,
+      workingDirectory: storedSession.workingDirectory,
+    })
+    managed.messages = bundleMessages.map(storedToMessage)
+
+    setPermissionMode(sessionId, managed.permissionMode ?? 'ask', { changedBy: 'restore' })
+    if (managed.previousPermissionMode) {
+      hydratePreviousPermissionMode(sessionId, managed.previousPermissionMode)
+    }
+
+    this.sessions.set(sessionId, managed)
+
+    // Initialize automation metadata
+    const automationSystem = this.automationSystems.get(workspaceRootPath)
+    if (automationSystem) {
+      automationSystem.setInitialSessionMetadata(sessionId, {
+        permissionMode: storedSession.permissionMode,
+        labels: storedSession.labels,
+        isFlagged: storedSession.isFlagged,
+        sessionStatus: storedSession.sessionStatus,
+        sessionName: managed.name,
+      })
+    }
+
+    // Emit session_created so renderer picks it up
+    this.sendEvent({ type: 'session_created', sessionId }, workspaceId)
+
+    sessionLog.info(`[import] Complete: sessionId=${sessionId}, transferredSummary=${managed.transferredSessionSummary ? `${managed.transferredSessionSummary.length} chars` : 'none'}, applied=${managed.transferredSessionSummaryApplied}, warnings=${warnings.length > 0 ? warnings.join('; ') : 'none'}`)
+    return { sessionId, warnings: warnings.length > 0 ? warnings : undefined }
+  }
+
+  /**
+   * Find an LLM connection on this server that matches the given provider type.
+   * Checks workspace default first, then falls back to any matching connection.
+   */
+  private findCompatibleLlmConnection(workspaceRootPath: string, providerType: string): string | null {
+    const wsConfig = loadWorkspaceConfig(workspaceRootPath)
+    const defaultSlug = wsConfig?.defaults?.defaultLlmConnection
+    if (defaultSlug) {
+      const conn = getLlmConnection(defaultSlug)
+      if (conn?.providerType === providerType) return defaultSlug
+    }
+    // Fall back: any connection with matching provider type
+    const connections = getLlmConnections()
+    const match = connections.find(c => c.providerType === providerType)
+    return match?.slug ?? null
   }
 
   /**

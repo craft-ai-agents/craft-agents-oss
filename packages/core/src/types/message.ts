@@ -299,6 +299,13 @@ export interface Message {
   errorDetails?: string[];
   errorOriginal?: string;
   errorCanRetry?: boolean;
+  errorActions?: Array<{
+    key: string;
+    label: string;
+    action?: 'retry' | 'settings' | 'reauth' | 'open_url' | 'reconnect_source';
+    url?: string;
+    sourceSlug?: string;
+  }>;
   // Plan-specific fields (for role='plan')
   planPath?: string;  // Path to the plan markdown file
   // Auth-request-specific fields (for role='auth-request')
@@ -371,6 +378,13 @@ export interface StoredMessage {
   errorDetails?: string[];
   errorOriginal?: string;
   errorCanRetry?: boolean;
+  errorActions?: Array<{
+    key: string;
+    label: string;
+    action?: 'retry' | 'settings' | 'reauth' | 'open_url' | 'reconnect_source';
+    url?: string;
+    sourceSlug?: string;
+  }>;
   // Plan-specific fields (for role='plan')
   planPath?: string;
   // Auth-request-specific fields (for role='auth-request')
@@ -422,7 +436,11 @@ export interface RecoveryAction {
   /** Slash command to execute (e.g., '/settings') */
   command?: string;
   /** Custom action type for special handling */
-  action?: 'retry' | 'settings' | 'reauth';
+  action?: 'retry' | 'settings' | 'reauth' | 'open_url' | 'reconnect_source';
+  /** URL to open (for open_url action) */
+  url?: string;
+  /** Source slug (for reconnect_source action) */
+  sourceSlug?: string;
 }
 
 /**

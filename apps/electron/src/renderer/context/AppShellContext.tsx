@@ -53,6 +53,8 @@ export interface AppShellContextType {
   enabledSources?: LoadedSource[]
   /** All skills for this workspace - provided by AppShell component (for @mentions) */
   skills?: LoadedSkill[]
+  /** Working directory of the active session — needed for project-level skill resolution */
+  activeSessionWorkingDirectory?: string
   /** All label configs (tree) for label menu and badge display */
   labels?: import('@craft-agent/shared/labels').LabelConfig[]
   /** Callback when session labels change */
@@ -102,7 +104,7 @@ export interface AppShellContextType {
   onOpenUrl: (url: string) => void
 
   // Workspace
-  onSelectWorkspace: (id: string, openInNewWindow?: boolean) => void
+  onSelectWorkspace: (id: string, openInNewWindow?: boolean) => void | Promise<void>
   onRefreshWorkspaces?: () => void
 
   // App actions
@@ -126,8 +128,14 @@ export interface AppShellContextType {
   // Right sidebar button (for page headers)
   rightSidebarButton?: React.ReactNode
 
+  // Leading action button for panel header (e.g., back button in compact mode)
+  leadingAction?: React.ReactNode
+
   /** Whether this panel is the focused panel (for multi-panel visual differentiation) */
   isFocusedPanel?: boolean
+
+  /** Whether the shell is currently in compact/narrow mode */
+  isCompactMode?: boolean
 
   // Session list search state (for ChatDisplay highlighting)
   /** Current search query from session list - used to highlight matches in ChatDisplay */
@@ -139,7 +147,7 @@ export interface AppShellContextType {
   /** Ref to ChatDisplay for navigation between matches */
   chatDisplayRef?: React.RefObject<ChatDisplayHandle>
   /** Callback when ChatDisplay match info changes (for immediate UI updates) */
-  onChatMatchInfoChange?: (info: { count: number; index: number }) => void
+  onChatMatchInfoChange?: (info: { sessionId: string | null; count: number; index: number; isHighlighting: boolean }) => void
 
   // Automation management
   /** Test an automation by ID — executes its actions and returns results */

@@ -130,6 +130,19 @@ export interface CreateSessionOptions {
   branchFromSessionId?: string
 }
 
+export interface RemoteSessionTransferPayload {
+  sourceSessionId: string
+  name?: string
+  sessionStatus?: SessionStatus
+  labels?: string[]
+  permissionMode?: PermissionMode
+  summary: string
+}
+
+export interface ImportRemoteSessionTransferResult {
+  sessionId: string
+}
+
 export interface PermissionModeState {
   permissionMode: PermissionMode
   previousPermissionMode?: PermissionMode
@@ -333,15 +346,15 @@ export interface LlmConnectionSetup {
   updateOnly?: boolean
   /** Custom endpoint protocol for arbitrary OpenAI/Anthropic-compatible APIs */
   customEndpoint?: CustomEndpointConfig
-  /** Bedrock IAM credentials for direct IAM authentication */
+  /** IAM credentials for Pi+Bedrock (piAuthProvider='amazon-bedrock') connections */
   iamCredentials?: {
     accessKeyId: string
     secretAccessKey: string
     sessionToken?: string
   }
-  /** AWS region for Bedrock connections */
+  /** AWS region for Pi+Bedrock connections */
   awsRegion?: string
-  /** Bedrock authentication method — determines how credentials are resolved */
+  /** Bedrock authentication method — determines auth type for Pi+Bedrock connections */
   bedrockAuthMethod?: 'iam_credentials' | 'environment'
 }
 

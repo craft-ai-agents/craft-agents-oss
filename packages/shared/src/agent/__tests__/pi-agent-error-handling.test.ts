@@ -70,4 +70,55 @@ describe('PiAgent subprocess error handling', () => {
 
     agent.destroy()
   })
+
+  it('suppresses only identical consecutive subprocess errors', () => {
+    const agent = new PiAgent(createConfig())
+
+    const enqueued: any[] = []
+    ;(agent as any).eventQueue.enqueue = (event: any) => {
+      enqueued.push(event)
+    }
+
+    for (let i = 0; i < 4; i++) {
+      ;(agent as any).handleLine(JSON.stringify({
+        type: 'error',
+        message: 'EFAULT: broken pipe',
+      }))
+    }
+
+    expect(enqueued).toHaveLength(3)
+    expect(enqueued.every((event) => event.type === 'error' || event.type === 'typed_error')).toBe(true)
+
+    agent.destroy()
+  })
+
+  it('resets repeated subprocess error suppression after non-error traffic', () => {
+    const agent = new PiAgent(createConfig())
+
+    const enqueued: any[] = []
+    ;(agent as any).eventQueue.enqueue = (event: any) => {
+      enqueued.push(event)
+    }
+
+    for (let i = 0; i < 3; i++) {
+      ;(agent as any).handleLine(JSON.stringify({
+        type: 'error',
+        message: 'EFAULT: broken pipe',
+      }))
+    }
+
+    ;(agent as any).handleLine(JSON.stringify({
+      type: 'event',
+      event: { type: 'agent_message_delta', delta: 'ok' },
+    }))
+
+    ;(agent as any).handleLine(JSON.stringify({
+      type: 'error',
+      message: 'EFAULT: broken pipe',
+    }))
+
+    expect(enqueued.filter((event) => event.type === 'error' || event.type === 'typed_error')).toHaveLength(4)
+
+    agent.destroy()
+  })
 })

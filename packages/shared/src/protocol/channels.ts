@@ -4,6 +4,19 @@
  * Key paths are internal and may be reorganized freely.
  */
 export const RPC_CHANNELS = {
+  remote: {
+    TEST_CONNECTION: 'remote:testConnection',
+  },
+  server: {
+    GET_WORKSPACES: 'server:getWorkspaces',
+    CREATE_WORKSPACE: 'server:createWorkspace',
+    GET_STATUS: 'server:getStatus',
+    GET_HEALTH: 'server:getHealth',
+    GET_ACTIVE_SESSIONS: 'server:getActiveSessions',
+    SHUTTING_DOWN: 'server:shuttingDown',
+    STATUS_CHANGED: 'server:statusChanged',
+    HOME_DIR: 'server:homeDir',
+  },
   sessions: {
     GET: 'sessions:get',
     GET_UNREAD_SUMMARY: 'sessions:getUnreadSummary',
@@ -30,6 +43,10 @@ export const RPC_CHANNELS = {
     UNWATCH_FILES: 'sessions:unwatchFiles',
     FILES_CHANGED: 'sessions:filesChanged',
     SEARCH_CONTENT: 'sessions:searchContent',
+    EXPORT: 'sessions:export',
+    IMPORT: 'sessions:import',
+    EXPORT_REMOTE_TRANSFER: 'sessions:exportRemoteTransfer',
+    IMPORT_REMOTE_TRANSFER: 'sessions:importRemoteTransfer',
   },
   tasks: {
     GET_OUTPUT: 'tasks:getOutput',
@@ -38,6 +55,7 @@ export const RPC_CHANNELS = {
     GET: 'workspaces:get',
     CREATE: 'workspaces:create',
     CHECK_SLUG: 'workspaces:checkSlug',
+    UPDATE_REMOTE: 'workspaces:updateRemote',
   },
   window: {
     GET_WORKSPACE: 'window:getWorkspace',
@@ -56,6 +74,7 @@ export const RPC_CHANNELS = {
   file: {
     READ: 'file:read',
     READ_DATA_URL: 'file:readDataUrl',
+    READ_PREVIEW_DATA_URL: 'file:readPreviewDataUrl',
     READ_BINARY: 'file:readBinary',
     OPEN_DIALOG: 'file:openDialog',
     READ_ATTACHMENT: 'file:readAttachment',
@@ -184,6 +203,9 @@ export const RPC_CHANNELS = {
     SET_DEFAULT_THINKING_LEVEL: 'settings:setDefaultThinkingLevel',
     GET_NETWORK_PROXY: 'settings:getNetworkProxy',
     SET_NETWORK_PROXY: 'settings:setNetworkProxy',
+    GET_SERVER_CONFIG: 'settings:getServerConfig',
+    SET_SERVER_CONFIG: 'settings:setServerConfig',
+    GET_SERVER_STATUS: 'settings:getServerStatus',
   },
   pi: {
     GET_API_KEY_PROVIDERS: 'pi:getApiKeyProviders',
@@ -281,6 +303,10 @@ export const RPC_CHANNELS = {
     GET_RICH_TOOL_DESCRIPTIONS: 'appearance:getRichToolDescriptions',
     SET_RICH_TOOL_DESCRIPTIONS: 'appearance:setRichToolDescriptions',
   },
+  tools: {
+    GET_BROWSER_TOOL_ENABLED: 'tools:getBrowserToolEnabled',
+    SET_BROWSER_TOOL_ENABLED: 'tools:setBrowserToolEnabled',
+  },
   caching: {
     GET_EXTENDED_PROMPT_CACHE: 'caching:getExtendedPromptCache',
     SET_EXTENDED_PROMPT_CACHE: 'caching:setExtendedPromptCache',
@@ -340,3 +366,17 @@ export const RPC_CHANNELS = {
 } as const
 
 // IPC_CHANNELS compat alias removed — all consumers now use RPC_CHANNELS
+
+/**
+ * Flatten all channel string values from the nested RPC_CHANNELS object.
+ * Used by the exhaustive routing test to ensure every channel is classified.
+ */
+export function getAllChannelValues(): string[] {
+  const values: string[] = []
+  for (const namespace of Object.values(RPC_CHANNELS)) {
+    for (const channel of Object.values(namespace)) {
+      values.push(channel)
+    }
+  }
+  return values
+}

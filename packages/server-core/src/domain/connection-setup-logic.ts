@@ -107,7 +107,7 @@ export const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
 }> = {
   'anthropic-api': {
     name: (h) => h ? 'Custom Anthropic-Compatible' : 'Anthropic (API Key)',
-    providerType: (h) => h ? 'anthropic_compat' : 'anthropic',
+    providerType: (h) => h ? 'pi_compat' : 'anthropic',
     authType: (h) => h ? 'api_key_with_endpoint' : 'api_key',
   },
   'claude-max': {

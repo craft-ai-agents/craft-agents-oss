@@ -1,6 +1,7 @@
 {
   "name": "@craft-agent/viewer",
-  "version": "0.7.12",
+  "version": "0.8.3",
+  "license": "Apache-2.0",
   "description": "Web viewer for Craft Agents sessions - upload and share session transcripts",
   "private": true,
   "type": "module",

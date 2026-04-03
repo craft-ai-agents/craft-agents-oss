@@ -1624,16 +1624,30 @@ function main(): void {
     handleShutdown();
   });
 
-  // Handle unexpected errors
+  // Handle unexpected errors — process state is unreliable after these,
+  // so we attempt to report and then exit immediately.
+  // send() is wrapped in try/catch because stdout itself may be broken
+  // (e.g. EFAULT from a closed pipe), and we must not let the error
+  // report trigger another uncaughtException (which would loop).
   process.on('uncaughtException', (error) => {
     debugLog(`Uncaught exception: ${error.message}`);
-    send({ type: 'error', message: `Uncaught exception: ${error.message}`, code: 'uncaught' });
+    try {
+      send({ type: 'error', message: `Uncaught exception: ${error.message}`, code: 'uncaught' });
+    } catch {
+      // stdout may be broken — swallow to avoid re-triggering
+    }
+    process.exit(1);
   });
 
   process.on('unhandledRejection', (reason) => {
     const msg = reason instanceof Error ? reason.message : String(reason);
     debugLog(`Unhandled rejection: ${msg}`);
-    send({ type: 'error', message: `Unhandled rejection: ${msg}`, code: 'unhandled_rejection' });
+    try {
+      send({ type: 'error', message: `Unhandled rejection: ${msg}`, code: 'unhandled_rejection' });
+    } catch {
+      // stdout may be broken — swallow to avoid re-triggering
+    }
+    process.exit(1);
   });
 }
 

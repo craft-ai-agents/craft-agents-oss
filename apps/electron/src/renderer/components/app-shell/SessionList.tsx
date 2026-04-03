@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react"
+import { useSetAtom } from "jotai"
 import { isToday, isYesterday, format, startOfDay } from "date-fns"
 import { useAction } from "@/actions"
 import { Inbox, Archive } from "lucide-react"
@@ -24,7 +25,7 @@ import { useFocusZone } from "@/hooks/keyboard"
 import { useEscapeInterrupt } from "@/context/EscapeInterruptContext"
 import { useNavigation, useNavigationState, routes, isSessionsNavigation } from "@/contexts/NavigationContext"
 import { useFocusContext } from "@/context/FocusContext"
-import type { SessionMeta } from "@/atoms/sessions"
+import { sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import type { ViewConfig } from "@craft-agent/shared/views"
 import type { SessionStatusId, SessionStatus } from "@/config/session-status-config"
 import { buildCollapsedGroupsScopeSuffix } from "@/utils/session-list-collapse"
@@ -86,6 +87,8 @@ interface SessionListProps {
   onNavigateToSession?: (sessionId: string) => void
   /** Session-level pending prompt marker (permission/admin approval) */
   hasPendingPrompt?: (sessionId: string) => boolean
+  /** DOM-verified match info for the active session (from ChatDisplay) */
+  activeChatMatchInfo?: { sessionId: string | null; count: number; isHighlighting?: boolean }
 }
 
 // Re-export SessionStatusId for use by parent components
@@ -134,7 +137,10 @@ export function SessionList({
   focusedSessionId,
   onNavigateToSession,
   hasPendingPrompt,
+  activeChatMatchInfo,
 }: SessionListProps) {
+  const setSendToWorkspace = useSetAtom(sendToWorkspaceAtom)
+
   // --- Selection (atom-backed, shared with ChatDisplay + BatchActionPanel) ---
   const {
     select: selectSession,
@@ -225,6 +231,7 @@ export function SessionList({
     isSearchMode,
     highlightQuery,
     isSearchingContent,
+    isSearchUnavailable,
     contentSearchResults,
     matchingFilterItems,
     otherResultItems,
@@ -564,6 +571,7 @@ export function SessionList({
     onLabelsChange,
     onSelectSessionById: handleSelectSessionById,
     onOpenInNewWindow: handleOpenInNewWindow,
+    onSendToWorkspace: (ids: string[]) => setSendToWorkspace(ids),
     onFocusZone: handleFocusZone,
     onKeyDown: handleKeyDown,
     sessionStatuses,
@@ -574,16 +582,17 @@ export function SessionList({
     isMultiSelectActive,
     sessionOptions,
     contentSearchResults,
+    activeChatMatchInfo,
     hasPendingPrompt,
   }), [
     handleRenameClick, onSessionStatusChange,
     onFlag, handleFlagWithToast, onUnflag, handleUnflagWithToast,
     onArchive, handleArchiveWithToast, onUnarchive, handleUnarchiveWithToast,
     onMarkUnread, handleDeleteWithToast, onLabelsChange,
-    handleSelectSessionById, handleOpenInNewWindow, handleFocusZone, handleKeyDown,
+    handleSelectSessionById, handleOpenInNewWindow, setSendToWorkspace, handleFocusZone, handleKeyDown,
     sessionStatuses, flatLabels, labels, resolvedSearchQuery,
     focusedSessionId, selectionStore.state.selected, isMultiSelectActive,
-    sessionOptions, contentSearchResults, hasPendingPrompt,
+    sessionOptions, contentSearchResults, activeChatMatchInfo, hasPendingPrompt,
   ])
 
   // --- Empty state (non-search) — render before EntityList ---
@@ -657,6 +666,7 @@ export function SessionList({
                 onFocus={() => setIsSearchInputFocused(true)}
                 onBlur={() => setIsSearchInputFocused(false)}
                 isSearching={isSearchingContent}
+                isUnavailable={isSearchUnavailable}
                 resultCount={matchingFilterItems.length + otherResultItems.length}
                 exceededLimit={exceededSearchLimit}
                 inputRef={searchInputRef}

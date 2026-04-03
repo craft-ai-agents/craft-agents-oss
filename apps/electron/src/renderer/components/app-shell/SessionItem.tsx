@@ -10,8 +10,9 @@ import { SessionMenu } from "./SessionMenu"
 import { BatchSessionMenu } from "./BatchSessionMenu"
 import { SessionStatusIcon } from "./SessionStatusIcon"
 import { SessionBadges } from "./SessionBadges"
-import { getSessionTitle, highlightMatch, hasUnreadMeta, shortTimeLocale } from "@/utils/session"
+import { getSessionTitle, getSessionPreviewText, highlightMatch, hasUnreadMeta, shortTimeLocale } from "@/utils/session"
 import { useSessionListContext } from "@/context/SessionListContext"
+import { useAppShellContext } from "@/context/AppShellContext"
 import { navigate, routes } from "@/lib/navigate"
 import type { SessionMeta } from "@/atoms/sessions"
 import { extractLabelId } from "@craft-agent/shared/labels"
@@ -39,16 +40,23 @@ export function SessionItem({
   onRangeSelect,
 }: SessionItemProps) {
   const ctx = useSessionListContext()
+  const { workspaces, isCompactMode } = useAppShellContext()
+  const hasRemoteWorkspaces = workspaces?.some(w => w.remoteServer) ?? false
   const { hotkey: nextHotkey } = useActionLabel('chat.nextSearchMatch')
   const { hotkey: prevHotkey } = useActionLabel('chat.prevSearchMatch')
   const title = getSessionTitle(item)
-  const chatMatchCount = ctx.contentSearchResults.get(item.id)?.matchCount
+  // For the active session, prefer logical match count over ripgrep count
+  const activeMatch = ctx.activeChatMatchInfo
+  const isActiveSession = isSelected && activeMatch?.sessionId === item.id
+  const ripgrepMatchCount = ctx.contentSearchResults.get(item.id)?.matchCount
+  const chatMatchCount = isActiveSession ? activeMatch!.count : ripgrepMatchCount
   const hasMatch = chatMatchCount != null && chatMatchCount > 0
   const hasLabels = !!(item.labels && item.labels.length > 0 && ctx.flatLabels.length > 0 && item.labels.some(entry => {
     const labelId = extractLabelId(entry)
     return ctx.flatLabels.some(l => l.id === labelId)
   }))
   const hasPendingPrompt = ctx.hasPendingPrompt?.(item.id) ?? false
+  const previewText = isCompactMode ? getSessionPreviewText(item) : null
 
   const handleClick = (e: React.MouseEvent) => {
     ctx.onFocusZone()
@@ -107,6 +115,8 @@ export function SessionItem({
           onMarkUnread={() => ctx.onMarkUnread(item.id)}
           onSessionStatusChange={(s) => ctx.onSessionStatusChange(item.id, s)}
           onOpenInNewWindow={() => ctx.onOpenInNewWindow(item)}
+          onSendToWorkspace={ctx.onSendToWorkspace ? () => ctx.onSendToWorkspace!([item.id]) : undefined}
+          hasRemoteWorkspaces={hasRemoteWorkspaces}
           onDelete={() => ctx.onDelete(item.id)}
         />
       }
@@ -140,6 +150,7 @@ export function SessionItem({
       }
       title={ctx.searchQuery ? highlightMatch(title, ctx.searchQuery) : title}
       titleClassName={cn("text-[13px]", item.isAsyncOperationOngoing && "animate-shimmer-text")}
+      subtitle={previewText}
       titleTrailing={hasMatch ? (
         <span
           className={cn(

@@ -142,6 +142,17 @@ const PREVIEWABLE_EXTENSIONS = new Set([
 ])
 
 /**
+ * Extensions that get lightweight image previews in web mode.
+ * Excludes pdf/psd/ai/svg — not rendered as <img> thumbnails here.
+ */
+const WEB_PREVIEWABLE_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico',
+])
+
+/** True when running in web UI (browser) rather than Electron. */
+const isWebMode = window.electronAPI.getRuntimeEnvironment() === 'web'
+
+/**
  * Constructs a thumbnail:// protocol URL for a given file path.
  * The path is URI-encoded so it can be embedded safely in a URL.
  * Works cross-platform (macOS paths start with /, Windows with C:\).
@@ -153,28 +164,46 @@ function getThumbnailUrl(filePath: string): string {
 /**
  * FileThumbnail — Renders an image thumbnail with cross-fade from icon fallback.
  *
- * Shows the Lucide icon immediately, then loads the thumbnail from the
- * custom thumbnail:// protocol. On load, the icon fades out and the
- * thumbnail fades in (200ms CSS transition). If loading fails, the icon
- * stays visible — no layout shift, no error state.
+ * In Electron: loads via the custom thumbnail:// protocol (efficient 64x64 resize).
+ * In Web mode: loads via readFilePreviewDataUrl RPC (server-side resized preview).
+ *
+ * Shows the Lucide icon immediately, then cross-fades to the thumbnail on load.
+ * If loading fails, the icon stays visible — no layout shift, no error state.
  */
 const FileThumbnail = memo(function FileThumbnail({ file }: { file: SessionFile }) {
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
+  const [dataUrl, setDataUrl] = useState<string | null>(null)
 
   // Reset state when file changes (e.g. watcher triggered re-render)
   useEffect(() => {
     setLoaded(false)
     setFailed(false)
+    setDataUrl(null)
   }, [file.path])
 
   const ext = file.name.split('.').pop()?.toLowerCase() || ''
-  const canPreview = PREVIEWABLE_EXTENSIONS.has(ext)
+  const previewableSet = isWebMode ? WEB_PREVIEWABLE_EXTENSIONS : PREVIEWABLE_EXTENSIONS
+  const canPreview = previewableSet.has(ext)
+
+  // Web mode: load a small preview via RPC as a base64 data URL
+  useEffect(() => {
+    if (!isWebMode || !canPreview || failed) return
+    let cancelled = false
+    window.electronAPI.readFilePreviewDataUrl(file.path, 64).then((url) => {
+      if (!cancelled) setDataUrl(url)
+    }).catch(() => {
+      if (!cancelled) setFailed(true)
+    })
+    return () => { cancelled = true }
+  }, [file.path, canPreview, failed])
 
   // Fall back to regular icon if not previewable or thumbnail failed
   if (!canPreview || failed) {
     return getFileIcon(file)
   }
+
+  const imgSrc = isWebMode ? dataUrl : getThumbnailUrl(file.path)
 
   return (
     <>
@@ -188,17 +217,19 @@ const FileThumbnail = memo(function FileThumbnail({ file }: { file: SessionFile 
         {getFileIcon(file)}
       </span>
       {/* Thumbnail — fades in on successful load */}
-      <img
-        src={getThumbnailUrl(file.path)}
-        alt=""
-        loading="lazy"
-        onLoad={() => setLoaded(true)}
-        onError={() => setFailed(true)}
-        className={cn(
-          'absolute inset-0 h-full w-full rounded-[2px] object-cover transition-opacity duration-200',
-          loaded ? 'opacity-100' : 'opacity-0'
-        )}
-      />
+      {imgSrc && (
+        <img
+          src={imgSrc}
+          alt=""
+          loading="lazy"
+          onLoad={() => setLoaded(true)}
+          onError={() => setFailed(true)}
+          className={cn(
+            'absolute inset-0 h-full w-full rounded-[2px] object-cover transition-opacity duration-200',
+            loaded ? 'opacity-100' : 'opacity-0'
+          )}
+        />
+      )}
     </>
   )
 })

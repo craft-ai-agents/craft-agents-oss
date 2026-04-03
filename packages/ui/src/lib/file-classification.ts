@@ -65,6 +65,22 @@ const TEXT_EXTENSIONS = new Set([
 const PDF_EXTENSIONS = new Set(['pdf'])
 
 /**
+ * External-only file extensions — recognized as file links but opened externally.
+ * These are included in FILE_EXTENSIONS_PATTERN so linkify.ts detects them as file paths,
+ * but classifyFile() returns canPreview: false so they route to the system opener.
+ */
+const EXTERNAL_EXTENSIONS = new Set([
+  'xlsx', 'xls', 'xlsm',   // Spreadsheets
+  'docx', 'doc',             // Word documents
+  'pptx', 'ppt',             // Presentations
+  'zip', 'tar', 'gz', 'rar', '7z',  // Archives
+  'dmg', 'pkg', 'exe', 'msi',       // Installers
+  'mp3', 'wav', 'flac', 'aac',      // Audio
+  'mp4', 'mov', 'avi', 'mkv',       // Video
+  'heic', 'heif', 'tiff', 'tif',    // Images Chromium can't decode
+])
+
+/**
  * Extract the file extension from a path, lowercased.
  * Handles compound extensions like .env.local by returning the last segment.
  */
@@ -107,4 +123,5 @@ export const FILE_EXTENSIONS_PATTERN = [
   ...JSON_EXTENSIONS,
   ...TEXT_EXTENSIONS,
   ...PDF_EXTENSIONS,
+  ...EXTERNAL_EXTENSIONS,
 ].join('|')

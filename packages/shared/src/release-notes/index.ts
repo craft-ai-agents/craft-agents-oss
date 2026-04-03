@@ -136,5 +136,11 @@ export function getLatestReleaseVersion(): string | undefined {
  */
 export function getCombinedReleaseNotes(): string {
   const list = getReleaseNotesList();
-  return list.map(n => n.content).join('\n\n---\n\n');
+  return list.map(n => {
+    // Auto-inject version header if the content doesn't start with one
+    if (!n.content.trimStart().startsWith('# ')) {
+      return `# v${n.version}\n\n${n.content}`;
+    }
+    return n.content;
+  }).join('\n\n---\n\n');
 }

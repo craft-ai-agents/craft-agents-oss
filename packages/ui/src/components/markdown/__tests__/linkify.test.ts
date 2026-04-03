@@ -266,6 +266,10 @@ describe('isFilePathTarget', () => {
     expect(isFilePathTarget('https://example.com/image.jpg')).toBe(false)
   })
 
+  it('rejects file URLs because they are resolved by link-target.ts', () => {
+    expect(isFilePathTarget('file:///Users/tester/report.xlsx')).toBe(false)
+  })
+
   it('rejects non-file strings', () => {
     expect(isFilePathTarget('not a link at all')).toBe(false)
   })

@@ -80,7 +80,7 @@ export function BrowserTabStrip({
     if (instancesOverride) return
 
     const browserPaneApi = window.electronAPI?.browserPane
-    if (!browserPaneApi) {
+    if (!browserPaneApi || !window.electronAPI.isChannelAvailable('browser-pane:list')) {
       setInstances([])
       setActiveInstanceId(null)
       return
@@ -106,7 +106,7 @@ export function BrowserTabStrip({
     if (instancesOverride) return
 
     const browserPaneApi = window.electronAPI?.browserPane
-    if (!browserPaneApi) return
+    if (!browserPaneApi || !window.electronAPI.isChannelAvailable('browser-pane:list')) return
 
     const cleanupState = browserPaneApi.onStateChanged((info: BrowserInstanceInfo) => {
       updateInstance(info)

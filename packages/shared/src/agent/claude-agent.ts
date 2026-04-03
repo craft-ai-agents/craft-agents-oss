@@ -24,7 +24,7 @@ import type { McpClientPool } from '../mcp/mcp-pool.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
 import { DEFAULT_MODEL, isClaudeModel, getDefaultSummarizationModel, getModelContextWindow } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
-import { loadPreferences, formatPreferencesForPrompt } from '../config/preferences.ts';
+import { loadPreferences, formatPreferencesForPrompt, getCoAuthorPreference } from '../config/preferences.ts';
 import type { FileAttachment } from '../utils/files.ts';
 import type { LLMQueryRequest, LLMQueryResult } from './llm-tool.ts';
 import { debug } from '../utils/debug.ts';
@@ -67,6 +67,7 @@ import {
   BUILT_IN_TOOLS,
 } from './core/pre-tool-use.ts';
 import { type ThinkingLevel, THINKING_TO_EFFORT, getThinkingTokens, DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
+import { generateConversationSummary } from './conversation-summary.ts';
 import type { LoadedSource } from '../sources/types.ts';
 import { sourceNeedsAuthentication } from '../sources/credential-manager.ts';
 import type {
@@ -134,7 +135,7 @@ export function resolveClaudeThinkingOptions(args: {
   const isClaude = isClaudeModel(model);
   const effort = THINKING_TO_EFFORT[thinkingLevel];
   const isHaiku = model.toLowerCase().includes('haiku');
-  const supportsAdaptiveThinking = isClaude && !isHaiku && providerType !== 'anthropic_compat';
+  const supportsAdaptiveThinking = isClaude && !isHaiku;
 
   if (minimizeThinking || !isClaude || !effort) {
     return supportsAdaptiveThinking
@@ -170,6 +171,14 @@ export interface ClaudeAgentConfig {
   getRecoveryMessages?: () => RecoveryMessage[];
   /** All parent messages for branch fork fallback (summarized via mini on fork failure). */
   getBranchFallbackMessages?: () => RecoveryMessage[];
+  /** Branch seed messages for seeded-fresh-session context strategy. */
+  getBranchSeedMessages?: () => RecoveryMessage[];
+  /** Mark branch seed as applied (called after first injection). */
+  markBranchSeedApplied?: () => void;
+  /** Get transferred session summary for cross-server session context. */
+  getTransferredSessionSummary?: () => string | null;
+  /** Mark transferred session summary as applied. */
+  markTransferredSessionSummaryApplied?: () => void;
   isHeadless?: boolean;        // Running in headless mode (disables interactive tools)
   debugMode?: {                // Debug mode configuration (when running in dev)
     enabled: boolean;          // Whether debug mode is active
@@ -456,6 +465,7 @@ export class ClaudeAgent extends BaseAgent {
   // Thinking level is managed by BaseAgent
   // Pinned system prompt components (captured on first chat, used for consistency after compaction)
   private pinnedPreferencesPrompt: string | null = null;
+  private pinnedIncludeCoAuthoredBy: boolean | null = null;
   // Track if preference drift notification has been shown this session
   private preferencesDriftNotified: boolean = false;
   // Captured stderr from SDK subprocess (for error diagnostics when process exits with code 1)
@@ -542,6 +552,10 @@ export class ClaudeAgent extends BaseAgent {
       onSdkSessionIdCleared: config.onSdkSessionIdCleared,
       getRecoveryMessages: config.getRecoveryMessages,
       getBranchFallbackMessages: config.getBranchFallbackMessages,
+      getBranchSeedMessages: config.getBranchSeedMessages,
+      markBranchSeedApplied: config.markBranchSeedApplied,
+      getTransferredSessionSummary: config.getTransferredSessionSummary,
+      markTransferredSessionSummaryApplied: config.markTransferredSessionSummaryApplied,
       envOverrides: config.envOverrides,
       miniModel: config.miniModel,
       mcpPool: config.mcpPool,
@@ -771,10 +785,12 @@ export class ClaudeAgent extends BaseAgent {
       // Pin system prompt components on first chat() call for consistency after compaction
       // The SDK's resume mechanism expects system prompt consistency within a session
       const currentPreferencesPrompt = formatPreferencesForPrompt();
+      const currentCoAuthorPref = getCoAuthorPreference();
 
       if (this.pinnedPreferencesPrompt === null) {
         // First chat in this session - pin current values
         this.pinnedPreferencesPrompt = currentPreferencesPrompt;
+        this.pinnedIncludeCoAuthoredBy = currentCoAuthorPref;
         debug('[chat] Pinned system prompt components for session consistency');
       } else {
         // Detect drift: warn user if context has changed since session started
@@ -932,7 +948,10 @@ export class ClaudeAgent extends BaseAgent {
                 this.pinnedPreferencesPrompt ?? undefined,
                 this.config.debugMode,
                 this.workspaceRootPath,
-                this.config.session?.workingDirectory
+                this.config.session?.workingDirectory,
+                undefined, // preset
+                undefined, // backendName
+                this.pinnedIncludeCoAuthoredBy ?? undefined
               ),
             },
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
@@ -1550,6 +1569,7 @@ This is a branched conversation. All prior messages in this conversation are par
           this.config.onSdkSessionIdCleared?.();
           // Clear pinned state for fresh start
           this.pinnedPreferencesPrompt = null;
+          this.pinnedIncludeCoAuthoredBy = null;
           this.preferencesDriftNotified = false;
 
           // Build fallback context: for branch failures, summarize parent conversation
@@ -1761,6 +1781,7 @@ This is a branched conversation. All prior messages in this conversation are par
           this.config.onSdkSessionIdCleared?.(); // persist cleared ID to JSONL header
           // Clear pinned state so retry captures fresh values
           this.pinnedPreferencesPrompt = null;
+          this.pinnedIncludeCoAuthoredBy = null;
           this.preferencesDriftNotified = false;
 
           // Inject fallback context for branch failures, recovery context for regular resume
@@ -1896,6 +1917,7 @@ This is a branched conversation. All prior messages in this conversation are par
           this.config.onSdkSessionIdCleared?.(); // persist cleared ID to JSONL header
           // Clear pinned state so retry captures fresh values
           this.pinnedPreferencesPrompt = null;
+          this.pinnedIncludeCoAuthoredBy = null;
           this.preferencesDriftNotified = false;
 
           // Inject fallback context for branch failures, recovery context for regular resume
@@ -2297,6 +2319,7 @@ This is a branched conversation. All prior messages in this conversation are par
     this.sessionId = null;
     // Clear pinned state so next chat() will capture fresh values
     this.pinnedPreferencesPrompt = null;
+    this.pinnedIncludeCoAuthoredBy = null;
     this.preferencesDriftNotified = false;
   }
 
@@ -2467,6 +2490,7 @@ This is a branched conversation. All prior messages in this conversation are par
 
     // Clear pinned system prompt state
     this.pinnedPreferencesPrompt = null;
+    this.pinnedIncludeCoAuthoredBy = null;
     this.preferencesDriftNotified = false;
 
     // Clear Claude-specific callbacks (not handled by BaseAgent)
@@ -2589,20 +2613,8 @@ This is a branched conversation. All prior messages in this conversation are par
     const messages = this.config.getBranchFallbackMessages?.();
     if (!messages || messages.length === 0) return null;
 
-    // Format transcript, truncating individual messages to stay within mini limits
-    const transcript = messages
-      .map(m => `${m.type === 'user' ? 'User' : 'Assistant'}: ${m.content.slice(0, 500)}`)
-      .join('\n\n');
-
-    // Cap total transcript to ~12K chars for mini input
-    const bounded = transcript.slice(0, 12_000);
-
     try {
-      const summary = await this.runMiniCompletion(
-        `Summarize this conversation concisely. Preserve: key decisions, ongoing tasks, ` +
-        `technical context, and the user's current goal. Be specific, not generic.\n\n${bounded}`
-      );
-      return summary;
+      return await generateConversationSummary(messages, this.runMiniCompletion.bind(this));
     } catch (error) {
       debug(`[ClaudeAgent] Branch fallback mini summary failed: ${error}`);
       return null;

@@ -29,4 +29,4 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.CRAFT_ANTHROPIC_API_KEY }}
           STITCH_API_KEY: ${{ secrets.STITCH_API_KEY }}
-        run: bun run apps/cli/src/index.ts --validate-server --no-spinner --workspace-dir .github/agents
+        run: bun run apps/cli/src/index.ts --validate-server --no-spinner --timeout 180000 --workspace-dir .github/agents

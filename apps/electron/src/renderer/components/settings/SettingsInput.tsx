@@ -176,6 +176,7 @@ export function SettingsInputRow({
 
   return (
     <div
+      data-layout="settings-row"
       className={cn(
         'flex items-center justify-between',
         inCard ? 'px-4 py-3.5' : 'py-3',
@@ -191,7 +192,7 @@ export function SettingsInputRow({
         )}
         {error && <p className={cn('text-sm text-destructive', settingsUI.labelDescriptionGap)}>{error}</p>}
       </div>
-      <div className={cn(
+      <div data-layout="settings-control" className={cn(
         'ml-4 shrink-0 rounded-md shadow-minimal has-[:focus-visible]:bg-background',
         error && 'ring-1 ring-destructive'
       )}>

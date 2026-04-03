@@ -13,6 +13,57 @@ export interface ImageResizeResult {
 
 let imageProcessor: ImageProcessor
 
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error))
+}
+
+function isImageProcessorUnavailableError(error: unknown): boolean {
+  const message = toError(error).message.toLowerCase()
+  return (
+    (message.includes('cannot find package') || message.includes('cannot find module'))
+    && message.includes('sharp')
+  )
+}
+
+export type ImageBufferInspection =
+  | { status: 'ok'; width: number; height: number }
+  | { status: 'invalid_image'; error?: Error }
+  | { status: 'processor_unavailable'; error?: Error }
+
+/**
+ * Inspect an uploaded image buffer and distinguish between invalid input and
+ * unavailable image-processing support.
+ */
+export async function inspectImageBuffer(
+  buffer: Buffer,
+  processor: ImageProcessor,
+): Promise<ImageBufferInspection> {
+  try {
+    const metadata = await processor.getMetadata(buffer)
+    if (metadata?.width && metadata?.height) {
+      return { status: 'ok', width: metadata.width, height: metadata.height }
+    }
+  } catch (error) {
+    if (isImageProcessorUnavailableError(error)) {
+      return { status: 'processor_unavailable', error: toError(error) }
+    }
+  }
+
+  try {
+    const normalized = await processor.process(buffer, { format: 'png' })
+    const metadata = await processor.getMetadata(normalized)
+    if (metadata?.width && metadata?.height) {
+      return { status: 'ok', width: metadata.width, height: metadata.height }
+    }
+    return { status: 'invalid_image' }
+  } catch (error) {
+    if (isImageProcessorUnavailableError(error)) {
+      return { status: 'processor_unavailable', error: toError(error) }
+    }
+    return { status: 'invalid_image', error: toError(error) }
+  }
+}
+
 export function setImageProcessor(proc: ImageProcessor) {
   imageProcessor = proc
 }

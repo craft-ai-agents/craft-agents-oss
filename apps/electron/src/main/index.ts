@@ -64,20 +64,21 @@ const machineId = createHash('sha256').update(hostname() + homedir()).digest('he
 Sentry.setUser({ id: machineId })
 
 import { join, delimiter } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
+import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
 import { registerAllRpcHandlers } from './handlers/index'
-import { cleanupSessionFileWatchForClient } from '@craft-agent/server-core/handlers/rpc'
+import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient } from '@craft-agent/server-core/handlers/rpc'
 import type { PlatformServices } from '../runtime/platform'
+import { createElectronPlatform } from './platform'
 import type { HandlerDeps } from './handlers/handler-deps'
-import type { RpcServer } from '@craft-agent/server-core/transport'
-import { WsRpcServer } from '../transport/server'
+import { bootstrapServer } from '@craft-agent/server-core/bootstrap'
 import { initModelRefreshService, getModelRefreshService, setFetcherPlatform } from '@craft-agent/server-core/model-fetchers'
 import { setSearchPlatform, setImageProcessor } from '@craft-agent/server-core/services'
 import { createApplicationMenu } from './menu'
 import { WindowManager } from './window-manager'
 import { loadWindowState, saveWindowState } from './window-state'
-import { getWorkspaces, loadStoredConfig, addWorkspace, saveConfig } from '@craft-agent/shared/config'
+import { getWorkspaces, getWorkspaceByNameOrId, loadStoredConfig, addWorkspace, saveConfig } from '@craft-agent/shared/config'
 import { getDefaultWorkspacesDir } from '@craft-agent/shared/workspaces'
 import { initializeDocs } from '@craft-agent/shared/docs'
 import { initializeReleaseNotes } from '@craft-agent/shared/release-notes'
@@ -434,142 +435,25 @@ app.whenReady().then(async () => {
       mainLog.info(`Client-only mode: CRAFT_SERVER_URL=${process.env.CRAFT_SERVER_URL} (server initialization skipped)`)
     }
 
-    // Initialize session manager (server-side only — thin client delegates to remote server)
-    let modelRefreshService: ReturnType<typeof initModelRefreshService> | null = null
-    if (!isClientOnly) {
-      sessionManager = new SessionManager()
-
-      // Restore persisted Git Bash path on Windows (must happen before any SDK subprocess spawn)
-      if (process.platform === 'win32') {
-        const { getGitBashPath, clearGitBashPath } = await import('@craft-agent/shared/config')
-        const gitBashPath = getGitBashPath()
-        if (gitBashPath) {
-          const validation = await validateGitBashPath(gitBashPath)
-          if (validation.valid) {
-            process.env.CLAUDE_CODE_GIT_BASH_PATH = validation.path
-          } else {
-            clearGitBashPath()
-            delete process.env.CLAUDE_CODE_GIT_BASH_PATH
-            mainLog.warn(`Cleared invalid persisted Git Bash path: ${gitBashPath}`)
-          }
-        }
-      }
-
-      // Check for VC++ Redistributable on Windows (required by onnxruntime / markitdown).
-      // Without it, document conversion tools (PDF, PPTX, DOCX, XLSX) crash with DLL errors.
-      // Sets env var so renderer can show an actionable toast with install button.
-      if (process.platform === 'win32') {
-        const vcCheck = checkVCRedistInstalled()
-        if (!vcCheck.installed) {
-          mainLog.warn('[vcredist]', vcCheck.message)
-          process.env.CRAFT_VCREDIST_MISSING = '1'
-          if (vcCheck.downloadUrl) {
-            process.env.CRAFT_VCREDIST_URL = vcCheck.downloadUrl
-          }
-        } else if (isDebugMode) {
-          mainLog.info('[vcredist]', vcCheck.message)
-        }
-      }
-
-      // Initialize model refresh service BEFORE IPC handlers —
-      // getModelRefreshService() is called from IPC handlers, so it must be ready
-      // before any renderer can send messages.
-      modelRefreshService = initModelRefreshService(async (slug: string) => {
-        const { getCredentialManager } = await import('@craft-agent/shared/credentials')
-        const manager = getCredentialManager()
-        const [apiKey, oauth] = await Promise.all([
-          manager.getLlmApiKey(slug).catch(() => null),
-          manager.getLlmOAuth(slug).catch(() => null),
-        ])
-        return {
-          apiKey: apiKey ?? undefined,
-          oauthAccessToken: oauth?.accessToken,
-          oauthRefreshToken: oauth?.refreshToken,
-          oauthIdToken: oauth?.idToken,
-        }
-      })
-    }
-
     // Initialize notification service (always — triggered by server push events)
     initNotificationService(windowManager)
 
-    // Initialize browser pane manager
+    // Initialize browser pane manager (always — even in headless, for deps wiring)
     browserPaneManager = new BrowserPaneManager()
     browserPaneManager.setWindowManager(windowManager)
     browserPaneManager.registerToolbarIpc()
-    sessionManager?.setBrowserPaneManager(browserPaneManager)
 
     // Build real PlatformServices from Electron APIs
-    const platform: PlatformServices = {
-      appRootPath: app.isPackaged ? app.getAppPath() : process.cwd(),
-      resourcesPath: process.resourcesPath,
-      isPackaged: app.isPackaged,
-      appVersion: app.getVersion(),
-      openExternal: (url) => shell.openExternal(url),
-      openPath: (p) => shell.openPath(p).then(() => {}),
-      showItemInFolder: (p) => shell.showItemInFolder(p),
-      quit: () => app.quit(),
-      systemDarkMode: () => nativeTheme.shouldUseDarkColors,
-      imageProcessor: {
-        async getMetadata(buffer) {
-          const img = nativeImage.createFromBuffer(buffer)
-          if (img.isEmpty()) return null
-          const { width, height } = img.getSize()
-          return (width && height) ? { width, height } : null
-        },
-        async process(input, opts = {}) {
-          const img = typeof input === 'string'
-            ? nativeImage.createFromPath(input)
-            : nativeImage.createFromBuffer(input)
-          if (img.isEmpty()) throw new Error('Invalid image input')
-
-          let result = img
-          if (opts.resize) {
-            const { width: tw, height: th } = opts.resize
-            const fit = opts.fit ?? 'inside'
-            if (fit === 'inside') {
-              const { width: sw, height: sh } = result.getSize()
-              const scale = Math.min(tw / sw, th / sh, 1)
-              result = result.resize({
-                width: Math.round(sw * scale),
-                height: Math.round(sh * scale),
-              })
-            } else {
-              result = result.resize({ width: tw, height: th })
-            }
-          }
-          return (opts.format === 'jpeg')
-            ? result.toJPEG(opts.quality ?? 90)
-            : result.toPNG()
-        },
-      },
+    const platform: PlatformServices = createElectronPlatform({
+      app,
+      nativeImage,
+      shell,
+      nativeTheme,
       logger: log,
       isDebugMode,
       getLogFilePath,
       captureError: (err) => Sentry.captureException(err),
-    }
-
-    // Inject platform into server-side subsystems (skip in thin-client mode)
-    if (!isClientOnly) {
-      setFetcherPlatform(platform)
-      setSessionPlatform(platform)
-      const { onSessionStarted, onSessionStopped } = await import('./power-manager')
-      setSessionRuntimeHooks({
-        updateBadgeCount,
-        onSessionStarted,
-        onSessionStopped,
-        captureException: (error, context) => {
-          Sentry.captureException(error instanceof Error ? error : new Error(String(error)), {
-            tags: {
-              ...(context?.errorSource ? { errorSource: context.errorSource } : {}),
-              ...(context?.sessionId ? { sessionId: context.sessionId } : {}),
-            },
-          })
-        },
-      })
-      setSearchPlatform(platform)
-      setImageProcessor(platform.imageProcessor)
-    }
+    })
 
     // Bootstrap IPC handlers — preload uses sendSync for window-local details
     ipcMain.on('__get-web-contents-id', (e) => {
@@ -632,78 +516,284 @@ app.whenReady().then(async () => {
     })
 
     if (!isClientOnly) {
-      // Create WS RPC server (local WebSocket transport)
-      // CRAFT_RPC_HOST / CRAFT_RPC_PORT allow binding to a custom address for remote access.
-      const rpcHost = process.env.CRAFT_RPC_HOST ?? '127.0.0.1'
-      const rpcPort = process.env.CRAFT_RPC_PORT ? parseInt(process.env.CRAFT_RPC_PORT, 10) : 0
+      // Restore persisted Git Bash path on Windows (must happen before any SDK subprocess spawn)
+      if (process.platform === 'win32') {
+        const { getGitBashPath, clearGitBashPath } = await import('@craft-agent/shared/config')
+        const gitBashPath = getGitBashPath()
+        if (gitBashPath) {
+          const validation = await validateGitBashPath(gitBashPath)
+          if (validation.valid) {
+            process.env.CLAUDE_CODE_GIT_BASH_PATH = validation.path
+          } else {
+            clearGitBashPath()
+            delete process.env.CLAUDE_CODE_GIT_BASH_PATH
+            mainLog.warn(`Cleared invalid persisted Git Bash path: ${gitBashPath}`)
+          }
+        }
+      }
 
+      // Check for VC++ Redistributable on Windows (required by onnxruntime / markitdown).
+      // Without it, document conversion tools (PDF, PPTX, DOCX, XLSX) crash with DLL errors.
+      // Sets env var so renderer can show an actionable toast with install button.
+      if (process.platform === 'win32') {
+        const vcCheck = checkVCRedistInstalled()
+        if (!vcCheck.installed) {
+          mainLog.warn('[vcredist]', vcCheck.message)
+          process.env.CRAFT_VCREDIST_MISSING = '1'
+          if (vcCheck.downloadUrl) {
+            process.env.CRAFT_VCREDIST_URL = vcCheck.downloadUrl
+          }
+        } else if (isDebugMode) {
+          mainLog.info('[vcredist]', vcCheck.message)
+        }
+      }
+
+      // Pre-import power manager (async import needed for applyPlatformToSubsystems)
+      const { onSessionStarted, onSessionStopped } = await import('./power-manager')
+
+      // Client ID tracking for Electron IPC bridge (webContentsId → clientId)
       const clientMap = new Map<number, string>()
       const resolveClientId = (wcId: number) => clientMap.get(wcId)
-      const localToken = randomUUID()
 
-      const wsServer = new WsRpcServer({
-        host: rpcHost,
-        port: rpcPort,
-        requireAuth: true,
-        validateToken: async (t) => t === localToken,
+      // Read embedded server config (Server settings page)
+      const { getServerConfig } = await import('@craft-agent/shared/config')
+      const embeddedServerConfig = getServerConfig()
+      const serverModeEnabled = embeddedServerConfig.enabled && !isClientOnly
+
+      // Derive host/port/token from server config (or env overrides)
+      const serverToken = serverModeEnabled && embeddedServerConfig.token
+        ? embeddedServerConfig.token
+        : randomUUID()
+      const rpcHost = process.env.CRAFT_RPC_HOST
+        ?? (serverModeEnabled ? '0.0.0.0' : '127.0.0.1')
+      const rpcPort = process.env.CRAFT_RPC_PORT
+        ? parseInt(process.env.CRAFT_RPC_PORT, 10)
+        : (serverModeEnabled ? embeddedServerConfig.port : 0)
+
+      // Load TLS certificates if configured
+      let tls: import('@craft-agent/server-core/transport').WsRpcTlsOptions | undefined
+      if (serverModeEnabled && embeddedServerConfig.tlsCertPath && embeddedServerConfig.tlsKeyPath) {
+        try {
+          tls = {
+            cert: readFileSync(embeddedServerConfig.tlsCertPath),
+            key: readFileSync(embeddedServerConfig.tlsKeyPath),
+          }
+          mainLog.info('[server-mode] TLS enabled')
+        } catch (err) {
+          mainLog.error('[server-mode] Failed to load TLS certificates:', err)
+        }
+      }
+
+      if (serverModeEnabled) {
+        mainLog.info(`[server-mode] Enabled — binding ${rpcHost}:${rpcPort}${tls ? ' (TLS)' : ''}`)
+      }
+
+      // Bootstrap the WS RPC server via shared bootstrap function.
+      const instance = await bootstrapServer<SessionManager, HandlerDeps>({
+        serverToken,
+        rpcHost,
+        rpcPort,
+        tls,
+        bundledAssetsRoot: __dirname,
         serverId: 'local',
+        serverVersion: app.getVersion(),
+        platformFactory: () => platform,
+        applyPlatformToSubsystems: (p) => {
+          setFetcherPlatform(p)
+          setSessionPlatform(p)
+          setSessionRuntimeHooks({
+            updateBadgeCount,
+            onSessionStarted,
+            onSessionStopped,
+            captureException: (error, context) => {
+              Sentry.captureException(error instanceof Error ? error : new Error(String(error)), {
+                tags: {
+                  ...(context?.errorSource ? { errorSource: context.errorSource } : {}),
+                  ...(context?.sessionId ? { sessionId: context.sessionId } : {}),
+                },
+              })
+            },
+          })
+          setSearchPlatform(p)
+          setImageProcessor(p.imageProcessor)
+        },
+        createSessionManager: () => {
+          const sm = new SessionManager()
+          sm.setBrowserPaneManager(browserPaneManager!)
+          return sm
+        },
+        createHandlerDeps: ({ sessionManager: sm, platform: p, oauthFlowStore: ofs }) => ({
+          sessionManager: sm,
+          platform: p,
+          windowManager: windowManager ?? undefined,
+          browserPaneManager: browserPaneManager ?? undefined,
+          oauthFlowStore: ofs,
+        }),
+        // Headless: register only core handlers (no GUI handlers for browser, settings, etc.)
+        // GUI: register all handlers (core + GUI)
+        registerAllRpcHandlers: isHeadless
+          ? (server, deps, serverCtx) => registerCoreRpcHandlers(server, deps, serverCtx)
+          : registerAllRpcHandlers,
+        setSessionEventSink: (sm, sink) => sm.setEventSink(sink),
+        initializeSessionManager: (sm) => sm.initialize(),
+        initModelRefreshService: () => initModelRefreshService(async (slug: string) => {
+          const { getCredentialManager } = await import('@craft-agent/shared/credentials')
+          const manager = getCredentialManager()
+          const [apiKey, oauth] = await Promise.all([
+            manager.getLlmApiKey(slug).catch(() => null),
+            manager.getLlmOAuth(slug).catch(() => null),
+          ])
+          return {
+            apiKey: apiKey ?? undefined,
+            oauthAccessToken: oauth?.accessToken,
+            oauthRefreshToken: oauth?.refreshToken,
+            oauthIdToken: oauth?.idToken,
+          }
+        }),
         onClientConnected: ({ clientId, webContentsId }) => {
           if (webContentsId != null) clientMap.set(webContentsId, clientId)
         },
-        onClientDisconnected: (clientId) => {
+        cleanupClientResources: (clientId) => {
           for (const [wcId, cId] of clientMap) {
             if (cId === clientId) { clientMap.delete(wcId); break }
           }
           cleanupSessionFileWatchForClient(clientId)
         },
       })
-      await wsServer.listen()
-      const server: RpcServer = wsServer
-      mainLog.info(`WS RPC server listening on ${rpcHost}:${wsServer.port}`)
 
-      // In headless mode, print connection details so a remote client can connect
-      if (isHeadless) {
-        console.log(`CRAFT_SERVER_URL=ws://${rpcHost}:${wsServer.port}`)
-        console.log(`CRAFT_SERVER_TOKEN=${localToken}`)
-      }
-
-      // Module-level EventSink/client resolver — used by deep-link handlers defined before app.whenReady
-      moduleSink = server.push.bind(server)
+      // Capture module-level references for before-quit cleanup and deep-link handlers
+      sessionManager = instance.sessionManager
+      oauthFlowStore = instance.oauthFlowStore
+      moduleSink = instance.wsServer.push.bind(instance.wsServer)
       moduleClientResolver = resolveClientId
 
-      // Bootstrap IPC handlers — preload uses sendSync to get WS connection details
+      // IPC handlers — preload uses sendSync to get WS connection details
+
+      // Remove workspace from config (cleanup stale entries)
+      ipcMain.handle('workspace:remove', async (_event, workspaceId: string) => {
+        const { removeWorkspace: remove } = await import('@craft-agent/shared/config')
+        return remove(workspaceId)
+      })
+
+      // Cross-server RPC — invoke a channel on an arbitrary remote server
+      ipcMain.handle('server:invokeOnServer', async (_event, url: string, token: string, channel: string, ...args: unknown[]) => {
+        const { connectToRemote } = await import('./handlers/workspace')
+        const { client, error } = await connectToRemote(url, token)
+        if (!client) throw new Error(error ?? 'Connection failed')
+        try {
+          return await client.invoke(channel, ...args)
+        } finally {
+          client.destroy()
+        }
+      })
+
+      // App relaunch (for server config changes — NOT an update install)
+      ipcMain.handle('app:relaunch', () => {
+        app.relaunch()
+        app.exit(0)
+      })
+
       ipcMain.on('__get-ws-port', (e) => {
-        e.returnValue = wsServer.port
+        e.returnValue = instance.port
       })
       ipcMain.on('__get-ws-token', (e) => {
-        e.returnValue = localToken
+        e.returnValue = instance.token
+      })
+      ipcMain.on('__get-workspace-remote-config', (e) => {
+        const wsId = windowManager?.getWorkspaceForWindow(e.sender.id)
+        if (!wsId) { e.returnValue = null; return }
+        const ws = getWorkspaceByNameOrId(wsId)
+        e.returnValue = ws?.remoteServer ?? null
       })
 
-      oauthFlowStore = new OAuthFlowStore()
-
-      // Ensure global config.json exists before handlers can be called.
-      // In GUI mode, createInitialWindows() also ensures this, but in headless
-      // mode that function is skipped — so we must do it here.
-      if (!loadStoredConfig()) {
-        saveConfig({ workspaces: [], activeWorkspaceId: null, activeSessionId: null })
-        mainLog.info('Initialized missing global config')
+      // Server config RPC handlers (LOCAL_ONLY — Electron-specific)
+      const runningServerState = {
+        host: rpcHost,
+        port: instance.port,
+        tls: !!tls,
+        token: serverToken,
+        enabled: serverModeEnabled,
       }
 
-      const deps: HandlerDeps = {
-        sessionManager: sessionManager!,
-        platform,
-        windowManager,
-        browserPaneManager,
-        oauthFlowStore,
+      instance.wsServer.handle(RPC_CHANNELS.settings.GET_SERVER_CONFIG, async () => {
+        const { getServerConfig: getConfig } = await import('@craft-agent/shared/config')
+        return getConfig()
+      })
+
+      instance.wsServer.handle(RPC_CHANNELS.settings.SET_SERVER_CONFIG, async (_ctx: unknown, config: unknown) => {
+        const { setServerConfig: setConfig } = await import('@craft-agent/shared/config')
+        const cfg = config as import('@craft-agent/shared/config/server-config').ServerConfig
+        // Validate port range
+        if (cfg.port < 1024 || cfg.port > 65535) {
+          throw new Error(`Port must be between 1024 and 65535, got ${cfg.port}`)
+        }
+        // Validate cert/key files exist if provided
+        if (cfg.tlsCertPath && !existsSync(cfg.tlsCertPath)) {
+          throw new Error(`Certificate file not found: ${cfg.tlsCertPath}`)
+        }
+        if (cfg.tlsKeyPath && !existsSync(cfg.tlsKeyPath)) {
+          throw new Error(`Private key file not found: ${cfg.tlsKeyPath}`)
+        }
+        setConfig(cfg)
+      })
+
+      instance.wsServer.handle(RPC_CHANNELS.settings.GET_SERVER_STATUS, async () => {
+        const { getServerConfig: getConfig } = await import('@craft-agent/shared/config')
+        const saved = getConfig()
+        const protocol = runningServerState.tls ? 'wss' : 'ws'
+
+        // Determine display host (LAN IP if bound to 0.0.0.0)
+        let displayHost = runningServerState.host
+        if (displayHost === '0.0.0.0' || displayHost === '::') {
+          const os = await import('os')
+          const nets = os.networkInterfaces()
+          for (const name of Object.keys(nets)) {
+            for (const net of nets[name] ?? []) {
+              if (net.family === 'IPv4' && !net.internal) {
+                displayHost = net.address
+                break
+              }
+            }
+            if (displayHost !== '0.0.0.0' && displayHost !== '::') break
+          }
+        }
+
+        // Only compare port/tls/token when at least one side has server mode enabled.
+        // When both are disabled, the running port is random — comparing it to the
+        // saved default (9100) would always produce a false "restart required" banner.
+        const needsRestart = saved.enabled !== runningServerState.enabled
+          || ((saved.enabled || runningServerState.enabled) && (
+            saved.port !== runningServerState.port
+            || (!!saved.tlsCertPath) !== runningServerState.tls
+            || (saved.token ?? '') !== runningServerState.token
+          ))
+
+        return {
+          running: true,
+          host: runningServerState.host,
+          port: runningServerState.port,
+          tls: runningServerState.tls,
+          url: `${protocol}://${displayHost}:${runningServerState.port}`,
+          token: runningServerState.token,
+          needsRestart,
+          insecureWarning: isInsecureBind,
+        }
+      })
+
+      // TLS enforcement — warn when server mode binds to a network address without TLS
+      // Mirrors the hard guard in packages/server/src/index.ts but warns instead of blocking,
+      // since the user explicitly enabled server mode via UI (may be on a trusted LAN).
+      const isInsecureBind = serverModeEnabled && !tls
+        && !['127.0.0.1', 'localhost', '::1'].includes(rpcHost)
+      if (isInsecureBind) {
+        mainLog.warn(
+          '[server-mode] WARNING: Listening on a network address without TLS. ' +
+          'Auth tokens will be sent in cleartext. ' +
+          'Configure TLS certificates in Settings > Server.'
+        )
       }
 
-      // Register RPC handlers (must happen before window creation)
-      registerAllRpcHandlers(server, deps)
-
-      // Wire EventSink so SessionManager pushes events via the RPC server
-      sessionManager!.setEventSink(server.push.bind(server))
-
-      // Wire EventSink to services that broadcast events to renderers
+      // Wire EventSink to Electron-specific services
       // Must happen BEFORE createInitialWindows() so event handlers use WS from the start
       windowManager.setRpcEventSink(moduleSink!, resolveClientId)
       const { setMenuEventSink } = await import('./menu')
@@ -711,11 +801,11 @@ app.whenReady().then(async () => {
       const { setNotificationEventSink } = await import('./notifications')
       setNotificationEventSink(moduleSink!, resolveClientId)
 
-      // Initialize auth (must happen after window creation for error reporting)
-      await sessionManager!.initialize()
-
-      // Start periodic model refresh after auth is initialized
-      modelRefreshService!.startAll()
+      // Headless: print connection details
+      if (isHeadless) {
+        console.log(`CRAFT_SERVER_URL=${instance.protocol}://${instance.host}:${instance.port}`)
+        console.log(`CRAFT_SERVER_TOKEN=${instance.token}`)
+      }
     }
 
     // Create initial windows (restores from saved state or opens first workspace)

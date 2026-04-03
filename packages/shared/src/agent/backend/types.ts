@@ -228,6 +228,12 @@ export interface CoreBackendConfig {
   /** Callback invoked after branch seed context has been injected. */
   markBranchSeedApplied?: () => void;
 
+  /** One-shot hidden summary to inject on the first turn of a transferred session. */
+  getTransferredSessionSummary?: () => string | null;
+
+  /** Callback invoked after transferred session summary has been injected. */
+  markTransferredSessionSummaryApplied?: () => void;
+
   /**
    * Optional callback to resize an oversized image for API compatibility.
    * Called from PreToolUse when Read targets an image exceeding the base64 size limit.

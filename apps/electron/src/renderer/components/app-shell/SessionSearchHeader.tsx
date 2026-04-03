@@ -27,6 +27,8 @@ export interface SessionSearchHeaderProps {
   onBlur?: () => void
   /** Whether content search is in progress */
   isSearching?: boolean
+  /** Whether the search service is unavailable (e.g. ripgrep not found) */
+  isUnavailable?: boolean
   /** Number of results to display (when not searching) */
   resultCount?: number
   /** Whether the result count exceeded the display limit (shows "100+" instead of exact count) */
@@ -47,6 +49,7 @@ export function SessionSearchHeader({
   onFocus,
   onBlur,
   isSearching = false,
+  isUnavailable = false,
   resultCount,
   exceededLimit = false,
   inputRef,
@@ -90,6 +93,8 @@ export function SessionSearchHeader({
               <Spinner className="text-[9px] text-foreground/50" />
               <span>Loading…</span>
             </>
+          ) : isUnavailable ? (
+            <span className="text-destructive/70">Search unavailable</span>
           ) : (
             <span>{exceededLimit ? '100+' : (resultCount ?? 0)} results</span>
           )}

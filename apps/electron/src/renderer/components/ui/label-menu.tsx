@@ -3,20 +3,14 @@ import { Check, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LabelIcon } from './label-icon'
 import type { LabelConfig } from '@craft-agent/shared/labels'
-import { flattenLabels } from '@craft-agent/shared/labels'
+import { createLabelMenuItems, filterItems, segmentScore, type LabelMenuItem } from './label-menu-utils'
 import { getStatusIconStyle, type SessionStatus } from '@/config/session-status-config'
+
+export { createLabelMenuItems, filterItems, type LabelMenuItem } from './label-menu-utils'
 
 // ============================================================================
 // Types
 // ============================================================================
-
-export interface LabelMenuItem {
-  id: string
-  label: string
-  config: LabelConfig
-  /** Breadcrumb path for nested labels (e.g. "Priority / ") */
-  parentPath?: string
-}
 
 export interface InlineLabelMenuProps {
   open: boolean
@@ -49,81 +43,6 @@ const MENU_ITEM_SELECTED = 'bg-foreground/5'
 // ============================================================================
 // Filter utilities
 // ============================================================================
-
-/**
- * Score how well a segment matches a path part.
- * 3 = starts with segment (best: "pri" → "Priority")
- * 2 = word boundary match (after space/hyphen/underscore: "high" → "super-high")
- * 1 = contains anywhere (mid-word: "ior" → "Priority")
- * 0 = no match
- */
-function segmentScore(part: string, segment: string): number {
-  const lower = part.toLowerCase()
-  if (lower.startsWith(segment)) return 3
-  if (new RegExp(`[\\s\\-_]${segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(lower)) return 2
-  if (lower.includes(segment)) return 1
-  return 0
-}
-
-/**
- * Unified hierarchical filter with scoring.
- * Splits the filter by "/" into segments (single segment if no "/").
- * Each segment is matched in order against the item's full path (parentPath parts + label).
- * Results are sorted by total match score (starts-with > word-boundary > contains).
- *
- * Examples:
- *   "pri"   → one segment, matches any part containing "pri" → shows parent + children
- *   "pri/h" → two segments → "Priority / High" scores highest
- *   "pa/b"  → matches "Parent / Balint"
- */
-export function filterItems(items: LabelMenuItem[], filter: string): LabelMenuItem[] {
-  if (!filter) return items
-
-  const segments = filter.toLowerCase().split('/').map(s => s.trim()).filter(Boolean)
-  if (segments.length === 0) return items
-
-  // Score each item: try to match segments against path parts in order
-  const scored: { item: LabelMenuItem; score: number }[] = []
-
-  for (const item of items) {
-    // Build full path: parentPath parts + item label
-    const parentParts = item.parentPath
-      ? item.parentPath.split(' / ').filter(Boolean)
-      : []
-    const fullParts = [...parentParts, item.label]
-
-    // Match segments against parts in order, accumulating score
-    let totalScore = 0
-    let partIndex = 0
-    let matched = true
-
-    for (const seg of segments) {
-      let bestScore = 0
-      let found = false
-      // Scan forward through remaining parts to find the best match for this segment
-      while (partIndex < fullParts.length) {
-        const s = segmentScore(fullParts[partIndex], seg)
-        if (s > 0) {
-          bestScore = s
-          found = true
-          partIndex++
-          break
-        }
-        partIndex++
-      }
-      if (!found) { matched = false; break }
-      totalScore += bestScore
-    }
-
-    if (matched) {
-      scored.push({ item, score: totalScore })
-    }
-  }
-
-  // Sort: higher score first, then alphabetical by label
-  scored.sort((a, b) => b.score - a.score || a.item.label.localeCompare(b.item.label))
-  return scored.map(s => s.item)
-}
 
 /**
  * Filter states by a simple text match on the state label.
@@ -458,36 +377,10 @@ export function useInlineLabelMenu({
   const currentInputRef = React.useRef({ value: '', cursorPosition: 0 })
 
   // Build flat menu items from label tree, excluding already-applied labels
-  const items = React.useMemo((): LabelMenuItem[] => {
-    const flat = flattenLabels(labels)
-    return flat
-      .filter(label => !sessionLabels.includes(label.id))
-      .map(label => {
-        // Build parent path breadcrumb for nested labels
-        let parentPath: string | undefined
-        const findParentPath = (tree: LabelConfig[], targetId: string, path: string[]): string[] | null => {
-          for (const node of tree) {
-            if (node.id === targetId) return path
-            if (node.children) {
-              const result = findParentPath(node.children, targetId, [...path, node.name])
-              if (result) return result
-            }
-          }
-          return null
-        }
-        const pathParts = findParentPath(labels, label.id, [])
-        if (pathParts && pathParts.length > 0) {
-          parentPath = pathParts.join(' / ') + ' / '
-        }
-
-        return {
-          id: label.id,
-          label: label.name,
-          config: label,
-          parentPath,
-        }
-      })
-  }, [labels, sessionLabels])
+  const items = React.useMemo(
+    () => createLabelMenuItems(labels, sessionLabels),
+    [labels, sessionLabels],
+  )
 
   const handleInputChange = React.useCallback((value: string, cursorPosition: number) => {
     // Store current state for handleSelect

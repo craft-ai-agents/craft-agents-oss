@@ -84,7 +84,7 @@ import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useSetAtom } from "jotai"
 import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter, AutomationFilter } from "../../../shared/types"
-import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
+import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
 import { panelStackAtom, panelCountAtom, focusedPanelIdAtom, focusedSessionIdAtom, focusNextPanelAtom, focusPrevPanelAtom, parseSessionIdFromRoute } from "@/atoms/panel-stack"
@@ -92,9 +92,11 @@ import { type SessionStatusId, type SessionStatus, statusConfigsToSessionStatuse
 import { useStatuses } from "@/hooks/useStatuses"
 import { useLabels } from "@/hooks/useLabels"
 import { useViews } from "@/hooks/useViews"
+import { useContainerWidth } from "@/hooks/useContainerWidth"
 import { LabelIcon, LabelValueTypeIcon } from "@/components/ui/label-icon"
-import { filterItems as filterLabelMenuItems, filterSessionStatuses as filterLabelMenuStates, type LabelMenuItem } from "@/components/ui/label-menu"
-import { buildLabelTree, getDescendantIds, getLabelDisplayName, flattenLabels, extractLabelId, findLabelById } from "@craft-agent/shared/labels"
+import { filterSessionStatuses as filterLabelMenuStates } from "@/components/ui/label-menu"
+import { createLabelMenuItems, filterItems as filterLabelMenuItems, type LabelMenuItem } from "@/components/ui/label-menu-utils"
+import { buildLabelTree, getDescendantIds, getLabelDisplayName, flattenLabels, extractLabelId, findLabelById, sortLabelsForDisplay } from "@craft-agent/shared/labels"
 import type { LabelConfig, LabelTreeNode } from "@craft-agent/shared/labels"
 import { resolveEntityColor } from "@craft-agent/shared/colors"
 import * as storage from "@/lib/local-storage"
@@ -118,6 +120,7 @@ import { APP_EVENTS, AGENT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO
 import { useAutomations } from "@/hooks/useAutomations"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { PanelHeader } from "./PanelHeader"
+import { SendToWorkspaceDialog } from "./SendToWorkspaceDialog"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import {
@@ -537,7 +540,16 @@ function AppShellContent({
   const [isSidebarAndNavigatorHidden, setIsSidebarAndNavigatorHidden] = React.useState(() => {
     return isFocusedMode || storage.get(storage.KEYS.focusModeEnabled, false)
   })
-  const effectiveSidebarAndNavigatorHidden = isSidebarAndNavigatorHidden
+
+  // Auto-compact mode: shell width below mobile threshold hides sidebar/navigator
+  // and switches to single-panel mode. Works in both webui (narrow viewport) and
+  // desktop (narrow window or small screen).
+  const shellRef = useRef<HTMLDivElement>(null)
+  const shellWidth = useContainerWidth(shellRef)
+  const MOBILE_THRESHOLD = 768
+  const isAutoCompact = shellWidth > 0 && shellWidth < MOBILE_THRESHOLD
+
+  const effectiveSidebarAndNavigatorHidden = isSidebarAndNavigatorHidden || isAutoCompact
 
   // What's New overlay
   const [showWhatsNew, setShowWhatsNew] = React.useState(false)
@@ -724,17 +736,23 @@ function AppShellContent({
   // Ref for ChatDisplay navigation (exposed via forwardRef)
   const chatDisplayRef = React.useRef<ChatDisplayHandle>(null)
   // Track match count and index from ChatDisplay (for SessionList navigation UI)
-  const [chatMatchInfo, setChatMatchInfo] = React.useState<{ count: number; index: number }>({ count: 0, index: 0 })
+  const [chatMatchInfo, setChatMatchInfo] = React.useState<{ sessionId: string | null; count: number; index: number; isHighlighting?: boolean }>({ sessionId: null, count: 0, index: 0 })
 
   // Callback for immediate match info updates from ChatDisplay
-  const handleChatMatchInfoChange = React.useCallback((info: { count: number; index: number }) => {
-    setChatMatchInfo(info)
+  // Memo guard prevents render feedback loops from identical updates
+  const handleChatMatchInfoChange = React.useCallback((info: { sessionId: string | null; count: number; index: number; isHighlighting: boolean }) => {
+    setChatMatchInfo(prev => {
+      if (prev.sessionId === info.sessionId && prev.count === info.count && prev.index === info.index && prev.isHighlighting === info.isHighlighting) {
+        return prev
+      }
+      return info
+    })
   }, [])
 
   // Reset match info when search is deactivated
   React.useEffect(() => {
     if (!searchActive || !searchQuery) {
-      setChatMatchInfo({ count: 0, index: 0 })
+      setChatMatchInfo({ sessionId: null, count: 0, index: 0 })
     }
   }, [searchActive, searchQuery])
 
@@ -801,6 +819,13 @@ function AppShellContent({
   }, [skills, setSkillsAtom])
   // Automations — state, handlers, loading, subscriptions
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
+
+  // Send to Workspace dialog state (driven by sendToWorkspaceAtom set from SessionMenu/BatchSessionMenu)
+  const sendToWorkspaceIds = useAtomValue(sendToWorkspaceAtom)
+  const setSendToWorkspaceIds = useSetAtom(sendToWorkspaceAtom)
+  const handleTransferComplete = useCallback((targetWorkspaceId: string, _newSessionIds: string[]) => {
+    onSelectWorkspace(targetWorkspaceId)
+  }, [onSelectWorkspace])
   const {
     automations, automationTestResults,
     automationPendingDelete, pendingDeleteAutomation, setAutomationPendingDelete,
@@ -961,37 +986,20 @@ function AppShellContent({
 
   // Load labels from workspace config
   const { labels: labelConfigs } = useLabels(activeWorkspace?.id || null)
+  const displayLabelConfigs = useMemo(() => sortLabelsForDisplay(labelConfigs), [labelConfigs])
 
   // Views: compiled once on config load, evaluated per session in list/chat
   const { evaluateSession: evaluateViews, viewConfigs } = useViews(activeWorkspace?.id || null)
 
-  // Build hierarchical label tree from nested config structure
-  const labelTree = useMemo(() => buildLabelTree(labelConfigs), [labelConfigs])
+  // Build hierarchical label tree from the display-sorted label config structure
+  const labelTree = useMemo(() => buildLabelTree(displayLabelConfigs), [displayLabelConfigs])
 
-  // Build flat LabelMenuItem[] from hierarchical labelConfigs for the filter dropdown's search mode.
-  // Uses the same structure as the # inline menu so we can reuse filterItems().
-  const flatLabelMenuItems = useMemo((): LabelMenuItem[] => {
-    const flat = flattenLabels(labelConfigs)
-    // Build parent path breadcrumbs for nested labels
-    const findParentPath = (tree: LabelConfig[], targetId: string, path: string[]): string[] | null => {
-      for (const node of tree) {
-        if (node.id === targetId) return path
-        if (node.children) {
-          const result = findParentPath(node.children, targetId, [...path, node.name])
-          if (result) return result
-        }
-      }
-      return null
-    }
-    return flat.map(label => {
-      let parentPath: string | undefined
-      const pathParts = findParentPath(labelConfigs, label.id, [])
-      if (pathParts && pathParts.length > 0) {
-        parentPath = pathParts.join(' / ') + ' / '
-      }
-      return { id: label.id, label: label.name, config: label, parentPath }
-    })
-  }, [labelConfigs])
+  // Build flat LabelMenuItem[] from hierarchical labels for the filter dropdown's search mode.
+  // Uses the same structure as the # inline menu so the two search surfaces stay aligned.
+  const flatLabelMenuItems = useMemo(
+    (): LabelMenuItem[] => createLabelMenuItems(displayLabelConfigs),
+    [displayLabelConfigs],
+  )
 
   // Filter dropdown keyboard navigation: tracks highlighted item index in flat search mode.
   // Unified index: [0..matchedStates-1] = statuses, [matchedStates..total-1] = labels.
@@ -1291,12 +1299,16 @@ function AppShellContent({
 
   // Filter session metadata by active workspace
   // Also exclude hidden sessions (mini-agent sessions) from all counts and lists
+  // For remote workspaces, sessions have the remote workspace ID (not the local one),
+  // so we match against both the local and remote workspace IDs.
+  const remoteWorkspaceId = activeWorkspace?.remoteServer?.remoteWorkspaceId
   const workspaceSessionMetas = useMemo(() => {
     const metas = Array.from(sessionMetaMap.values())
-    return activeWorkspaceId
-      ? metas.filter(s => s.workspaceId === activeWorkspaceId && !s.hidden)
-      : metas.filter(s => !s.hidden)
-  }, [sessionMetaMap, activeWorkspaceId])
+    if (!activeWorkspaceId) return metas.filter(s => !s.hidden)
+    return metas.filter(s =>
+      !s.hidden && (s.workspaceId === activeWorkspaceId || (remoteWorkspaceId && s.workspaceId === remoteWorkspaceId))
+    )
+  }, [sessionMetaMap, activeWorkspaceId, remoteWorkspaceId])
 
   // Active sessions exclude archived - use this for all counts and filters except archived view
   const activeSessionMetas = useMemo(() => {
@@ -1556,12 +1568,14 @@ function AppShellContent({
     onDeleteSession: handleDeleteSession,
     enabledSources: sources,
     skills,
-    labels: labelConfigs,
+    activeSessionWorkingDirectory,
+    labels: displayLabelConfigs,
     onSessionLabelsChange: handleSessionLabelsChange,
     enabledModes,
     sessionStatuses: effectiveSessionStatuses,
     onSessionSourcesChange: handleSessionSourcesChange,
     rightSidebarButton: null,
+    isCompactMode: isAutoCompact,
     // Search state for ChatDisplay highlighting
     sessionListSearchQuery: searchActive ? searchQuery : undefined,
     isSearchModeActive: searchActive,
@@ -1574,7 +1588,7 @@ function AppShellContent({
     automationTestResults,
     getAutomationHistory,
     onReplayAutomation: handleReplayAutomation,
-  }), [contextValue, handleDeleteSession, sources, skills, labelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory, handleReplayAutomation])
+  }), [contextValue, handleDeleteSession, sources, skills, activeSessionWorkingDirectory, displayLabelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, isAutoCompact, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory, handleReplayAutomation])
 
   // Persist expanded folders to localStorage (workspace-scoped)
   React.useEffect(() => {
@@ -2094,17 +2108,11 @@ function AppShellContent({
     }
   }, [navState, sessionFilter, effectiveSessionStatuses, labelConfigs, viewConfigs, automationFilter])
 
-  // Build recursive sidebar items from label tree.
+  // Build recursive sidebar items from the shared display-sorted label tree.
   // Each node renders with condensed height (compact: true) since many labels expected.
   // Clicking any label navigates to its filter view; the chevron toggles expand/collapse.
   const buildLabelSidebarItems = useCallback((nodes: LabelTreeNode[]): any[] => {
-    // Sort labels alphabetically by display name at every level (parent + children)
-    const sorted = [...nodes].sort((a, b) => {
-      const nameA = (a.label?.name || a.segment).toLowerCase()
-      const nameB = (b.label?.name || b.segment).toLowerCase()
-      return nameA.localeCompare(nameB)
-    })
-    return sorted.map(node => {
+    return nodes.map(node => {
       const hasChildren = node.children.length > 0
       const isActive = sessionFilter?.kind === 'label' && sessionFilter.labelId === node.fullId
       const count = labelCounts[node.fullId] || 0
@@ -2165,6 +2173,7 @@ function AppShellContent({
           onSelectWorkspace={onSelectWorkspace}
           workspaceUnreadMap={workspaceUnreadMap}
           onWorkspaceCreated={() => onRefreshWorkspaces?.()}
+          onWorkspaceRemoved={() => onRefreshWorkspaces?.()}
           activeSessionId={effectiveSessionId}
           onNewChat={() => handleNewChat()}
           onNewWindow={() => window.electronAPI.menuNewWindow()}
@@ -2180,10 +2189,12 @@ function AppShellContent({
           onToggleFocusMode={() => setIsSidebarAndNavigatorHidden(prev => !prev)}
           onAddSessionPanel={() => handleNewChat(true)}
           onAddBrowserPanel={() => { void handleNewBrowserWindow() }}
+          isCompact={isAutoCompact}
         />
 
       {/* === OUTER LAYOUT: Unified Panel Stack | Right Sidebar === */}
       <div
+        ref={shellRef}
         className="flex items-stretch relative"
         style={{ height: '100%', paddingRight: PANEL_EDGE_INSET, paddingBottom: PANEL_EDGE_INSET, paddingLeft: 0, gap: PANEL_GAP }}
       >
@@ -2478,7 +2489,7 @@ function AppShellContent({
           sidebarWidth={effectiveSidebarAndNavigatorHidden ? 0 : (isSidebarVisible ? sidebarWidth : 0)}
           navigatorSlot={
             <div
-              style={{ width: sessionListWidth }}
+              style={{ width: isAutoCompact ? '100%' : sessionListWidth }}
               className="h-full flex flex-col min-w-0 relative z-panel"
             >
             <PanelHeader
@@ -2824,7 +2835,7 @@ function AppShellContent({
                                   </StyledDropdownMenuItem>
                                 ) : (
                                   <FilterLabelItems
-                                    labels={labelConfigs}
+                                    labels={displayLabelConfigs}
                                     labelFilter={labelFilter}
                                     setLabelFilter={setLabelFilter}
                                     pinnedLabelId={pinnedFilters.pinnedLabelId}
@@ -3193,7 +3204,7 @@ function AppShellContent({
                   }}
                   sessionStatuses={effectiveSessionStatuses}
                   evaluateViews={evaluateViews}
-                  labels={labelConfigs}
+                  labels={displayLabelConfigs}
                   onLabelsChange={handleSessionLabelsChange}
                   groupingMode={chatGroupingMode}
                   workspaceId={activeWorkspaceId ?? undefined}
@@ -3202,14 +3213,16 @@ function AppShellContent({
                   focusedSessionId={panelCount === 0 ? null : panelCount > 1 ? focusedSessionId : undefined}
                   onNavigateToSession={panelCount > 1 ? navigateToSessionInPanel : undefined}
                   hasPendingPrompt={hasPendingPrompt}
+                  activeChatMatchInfo={chatMatchInfo}
                 />
               </>
             )}
             </div>
           }
-          navigatorWidth={effectiveSidebarAndNavigatorHidden ? 0 : sessionListWidth}
+          navigatorWidth={isAutoCompact ? sessionListWidth : (effectiveSidebarAndNavigatorHidden ? 0 : sessionListWidth)}
           isSidebarAndNavigatorHidden={effectiveSidebarAndNavigatorHidden}
           isRightSidebarVisible={false}
+          isCompact={isAutoCompact}
           isResizing={!!isResizing}
         />
 
@@ -3485,6 +3498,16 @@ function AppShellContent({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Send to Workspace dialog (driven by sendToWorkspaceAtom) */}
+      <SendToWorkspaceDialog
+        open={sendToWorkspaceIds.length > 0}
+        onOpenChange={(open) => { if (!open) setSendToWorkspaceIds([]) }}
+        sessionIds={sendToWorkspaceIds}
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
+        onTransferComplete={handleTransferComplete}
+      />
 
     </AppShellProvider>
   )

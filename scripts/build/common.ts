@@ -649,10 +649,10 @@ export async function loadEnvFile(config: BuildConfig): Promise<void> {
 export function getArtifactName(platform: Platform, arch: Arch): string {
   switch (platform) {
     case 'darwin':
-      return `Craft-Agent-${arch}.dmg`;
+      return `Craft-Agents-${arch}.dmg`;
     case 'win32':
-      return `Craft-Agent-${arch}.exe`;
+      return `Craft-Agents-${arch}.exe`;
     case 'linux':
-      return `Craft-Agent-${arch}.AppImage`;
+      return `Craft-Agents-${arch}.AppImage`;
   }
 }

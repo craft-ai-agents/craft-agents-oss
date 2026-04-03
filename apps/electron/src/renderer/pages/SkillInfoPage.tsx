@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import { SkillMenu } from '@/components/app-shell/SkillMenu'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { routes, navigate } from '@/lib/navigate'
+import { useActiveWorkspace } from '@/context/AppShellContext'
 import {
   Info_Page,
   Info_Section,
@@ -25,12 +26,15 @@ import type { LoadedSkill } from '../../shared/types'
 interface SkillInfoPageProps {
   skillSlug: string
   workspaceId: string
+  workingDirectory?: string
 }
 
-export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageProps) {
+export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory }: SkillInfoPageProps) {
   const [skill, setSkill] = useState<LoadedSkill | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const activeWorkspace = useActiveWorkspace()
+  const canRevealLocally = !activeWorkspace?.remoteServer
 
   // Load skill data
   useEffect(() => {
@@ -40,7 +44,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
 
     const loadSkill = async () => {
       try {
-        const skills = await window.electronAPI.getSkills(workspaceId)
+        const skills = await window.electronAPI.getSkills(workspaceId, workingDirectory)
 
         if (!isMounted) return
 
@@ -74,24 +78,26 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
       isMounted = false
       unsubscribe?.()
     }
-  }, [workspaceId, skillSlug])
+  }, [workspaceId, skillSlug, workingDirectory])
 
   // Handle open in finder
   const handleOpenInFinder = useCallback(async () => {
     if (!skill) return
 
     try {
-      await window.electronAPI.openSkillInFinder(workspaceId, skillSlug)
+      if (!canRevealLocally) return
+      await window.electronAPI.showInFolder(`${skill.path}/SKILL.md`)
     } catch (err) {
       console.error('Failed to open skill in finder:', err)
     }
-  }, [skill, workspaceId, skillSlug])
+  }, [canRevealLocally, skill])
 
   // Handle delete
   const handleDelete = useCallback(async () => {
     if (!skill) return
 
     try {
+      if (skill.source !== 'workspace') return
       await window.electronAPI.deleteSkill(workspaceId, skillSlug)
       toast.success(`Deleted skill: ${skill.metadata.name}`)
       navigate(routes.view.skills())
@@ -109,6 +115,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
 
   // Get skill name for header
   const skillName = skill?.metadata.name || skillSlug
+  const canDeleteSkill = skill?.source === 'workspace'
 
   // Format path to show just the skill-relative portion (skills/{slug}/)
   const formatPath = (path: string) => {
@@ -123,6 +130,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
   const handleLocationClick = () => {
     if (!skill) return
     // Show the SKILL.md file in Finder (this reveals the enclosing folder with file focused)
+    if (!canRevealLocally) return
     window.electronAPI.showInFolder(`${skill.path}/SKILL.md`)
   }
 
@@ -140,7 +148,10 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
             skillName={skillName}
             onOpenInNewWindow={handleOpenInNewWindow}
             onShowInFinder={handleOpenInFinder}
-            onDelete={handleDelete}
+            canShowInFinder={canRevealLocally}
+            onDelete={canDeleteSkill ? handleDelete : undefined}
+            canDelete={canDeleteSkill}
+            deleteLabel={canDeleteSkill ? 'Delete Skill' : 'Managed by project'}
           />
         }
       />
@@ -174,6 +185,11 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
               <Info_Table.Row label="Name">{skill.metadata.name}</Info_Table.Row>
               <Info_Table.Row label="Description">
                 {skill.metadata.description}
+              </Info_Table.Row>
+              <Info_Table.Row label="Source">
+                {skill.source === 'project' ? 'Project (.agents/skills/)' :
+                 skill.source === 'global' ? 'Global (~/.agents/skills/)' :
+                 'Workspace'}
               </Info_Table.Row>
               <Info_Table.Row label="Location">
                 <button

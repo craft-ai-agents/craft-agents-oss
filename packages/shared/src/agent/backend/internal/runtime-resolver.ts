@@ -62,8 +62,10 @@ function resolveBundledRuntimePath(hostRuntime: BackendHostRuntimeContext): stri
   const bunPath = join(bunBasePath, 'vendor', 'bun', bunBinary);
   if (existsSync(bunPath)) return bunPath;
 
-  // Dev runtime: fall back to system bun
-  if (IS_DEV_RUNTIME) {
+  // Non-packaged (headless server, dev mode): fall back to system bun via PATH.
+  // Packaged apps must ship their own bundled bun — never resolve from PATH
+  // to avoid picking up an incompatible system install.
+  if (!hostRuntime.isPackaged) {
     try {
       const whichCmd = process.platform === 'win32' ? 'where' : 'which';
       const systemBun = execFileSync(whichCmd, ['bun'], { encoding: 'utf-8' }).trim();
@@ -173,6 +175,17 @@ function resolveRipgrepPath(hostRuntime: BackendHostRuntimeContext): string | un
   const cwdFallback = join(process.cwd(), ripgrepRelative);
   if (existsSync(cwdFallback)) return cwdFallback;
 
+  // Non-packaged (headless server, dev mode): fall back to system rg via PATH.
+  // Packaged apps must use vendored binary only — never resolve from PATH
+  // to avoid picking up an incompatible system install.
+  if (!hostRuntime.isPackaged) {
+    try {
+      const whichCmd = process.platform === 'win32' ? 'where' : 'which';
+      const systemRg = execFileSync(whichCmd, ['rg'], { encoding: 'utf-8' }).trim();
+      if (systemRg && existsSync(systemRg)) return systemRg;
+    } catch { /* system rg not found */ }
+  }
+
   return undefined;
 }
 
@@ -187,7 +200,7 @@ export function resolveBackendRuntimePaths(hostRuntime: BackendHostRuntimeContex
     sessionServerPath: resolveServerPath(hostRuntime, 'session-mcp-server'),
     bridgeServerPath: resolveServerPath(hostRuntime, 'bridge-mcp-server'),
     piServerPath: resolveServerPath(hostRuntime, 'pi-agent-server'),
-    nodeRuntimePath: hostRuntime.nodeRuntimePath || bundledRuntimePath || 'bun',
+    nodeRuntimePath: hostRuntime.nodeRuntimePath || bundledRuntimePath || process.execPath,
     bundledRuntimePath,
   };
 }

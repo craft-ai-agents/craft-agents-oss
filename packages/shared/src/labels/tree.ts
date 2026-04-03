@@ -4,6 +4,8 @@
  * The label config IS a nested JSON tree — no conversion from flat list needed.
  * These utilities provide recursive operations on the tree:
  * - flattenLabels: collect all labels into a flat array (for ID lookups, validation)
+ * - sortLabelsForDisplay: recursively alphabetize a copy of the tree for UI display
+ * - flattenLabelsWithParentPath: flatten labels while preserving parent breadcrumbs
  * - findLabelById: locate a label node anywhere in the tree
  * - getDescendantIds: get all child/grandchild IDs (for hierarchical filtering)
  * - findParent: find the parent label of a given label ID
@@ -13,6 +15,17 @@
  */
 
 import type { LabelConfig } from './types.ts';
+
+const labelNameCollator = new Intl.Collator(undefined, { sensitivity: 'base' });
+
+/**
+ * Compare label display names consistently for UI ordering.
+ * Uses case-insensitive locale-aware comparison so all label surfaces can share
+ * the same rule instead of mixing lowercase normalization and raw localeCompare.
+ */
+export function compareLabelNamesForDisplay(a: Pick<LabelConfig, 'name'>, b: Pick<LabelConfig, 'name'>): number {
+  return labelNameCollator.compare(a.name, b.name);
+}
 
 /**
  * Flatten the entire label tree into a one-dimensional array.
@@ -32,6 +45,52 @@ export function flattenLabels(labels: LabelConfig[]): LabelConfig[] {
   }
 
   walk(labels);
+  return result;
+}
+
+/**
+ * Return a recursively sorted copy of the label tree for user-facing display.
+ * Does not mutate the original config tree.
+ */
+export function sortLabelsForDisplay(labels: LabelConfig[]): LabelConfig[] {
+  return [...labels]
+    .map((label) => ({
+      ...label,
+      children: label.children && label.children.length > 0
+        ? sortLabelsForDisplay(label.children)
+        : label.children,
+    }))
+    .sort(compareLabelNamesForDisplay);
+}
+
+export interface FlattenedLabelWithParentPath {
+  label: LabelConfig;
+  parentNames: string[];
+  parentPath?: string;
+}
+
+/**
+ * Flatten labels while preserving parent breadcrumb names for display/search UIs.
+ * Ordering follows the provided tree order so callers can choose whether to feed
+ * raw config order or a recursively display-sorted tree.
+ */
+export function flattenLabelsWithParentPath(labels: LabelConfig[]): FlattenedLabelWithParentPath[] {
+  const result: FlattenedLabelWithParentPath[] = [];
+
+  function walk(nodes: LabelConfig[], parentNames: string[]): void {
+    for (const node of nodes) {
+      result.push({
+        label: node,
+        parentNames,
+        parentPath: parentNames.length > 0 ? `${parentNames.join(' / ')} / ` : undefined,
+      });
+      if (node.children && node.children.length > 0) {
+        walk(node.children, [...parentNames, node.name]);
+      }
+    }
+  }
+
+  walk(labels, []);
   return result;
 }
 

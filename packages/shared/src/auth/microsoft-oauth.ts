@@ -263,7 +263,10 @@ export function getMicrosoftScopes(options: MicrosoftOAuthOptions): string[] {
 export interface PrepareMicrosoftOAuthOptions {
   service?: MicrosoftService;
   scopes?: string[];
-  callbackPort: number;
+  /** Port for the local callback server (Electron). One of callbackPort or callbackUrl required. */
+  callbackPort?: number;
+  /** Full callback URL (WebUI). Takes precedence over callbackPort. */
+  callbackUrl?: string;
 }
 
 /**
@@ -280,7 +283,8 @@ export function prepareMicrosoftOAuth(options: PrepareMicrosoftOAuthOptions): Pr
   const scopes = getMicrosoftScopes(options);
   const pkce = generatePKCE();
   const state = generateState();
-  const redirectUri = `http://localhost:${options.callbackPort}/callback`;
+  const redirectUri = options.callbackUrl
+    ?? `http://localhost:${options.callbackPort}/callback`;
 
   const authUrl = new URL(MICROSOFT_AUTH_URL);
   authUrl.searchParams.set('client_id', MICROSOFT_CLIENT_ID);

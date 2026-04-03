@@ -1,6 +1,7 @@
 import type { SDKAssistantMessageError } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentError } from './errors.ts';
 import type { LastApiError } from '../interceptor-common.ts';
+import { getProviderMetadata, getProviderDisplayName } from '../config/provider-metadata.ts';
 
 export interface ClaudeSdkApiError {
   errorType: string;
@@ -11,6 +12,8 @@ export interface ClaudeSdkApiError {
 export interface ClaudeSdkErrorContext {
   actualError: ClaudeSdkApiError | null;
   capturedApiError: LastApiError | null;
+  providerType?: string;
+  piAuthProvider?: string;
 }
 
 type FailureKind = 'provider' | 'network' | 'unknown';
@@ -126,6 +129,10 @@ export function mapClaudeSdkAssistantError(
 ): AgentError {
   const apiDetails = buildApiDetails(context);
   const failureKind = classifyFailure(errorCode, context);
+  const providerInfo = getProviderMetadata(
+    context.providerType ?? 'anthropic',
+    context.piAuthProvider,
+  ) ?? undefined;
 
   const retryAction = [{ key: 'r', label: 'Retry', action: 'retry' as const }];
 
@@ -140,6 +147,7 @@ export function mapClaudeSdkAssistantError(
     actions: retryAction,
     canRetry: true,
     retryDelayMs: 5000,
+    providerInfo,
   };
 
   const networkError: AgentError = {
@@ -154,6 +162,7 @@ export function mapClaudeSdkAssistantError(
     actions: retryAction,
     canRetry: true,
     retryDelayMs: 2000,
+    providerInfo,
   };
 
   switch (errorCode) {
@@ -169,6 +178,7 @@ export function mapClaudeSdkAssistantError(
         ],
         canRetry: true,
         retryDelayMs: 1000,
+        providerInfo,
       };
 
     case 'billing_error':
@@ -179,6 +189,7 @@ export function mapClaudeSdkAssistantError(
         details: ['Check your account billing status'],
         actions: [{ key: 's', label: 'Update credentials', action: 'settings' }],
         canRetry: false,
+        providerInfo,
       };
 
     case 'rate_limit':
@@ -190,6 +201,7 @@ export function mapClaudeSdkAssistantError(
         actions: retryAction,
         canRetry: true,
         retryDelayMs: 5000,
+        providerInfo,
       };
 
     case 'invalid_request':
@@ -205,6 +217,7 @@ export function mapClaudeSdkAssistantError(
         actions: retryAction,
         canRetry: true,
         retryDelayMs: 1000,
+        providerInfo,
       };
 
     case 'server_error':
@@ -219,6 +232,7 @@ export function mapClaudeSdkAssistantError(
         actions: retryAction,
         canRetry: true,
         retryDelayMs: 1000,
+        providerInfo,
       };
 
     case 'unknown': {
@@ -242,6 +256,7 @@ export function mapClaudeSdkAssistantError(
         actions: retryAction,
         canRetry: true,
         retryDelayMs: 2000,
+        providerInfo,
       };
     }
 
@@ -258,6 +273,7 @@ export function mapClaudeSdkAssistantError(
         actions: retryAction,
         canRetry: true,
         retryDelayMs: 2000,
+        providerInfo,
       };
   }
 }

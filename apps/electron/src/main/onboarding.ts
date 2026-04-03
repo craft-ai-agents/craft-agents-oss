@@ -72,7 +72,7 @@ export function registerOnboardingHandlers(server: RpcServer, deps: HandlerDeps)
       if (!callbackPort) {
         throw new Error('callbackPort is required — client must run a local callback server')
       }
-      const prepared = await prepareMcpOAuth(mcpUrl, callbackPort)
+      const prepared = await prepareMcpOAuth(mcpUrl, { callbackPort })
       log.info('[Onboarding:Main] MCP OAuth prepared, returning authUrl to client')
 
       return {

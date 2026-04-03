@@ -18,8 +18,6 @@ import { Icon_Home, Icon_Folder, Spinner } from '@craft-agent/ui'
 import * as storage from '@/lib/local-storage'
 import { useDirectoryPicker } from '@/hooks/useDirectoryPicker'
 import { ServerDirectoryBrowser } from '@/components/ServerDirectoryBrowser'
-import { extractWorkspaceSlugFromPath } from '@craft-agent/shared/utils/workspace-slug'
-
 import { Button } from '@/components/ui/button'
 import {
   InlineSlashCommand,
@@ -80,6 +78,7 @@ import {
   addRecentWorkingDir,
   removeRecentWorkingDir,
 } from './working-directory-history'
+import { CompactPermissionModeSelector } from './CompactPermissionModeSelector'
 
 /**
  * Format token count for display (e.g., 1500 -> "1.5k", 200000 -> "200k")
@@ -300,7 +299,7 @@ export function FreeFormInput({
 
   // Derive connectionDefaultModel per-session from the effective connection.
   // Only non-null for compat providers (custom endpoints with fixed models).
-  // Standard providers (anthropic, openai, bedrock, vertex) → null → normal model picker.
+  // Standard providers (anthropic, pi) → null → normal model picker.
   const connectionDefaultModel = React.useMemo(() => {
     const effectiveSlug = resolveEffectiveConnectionSlug(currentConnection, workspaceDefaultConnection, llmConnections)
     const conn = llmConnections.find(c => c.slug === effectiveSlug)
@@ -358,8 +357,8 @@ export function FreeFormInput({
     }
     for (const conn of llmConnections) {
       const provider = conn.providerType || 'anthropic'
-      // Group by SDK: anthropic/anthropic_compat/bedrock/vertex use Anthropic SDK
-      if (provider === 'anthropic' || provider === 'anthropic_compat' || provider === 'bedrock' || provider === 'vertex') {
+      // Group by SDK: only 'anthropic' uses Claude Agent SDK
+      if (provider === 'anthropic') {
         groups['Anthropic'].push(conn)
       } else if (provider === 'pi' || provider === 'pi_compat') {
         groups['Craft Agents Backend'].push(conn)
@@ -430,22 +429,38 @@ export function FreeFormInput({
     return appShellCtx.workspaces.find(w => w.id === workspaceId)?.rootPath ?? null
   }, [appShellCtx, workspaceId])
 
-  // Compute workspace slug from rootPath for SDK skill qualification
+  // Workspace slug for SDK skill qualification (server-computed)
   // SDK expects "workspaceSlug:skillSlug" format, NOT UUID
   const workspaceSlug = React.useMemo(() => {
-    if (!workspaceRootPath) return workspaceId // Fallback to ID if no path
-    return extractWorkspaceSlugFromPath(workspaceRootPath, workspaceId ?? '')
-  }, [workspaceRootPath, workspaceId])
+    if (!appShellCtx || !workspaceId) return workspaceId
+    return appShellCtx.workspaces.find(w => w.id === workspaceId)?.slug ?? workspaceId
+  }, [appShellCtx, workspaceId])
 
   // Read panel focus state from context (for multi-panel unfocused styling)
   const appShellContext = useOptionalAppShellContext()
   const isFocusedPanel = appShellContext?.isFocusedPanel ?? true
 
-  // Shuffle placeholder order once per mount so each session feels fresh
+  // Shuffle placeholder order once per mount so each session feels fresh.
+  // In compact mode, suppress desktop-keyboard guidance that is noisy or misleading
+  // on narrow/mobile-like layouts.
+  const placeholderOptions = React.useMemo(() => {
+    if (!Array.isArray(placeholder)) return placeholder
+    if (!compactMode) return placeholder
+    return placeholder.filter((entry) => {
+      const lower = entry.toLowerCase()
+      return !lower.includes('shift + tab')
+        && !lower.includes('shift + return')
+        && !lower.includes('toggle the sidebar')
+        && !lower.includes('focus mode')
+        && !lower.includes('⌘')
+        && !lower.includes('ctrl')
+    })
+  }, [placeholder, compactMode])
+
   // Hide placeholder entirely when panel is unfocused in multi-panel layout
   const shuffledPlaceholder = React.useMemo(
-    () => Array.isArray(placeholder) ? shuffleArray(placeholder) : placeholder,
-    [] // eslint-disable-line react-hooks/exhaustive-deps -- intentionally shuffle only on mount
+    () => Array.isArray(placeholderOptions) ? shuffleArray(placeholderOptions) : placeholderOptions,
+    [placeholderOptions]
   )
   const effectivePlaceholder = isFocusedPanel ? shuffledPlaceholder : ''
 
@@ -1061,9 +1076,15 @@ export function FreeFormInput({
       const reader = new FileReader()
       reader.onload = async () => {
         const result = reader.result as ArrayBuffer
-        const base64 = btoa(
-          new Uint8Array(result).reduce((data, byte) => data + String.fromCharCode(byte), '')
-        )
+        // Chunked base64 encoding — btoa + reduce fails on large files (>1MB)
+        // due to O(n²) string concatenation and browser string-length limits
+        const bytes = new Uint8Array(result)
+        let binary = ''
+        const chunkSize = 8192
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunkSize, bytes.length)))
+        }
+        const base64 = btoa(binary)
 
         let type: FileAttachment['type'] = 'unknown'
         const fileName = overrideName || file.name
@@ -1656,11 +1677,7 @@ export function FreeFormInput({
           />
 
           <div className={cn("flex items-center gap-1 px-2 py-2", !compactMode && "border-t border-border/50")}>
-          {/* Left side: Context badges - shrinkable so model + send always stay visible */}
-          {/* Hidden in compact mode (EditPopover embedding) */}
-          {!compactMode && (
-          <div className="flex items-center gap-1 min-w-32 shrink overflow-hidden">
-          {/* Hidden file input for attach button */}
+          {/* Hidden file input for attach button (shared by compact and desktop) */}
           <input
             ref={fileInputRef}
             type="file"
@@ -1668,10 +1685,121 @@ export function FreeFormInput({
             className="hidden"
             onChange={handleFileInputChange}
           />
+
+          {/* Compact mode: permission mode drawer + standard icon badges for attach/sources/working dir */}
+          {compactMode && (
+          <>
+          {onPermissionModeChange && (
+            <CompactPermissionModeSelector
+              permissionMode={permissionMode}
+              onPermissionModeChange={onPermissionModeChange}
+            />
+          )}
+          <FreeFormInputContextBadge
+            icon={<Paperclip className="h-4 w-4" />}
+            label={attachments.length > 0
+              ? attachments.length === 1
+                ? "1 file"
+                : `${attachments.length} files`
+              : "Attach"
+            }
+            isExpanded={false}
+            hasSelection={attachments.length > 0}
+            showChevron={false}
+            onClick={handleAttachClick}
+            tooltip="Attach files"
+            disabled={disabled}
+          />
+          {onSourcesChange && (
+            <div className="relative shrink min-w-0">
+              <FreeFormInputContextBadge
+                buttonRef={sourceButtonRef}
+                icon={
+                  optimisticSourceSlugs.length === 0 ? (
+                    <DatabaseZap className="h-4 w-4" />
+                  ) : (
+                    <div className="flex items-center -ml-0.5">
+                      {(() => {
+                        const enabledSources = sources.filter(s => optimisticSourceSlugs.includes(s.config.slug))
+                        const displaySources = enabledSources.slice(0, 3)
+                        const remainingCount = enabledSources.length - 3
+                        return (
+                          <>
+                            {displaySources.map((source, index) => (
+                              <div
+                                key={source.config.slug}
+                                className={cn("relative h-5 w-5 rounded-[4px] bg-background shadow-minimal flex items-center justify-center", index > 0 && "-ml-1")}
+                                style={{ zIndex: index + 1 }}
+                              >
+                                <SourceAvatar source={source} size="xs" />
+                              </div>
+                            ))}
+                            {remainingCount > 0 && (
+                              <div
+                                className="-ml-1 h-5 w-5 rounded-[4px] bg-background shadow-minimal flex items-center justify-center text-[8px] font-medium text-muted-foreground"
+                                style={{ zIndex: displaySources.length + 1 }}
+                              >
+                                +{remainingCount}
+                              </div>
+                            )}
+                          </>
+                        )
+                      })()}
+                    </div>
+                  )
+                }
+                label={
+                  optimisticSourceSlugs.length === 0
+                    ? "Sources"
+                    : (() => {
+                        const enabledSources = sources.filter(s => optimisticSourceSlugs.includes(s.config.slug))
+                        if (enabledSources.length === 1) return enabledSources[0].config.name
+                        return `${enabledSources.length} sources`
+                      })()
+                }
+                isExpanded={false}
+                hasSelection={optimisticSourceSlugs.length > 0}
+                showChevron={false}
+                isOpen={sourceDropdownOpen}
+                disabled={disabled}
+                onClick={() => setSourceDropdownOpen(prev => !prev)}
+                tooltip="Sources"
+              />
+              <SourceSelectorPopover
+                open={sourceDropdownOpen}
+                onOpenChange={setSourceDropdownOpen}
+                anchorRef={sourceButtonRef}
+                sources={sources}
+                selectedSlugs={optimisticSourceSlugs}
+                onToggleSlug={(slug) => {
+                  const isEnabled = optimisticSourceSlugs.includes(slug)
+                  const newSlugs = isEnabled
+                    ? optimisticSourceSlugs.filter(currentSlug => currentSlug !== slug)
+                    : [...optimisticSourceSlugs, slug]
+                  setOptimisticSourceSlugs(newSlugs)
+                  onSourcesChange?.(newSlugs)
+                }}
+              />
+            </div>
+          )}
+          {onWorkingDirectoryChange && (
+            <WorkingDirectoryBadge
+              workingDirectory={workingDirectory}
+              onWorkingDirectoryChange={onWorkingDirectoryChange}
+              sessionFolderPath={sessionFolderPath}
+              isEmptySession={false}
+              workspaceId={workspaceId}
+            />
+          )}
+          </>
+          )}
+
+          {/* Desktop: full badges row with labels and working directory */}
+          {!compactMode && (
+          <div className="flex items-center gap-1 min-w-32 shrink overflow-hidden">
           {/* 1. Attach Files Badge */}
           <FreeFormInputContextBadge
             icon={<Paperclip className="h-4 w-4" />}
-            // Show count ("1 file" / "X files") instead of filename for cleaner UI
             label={attachments.length > 0
               ? attachments.length === 1
                 ? "1 file"
@@ -1790,7 +1918,7 @@ export function FreeFormInput({
                   <button
                     type="button"
                     className={cn(
-                      "inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors select-none",
+                      "input-toolbar-btn inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors select-none",
                       modelDropdownOpen && "bg-foreground/5",
                       connectionUnavailable && "text-destructive",
                     )}
@@ -2129,7 +2257,8 @@ Model
               type="button"
               size="icon"
               variant="secondary"
-              className="h-7 w-7 rounded-full shrink-0 hover:bg-foreground/15 active:bg-foreground/20 ml-2"
+              aria-label="Stop response"
+              className="send-btn h-7 w-7 rounded-full shrink-0 hover:bg-foreground/15 active:bg-foreground/20 ml-2"
               onClick={() => handleStop(false)}
             >
               <Square className="h-3 w-3 fill-current" />
@@ -2138,7 +2267,8 @@ Model
             <Button
               type="submit"
               size="icon"
-              className="h-7 w-7 rounded-full shrink-0 ml-2"
+              aria-label="Send message"
+              className="send-btn h-7 w-7 rounded-full shrink-0 ml-2"
               disabled={!hasContent || disabled || disableSend}
               data-tutorial="send-button"
             >

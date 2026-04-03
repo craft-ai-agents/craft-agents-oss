@@ -3,7 +3,7 @@ import { Check, Globe, Copy, RefreshCw, Link2Off } from 'lucide-react'
 import { toast } from 'sonner'
 import type { MenuComponents } from '@/components/ui/menu-context'
 import { getStatusIconStyle, type SessionStatusId, type SessionStatus } from '@/config/session-status-config'
-import type { LabelConfig } from '@craft-agent/shared/labels'
+import { sortLabelsForDisplay, type LabelConfig } from '@craft-agent/shared/labels'
 import { LabelIcon } from '@/components/ui/label-icon'
 
 export interface ShareMenuItemsProps {
@@ -142,10 +142,11 @@ export function LabelMenuItems({
   menu,
 }: LabelMenuItemsProps) {
   const { MenuItem, Separator, Sub, SubTrigger, SubContent } = menu
+  const displayLabels = React.useMemo(() => sortLabelsForDisplay(labels), [labels])
 
-  return (
+  const renderItems = (nodes: LabelConfig[]): React.ReactNode => (
     <>
-      {labels.map(label => {
+      {nodes.map(label => {
         const hasChildren = label.children && label.children.length > 0
         const isApplied = appliedLabelIds.has(label.id)
 
@@ -177,12 +178,7 @@ export function LabelMenuItems({
                   </span>
                 </MenuItem>
                 <Separator />
-                <LabelMenuItems
-                  labels={label.children!}
-                  appliedLabelIds={appliedLabelIds}
-                  onToggle={onToggle}
-                  menu={menu}
-                />
+                {renderItems(label.children!)}
               </SubContent>
             </Sub>
           )
@@ -206,4 +202,6 @@ export function LabelMenuItems({
       })}
     </>
   )
+
+  return renderItems(displayLabels)
 }

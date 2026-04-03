@@ -17,19 +17,6 @@ describe('resolveClaudeThinkingOptions', () => {
     })
   })
 
-  it('falls back to token budgets for anthropic_compat endpoints', () => {
-    const result = resolveClaudeThinkingOptions({
-      thinkingLevel: 'high',
-      model: 'claude-opus-4-6',
-      providerType: 'anthropic_compat',
-      minimizeThinking: false,
-    })
-
-    expect(result).toEqual({
-      maxThinkingTokens: getThinkingTokens('high', 'claude-opus-4-6'),
-    })
-  })
-
   it('uses token budgets for Haiku on true Anthropic backends', () => {
     const result = resolveClaudeThinkingOptions({
       thinkingLevel: 'high',

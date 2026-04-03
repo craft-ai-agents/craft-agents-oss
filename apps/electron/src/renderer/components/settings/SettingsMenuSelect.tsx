@@ -238,6 +238,7 @@ export function SettingsMenuSelectRow({
 }: SettingsMenuSelectRowProps) {
   return (
     <div
+      data-layout="settings-row"
       className={cn(
         'flex items-center justify-between',
         inCard ? 'px-4 py-3.5' : 'py-3',
@@ -250,7 +251,7 @@ export function SettingsMenuSelectRow({
           <p className={cn(settingsUI.description, settingsUI.labelDescriptionGap)}>{description}</p>
         )}
       </div>
-      <div className="ml-4 shrink-0">
+      <div data-layout="settings-control" className="ml-4 shrink-0">
         <SettingsMenuSelect
           value={value}
           onValueChange={onValueChange}

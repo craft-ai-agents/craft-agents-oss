@@ -9,7 +9,8 @@
     "spellCheck": false,
     "keepAwakeWhileRunning": false,
     "richToolDescriptions": true,
-    "extendedPromptCache": false
+    "extendedPromptCache": false,
+    "browserToolEnabled": true
   },
   "workspaceDefaults": {
     "thinkingLevel": "think",

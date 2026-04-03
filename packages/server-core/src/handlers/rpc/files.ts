@@ -1,5 +1,6 @@
 import { readFile, writeFile, unlink, mkdir, readdir, stat } from 'fs/promises'
 import { join, resolve, dirname, parse as parsePath } from 'path'
+import { homedir } from 'os'
 import { validatePathFormat } from '../../utils/path-validation'
 import { randomUUID } from 'crypto'
 import { RPC_CHANNELS, type FileAttachment, type DirectoryListingResult } from '@craft-agent/shared/protocol'
@@ -7,19 +8,17 @@ import type { StoredAttachment } from '@craft-agent/core/types'
 import { readFileAttachment, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
 import { getSessionAttachmentsPath, validateSessionId } from '@craft-agent/shared/sessions'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import { resizeImageForAPI, getImageSize } from '@craft-agent/server-core/services'
+import { resizeImageForAPI, inspectImageBuffer } from '@craft-agent/server-core/services'
 import { sanitizeFilename, validateFilePath } from '@craft-agent/server-core/handlers'
 import { MarkItDown } from 'markitdown-js'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
 
-// Re-export from server-core for backward compatibility
-export { sanitizeFilename, validateFilePath } from '@craft-agent/server-core/handlers'
-
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.file.READ,
   RPC_CHANNELS.file.READ_DATA_URL,
+  RPC_CHANNELS.file.READ_PREVIEW_DATA_URL,
   RPC_CHANNELS.file.READ_BINARY,
   RPC_CHANNELS.file.OPEN_DIALOG,
   RPC_CHANNELS.file.READ_ATTACHMENT,
@@ -77,6 +76,25 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
       const message = error instanceof Error ? error.message : 'Unknown error'
       deps.platform.logger.error('readFileDataUrl error:', message)
       throw new Error(`Failed to read file as data URL: ${message}`)
+    }
+  })
+
+  // Read an image file as a small preview data URL for lightweight thumbnail rendering.
+  // Returns a PNG data URL resized to fit within maxSize×maxSize.
+  server.handle(RPC_CHANNELS.file.READ_PREVIEW_DATA_URL, async (_ctx, path: string, maxSize = 64) => {
+    try {
+      const safePath = await validateFilePath(path)
+      const size = Number.isFinite(maxSize) ? Math.max(16, Math.min(256, Math.floor(maxSize))) : 64
+      const preview = await deps.platform.imageProcessor.process(safePath, {
+        resize: { width: size, height: size },
+        fit: 'inside',
+        format: 'png',
+      })
+      return `data:image/png;base64,${preview.toString('base64')}`
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      deps.platform.logger.error('readFilePreviewDataUrl error:', message)
+      throw new Error(`Failed to read file preview: ${message}`)
     }
   })
 
@@ -208,35 +226,46 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
 
         // For images: validate and resize if needed for Claude API compatibility
         if (attachment.type === 'image') {
-          // Get image dimensions
-          const imageSize = await getImageSize(decoded)
-          if (!imageSize) {
-            throw new Error('Could not read image dimensions — file may be corrupt or unsupported')
-          }
-
-          // Validate image for Claude API
-          const validation = validateImageForClaudeAPI(decoded.length, imageSize.width, imageSize.height)
+          const imageInspection = await inspectImageBuffer(decoded, deps.platform.imageProcessor)
+          const imageSize = imageInspection.status === 'ok'
+            ? { width: imageInspection.width, height: imageInspection.height }
+            : null
 
           // Determine if we should resize
-          let shouldResize = validation.needsResize
-          let targetSize = validation.suggestedSize
+          let shouldResize = false
+          let targetSize: { width: number; height: number } | undefined
 
-          if (!validation.valid && validation.errorCode === 'dimension_exceeded') {
-            // Image exceeds 8000px limit - calculate resize to fit within limits
-            const maxDim = IMAGE_LIMITS.MAX_DIMENSION
-            const scale = Math.min(maxDim / imageSize.width, maxDim / imageSize.height)
-            targetSize = {
-              width: Math.floor(imageSize.width * scale),
-              height: Math.floor(imageSize.height * scale),
+          if (imageInspection.status === 'processor_unavailable') {
+            deps.platform.logger.warn('Image processing unavailable while validating attachment:', imageInspection.error?.message ?? 'unknown error')
+            if (decoded.length > IMAGE_LIMITS.MAX_SIZE) {
+              throw new Error('Image processing is unavailable, so oversized images cannot be validated or resized automatically. Please attach a smaller image.')
             }
-            shouldResize = true
-            deps.platform.logger.info(`Image exceeds ${maxDim}px limit (${imageSize.width}x${imageSize.height}), will resize to ${targetSize.width}x${targetSize.height}`)
-          } else if (!validation.valid && validation.errorCode === 'size_exceeded') {
-            // File >5MB — try resize+compress instead of rejecting
-            shouldResize = true
-            deps.platform.logger.info(`Image exceeds 5MB (${(decoded.length / 1024 / 1024).toFixed(1)}MB), will attempt resize`)
-          } else if (!validation.valid) {
-            throw new Error(validation.error)
+          } else if (imageInspection.status === 'invalid_image') {
+            throw new Error(imageInspection.error?.message || 'Invalid or unsupported image file')
+          } else {
+            // Validate image for Claude API
+            const validation = validateImageForClaudeAPI(decoded.length, imageSize!.width, imageSize!.height)
+
+            shouldResize = validation.needsResize ?? false
+            targetSize = validation.suggestedSize
+
+            if (!validation.valid && validation.errorCode === 'dimension_exceeded') {
+              // Image exceeds 8000px limit - calculate resize to fit within limits
+              const maxDim = IMAGE_LIMITS.MAX_DIMENSION
+              const scale = Math.min(maxDim / imageSize!.width, maxDim / imageSize!.height)
+              targetSize = {
+                width: Math.floor(imageSize!.width * scale),
+                height: Math.floor(imageSize!.height * scale),
+              }
+              shouldResize = true
+              deps.platform.logger.info(`Image exceeds ${maxDim}px limit (${imageSize!.width}x${imageSize!.height}), will resize to ${targetSize.width}x${targetSize.height}`)
+            } else if (!validation.valid && validation.errorCode === 'size_exceeded') {
+              // File >5MB — try resize+compress instead of rejecting
+              shouldResize = true
+              deps.platform.logger.info(`Image exceeds 5MB (${(decoded.length / 1024 / 1024).toFixed(1)}MB), will attempt resize`)
+            } else if (!validation.valid) {
+              throw new Error(validation.error)
+            }
           }
 
           // If resize is needed (either recommended or required), do it now
@@ -245,7 +274,7 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
 
             if (targetSize) {
               // Dimension-exceeded: resize to specific target dimensions
-              deps.platform.logger.info(`Resizing image from ${imageSize.width}x${imageSize.height} to ${targetSize.width}x${targetSize.height}`)
+              deps.platform.logger.info(`Resizing image from ${imageSize!.width}x${imageSize!.height} to ${targetSize.width}x${targetSize.height}`)
               try {
                 decoded = await deps.platform.imageProcessor.process(decoded, {
                   resize: { width: targetSize.width, height: targetSize.height },
@@ -266,7 +295,7 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
               } catch (resizeError) {
                 deps.platform.logger.error('Image resize failed:', resizeError)
                 const reason = resizeError instanceof Error ? resizeError.message : String(resizeError)
-                throw new Error(`Image too large (${imageSize.width}x${imageSize.height}) and automatic resize failed: ${reason}. Please manually resize it before attaching.`)
+                throw new Error(`Image too large (${imageSize!.width}x${imageSize!.height}) and automatic resize failed: ${reason}. Please manually resize it before attaching.`)
               }
             } else {
               // Size-exceeded or optimal resize — use shared utility for full pipeline
@@ -461,6 +490,11 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
   // List directories in a given path (for remote directory browsing).
   // Returns only directories (not files) — this is a folder picker.
   server.handle(RPC_CHANNELS.fs.LIST_DIRECTORY, async (_ctx, dirPath: string) => {
+    // Resolve ~ to server's home directory (thin clients don't know the server's home)
+    if (dirPath === '~' || dirPath.startsWith('~/')) {
+      dirPath = dirPath === '~' ? homedir() : join(homedir(), dirPath.slice(2))
+    }
+
     // Reject cross-platform and relative paths before resolve() can concatenate with cwd
     const pathCheck = validatePathFormat(dirPath)
     if (!pathCheck.valid) {

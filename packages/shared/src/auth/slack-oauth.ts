@@ -242,7 +242,10 @@ export function getSlackScopes(options: SlackOAuthOptions): string[] {
 export interface PrepareSlackOAuthOptions {
   service?: SlackService;
   userScopes?: string[];
-  callbackPort: number;
+  /** Port for the local callback server (Electron). One of callbackPort or callbackUrl required. */
+  callbackPort?: number;
+  /** Full callback URL (WebUI). Takes precedence over callbackPort. */
+  callbackUrl?: string;
 }
 
 /**
@@ -261,8 +264,9 @@ export function prepareSlackOAuth(options: PrepareSlackOAuthOptions): PreparedOA
   const userScopes = getSlackScopes(options);
   const state = generateState();
 
-  // Slack requires HTTPS → use Cloudflare relay
-  const redirectUri = `https://agents.craft.do/auth/slack/callback?port=${options.callbackPort}`;
+  // Slack requires HTTPS → use Cloudflare relay when using callbackPort
+  const redirectUri = options.callbackUrl
+    ?? `https://agents.craft.do/auth/slack/callback?port=${options.callbackPort}`;
 
   const authUrl = new URL(SLACK_AUTH_URL);
   authUrl.searchParams.set('client_id', SLACK_CLIENT_ID);

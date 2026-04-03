@@ -1,9 +1,19 @@
 {
   "name": "craft-agent",
-  "version": "0.7.12",
+  "version": "0.8.3",
+  "license": "Apache-2.0",
   "description": "Claude Code-like agent for Craft documents",
   "type": "module",
   "private": true,
+  "trustedDependencies": [
+    "@sentry/cli",
+    "electron",
+    "electron-winstaller",
+    "esbuild",
+    "koffi",
+    "protobufjs",
+    "sharp"
+  ],
   "workspaces": [
     "packages/*",
     "apps/*",
@@ -16,7 +26,7 @@
     "typecheck:staged": "bash scripts/typecheck-staged.sh",
     "typecheck:all": "cd packages/core && bun run tsc --noEmit && cd ../shared && bun run tsc --noEmit && cd ../server-core && bun run tsc --noEmit && cd ../server && bun run tsc --noEmit && cd ../session-tools-core && bun run tsc --noEmit && cd ../../apps/electron && bun run typecheck && cd ../../packages/ui && bun run tsc --noEmit",
     "server:start": "bun run packages/server/src/index.ts",
-    "server:dev": "CRAFT_DEBUG=true CRAFT_BUNDLED_ASSETS_ROOT=$PWD/apps/electron bun run packages/server/src/index.ts",
+    "server:dev": "bun run server:build:subprocess && CRAFT_DEBUG=true CRAFT_BUNDLED_ASSETS_ROOT=$PWD/apps/electron bun run packages/server/src/index.ts",
     "server:build": "bun run scripts/build-server.ts",
     "server:build:linux-x64": "bun run scripts/build-server.ts --platform=linux --arch=x64 --compress",
     "server:build:linux-arm64": "bun run scripts/build-server.ts --platform=linux --arch=arm64 --compress",
@@ -65,6 +75,13 @@
     "viewer:typecheck": "cd apps/viewer && bun run typecheck",
     "viewer:build": "vite build --config apps/viewer/vite.config.ts",
     "viewer:preview": "vite preview --config apps/viewer/vite.config.ts",
+    "webui:dev": "lsof -ti:5175 | xargs kill -9 2>/dev/null; vite dev --config apps/webui/vite.config.ts",
+    "webui:clean": "rm -rf apps/webui/dist",
+    "webui:build": "vite build --config apps/webui/vite.config.ts",
+    "webui:typecheck": "cd apps/webui && bun run typecheck",
+    "server:build:subprocess": "cd packages/session-mcp-server && bun run build && cd ../pi-agent-server && bun run build",
+    "server:prod": "bun run server:build:subprocess && bun run webui:build && CRAFT_WEBUI_DIR=apps/webui/dist CRAFT_BUNDLED_ASSETS_ROOT=$PWD/apps/electron bun run packages/server/src/index.ts",
+    "server:dev:webui": "bun run server:build:subprocess && bun run webui:build && CRAFT_WEBUI_DIR=apps/webui/dist CRAFT_WEBUI_PORT=3100 bun run server:dev",
     "marketing:dev": "vite dev --config apps/marketing/vite.config.ts",
     "marketing:build": "vite build --config apps/marketing/vite.config.ts",
     "marketing:preview": "vite preview --config apps/marketing/vite.config.ts",
@@ -171,5 +188,15 @@
     "tiptap-extension-code-block-shiki": "^1.0.0",
     "tiptap-markdown": "^0.9.0",
     "zod": "^4.0.0"
+  },
+  "optionalDependencies": {
+    "@img/sharp-darwin-arm64": "0.34.5",
+    "@img/sharp-darwin-x64": "0.34.5",
+    "@img/sharp-linux-arm64": "0.34.5",
+    "@img/sharp-linux-x64": "0.34.5",
+    "@img/sharp-libvips-darwin-arm64": "1.2.4",
+    "@img/sharp-libvips-darwin-x64": "1.2.4",
+    "@img/sharp-libvips-linux-arm64": "1.2.4",
+    "@img/sharp-libvips-linux-x64": "1.2.4"
   }
 }

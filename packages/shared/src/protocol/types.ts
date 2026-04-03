@@ -58,6 +58,8 @@ export interface MessageEnvelope {
   reconnected?: boolean
   /** True when server buffer was evicted — client must do a full state refresh. */
   stale?: boolean
+  /** Server app version, sent in handshake_ack. Clients can use this for compatibility checks. */
+  serverVersion?: string
 }
 
 export interface WireError {

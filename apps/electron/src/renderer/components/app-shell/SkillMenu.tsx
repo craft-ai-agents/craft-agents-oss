@@ -31,7 +31,10 @@ export interface SkillMenuProps {
   /** Callbacks */
   onOpenInNewWindow: () => void
   onShowInFinder: () => void
-  onDelete: () => void
+  onDelete?: () => void
+  canShowInFinder?: boolean
+  canDelete?: boolean
+  deleteLabel?: string
 }
 
 /**
@@ -44,6 +47,9 @@ export function SkillMenu({
   onOpenInNewWindow,
   onShowInFinder,
   onDelete,
+  canShowInFinder = true,
+  canDelete = true,
+  deleteLabel = 'Delete Skill',
 }: SkillMenuProps) {
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator } = useMenuComponents()
@@ -57,7 +63,7 @@ export function SkillMenu({
       </MenuItem>
 
       {/* Show in file manager */}
-      <MenuItem onClick={onShowInFinder}>
+      <MenuItem onClick={onShowInFinder} disabled={!canShowInFinder}>
         <FolderOpen className="h-3.5 w-3.5" />
         <span className="flex-1">{`Show in ${getFileManagerName()}`}</span>
       </MenuItem>
@@ -65,9 +71,9 @@ export function SkillMenu({
       <Separator />
 
       {/* Delete */}
-      <MenuItem onClick={onDelete} variant="destructive">
+      <MenuItem onClick={canDelete ? onDelete : undefined} variant="destructive" disabled={!canDelete}>
         <Trash2 className="h-3.5 w-3.5" />
-        <span className="flex-1">Delete Skill</span>
+        <span className="flex-1">{deleteLabel}</span>
       </MenuItem>
     </>
   )

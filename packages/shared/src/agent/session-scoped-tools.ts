@@ -36,6 +36,7 @@ import { createLLMTool, type LLMQueryRequest, type LLMQueryResult } from './llm-
 import { createSpawnSessionTool, type SpawnSessionFn } from './spawn-session-tool.ts';
 import { createBrowserTools, type BrowserPaneFns } from './browser-tools.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
+import { getBrowserToolEnabled } from '../config/storage.ts';
 
 // Re-export types for backward compatibility
 export type {
@@ -94,6 +95,19 @@ export interface SessionScopedToolCallbacks {
    * with the session's bound browser instance.
    */
   browserPaneFns?: BrowserPaneFns;
+
+  /** Set labels on a session (defaults to current). */
+  setSessionLabelsFn?: (sessionId: string | undefined, labels: string[]) => void | Promise<void>;
+  /** Set status on a session (defaults to current). */
+  setSessionStatusFn?: (sessionId: string | undefined, status: string) => void | Promise<void>;
+  /** Get detailed info about a session (defaults to current). */
+  getSessionInfoFn?: (sessionId?: string) => import('@craft-agent/session-tools-core').SessionInfo | null;
+  /** List sessions in the workspace with pagination. */
+  listSessionsFn?: (options?: import('@craft-agent/session-tools-core').ListSessionsOptions) => import('@craft-agent/session-tools-core').ListSessionsResult;
+  /** Resolve label display names to IDs. */
+  resolveLabelsFn?: (labels: string[]) => import('@craft-agent/session-tools-core').ResolvedLabelsResult;
+  /** Resolve a status display name to its ID. */
+  resolveStatusFn?: (status: string) => import('@craft-agent/session-tools-core').ResolvedStatusResult;
 }
 
 // Registry of callbacks keyed by sessionId
@@ -237,6 +251,14 @@ function convertResult(result: ToolResult): { content: Array<{ type: 'text'; tex
 const sessionToolsCache = new Map<string, ReturnType<typeof tool>[]>();
 
 /**
+ * Invalidate ALL session tool caches (e.g., when a global setting like browserToolEnabled changes).
+ * This forces tools to be rebuilt on the next message for every session.
+ */
+export function invalidateAllSessionToolsCaches(): void {
+  sessionToolsCache.clear();
+}
+
+/**
  * Clean up cached tools for a session
  */
 export function cleanupSessionScopedTools(sessionId: string): void {
@@ -297,6 +319,30 @@ export function getSessionScopedTools(
         const callbacks = getSessionScopedToolCallbacks(sessionId);
         callbacks?.onAuthRequest?.(request as AuthRequest);
       },
+      setSessionLabels: async (sid: string | undefined, labels: string[]) => {
+        const callbacks = getSessionScopedToolCallbacks(sessionId);
+        await callbacks?.setSessionLabelsFn?.(sid, labels);
+      },
+      setSessionStatus: async (sid: string | undefined, status: string) => {
+        const callbacks = getSessionScopedToolCallbacks(sessionId);
+        await callbacks?.setSessionStatusFn?.(sid, status);
+      },
+      getSessionInfo: (sid?: string) => {
+        const callbacks = getSessionScopedToolCallbacks(sessionId);
+        return callbacks?.getSessionInfoFn?.(sid ?? sessionId) ?? null;
+      },
+      listSessions: (options) => {
+        const callbacks = getSessionScopedToolCallbacks(sessionId);
+        return callbacks?.listSessionsFn?.(options) ?? { total: 0, returned: 0, sessions: [] };
+      },
+      resolveLabels: (labels) => {
+        const callbacks = getSessionScopedToolCallbacks(sessionId);
+        return callbacks?.resolveLabelsFn?.(labels) ?? { resolved: labels, unknown: [], available: [] };
+      },
+      resolveStatus: (status) => {
+        const callbacks = getSessionScopedToolCallbacks(sessionId);
+        return callbacks?.resolveStatusFn?.(status) ?? { resolved: status, available: [] };
+      },
     });
 
     // Helper to create a tool from the canonical registry.
@@ -345,15 +391,19 @@ export function getSessionScopedTools(
     );
 
     // Add browser_* tools — backend-specific (requires BrowserPaneManager in Electron)
-    tools.push(
-      ...createBrowserTools({
-        sessionId,
-        getBrowserPaneFns: () => {
-          const callbacks = getSessionScopedToolCallbacks(sessionId);
-          return callbacks?.browserPaneFns;
-        },
-      }),
-    );
+    // Gated by the "Built-in browser" setting so users with external browser tools
+    // (Playwright, Puppeteer, etc.) can disable the built-in one.
+    if (getBrowserToolEnabled()) {
+      tools.push(
+        ...createBrowserTools({
+          sessionId,
+          getBrowserPaneFns: () => {
+            const callbacks = getSessionScopedToolCallbacks(sessionId);
+            return callbacks?.browserPaneFns;
+          },
+        }),
+      );
+    }
 
     sessionToolsCache.set(cacheKey, tools);
   }
