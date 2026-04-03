@@ -1832,12 +1832,31 @@ export function FreeFormInput({
                               <p className="text-muted-foreground">
                                 To see your premium request usage, add a GitHub fine-grained PAT with <span className="font-medium text-foreground">Copilot (read)</span> permission.
                               </p>
-                              <p className="text-muted-foreground">
-                                Ask me to set it up:
-                              </p>
-                              <code className="block bg-muted rounded px-2 py-1.5 text-[11px] select-all">
-                                Save my GitHub PAT for the copilot usage indicator: github_pat_...
-                              </code>
+                              <form
+                                className="flex gap-1.5"
+                                onSubmit={async (e) => {
+                                  e.preventDefault()
+                                  const input = (e.currentTarget.elements.namedItem('pat') as HTMLInputElement)
+                                  const pat = input.value.trim()
+                                  if (!pat) return
+                                  await window.electronAPI.setCopilotBillingPat(pat)
+                                  input.value = ''
+                                }}
+                              >
+                                <input
+                                  name="pat"
+                                  type="password"
+                                  placeholder="github_pat_..."
+                                  autoComplete="off"
+                                  className="flex-1 min-w-0 rounded border border-border bg-background px-2 py-1 text-[11px] font-mono outline-none focus:ring-1 focus:ring-ring"
+                                />
+                                <button
+                                  type="submit"
+                                  className="shrink-0 rounded bg-primary px-2 py-1 text-[11px] text-primary-foreground hover:bg-primary/90"
+                                >
+                                  Save
+                                </button>
+                              </form>
                             </PopoverContent>
                           </Popover>
                         )}

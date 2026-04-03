@@ -1,4 +1,5 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { getCredentialManager } from '@craft-agent/shared/credentials'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
 
@@ -6,6 +7,8 @@ export const GUI_HANDLED_CHANNELS = [
   RPC_CHANNELS.power.SET_KEEP_AWAKE,
   RPC_CHANNELS.settings.SET_NETWORK_PROXY,
   RPC_CHANNELS.copilot.GET_PREMIUM_USAGE,
+  RPC_CHANNELS.copilot.SET_BILLING_PAT,
+  RPC_CHANNELS.copilot.CLEAR_BILLING_PAT,
 ] as const
 
 // ============================================================
@@ -27,16 +30,12 @@ let usageCache: { result: PremiumUsageResult; timestamp: number } | null = null
 const CACHE_TTL_MS = 30 * 1000 // 30 seconds
 
 async function fetchPremiumUsage(): Promise<PremiumUsageResult> {
-  // Read PAT from config file or env var
+  // Read PAT from env var or secure credential store (never plaintext file)
   let pat = process.env.GITHUB_BILLING_PAT
-  try {
-    const os = await import('os')
-    const fs = await import('fs')
-    const path = await import('path')
-    const configPath = path.join(os.homedir(), '.craft-agent', 'github-billing.json')
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
-    if (!pat) pat = config.pat
-  } catch { /* file doesn't exist or is invalid */ }
+  if (!pat) {
+    const manager = getCredentialManager()
+    pat = await manager.getLlmApiKey('__copilot-billing') ?? undefined
+  }
   if (!pat) {
     return { used: 0, limit: 0, percentRemaining: 100, resetDate: '', error: 'No GitHub billing PAT configured' }
   }
@@ -48,7 +47,10 @@ async function fetchPremiumUsage(): Promise<PremiumUsageResult> {
   }
 
   try {
-    // Use the same internal API that VS Code uses — returns exact quota snapshots
+    // WARNING: This is an undocumented internal GitHub API (used by VS Code's Copilot
+    // extension). There is no public/stable alternative for fetching premium quota
+    // snapshots. It could break without notice on any GitHub deployment. Monitor for
+    // unexpected 404/403 responses and be prepared to adapt if the endpoint changes.
     const res = await fetch('https://api.github.com/copilot_internal/user', { headers })
     if (!res.ok) {
       return { used: 0, limit: 0, percentRemaining: 100, resetDate: '', error: `Copilot API error: ${res.status}` }
@@ -106,6 +108,22 @@ export function registerSettingsGuiHandlers(server: RpcServer, _deps: HandlerDep
       usageCache = { result, timestamp: Date.now() }
     }
     return result
+  })
+
+  // Store GitHub billing PAT securely (AES-256-GCM via CredentialManager)
+  server.handle(RPC_CHANNELS.copilot.SET_BILLING_PAT, async (_ctx, pat: string) => {
+    const manager = getCredentialManager()
+    await manager.setLlmApiKey('__copilot-billing', pat)
+    usageCache = null // Invalidate cache so next fetch uses the new PAT
+    return { success: true }
+  })
+
+  // Remove GitHub billing PAT from credential store
+  server.handle(RPC_CHANNELS.copilot.CLEAR_BILLING_PAT, async () => {
+    const manager = getCredentialManager()
+    await manager.deleteLlmApiKey('__copilot-billing')
+    usageCache = null
+    return { success: true }
   })
 
   // Set keep awake while running setting (requires Electron power-manager)
