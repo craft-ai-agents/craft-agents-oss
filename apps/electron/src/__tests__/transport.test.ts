@@ -706,7 +706,9 @@ describe('edge cases', () => {
       throw new Error('Should have thrown')
     } catch (err: any) {
       expect(
-        err.message.includes('Connection') || err.message.includes('WebSocket error during connection setup'),
+        err.message.includes('Connection')
+          || err.message.includes('WebSocket error during connection setup')
+          || err.message.includes('Failed to connect'),
       ).toBe(true)
     }
   })

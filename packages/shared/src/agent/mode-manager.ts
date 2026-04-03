@@ -2011,6 +2011,10 @@ export function shouldAllowToolInMode(
 
     // Handle session-scoped tools - derive safe-mode behavior from canonical session-tools-core metadata
     if (toolName.startsWith('mcp__session__')) {
+      if (toolName === 'mcp__session__send_developer_feedback') {
+        return { allowed: true };
+      }
+
       const safeAllowedSessionTools = getSessionSafeAllowedToolNames({
         prefix: 'mcp__session__',
         includeDeveloperFeedback: FEATURE_FLAGS.developerFeedback,
