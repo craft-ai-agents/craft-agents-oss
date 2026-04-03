@@ -28,6 +28,7 @@ import {
 } from './storage'
 import { type PluginManifestLoadFailure, loadPluginManifestsFromDirectory } from './loader'
 import { PluginBridgeRuntime, type ExternalPluginPackage } from './bridge-runtime'
+import { prepareHermesPluginBackendRegistration } from './hermes-runtime'
 
 export const PLUGIN_API_VERSION = '1.0.0'
 
@@ -311,11 +312,22 @@ export class PluginHost {
       }
       const { helperPath } = await this.bridgeRuntime.activate(packageInfo)
       if (helperPath) {
-        const registrations = (plugin.contributions.backends ?? []).map<ExternalPluginBackendRegistration>((backendId) => ({
-          backendId,
-          pluginId: plugin.id,
-          helperPath,
-          helperRuntimePath: this.helperRuntimePath,
+        const registrations = await Promise.all((plugin.contributions.backends ?? []).map(async (backendId) => {
+          if (backendId === 'hermes') {
+            return prepareHermesPluginBackendRegistration({
+              backendId,
+              pluginId: plugin.id,
+              helperPath,
+              helperRuntimePath: this.helperRuntimePath,
+            })
+          }
+
+          return {
+            backendId,
+            pluginId: plugin.id,
+            helperPath,
+            helperRuntimePath: this.helperRuntimePath,
+          } satisfies ExternalPluginBackendRegistration
         }))
 
         for (const registration of registrations) {

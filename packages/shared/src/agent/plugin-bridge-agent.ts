@@ -48,10 +48,12 @@ export class BridgePluginAgent extends BaseAgent {
   private lastStderr = ''
   private abortReason?: AbortReason
   private readonly pluginRuntime: PluginBridgeRuntimeConfig
+  private bridgeSessionId: string | null
 
   constructor(config: BackendConfig) {
     super(config, config.model || 'gpt-5.4')
     this._supportsBranching = false
+    this.bridgeSessionId = config.session?.sdkSessionId || null
 
     const runtime = config.runtime?.pluginBridge as PluginBridgeRuntimeConfig | undefined
     if (!runtime?.helperPath) {
@@ -91,6 +93,7 @@ export class BridgePluginAgent extends BaseAgent {
       model: this.getModel(),
       sessionId: this.getSessionId(),
       permissionMode: this.getPermissionMode(),
+      recoveryMessages: this.config.getRecoveryMessages?.() ?? [],
     })
 
     yield* this.eventQueue.drain()
@@ -164,6 +167,14 @@ export class BridgePluginAgent extends BaseAgent {
     this.pendingMiniCompletions.clear()
 
     super.destroy()
+  }
+
+  override getSessionId(): string | null {
+    return this.bridgeSessionId
+  }
+
+  override setSessionId(sessionId: string | null): void {
+    this.bridgeSessionId = sessionId
   }
 
   private async ensureSubprocess(): Promise<void> {

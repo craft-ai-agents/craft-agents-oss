@@ -3,6 +3,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
+import { getExternalPluginBackend } from '@craft-agent/shared/agent/backend'
 import { bootstrapPluginHost } from '../bootstrap'
 import { PluginHost } from '../host'
 import {
@@ -432,5 +433,43 @@ describe('PluginHost', () => {
     expect(plugins.map((plugin) => plugin.id)).toContain('external.codex-cli')
     expect(host.listCapabilities('backend').map((capability) => capability.id)).toContain('codex-cli')
     expect(plugins.find((plugin) => plugin.id === 'external.codex-cli')?.status).toBe('active')
+  })
+
+  it('loads and activates the real hermes plugin package with managed runtime defaults', async () => {
+    const pluginStatePath = join(tempRoot, 'plugin-state.json')
+    const previousHermesHome = process.env.CRAFT_HERMES_HOME
+    process.env.CRAFT_HERMES_HOME = join(tempRoot, 'hermes-home')
+
+    await writePluginState({
+      plugins: {
+        'external.hermes': { enabled: true, status: 'active' },
+      },
+    }, pluginStatePath)
+
+    try {
+      const host = new PluginHost({
+        appVersion: '0.8.1',
+        pluginDirectory: realPluginDirectory,
+        pluginStatePath,
+        helperRuntimePath: '/opt/homebrew/bin/node',
+      })
+      await host.initialize()
+
+      const plugins = await host.loadExternalPlugins()
+      const registration = getExternalPluginBackend('hermes')
+
+      expect(plugins.map((plugin) => plugin.id)).toContain('external.hermes')
+      expect(host.listCapabilities('backend').map((capability) => capability.id)).toContain('hermes')
+      expect(plugins.find((plugin) => plugin.id === 'external.hermes')?.status).toBe('active')
+      expect(registration?.envOverrides?.CRAFT_HERMES_MODE).toBe('managed')
+      expect(registration?.envOverrides?.CRAFT_HERMES_TRANSPORT).toBe('api')
+      expect(registration?.supportsBranching).toBe(false)
+    } finally {
+      if (previousHermesHome === undefined) {
+        delete process.env.CRAFT_HERMES_HOME
+      } else {
+        process.env.CRAFT_HERMES_HOME = previousHermesHome
+      }
+    }
   })
 })

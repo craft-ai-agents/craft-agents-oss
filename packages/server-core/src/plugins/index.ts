@@ -1,6 +1,7 @@
 export * from './bootstrap'
 export * from './bridge-runtime'
 export * from './host'
+export * from './hermes-runtime'
 export * from './loader'
 export * from './registry'
 export * from './storage'

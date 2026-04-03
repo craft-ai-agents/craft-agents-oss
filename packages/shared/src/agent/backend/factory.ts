@@ -75,6 +75,7 @@ export interface ExternalPluginBackendRegistration {
   defaultModel?: string
   supportsBranching?: boolean
   needsHttpPoolServer?: boolean
+  envOverrides?: Record<string, string>
 }
 
 const EXTERNAL_PLUGIN_BACKENDS = new Map<string, ExternalPluginBackendRegistration>()
@@ -147,7 +148,10 @@ export function createExternalPluginBackend(args: {
     debugMode: args.coreConfig.debugMode,
     systemPromptPreset: args.coreConfig.systemPromptPreset,
     automationSystem: args.coreConfig.automationSystem,
-    envOverrides: args.coreConfig.envOverrides,
+    envOverrides: {
+      ...definition.envOverrides,
+      ...args.coreConfig.envOverrides,
+    },
     mcpPool: args.coreConfig.mcpPool,
     poolServerUrl: args.coreConfig.poolServerUrl,
     onSdkSessionIdUpdate: args.coreConfig.onSdkSessionIdUpdate,
@@ -731,11 +735,13 @@ export const BACKEND_CAPABILITIES: Record<AgentProvider, {
 
 export function getExternalBackendCapabilities(backendId: string): {
   needsHttpPoolServer: boolean
+  supportsBranching: boolean
 } | undefined {
   const definition = getExternalPluginBackend(backendId)
   if (!definition) return undefined
   return {
     needsHttpPoolServer: definition.needsHttpPoolServer ?? false,
+    supportsBranching: definition.supportsBranching ?? false,
   }
 }
 

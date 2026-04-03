@@ -81,6 +81,27 @@ describe('resolveSessionBackendTarget', () => {
     expect(target.capabilities.needsHttpPoolServer).toBe(true)
   })
 
+  it('resolves hermes as a normal external backend target', () => {
+    clearExternalPluginBackendsForTests()
+    registerExternalPluginBackend({
+      backendId: 'hermes',
+      pluginId: 'external.hermes',
+      helperPath: '/tmp/hermes-helper.mjs',
+      supportsBranching: false,
+    })
+
+    const target = resolveSessionBackendTarget({
+      backendId: 'hermes',
+    })
+
+    expect(target.kind).toBe('external')
+    if (target.kind !== 'external') {
+      throw new Error('Expected an external backend target')
+    }
+    expect(target.backendId).toBe('hermes')
+    expect(target.capabilities.supportsBranching).toBe(false)
+  })
+
   it('rejects mixing external plugin backends with llm connections', () => {
     clearExternalPluginBackendsForTests()
     registerExternalPluginBackend({

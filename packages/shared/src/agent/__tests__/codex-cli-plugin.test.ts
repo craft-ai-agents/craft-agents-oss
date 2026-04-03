@@ -121,7 +121,7 @@ printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens
       { type: 'text_complete', text: 'done' },
       { type: 'complete' },
     ])
-    expect(agent.getSessionId()).toBe('session-1')
+    expect(agent.getSessionId()).toBe('thread-new')
     await expect(agent.runMiniCompletion('mini prompt')).resolves.toBe('mini result')
 
     agent.destroy()

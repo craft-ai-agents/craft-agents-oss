@@ -997,7 +997,7 @@ type SessionBackendTarget =
     backendId: string
     definition: NonNullable<ReturnType<typeof getExternalPluginBackend>>
     resolvedModel?: string
-    capabilities: { needsHttpPoolServer: boolean }
+    capabilities: { needsHttpPoolServer: boolean; supportsBranching: boolean }
     supportsBranching: boolean
   }
 
@@ -1024,6 +1024,7 @@ export function resolveSessionBackendTarget(args: {
       resolvedModel: args.model || externalDefinition.defaultModel,
       capabilities: getExternalBackendCapabilities(externalDefinition.backendId) ?? {
         needsHttpPoolServer: false,
+        supportsBranching: false,
       },
       supportsBranching: externalDefinition.supportsBranching ?? false,
     }

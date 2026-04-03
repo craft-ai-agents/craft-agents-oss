@@ -1,0 +1,35 @@
+{
+  "id": "external.hermes",
+  "name": "Hermes",
+  "version": "1.0.0",
+  "apiVersion": "1.0.0",
+  "description": "External backend plugin that runs Hermes through the Craft Agents bridge runtime.",
+  "author": "OpenAI",
+  "engines": {
+    "craftAgents": "*"
+  },
+  "permissions": [
+    "network",
+    "filesystem",
+    "session.read",
+    "session.write",
+    "tools.invoke"
+  ],
+  "entrypoints": {
+    "main": "main.mjs"
+  },
+  "contributions": {
+    "backends": [
+      "hermes"
+    ]
+  },
+  "capabilityMetadata": {
+    "backends": {
+      "hermes": {
+        "title": "Hermes",
+        "description": "Runs a Craft session through Hermes gateway with API-first transport and CLI fallback for diagnostics.",
+        "hook": "backend.registry"
+      }
+    }
+  }
+}
