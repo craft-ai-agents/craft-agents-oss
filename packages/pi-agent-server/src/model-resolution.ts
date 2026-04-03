@@ -41,9 +41,41 @@ export function resolvePiModel(
       }
       return exact;
     }
+
+    // Model not found in the static catalog for this provider.
+    //
+    // Synthesize a model entry using a same-provider template rather than
+    // falling through to the getAll() scan below, which might match the model
+    // under a DIFFERENT provider (e.g. "gpt-5.4" exists under both
+    // "github-copilot" in newer pi-ai versions AND "azure-openai-responses" in
+    // older ones). If the pi-agent-server bundles an older pi-ai than the main
+    // process, getAll() would wrongly pick "azure-openai-responses" → runtime
+    // error: "No API key found for azure-openai-responses".
+    //
+    // By synthesizing from a same-provider template we ensure the correct
+    // API type, baseUrl, and auth headers are used regardless of SDK version skew.
+    const allModels = modelRegistry.getAll();
+
+    // Look up the model across all providers to get an API-type hint.
+    const anyMatch = allModels.find(m => m.id === bareId || m.name === bareId);
+    const targetApi = anyMatch?.api;
+
+    // Prefer a template with the same API type (e.g. openai-responses vs anthropic-messages).
+    const sameProviderTemplate = targetApi
+      ? (allModels.find(m => m.provider === piAuthProvider && m.api === targetApi)
+         ?? allModels.find(m => m.provider === piAuthProvider))
+      : allModels.find(m => m.provider === piAuthProvider);
+
+    if (sameProviderTemplate) {
+      return {
+        ...sameProviderTemplate,
+        id: bareId,
+        name: anyMatch?.name ?? bareId,
+      };
+    }
   }
 
-  // Fallback: search all available models
+  // Fallback: search all available models (only reached when piAuthProvider is unset)
   const allModels = modelRegistry.getAll();
   const match = allModels.find(m => m.id === bareId || m.name === bareId);
   if (match) return match;

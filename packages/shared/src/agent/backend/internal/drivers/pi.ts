@@ -102,6 +102,17 @@ async function listModelsViaHttp(
 /** Model ID prefixes to exclude — legacy models that clutter the selector. */
 const EXCLUDED_MODEL_PREFIXES = ['gpt-4', 'gpt-3.5'];
 
+/**
+ * Models always surfaced for GitHub Copilot regardless of the /models API response.
+ * These are special routing/meta models that may lack a `policy` field.
+ */
+const COPILOT_BUILTIN_MODELS: RawCopilotModel[] = [
+  // "Auto" lets Copilot pick the best model per request and gives a 10%
+  // discount on premium-request usage. It is a first-class option in VS Code
+  // but may not appear in the /models endpoint with a standard policy state.
+  { id: 'auto', name: 'Auto' },
+];
+
 /** Filter raw models to only those explicitly enabled by policy, excluding legacy models. */
 function filterEnabledModels(models: RawCopilotModel[]): RawCopilotModel[] {
   return models.filter(m =>
@@ -159,7 +170,12 @@ async function fetchCopilotModels(
       logModelBreakdown('tier1-httpApi', raw);
       const enabled = filterEnabledModels(raw);
       if (enabled.length > 0) {
-        return toModelDefinitions(enabled);
+        // Prepend builtin models that aren't already in the API response.
+        const merged = [
+          ...COPILOT_BUILTIN_MODELS.filter(b => !enabled.some(m => m.id === b.id)),
+          ...enabled,
+        ];
+        return toModelDefinitions(merged);
       }
       // All models disabled by policy — unusual but possible.
       // Log it clearly and fall through to static catalog.
