@@ -409,7 +409,12 @@ export function FreeFormInput({
       try {
         const result = await window.electronAPI.getCopilotPremiumUsage()
         if (!cancelled) setCopilotUsage(result)
-      } catch { /* silently fail */ }
+      } catch (err) {
+        if (!cancelled) setCopilotUsage({
+          used: 0, limit: 0, percentRemaining: 100, resetDate: '',
+          error: err instanceof Error ? err.message : 'Failed to fetch usage',
+        })
+      }
     }
     fetchUsage()
     const interval = setInterval(fetchUsage, 60 * 1000) // poll every 60s
@@ -1815,7 +1820,7 @@ export function FreeFormInput({
                                 <div>Premium requests: {copilotUsage.used} of {copilotUsage.limit} used ({Math.round(100 - copilotUsage.percentRemaining)}%)</div>
                                 {copilotUsage.plan && <div className="text-muted-foreground capitalize">Plan: Copilot {copilotUsage.plan}</div>}
                                 {copilotUsage.overageEnabled && <div className="text-muted-foreground">Overages enabled</div>}
-                                {copilotUsage.resetDate && <div className="text-muted-foreground">Resets {new Date(copilotUsage.resetDate).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}</div>}
+                                {copilotUsage.resetDate && <div className="text-muted-foreground">Resets {new Date(copilotUsage.resetDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>}
                               </div>
                             </TooltipContent>
                           </Tooltip>
@@ -1839,8 +1844,18 @@ export function FreeFormInput({
                                   const input = (e.currentTarget.elements.namedItem('pat') as HTMLInputElement)
                                   const pat = input.value.trim()
                                   if (!pat) return
-                                  await window.electronAPI.setCopilotBillingPat(pat)
-                                  input.value = ''
+                                  try {
+                                    const result = await window.electronAPI.setCopilotBillingPat(pat)
+                                    if (!result.success) {
+                                      toast.error(result.error ?? 'Failed to save GitHub PAT')
+                                      return
+                                    }
+                                    input.value = ''
+                                    toast.success('GitHub PAT saved')
+                                    setCopilotUsageRefreshKey(k => k + 1) // trigger immediate usage refresh
+                                  } catch (err) {
+                                    toast.error(err instanceof Error ? err.message : 'Failed to save GitHub PAT')
+                                  }
                                 }}
                               >
                                 <input
