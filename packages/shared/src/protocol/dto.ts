@@ -501,6 +501,10 @@ export interface WorkspaceSettings {
   localMcpEnabled?: boolean
   defaultLlmConnection?: string
   enabledSourceSlugs?: string[]
+  // Secondary Model: per-workspace overrides for call_llm tool calls
+  callLlmConnection?: string
+  callLlmModel?: string
+  callLlmThinkingLevel?: ThinkingLevel
 }
 
 // ---------------------------------------------------------------------------

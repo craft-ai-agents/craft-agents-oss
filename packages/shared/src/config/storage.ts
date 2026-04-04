@@ -54,6 +54,11 @@ export interface StoredConfig {
   defaultLlmConnection?: string;  // Slug of default connection for new sessions
   defaultThinkingLevel?: ThinkingLevel;  // App-level default thinking level for new sessions
 
+  // Secondary Model: app-level defaults for call_llm tool calls
+  callLlmConnection?: string;       // Slug of connection for call_llm (undefined = use session's connection)
+  callLlmModel?: string;            // Model ID for call_llm (undefined = auto-select fast model)
+  callLlmThinkingLevel?: ThinkingLevel;  // Thinking level for call_llm (undefined = let agent decide)
+
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   activeSessionId: string | null;  // Currently active session (primary scope)
@@ -2557,6 +2562,89 @@ export function setDefaultThinkingLevel(level: ThinkingLevel): boolean {
   if (!config) return false;
 
   config.defaultThinkingLevel = level;
+  saveConfig(config);
+  return true;
+}
+
+// ============================================
+// Secondary Model (call_llm) Settings
+// ============================================
+
+/**
+ * Get the app-level call_llm connection override.
+ * Returns undefined when unset (= use session's connection).
+ */
+export function getCallLlmConnection(): string | undefined {
+  const config = loadStoredConfig();
+  return config?.callLlmConnection ?? undefined;
+}
+
+/**
+ * Set the app-level call_llm connection override.
+ * Pass undefined to clear (revert to auto behavior).
+ */
+export function setCallLlmConnection(slug: string | undefined): boolean {
+  const config = loadStoredConfig();
+  if (!config) return false;
+
+  if (slug) {
+    config.callLlmConnection = slug;
+  } else {
+    delete config.callLlmConnection;
+  }
+  saveConfig(config);
+  return true;
+}
+
+/**
+ * Get the app-level call_llm model override.
+ * Returns undefined when unset (= auto-select fast model).
+ */
+export function getCallLlmModel(): string | undefined {
+  const config = loadStoredConfig();
+  return config?.callLlmModel ?? undefined;
+}
+
+/**
+ * Set the app-level call_llm model override.
+ * Pass undefined to clear (revert to auto behavior).
+ */
+export function setCallLlmModel(model: string | undefined): boolean {
+  const config = loadStoredConfig();
+  if (!config) return false;
+
+  if (model) {
+    config.callLlmModel = model;
+  } else {
+    delete config.callLlmModel;
+  }
+  saveConfig(config);
+  return true;
+}
+
+/**
+ * Get the app-level call_llm thinking level override.
+ * Returns undefined when unset (= let agent decide).
+ */
+export function getCallLlmThinkingLevel(): ThinkingLevel | undefined {
+  const config = loadStoredConfig();
+  if (!config?.callLlmThinkingLevel) return undefined;
+  return normalizeThinkingLevel(config.callLlmThinkingLevel) ?? undefined;
+}
+
+/**
+ * Set the app-level call_llm thinking level override.
+ * Pass undefined to clear (revert to auto behavior).
+ */
+export function setCallLlmThinkingLevel(level: ThinkingLevel | undefined): boolean {
+  const config = loadStoredConfig();
+  if (!config) return false;
+
+  if (level) {
+    config.callLlmThinkingLevel = level;
+  } else {
+    delete config.callLlmThinkingLevel;
+  }
   saveConfig(config);
   return true;
 }
