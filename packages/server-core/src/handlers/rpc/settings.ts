@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel } from '@craft-agent/shared/config'
+import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel, getCallLlmConnection, setCallLlmConnection, getCallLlmModel, setCallLlmModel, getCallLlmThinkingLevel, setCallLlmThinkingLevel } from '@craft-agent/shared/config'
 import { isValidThinkingLevel, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { getWorkspaceOrThrow } from '@craft-agent/server-core/handlers'
 import type { RpcServer } from '@craft-agent/server-core/transport'
@@ -35,6 +35,10 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sessions.SET_MODEL,
   RPC_CHANNELS.settings.GET_DEFAULT_THINKING_LEVEL,
   RPC_CHANNELS.settings.SET_DEFAULT_THINKING_LEVEL,
+  RPC_CHANNELS.settings.GET_CALL_LLM_SETTINGS,
+  RPC_CHANNELS.settings.SET_CALL_LLM_CONNECTION,
+  RPC_CHANNELS.settings.SET_CALL_LLM_MODEL,
+  RPC_CHANNELS.settings.SET_CALL_LLM_THINKING_LEVEL,
   RPC_CHANNELS.tools.GET_BROWSER_TOOL_ENABLED,
   RPC_CHANNELS.tools.SET_BROWSER_TOOL_ENABLED,
   RPC_CHANNELS.settings.GET_NETWORK_PROXY,
@@ -57,6 +61,49 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     const success = setDefaultThinkingLevel(level)
     if (!success) {
       throw new Error('Failed to persist default thinking level')
+    }
+  })
+
+  // ============================================================
+  // Settings - Secondary Model (call_llm overrides, App-Level)
+  // ============================================================
+
+  server.handle(RPC_CHANNELS.settings.GET_CALL_LLM_SETTINGS, async () => {
+    return {
+      connection: getCallLlmConnection(),
+      model: getCallLlmModel(),
+      thinkingLevel: getCallLlmThinkingLevel(),
+    }
+  })
+
+  server.handle(RPC_CHANNELS.settings.SET_CALL_LLM_CONNECTION, async (_ctx, slug: string | null) => {
+    if (slug) {
+      // Validate connection exists
+      const { getLlmConnection } = await import('@craft-agent/shared/config/storage')
+      if (!getLlmConnection(slug)) {
+        throw new Error(`LLM connection "${slug}" not found`)
+      }
+    }
+    const success = setCallLlmConnection(slug ?? undefined)
+    if (!success) {
+      throw new Error('Failed to persist call_llm connection setting')
+    }
+  })
+
+  server.handle(RPC_CHANNELS.settings.SET_CALL_LLM_MODEL, async (_ctx, model: string | null) => {
+    const success = setCallLlmModel(model ?? undefined)
+    if (!success) {
+      throw new Error('Failed to persist call_llm model setting')
+    }
+  })
+
+  server.handle(RPC_CHANNELS.settings.SET_CALL_LLM_THINKING_LEVEL, async (_ctx, level: string | null) => {
+    if (level && !isValidThinkingLevel(level)) {
+      throw new Error(`Invalid thinking level: ${level}. Valid values: 'off', 'low', 'medium', 'high', 'max'`)
+    }
+    const success = setCallLlmThinkingLevel(level && isValidThinkingLevel(level) ? level : undefined)
+    if (!success) {
+      throw new Error('Failed to persist call_llm thinking level setting')
     }
   })
 

@@ -623,6 +623,12 @@ export interface ElectronAPI {
   setDefaultThinkingLevel(level: ThinkingLevel): Promise<{ success: boolean; error?: string }>
   setWorkspaceDefaultLlmConnection(workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }>
 
+  // Secondary Model (call_llm overrides)
+  getCallLlmSettings(): Promise<{ connection?: string; model?: string; thinkingLevel?: string }>
+  setCallLlmConnection(slug: string | null): Promise<{ success: boolean; error?: string }>
+  setCallLlmModel(model: string | null): Promise<{ success: boolean; error?: string }>
+  setCallLlmThinkingLevel(level: string | null): Promise<{ success: boolean; error?: string }>
+
   // Automations
   getAutomations(workspaceId: string): Promise<unknown>
 

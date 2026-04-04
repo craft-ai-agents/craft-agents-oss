@@ -363,6 +363,12 @@ export const CHANNEL_MAP = {
   setDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_DEFAULT),
   setWorkspaceDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT),
 
+  // Secondary Model (call_llm overrides)
+  getCallLlmSettings: invoke(RPC_CHANNELS.settings.GET_CALL_LLM_SETTINGS),
+  setCallLlmConnection: invoke(RPC_CHANNELS.settings.SET_CALL_LLM_CONNECTION),
+  setCallLlmModel: invoke(RPC_CHANNELS.settings.SET_CALL_LLM_MODEL),
+  setCallLlmThinkingLevel: invoke(RPC_CHANNELS.settings.SET_CALL_LLM_THINKING_LEVEL),
+
   // Automations
   getAutomations: invoke(RPC_CHANNELS.automations.GET),
   testAutomation: invoke(RPC_CHANNELS.automations.TEST),
