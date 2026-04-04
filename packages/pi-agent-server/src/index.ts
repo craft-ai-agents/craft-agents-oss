@@ -94,6 +94,8 @@ interface InitMessage {
   workingDirectory: string;
   plansFolderPath: string;
   miniModel?: string;
+  callLlmModelOverride?: string;
+  callLlmThinkingLevel?: string;
   agentDir?: string;
   providerType?: string;
   authType?: string;
@@ -895,11 +897,10 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
 
   debugLog('[queryLlm] Starting');
 
-  // Pick mini model. If the configured miniModel uses a different provider than
-  // what the user authenticated with (e.g. gemini-2.5-pro when only anthropic
-  // credentials exist), fall back to the default summarization model which uses
-  // the same provider family.
-  let model = request.model ?? initConfig.miniModel ?? getDefaultSummarizationModel();
+  // Pick mini model. If callLlmModelOverride is set, it takes priority.
+  // If the configured miniModel uses a different provider than what the user
+  // authenticated with, fall back to the default summarization model.
+  let model = initConfig.callLlmModelOverride ?? request.model ?? initConfig.miniModel ?? getDefaultSummarizationModel();
 
   // Create authenticated registry upfront — used by both the provider guard and the ephemeral session.
   const { authStorage, modelRegistry } = createAuthenticatedRegistry();

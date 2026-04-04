@@ -18,7 +18,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars } from '@craft-agent/shared/config'
+import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, getCallLlmModel, getCallLlmThinkingLevel } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
@@ -2663,6 +2663,15 @@ export class SessionManager implements ISessionManager {
 
       // Per-session env overrides
       const miniModel = connection ? (getMiniModel(connection) ?? connection.defaultModel) : undefined
+
+      // Resolve Secondary Model (call_llm) overrides: workspace config → app-level → unset
+      const callLlmModelOverride = workspaceConfig?.defaults?.callLlmModel
+        ?? getCallLlmModel()
+        ?? undefined
+      const callLlmThinkingLevel = workspaceConfig?.defaults?.callLlmThinkingLevel
+        ?? getCallLlmThinkingLevel()
+        ?? undefined
+
       const envOverrides: Record<string, string> = {
         CRAFT_WORKSPACE_PATH: managed.workspace.rootPath,
         // Pass mini model to SDK subprocess so built-in tools like WebFetch
@@ -2787,6 +2796,8 @@ export class SessionManager implements ISessionManager {
         coreConfig: {
         workspace: managed.workspace,
         miniModel,
+        callLlmModelOverride,
+        callLlmThinkingLevel,
         thinkingLevel: managed.thinkingLevel,
         session: sessionConfig,
         onSdkSessionIdUpdate,

@@ -166,6 +166,13 @@ export interface CoreBackendConfig {
   /** Mini/utility model for summarization/title generation/mini-completions */
   miniModel?: string;
 
+  /** Secondary Model (call_llm) override: connection slug */
+  callLlmConnectionSlug?: string;
+  /** Secondary Model (call_llm) override: force this model for all call_llm calls */
+  callLlmModelOverride?: string;
+  /** Secondary Model (call_llm) override: force this thinking level for call_llm */
+  callLlmThinkingLevel?: string;
+
   /** Initial thinking level */
   thinkingLevel?: ThinkingLevel;
 

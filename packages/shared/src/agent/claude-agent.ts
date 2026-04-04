@@ -196,6 +196,10 @@ export interface ClaudeAgentConfig {
   envOverrides?: Record<string, string>;
   /** Mini/utility model for summarization, title generation, and mini completions. */
   miniModel?: string;
+  /** Secondary Model (call_llm) override: model ID */
+  callLlmModelOverride?: string;
+  /** Secondary Model (call_llm) override: thinking level */
+  callLlmThinkingLevel?: ThinkingLevel;
   /** Centralized MCP client pool for source tool execution. */
   mcpPool?: McpClientPool;
   /** LLM connection slug for credential lookup in postInit(). */
@@ -558,6 +562,8 @@ export class ClaudeAgent extends BaseAgent {
       markTransferredSessionSummaryApplied: config.markTransferredSessionSummaryApplied,
       envOverrides: config.envOverrides,
       miniModel: config.miniModel,
+      callLlmModelOverride: config.callLlmModelOverride,
+      callLlmThinkingLevel: config.callLlmThinkingLevel,
       mcpPool: config.mcpPool,
       connectionSlug: config.connectionSlug,
       automationSystem: config.automationSystem,
@@ -840,7 +846,10 @@ export class ClaudeAgent extends BaseAgent {
       // Build full MCP servers set first, then filter for mini agents
       const fullMcpServers: Options['mcpServers'] = {
         // Session-scoped tools (SubmitPlan, source_test, update_user_preferences, transform_data, etc.)
-        session: getSessionScopedTools(sessionId, this.workspaceRootPath),
+        session: getSessionScopedTools(sessionId, this.workspaceRootPath, undefined, {
+          callLlmModelOverride: this.config.callLlmModelOverride,
+          callLlmThinkingLevelOverride: this.config.callLlmThinkingLevel,
+        }),
         // Craft Agents documentation - always available for searching setup guides
         // This is a public Mintlify MCP server, no auth needed
         'craft-agents-docs': {

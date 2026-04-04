@@ -248,6 +248,9 @@ export class PiAgent extends BaseAgent {
     if (config.miniModel) {
       this.adapter.setMiniModel(config.miniModel);
     }
+    if (config.callLlmModelOverride || config.miniModel) {
+      this.adapter.setMiniModel(config.callLlmModelOverride ?? config.miniModel);
+    }
 
     // Set session dir on adapter for concurrent-safe toolMetadataStore lookups
     if (config.session?.id && config.workspace.rootPath) {
@@ -422,6 +425,8 @@ export class PiAgent extends BaseAgent {
       workingDirectory,
       plansFolderPath,
       miniModel: this.config.miniModel,
+      callLlmModelOverride: this.config.callLlmModelOverride,
+      callLlmThinkingLevel: this.config.callLlmThinkingLevel,
       providerType: this.config.providerType,
       authType: this.config.authType,
       workspaceId: this.config.workspace.id,
@@ -455,10 +460,14 @@ export class PiAgent extends BaseAgent {
     const sessionToolDefs = getSessionToolProxyDefs();
 
     // Patch call_llm description with provider-specific model hint
-    if (this.config.miniModel) {
+    if (this.config.callLlmModelOverride || this.config.miniModel) {
       const callLlmDef = sessionToolDefs.find(d => d.name === 'mcp__session__call_llm');
       if (callLlmDef) {
-        callLlmDef.description += `\n\nDefault fast model for this session: ${this.config.miniModel}. Omit the model parameter to use it automatically.`;
+        if (this.config.callLlmModelOverride) {
+          callLlmDef.description += `\n\nSecondary model override is configured: ${this.config.callLlmModelOverride}. The model parameter is ignored — all call_llm calls use this model.`;
+        } else {
+          callLlmDef.description += `\n\nDefault fast model for this session: ${this.config.miniModel}. Omit the model parameter to use it automatically.`;
+        }
       }
     }
 
