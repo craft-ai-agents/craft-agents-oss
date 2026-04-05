@@ -961,6 +961,16 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
   const runQueryWithModel = async (modelId: string): Promise<string> => {
     debugLog(`[queryLlm] Using model: ${modelId}`);
 
+    // Resolve thinking level for ephemeral session.
+    // - Default to 'off' to prevent reasoning models (e.g. gemini-3-flash-preview,
+    //   claude reasoning models) from producing only thinking blocks with empty text.
+    // - Honour callLlmThinkingLevel when explicitly configured.
+    const callLlmThinkingLevelRaw = initConfig.callLlmThinkingLevel;
+    const ephemeralThinkingLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' =
+      callLlmThinkingLevelRaw && callLlmThinkingLevelRaw in THINKING_TO_PI
+        ? THINKING_TO_PI[callLlmThinkingLevelRaw as keyof typeof THINKING_TO_PI] as any
+        : 'off';
+
     // Create minimal ephemeral session
     const ephemeralOptions: CreateAgentSessionOptions = {
       cwd: resolvedCwd(),
@@ -968,6 +978,7 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
       modelRegistry,
       tools: [],
       sessionManager: PiSessionManager.inMemory(),
+      thinkingLevel: ephemeralThinkingLevel,
     };
 
     // Resolve model
@@ -1030,10 +1041,20 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
         if (typeof msg.content === 'string') {
           result = msg.content;
         } else if (Array.isArray(msg.content)) {
-          result = msg.content
+          // Prefer text blocks; fall back to thinking blocks for reasoning models
+          // where callLlmThinkingLevel is enabled and the answer is inside thinking.
+          const textParts = msg.content
             .filter((c) => c.type === 'text' && c.text)
-            .map((c) => c.text!)
-            .join('');
+            .map((c) => c.text!);
+          if (textParts.length > 0) {
+            result = textParts.join('');
+          } else {
+            // Fallback: collect thinking content (reasoning models with thinking enabled)
+            result = msg.content
+              .filter((c) => (c.type === 'thinking' || c.type === 'reasoning') && (c as any).text)
+              .map((c) => (c as any).text!)
+              .join('');
+          }
         }
       }
       if (event.type === 'agent_end') {
