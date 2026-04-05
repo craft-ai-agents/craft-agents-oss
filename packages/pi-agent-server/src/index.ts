@@ -17,7 +17,7 @@
 import http from 'node:http';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
-import { mkdirSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { mkdirSync, readdirSync, statSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 
 // Pi SDK
@@ -1016,12 +1016,20 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
     // Collect response text and errors from events
     let result = '';
     let lastError = '';
+    const diagEvents: string[] = [];
+    const allEvents: Array<{ type: string; raw: string }> = [];
     let completionResolve: () => void;
     const completionPromise = new Promise<void>((resolve) => {
       completionResolve = resolve;
     });
 
     const unsub = ephemeralSession.subscribe((event: AgentSessionEvent) => {
+      // Capture ALL events for diagnostics
+      try {
+        const raw = JSON.stringify(event, (_k, v) => typeof v === 'string' && v.length > 500 ? v.slice(0, 500) + '...' : v);
+        allEvents.push({ type: event.type, raw });
+      } catch { allEvents.push({ type: event.type, raw: '(non-serializable)' }); }
+
       if (event.type === 'message_end') {
         // Only capture assistant messages — Pi SDK emits message_end for user messages too
         const msg = event.message as {
@@ -1056,6 +1064,18 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
               .join('');
           }
         }
+
+        // Diagnostic: capture content shape for debugging
+        diagEvents.push(`msg_end role=${msg.role} stopReason=${msg.stopReason ?? 'none'} ` +
+          `contentType=${typeof msg.content} ` +
+          (Array.isArray(msg.content)
+            ? `blocks=[${msg.content.map((c: any) => `${c.type}(${c.text?.length ?? 0})`).join(',')}]`
+            : `len=${(msg.content as string)?.length ?? 0}`));
+      }
+      if (event.type === 'error') {
+        const errMsg = (event as any).message ?? String(event);
+        lastError = lastError || errMsg;
+        diagEvents.push(`error: ${errMsg}`);
       }
       if (event.type === 'agent_end') {
         completionResolve();
