@@ -196,6 +196,8 @@ export interface ClaudeAgentConfig {
   envOverrides?: Record<string, string>;
   /** Mini/utility model for summarization, title generation, and mini completions. */
   miniModel?: string;
+  /** Secondary Model (call_llm) override: connection slug */
+  callLlmConnectionSlug?: string;
   /** Secondary Model (call_llm) override: model ID */
   callLlmModelOverride?: string;
   /** Secondary Model (call_llm) override: thinking level */
@@ -562,6 +564,7 @@ export class ClaudeAgent extends BaseAgent {
       markTransferredSessionSummaryApplied: config.markTransferredSessionSummaryApplied,
       envOverrides: config.envOverrides,
       miniModel: config.miniModel,
+      callLlmConnectionSlug: config.callLlmConnectionSlug,
       callLlmModelOverride: config.callLlmModelOverride,
       callLlmThinkingLevel: config.callLlmThinkingLevel,
       mcpPool: config.mcpPool,

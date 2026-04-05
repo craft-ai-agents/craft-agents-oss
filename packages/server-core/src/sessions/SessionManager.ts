@@ -18,7 +18,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, getCallLlmModel, getCallLlmThinkingLevel } from '@craft-agent/shared/config'
+import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, getCallLlmModel, getCallLlmThinkingLevel, getCallLlmConnection } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
@@ -2665,6 +2665,9 @@ export class SessionManager implements ISessionManager {
       const miniModel = connection ? (getMiniModel(connection) ?? connection.defaultModel) : undefined
 
       // Resolve Secondary Model (call_llm) overrides: workspace config → app-level → unset
+      const callLlmConnectionSlug = workspaceConfig?.defaults?.callLlmConnection
+        ?? getCallLlmConnection()
+        ?? undefined
       const callLlmModelOverride = workspaceConfig?.defaults?.callLlmModel
         ?? getCallLlmModel()
         ?? undefined
@@ -2796,6 +2799,7 @@ export class SessionManager implements ISessionManager {
         coreConfig: {
         workspace: managed.workspace,
         miniModel,
+        callLlmConnectionSlug,
         callLlmModelOverride,
         callLlmThinkingLevel,
         thinkingLevel: managed.thinkingLevel,

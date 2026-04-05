@@ -96,6 +96,7 @@ interface InitMessage {
   miniModel?: string;
   callLlmModelOverride?: string;
   callLlmThinkingLevel?: string;
+  callLlmPiAuth?: { provider: string; credential: PiCredential };
   agentDir?: string;
   providerType?: string;
   authType?: string;
@@ -198,6 +199,8 @@ type OutboundMessage =
 let piSession: AgentSession | null = null;
 let piModelRegistry: PiModelRegistry | null = null;
 let moduleAuthStorage: PiAuthStorage | null = null;
+/** Separate auth storage for the Secondary Model connection (callLlmPiAuth). Refreshed by token_update. */
+let callLlmAuthStorage: PiAuthStorage | null = null;
 let unsubscribeEvents: (() => void) | null = null;
 
 // Init config (set on 'init' message)
@@ -903,7 +906,22 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
   let model = initConfig.callLlmModelOverride ?? request.model ?? initConfig.miniModel ?? getDefaultSummarizationModel();
 
   // Create authenticated registry upfront — used by both the provider guard and the ephemeral session.
-  const { authStorage, modelRegistry } = createAuthenticatedRegistry();
+  let { authStorage, modelRegistry } = createAuthenticatedRegistry();
+
+  // When a secondary connection is configured (callLlmPiAuth), build a separate auth registry
+  // so queryLlm uses the secondary connection's credentials instead of the main session's.
+  const useCallLlmAuth = !!initConfig.callLlmPiAuth;
+  if (useCallLlmAuth) {
+    // Build or reuse the secondary auth storage
+    if (!callLlmAuthStorage) {
+      callLlmAuthStorage = PiAuthStorage.inMemory();
+    }
+    const { provider, credential } = initConfig.callLlmPiAuth!;
+    callLlmAuthStorage.set(provider, credential);
+    debugLog(`[queryLlm] Using secondary connection auth: provider=${provider}`);
+    authStorage = callLlmAuthStorage;
+    modelRegistry = PiModelRegistry.inMemory(callLlmAuthStorage);
+  }
 
   const isModelNotFoundError = (message: string): boolean => {
     const normalized = message.toLowerCase();
@@ -924,15 +942,18 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
   // Pi SDK will fail with "No API key found" if the model requires a different provider.
   // Exception: 'custom-endpoint' provider is always compatible because it has its own
   // API key configured via resolveCustomEndpointApiKey() and doesn't use authStorage.
-  if (initConfig.piAuth) {
-    const authProvider = initConfig.piAuth.provider;
+  // When callLlmPiAuth is active, use the secondary connection's provider instead.
+  const activeProvider = useCallLlmAuth
+    ? initConfig.callLlmPiAuth?.provider
+    : initConfig.piAuth?.provider;
+  if (activeProvider) {
     const bareModel = model.startsWith('pi/') ? model.slice(3) : model;
-    const resolved = resolvePiModel(modelRegistry, bareModel, authProvider, shouldPreferCustomEndpoint());
+    const resolved = resolvePiModel(modelRegistry, bareModel, activeProvider, shouldPreferCustomEndpoint());
     const resolvedProvider = (resolved as any)?.provider;
-    const isCompatible = resolvedProvider === authProvider || resolvedProvider === 'custom-endpoint';
+    const isCompatible = resolvedProvider === activeProvider || resolvedProvider === 'custom-endpoint';
     if (!resolved || !isCompatible || isDeniedMiniModelId(model)) {
       const fallback = getDefaultSummarizationModel();
-      debugLog(`[queryLlm] Model ${bareModel} incompatible with ${authProvider} (resolved: ${resolvedProvider}), falling back to ${fallback}`);
+      debugLog(`[queryLlm] Model ${bareModel} incompatible with ${activeProvider} (resolved: ${resolvedProvider}), falling back to ${fallback}`);
       model = fallback;
     }
   }
@@ -1228,6 +1249,7 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
     piSession.dispose();
     piSession = null;
     moduleAuthStorage = null; // Reset so createAuthenticatedRegistry() creates fresh storage
+    callLlmAuthStorage = null; // Reset secondary auth too
     debugLog('Cleaned up existing session for re-init');
   }
 
@@ -1651,6 +1673,11 @@ async function processMessage(msg: InboundMessage): Promise<void> {
           initConfig.piAuth = msg.piAuth;
         }
         debugLog(`Updated ${credential.type} credential for provider: ${provider}`);
+        // Also refresh the secondary auth storage if it exists
+        if (callLlmAuthStorage && initConfig?.callLlmPiAuth?.provider === provider) {
+          callLlmAuthStorage.set(provider, credential);
+          debugLog(`Also refreshed secondary (callLlm) auth for provider: ${provider}`);
+        }
       } else {
         debugLog('token_update received but no authStorage initialized');
       }
