@@ -96,11 +96,41 @@ This uses the official GitHub MCP server Docker image (`ghcr.io/github/github-mc
 
 ---
 
-### Tier 3 — Remote OAuth (not supported)
+### Tier 3 — API Source with OAuth
 
-GitHub's remote MCP endpoint at `https://api.githubcopilot.com/mcp/` requires OAuth with a pre-registered client application. **Craft Agents is not registered with GitHub as an OAuth client, so this will not work.**
+If you have your own GitHub OAuth App (Settings → Developer settings → OAuth Apps), you can configure GitHub as an API source with automatic OAuth:
 
-Do not attempt remote OAuth setup — it will fail during the authorization step. Use Tier 1 or Tier 2 instead.
+```json
+{
+  "name": "GitHub",
+  "slug": "github",
+  "enabled": true,
+  "provider": "github",
+  "type": "api",
+  "tagline": "GitHub REST API via OAuth",
+  "api": {
+    "baseUrl": "https://api.github.com/",
+    "authType": "oauth",
+    "oauth": {
+      "authorizationUrl": "https://github.com/login/oauth/authorize",
+      "tokenUrl": "https://github.com/login/oauth/access_token",
+      "clientId": "<your-oauth-app-client-id>",
+      "clientSecret": "<your-oauth-app-client-secret>",
+      "scopes": ["repo", "read:user", "read:org"]
+    },
+    "testEndpoint": {
+      "method": "GET",
+      "path": "user"
+    }
+  }
+}
+```
+
+Set your OAuth App's callback URL to `http://localhost:8914/callback`.
+
+<Note>
+GitHub's remote **MCP** endpoint at `https://api.githubcopilot.com/mcp/` requires a pre-registered Copilot client — that path won't work with Craft Agents. Use this API OAuth approach, or Tier 1/2 instead.
+</Note>
 
 ---
 

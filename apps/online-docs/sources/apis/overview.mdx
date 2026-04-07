@@ -61,10 +61,11 @@ API sources are configured with a JSON file:
 | `api.queryParam` | No | Query parameter name for `query` auth type |
 | `api.authScheme` | No | Bearer token prefix for `bearer` auth (default: `"Bearer"`, can be `"Token"`) |
 | `api.headerNames` | No | Array of header names for multi-header auth (e.g., `["DD-API-KEY", "DD-APPLICATION-KEY"]`) |
+| `api.oauth` | No | Generic OAuth 2.0 config block (see OAuth 2.0 section below) |
 
 ## Authentication Types
 
-API sources support five authentication methods:
+API sources support six authentication methods:
 
 ### Bearer Token
 
@@ -106,6 +107,40 @@ Sends credentials in a custom header: `X-API-Key: {token}`.
 ```
 
 Appends credentials as a query parameter: `?api_key={token}`.
+
+### OAuth 2.0
+
+```json
+{
+  "api": {
+    "baseUrl": "https://api.github.com/",
+    "authType": "oauth",
+    "oauth": {
+      "authorizationUrl": "https://github.com/login/oauth/authorize",
+      "tokenUrl": "https://github.com/login/oauth/access_token",
+      "clientId": "your_client_id",
+      "clientSecret": "your_client_secret",
+      "scopes": ["repo", "read:user"]
+    }
+  }
+}
+```
+
+Full OAuth 2.0 flow with PKCE. Tokens are automatically refreshed and sent as `Authorization: Bearer {token}`. Works with any OAuth 2.0 provider — GitHub, Linear, Notion, Spotify, etc.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `oauth.authorizationUrl` | Yes | OAuth authorization endpoint |
+| `oauth.tokenUrl` | Yes | OAuth token exchange endpoint |
+| `oauth.clientId` | Yes | Your OAuth app's client ID |
+| `oauth.clientSecret` | No | Client secret (not required for public PKCE clients) |
+| `oauth.scopes` | No | Requested OAuth scopes |
+| `oauth.audience` | No | Auth0-style audience parameter |
+| `oauth.extraParams` | No | Additional authorization URL params |
+
+<Tip>
+For Google, Microsoft, and Slack APIs, Craft Agents has built-in OAuth support with predefined scopes — you don't need to configure the `oauth` block manually. Just set the appropriate `provider` field.
+</Tip>
 
 ### No Authentication
 
@@ -189,13 +224,15 @@ Choose a lightweight endpoint that requires authentication. This validates both 
 |---------|-------------|-------------|
 | Setup | Need MCP server URL | Base URL + auth config |
 | Tools | Predefined by server | Flexible HTTP tool |
-| Auth | OAuth or bearer | Bearer, header, query, basic, none |
+| Auth | OAuth or bearer | OAuth, bearer, header, query, basic, none |
 | Best for | Services with MCP support | Any REST API |
 
 Use MCP sources when available for richer integration with predefined tools. Use API sources for services without MCP support or when you need flexible HTTP access.
 
 <Note>
-**Need Google, Microsoft, or Slack?** Craft Agents has built-in OAuth support for these services. Just ask your agent to "connect Google Calendar" or "add Slack" and it will walk you through the OAuth flow. No external aggregators needed.
+**Need Google, Microsoft, or Slack?** Craft Agents has built-in OAuth support for these services with predefined scopes. Just ask your agent to "connect Google Calendar" or "add Slack" and it will walk you through the OAuth flow.
+
+**Need any other OAuth provider?** Use `authType: "oauth"` with the `oauth` config block to connect GitHub, Linear, Notion, Spotify, or any other OAuth 2.0 service.
 </Note>
 
 ## Next Steps
