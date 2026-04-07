@@ -27,6 +27,7 @@ import {
 import type { MenuItem, MenuSection, SettingsMenuItem } from "../../shared/menu-schema"
 import { SETTINGS_ICONS } from "./icons/SettingsIcons"
 import { getDocUrl } from '@craft-agent/shared/docs/doc-links'
+import { t } from '@/i18n'
 
 // Map of action handlers for menu items that need custom behavior
 type MenuActionHandlers = {
@@ -208,13 +209,13 @@ export function AppMenu({
           {/* File actions at root level */}
           <StyledDropdownMenuItem onClick={onNewChat}>
             <SquarePenRounded className="h-3.5 w-3.5" />
-            New Chat
+            {t('chat.newChat', 'New Chat')}
             {newChatHotkey && <DropdownMenuShortcut className="pl-6">{newChatHotkey}</DropdownMenuShortcut>}
           </StyledDropdownMenuItem>
           {onNewWindow && (
             <StyledDropdownMenuItem onClick={onNewWindow}>
               <Icons.AppWindow className="h-3.5 w-3.5" />
-              New Window
+              {t('common.newWindow', 'New Window')}
               {newWindowHotkey && <DropdownMenuShortcut className="pl-6">{newWindowHotkey}</DropdownMenuShortcut>}
             </StyledDropdownMenuItem>
           )}
@@ -232,13 +233,13 @@ export function AppMenu({
           <DropdownMenuSub>
             <StyledDropdownMenuSubTrigger>
               <Icons.Settings className="h-3.5 w-3.5" />
-              Settings
+              {t('common.settings', 'Settings')}
             </StyledDropdownMenuSubTrigger>
             <StyledDropdownMenuSubContent>
               {/* Main settings entry with keyboard shortcut */}
               <StyledDropdownMenuItem onClick={onOpenSettings}>
                 <Icons.Settings className="h-3.5 w-3.5" />
-                Settings...
+                {t('common.settings', 'Settings')}...
                 {settingsHotkey && <DropdownMenuShortcut className="pl-6">{settingsHotkey}</DropdownMenuShortcut>}
               </StyledDropdownMenuItem>
               <StyledDropdownMenuSeparator />
@@ -251,7 +252,7 @@ export function AppMenu({
                     onClick={() => onOpenSettingsSubpage(item.id)}
                   >
                     <Icon className="h-3.5 w-3.5" />
-                    {item.label}
+                    {t(`settings.${item.id}.label`, item.label)}
                   </StyledDropdownMenuItem>
                 )
               })}
@@ -262,23 +263,23 @@ export function AppMenu({
           <DropdownMenuSub>
             <StyledDropdownMenuSubTrigger>
               <Icons.HelpCircle className="h-3.5 w-3.5" />
-              Help
+              {t('common.help', 'Help')}
             </StyledDropdownMenuSubTrigger>
             <StyledDropdownMenuSubContent>
               <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}>
                 <Icons.HelpCircle className="h-3.5 w-3.5" />
-                Help & Documentation
+                {t('common.helpDocumentation', 'Help & Documentation')}
                 <Icons.ExternalLink className="h-3 w-3 ml-auto text-muted-foreground" />
               </StyledDropdownMenuItem>
               <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('automations'))}>
                 <Icons.Webhook className="h-3.5 w-3.5" />
-                Automations
+                {t('common.automations', 'Automations')}
                 <Icons.ExternalLink className="h-3 w-3 ml-auto text-muted-foreground" />
               </StyledDropdownMenuItem>
               <StyledDropdownMenuSeparator />
               <StyledDropdownMenuItem onClick={onOpenKeyboardShortcuts}>
                 <Icons.Keyboard className="h-3.5 w-3.5" />
-                Keyboard Shortcuts
+                {t('shortcuts.keyboardShortcuts', 'Keyboard Shortcuts')}
                 {keyboardShortcutsHotkey && <DropdownMenuShortcut className="pl-6">{keyboardShortcutsHotkey}</DropdownMenuShortcut>}
               </StyledDropdownMenuItem>
             </StyledDropdownMenuSubContent>
@@ -290,21 +291,21 @@ export function AppMenu({
               <DropdownMenuSub>
                 <StyledDropdownMenuSubTrigger>
                   <Icons.Bug className="h-3.5 w-3.5" />
-                  Debug
+                  {t('common.debug', 'Debug')}
                 </StyledDropdownMenuSubTrigger>
                 <StyledDropdownMenuSubContent>
                   <StyledDropdownMenuItem onClick={() => window.electronAPI.checkForUpdates()}>
                     <Icons.Download className="h-3.5 w-3.5" />
-                    Check for Updates
+                    {t('common.checkForUpdates', 'Check for Updates')}
                   </StyledDropdownMenuItem>
                   <StyledDropdownMenuItem onClick={() => window.electronAPI.installUpdate()}>
                     <Icons.Download className="h-3.5 w-3.5" />
-                    Install Update
+                    {t('common.installUpdate', 'Install Update')}
                   </StyledDropdownMenuItem>
                   <StyledDropdownMenuSeparator />
                   <StyledDropdownMenuItem onClick={() => window.electronAPI.menuToggleDevTools()}>
                     <Icons.Bug className="h-3.5 w-3.5" />
-                    Toggle DevTools
+                    {t('common.toggleDevTools', 'Toggle DevTools')}
                     <DropdownMenuShortcut className="pl-6">{isMac ? '⌥⌘I' : 'Ctrl+Shift+I'}</DropdownMenuShortcut>
                   </StyledDropdownMenuItem>
                 </StyledDropdownMenuSubContent>
@@ -317,7 +318,7 @@ export function AppMenu({
           {/* Quit */}
           <StyledDropdownMenuItem onClick={() => window.electronAPI.menuQuit()}>
             <Icons.LogOut className="h-3.5 w-3.5" />
-            Quit Craft Agents
+            {t('common.quit', 'Quit Craft Agents')}
             {quitHotkey && <DropdownMenuShortcut className="pl-6">{quitHotkey}</DropdownMenuShortcut>}
           </StyledDropdownMenuItem>
         </StyledDropdownMenuContent>

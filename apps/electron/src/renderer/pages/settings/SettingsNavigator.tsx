@@ -22,6 +22,7 @@ import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { SettingsSubpage } from '../../../shared/types'
 import { SETTINGS_ITEMS } from '../../../shared/menu-schema'
 import { SETTINGS_ICONS } from '@/components/icons/SettingsIcons'
+import { t } from '@/i18n'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -112,10 +113,10 @@ function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRo
                 isSelected ? 'text-foreground' : 'text-foreground/80'
               )}
             >
-              {item.label}
+              {t(`settings.${item.id}.label`, item.label)}
             </span>
             <span className="text-xs text-foreground/60 line-clamp-1">
-              {item.description}
+              {t(`settings.${item.id}.description`, item.description)}
             </span>
           </div>
         </button>
@@ -137,7 +138,7 @@ function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRo
                 <DropdownMenuProvider>
                   <StyledDropdownMenuItem onClick={handleOpenInNewWindow}>
                     <AppWindow className="h-3.5 w-3.5" />
-                    <span className="flex-1">Open in New Window</span>
+                    <span className="flex-1">{t('common.openInNewWindow', 'Open in New Window')}</span>
                   </StyledDropdownMenuItem>
                 </DropdownMenuProvider>
               </StyledDropdownMenuContent>

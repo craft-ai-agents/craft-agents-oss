@@ -20,9 +20,11 @@ import {
   SettingsCard,
   SettingsInput,
   SettingsTextarea,
+  SettingsSelect,
 } from '@/components/settings'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
+import { useLocale, setLocale, Locale } from '@/i18n'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -86,6 +88,7 @@ function serializePreferences(state: PreferencesFormState): string {
 }
 
 export default function PreferencesPage() {
+  const currentLocale = useLocale()
   const [formState, setFormState] = useState<PreferencesFormState>(emptyFormState)
   const [isLoading, setIsLoading] = useState(true)
   const [preferencesPath, setPreferencesPath] = useState<string | null>(null)
@@ -93,6 +96,10 @@ export default function PreferencesPage() {
   const isInitialLoadRef = useRef(true)
   const formStateRef = useRef(formState)
   const lastSavedRef = useRef<string | null>(null)
+
+  const handleLanguageChange = (value: string) => {
+    setLocale(value as Locale)
+  }
 
   // Keep formStateRef in sync for use in cleanup
   useEffect(() => {
@@ -222,6 +229,17 @@ export default function PreferencesPage() {
                 value={formState.language}
                 onChange={(v) => updateField('language', v)}
                 placeholder="e.g., English"
+                inCard
+              />
+              <SettingsSelect
+                label="Interface Language"
+                description="Language for the Craft Agent user interface."
+                value={currentLocale}
+                onChange={handleLanguageChange}
+                options={[
+                  { value: 'en-US', label: 'English' },
+                  { value: 'zh-CN', label: '中文' }
+                ]}
                 inCard
               />
             </SettingsCard>
