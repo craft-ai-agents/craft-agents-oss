@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AlertTriangle } from "lucide-react"
 import { useRegisterModal } from "@/context/ModalContext"
+import { useTranslations } from "@/i18n"
 
 interface ResetConfirmationDialogProps {
   open: boolean
@@ -30,6 +31,7 @@ export function ResetConfirmationDialog({
   onCancel,
 }: ResetConfirmationDialogProps) {
   const [answer, setAnswer] = useState("")
+  const t = useTranslations()
 
   // Register with modal context so X button / Cmd+W closes this dialog first
   useRegisterModal(open, onCancel)
@@ -61,35 +63,35 @@ export function ResetConfirmationDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="h-5 w-5" />
-            Reset App
+            {t('resetDialog.title')}
           </DialogTitle>
           <DialogDescription className="text-left pt-2">
-            This will <strong>permanently delete</strong>:
+            {t('resetDialog.warning')}
           </DialogDescription>
         </DialogHeader>
 
         <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 pl-2">
-          <li>All workspaces and their settings</li>
-          <li>All credentials and API keys</li>
-          <li>All preferences and session data</li>
+          <li>{t('resetDialog.deleteItem1')}</li>
+          <li>{t('resetDialog.deleteItem2')}</li>
+          <li>{t('resetDialog.deleteItem3')}</li>
         </ul>
 
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-md p-3 text-sm">
-          <strong className="text-amber-600 dark:text-amber-400">Back up any important data first!</strong>
+          <strong className="text-amber-600 dark:text-amber-400">{t('resetDialog.backupWarning')}</strong>
           <p className="text-muted-foreground mt-1">
-            This action cannot be undone.
+            {t('resetDialog.undoWarning')}
           </p>
         </div>
 
         <div className="space-y-2 pt-2">
           <label className="text-sm font-medium">
-            To confirm, solve: {problem.a} + {problem.b} =
+            {t('resetDialog.confirmPrompt', { a: problem.a, b: problem.b })}
           </label>
           <Input
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
-            placeholder="Enter answer"
+            placeholder={t('resetDialog.answerPlaceholder')}
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
             onKeyDown={(e) => {
@@ -103,14 +105,14 @@ export function ResetConfirmationDialog({
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={handleCancel}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             variant="destructive"
             disabled={!isCorrect}
             onClick={handleConfirm}
           >
-            Reset App
+            {t('resetDialog.title')}
           </Button>
         </DialogFooter>
       </DialogContent>

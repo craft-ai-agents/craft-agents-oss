@@ -188,6 +188,60 @@ export const enUS = {
   input: {
     sendKey: 'Send Key',
     spellCheck: 'Spell Check',
-    enableSpellCheck: 'Enable Spell Check'
+    enableSpellCheck: 'Enable Spell Check',
+    whatWouldYouLike: 'What would you like to work on?',
+    shiftTabSwitch: 'Use Shift + Tab to switch between Explore and Execute',
+    typeAtMention: 'Type @ to mention files, folders, or skills',
+    typeHashLabels: 'Type # to apply labels to this conversation',
+    shiftReturnNewLine: 'Press Shift + Return to add a new line',
+    cmdBToggleSidebar: 'Press {cmdKey} + B to toggle the sidebar',
+    cmdDotFocusMode: 'Press {cmdKey} + . for focus mode'
+  },
+  
+  // Session list
+  sessionList: {
+    today: 'Today',
+    yesterday: 'Yesterday',
+    allSessions: 'All Sessions',
+    flagged: 'Flagged',
+    archived: 'Archived',
+    searchResults: 'Search Results',
+    noSessions: 'No sessions found',
+    searchedContent: 'Searched titles and message content'
+  },
+  
+  // Reset dialog
+  resetDialog: {
+    title: 'Reset App',
+    warning: 'This will <strong>permanently delete</strong>:',
+    deleteItem1: 'All workspaces and their settings',
+    deleteItem2: 'All credentials and API keys',
+    deleteItem3: 'All preferences and session data',
+    backupWarning: 'Back up any important data first!',
+    undoWarning: 'This action cannot be undone.',
+    confirmPrompt: 'To confirm, solve: {a} + {b} =',
+    answerPlaceholder: 'Enter answer'
+  },
+  
+  // Workspace picker
+  workspacePicker: {
+    title: 'Select Workspace',
+    description: 'Choose a workspace on this server, or create a new one.',
+    loading: 'Loading workspaces...',
+    placeholder: 'New workspace name',
+    creating: 'Creating...',
+    createButton: 'Create Workspace'
+  },
+  
+  // Onboarding
+  onboarding: {
+    welcome: {
+      title: 'Welcome to Craft Agents',
+      description: 'Agents with the UX they deserve. Connect anything. Organize your sessions. Everything you need to do the work of your life!',
+      existingTitle: 'Update Settings',
+      existingDescription: 'Update your API connection or change your setup.',
+      checking: 'Checking...',
+      getStarted: 'Get Started'
+    }
   }
 };

@@ -3,6 +3,7 @@ import { useSetAtom } from "jotai"
 import { isToday, isYesterday, format, startOfDay } from "date-fns"
 import { useAction } from "@/actions"
 import { Inbox, Archive } from "lucide-react"
+import { useTranslations } from "@/i18n"
 
 import { getSessionStatus } from "@/utils/session"
 import * as storage from "@/lib/local-storage"
@@ -94,9 +95,9 @@ interface SessionListProps {
 // Re-export SessionStatusId for use by parent components
 export type { SessionStatusId }
 
-function formatDateGroupLabel(date: Date): string {
-  if (isToday(date)) return 'Today'
-  if (isYesterday(date)) return 'Yesterday'
+function formatDateGroupLabel(date: Date, t: (key: string) => string): string {
+  if (isToday(date)) return t('sessionList.today')
+  if (isYesterday(date)) return t('sessionList.yesterday')
   return format(date, 'MMM d')
 }
 
@@ -140,6 +141,7 @@ export function SessionList({
   activeChatMatchInfo,
 }: SessionListProps) {
   const setSendToWorkspace = useSetAtom(sendToWorkspaceAtom)
+  const t = useTranslations()
 
   // --- Selection (atom-backed, shared with ChatDisplay + BatchActionPanel) ---
   const {
@@ -341,7 +343,7 @@ export function SessionList({
       if (!groupsByKey.has(groupKey)) {
         groupsByKey.set(groupKey, {
           key: groupKey,
-          label: formatDateGroupLabel(day),
+          label: formatDateGroupLabel(day, t),
           items: [],
           collapsible: true,
         })
@@ -356,7 +358,7 @@ export function SessionList({
         const date = new Date(meta.key)
         groupsByKey.set(meta.key, {
           key: meta.key,
-          label: formatDateGroupLabel(date),
+          label: formatDateGroupLabel(date, t),
           items: [],
           collapsible: true,
           collapsedCount: meta.count,
@@ -682,9 +684,9 @@ export function SessionList({
         emptyState={
           isSearchMode && !isSearchingContent ? (
             <div className="flex flex-col items-center justify-center py-12 px-4">
-              <p className="text-sm text-muted-foreground">No sessions found</p>
+              <p className="text-sm text-muted-foreground">{t('sessionList.noSessions')}</p>
               <p className="text-xs text-muted-foreground/60 mt-0.5">
-                Searched titles and message content
+                {t('sessionList.searchedContent')}
               </p>
               <button
                 onClick={() => onSearchChange?.('')}

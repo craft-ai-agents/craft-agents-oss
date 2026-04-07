@@ -12,6 +12,7 @@ import {
   AddWorkspaceStepHeader,
   AddWorkspacePrimaryButton,
 } from './primitives'
+import { useTranslations } from '@/i18n'
 
 interface WorkspacePickerProps {
   onSelectWorkspace: (workspaceId: string) => void
@@ -23,6 +24,7 @@ export function WorkspacePicker({ onSelectWorkspace }: WorkspacePickerProps) {
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
+  const t = useTranslations()
 
   // Load workspaces from server
   useEffect(() => {
@@ -54,7 +56,7 @@ export function WorkspacePicker({ onSelectWorkspace }: WorkspacePickerProps) {
       <div className="flex h-screen items-center justify-center bg-sidebar px-4">
         <AddWorkspaceContainer>
           <Spinner className="h-6 w-6" />
-          <p className="mt-3 text-sm text-muted-foreground">Loading workspaces...</p>
+          <p className="mt-3 text-sm text-muted-foreground">{t('workspacePicker.loading')}</p>
         </AddWorkspaceContainer>
       </div>
     )
@@ -64,8 +66,8 @@ export function WorkspacePicker({ onSelectWorkspace }: WorkspacePickerProps) {
     <div className="flex h-screen items-center justify-center bg-sidebar px-4">
       <AddWorkspaceContainer>
         <AddWorkspaceStepHeader
-          title="Select Workspace"
-          description="Choose a workspace on this server, or create a new one."
+          title={t('workspacePicker.title')}
+          description={t('workspacePicker.description')}
         />
 
         {error && (
@@ -103,18 +105,18 @@ export function WorkspacePicker({ onSelectWorkspace }: WorkspacePickerProps) {
             value={newName}
             onChange={e => setNewName(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleCreate()}
-            placeholder="New workspace name"
+            placeholder={t('workspacePicker.placeholder')}
             className="w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
           <AddWorkspacePrimaryButton
             onClick={handleCreate}
             disabled={!newName.trim()}
             loading={creating}
-            loadingText="Creating..."
+            loadingText={t('workspacePicker.creating')}
             className="bg-accent hover:bg-accent/90 text-white"
           >
             <Plus className="mr-1.5 h-4 w-4" />
-            Create Workspace
+            {t('workspacePicker.createButton')}
           </AddWorkspacePrimaryButton>
         </div>
       </AddWorkspaceContainer>

@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react'
 import { Icon_Home, Icon_Folder, Spinner } from '@craft-agent/ui'
+import { useTranslations } from '@/i18n'
 
 import * as storage from '@/lib/local-storage'
 import { useDirectoryPicker } from '@/hooks/useDirectoryPicker'
@@ -110,14 +111,14 @@ function formatFollowUpChipText(text: string, fallback: string, maxLength = 50):
 const cmdKey = isMac ? '⌘' : 'Ctrl'
 
 /** Default rotating placeholders for onboarding/empty state */
-const DEFAULT_PLACEHOLDERS = [
-  'What would you like to work on?',
-  'Use Shift + Tab to switch between Explore and Execute',
-  'Type @ to mention files, folders, or skills',
-  'Type # to apply labels to this conversation',
-  'Press Shift + Return to add a new line',
-  `Press ${cmdKey} + B to toggle the sidebar`,
-  `Press ${cmdKey} + . for focus mode`,
+const getDefaultPlaceholders = (t: (key: string, params?: Record<string, string>) => string, cmdKey: string) => [
+  t('input.whatWouldYouLike'),
+  t('input.shiftTabSwitch'),
+  t('input.typeAtMention'),
+  t('input.typeHashLabels'),
+  t('input.shiftReturnNewLine'),
+  t('input.cmdBToggleSidebar', { cmdKey }),
+  t('input.cmdDotFocusMode', { cmdKey }),
 ]
 
 /** Fisher-Yates shuffle — returns a new array in random order */
@@ -248,7 +249,7 @@ export interface FreeFormInputProps {
  * - Active option badges
  */
 export function FreeFormInput({
-  placeholder = DEFAULT_PLACEHOLDERS,
+  placeholder: customPlaceholder,
   disabled = false,
   isProcessing = false,
   onSubmit,
@@ -290,6 +291,8 @@ export function FreeFormInput({
   onConnectionChange,
   connectionUnavailable = false,
 }: FreeFormInputProps) {
+  const t = useTranslations()
+  const placeholder = customPlaceholder || getDefaultPlaceholders(t, cmdKey)
   // Read connection default model, connections, and workspace info from context.
   // Uses optional variant so playground (no provider) doesn't crash.
   const appShellCtx = useOptionalAppShellContext()

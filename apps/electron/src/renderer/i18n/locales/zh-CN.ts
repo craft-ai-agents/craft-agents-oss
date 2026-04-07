@@ -188,6 +188,60 @@ export const zhCN = {
   input: {
     sendKey: '发送键',
     spellCheck: '拼写检查',
-    enableSpellCheck: '启用拼写检查'
+    enableSpellCheck: '启用拼写检查',
+    whatWouldYouLike: '你想做什么工作？',
+    shiftTabSwitch: '使用 Shift + Tab 在探索和执行之间切换',
+    typeAtMention: '输入 @ 来提及文件、文件夹或技能',
+    typeHashLabels: '输入 # 为对话添加标签',
+    shiftReturnNewLine: '按 Shift + Enter 添加新行',
+    cmdBToggleSidebar: '按 {cmdKey} + B 切换侧边栏',
+    cmdDotFocusMode: '按 {cmdKey} + . 进入专注模式'
+  },
+  
+  // Session list
+  sessionList: {
+    today: '今天',
+    yesterday: '昨天',
+    allSessions: '所有会话',
+    flagged: '已标记',
+    archived: '已归档',
+    searchResults: '搜索结果',
+    noSessions: '未找到会话',
+    searchedContent: '已搜索标题和消息内容'
+  },
+  
+  // Reset dialog
+  resetDialog: {
+    title: '重置应用',
+    warning: '这将 <strong>永久删除</strong>:',
+    deleteItem1: '所有工作区及其设置',
+    deleteItem2: '所有凭证和API密钥',
+    deleteItem3: '所有偏好设置和会话数据',
+    backupWarning: '请先备份重要数据！',
+    undoWarning: '此操作无法撤销。',
+    confirmPrompt: '请解决以下问题以确认：{a} + {b} =',
+    answerPlaceholder: '输入答案'
+  },
+  
+  // Workspace picker
+  workspacePicker: {
+    title: '选择工作区',
+    description: '选择此服务器上的工作区，或创建一个新的工作区。',
+    loading: '正在加载工作区...',
+    placeholder: '新工作区名称',
+    creating: '创建中...',
+    createButton: '创建工作区'
+  },
+  
+  // Onboarding
+  onboarding: {
+    welcome: {
+      title: '欢迎使用 Craft Agents',
+      description: '为代理提供应有的用户体验。连接任何东西。组织您的会话。满足您工作所需的一切！',
+      existingTitle: '更新设置',
+      existingDescription: '更新您的API连接或更改设置。',
+      checking: '检查中...',
+      getStarted: '开始使用'
+    }
   }
 };
