@@ -816,6 +816,8 @@ export interface ValidateContext {
   /** Backup of existing automations-history.jsonl before overwrite (undefined = didn't exist) */
   automationsHistoryBackup?: string | null
   branchedSessionId?: string
+  /** Label ID for e2e-test label created for session tool validation */
+  e2eTestLabelId?: string
   onEvent?: (ev: { type: string; [key: string]: unknown }) => void
 }
 
@@ -1168,9 +1170,22 @@ export function getValidateSteps(): ValidateStep[] {
     },
     // ----- Session tool validation (guards against #511 regression) -----
     {
+      name: 'labels:create (e2e-test)',
+      fn: async (client, ctx) => {
+        if (!ctx.workspaceId) return 'skipped (no workspace)'
+        const r = (await client.invoke('labels:create', ctx.workspaceId, {
+          name: 'e2e-test',
+          color: 'gray',
+        })) as any
+        ctx.e2eTestLabelId = r?.id
+        return `label created: ${r?.id}`
+      },
+    },
+    {
       name: 'session-tools:set_session_labels',
       fn: async (client, ctx) => {
         if (!ctx.createdSessionId) return 'skipped (no session)'
+        if (!ctx.e2eTestLabelId) return 'skipped (no e2e-test label)'
         const result = await waitForSendEvents(client, ctx.createdSessionId,
           'Use the set_session_labels tool to set labels: ["e2e-test"] on the current session. Do NOT use any other tool.',
           90_000, true, undefined, ctx.onEvent, 'set_session_labels')
@@ -1622,6 +1637,14 @@ SKILLEOF`, 90_000, true, undefined, ctx.onEvent)
         if (!ctx.workspaceId || !ctx.createdSourceSlug) return 'skipped (no source)'
         await client.invoke('sources:delete', ctx.workspaceId, ctx.createdSourceSlug)
         return `deleted source: ${ctx.createdSourceSlug}`
+      },
+    },
+    {
+      name: 'labels:delete (e2e-test)',
+      fn: async (client, ctx) => {
+        if (!ctx.workspaceId || !ctx.e2eTestLabelId) return 'skipped (no e2e-test label)'
+        await client.invoke('labels:delete', ctx.workspaceId, ctx.e2eTestLabelId)
+        return `deleted label: ${ctx.e2eTestLabelId}`
       },
     },
     {
