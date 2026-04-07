@@ -51,8 +51,6 @@ export interface ProxyToolDef {
 export interface McpToolResult {
   content: string;
   isError: boolean;
-  /** Source slug for error attribution (set on failure) */
-  sourceSlug?: string;
 }
 
 /**
@@ -381,7 +379,6 @@ export class McpClientPool {
       return {
         content: `MCP client for source "${slug}" is not connected.`,
         isError: true,
-        sourceSlug: slug,
       };
     }
 
@@ -445,7 +442,6 @@ export class McpClientPool {
       return {
         content: `MCP tool "${originalName}" (source: ${slug}) failed: ${err instanceof Error ? err.message : String(err)}`,
         isError: true,
-        sourceSlug: slug,
       };
     }
   }

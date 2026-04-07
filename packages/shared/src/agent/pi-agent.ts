@@ -724,6 +724,7 @@ export class PiAgent extends BaseAgent {
    */
   private async getCallLlmPiAuth(): Promise<{
     provider: string;
+    baseUrl?: string;
     credential:
       | { type: 'api_key'; key: string }
       | { type: 'oauth'; access: string; refresh: string; expires: number }
@@ -748,6 +749,11 @@ export class PiAgent extends BaseAgent {
         return null;
       }
 
+      // Capture the connection's base URL so the pi-server can register the provider
+      // endpoint for model discovery (without this, unknown providers like 'zai' fall
+      // back to Copilot's endpoint and reject the credential).
+      const connBaseUrl = (conn as any).baseUrl as string | undefined;
+
       const credentialManager = getCredentialManager();
 
       if (conn.authType === 'oauth') {
@@ -757,6 +763,7 @@ export class PiAgent extends BaseAgent {
             this.debug(`[callLlm] Retrieved Copilot OAuth for secondary connection: ${slug}`);
             return {
               provider: piAuthProvider,
+              baseUrl: connBaseUrl,
               credential: {
                 type: 'oauth',
                 access: oauth.accessToken,
@@ -768,6 +775,7 @@ export class PiAgent extends BaseAgent {
           this.debug(`[callLlm] Retrieved OAuth token for secondary connection: ${slug}`);
           return {
             provider: piAuthProvider,
+            baseUrl: connBaseUrl,
             credential: { type: 'api_key', key: oauth.accessToken },
           };
         }
@@ -777,6 +785,7 @@ export class PiAgent extends BaseAgent {
           this.debug(`[callLlm] Retrieved API key for secondary connection: ${slug}`);
           return {
             provider: piAuthProvider,
+            baseUrl: connBaseUrl,
             credential: { type: 'api_key', key: apiKey },
           };
         }

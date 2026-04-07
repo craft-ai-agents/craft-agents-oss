@@ -96,7 +96,7 @@ interface InitMessage {
   miniModel?: string;
   callLlmModelOverride?: string;
   callLlmThinkingLevel?: string;
-  callLlmPiAuth?: { provider: string; credential: PiCredential };
+  callLlmPiAuth?: { provider: string; credential: PiCredential; baseUrl?: string };
   agentDir?: string;
   providerType?: string;
   authType?: string;
@@ -443,6 +443,7 @@ function registerDynamicPiModel(
   registry: PiModelRegistry,
   bareId: string,
   piAuthProvider: string,
+  overrideBaseUrl?: string,
 ): ReturnType<PiModelRegistry['find']> | undefined {
   // Find all existing models for this provider to preserve them
   const existing = registry.getAll().filter(m => m.provider === piAuthProvider);
@@ -455,6 +456,10 @@ function registerDynamicPiModel(
   if (!apiKey) return undefined;
 
   const ref = existing[0];
+
+  // Use the override baseUrl when provided (e.g. secondary connection with a custom
+  // endpoint that differs from the SDK-registered default for this provider).
+  const effectiveBaseUrl = overrideBaseUrl ?? ref.baseUrl;
 
   // Preserve all existing models and add the new one
   const allModels = existing.map(m => ({
@@ -471,12 +476,12 @@ function registerDynamicPiModel(
   });
 
   registry.registerProvider(piAuthProvider, {
-    baseUrl: ref.baseUrl,
+    baseUrl: effectiveBaseUrl,
     api: ref.api,
     apiKey,
     models: allModels,
   });
-  debugLog(`Dynamically registered model '${bareId}' under provider '${piAuthProvider}' (${allModels.length} total models)`);
+  debugLog(`Dynamically registered model '${bareId}' under provider '${piAuthProvider}' baseUrl=${effectiveBaseUrl} (${allModels.length} total models)`);
 
   return registry.find(piAuthProvider, bareId) ?? undefined;
 }
@@ -984,7 +989,20 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
     // Resolve model
     let piModel: ReturnType<typeof resolvePiModel>;
     try {
-      piModel = resolvePiModel(modelRegistry, modelId, initConfig.piAuth?.provider, shouldPreferCustomEndpoint());
+      // Resolve model — use secondary connection's provider when callLlmPiAuth is active
+      const resolveProvider = useCallLlmAuth
+        ? initConfig.callLlmPiAuth?.provider
+        : initConfig.piAuth?.provider;
+      piModel = resolvePiModel(modelRegistry, modelId, resolveProvider, shouldPreferCustomEndpoint());
+
+      // For secondary connections (e.g. Z.ai), the SDK registers built-in models
+      // under the provider, but the user might configure a model that's too new for
+      // the SDK registry. Dynamically register it using the secondary baseUrl.
+      if (!piModel && resolveProvider) {
+        const overrideBaseUrl = useCallLlmAuth ? initConfig.callLlmPiAuth?.baseUrl : undefined;
+        piModel = registerDynamicPiModel(modelRegistry, modelId, resolveProvider, overrideBaseUrl);
+      }
+
       if (piModel) {
         ephemeralOptions.model = piModel;
       }

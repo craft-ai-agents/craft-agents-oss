@@ -1395,9 +1395,15 @@ export function resolveAdapterNameFromPiApiHint(piApiHint?: string): 'anthropic'
 function findAdapter(url: string): ApiAdapter | undefined {
   const piApiHint = getPiApiHint();
   const hintedAdapter = resolveAdapterNameFromPiApiHint(piApiHint);
-  if (hintedAdapter === 'anthropic') return anthropicAdapter;
-  if (hintedAdapter === 'openai') return openAiAdapter;
-  if (hintedAdapter === 'openai-responses') return openAiResponsesAdapter;
+
+  // When a PI API hint is set (from the main session's model), verify the hinted
+  // adapter actually matches the URL before using it.  call_llm may route to a
+  // different provider (e.g. Z.ai/OpenAI) than the main session (e.g. Anthropic),
+  // so blindly trusting the hint would apply the wrong SSE transform — causing the
+  // Anthropic transform to silently drop all OpenAI-format SSE events.
+  if (hintedAdapter === 'anthropic' && anthropicAdapter.shouldIntercept(url)) return anthropicAdapter;
+  if (hintedAdapter === 'openai' && openAiAdapter.shouldIntercept(url)) return openAiAdapter;
+  if (hintedAdapter === 'openai-responses' && openAiResponsesAdapter.shouldIntercept(url)) return openAiResponsesAdapter;
 
   return adapters.find(a => a.shouldIntercept(url));
 }
