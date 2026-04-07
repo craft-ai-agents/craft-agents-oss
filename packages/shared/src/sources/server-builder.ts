@@ -205,7 +205,7 @@ export class SourceServerBuilder {
 
     // Generic OAuth APIs — use token getter with auto-refresh
     // Order matters: provider-specific checks (google, slack) come first
-    if (authType === 'oauth' && apiConfig.oauth) {
+    if (authType === 'oauth') {
       if (!source.config.isAuthenticated || !getToken) {
         debug(`[SourceServerBuilder] Generic OAuth source ${source.config.slug} not authenticated`);
         return null;

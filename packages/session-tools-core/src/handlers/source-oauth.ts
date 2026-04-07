@@ -44,18 +44,11 @@ export async function handleSourceOAuthTrigger(
     return errorResponse(`Source '${sourceSlug}' not found.`);
   }
 
-  // Validate source uses OAuth — supports MCP OAuth and generic API OAuth
+  // Validate source uses OAuth — supports MCP OAuth and generic API OAuth (with or without oauth config block)
   const isMcpOAuth = source.type === 'mcp' && source.mcp?.authType === 'oauth';
-  const isGenericApiOAuth = source.type === 'api' && source.api?.authType === 'oauth' && !!source.api?.oauth;
+  const isApiOAuth = source.type === 'api' && source.api?.authType === 'oauth';
 
-  if (!isMcpOAuth && !isGenericApiOAuth) {
-    // Provide a helpful error when authType is 'oauth' but the oauth config block is missing
-    if (source.type === 'api' && source.api?.authType === 'oauth' && !source.api?.oauth) {
-      return errorResponse(
-        `Source '${sourceSlug}' has authType 'oauth' but is missing the api.oauth config block. ` +
-        `Add an oauth block with authorizationUrl, tokenUrl, and clientId to config.json.`
-      );
-    }
+  if (!isMcpOAuth && !isApiOAuth) {
     return errorResponse(
       `Source '${sourceSlug}' is not configured for OAuth authentication.`
     );

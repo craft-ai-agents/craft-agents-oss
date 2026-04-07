@@ -288,8 +288,8 @@ export class SourceCredentialManager {
       // Order matters: provider-specific checks first, then generic OAuth fallback
       if (isApiOAuthProvider(source.config.provider)) {
         type = 'source_oauth';
-      } else if (api?.authType === 'oauth' && api?.oauth) {
-        // Generic OAuth API sources (e.g. GitHub, Linear)
+      } else if (api?.authType === 'oauth') {
+        // Generic OAuth API sources — explicit config or auto-discovery
         type = 'source_oauth';
       } else if (api?.authType === 'bearer') {
         type = 'source_bearer';
@@ -371,7 +371,8 @@ export class SourceCredentialManager {
     if (source.config.provider === 'google') return 'google';
     if (source.config.provider === 'slack') return 'slack';
     if (source.config.provider === 'microsoft') return 'microsoft';
-    if (source.config.api?.authType === 'oauth' && source.config.api?.oauth) return 'generic';
+    // Generic OAuth: either explicit oauth config block or authType 'oauth' with auto-discovery
+    if (source.config.api?.authType === 'oauth') return 'generic';
     return 'mcp';
   }
 
@@ -474,10 +475,20 @@ export class SourceCredentialManager {
 
       case 'generic': {
         const oauthConfig = source.config.api?.oauth;
-        if (!oauthConfig) {
-          throw new Error(`Source '${source.config.slug}' missing api.oauth config block`);
+        if (oauthConfig) {
+          // Static config: endpoints provided in config.json
+          prepared = prepareGenericOAuth({ oauthConfig, callbackPort, callbackUrl: providerCallbackUrl });
+        } else {
+          // Auto-discovery: hit baseUrl, discover OAuth metadata via RFC 9728/8414,
+          // dynamically register a client — same flow as MCP OAuth.
+          const baseUrl = source.config.api?.baseUrl;
+          if (!baseUrl) {
+            throw new Error(`Source '${source.config.slug}' missing api.baseUrl for OAuth discovery`);
+          }
+          prepared = await prepareMcpOAuth(baseUrl, { callbackPort, callbackUrl: providerCallbackUrl });
+          // Relabel as generic (discovery used MCP internals but this is an API source)
+          prepared = { ...prepared, provider: 'generic' };
         }
-        prepared = prepareGenericOAuth({ oauthConfig, callbackPort, callbackUrl: providerCallbackUrl });
         break;
       }
 
@@ -583,8 +594,8 @@ export class SourceCredentialManager {
       return this.authenticateMicrosoft(source, cb, sessionContext);
     }
 
-    // Generic OAuth (any API source with api.oauth config block)
-    if (source.config.api?.authType === 'oauth' && source.config.api?.oauth) {
+    // Generic OAuth (explicit config or auto-discovery from baseUrl)
+    if (source.config.api?.authType === 'oauth') {
       return this.authenticateGeneric(source, cb, sessionContext);
     }
 
@@ -908,9 +919,20 @@ export class SourceCredentialManager {
       return this.refreshMicrosoft(source, cred);
     }
 
-    // Generic OAuth refresh — tokenUrl from config, clientId/clientSecret from stored credential falling back to config
-    if (source.config.api?.authType === 'oauth' && source.config.api?.oauth?.tokenUrl) {
-      return this.refreshGeneric(source, cred);
+    // Generic OAuth refresh
+    if (source.config.api?.authType === 'oauth') {
+      if (source.config.api?.oauth?.tokenUrl) {
+        // Static config: tokenUrl from config.json
+        return this.refreshGeneric(source, cred);
+      }
+      // Auto-discovered: re-discover token endpoint from baseUrl via MCP OAuth refresh
+      if (source.config.api?.baseUrl && cred.clientId) {
+        return this.refreshMcp(
+          { ...source, config: { ...source.config, type: 'mcp', mcp: { url: source.config.api.baseUrl, authType: 'oauth' } } },
+          cred,
+        );
+      }
+      return null;
     }
 
     // MCP refresh

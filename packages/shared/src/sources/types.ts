@@ -206,13 +206,13 @@ export function isOAuthSource(source: LoadedSource): boolean {
 
 /**
  * Check if a source uses generic OAuth (not Google/Slack/Microsoft provider-specific).
- * Detected by api.authType === 'oauth' + api.oauth config block presence.
+ * Matches API sources with authType 'oauth' — either explicit oauth config block
+ * or auto-discovery from baseUrl via RFC 9728/8414.
  */
 export function isGenericOAuthSource(source: LoadedSource): boolean {
   return (
     source.config.type === 'api' &&
     source.config.api?.authType === 'oauth' &&
-    !!source.config.api?.oauth &&
     !isApiOAuthProvider(source.config.provider)
   );
 }
