@@ -142,16 +142,18 @@ export const zhCN = {
     if: '如果',
     conditionsThatMustPassBeforeActionsRun: '操作运行前必须通过的条件',
     action: '操作',
-    actions: '操作',
     toPerform: '要执行',
-    settings: '设置',
     accessLevel: '访问级别',
     status: '状态',
     active: '活动',
     labels: '标签',
     recentActivity: '最近活动',
     lastXruns: '最近 {count} 次运行',
-    rawConfig: '原始配置'
+    rawConfig: '原始配置',
+    enable: '启用',
+    disable: '禁用',
+    duplicate: '复制',
+    editConfiguration: '编辑配置'
   },
   
   // Menu

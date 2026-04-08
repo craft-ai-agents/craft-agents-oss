@@ -18,6 +18,7 @@ import {
   PowerOff,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
+import { useTranslations } from '@/i18n'
 
 export interface AutomationMenuProps {
   automationId: string
@@ -40,6 +41,7 @@ export function AutomationMenu({
   onEditJson,
   onDelete,
 }: AutomationMenuProps) {
+  const { t } = useTranslations()
   const { MenuItem, Separator } = useMenuComponents()
 
   return (
@@ -52,7 +54,7 @@ export function AutomationMenu({
           ) : (
             <Power className="h-3.5 w-3.5" />
           )}
-          <span className="flex-1">{enabled ? 'Disable' : 'Enable'}</span>
+          <span className="flex-1">{enabled ? t('common.disable', 'Disable') : t('common.enable', 'Enable')}</span>
         </MenuItem>
       )}
 
@@ -60,7 +62,7 @@ export function AutomationMenu({
       {onTest && (
         <MenuItem onClick={onTest}>
           <Play className="h-3.5 w-3.5" />
-          <span className="flex-1">Run Test</span>
+          <span className="flex-1">{t('common.runTest', 'Run Test')}</span>
         </MenuItem>
       )}
 
@@ -68,7 +70,7 @@ export function AutomationMenu({
       {onDuplicate && (
         <MenuItem onClick={onDuplicate}>
           <Copy className="h-3.5 w-3.5" />
-          <span className="flex-1">Duplicate</span>
+          <span className="flex-1">{t('common.duplicate', 'Duplicate')}</span>
         </MenuItem>
       )}
 
@@ -76,7 +78,7 @@ export function AutomationMenu({
       {onEditJson && (
         <MenuItem onClick={onEditJson}>
           <FileCode className="h-3.5 w-3.5" />
-          <span className="flex-1">Edit Configuration</span>
+          <span className="flex-1">{t('common.editConfiguration', 'Edit Configuration')}</span>
         </MenuItem>
       )}
 
@@ -86,7 +88,7 @@ export function AutomationMenu({
       {onDelete && (
         <MenuItem onClick={onDelete} variant="destructive">
           <Trash2 className="h-3.5 w-3.5" />
-          <span className="flex-1">Delete</span>
+          <span className="flex-1">{t('common.delete', 'Delete')}</span>
         </MenuItem>
       )}
     </>

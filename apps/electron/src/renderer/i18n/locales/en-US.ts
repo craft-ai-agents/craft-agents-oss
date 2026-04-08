@@ -142,16 +142,18 @@ export const enUS = {
     if: 'If',
     conditionsThatMustPassBeforeActionsRun: 'Conditions that must pass before actions run',
     action: 'action',
-    actions: 'actions',
     toPerform: 'to perform',
-    settings: 'Settings',
     accessLevel: 'Access Level',
     status: 'Status',
     active: 'Active',
     labels: 'Labels',
     recentActivity: 'Recent Activity',
     lastXruns: 'Last {count} runs',
-    rawConfig: 'Raw config'
+    rawConfig: 'Raw config',
+    enable: 'Enable',
+    disable: 'Disable',
+    duplicate: 'Duplicate',
+    editConfiguration: 'Edit Configuration'
   },
   
   // Menu
