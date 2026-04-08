@@ -153,7 +153,10 @@ export const enUS = {
     enable: 'Enable',
     disable: 'Disable',
     duplicate: 'Duplicate',
-    editConfiguration: 'Edit Configuration'
+    editConfiguration: 'Edit Configuration',
+    runningTest: 'Running test...',
+    testPassed: 'Test Passed',
+    testFailed: 'Test Failed'
   },
   
   // Menu

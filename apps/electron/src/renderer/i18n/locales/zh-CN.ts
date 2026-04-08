@@ -153,7 +153,10 @@ export const zhCN = {
     enable: '启用',
     disable: '禁用',
     duplicate: '复制',
-    editConfiguration: '编辑配置'
+    editConfiguration: '编辑配置',
+    runningTest: '正在运行测试...',
+    testPassed: '测试通过',
+    testFailed: '测试失败'
   },
   
   // Menu
