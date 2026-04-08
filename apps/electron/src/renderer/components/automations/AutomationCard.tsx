@@ -78,7 +78,7 @@ export function AutomationCard({
           <div className="space-y-1">
             <h5 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{t('common.when', 'When')}</h5>
             <div className="text-xs text-foreground/70">
-              <span className="font-medium">{getEventDisplayName(automation.event)}</span>
+              <span className="font-medium">{getEventDisplayName(automation.event, t)}</span>
               {automation.matcher && (
                 <span className="ml-2">
                   {t('common.matching', 'matching')} <code className="font-mono bg-foreground/5 px-1 rounded">{automation.matcher}</code>

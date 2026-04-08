@@ -133,7 +133,7 @@ export function AutomationEventTimeline({ entries, className, onReplay }: Automa
 
               {/* Time */}
               <span className="text-xs text-muted-foreground w-16 shrink-0 tabular-nums">
-                {formatShortRelativeTime(entry.timestamp)}
+                {formatShortRelativeTime(entry.timestamp, t)}
               </span>
 
               {/* Action summary — truncated prompt text */}

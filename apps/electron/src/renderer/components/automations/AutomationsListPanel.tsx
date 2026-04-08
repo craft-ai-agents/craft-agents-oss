@@ -107,7 +107,7 @@ function AutomationItem({
       badges={
         <>
           <MicroBadge colorClass="bg-foreground/8 text-foreground/60">
-            {getEventDisplayName(automation.event)}
+            {getEventDisplayName(automation.event, t)}
           </MicroBadge>
           {automation.actions.some(a => a.type === 'prompt') && (
             <MicroBadge colorClass="bg-accent/10 text-accent">
@@ -126,11 +126,11 @@ function AutomationItem({
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="shrink-0 text-[11px] text-foreground/40 whitespace-nowrap cursor-default">
-                {formatShortRelativeTime(automation.lastExecutedAt)}
+                {formatShortRelativeTime(automation.lastExecutedAt, t)}
               </span>
             </TooltipTrigger>
             <TooltipContent side="bottom" sideOffset={4}>
-              {t('common.lastRan', 'Last ran')} {formatShortRelativeTime(automation.lastExecutedAt)}
+              {t('common.lastRan', 'Last ran')} {formatShortRelativeTime(automation.lastExecutedAt, t)}
             </TooltipContent>
           </Tooltip>
         ) : undefined
@@ -211,7 +211,7 @@ export function AutomationsListPanel({
     return categoryFiltered.filter(a =>
       a.name.toLowerCase().includes(q) ||
       a.summary.toLowerCase().includes(q) ||
-      getEventDisplayName(a.event).toLowerCase().includes(q)
+      getEventDisplayName(a.event, t).toLowerCase().includes(q)
     )
   }, [categoryFiltered, isSearchMode, searchQuery])
 

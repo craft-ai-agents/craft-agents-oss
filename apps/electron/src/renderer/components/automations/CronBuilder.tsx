@@ -202,7 +202,7 @@ export function CronBuilder({
   }, [onChange])
 
   const validationError = useMemo(() => validateCron(rawInput, t), [rawInput, t])
-  const description = useMemo(() => describeCronExpression(rawInput), [rawInput])
+  const description = useMemo(() => describeCronExpression(rawInput, t), [rawInput, t])
   const nextRuns = useMemo(() => computeNextRuns(rawInput), [rawInput])
 
   return (

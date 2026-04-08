@@ -111,7 +111,7 @@ export function AutomationInfoPage({
         >
           <Info_Table>
             <Info_Table.Row label={t('common.event', 'Event')}>
-              <Info_Badge color="default">{getEventDisplayName(automation.event)}</Info_Badge>
+              <Info_Badge color="default">{getEventDisplayName(automation.event, t)}</Info_Badge>
             </Info_Table.Row>
             <Info_Table.Row label={t('common.timing', 'Timing')}>
               <PhaseBadge event={automation.event} />
@@ -125,7 +125,7 @@ export function AutomationInfoPage({
             )}
             {automation.cron && (
               <>
-                <Info_Table.Row label={t('common.repeats', 'Repeats')} value={describeCron(automation.cron)} />
+                <Info_Table.Row label={t('common.repeats', 'Repeats')} value={describeCron(automation.cron, t)} />
                 <Info_Table.Row label={t('common.scheduleExpression', 'Schedule expression')}>
                   <code className="text-xs font-mono bg-foreground/5 px-1.5 py-0.5 rounded">
                     {automation.cron}
@@ -160,7 +160,7 @@ export function AutomationInfoPage({
             actions={editActions}
           >
             <Info_Table>
-              {flattenConditions(automation.conditions).map((row, i) => (
+              {flattenConditions(automation.conditions, t).map((row, i) => (
                 <Info_Table.Row key={i} label={row.label}>
                   <span className="text-sm text-foreground/70">
                     {row.description}
@@ -192,7 +192,7 @@ export function AutomationInfoPage({
         {/* Section: Settings */}
         <Info_Section title={t('common.settings', 'Settings')} actions={editActions}>
           <Info_Table>
-            <Info_Table.Row label={t('common.accessLevel', 'Access Level')} value={getPermissionDisplayName(automation.permissionMode)} />
+            <Info_Table.Row label={t('common.accessLevel', 'Access Level')} value={getPermissionDisplayName(automation.permissionMode, t)} />
             <Info_Table.Row label={t('common.status', 'Status')}>
               <Info_Badge color={automation.enabled ? 'success' : 'muted'}>
                 {automation.enabled ? t('common.active', 'Active') : t('common.disabled', 'Disabled')}

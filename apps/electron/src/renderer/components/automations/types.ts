@@ -113,36 +113,43 @@ const FIELD_LABELS: Record<string, string> = {
 }
 
 /** Get a readable field name, falling back to the raw field */
-function fieldLabel(field: string): string {
-  return FIELD_LABELS[field] ?? field
+function fieldLabel(field: string, t: any = defaultT): string {
+  const labels: Record<string, string> = {
+    permissionMode: t('common.permissionMode', 'permission mode'),
+    sessionStatus: t('common.sessionStatus', 'session status'),
+    isFlagged: t('common.flagged', 'flagged'),
+    labels: t('common.label', 'label'),
+    sessionName: t('common.sessionName', 'session name'),
+  }
+  return labels[field] ?? field
 }
 
 /** Produce a short human-readable label for a single leaf condition */
-function describeLeaf(c: AutomationConditionUI): string {
+function describeLeaf(c: AutomationConditionUI, t: any = defaultT): string {
   switch (c.condition) {
     case 'time': {
       const parts: string[] = []
       if (c.weekday?.length) parts.push(c.weekday.join(', '))
-      if (c.after) parts.push(`after ${c.after}`)
-      if (c.before) parts.push(`before ${c.before}`)
+      if (c.after) parts.push(`${t('common.after', 'after')} ${c.after}`)
+      if (c.before) parts.push(`${t('common.before', 'before')} ${c.before}`)
       if (c.timezone) parts.push(`(${c.timezone})`)
-      return parts.length ? parts.join(' ') : 'any time'
+      return parts.length ? parts.join(' ') : t('common.anyTime', 'any time')
     }
     case 'state': {
-      const label = fieldLabel(c.field)
+      const label = fieldLabel(c.field, t)
       if (c.from !== undefined || c.to !== undefined) {
-        const from = c.from !== undefined ? String(c.from) : 'any'
-        const to = c.to !== undefined ? String(c.to) : 'any'
-        return `${label} changed from ${from} to ${to}`
+        const from = c.from !== undefined ? String(c.from) : t('common.any', 'any')
+        const to = c.to !== undefined ? String(c.to) : t('common.any', 'any')
+        return `${label} ${t('common.changedFrom', 'changed from')} ${from} ${t('common.to', 'to')} ${to}`
       }
-      if (c.contains) return `has ${label} "${c.contains}"`
+      if (c.contains) return `${t('common.has', 'has')} ${label} "${c.contains}"`
       if (c.not_value !== undefined) {
-        if (c.field === 'isFlagged') return c.not_value ? 'not flagged' : 'is flagged'
-        return `${label} is not ${String(c.not_value)}`
+        if (c.field === 'isFlagged') return c.not_value ? t('common.isNot', 'is not') + ' ' + t('common.flagged', 'flagged') : t('common.is', 'is') + ' ' + t('common.flagged', 'flagged')
+        return `${label} ${t('common.isNot', 'is not')} ${String(c.not_value)}`
       }
       if (c.value !== undefined) {
-        if (c.field === 'isFlagged') return c.value ? 'is flagged' : 'not flagged'
-        return `${label} is ${String(c.value)}`
+        if (c.field === 'isFlagged') return c.value ? t('common.is', 'is') + ' ' + t('common.flagged', 'flagged') : t('common.isNot', 'is not') + ' ' + t('common.flagged', 'flagged')
+        return `${label} ${t('common.is', 'is')} ${String(c.value)}`
       }
       return label
     }
@@ -150,10 +157,10 @@ function describeLeaf(c: AutomationConditionUI): string {
     case 'or':
     case 'not': {
       const sep = c.condition === 'not' ? ' and not ' : ` ${c.condition} `
-      return c.conditions.map(describeLeaf).join(sep)
+      return c.conditions.map((cond) => describeLeaf(cond, t)).join(sep)
     }
     default:
-      return 'unknown condition'
+      return t('common.unknownCondition', 'unknown condition')
   }
 }
 
@@ -162,24 +169,24 @@ function describeLeaf(c: AutomationConditionUI): string {
  * Logical conditions are expanded so their children appear as joined text.
  * Returns an array of { label, description } for rendering in Info_Table.
  */
-export function flattenConditions(conditions: AutomationConditionUI[]): { label: string; description: string }[] {
+export function flattenConditions(conditions: AutomationConditionUI[], t: any = defaultT): { label: string; description: string }[] {
   const rows: { label: string; description: string }[] = []
   for (const c of conditions) {
     if (c.condition === 'and' || c.condition === 'or' || c.condition === 'not') {
       // Flatten: join inner descriptions with the operator
       const sep = c.condition === 'not' ? ' and not ' : ` ${c.condition} `
-      const inner = c.conditions.map(describeLeaf).join(sep)
+      const inner = c.conditions.map((cond) => describeLeaf(cond, t)).join(sep)
       // Use the label of the first child type, or 'Condition' as fallback
       const firstChild = c.conditions[0]
       const label = firstChild
-        ? firstChild.condition === 'time' ? 'Time'
-          : firstChild.condition === 'state' ? 'State'
-          : 'Condition'
-        : 'Condition'
+        ? firstChild.condition === 'time' ? t('common.time', 'Time')
+          : firstChild.condition === 'state' ? t('common.state', 'State')
+          : t('common.condition', 'Condition')
+        : t('common.condition', 'Condition')
       rows.push({ label, description: inner })
     } else {
-      const label = c.condition === 'time' ? 'Time' : c.condition === 'state' ? 'State' : 'Condition'
-      rows.push({ label, description: describeLeaf(c) })
+      const label = c.condition === 'time' ? t('common.time', 'Time') : c.condition === 'state' ? t('common.state', 'State') : t('common.condition', 'Condition')
+      rows.push({ label, description: describeLeaf(c, t) })
     }
   }
   return rows
@@ -289,47 +296,53 @@ export interface TestResult {
 // ============================================================================
 
 /** Maps internal event names to user-friendly labels */
-export const EVENT_DISPLAY_NAMES: Record<AutomationTrigger, string> = {
-  // App events
-  LabelAdd:             'Label Added',
-  LabelRemove:          'Label Removed',
-  LabelConfigChange:    'Label Settings Changed',
-  PermissionModeChange: 'Permission Changed',
-  FlagChange:           'Flag Changed',
-  TodoStateChange:      'Task Updated',
-  SessionStatusChange:  'Status Changed',
-  SchedulerTick:        'Scheduled',
+export function getEventDisplayNames(t: any): Record<AutomationTrigger, string> {
+  return {
+    // App events
+    LabelAdd: t('common.labelAdded', 'Label Added'),
+    LabelRemove: t('common.labelRemoved', 'Label Removed'),
+    LabelConfigChange: t('common.labelSettingsChanged', 'Label Settings Changed'),
+    PermissionModeChange: t('common.permissionChanged', 'Permission Changed'),
+    FlagChange: t('common.flagChanged', 'Flag Changed'),
+    TodoStateChange: t('common.taskUpdated', 'Task Updated'),
+    SessionStatusChange: t('common.statusChanged', 'Status Changed'),
+    SchedulerTick: t('common.scheduled', 'Scheduled'),
 
-  // Agent events
-  PreToolUse:           'Before Tool Runs',
-  PostToolUse:          'After Tool Runs',
-  PostToolUseFailure:   'When Tool Fails',
-  Notification:         'Notification',
-  UserPromptSubmit:     'Message Sent',
-  SessionStart:         'Session Started',
-  SessionEnd:           'Session Ended',
-  Stop:                 'Agent Stopped',
-  SubagentStart:        'Sub-agent Started',
-  SubagentStop:         'Sub-agent Stopped',
-  PreCompact:           'Before Memory Cleanup',
-  PermissionRequest:    'Permission Requested',
-  Setup:                'Initial Setup',
+    // Agent events
+    PreToolUse: t('common.beforeToolRuns', 'Before Tool Runs'),
+    PostToolUse: t('common.afterToolRuns', 'After Tool Runs'),
+    PostToolUseFailure: t('common.whenToolFails', 'When Tool Fails'),
+    Notification: t('common.notification', 'Notification'),
+    UserPromptSubmit: t('common.messageSent', 'Message Sent'),
+    SessionStart: t('common.sessionStarted', 'Session Started'),
+    SessionEnd: t('common.sessionEnded', 'Session Ended'),
+    Stop: t('common.agentStopped', 'Agent Stopped'),
+    SubagentStart: t('common.subagentStarted', 'Sub-agent Started'),
+    SubagentStop: t('common.subagentStopped', 'Sub-agent Stopped'),
+    PreCompact: t('common.beforeMemoryCleanup', 'Before Memory Cleanup'),
+    PermissionRequest: t('common.permissionRequested', 'Permission Requested'),
+    Setup: t('common.initialSetup', 'Initial Setup'),
+  }
 }
 
-export function getEventDisplayName(event: AutomationTrigger): string {
-  return EVENT_DISPLAY_NAMES[event] ?? event
+export function getEventDisplayName(event: AutomationTrigger, t: any = defaultT): string {
+  const displayNames = getEventDisplayNames(t)
+  return displayNames[event] ?? event
 }
 
 /** Maps permission mode values to user-friendly labels */
-export const PERMISSION_DISPLAY_NAMES: Record<PermissionMode, string> = {
-  'safe':      'Explore',
-  'ask':       'Ask',
-  'allow-all': 'Execute',
+export function getPermissionDisplayNames(t: any = defaultT): Record<PermissionMode, string> {
+  return {
+    'safe': t('common.explore', 'Explore'),
+    'ask': t('common.ask', 'Ask'),
+    'allow-all': t('common.execute', 'Execute'),
+  }
 }
 
-export function getPermissionDisplayName(mode?: PermissionMode): string {
-  if (!mode) return 'Explore'
-  return PERMISSION_DISPLAY_NAMES[mode] ?? mode
+export function getPermissionDisplayName(mode: PermissionMode | undefined, t: any = defaultT): string {
+  if (!mode) return t('common.explore', 'Explore')
+  const displayNames = getPermissionDisplayNames(t)
+  return displayNames[mode] ?? mode
 }
 
 // ============================================================================
@@ -375,28 +388,31 @@ interface AutomationsConfigMatcher {
   actions?: RawAction[]
 }
 
+/** 默认的翻译函数，当没有提供翻译函数时使用 */
+const defaultT = (key: string, defaultValue: string): string => defaultValue
+
 /** Derive a human-readable name from task actions and event */
-function deriveAutomationName(event: string, matcher: AutomationsConfigMatcher): string {
+function deriveAutomationName(event: string, matcher: AutomationsConfigMatcher, t: any = defaultT): string {
   if (matcher.name) return matcher.name
   const allActions = matcher.actions ?? []
   const firstAction = allActions[0]
-  if (!firstAction) return getEventDisplayName(event as AutomationTrigger)
+  if (!firstAction) return getEventDisplayName(event as AutomationTrigger, t)
 
   if (firstAction.type === 'webhook') {
-    const label = `Webhook ${firstAction.method ?? DEFAULT_WEBHOOK_METHOD} ${firstAction.url}`
+    const label = `${t('common.webhook', 'Webhook')} ${firstAction.method ?? DEFAULT_WEBHOOK_METHOD} ${firstAction.url}`
     return label.length > 40 ? label.slice(0, 40) + '...' : label
   }
 
   // Extract @skill mentions or use first ~40 chars
   const mentionMatch = firstAction.prompt.match(/@(\S+)/)
-  if (mentionMatch) return `${mentionMatch[1]} prompt`
+  if (mentionMatch) return `${mentionMatch[1]} ${t('common.prompt', 'prompt')}`
   return firstAction.prompt.length > 40
     ? firstAction.prompt.slice(0, 40) + '...'
     : firstAction.prompt
 }
 
 /** Derive a summary line from the matcher/cron/event */
-function deriveAutomationSummary(event: string, matcher: AutomationsConfigMatcher): string {
+function deriveAutomationSummary(event: string, matcher: AutomationsConfigMatcher, t: any = defaultT): string {
   if (matcher.cron) {
     const runs = computeNextRuns(matcher.cron, 1)
     if (runs.length > 0) {
@@ -409,22 +425,22 @@ function deriveAutomationSummary(event: string, matcher: AutomationsConfigMatche
         minute: '2-digit',
         timeZone: tz,
       })
-      return `Next run: ${formatted} (${tzCity})`
+      return `${t('common.nextRun', 'Next run:')} ${formatted} (${tzCity})`
     }
     const tz = matcher.timezone ? ` (${matcher.timezone})` : ''
-    return `Cron: ${matcher.cron}${tz}`
+    return `${t('common.cron', 'Cron:')} ${matcher.cron}${tz}`
   }
   if (matcher.matcher) {
-    return `Matches: ${matcher.matcher}`
+    return `${t('common.matches', 'Matches:')} ${matcher.matcher}`
   }
-  return `On ${getEventDisplayName(event as AutomationTrigger)}`
+  return `${t('common.on', 'On')} ${getEventDisplayName(event as AutomationTrigger, t)}`
 }
 
 /**
  * Parse an automations.json file into a flat list of AutomationListItem[].
  * Each matcher entry under each event becomes one item.
  */
-export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
+export function parseAutomationsConfig(json: unknown, t: any = defaultT): AutomationListItem[] {
   if (!json || typeof json !== 'object') return []
   const config = json as AutomationsConfigFile
   const eventMap = config.automations
@@ -451,8 +467,8 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
         id: matcher.id ?? `${eventName}-${index}`,
         event,
         matcherIndex: matcherIdx,
-        name: deriveAutomationName(eventName, matcher),
-        summary: deriveAutomationSummary(eventName, matcher),
+        name: deriveAutomationName(eventName, matcher, t),
+        summary: deriveAutomationSummary(eventName, matcher, t),
         enabled: matcher.enabled !== false,
         matcher: matcher.matcher,
         cron: matcher.cron,

@@ -2,6 +2,17 @@ import { Button } from '@/components/ui/button'
 import { useTranslations } from '@/i18n'
 import type { TransportConnectionState } from '../../../shared/types'
 
+/** 默认的翻译函数，当没有提供翻译函数时使用 */
+const defaultT = (key: string, defaultValue: string, params?: Record<string, string | number>): string => {
+  let text = defaultValue
+  if (params) {
+    Object.keys(params).forEach(paramKey => {
+      text = text.replace(new RegExp(`{${paramKey}}`, 'g'), String(params[paramKey]))
+    })
+  }
+  return text
+}
+
 export function shouldShowTransportConnectionBanner(state: TransportConnectionState | null): boolean {
   if (!state || state.mode === 'local') return false
   return state.status !== 'connected' && state.status !== 'idle'
@@ -14,7 +25,7 @@ export interface TransportBannerCopy {
   tone: 'warning' | 'error' | 'info'
 }
 
-export function getTransportBannerCopy(state: TransportConnectionState, t: any): TransportBannerCopy {
+export function getTransportBannerCopy(state: TransportConnectionState, t: any = defaultT): TransportBannerCopy {
   switch (state.status) {
     case 'connecting':
       return {
