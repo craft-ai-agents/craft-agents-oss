@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@craft-agent/ui'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { ServerConfig, ServerStatus } from '@craft-agent/shared/config/server-config'
+import { useTranslations } from '@/i18n'
 
 import {
   SettingsSection,
@@ -58,6 +59,7 @@ function formToConfig(form: ServerFormState): ServerConfig {
 }
 
 export default function ServerSettingsPage() {
+  const { t } = useTranslations()
   const [form, setForm] = useState<ServerFormState>({
     enabled: false,
     port: '9100',
@@ -99,15 +101,15 @@ export default function ServerSettingsPage() {
     setError(undefined)
     const port = parseInt(form.port, 10)
     if (isNaN(port) || port < 1024 || port > 65535) {
-      setError('Port must be between 1024 and 65535')
+      setError(t('settings.server.portMustBeBetween', 'Port must be between 1024 and 65535'))
       return
     }
     if (form.tlsCertPath && !form.tlsKeyPath) {
-      setError('Private key is required when a certificate is provided')
+      setError(t('settings.server.privateKeyRequired', 'Private key is required when a certificate is provided'))
       return
     }
     if (form.tlsKeyPath && !form.tlsCertPath) {
-      setError('Certificate is required when a private key is provided')
+      setError(t('settings.server.certificateRequired', 'Certificate is required when a private key is provided'))
       return
     }
 
@@ -117,11 +119,11 @@ export default function ServerSettingsPage() {
       setSavedForm(form)
       const newStatus = await window.electronAPI.getServerStatus()
       setStatus(newStatus)
-      toast.success('Server settings saved')
+      toast.success(t('settings.server.serverSettingsSaved', 'Server settings saved'))
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setError(msg)
-      toast.error(`Failed to save: ${msg}`)
+      toast.error(t('settings.server.failedToSave', 'Failed to save: {msg}', { msg }))
     } finally {
       setIsSaving(false)
     }
@@ -134,7 +136,7 @@ export default function ServerSettingsPage() {
 
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text)
-    toast.success(`${label} copied to clipboard`)
+    toast.success(t('settings.server.copiedToClipboard', '{label} copied to clipboard', { label }))
   }
 
   const handleBrowseCert = async () => {
@@ -165,16 +167,16 @@ export default function ServerSettingsPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <PanelHeader title="Server" />
+      <PanelHeader title={t('settings.server.title', 'Server')} />
       <ScrollArea className="flex-1">
         <div className="px-5 py-7 max-w-3xl mx-auto space-y-5">
 
           {/* Enable toggle + restart banner */}
-          <SettingsSection title="Remote Access">
+          <SettingsSection title={t('settings.server.remoteAccess', 'Remote Access')}>
             <SettingsCard>
               <SettingsToggle
-                label="Enable Server Mode"
-                description="Allow connections from other machines on the network."
+                label={t('settings.server.enableServerMode', 'Enable Server Mode')}
+                description={t('settings.server.allowConnections', 'Allow connections from other machines on the network.')}
                 checked={form.enabled}
                 onCheckedChange={(enabled) => setForm(f => ({ ...f, enabled }))}
               />
@@ -183,14 +185,14 @@ export default function ServerSettingsPage() {
             {needsRestart && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-warning/10 border border-warning/20 text-xs text-warning">
                 <RotateCw className="h-3.5 w-3.5 shrink-0" />
-                <span className="flex-1">Restart required to apply changes</span>
+                <span className="flex-1">{t('settings.server.restartRequired', 'Restart required to apply changes')}</span>
                 <Button
                   variant="outline"
                   size="sm"
                   className="h-6 text-[11px] px-2"
                   onClick={() => window.electronAPI.relaunchApp()}
                 >
-                  Restart Now
+                  {t('settings.server.restartNow', 'Restart Now')}
                 </Button>
               </div>
             )}
@@ -198,10 +200,10 @@ export default function ServerSettingsPage() {
 
           {/* Connection + TLS — only visible when server mode is relevant */}
           {showServerDetails && (
-            <SettingsSection title="Connection">
+            <SettingsSection title={t('settings.server.connection', 'Connection')}>
               <SettingsCard>
                 <SettingsInputRow
-                  label="Port"
+                  label={t('settings.server.port', 'Port')}
                   value={form.port}
                   onChange={(port) => setForm(f => ({ ...f, port }))}
                   placeholder="9100"
@@ -209,18 +211,18 @@ export default function ServerSettingsPage() {
 
                 {status && form.enabled && (
                   <>
-                    <SettingsRow label="URL">
+                    <SettingsRow label={t('settings.server.url', 'URL')}>
                       <div className="flex items-center gap-1.5">
                         <code className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
                           {status.url}
                         </code>
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleCopy(status.url, 'URL')}>
+                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleCopy(status.url, t('settings.server.url', 'URL'))}>
                           <Copy className="h-3 w-3" />
                         </Button>
                       </div>
                     </SettingsRow>
 
-                    <SettingsRow label="Token">
+                    <SettingsRow label={t('settings.server.token', 'Token')}>
                       <div className="flex items-center gap-1.5">
                         <code className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded max-w-[180px] truncate">
                           {tokenVisible ? status.token : '••••••••••••••••'}
@@ -228,7 +230,7 @@ export default function ServerSettingsPage() {
                         <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setTokenVisible(v => !v)}>
                           {tokenVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleCopy(status.token, 'Token')}>
+                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleCopy(status.token, t('settings.server.token', 'Token'))}>
                           <Copy className="h-3 w-3" />
                         </Button>
                       </div>
@@ -236,24 +238,24 @@ export default function ServerSettingsPage() {
                   </>
                 )}
 
-                <SettingsRow label="Certificate">
+                <SettingsRow label={t('settings.server.certificate', 'Certificate')}>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                      {form.tlsCertPath || 'Not configured'}
+                      {form.tlsCertPath || t('settings.server.notConfigured', 'Not configured')}
                     </span>
                     <Button variant="outline" size="sm" className="h-6 text-[11px] px-2 shrink-0" onClick={handleBrowseCert}>
-                      Browse
+                      {t('settings.server.browse', 'Browse')}
                     </Button>
                   </div>
                 </SettingsRow>
 
-                <SettingsRow label="Private Key">
+                <SettingsRow label={t('settings.server.privateKey', 'Private Key')}>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                      {form.tlsKeyPath || 'Not configured'}
+                      {form.tlsKeyPath || t('settings.server.notConfigured', 'Not configured')}
                     </span>
                     <Button variant="outline" size="sm" className="h-6 text-[11px] px-2 shrink-0" onClick={handleBrowseKey}>
-                      Browse
+                      {t('settings.server.browse', 'Browse')}
                     </Button>
                   </div>
                 </SettingsRow>
@@ -264,8 +266,8 @@ export default function ServerSettingsPage() {
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                   <span>
                     {status?.insecureWarning
-                      ? 'Server is running without TLS. Auth tokens are sent in cleartext.'
-                      : 'Without TLS, connections will be unencrypted.'}
+                      ? t('settings.server.serverRunningWithoutTls', 'Server is running without TLS. Auth tokens are sent in cleartext.')
+                      : t('settings.server.withoutTlsUnencrypted', 'Without TLS, connections will be unencrypted.')}
                   </span>
                 </div>
               )}
@@ -279,11 +281,11 @@ export default function ServerSettingsPage() {
           {(isDirty || error) && (
             <SettingsCardFooter>
               <Button variant="outline" size="sm" onClick={handleReset} disabled={isSaving}>
-                Reset
+                {t('settings.server.reset', 'Reset')}
               </Button>
               <Button size="sm" onClick={handleSave} disabled={isSaving}>
                 {isSaving ? <Spinner className="mr-1.5" /> : null}
-                Save
+                {t('settings.server.save', 'Save')}
               </Button>
             </SettingsCardFooter>
           )}
