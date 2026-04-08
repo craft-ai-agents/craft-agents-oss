@@ -320,7 +320,7 @@ export const zhCN = {
     language: {
       label: '语言',
       description: '界面语言',
-      enUS: '英语',
+      enUS: 'English',
       zhCN: '中文'
     }
   },

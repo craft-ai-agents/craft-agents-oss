@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState } from "react"
 import { isMac } from "@/lib/platform"
 import { useActionLabel } from "@/actions"
 import {
@@ -56,6 +56,78 @@ const roleHandlers: Record<string, () => void> = {
 function getIcon(name: string): React.ComponentType<{ className?: string }> | null {
   const IconComponent = Icons[name as keyof typeof Icons] as React.ComponentType<{ className?: string }> | undefined
   return IconComponent ?? null
+}
+
+/**
+ * Renders a single menu item from the schema
+ */
+function renderMenuItem(
+  item: MenuItem,
+  index: number,
+  actionHandlers: MenuActionHandlers,
+  t: (key: string, defaultValue: string) => string
+): React.ReactNode {
+  if (item.type === 'separator') {
+    return <StyledDropdownMenuSeparator key={`sep-${index}`} />
+  }
+
+  const Icon = getIcon(item.icon)
+  const shortcut = getShortcutDisplay(item, isMac)
+
+  if (item.type === 'role') {
+    const handler = roleHandlers[item.role]
+    // Gracefully handle missing role handlers with console warning
+    const safeHandler = handler ?? (() => {
+      console.warn(`[AppMenu] No handler registered for role: ${item.role}`)
+    })
+    return (
+      <StyledDropdownMenuItem key={item.role} onClick={safeHandler}>
+        {Icon && <Icon className="h-3.5 w-3.5" />}
+        {item.label}
+        {shortcut && <DropdownMenuShortcut className="pl-6">{shortcut}</DropdownMenuShortcut>}
+      </StyledDropdownMenuItem>
+    )
+  }
+
+  if (item.type === 'action') {
+    // Map action IDs to handlers
+    const handler = item.id === 'toggleFocusMode'
+      ? actionHandlers.toggleFocusMode
+      : item.id === 'toggleSidebar'
+        ? actionHandlers.toggleSidebar
+        : undefined
+    return (
+      <StyledDropdownMenuItem key={item.id} onClick={handler}>
+        {Icon && <Icon className="h-3.5 w-3.5" />}
+        {item.label}
+        {shortcut && <DropdownMenuShortcut className="pl-6">{shortcut}</DropdownMenuShortcut>}
+      </StyledDropdownMenuItem>
+    )
+  }
+
+  return null
+}
+
+/**
+ * Renders a menu section as a submenu
+ */
+function renderMenuSection(
+  section: MenuSection,
+  actionHandlers: MenuActionHandlers,
+  t: (key: string, defaultValue: string) => string
+): React.ReactNode {
+  const Icon = getIcon(section.icon)
+  return (
+    <DropdownMenuSub key={section.id}>
+      <StyledDropdownMenuSubTrigger>
+        {Icon && <Icon className="h-3.5 w-3.5" />}
+        {section.label}
+      </StyledDropdownMenuSubTrigger>
+      <StyledDropdownMenuSubContent>
+        {section.items.map((item, index) => renderMenuItem(item, index, actionHandlers, t))}
+      </StyledDropdownMenuSubContent>
+    </DropdownMenuSub>
+  )
 }
 
 interface AppMenuProps {
@@ -126,97 +198,6 @@ export function AppMenu({
     toggleSidebar: onToggleSidebar,
   }
 
-  // 渲染单个菜单项
-  const renderMenuItem = useCallback((
-    item: MenuItem,
-    index: number
-  ): React.ReactNode => {
-    if (item.type === 'separator') {
-      return <StyledDropdownMenuSeparator key={`sep-${index}`} />
-    }
-
-    const Icon = getIcon(item.icon)
-    const shortcut = getShortcutDisplay(item, isMac)
-    let label = item.label
-
-    if (item.type === 'role') {
-      switch (item.role) {
-        case 'undo': label = t('menu.undo', item.label); break
-        case 'redo': label = t('menu.redo', item.label); break
-        case 'cut': label = t('menu.cut', item.label); break
-        case 'copy': label = t('menu.copy', item.label); break
-        case 'paste': label = t('menu.paste', item.label); break
-        case 'selectAll': label = t('menu.selectAll', item.label); break
-        case 'zoomIn': label = t('menu.zoomIn', item.label); break
-        case 'zoomOut': label = t('menu.zoomOut', item.label); break
-        case 'resetZoom': label = t('menu.resetZoom', item.label); break
-        case 'minimize': label = t('menu.minimize', item.label); break
-        case 'zoom': label = t('menu.maximize', item.label); break
-      }
-    } else if (item.type === 'action') {
-      switch (item.id) {
-        case 'toggleFocusMode': label = t('menu.toggleFocusMode', item.label); break
-        case 'toggleSidebar': label = t('menu.toggleSidebar', item.label); break
-      }
-    }
-
-    if (item.type === 'role') {
-      const handler = roleHandlers[item.role]
-      const safeHandler = handler ?? (() => {
-        console.warn(`[AppMenu] No handler registered for role: ${item.role}`)
-      })
-      return (
-        <StyledDropdownMenuItem key={item.role} onClick={safeHandler}>
-          {Icon && <Icon className="h-3.5 w-3.5" />}
-          {label}
-          {shortcut && <DropdownMenuShortcut className="pl-6">{shortcut}</DropdownMenuShortcut>}
-        </StyledDropdownMenuItem>
-      )
-    }
-
-    if (item.type === 'action') {
-      const handler = item.id === 'toggleFocusMode'
-        ? actionHandlers.toggleFocusMode
-        : item.id === 'toggleSidebar'
-          ? actionHandlers.toggleSidebar
-          : undefined
-      return (
-        <StyledDropdownMenuItem key={item.id} onClick={handler}>
-          {Icon && <Icon className="h-3.5 w-3.5" />}
-          {label}
-          {shortcut && <DropdownMenuShortcut className="pl-6">{shortcut}</DropdownMenuShortcut>}
-        </StyledDropdownMenuItem>
-      )
-    }
-
-    return null
-  }, [t, actionHandlers])
-
-  // 渲染菜单子菜单
-  const renderMenuSection = useCallback((
-    section: MenuSection
-  ): React.ReactNode => {
-    const Icon = getIcon(section.icon)
-    let sectionLabel = section.label
-    switch (section.id) {
-      case 'edit': sectionLabel = t('menu.edit', section.label); break
-      case 'view': sectionLabel = t('menu.view', section.label); break
-      case 'window': sectionLabel = t('menu.window', section.label); break
-    }
-    
-    return (
-      <DropdownMenuSub key={section.id}>
-        <StyledDropdownMenuSubTrigger>
-          {Icon && <Icon className="h-3.5 w-3.5" />}
-          {sectionLabel}
-        </StyledDropdownMenuSubTrigger>
-        <StyledDropdownMenuSubContent>
-          {section.items.map((item, index) => renderMenuItem(item, index))}
-        </StyledDropdownMenuSubContent>
-      </DropdownMenuSub>
-    )
-  }, [t, renderMenuItem])
-
   return (
     <div className="flex items-center gap-[5px] w-full">
       {/* Craft Logo Menu - interactive island */}
@@ -245,9 +226,9 @@ export function AppMenu({
           <StyledDropdownMenuSeparator />
 
           {/* Edit, View, Window submenus from shared schema */}
-          {renderMenuSection(EDIT_MENU)}
-          {renderMenuSection(VIEW_MENU)}
-          {renderMenuSection(WINDOW_MENU)}
+          {renderMenuSection(EDIT_MENU, actionHandlers, t)}
+          {renderMenuSection(VIEW_MENU, actionHandlers, t)}
+          {renderMenuSection(WINDOW_MENU, actionHandlers, t)}
 
           <StyledDropdownMenuSeparator />
 

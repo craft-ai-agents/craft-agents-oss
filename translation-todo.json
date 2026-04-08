@@ -7,87 +7,9 @@
   },
   {
     "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 10,
-    "text": "Create a new chat session",
-    "key": "createANewChatSession"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 12,
-    "text": "General",
-    "key": "general"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 16,
-    "text": "New Chat in Panel",
-    "key": "newChatInPanel"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 17,
-    "text": "Create a new chat session in a new panel",
-    "key": "createANewChatSessionInANewPanel"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 19,
-    "text": "General",
-    "key": "general"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
     "line": 23,
     "text": "Settings",
     "key": "settings"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 24,
-    "text": "Open application settings",
-    "key": "openApplicationSettings"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 26,
-    "text": "General",
-    "key": "general"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 30,
-    "text": "Toggle Theme",
-    "key": "toggleTheme"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 31,
-    "text": "Switch between light and dark mode",
-    "key": "switchBetweenLightAndDarkMode"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 33,
-    "text": "General",
-    "key": "general"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 37,
-    "text": "Search",
-    "key": "search"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 38,
-    "text": "Open search panel",
-    "key": "openSearchPanel"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 40,
-    "text": "General",
-    "key": "general"
   },
   {
     "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
@@ -97,159 +19,9 @@
   },
   {
     "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 45,
-    "text": "Show keyboard shortcuts reference",
-    "key": "showKeyboardShortcutsReference"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 47,
-    "text": "General",
-    "key": "general"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
     "line": 51,
     "text": "New Window",
     "key": "newWindow"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 52,
-    "text": "Open a new window",
-    "key": "openANewWindow"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 54,
-    "text": "General",
-    "key": "general"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 58,
-    "text": "Quit",
-    "key": "quit"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 59,
-    "text": "Quit the application",
-    "key": "quitTheApplication"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 61,
-    "text": "General",
-    "key": "general"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 69,
-    "text": "Focus Sidebar",
-    "key": "focusSidebar"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 71,
-    "text": "Navigation",
-    "key": "navigation"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 75,
-    "text": "Focus Navigator",
-    "key": "focusNavigator"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 77,
-    "text": "Navigation",
-    "key": "navigation"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 81,
-    "text": "Focus Chat",
-    "key": "focusChat"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 83,
-    "text": "Navigation",
-    "key": "navigation"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 87,
-    "text": "Focus Next Zone",
-    "key": "focusNextZone"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 89,
-    "text": "Navigation",
-    "key": "navigation"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 94,
-    "text": "Go Back",
-    "key": "goBack"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 95,
-    "text": "Navigate to previous session",
-    "key": "navigateToPreviousSession"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 97,
-    "text": "Navigation",
-    "key": "navigation"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 101,
-    "text": "Go Forward",
-    "key": "goForward"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 102,
-    "text": "Navigate to next session",
-    "key": "navigateToNextSession"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 104,
-    "text": "Navigation",
-    "key": "navigation"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 108,
-    "text": "Go Back",
-    "key": "goBack"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 111,
-    "text": "Navigation",
-    "key": "navigation"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 116,
-    "text": "Go Forward",
-    "key": "goForward"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 119,
-    "text": "Navigation",
-    "key": "navigation"
   },
   {
     "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
@@ -282,118 +54,148 @@
     "key": "selectAll"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 147,
-    "text": "Navigator",
-    "key": "navigator"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 153,
-    "text": "Clear Selection",
-    "key": "clearSelection"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 155,
-    "text": "Navigator",
-    "key": "navigator"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 165,
-    "text": "Focus Next Panel",
-    "key": "focusNextPanel"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 166,
-    "text": "Move focus to the next panel",
-    "key": "moveFocusToTheNextPanel"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 168,
-    "text": "Navigation",
-    "key": "navigation"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 172,
-    "text": "Focus Previous Panel",
-    "key": "focusPreviousPanel"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 173,
-    "text": "Move focus to the previous panel",
-    "key": "moveFocusToThePreviousPanel"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 175,
-    "text": "Navigation",
-    "key": "navigation"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 183,
-    "text": "Stop Processing",
-    "key": "stopProcessing"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 186,
-    "text": "Chat",
-    "key": "chat"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 192,
-    "text": "Cycle Permission Mode",
-    "key": "cyclePermissionMode"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 195,
-    "text": "Chat",
-    "key": "chat"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 199,
-    "text": "Next Search Match",
-    "key": "nextSearchMatch"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 201,
-    "text": "Chat",
-    "key": "chat"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 205,
-    "text": "Previous Search Match",
-    "key": "previousSearchMatch"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\actions\\definitions.ts",
-    "line": 207,
-    "text": "Chat",
-    "key": "chat"
-  },
-  {
     "file": "apps\\electron\\src\\renderer\\actions\\useHotkeyLabel.ts",
-    "line": 24,
+    "line": 25,
     "text": "New Chat",
     "key": "newChat"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\NavigatorPanel.tsx",
-    "line": 24,
-    "text": "Conversations",
-    "key": "conversations"
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\AppShell.tsx",
+    "line": 1460,
+    "text": "Labels",
+    "key": "labels"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\AppShell.tsx",
+    "line": 1915,
+    "text": "New Chat",
+    "key": "newChat"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\AppShell.tsx",
+    "line": 2074,
+    "text": "Sources",
+    "key": "sources"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\AppShell.tsx",
+    "line": 2094,
+    "text": "Settings",
+    "key": "settings"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\AppShell.tsx",
+    "line": 2107,
+    "text": "Labels",
+    "key": "labels"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\AppShell.tsx",
+    "line": 2337,
+    "text": "Labels",
+    "key": "labels"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\AppShell.tsx",
+    "line": 2339,
+    "text": "Labels",
+    "key": "labels"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\AppShell.tsx",
+    "line": 2358,
+    "text": "Sources",
+    "key": "sources"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\AppShell.tsx",
+    "line": 2415,
+    "text": "Skills",
+    "key": "skills"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\AppShell.tsx",
+    "line": 2427,
+    "text": "Automations",
+    "key": "automations"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\AppShell.tsx",
+    "line": 2474,
+    "text": "Settings",
+    "key": "settings"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\AppShell.tsx",
+    "line": 2769,
+    "text": "Statuses",
+    "key": "statuses"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\AppShell.tsx",
+    "line": 2842,
+    "text": "Labels",
+    "key": "labels"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\BatchSessionMenu.tsx",
+    "line": 205,
+    "text": "Labels",
+    "key": "labels"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\ChatDisplay.tsx",
+    "line": 1098,
+    "text": "Edit",
+    "key": "edit"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\ChatDisplay.tsx",
+    "line": 1106,
+    "text": "Edit",
+    "key": "edit"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\ChatDisplay.tsx",
+    "line": 1118,
+    "text": "Edit",
+    "key": "edit"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\ChatDisplay.tsx",
+    "line": 1885,
+    "text": "Edit",
+    "key": "edit"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\ChatDisplay.tsx",
+    "line": 1901,
+    "text": "Edit",
+    "key": "edit"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\input\\FreeFormInput.tsx",
+    "line": 1721,
+    "text": "Sources",
+    "key": "sources"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\input\\FreeFormInput.tsx",
+    "line": 1734,
+    "text": "Sources",
+    "key": "sources"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\input\\FreeFormInput.tsx",
+    "line": 1841,
+    "text": "Sources",
+    "key": "sources"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\input\\FreeFormInput.tsx",
+    "line": 2331,
+    "text": "Choose working directory",
+    "key": "chooseWorkingDirectory"
   },
   {
     "file": "apps\\electron\\src\\renderer\\components\\app-shell\\NavigatorPanel.tsx",
@@ -402,2230 +204,700 @@
     "key": "sources"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\Panel.tsx",
-    "line": 14,
-    "text": "Title",
-    "key": "title"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\Panel.tsx",
-    "line": 14,
-    "text": "Subtitle",
-    "key": "subtitle"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\Panel.tsx",
-    "line": 14,
-    "text": "Title",
-    "key": "title"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\Panel.tsx",
-    "line": 14,
-    "text": "Subtitle",
-    "key": "subtitle"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\SkillsListPanel.tsx",
-    "line": 45,
-    "text": "No skills configured",
-    "key": "noSkillsConfigured"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\SkillsListPanel.tsx",
-    "line": 45,
-    "text": "No skills configured",
-    "key": "noSkillsConfigured"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\SkillsListPanel.tsx",
-    "line": 88,
-    "text": "Delete Skill",
-    "key": "deleteSkill"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\SkillsListPanel.tsx",
-    "line": 88,
-    "text": "Managed by project",
-    "key": "managedByProject"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\SourcesListPanel.tsx",
-    "line": 16,
-    "text": "Local",
-    "key": "local"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\SourcesListPanel.tsx",
-    "line": 21,
-    "text": "Auth Required",
-    "key": "authRequired"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\SourcesListPanel.tsx",
-    "line": 22,
-    "text": "Disconnected",
-    "key": "disconnected"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\SourcesListPanel.tsx",
-    "line": 23,
-    "text": "Not Tested",
-    "key": "notTested"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\SourcesListPanel.tsx",
-    "line": 24,
-    "text": "Disabled",
-    "key": "disabled"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\TransportConnectionBanner.tsx",
-    "line": 20,
-    "text": "Connecting to remote server",
-    "key": "connectingToRemoteServer"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\TransportConnectionBanner.tsx",
-    "line": 29,
-    "text": "Reconnecting to remote server",
-    "key": "reconnectingToRemoteServer"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\TransportConnectionBanner.tsx",
-    "line": 38,
-    "text": "Cannot connect to remote server",
-    "key": "cannotConnectToRemoteServer"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\TransportConnectionBanner.tsx",
-    "line": 46,
-    "text": "Connection to remote server lost",
-    "key": "connectionToRemoteServerLost"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\TransportConnectionBanner.tsx",
-    "line": 54,
-    "text": "Remote server connection status",
-    "key": "remoteServerConnectionStatus"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationCard.tsx",
-    "line": 77,
-    "text": "When",
-    "key": "when"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationCard.tsx",
-    "line": 95,
-    "text": "Then",
-    "key": "then"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 62,
-    "text": "Edit File",
-    "key": "editFile"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 97,
-    "text": "Paused",
-    "key": "paused"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 106,
-    "text": "When",
-    "key": "when"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 106,
-    "text": "When",
-    "key": "when"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 107,
-    "text": "What causes this automation to run",
-    "key": "whatCausesThisAutomationToRun"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 107,
-    "text": "What causes this automation to run",
-    "key": "whatCausesThisAutomationToRun"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 111,
-    "text": "Event",
-    "key": "event"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 111,
-    "text": "Event",
-    "key": "event"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 114,
-    "text": "Timing",
-    "key": "timing"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 114,
-    "text": "Timing",
-    "key": "timing"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 118,
-    "text": "Only when matching",
-    "key": "onlyWhenMatching"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 118,
-    "text": "Only when matching",
-    "key": "onlyWhenMatching"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 126,
-    "text": "Repeats",
-    "key": "repeats"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 126,
-    "text": "Repeats",
-    "key": "repeats"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 127,
-    "text": "Schedule expression",
-    "key": "scheduleExpression"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 127,
-    "text": "Schedule expression",
-    "key": "scheduleExpression"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 133,
-    "text": "Next runs",
-    "key": "nextRuns"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 133,
-    "text": "Next runs",
-    "key": "nextRuns"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 147,
-    "text": "Timezone",
-    "key": "timezone"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 147,
-    "text": "Timezone",
-    "key": "timezone"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 147,
-    "text": "System default",
-    "key": "systemDefault"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 157,
-    "text": "Conditions that must pass before actions run",
-    "key": "conditionsThatMustPassBeforeActionsRun"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 157,
-    "text": "Conditions that must pass before actions run",
-    "key": "conditionsThatMustPassBeforeActionsRun"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 174,
-    "text": "Then",
-    "key": "then"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 174,
-    "text": "Then",
-    "key": "then"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 191,
-    "text": "Settings",
-    "key": "settings"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 191,
-    "text": "Settings",
-    "key": "settings"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 193,
-    "text": "Access Level",
-    "key": "accessLevel"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 193,
-    "text": "Access Level",
-    "key": "accessLevel"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 194,
-    "text": "Status",
-    "key": "status"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 194,
-    "text": "Status",
-    "key": "status"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 196,
-    "text": "Active",
-    "key": "active"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 196,
-    "text": "Disabled",
-    "key": "disabled"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 200,
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\SessionMenu.tsx",
+    "line": 231,
     "text": "Labels",
     "key": "labels"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 200,
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx",
+    "line": 123,
     "text": "Labels",
     "key": "labels"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 213,
-    "text": "Recent Activity",
-    "key": "recentActivity"
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\TopBar.tsx",
+    "line": 259,
+    "text": "Toggle Sidebar",
+    "key": "toggleSidebar"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 213,
-    "text": "Recent Activity",
-    "key": "recentActivity"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 220,
-    "text": "Raw config",
-    "key": "rawConfig"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
-    "line": 220,
-    "text": "Raw config",
-    "key": "rawConfig"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationMenu.tsx",
-    "line": 55,
-    "text": "Disable",
-    "key": "disable"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationMenu.tsx",
-    "line": 55,
-    "text": "Enable",
-    "key": "enable"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationMenu.tsx",
-    "line": 63,
-    "text": "Run Test",
-    "key": "runTest"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationMenu.tsx",
-    "line": 71,
-    "text": "Duplicate",
-    "key": "duplicate"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationMenu.tsx",
-    "line": 79,
-    "text": "Edit Configuration",
-    "key": "editConfiguration"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationMenu.tsx",
-    "line": 89,
-    "text": "Delete",
-    "key": "delete"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationTestPanel.tsx",
-    "line": 51,
-    "text": "Test Failed",
-    "key": "testFailed"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\PhaseBadge.tsx",
-    "line": 12,
-    "text": "Scheduled",
-    "key": "scheduled"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\PhaseBadge.tsx",
-    "line": 13,
-    "text": "Before",
-    "key": "before"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\PhaseBadge.tsx",
-    "line": 14,
-    "text": "After",
-    "key": "after"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\PhaseBadge.tsx",
-    "line": 15,
-    "text": "On Error",
-    "key": "onError"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\PhaseBadge.tsx",
-    "line": 16,
-    "text": "Event",
-    "key": "event"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\PhaseBadge.tsx",
-    "line": 17,
-    "text": "Event",
-    "key": "event"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\PhaseBadge.tsx",
-    "line": 18,
-    "text": "Event",
-    "key": "event"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\PhaseBadge.tsx",
-    "line": 19,
-    "text": "Event",
-    "key": "event"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\PhaseBadge.tsx",
-    "line": 20,
-    "text": "Event",
-    "key": "event"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\automations\\PhaseBadge.tsx",
-    "line": 21,
-    "text": "Event",
-    "key": "event"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\browser\\empty-state-prompts.ts",
-    "line": 17,
-    "text": "GitHub Docs: latest Actions updates",
-    "key": "githubDocsLatestActionsUpdates"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\browser\\empty-state-prompts.ts",
-    "line": 37,
-    "text": "Figma Community: trending design systems",
-    "key": "figmaCommunityTrendingDesignSystems"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\browser\\empty-state-prompts.ts",
-    "line": 41,
-    "text": "Google Search docs: Core Web Vitals checklist",
-    "key": "googleSearchDocsCoreWebVitalsChecklist"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\icons\\CraftAppIcon.tsx",
-    "line": 15,
-    "text": "Craft",
-    "key": "craft"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\Info_DataTable.tsx",
-    "line": 55,
-    "text": "Name",
-    "key": "name"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\Info_DataTable.tsx",
-    "line": 55,
-    "text": "Name",
-    "key": "name"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\Info_DataTable.tsx",
-    "line": 107,
-    "text": "Source requires authentication",
-    "key": "sourceRequiresAuthentication"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\Info_DataTable.tsx",
-    "line": 108,
-    "text": "Authenticate with this source to view available data",
-    "key": "authenticateWithThisSourceToViewAvailableData"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\Info_StatusBadge.tsx",
-    "line": 13,
-    "text": "Allowed",
-    "key": "allowed"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\Info_StatusBadge.tsx",
-    "line": 14,
-    "text": "Blocked",
-    "key": "blocked"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\LabelsDataTable.tsx",
-    "line": 79,
-    "text": "Color",
-    "key": "color"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\LabelsDataTable.tsx",
-    "line": 94,
-    "text": "Name",
-    "key": "name"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\LabelsDataTable.tsx",
-    "line": 94,
-    "text": "Name",
-    "key": "name"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\LabelsDataTable.tsx",
-    "line": 101,
-    "text": "Type",
-    "key": "type"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\LabelsDataTable.tsx",
-    "line": 101,
-    "text": "Type",
-    "key": "type"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\LabelsDataTable.tsx",
-    "line": 130,
-    "text": "Labels",
-    "key": "labels"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\LabelsDataTable.tsx",
-    "line": 147,
-    "text": "View Fullscreen",
-    "key": "viewFullscreen"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\LabelsDataTable.tsx",
-    "line": 147,
-    "text": "View Fullscreen",
-    "key": "viewFullscreen"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\LabelsDataTable.tsx",
-    "line": 165,
-    "text": "No labels configured",
-    "key": "noLabelsConfigured"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\LabelsDataTable.tsx",
-    "line": 184,
-    "text": "No labels configured",
-    "key": "noLabelsConfigured"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\ToolsDataTable.tsx",
-    "line": 36,
-    "text": "Access",
-    "key": "access"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\ToolsDataTable.tsx",
-    "line": 36,
-    "text": "Access",
-    "key": "access"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\ToolsDataTable.tsx",
-    "line": 46,
-    "text": "Tool",
-    "key": "tool"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\ToolsDataTable.tsx",
-    "line": 46,
-    "text": "Tool",
-    "key": "tool"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\ToolsDataTable.tsx",
-    "line": 59,
-    "text": "Description",
-    "key": "description"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\info\\ToolsDataTable.tsx",
-    "line": 83,
-    "text": "No tools available",
-    "key": "noToolsAvailable"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\onboarding\\GitBashWarning.tsx",
-    "line": 63,
-    "text": "Git Bash Required",
-    "key": "gitBashRequired"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\onboarding\\GitBashWarning.tsx",
-    "line": 63,
-    "text": "Git Bash Required",
-    "key": "gitBashRequired"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\onboarding\\OnboardingWizard.tsx",
-    "line": 63,
-    "text": "Setup later",
-    "key": "setupLater"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\onboarding\\ReauthScreen.tsx",
-    "line": 29,
-    "text": "Login failed",
-    "key": "loginFailed"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\onboarding\\ReauthScreen.tsx",
-    "line": 47,
-    "text": "Session Expired",
-    "key": "sessionExpired"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\onboarding\\ReauthScreen.tsx",
-    "line": 47,
-    "text": "Session Expired",
-    "key": "sessionExpired"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsEditRow.tsx",
-    "line": 22,
-    "text": "Change the API endpoint",
-    "key": "changeTheApiEndpoint"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsRow.tsx",
-    "line": 21,
-    "text": "Change",
-    "key": "change"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsRow.tsx",
-    "line": 34,
-    "text": "Working Directory",
-    "key": "workingDirectory"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsRow.tsx",
-    "line": 34,
-    "text": "Working Directory",
-    "key": "workingDirectory"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsRow.tsx",
-    "line": 36,
-    "text": "Change",
-    "key": "change"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsRow.tsx",
-    "line": 84,
-    "text": "Theme",
-    "key": "theme"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsRow.tsx",
-    "line": 84,
-    "text": "Theme",
-    "key": "theme"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
-    "line": 33,
-    "text": "Billing",
-    "key": "billing"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
-    "line": 33,
-    "text": "Choose how you pay",
-    "key": "chooseHowYouPay"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
-    "line": 33,
-    "text": "Billing",
-    "key": "billing"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
-    "line": 33,
-    "text": "Choose how you pay",
-    "key": "chooseHowYouPay"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
-    "line": 82,
-    "text": "Workspace",
-    "key": "workspace"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
-    "line": 85,
-    "text": "Workspace",
-    "key": "workspace"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
-    "line": 85,
-    "text": "Workspace",
-    "key": "workspace"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
-    "line": 86,
-    "text": "Model",
-    "key": "model"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
-    "line": 86,
-    "text": "Model",
-    "key": "model"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
-    "line": 87,
-    "text": "Permissions",
-    "key": "permissions"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
-    "line": 87,
-    "text": "Permissions",
-    "key": "permissions"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSegmentedControl.tsx",
-    "line": 41,
-    "text": "System",
-    "key": "system"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSegmentedControl.tsx",
-    "line": 42,
-    "text": "Light",
-    "key": "light"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSegmentedControl.tsx",
-    "line": 43,
-    "text": "Dark",
-    "key": "dark"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsTextarea.tsx",
-    "line": 43,
-    "text": "Notes",
-    "key": "notes"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsTextarea.tsx",
-    "line": 43,
-    "text": "Notes",
-    "key": "notes"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsTextarea.tsx",
-    "line": 44,
-    "text": "Additional context for the AI assistant",
-    "key": "additionalContextForTheAiAssistant"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsTextarea.tsx",
-    "line": 44,
-    "text": "Additional context for the AI assistant",
-    "key": "additionalContextForTheAiAssistant"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsToggle.tsx",
-    "line": 36,
-    "text": "Desktop notifications",
-    "key": "desktopNotifications"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsToggle.tsx",
-    "line": 36,
-    "text": "Desktop notifications",
-    "key": "desktopNotifications"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsToggle.tsx",
-    "line": 37,
-    "text": "Get notified when AI finishes working",
-    "key": "getNotifiedWhenAiFinishesWorking"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsToggle.tsx",
-    "line": 37,
-    "text": "Get notified when AI finishes working",
-    "key": "getNotifiedWhenAiFinishesWorking"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\entity-list-empty.tsx",
-    "line": 16,
-    "text": "Learn more",
-    "key": "learnMore"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\entity-list-empty.tsx",
-    "line": 18,
-    "text": "Learn more",
-    "key": "learnMore"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\entity-list.tsx",
-    "line": 128,
-    "text": "Expand",
-    "key": "expand"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\entity-list.tsx",
-    "line": 128,
-    "text": "Collapse",
-    "key": "collapse"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\HeaderMenu.tsx",
-    "line": 6,
-    "text": "Learn More",
-    "key": "learnMore"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\HeaderMenu.tsx",
-    "line": 28,
-    "text": "Learn More",
-    "key": "learnMore"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\HeaderMenu.tsx",
-    "line": 57,
-    "text": "Open in New Window",
-    "key": "openInNewWindow"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\HeaderMenu.tsx",
-    "line": 64,
-    "text": "Learn More",
-    "key": "learnMore"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx",
-    "line": 43,
-    "text": "Connected",
-    "key": "connected"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx",
-    "line": 44,
-    "text": "Source is connected and working",
-    "key": "sourceIsConnectedAndWorking"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx",
-    "line": 49,
-    "text": "Needs Authentication",
-    "key": "needsAuthentication"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx",
-    "line": 50,
-    "text": "Source requires authentication to connect",
-    "key": "sourceRequiresAuthenticationToConnect"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx",
-    "line": 55,
-    "text": "Connection Failed",
-    "key": "connectionFailed"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx",
-    "line": 56,
-    "text": "Failed to connect to source",
-    "key": "failedToConnectToSource"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx",
-    "line": 61,
-    "text": "Not Tested",
-    "key": "notTested"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx",
-    "line": 62,
-    "text": "Connection has not been tested",
-    "key": "connectionHasNotBeenTested"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx",
-    "line": 67,
-    "text": "Disabled",
-    "key": "disabled"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx",
-    "line": 68,
-    "text": "Local MCP servers are disabled in Settings",
-    "key": "localMcpServersAreDisabledInSettings"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_Choice.tsx",
-    "line": 65,
-    "text": "Add Workspace",
-    "key": "addWorkspace"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_Choice.tsx",
-    "line": 65,
-    "text": "Add Workspace",
-    "key": "addWorkspace"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_Choice.tsx",
-    "line": 72,
-    "text": "Create new",
-    "key": "createNew"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_Choice.tsx",
-    "line": 72,
-    "text": "Create new",
-    "key": "createNew"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_Choice.tsx",
-    "line": 80,
-    "text": "Open folder",
-    "key": "openFolder"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_Choice.tsx",
-    "line": 80,
-    "text": "Open folder",
-    "key": "openFolder"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_Choice.tsx",
-    "line": 87,
-    "text": "Connect to remote server",
-    "key": "connectToRemoteServer"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_Choice.tsx",
-    "line": 87,
-    "text": "Connect to remote server",
-    "key": "connectToRemoteServer"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\workspace\\primitives.tsx",
-    "line": 94,
-    "text": "Create",
-    "key": "create"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\workspace\\primitives.tsx",
-    "line": 94,
-    "text": "Open",
-    "key": "open"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\workspace\\primitives.tsx",
-    "line": 98,
-    "text": "Continue",
-    "key": "continue"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\components\\workspace\\primitives.tsx",
-    "line": 130,
-    "text": "Browse",
-    "key": "browse"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\hooks\\useBackgroundTasks.ts",
-    "line": 73,
-    "text": "Killing agent tasks not yet implemented",
-    "key": "killingAgentTasksNotYetImplemented"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 7,
-    "text": "Notifications and updates",
-    "key": "notificationsAndUpdates"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 14,
-    "text": "Appearance",
-    "key": "appearance"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 18,
-    "text": "Input",
-    "key": "input"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 22,
-    "text": "Workspace",
-    "key": "workspace"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 26,
-    "text": "Permissions",
-    "key": "permissions"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 27,
-    "text": "Explore mode rules",
-    "key": "exploreModeRules"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 30,
-    "text": "Labels",
-    "key": "labels"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 31,
-    "text": "Manage session labels",
-    "key": "manageSessionLabels"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 34,
-    "text": "Server",
-    "key": "server"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 35,
-    "text": "Remote server access",
-    "key": "remoteServerAccess"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 38,
-    "text": "Shortcuts",
-    "key": "shortcuts"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 39,
-    "text": "Keyboard shortcuts",
-    "key": "keyboardShortcuts"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 42,
-    "text": "Preferences",
-    "key": "preferences"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 43,
-    "text": "User preferences",
-    "key": "userPreferences"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 46,
-    "text": "Language",
-    "key": "language"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 47,
-    "text": "Interface language",
-    "key": "interfaceLanguage"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 48,
-    "text": "English",
-    "key": "english"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 55,
-    "text": "Open in New Window",
-    "key": "openInNewWindow"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 56,
-    "text": "Save",
-    "key": "save"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 57,
-    "text": "Cancel",
-    "key": "cancel"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 58,
-    "text": "Delete",
-    "key": "delete"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 59,
-    "text": "Edit",
-    "key": "edit"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 61,
-    "text": "Close",
-    "key": "close"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 62,
-    "text": "Back",
-    "key": "back"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 63,
-    "text": "Next",
-    "key": "next"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 64,
-    "text": "Confirm",
-    "key": "confirm"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 68,
-    "text": "New Window",
-    "key": "newWindow"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 69,
-    "text": "Settings",
-    "key": "settings"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 70,
-    "text": "Help",
-    "key": "help"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 71,
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\TopBar.tsx",
+    "line": 437,
     "text": "Help & Documentation",
     "key": "helpDocumentation"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 72,
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\TopBar.tsx",
+    "line": 444,
+    "text": "Sources",
+    "key": "sources"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\TopBar.tsx",
+    "line": 449,
+    "text": "Skills",
+    "key": "skills"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\TopBar.tsx",
+    "line": 454,
+    "text": "Statuses",
+    "key": "statuses"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\TopBar.tsx",
+    "line": 459,
+    "text": "Permissions",
+    "key": "permissions"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\TopBar.tsx",
+    "line": 464,
     "text": "Automations",
     "key": "automations"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 73,
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\TopBar.tsx",
+    "line": 470,
+    "text": "All Documentation",
+    "key": "allDocumentation"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\app-shell\\WorkspaceSwitcher.tsx",
+    "line": 200,
+    "text": "Workspace",
+    "key": "workspace"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\AppMenu.tsx",
+    "line": 215,
+    "text": "New Chat",
+    "key": "newChat"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\AppMenu.tsx",
+    "line": 221,
+    "text": "New Window",
+    "key": "newWindow"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\AppMenu.tsx",
+    "line": 239,
+    "text": "Settings",
+    "key": "settings"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\AppMenu.tsx",
+    "line": 245,
+    "text": "Settings",
+    "key": "settings"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\AppMenu.tsx",
+    "line": 269,
+    "text": "Help",
+    "key": "help"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\AppMenu.tsx",
+    "line": 274,
+    "text": "Help & Documentation",
+    "key": "helpDocumentation"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\AppMenu.tsx",
+    "line": 279,
+    "text": "Automations",
+    "key": "automations"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\AppMenu.tsx",
+    "line": 285,
+    "text": "Keyboard Shortcuts",
+    "key": "keyboardShortcuts"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\AppMenu.tsx",
+    "line": 297,
     "text": "Debug",
     "key": "debug"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 74,
+    "file": "apps\\electron\\src\\renderer\\components\\AppMenu.tsx",
+    "line": 302,
     "text": "Check for Updates",
     "key": "checkForUpdates"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 75,
+    "file": "apps\\electron\\src\\renderer\\components\\AppMenu.tsx",
+    "line": 306,
     "text": "Install Update",
     "key": "installUpdate"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 76,
+    "file": "apps\\electron\\src\\renderer\\components\\AppMenu.tsx",
+    "line": 311,
     "text": "Toggle DevTools",
     "key": "toggleDevtools"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 77,
+    "file": "apps\\electron\\src\\renderer\\components\\AppMenu.tsx",
+    "line": 324,
     "text": "Quit Craft Agents",
     "key": "quitCraftAgents"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 78,
-    "text": "Mark All Read",
-    "key": "markAllRead"
+    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
+    "line": 193,
+    "text": "Settings",
+    "key": "settings"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 79,
-    "text": "Configure Statuses",
-    "key": "configureStatuses"
+    "file": "apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
+    "line": 202,
+    "text": "Labels",
+    "key": "labels"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 80,
-    "text": "Add New Label",
-    "key": "addNewLabel"
+    "file": "apps\\electron\\src\\renderer\\components\\info\\LabelsDataTable.tsx",
+    "line": 130,
+    "text": "Labels",
+    "key": "labels"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 81,
-    "text": "Edit Labels",
-    "key": "editLabels"
+    "file": "apps\\electron\\src\\renderer\\components\\info\\PermissionsDataTable.tsx",
+    "line": 177,
+    "text": "Permissions",
+    "key": "permissions"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "file": "apps\\electron\\src\\renderer\\components\\KeyboardShortcutsDialog.tsx",
+    "line": 150,
+    "text": "Keyboard Shortcuts",
+    "key": "keyboardShortcuts"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
     "line": 82,
-    "text": "Delete Label",
-    "key": "deleteLabel"
+    "text": "App",
+    "key": "app"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 83,
-    "text": "Edit Views",
-    "key": "editViews"
+    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
+    "line": 82,
+    "text": "Workspace",
+    "key": "workspace"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 84,
-    "text": "Delete View",
-    "key": "deleteView"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
     "line": 85,
-    "text": "Learn More about APIs",
-    "key": "learnMoreAboutApis"
+    "text": "Workspace",
+    "key": "workspace"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 86,
-    "text": "Learn More about MCP",
-    "key": "learnMoreAboutMcp"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "file": "apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
     "line": 87,
-    "text": "Learn More about Local Folders",
-    "key": "learnMoreAboutLocalFolders"
+    "text": "Permissions",
+    "key": "permissions"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 88,
-    "text": "Learn More about Sources",
-    "key": "learnMoreAboutSources"
+    "file": "apps\\electron\\src\\renderer\\components\\ui\\EditPopover.tsx",
+    "line": 38,
+    "text": "Permissions",
+    "key": "permissions"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 89,
-    "text": "Add Source",
-    "key": "addSource"
+    "file": "apps\\electron\\src\\renderer\\components\\ui\\EditPopover.tsx",
+    "line": 395,
+    "text": "Bug",
+    "key": "bug"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 90,
-    "text": "Add Skill",
-    "key": "addSkill"
+    "file": "apps\\electron\\src\\renderer\\components\\ui\\EditPopover.tsx",
+    "line": 435,
+    "text": "Bug",
+    "key": "bug"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 91,
-    "text": "Add Automation",
-    "key": "addAutomation"
+    "file": "apps\\electron\\src\\renderer\\components\\ui\\label-menu-utils.ts",
+    "line": 41,
+    "text": "Priority",
+    "key": "priority"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 92,
-    "text": "Learn More about Automations",
-    "key": "learnMoreAboutAutomations"
+    "file": "apps\\electron\\src\\renderer\\components\\ui\\label-menu-utils.ts",
+    "line": 43,
+    "text": "Priority",
+    "key": "priority"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 93,
-    "text": "Show in Explorer",
-    "key": "showInExplorer"
+    "file": "apps\\electron\\src\\renderer\\components\\ui\\mention-menu.tsx",
+    "line": 512,
+    "text": "Skills",
+    "key": "skills"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 94,
-    "text": "Delete Source",
-    "key": "deleteSource"
+    "file": "apps\\electron\\src\\renderer\\components\\ui\\mention-menu.tsx",
+    "line": 527,
+    "text": "Sources",
+    "key": "sources"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 95,
-    "text": "Delete Skill",
-    "key": "deleteSkill"
+    "file": "apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_CreateNew.tsx",
+    "line": 130,
+    "text": "My Workspace",
+    "key": "myWorkspace"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 100,
-    "text": "Edit",
-    "key": "edit"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "file": "apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_OpenFolder.tsx",
     "line": 101,
-    "text": "View",
-    "key": "view"
+    "text": "My Workspace",
+    "key": "myWorkspace"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 102,
-    "text": "Window",
-    "key": "window"
+    "file": "apps\\electron\\src\\renderer\\hooks\\useSessionActions.ts",
+    "line": 25,
+    "text": "Undo",
+    "key": "undo"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 103,
+    "file": "apps\\electron\\src\\renderer\\hooks\\useSessionActions.ts",
+    "line": 37,
+    "text": "Undo",
+    "key": "undo"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\hooks\\useSessionActions.ts",
+    "line": 49,
+    "text": "Undo",
+    "key": "undo"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\hooks\\useSessionActions.ts",
+    "line": 61,
     "text": "Undo",
     "key": "undo"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 104,
-    "text": "Redo",
-    "key": "redo"
+    "line": 6,
+    "text": "App",
+    "key": "app"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 106,
-    "text": "Copy",
-    "key": "copy"
+    "line": 8,
+    "text": "App",
+    "key": "app"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 107,
-    "text": "Paste",
-    "key": "paste"
+    "line": 38,
+    "text": "AI",
+    "key": "ai"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 108,
-    "text": "Select All",
-    "key": "selectAll"
+    "line": 40,
+    "text": "AI",
+    "key": "ai"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 109,
-    "text": "Zoom In",
-    "key": "zoomIn"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 110,
-    "text": "Zoom Out",
-    "key": "zoomOut"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 111,
-    "text": "Reset Zoom",
-    "key": "resetZoom"
+    "line": 61,
+    "text": "Edit",
+    "key": "edit"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
     "line": 112,
-    "text": "Toggle Focus Mode",
-    "key": "toggleFocusMode"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 113,
-    "text": "Toggle Sidebar",
-    "key": "toggleSidebar"
+    "text": "Appearance",
+    "key": "appearance"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
     "line": 114,
-    "text": "Minimize",
-    "key": "minimize"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 115,
-    "text": "Maximize",
-    "key": "maximize"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 120,
-    "text": "Send message",
-    "key": "sendMessage"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 123,
-    "text": "New Chat",
-    "key": "newChat"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 124,
-    "text": "Save Chat",
-    "key": "saveChat"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 125,
-    "text": "Delete Chat",
-    "key": "deleteChat"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 126,
-    "text": "Rename Chat",
-    "key": "renameChat"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 127,
-    "text": "Share Chat",
-    "key": "shareChat"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 128,
-    "text": "Export Chat",
-    "key": "exportChat"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 129,
-    "text": "Clear Chat",
-    "key": "clearChat"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 130,
-    "text": "Chat History",
-    "key": "chatHistory"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 131,
-    "text": "Recent Chats",
-    "key": "recentChats"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 132,
-    "text": "All Chats",
-    "key": "allChats"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 137,
-    "text": "Model",
-    "key": "model"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 138,
-    "text": "Thinking Level",
-    "key": "thinkingLevel"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 139,
-    "text": "Connections",
-    "key": "connections"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 140,
-    "text": "API Key",
-    "key": "apiKey"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 141,
-    "text": "Temperature",
-    "key": "temperature"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 142,
-    "text": "Max Tokens",
-    "key": "maxTokens"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 143,
-    "text": "Top P",
-    "key": "topP"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 144,
-    "text": "Frequency Penalty",
-    "key": "frequencyPenalty"
+    "text": "Appearance",
+    "key": "appearance"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
     "line": 145,
-    "text": "Presence Penalty",
-    "key": "presencePenalty"
+    "text": "Input",
+    "key": "input"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 150,
-    "text": "Theme",
-    "key": "theme"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 151,
-    "text": "Light",
-    "key": "light"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 152,
-    "text": "Dark",
-    "key": "dark"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 153,
-    "text": "System",
-    "key": "system"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 154,
-    "text": "Font",
-    "key": "font"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 155,
-    "text": "Font Size",
-    "key": "fontSize"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 161,
-    "text": "Name",
-    "key": "name"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 163,
-    "text": "Working Directory",
-    "key": "workingDirectory"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 164,
-    "text": "Browse",
-    "key": "browse"
+    "line": 147,
+    "text": "Input",
+    "key": "input"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
     "line": 165,
-    "text": "Reset",
-    "key": "reset"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 170,
-    "text": "Explore Mode",
-    "key": "exploreMode"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 171,
-    "text": "Allow Commands",
-    "key": "allowCommands"
+    "text": "Workspace",
+    "key": "workspace"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
     "line": 172,
-    "text": "Allow Write",
-    "key": "allowWrite"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 173,
-    "text": "Allow Network",
-    "key": "allowNetwork"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 174,
-    "text": "Allow System",
-    "key": "allowSystem"
+    "text": "Edit",
+    "key": "edit"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
     "line": 179,
-    "text": "Manage Labels",
-    "key": "manageLabels"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 180,
-    "text": "Create Label",
-    "key": "createLabel"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 181,
-    "text": "Edit Label",
-    "key": "editLabel"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 182,
-    "text": "Delete Label",
-    "key": "deleteLabel"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 183,
-    "text": "Color",
-    "key": "color"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 184,
-    "text": "Name",
-    "key": "name"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 189,
-    "text": "Remote Server",
-    "key": "remoteServer"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 190,
-    "text": "Enabled",
-    "key": "enabled"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 192,
-    "text": "Port",
-    "key": "port"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 193,
-    "text": "Username",
-    "key": "username"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 194,
-    "text": "Password",
-    "key": "password"
+    "text": "Permissions",
+    "key": "permissions"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
     "line": 199,
-    "text": "Keyboard Shortcuts",
-    "key": "keyboardShortcuts"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 200,
-    "text": "Edit Shortcuts",
-    "key": "editShortcuts"
+    "text": "Permissions",
+    "key": "permissions"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
     "line": 201,
-    "text": "Reset Shortcuts",
-    "key": "resetShortcuts"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 202,
-    "text": "Save Changes",
-    "key": "saveChanges"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 207,
-    "text": "Send Key",
-    "key": "sendKey"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 208,
-    "text": "Spell Check",
-    "key": "spellCheck"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 209,
-    "text": "Enable Spell Check",
-    "key": "enableSpellCheck"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 210,
-    "text": "What would you like to work on?",
-    "key": "whatWouldYouLikeToWorkOn "
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 221,
-    "text": "Today",
-    "key": "today"
+    "text": "Permissions",
+    "key": "permissions"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
     "line": 222,
-    "text": "Yesterday",
-    "key": "yesterday"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 223,
-    "text": "All Sessions",
-    "key": "allSessions"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 224,
-    "text": "Flagged",
-    "key": "flagged"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 225,
-    "text": "Archived",
-    "key": "archived"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 226,
-    "text": "Search Results",
-    "key": "searchResults"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 227,
-    "text": "No sessions found",
-    "key": "noSessionsFound"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 228,
-    "text": "Searched titles and message content",
-    "key": "searchedTitlesAndMessageContent"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 233,
-    "text": "Reset App",
-    "key": "resetApp"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 235,
-    "text": "All workspaces and their settings",
-    "key": "allWorkspacesAndTheirSettings"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 236,
-    "text": "All credentials and API keys",
-    "key": "allCredentialsAndApiKeys"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 237,
-    "text": "All preferences and session data",
-    "key": "allPreferencesAndSessionData"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 238,
-    "text": "Back up any important data first!",
-    "key": "backUpAnyImportantDataFirst "
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 241,
-    "text": "Enter answer",
-    "key": "enterAnswer"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 246,
-    "text": "Select Workspace",
-    "key": "selectWorkspace"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 249,
-    "text": "New workspace name",
-    "key": "newWorkspaceName"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 251,
-    "text": "Create Workspace",
-    "key": "createWorkspace"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 256,
-    "text": "All Sessions",
-    "key": "allSessions"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 257,
-    "text": "Flagged",
-    "key": "flagged"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 258,
-    "text": "Archived",
-    "key": "archived"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 259,
     "text": "Labels",
     "key": "labels"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 260,
-    "text": "Sources",
-    "key": "sources"
+    "line": 224,
+    "text": "Labels",
+    "key": "labels"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 261,
-    "text": "APIs",
-    "key": "apis"
+    "line": 270,
+    "text": "Shortcuts",
+    "key": "shortcuts"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 262,
-    "text": "MCPs",
-    "key": "mcps"
+    "line": 272,
+    "text": "Shortcuts",
+    "key": "shortcuts"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 263,
-    "text": "Local Folders",
-    "key": "localFolders"
+    "line": 291,
+    "text": "Preferences",
+    "key": "preferences"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 264,
-    "text": "Skills",
-    "key": "skills"
+    "line": 293,
+    "text": "Preferences",
+    "key": "preferences"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 265,
-    "text": "Automations",
-    "key": "automations"
+    "line": 338,
+    "text": "Edit",
+    "key": "edit"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 266,
-    "text": "Scheduled",
-    "key": "scheduled"
+    "line": 347,
+    "text": "New Window",
+    "key": "newWindow"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 268,
-    "text": "Agentic",
-    "key": "agentic"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 269,
+    "line": 348,
     "text": "Settings",
     "key": "settings"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 275,
-    "text": "Backlog",
-    "key": "backlog"
+    "line": 349,
+    "text": "Help",
+    "key": "help"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 276,
-    "text": "Todo",
-    "key": "todo"
+    "line": 350,
+    "text": "Help & Documentation",
+    "key": "helpDocumentation"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 277,
-    "text": "Needs Review",
-    "key": "needsReview"
+    "line": 351,
+    "text": "Automations",
+    "key": "automations"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 278,
-    "text": "Done",
-    "key": "done"
+    "line": 352,
+    "text": "Debug",
+    "key": "debug"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 279,
-    "text": "Cancelled",
-    "key": "cancelled"
+    "line": 353,
+    "text": "Check for Updates",
+    "key": "checkForUpdates"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 284,
+    "line": 354,
+    "text": "Install Update",
+    "key": "installUpdate"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 355,
+    "text": "Toggle DevTools",
+    "key": "toggleDevtools"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 356,
+    "text": "Quit Craft Agents",
+    "key": "quitCraftAgents"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 428,
+    "text": "Labels",
+    "key": "labels"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 569,
+    "text": "Edit",
+    "key": "edit"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 570,
+    "text": "View",
+    "key": "view"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 571,
+    "text": "Window",
+    "key": "window"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 572,
+    "text": "Undo",
+    "key": "undo"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 573,
+    "text": "Redo",
+    "key": "redo"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 574,
+    "text": "Cut",
+    "key": "cut"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 575,
+    "text": "Copy",
+    "key": "copy"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 576,
+    "text": "Paste",
+    "key": "paste"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 577,
+    "text": "Select All",
+    "key": "selectAll"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 578,
+    "text": "Zoom In",
+    "key": "zoomIn"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 579,
+    "text": "Zoom Out",
+    "key": "zoomOut"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 580,
+    "text": "Reset Zoom",
+    "key": "resetZoom"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 581,
+    "text": "Toggle Focus Mode",
+    "key": "toggleFocusMode"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 582,
+    "text": "Toggle Sidebar",
+    "key": "toggleSidebar"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 583,
+    "text": "Minimize",
+    "key": "minimize"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 584,
+    "text": "Maximize",
+    "key": "maximize"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 592,
+    "text": "New Chat",
+    "key": "newChat"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 668,
+    "text": "New Chat",
+    "key": "newChat"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 693,
+    "text": "View",
+    "key": "view"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 713,
+    "text": "Keyboard Shortcuts",
+    "key": "keyboardShortcuts"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 773,
+    "text": "Labels",
+    "key": "labels"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 775,
+    "text": "Sources",
+    "key": "sources"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 779,
+    "text": "Skills",
+    "key": "skills"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 781,
+    "text": "Automations",
+    "key": "automations"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 786,
+    "text": "Settings",
+    "key": "settings"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+    "line": 801,
     "text": "Content",
     "key": "content"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 285,
+    "line": 802,
     "text": "Design",
     "key": "design"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 286,
+    "line": 803,
     "text": "Research",
     "key": "research"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 287,
+    "line": 804,
     "text": "Writing",
     "key": "writing"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 288,
+    "line": 805,
     "text": "Development",
     "key": "development"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 289,
+    "line": 806,
     "text": "Automation",
     "key": "automation"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 291,
-    "text": "Code",
-    "key": "code"
+    "line": 807,
+    "text": "Bug",
+    "key": "bug"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 292,
+    "line": 809,
     "text": "Priority",
     "key": "priority"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 293,
+    "line": 810,
     "text": "Project",
     "key": "project"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 298,
-    "text": "All Sessions",
-    "key": "allSessions"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 299,
-    "text": "Filter Chats",
-    "key": "filterChats"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 301,
+    "line": 818,
     "text": "Statuses",
     "key": "statuses"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 302,
-    "text": "Group",
-    "key": "group"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 303,
-    "text": "Search",
-    "key": "search"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 304,
-    "text": "Share",
-    "key": "share"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 305,
-    "text": "Flag",
-    "key": "flag"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 306,
-    "text": "Archive",
-    "key": "archive"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 307,
-    "text": "Rename",
-    "key": "rename"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 308,
-    "text": "Regenerate Title",
-    "key": "regenerateTitle"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 309,
-    "text": "Open in New Panel",
-    "key": "openInNewPanel"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 310,
-    "text": "Open in New Window",
-    "key": "openInNewWindow"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 311,
-    "text": "Show in Explorer",
-    "key": "showInExplorer"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 312,
-    "text": "Copy Path",
-    "key": "copyPath"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 313,
-    "text": "Delete",
-    "key": "delete"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 315,
-    "text": "Unflag",
-    "key": "unflag"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 316,
-    "text": "Unarchive",
-    "key": "unarchive"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 317,
-    "text": "Mark as Unread",
-    "key": "markAsUnread"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 319,
-    "text": "Open in Browser",
-    "key": "openInBrowser"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 320,
-    "text": "Copy Link",
-    "key": "copyLink"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 321,
-    "text": "Update Share",
-    "key": "updateShare"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 322,
-    "text": "Stop Sharing",
-    "key": "stopSharing"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 323,
-    "text": "Shared",
-    "key": "shared"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 324,
-    "text": "No status found",
-    "key": "noStatusFound"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 325,
-    "text": "Explore",
-    "key": "explore"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 326,
-    "text": "Ask to Edit",
-    "key": "askToEdit"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 327,
-    "text": "Execute",
-    "key": "execute"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 329,
-    "text": "Info",
-    "key": "info"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 330,
-    "text": "Date",
-    "key": "date"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 336,
-    "text": "Welcome to Craft Agents",
-    "key": "welcomeToCraftAgents"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 338,
-    "text": "Update Settings",
-    "key": "updateSettings"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
-    "line": 341,
-    "text": "Get Started",
-    "key": "getStarted"
+    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\zh-CN.ts",
+    "line": 38,
+    "text": "AI",
+    "key": "ai"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\zh-CN.ts",
-    "line": 143,
-    "text": "Top P",
-    "key": "topP"
+    "line": 40,
+    "text": "AI",
+    "key": "ai"
   },
   {
     "file": "apps\\electron\\src\\renderer\\i18n\\locales\\zh-CN.ts",
-    "line": 261,
-    "text": "APIs",
-    "key": "apis"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\i18n\\locales\\zh-CN.ts",
-    "line": 262,
-    "text": "MCPs",
-    "key": "mcps"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\lib\\navigation-registry.ts",
-    "line": 120,
-    "text": "Sessions",
-    "key": "sessions"
+    "line": 807,
+    "text": "Bug",
+    "key": "bug"
   },
   {
     "file": "apps\\electron\\src\\renderer\\lib\\navigation-registry.ts",
@@ -2640,117 +912,111 @@
     "key": "settings"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\lib\\provider-icons.ts",
-    "line": 49,
-    "text": "Anthropic",
-    "key": "anthropic"
+    "file": "apps\\electron\\src\\renderer\\pages\\PreferencesPage.tsx",
+    "line": 225,
+    "text": "Preferences",
+    "key": "preferences"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\lib\\provider-icons.ts",
-    "line": 50,
-    "text": "OpenAI",
-    "key": "openai"
+    "file": "apps\\electron\\src\\renderer\\pages\\settings\\AiSettingsPage.tsx",
+    "line": 304,
+    "text": "Edit",
+    "key": "edit"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\lib\\provider-icons.ts",
-    "line": 51,
-    "text": "OpenAI",
-    "key": "openai"
+    "file": "apps\\electron\\src\\renderer\\pages\\settings\\AiSettingsPage.tsx",
+    "line": 894,
+    "text": "AI",
+    "key": "ai"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\lib\\provider-icons.ts",
-    "line": 52,
-    "text": "GitHub Copilot",
-    "key": "githubCopilot"
+    "file": "apps\\electron\\src\\renderer\\pages\\settings\\AppearanceSettingsPage.tsx",
+    "line": 244,
+    "text": "Appearance",
+    "key": "appearance"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\lib\\provider-icons.ts",
-    "line": 53,
-    "text": "Kimi",
-    "key": "kimi"
+    "file": "apps\\electron\\src\\renderer\\pages\\settings\\AppSettingsPage.tsx",
+    "line": 203,
+    "text": "App",
+    "key": "app"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\lib\\provider-icons.ts",
-    "line": 54,
-    "text": "Minimax",
-    "key": "minimax"
+    "file": "apps\\electron\\src\\renderer\\pages\\settings\\InputSettingsPage.tsx",
+    "line": 87,
+    "text": "Input",
+    "key": "input"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\lib\\provider-icons.ts",
-    "line": 55,
-    "text": "Ollama",
-    "key": "ollama"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\lib\\provider-icons.ts",
-    "line": 56,
-    "text": "OpenRouter",
-    "key": "openrouter"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\lib\\provider-icons.ts",
-    "line": 57,
-    "text": "Craft Agents Backend",
-    "key": "craftAgentsBackend"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\lib\\provider-icons.ts",
-    "line": 58,
-    "text": "Craft Agents Backend",
-    "key": "craftAgentsBackend"
-  },
-  {
-    "file": "apps\\electron\\src\\renderer\\lib\\provider-icons.ts",
+    "file": "apps\\electron\\src\\renderer\\pages\\settings\\LabelsSettingsPage.tsx",
     "line": 59,
-    "text": "Vercel",
-    "key": "vercel"
+    "text": "Labels",
+    "key": "labels"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\lib\\provider-icons.ts",
-    "line": 67,
-    "text": "OpenRouter",
-    "key": "openrouter"
+    "file": "apps\\electron\\src\\renderer\\pages\\settings\\PermissionsSettingsPage.tsx",
+    "line": 198,
+    "text": "Permissions",
+    "key": "permissions"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\lib\\provider-icons.ts",
-    "line": 68,
-    "text": "Ollama",
-    "key": "ollama"
+    "file": "apps\\electron\\src\\renderer\\pages\\settings\\PreferencesPage.tsx",
+    "line": 205,
+    "text": "Preferences",
+    "key": "preferences"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\lib\\provider-icons.ts",
-    "line": 69,
-    "text": "Kimi",
-    "key": "kimi"
+    "file": "apps\\electron\\src\\renderer\\pages\\settings\\ShortcutsPage.tsx",
+    "line": 98,
+    "text": "Shortcuts",
+    "key": "shortcuts"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\lib\\provider-icons.ts",
-    "line": 70,
-    "text": "Minimax",
-    "key": "minimax"
+    "file": "apps\\electron\\src\\renderer\\pages\\settings\\WorkspaceSettingsPage.tsx",
+    "line": 373,
+    "text": "Edit",
+    "key": "edit"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\lib\\provider-icons.ts",
-    "line": 71,
-    "text": "Vercel",
-    "key": "vercel"
+    "file": "apps\\electron\\src\\renderer\\pages\\settings\\WorkspaceSettingsPage.tsx",
+    "line": 433,
+    "text": "Permissions",
+    "key": "permissions"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\lib\\session-load.ts",
-    "line": 21,
-    "text": "Unknown error",
-    "key": "unknownError"
+    "file": "apps\\electron\\src\\renderer\\pages\\ShortcutsPage.tsx",
+    "line": 100,
+    "text": "Shortcuts",
+    "key": "shortcuts"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\utils\\auth-validation.ts",
-    "line": 45,
-    "text": "Password",
-    "key": "password"
+    "file": "apps\\electron\\src\\renderer\\pages\\SkillInfoPage.tsx",
+    "line": 192,
+    "text": "Workspace",
+    "key": "workspace"
   },
   {
-    "file": "apps\\electron\\src\\renderer\\utils\\auth-validation.ts",
-    "line": 59,
-    "text": "Password",
-    "key": "password"
+    "file": "apps\\electron\\src\\renderer\\pages\\SourceInfoPage.tsx",
+    "line": 441,
+    "text": "Permissions",
+    "key": "permissions"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\pages\\SourceInfoPage.tsx",
+    "line": 455,
+    "text": "Permissions",
+    "key": "permissions"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\pages\\SourceInfoPage.tsx",
+    "line": 487,
+    "text": "Permissions",
+    "key": "permissions"
+  },
+  {
+    "file": "apps\\electron\\src\\renderer\\pages\\SourceInfoPage.tsx",
+    "line": 501,
+    "text": "Permissions",
+    "key": "permissions"
   }
 ]
