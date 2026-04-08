@@ -73,7 +73,23 @@ export const zhCN = {
     },
     input: {
       label: '输入',
-      description: '发送键、拼写检查'
+      description: '发送键、拼写检查',
+      title: '输入',
+      typing: '输入',
+      typingDescription: '控制聊天输入框中文本的输入方式。',
+      autoCapitalisation: '自动大写',
+      autoCapitalisationDescription: '输入消息时自动首字母大写。',
+      spellCheck: '拼写检查',
+      spellCheckDescription: '输入时为拼写错误的单词添加下划线。',
+      sending: '发送',
+      sendingDescription: '选择发送消息的方式。',
+      sendMessageWith: '发送消息使用',
+      sendMessageWithDescription: '发送消息的键盘快捷键',
+      enter: 'Enter',
+      useShiftEnterForNewLines: '使用 Shift+Enter 换行',
+      cmdEnter: '⌘ Enter',
+      ctrlEnter: 'Ctrl+Enter',
+      useEnterForNewLines: '使用 Enter 换行'
     },
     workspace: {
       label: '工作区',

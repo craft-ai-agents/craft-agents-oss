@@ -73,7 +73,23 @@ export const enUS = {
     },
     input: {
       label: 'Input',
-      description: 'Send key, spell check'
+      description: 'Send key, spell check',
+      title: 'Input',
+      typing: 'Typing',
+      typingDescription: 'Control how text is entered in the chat input.',
+      autoCapitalisation: 'Auto capitalisation',
+      autoCapitalisationDescription: 'Automatically capitalise the first letter when typing a message.',
+      spellCheck: 'Spell check',
+      spellCheckDescription: 'Underline misspelled words while typing.',
+      sending: 'Sending',
+      sendingDescription: 'Choose how to send messages.',
+      sendMessageWith: 'Send message with',
+      sendMessageWithDescription: 'Keyboard shortcut for sending messages',
+      enter: 'Enter',
+      useShiftEnterForNewLines: 'Use Shift+Enter for new lines',
+      cmdEnter: '⌘ Enter',
+      ctrlEnter: 'Ctrl+Enter',
+      useEnterForNewLines: 'Use Enter for new lines'
     },
     workspace: {
       label: 'Workspace',
