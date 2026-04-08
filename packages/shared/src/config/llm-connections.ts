@@ -14,6 +14,7 @@
 import {
   type ModelDefinition,
   ANTHROPIC_MODELS,
+  getModelById,
 } from './models';
 import type { CredentialManager } from '../credentials/manager.ts';
 
@@ -498,6 +499,60 @@ export function getDefaultModelForConnection(providerType: LlmProviderType, piAu
   const first = models[0];
   if (!first) return '';  // Dynamic provider — no default
   return typeof first === 'string' ? first : first.id;
+}
+
+/**
+ * Resolve full model metadata for a model ID within the context of a connection.
+ *
+ * Why this exists:
+ * - Built-in Claude models live in MODEL_REGISTRY
+ * - Compat/custom endpoint models often exist only in connection.models
+ * - UI and backend logic (context window, thinking support) need a single lookup path
+ *   that prefers connection-specific metadata but still falls back to known registry data.
+ */
+export function getModelDefinitionForConnection(
+  connection: Pick<LlmConnection, 'models'> | null | undefined,
+  modelId: string,
+): ModelDefinition | undefined {
+  const connectionModel = connection?.models?.find(m => (typeof m === 'string' ? m : m.id) === modelId)
+
+  if (connectionModel && typeof connectionModel !== 'string') {
+    const registryModel = getModelById(modelId)
+    return {
+      ...(registryModel ?? {
+        id: connectionModel.id,
+        name: connectionModel.name || connectionModel.id,
+        shortName: connectionModel.shortName || connectionModel.name || connectionModel.id,
+        description: connectionModel.description || '',
+        provider: connectionModel.provider || 'anthropic',
+        contextWindow: connectionModel.contextWindow,
+      }),
+      ...connectionModel,
+    }
+  }
+
+  return getModelById(modelId)
+}
+
+/**
+ * Resolve context window using connection-specific metadata first, then global registry fallback.
+ */
+export function getConnectionModelContextWindow(
+  connection: Pick<LlmConnection, 'models'> | null | undefined,
+  modelId: string,
+): number | undefined {
+  return getModelDefinitionForConnection(connection, modelId)?.contextWindow
+}
+
+/**
+ * Resolve whether a model supports thinking/reasoning.
+ * Returns undefined when no explicit metadata is available.
+ */
+export function getConnectionModelSupportsThinking(
+  connection: Pick<LlmConnection, 'models'> | null | undefined,
+  modelId: string,
+): boolean | undefined {
+  return getModelDefinitionForConnection(connection, modelId)?.supportsThinking
 }
 
 /**

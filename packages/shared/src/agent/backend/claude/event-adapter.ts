@@ -224,6 +224,15 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
     this.callbacks.sessionDir = sessionDir;
   }
 
+  /**
+   * Seed the adapter with a known context window before provider usage arrives.
+   * This is required for custom Anthropic-compatible models, which may not report
+   * modelUsage.contextWindow back through the Claude SDK result payload.
+   */
+  setContextWindow(contextWindow: number): void {
+    this.cachedContextWindow = contextWindow;
+  }
+
   // ============================================================
   // Per-message-type Handlers
   // ============================================================

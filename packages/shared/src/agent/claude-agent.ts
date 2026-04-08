@@ -18,6 +18,8 @@ import { loadStoredConfig, loadConfigDefaults, type Workspace, type AuthType, ge
 import { getValidClaudeOAuthToken } from '../auth/state.ts';
 import {
   clearClaudeBedrockRoutingEnvVars,
+  getConnectionModelContextWindow,
+  getConnectionModelSupportsThinking,
   resolveAuthEnvVars,
 } from '../config/llm-connections.ts';
 import type { McpClientPool } from '../mcp/mcp-pool.ts';
@@ -130,14 +132,18 @@ export function resolveClaudeThinkingOptions(args: {
   model: string;
   providerType?: BackendConfig['providerType'];
   minimizeThinking: boolean;
+  supportsThinking?: boolean;
 }): Partial<Options> {
-  const { thinkingLevel, model, providerType, minimizeThinking } = args;
+  const { thinkingLevel, model, providerType, minimizeThinking, supportsThinking } = args;
   const isClaude = isClaudeModel(model);
   const effort = THINKING_TO_EFFORT[thinkingLevel];
   const isHaiku = model.toLowerCase().includes('haiku');
   const supportsAdaptiveThinking = isClaude && !isHaiku && providerType !== 'anthropic_compat';
+  const supportsTokenBudgetThinking = providerType === 'anthropic_compat'
+    ? supportsThinking !== false
+    : isClaude;
 
-  if (minimizeThinking || !isClaude || !effort) {
+  if (minimizeThinking || !supportsTokenBudgetThinking || !effort) {
     return supportsAdaptiveThinking
       ? { thinking: { type: 'disabled' as const } }
       : { maxThinkingTokens: 0 };
@@ -469,6 +475,8 @@ export class ClaudeAgent extends BaseAgent {
   private preferencesDriftNotified: boolean = false;
   // Captured stderr from SDK subprocess (for error diagnostics when process exits with code 1)
   private lastStderrOutput: string[] = [];
+  /** Resolved thinking capability for the selected model on this connection. */
+  private modelSupportsThinking: boolean | undefined;
   /** Pending steer message — injected via additionalContext on next PreToolUse */
   private pendingSteerMessage: string | null = null;
 
@@ -533,10 +541,13 @@ export class ClaudeAgent extends BaseAgent {
   constructor(config: ClaudeAgentConfig) {
     // Resolve model: prioritize session model > config model (caller must provide via connection)
     const model = config.session?.model ?? config.model!;
+    const connection = config.connectionSlug ? getLlmConnection(config.connectionSlug) : null;
 
     // Build BackendConfig for BaseAgent
-    // Context window from registry (1M for Opus/Sonnet 4.6, 200K for others)
-    const CLAUDE_CONTEXT_WINDOW = getModelContextWindow(model) ?? 200_000;
+    // Prefer connection-scoped metadata for custom Anthropic-compatible models,
+    // then fall back to the built-in Claude registry.
+    const CLAUDE_CONTEXT_WINDOW = getConnectionModelContextWindow(connection, model) ?? 200_000;
+    const supportsThinking = getConnectionModelSupportsThinking(connection, model);
     const backendConfig: BackendConfig = {
       provider: 'anthropic',
       workspace: config.workspace,
@@ -566,6 +577,7 @@ export class ClaudeAgent extends BaseAgent {
     // The inherited this.config is set by super() and compatible with ClaudeAgentConfig
     super(backendConfig, DEFAULT_MODEL, CLAUDE_CONTEXT_WINDOW);
 
+    this.modelSupportsThinking = supportsThinking;
     this.isHeadless = config.isHeadless ?? false;
     this.automationSystem = config.automationSystem;
 
@@ -574,6 +586,7 @@ export class ClaudeAgent extends BaseAgent {
       onDebug: (msg) => this.onDebug?.(msg),
       mapSDKError: (errorCode) => this.mapSDKErrorToTypedError(errorCode),
     });
+    this.eventAdapter.setContextWindow(CLAUDE_CONTEXT_WINDOW);
 
     // Log which model is being used (helpful for debugging custom models)
     this.debug(`Using model: ${model}`);
@@ -873,6 +886,7 @@ export class ClaudeAgent extends BaseAgent {
         model,
         providerType: this.config.providerType,
         minimizeThinking: miniConfig.minimizeThinking,
+        supportsThinking: this.modelSupportsThinking,
       });
       if ('effort' in thinkingOptions && thinkingOptions.effort) {
         debug(`[chat] Thinking: level=${this._thinkingLevel}, effort=${thinkingOptions.effort}`);
@@ -928,9 +942,9 @@ export class ClaudeAgent extends BaseAgent {
           }
         },
         // Thinking config is provider-aware:
-        // - true Anthropic backends use adaptive thinking + effort
+        // - true Anthropic Claude backends use adaptive thinking + effort
         // - anthropic_compat/custom endpoints fall back to token budgets
-        // - non-Claude models disable thinking entirely
+        // - custom compat models can opt out with supportsThinking: false
         ...thinkingOptions,
         // System prompt configuration:
         // - Mini agents: Use custom (lean) system prompt without Claude Code preset

@@ -9,6 +9,9 @@ import {
   toBedrockNativeId,
   fromBedrockNativeId,
   normalizeBedrockModelId,
+  getModelDefinitionForConnection,
+  getConnectionModelContextWindow,
+  getConnectionModelSupportsThinking,
 } from '../llm-connections'
 import { ANTHROPIC_MODELS, getModelDisplayName, getModelContextWindow, getModelShortName, isClaudeModel } from '../models'
 
@@ -151,6 +154,43 @@ describe('isPiProvider', () => {
 
   it('returns false for anthropic', () => {
     expect(isPiProvider('anthropic')).toBe(false)
+  })
+})
+
+describe('connection-scoped model metadata', () => {
+  const compatConnection = {
+    models: [
+      {
+        id: 'glm-5.1',
+        name: 'GLM-5.1',
+        shortName: 'GLM-5.1',
+        description: 'Z.AI flagship coding model',
+        provider: 'anthropic' as const,
+        contextWindow: 204_800,
+        supportsThinking: true,
+      },
+    ],
+  }
+
+  it('prefers connection model definitions for custom compat models', () => {
+    expect(getModelDefinitionForConnection(compatConnection, 'glm-5.1')).toMatchObject({
+      id: 'glm-5.1',
+      contextWindow: 204_800,
+      supportsThinking: true,
+    })
+  })
+
+  it('resolves context window from connection models when registry has no entry', () => {
+    expect(getConnectionModelContextWindow(compatConnection, 'glm-5.1')).toBe(204_800)
+  })
+
+  it('resolves supportsThinking from connection models when registry has no entry', () => {
+    expect(getConnectionModelSupportsThinking(compatConnection, 'glm-5.1')).toBe(true)
+  })
+
+  it('falls back to registry metadata for built-in Claude models', () => {
+    expect(getConnectionModelContextWindow({ models: [] }, 'claude-opus-4-6')).toBe(1_000_000)
+    expect(getConnectionModelSupportsThinking({ models: [] }, 'claude-opus-4-6')).toBeUndefined()
   })
 })
 
