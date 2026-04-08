@@ -247,7 +247,32 @@ export const enUS = {
     automations: 'Automations',
     scheduled: 'Scheduled',
     eventBased: 'Event-based',
-    agentic: 'Agentic'
+    agentic: 'Agentic',
+    settings: 'Settings',
+    whatsNew: 'What\'s New'
+  },
+
+  // Session Statuses
+  statuses: {
+    backlog: 'Backlog',
+    todo: 'Todo',
+    needsReview: 'Needs Review',
+    done: 'Done',
+    cancelled: 'Cancelled'
+  },
+
+  // Labels
+  labels: {
+    content: 'Content',
+    design: 'Design',
+    research: 'Research',
+    writing: 'Writing',
+    development: 'Development',
+    automation: 'Automation',
+    bug: 'Bug',
+    code: 'Code',
+    priority: 'Priority',
+    project: 'Project'
   },
 
   // Onboarding

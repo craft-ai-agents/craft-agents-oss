@@ -247,7 +247,32 @@ export const zhCN = {
     automations: '自动化',
     scheduled: '定时任务',
     eventBased: '事件触发',
-    agentic: '智能体'
+    agentic: '智能体',
+    settings: '设置',
+    whatsNew: '新功能'
+  },
+
+  // Session Statuses
+  statuses: {
+    backlog: '待办',
+    todo: '待处理',
+    needsReview: '需要审核',
+    done: '已完成',
+    cancelled: '已取消'
+  },
+
+  // Labels
+  labels: {
+    content: '内容',
+    design: '设计',
+    research: '研究',
+    writing: '写作',
+    development: '开发',
+    automation: '自动化',
+    bug: 'Bug',
+    code: '代码',
+    priority: '优先级',
+    project: '项目'
   },
 
   // Onboarding

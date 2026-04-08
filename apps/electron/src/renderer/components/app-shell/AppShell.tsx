@@ -2123,7 +2123,7 @@ function AppShellContent({
 
       const item: any = {
         id: `nav:label:${node.fullId}`,
-        title: node.label?.name || node.segment.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+        title: t(`labels.${node.label.id}`, node.label?.name || node.segment.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')),
         label: count > 0 ? String(count) : undefined,
         // Show label type icon (Hash/Calendar/Type) right-aligned before count, with tooltip explaining the type
         afterTitle: node.label?.valueType ? (
@@ -2287,7 +2287,7 @@ function AppShellContent({
                         // Status items (sortable via SortableStatusList)
                         ...effectiveSessionStatuses.map(state => ({
                           id: `nav:state:${state.id}`,
-                          title: state.label,
+                          title: t(`statuses.${state.id.replace('-', '')}`, state.label),
                           label: String(sessionStatusCounts[state.id] || 0),
                           icon: state.icon,
                           iconColor: state.resolvedColor,
@@ -2462,7 +2462,7 @@ function AppShellContent({
                     // --- Settings ---
                     {
                       id: "nav:settings",
-                      title: "Settings",
+                      title: t('sidebar.settings', 'Settings'),
                       icon: Settings,
                       variant: isSettingsNavigation(navState) ? "default" : "ghost",
                       onClick: () => handleSettingsClick('app'),
@@ -2470,7 +2470,7 @@ function AppShellContent({
                     // --- What's New ---
                     {
                       id: "nav:whats-new",
-                      title: "What's New",
+                      title: t('sidebar.whatsNew', 'What\'s New'),
                       icon: hasUnseenReleaseNotes ? (
                         <span className="relative">
                           <Cake className="h-3.5 w-3.5" />
