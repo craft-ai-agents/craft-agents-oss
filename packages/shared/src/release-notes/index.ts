@@ -31,16 +31,24 @@ function loadBundledReleaseNotes(): Record<string, string> {
   const assetsDir = getAssetsDir();
   const notes: Record<string, string> = {};
 
+  // Try bundled assets first, fall back to ~/.craft-agent/release-notes/
+  // (Docker/remote server may not have CRAFT_BUNDLED_ASSETS_ROOT set,
+  // but initializeReleaseNotes() copies files to the config dir at startup)
+  let dir = assetsDir;
+  if (!existsSync(dir)) {
+    dir = RELEASE_NOTES_DIR;
+  }
+
   let files: string[];
   try {
-    files = existsSync(assetsDir) ? readdirSync(assetsDir).filter(f => f.endsWith('.md')) : [];
+    files = existsSync(dir) ? readdirSync(dir).filter(f => f.endsWith('.md')) : [];
   } catch {
-    console.warn(`[release-notes] Could not read assets dir: ${assetsDir}`);
+    console.warn(`[release-notes] Could not read release notes dir: ${dir}`);
     return notes;
   }
 
   for (const filename of files) {
-    const filePath = join(assetsDir, filename);
+    const filePath = join(dir, filename);
     try {
       notes[filename] = readFileSync(filePath, 'utf-8');
     } catch (error) {
