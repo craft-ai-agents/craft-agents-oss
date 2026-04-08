@@ -308,7 +308,8 @@ export const enUS = {
     askToEdit: 'Ask to Edit',
     execute: 'Execute',
     ask: 'Ask',
-    info: 'Info'
+    info: 'Info',
+    date: 'Date'
   },
 
   // Onboarding

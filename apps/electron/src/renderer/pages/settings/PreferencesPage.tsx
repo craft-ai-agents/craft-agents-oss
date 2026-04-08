@@ -24,7 +24,8 @@ import {
 } from '@/components/settings'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
-import { useLocale, setLocale, Locale } from '@/i18n'
+import { useLocale, setLocale } from '@/i18n'
+import type { Locale } from '@/i18n'
 import { useSetAtom } from 'jotai'
 import { settingsStore } from '@/atoms/settings'
 

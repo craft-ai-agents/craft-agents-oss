@@ -308,7 +308,8 @@ export const zhCN = {
     askToEdit: '询问编辑',
     execute: '执行',
     ask: '询问',
-    info: '信息'
+    info: '信息',
+    date: '日期'
   },
 
   // Onboarding

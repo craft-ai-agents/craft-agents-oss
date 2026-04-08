@@ -2557,7 +2557,7 @@ function AppShellContent({
                       >
                         {/* Header with title and clear button (only clears user-added filters, never pinned) */}
                         <div className="flex items-center justify-between px-2 py-1.5">
-                          <span className="text-xs font-medium text-muted-foreground">Filter Chats</span>
+                          <span className="text-xs font-medium text-muted-foreground">{t('ui.filterChats', 'Filter Chats')}</span>
                           {(listFilter.size > 0 || labelFilter.size > 0) && (
                             <button
                               onClick={(e) => {
@@ -2637,7 +2637,7 @@ function AppShellContent({
                                   }
                                 }
                               }}
-                              placeholder="Search statuses & labels..."
+                              placeholder={t('ui.searchStatusesAndLabels', 'Search statuses & labels...')}
                               className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
                               autoFocus
                             />
@@ -2766,7 +2766,7 @@ function AppShellContent({
                             <DropdownMenuSub>
                               <StyledDropdownMenuSubTrigger>
                                 <Inbox className="h-3.5 w-3.5" />
-                                <span className="flex-1">Statuses</span>
+                                <span className="flex-1">{t('ui.statuses', 'Statuses')}</span>
                               </StyledDropdownMenuSubTrigger>
                               <StyledDropdownMenuSubContent minWidth="min-w-[180px]">
                                 {effectiveSessionStatuses.map(state => {
@@ -2839,7 +2839,7 @@ function AppShellContent({
                             <DropdownMenuSub>
                               <StyledDropdownMenuSubTrigger>
                                 <Tag className="h-3.5 w-3.5" />
-                                <span className="flex-1">Labels</span>
+                                <span className="flex-1">{t('ui.labels', 'Labels')}</span>
                               </StyledDropdownMenuSubTrigger>
                               <StyledDropdownMenuSubContent minWidth="min-w-[180px]">
                                 {labelConfigs.length === 0 ? (
@@ -2865,17 +2865,17 @@ function AppShellContent({
                                 <DropdownMenuSub>
                                   <StyledDropdownMenuSubTrigger>
                                     <Layers className="h-3.5 w-3.5" />
-                                    <span className="flex-1">Group</span>
+                                    <span className="flex-1">{t('ui.group', 'Group')}</span>
                                   </StyledDropdownMenuSubTrigger>
                                   <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
                                     <StyledDropdownMenuItem onClick={() => setChatGroupingMode('date')}>
                                       <Calendar className="h-3.5 w-3.5" />
-                                      <span className="flex-1">Date</span>
+                                      <span className="flex-1">{t('ui.date', 'Date')}</span>
                                       {chatGroupingMode === 'date' && <Check className="h-3 w-3 text-muted-foreground" />}
                                     </StyledDropdownMenuItem>
                                     <StyledDropdownMenuItem onClick={() => setChatGroupingMode('status')}>
                                       <Inbox className="h-3.5 w-3.5" />
-                                      <span className="flex-1">Status</span>
+                                      <span className="flex-1">{t('ui.statuses', 'Status')}</span>
                                       {chatGroupingMode === 'status' && <Check className="h-3 w-3 text-muted-foreground" />}
                                     </StyledDropdownMenuItem>
                                   </StyledDropdownMenuSubContent>
@@ -2890,7 +2890,7 @@ function AppShellContent({
                               }}
                             >
                               <Search className="h-3.5 w-3.5" />
-                              <span className="flex-1">Search</span>
+                              <span className="flex-1">{t('ui.search', 'Search')}</span>
                             </StyledDropdownMenuItem>
                           </>
                         ) : (
