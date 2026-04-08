@@ -97,7 +97,26 @@ export const zhCN = {
     },
     permissions: {
       label: '权限',
-      description: '探索模式规则'
+      description: '探索模式规则',
+      title: '权限',
+      aboutPermissions: '关于权限',
+      permissionsControlAutonomy: '权限控制您的智能体拥有多少自主权。在',
+      explore: '探索',
+      exploreModeDescription: '模式下，智能体只能读取和研究 — 非常适合在承诺更改之前理解问题。准备好后，切换到',
+      execute: '执行',
+      executeModeDescription: '模式让智能体自主实施计划。',
+      goodWorkflow: '一个好的工作流程：从探索开始，让智能体调查，审查提议的计划，然后自信地执行。',
+      learnMore: '了解更多',
+      defaultPermissions: '默认权限',
+      defaultPermissionsDescription: '探索模式中允许的应用级模式。不在此列表中的命令将被阻止。',
+      editFile: '编辑文件',
+      noDefaultPermissionsFound: '未找到默认权限。',
+      defaultPermissionsShouldBeAt: '默认权限应该位于',
+      workspaceCustomizations: '工作区自定义',
+      workspaceCustomizationsDescription: '扩展上述应用默认设置的工作区级模式。',
+      noCustomPermissionsConfigured: '未配置自定义权限。',
+      createPermissionsJson: '在您的工作区中创建',
+      fileInWorkspace: '文件以添加自定义规则。'
     },
     labels: {
       label: '标签',

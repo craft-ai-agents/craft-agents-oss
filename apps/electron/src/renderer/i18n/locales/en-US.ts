@@ -97,7 +97,26 @@ export const enUS = {
     },
     permissions: {
       label: 'Permissions',
-      description: 'Explore mode rules'
+      description: 'Explore mode rules',
+      title: 'Permissions',
+      aboutPermissions: 'About Permissions',
+      permissionsControlAutonomy: 'Permissions control how much autonomy your agent has. In',
+      explore: 'Explore',
+      exploreModeDescription: 'mode, the agent can only read and research — perfect for understanding a problem before committing to changes. When you\'re ready, switch to',
+      execute: 'Execute',
+      executeModeDescription: 'mode to let the agent implement the plan autonomously.',
+      goodWorkflow: 'A good workflow: start in Explore to let the agent investigate, review the proposed plan, then execute with confidence.',
+      learnMore: 'Learn more',
+      defaultPermissions: 'Default Permissions',
+      defaultPermissionsDescription: 'App-level patterns allowed in Explore mode. Commands not on this list are blocked.',
+      editFile: 'Edit File',
+      noDefaultPermissionsFound: 'No default permissions found.',
+      defaultPermissionsShouldBeAt: 'Default permissions should be at',
+      workspaceCustomizations: 'Workspace Customizations',
+      workspaceCustomizationsDescription: 'Workspace-level patterns that extend the app defaults above.',
+      noCustomPermissionsConfigured: 'No custom permissions configured.',
+      createPermissionsJson: 'Create a',
+      fileInWorkspace: 'file in your workspace to add custom rules.'
     },
     labels: {
       label: 'Labels',
