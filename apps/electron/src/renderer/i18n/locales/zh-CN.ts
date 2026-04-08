@@ -36,7 +36,77 @@ export const zhCN = {
     },
     ai: {
       label: 'AI',
-      description: '模型、思考、连接'
+      description: '模型、思考、连接',
+      title: 'AI',
+      credential: {
+        fileCorrupted: '凭证文件已损坏。请重新验证身份。',
+        decryptionFailed: '检测到来自其他机器的凭证。请在此设备上重新验证身份。',
+        noDefaultCredentials: '未找到您的默认连接的凭证。',
+        credentialIssueDetected: '检测到凭证问题',
+        reauthenticate: '重新验证身份'
+      },
+      connection: {
+        validating: '正在验证...',
+        connectionValid: '连接有效',
+        validationFailed: '验证失败',
+        anthropicSubscription: 'Anthropic 订阅',
+        anthropicApi: 'Anthropic API',
+        craftAgentsBackend: 'Craft Agents 后端',
+        craftAgentsBackendCompatible: 'Craft Agents 后端兼容',
+        unknown: '未知',
+        notAuthenticated: '未验证身份',
+        default: '默认',
+        rename: '重命名',
+        setAsDefault: '设为默认',
+        edit: '编辑',
+        validateConnection: '验证连接',
+        delete: '删除'
+      },
+      workspaceOverride: {
+        workspaceConnectionOverride: '工作区连接覆盖',
+        workspaceModelOverride: '工作区模型覆盖',
+        workspaceThinkingOverride: '工作区思考覆盖',
+        failedToLoadWorkspaceSettings: '加载工作区设置失败：',
+        unknownError: '未知错误',
+        failedToSave: '保存 {settingLabel} 失败',
+        usingDefaults: '使用默认设置',
+        loading: '正在加载...',
+        connection: '连接',
+        apiConnectionForNewChats: '新聊天的 API 连接',
+        useDefault: '使用默认',
+        inheritFromAppSettings: '从应用设置继承',
+        model: '模型',
+        aiModelForNewChats: '新聊天的 AI 模型',
+        thinking: '思考',
+        reasoningDepthForNewChats: '新聊天的推理深度'
+      },
+      defaultSettings: {
+        default: '默认',
+        settingsForNewChats: '未设置工作区覆盖时的新聊天设置。'
+      },
+      workspaceOverrides: {
+        title: '工作区覆盖',
+        description: '按工作区覆盖默认设置。'
+      },
+      connections: {
+        title: '连接',
+        description: '管理您的 AI 提供程序连接。',
+        noConnectionsConfigured: '未配置连接。添加连接以开始使用。',
+        addConnection: '+ 添加连接'
+      },
+      performance: {
+        title: '性能',
+        description: '成本和缓存选项。',
+        extendedContext: '扩展上下文（1M）',
+        extendedContextDescription: '为 Opus 4.6 使用 1M 令牌上下文窗口。禁用以使用 200K 并节省使用限制。',
+        extendedPromptCache: '扩展提示缓存（1 小时）',
+        extendedPromptCacheDescription: '将提示缓存 1 小时而不是 5 分钟。仅适用于通过 Anthropic API 的 Claude 模型。降低长会话的成本，但会增加缓存写入成本。'
+      },
+      renameDialog: {
+        title: '重命名连接',
+        placeholder: '输入连接名称...'
+      },
+      close: '关闭（Esc）'
     },
     appearance: {
       label: '外观',

@@ -36,7 +36,77 @@ export const enUS = {
     },
     ai: {
       label: 'AI',
-      description: 'Model, thinking, connections'
+      description: 'Model, thinking, connections',
+      title: 'AI',
+      credential: {
+        fileCorrupted: 'Credential file is corrupted. Please re-authenticate.',
+        decryptionFailed: 'Credentials from another machine detected. Please re-authenticate on this device.',
+        noDefaultCredentials: 'No credentials found for your default connection.',
+        credentialIssueDetected: 'Credential Issue Detected',
+        reauthenticate: 'Re-authenticate'
+      },
+      connection: {
+        validating: 'Validating...',
+        connectionValid: 'Connection valid',
+        validationFailed: 'Validation failed',
+        anthropicSubscription: 'Anthropic Subscription',
+        anthropicApi: 'Anthropic API',
+        craftAgentsBackend: 'Craft Agents Backend',
+        craftAgentsBackendCompatible: 'Craft Agents Backend Compatible',
+        unknown: 'Unknown',
+        notAuthenticated: 'Not authenticated',
+        default: 'Default',
+        rename: 'Rename',
+        setAsDefault: 'Set as default',
+        edit: 'Edit',
+        validateConnection: 'Validate Connection',
+        delete: 'Delete'
+      },
+      workspaceOverride: {
+        workspaceConnectionOverride: 'workspace connection override',
+        workspaceModelOverride: 'workspace model override',
+        workspaceThinkingOverride: 'workspace thinking override',
+        failedToLoadWorkspaceSettings: 'Failed to load workspace settings:',
+        unknownError: 'Unknown error',
+        failedToSave: 'Failed to save {settingLabel}',
+        usingDefaults: 'Using defaults',
+        loading: 'Loading...',
+        connection: 'Connection',
+        apiConnectionForNewChats: 'API connection for new chats',
+        useDefault: 'Use default',
+        inheritFromAppSettings: 'Inherit from app settings',
+        model: 'Model',
+        aiModelForNewChats: 'AI model for new chats',
+        thinking: 'Thinking',
+        reasoningDepthForNewChats: 'Reasoning depth for new chats'
+      },
+      defaultSettings: {
+        default: 'Default',
+        settingsForNewChats: 'Settings for new chats when no workspace override is set.'
+      },
+      workspaceOverrides: {
+        title: 'Workspace Overrides',
+        description: 'Override default settings per workspace.'
+      },
+      connections: {
+        title: 'Connections',
+        description: 'Manage your AI provider connections.',
+        noConnectionsConfigured: 'No connections configured. Add a connection to get started.',
+        addConnection: '+ Add Connection'
+      },
+      performance: {
+        title: 'Performance',
+        description: 'Cost and caching options.',
+        extendedContext: 'Extended Context (1M)',
+        extendedContextDescription: 'Use 1M token context window for Opus 4.6. Disable to use 200K and conserve usage limits.',
+        extendedPromptCache: 'Extended prompt cache (1 hour)',
+        extendedPromptCacheDescription: 'Cache prompts for 1 hour instead of 5 minutes. Only applies to Claude models via Anthropic API. Reduces cost for long sessions but increases cache write cost.'
+      },
+      renameDialog: {
+        title: 'Rename Connection',
+        placeholder: 'Enter connection name...'
+      },
+      close: 'Close (Esc)'
     },
     appearance: {
       label: 'Appearance',
