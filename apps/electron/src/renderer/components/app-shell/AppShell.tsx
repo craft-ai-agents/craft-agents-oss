@@ -2285,21 +2285,30 @@ function AppShellContent({
                       sortable: { onReorder: handleStatusReorder },
                       items: [
                         // Status items (sortable via SortableStatusList)
-                        ...effectiveSessionStatuses.map(state => ({
-                          id: `nav:state:${state.id}`,
-                          title: t(`statuses.${state.id.replace('-', '')}`, state.label),
-                          label: String(sessionStatusCounts[state.id] || 0),
-                          icon: state.icon,
-                          iconColor: state.resolvedColor,
-                          iconColorable: state.iconColorable,
-                          variant: (sessionFilter?.kind === 'state' && sessionFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
-                          onClick: () => handleSessionStatusClick(state.id),
-                          contextMenu: {
-                            type: 'status' as const,
-                            statusId: state.id,
-                            onConfigureStatuses: openConfigureStatuses,
-                          },
-                        })),
+                        ...effectiveSessionStatuses.map(state => {
+                          const statusKeyMap: Record<string, string> = {
+                            'backlog': 'backlog',
+                            'todo': 'todo',
+                            'needs-review': 'needsReview',
+                            'done': 'done',
+                            'cancelled': 'cancelled'
+                          };
+                          return {
+                            id: `nav:state:${state.id}`,
+                            title: t(`statuses.${statusKeyMap[state.id] || state.id}`, state.label),
+                            label: String(sessionStatusCounts[state.id] || 0),
+                            icon: state.icon,
+                            iconColor: state.resolvedColor,
+                            iconColorable: state.iconColorable,
+                            variant: (sessionFilter?.kind === 'state' && sessionFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
+                            onClick: () => handleSessionStatusClick(state.id),
+                            contextMenu: {
+                              type: 'status' as const,
+                              statusId: state.id,
+                              onConfigureStatuses: openConfigureStatuses,
+                            },
+                          };
+                        }),
                         // Separator: SortableStatusList splits here — items after become non-sortable trailingItems
                         { id: 'separator:states-flagged', type: 'separator' as const },
                         // Flagged (trailing, non-sortable)
