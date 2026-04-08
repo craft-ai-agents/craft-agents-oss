@@ -75,32 +75,28 @@ function renderMenuItem(
   const shortcut = getShortcutDisplay(item, isMac)
 
   // 获取翻译后的标签
-  const getTranslatedLabel = (item: MenuItem): string => {
-    if (item.type === 'role') {
-      // 翻译role类型的菜单项
-      switch (item.role) {
-        case 'undo': return t('menu.undo', item.label)
-        case 'redo': return t('menu.redo', item.label)
-        case 'cut': return t('menu.cut', item.label)
-        case 'copy': return t('menu.copy', item.label)
-        case 'paste': return t('menu.paste', item.label)
-        case 'selectAll': return t('menu.selectAll', item.label)
-        case 'zoomIn': return t('menu.zoomIn', item.label)
-        case 'zoomOut': return t('menu.zoomOut', item.label)
-        case 'resetZoom': return t('menu.resetZoom', item.label)
-        case 'minimize': return t('menu.minimize', item.label)
-        case 'zoom': return t('menu.maximize', item.label)
-        default: return item.label
-      }
-    } else if (item.type === 'action') {
-      // 翻译action类型的菜单项
-      switch (item.id) {
-        case 'toggleFocusMode': return t('menu.toggleFocusMode', item.label)
-        case 'toggleSidebar': return t('menu.toggleSidebar', item.label)
-        default: return item.label
-      }
+  let label = item.label
+  if (item.type === 'role') {
+    // 翻译role类型的菜单项
+    switch (item.role) {
+      case 'undo': label = t('menu.undo', item.label); break
+      case 'redo': label = t('menu.redo', item.label); break
+      case 'cut': label = t('menu.cut', item.label); break
+      case 'copy': label = t('menu.copy', item.label); break
+      case 'paste': label = t('menu.paste', item.label); break
+      case 'selectAll': label = t('menu.selectAll', item.label); break
+      case 'zoomIn': label = t('menu.zoomIn', item.label); break
+      case 'zoomOut': label = t('menu.zoomOut', item.label); break
+      case 'resetZoom': label = t('menu.resetZoom', item.label); break
+      case 'minimize': label = t('menu.minimize', item.label); break
+      case 'zoom': label = t('menu.maximize', item.label); break
     }
-    return ''
+  } else if (item.type === 'action') {
+    // 翻译action类型的菜单项
+    switch (item.id) {
+      case 'toggleFocusMode': label = t('menu.toggleFocusMode', item.label); break
+      case 'toggleSidebar': label = t('menu.toggleSidebar', item.label); break
+    }
   }
 
   if (item.type === 'role') {
@@ -112,7 +108,7 @@ function renderMenuItem(
     return (
       <StyledDropdownMenuItem key={item.role} onClick={safeHandler}>
         {Icon && <Icon className="h-3.5 w-3.5" />}
-        {getTranslatedLabel(item)}
+        {label}
         {shortcut && <DropdownMenuShortcut className="pl-6">{shortcut}</DropdownMenuShortcut>}
       </StyledDropdownMenuItem>
     )
@@ -128,7 +124,7 @@ function renderMenuItem(
     return (
       <StyledDropdownMenuItem key={item.id} onClick={handler}>
         {Icon && <Icon className="h-3.5 w-3.5" />}
-        {getTranslatedLabel(item)}
+        {label}
         {shortcut && <DropdownMenuShortcut className="pl-6">{shortcut}</DropdownMenuShortcut>}
       </StyledDropdownMenuItem>
     )
@@ -148,20 +144,18 @@ function renderMenuSection(
   const Icon = getIcon(section.icon)
   
   // 获取翻译后的section标签
-  const getTranslatedSectionLabel = (section: MenuSection): string => {
-    switch (section.id) {
-      case 'edit': return t('menu.edit', section.label)
-      case 'view': return t('menu.view', section.label)
-      case 'window': return t('menu.window', section.label)
-      default: return section.label
-    }
+  let sectionLabel = section.label
+  switch (section.id) {
+    case 'edit': sectionLabel = t('menu.edit', section.label); break
+    case 'view': sectionLabel = t('menu.view', section.label); break
+    case 'window': sectionLabel = t('menu.window', section.label); break
   }
   
   return (
     <DropdownMenuSub key={section.id}>
       <StyledDropdownMenuSubTrigger>
         {Icon && <Icon className="h-3.5 w-3.5" />}
-        {getTranslatedSectionLabel(section)}
+        {sectionLabel}
       </StyledDropdownMenuSubTrigger>
       <StyledDropdownMenuSubContent>
         {section.items.map((item, index) => renderMenuItem(item, index, actionHandlers, t))}
