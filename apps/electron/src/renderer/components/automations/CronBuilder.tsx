@@ -14,6 +14,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react'
 import { Clock, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { describeCron as describeCronExpression, computeNextRuns } from './utils'
+import { useTranslations } from '@/i18n'
 
 // ============================================================================
 // Presets
@@ -67,9 +68,9 @@ const FIELDS: FieldDef[] = [
 // Helpers
 // ============================================================================
 
-function validateCron(cron: string): string | null {
+function validateCron(cron: string, t: (key: string, defaultValue: string) => string): string | null {
   const parts = cron.trim().split(/\s+/)
-  if (parts.length !== 5) return 'Schedule needs 5 parts: minute, hour, day, month, and weekday'
+  if (parts.length !== 5) return t('common.scheduleNeeds5Parts', 'Schedule needs 5 parts: minute, hour, day, month, and weekday')
   // Basic validation per field
   const ranges = [[0, 59], [0, 23], [1, 31], [1, 12], [0, 7]]
   for (let i = 0; i < 5; i++) {
@@ -77,7 +78,7 @@ function validateCron(cron: string): string | null {
     if (part === '*') continue
     if (/^\*\/\d+$/.test(part)) continue
     if (/^[\d,\-\/]+$/.test(part)) continue
-    return `Invalid value in ${FIELDS[i]?.label ?? `field ${i + 1}`}: "${part}"`
+    return `${t('common.invalidValueIn', 'Invalid value in')} ${FIELDS[i]?.label ?? `field ${i + 1}`}: "${part}"`
   }
   return null
 }
@@ -131,6 +132,39 @@ export function CronBuilder({
   onTimezoneChange,
   className,
 }: CronBuilderProps) {
+  const { t } = useTranslations()
+  
+  const localizedPresets = useMemo(() => {
+    return [
+      { label: t('common.everyMinute', 'Every minute'),       cron: '* * * * *',     description: t('common.runsEveryMinute', 'Runs every minute') },
+      { label: t('common.every15Min', 'Every 15 min'),       cron: '*/15 * * * *',  description: t('common.runsEvery15Minutes', 'Runs every 15 minutes') },
+      { label: t('common.everyHour', 'Every hour'),         cron: '0 * * * *',     description: t('common.atTheTopOfEveryHour', 'At the top of every hour') },
+      { label: t('common.dailyAtMidnight', 'Daily at midnight'),  cron: '0 0 * * *',     description: t('common.onceADayAt0000', 'Once a day at 00:00') },
+      { label: t('common.dailyAt9am', 'Daily at 9am'),       cron: '0 9 * * *',     description: t('common.onceADayAt0900', 'Once a day at 09:00') },
+      { label: t('common.weekdaysAt9am', 'Weekdays at 9am'),    cron: '0 9 * * 1-5',   description: t('common.mondayFridayAt0900', 'Monday–Friday at 09:00') },
+      { label: t('common.monthlyOn1st', 'Monthly on 1st'),     cron: '0 0 1 * *',     description: t('common.firstDayOfEachMonthAt0000', 'First day of each month at 00:00') },
+    ]
+  }, [t])
+
+  const localizedFields = useMemo(() => {
+    return [
+      { label: t('common.minute', 'Minute'), min: 0, max: 59 },
+      { label: t('common.hour', 'Hour'), min: 0, max: 23 },
+      { label: t('common.day', 'Day'), min: 1, max: 31 },
+      { label: t('common.month', 'Month'), min: 1, max: 12, options: [
+        { value: '1', label: t('common.january', 'Jan') }, { value: '2', label: t('common.february', 'Feb') }, { value: '3', label: t('common.march', 'Mar') },
+        { value: '4', label: t('common.april', 'Apr') }, { value: '5', label: t('common.may', 'May') }, { value: '6', label: t('common.june', 'Jun') },
+        { value: '7', label: t('common.july', 'Jul') }, { value: '8', label: t('common.august', 'Aug') }, { value: '9', label: t('common.september', 'Sep') },
+        { value: '10', label: t('common.october', 'Oct') }, { value: '11', label: t('common.november', 'Nov') }, { value: '12', label: t('common.december', 'Dec') },
+      ]},
+      { label: t('common.weekday', 'Weekday'), min: 0, max: 6, options: [
+        { value: '0', label: t('common.sunday', 'Sun') }, { value: '1', label: t('common.monday', 'Mon') }, { value: '2', label: t('common.tuesday', 'Tue') },
+        { value: '3', label: t('common.wednesday', 'Wed') }, { value: '4', label: t('common.thursday', 'Thu') }, { value: '5', label: t('common.friday', 'Fri') },
+        { value: '6', label: t('common.saturday', 'Sat') },
+      ]},
+    ]
+  }, [t])
+
   const [rawInput, setRawInput] = useState(value)
   const [fields, setFields] = useState<string[]>(value.split(/\s+/))
 
@@ -167,7 +201,7 @@ export function CronBuilder({
     onChange?.(cron)
   }, [onChange])
 
-  const validationError = useMemo(() => validateCron(rawInput), [rawInput])
+  const validationError = useMemo(() => validateCron(rawInput, t), [rawInput, t])
   const description = useMemo(() => describeCronExpression(rawInput), [rawInput])
   const nextRuns = useMemo(() => computeNextRuns(rawInput), [rawInput])
 
@@ -176,10 +210,10 @@ export function CronBuilder({
       {/* Layer 1: Common Schedules */}
       <div className="space-y-2">
         <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider pl-1">
-          Common Schedules
+          {t('common.commonSchedules', 'Common Schedules')}
         </h4>
         <div className="flex flex-wrap gap-1.5">
-          {PRESETS.map((preset) => (
+          {localizedPresets.map((preset) => (
             <button
               key={preset.cron}
               onClick={() => handlePreset(preset.cron)}
@@ -199,10 +233,10 @@ export function CronBuilder({
       {/* Layer 2: Custom Schedule */}
       <div className="space-y-2">
         <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider pl-1">
-          Custom Schedule
+          {t('common.customSchedule', 'Custom Schedule')}
         </h4>
         <div className="grid grid-cols-5 gap-2">
-          {FIELDS.map((field, i) => (
+          {localizedFields.map((field, i) => (
             <CronField
               key={field.label}
               field={field}
@@ -216,7 +250,7 @@ export function CronBuilder({
       {/* Layer 3: Advanced */}
       <div className="space-y-2">
         <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider pl-1">
-          Advanced
+          {t('common.advanced', 'Advanced')}
         </h4>
         <input
           type="text"
@@ -250,7 +284,7 @@ export function CronBuilder({
         {/* Next runs */}
         {nextRuns.length > 0 && !validationError && (
           <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">Next runs:</span>
+            <span className="text-xs text-muted-foreground">{t('common.nextRuns', 'Next runs:')}</span>
             <div className="flex flex-col gap-0.5">
               {(() => {
                 const spansYears = nextRuns.length > 1 && nextRuns[0].getFullYear() !== nextRuns[nextRuns.length - 1].getFullYear()
@@ -275,8 +309,8 @@ export function CronBuilder({
 
         {/* Timezone */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>Timezone:</span>
-          <span className="font-medium text-foreground/70">{timezone || 'System default'}</span>
+          <span>{t('common.timezone', 'Timezone:')}</span>
+          <span className="font-medium text-foreground/70">{timezone || t('common.systemDefault', 'System default')}</span>
         </div>
       </div>
     </div>

@@ -17,6 +17,7 @@ import { useMenuComponents } from '@/components/ui/menu-context'
 import { automationSelection } from '@/hooks/useEntitySelection'
 import { automationsAtom } from '@/atoms/automations'
 import { useAppShellContext } from '@/context/AppShellContext'
+import { useTranslations } from '@/i18n'
 
 const {
   useSelection: useAutomationSelection,
@@ -24,6 +25,7 @@ const {
 } = automationSelection
 
 export function BatchAutomationMenu() {
+  const { t } = useTranslations()
   const { MenuItem, Separator } = useMenuComponents()
 
   const selectedIds = useAutomationSelectedIds()
@@ -60,8 +62,8 @@ export function BatchAutomationMenu() {
         targetEnabled,
       ).catch(() => {})
     }
-    toast(`${count} ${count === 1 ? 'automation' : 'automations'} ${targetEnabled ? 'enabled' : 'disabled'}`)
-  }, [activeWorkspaceId, selectedAutomations, allEnabled, clearMultiSelect])
+    toast(`${count} ${count === 1 ? t('common.automation', 'automation') : t('common.automations', 'automations')} ${targetEnabled ? t('common.enabled', 'enabled') : t('common.disabled', 'disabled')}`)
+  }, [activeWorkspaceId, selectedAutomations, allEnabled, clearMultiSelect, t])
 
   // Batch delete — sequential IPC in reverse matcherIndex order so earlier indices stay valid
   const handleBatchDelete = useCallback(async () => {
@@ -76,8 +78,8 @@ export function BatchAutomationMenu() {
         a.matcherIndex,
       ).catch(() => {})
     }
-    toast(`${count} ${count === 1 ? 'automation' : 'automations'} deleted`)
-  }, [activeWorkspaceId, selectedIds.size, selectedAutomations, clearMultiSelect])
+    toast(`${count} ${count === 1 ? t('common.automation', 'automation') : t('common.automations', 'automations')} ${t('common.deleted', 'deleted')}`)
+  }, [activeWorkspaceId, selectedIds.size, selectedAutomations, clearMultiSelect, t])
 
   const count = selectedIds.size
 
@@ -85,7 +87,7 @@ export function BatchAutomationMenu() {
     <>
       {/* Header showing selection count */}
       <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium">
-        {count} {count === 1 ? 'automation' : 'automations'} selected
+        {count} {count === 1 ? t('common.automation', 'automation') : t('common.automations', 'automations')} {t('common.selected', 'selected')}
       </div>
       <Separator />
 
@@ -96,7 +98,7 @@ export function BatchAutomationMenu() {
         ) : (
           <Power className="h-3.5 w-3.5" />
         )}
-        <span className="flex-1">{allEnabled ? 'Disable All' : 'Enable All'}</span>
+        <span className="flex-1">{allEnabled ? t('common.disableAll', 'Disable All') : t('common.enableAll', 'Enable All')}</span>
       </MenuItem>
 
       <Separator />
@@ -105,7 +107,7 @@ export function BatchAutomationMenu() {
       {activeWorkspaceId && (
         <MenuItem onClick={handleBatchDelete} variant="destructive">
           <Trash2 className="h-3.5 w-3.5" />
-          <span className="flex-1">Delete</span>
+          <span className="flex-1">{t('common.delete', 'Delete')}</span>
         </MenuItem>
       )}
     </>
