@@ -5,6 +5,7 @@ import type { MenuComponents } from '@/components/ui/menu-context'
 import { getStatusIconStyle, type SessionStatusId, type SessionStatus } from '@/config/session-status-config'
 import { sortLabelsForDisplay, type LabelConfig } from '@craft-agent/shared/labels'
 import { LabelIcon } from '@/components/ui/label-icon'
+import { useTranslations } from '@/i18n'
 
 export interface ShareMenuItemsProps {
   sessionId: string
@@ -14,6 +15,7 @@ export interface ShareMenuItemsProps {
 
 export function ShareMenuItems({ sessionId, sharedUrl, menu }: ShareMenuItemsProps) {
   const { MenuItem, Separator } = menu
+  const { t } = useTranslations()
 
   const handleOpenInBrowser = () => {
     window.electronAPI.openUrl(sharedUrl)
@@ -48,20 +50,20 @@ export function ShareMenuItems({ sessionId, sharedUrl, menu }: ShareMenuItemsPro
     <>
       <MenuItem onClick={handleOpenInBrowser}>
         <Globe className="h-3.5 w-3.5" />
-        <span className="flex-1">Open in Browser</span>
+        <span className="flex-1">{t('ui.openInBrowser', 'Open in Browser')}</span>
       </MenuItem>
       <MenuItem onClick={handleCopyLink}>
         <Copy className="h-3.5 w-3.5" />
-        <span className="flex-1">Copy Link</span>
+        <span className="flex-1">{t('ui.copyLink', 'Copy Link')}</span>
       </MenuItem>
       <MenuItem onClick={handleUpdateShare}>
         <RefreshCw className="h-3.5 w-3.5" />
-        <span className="flex-1">Update Share</span>
+        <span className="flex-1">{t('ui.updateShare', 'Update Share')}</span>
       </MenuItem>
       <Separator />
       <MenuItem onClick={handleRevokeShare} variant="destructive">
         <Link2Off className="h-3.5 w-3.5" />
-        <span className="flex-1">Stop Sharing</span>
+        <span className="flex-1">{t('ui.stopSharing', 'Stop Sharing')}</span>
       </MenuItem>
     </>
   )

@@ -275,6 +275,37 @@ export const zhCN = {
     project: '项目'
   },
 
+  // UI Elements
+  ui: {
+    allSessions: '所有会话',
+    filterChats: '筛选会话',
+    searchStatusesAndLabels: '搜索状态和标签...',
+    statuses: '状态',
+    group: '分组',
+    search: '搜索',
+    share: '分享',
+    flag: '标记',
+    archive: '归档',
+    rename: '重命名',
+    regenerateTitle: '重新生成标题',
+    openInNewPanel: '在新面板中打开',
+    openInNewWindow: '在新窗口中打开',
+    showInExplorer: '在文件管理器中显示',
+    copyPath: '复制路径',
+    delete: '删除',
+    filterStatuses: '筛选状态...',
+    unflag: '取消标记',
+    unarchive: '取消归档',
+    markAsUnread: '标记为未读',
+    sendToWorkspace: '发送到工作区...',
+    openInBrowser: '在浏览器中打开',
+    copyLink: '复制链接',
+    updateShare: '更新分享',
+    stopSharing: '停止分享',
+    shared: '已分享',
+    noStatusFound: '未找到状态'
+  },
+
   // Onboarding
   onboarding: {
     welcome: {

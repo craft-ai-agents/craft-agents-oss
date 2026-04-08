@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Search, X } from 'lucide-react'
 import { Spinner } from '@craft-agent/ui'
+import { useTranslations } from '@/i18n'
 
 /**
  * SessionSearchHeader - Presentational component for session list search UI.
@@ -56,6 +57,7 @@ export function SessionSearchHeader({
   placeholder = 'Search titles and content...',
   readOnly = false,
 }: SessionSearchHeaderProps) {
+  const { t } = useTranslations()
   return (
     <div className="shrink-0 px-2 pt-2 pb-1.5 border-b border-border/50">
       {/* Search input */}

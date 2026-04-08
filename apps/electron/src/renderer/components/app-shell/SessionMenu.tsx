@@ -48,6 +48,7 @@ import { LabelMenuItems, StatusMenuItems, ShareMenuItems } from './SessionMenuPa
 import { getFileManagerName } from '@/lib/platform'
 import type { SessionMeta } from '@/atoms/sessions'
 import { getSessionStatus, hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
+import { useTranslations } from '@/i18n'
 
 export interface SessionMenuProps {
   /** Session data — display state is derived from this */
@@ -103,6 +104,7 @@ export function SessionMenu({
   const sessionLabels = item.labels ?? []
   const _hasMessages = hasMessagesMeta(item)
   const _hasUnread = hasUnreadMeta(item)
+  const { t } = useTranslations()
   // Share handlers
   const handleShare = async () => {
     const result = await window.electronAPI.sessionCommand(sessionId, { type: 'shareToViewer' }) as { success: boolean; url?: string; error?: string } | undefined
@@ -174,13 +176,13 @@ export function SessionMenu({
       {!sharedUrl ? (
         <MenuItem onClick={handleShare}>
           <CloudUpload className="h-3.5 w-3.5" />
-          <span className="flex-1">Share</span>
+          <span className="flex-1">{t('ui.share', 'Share')}</span>
         </MenuItem>
       ) : (
         <Sub>
           <SubTrigger className="pr-2">
             <CloudUpload className="h-3.5 w-3.5" />
-            <span className="flex-1">Shared</span>
+            <span className="flex-1">{t('ui.shared', 'Shared')}</span>
           </SubTrigger>
           <SubContent>
             <ShareMenuItems sessionId={sessionId} sharedUrl={sharedUrl} menu={{ MenuItem, Separator }} />
@@ -192,7 +194,7 @@ export function SessionMenu({
       {hasRemoteWorkspaces && onSendToWorkspace && (
         <MenuItem onClick={onSendToWorkspace}>
           <Send className="h-3.5 w-3.5" />
-          <span className="flex-1">Send to Workspace...</span>
+          <span className="flex-1">{t('ui.sendToWorkspace', 'Send to Workspace...')}</span>
         </MenuItem>
       )}
 
@@ -209,7 +211,7 @@ export function SessionMenu({
                 : icon
             })()}
           </span>
-          <span className="flex-1">Status</span>
+          <span className="flex-1">{t('ui.statuses', 'Status')}</span>
         </SubTrigger>
         <SubContent>
           <StatusMenuItems
@@ -225,14 +227,14 @@ export function SessionMenu({
       {labels.length > 0 && (
         <Sub>
           <SubTrigger className="pr-2">
-            <Tag className="h-3.5 w-3.5" />
-            <span className="flex-1">Labels</span>
-            {sessionLabels.length > 0 && (
-              <span className="text-[10px] text-muted-foreground tabular-nums -mr-2.5">
-                {sessionLabels.length}
-              </span>
-            )}
-          </SubTrigger>
+          <Tag className="h-3.5 w-3.5" />
+          <span className="flex-1">{t('ui.labels', 'Labels')}</span>
+          {sessionLabels.length > 0 && (
+            <span className="text-[10px] text-muted-foreground tabular-nums -mr-2.5">
+              {sessionLabels.length}
+            </span>
+          )}
+        </SubTrigger>
           <SubContent>
             <LabelMenuItems
               labels={labels}
@@ -248,12 +250,12 @@ export function SessionMenu({
       {!isFlagged ? (
         <MenuItem onClick={onFlag}>
           <Flag className="h-3.5 w-3.5 text-info" />
-          <span className="flex-1">Flag</span>
+          <span className="flex-1">{t('ui.flag', 'Flag')}</span>
         </MenuItem>
       ) : (
         <MenuItem onClick={onUnflag}>
           <FlagOff className="h-3.5 w-3.5" />
-          <span className="flex-1">Unflag</span>
+          <span className="flex-1">{t('ui.unflag', 'Unflag')}</span>
         </MenuItem>
       )}
 
@@ -261,12 +263,12 @@ export function SessionMenu({
       {!isArchived ? (
         <MenuItem onClick={onArchive}>
           <Archive className="h-3.5 w-3.5" />
-          <span className="flex-1">Archive</span>
+          <span className="flex-1">{t('ui.archive', 'Archive')}</span>
         </MenuItem>
       ) : (
         <MenuItem onClick={onUnarchive}>
           <ArchiveRestore className="h-3.5 w-3.5" />
-          <span className="flex-1">Unarchive</span>
+          <span className="flex-1">{t('ui.unarchive', 'Unarchive')}</span>
         </MenuItem>
       )}
 
@@ -274,7 +276,7 @@ export function SessionMenu({
       {!_hasUnread && _hasMessages && (
         <MenuItem onClick={onMarkUnread}>
           <MailOpen className="h-3.5 w-3.5" />
-          <span className="flex-1">Mark as Unread</span>
+          <span className="flex-1">{t('ui.markAsUnread', 'Mark as Unread')}</span>
         </MenuItem>
       )}
 
@@ -283,13 +285,13 @@ export function SessionMenu({
       {/* Rename */}
       <MenuItem onClick={onRename}>
         <Pencil className="h-3.5 w-3.5" />
-        <span className="flex-1">Rename</span>
+        <span className="flex-1">{t('ui.rename', 'Rename')}</span>
       </MenuItem>
 
       {/* Regenerate Title - AI-generate based on recent messages */}
       <MenuItem onClick={handleRefreshTitle}>
         <RefreshCw className="h-3.5 w-3.5" />
-        <span className="flex-1">Regenerate Title</span>
+        <span className="flex-1">{t('ui.regenerateTitle', 'Regenerate Title')}</span>
       </MenuItem>
 
       <Separator />
@@ -297,25 +299,25 @@ export function SessionMenu({
       {/* Open in New Panel */}
       <MenuItem onClick={handleOpenInNewPanel}>
         <Columns2 className="h-3.5 w-3.5" />
-        <span className="flex-1">Open in New Panel</span>
+        <span className="flex-1">{t('ui.openInNewPanel', 'Open in New Panel')}</span>
       </MenuItem>
 
       {/* Open in New Window */}
       <MenuItem onClick={onOpenInNewWindow}>
         <AppWindow className="h-3.5 w-3.5" />
-        <span className="flex-1">Open in New Window</span>
+        <span className="flex-1">{t('ui.openInNewWindow', 'Open in New Window')}</span>
       </MenuItem>
 
       {/* Show in file manager */}
       <MenuItem onClick={handleShowInFinder}>
         <FolderOpen className="h-3.5 w-3.5" />
-        <span className="flex-1">{`Show in ${getFileManagerName()}`}</span>
+        <span className="flex-1">{t('ui.showInExplorer', `Show in ${getFileManagerName()}`)}</span>
       </MenuItem>
 
       {/* Copy Path */}
       <MenuItem onClick={handleCopyPath}>
         <Copy className="h-3.5 w-3.5" />
-        <span className="flex-1">Copy Path</span>
+        <span className="flex-1">{t('ui.copyPath', 'Copy Path')}</span>
       </MenuItem>
 
       <Separator />
@@ -323,7 +325,7 @@ export function SessionMenu({
       {/* Delete */}
       <MenuItem onClick={onDelete} variant="destructive">
         <Trash2 className="h-3.5 w-3.5" />
-        <span className="flex-1">Delete</span>
+        <span className="flex-1">{t('ui.delete', 'Delete')}</span>
       </MenuItem>
     </>
   )

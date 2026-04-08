@@ -275,6 +275,37 @@ export const enUS = {
     project: 'Project'
   },
 
+  // UI Elements
+  ui: {
+    allSessions: 'All Sessions',
+    filterChats: 'Filter Chats',
+    searchStatusesAndLabels: 'Search statuses & labels...',
+    statuses: 'Statuses',
+    group: 'Group',
+    search: 'Search',
+    share: 'Share',
+    flag: 'Flag',
+    archive: 'Archive',
+    rename: 'Rename',
+    regenerateTitle: 'Regenerate Title',
+    openInNewPanel: 'Open in New Panel',
+    openInNewWindow: 'Open in New Window',
+    showInExplorer: 'Show in Explorer',
+    copyPath: 'Copy Path',
+    delete: 'Delete',
+    filterStatuses: 'Filter statuses...',
+    unflag: 'Unflag',
+    unarchive: 'Unarchive',
+    markAsUnread: 'Mark as Unread',
+    sendToWorkspace: 'Send to Workspace...',
+    openInBrowser: 'Open in Browser',
+    copyLink: 'Copy Link',
+    updateShare: 'Update Share',
+    stopSharing: 'Stop Sharing',
+    shared: 'Shared',
+    noStatusFound: 'No status found'
+  },
+
   // Onboarding
   onboarding: {
     welcome: {

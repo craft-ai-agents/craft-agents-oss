@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Command as CommandPrimitive } from 'cmdk'
 import { Archive, ArchiveRestore } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useTranslations } from '@/i18n'
 import {
   type SessionStatusId,
   type SessionStatus,
@@ -64,6 +65,7 @@ export function SessionStatusMenu({
 }: SessionStatusMenuProps) {
   const [filter, setFilter] = React.useState('')
   const inputRef = React.useRef<HTMLInputElement>(null)
+  const { t } = useTranslations()
 
   // Focus input when menu opens
   React.useEffect(() => {
@@ -86,13 +88,13 @@ export function SessionStatusMenu({
           ref={inputRef}
           value={filter}
           onValueChange={setFilter}
-          placeholder="Filter statuses..."
+          placeholder={t('ui.filterStatuses', 'Filter statuses...')}
           className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
         />
       </div>
       <CommandPrimitive.List className={MENU_LIST_STYLE}>
         <CommandPrimitive.Empty className="py-3 text-center text-sm text-muted-foreground">
-          No status found
+          {t('ui.noStatusFound', 'No status found')}
         </CommandPrimitive.Empty>
         {states.map((state) => {
           const isActive = activeState === state.id
