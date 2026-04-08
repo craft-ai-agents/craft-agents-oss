@@ -168,7 +168,24 @@ export const enUS = {
     },
     shortcuts: {
       label: 'Shortcuts',
-      description: 'Keyboard shortcuts'
+      description: 'Keyboard shortcuts',
+      title: 'Shortcuts',
+      section: {
+        'List Navigation': 'List Navigation',
+        'Session List': 'Session List',
+        'Chat Input': 'Chat Input'
+      },
+      shortcut: {
+        'Navigate items in list': 'Navigate items in list',
+        'Go to first item': 'Go to first item',
+        'Go to last item': 'Go to last item',
+        'Focus chat input': 'Focus chat input',
+        'Open context menu': 'Open context menu',
+        'Add filter as excluded': 'Add filter as excluded',
+        'Send message': 'Send message',
+        'New line': 'New line',
+        'Close dialog / blur input': 'Close dialog / blur input'
+      }
     },
     preferences: {
       label: 'Preferences',

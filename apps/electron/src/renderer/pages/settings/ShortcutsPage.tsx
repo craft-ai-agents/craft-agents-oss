@@ -11,6 +11,7 @@ import { SettingsSection, SettingsCard, SettingsRow } from '@/components/setting
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import { isMac } from '@/lib/platform'
 import { actionsByCategory, useActionLabel, type ActionId } from '@/actions'
+import { useTranslations } from '@/i18n'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -90,15 +91,17 @@ function ActionShortcutRow({ actionId }: { actionId: ActionId }) {
 }
 
 export default function ShortcutsPage() {
+  const { t } = useTranslations()
+  
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Shortcuts" />
+      <PanelHeader title={t('settings.shortcuts.title', 'Shortcuts')} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto space-y-8">
             {/* Registry-driven sections */}
             {Object.entries(actionsByCategory).map(([category, actions]) => (
-              <SettingsSection key={category} title={category}>
+              <SettingsSection key={category} title={t(`settings.shortcuts.category.${category}`, category)}>
                 <SettingsCard>
                   {actions.map(action => (
                     <ActionShortcutRow key={action.id} actionId={action.id as ActionId} />
@@ -109,10 +112,10 @@ export default function ShortcutsPage() {
 
             {/* Component-specific sections */}
             {componentSpecificSections.map((section) => (
-              <SettingsSection key={section.title} title={section.title}>
+              <SettingsSection key={section.title} title={t(`settings.shortcuts.section.${section.title}`, section.title)}>
                 <SettingsCard>
                   {section.shortcuts.map((shortcut, index) => (
-                    <SettingsRow key={index} label={shortcut.description}>
+                    <SettingsRow key={index} label={t(`settings.shortcuts.shortcut.${shortcut.description}`, shortcut.description)}>
                       <div className="flex items-center gap-1">
                         {shortcut.keys.map((key, keyIndex) => (
                           <Kbd key={keyIndex}>{key}</Kbd>

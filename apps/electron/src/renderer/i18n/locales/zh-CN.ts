@@ -168,7 +168,24 @@ export const zhCN = {
     },
     shortcuts: {
       label: '快捷键',
-      description: '键盘快捷键'
+      description: '键盘快捷键',
+      title: '快捷键',
+      section: {
+        'List Navigation': '列表导航',
+        'Session List': '会话列表',
+        'Chat Input': '聊天输入'
+      },
+      shortcut: {
+        'Navigate items in list': '在列表中导航项目',
+        'Go to first item': '转到第一个项目',
+        'Go to last item': '转到最后一个项目',
+        'Focus chat input': '聚焦聊天输入框',
+        'Open context menu': '打开上下文菜单',
+        'Add filter as excluded': '添加排除筛选',
+        'Send message': '发送消息',
+        'New line': '换行',
+        'Close dialog / blur input': '关闭对话框 / 取消输入框聚焦'
+      }
     },
     preferences: {
       label: '偏好设置',
