@@ -121,7 +121,12 @@ export const enUS = {
     connectionToUrlTimedOut: 'Connection to {url} timed out. Server may be unreachable.',
     couldNotConnectToUrl: 'Could not connect to {url}. Is the remote server running?',
     webSocketClosedWithCode: 'WebSocket closed with code {code}{reason}.',
-    waitingForRemoteServerConnection: 'Waiting for remote server connection.'
+    waitingForRemoteServerConnection: 'Waiting for remote server connection.',
+    when: 'When',
+    then: 'Then',
+    matching: 'matching',
+    at: 'at',
+    runTest: 'Run Test'
   },
   
   // Menu

@@ -121,7 +121,12 @@ export const zhCN = {
     connectionToUrlTimedOut: '连接 {url} 超时。服务器可能无法访问。',
     couldNotConnectToUrl: '无法连接到 {url}。远程服务器是否正在运行？',
     webSocketClosedWithCode: 'WebSocket 已关闭，代码为 {code}{reason}。',
-    waitingForRemoteServerConnection: '等待远程服务器连接。'
+    waitingForRemoteServerConnection: '等待远程服务器连接。',
+    when: '当',
+    then: '然后',
+    matching: '匹配',
+    at: '在',
+    runTest: '运行测试'
   },
   
   // Menu
