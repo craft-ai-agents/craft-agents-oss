@@ -101,7 +101,23 @@ export const enUS = {
     },
     labels: {
       label: 'Labels',
-      description: 'Manage session labels'
+      description: 'Manage session labels',
+      title: 'Labels',
+      editFile: 'Edit File',
+      aboutLabels: 'About Labels',
+      labelsHelpOrganize: 'Labels help you organize sessions with colored tags. Use them to categorize conversations by project, topic, or priority — making it easy to filter and find related sessions later.',
+      eachLabelCanCarry: 'Each label can optionally carry a',
+      value: 'value',
+      withSpecificType: 'with a specific type (text, number, or date). This turns labels into structured metadata — for example, a "priority" label with value 3, or a "due" label with a date.',
+      autoApplyRules: 'Auto-apply rules',
+      assignLabelsAutomatically: 'assign labels automatically when a message matches a regex pattern. For example, pasting a Linear issue URL can auto-tag the session with the project name and issue ID — no manual tagging needed.',
+      learnMore: 'Learn more',
+      labelHierarchy: 'Label Hierarchy',
+      labelHierarchyDescription: 'All labels configured for this workspace. Labels can be nested to form groups.',
+      noLabelsConfigured: 'No labels configured.',
+      labelsCanBeCreated: 'Labels can be created by the agent or by editing',
+      inYourWorkspace: 'in your workspace.',
+      autoApplyRulesDescription: 'Regex patterns that automatically apply labels when matched in user messages. For example, paste a Linear issue URL and automatically tag the session with the project name and issue ID.'
     },
     server: {
       label: 'Server',

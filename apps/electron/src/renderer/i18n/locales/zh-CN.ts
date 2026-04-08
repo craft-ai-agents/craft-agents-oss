@@ -101,7 +101,23 @@ export const zhCN = {
     },
     labels: {
       label: '标签',
-      description: '管理会话标签'
+      description: '管理会话标签',
+      title: '标签',
+      editFile: '编辑文件',
+      aboutLabels: '关于标签',
+      labelsHelpOrganize: '标签可以帮助您使用彩色标签组织会话。使用它们按项目、主题或优先级分类对话 — 便于日后筛选和查找相关会话。',
+      eachLabelCanCarry: '每个标签可以选择性地携带一个',
+      value: '值',
+      withSpecificType: '，具有特定类型（文本、数字或日期）。这将标签转换为结构化元数据 — 例如，值为 3 的“优先级”标签，或带有日期的“截止”标签。',
+      autoApplyRules: '自动应用规则',
+      assignLabelsAutomatically: '当消息匹配正则表达式模式时自动分配标签。例如，粘贴 Linear 问题 URL 可以自动为会话标记项目名称和问题 ID — 无需手动标记。',
+      learnMore: '了解更多',
+      labelHierarchy: '标签层次结构',
+      labelHierarchyDescription: '为此工作区配置的所有标签。标签可以嵌套以形成组。',
+      noLabelsConfigured: '未配置标签。',
+      labelsCanBeCreated: '标签可以由智能体创建，也可以通过在工作区中编辑',
+      inYourWorkspace: '来创建。',
+      autoApplyRulesDescription: '在用户消息中匹配时自动应用标签的正则表达式模式。例如，粘贴 Linear 问题 URL 并自动为会话标记项目名称和问题 ID。'
     },
     server: {
       label: '服务器',
