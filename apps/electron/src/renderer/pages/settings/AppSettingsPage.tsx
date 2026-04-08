@@ -21,6 +21,7 @@ import { routes } from '@/lib/navigate'
 import { Spinner } from '@craft-agent/ui'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { NetworkProxySettings } from '../../../shared/types'
+import { useTranslations } from '@/i18n'
 
 import {
   SettingsSection,
@@ -74,16 +75,16 @@ function toNetworkProxySettings(form: ProxyFormState): NetworkProxySettings {
   }
 }
 
-function validateProxyUrl(url: string): string | undefined {
+function validateProxyUrl(url: string, t?: any): string | undefined {
   if (!url.trim()) return undefined
   try {
     const parsed = new URL(url.trim())
     if (!['http:', 'https:', 'socks4:', 'socks5:'].includes(parsed.protocol)) {
-      return 'Must be http://, https://, socks4://, or socks5:// URL'
+      return t ? t('settings.app.invalidProxyProtocol', 'Must be http://, https://, socks4://, or socks5:// URL') : 'Must be http://, https://, socks4://, or socks5:// URL'
     }
     return undefined
   } catch {
-    return 'Invalid URL format'
+    return t ? t('settings.app.invalidUrlFormat', 'Invalid URL format') : 'Invalid URL format'
   }
 }
 
@@ -92,6 +93,8 @@ function validateProxyUrl(url: string): string | undefined {
 // ============================================
 
 export default function AppSettingsPage() {
+  const { t } = useTranslations()
+  
   // Notifications state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
 
@@ -167,8 +170,8 @@ export default function AppSettingsPage() {
 
   const handleSaveProxy = useCallback(async () => {
     // Validate URLs
-    const httpErr = validateProxyUrl(proxyForm.httpProxy)
-    const httpsErr = validateProxyUrl(proxyForm.httpsProxy)
+    const httpErr = validateProxyUrl(proxyForm.httpProxy, t)
+    const httpsErr = validateProxyUrl(proxyForm.httpsProxy, t)
     if (httpErr || httpsErr) {
       setProxyError(httpErr || httpsErr)
       return
@@ -184,11 +187,11 @@ export default function AppSettingsPage() {
       setProxyForm(form)
       setSavedProxyForm(form)
     } catch (error) {
-      setProxyError(error instanceof Error ? error.message : 'Failed to save')
+      setProxyError(error instanceof Error ? error.message : t('settings.app.failedToSave', 'Failed to save'))
     } finally {
       setIsSavingProxy(false)
     }
-  }, [proxyForm])
+  }, [proxyForm, t])
 
   const handleResetProxy = useCallback(() => {
     setProxyForm(savedProxyForm)
@@ -197,17 +200,17 @@ export default function AppSettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="App" actions={<HeaderMenu route={routes.view.settings('app')} helpFeature="app-settings" />} />
+      <PanelHeader title={t('settings.app.title', 'App')} actions={<HeaderMenu route={routes.view.settings('app')} helpFeature="app-settings" />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
             <div className="space-y-8">
               {/* Notifications */}
-              <SettingsSection title="Notifications">
+              <SettingsSection title={t('settings.app.notifications', 'Notifications')}>
                 <SettingsCard>
                   <SettingsToggle
-                    label="Desktop notifications"
-                    description="Get notified when AI finishes working in a chat."
+                    label={t('settings.app.desktopNotifications', 'Desktop notifications')}
+                    description={t('settings.app.desktopNotificationsDescription', 'Get notified when AI finishes working in a chat.')}
                     checked={notificationsEnabled}
                     onCheckedChange={handleNotificationsEnabledChange}
                   />
@@ -215,11 +218,11 @@ export default function AppSettingsPage() {
               </SettingsSection>
 
               {/* Power */}
-              <SettingsSection title="Power">
+              <SettingsSection title={t('settings.app.power', 'Power')}>
                 <SettingsCard>
                   <SettingsToggle
-                    label="Keep screen awake"
-                    description="Prevent the screen from turning off while sessions are running."
+                    label={t('settings.app.keepScreenAwake', 'Keep screen awake')}
+                    description={t('settings.app.keepScreenAwakeDescription', 'Prevent the screen from turning off while sessions are running.')}
                     checked={keepAwakeEnabled}
                     onCheckedChange={handleKeepAwakeEnabledChange}
                   />
@@ -227,11 +230,11 @@ export default function AppSettingsPage() {
               </SettingsSection>
 
               {/* Tools */}
-              <SettingsSection title="Tools">
+              <SettingsSection title={t('settings.app.tools', 'Tools')}>
                 <SettingsCard>
                   <SettingsToggle
-                    label="Built-in browser"
-                    description="Disable if you use external browser tools like Playwright, Puppeteer, or browser MCP servers."
+                    label={t('settings.app.builtInBrowser', 'Built-in browser')}
+                    description={t('settings.app.builtInBrowserDescription', 'Disable if you use external browser tools like Playwright, Puppeteer, or browser MCP servers.')}
                     checked={browserToolEnabled}
                     onCheckedChange={handleBrowserToolEnabledChange}
                   />
@@ -239,35 +242,35 @@ export default function AppSettingsPage() {
               </SettingsSection>
 
               {/* Network */}
-              <SettingsSection title="Network">
+              <SettingsSection title={t('settings.app.network', 'Network')}>
                 <SettingsCard>
                   <SettingsToggle
-                    label="HTTP proxy"
-                    description="Route network traffic through a proxy server."
+                    label={t('settings.app.httpProxy', 'HTTP proxy')}
+                    description={t('settings.app.httpProxyDescription', 'Route network traffic through a proxy server.')}
                     checked={proxyForm.enabled}
                     onCheckedChange={(enabled) => setProxyForm(prev => ({ ...prev, enabled }))}
                   />
                   {proxyForm.enabled && (
                     <>
                       <SettingsInput
-                        label="HTTP Proxy"
+                        label={t('settings.app.httpProxyLabel', 'HTTP Proxy')}
                         value={proxyForm.httpProxy}
                         onChange={(value) => setProxyForm(prev => ({ ...prev, httpProxy: value }))}
-                        placeholder="http://proxy.example.com:8080"
+                        placeholder={t('settings.app.proxyPlaceholder', 'http://proxy.example.com:8080')}
                         inCard
                       />
                       <SettingsInput
-                        label="HTTPS Proxy"
+                        label={t('settings.app.httpsProxyLabel', 'HTTPS Proxy')}
                         value={proxyForm.httpsProxy}
                         onChange={(value) => setProxyForm(prev => ({ ...prev, httpsProxy: value }))}
-                        placeholder="http://proxy.example.com:8080"
+                        placeholder={t('settings.app.proxyPlaceholder', 'http://proxy.example.com:8080')}
                         inCard
                       />
                       <SettingsInput
-                        label="Bypass Rules"
+                        label={t('settings.app.bypassRules', 'Bypass Rules')}
                         value={proxyForm.noProxy}
                         onChange={(value) => setProxyForm(prev => ({ ...prev, noProxy: value }))}
-                        placeholder="localhost, 127.0.0.1, .example.com"
+                        placeholder={t('settings.app.bypassRulesPlaceholder', 'localhost, 127.0.0.1, .example.com')}
                         inCard
                       />
                     </>
@@ -283,7 +286,7 @@ export default function AppSettingsPage() {
                         onClick={handleResetProxy}
                         disabled={!isProxyDirty || isSavingProxy}
                       >
-                        Reset
+                        {t('common.reset', 'Reset')}
                       </Button>
                       <Button
                         size="sm"
@@ -293,10 +296,10 @@ export default function AppSettingsPage() {
                         {isSavingProxy ? (
                           <>
                             <Spinner className="mr-1.5" />
-                            Saving...
+                            {t('common.saving', 'Saving...')}
                           </>
                         ) : (
-                          'Save'
+                          t('common.save', 'Save')
                         )}
                       </Button>
                     </SettingsCardFooter>
@@ -305,22 +308,22 @@ export default function AppSettingsPage() {
               </SettingsSection>
 
               {/* About */}
-              <SettingsSection title="About">
+              <SettingsSection title={t('settings.app.about', 'About')}>
                 <SettingsCard>
-                  <SettingsRow label="Version">
+                  <SettingsRow label={t('settings.app.version', 'Version')}>
                     <div className="flex items-center gap-2">
                       <span className="text-muted-foreground">
-                        {updateChecker.updateInfo?.currentVersion ?? 'Loading...'}
+                        {updateChecker.updateInfo?.currentVersion ?? t('common.loading', 'Loading...')}
                       </span>
                       {updateChecker.isDownloading && updateChecker.updateInfo?.latestVersion && (
                         <div className="flex items-center gap-2 text-muted-foreground text-sm">
                           <Spinner className="w-3 h-3" />
-                          <span>Downloading v{updateChecker.updateInfo.latestVersion} ({updateChecker.downloadProgress}%)</span>
+                          <span>{t('settings.app.downloadingVersion', 'Downloading v{version} ({progress}%)', { version: updateChecker.updateInfo.latestVersion, progress: updateChecker.downloadProgress })}</span>
                         </div>
                       )}
                     </div>
                   </SettingsRow>
-                  <SettingsRow label="Check for updates">
+                  <SettingsRow label={t('settings.app.checkForUpdates', 'Check for updates')}>
                     <Button
                       variant="outline"
                       size="sm"
@@ -330,20 +333,20 @@ export default function AppSettingsPage() {
                       {isCheckingForUpdates ? (
                         <>
                           <Spinner className="mr-1.5" />
-                          Checking...
+                          {t('common.checking', 'Checking...')}
                         </>
                       ) : (
-                        'Check Now'
+                        t('settings.app.checkNow', 'Check Now')
                       )}
                     </Button>
                   </SettingsRow>
                   {updateChecker.isReadyToInstall && updateChecker.updateInfo?.latestVersion && (
-                    <SettingsRow label="Update ready">
+                    <SettingsRow label={t('settings.app.updateReady', 'Update ready')}>
                       <Button
                         size="sm"
                         onClick={updateChecker.installUpdate}
                       >
-                        Restart to Update to v{updateChecker.updateInfo.latestVersion}
+                        {t('settings.app.restartToUpdate', 'Restart to Update to v{version}', { version: updateChecker.updateInfo.latestVersion })}
                       </Button>
                     </SettingsRow>
                   )}
