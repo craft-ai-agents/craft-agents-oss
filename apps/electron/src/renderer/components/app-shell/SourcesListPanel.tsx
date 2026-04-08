@@ -8,6 +8,7 @@ import { EntityListEmptyScreen } from '@/components/ui/entity-list-empty'
 import { sourceSelection } from '@/hooks/useEntitySelection'
 import { SourceMenu } from './SourceMenu'
 import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
+import { useTranslations } from '@/i18n'
 import type { LoadedSource, SourceConnectionStatus, SourceFilter } from '../../../shared/types'
 
 const SOURCE_TYPE_CONFIG: Record<string, { label: string; colorClass: string }> = {
@@ -51,6 +52,8 @@ export function SourcesListPanel({
   localMcpEnabled = true,
   className,
 }: SourcesListPanelProps) {
+  const { t } = useTranslations()
+  
   const filteredSources = React.useMemo(() => {
     if (!sourceFilter) return sources
     return sources.filter(s => s.config.type === sourceFilter.sourceType)
@@ -58,10 +61,25 @@ export function SourcesListPanel({
 
   const emptyMessage = React.useMemo(() => {
     if (sourceFilter?.kind === 'type') {
+      if (sourceFilter.sourceType === 'api') {
+        return t('common.noApiSourcesConfigured', 'No API sources configured.')
+      } else if (sourceFilter.sourceType === 'mcp') {
+        return t('common.noMcpSourcesConfigured', 'No MCP sources configured.')
+      } else if (sourceFilter.sourceType === 'local') {
+        return t('common.noLocalFolderSourcesConfigured', 'No local folder sources configured.')
+      }
       return `No ${SOURCE_TYPE_FILTER_LABELS[sourceFilter.sourceType] ?? sourceFilter.sourceType} sources configured.`
     }
-    return 'No sources configured.'
-  }, [sourceFilter])
+    return t('common.noSourcesConfigured', 'No sources configured.')
+  }, [sourceFilter, t])
+
+  const translatedSourceStatusConfig = React.useMemo(() => ({
+    ...SOURCE_STATUS_CONFIG,
+    needs_auth: SOURCE_STATUS_CONFIG.needs_auth ? { ...SOURCE_STATUS_CONFIG.needs_auth, label: t('common.authRequired', 'Auth Required') } : null,
+    failed: SOURCE_STATUS_CONFIG.failed ? { ...SOURCE_STATUS_CONFIG.failed, label: t('common.disconnected', 'Disconnected') } : null,
+    untested: SOURCE_STATUS_CONFIG.untested ? { ...SOURCE_STATUS_CONFIG.untested, label: t('common.notTested', 'Not Tested') } : null,
+    local_disabled: SOURCE_STATUS_CONFIG.local_disabled ? { ...SOURCE_STATUS_CONFIG.local_disabled, label: t('common.disabled', 'Disabled') } : null,
+  }), [t])
 
   return (
     <EntityPanel<LoadedSource>
@@ -75,7 +93,7 @@ export function SourcesListPanel({
         <EntityListEmptyScreen
           icon={<DatabaseZap />}
           title={emptyMessage}
-          description="Sources connect your agent to external data — MCP servers, REST APIs, and local folders."
+          description={t('common.sourcesDescription', 'Sources connect your agent to external data — MCP servers, REST APIs, and local folders.')}
           docKey="sources"
         >
           {workspaceRootPath && (
@@ -83,7 +101,7 @@ export function SourcesListPanel({
               align="center"
               trigger={
                 <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
-                  Add Source
+                  {t('common.addSource', 'Add Source')}
                 </button>
               }
               {...getEditConfig(
@@ -97,7 +115,7 @@ export function SourcesListPanel({
       mapItem={(source) => {
         const connectionStatus = deriveConnectionStatus(source, localMcpEnabled)
         const typeConfig = SOURCE_TYPE_CONFIG[source.config.type]
-        const statusConfig = SOURCE_STATUS_CONFIG[connectionStatus]
+        const statusConfig = translatedSourceStatusConfig[connectionStatus]
         const subtitle = source.config.tagline || source.config.provider || ''
         return {
           icon: <SourceAvatar source={source} size="sm" />,

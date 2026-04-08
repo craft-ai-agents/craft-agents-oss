@@ -7,6 +7,7 @@ import { skillSelection } from '@/hooks/useEntitySelection'
 import { SkillMenu } from './SkillMenu'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { useActiveWorkspace } from '@/context/AppShellContext'
+import { useTranslations } from '@/i18n'
 import type { LoadedSkill } from '../../../shared/types'
 
 export interface SkillsListPanelProps {
@@ -28,6 +29,7 @@ export function SkillsListPanel({
   workspaceRootPath,
   className,
 }: SkillsListPanelProps) {
+  const { t } = useTranslations()
   const activeWorkspace = useActiveWorkspace()
   const canRevealLocally = !activeWorkspace?.remoteServer
 
@@ -42,8 +44,8 @@ export function SkillsListPanel({
       emptyState={
         <EntityListEmptyScreen
           icon={<Zap />}
-          title="No skills configured"
-          description="Skills are reusable instructions that teach your agent specialized behaviors."
+          title={t('common.noSkillsConfigured', 'No skills configured')}
+          description={t('common.skillsDescription', 'Skills are reusable instructions that teach your agent specialized behaviors.')}
           docKey="skills"
         >
           {workspaceRootPath && (
@@ -51,7 +53,7 @@ export function SkillsListPanel({
               align="center"
               trigger={
                 <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
-                  Add Skill
+                  {t('common.addSkill', 'Add Skill')}
                 </button>
               }
               {...getEditConfig('add-skill', workspaceRootPath)}
@@ -66,7 +68,7 @@ export function SkillsListPanel({
           <span className="flex items-center gap-1.5 min-w-0">
             {skill.source === 'project' && (
               <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-foreground/5 text-muted-foreground">
-                project
+                {t('labelCategories.project', 'project')}
               </span>
             )}
             <span className="truncate">{skill.metadata.description}</span>
@@ -85,7 +87,7 @@ export function SkillsListPanel({
             canShowInFinder={canRevealLocally}
             onDelete={skill.source === 'workspace' ? () => onDeleteSkill(skill.slug) : undefined}
             canDelete={skill.source === 'workspace'}
-            deleteLabel={skill.source === 'workspace' ? 'Delete Skill' : 'Managed by project'}
+            deleteLabel={skill.source === 'workspace' ? t('common.deleteSkill', 'Delete Skill') : t('common.managedByProject', 'Managed by project')}
           />
         ),
       })}

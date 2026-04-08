@@ -2071,22 +2071,22 @@ function AppShellContent({
   const listTitle = React.useMemo(() => {
     // Sources navigator
     if (isSourcesNavigation(navState)) {
-      return 'Sources'
+      return t('sidebar.sources', 'Sources')
     }
 
     // Skills navigator
     if (isSkillsNavigation(navState)) {
-      return 'All Skills'
+      return t('sidebar.allSkills', 'All Skills')
     }
 
     // Automations navigator
     if (isAutomationsNavigation(navState)) {
-      if (!automationFilter) return 'All Automations'
+      if (!automationFilter) return t('sidebar.allAutomations', 'All Automations')
       switch (automationFilter.automationType) {
-        case 'scheduled': return 'Scheduled'
-        case 'event': return 'Event-based'
-        case 'agentic': return 'Agentic'
-        default: return 'All Automations'
+        case 'scheduled': return t('sidebar.scheduled', 'Scheduled')
+        case 'event': return t('sidebar.eventBased', 'Event-based')
+        case 'agentic': return t('sidebar.agentic', 'Agentic')
+        default: return t('sidebar.allAutomations', 'All Automations')
       }
     }
 
@@ -2106,11 +2106,11 @@ function AppShellContent({
       case 'label':
         return sessionFilter.labelId === '__all__' ? t('sidebar.labels', 'Labels') : getLabelDisplayName(labelConfigs, sessionFilter.labelId)
       case 'view':
-        return sessionFilter.viewId === '__all__' ? 'Views' : viewConfigs.find(v => v.id === sessionFilter.viewId)?.name || 'Views'
+        return sessionFilter.viewId === '__all__' ? t('sidebar.views', 'Views') : viewConfigs.find(v => v.id === sessionFilter.viewId)?.name || t('sidebar.views', 'Views')
       default:
         return t('sidebar.allSessions', 'All Sessions')
     }
-  }, [navState, sessionFilter, effectiveSessionStatuses, labelConfigs, viewConfigs, automationFilter])
+  }, [navState, sessionFilter, effectiveSessionStatuses, labelConfigs, viewConfigs, automationFilter, t])
 
   // Build recursive sidebar items from the shared display-sorted label tree.
   // Each node renders with condensed height (compact: true) since many labels expected.
