@@ -27,7 +27,7 @@ import {
 import type { MenuItem, MenuSection, SettingsMenuItem } from "../../shared/menu-schema"
 import { SETTINGS_ICONS } from "./icons/SettingsIcons"
 import { getDocUrl } from '@craft-agent/shared/docs/doc-links'
-import { t } from '@/i18n'
+import { useTranslations } from '@/i18n'
 
 // Map of action handlers for menu items that need custom behavior
 type MenuActionHandlers = {
@@ -64,7 +64,8 @@ function getIcon(name: string): React.ComponentType<{ className?: string }> | nu
 function renderMenuItem(
   item: MenuItem,
   index: number,
-  actionHandlers: MenuActionHandlers
+  actionHandlers: MenuActionHandlers,
+  t: (key: string, defaultValue: string) => string
 ): React.ReactNode {
   if (item.type === 'separator') {
     return <StyledDropdownMenuSeparator key={`sep-${index}`} />
@@ -112,7 +113,8 @@ function renderMenuItem(
  */
 function renderMenuSection(
   section: MenuSection,
-  actionHandlers: MenuActionHandlers
+  actionHandlers: MenuActionHandlers,
+  t: (key: string, defaultValue: string) => string
 ): React.ReactNode {
   const Icon = getIcon(section.icon)
   return (
@@ -122,7 +124,7 @@ function renderMenuSection(
         {section.label}
       </StyledDropdownMenuSubTrigger>
       <StyledDropdownMenuSubContent>
-        {section.items.map((item, index) => renderMenuItem(item, index, actionHandlers))}
+        {section.items.map((item, index) => renderMenuItem(item, index, actionHandlers, t))}
       </StyledDropdownMenuSubContent>
     </DropdownMenuSub>
   )
@@ -174,6 +176,7 @@ export function AppMenu({
   onToggleSidebar,
   onToggleFocusMode,
 }: AppMenuProps) {
+  const { t } = useTranslations()
   const [isDebugMode, setIsDebugMode] = useState(false)
 
   // Get hotkey labels from centralized action registry
@@ -223,9 +226,9 @@ export function AppMenu({
           <StyledDropdownMenuSeparator />
 
           {/* Edit, View, Window submenus from shared schema */}
-          {renderMenuSection(EDIT_MENU, actionHandlers)}
-          {renderMenuSection(VIEW_MENU, actionHandlers)}
-          {renderMenuSection(WINDOW_MENU, actionHandlers)}
+          {renderMenuSection(EDIT_MENU, actionHandlers, t)}
+          {renderMenuSection(VIEW_MENU, actionHandlers, t)}
+          {renderMenuSection(WINDOW_MENU, actionHandlers, t)}
 
           <StyledDropdownMenuSeparator />
 

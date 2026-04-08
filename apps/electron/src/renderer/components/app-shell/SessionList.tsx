@@ -141,7 +141,7 @@ export function SessionList({
   activeChatMatchInfo,
 }: SessionListProps) {
   const setSendToWorkspace = useSetAtom(sendToWorkspaceAtom)
-  const t = useTranslations()
+  const { t } = useTranslations()
 
   // --- Selection (atom-backed, shared with ChatDisplay + BatchActionPanel) ---
   const {

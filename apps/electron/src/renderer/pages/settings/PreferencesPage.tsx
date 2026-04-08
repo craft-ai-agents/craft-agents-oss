@@ -25,6 +25,8 @@ import {
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import { useLocale, setLocale, Locale } from '@/i18n'
+import { useSetAtom } from 'jotai'
+import { settingsStore } from '@/atoms/settings'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -89,6 +91,7 @@ function serializePreferences(state: PreferencesFormState): string {
 
 export default function PreferencesPage() {
   const currentLocale = useLocale()
+  const setLocaleAtom = useSetAtom(settingsStore.setLocale)
   const [formState, setFormState] = useState<PreferencesFormState>(emptyFormState)
   const [isLoading, setIsLoading] = useState(true)
   const [preferencesPath, setPreferencesPath] = useState<string | null>(null)
@@ -98,7 +101,7 @@ export default function PreferencesPage() {
   const lastSavedRef = useRef<string | null>(null)
 
   const handleLanguageChange = (value: string) => {
-    setLocale(value as Locale)
+    setLocaleAtom(value as Locale)
   }
 
   // Keep formStateRef in sync for use in cleanup
@@ -235,7 +238,7 @@ export default function PreferencesPage() {
                 label="Interface Language"
                 description="Language for the Craft Agent user interface."
                 value={currentLocale}
-                onChange={handleLanguageChange}
+                onValueChange={handleLanguageChange}
                 options={[
                   { value: 'en-US', label: 'English' },
                   { value: 'zh-CN', label: '中文' }

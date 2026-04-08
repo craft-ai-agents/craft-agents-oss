@@ -24,7 +24,7 @@ export function WorkspacePicker({ onSelectWorkspace }: WorkspacePickerProps) {
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
-  const t = useTranslations()
+  const { t } = useTranslations()
 
   // Load workspaces from server
   useEffect(() => {

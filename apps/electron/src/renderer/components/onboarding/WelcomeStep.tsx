@@ -22,7 +22,7 @@ export function WelcomeStep({
   isExistingUser = false,
   isLoading = false
 }: WelcomeStepProps) {
-  const t = useTranslations()
+  const { t } = useTranslations()
   return (
     <StepFormLayout
       iconElement={

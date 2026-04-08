@@ -22,7 +22,7 @@ import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { SettingsSubpage } from '../../../shared/types'
 import { SETTINGS_ITEMS } from '../../../shared/menu-schema'
 import { SETTINGS_ICONS } from '@/components/icons/SettingsIcons'
-import { t } from '@/i18n'
+import { useTranslations } from '@/i18n'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -63,6 +63,7 @@ interface SettingsItemRowProps {
  * Tracks menu open state to keep "..." button visible when menu is open
  */
 function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRowProps) {
+  const { t } = useTranslations()
   const [menuOpen, setMenuOpen] = useState(false)
   const Icon = item.icon
 

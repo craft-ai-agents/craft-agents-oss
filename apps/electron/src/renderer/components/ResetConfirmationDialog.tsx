@@ -31,7 +31,7 @@ export function ResetConfirmationDialog({
   onCancel,
 }: ResetConfirmationDialogProps) {
   const [answer, setAnswer] = useState("")
-  const t = useTranslations()
+  const { t } = useTranslations()
 
   // Register with modal context so X button / Cmd+W closes this dialog first
   useRegisterModal(open, onCancel)

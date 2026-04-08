@@ -291,7 +291,7 @@ export function FreeFormInput({
   onConnectionChange,
   connectionUnavailable = false,
 }: FreeFormInputProps) {
-  const t = useTranslations()
+  const { t } = useTranslations()
   const placeholder = customPlaceholder || getDefaultPlaceholders(t, cmdKey)
   // Read connection default model, connections, and workspace info from context.
   // Uses optional variant so playground (no provider) doesn't crash.
