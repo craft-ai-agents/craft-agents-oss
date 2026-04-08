@@ -70,6 +70,7 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
 
   // Get automations config for a workspace (read-only, resolves path server-side)
   server.handle(RPC_CHANNELS.automations.GET, async (_ctx, workspaceId: string) => {
+    log.info(`AUTOMATIONS_GET: Loading automations for workspace: ${workspaceId}`)
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) {
       log.error(`AUTOMATIONS_GET: Workspace not found: ${workspaceId}`)
@@ -78,12 +79,18 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
     try {
       const { resolveAutomationsConfigPath } = await import('@craft-agent/shared/automations/resolve-config-path')
       const configPath = resolveAutomationsConfigPath(workspace.rootPath)
+      log.info(`AUTOMATIONS_GET: Reading config from: ${configPath}`)
       const content = await readFile(configPath, 'utf-8')
-      return JSON.parse(content)
+      const parsed = JSON.parse(content)
+      const eventCount = parsed?.automations ? Object.keys(parsed.automations).length : 0
+      log.info(`AUTOMATIONS_GET: Loaded ${eventCount} event type(s) from ${configPath}`)
+      return parsed
     } catch (error) {
       if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+        log.info(`AUTOMATIONS_GET: No automations.json found for workspace ${workspaceId}`)
         return null // No automations configured yet
       }
+      log.error(`AUTOMATIONS_GET: Error loading automations:`, error)
       throw error
     }
   })
