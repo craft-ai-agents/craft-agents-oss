@@ -1,5 +1,5 @@
 import { atom } from 'jotai'
-import { Locale } from '@/i18n'
+import type { Locale } from '@/i18n'
 
 interface SettingsState {
   locale: Locale | null

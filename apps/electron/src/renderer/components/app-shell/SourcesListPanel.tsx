@@ -75,6 +75,7 @@ export function SourcesListPanel({
 
   const translatedSourceStatusConfig = React.useMemo(() => ({
     ...SOURCE_STATUS_CONFIG,
+    connected: SOURCE_STATUS_CONFIG.connected,
     needs_auth: SOURCE_STATUS_CONFIG.needs_auth ? { ...SOURCE_STATUS_CONFIG.needs_auth, label: t('common.authRequired', 'Auth Required') } : null,
     failed: SOURCE_STATUS_CONFIG.failed ? { ...SOURCE_STATUS_CONFIG.failed, label: t('common.disconnected', 'Disconnected') } : null,
     untested: SOURCE_STATUS_CONFIG.untested ? { ...SOURCE_STATUS_CONFIG.untested, label: t('common.notTested', 'Not Tested') } : null,
