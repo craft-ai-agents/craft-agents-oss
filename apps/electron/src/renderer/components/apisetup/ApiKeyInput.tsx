@@ -54,6 +54,8 @@ export interface ApiKeySubmitData {
   awsRegion?: string
   /** Bedrock authentication method — determines auth type for Pi+Bedrock connections */
   bedrockAuthMethod?: 'iam_credentials' | 'environment'
+  /** AWS named profile for Bedrock environment auth (maps to AWS_PROFILE) */
+  awsProfile?: string
 }
 
 export interface ApiKeyInputProps {
@@ -78,6 +80,8 @@ export interface ApiKeyInputProps {
     models?: string[]
     /** Pre-fill the protocol toggle for custom endpoints */
     customApi?: CustomEndpointApi
+    /** Pre-fill AWS profile for Bedrock environment auth */
+    awsProfile?: string
   }
 }
 
@@ -198,6 +202,7 @@ export function ApiKeyInput({
   const [awsSecretAccessKey, setAwsSecretAccessKey] = useState('')
   const [awsSessionToken, setAwsSessionToken] = useState('')
   const [awsRegion, setAwsRegion] = useState('us-east-1')
+  const [awsProfile, setAwsProfile] = useState(initialValues?.awsProfile ?? 'default')
 
   // Pi model tier state (for providers with many models like OpenRouter, Vercel)
   const [piModels, setPiModels] = useState<PiModelInfo[]>([])
@@ -364,6 +369,7 @@ export function ApiKeyInput({
             ...(awsSessionToken.trim() ? { sessionToken: awsSessionToken.trim() } : {}),
           },
         } : {}),
+        ...(bedrockAuthMethod === 'environment' && awsProfile.trim() ? { awsProfile: awsProfile.trim() } : {}),
         connectionDefaultModel: parsedModels[0],
         models: parsedModels.length > 0 ? parsedModels : undefined,
       })
@@ -623,11 +629,25 @@ export function ApiKeyInput({
             </div>
           )}
 
-          {/* Environment info */}
+          {/* AWS Profile (environment auth) */}
           {bedrockAuthMethod === 'environment' && (
-            <div className="rounded-md bg-foreground-2 p-3">
-              <p className="text-xs text-foreground/50">
-                Uses your existing AWS credential chain — <code className="text-foreground/70">~/.aws/credentials</code>, <code className="text-foreground/70">AWS_PROFILE</code>, IAM roles, SSO sessions, and environment variables.
+            <div className="space-y-1.5">
+              <Label htmlFor="aws-profile" className="text-muted-foreground font-normal text-xs">
+                AWS Profile
+              </Label>
+              <div className={cn("rounded-md shadow-minimal transition-colors", "bg-foreground-2 focus-within:bg-background")}>
+                <Input
+                  id="aws-profile"
+                  type="text"
+                  value={awsProfile}
+                  onChange={(e) => setAwsProfile(e.target.value)}
+                  placeholder="default"
+                  className="border-0 bg-transparent shadow-none"
+                  disabled={isDisabled}
+                />
+              </div>
+              <p className="text-xs text-foreground/40">
+                Named profile from ~/.aws/config. Supports SSO sessions, IAM roles, and static credentials.
               </p>
             </div>
           )}

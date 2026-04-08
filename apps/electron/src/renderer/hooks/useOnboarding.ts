@@ -147,6 +147,7 @@ export function apiSetupMethodToConnectionSetup(
     iamCredentials?: { accessKeyId: string; secretAccessKey: string; sessionToken?: string }
     awsRegion?: string
     bedrockAuthMethod?: 'iam_credentials' | 'environment'
+    awsProfile?: string
   },
   editingSlug: string | null,
   existingSlugs: Set<string>,
@@ -187,6 +188,7 @@ export function apiSetupMethodToConnectionSetup(
         iamCredentials: options.iamCredentials,
         awsRegion: options.awsRegion,
         bedrockAuthMethod: options.bedrockAuthMethod,
+        awsProfile: options.awsProfile,
       }
   }
 }
@@ -252,6 +254,7 @@ export function useOnboarding({
       iamCredentials?: { accessKeyId: string; secretAccessKey: string; sessionToken?: string }
       awsRegion?: string
       bedrockAuthMethod?: 'iam_credentials' | 'environment'
+      awsProfile?: string
     },
     methodOverride?: ApiSetupMethod,
     connectionSlugOverride?: string,
@@ -277,6 +280,7 @@ export function useOnboarding({
         iamCredentials: options?.iamCredentials,
         awsRegion: options?.awsRegion,
         bedrockAuthMethod: options?.bedrockAuthMethod,
+        awsProfile: options?.awsProfile,
       }, connectionSlugOverride ?? editingSlug, existingSlugs)
       // Use new unified API
       const result = await window.electronAPI.setupLlmConnection(
@@ -394,6 +398,7 @@ export function useOnboarding({
           iamCredentials: data.iamCredentials,
           awsRegion: data.awsRegion,
           bedrockAuthMethod: data.bedrockAuthMethod,
+          awsProfile: data.awsProfile,
         })
         if (saved) {
           setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))

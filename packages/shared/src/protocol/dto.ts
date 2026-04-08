@@ -354,6 +354,8 @@ export interface LlmConnectionSetup {
   }
   /** AWS region for Pi+Bedrock connections */
   awsRegion?: string
+  /** AWS named profile for Bedrock environment auth. Maps to AWS_PROFILE env var. */
+  awsProfile?: string
   /** Bedrock authentication method — determines auth type for Pi+Bedrock connections */
   bedrockAuthMethod?: 'iam_credentials' | 'environment'
 }

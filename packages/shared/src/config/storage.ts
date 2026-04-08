@@ -2400,6 +2400,9 @@ export function updateLlmConnection(slug: string, updates: Partial<Omit<LlmConne
     models: updates.models !== undefined ? updates.models : existing.models,
     defaultModel: updates.defaultModel !== undefined ? updates.defaultModel : existing.defaultModel,
     modelSelectionMode: updates.modelSelectionMode !== undefined ? updates.modelSelectionMode : existing.modelSelectionMode,
+    // Cloud provider fields
+    awsRegion: updates.awsRegion !== undefined ? updates.awsRegion : existing.awsRegion,
+    awsProfile: updates.awsProfile !== undefined ? updates.awsProfile : existing.awsProfile,
     // Pi auth provider
     piAuthProvider: updates.piAuthProvider !== undefined ? updates.piAuthProvider : existing.piAuthProvider,
     // Custom endpoint protocol (Anthropic/OpenAI compatible)
