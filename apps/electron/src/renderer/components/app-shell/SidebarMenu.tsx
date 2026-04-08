@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getDocUrl, type DocFeature } from '@craft-agent/shared/docs/doc-links'
+import { useTranslations } from '@/i18n'
 
 export type SidebarMenuType = 'allSessions' | 'flagged' | 'status' | 'sources' | 'skills' | 'automations' | 'labels' | 'views' | 'newSession'
 
@@ -85,13 +86,14 @@ export function SidebarMenu({
 }: SidebarMenuProps) {
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator } = useMenuComponents()
+  const { t } = useTranslations()
 
   // New Session: only shows "Open in New Window"
   if (type === 'newSession') {
     return (
       <MenuItem onClick={() => window.electronAPI.openUrl('craftagents://action/new-session?window=focused')}>
         <AppWindow className="h-3.5 w-3.5" />
-        <span className="flex-1">Open in New Window</span>
+        <span className="flex-1">{t('common.openInNewWindow', 'Open in New Window')}</span>
       </MenuItem>
     )
   }
@@ -104,14 +106,14 @@ export function SidebarMenu({
           <>
             <MenuItem onClick={onMarkAllRead}>
               <CheckCheck className="h-3.5 w-3.5" />
-              <span className="flex-1">Mark All Read</span>
+              <span className="flex-1">{t('common.markAllRead', 'Mark All Read')}</span>
             </MenuItem>
             <Separator />
           </>
         )}
         <MenuItem onClick={onConfigureStatuses}>
           <Settings2 className="h-3.5 w-3.5" />
-          <span className="flex-1">Configure Statuses</span>
+          <span className="flex-1">{t('common.configureStatuses', 'Configure Statuses')}</span>
         </MenuItem>
       </>
     )
@@ -126,13 +128,13 @@ export function SidebarMenu({
         {onAddLabel && (
           <MenuItem onClick={() => onAddLabel(labelId)}>
             <Plus className="h-3.5 w-3.5" />
-            <span className="flex-1">Add New Label</span>
+            <span className="flex-1">{t('common.addNewLabel', 'Add New Label')}</span>
           </MenuItem>
         )}
         {onConfigureLabels && (
           <MenuItem onClick={() => onConfigureLabels(labelId)}>
             <Settings2 className="h-3.5 w-3.5" />
-            <span className="flex-1">Edit Labels</span>
+            <span className="flex-1">{t('common.editLabels', 'Edit Labels')}</span>
           </MenuItem>
         )}
         {labelId && onDeleteLabel && (
@@ -140,7 +142,7 @@ export function SidebarMenu({
             <Separator />
             <MenuItem onClick={() => onDeleteLabel(labelId)}>
               <Trash2 className="h-3.5 w-3.5" />
-              <span className="flex-1">Delete Label</span>
+              <span className="flex-1">{t('common.deleteLabel', 'Delete Label')}</span>
             </MenuItem>
           </>
         )}
@@ -155,7 +157,7 @@ export function SidebarMenu({
         {onConfigureViews && (
           <MenuItem onClick={onConfigureViews}>
             <Settings2 className="h-3.5 w-3.5" />
-            <span className="flex-1">Edit Views</span>
+            <span className="flex-1">{t('common.editViews', 'Edit Views')}</span>
           </MenuItem>
         )}
         {viewId && onDeleteView && (
@@ -163,7 +165,7 @@ export function SidebarMenu({
             <Separator />
             <MenuItem onClick={() => onDeleteView(viewId)}>
               <Trash2 className="h-3.5 w-3.5" />
-              <span className="flex-1">Delete View</span>
+              <span className="flex-1">{t('common.deleteView', 'Delete View')}</span>
             </MenuItem>
           </>
         )}
@@ -180,19 +182,19 @@ export function SidebarMenu({
 
     // Display label varies by source type
     const learnMoreLabel = sourceType === 'api'
-      ? 'Learn More about APIs'
+      ? t('common.learnMoreAboutAPIs', 'Learn More about APIs')
       : sourceType === 'mcp'
-        ? 'Learn More about MCP'
+        ? t('common.learnMoreAboutMCPs', 'Learn More about MCP')
         : sourceType === 'local'
-          ? 'Learn More about Local Folders'
-          : 'Learn More about Sources'
+          ? t('common.learnMoreAboutLocalFolders', 'Learn More about Local Folders')
+          : t('common.learnMoreAboutSources', 'Learn More about Sources')
 
     return (
       <>
         {onAddSource && (
           <MenuItem onClick={onAddSource}>
             <Plus className="h-3.5 w-3.5" />
-            <span className="flex-1">Add Source</span>
+            <span className="flex-1">{t('common.addSource', 'Add Source')}</span>
           </MenuItem>
         )}
         <Separator />
@@ -209,7 +211,7 @@ export function SidebarMenu({
     return (
       <MenuItem onClick={onAddSkill}>
         <Plus className="h-3.5 w-3.5" />
-        <span className="flex-1">Add Skill</span>
+        <span className="flex-1">{t('common.addSkill', 'Add Skill')}</span>
       </MenuItem>
     )
   }
@@ -221,13 +223,13 @@ export function SidebarMenu({
         {onAddAutomation && (
           <MenuItem onClick={onAddAutomation}>
             <Plus className="h-3.5 w-3.5" />
-            <span className="flex-1">Add Automation</span>
+            <span className="flex-1">{t('common.addAutomation', 'Add Automation')}</span>
           </MenuItem>
         )}
         <Separator />
         <MenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('automations'))}>
           <ExternalLink className="h-3.5 w-3.5" />
-          <span className="flex-1">Learn More about Automations</span>
+          <span className="flex-1">{t('common.learnMoreAboutAutomations', 'Learn More about Automations')}</span>
         </MenuItem>
       </>
     )

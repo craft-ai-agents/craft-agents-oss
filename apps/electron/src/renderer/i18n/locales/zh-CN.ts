@@ -74,7 +74,25 @@ export const zhCN = {
     checkForUpdates: '检查更新',
     installUpdate: '安装更新',
     toggleDevTools: '切换开发者工具',
-    quit: '退出 Craft Agents'
+    quit: '退出 Craft Agents',
+    markAllRead: '全部标为已读',
+    configureStatuses: '配置状态',
+    addNewLabel: '添加新标签',
+    editLabels: '编辑标签',
+    deleteLabel: '删除标签',
+    editViews: '编辑视图',
+    deleteView: '删除视图',
+    learnMoreAboutAPIs: '了解更多关于APIs',
+    learnMoreAboutMCPs: '了解更多关于MCP',
+    learnMoreAboutLocalFolders: '了解更多关于本地文件夹',
+    learnMoreAboutSources: '了解更多关于数据源',
+    addSource: '添加数据源',
+    addSkill: '添加技能',
+    addAutomation: '添加自动化',
+    learnMoreAboutAutomations: '了解更多关于自动化',
+    showInExplorer: '在文件管理器中显示',
+    deleteSource: '删除数据源',
+    deleteSkill: '删除技能'
   },
   
   // Menu

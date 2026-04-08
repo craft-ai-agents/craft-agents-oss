@@ -74,7 +74,25 @@ export const enUS = {
     checkForUpdates: 'Check for Updates',
     installUpdate: 'Install Update',
     toggleDevTools: 'Toggle DevTools',
-    quit: 'Quit Craft Agents'
+    quit: 'Quit Craft Agents',
+    markAllRead: 'Mark All Read',
+    configureStatuses: 'Configure Statuses',
+    addNewLabel: 'Add New Label',
+    editLabels: 'Edit Labels',
+    deleteLabel: 'Delete Label',
+    editViews: 'Edit Views',
+    deleteView: 'Delete View',
+    learnMoreAboutAPIs: 'Learn More about APIs',
+    learnMoreAboutMCPs: 'Learn More about MCP',
+    learnMoreAboutLocalFolders: 'Learn More about Local Folders',
+    learnMoreAboutSources: 'Learn More about Sources',
+    addSource: 'Add Source',
+    addSkill: 'Add Skill',
+    addAutomation: 'Add Automation',
+    learnMoreAboutAutomations: 'Learn More about Automations',
+    showInExplorer: 'Show in Explorer',
+    deleteSource: 'Delete Source',
+    deleteSkill: 'Delete Skill'
   },
   
   // Menu

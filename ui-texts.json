@@ -1,0 +1,3220 @@
+[
+  {
+    "text": "Access",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\info\\ToolsDataTable.tsx"
+    ],
+    "contexts": [
+      ": ({ column }) => <SortableHeader column={column} title=\"Access\" />, cell: ({ row }) => ( <div classNa",
+      "olumn }) => <SortableHeader column={column} title=\"Access\" />, cell: ({ row }) => ( <div classNa"
+    ]
+  },
+  {
+    "text": "Access Level",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      "<Info_Table> <Info_Table.Row label=\"Access Level\" value={getPermissionDisplayName(automation.permis",
+      "<Info_Table> <Info_Table.Row label=\"Access Level\" value={getPermissionDisplayName(automation.permis"
+    ]
+  },
+  {
+    "text": "Active",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      "'muted'}> {automation.enabled ? 'Active' : 'Disabled'} </Info_Badge>"
+    ]
+  },
+  {
+    "text": "Add Automation",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx"
+    ],
+    "contexts": [
+      ".5 w-3.5\" /> <span className=\"flex-1\">Add Automation</span> </MenuItem> )}",
+      "*/ onAddSkill?: () => void /** Handler for \"Add Automation\" action - only for automations type */ onAddAut",
+      "</MenuItem> ) } // Automations: show \"Add Automation\" and \"Learn More\" if (type === 'automations') {"
+    ]
+  },
+  {
+    "text": "Add New Label",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx"
+    ],
+    "contexts": [
+      ".5 w-3.5\" /> <span className=\"flex-1\">Add New Label</span> </MenuItem> )}",
+      "s?: (labelId?: string) => void /** Handler for \"Add New Label\" action - creates a label (parentId = labelId if s"
+    ]
+  },
+  {
+    "text": "Add Skill",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx"
+    ],
+    "contexts": [
+      "\"h-3.5 w-3.5\" /> <span className=\"flex-1\">Add Skill</span> </MenuItem> ) } // Auto",
+      "or sources) - triggers EditPopover callback * - \"Add Skill\" (for skills) - triggers EditPopover callback *",
+      "*/ onAddSource?: () => void /** Handler for \"Add Skill\" action - only for skills type */ onAddSkill?:"
+    ]
+  },
+  {
+    "text": "Add Source",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx"
+    ],
+    "contexts": [
+      ".5 w-3.5\" /> <span className=\"flex-1\">Add Source</span> </MenuItem> )}",
+      "gged items) - triggers EditPopover callback * - \"Add Source\" (for sources) - triggers EditPopover callback *",
+      "el?: (labelId: string) => void /** Handler for \"Add Source\" action - only for sources type */ onAddSource?"
+    ]
+  },
+  {
+    "text": "Add Workspace",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_Choice.tsx"
+    ],
+    "contexts": [
+      "\"mt-2\" /> <AddWorkspaceStepHeader title=\"Add Workspace\" description=\"Where your ideas meet the t",
+      "/> <AddWorkspaceStepHeader title=\"Add Workspace\" description=\"Where your ideas meet the t"
+    ]
+  },
+  {
+    "text": "Additional context for the AI assistant",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\settings\\SettingsTextarea.tsx"
+    ],
+    "contexts": [
+      "e * <SettingsTextarea * label=\"Notes\" * description=\"Additional context for the AI assistant\" * value={notes} * onChange={setNotes} *",
+      "ngsTextarea * label=\"Notes\" * description=\"Additional context for the AI assistant\" * value={notes} * onChange={setNotes} *"
+    ]
+  },
+  {
+    "text": "After",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\PhaseBadge.tsx"
+    ],
+    "contexts": [
+      "color: 'warning' }, 'agent-post': { label: 'After', color: 'success' }, 'agent-error': { labe"
+    ]
+  },
+  {
+    "text": "Agentic",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "led', eventBased: 'Event-based', agentic: 'Agentic', settings: 'Settings', whatsNew: 'What\\'s"
+    ]
+  },
+  {
+    "text": "All Chats",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "', recentChats: 'Recent Chats', allChats: 'All Chats' }, // AI ai: { model: 'Model', t"
+    ]
+  },
+  {
+    "text": "All credentials and API keys",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "workspaces and their settings', deleteItem2: 'All credentials and API keys', deleteItem3: 'All preferences and session da"
+    ]
+  },
+  {
+    "text": "All preferences and session data",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "'All credentials and API keys', deleteItem3: 'All preferences and session data', backupWarning: 'Back up any important data f"
+    ]
+  },
+  {
+    "text": "All Sessions",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "ay', yesterday: 'Yesterday', allSessions: 'All Sessions', flagged: 'Flagged', archived: 'Archived'",
+      "}, // Sidebar sidebar: { allSessions: 'All Sessions', flagged: 'Flagged', archived: 'Archived'",
+      "' }, // UI Elements ui: { allSessions: 'All Sessions', filterChats: 'Filter Chats', searchStatu"
+    ]
+  },
+  {
+    "text": "All workspaces and their settings",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "g>permanently delete</strong>:', deleteItem1: 'All workspaces and their settings', deleteItem2: 'All credentials and API keys',"
+    ]
+  },
+  {
+    "text": "Allow Commands",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "exploreMode: 'Explore Mode', allowCommands: 'Allow Commands', allowWrite: 'Allow Write', allowNetwork:"
+    ]
+  },
+  {
+    "text": "Allow Network",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "allowWrite: 'Allow Write', allowNetwork: 'Allow Network', allowSystem: 'Allow System' }, // Lab"
+    ]
+  },
+  {
+    "text": "Allow System",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "allowNetwork: 'Allow Network', allowSystem: 'Allow System' }, // Labels labels: { manageLabels:"
+    ]
+  },
+  {
+    "text": "Allow Write",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "allowCommands: 'Allow Commands', allowWrite: 'Allow Write', allowNetwork: 'Allow Network', allowSyst"
+    ]
+  },
+  {
+    "text": "Allowed",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\info\\Info_StatusBadge.tsx"
+    ],
+    "contexts": [
+      "ng; color: BadgeColor }> = { allowed: { label: 'Allowed', color: 'success' }, blocked: { label: 'Blocke"
+    ]
+  },
+  {
+    "text": "Anthropic",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\lib\\provider-icons.ts"
+    ],
+    "contexts": [
+      "ayNames: Record<string, string> = { anthropic: 'Anthropic', openai: 'OpenAI', openai_compat: 'OpenAI',"
+    ]
+  },
+  {
+    "text": "API Key",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "vel', connections: 'Connections', apiKey: 'API Key', temperature: 'Temperature', maxTokens: '"
+    ]
+  },
+  {
+    "text": "APIs",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\zh-CN.ts"
+    ],
+    "contexts": [
+      "bels: 'Labels', sources: 'Sources', apis: 'APIs', mcps: 'MCPs', localFolders: 'Local Folde",
+      ", labels: '标签', sources: '数据源', apis: 'APIs', mcps: 'MCPs', localFolders: '本地文件夹',"
+    ]
+  },
+  {
+    "text": "Appearance",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "onnections' }, appearance: { label: 'Appearance', description: 'Theme, font, tool icons'"
+    ]
+  },
+  {
+    "text": "Archive",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "share: 'Share', flag: 'Flag', archive: 'Archive', rename: 'Rename', regenerateTitle: 'Rege"
+    ]
+  },
+  {
+    "text": "Archived",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "Sessions', flagged: 'Flagged', archived: 'Archived', searchResults: 'Search Results', noSessi",
+      "Sessions', flagged: 'Flagged', archived: 'Archived', labels: 'Labels', sources: 'Sources',"
+    ]
+  },
+  {
+    "text": "Ask to Edit",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "us found', explore: 'Explore', askToEdit: 'Ask to Edit', execute: 'Execute', ask: 'Ask', info"
+    ]
+  },
+  {
+    "text": "Auth Required",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SourcesListPanel.tsx"
+    ],
+    "contexts": [
+      "ll> = { connected: null, needs_auth: { label: 'Auth Required', colorClass: 'bg-warning/10 text-warning' }, fa"
+    ]
+  },
+  {
+    "text": "Authenticate with this source to view available data",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\info\\Info_DataTable.tsx"
+    ],
+    "contexts": [
+      "urce requires authentication' ? ( <span>Authenticate with this source to view available data</span> ) : ( <span>{error}</sp"
+    ]
+  },
+  {
+    "text": "Automation",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      ", development: 'Development', automation: 'Automation', bug: 'Bug', code: 'Code', priority:"
+    ]
+  },
+  {
+    "text": "Automations",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "ntation: 'Help & Documentation', automations: 'Automations', debug: 'Debug', checkForUpdates: 'Check",
+      "Folders', skills: 'Skills', automations: 'Automations', scheduled: 'Scheduled', eventBased: 'Eve"
+    ]
+  },
+  {
+    "text": "Back",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "t', add: 'Add', close: 'Close', back: 'Back', next: 'Next', confirm: 'Confirm', ok"
+    ]
+  },
+  {
+    "text": "Back up any important data first!",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "preferences and session data', backupWarning: 'Back up any important data first!', undoWarning: 'This action cannot be undone.'"
+    ]
+  },
+  {
+    "text": "Backlog",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "// Session Statuses statuses: { backlog: 'Backlog', todo: 'Todo', needsReview: 'Needs Review"
+    ]
+  },
+  {
+    "text": "Before",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\PhaseBadge.tsx"
+    ],
+    "contexts": [
+      "', color: 'success' }, 'agent-pre': { label: 'Before', color: 'warning' }, 'agent-post': { label"
+    ]
+  },
+  {
+    "text": "Billing",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx"
+    ],
+    "contexts": [
+      "description * * @example * <SettingsSection title=\"Billing\" description=\"Choose how you pay\"> * <Settings",
+      "ption * * @example * <SettingsSection title=\"Billing\" description=\"Choose how you pay\"> * <Settings"
+    ]
+  },
+  {
+    "text": "Blocked",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\info\\Info_StatusBadge.tsx"
+    ],
+    "contexts": [
+      "llowed', color: 'success' }, blocked: { label: 'Blocked', color: 'destructive' }, 'requires-permission'"
+    ]
+  },
+  {
+    "text": "Browse",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\workspace\\primitives.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "for workspace flow * * Used for actions like \"Browse\", or inline actions within forms. */ export fun",
+      "orkingDirectory: 'Working Directory', browse: 'Browse', reset: 'Reset' }, // Permissions pe"
+    ]
+  },
+  {
+    "text": "Button",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\button.tsx"
+    ],
+    "contexts": [
+      "s} /> ) } ) Button.displayName = \"Button\" export { Button, buttonVariants }"
+    ]
+  },
+  {
+    "text": "Cancel",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "pen in New Window', save: 'Save', cancel: 'Cancel', delete: 'Delete', edit: 'Edit', add:"
+    ]
+  },
+  {
+    "text": "Cancelled",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "'Needs Review', done: 'Done', cancelled: 'Cancelled' }, // Label Categories labelCategories: {"
+    ]
+  },
+  {
+    "text": "Cannot connect to remote server",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\TransportConnectionBanner.tsx"
+    ],
+    "contexts": [
+      "case 'failed': return { title: 'Cannot connect to remote server', description: getFailureReason(state),"
+    ]
+  },
+  {
+    "text": "Change",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\settings\\SettingsRow.tsx"
+    ],
+    "contexts": [
+      "s\" * action={<Button variant=\"ghost\" size=\"sm\">Change</Button>} * /> */ export function SettingsRow",
+      ": () => void /** Optional action button (e.g., \"Change\" button) */ action?: React.ReactNode /** Add"
+    ]
+  },
+  {
+    "text": "Change the API endpoint",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\settings\\SettingsEditRow.tsx"
+    ],
+    "contexts": [
+      "/** Example text for the edit placeholder (e.g., \"Change the API endpoint\") */ editExample?: string /** Whether the ro"
+    ]
+  },
+  {
+    "text": "Chat",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "s)', defaultHotkey: 'escape', category: 'Chat', scope: 'chat', when: '!hasSelection',",
+      ", defaultHotkey: 'shift+tab', category: 'Chat', }, 'chat.nextSearchMatch': { id: 'cha",
+      "tch', defaultHotkey: 'mod+g', category: 'Chat', }, 'chat.prevSearchMatch': { id: 'cha"
+    ]
+  },
+  {
+    "text": "Chat History",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "t', clearChat: 'Clear Chat', chatHistory: 'Chat History', recentChats: 'Recent Chats', allChats: '"
+    ]
+  },
+  {
+    "text": "Check for Updates",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "ations', debug: 'Debug', checkForUpdates: 'Check for Updates', installUpdate: 'Install Update', toggleD"
+    ]
+  },
+  {
+    "text": "Choose an existing folder as workspace.",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_Choice.tsx"
+    ],
+    "contexts": [
+      "-5\" />} title=\"Open folder\" description=\"Choose an existing folder as workspace.\" onClick={onOpenFolder} />"
+    ]
+  },
+  {
+    "text": "Choose how you pay",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx"
+    ],
+    "contexts": [
+      "* @example * <SettingsSection title=\"Billing\" description=\"Choose how you pay\"> * <SettingsRadioGroup>...</SettingsRadioGrou",
+      "* <SettingsSection title=\"Billing\" description=\"Choose how you pay\"> * <SettingsRadioGroup>...</SettingsRadioGrou"
+    ]
+  },
+  {
+    "text": "Clear Chat",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "t', exportChat: 'Export Chat', clearChat: 'Clear Chat', chatHistory: 'Chat History', recentChats"
+    ]
+  },
+  {
+    "text": "Clear Selection",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "id: 'navigator.clearSelection', label: 'Clear Selection', defaultHotkey: 'escape', category: 'Na"
+    ]
+  },
+  {
+    "text": "Close",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "te', edit: 'Edit', add: 'Add', close: 'Close', back: 'Back', next: 'Next', confirm:"
+    ]
+  },
+  {
+    "text": "Code",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "tomation: 'Automation', bug: 'Bug', code: 'Code', priority: 'Priority', project: 'Project'"
+    ]
+  },
+  {
+    "text": "Collapse",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\entity-list.tsx"
+    ],
+    "contexts": [
+      "={onToggle}> {isCollapsed ? 'Expand' : 'Collapse'} </StyledContextMenuItem> <Styl"
+    ]
+  },
+  {
+    "text": "Color",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\info\\LabelsDataTable.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "header: () => <span className=\"p-1.5 pl-2.5\">Color</span>, cell: ({ row }) => ( <div clas",
+      "bel', deleteLabel: 'Delete Label', color: 'Color', name: 'Name' }, // Server server: {"
+    ]
+  },
+  {
+    "text": "Conditions that must pass before actions run",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      "Info_Section title=\"If\" description=\"Conditions that must pass before actions run\" actions={editActions} >",
+      "title=\"If\" description=\"Conditions that must pass before actions run\" actions={editActions} >"
+    ]
+  },
+  {
+    "text": "Configure Labels",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx"
+    ],
+    "contexts": [
+      "onMarkAllRead?: () => void /** Handler for \"Configure Labels\" action - receives labelId when triggered from a s"
+    ]
+  },
+  {
+    "text": "Configure Statuses",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx"
+    ],
+    "contexts": [
+      "-3.5 w-3.5\" /> <span className=\"flex-1\">Configure Statuses</span> </MenuItem> </> ) }",
+      "des actions based on the sidebar item type: * - \"Configure Statuses\" (for allSessions/status/flagged items) - triggers",
+      "Label) */ labelId?: string /** Handler for \"Configure Statuses\" action - only for allSessions/status/flagged type"
+    ]
+  },
+  {
+    "text": "Confirm",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "back: 'Back', next: 'Next', confirm: 'Confirm', ok: 'OK', yes: 'Yes', no: 'No',"
+    ]
+  },
+  {
+    "text": "Connect to remote server",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_Choice.tsx"
+    ],
+    "contexts": [
+      "icon={<Cloud className=\"h-5 w-5\" />} title=\"Connect to remote server\" description=\"Use a remote Craft Agent",
+      "={<Cloud className=\"h-5 w-5\" />} title=\"Connect to remote server\" description=\"Use a remote Craft Agent"
+    ]
+  },
+  {
+    "text": "Connected",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx"
+    ],
+    "contexts": [
+      "s', pulseColor: 'bg-success/80', label: 'Connected', description: 'Source is connected and worki"
+    ]
+  },
+  {
+    "text": "Connecting to remote server",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\TransportConnectionBanner.tsx"
+    ],
+    "contexts": [
+      "ase 'connecting': return { title: 'Connecting to remote server', description: `Connecting to ${state.url"
+    ]
+  },
+  {
+    "text": "Connection Failed",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx"
+    ],
+    "contexts": [
+      "pulseColor: 'bg-destructive/80', label: 'Connection Failed', description: 'Failed to connect to source',"
+    ]
+  },
+  {
+    "text": "Connection has not been tested",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx"
+    ],
+    "contexts": [
+      "/30', label: 'Not Tested', description: 'Connection has not been tested', }, local_disabled: { color: 'bg-foreg"
+    ]
+  },
+  {
+    "text": "Connection to remote server lost",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\TransportConnectionBanner.tsx"
+    ],
+    "contexts": [
+      "e 'disconnected': return { title: 'Connection to remote server lost', description: getFailureReason(state),"
+    ]
+  },
+  {
+    "text": "Connections",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "thinkingLevel: 'Thinking Level', connections: 'Connections', apiKey: 'API Key', temperature: 'Tempera"
+    ]
+  },
+  {
+    "text": "Content",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "abel Categories labelCategories: { content: 'Content', design: 'Design', research: 'Research',"
+    ]
+  },
+  {
+    "text": "Continue",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\workspace\\primitives.tsx"
+    ],
+    "contexts": [
+      "unction AddWorkspacePrimaryButton({ children = 'Continue', loading, loadingText, className, dis"
+    ]
+  },
+  {
+    "text": "Conversations",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\NavigatorPanel.tsx"
+    ],
+    "contexts": [
+      "e NavigatorPanelProps { /** Panel title (e.g., \"Conversations\", \"Sources\") */ title: string /** Panel widt"
+    ]
+  },
+  {
+    "text": "Copy",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "ndo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select All',"
+    ]
+  },
+  {
+    "text": "Copy Link",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "openInBrowser: 'Open in Browser', copyLink: 'Copy Link', updateShare: 'Update Share', stopSharing"
+    ]
+  },
+  {
+    "text": "Copy Path",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "showInExplorer: 'Show in Explorer', copyPath: 'Copy Path', delete: 'Delete', filterStatuses: 'Filte"
+    ]
+  },
+  {
+    "text": "Craft",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\icons\\CraftAppIcon.tsx"
+    ],
+    "contexts": [
+      "urn ( <img src={craftLogo} alt=\"Craft\" width={size} height={size} c"
+    ]
+  },
+  {
+    "text": "Craft Agent needs Git Bash to run shell commands on Windows. It was not found on your system.",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\onboarding\\GitBashWarning.tsx"
+    ],
+    "contexts": [
+      "ormLayout title=\"Git Bash Required\" description=\"Craft Agent needs Git Bash to run shell commands on Windows. It was not found on your system.\" > <div className=\"space-y-4\">"
+    ]
+  },
+  {
+    "text": "Craft Agents Backend",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\lib\\provider-icons.ts"
+    ],
+    "contexts": [
+      "ma: 'Ollama', openrouter: 'OpenRouter', pi: 'Craft Agents Backend', pi_compat: 'Craft Agents Backend', vercel:",
+      "er', pi: 'Craft Agents Backend', pi_compat: 'Craft Agents Backend', vercel: 'Vercel', } /** Get a human-reada"
+    ]
+  },
+  {
+    "text": "Create",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\workspace\\primitives.tsx"
+    ],
+    "contexts": [
+      "workspace flow * * Used for main actions like \"Create\", \"Open\", etc. * Includes loading state with spi"
+    ]
+  },
+  {
+    "text": "Create a new chat session",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "wChat', label: 'New Chat', description: 'Create a new chat session', defaultHotkey: 'mod+n', category: 'Gen"
+    ]
+  },
+  {
+    "text": "Create a new chat session in a new panel",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "label: 'New Chat in Panel', description: 'Create a new chat session in a new panel', defaultHotkey: 'mod+t', category: 'Gen"
+    ]
+  },
+  {
+    "text": "Create Label",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "manageLabels: 'Manage Labels', createLabel: 'Create Label', editLabel: 'Edit Label', deleteLabel: 'D"
+    ]
+  },
+  {
+    "text": "Create new",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_Choice.tsx"
+    ],
+    "contexts": [
+      "n={<FolderPlus className=\"h-5 w-5\" />} title=\"Create new\" description=\"Start fresh with an empty",
+      "lderPlus className=\"h-5 w-5\" />} title=\"Create new\" description=\"Start fresh with an empty"
+    ]
+  },
+  {
+    "text": "Create Workspace",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "', creating: 'Creating...', createButton: 'Create Workspace' }, // Sidebar sidebar: { allSessions"
+    ]
+  },
+  {
+    "text": "Cycle Permission Mode",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "id: 'chat.cyclePermissionMode', label: 'Cycle Permission Mode', description: 'Switch between Explore, Ask,"
+    ]
+  },
+  {
+    "text": "Dark",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\settings\\SettingsSegmentedControl.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "icon: <Sun /> }, * { value: 'dark', label: 'Dark', icon: <Moon /> }, * ]} * /> */ export f",
+      "theme: 'Theme', light: 'Light', dark: 'Dark', system: 'System', font: 'Font', font"
+    ]
+  },
+  {
+    "text": "Date",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "ute', ask: 'Ask', info: 'Info', date: 'Date' }, // Onboarding onboarding: { welcome"
+    ]
+  },
+  {
+    "text": "Debug",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "tion', automations: 'Automations', debug: 'Debug', checkForUpdates: 'Check for Updates', in"
+    ]
+  },
+  {
+    "text": "Delete",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationMenu.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "-3.5 w-3.5\" /> <span className=\"flex-1\">Delete</span> </MenuItem> )} </>",
+      "save: 'Save', cancel: 'Cancel', delete: 'Delete', edit: 'Edit', add: 'Add', close: 'Cl",
+      "Explorer', copyPath: 'Copy Path', delete: 'Delete', filterStatuses: 'Filter statuses...', un"
+    ]
+  },
+  {
+    "text": "Delete Chat",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "Chat', saveChat: 'Save Chat', deleteChat: 'Delete Chat', renameChat: 'Rename Chat', shareChat: 'S"
+    ]
+  },
+  {
+    "text": "Delete Label",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "w-3.5\" /> <span className=\"flex-1\">Delete Label</span> </MenuItem> </>",
+      "?: (parentId?: string) => void /** Handler for \"Delete Label\" action - deletes the label identified by labelId",
+      "l', editLabel: 'Edit Label', deleteLabel: 'Delete Label', color: 'Color', name: 'Name' }, /"
+    ]
+  },
+  {
+    "text": "Delete Skill",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SkillMenu.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SkillsListPanel.tsx"
+    ],
+    "contexts": [
+      "der = true, canDelete = true, deleteLabel = 'Delete Skill', }: SkillMenuProps) { // Get menu components",
+      "deleteLabel={skill.source === 'workspace' ? 'Delete Skill' : 'Managed by project'} /> ),"
+    ]
+  },
+  {
+    "text": "Delete Source",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SourceMenu.tsx"
+    ],
+    "contexts": [
+      "\"h-3.5 w-3.5\" /> <span className=\"flex-1\">Delete Source</span> </MenuItem> </> ) }"
+    ]
+  },
+  {
+    "text": "Delete View",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx"
+    ],
+    "contexts": [
+      "w-3.5\" /> <span className=\"flex-1\">Delete View</span> </MenuItem> </>",
+      "Delete) */ viewId?: string /** Handler for \"Delete View\" action */ onDeleteView?: (id: string) => void",
+      "} // Views: show \"Edit Views\" and optionally \"Delete View\" if (type === 'views') { return ( <"
+    ]
+  },
+  {
+    "text": "Description",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\info\\ToolsDataTable.tsx"
+    ],
+    "contexts": [
+      "header: () => <span className=\"p-1.5 pl-2.5\">Description</span>, cell: ({ row }) => ( <div clas"
+    ]
+  },
+  {
+    "text": "Design",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "Categories: { content: 'Content', design: 'Design', research: 'Research', writing: 'Writing'"
+    ]
+  },
+  {
+    "text": "Desktop notifications",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\settings\\SettingsToggle.tsx"
+    ],
+    "contexts": [
+      "* <SettingsCard> * <SettingsToggle * label=\"Desktop notifications\" * description=\"Get notified when AI finishe",
+      "SettingsCard> * <SettingsToggle * label=\"Desktop notifications\" * description=\"Get notified when AI finishe"
+    ]
+  },
+  {
+    "text": "Development",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "search', writing: 'Writing', development: 'Development', automation: 'Automation', bug: 'Bug',"
+    ]
+  },
+  {
+    "text": "Disable",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationMenu.tsx"
+    ],
+    "contexts": [
+      ")} <span className=\"flex-1\">{enabled ? 'Disable' : 'Enable'}</span> </MenuItem> )}"
+    ]
+  },
+  {
+    "text": "Disabled",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SourcesListPanel.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx"
+    ],
+    "contexts": [
+      "text-foreground/50' }, local_disabled: { label: 'Disabled', colorClass: 'bg-foreground/10 text-foreground/50",
+      "{automation.enabled ? 'Active' : 'Disabled'} </Info_Badge> </Info",
+      "pulseColor: 'bg-foreground/20', label: 'Disabled', description: 'Local MCP servers are disable"
+    ]
+  },
+  {
+    "text": "Disconnected",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SourcesListPanel.tsx"
+    ],
+    "contexts": [
+      "bg-warning/10 text-warning' }, failed: { label: 'Disconnected', colorClass: 'bg-destructive/10 text-destructive'"
+    ]
+  },
+  {
+    "text": "Done",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "Todo', needsReview: 'Needs Review', done: 'Done', cancelled: 'Cancelled' }, // Label Cate"
+    ]
+  },
+  {
+    "text": "Duplicate",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationMenu.tsx"
+    ],
+    "contexts": [
+      "-3.5 w-3.5\" /> <span className=\"flex-1\">Duplicate</span> </MenuItem> )} {/*"
+    ]
+  },
+  {
+    "text": "Edit",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "cancel: 'Cancel', delete: 'Delete', edit: 'Edit', add: 'Add', close: 'Close', back: 'B",
+      "aft Agents' }, // Menu menu: { edit: 'Edit', view: 'View', window: 'Window', undo"
+    ]
+  },
+  {
+    "text": "Edit Configuration",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationMenu.tsx"
+    ],
+    "contexts": [
+      "-3.5 w-3.5\" /> <span className=\"flex-1\">Edit Configuration</span> </MenuItem> )} <Se"
+    ]
+  },
+  {
+    "text": "Edit File",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      "space.rootPath)} secondaryAction={{ label: 'Edit File', filePath: `${workspace.rootPath}/automations.jso"
+    ]
+  },
+  {
+    "text": "Edit Label",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      ", createLabel: 'Create Label', editLabel: 'Edit Label', deleteLabel: 'Delete Label', color: 'Col"
+    ]
+  },
+  {
+    "text": "Edit Labels",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx"
+    ],
+    "contexts": [
+      ".5 w-3.5\" /> <span className=\"flex-1\">Edit Labels</span> </MenuItem> )}"
+    ]
+  },
+  {
+    "text": "Edit Shortcuts",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "ortcuts: 'Keyboard Shortcuts', editShortcuts: 'Edit Shortcuts', resetShortcuts: 'Reset Shortcuts', saveC"
+    ]
+  },
+  {
+    "text": "Edit Views",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx"
+    ],
+    "contexts": [
+      ".5 w-3.5\" /> <span className=\"flex-1\">Edit Views</span> </MenuItem> )}",
+      "Type?: 'api' | 'mcp' | 'local' /** Handler for \"Edit Views\" action - for views type */ onConfigureViews?:",
+      ")} </> ) } // Views: show \"Edit Views\" and optionally \"Delete View\" if (type === 'vie"
+    ]
+  },
+  {
+    "text": "Enable",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationMenu.tsx"
+    ],
+    "contexts": [
+      "<span className=\"flex-1\">{enabled ? 'Disable' : 'Enable'}</span> </MenuItem> )} {"
+    ]
+  },
+  {
+    "text": "Enable Spell Check",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "spellCheck: 'Spell Check', enableSpellCheck: 'Enable Spell Check', whatWouldYouLike: 'What would you like to wo"
+    ]
+  },
+  {
+    "text": "Enabled",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "{ remoteServer: 'Remote Server', enabled: 'Enabled', url: 'URL', port: 'Port', username:"
+    ]
+  },
+  {
+    "text": "English",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "description: 'Interface language', enUS: 'English', zhCN: '中文' } }, // Common com"
+    ]
+  },
+  {
+    "text": "Enter answer",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "firm, solve: {a} + {b} =', answerPlaceholder: 'Enter answer' }, // Workspace picker workspacePicker:"
+    ]
+  },
+  {
+    "text": "Event",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\PhaseBadge.tsx"
+    ],
+    "contexts": [
+      "<Info_Table> <Info_Table.Row label=\"Event\"> <Info_Badge color=\"default\">{getE",
+      "<Info_Table> <Info_Table.Row label=\"Event\"> <Info_Badge color=\"default\">{getE",
+      "olor: 'destructive' }, 'label': { label: 'Event', color: 'default' }, 'permission': { labe"
+    ]
+  },
+  {
+    "text": "Execute",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "lore', askToEdit: 'Ask to Edit', execute: 'Execute', ask: 'Ask', info: 'Info', date: 'Dat"
+    ]
+  },
+  {
+    "text": "Expand",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\entity-list.tsx"
+    ],
+    "contexts": [
+      "tem onClick={onToggle}> {isCollapsed ? 'Expand' : 'Collapse'} </StyledContextMenuItem>"
+    ]
+  },
+  {
+    "text": "Explore",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "noStatusFound: 'No status found', explore: 'Explore', askToEdit: 'Ask to Edit', execute: 'Exec"
+    ]
+  },
+  {
+    "text": "Explore Mode",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "// Permissions permissions: { exploreMode: 'Explore Mode', allowCommands: 'Allow Commands', allowWr"
+    ]
+  },
+  {
+    "text": "Explore mode rules",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "{ label: 'Permissions', description: 'Explore mode rules' }, labels: { label: 'Labels',"
+    ]
+  },
+  {
+    "text": "Export Chat",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "at', shareChat: 'Share Chat', exportChat: 'Export Chat', clearChat: 'Clear Chat', chatHistory: 'C"
+    ]
+  },
+  {
+    "text": "Failed to connect to source",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx"
+    ],
+    "contexts": [
+      "label: 'Connection Failed', description: 'Failed to connect to source', }, untested: { color: 'bg-foreground/"
+    ]
+  },
+  {
+    "text": "Figma Community: trending design systems",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\browser\\empty-state-prompts.ts"
+    ],
+    "contexts": [
+      "and affected components.', }, { short: 'Figma Community: trending design systems', full: 'Use the browser to go to https://www"
+    ]
+  },
+  {
+    "text": "Filter Chats",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "allSessions: 'All Sessions', filterChats: 'Filter Chats', searchStatusesAndLabels: 'Search statuses &"
+    ]
+  },
+  {
+    "text": "Flag",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "search: 'Search', share: 'Share', flag: 'Flag', archive: 'Archive', rename: 'Rename',"
+    ]
+  },
+  {
+    "text": "Flagged",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "y', allSessions: 'All Sessions', flagged: 'Flagged', archived: 'Archived', searchResults: 'Se",
+      ": { allSessions: 'All Sessions', flagged: 'Flagged', archived: 'Archived', labels: 'Labels',"
+    ]
+  },
+  {
+    "text": "Focus Chat",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "cusChat': { id: 'nav.focusChat', label: 'Focus Chat', defaultHotkey: 'mod+3', category: 'Nav"
+    ]
+  },
+  {
+    "text": "Focus Navigator",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "or': { id: 'nav.focusNavigator', label: 'Focus Navigator', defaultHotkey: 'mod+2', category: 'Nav"
+    ]
+  },
+  {
+    "text": "Focus Next Panel",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "sNext': { id: 'panel.focusNext', label: 'Focus Next Panel', description: 'Move focus to the next panel'"
+    ]
+  },
+  {
+    "text": "Focus Next Zone",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "nextZone': { id: 'nav.nextZone', label: 'Focus Next Zone', defaultHotkey: 'tab', category: 'Navig"
+    ]
+  },
+  {
+    "text": "Focus Previous Panel",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "sPrev': { id: 'panel.focusPrev', label: 'Focus Previous Panel', description: 'Move focus to the previous pa"
+    ]
+  },
+  {
+    "text": "Focus Sidebar",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "ebar': { id: 'nav.focusSidebar', label: 'Focus Sidebar', defaultHotkey: 'mod+1', category: 'Nav"
+    ]
+  },
+  {
+    "text": "Font",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "dark: 'Dark', system: 'System', font: 'Font', fontSize: 'Font Size', toolIcons: 'Tool"
+    ]
+  },
+  {
+    "text": "Font Size",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "system: 'System', font: 'Font', fontSize: 'Font Size', toolIcons: 'Tool Icons' }, // Workspa"
+    ]
+  },
+  {
+    "text": "Frequency Penalty",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "Tokens', topP: 'Top P', frequencyPenalty: 'Frequency Penalty', presencePenalty: 'Presence Penalty' },"
+    ]
+  },
+  {
+    "text": "General",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "ion', defaultHotkey: 'mod+n', category: 'General', }, 'app.newChatInPanel': { id: 'app.n",
+      "nel', defaultHotkey: 'mod+t', category: 'General', }, 'app.settings': { id: 'app.setting",
+      "ngs', defaultHotkey: 'mod+,', category: 'General', }, 'app.toggleTheme': { id: 'app.togg"
+    ]
+  },
+  {
+    "text": "Get notified when AI finishes working",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\settings\\SettingsToggle.tsx"
+    ],
+    "contexts": [
+      "gle * label=\"Desktop notifications\" * description=\"Get notified when AI finishes working\" * checked={enabled} * onCheckedChange",
+      "label=\"Desktop notifications\" * description=\"Get notified when AI finishes working\" * checked={enabled} * onCheckedChange"
+    ]
+  },
+  {
+    "text": "Get Started",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "checking: 'Checking...', getStarted: 'Get Started' } } };"
+    ]
+  },
+  {
+    "text": "Git Bash Required",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\onboarding\\GitBashWarning.tsx"
+    ],
+    "contexts": [
+      "') } return ( <StepFormLayout title=\"Git Bash Required\" description=\"Craft Agent needs Git Bash to",
+      "} return ( <StepFormLayout title=\"Git Bash Required\" description=\"Craft Agent needs Git Bash to"
+    ]
+  },
+  {
+    "text": "GitHub Copilot",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\lib\\provider-icons.ts"
+    ],
+    "contexts": [
+      "'OpenAI', openai_compat: 'OpenAI', copilot: 'GitHub Copilot', kimi: 'Kimi', minimax: 'Minimax', ollam"
+    ]
+  },
+  {
+    "text": "GitHub Docs: latest Actions updates",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\browser\\empty-state-prompts.ts"
+    ],
+    "contexts": [
+      "on, and overage pricing.', }, { short: 'GitHub Docs: latest Actions updates', full: 'Use the browser to navigate to https"
+    ]
+  },
+  {
+    "text": "Go Back",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "nav.goBack': { id: 'nav.goBack', label: 'Go Back', description: 'Navigate to previous session'",
+      "BackAlt': { id: 'nav.goBackAlt', label: 'Go Back', description: 'Navigate to previous session"
+    ]
+  },
+  {
+    "text": "Go Forward",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "Forward': { id: 'nav.goForward', label: 'Go Forward', description: 'Navigate to next session',",
+      "dAlt': { id: 'nav.goForwardAlt', label: 'Go Forward', description: 'Navigate to next session (arr"
+    ]
+  },
+  {
+    "text": "Google Search docs: Core Web Vitals checklist",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\browser\\empty-state-prompts.ts"
+    ],
+    "contexts": [
+      "ashboard UI inspiration.', }, { short: 'Google Search docs: Core Web Vitals checklist', full: 'Use the browser to open https://deve"
+    ]
+  },
+  {
+    "text": "Group",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "labels...', statuses: 'Statuses', group: 'Group', search: 'Search', share: 'Share', fl"
+    ]
+  },
+  {
+    "text": "HeaderIconButton",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\HeaderIconButton.tsx"
+    ],
+    "contexts": [
+      "rn button } ) HeaderIconButton.displayName = 'HeaderIconButton'"
+    ]
+  },
+  {
+    "text": "Help",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "'New Window', settings: 'Settings', help: 'Help', helpDocumentation: 'Help & Documentation',"
+    ]
+  },
+  {
+    "text": "Help & Documentation",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "ttings', help: 'Help', helpDocumentation: 'Help & Documentation', automations: 'Automations', debug: 'Debu"
+    ]
+  },
+  {
+    "text": "Icon",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "kspace workspace: { name: 'Name', icon: 'Icon', workingDirectory: 'Working Directory', b"
+    ]
+  },
+  {
+    "text": "Info",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "execute: 'Execute', ask: 'Ask', info: 'Info', date: 'Date' }, // Onboarding onboard"
+    ]
+  },
+  {
+    "text": "Input",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "ont, tool icons' }, input: { label: 'Input', description: 'Send key, spell check' }"
+    ]
+  },
+  {
+    "text": "Install Update",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "rUpdates: 'Check for Updates', installUpdate: 'Install Update', toggleDevTools: 'Toggle DevTools', quit:"
+    ]
+  },
+  {
+    "text": "Interface language",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "ge: { label: 'Language', description: 'Interface language', enUS: 'English', zhCN: '中文' }"
+    ]
+  },
+  {
+    "text": "Keyboard shortcuts",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "s: { label: 'Shortcuts', description: 'Keyboard shortcuts' }, preferences: { label: 'Preferenc"
+    ]
+  },
+  {
+    "text": "Keyboard Shortcuts",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      ": { id: 'app.keyboardShortcuts', label: 'Keyboard Shortcuts', description: 'Show keyboard shortcuts refer",
+      "/ Shortcuts shortcuts: { keyboardShortcuts: 'Keyboard Shortcuts', editShortcuts: 'Edit Shortcuts', resetSh"
+    ]
+  },
+  {
+    "text": "Killing agent tasks not yet implemented",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\hooks\\useBackgroundTasks.ts"
+    ],
+    "contexts": [
+      "se TaskOutput to check status console.warn('Killing agent tasks not yet implemented') } // Always remove from UI after kil"
+    ]
+  },
+  {
+    "text": "Kimi",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\lib\\provider-icons.ts"
+    ],
+    "contexts": [
+      "'OpenAI', copilot: 'GitHub Copilot', kimi: 'Kimi', minimax: 'Minimax', ollama: 'Ollama', o",
+      "Ollama' if (url.includes('kimi.com')) return 'Kimi' if (url.includes('minimax.io') || url.includ"
+    ]
+  },
+  {
+    "text": "Labels",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\info\\LabelsDataTable.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "show context-appropriate actions // - Header (\"Labels\" parent): Configure Labels + Add New Label // -",
+      "ls.length > 0 && ( <Info_Table.Row label=\"Labels\"> <div className=\"flex gap-1.5 fl",
+      "gth > 0 && ( <Info_Table.Row label=\"Labels\"> <div className=\"flex gap-1.5 fl"
+    ]
+  },
+  {
+    "text": "Language",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "preferences' }, language: { label: 'Language', description: 'Interface language', e"
+    ]
+  },
+  {
+    "text": "Learn more",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\entity-list-empty.tsx"
+    ],
+    "contexts": [
+      "ring description: string /** Auto-renders a \"Learn more\" button linking to this doc key */ docKey?: Doc",
+      "eature /** Extra action buttons rendered after \"Learn more\" */ children?: React.ReactNode className?: s"
+    ]
+  },
+  {
+    "text": "Learn More",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\HeaderMenu.tsx"
+    ],
+    "contexts": [
+      "mation?: () => void /** Source type filter for \"Learn More\" link - determines which docs page to open */ s",
+      ") } // Sources: show \"Add Source\" and \"Learn More\" if (type === 'sources') { // Determine wh",
+      "} // Automations: show \"Add Automation\" and \"Learn More\" if (type === 'automations') { return ("
+    ]
+  },
+  {
+    "text": "Learn More about APIs",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx"
+    ],
+    "contexts": [
+      "st learnMoreLabel = sourceType === 'api' ? 'Learn More about APIs' : sourceType === 'mcp' ? 'Learn M"
+    ]
+  },
+  {
+    "text": "Learn More about Automations",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx"
+    ],
+    "contexts": [
+      "-3.5 w-3.5\" /> <span className=\"flex-1\">Learn More about Automations</span> </MenuItem> </> ) }"
+    ]
+  },
+  {
+    "text": "Learn More about Local Folders",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx"
+    ],
+    "contexts": [
+      "P' : sourceType === 'local' ? 'Learn More about Local Folders' : 'Learn More about Sources' re"
+    ]
+  },
+  {
+    "text": "Learn More about MCP",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx"
+    ],
+    "contexts": [
+      "ut APIs' : sourceType === 'mcp' ? 'Learn More about MCP' : sourceType === 'local' ? 'L"
+    ]
+  },
+  {
+    "text": "Learn More about Sources",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx"
+    ],
+    "contexts": [
+      "? 'Learn More about Local Folders' : 'Learn More about Sources' return ( <> {onAddSource &"
+    ]
+  },
+  {
+    "text": "Light",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\settings\\SettingsSegmentedControl.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      ": <Monitor /> }, * { value: 'light', label: 'Light', icon: <Sun /> }, * { value: 'dark', label:",
+      "ce appearance: { theme: 'Theme', light: 'Light', dark: 'Dark', system: 'System', font"
+    ]
+  },
+  {
+    "text": "Local",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SourcesListPanel.tsx"
+    ],
+    "contexts": [
+      "'bg-success/10 text-success' }, local: { label: 'Local', colorClass: 'bg-info/10 text-info' }, } const S"
+    ]
+  },
+  {
+    "text": "Local Folders",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "apis: 'APIs', mcps: 'MCPs', localFolders: 'Local Folders', skills: 'Skills', automations: 'Automati"
+    ]
+  },
+  {
+    "text": "Local MCP servers are disabled in Settings",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx"
+    ],
+    "contexts": [
+      "nd/20', label: 'Disabled', description: 'Local MCP servers are disabled in Settings', }, } // Size configurations const SIZE_C"
+    ]
+  },
+  {
+    "text": "Login failed",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\onboarding\\ReauthScreen.tsx"
+    ],
+    "contexts": [
+      "setError(err instanceof Error ? err.message : 'Login failed') setIsLoading(false) } } retu"
+    ]
+  },
+  {
+    "text": "Manage Labels",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "}, // Labels labels: { manageLabels: 'Manage Labels', createLabel: 'Create Label', editLabel:"
+    ]
+  },
+  {
+    "text": "Manage session labels",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "bels: { label: 'Labels', description: 'Manage session labels' }, server: { label: 'Server',"
+    ]
+  },
+  {
+    "text": "Managed by project",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SkillsListPanel.tsx"
+    ],
+    "contexts": [
+      "={skill.source === 'workspace' ? 'Delete Skill' : 'Managed by project'} /> ), })} />"
+    ]
+  },
+  {
+    "text": "Mark All Read",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx"
+    ],
+    "contexts": [
+      "w-3.5\" /> <span className=\"flex-1\">Mark All Read</span> </MenuItem> <Sepa",
+      "ConfigureStatuses?: () => void /** Handler for \"Mark All Read\" action - only for allSessions type */ onMarkAl",
+      "/ Status / Flagged: show \"Configure Statuses\" (+ \"Mark All Read\" for allSessions) if ((type === 'allSessions' |"
+    ]
+  },
+  {
+    "text": "Mark as Unread",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "g', unarchive: 'Unarchive', markAsUnread: 'Mark as Unread', sendToWorkspace: 'Send to Workspace...',"
+    ]
+  },
+  {
+    "text": "Max Tokens",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "', temperature: 'Temperature', maxTokens: 'Max Tokens', topP: 'Top P', frequencyPenalty: 'Freque"
+    ]
+  },
+  {
+    "text": "Maximize",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "Sidebar', minimize: 'Minimize', maximize: 'Maximize' }, // Chat chat: { sendMessage: 'Sen"
+    ]
+  },
+  {
+    "text": "MCPs",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\zh-CN.ts"
+    ],
+    "contexts": [
+      "sources: 'Sources', apis: 'APIs', mcps: 'MCPs', localFolders: 'Local Folders', skills: '",
+      ", sources: '数据源', apis: 'APIs', mcps: 'MCPs', localFolders: '本地文件夹', skills: '技能',"
+    ]
+  },
+  {
+    "text": "Minimax",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\lib\\provider-icons.ts"
+    ],
+    "contexts": [
+      "t: 'GitHub Copilot', kimi: 'Kimi', minimax: 'Minimax', ollama: 'Ollama', openrouter: 'OpenRouter'",
+      "imax.io') || url.includes('minimaxi.com')) return 'Minimax' if (url.includes('v0.dev') || url.includes('"
+    ]
+  },
+  {
+    "text": "Minimize",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "toggleSidebar: 'Toggle Sidebar', minimize: 'Minimize', maximize: 'Maximize' }, // Chat cha"
+    ]
+  },
+  {
+    "text": "Model",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "gsGroup title=\"Workspace\"> * <SettingsSection title=\"Model\">...</SettingsSection> * <SettingsSection titl",
+      "p title=\"Workspace\"> * <SettingsSection title=\"Model\">...</SettingsSection> * <SettingsSection titl",
+      "s: 'All Chats' }, // AI ai: { model: 'Model', thinkingLevel: 'Thinking Level', connect"
+    ]
+  },
+  {
+    "text": "Move focus to the next panel",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "label: 'Focus Next Panel', description: 'Move focus to the next panel', defaultHotkey: 'mod+shift+]', category"
+    ]
+  },
+  {
+    "text": "Move focus to the previous panel",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "label: 'Focus Previous Panel', description: 'Move focus to the previous panel', defaultHotkey: 'mod+shift+[', category"
+    ]
+  },
+  {
+    "text": "Name",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\info\\Info_DataTable.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\info\\LabelsDataTable.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      ": ({ column }) => <SortableHeader column={column} title=\"Name\" />, * }, * // ... * ] * * <Info_Dat",
+      "olumn }) => <SortableHeader column={column} title=\"Name\" />, * }, * // ... * ] * * <Info_Dat",
+      ": ({ column }) => <SortableHeader column={column} title=\"Name\" />, cell: ({ row }) => <ExpandableNameCell r"
+    ]
+  },
+  {
+    "text": "Navigate to next session",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "ard', label: 'Go Forward', description: 'Navigate to next session', defaultHotkey: 'mod+]', category: 'Nav"
+    ]
+  },
+  {
+    "text": "Navigate to previous session",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "goBack', label: 'Go Back', description: 'Navigate to previous session', defaultHotkey: 'mod+[', category: 'Nav"
+    ]
+  },
+  {
+    "text": "Navigation",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "bar', defaultHotkey: 'mod+1', category: 'Navigation', }, 'nav.focusNavigator': { id: 'nav.f",
+      "tor', defaultHotkey: 'mod+2', category: 'Navigation', }, 'nav.focusChat': { id: 'nav.focusC",
+      "hat', defaultHotkey: 'mod+3', category: 'Navigation', }, 'nav.nextZone': { id: 'nav.nextZon"
+    ]
+  },
+  {
+    "text": "Navigator",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "All', defaultHotkey: 'mod+a', category: 'Navigator', scope: 'navigator', when: 'navigatorFo",
+      "on', defaultHotkey: 'escape', category: 'Navigator', scope: 'navigator', when: 'navigatorFo"
+    ]
+  },
+  {
+    "text": "Needs Authentication",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx"
+    ],
+    "contexts": [
+      "info', pulseColor: 'bg-info/80', label: 'Needs Authentication', description: 'Source requires authenticatio"
+    ]
+  },
+  {
+    "text": "Needs Review",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "og: 'Backlog', todo: 'Todo', needsReview: 'Needs Review', done: 'Done', cancelled: 'Cancelled' }"
+    ]
+  },
+  {
+    "text": "New Chat",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\useHotkeyLabel.ts",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "p.newChat': { id: 'app.newChat', label: 'New Chat', description: 'Create a new chat session',",
+      "y } = useActionLabel('app.newChat') * // label: \"New Chat\", hotkey: \"⌘N\" */ export function useActionLabe",
+      "inking...', typing: 'Typing...', newChat: 'New Chat', saveChat: 'Save Chat', deleteChat: 'Dele"
+    ]
+  },
+  {
+    "text": "New Chat in Panel",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "el': { id: 'app.newChatInPanel', label: 'New Chat in Panel', description: 'Create a new chat session in"
+    ]
+  },
+  {
+    "text": "New Window",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "wWindow': { id: 'app.newWindow', label: 'New Window', description: 'Open a new window', defa",
+      "OK', yes: 'Yes', no: 'No', newWindow: 'New Window', settings: 'Settings', help: 'Help',"
+    ]
+  },
+  {
+    "text": "New workspace name",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "oading: 'Loading workspaces...', placeholder: 'New workspace name', creating: 'Creating...', createButton: '"
+    ]
+  },
+  {
+    "text": "Next",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      ", close: 'Close', back: 'Back', next: 'Next', confirm: 'Confirm', ok: 'OK', yes: '"
+    ]
+  },
+  {
+    "text": "Next runs",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      "ength > 0 && ( <Info_Table.Row label=\"Next runs\"> <div className=\"flex flex-c",
+      "> 0 && ( <Info_Table.Row label=\"Next runs\"> <div className=\"flex flex-c"
+    ]
+  },
+  {
+    "text": "Next Search Match",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "': { id: 'chat.nextSearchMatch', label: 'Next Search Match', defaultHotkey: 'mod+g', category: 'Cha"
+    ]
+  },
+  {
+    "text": "No labels configured",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\info\\LabelsDataTable.tsx"
+    ],
+    "contexts": [
+      "maxHeight={maxHeight} emptyContent=\"No labels configured\" floatingAction={fullscreenButton}",
+      "h labels...' } : false} emptyContent=\"No labels configured\" getSubRows={getSubRows} /"
+    ]
+  },
+  {
+    "text": "No sessions found",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "searchResults: 'Search Results', noSessions: 'No sessions found', searchedContent: 'Searched titles and messag"
+    ]
+  },
+  {
+    "text": "No skills configured",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SkillsListPanel.tsx"
+    ],
+    "contexts": [
+      "tEmptyScreen icon={<Zap />} title=\"No skills configured\" description=\"Skills are reusable instr",
+      "Screen icon={<Zap />} title=\"No skills configured\" description=\"Skills are reusable instr"
+    ]
+  },
+  {
+    "text": "No status found",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "haring', shared: 'Shared', noStatusFound: 'No status found', explore: 'Explore', askToEdit: 'Ask to E"
+    ]
+  },
+  {
+    "text": "No tools available",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\info\\ToolsDataTable.tsx"
+    ],
+    "contexts": [
+      "maxHeight={maxHeight} emptyContent=\"No tools available\" className={className} /> ) }"
+    ]
+  },
+  {
+    "text": "Not Tested",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SourcesListPanel.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx"
+    ],
+    "contexts": [
+      "tive/10 text-destructive' }, untested: { label: 'Not Tested', colorClass: 'bg-foreground/10 text-foreground/50",
+      "pulseColor: 'bg-foreground/30', label: 'Not Tested', description: 'Connection has not been teste"
+    ]
+  },
+  {
+    "text": "Notes",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\settings\\SettingsTextarea.tsx"
+    ],
+    "contexts": [
+      "ount * * @example * <SettingsTextarea * label=\"Notes\" * description=\"Additional context for the AI",
+      "* * @example * <SettingsTextarea * label=\"Notes\" * description=\"Additional context for the AI"
+    ]
+  },
+  {
+    "text": "Notifications and updates",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "app: { label: 'App', description: 'Notifications and updates' }, ai: { label: 'AI', descrip"
+    ]
+  },
+  {
+    "text": "Ollama",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\lib\\provider-icons.ts"
+    ],
+    "contexts": [
+      "kimi: 'Kimi', minimax: 'Minimax', ollama: 'Ollama', openrouter: 'OpenRouter', pi: 'Craft Agent",
+      "enRouter' if (url.includes('ollama')) return 'Ollama' if (url.includes('kimi.com')) return 'Kimi'"
+    ]
+  },
+  {
+    "text": "On Error",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\PhaseBadge.tsx"
+    ],
+    "contexts": [
+      "color: 'success' }, 'agent-error': { label: 'On Error', color: 'destructive' }, 'label': { lab"
+    ]
+  },
+  {
+    "text": "Only when matching",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      "ation.matcher && ( <Info_Table.Row label=\"Only when matching\"> <code className=\"text-xs font-m",
+      "matcher && ( <Info_Table.Row label=\"Only when matching\"> <code className=\"text-xs font-m"
+    ]
+  },
+  {
+    "text": "Open",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\workspace\\primitives.tsx"
+    ],
+    "contexts": [
+      "flow * * Used for main actions like \"Create\", \"Open\", etc. * Includes loading state with spinner."
+    ]
+  },
+  {
+    "text": "Open a new window",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "dow', label: 'New Window', description: 'Open a new window', defaultHotkey: 'mod+shift+n', category"
+    ]
+  },
+  {
+    "text": "Open application settings",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "tings', label: 'Settings', description: 'Open application settings', defaultHotkey: 'mod+,', category: 'Gen"
+    ]
+  },
+  {
+    "text": "Open folder",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_Choice.tsx"
+    ],
+    "contexts": [
+      "n={<FolderOpen className=\"h-5 w-5\" />} title=\"Open folder\" description=\"Choose an existing folder",
+      "lderOpen className=\"h-5 w-5\" />} title=\"Open folder\" description=\"Choose an existing folder"
+    ]
+  },
+  {
+    "text": "Open in Browser",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "space: 'Send to Workspace...', openInBrowser: 'Open in Browser', copyLink: 'Copy Link', updateShare: 'Upd"
+    ]
+  },
+  {
+    "text": "Open in New Panel",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "ateTitle: 'Regenerate Title', openInNewPanel: 'Open in New Panel', openInNewWindow: 'Open in New Window', s"
+    ]
+  },
+  {
+    "text": "Open in New Window",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SidebarMenu.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SkillMenu.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SourceMenu.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\HeaderMenu.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "\"h-3.5 w-3.5\" /> <span className=\"flex-1\">Open in New Window</span> </MenuItem> ) } // All",
+      "for skills) - triggers EditPopover callback * - \"Open in New Window\" (for newSession only) - uses deep link */ im",
+      "eMenuComponents() // New Session: only shows \"Open in New Window\" if (type === 'newSession') { return ("
+    ]
+  },
+  {
+    "text": "Open search panel",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      ".search', label: 'Search', description: 'Open search panel', defaultHotkey: 'mod+f', category: 'Gen"
+    ]
+  },
+  {
+    "text": "OpenAI",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\lib\\provider-icons.ts"
+    ],
+    "contexts": [
+      "string> = { anthropic: 'Anthropic', openai: 'OpenAI', openai_compat: 'OpenAI', copilot: 'GitHub",
+      "nthropic', openai: 'OpenAI', openai_compat: 'OpenAI', copilot: 'GitHub Copilot', kimi: 'Kimi',"
+    ]
+  },
+  {
+    "text": "OpenRouter",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\lib\\provider-icons.ts"
+    ],
+    "contexts": [
+      "x: 'Minimax', ollama: 'Ollama', openrouter: 'OpenRouter', pi: 'Craft Agents Backend', pi_compat: 'Cr",
+      "() if (url.includes('openrouter.ai')) return 'OpenRouter' if (url.includes('ollama')) return 'Ollama'"
+    ]
+  },
+  {
+    "text": "PanelHeaderCenterButton",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\PanelHeaderCenterButton.tsx"
+    ],
+    "contexts": [
+      "on } ) PanelHeaderCenterButton.displayName = 'PanelHeaderCenterButton'"
+    ]
+  },
+  {
+    "text": "Password",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\utils\\auth-validation.ts"
+    ],
+    "contexts": [
+      ": 'Port', username: 'Username', password: 'Password' }, // Shortcuts shortcuts: { keyboar",
+      "* * @param baseLabel - The base label (e.g., \"Password\") * @param passwordRequired - Whether password i",
+      "* * @param baseLabel - The base label (e.g., \"Password\") * @param passwordRequired - Whether password i"
+    ]
+  },
+  {
+    "text": "Paste",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "do', cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select All', zoomIn: 'Zoom I"
+    ]
+  },
+  {
+    "text": "Paused",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      "Name=\"h-4 w-4\" />}> <Info_Alert.Title>Paused</Info_Alert.Title> <Info_Alert.Descri"
+    ]
+  },
+  {
+    "text": "Permissions",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "del\">...</SettingsSection> * <SettingsSection title=\"Permissions\">...</SettingsSection> * </SettingsGroup> */",
+      "..</SettingsSection> * <SettingsSection title=\"Permissions\">...</SettingsSection> * </SettingsGroup> */",
+      "directory' }, permissions: { label: 'Permissions', description: 'Explore mode rules' },"
+    ]
+  },
+  {
+    "text": "Port",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "enabled: 'Enabled', url: 'URL', port: 'Port', username: 'Username', password: 'Passwor"
+    ]
+  },
+  {
+    "text": "Preferences",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "shortcuts' }, preferences: { label: 'Preferences', description: 'User preferences' },"
+    ]
+  },
+  {
+    "text": "Presence Penalty",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "enalty: 'Frequency Penalty', presencePenalty: 'Presence Penalty' }, // Appearance appearance: { theme"
+    ]
+  },
+  {
+    "text": "Previous Search Match",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "': { id: 'chat.prevSearchMatch', label: 'Previous Search Match', defaultHotkey: 'mod+shift+g', category"
+    ]
+  },
+  {
+    "text": "Priority",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      ", bug: 'Bug', code: 'Code', priority: 'Priority', project: 'Project' }, // UI Elements"
+    ]
+  },
+  {
+    "text": "Project",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "e: 'Code', priority: 'Priority', project: 'Project' }, // UI Elements ui: { allSessions: '"
+    ]
+  },
+  {
+    "text": "Quit",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "'app.quit': { id: 'app.quit', label: 'Quit', description: 'Quit the application', d"
+    ]
+  },
+  {
+    "text": "Quit Craft Agents",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "toggleDevTools: 'Toggle DevTools', quit: 'Quit Craft Agents' }, // Menu menu: { edit: 'Edit',"
+    ]
+  },
+  {
+    "text": "Quit the application",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "'app.quit', label: 'Quit', description: 'Quit the application', defaultHotkey: 'mod+q', category: 'Gen"
+    ]
+  },
+  {
+    "text": "Raw config",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      "ion: Raw config (JSON) */} <Info_Section title=\"Raw config\"> <div className=\"rounded-[8px] shadow-",
+      "aw config (JSON) */} <Info_Section title=\"Raw config\"> <div className=\"rounded-[8px] shadow-"
+    ]
+  },
+  {
+    "text": "Recent Activity",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      "nt Activity */} <Info_Section title=\"Recent Activity\" description={executions.length > 0 ? `",
+      "ivity */} <Info_Section title=\"Recent Activity\" description={executions.length > 0 ? `"
+    ]
+  },
+  {
+    "text": "Recent Chats",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "chatHistory: 'Chat History', recentChats: 'Recent Chats', allChats: 'All Chats' }, // AI ai:"
+    ]
+  },
+  {
+    "text": "Reconnecting to remote server",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\TransportConnectionBanner.tsx"
+    ],
+    "contexts": [
+      "}ms` : 'retrying' return { title: 'Reconnecting to remote server', description: `${getFailureReason(state)"
+    ]
+  },
+  {
+    "text": "Redo",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "window: 'Window', undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Pa"
+    ]
+  },
+  {
+    "text": "Regenerate Title",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "hive', rename: 'Rename', regenerateTitle: 'Regenerate Title', openInNewPanel: 'Open in New Panel', ope"
+    ]
+  },
+  {
+    "text": "Remote Server",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "}, // Server server: { remoteServer: 'Remote Server', enabled: 'Enabled', url: 'URL', port"
+    ]
+  },
+  {
+    "text": "Remote server access",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "rver: { label: 'Server', description: 'Remote server access' }, shortcuts: { label: 'Shortcuts',"
+    ]
+  },
+  {
+    "text": "Remote server connection status",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\TransportConnectionBanner.tsx"
+    ],
+    "contexts": [
+      "} default: return { title: 'Remote server connection status', description: getFailureReason(state),"
+    ]
+  },
+  {
+    "text": "Rename",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "flag: 'Flag', archive: 'Archive', rename: 'Rename', regenerateTitle: 'Regenerate Title', ope"
+    ]
+  },
+  {
+    "text": "Rename Chat",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "', deleteChat: 'Delete Chat', renameChat: 'Rename Chat', shareChat: 'Share Chat', exportChat: 'Ex"
+    ]
+  },
+  {
+    "text": "Repeats",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      "<> <Info_Table.Row label=\"Repeats\" value={describeCron(automation.cron)} />",
+      "<> <Info_Table.Row label=\"Repeats\" value={describeCron(automation.cron)} />"
+    ]
+  },
+  {
+    "text": "Research",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "t: 'Content', design: 'Design', research: 'Research', writing: 'Writing', development: 'Develo"
+    ]
+  },
+  {
+    "text": "Reset",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "king Directory', browse: 'Browse', reset: 'Reset' }, // Permissions permissions: { exp"
+    ]
+  },
+  {
+    "text": "Reset App",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "// Reset dialog resetDialog: { title: 'Reset App', warning: 'This will <strong>permanently dele"
+    ]
+  },
+  {
+    "text": "Reset Shortcuts",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "tShortcuts: 'Edit Shortcuts', resetShortcuts: 'Reset Shortcuts', saveChanges: 'Save Changes' }, // Inp"
+    ]
+  },
+  {
+    "text": "Reset Zoom",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "Zoom In', zoomOut: 'Zoom Out', resetZoom: 'Reset Zoom', toggleFocusMode: 'Toggle Focus Mode', to"
+    ]
+  },
+  {
+    "text": "Run Test",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationMenu.tsx"
+    ],
+    "contexts": [
+      "-3.5 w-3.5\" /> <span className=\"flex-1\">Run Test</span> </MenuItem> )} {/*"
+    ]
+  },
+  {
+    "text": "Save",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "openInNewWindow: 'Open in New Window', save: 'Save', cancel: 'Cancel', delete: 'Delete',"
+    ]
+  },
+  {
+    "text": "Save Changes",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "setShortcuts: 'Reset Shortcuts', saveChanges: 'Save Changes' }, // Input input: { sendKey: 'Send"
+    ]
+  },
+  {
+    "text": "Save Chat",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "yping...', newChat: 'New Chat', saveChat: 'Save Chat', deleteChat: 'Delete Chat', renameChat: '"
+    ]
+  },
+  {
+    "text": "Schedule expression",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      "mation.cron)} /> <Info_Table.Row label=\"Schedule expression\"> <code className=\"text-xs font",
+      ".cron)} /> <Info_Table.Row label=\"Schedule expression\"> <code className=\"text-xs font"
+    ]
+  },
+  {
+    "text": "Scheduled",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\PhaseBadge.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "lor: BadgeColor }> = { 'scheduled': { label: 'Scheduled', color: 'success' }, 'agent-pre': { label: '",
+      "', automations: 'Automations', scheduled: 'Scheduled', eventBased: 'Event-based', agentic: 'Age"
+    ]
+  },
+  {
+    "text": "Search",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "app.search': { id: 'app.search', label: 'Search', description: 'Open search panel', defa",
+      "uses: 'Statuses', group: 'Group', search: 'Search', share: 'Share', flag: 'Flag', archiv"
+    ]
+  },
+  {
+    "text": "Search Results",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "ed', archived: 'Archived', searchResults: 'Search Results', noSessions: 'No sessions found', searche"
+    ]
+  },
+  {
+    "text": "Searched titles and message content",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "ssions: 'No sessions found', searchedContent: 'Searched titles and message content' }, // Reset dialog resetDialog: { ti"
+    ]
+  },
+  {
+    "text": "Select All",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "l': { id: 'navigator.selectAll', label: 'Select All', defaultHotkey: 'mod+a', category: 'Nav",
+      "copy: 'Copy', paste: 'Paste', selectAll: 'Select All', zoomIn: 'Zoom In', zoomOut: 'Zoom Out',"
+    ]
+  },
+  {
+    "text": "Select Workspace",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "Workspace picker workspacePicker: { title: 'Select Workspace', description: 'Choose a workspace on this ser"
+    ]
+  },
+  {
+    "text": "Send Key",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "anges' }, // Input input: { sendKey: 'Send Key', spellCheck: 'Spell Check', enableSpellCh"
+    ]
+  },
+  {
+    "text": "Send message",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "ize' }, // Chat chat: { sendMessage: 'Send message', thinking: 'Thinking...', typing: 'Typing"
+    ]
+  },
+  {
+    "text": "Server",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "session labels' }, server: { label: 'Server', description: 'Remote server access' },"
+    ]
+  },
+  {
+    "text": "Session Expired",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\onboarding\\ReauthScreen.tsx"
+    ],
+    "contexts": [
+      "o\" /> </div> } title=\"Session Expired\" description={ <>",
+      "</div> } title=\"Session Expired\" description={ <>"
+    ]
+  },
+  {
+    "text": "Sessions",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\lib\\navigation-registry.ts"
+    ],
+    "contexts": [
+      "tionRegistry = { sessions: { displayName: 'Sessions', detailsPages: { session: Placeholder"
+    ]
+  },
+  {
+    "text": "Settings",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\lib\\navigation-registry.ts"
+    ],
+    "contexts": [
+      "settings': { id: 'app.settings', label: 'Settings', description: 'Open application settings',",
+      "{/* Section: Settings */} <Info_Section title=\"Settings\" actions={editActions}> <Info_Table>",
+      "ection: Settings */} <Info_Section title=\"Settings\" actions={editActions}> <Info_Table>"
+    ]
+  },
+  {
+    "text": "Setup later",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\onboarding\\OnboardingWizard.tsx"
+    ],
+    "contexts": [
+      "erChoice) => void /** Called when user chooses \"Setup later\" on provider select */ onSkipSetup?: () => void"
+    ]
+  },
+  {
+    "text": "Share",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "group: 'Group', search: 'Search', share: 'Share', flag: 'Flag', archive: 'Archive', re"
+    ]
+  },
+  {
+    "text": "Share Chat",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "t', renameChat: 'Rename Chat', shareChat: 'Share Chat', exportChat: 'Export Chat', clearChat: 'C"
+    ]
+  },
+  {
+    "text": "Shared",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "re', stopSharing: 'Stop Sharing', shared: 'Shared', noStatusFound: 'No status found', explor"
+    ]
+  },
+  {
+    "text": "Shortcuts",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "rver access' }, shortcuts: { label: 'Shortcuts', description: 'Keyboard shortcuts' },"
+    ]
+  },
+  {
+    "text": "Show in Explorer",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "Window: 'Open in New Window', showInExplorer: 'Show in Explorer', copyPath: 'Copy Path', delete: 'Delete',"
+    ]
+  },
+  {
+    "text": "Show keyboard shortcuts reference",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "label: 'Keyboard Shortcuts', description: 'Show keyboard shortcuts reference', defaultHotkey: 'mod+/', category: 'Gen"
+    ]
+  },
+  {
+    "text": "Skills",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "', localFolders: 'Local Folders', skills: 'Skills', automations: 'Automations', scheduled: '"
+    ]
+  },
+  {
+    "text": "Skills are reusable instructions that teach your agent specialized behaviors.",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SkillsListPanel.tsx"
+    ],
+    "contexts": [
+      "title=\"No skills configured\" description=\"Skills are reusable instructions that teach your agent specialized behaviors.\" docKey=\"skills\" >"
+    ]
+  },
+  {
+    "text": "Source is connected and working",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx"
+    ],
+    "contexts": [
+      "s/80', label: 'Connected', description: 'Source is connected and working', }, needs_auth: { color: 'bg-info',"
+    ]
+  },
+  {
+    "text": "Source requires authentication",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\info\\Info_DataTable.tsx"
+    ],
+    "contexts": [
+      "xt-sm text-muted-foreground\"> {error === 'Source requires authentication' ? ( <span>Authenticate with this sourc"
+    ]
+  },
+  {
+    "text": "Source requires authentication to connect",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\source-status-indicator.tsx"
+    ],
+    "contexts": [
+      "label: 'Needs Authentication', description: 'Source requires authentication to connect', }, failed: { color: 'bg-destructive',"
+    ]
+  },
+  {
+    "text": "Sources",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\NavigatorPanel.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\lib\\navigation-registry.ts"
+    ],
+    "contexts": [
+      "rops { /** Panel title (e.g., \"Conversations\", \"Sources\") */ title: string /** Panel width in pixels",
+      "d: 'Archived', labels: 'Labels', sources: 'Sources', apis: 'APIs', mcps: 'MCPs', localFol",
+      "l }, }, sources: { displayName: 'Sources', detailsPages: { source: PlaceholderC"
+    ]
+  },
+  {
+    "text": "Sources connect your agent to external data — MCP servers, REST APIs, and local folders.",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\SourcesListPanel.tsx"
+    ],
+    "contexts": [
+      "eZap />} title={emptyMessage} description=\"Sources connect your agent to external data — MCP servers, REST APIs, and local folders.\" docKey=\"sources\" > {w"
+    ]
+  },
+  {
+    "text": "Spell Check",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "input: { sendKey: 'Send Key', spellCheck: 'Spell Check', enableSpellCheck: 'Enable Spell Check',"
+    ]
+  },
+  {
+    "text": "Start fresh with an empty workspace.",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_Choice.tsx"
+    ],
+    "contexts": [
+      "w-5\" />} title=\"Create new\" description=\"Start fresh with an empty workspace.\" onClick={onCreateNew} varia"
+    ]
+  },
+  {
+    "text": "Status",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      ".permissionMode)} /> <Info_Table.Row label=\"Status\"> <Info_Badge color={automation.ena",
+      "ssionMode)} /> <Info_Table.Row label=\"Status\"> <Info_Badge color={automation.ena"
+    ]
+  },
+  {
+    "text": "Statuses",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "els: 'Search statuses & labels...', statuses: 'Statuses', group: 'Group', search: 'Search', sh"
+    ]
+  },
+  {
+    "text": "Stop Processing",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "g': { id: 'chat.stopProcessing', label: 'Stop Processing', description: 'Cancel the current agent task"
+    ]
+  },
+  {
+    "text": "Stop Sharing",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "updateShare: 'Update Share', stopSharing: 'Stop Sharing', shared: 'Shared', noStatusFound: 'No sta"
+    ]
+  },
+  {
+    "text": "StyledContextMenuContent",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\styled-context-menu.tsx"
+    ],
+    "contexts": [
+      "/> )) StyledContextMenuContent.displayName = \"StyledContextMenuContent\" // Styled menu item - matches StyledDropdownMe"
+    ]
+  },
+  {
+    "text": "StyledContextMenuItem",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\styled-context-menu.tsx"
+    ],
+    "contexts": [
+      "s} /> )) StyledContextMenuItem.displayName = \"StyledContextMenuItem\" // Styled separator - matches StyledDropdownMe"
+    ]
+  },
+  {
+    "text": "StyledContextMenuSeparator",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\styled-context-menu.tsx"
+    ],
+    "contexts": [
+      "/> )) StyledContextMenuSeparator.displayName = \"StyledContextMenuSeparator\" // Re-export Sub for submenus export { Contex"
+    ]
+  },
+  {
+    "text": "StyledContextMenuSubContent",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\styled-context-menu.tsx"
+    ],
+    "contexts": [
+      "l> )) StyledContextMenuSubContent.displayName = \"StyledContextMenuSubContent\""
+    ]
+  },
+  {
+    "text": "StyledContextMenuSubTrigger",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\styled-context-menu.tsx"
+    ],
+    "contexts": [
+      "/> )) StyledContextMenuSubTrigger.displayName = \"StyledContextMenuSubTrigger\" // Styled sub-menu content - matches StyledDro"
+    ]
+  },
+  {
+    "text": "Subtitle",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\Panel.tsx"
+    ],
+    "contexts": [
+      "riant=\"grow\"> * <PanelHeader title=\"Title\" subtitle=\"Subtitle\" /> * <Separator /> * {content} * </Pane",
+      "\"grow\"> * <PanelHeader title=\"Title\" subtitle=\"Subtitle\" /> * <Separator /> * {content} * </Pane"
+    ]
+  },
+  {
+    "text": "Switch between light and dark mode",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "e', label: 'Toggle Theme', description: 'Switch between light and dark mode', defaultHotkey: 'mod+shift+a', category"
+    ]
+  },
+  {
+    "text": "System",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\settings\\SettingsSegmentedControl.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "* options={[ * { value: 'system', label: 'System', icon: <Monitor /> }, * { value: 'light', l",
+      "light: 'Light', dark: 'Dark', system: 'System', font: 'Font', fontSize: 'Font Size',"
+    ]
+  },
+  {
+    "text": "System default",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      "ow label=\"Timezone\" value={automation.timezone || 'System default'} /> </> )}"
+    ]
+  },
+  {
+    "text": "Temperature",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "ections', apiKey: 'API Key', temperature: 'Temperature', maxTokens: 'Max Tokens', topP: 'Top P',"
+    ]
+  },
+  {
+    "text": "Test Failed",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationTestPanel.tsx"
+    ],
+    "contexts": [
+      "className={className}> <Info_Alert.Title>Test Failed</Info_Alert.Title> {result.stderr && ("
+    ]
+  },
+  {
+    "text": "Theme",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\settings\\SettingsRow.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "ettingsRow * * @example * <SettingsRowLabel label=\"Theme\" /> * <SettingsSegmentedControl ... /> */ exp",
+      "sRow * * @example * <SettingsRowLabel label=\"Theme\" /> * <SettingsSegmentedControl ... /> */ exp",
+      "}, // Appearance appearance: { theme: 'Theme', light: 'Light', dark: 'Dark', system"
+    ]
+  },
+  {
+    "text": "Then",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationCard.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      "um text-muted-foreground uppercase tracking-wider\">Then</h5> <AutomationActionPreview actions",
+      "ction: Then */} <Info_Section title=\"Then\" description={`${automation.actions.len",
+      "Then */} <Info_Section title=\"Then\" description={`${automation.actions.len"
+    ]
+  },
+  {
+    "text": "Thinking Level",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "AI ai: { model: 'Model', thinkingLevel: 'Thinking Level', connections: 'Connections', apiKey: 'API"
+    ]
+  },
+  {
+    "text": "Timezone",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      ")} <Info_Table.Row label=\"Timezone\" value={automation.timezone || 'System default'} /",
+      ")} <Info_Table.Row label=\"Timezone\" value={automation.timezone || 'System default'} /"
+    ]
+  },
+  {
+    "text": "Timing",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      "</Info_Table.Row> <Info_Table.Row label=\"Timing\"> <PhaseBadge event={automation.eve",
+      "nfo_Table.Row> <Info_Table.Row label=\"Timing\"> <PhaseBadge event={automation.eve"
+    ]
+  },
+  {
+    "text": "Title",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\app-shell\\Panel.tsx"
+    ],
+    "contexts": [
+      "tsx * <Panel variant=\"grow\"> * <PanelHeader title=\"Title\" subtitle=\"Subtitle\" /> * <Separator /> *",
+      "* <Panel variant=\"grow\"> * <PanelHeader title=\"Title\" subtitle=\"Subtitle\" /> * <Separator /> *"
+    ]
+  },
+  {
+    "text": "Today",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "// Session list sessionList: { today: 'Today', yesterday: 'Yesterday', allSessions: 'Al"
+    ]
+  },
+  {
+    "text": "Todo",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "s statuses: { backlog: 'Backlog', todo: 'Todo', needsReview: 'Needs Review', done: 'Done"
+    ]
+  },
+  {
+    "text": "Toggle DevTools",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "tallUpdate: 'Install Update', toggleDevTools: 'Toggle DevTools', quit: 'Quit Craft Agents' }, // Menu"
+    ]
+  },
+  {
+    "text": "Toggle Focus Mode",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "': { id: 'view.toggleFocusMode', label: 'Toggle Focus Mode', description: 'Hide both sidebars for distra",
+      "resetZoom: 'Reset Zoom', toggleFocusMode: 'Toggle Focus Mode', toggleSidebar: 'Toggle Sidebar', minimiz"
+    ]
+  },
+  {
+    "text": "Toggle Sidebar",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "ar': { id: 'view.toggleSidebar', label: 'Toggle Sidebar', defaultHotkey: 'mod+b', category: 'Vie",
+      "ocusMode: 'Toggle Focus Mode', toggleSidebar: 'Toggle Sidebar', minimize: 'Minimize', maximize: 'Maximiz"
+    ]
+  },
+  {
+    "text": "Toggle Theme",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts"
+    ],
+    "contexts": [
+      "Theme': { id: 'app.toggleTheme', label: 'Toggle Theme', description: 'Switch between light and dark"
+    ]
+  },
+  {
+    "text": "Tool",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\info\\ToolsDataTable.tsx"
+    ],
+    "contexts": [
+      ": ({ column }) => <SortableHeader column={column} title=\"Tool\" />, cell: ({ row }) => ( <div classNa",
+      "olumn }) => <SortableHeader column={column} title=\"Tool\" />, cell: ({ row }) => ( <div classNa"
+    ]
+  },
+  {
+    "text": "Tool Icons",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "'Font', fontSize: 'Font Size', toolIcons: 'Tool Icons' }, // Workspace workspace: { name: '"
+    ]
+  },
+  {
+    "text": "Top P",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\zh-CN.ts"
+    ],
+    "contexts": [
+      "perature', maxTokens: 'Max Tokens', topP: 'Top P', frequencyPenalty: 'Frequency Penalty', p",
+      "mperature: '温度', maxTokens: '最大令牌', topP: 'Top P', frequencyPenalty: '频率惩罚', presencePenalt"
+    ]
+  },
+  {
+    "text": "TopBarButton",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\ui\\TopBarButton.tsx"
+    ],
+    "contexts": [
+      "ton> ) } ) TopBarButton.displayName = \"TopBarButton\""
+    ]
+  },
+  {
+    "text": "Type",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\info\\LabelsDataTable.tsx"
+    ],
+    "contexts": [
+      ": ({ column }) => <SortableHeader column={column} title=\"Type\" />, cell: ({ row }) => ( <div classNa",
+      "olumn }) => <SortableHeader column={column} title=\"Type\" />, cell: ({ row }) => ( <div classNa"
+    ]
+  },
+  {
+    "text": "Unarchive",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "tatuses...', unflag: 'Unflag', unarchive: 'Unarchive', markAsUnread: 'Mark as Unread', sendToWo"
+    ]
+  },
+  {
+    "text": "Undo",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "view: 'View', window: 'Window', undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Cop"
+    ]
+  },
+  {
+    "text": "Unflag",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "filterStatuses: 'Filter statuses...', unflag: 'Unflag', unarchive: 'Unarchive', markAsUnread: 'M"
+    ]
+  },
+  {
+    "text": "Unknown error",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\lib\\session-load.ts"
+    ],
+    "contexts": [
+      "'string' && error.trim()) return error return 'Unknown error' }"
+    ]
+  },
+  {
+    "text": "Update Settings",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "do the work of your life!', existingTitle: 'Update Settings', existingDescription: 'Update your API conn"
+    ]
+  },
+  {
+    "text": "Update Share",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "ser', copyLink: 'Copy Link', updateShare: 'Update Share', stopSharing: 'Stop Sharing', shared: 'Sh"
+    ]
+  },
+  {
+    "text": "Use a remote Craft Agent Server.",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_Choice.tsx"
+    ],
+    "contexts": [
+      "title=\"Connect to remote server\" description=\"Use a remote Craft Agent Server.\" onClick={onConnectRemote} />"
+    ]
+  },
+  {
+    "text": "User preferences",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "{ label: 'Preferences', description: 'User preferences' }, language: { label: 'Language',"
+    ]
+  },
+  {
+    "text": "Username",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      ", url: 'URL', port: 'Port', username: 'Username', password: 'Password' }, // Shortcuts"
+    ]
+  },
+  {
+    "text": "Vercel",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\lib\\provider-icons.ts"
+    ],
+    "contexts": [
+      "pi_compat: 'Craft Agents Backend', vercel: 'Vercel', } /** Get a human-readable provider name fro",
+      "ludes('v0.dev') || url.includes('vercel')) return 'Vercel' } return providerDisplayNames[providerType]"
+    ]
+  },
+  {
+    "text": "View",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\actions\\definitions.ts",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "bar', defaultHotkey: 'mod+b', category: 'View', }, 'view.toggleFocusMode': { id: 'vie",
+      "ork', defaultHotkey: 'mod+.', category: 'View', }, // ══════════════════════════════════",
+      "// Menu menu: { edit: 'Edit', view: 'View', window: 'Window', undo: 'Undo', redo"
+    ]
+  },
+  {
+    "text": "View Fullscreen",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\info\\LabelsDataTable.tsx"
+    ],
+    "contexts": [
+      "-ring focus-visible:opacity-100' )} title=\"View Fullscreen\" > <Maximize2 className=\"w-3.5 h-3.5\"",
+      "focus-visible:opacity-100' )} title=\"View Fullscreen\" > <Maximize2 className=\"w-3.5 h-3.5\""
+    ]
+  },
+  {
+    "text": "Welcome to Craft Agents",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "rding onboarding: { welcome: { title: 'Welcome to Craft Agents', description: 'Agents with the UX they dese"
+    ]
+  },
+  {
+    "text": "What causes this automation to run",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      "<Info_Section title=\"When\" description=\"What causes this automation to run\" actions={editActions} >",
+      "on title=\"When\" description=\"What causes this automation to run\" actions={editActions} >"
+    ]
+  },
+  {
+    "text": "What would you like to work on?",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "heck: 'Enable Spell Check', whatWouldYouLike: 'What would you like to work on?', shiftTabSwitch: 'Use Shift + Tab to switch b"
+    ]
+  },
+  {
+    "text": "When",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationCard.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\automations\\AutomationInfoPage.tsx"
+    ],
+    "contexts": [
+      "um text-muted-foreground uppercase tracking-wider\">When</h5> <div className=\"text-xs text-for",
+      "ction: When */} <Info_Section title=\"When\" description=\"What causes this automati",
+      "When */} <Info_Section title=\"When\" description=\"What causes this automati"
+    ]
+  },
+  {
+    "text": "Where your ideas meet the tools to make them happen.",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\workspace\\AddWorkspaceStep_Choice.tsx"
+    ],
+    "contexts": [
+      "tepHeader title=\"Add Workspace\" description=\"Where your ideas meet the tools to make them happen.\" /> <div className=\"mt-8 w-full sp"
+    ]
+  },
+  {
+    "text": "Window",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "{ edit: 'Edit', view: 'View', window: 'Window', undo: 'Undo', redo: 'Redo', cut: 'Cu"
+    ]
+  },
+  {
+    "text": "Working Directory",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\settings\\SettingsRow.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "s layouts * * @example * <SettingsRow * label=\"Working Directory\" * description=\"~/Documents\" * action={<Bu",
+      "uts * * @example * <SettingsRow * label=\"Working Directory\" * description=\"~/Documents\" * action={<Bu",
+      ": 'Name', icon: 'Icon', workingDirectory: 'Working Directory', browse: 'Browse', reset: 'Reset' },"
+    ]
+  },
+  {
+    "text": "Workspace",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\components\\settings\\SettingsSection.tsx",
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "\"Workspace\") * * @example * <SettingsGroup title=\"Workspace\"> * <SettingsSection title=\"Model\">...</Settin",
+      "-level divider for major sections (e.g., \"App\" vs \"Workspace\") * * @example * <SettingsGroup title=\"Works",
+      "space\") * * @example * <SettingsGroup title=\"Workspace\"> * <SettingsSection title=\"Model\">...</Settin"
+    ]
+  },
+  {
+    "text": "Writing",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "'Design', research: 'Research', writing: 'Writing', development: 'Development', automation:"
+    ]
+  },
+  {
+    "text": "Yesterday",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "sessionList: { today: 'Today', yesterday: 'Yesterday', allSessions: 'All Sessions', flagged: 'F"
+    ]
+  },
+  {
+    "text": "Zoom In",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "'Paste', selectAll: 'Select All', zoomIn: 'Zoom In', zoomOut: 'Zoom Out', resetZoom: 'Reset Z"
+    ]
+  },
+  {
+    "text": "Zoom Out",
+    "files": [
+      "D:\\Projects\\CraftAgents\\apps\\electron\\src\\renderer\\i18n\\locales\\en-US.ts"
+    ],
+    "contexts": [
+      "'Select All', zoomIn: 'Zoom In', zoomOut: 'Zoom Out', resetZoom: 'Reset Zoom', toggleFocusMode"
+    ]
+  }
+]
