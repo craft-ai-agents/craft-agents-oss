@@ -233,6 +233,23 @@ export const enUS = {
     createButton: 'Create Workspace'
   },
   
+  // Sidebar
+  sidebar: {
+    allSessions: 'All Sessions',
+    flagged: 'Flagged',
+    archived: 'Archived',
+    labels: 'Labels',
+    sources: 'Sources',
+    apis: 'APIs',
+    mcps: 'MCPs',
+    localFolders: 'Local Folders',
+    skills: 'Skills',
+    automations: 'Automations',
+    scheduled: 'Scheduled',
+    eventBased: 'Event-based',
+    agentic: 'Agentic'
+  },
+
   // Onboarding
   onboarding: {
     welcome: {

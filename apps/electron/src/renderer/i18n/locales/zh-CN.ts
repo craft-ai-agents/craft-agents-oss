@@ -233,6 +233,23 @@ export const zhCN = {
     createButton: '创建工作区'
   },
   
+  // Sidebar
+  sidebar: {
+    allSessions: '所有会话',
+    flagged: '已标记',
+    archived: '已归档',
+    labels: '标签',
+    sources: '数据源',
+    apis: 'APIs',
+    mcps: 'MCPs',
+    localFolders: '本地文件夹',
+    skills: '技能',
+    automations: '自动化',
+    scheduled: '定时任务',
+    eventBased: '事件触发',
+    agentic: '智能体'
+  },
+
   // Onboarding
   onboarding: {
     welcome: {

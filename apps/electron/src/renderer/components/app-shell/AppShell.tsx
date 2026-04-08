@@ -83,6 +83,7 @@ import { useFocusZone } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useSetAtom } from "jotai"
+import { useTranslations } from "@/i18n"
 import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter, AutomationFilter } from "../../../shared/types"
 import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
@@ -523,6 +524,9 @@ function AppShellContent({
 
   // Get hotkey labels from centralized action registry
   const newChatHotkey = useActionLabel('app.newChat').hotkey
+  
+  // 获取翻译函数
+  const { t } = useTranslations()
 
   const [isSidebarVisible, setIsSidebarVisible] = React.useState(() => {
     return storage.get(storage.KEYS.sidebarVisible, !defaultCollapsed)
@@ -2225,7 +2229,7 @@ function AppShellContent({
                               data-tutorial="new-chat-button"
                             >
                               <SquarePenRounded className="h-3.5 w-3.5 shrink-0" />
-                              New Session
+                              {t('chat.newChat', 'New Session')}
                             </Button>
                           </ContextMenuTrigger>
                           <StyledContextMenuContent>
@@ -2251,7 +2255,7 @@ function AppShellContent({
                     // All Sessions: expandable with status children (sortable) + Flagged & Archived as trailing items
                     {
                       id: "nav:allSessions",
-                      title: "All Sessions",
+                      title: t('sidebar.allSessions', 'All Sessions'),
                       label: String(workspaceSessionMetas.length),
                       icon: Inbox,
                       variant: sessionFilter?.kind === 'allSessions' ? "default" : "ghost",
@@ -2301,7 +2305,7 @@ function AppShellContent({
                         // Flagged (trailing, non-sortable)
                         {
                           id: "nav:flagged",
-                          title: "Flagged",
+                          title: t('sidebar.flagged', 'Flagged'),
                           label: String(flaggedCount),
                           icon: <Flag className="h-3.5 w-3.5" />,
                           variant: (sessionFilter?.kind === 'flagged' ? "default" : "ghost") as "default" | "ghost",
@@ -2310,7 +2314,7 @@ function AppShellContent({
                         // Archived (trailing, non-sortable)
                         {
                           id: "nav:archived",
-                          title: "Archived",
+                          title: t('sidebar.archived', 'Archived'),
                           label: archivedCount > 0 ? String(archivedCount) : undefined,
                           icon: Archive,
                           variant: (sessionFilter?.kind === 'archived' ? "default" : "ghost") as "default" | "ghost",
@@ -2321,7 +2325,7 @@ function AppShellContent({
                     // Labels: navigable header (shows all labeled sessions) + hierarchical tree (drag-and-drop reorder + re-parent)
                     {
                       id: "nav:labels",
-                      title: "Labels",
+                      title: t('sidebar.labels', 'Labels'),
                       icon: Tag,
                       // Only highlighted when "Labels" itself is selected (not sub-labels)
                       variant: (sessionFilter?.kind === 'label' && sessionFilter.labelId === '__all__') ? "default" as const : "ghost" as const,
@@ -2342,7 +2346,7 @@ function AppShellContent({
                     // --- Sources & Skills Section ---
                     {
                       id: "nav:sources",
-                      title: "Sources",
+                      title: t('sidebar.sources', 'Sources'),
                       label: String(sources.length),
                       icon: DatabaseZap,
                       variant: (isSourcesNavigation(navState) && !sourceFilter) ? "default" : "ghost",
@@ -2358,7 +2362,7 @@ function AppShellContent({
                       items: [
                         {
                           id: "nav:sources:api",
-                          title: "APIs",
+                          title: t('sidebar.apis', 'APIs'),
                           label: String(sourceTypeCounts.api),
                           icon: Globe,
                           variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'api') ? "default" : "ghost",
@@ -2371,7 +2375,7 @@ function AppShellContent({
                         },
                         {
                           id: "nav:sources:mcp",
-                          title: "MCPs",
+                          title: t('sidebar.mcps', 'MCPs'),
                           label: String(sourceTypeCounts.mcp),
                           icon: <McpIcon className="h-3.5 w-3.5" />,
                           variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'mcp') ? "default" : "ghost",
@@ -2384,7 +2388,7 @@ function AppShellContent({
                         },
                         {
                           id: "nav:sources:local",
-                          title: "Local Folders",
+                          title: t('sidebar.localFolders', 'Local Folders'),
                           label: String(sourceTypeCounts.local),
                           icon: FolderOpen,
                           variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'local') ? "default" : "ghost",
@@ -2399,7 +2403,7 @@ function AppShellContent({
                     },
                     {
                       id: "nav:skills",
-                      title: "Skills",
+                      title: t('sidebar.skills', 'Skills'),
                       label: String(skills.length),
                       icon: Zap,
                       variant: isSkillsNavigation(navState) ? "default" : "ghost",
@@ -2411,7 +2415,7 @@ function AppShellContent({
                     },
                     {
                       id: "nav:automations",
-                      title: "Automations",
+                      title: t('sidebar.automations', 'Automations'),
                       label: String(automations.length),
                       icon: ListTodo,
                       variant: (isAutomationsNavigation(navState) && !automationFilter) ? "default" : "ghost",
@@ -2426,7 +2430,7 @@ function AppShellContent({
                       items: [
                         {
                           id: "nav:automations:scheduled",
-                          title: "Scheduled",
+                          title: t('sidebar.scheduled', 'Scheduled'),
                           label: String(automationTypeCounts.scheduled),
                           icon: Clock,
                           variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'scheduled') ? "default" : "ghost",
@@ -2435,7 +2439,7 @@ function AppShellContent({
                         },
                         {
                           id: "nav:automations:event",
-                          title: "Event-based",
+                          title: t('sidebar.eventBased', 'Event-based'),
                           label: String(automationTypeCounts.event),
                           icon: Radio,
                           variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'event') ? "default" : "ghost",
@@ -2444,7 +2448,7 @@ function AppShellContent({
                         },
                         {
                           id: "nav:automations:agentic",
-                          title: "Agentic",
+                          title: t('sidebar.agentic', 'Agentic'),
                           label: String(automationTypeCounts.agentic),
                           icon: Bot,
                           variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'agentic') ? "default" : "ghost",
