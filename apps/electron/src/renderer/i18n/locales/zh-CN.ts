@@ -261,8 +261,8 @@ export const zhCN = {
     cancelled: '已取消'
   },
 
-  // Labels
-  labels: {
+  // Label Categories
+  labelCategories: {
     content: '内容',
     design: '设计',
     research: '研究',
@@ -303,7 +303,12 @@ export const zhCN = {
     updateShare: '更新分享',
     stopSharing: '停止分享',
     shared: '已分享',
-    noStatusFound: '未找到状态'
+    noStatusFound: '未找到状态',
+    explore: '探索',
+    askToEdit: '询问编辑',
+    execute: '执行',
+    ask: '询问',
+    info: '信息'
   },
 
   // Onboarding

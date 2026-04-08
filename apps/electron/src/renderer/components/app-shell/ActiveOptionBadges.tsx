@@ -12,6 +12,7 @@ import { flattenLabels, parseLabelEntry, formatLabelEntry } from '@craft-agent/s
 import { resolveEntityColor } from '@craft-agent/shared/colors'
 import { useTheme } from '@/context/ThemeContext'
 import { useDynamicStack } from '@/hooks/useDynamicStack'
+import { useTranslations } from '@/i18n'
 import type { SessionStatus } from '@/config/session-status-config'
 import { getState } from '@/config/session-status-config'
 import { SessionStatusMenu } from '@/components/ui/session-status-menu'
@@ -387,6 +388,7 @@ function StateBadge({
 
 function FilesPopoverButton({ sessionId, sessionFolderPath }: { sessionId?: string; sessionFolderPath?: string }) {
   if (!sessionId) return null
+  const { t } = useTranslations()
 
   return (
     <SessionInfoPopover
@@ -404,7 +406,7 @@ function FilesPopoverButton({ sessionId, sessionFolderPath }: { sessionId?: stri
           )}
         >
           <Info className="h-3.5 w-3.5 shrink-0" />
-          <span className="whitespace-nowrap">Info</span>
+          <span className="whitespace-nowrap">{t('ui.info', 'Info')}</span>
         </button>
       )}
     />
@@ -421,6 +423,7 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessio
   const [open, setOpen] = React.useState(false)
   // Optimistic local state - updates immediately, syncs with prop
   const [optimisticMode, setOptimisticMode] = React.useState(permissionMode)
+  const { t } = useTranslations()
 
   // Sync optimistic state when prop changes (confirmation from backend)
   React.useEffect(() => {
@@ -442,6 +445,11 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessio
 
   // Get config for current mode (use optimistic state for instant UI update)
   const config = PERMISSION_MODE_CONFIG[optimisticMode]
+  const modeDisplayNameMap: Record<PermissionMode, string> = {
+    'safe': t('ui.explore', 'Explore'),
+    'ask': t('ui.askToEdit', 'Ask to Edit'),
+    'allow-all': t('ui.execute', 'Execute')
+  }
 
   // Mode-specific styling using CSS variables (theme-aware)
   // - safe (Explore): foreground at 60% opacity - subtle, read-only feel
@@ -476,7 +484,7 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessio
           style={{ '--shadow-color': currentStyle.shadowVar } as React.CSSProperties}
         >
           <PermissionModeIcon mode={optimisticMode} className="h-3.5 w-3.5" />
-          <span>{config.displayName}</span>
+          <span>{modeDisplayNameMap[optimisticMode]}</span>
           <ChevronDown className="h-3.5 w-3.5 opacity-60" />
         </button>
       </PopoverTrigger>

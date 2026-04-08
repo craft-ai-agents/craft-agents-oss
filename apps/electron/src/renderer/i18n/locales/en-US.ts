@@ -261,8 +261,8 @@ export const enUS = {
     cancelled: 'Cancelled'
   },
 
-  // Labels
-  labels: {
+  // Label Categories
+  labelCategories: {
     content: 'Content',
     design: 'Design',
     research: 'Research',
@@ -303,7 +303,12 @@ export const enUS = {
     updateShare: 'Update Share',
     stopSharing: 'Stop Sharing',
     shared: 'Shared',
-    noStatusFound: 'No status found'
+    noStatusFound: 'No status found',
+    explore: 'Explore',
+    askToEdit: 'Ask to Edit',
+    execute: 'Execute',
+    ask: 'Ask',
+    info: 'Info'
   },
 
   // Onboarding
