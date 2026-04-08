@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils'
 import { automationSelection } from '@/hooks/useEntitySelection'
 import { APP_EVENTS, AGENT_EVENTS, getEventDisplayName, type AutomationListItem, type AutomationListFilter } from './types'
 import { formatShortRelativeTime } from './utils'
+import { useTranslations } from '@/i18n'
 
 const {
   useSelection: useAutomationSelection,
@@ -73,6 +74,7 @@ function AutomationItem({
   onTest,
   onDuplicate,
 }: AutomationItemProps) {
+  const { t } = useTranslations()
   const handleClick = useCallback((e: React.MouseEvent) => {
     if (e.button === 2) {
       // Right-click: auto-add to selection if multi-select active
@@ -109,12 +111,12 @@ function AutomationItem({
           </MicroBadge>
           {automation.actions.some(a => a.type === 'prompt') && (
             <MicroBadge colorClass="bg-accent/10 text-accent">
-              Prompt
+              {t('common.prompt', 'Prompt')}
             </MicroBadge>
           )}
           {automation.actions.some(a => a.type === 'webhook') && (
             <MicroBadge colorClass="bg-orange-500/10 text-orange-600 dark:text-orange-400">
-              Webhook
+              {t('common.webhook', 'Webhook')}
             </MicroBadge>
           )}
         </>
@@ -128,7 +130,7 @@ function AutomationItem({
               </span>
             </TooltipTrigger>
             <TooltipContent side="bottom" sideOffset={4}>
-              Last ran {formatShortRelativeTime(automation.lastExecutedAt)}
+              {t('common.lastRan', 'Last ran')} {formatShortRelativeTime(automation.lastExecutedAt)}
             </TooltipContent>
           </Tooltip>
         ) : undefined
@@ -178,6 +180,7 @@ export function AutomationsListPanel({
   workspaceRootPath,
   className,
 }: AutomationsListPanelProps) {
+  const { t } = useTranslations()
   const [searchQuery, setSearchQuery] = useState('')
   const [searchActive, setSearchActive] = useState(false)
 
@@ -242,8 +245,8 @@ export function AutomationsListPanel({
       <div className={cn('flex flex-col flex-1 min-h-0', className)}>
         <EntityListEmptyScreen
           icon={<Webhook />}
-          title="No automations configured"
-          description="Automations run actions when events occur — execute commands on schedules, react to label changes, or trigger prompts automatically."
+          title={t('common.noAutomationsConfigured', 'No automations configured')}
+          description={t('common.automationsDescription', 'Automations run actions when events occur — execute commands on schedules, react to label changes, or trigger prompts automatically.')}
           docKey="automations"
         >
           {workspaceRootPath && (
@@ -251,7 +254,7 @@ export function AutomationsListPanel({
               align="center"
               trigger={
                 <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
-                  Add Automation
+                  {t('common.addAutomation', 'Add Automation')}
                 </button>
               }
               {...getEditConfig('automation-config', workspaceRootPath)}
@@ -273,7 +276,7 @@ export function AutomationsListPanel({
             setSearchActive(false)
             setSearchQuery('')
           }}
-          placeholder="Search automations..."
+          placeholder={t('common.searchAutomations', 'Search automations...')}
           resultCount={isSearchMode ? filteredAutomations.length : undefined}
         />
       )}
@@ -282,14 +285,14 @@ export function AutomationsListPanel({
       {filteredAutomations.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-1">
           <p className="text-sm text-muted-foreground">
-            {isSearchMode ? 'No automations found' : 'No automations configured.'}
+            {isSearchMode ? t('common.noAutomationsFound', 'No automations found') : t('common.noAutomationsConfigured', 'No automations configured.')}
           </p>
           {isSearchMode && (
             <button
               onClick={() => setSearchQuery('')}
               className="text-xs text-foreground hover:underline"
             >
-              Clear search
+              {t('common.clearSearch', 'Clear search')}
             </button>
           )}
         </div>
