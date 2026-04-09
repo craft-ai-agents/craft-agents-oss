@@ -4,6 +4,7 @@
 
 import * as React from 'react'
 import { useState, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Image } from 'lucide-react'
 import { PreviewOverlay } from './PreviewOverlay'
 import { CopyButton } from './CopyButton'
@@ -38,6 +39,7 @@ export function ImagePreviewOverlay({
   loadDataUrl,
   theme = 'light',
 }: ImagePreviewOverlayProps) {
+  const { t } = useTranslation()
   const resolvedItems = useMemo<PreviewItem[]>(() => {
     if (items && items.length > 0) return items
     return [{ src: filePath }]
@@ -142,7 +144,7 @@ export function ImagePreviewOverlay({
         resetDisabled={isDefaultView}
       />
 
-      <CopyButton content={activeItem?.src || filePath} title="Copy path" className="bg-background shadow-minimal" />
+      <CopyButton content={activeItem?.src || filePath} title={t('common.copyPath')} className="bg-background shadow-minimal" />
     </div>
   )
 

@@ -6,6 +6,7 @@
  */
 
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
@@ -37,6 +38,7 @@ export function LocalModelStep({
   status = 'idle',
   errorMessage,
 }: LocalModelStepProps) {
+  const { t } = useTranslation()
   const [baseUrl, setBaseUrl] = useState('http://localhost:11434')
   const [model, setModel] = useState('qwen3-coder')
   const [modelError, setModelError] = useState<string | null>(null)
@@ -49,11 +51,11 @@ export function LocalModelStep({
     const parsedModels = parseModelList(model)
 
     if (!trimmedUrl) {
-      setModelError('Endpoint URL is required.')
+      setModelError(t('onboarding.localModel.endpointRequired'))
       return
     }
     if (parsedModels.length === 0) {
-      setModelError('At least one model name is required.')
+      setModelError(t('onboarding.localModel.modelRequired'))
       return
     }
 
@@ -67,8 +69,8 @@ export function LocalModelStep({
 
   return (
     <StepFormLayout
-      title="Local Model"
-      description="Connect to Ollama or any OpenAI-compatible local server."
+      title={t("onboarding.localModel.title")}
+      description={t("onboarding.localModel.description")}
       actions={
         <>
           <BackButton onClick={onBack} disabled={isDisabled} />
@@ -85,7 +87,7 @@ export function LocalModelStep({
       <form id="local-model-form" onSubmit={handleSubmit} className="space-y-6">
         {/* Endpoint URL */}
         <div className="space-y-2">
-          <Label htmlFor="local-base-url">Endpoint</Label>
+          <Label htmlFor="local-base-url">{t("onboarding.localModel.endpoint")}</Label>
           <div className={cn(
             "rounded-md shadow-minimal transition-colors",
             "bg-foreground-2 focus-within:bg-background"
@@ -95,22 +97,22 @@ export function LocalModelStep({
               type="text"
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="http://localhost:11434"
+              placeholder={t("onboarding.localModel.endpointPlaceholder")}
               className="border-0 bg-transparent shadow-none"
               disabled={isDisabled}
               autoFocus
             />
           </div>
           <p className="text-xs text-foreground/30">
-            Default Ollama port is 11434. Change if using a custom setup.
+            {t("onboarding.localModel.endpointHelper")}
           </p>
         </div>
 
         {/* Model */}
         <div className="space-y-2">
           <Label htmlFor="local-model">
-            Model{' '}
-            <span className="text-foreground/30">· required</span>
+            {t("onboarding.localModel.model")}{' '}
+            <span className="text-foreground/30">· {t("onboarding.localModel.required")}</span>
           </Label>
           <div className={cn(
             "rounded-md shadow-minimal transition-colors",
@@ -125,7 +127,7 @@ export function LocalModelStep({
                 setModel(e.target.value)
                 setModelError(null)
               }}
-              placeholder="e.g. qwen3-coder, llama3.3"
+              placeholder={t("onboarding.localModel.modelPlaceholder")}
               className="border-0 bg-transparent shadow-none"
               disabled={isDisabled}
             />
@@ -134,8 +136,7 @@ export function LocalModelStep({
             <p className="text-xs text-destructive">{modelError}</p>
           )}
           <p className="text-xs text-foreground/30">
-            Use any model pulled via <code className="text-foreground/40">ollama pull</code>.
-            Comma-separated for multiple models.
+            {t("onboarding.localModel.modelHelper")}
           </p>
         </div>
 

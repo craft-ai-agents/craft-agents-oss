@@ -22,7 +22,6 @@ The preferences file stores personal settings that customize how the agent inter
     "region": "New York",
     "country": "USA"
   },
-  "language": "English",
   "notes": "I prefer concise responses",
   "includeCoAuthoredBy": true,
   "updatedAt": 1737451800000
@@ -84,15 +83,15 @@ Timestamp (in milliseconds) of when preferences were last updated. This is set a
 "updatedAt": 1737451800000
 ```
 
-### language
+### Language
 
-Your preferred language for responses.
+Language is controlled via **Settings > Appearance > Language**, not through preferences.json.
 
-```json
-"language": "English"
-```
+The selected language applies to both the app UI and the agent's response language — changing the Appearance language to Japanese, for example, automatically tells the agent to respond in Japanese.
 
-The agent will respond in this language when possible.
+<Note>
+If your preferences.json still has a `language` field from a previous version, it is safely ignored.
+</Note>
 
 ### notes
 
@@ -141,7 +140,7 @@ Preferences are included in the system prompt, so the agent knows:
 - What to call you
 - Your current time and timezone
 - Where you're located
-- How to communicate with you
+- Which language to respond in (from Appearance > Language)
 - Whether to include a co-author trailer on git commits
 
 This context makes responses more relevant and personalized.
@@ -157,13 +156,12 @@ This context makes responses more relevant and personalized.
     "region": "Berlin",
     "country": "Germany"
   },
-  "language": "English",
   "notes": "Software engineer. Prefer code examples over descriptions. Use metric units."
 }
 ```
 
 With these preferences, the agent will:
 - Use Berlin time for scheduling references
-- Respond in English
+- Respond in the language selected in Appearance settings
 - Lean toward showing code
 - Use kilometers, Celsius, etc.

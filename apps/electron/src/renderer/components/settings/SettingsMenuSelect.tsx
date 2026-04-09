@@ -7,6 +7,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from "react-i18next"
 import { Check, ChevronDown, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -61,8 +62,10 @@ export function SettingsMenuSelect({
   menuWidth = 280,
   onHover,
   searchable,
-  searchPlaceholder = 'Search...',
+  searchPlaceholder,
 }: SettingsMenuSelectProps) {
+  const { t } = useTranslation()
+  const effectiveSearchPlaceholder = searchPlaceholder ?? t("common.search")
   const [isOpen, setIsOpen] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
   const searchInputRef = React.useRef<HTMLInputElement>(null)
@@ -138,7 +141,7 @@ export function SettingsMenuSelect({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={searchPlaceholder}
+              placeholder={effectiveSearchPlaceholder}
               className={cn(
                 'w-full h-8 pl-8 pr-3 text-sm rounded-md',
                 'bg-foreground/5 border-0',

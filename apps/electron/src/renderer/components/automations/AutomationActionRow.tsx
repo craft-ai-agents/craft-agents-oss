@@ -5,6 +5,7 @@
  * Used within the "Then" section of AutomationInfoPage.
  */
 
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import type { AutomationAction } from './types'
 import { ActionTypeIcon } from './ActionTypeIcon'
@@ -19,8 +20,8 @@ export interface AutomationActionRowProps {
 /**
  * Highlight @mentions in prompt strings
  */
-function PromptText({ text }: { text: string }) {
-  if (!text) return <span className="text-sm text-muted-foreground italic">Empty prompt</span>
+function PromptText({ text, t }: { text: string; t: (key: string) => string }) {
+  if (!text) return <span className="text-sm text-muted-foreground italic">{t('automations.emptyPrompt')}</span>
   const parts = text.split(/(@\w[\w-]*)/g)
   return (
     <span className="text-sm break-words">
@@ -49,6 +50,7 @@ function WebhookText({ action }: { action: Extract<AutomationAction, { type: 'we
 }
 
 export function AutomationActionRow({ action, index, className }: AutomationActionRowProps) {
+  const { t } = useTranslation()
   const isWebhook = action.type === 'webhook'
 
   return (
@@ -66,7 +68,7 @@ export function AutomationActionRow({ action, index, className }: AutomationActi
         {isWebhook ? (
           <WebhookText action={action} />
         ) : (
-          <PromptText text={action.prompt} />
+          <PromptText text={action.prompt} t={t} />
         )}
       </div>
     </div>

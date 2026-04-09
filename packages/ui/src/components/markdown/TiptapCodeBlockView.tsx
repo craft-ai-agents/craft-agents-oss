@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { NodeViewWrapper, NodeViewContent, ReactNodeViewRenderer } from '@tiptap/react'
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import CodeBlockShiki from 'tiptap-extension-code-block-shiki'
@@ -100,6 +101,7 @@ function getLanguageLabel(language: string | null | undefined): string {
  * - latexBlock
  */
 function TiptapCodeBlockView({ node, updateAttributes }: TiptapCodeBlockViewProps) {
+  const { t } = useTranslation()
   const [copied, setCopied] = React.useState(false)
   const [languageFilter, setLanguageFilter] = React.useState('')
   const [languageDropdownOpen, setLanguageDropdownOpen] = React.useState(false)
@@ -212,7 +214,7 @@ function TiptapCodeBlockView({ node, updateAttributes }: TiptapCodeBlockViewProp
           trigger={(
             <TiptapHoverActionButton
               active={languageDropdownOpen}
-              title="Code language"
+              title={t('editor.codeLanguage')}
               aria-label="Select code language"
               className="tiptap-code-block-language-trigger"
             >
@@ -227,7 +229,7 @@ function TiptapCodeBlockView({ node, updateAttributes }: TiptapCodeBlockViewProp
               value={languageFilter}
               onChange={(event) => setLanguageFilter(event.target.value)}
               onKeyDown={handleLanguageFilterKeyDown}
-              placeholder="Search languages..."
+              placeholder={t('editor.searchLanguages')}
               className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground placeholder:select-none"
             />
           </div>
@@ -262,8 +264,8 @@ function TiptapCodeBlockView({ node, updateAttributes }: TiptapCodeBlockViewProp
         </SimpleDropdown>
 
         <TiptapHoverActionButton
-          title="Copy code"
-          aria-label="Copy code"
+          title={t("common.copyCode")}
+          aria-label={t("common.copyCode")}
           onClick={handleCopy}
         >
           {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}

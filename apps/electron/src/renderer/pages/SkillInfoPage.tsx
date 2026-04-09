@@ -7,6 +7,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { useEffect, useState, useCallback } from 'react'
 import { Check, X, Minus } from 'lucide-react'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
@@ -30,6 +31,7 @@ interface SkillInfoPageProps {
 }
 
 export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory }: SkillInfoPageProps) {
+  const { t } = useTranslation()
   const [skill, setSkill] = useState<LoadedSkill | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -53,11 +55,11 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
         if (found) {
           setSkill(found)
         } else {
-          setError('Skill not found')
+          setError(t('skillInfo.notFound'))
         }
       } catch (err) {
         if (!isMounted) return
-        setError(err instanceof Error ? err.message : 'Failed to load skill')
+        setError(err instanceof Error ? err.message : t('skillInfo.failedToLoad'))
       } finally {
         if (isMounted) setLoading(false)
       }
@@ -99,11 +101,11 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
     try {
       if (skill.source !== 'workspace') return
       await window.electronAPI.deleteSkill(workspaceId, skillSlug)
-      toast.success(`Deleted skill: ${skill.metadata.name}`)
+      toast.success(t('skillInfo.deletedSkill', { name: skill.metadata.name }))
       navigate(routes.view.skills())
     } catch (err) {
-      toast.error('Failed to delete skill', {
-        description: err instanceof Error ? err.message : 'Unknown error',
+      toast.error(t('skillInfo.failedToDelete'), {
+        description: err instanceof Error ? err.message : undefined,
       })
     }
   }, [skill, workspaceId, skillSlug])
@@ -138,7 +140,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
     <Info_Page
       loading={loading}
       error={error ?? undefined}
-      empty={!skill && !loading && !error ? 'Skill not found' : undefined}
+      empty={!skill && !loading && !error ? t('skillInfo.notFound') : undefined}
     >
       <Info_Page.Header
         title={skillName}
@@ -151,7 +153,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
             canShowInFinder={canRevealLocally}
             onDelete={canDeleteSkill ? handleDelete : undefined}
             canDelete={canDeleteSkill}
-            deleteLabel={canDeleteSkill ? 'Delete Skill' : 'Managed by project'}
+            deleteLabel={canDeleteSkill ? t('skillInfo.deleteSkill') : t('skillInfo.managedByProject')}
           />
         }
       />
@@ -167,31 +169,31 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
 
           {/* Metadata */}
           <Info_Section
-            title="Metadata"
+            title={t('skillInfo.metadata')}
             actions={
               // EditPopover for AI-assisted metadata editing (name, description in frontmatter)
               <EditPopover
                 trigger={<EditButton />}
                 {...getEditConfig('skill-metadata', skill.path)}
                 secondaryAction={{
-                  label: 'Edit File',
+                  label: t('common.editFile'),
                   filePath: `${skill.path}/SKILL.md`,
                 }}
               />
             }
           >
             <Info_Table>
-              <Info_Table.Row label="Slug" value={skill.slug} />
-              <Info_Table.Row label="Name">{skill.metadata.name}</Info_Table.Row>
-              <Info_Table.Row label="Description">
+              <Info_Table.Row label={t('common.slug')} value={skill.slug} />
+              <Info_Table.Row label={t('common.name')}>{skill.metadata.name}</Info_Table.Row>
+              <Info_Table.Row label={t('common.description')}>
                 {skill.metadata.description}
               </Info_Table.Row>
-              <Info_Table.Row label="Source">
-                {skill.source === 'project' ? 'Project (.agents/skills/)' :
-                 skill.source === 'global' ? 'Global (~/.agents/skills/)' :
-                 'Workspace'}
+              <Info_Table.Row label={t('common.source')}>
+                {skill.source === 'project' ? t('skillInfo.sourceProject') :
+                 skill.source === 'global' ? t('skillInfo.sourceGlobal') :
+                 t('skillInfo.sourceWorkspace')}
               </Info_Table.Row>
-              <Info_Table.Row label="Location">
+              <Info_Table.Row label={t('common.location')}>
                 <button
                   onClick={handleLocationClick}
                   className="hover:underline cursor-pointer text-left"
@@ -200,7 +202,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
                 </button>
               </Info_Table.Row>
               {skill.metadata.requiredSources && skill.metadata.requiredSources.length > 0 && (
-                <Info_Table.Row label="Required Sources">
+                <Info_Table.Row label={t('skillInfo.requiredSources')}>
                   {skill.metadata.requiredSources.join(', ')}
                 </Info_Table.Row>
               )}
@@ -209,33 +211,33 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
 
           {/* Permission Modes */}
           {skill.metadata.alwaysAllow && skill.metadata.alwaysAllow.length > 0 && (
-            <Info_Section title="Permission Modes">
+            <Info_Section title={t('skillInfo.permissionModes')}>
               <div className="space-y-2 px-4 py-3">
                 <p className="text-xs text-muted-foreground mb-3">
-                  How "Always Allowed Tools" interacts with permission modes:
+                  {t('skillInfo.permissionModesDesc')}
                 </p>
                 <div className="rounded-[8px] border border-border/50 overflow-hidden">
                   <table className="w-full text-sm">
                     <tbody>
                       <tr className="border-b border-border/30">
-                        <td className="px-3 py-2 font-medium text-muted-foreground w-[140px]">Explore</td>
+                        <td className="px-3 py-2 font-medium text-muted-foreground w-[140px]">{t('skillInfo.explore')}</td>
                         <td className="px-3 py-2 flex items-center gap-2">
                           <X className="h-3.5 w-3.5 text-destructive shrink-0" />
-                          <span className="text-foreground/80">Blocked — write tools blocked regardless</span>
+                          <span className="text-foreground/80">{t('skillInfo.exploreDesc')}</span>
                         </td>
                       </tr>
                       <tr className="border-b border-border/30">
-                        <td className="px-3 py-2 font-medium text-muted-foreground">Ask to Edit</td>
+                        <td className="px-3 py-2 font-medium text-muted-foreground">{t('skillInfo.askToEdit')}</td>
                         <td className="px-3 py-2 flex items-center gap-2">
                           <Check className="h-3.5 w-3.5 text-success shrink-0" />
-                          <span className="text-foreground/80">Auto-approved — no prompts for allowed tools</span>
+                          <span className="text-foreground/80">{t('skillInfo.askToEditDesc')}</span>
                         </td>
                       </tr>
                       <tr>
-                        <td className="px-3 py-2 font-medium text-muted-foreground">Auto</td>
+                        <td className="px-3 py-2 font-medium text-muted-foreground">{t('skillInfo.auto')}</td>
                         <td className="px-3 py-2 flex items-center gap-2">
                           <Minus className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span className="text-foreground/80">No effect — all tools already auto-approved</span>
+                          <span className="text-foreground/80">{t('skillInfo.autoDesc')}</span>
                         </td>
                       </tr>
                     </tbody>
@@ -247,21 +249,21 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
 
           {/* Instructions */}
           <Info_Section
-            title="Instructions"
+            title={t('skillInfo.instructions')}
             actions={
               // EditPopover for AI-assisted editing with "Edit File" as secondary action
               <EditPopover
                 trigger={<EditButton />}
                 {...getEditConfig('skill-instructions', skill.path)}
                 secondaryAction={{
-                  label: 'Edit File',
+                  label: t('common.editFile'),
                   filePath: `${skill.path}/SKILL.md`,
                 }}
               />
             }
           >
             <Info_Markdown maxHeight={540} fullscreen>
-              {skill.content || '*No instructions provided.*'}
+              {skill.content || t('skillInfo.noInstructions')}
             </Info_Markdown>
           </Info_Section>
 

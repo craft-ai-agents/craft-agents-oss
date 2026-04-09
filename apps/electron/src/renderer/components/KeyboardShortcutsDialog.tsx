@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next"
 import {
   Dialog,
   DialogContent,
@@ -25,41 +26,44 @@ interface ShortcutSection {
 
 // Component-specific shortcuts that aren't in the centralized registry
 // These are context-sensitive behaviors, not global actions
-const componentSpecificSections: ShortcutSection[] = [
-  {
-    title: 'List Navigation',
-    shortcuts: [
-      { keys: ['↑', '↓'], description: 'Navigate items in list' },
-      { keys: ['Home'], description: 'Go to first item' },
-      { keys: ['End'], description: 'Go to last item' },
-    ],
-  },
-  {
-    title: 'Session List',
-    shortcuts: [
-      { keys: ['Enter'], description: 'Focus chat input' },
-      { keys: ['Delete'], description: 'Delete session' },
-      { keys: ['R'], description: 'Rename session' },
-      { keys: ['Right-click'], description: 'Open context menu' },
-      { keys: [isMac ? '⌥' : 'Alt', 'Click'], description: 'Add filter as excluded' },
-    ],
-  },
-  {
-    title: 'Agent Tree',
-    shortcuts: [
-      { keys: ['←'], description: 'Collapse folder' },
-      { keys: ['→'], description: 'Expand folder' },
-    ],
-  },
-  {
-    title: 'Chat Input',
-    shortcuts: [
-      { keys: ['Enter'], description: 'Send message' },
-      { keys: ['Shift', 'Enter'], description: 'New line' },
-      { keys: ['Esc'], description: 'Close dialog / blur input' },
-    ],
-  },
-]
+function useComponentSpecificSections(): ShortcutSection[] {
+  const { t } = useTranslation()
+  return [
+    {
+      title: t('shortcuts.listNavigation'),
+      shortcuts: [
+        { keys: ['↑', '↓'], description: t('shortcuts.navigateItems') },
+        { keys: ['Home'], description: t('shortcuts.goToFirst') },
+        { keys: ['End'], description: t('shortcuts.goToLast') },
+      ],
+    },
+    {
+      title: t('shortcuts.sessionList'),
+      shortcuts: [
+        { keys: ['Enter'], description: t('shortcuts.focusChatInput') },
+        { keys: ['Delete'], description: t('shortcuts.deleteSession') },
+        { keys: ['R'], description: t('shortcuts.renameSession') },
+        { keys: ['Right-click'], description: t('shortcuts.openContextMenu') },
+        { keys: [isMac ? '⌥' : 'Alt', 'Click'], description: t('shortcuts.addFilterExcluded') },
+      ],
+    },
+    {
+      title: t('shortcuts.agentTree'),
+      shortcuts: [
+        { keys: ['←'], description: t('shortcuts.collapseFolder') },
+        { keys: ['→'], description: t('shortcuts.expandFolder') },
+      ],
+    },
+    {
+      title: t('shortcuts.chatInput'),
+      shortcuts: [
+        { keys: ['Enter'], description: t('shortcuts.sendMessage') },
+        { keys: ['Shift', 'Enter'], description: t('shortcuts.newLine') },
+        { keys: ['Esc'], description: t('shortcuts.closeDialogBlur') },
+      ],
+    },
+  ]
+}
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
@@ -140,6 +144,9 @@ function StaticSection({ section }: { section: ShortcutSection }) {
 }
 
 export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcutsDialogProps) {
+  const { t } = useTranslation()
+  const componentSpecificSections = useComponentSpecificSections()
+
   // Register with modal context so X button / Cmd+W closes this dialog first
   useRegisterModal(open, () => onOpenChange(false))
 
@@ -147,7 +154,7 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Keyboard Shortcuts</DialogTitle>
+          <DialogTitle>{t("shortcuts.title")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-6 py-2">
           {/* Registry-driven sections */}

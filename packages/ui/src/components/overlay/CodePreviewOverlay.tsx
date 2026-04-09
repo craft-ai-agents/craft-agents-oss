@@ -6,6 +6,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { BookOpen, PenLine } from 'lucide-react'
 import { PreviewOverlay } from './PreviewOverlay'
 import { ContentFrame } from './ContentFrame'
@@ -55,6 +56,8 @@ export function CodePreviewOverlay({
   embedded,
   command,
 }: CodePreviewOverlayProps) {
+  const { t } = useTranslation()
+
   // Build subtitle with line info
   const subtitle =
     startLine !== undefined && totalLines !== undefined && numLines !== undefined
@@ -92,7 +95,7 @@ export function CodePreviewOverlay({
         </div>
       )}
 
-      <ContentFrame title="Code" fitContent minWidth={850}>
+      <ContentFrame title={t('overlay.code')} fitContent minWidth={850}>
         <div>
           <ShikiCodeViewer
             code={content}

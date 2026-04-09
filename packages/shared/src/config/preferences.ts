@@ -3,6 +3,8 @@ import { join } from 'path';
 import { ensureConfigDir } from './storage.ts';
 import { CONFIG_DIR } from './paths.ts';
 import { readJsonFileSync } from '../utils/files.ts';
+import { i18n } from '../i18n/index.ts';
+import { LOCALE_REGISTRY, type LanguageCode } from '../i18n/registry.ts';
 
 export interface UserLocation {
   city?: string;
@@ -83,8 +85,14 @@ export function getPreferencesPath(): string {
 export function formatPreferencesForPrompt(): string {
   const prefs = loadPreferences();
 
+  // Derive language from the app's i18n setting (Appearance > Language).
+  // This replaces the old prefs.language field which is now ignored.
+  const langCode = (i18n.resolvedLanguage ?? 'en') as LanguageCode;
+  const langEntry = LOCALE_REGISTRY[langCode];
+  const langName = langEntry?.nativeName ?? 'English';
+
   if (Object.keys(prefs).length === 0 ||
-      (!prefs.name && !prefs.timezone && !prefs.location && !prefs.language && !prefs.notes)) {
+      (!prefs.name && !prefs.timezone && !prefs.location && !prefs.notes && langCode === 'en')) {
     return '';
   }
 
@@ -106,9 +114,9 @@ export function formatPreferencesForPrompt(): string {
     }
   }
 
-  if (prefs.language) {
-    lines.push(`- Preferred language: ${prefs.language}`);
-  }
+  // Always include language so the AI knows which language to respond in.
+  // Derived from the Appearance language setting, not the old prefs.language field.
+  lines.push(`- Preferred language: ${langName}`);
 
   if (prefs.notes) {
     lines.push('', '### Notes about this user', prefs.notes);
@@ -130,9 +138,8 @@ export function formatPreferencesDisplay(): string {
   const hasName = !!prefs.name;
   const hasTimezone = !!prefs.timezone;
   const hasLocation = prefs.location && (prefs.location.city || prefs.location.region || prefs.location.country);
-  const hasLanguage = !!prefs.language;
   const hasNotes = !!prefs.notes;
-  const hasAnyPrefs = hasName || hasTimezone || hasLocation || hasLanguage || hasNotes;
+  const hasAnyPrefs = hasName || hasTimezone || hasLocation || hasNotes;
 
   lines.push('Your preferences help personalise your experience. The assistant uses these to provide more relevant responses (e.g., timezone for scheduling, language for communication).');
   lines.push('');
@@ -152,7 +159,9 @@ export function formatPreferencesDisplay(): string {
       lines.push('- Location: (not set)');
     }
 
-    lines.push(`- Language: ${prefs.language || '(not set)'}`);
+    const displayLangCode = (i18n.resolvedLanguage ?? 'en') as LanguageCode;
+    const displayLangEntry = LOCALE_REGISTRY[displayLangCode];
+    lines.push(`- Language: ${displayLangEntry?.nativeName ?? 'English'} (via Appearance settings)`);
 
     if (hasNotes) {
       lines.push('', '**Notes**', prefs.notes!);

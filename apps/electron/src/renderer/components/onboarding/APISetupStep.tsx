@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { Check, CreditCard, Key, Cpu } from "lucide-react"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
@@ -7,21 +8,11 @@ import type { LlmAuthType, LlmProviderType } from "@craft-agent/shared/config/ll
 /** Provider segment for the segmented control */
 export type ProviderSegment = 'anthropic' | 'pi'
 
-const SEGMENT_LABELS: Record<ProviderSegment, string> = {
-  anthropic: 'Claude',
-  pi: 'Craft Agents Backend',
-}
-
-const BetaBadge = () => (
+const BetaBadge = ({ label }: { label: string }) => (
   <span className="inline px-1.5 pt-[2px] pb-[3px] text-[10px] font-accent font-bold rounded-[4px] bg-accent text-background ml-1 relative -top-[1px]">
-    Beta
+    {label}
   </span>
 )
-
-const SEGMENT_DESCRIPTIONS: Record<ProviderSegment, React.ReactNode> = {
-  anthropic: <>Use Claude Agent SDK as the main agent.<br />Configure with your Claude subscription or API key.</>,
-  pi: <>Use Craft Agents Backend as the main agent.<BetaBadge /><br />Configure with your API key, OAuth subscription, or custom endpoint.</>,
-}
 
 /**
  * API setup method for onboarding.
@@ -69,43 +60,13 @@ interface ApiSetupOption {
   providerType: LlmProviderType
 }
 
-const API_SETUP_OPTIONS: ApiSetupOption[] = [
-  {
-    id: 'claude_oauth',
-    name: 'Claude Pro/Max',
-    description: 'Use your Claude subscription for unlimited access.',
-    icon: <CreditCard className="size-4" />,
-    providerType: 'anthropic',
-  },
-  {
-    id: 'anthropic_api_key',
-    name: 'Anthropic API Key',
-    description: 'Pay-as-you-go via Anthropic, OpenRouter, or compatible APIs.',
-    icon: <Key className="size-4" />,
-    providerType: 'anthropic',
-  },
-  {
-    id: 'pi_chatgpt_oauth',
-    name: 'ChatGPT Plus',
-    description: 'Use your ChatGPT subscription with Craft Agents Backend.',
-    icon: <Cpu className="size-4" />,
-    providerType: 'pi',
-  },
-  {
-    id: 'pi_copilot_oauth',
-    name: 'GitHub Copilot',
-    description: 'Use your GitHub Copilot subscription with Craft Agents Backend.',
-    icon: <Cpu className="size-4" />,
-    providerType: 'pi',
-  },
-  {
-    id: 'pi_api_key',
-    name: 'API Key',
-    description: 'Use provider presets (Anthropic, OpenAI, Google, etc.) via Craft Agents Backend.',
-    icon: <Key className="size-4" />,
-    providerType: 'pi',
-  },
-]
+const API_SETUP_ICONS: Record<ApiSetupMethod, React.ReactNode> = {
+  claude_oauth: <CreditCard className="size-4" />,
+  anthropic_api_key: <Key className="size-4" />,
+  pi_chatgpt_oauth: <Cpu className="size-4" />,
+  pi_copilot_oauth: <Cpu className="size-4" />,
+  pi_api_key: <Key className="size-4" />,
+}
 
 interface APISetupStepProps {
   selectedMethod: ApiSetupMethod | null
@@ -181,9 +142,11 @@ function OptionButton({
 function ProviderSegmentedControl({
   activeSegment,
   onSegmentChange,
+  segmentLabels,
 }: {
   activeSegment: ProviderSegment
   onSegmentChange: (segment: ProviderSegment) => void
+  segmentLabels: Record<ProviderSegment, string>
 }) {
   const segments: ProviderSegment[] = ['anthropic', 'pi']
 
@@ -200,7 +163,7 @@ function ProviderSegmentedControl({
               : "text-muted-foreground hover:text-foreground"
           )}
         >
-          {SEGMENT_LABELS[segment]}
+          {segmentLabels[segment]}
         </button>
       ))}
     </div>
@@ -222,7 +185,56 @@ export function APISetupStep({
   onBack,
   initialSegment = 'anthropic',
 }: APISetupStepProps) {
+  const { t } = useTranslation()
   const [activeSegment, setActiveSegment] = useState<ProviderSegment>(initialSegment)
+
+  const SEGMENT_LABELS: Record<ProviderSegment, string> = {
+    anthropic: t("onboarding.apiSetup.claude"),
+    pi: t("onboarding.apiSetup.craftAgentsBackend"),
+  }
+
+  const SEGMENT_DESCRIPTIONS: Record<ProviderSegment, React.ReactNode> = {
+    anthropic: <>{t("onboarding.apiSetup.claudeDesc")}</>,
+    pi: <>{t("onboarding.apiSetup.piDesc")}<BetaBadge label={t("onboarding.apiSetup.beta")} /></>,
+  }
+
+  const API_SETUP_OPTIONS: ApiSetupOption[] = [
+    {
+      id: 'claude_oauth',
+      name: t("onboarding.apiSetup.claudeProMax"),
+      description: t("onboarding.apiSetup.claudeProMaxDesc"),
+      icon: API_SETUP_ICONS.claude_oauth,
+      providerType: 'anthropic',
+    },
+    {
+      id: 'anthropic_api_key',
+      name: t("onboarding.apiSetup.anthropicApiKey"),
+      description: t("onboarding.apiSetup.anthropicApiKeyDesc"),
+      icon: API_SETUP_ICONS.anthropic_api_key,
+      providerType: 'anthropic',
+    },
+    {
+      id: 'pi_chatgpt_oauth',
+      name: 'ChatGPT Plus',
+      description: t("onboarding.apiSetup.chatGPTPlusDesc"),
+      icon: API_SETUP_ICONS.pi_chatgpt_oauth,
+      providerType: 'pi',
+    },
+    {
+      id: 'pi_copilot_oauth',
+      name: 'GitHub Copilot',
+      description: t("onboarding.apiSetup.githubCopilotDesc"),
+      icon: API_SETUP_ICONS.pi_copilot_oauth,
+      providerType: 'pi',
+    },
+    {
+      id: 'pi_api_key',
+      name: t("onboarding.apiSetup.apiKey"),
+      description: t("onboarding.apiSetup.apiKeyDesc"),
+      icon: API_SETUP_ICONS.pi_api_key,
+      providerType: 'pi',
+    },
+  ]
 
   // Filter options based on active segment
   const filteredOptions = API_SETUP_OPTIONS.filter(o => o.providerType === activeSegment)
@@ -236,8 +248,8 @@ export function APISetupStep({
 
   return (
     <StepFormLayout
-      title="Set up your Agent"
-      description={<>Select how you'd like to power your AI agents.<br />You can add more connections later.</>}
+      title={t("onboarding.apiSetup.title")}
+      description={t("onboarding.apiSetup.description")}
       actions={
         <>
           <BackButton onClick={onBack} />
@@ -249,6 +261,7 @@ export function APISetupStep({
       <ProviderSegmentedControl
         activeSegment={activeSegment}
         onSegmentChange={handleSegmentChange}
+        segmentLabels={SEGMENT_LABELS}
       />
 
       {/* Segment description */}

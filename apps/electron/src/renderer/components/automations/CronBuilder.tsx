@@ -11,6 +11,7 @@
 
 import * as React from 'react'
 import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Clock, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { describeCron as describeCronExpression, computeNextRuns } from './utils'
@@ -131,6 +132,7 @@ export function CronBuilder({
   onTimezoneChange,
   className,
 }: CronBuilderProps) {
+  const { t } = useTranslation()
   const [rawInput, setRawInput] = useState(value)
   const [fields, setFields] = useState<string[]>(value.split(/\s+/))
 
@@ -275,8 +277,8 @@ export function CronBuilder({
 
         {/* Timezone */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>Timezone:</span>
-          <span className="font-medium text-foreground/70">{timezone || 'System default'}</span>
+          <span>{t('automations.labelTimezone')}:</span>
+          <span className="font-medium text-foreground/70">{timezone || t('automations.systemDefault')}</span>
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { useTransportConnectionState } from './useTransportConnectionState'
 import { toast } from 'sonner'
@@ -23,6 +24,7 @@ interface DirectoryPickerResult {
 export function useDirectoryPicker(
   onSelect: (path: string) => void
 ): DirectoryPickerResult {
+  const { t } = useTranslation()
   const connectionState = useTransportConnectionState()
   const isRemote = connectionState?.mode === 'remote'
   const canBrowse = isRemote &&
@@ -45,7 +47,7 @@ export function useDirectoryPicker(
       if (path) onSelect(path)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
-      toast.error('Failed to open folder picker', {
+      toast.error(t('toast.failedToOpenFolderPicker'), {
         description: message,
       })
     }

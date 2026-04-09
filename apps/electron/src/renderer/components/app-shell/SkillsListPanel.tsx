@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { Zap } from 'lucide-react'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { EntityPanel } from '@/components/ui/entity-panel'
@@ -29,6 +30,7 @@ export function SkillsListPanel({
   workspaceRootPath,
   className,
 }: SkillsListPanelProps) {
+  const { t } = useTranslation()
   const activeWorkspace = useActiveWorkspace()
   const canRevealLocally = !activeWorkspace?.remoteServer
   const { workspaces, activeWorkspaceId } = useAppShellContext()
@@ -51,8 +53,8 @@ export function SkillsListPanel({
       emptyState={
         <EntityListEmptyScreen
           icon={<Zap />}
-          title="No skills configured"
-          description="Skills are reusable instructions that teach your agent specialized behaviors."
+          title={t('skillsList.noSkillsConfigured')}
+          description={t('skillsList.emptyDescription')}
           docKey="skills"
         >
           {workspaceRootPath && (
@@ -60,7 +62,7 @@ export function SkillsListPanel({
               align="center"
               trigger={
                 <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
-                  Add Skill
+                  {t('skillsList.addSkill')}
                 </button>
               }
               {...getEditConfig('add-skill', workspaceRootPath)}
@@ -75,7 +77,7 @@ export function SkillsListPanel({
           <span className="flex items-center gap-1.5 min-w-0">
             {skill.source === 'project' && (
               <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-foreground/5 text-muted-foreground">
-                project
+                {t('skillsList.projectBadge')}
               </span>
             )}
             <span className="truncate">{skill.metadata.description}</span>
@@ -94,7 +96,7 @@ export function SkillsListPanel({
             canShowInFinder={canRevealLocally}
             onDelete={skill.source === 'workspace' ? () => onDeleteSkill(skill.slug) : undefined}
             canDelete={skill.source === 'workspace'}
-            deleteLabel={skill.source === 'workspace' ? 'Delete Skill' : 'Managed by project'}
+            deleteLabel={skill.source === 'workspace' ? t('skillsList.deleteSkill') : t('skillsList.managedByProject')}
             onSendToWorkspace={hasOtherWorkspaces && skill.source === 'workspace' ? () => {
               setSendResourceSlug(skill.slug)
               setSendResourceLabel(skill.metadata.name)

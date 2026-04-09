@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react"
+import { useTranslation } from "react-i18next"
 import { ArrowLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "../ui/input"
@@ -20,6 +21,7 @@ export function AddWorkspaceStep_OpenFolder({
   onCreate,
   isCreating
 }: AddWorkspaceStep_OpenFolderProps) {
+  const { t } = useTranslation()
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [workspaceName, setWorkspaceName] = useState('')
 
@@ -62,8 +64,8 @@ export function AddWorkspaceStep_OpenFolder({
       </button>
 
       <AddWorkspaceStepHeader
-        title="Choose existing folder"
-        description="Choose any folder to use as workspace."
+        title={t("workspace.chooseExistingFolder")}
+        description={t("workspace.chooseExistingFolderDesc")}
       />
 
       <div className="mt-6 w-full space-y-6">
@@ -98,7 +100,7 @@ export function AddWorkspaceStep_OpenFolder({
             <Input
               value={workspaceName}
               onChange={(e) => setWorkspaceName(e.target.value)}
-              placeholder="My Workspace"
+              placeholder={t("workspace.myWorkspace")}
               disabled={isCreating}
             />
           </div>

@@ -414,4 +414,7 @@ client.onConnectionStateChanged((state) => {
   downloadUrl: process.env.CRAFT_VCREDIST_URL,
 })
 
+// i18n: sync language changes to main process (for native menus/dialogs)
+;(api as ElectronAPI).changeLanguage = (lang: string) => ipcRenderer.invoke('i18n:changeLanguage', lang)
+
 contextBridge.exposeInMainWorld('electronAPI', api)

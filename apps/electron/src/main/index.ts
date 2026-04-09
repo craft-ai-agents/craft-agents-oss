@@ -58,6 +58,10 @@ Sentry.init({
   },
 })
 
+// Initialize i18n for main process (menus, dialogs, etc.)
+import { setupI18n, i18n } from '@craft-agent/shared/i18n'
+setupI18n()
+
 // Set anonymous machine ID for Sentry user tracking (no PII — just a hash).
 // Uses hostname + homedir to produce a stable per-machine identifier.
 const machineId = createHash('sha256').update(hostname() + homedir()).digest('hex').slice(0, 16)
@@ -691,6 +695,13 @@ app.whenReady().then(async () => {
       ipcMain.handle('app:relaunch', () => {
         app.relaunch()
         app.exit(0)
+      })
+
+      // Language change: sync from renderer to main process and rebuild native menu
+      ipcMain.handle('i18n:changeLanguage', async (_event, lang: string) => {
+        i18n.changeLanguage(lang)
+        const { rebuildMenu } = await import('./menu')
+        await rebuildMenu()
       })
 
       ipcMain.on('__get-ws-port', (e) => {

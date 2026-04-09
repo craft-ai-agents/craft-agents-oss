@@ -49,7 +49,9 @@
     "shiki": "^3.21.0",
     "tailwind-merge": ">=2.0.0",
     "tailwindcss": ">=4.0.0",
-    "react-pdf": ">=10.0.0"
+    "react-pdf": ">=10.0.0",
+    "i18next": ">=26.0.0",
+    "react-i18next": ">=17.0.0"
   },
   "peerDependenciesMeta": {
     "@radix-ui/react-context-menu": {

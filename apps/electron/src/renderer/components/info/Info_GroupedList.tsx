@@ -6,6 +6,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { cva } from 'class-variance-authority'
 import { Spinner } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
@@ -61,6 +62,7 @@ function Info_GroupedListRoot({
   empty,
   className,
 }: Info_GroupedListProps) {
+  const { t } = useTranslation()
   if (loading) {
     return (
       <div className={cn('flex items-center justify-center py-8', className)}>
@@ -73,7 +75,7 @@ function Info_GroupedListRoot({
     return (
       <div className={cn('px-4 py-4 text-sm text-muted-foreground', className)}>
         {error === 'Source requires authentication' ? (
-          <span>Authenticate with this source to view available tools</span>
+          <span>{t('sourceInfo.authenticateToViewTools')}</span>
         ) : (
           <span>{error}</span>
         )}

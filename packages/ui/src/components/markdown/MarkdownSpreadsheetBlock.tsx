@@ -30,6 +30,7 @@ import { DataTableOverlay } from '../overlay/DataTableOverlay'
 import { useScrollFade } from './useScrollFade'
 import { TableExportDropdown } from './TableExportDropdown'
 import { usePlatform } from '../../context/PlatformContext'
+import { useTranslation } from 'react-i18next'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -117,6 +118,7 @@ export interface MarkdownSpreadsheetBlockProps {
 }
 
 export function MarkdownSpreadsheetBlock({ code, className }: MarkdownSpreadsheetBlockProps) {
+  const { t } = useTranslation()
   const { onReadFile } = usePlatform()
 
   // Parse the inline JSON spec (may have src field for file-backed data)
@@ -284,7 +286,7 @@ export function MarkdownSpreadsheetBlock({ code, className }: MarkdownSpreadshee
             "text-muted-foreground/50 hover:text-foreground",
             "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100"
           )}
-          title="View Fullscreen"
+          title={t('common.viewFullscreen')}
         >
           <Maximize2 className="w-3.5 h-3.5" />
         </button>

@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { BubbleMenu } from '@tiptap/react/menus'
 import type { Editor } from '@tiptap/react'
 import { NodeSelection } from '@tiptap/pm/state'
@@ -44,12 +45,13 @@ function BubbleButton({
 // ============================================================================
 
 function TextFormattingMenu({ editor }: { editor: Editor }) {
+  const { t } = useTranslation()
   return (
     <div className="tiptap-bubble-menu">
       <BubbleButton
         onClick={() => editor.chain().focus().toggleBold().run()}
         isActive={editor.isActive('bold')}
-        title="Bold"
+        title={t('editor.bold')}
       >
         <Bold className="w-3.5 h-3.5" />
       </BubbleButton>
@@ -57,7 +59,7 @@ function TextFormattingMenu({ editor }: { editor: Editor }) {
       <BubbleButton
         onClick={() => editor.chain().focus().toggleItalic().run()}
         isActive={editor.isActive('italic')}
-        title="Italic"
+        title={t('editor.italic')}
       >
         <Italic className="w-3.5 h-3.5" />
       </BubbleButton>
@@ -65,7 +67,7 @@ function TextFormattingMenu({ editor }: { editor: Editor }) {
       <BubbleButton
         onClick={() => editor.chain().focus().toggleStrike().run()}
         isActive={editor.isActive('strike')}
-        title="Strikethrough"
+        title={t('editor.strikethrough')}
       >
         <Strikethrough className="w-3.5 h-3.5" />
       </BubbleButton>
@@ -73,7 +75,7 @@ function TextFormattingMenu({ editor }: { editor: Editor }) {
       <BubbleButton
         onClick={() => editor.chain().focus().toggleCode().run()}
         isActive={editor.isActive('code')}
-        title="Code"
+        title={t('editor.code')}
       >
         <Code className="w-3.5 h-3.5" />
       </BubbleButton>
@@ -95,7 +97,7 @@ function TextFormattingMenu({ editor }: { editor: Editor }) {
             queueMicrotask(() => (editor as any).emit(INLINE_MATH_EDIT_EVENT))
           }
         }}
-        title="Math"
+        title={t('editor.math')}
       >
         <Sigma className="w-3.5 h-3.5" />
       </BubbleButton>

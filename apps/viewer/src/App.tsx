@@ -10,6 +10,7 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { FileText } from 'lucide-react'
 import type { StoredSession } from '@craft-agent/core'
 import {
@@ -50,6 +51,7 @@ function getSessionIdFromUrl(): string | null {
 }
 
 export function App() {
+  const { t } = useTranslation()
   const [session, setSession] = useState<StoredSession | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -71,9 +73,9 @@ export function App() {
         const response = await fetch(`/s/api/${sessionId}`)
         if (!response.ok) {
           if (response.status === 404) {
-            setError('Session not found')
+            setError(t('errors.sessionNotFound'))
           } else {
-            setError('Failed to load session')
+            setError(t('errors.failedToLoadSession'))
           }
           return
         }
@@ -82,7 +84,7 @@ export function App() {
         setSession(data)
       } catch (err) {
         console.error('Failed to fetch session:', err)
-        setError('Failed to load session')
+        setError(t('errors.failedToLoadSession'))
       } finally {
         setIsLoading(false)
       }

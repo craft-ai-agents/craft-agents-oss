@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from "react-i18next"
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { SlashCommandMenu, DEFAULT_SLASH_COMMAND_GROUPS, type SlashCommandId } from '@/components/ui/slash-command-menu'
@@ -332,6 +333,7 @@ function StateBadge({
   onSessionStatusChange?: (stateId: string) => void
   sessionId?: string
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
 
   const handleSelect = React.useCallback((stateId: string) => {
@@ -343,11 +345,14 @@ function StateBadge({
   const badgeColor = state.resolvedColor || 'var(--foreground)'
   const applyColor = state.iconColorable
 
+  const DEFAULT_STATUS_IDS = new Set(['backlog', 'todo', 'needs-review', 'done', 'cancelled'])
+  const stateLabel = DEFAULT_STATUS_IDS.has(state.id) ? t(`status.${state.id}`, state.label) : state.label
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <MetadataBadge
-          label={state.label}
+          label={stateLabel}
           badgeColor={badgeColor}
           interactive
           isActive={open}
@@ -386,6 +391,9 @@ function StateBadge({
 }
 
 function FilesPopoverButton({ sessionId, sessionFolderPath }: { sessionId?: string; sessionFolderPath?: string }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = React.useState(false)
+
   if (!sessionId) return null
 
   return (
@@ -404,7 +412,7 @@ function FilesPopoverButton({ sessionId, sessionFolderPath }: { sessionId?: stri
           )}
         >
           <Info className="h-3.5 w-3.5 shrink-0" />
-          <span className="whitespace-nowrap">Info</span>
+          <span className="whitespace-nowrap">{t("common.info")}</span>
         </button>
       )}
     />
@@ -418,6 +426,7 @@ interface PermissionModeDropdownProps {
 }
 
 function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessionId }: PermissionModeDropdownProps) {
+  const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
   // Optimistic local state - updates immediately, syncs with prop
   const [optimisticMode, setOptimisticMode] = React.useState(permissionMode)
@@ -476,7 +485,7 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessio
           style={{ '--shadow-color': currentStyle.shadowVar } as React.CSSProperties}
         >
           <PermissionModeIcon mode={optimisticMode} className="h-3.5 w-3.5" />
-          <span>{config.displayName}</span>
+          <span>{t(`mode.${optimisticMode}`)}</span>
           <ChevronDown className="h-3.5 w-3.5 opacity-60" />
         </button>
       </PopoverTrigger>

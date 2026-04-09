@@ -44,6 +44,7 @@
     "lint:electron": "cd apps/electron && bun run lint",
     "lint:shared": "cd packages/shared && npx eslint .",
     "lint:ui": "cd packages/ui && npx eslint .",
+    "lint:i18n:staged": "bash scripts/lint-i18n-staged.sh",
     "lint": "bun run lint:ipc-sends && bun run lint:electron && bun run lint:shared && bun run lint:ui",
     "link": "bun link",
     "electron:clean": "bun run scripts/electron-clean.ts",

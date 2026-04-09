@@ -19,10 +19,10 @@
 export interface SettingsPageDefinition {
   /** Unique identifier used in routes and navigation */
   id: string
-  /** Display label in settings navigator */
-  label: string
-  /** Short description shown in settings navigator */
-  description: string
+  /** i18n key for display label in settings navigator */
+  labelKey: string
+  /** i18n key for short description shown in settings navigator */
+  descriptionKey: string
 }
 
 /**
@@ -30,19 +30,22 @@ export interface SettingsPageDefinition {
  * Order here determines display order in the settings navigator.
  *
  * ADD NEW PAGES HERE - everything else derives from this list.
+ *
+ * NOTE: labelKey/descriptionKey are i18n translation keys, resolved at render
+ * time via t(). Do NOT call i18n.t() here — this module loads before i18n init.
  */
 export const SETTINGS_PAGES = [
-  { id: 'app', label: 'App', description: 'Notifications and updates' },
-  { id: 'ai', label: 'AI', description: 'Model, thinking, connections' },
-  { id: 'appearance', label: 'Appearance', description: 'Theme, font, tool icons' },
-  { id: 'input', label: 'Input', description: 'Send key, spell check' },
-  { id: 'workspace', label: 'Workspace', description: 'Name, icon, working directory' },
-  { id: 'permissions', label: 'Permissions', description: 'Explore mode rules' },
-  { id: 'labels', label: 'Labels', description: 'Manage session labels' },
-  { id: 'server', label: 'Server', description: 'Remote server access' },
-  { id: 'shortcuts', label: 'Shortcuts', description: 'Keyboard shortcuts' },
-  { id: 'preferences', label: 'Preferences', description: 'User preferences' },
-] as const satisfies readonly SettingsPageDefinition[]
+  { id: 'app' as const, labelKey: 'settings.app.title', descriptionKey: 'settings.app.description' },
+  { id: 'ai' as const, labelKey: 'settings.ai.title', descriptionKey: 'settings.ai.description' },
+  { id: 'appearance' as const, labelKey: 'settings.appearance.title', descriptionKey: 'settings.appearance.description' },
+  { id: 'input' as const, labelKey: 'settings.input.title', descriptionKey: 'settings.input.description' },
+  { id: 'workspace' as const, labelKey: 'settings.workspace.title', descriptionKey: 'settings.workspace.description' },
+  { id: 'permissions' as const, labelKey: 'settings.permissions.title', descriptionKey: 'settings.permissions.description' },
+  { id: 'labels' as const, labelKey: 'settings.labels.title', descriptionKey: 'settings.labels.description' },
+  { id: 'server' as const, labelKey: 'settings.server.title', descriptionKey: 'settings.server.description' },
+  { id: 'shortcuts' as const, labelKey: 'settings.shortcuts.title', descriptionKey: 'settings.shortcuts.description' },
+  { id: 'preferences' as const, labelKey: 'settings.preferences.title', descriptionKey: 'settings.preferences.description' },
+] satisfies readonly SettingsPageDefinition[]
 
 /**
  * Settings subpage type - derived from SETTINGS_PAGES

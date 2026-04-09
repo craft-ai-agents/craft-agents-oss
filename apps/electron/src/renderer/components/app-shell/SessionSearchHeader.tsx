@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { Search, X } from 'lucide-react'
 import { Spinner } from '@craft-agent/ui'
 
@@ -56,6 +57,7 @@ export function SessionSearchHeader({
   placeholder = 'Search titles and content...',
   readOnly = false,
 }: SessionSearchHeaderProps) {
+  const { t } = useTranslation()
   return (
     <div className="shrink-0 px-2 pt-2 pb-1.5 border-b border-border/50">
       {/* Search input */}
@@ -78,7 +80,7 @@ export function SessionSearchHeader({
           <button
             onClick={onSearchClose}
             className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-foreground/10 rounded"
-            title="Close search"
+            title={t("session.closeSearch")}
           >
             <X className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
@@ -91,12 +93,12 @@ export function SessionSearchHeader({
           {isSearching ? (
             <>
               <Spinner className="text-[9px] text-foreground/50" />
-              <span>Loading…</span>
+              <span>{t('common.loading')}</span>
             </>
           ) : isUnavailable ? (
-            <span className="text-destructive/70">Search unavailable</span>
+            <span className="text-destructive/70">{t('session.searchUnavailable')}</span>
           ) : (
-            <span>{exceededLimit ? '100+' : (resultCount ?? 0)} results</span>
+            <span>{t('session.results', { count: exceededLimit ? '100+' : (resultCount ?? 0) })}</span>
           )}
         </div>
       )}

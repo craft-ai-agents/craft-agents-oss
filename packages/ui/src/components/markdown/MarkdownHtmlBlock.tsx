@@ -35,6 +35,7 @@ import { CodeBlock } from './CodeBlock'
 import { HTMLPreviewOverlay } from '../overlay/HTMLPreviewOverlay'
 import { ItemNavigator } from '../overlay/ItemNavigator'
 import { usePlatform } from '../../context/PlatformContext'
+import { useTranslation } from 'react-i18next'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -93,6 +94,7 @@ export interface MarkdownHtmlBlockProps {
 }
 
 export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
+  const { t } = useTranslation()
   const { onReadFile } = usePlatform()
 
   // Parse the JSON spec — supports single src or items array
@@ -197,7 +199,7 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
                 "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100",
                 hasMultiple ? "opacity-100" : "opacity-0 group-hover:opacity-100"
               )}
-              title="View Fullscreen"
+              title={t('common.viewFullscreen')}
             >
               <Maximize2 className="w-3.5 h-3.5" />
             </button>

@@ -11,6 +11,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from "react-i18next"
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { Cloud, CloudOff, Send } from 'lucide-react'
 import { toast } from 'sonner'
@@ -49,6 +50,7 @@ export function SendToWorkspaceDialog({
   activeWorkspaceId,
   onTransferComplete,
 }: SendToWorkspaceDialogProps) {
+  const { t } = useTranslation()
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null)
   const [isTransferring, setIsTransferring] = useState(false)
   const workspaceIconMap = useWorkspaceIcons(workspaces)
@@ -106,10 +108,9 @@ export function SendToWorkspaceDialog({
     setIsTransferring(true)
     const targetName = targetWorkspace.name
     const count = sessionIds.length
-    const label = count === 1 ? 'session' : 'sessions'
     const { url, token, remoteWorkspaceId } = targetWorkspace.remoteServer
 
-    const toastId = toast.loading(`Sending ${count} ${label} to ${targetName}...`)
+    const toastId = toast.loading(t('sendToWorkspace.sending', { count, target: targetName }))
 
     try {
       const newSessionIds: string[] = []
@@ -144,10 +145,10 @@ export function SendToWorkspaceDialog({
         newSessionIds.push(result.sessionId)
       }
 
-      toast.success(`Sent ${count} ${label} to ${targetName}`, {
+      toast.success(t('sendToWorkspace.sent', { count, target: targetName }), {
         id: toastId,
         action: onTransferComplete ? {
-          label: 'Open',
+          label: t('sendToWorkspace.open'),
           onClick: () => onTransferComplete(selectedWorkspaceId, newSessionIds),
         } : undefined,
       })
@@ -156,7 +157,7 @@ export function SendToWorkspaceDialog({
       setSelectedWorkspaceId(null)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
-      toast.error(`Failed to send ${label}`, {
+      toast.error(t('sendToWorkspace.failedToSend', { count }), {
         id: toastId,
         description: message,
       })
@@ -166,7 +167,6 @@ export function SendToWorkspaceDialog({
   }, [selectedWorkspaceId, sessionIds, workspaces, onOpenChange, onTransferComplete])
 
   const count = sessionIds.length
-  const label = count === 1 ? 'session' : 'sessions'
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
@@ -179,10 +179,10 @@ export function SendToWorkspaceDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Send className="h-4 w-4" />
-            Send to Workspace
+            {t("sendToWorkspace.title")}
           </DialogTitle>
           <DialogDescription>
-            Send {count} {label} to a remote workspace.
+            {t("sendToWorkspace.description", { count })}
           </DialogDescription>
         </DialogHeader>
 
@@ -190,7 +190,7 @@ export function SendToWorkspaceDialog({
         <div className="flex flex-col gap-1 max-h-64 overflow-y-auto py-1">
           {remoteWorkspaces.length === 0 ? (
             <p className="text-sm text-muted-foreground px-2 py-4 text-center">
-              No remote workspaces available.
+              {t("sendToWorkspace.noRemoteWorkspaces")}
             </p>
           ) : (
             remoteWorkspaces.map(workspace => {

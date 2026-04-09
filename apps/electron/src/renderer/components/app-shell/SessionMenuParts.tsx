@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from "react-i18next"
 import { Check, Globe, Copy, RefreshCw, Link2Off } from 'lucide-react'
 import { toast } from 'sonner'
 import type { MenuComponents } from '@/components/ui/menu-context'
@@ -13,6 +14,7 @@ export interface ShareMenuItemsProps {
 }
 
 export function ShareMenuItems({ sessionId, sharedUrl, menu }: ShareMenuItemsProps) {
+  const { t } = useTranslation()
   const { MenuItem, Separator } = menu
 
   const handleOpenInBrowser = () => {
@@ -21,26 +23,26 @@ export function ShareMenuItems({ sessionId, sharedUrl, menu }: ShareMenuItemsPro
 
   const handleCopyLink = async () => {
     await navigator.clipboard.writeText(sharedUrl)
-    toast.success('Link copied to clipboard')
+    toast.success(t("toast.linkCopied"))
   }
 
   const handleUpdateShare = async () => {
     const result = await window.electronAPI.sessionCommand(sessionId, { type: 'updateShare' })
     if (result && 'success' in result && result.success) {
-      toast.success('Share updated')
+      toast.success(t("chat.shareUpdated"))
     } else {
       const errorMsg = result && 'error' in result ? result.error : undefined
-      toast.error('Failed to update share', { description: errorMsg })
+      toast.error(t("chat.failedToUpdateShare"), { description: errorMsg })
     }
   }
 
   const handleRevokeShare = async () => {
     const result = await window.electronAPI.sessionCommand(sessionId, { type: 'revokeShare' })
     if (result && 'success' in result && result.success) {
-      toast.success('Sharing stopped')
+      toast.success(t("chat.sharingStopped"))
     } else {
       const errorMsg = result && 'error' in result ? result.error : undefined
-      toast.error('Failed to stop sharing', { description: errorMsg })
+      toast.error(t("chat.failedToStopSharing"), { description: errorMsg })
     }
   }
 
@@ -48,20 +50,20 @@ export function ShareMenuItems({ sessionId, sharedUrl, menu }: ShareMenuItemsPro
     <>
       <MenuItem onClick={handleOpenInBrowser}>
         <Globe className="h-3.5 w-3.5" />
-        <span className="flex-1">Open in Browser</span>
+        <span className="flex-1">{t("sessionMenu.openInBrowser")}</span>
       </MenuItem>
       <MenuItem onClick={handleCopyLink}>
         <Copy className="h-3.5 w-3.5" />
-        <span className="flex-1">Copy Link</span>
+        <span className="flex-1">{t("sessionMenu.copyLink")}</span>
       </MenuItem>
       <MenuItem onClick={handleUpdateShare}>
         <RefreshCw className="h-3.5 w-3.5" />
-        <span className="flex-1">Update Share</span>
+        <span className="flex-1">{t("sessionMenu.updateShare")}</span>
       </MenuItem>
       <Separator />
       <MenuItem onClick={handleRevokeShare} variant="destructive">
         <Link2Off className="h-3.5 w-3.5" />
-        <span className="flex-1">Stop Sharing</span>
+        <span className="flex-1">{t("sessionMenu.stopSharing")}</span>
       </MenuItem>
     </>
   )

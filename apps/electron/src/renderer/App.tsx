@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '@/hooks/useTheme'
 import type { ThemeOverrides } from '@config/theme'
 import { useSetAtom, useStore, useAtomValue, useAtom } from 'jotai'
@@ -164,12 +165,14 @@ function SessionLoadErrorScreen({
   message: string
   onRetry: () => void
 }) {
+  const { t } = useTranslation()
+
   return (
     <div className="flex h-full items-center justify-center p-6">
       <div className="max-w-lg rounded-xl border border-border/50 bg-background shadow-minimal p-6 text-center">
-        <h2 className="text-lg font-semibold text-foreground">Failed to load sessions</h2>
+        <h2 className="text-lg font-semibold text-foreground">{t("errors.failedToLoadSessions")}</h2>
         <p className="mt-2 text-sm text-foreground/60">
-          Craft Agents could connect, but loading the session list failed. This is not being treated as an empty workspace to avoid hiding a real bug or data problem.
+          {t("errors.failedToLoadSessionsDesc")}
         </p>
         <p className="mt-3 rounded-lg bg-foreground/5 px-3 py-2 text-left text-xs text-foreground/70 break-words">
           {message}
@@ -179,7 +182,7 @@ function SessionLoadErrorScreen({
           onClick={onRetry}
           className="mt-4 inline-flex h-8 items-center justify-center rounded-[8px] bg-foreground text-background px-3 text-sm font-medium hover:opacity-90 transition-opacity"
         >
-          Retry loading sessions
+          {t("errors.retryLoadingSessions")}
         </button>
       </div>
     </div>
@@ -187,6 +190,8 @@ function SessionLoadErrorScreen({
 }
 
 export default function App() {
+  const { t } = useTranslation()
+
   // Initialize renderer perf tracking early (debug mode = running from source)
   // Uses useEffect with empty deps to run once on mount before any session switches
   useEffect(() => {
@@ -659,8 +664,8 @@ export default function App() {
     // Show actionable toast for missing system dependencies (Windows only)
     window.electronAPI.getSystemWarnings().then((warnings) => {
       if (warnings.vcredistMissing) {
-        toast.warning('Microsoft Visual C++ Redistributable not found', {
-          description: 'Document tools (PDF, PPTX, DOCX, XLSX) require it to work. Restart after installing.',
+        toast.warning(t('toast.vcRedistNotFound'), {
+          description: t('toast.vcRedistNotFoundDesc'),
           duration: Infinity,
           action: {
             label: 'Install',
@@ -1458,7 +1463,7 @@ export default function App() {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
         console.error('Failed to open file:', error)
-        toast.error('Failed to open file', {
+        toast.error(t('toast.failedToOpenFile'), {
           description: message,
         })
       }
@@ -1469,7 +1474,7 @@ export default function App() {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
         console.error('Failed to open URL:', error)
-        toast.error('Failed to open link', {
+        toast.error(t('toast.failedToOpenLink'), {
           description: `${message}. If this is a local path, use Open File instead.`,
         })
       }
@@ -1480,7 +1485,7 @@ export default function App() {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
         console.error('Failed to show in folder:', error)
-        toast.error(`Failed to reveal in ${getFileManagerName()}`, {
+        toast.error(t("toast.failedToReveal", { fileManager: getFileManagerName() }), {
           description: message,
         })
       }
@@ -1496,7 +1501,7 @@ export default function App() {
   const handleReconnectTransport = useCallback(() => {
     void window.electronAPI.reconnectTransport().catch((error) => {
       const message = error instanceof Error ? error.message : 'Unknown error'
-      toast.error('Reconnect failed', { description: message })
+      toast.error(t('toast.reconnectFailed'), { description: message })
     })
   }, [])
 

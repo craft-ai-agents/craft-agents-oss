@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
+import { useTranslation } from "react-i18next"
 import { ArrowLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { slugify } from "@/lib/slugify"
@@ -29,6 +30,7 @@ export function AddWorkspaceStep_CreateNew({
   onCreate,
   isCreating
 }: AddWorkspaceStep_CreateNewProps) {
+  const { t } = useTranslation()
   const [name, setName] = useState('')
   const [locationOption, setLocationOption] = useState<LocationOption>('default')
   const [customPath, setCustomPath] = useState<string | null>(null)
@@ -113,8 +115,8 @@ export function AddWorkspaceStep_CreateNew({
       </button>
 
       <AddWorkspaceStepHeader
-        title="Create workspace"
-        description="Enter a name and choose where to store your workspace."
+        title={t("workspace.createWorkspace")}
+        description={t("workspace.createWorkspaceDesc")}
       />
 
       <div className="mt-6 w-full space-y-6">
@@ -127,7 +129,7 @@ export function AddWorkspaceStep_CreateNew({
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My Workspace"
+              placeholder={t("workspace.myWorkspace")}
               disabled={isCreating}
               autoFocus
               className="border-0 bg-transparent shadow-none"
@@ -150,7 +152,7 @@ export function AddWorkspaceStep_CreateNew({
             checked={locationOption === 'default'}
             onChange={() => setLocationOption('default')}
             disabled={isCreating}
-            title="Default location"
+            title={t("workspace.defaultLocation")}
             subtitle="under .craft-agent folder"
           />
 
@@ -160,8 +162,8 @@ export function AddWorkspaceStep_CreateNew({
             checked={locationOption === 'custom'}
             onChange={() => setLocationOption('custom')}
             disabled={isCreating}
-            title="Choose a location"
-            subtitle={customPath || "Pick a place to put your new workspace."}
+            title={t("workspace.chooseLocation")}
+            subtitle={customPath || t("workspace.pickLocation")}
             action={locationOption === 'custom' ? (
               <AddWorkspaceSecondaryButton
                 onClick={(e) => {

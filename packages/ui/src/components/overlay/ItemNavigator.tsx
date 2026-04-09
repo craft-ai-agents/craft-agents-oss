@@ -9,6 +9,7 @@
  */
 
 import { useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react'
 import {
   DropdownMenu,
@@ -31,6 +32,7 @@ export interface ItemNavigatorProps {
 }
 
 export function ItemNavigator({ items, activeIndex, onSelect, size = 'sm' }: ItemNavigatorProps) {
+  const { t } = useTranslation()
   const goToPrev = useCallback(() => {
     onSelect(Math.max(0, activeIndex - 1))
   }, [onSelect, activeIndex])
@@ -55,7 +57,7 @@ export function ItemNavigator({ items, activeIndex, onSelect, size = 'sm' }: Ite
           'disabled:opacity-30 disabled:cursor-not-allowed',
           size === 'md' ? 'p-1.5 rounded-[8px]' : 'p-1 rounded-[6px]'
         )}
-        title="Previous item"
+        title={t('overlay.previousItem')}
       >
         <ChevronLeft className={size === 'md' ? 'w-4 h-4' : 'w-3.5 h-3.5'} />
       </button>
@@ -69,7 +71,7 @@ export function ItemNavigator({ items, activeIndex, onSelect, size = 'sm' }: Ite
               'hover:opacity-80 transition-opacity',
               size === 'md' ? 'text-[13px] px-3 h-[28px] w-[144px] justify-center rounded-[8px]' : 'text-[12px] px-2.5 h-[22px] w-[112px] justify-center rounded-[6px]'
             )}
-            title="Select item"
+            title={t('overlay.selectItem')}
           >
             <span className="truncate max-w-[120px]">{displayLabel}</span>
           </button>
@@ -98,7 +100,7 @@ export function ItemNavigator({ items, activeIndex, onSelect, size = 'sm' }: Ite
           'disabled:opacity-30 disabled:cursor-not-allowed',
           size === 'md' ? 'p-1.5 rounded-[8px]' : 'p-1 rounded-[6px]'
         )}
-        title="Next item"
+        title={t('overlay.nextItem')}
       >
         <ChevronRight className={size === 'md' ? 'w-4 h-4' : 'w-3.5 h-3.5'} />
       </button>

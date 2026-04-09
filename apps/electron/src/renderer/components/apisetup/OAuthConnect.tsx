@@ -13,6 +13,7 @@
  */
 
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
@@ -43,6 +44,7 @@ export function OAuthConnect({
   onSubmitAuthCode,
   formId = "auth-code-form",
 }: OAuthConnectProps) {
+  const { t } = useTranslation()
   const [authCode, setAuthCode] = useState('')
 
   const handleAuthCodeSubmit = (e: React.FormEvent) => {
@@ -57,7 +59,7 @@ export function OAuthConnect({
     return (
       <form id={formId} onSubmit={handleAuthCodeSubmit}>
         <div className="space-y-2">
-          <Label htmlFor="auth-code">Authorization Code</Label>
+          <Label htmlFor="auth-code">{t("apiSetup.authorizationCode")}</Label>
           <div className={cn(
             "relative rounded-md shadow-minimal transition-colors",
             "bg-foreground-2 focus-within:bg-background"
@@ -67,7 +69,7 @@ export function OAuthConnect({
               type="text"
               value={authCode}
               onChange={(e) => setAuthCode(e.target.value)}
-              placeholder="Paste your authorization code here"
+              placeholder={t("apiSetup.pasteAuthCode")}
               className={cn(
                 "border-0 bg-transparent shadow-none font-mono text-sm",
                 status === 'error' && "focus-visible:ring-destructive"

@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from "react-i18next"
 import { Command as CommandPrimitive } from 'cmdk'
 import { Archive, ArchiveRestore } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -25,13 +26,17 @@ const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-3 roun
 // StateItemContent - Shared item rendering
 // ============================================================================
 
+const DEFAULT_STATUS_IDS = new Set(['backlog', 'todo', 'needs-review', 'done', 'cancelled'])
+
 function StateItemContent({ state }: { state: SessionStatus }) {
+  const { t } = useTranslation()
+  const label = DEFAULT_STATUS_IDS.has(state.id) ? t(`status.${state.id}`, state.label) : state.label
   return (
     <>
       <span className="shrink-0 flex items-center" style={getStatusIconStyle(state)}>
         {state.icon}
       </span>
-      <div className="flex-1 min-w-0">{state.label}</div>
+      <div className="flex-1 min-w-0">{label}</div>
     </>
   )
 }
@@ -62,6 +67,7 @@ export function SessionStatusMenu({
   onUnarchive,
   className,
 }: SessionStatusMenuProps) {
+  const { t } = useTranslation()
   const [filter, setFilter] = React.useState('')
   const inputRef = React.useRef<HTMLInputElement>(null)
 
@@ -86,7 +92,7 @@ export function SessionStatusMenu({
           ref={inputRef}
           value={filter}
           onValueChange={setFilter}
-          placeholder="Filter statuses..."
+          placeholder={t("status.filterStatuses")}
           className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
         />
       </div>

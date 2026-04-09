@@ -5,6 +5,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { Terminal, Search, FolderSearch } from 'lucide-react'
 import { PreviewOverlay, type BadgeVariant } from './PreviewOverlay'
 import { ContentFrame } from './ContentFrame'
@@ -60,6 +61,7 @@ export function TerminalPreviewOverlay({
   error,
   embedded,
 }: TerminalPreviewOverlayProps) {
+  const { t } = useTranslation()
   const config = getToolConfig(toolType)
 
   return (
@@ -77,7 +79,7 @@ export function TerminalPreviewOverlay({
       embedded={embedded}
       className="bg-foreground-3"
     >
-      <ContentFrame title="Terminal">
+      <ContentFrame title={t('overlay.terminal')}>
         <div className="flex-1 overflow-y-auto min-h-0">
           <TerminalOutput
             command={command}

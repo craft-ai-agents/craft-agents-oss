@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { ChevronDown, Send } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { IslandContentView, type IslandMorphTarget } from './Island'
 import {
   DropdownMenu,
@@ -62,6 +63,7 @@ export function IslandFollowUpContentView({
   mode = 'edit',
   onRequestEdit,
 }: IslandFollowUpContentViewProps) {
+  const { t } = useTranslation()
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null)
   const measureTextareaRef = React.useRef<HTMLTextAreaElement | null>(null)
   const isViewMode = mode === 'view'
@@ -230,8 +232,8 @@ export function IslandFollowUpContentView({
                     <button
                       type="button"
                       disabled={isEmpty}
-                      aria-label="More submit actions"
-                      title="More submit actions"
+                      aria-label={t('chat.moreSubmitActions')}
+                      title={t('chat.moreSubmitActions')}
                       className="h-8 w-6 border-l border-border/40 inline-flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-foreground/2 data-[state=open]:bg-foreground/2 data-[state=open]:text-foreground disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-foreground/70"
                     >
                       <ChevronDown className="h-3 w-3" />

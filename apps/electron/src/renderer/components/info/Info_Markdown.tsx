@@ -8,6 +8,7 @@
 
 import * as React from 'react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Maximize2 } from 'lucide-react'
 import { Markdown } from '@/components/markdown'
 import { DocumentFormattedMarkdownOverlay } from '@craft-agent/ui'
@@ -32,6 +33,7 @@ export function Info_Markdown({
   className,
   fullscreen = false,
 }: Info_MarkdownProps) {
+  const { t } = useTranslation()
   const [isFullscreen, setIsFullscreen] = useState(false)
 
   // Detect if content starts with H1-H3 heading
@@ -61,7 +63,7 @@ export function Info_Markdown({
               'text-muted-foreground/50 hover:text-foreground',
               'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100'
             )}
-            title="View Fullscreen"
+            title={t("table.viewFullscreen")}
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>

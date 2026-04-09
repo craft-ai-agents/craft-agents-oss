@@ -3,6 +3,7 @@
  */
 
 import { useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { GitGraph } from 'lucide-react'
 import { PreviewOverlay } from './PreviewOverlay'
 import { CopyButton } from './CopyButton'
@@ -31,6 +32,7 @@ export function MermaidPreviewOverlay({
   svg,
   code,
 }: MermaidPreviewOverlayProps) {
+  const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
 
   const {
@@ -67,7 +69,7 @@ export function MermaidPreviewOverlay({
         resetDisabled={isDefaultView}
       />
 
-      <CopyButton content={code} title="Copy code" className="bg-background shadow-minimal opacity-70 hover:opacity-100" />
+      <CopyButton content={code} title={t('common.copyCode')} className="bg-background shadow-minimal opacity-70 hover:opacity-100" />
     </div>
   )
 
@@ -80,7 +82,7 @@ export function MermaidPreviewOverlay({
         label: 'Diagram',
         variant: 'purple',
       }}
-      title="Mermaid Diagram"
+      title={t('overlay.mermaidDiagram')}
       headerActions={headerActions}
     >
       <div

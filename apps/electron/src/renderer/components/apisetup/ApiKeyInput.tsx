@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { useTranslation } from "react-i18next"
 import { Command as CommandPrimitive } from "cmdk"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -181,6 +182,7 @@ export function ApiKeyInput({
   const initialPreset = initialValues?.activePreset
     ?? (initialValues?.baseUrl ? getPresetForUrl(initialValues.baseUrl, presets) : defaultPreset.key)
 
+  const { t } = useTranslation()
   const [apiKey, setApiKey] = useState(initialValues?.apiKey ?? '')
   const [showValue, setShowValue] = useState(false)
   const [baseUrl, setBaseUrl] = useState(initialValues?.baseUrl ?? defaultPreset.url)
@@ -590,7 +592,7 @@ export function ApiKeyInput({
                     type={showValue ? 'text' : 'password'}
                     value={awsSecretAccessKey}
                     onChange={(e) => setAwsSecretAccessKey(e.target.value)}
-                    placeholder="Your secret access key"
+                    placeholder={t("apiSetup.secretAccessKey")}
                     className="pr-10 border-0 bg-transparent shadow-none"
                     disabled={isDisabled}
                   />
@@ -614,7 +616,7 @@ export function ApiKeyInput({
                     type="text"
                     value={awsSessionToken}
                     onChange={(e) => setAwsSessionToken(e.target.value)}
-                    placeholder="For temporary credentials (STS)"
+                    placeholder={t("apiSetup.temporaryCredentials")}
                     className="border-0 bg-transparent shadow-none"
                     disabled={isDisabled}
                   />
@@ -720,7 +722,7 @@ export function ApiKeyInput({
                           ref={tierFilterInputRef}
                           value={tierFilter}
                           onValueChange={setTierFilter}
-                          placeholder="Search models..."
+                          placeholder={t("apiSetup.searchModels")}
                           autoFocus
                           className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground placeholder:select-none"
                         />

@@ -28,6 +28,7 @@ import { CodeBlock } from './CodeBlock'
 import { ImagePreviewOverlay } from '../overlay/ImagePreviewOverlay'
 import { usePlatform } from '../../context/PlatformContext'
 import { ImageCardStack } from './ImageCardStack'
+import { useTranslation } from 'react-i18next'
 
 interface PreviewItem {
   src: string
@@ -78,6 +79,7 @@ function detectImageRatio(src: string): Promise<number | null> {
 }
 
 export function MarkdownImageBlock({ code, className, onCreateRegionAnnotation: _onCreateRegionAnnotation }: MarkdownImageBlockProps) {
+  const { t } = useTranslation()
   const { onReadFileDataUrl } = usePlatform()
 
   const spec = React.useMemo<ImagePreviewSpec | null>(() => {
@@ -232,7 +234,7 @@ export function MarkdownImageBlock({ code, className, onCreateRegionAnnotation: 
               'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100',
               hasMultiple ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
             )}
-            title="View Fullscreen"
+            title={t('common.viewFullscreen')}
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>

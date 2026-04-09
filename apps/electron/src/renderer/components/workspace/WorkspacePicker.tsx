@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Plus } from 'lucide-react'
 import { Spinner } from '@craft-agent/ui'
 import type { WorkspaceInfo } from '../../../shared/types'
@@ -18,6 +19,7 @@ interface WorkspacePickerProps {
 }
 
 export function WorkspacePicker({ onSelectWorkspace }: WorkspacePickerProps) {
+  const { t } = useTranslation()
   const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -64,8 +66,8 @@ export function WorkspacePicker({ onSelectWorkspace }: WorkspacePickerProps) {
     <div className="flex h-screen items-center justify-center bg-sidebar px-4">
       <AddWorkspaceContainer>
         <AddWorkspaceStepHeader
-          title="Select Workspace"
-          description="Choose a workspace on this server, or create a new one."
+          title={t("workspace.selectWorkspace")}
+          description={t("workspace.selectWorkspaceDesc")}
         />
 
         {error && (
@@ -103,7 +105,7 @@ export function WorkspacePicker({ onSelectWorkspace }: WorkspacePickerProps) {
             value={newName}
             onChange={e => setNewName(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleCreate()}
-            placeholder="New workspace name"
+            placeholder={t("workspace.newWorkspaceName")}
             className="w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
           <AddWorkspacePrimaryButton

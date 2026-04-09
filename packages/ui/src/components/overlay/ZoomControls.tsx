@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { Check, Minus, Plus, RotateCcw } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
@@ -29,6 +30,7 @@ function ZoomDropdown({
   onZoomToFit: () => void
   onZoomToPreset: (preset: number) => void
 }) {
+  const { t } = useTranslation()
   const [isOpen, setIsOpen] = React.useState(false)
   const dropdownRef = React.useRef<HTMLDivElement>(null)
 
@@ -61,7 +63,7 @@ function ZoomDropdown({
       <button
         onClick={() => setIsOpen(prev => !prev)}
         className="flex items-center gap-0.5 px-1 py-1 hover:bg-foreground/5 text-[13px] tabular-nums min-w-[4rem] justify-center transition-colors"
-        title="Zoom presets"
+        title={t('overlay.zoomPresets')}
       >
         {zoomPercent}%
       </button>
@@ -79,7 +81,7 @@ function ZoomDropdown({
             onClick={() => { onZoomToFit(); setIsOpen(false) }}
             className="flex items-center gap-2 w-full px-2.5 py-1.5 text-left text-[13px] rounded-[4px] hover:bg-foreground/[0.05] transition-colors"
           >
-            Zoom to Fit
+            {t('overlay.zoomToFit')}
           </button>
           <div className="h-px bg-foreground/5 my-1" />
           {zoomPresets.map(preset => (
@@ -116,6 +118,7 @@ export function ZoomControls({
   resetDisabled,
   className,
 }: ZoomControlsProps) {
+  const { t } = useTranslation()
   const zoomPercent = Math.round(scale * 100)
   const activePreset = zoomPresets.find(p => p === zoomPercent)
 
@@ -137,7 +140,7 @@ export function ZoomControls({
             'opacity-70 hover:opacity-100 transition-opacity',
             'disabled:opacity-30 disabled:cursor-not-allowed',
           )}
-          title="Zoom out (⌘−)"
+          title={t('overlay.zoomOut')}
         >
           <Minus className="w-3.5 h-3.5" />
         </button>
@@ -158,7 +161,7 @@ export function ZoomControls({
             'opacity-70 hover:opacity-100 transition-opacity',
             'disabled:opacity-30 disabled:cursor-not-allowed',
           )}
-          title="Zoom in (⌘+)"
+          title={t('overlay.zoomIn')}
         >
           <Plus className="w-3.5 h-3.5" />
         </button>
@@ -168,7 +171,7 @@ export function ZoomControls({
         onClick={onReset}
         disabled={resetDisabled}
         className={resetBtnClass}
-        title="Reset zoom (⌘0)"
+        title={t('overlay.zoomReset')}
       >
         <RotateCcw className="w-3.5 h-3.5" />
       </button>

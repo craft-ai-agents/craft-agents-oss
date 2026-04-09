@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { ShieldAlert, Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -33,6 +34,7 @@ export function AdminApprovalRequest({
   onCancel,
   unstyled = false,
 }: AdminApprovalRequestProps) {
+  const { t } = useTranslation()
   const [rememberChoice, setRememberChoice] = React.useState(false)
 
   const rememberForMinutes = request.rememberForMinutes ?? 10
@@ -54,7 +56,7 @@ export function AdminApprovalRequest({
         <div className="space-y-2 pb-1">
           <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
             <ShieldAlert className="h-3.5 w-3.5 text-info" />
-            <span>Admin approval required</span>
+            <span>{t('chat.adminApprovalRequired')}</span>
           </div>
           <div className="text-xs leading-[18px] text-muted-foreground">
             Installing <span className="font-medium text-foreground">{request.appName}</span> needs your Mac admin approval.

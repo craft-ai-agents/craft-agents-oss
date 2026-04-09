@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { ShieldAlert, Check, X, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -22,6 +23,7 @@ interface PermissionRequestProps {
  * - Action buttons: Allow, Always Allow, Deny
  */
 export function PermissionRequest({ request, onResponse, unstyled = false }: PermissionRequestProps) {
+  const { t } = useTranslation()
 
   const handleAllow = () => {
     onResponse({ type: 'permission', allowed: true, alwaysAllow: false })
@@ -50,7 +52,7 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
         <div className="space-y-2 pb-1">
           <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
             <ShieldAlert className="h-3.5 w-3.5 text-info" />
-            <span>Permission required</span>
+            <span>{t('chat.permissionRequired')}</span>
           </div>
           <div className="text-xs leading-[18px] text-muted-foreground">
             <span className="font-medium text-foreground">Tool:</span> {request.toolName}

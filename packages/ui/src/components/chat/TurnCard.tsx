@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { useMemo, useEffect, useRef, useCallback, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ToolDisplayMeta, AnnotationV1 } from '@craft-agent/core'
 import { normalizePath, pathStartsWith, stripPathPrefix } from '@craft-agent/core/utils'
 import { motion, AnimatePresence } from 'motion/react'
@@ -1430,6 +1431,7 @@ interface BranchDropdownProps {
 }
 
 function BranchDropdown({ onBranch }: BranchDropdownProps) {
+  const { t } = useTranslation()
   const handleBranchClick = () => {
     onBranch({ newPanel: true })
   }
@@ -1440,7 +1442,7 @@ function BranchDropdown({ onBranch }: BranchDropdownProps) {
         <button
           type="button"
           aria-label="Branch options"
-          title="Branch"
+          title={t('chat.branch')}
           className={cn(
             "p-1 rounded-[4px] transition-colors select-none",
             "text-muted-foreground hover:text-foreground hover:bg-foreground/5",
@@ -1663,6 +1665,7 @@ export function ResponseCard({
   openAnnotationRequest,
   annotationInteractionMode = 'interactive',
 }: ResponseCardProps) {
+  const { t } = useTranslation()
   // Throttled content for display - updates every CONTENT_THROTTLE_MS during streaming
   const [displayedText, setDisplayedText] = useState(text)
   const lastUpdateRef = useRef(Date.now())
@@ -2425,7 +2428,7 @@ export function ResponseCard({
               "text-muted-foreground/50 hover:text-foreground",
               "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100"
             )}
-            title="View Fullscreen"
+            title={t('common.viewFullscreen')}
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
@@ -2491,12 +2494,12 @@ export function ResponseCard({
                   {copied ? (
                     <>
                       <Check className={SIZE_CONFIG.iconSize} />
-                      <span>Copied!</span>
+                      <span>{t("common.copied")}</span>
                     </>
                   ) : (
                     <>
                       <Copy className={SIZE_CONFIG.iconSize} />
-                      <span>Copy</span>
+                      <span>{t("common.copy")}</span>
                     </>
                   )}
                 </button>
@@ -2530,8 +2533,8 @@ export function ResponseCard({
                     <AcceptPlanDropdown
                       onAccept={onAccept}
                       onAcceptWithCompact={onAcceptWithCompact}
-                      acceptLabel={hasActiveFollowUpAnnotations ? 'Accept & Send Follow-ups' : 'Accept Plan'}
-                      acceptOptionLabel={hasActiveFollowUpAnnotations ? 'Accept & Send Follow-ups' : 'Accept'}
+                      acceptLabel={hasActiveFollowUpAnnotations ? t('plan.acceptAndSendFollowups') : t('plan.acceptPlan')}
+                      acceptOptionLabel={hasActiveFollowUpAnnotations ? t('plan.acceptAndSendFollowups') : t('plan.accept')}
                     />
                   </div>
                 )}

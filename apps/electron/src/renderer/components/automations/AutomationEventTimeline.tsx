@@ -7,6 +7,7 @@
  */
 
 import { useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { CheckCircle2, XCircle, ShieldAlert, ChevronDown, Copy, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useNavigation } from '@/contexts/NavigationContext'
@@ -23,8 +24,8 @@ const statusConfig: Record<ExecutionStatus, { icon: React.ElementType; classes: 
   blocked: { icon: ShieldAlert,   classes: 'text-warning' },
 }
 
-function formatStatusCode(code: number): string {
-  if (code === 0) return 'No response'
+function formatStatusCode(code: number, t: (key: string) => string): string {
+  if (code === 0) return t('automations.noResponse')
   return String(code)
 }
 
@@ -44,6 +45,7 @@ export interface AutomationEventTimelineProps {
 }
 
 function CopyButton({ details }: { details: import('./types').WebhookDetails }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
 
   const handleCopy = useCallback((e: React.MouseEvent) => {
@@ -78,7 +80,7 @@ function CopyButton({ details }: { details: import('./types').WebhookDetails }) 
         copied ? 'text-success' : 'text-foreground/40 hover:text-foreground/60',
       )}
       onClick={handleCopy}
-      title="Copy payload"
+      title={t('automations.copyPayload')}
     >
       <Icon className="h-3 w-3" />
     </button>
@@ -86,13 +88,14 @@ function CopyButton({ details }: { details: import('./types').WebhookDetails }) 
 }
 
 export function AutomationEventTimeline({ entries, className, onReplay }: AutomationEventTimelineProps) {
+  const { t } = useTranslation()
   const { navigateToSession } = useNavigation()
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   if (entries.length === 0) {
     return (
       <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-        No activity yet.
+        {t('automations.noActivityYet')}
       </div>
     )
   }
@@ -144,7 +147,7 @@ export function AutomationEventTimeline({ entries, className, onReplay }: Automa
                   className="shrink-0 text-[11px] text-accent hover:underline cursor-pointer"
                   onClick={(e) => { e.stopPropagation(); navigateToSession(entry.sessionId!) }}
                 >
-                  Open session
+                  {t('automations.openSession')}
                 </button>
               )}
 
@@ -154,7 +157,7 @@ export function AutomationEventTimeline({ entries, className, onReplay }: Automa
                   className="shrink-0 text-[11px] text-accent hover:underline cursor-pointer"
                   onClick={(e) => { e.stopPropagation(); onReplay(entry.automationId, entry.event) }}
                 >
-                  Retry
+                  {t('automations.retry')}
                 </button>
               )}
 
@@ -174,35 +177,35 @@ export function AutomationEventTimeline({ entries, className, onReplay }: Automa
                   <CopyButton details={entry.webhookDetails} />
                 </div>
                 <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 pr-6">
-                  <span className="text-foreground/50">Method</span>
+                  <span className="text-foreground/50">{t('automations.webhookMethod')}</span>
                   <span className="font-mono text-foreground/80">{entry.webhookDetails.method}</span>
 
-                  <span className="text-foreground/50">URL</span>
+                  <span className="text-foreground/50">{t('automations.webhookUrl')}</span>
                   <span className="font-mono text-foreground/80 break-all">{entry.webhookDetails.url}</span>
 
-                  <span className="text-foreground/50">Status</span>
+                  <span className="text-foreground/50">{t('automations.webhookStatus')}</span>
                   <span className={cn(
                     'font-mono',
                     entry.webhookDetails.statusCode >= 200 && entry.webhookDetails.statusCode < 300
                       ? 'text-success'
                       : 'text-destructive',
                   )}>
-                    {formatStatusCode(entry.webhookDetails.statusCode)}
+                    {formatStatusCode(entry.webhookDetails.statusCode, t)}
                   </span>
 
-                  <span className="text-foreground/50">Duration</span>
+                  <span className="text-foreground/50">{t('automations.webhookDuration')}</span>
                   <span className="font-mono text-foreground/80">{formatDuration(entry.webhookDetails.durationMs)}</span>
 
                   {entry.webhookDetails.attempts && entry.webhookDetails.attempts > 1 && (
                     <>
-                      <span className="text-foreground/50">Attempts</span>
+                      <span className="text-foreground/50">{t('automations.webhookAttempts')}</span>
                       <span className="font-mono text-foreground/80">{entry.webhookDetails.attempts}</span>
                     </>
                   )}
 
                   {entry.webhookDetails.error && (
                     <>
-                      <span className="text-foreground/50">Error</span>
+                      <span className="text-foreground/50">{t('automations.webhookError')}</span>
                       <span className="font-mono text-destructive">{entry.webhookDetails.error}</span>
                     </>
                   )}
@@ -210,7 +213,7 @@ export function AutomationEventTimeline({ entries, className, onReplay }: Automa
 
                 {entry.webhookDetails.responseBody && (
                   <div className="mt-2 pt-2 border-t border-border/30">
-                    <span className="text-foreground/50">Response</span>
+                    <span className="text-foreground/50">{t('automations.webhookResponse')}</span>
                     <pre className="mt-1 max-h-24 overflow-auto rounded bg-foreground/[0.04] p-2 font-mono text-[11px] text-foreground/70 whitespace-pre-wrap break-all">
                       {entry.webhookDetails.responseBody}
                     </pre>

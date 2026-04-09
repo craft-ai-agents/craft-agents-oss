@@ -62,6 +62,9 @@ export interface ModelDefinition {
   shortName: string;
   /** Brief description of the model's strengths */
   description: string;
+  /** Translation key for the description (for built-in static models only).
+   *  UI should resolve: t(descriptionKey) if set, otherwise fall back to description. */
+  descriptionKey?: string;
   /** Provider that offers this model */
   provider: ModelProvider;
   /** Maximum context window in tokens */
@@ -87,6 +90,7 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
     name: 'Opus 4.6',
     shortName: 'Opus',
     description: 'Most capable for complex work',
+    descriptionKey: 'model.opusDesc',
     provider: 'anthropic',
     contextWindow: 1_000_000,
   },
@@ -95,6 +99,7 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
     name: 'Sonnet 4.6',
     shortName: 'Sonnet',
     description: 'Best for everyday tasks',
+    descriptionKey: 'model.sonnetDesc',
     provider: 'anthropic',
     contextWindow: 200_000,
   },
@@ -103,6 +108,7 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
     name: 'Haiku 4.5',
     shortName: 'Haiku',
     description: 'Fastest for quick answers',
+    descriptionKey: 'model.haikuDesc',
     provider: 'anthropic',
     contextWindow: 200_000,
   },

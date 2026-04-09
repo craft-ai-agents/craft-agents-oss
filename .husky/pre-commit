@@ -1,3 +1,4 @@
 #!/bin/sh
 set -e
 bun run typecheck:staged
+bun run lint:i18n:staged

@@ -6,6 +6,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { AlertCircle } from 'lucide-react'
 import { PanelHeader, type PanelHeaderProps } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -50,6 +51,7 @@ function Info_PageRoot({
   empty,
   className,
 }: Info_PageProps) {
+  const { t } = useTranslation()
   // Extract header from children for consistent structure
   let header: React.ReactNode = null
   const otherChildren: React.ReactNode[] = []
@@ -81,7 +83,7 @@ function Info_PageRoot({
         {header}
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground p-4">
           <AlertCircle className="h-10 w-10 text-destructive" />
-          <p className="text-sm font-medium">Error loading content</p>
+          <p className="text-sm font-medium">{t('common.errorLoadingContent')}</p>
           <p className="text-xs text-center max-w-md">{error}</p>
         </div>
       </div>

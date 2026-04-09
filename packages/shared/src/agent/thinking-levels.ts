@@ -19,23 +19,24 @@ export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'max';
 
 export interface ThinkingLevelDefinition {
   id: ThinkingLevel;
-  name: string;
-  description: string;
+  /** Translation key for the display name (resolve with t() at render site) */
+  nameKey: string;
+  /** Translation key for the description (resolve with t() at render site) */
+  descriptionKey: string;
 }
 
 /**
  * Available thinking levels with display metadata.
  * Used in UI dropdowns and for validation.
  *
- * Labels are user-facing and should be consistent across all UI surfaces
- * (model dropdown, workspace settings, etc.)
+ * Labels use translation keys — resolve with t(level.nameKey) in components.
  */
 export const THINKING_LEVELS: readonly ThinkingLevelDefinition[] = [
-  { id: 'off', name: 'No Thinking', description: 'Fastest responses, no reasoning' },
-  { id: 'low', name: 'Low', description: 'Light reasoning, faster responses' },
-  { id: 'medium', name: 'Medium', description: 'Balanced speed and reasoning' },
-  { id: 'high', name: 'High', description: 'Deep reasoning for complex tasks' },
-  { id: 'max', name: 'Max', description: 'Maximum effort reasoning' },
+  { id: 'off', nameKey: 'thinking.off', descriptionKey: 'thinking.offDesc' },
+  { id: 'low', nameKey: 'thinking.low', descriptionKey: 'thinking.lowDesc' },
+  { id: 'medium', nameKey: 'thinking.medium', descriptionKey: 'thinking.mediumDesc' },
+  { id: 'high', nameKey: 'thinking.high', descriptionKey: 'thinking.highDesc' },
+  { id: 'max', nameKey: 'thinking.max', descriptionKey: 'thinking.maxDesc' },
 ] as const;
 
 /** Default thinking level for new sessions when workspace has no default */
@@ -95,11 +96,12 @@ export function getThinkingTokens(level: ThinkingLevel, modelId: string): number
 }
 
 /**
- * Get display name for a thinking level.
+ * Get the translation key for a thinking level's display name.
+ * Resolve with t() or i18n.t() at the call site.
  */
-export function getThinkingLevelName(level: ThinkingLevel): string {
+export function getThinkingLevelNameKey(level: ThinkingLevel): string {
   const def = THINKING_LEVELS.find((l) => l.id === level);
-  return def?.name ?? level;
+  return def?.nameKey ?? `thinking.${level}`;
 }
 
 /**

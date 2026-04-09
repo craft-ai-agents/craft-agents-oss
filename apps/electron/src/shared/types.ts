@@ -636,6 +636,9 @@ export interface ElectronAPI {
   // Automations change listener
   onAutomationsChanged(callback: (workspaceId: string) => void): () => void
 
+  // Language
+  changeLanguage(lang: string): Promise<void>
+
   // Resources (cross-workspace export/import)
   exportResources(workspaceId: string, options: ExportResourcesOptions): Promise<ExportResult>
   importResources(workspaceId: string, bundle: ResourceBundle, mode: ResourceImportMode): Promise<ResourceImportResult>

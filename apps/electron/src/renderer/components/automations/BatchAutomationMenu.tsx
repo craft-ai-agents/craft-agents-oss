@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAtomValue } from 'jotai'
 import { Power, PowerOff, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -24,6 +25,7 @@ const {
 } = automationSelection
 
 export function BatchAutomationMenu() {
+  const { t } = useTranslation()
   const { MenuItem, Separator } = useMenuComponents()
 
   const selectedIds = useAutomationSelectedIds()
@@ -60,8 +62,11 @@ export function BatchAutomationMenu() {
         targetEnabled,
       ).catch(() => {})
     }
-    toast(`${count} ${count === 1 ? 'automation' : 'automations'} ${targetEnabled ? 'enabled' : 'disabled'}`)
-  }, [activeWorkspaceId, selectedAutomations, allEnabled, clearMultiSelect])
+    toast(targetEnabled
+      ? t('automations.batchEnabled', { count })
+      : t('automations.batchDisabled', { count })
+    )
+  }, [activeWorkspaceId, selectedAutomations, allEnabled, clearMultiSelect, t])
 
   // Batch delete — sequential IPC in reverse matcherIndex order so earlier indices stay valid
   const handleBatchDelete = useCallback(async () => {
@@ -76,8 +81,8 @@ export function BatchAutomationMenu() {
         a.matcherIndex,
       ).catch(() => {})
     }
-    toast(`${count} ${count === 1 ? 'automation' : 'automations'} deleted`)
-  }, [activeWorkspaceId, selectedIds.size, selectedAutomations, clearMultiSelect])
+    toast(t('automations.batchDeleted', { count }))
+  }, [activeWorkspaceId, selectedIds.size, selectedAutomations, clearMultiSelect, t])
 
   const count = selectedIds.size
 
@@ -85,7 +90,7 @@ export function BatchAutomationMenu() {
     <>
       {/* Header showing selection count */}
       <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium">
-        {count} {count === 1 ? 'automation' : 'automations'} selected
+        {t('automations.batchSelected', { count })}
       </div>
       <Separator />
 
@@ -96,7 +101,7 @@ export function BatchAutomationMenu() {
         ) : (
           <Power className="h-3.5 w-3.5" />
         )}
-        <span className="flex-1">{allEnabled ? 'Disable All' : 'Enable All'}</span>
+        <span className="flex-1">{allEnabled ? t('automations.menuDisableAll') : t('automations.menuEnableAll')}</span>
       </MenuItem>
 
       <Separator />
@@ -105,7 +110,7 @@ export function BatchAutomationMenu() {
       {activeWorkspaceId && (
         <MenuItem onClick={handleBatchDelete} variant="destructive">
           <Trash2 className="h-3.5 w-3.5" />
-          <span className="flex-1">Delete</span>
+          <span className="flex-1">{t('automations.menuDelete')}</span>
         </MenuItem>
       )}
     </>

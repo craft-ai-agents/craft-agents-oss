@@ -10,6 +10,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { useCallback, useMemo } from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { Archive, Flag, FlagOff, Trash2, Tag, Send } from 'lucide-react'
@@ -29,6 +30,7 @@ export interface BatchSessionMenuProps {
 }
 
 export function BatchSessionMenu({ onSendToWorkspace }: BatchSessionMenuProps = {}) {
+  const { t } = useTranslation()
   const { MenuItem, Separator, Sub, SubTrigger, SubContent } = useMenuComponents()
 
   const selectedIds = useSelectedIds()
@@ -202,7 +204,7 @@ export function BatchSessionMenu({ onSendToWorkspace }: BatchSessionMenuProps = 
         <Sub>
           <SubTrigger className="pr-2">
             <Tag className="h-3.5 w-3.5" />
-            <span className="flex-1">Labels</span>
+            <span className="flex-1">{t("sidebar.labels")}</span>
           </SubTrigger>
           <SubContent>
             <LabelMenuItems

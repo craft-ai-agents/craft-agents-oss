@@ -15,6 +15,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
 import { File, Folder, FolderOpen, FileText, Image, FileCode, ChevronRight, ExternalLink } from 'lucide-react'
@@ -263,6 +264,7 @@ function FileTreeItem({
   onRevealInFileManager,
   isNested,
 }: FileTreeItemProps) {
+  const { t } = useTranslation()
   const isDirectory = file.type === 'directory'
   const isExpanded = expandedPaths.has(file.path)
   const hasChildren = isDirectory && file.children && file.children.length > 0
@@ -350,7 +352,7 @@ function FileTreeItem({
           {file.type !== 'directory' && (
             <StyledContextMenuItem onSelect={() => onFileClick(file)}>
               <ExternalLink className="h-3.5 w-3.5" />
-              Open
+              {t("chat.openFile")}
             </StyledContextMenuItem>
           )}
           {/* Show in file manager */}
@@ -358,7 +360,7 @@ function FileTreeItem({
             onSelect={() => onRevealInFileManager(file.path)}
           >
             <FolderOpen className="h-3.5 w-3.5" />
-            {`Show in ${fileManagerName}`}
+            {t("chat.showInFileManager", { fileManager: fileManagerName })}
           </StyledContextMenuItem>
         </StyledContextMenuContent>
       </ContextMenu>
@@ -419,6 +421,7 @@ function FileTreeItem({
  * Section displaying session files as a tree
  */
 export function SessionFilesSection({ sessionId, className, sessionFolderPath, hideHeader = false }: SessionFilesSectionProps) {
+  const { t } = useTranslation()
   const [files, setFiles] = useState<SessionFile[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
@@ -573,14 +576,14 @@ export function SessionFilesSection({ sessionId, className, sessionFolderPath, h
       {/* Header - matches sidebar styling with select-none, extra top padding for visual balance */}
       {!hideHeader && (
         <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0 select-none">
-          <span className="text-xs font-medium text-muted-foreground">Session Files</span>
+          <span className="text-xs font-medium text-muted-foreground">{t("chat.sessionFiles")}</span>
           {sessionFolderPath && (
             <button
               type="button"
               onClick={() => window.electronAPI.showInFolder(sessionFolderPath)}
               className="text-xs text-foreground/50 hover:text-foreground/80 hover:underline underline-offset-2 transition-colors"
             >
-              {`View in ${fileManagerName}`}
+              {t("chat.viewInFileManager", { fileManager: fileManagerName })}
             </button>
           )}
         </div>

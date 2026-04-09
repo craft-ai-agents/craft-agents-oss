@@ -45,6 +45,7 @@ import {
   StyledDropdownMenuSubTrigger,
   StyledDropdownMenuSubContent,
 } from '../ui/StyledDropdown'
+import { useTranslation } from 'react-i18next'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -293,6 +294,7 @@ export interface MarkdownDatatableBlockProps {
 }
 
 export function MarkdownDatatableBlock({ code, className }: MarkdownDatatableBlockProps) {
+  const { t } = useTranslation()
   const { onReadFile } = usePlatform()
 
   // Parse the inline JSON spec (may have src field for file-backed data)
@@ -550,7 +552,7 @@ export function MarkdownDatatableBlock({ code, className }: MarkdownDatatableBlo
                 : 'opacity-0 group-hover:opacity-100 text-muted-foreground/50 hover:text-foreground',
             'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100',
           )}
-          title="Table Controls"
+          title={t('table.tableControls')}
         >
           <ListFilter className="w-3.5 h-3.5" />
         </button>
@@ -678,7 +680,7 @@ export function MarkdownDatatableBlock({ code, className }: MarkdownDatatableBlo
             "text-muted-foreground/50 hover:text-foreground",
             "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100"
           )}
-          title="View Fullscreen"
+          title={t('common.viewFullscreen')}
         >
           <Maximize2 className="w-3.5 h-3.5" />
         </button>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react"
+import { useTranslation } from "react-i18next"
 import { ArrowLeft, CheckCircle, XCircle, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { slugify } from "@/lib/slugify"
@@ -64,6 +65,7 @@ export function AddWorkspaceStep_ConnectRemote({
   reconnectWorkspace,
   onUpdate,
 }: AddWorkspaceStep_ConnectRemoteProps) {
+  const { t } = useTranslation()
   const isReconnectMode = !!reconnectWorkspace
   const [serverUrl, setServerUrl] = useState(initialUrl ?? '')
   const [token, setToken] = useState(initialToken ?? '')
@@ -199,7 +201,7 @@ export function AddWorkspaceStep_ConnectRemote({
       </button>
 
       <AddWorkspaceStepHeader
-        title={isReconnectMode ? `Reconnect "${reconnectWorkspace!.name}"` : "Connect to remote server"}
+        title={isReconnectMode ? t("workspace.reconnect", { name: reconnectWorkspace!.name }) : "Connect to remote server"}
         description={isReconnectMode
           ? "Update the server URL or token to restore the connection."
           : "Connect to a remote Craft Agent Server for this workspace."}
@@ -233,7 +235,7 @@ export function AddWorkspaceStep_ConnectRemote({
               type="password"
               value={token}
               onChange={(e) => setToken(e.target.value)}
-              placeholder="Server authentication token"
+              placeholder={t("workspace.serverAuthToken")}
               disabled={isCreating}
               className="border-0 bg-transparent shadow-none"
             />
@@ -272,7 +274,7 @@ export function AddWorkspaceStep_ConnectRemote({
         {testState === 'ok' && !serverVersion && (
           <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-xs text-yellow-700 dark:text-yellow-400">
             <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            <span>This server is running an older version. Some features like remote directory browsing may not work correctly. Update the server for full functionality.</span>
+            <span>{t("workspace.olderServerWarning")}</span>
           </div>
         )}
 
@@ -292,7 +294,7 @@ export function AddWorkspaceStep_ConnectRemote({
                 disabled={isCreating}
               >
                 <SelectTrigger className="border-0 bg-transparent shadow-none">
-                  <SelectValue placeholder="Select a workspace..." />
+                  <SelectValue placeholder={t("workspace.selectWorkspacePlaceholder")} />
                 </SelectTrigger>
                 <SelectContent container={selectPortalRef.current}>
                   {remoteWorkspaces.map(ws => (
@@ -325,7 +327,7 @@ export function AddWorkspaceStep_ConnectRemote({
               <Input
                 value={newWorkspaceName}
                 onChange={(e) => setNewWorkspaceName(e.target.value)}
-                placeholder="My Remote Workspace"
+                placeholder={t("workspace.myRemoteWorkspace")}
                 disabled={isCreating}
                 className="border-0 bg-transparent shadow-none"
               />

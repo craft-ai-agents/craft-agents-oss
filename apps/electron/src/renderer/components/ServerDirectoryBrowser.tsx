@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Dialog,
   DialogContent,
@@ -45,6 +46,7 @@ export function ServerDirectoryBrowser({
   initialPath,
 }: ServerDirectoryBrowserProps) {
   useRegisterModal(open, onCancel)
+  const { t } = useTranslation()
 
   const [listing, setListing] = useState<DirectoryListingResult | null>(null)
   const [loading, setLoading] = useState(false)
@@ -188,7 +190,7 @@ export function ServerDirectoryBrowser({
           onKeyDown={e => {
             if (e.key === 'Enter') handlePathSubmit()
           }}
-          placeholder="Enter path..."
+          placeholder={t("common.enterPath")}
           className="flex-1 font-mono text-xs"
         />
         <Button variant="outline" size="sm" onClick={handlePathSubmit} disabled={loading}>
@@ -291,7 +293,7 @@ export function ServerDirectoryBrowser({
     <Dialog open={open} onOpenChange={isOpen => { if (!isOpen) onCancel() }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Select Server Directory</DialogTitle>
+          <DialogTitle>{t("settings.server.selectDirectory")}</DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-col gap-2">

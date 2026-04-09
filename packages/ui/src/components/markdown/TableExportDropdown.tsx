@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Check, ChevronDown, Copy, Download, FileText } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import {
@@ -23,6 +24,7 @@ export interface TableExportDropdownProps {
 }
 
 export function TableExportDropdown({ columns, rows, filename }: TableExportDropdownProps) {
+  const { t } = useTranslation()
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null)
 
   const handleExport = useCallback(async (format: 'markdown' | 'csv' | 'xlsx') => {
@@ -50,7 +52,7 @@ export function TableExportDropdown({ columns, rows, filename }: TableExportDrop
             'opacity-70 hover:opacity-100 transition-opacity',
             'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
           )}
-          title="Export table"
+          title={t('table.exportTable')}
         >
           <Copy className="w-4 h-4" />
           <ChevronDown className="w-3 h-3" />
@@ -59,15 +61,15 @@ export function TableExportDropdown({ columns, rows, filename }: TableExportDrop
       <StyledDropdownMenuContent sideOffset={6} align="end" style={{ zIndex: 'var(--z-floating-menu, 400)' }}>
         <StyledDropdownMenuItem onSelect={() => handleExport('markdown')}>
           {copiedFormat === 'markdown' ? <Check className="text-success" /> : <FileText />}
-          Copy as Markdown
+          {t('table.copyAsMarkdown')}
         </StyledDropdownMenuItem>
         <StyledDropdownMenuItem onSelect={() => handleExport('csv')}>
           {copiedFormat === 'csv' ? <Check className="text-success" /> : <FileText />}
-          Copy as CSV
+          {t('table.copyAsCsv')}
         </StyledDropdownMenuItem>
         <StyledDropdownMenuItem onSelect={() => handleExport('xlsx')}>
           <Download />
-          Download as XLSX
+          {t('table.downloadAsXlsx')}
         </StyledDropdownMenuItem>
       </StyledDropdownMenuContent>
     </DropdownMenu>

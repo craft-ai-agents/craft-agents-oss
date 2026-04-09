@@ -7,6 +7,7 @@
  * macOS: offset left to avoid stoplight controls.
  */
 
+import { useTranslation } from "react-i18next"
 import * as Icons from "lucide-react"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@craft-agent/ui"
 import { CraftAgentsSymbol } from "../icons/CraftAgentsSymbol"
@@ -74,7 +75,8 @@ function getIcon(name: string): React.ComponentType<{ className?: string }> | nu
 function renderMenuItem(
   item: MenuItem,
   index: number,
-  actionHandlers: MenuActionHandlers
+  actionHandlers: MenuActionHandlers,
+  t: (key: string) => string
 ): React.ReactNode {
   if (item.type === 'separator') {
     return <StyledDropdownMenuSeparator key={`sep-${index}`} />
@@ -91,7 +93,7 @@ function renderMenuItem(
     return (
       <StyledDropdownMenuItem key={item.role} onClick={safeHandler}>
         {Icon && <Icon className="h-3.5 w-3.5" />}
-        {item.label}
+        {t(item.labelKey)}
         {shortcut && <DropdownMenuShortcut className="pl-6">{shortcut}</DropdownMenuShortcut>}
       </StyledDropdownMenuItem>
     )
@@ -106,7 +108,7 @@ function renderMenuItem(
     return (
       <StyledDropdownMenuItem key={item.id} onClick={handler}>
         {Icon && <Icon className="h-3.5 w-3.5" />}
-        {item.label}
+        {t(item.labelKey)}
         {shortcut && <DropdownMenuShortcut className="pl-6">{shortcut}</DropdownMenuShortcut>}
       </StyledDropdownMenuItem>
     )
@@ -117,17 +119,18 @@ function renderMenuItem(
 
 function renderMenuSection(
   section: MenuSection,
-  actionHandlers: MenuActionHandlers
+  actionHandlers: MenuActionHandlers,
+  t: (key: string) => string
 ): React.ReactNode {
   const Icon = getIcon(section.icon)
   return (
     <DropdownMenuSub key={section.id}>
       <StyledDropdownMenuSubTrigger>
         {Icon && <Icon className="h-3.5 w-3.5" />}
-        {section.label}
+        {t(section.labelKey)}
       </StyledDropdownMenuSubTrigger>
       <StyledDropdownMenuSubContent>
-        {section.items.map((item, index) => renderMenuItem(item, index, actionHandlers))}
+        {section.items.map((item, index) => renderMenuItem(item, index, actionHandlers, t))}
       </StyledDropdownMenuSubContent>
     </DropdownMenuSub>
   )
@@ -185,6 +188,7 @@ export function TopBar({
   onAddBrowserPanel,
   isCompact,
 }: TopBarProps) {
+  const { t } = useTranslation()
   const [isDebugMode, setIsDebugMode] = useState(false)
   const [maxVisibleBrowserBadges, setMaxVisibleBrowserBadges] = useState(3)
   const rightSlotRef = useRef<HTMLDivElement | null>(null)
@@ -256,7 +260,7 @@ export function TopBar({
               <PanelLeftRounded className="h-[18px] w-[18px] text-foreground/70" />
             </TopBarButton>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Toggle Sidebar</TooltipContent>
+          <TooltipContent side="bottom">{t("menu.toggleSidebar")}</TooltipContent>
         </Tooltip>
         )}
 
@@ -270,34 +274,34 @@ export function TopBar({
           <StyledDropdownMenuContent align="start" minWidth="min-w-48">
             <StyledDropdownMenuItem onClick={onNewChat}>
               <SquarePenRounded className="h-3.5 w-3.5" />
-              New Chat
+              {t("menu.newChat")}
               {newChatHotkey && <DropdownMenuShortcut className="pl-6">{newChatHotkey}</DropdownMenuShortcut>}
             </StyledDropdownMenuItem>
             {onNewWindow && (
               <StyledDropdownMenuItem onClick={onNewWindow}>
                 <Icons.AppWindow className="h-3.5 w-3.5" />
-                New Window
+                {t("menu.newWindow")}
                 {newWindowHotkey && <DropdownMenuShortcut className="pl-6">{newWindowHotkey}</DropdownMenuShortcut>}
               </StyledDropdownMenuItem>
             )}
 
             <StyledDropdownMenuSeparator />
 
-            {renderMenuSection(EDIT_MENU, actionHandlers)}
-            {renderMenuSection(VIEW_MENU, actionHandlers)}
-            {renderMenuSection(WINDOW_MENU, actionHandlers)}
+            {renderMenuSection(EDIT_MENU, actionHandlers, t)}
+            {renderMenuSection(VIEW_MENU, actionHandlers, t)}
+            {renderMenuSection(WINDOW_MENU, actionHandlers, t)}
 
             <StyledDropdownMenuSeparator />
 
             <DropdownMenuSub>
               <StyledDropdownMenuSubTrigger>
                 <Icons.Settings className="h-3.5 w-3.5" />
-                Settings
+                {t("sidebar.settings")}
               </StyledDropdownMenuSubTrigger>
               <StyledDropdownMenuSubContent>
                 <StyledDropdownMenuItem onClick={onOpenSettings}>
                   <Icons.Settings className="h-3.5 w-3.5" />
-                  Settings...
+                  {t("menu.settings")}
                   {settingsHotkey && <DropdownMenuShortcut className="pl-6">{settingsHotkey}</DropdownMenuShortcut>}
                 </StyledDropdownMenuItem>
                 <StyledDropdownMenuSeparator />
@@ -309,7 +313,7 @@ export function TopBar({
                       onClick={() => onOpenSettingsSubpage(item.id)}
                     >
                       <Icon className="h-3.5 w-3.5" />
-                      {item.label}
+                      {t(item.labelKey)}
                     </StyledDropdownMenuItem>
                   )
                 })}
@@ -319,17 +323,17 @@ export function TopBar({
             <DropdownMenuSub>
               <StyledDropdownMenuSubTrigger>
                 <Icons.HelpCircle className="h-3.5 w-3.5" />
-                Help
+                {t("menu.help")}
               </StyledDropdownMenuSubTrigger>
               <StyledDropdownMenuSubContent>
                 <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}>
                   <Icons.HelpCircle className="h-3.5 w-3.5" />
-                  Help & Documentation
+                  {t("menu.helpAndDocs")}
                   <Icons.ExternalLink className="h-3 w-3 ml-auto text-muted-foreground" />
                 </StyledDropdownMenuItem>
                 <StyledDropdownMenuItem onClick={onOpenKeyboardShortcuts}>
                   <Icons.Keyboard className="h-3.5 w-3.5" />
-                  Keyboard Shortcuts
+                  {t("menu.keyboardShortcuts")}
                   {keyboardShortcutsHotkey && <DropdownMenuShortcut className="pl-6">{keyboardShortcutsHotkey}</DropdownMenuShortcut>}
                 </StyledDropdownMenuItem>
               </StyledDropdownMenuSubContent>
@@ -366,7 +370,7 @@ export function TopBar({
 
             <StyledDropdownMenuItem onClick={() => window.electronAPI.menuQuit()}>
               <Icons.LogOut className="h-3.5 w-3.5" />
-              Quit Craft Agents
+              {t("menu.quitCraftAgents")}
               {quitHotkey && <DropdownMenuShortcut className="pl-6">{quitHotkey}</DropdownMenuShortcut>}
             </StyledDropdownMenuItem>
           </StyledDropdownMenuContent>
@@ -422,7 +426,7 @@ export function TopBar({
           <StyledDropdownMenuContent align="end" minWidth="min-w-56">
             <StyledDropdownMenuItem onClick={onAddSessionPanel}>
               <SquarePenRounded className="h-3.5 w-3.5" />
-              New Session in Panel
+              {t("session.newSessionInPanel")}
             </StyledDropdownMenuItem>
             <StyledDropdownMenuItem onClick={onAddBrowserPanel}>
               <Icons.Globe className="h-3.5 w-3.5" />
@@ -451,7 +455,7 @@ export function TopBar({
             </StyledDropdownMenuItem>
             <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('statuses'))}>
               <Icons.CheckCircle2 className="h-3.5 w-3.5" />
-              <span className="flex-1">Statuses</span>
+              <span className="flex-1">{t("sidebar.statuses")}</span>
               <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
             </StyledDropdownMenuItem>
             <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('permissions'))}>

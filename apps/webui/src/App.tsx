@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createWebApi } from './adapter/web-api'
 import type { WsRpcClient } from '../../electron/src/transport/client'
 
@@ -20,25 +21,29 @@ const ElectronApp = lazy(() => import('@/App'))
 type Phase = 'loading' | 'error' | 'ready'
 
 function LoadingScreen() {
+  const { t } = useTranslation()
+
   return (
     <div className="flex flex-col items-center justify-center h-screen font-sans text-foreground/50 gap-3">
       <div className="animate-spin w-6 h-6 border-2 border-current border-t-transparent rounded-full" />
-      <p className="text-[13px]">Connecting to server...</p>
+      <p className="text-[13px]">{t("webui.connectingToServer")}</p>
     </div>
   )
 }
 
 function ErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useTranslation()
+
   return (
     <div className="flex flex-col items-center justify-center h-screen font-sans text-foreground/50 gap-3">
-      <p className="text-base font-medium text-destructive">Connection Failed</p>
+      <p className="text-base font-medium text-destructive">{t("webui.connectionFailed")}</p>
       <p className="text-[13px] max-w-md text-center">{message}</p>
       <div className="flex gap-2 mt-2">
         <button
           onClick={onRetry}
           className="px-4 py-1.5 rounded-md bg-background shadow-minimal text-[13px] text-foreground/70 cursor-pointer"
         >
-          Retry
+          {t("common.retry")}
         </button>
         <button
           onClick={() => {
@@ -48,7 +53,7 @@ function ErrorScreen({ message, onRetry }: { message: string; onRetry: () => voi
           }}
           className="px-4 py-1.5 rounded-md bg-background shadow-minimal text-[13px] text-foreground/70 cursor-pointer"
         >
-          Log Out
+          {t("webui.logOut")}
         </button>
       </div>
     </div>

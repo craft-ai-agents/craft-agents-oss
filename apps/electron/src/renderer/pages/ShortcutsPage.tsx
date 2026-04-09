@@ -5,6 +5,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -24,39 +25,42 @@ interface ShortcutSection {
 }
 
 // Component-specific shortcuts that aren't in the centralized registry
-const componentSpecificSections: ShortcutSection[] = [
-  {
-    title: 'List Navigation',
-    shortcuts: [
-      { keys: ['↑', '↓'], description: 'Navigate items in list' },
-      { keys: ['Home'], description: 'Go to first item' },
-      { keys: ['End'], description: 'Go to last item' },
-    ],
-  },
-  {
-    title: 'Session List',
-    shortcuts: [
-      { keys: ['Enter'], description: 'Focus chat input' },
-      { keys: ['Right-click'], description: 'Open context menu' },
-      { keys: [isMac ? '⌥' : 'Alt', 'Click'], description: 'Add filter as excluded' },
-    ],
-  },
-  {
-    title: 'Agent Tree',
-    shortcuts: [
-      { keys: ['←'], description: 'Collapse folder' },
-      { keys: ['→'], description: 'Expand folder' },
-    ],
-  },
-  {
-    title: 'Chat Input',
-    shortcuts: [
-      { keys: ['Enter'], description: 'Send message' },
-      { keys: ['Shift', 'Enter'], description: 'New line' },
-      { keys: ['Esc'], description: 'Close dialog / blur input' },
-    ],
-  },
-]
+function useComponentSpecificSections(): ShortcutSection[] {
+  const { t } = useTranslation()
+  return [
+    {
+      title: t('shortcuts.listNavigation'),
+      shortcuts: [
+        { keys: ['↑', '↓'], description: t('shortcuts.navigateItems') },
+        { keys: ['Home'], description: t('shortcuts.goToFirst') },
+        { keys: ['End'], description: t('shortcuts.goToLast') },
+      ],
+    },
+    {
+      title: t('shortcuts.sessionList'),
+      shortcuts: [
+        { keys: ['Enter'], description: t('shortcuts.focusChatInput') },
+        { keys: ['Right-click'], description: t('shortcuts.openContextMenu') },
+        { keys: [isMac ? '⌥' : 'Alt', 'Click'], description: t('shortcuts.addFilterExcluded') },
+      ],
+    },
+    {
+      title: t('shortcuts.agentTree'),
+      shortcuts: [
+        { keys: ['←'], description: t('shortcuts.collapseFolder') },
+        { keys: ['→'], description: t('shortcuts.expandFolder') },
+      ],
+    },
+    {
+      title: t('shortcuts.chatInput'),
+      shortcuts: [
+        { keys: ['Enter'], description: t('shortcuts.sendMessage') },
+        { keys: ['Shift', 'Enter'], description: t('shortcuts.newLine') },
+        { keys: ['Esc'], description: t('shortcuts.closeDialogBlur') },
+      ],
+    },
+  ]
+}
 
 function Kbd({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
@@ -95,9 +99,12 @@ function ActionShortcutRow({ actionId }: { actionId: ActionId }) {
 }
 
 export default function ShortcutsPage() {
+  const { t } = useTranslation()
+  const componentSpecificSections = useComponentSpecificSections()
+
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Shortcuts" actions={<HeaderMenu route={routes.view.settings('shortcuts')} />} />
+      <PanelHeader title={t("shortcuts.title")} actions={<HeaderMenu route={routes.view.settings('shortcuts')} />} />
       <Separator />
       <ScrollArea className="flex-1">
         <div className="px-5 py-4">

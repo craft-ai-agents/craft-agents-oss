@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { Key, Monitor } from "lucide-react"
 import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
@@ -20,38 +21,13 @@ interface ProviderOption {
   icon: React.ReactNode
 }
 
-const PROVIDER_OPTIONS: ProviderOption[] = [
-  {
-    id: 'claude',
-    name: 'Claude Pro / Max',
-    description: 'Use your Anthropic subscription.',
-    icon: <img src={claudeIcon} alt="" className="size-5 rounded-[3px]" />,
-  },
-  {
-    id: 'chatgpt',
-    name: 'Codex · ChatGPT Plus',
-    description: 'Use your ChatGPT Plus or Pro subscription.',
-    icon: <img src={openaiIcon} alt="" className="size-5 rounded-[3px]" />,
-  },
-  {
-    id: 'copilot',
-    name: 'GitHub Copilot',
-    description: 'Use your GitHub Copilot subscription.',
-    icon: <img src={copilotIcon} alt="" className="size-5 rounded-[3px]" />,
-  },
-  {
-    id: 'api_key',
-    name: 'I use other provider',
-    description: 'Anthropic, AWS Bedrock, OpenRouter, Google or any compatible provider.',
-    icon: <Key className="size-5" />,
-  },
-  {
-    id: 'local',
-    name: 'Local model',
-    description: 'Run models locally with Ollama.',
-    icon: <Monitor className="size-5" />,
-  },
-]
+const PROVIDER_ICONS: Record<ProviderChoice, React.ReactNode> = {
+  claude: <img src={claudeIcon} alt="" className="size-5 rounded-[3px]" />,
+  chatgpt: <img src={openaiIcon} alt="" className="size-5 rounded-[3px]" />,
+  copilot: <img src={copilotIcon} alt="" className="size-5 rounded-[3px]" />,
+  api_key: <Key className="size-5" />,
+  local: <Monitor className="size-5" />,
+}
 
 interface ProviderSelectStepProps {
   /** Called when the user selects a provider */
@@ -67,6 +43,41 @@ interface ProviderSelectStepProps {
  * Selecting a card immediately advances to the next step.
  */
 export function ProviderSelectStep({ onSelect, onSkip }: ProviderSelectStepProps) {
+  const { t } = useTranslation()
+
+  const PROVIDER_OPTIONS: ProviderOption[] = [
+    {
+      id: 'claude',
+      name: t("onboarding.providerSelect.claudeProMax"),
+      description: t("onboarding.providerSelect.claudeProMaxDesc"),
+      icon: PROVIDER_ICONS.claude,
+    },
+    {
+      id: 'chatgpt',
+      name: t("onboarding.providerSelect.codexChatGPT"),
+      description: t("onboarding.providerSelect.codexChatGPTDesc"),
+      icon: PROVIDER_ICONS.chatgpt,
+    },
+    {
+      id: 'copilot',
+      name: t("onboarding.providerSelect.githubCopilot"),
+      description: t("onboarding.providerSelect.githubCopilotDesc"),
+      icon: PROVIDER_ICONS.copilot,
+    },
+    {
+      id: 'api_key',
+      name: t("onboarding.providerSelect.otherProvider"),
+      description: 'Anthropic, AWS Bedrock, OpenRouter, Google or any compatible provider.',
+      icon: PROVIDER_ICONS.api_key,
+    },
+    {
+      id: 'local',
+      name: t("onboarding.providerSelect.localModel"),
+      description: 'Run models locally with Ollama.',
+      icon: PROVIDER_ICONS.local,
+    },
+  ]
+
   return (
     <StepFormLayout
       iconElement={
@@ -74,8 +85,8 @@ export function ProviderSelectStep({ onSelect, onSkip }: ProviderSelectStepProps
           <CraftAgentsSymbol className="size-10 text-accent" />
         </div>
       }
-      title="Welcome to Craft Agents"
-      description="How would you like to connect?"
+      title={t("onboarding.providerSelect.title")}
+      description={t("onboarding.providerSelect.description")}
     >
       <div className="space-y-3">
         {PROVIDER_OPTIONS.map((option) => (
@@ -110,7 +121,7 @@ export function ProviderSelectStep({ onSelect, onSkip }: ProviderSelectStepProps
             onClick={onSkip}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
-            Setup later
+            {t("onboarding.providerSelect.setupLater")}
           </button>
         </div>
       )}

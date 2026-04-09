@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useTranslation } from "react-i18next"
 import { useState, useCallback, useRef } from "react"
 import { Check, FolderPlus, ExternalLink, ChevronDown, Cloud, CloudOff, Trash2 } from "lucide-react"
 import { AnimatePresence } from "motion/react"
@@ -51,6 +52,7 @@ export function WorkspaceSwitcher({
   onWorkspaceRemoved,
   workspaceUnreadMap,
 }: WorkspaceSwitcherProps) {
+  const { t } = useTranslation()
   const [showCreationScreen, setShowCreationScreen] = useState(false)
   const [reconnectTarget, setReconnectTarget] = useState<Workspace | null>(null)
   const setFullscreenOverlayOpen = useSetAtom(fullscreenOverlayOpenAtom)
@@ -98,11 +100,11 @@ export function WorkspaceSwitcher({
   const getDisconnectTooltip = (workspaceId: string): string => {
     if (workspaceId === activeWorkspaceId && connectionState?.lastError) {
       const { kind } = connectionState.lastError
-      if (kind === 'auth') return 'Authentication failed — click to reconnect'
-      if (kind === 'timeout') return 'Server unreachable — click to reconnect'
-      if (kind === 'network') return 'Server unreachable — click to reconnect'
+      if (kind === 'auth') return t('toast.authenticationFailed')
+      if (kind === 'timeout') return t('toast.serverUnreachable')
+      if (kind === 'network') return t('toast.serverUnreachable')
     }
-    return 'Disconnected — click to reconnect'
+    return t('toast.disconnected')
   }
 
   /** True when we know a remote workspace is unreachable. */
@@ -130,19 +132,19 @@ export function WorkspaceSwitcher({
   const handleWorkspaceCreated = (workspace: Workspace) => {
     setShowCreationScreen(false)
     setFullscreenOverlayOpen(false)
-    toast.success(`Created workspace "${workspace.name}"`)
+    toast.success(t('toast.createdWorkspace', { name: workspace.name }))
     onWorkspaceCreated?.(workspace)
     onSelect(workspace.id)
   }
 
   const handleRemoveWorkspace = useCallback(async (workspace: Workspace) => {
     if (workspace.id === activeWorkspaceId) {
-      toast.error('Cannot remove the active workspace')
+      toast.error(t('toast.cannotRemoveActiveWorkspace'))
       return
     }
     const removed = await window.electronAPI.removeWorkspace(workspace.id)
     if (removed) {
-      toast.success(`Removed "${workspace.name}"`)
+      toast.success(t('toast.removedWorkspace', { name: workspace.name }))
       onWorkspaceRemoved?.()
     }
   }, [activeWorkspaceId, onWorkspaceRemoved])
@@ -165,7 +167,7 @@ export function WorkspaceSwitcher({
     }
 
     handleCloseCreationScreen()
-    toast.success('Workspace reconnected')
+    toast.success(t('toast.workspaceReconnected'))
   }, [activeWorkspaceId, handleCloseCreationScreen, onSelect])
 
   return (
@@ -292,7 +294,7 @@ export function WorkspaceSwitcher({
                         e.stopPropagation()
                         handleRemoveWorkspace(workspace)
                       }}
-                      title="Remove workspace"
+                      title={t("workspace.removeWorkspace")}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -304,7 +306,7 @@ export function WorkspaceSwitcher({
                         e.stopPropagation()
                         onSelect(workspace.id, true)
                       }}
-                      title="Open in new window"
+                      title={t("sidebarMenu.openInNewWindow")}
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
                     </button>
@@ -324,7 +326,7 @@ export function WorkspaceSwitcher({
             className="font-sans"
           >
             <FolderPlus className="h-4 w-4" />
-            Add Workspace...
+            {t("workspace.addWorkspace")}
           </StyledDropdownMenuItem>
         </StyledDropdownMenuContent>
       </DropdownMenu>
