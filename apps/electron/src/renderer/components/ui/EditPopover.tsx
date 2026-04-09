@@ -19,6 +19,7 @@ import type { ContentBadge, Session, CreateSessionOptions } from '../../../share
 import { useActiveWorkspace, useAppShellContext, useSession } from '@/context/AppShellContext'
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { ChatDisplay } from '../app-shell/ChatDisplay'
+import { usesInlineExecutionForEditPopoverContext } from './edit-popover-inline'
 
 /** Rotating placeholders for compact mode input - short, action-oriented */
 const COMPACT_PLACEHOLDERS = [
@@ -286,6 +287,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     },
     example: 'Connect to my Craft space',
     overridePlaceholder: 'What would you like to connect?',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: usesInlineExecutionForEditPopoverContext('add-source'),
   }),
 
   // Filter-specific add-source contexts: user is viewing a filtered list and wants to add that type
@@ -304,6 +308,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     },
     example: 'Connect to the OpenAI API',
     overridePlaceholder: 'What API would you like to connect?',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: usesInlineExecutionForEditPopoverContext('add-source-api'),
   }),
 
   'add-source-mcp': (location) => ({
@@ -321,6 +328,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     },
     example: 'Connect to Linear',
     overridePlaceholder: 'What MCP server would you like to connect?',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: usesInlineExecutionForEditPopoverContext('add-source-mcp'),
   }),
 
   'add-source-local': (location) => ({
@@ -339,6 +349,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     },
     example: 'Connect to my Obsidian vault',
     overridePlaceholder: 'What folder would you like to connect?',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: usesInlineExecutionForEditPopoverContext('add-source-local'),
   }),
 
   'add-skill': (location) => ({
@@ -355,6 +368,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     },
     example: 'Review PRs following our code standards',
     overridePlaceholder: 'What should I learn to do?',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: usesInlineExecutionForEditPopoverContext('add-skill'),
   }),
 
   // Status configuration context
