@@ -4,18 +4,49 @@
 #
 # Scans staged .tsx files for common patterns that should use t() or i18n.t():
 #   - tooltip="English text"
-#   - label="English text"
 #   - placeholder="English text"
 #   - title="English text" (in JSX props)
 #   - description="English text"
-#   - toast.error("English text")
-#   - toast.success("English text")
-#   - >English text< (JSX text content with 3+ words)
+#   - aria-label="English text"
+#   - toast.error("English text") / success / warning / info
+#   - >Multi Word Text</ (JSX text content with 2+ words)
+#   - >SingleWord</ for known UI words (from SINGLE_WORD_WATCHLIST)
 #
-# Ignores: aria-label, comments, imports, playground/registry files, brand names.
+# Ignores: comments, imports, playground/registry files, brand names.
 # Exit code 0 = clean, 1 = hardcoded strings found (blocks commit).
 #
 set -euo pipefail
+
+# ─── Configurable lists ──────────────────────────────────────────────────────
+# Add words here as they come up. Single words that appear between JSX tags
+# (e.g. <button>Retry</button>) and should always use t().
+SINGLE_WORD_WATCHLIST=(
+  Retry
+  Cancel
+  Save
+  Delete
+  Edit
+  Close
+  Submit
+  Loading
+  Preview
+  Terminal
+  Search
+  Reset
+  Remove
+  Done
+  Confirm
+  Continue
+  Rename
+  Disable
+  Enable
+  Duplicate
+  Archive
+  Unarchive
+)
+
+# Brand names and technical terms that should NOT be flagged.
+BRAND_NAMES="Craft|Claude|Anthropic|OpenAI|MCP|Mermaid|LaTeX|Markdown|GitHub|WebSocket|Ollama|Codex"
 
 # Only check staged .tsx files (where i18n applies)
 staged_tsx="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.tsx$' | grep -v 'playground\|registry\|\.test\.' || true)"
@@ -26,7 +57,7 @@ fi
 
 # Quick check: do any staged diffs contain potential UI text patterns?
 # If not, skip entirely — no point scanning files with only logic/style changes.
-has_text_changes="$(git diff --cached -U0 -- $staged_tsx | grep -E '^\+.*(tooltip="|placeholder="|description="|title="|toast\.(error|success|warning|info)\(|DropdownMenuItem|SimpleDropdownItem|<Button)' | head -1 || true)"
+has_text_changes="$(git diff --cached -U0 -- $staged_tsx | grep -E '^\+.*(tooltip="|placeholder="|description="|title="|aria-label="|toast\.(error|success|warning|info)\(|DropdownMenuItem|SimpleDropdownItem|<Button)' | head -1 || true)"
 if [ -z "$has_text_changes" ]; then
   exit 0
 fi
@@ -41,33 +72,42 @@ for file in $staged_tsx; do
     continue
   fi
 
-  # Check for hardcoded string props (not using t() or {t()})
-  # Pattern: prop="CapitalizedEnglishText" where prop is a known UI prop
-  matches="$(echo "$staged_content" | grep -nE '(tooltip|placeholder|description)="[A-Z][a-z]' | grep -v 't(' | grep -v 'aria-' | grep -v '^ *\*' | grep -v '^ *//' || true)"
+  # Shared exclusion: already localized, comments
+  not_localized='t(\|i18n\.t('
+  not_comment='^ *\*\|^ *//'
 
-  # Check for hardcoded title= (but not in comments or aria-)
-  title_matches="$(echo "$staged_content" | grep -nE 'title="[A-Z][a-z]' | grep -v 't(' | grep -v 'aria-' | grep -v '^ *\*' | grep -v '^ *//' | grep -v 'DialogTitle\|PanelHeader' || true)"
+  # 1. Hardcoded string props: tooltip, placeholder, description
+  matches="$(echo "$staged_content" | grep -nE '(tooltip|placeholder|description)="[A-Z][a-z]' | grep -v "$not_localized" | grep -v 'aria-' | grep -v "$not_comment" || true)"
 
-  # Check for toast calls with hardcoded strings
-  toast_matches="$(echo "$staged_content" | grep -nE "toast\.(error|success|warning|info)\(['\"][A-Z]" | grep -v 't(' || true)"
+  # 2. Hardcoded title= (excluding component names that accept title as a slot)
+  title_matches="$(echo "$staged_content" | grep -nE 'title="[A-Z][a-z]' | grep -v "$not_localized" | grep -v 'aria-' | grep -v "$not_comment" | grep -v 'DialogTitle\|PanelHeader' || true)"
 
-  # Check for hardcoded text inside interactive elements (the biggest blind spot).
-  # Matches: >CapitalizedText with 2+ words< inside DropdownMenuItem, Button, etc.
-  # Excludes lines with {t( (already localized) and brand names.
-  jsx_text_matches="$(echo "$staged_content" | grep -nE '>([ ]*)[A-Z][a-z]+( [A-Za-z]+)+</' | grep -v '{t(' | grep -v 't(' | grep -v '^ *\*' | grep -v '^ *//' | grep -vE '>(Craft|Claude|Anthropic|OpenAI|MCP|Mermaid|LaTeX|Markdown|GitHub|WebSocket)<' || true)"
+  # 3. Hardcoded aria-label=
+  aria_matches="$(echo "$staged_content" | grep -nE 'aria-label="[A-Z][a-z]' | grep -v "$not_localized" | grep -v "$not_comment" || true)"
 
-  if [ -n "$matches" ] || [ -n "$title_matches" ] || [ -n "$toast_matches" ] || [ -n "$jsx_text_matches" ]; then
+  # 4. Toast calls with hardcoded strings
+  toast_matches="$(echo "$staged_content" | grep -nE "toast\.(error|success|warning|info)\(['\"][A-Z]" | grep -v "$not_localized" || true)"
+
+  # 5. Multi-word JSX text content: >Capitalized Two Words</
+  jsx_text_matches="$(echo "$staged_content" | grep -nE '>[  ]*[A-Z][a-z]+( [A-Za-z]+)+[  ]*</' | grep -v '{t(' | grep -v 't(' | grep -v "$not_comment" | grep -vE ">($BRAND_NAMES)<" || true)"
+
+  # 6. Single-word watchlist: known UI labels that should always use t()
+  watchlist_pattern="$(IFS='|'; echo "${SINGLE_WORD_WATCHLIST[*]}")"
+  single_word_matches="$(echo "$staged_content" | grep -nE ">[  ]*(${watchlist_pattern})[  ]*</" | grep -v '{t(' | grep -v 't(' | grep -v "$not_comment" || true)"
+
+  all_matches=""
+  [ -n "$matches" ] && all_matches+="$matches"$'\n'
+  [ -n "$title_matches" ] && all_matches+="$title_matches"$'\n'
+  [ -n "$aria_matches" ] && all_matches+="$aria_matches"$'\n'
+  [ -n "$toast_matches" ] && all_matches+="$toast_matches"$'\n'
+  [ -n "$jsx_text_matches" ] && all_matches+="$jsx_text_matches"$'\n'
+  [ -n "$single_word_matches" ] && all_matches+="$single_word_matches"$'\n'
+
+  if [ -n "$all_matches" ]; then
     found=1
     output+="
-⚠️  $file"
-    [ -n "$matches" ] && output+="
-$(echo "$matches" | sed 's/^/    /')"
-    [ -n "$title_matches" ] && output+="
-$(echo "$title_matches" | sed 's/^/    /')"
-    [ -n "$toast_matches" ] && output+="
-$(echo "$toast_matches" | sed 's/^/    /')"
-    [ -n "$jsx_text_matches" ] && output+="
-$(echo "$jsx_text_matches" | sed 's/^/    /')"
+⚠️  $file
+$(echo "$all_matches" | sed '/^$/d' | sed 's/^/    /')"
   fi
 done
 
