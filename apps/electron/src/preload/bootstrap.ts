@@ -271,17 +271,12 @@ client.onConnectionStateChanged((state) => {
   try {
     // 1. Start local callback server to receive OAuth redirect
     callbackServer = await createCallbackServer({ appType: 'electron' })
-    const callbackPort = Number(new URL(callbackServer.url).port)
-    if (!Number.isInteger(callbackPort) || callbackPort <= 0) {
-      throw new Error(`Invalid OAuth callback port: ${callbackServer.url}`)
-    }
+    const callbackUrl = `${callbackServer.url}/callback`
 
     // 2. Ask server to prepare the flow (PKCE, auth URL, store in flow store)
-    // Pass callbackPort (not callbackUrl) so Electron stays on the desktop
-    // loopback flow instead of opting into the WebUI relay redirect.
     const startResult = await client.invoke('oauth:start', {
       sourceSlug: args.sourceSlug,
-      callbackPort,
+      callbackUrl,
       sessionId: args.sessionId,
       authRequestId: args.authRequestId,
     })
