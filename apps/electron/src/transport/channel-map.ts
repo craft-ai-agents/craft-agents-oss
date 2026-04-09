@@ -143,6 +143,9 @@ export const CHANNEL_MAP = {
   getCopilotAuthStatus: invoke(RPC_CHANNELS.copilot.GET_AUTH_STATUS),
   copilotLogout: invoke(RPC_CHANNELS.copilot.LOGOUT),
   onCopilotDeviceCode: listener(RPC_CHANNELS.copilot.DEVICE_CODE),
+  getCopilotPremiumUsage: invoke(RPC_CHANNELS.copilot.GET_PREMIUM_USAGE),
+  setCopilotBillingPat: invoke(RPC_CHANNELS.copilot.SET_BILLING_PAT),
+  clearCopilotBillingPat: invoke(RPC_CHANNELS.copilot.CLEAR_BILLING_PAT),
 
   // Server info (REMOTE_ELIGIBLE)
   getServerHomeDir: invoke(RPC_CHANNELS.server.HOME_DIR),

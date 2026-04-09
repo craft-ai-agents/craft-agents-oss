@@ -95,6 +95,13 @@ class ModelRefreshService {
       const result = await fetcher.fetchModels(connection, credentials)
       newModels = result.models
       serverDefault = result.serverDefault
+      // For Copilot, always ensure 'auto' appears first (unconditional — strip any existing, prepend fresh)
+      if (connection.piAuthProvider === 'github-copilot') {
+        newModels = [
+          { id: 'auto', name: 'Auto', shortName: 'Auto', description: '', provider: 'pi' as const, contextWindow: 200_000, supportsThinking: false },
+          ...newModels.filter(m => m.id !== 'auto'),
+        ]
+      }
       handlerLog.info(`Model refresh [${slug}]: fetched ${newModels.length} models from provider: ${newModels.map(m => m.id).join(', ')}`)
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)

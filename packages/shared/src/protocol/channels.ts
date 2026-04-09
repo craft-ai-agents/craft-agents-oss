@@ -192,6 +192,9 @@ export const RPC_CHANNELS = {
     GET_AUTH_STATUS: 'copilot:getAuthStatus',
     LOGOUT: 'copilot:logout',
     DEVICE_CODE: 'copilot:deviceCode',
+    GET_PREMIUM_USAGE: 'copilot:getPremiumUsage',
+    SET_BILLING_PAT: 'copilot:setBillingPat',
+    CLEAR_BILLING_PAT: 'copilot:clearBillingPat',
   },
   settings: {
     SETUP_LLM_CONNECTION: 'settings:setupLlmConnection',

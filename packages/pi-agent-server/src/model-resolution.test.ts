@@ -95,6 +95,70 @@ describe('resolvePiModel', () => {
     });
   });
 
+  describe('provider synthesis for SDK version skew', () => {
+    it('synthesizes a model for piAuthProvider when model only exists under a different provider', () => {
+      // Simulates: pi-agent-server pi-ai v0.56.2 lacks "gpt-5.4" under github-copilot,
+      // but finds it under azure-openai-responses. Should NOT return azure-openai-responses model.
+      const registry = createMockRegistry({
+        'github-copilot': [
+          { id: 'gpt-5.1', name: 'GPT-5.1', provider: 'github-copilot', api: 'openai-responses' } as any,
+        ],
+        'azure-openai-responses': [
+          { id: 'gpt-5.4', name: 'GPT-5.4', provider: 'azure-openai-responses', api: 'azure-openai-responses' } as any,
+        ],
+      });
+
+      const result = resolvePiModel(registry, 'gpt-5.4', 'github-copilot');
+      expect(result).toBeDefined();
+      expect(result!.id).toBe('gpt-5.4');
+      expect(result!.provider).toBe('github-copilot');
+    });
+
+    it('synthesizes using same-api-type template when available', () => {
+      const registry = createMockRegistry({
+        'github-copilot': [
+          { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', provider: 'github-copilot', api: 'anthropic-messages' } as any,
+          { id: 'gpt-5.1', name: 'GPT-5.1', provider: 'github-copilot', api: 'openai-responses' } as any,
+        ],
+        'azure-openai-responses': [
+          { id: 'gpt-5.4', name: 'GPT-5.4', provider: 'azure-openai-responses', api: 'azure-openai-responses' } as any,
+        ],
+      });
+
+      // gpt-5.4 found under azure with api 'azure-openai-responses'.
+      // No github-copilot model has that exact api, so falls back to any copilot template.
+      const result = resolvePiModel(registry, 'gpt-5.4', 'github-copilot');
+      expect(result).toBeDefined();
+      expect(result!.provider).toBe('github-copilot');
+      expect(result!.id).toBe('gpt-5.4');
+    });
+
+    it('synthesizes unknown model (like "auto") using provider template', () => {
+      const registry = createMockRegistry({
+        'github-copilot': [
+          { id: 'gpt-5.1', name: 'GPT-5.1', provider: 'github-copilot', api: 'openai-responses' } as any,
+        ],
+        openrouter: [
+          { id: 'auto', name: 'Auto', provider: 'openrouter', api: 'openai-completions' } as any,
+        ],
+      });
+
+      const result = resolvePiModel(registry, 'auto', 'github-copilot');
+      expect(result).toBeDefined();
+      expect(result!.id).toBe('auto');
+      expect(result!.provider).toBe('github-copilot');
+    });
+
+    it('returns undefined when piAuthProvider has no models to use as template', () => {
+      const registry = createMockRegistry({
+        'github-copilot': [],
+      });
+
+      const result = resolvePiModel(registry, 'unknown-model', 'github-copilot');
+      expect(result).toBeUndefined();
+    });
+  });
+
   describe('fallback chain', () => {
     it('falls through getAll scan when no exact match', () => {
       const registry = createMockRegistry({

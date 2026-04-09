@@ -400,6 +400,9 @@ export interface ElectronAPI {
   getCopilotAuthStatus(connectionSlug: string): Promise<{ authenticated: boolean }>
   copilotLogout(connectionSlug: string): Promise<{ success: boolean }>
   onCopilotDeviceCode(callback: (data: { userCode: string; verificationUri: string }) => void): () => void
+  getCopilotPremiumUsage(): Promise<{ used: number; limit: number; percentRemaining: number; resetDate: string; plan?: string; unlimited?: boolean; overageEnabled?: boolean; error?: string }>
+  setCopilotBillingPat(pat: string): Promise<{ success: boolean; error?: string }>
+  clearCopilotBillingPat(): Promise<{ success: boolean }>
 
   /** Unified LLM connection setup */
   setupLlmConnection(setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }>
