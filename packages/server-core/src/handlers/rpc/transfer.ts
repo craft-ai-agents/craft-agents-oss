@@ -117,7 +117,10 @@ export function registerTransferHandlers(server: RpcServer): void {
     const dir = join(tmpdir(), `craft-transfer-${transferId}`)
     mkdirSync(dir, { recursive: true })
 
-    const timer = setTimeout(() => cleanupTransfer(transferId), TRANSFER_TTL_MS)
+    const timer = setTimeout(() => {
+      console.warn(`[Transfer:server] TTL expired for transfer ${transferId} — cleaning up`)
+      cleanupTransfer(transferId)
+    }, TRANSFER_TTL_MS)
 
     activeTransfers.set(transferId, {
       id: transferId,
@@ -131,6 +134,9 @@ export function registerTransferHandlers(server: RpcServer): void {
       timer,
     })
 
+    const totalMB = (opts.totalBytes / (1024 * 1024)).toFixed(1)
+    console.log(`[Transfer:server] Started transfer ${transferId}: ${opts.chunkCount} chunks, ${totalMB}MB, channel: ${opts.channel}`)
+
     return { transferId }
   })
 
@@ -142,6 +148,7 @@ export function registerTransferHandlers(server: RpcServer): void {
   }) => {
     const transfer = activeTransfers.get(opts.transferId)
     if (!transfer) {
+      console.error(`[Transfer:server] Unknown transfer: ${opts.transferId}`)
       throw new Error(`Unknown transfer: ${opts.transferId}`)
     }
     if (typeof opts.index !== 'number' || opts.index < 0 || opts.index >= transfer.chunkCount) {
@@ -156,6 +163,10 @@ export function registerTransferHandlers(server: RpcServer): void {
     writeFileSync(chunkPath, opts.data, 'utf-8')
     transfer.received.add(opts.index)
 
+    if ((opts.index + 1) % 10 === 0 || opts.index === transfer.chunkCount - 1) {
+      console.log(`[Transfer:server] Received chunk ${opts.index + 1}/${transfer.chunkCount} for ${transfer.id.slice(0, 8)}`)
+    }
+
     return { received: opts.index }
   })
 
@@ -165,8 +176,11 @@ export function registerTransferHandlers(server: RpcServer): void {
   }) => {
     const transfer = activeTransfers.get(opts.transferId)
     if (!transfer) {
+      console.error(`[Transfer:server] Commit failed — unknown transfer: ${opts.transferId}`)
       throw new Error(`Unknown transfer: ${opts.transferId}`)
     }
+
+    console.log(`[Transfer:server] Committing transfer ${transfer.id.slice(0, 8)}: ${transfer.received.size}/${transfer.chunkCount} chunks received`)
 
     // Validate all chunks received
     if (transfer.received.size !== transfer.chunkCount) {
@@ -202,6 +216,9 @@ export function registerTransferHandlers(server: RpcServer): void {
       throw new Error(`No handler for channel: ${transfer.channel}`)
     }
 
+    const reassembledMB = (jsonString.length / (1024 * 1024)).toFixed(1)
+    console.log(`[Transfer:server] Reassembled ${reassembledMB}MB payload for ${transfer.channel} — executing handler`)
+
     // Reconstruct the original args with the reassembled payload
     const args = [...transfer.args]
     args[transfer.largeArgIndex] = payload
@@ -210,6 +227,13 @@ export function registerTransferHandlers(server: RpcServer): void {
     cleanupTransfer(transfer.id)
 
     // Execute with the original request context
-    return handler(ctx, ...args)
+    try {
+      const result = await handler(ctx, ...args)
+      console.log(`[Transfer:server] Handler ${transfer.channel} completed successfully`)
+      return result
+    } catch (err) {
+      console.error(`[Transfer:server] Handler ${transfer.channel} failed:`, err)
+      throw err
+    }
   })
 }
