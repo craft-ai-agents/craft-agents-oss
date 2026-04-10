@@ -485,6 +485,10 @@ async function loadSessionMessages(
     // tokenUsage and sessionFolderPath are only returned by getSession() (not getSessions()),
     // so they must be explicitly merged here to be available after app restart.
     const existingSession = get(sessionAtomFamily(sessionId))
+    const preservedStaleMessages = !!existingSession
+      && existingSession.messages.length > 0
+      && (!loadedSession.messages || loadedSession.messages.length === 0)
+
     const mergedSession = existingSession
       ? {
           ...existingSession,
@@ -495,9 +499,13 @@ async function loadSessionMessages(
           // The `messages.length > 0` guard ensures Cmd+R reload works: after reload,
           // the atom starts with messages=[] from getSessions(), so IPC response
           // (which has full history from main process memory) must be used.
-          messages: existingSession.isProcessing && existingSession.messages.length > 0
+          // Also guard against sleep/wake edge case: the server may return
+          // empty messages if the session subprocess hasn't finished lazy-loading.
+          messages: preservedStaleMessages
             ? existingSession.messages
-            : loadedSession.messages,
+            : existingSession.isProcessing && existingSession.messages.length > 0
+              ? existingSession.messages
+              : loadedSession.messages,
           tokenUsage: loadedSession.tokenUsage ?? existingSession.tokenUsage,
           sessionFolderPath: loadedSession.sessionFolderPath ?? existingSession.sessionFolderPath,
         }
@@ -518,10 +526,14 @@ async function loadSessionMessages(
       }
     }
 
-    // Mark as loaded
-    const newLoadedSessions = new Set(get(loadedSessionsAtom))
-    newLoadedSessions.add(sessionId)
-    set(loadedSessionsAtom, newLoadedSessions)
+    // Mark as loaded only when we received a fresh payload.
+    // If we had to preserve stale in-memory messages because the backend returned
+    // an empty array during lazy-load recovery, keep the session reloadable.
+    if (!preservedStaleMessages) {
+      const newLoadedSessions = new Set(get(loadedSessionsAtom))
+      newLoadedSessions.add(sessionId)
+      set(loadedSessionsAtom, newLoadedSessions)
+    }
 
     return mergedSession
   })()

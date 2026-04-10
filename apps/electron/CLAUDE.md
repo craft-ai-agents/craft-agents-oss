@@ -6,7 +6,11 @@ Primary desktop interface for Craft Agents:
 - Session/source/workspace management
 - Main-process integration with `@craft-agent/shared`
 
-Remote **Send to Workspace** handoffs use a summarized transfer payload, not a raw full-session bundle.
+Remote **Send to Workspace** sends a full `SessionBundle` (messages + base64 files) via
+chunked WebSocket RPC for large bundles (>5MB) or a single RPC call for small ones.
+A conversation summary is generated and injected into the bundle header so the AI has
+context after fork. The chunked transfer protocol (`transfer:start/chunk/commit`) splits
+the payload into ~512KB messages to work behind proxies and tunnels.
 
 ## Commands (run from repo root)
 ```bash

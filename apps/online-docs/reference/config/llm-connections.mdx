@@ -49,7 +49,8 @@ Each session locks to a connection after the first message. To change connection
 | `providerType` | Yes | Provider backend (see list below) |
 | `authType` | Yes | Auth mechanism (see list below) |
 | `baseUrl` | No | Custom base URL for compatible providers |
-| `models` | No | Explicit model list. Accepts strings (`"gpt-5.4"`) or objects with optional `contextWindow` override (see [Custom Context Window](#custom-context-window)). |
+| `models` | No | Explicit model list. Accepts strings (`"gpt-5.4"`) or objects with optional `contextWindow` and `supportsImages` overrides (see [Custom Endpoint Capabilities](#custom-endpoint-capabilities)). |
+| `customEndpoint` | No | Custom endpoint protocol config. Use `api` to select the wire format and optional `supportsImages` to opt an entire endpoint into image input. |
 | `defaultModel` | No | Default model for this connection |
 | `codexPath` | No | Path to Codex binary (OpenAI/Codex only) |
 | `awsRegion` | No | AWS region for Bedrock |
@@ -197,29 +198,51 @@ Set `awsRegion` to the region where you have Bedrock model access enabled (e.g.,
 }
 ```
 
-## Custom Context Window
+## Custom Endpoint Capabilities
 
-Custom endpoints default to a **128K context window** for all models. If your model supports a larger context, set `contextWindow` on the model object to enable proper auto-compaction behavior:
+Custom endpoints default to a **128K context window** and **text-only input**. If your model supports a larger context window or accepts image input, set those capabilities explicitly in the connection config.
+
+### Per-model overrides (recommended)
+
+Use model objects when an endpoint hosts a mix of text-only and multimodal models:
 
 ```json
 {
-  "slug": "my-proxy",
-  "name": "My Proxy",
-  "providerType": "anthropic_compat",
-  "authType": "api_key_with_endpoint",
-  "baseUrl": "https://my-proxy.example.com/v1",
+  "slug": "ollama",
+  "name": "Ollama",
+  "providerType": "pi_compat",
+  "authType": "none",
+  "baseUrl": "http://localhost:11434/v1",
+  "customEndpoint": { "api": "openai-completions" },
   "models": [
-    { "id": "gpt-5.4", "name": "GPT 5.4", "contextWindow": 1000000 },
-    { "id": "gpt-5.2", "name": "GPT 5.2", "contextWindow": 272000 }
+    { "id": "gemma4", "contextWindow": 262144, "supportsImages": true },
+    { "id": "qwen3-coder", "contextWindow": 131072 }
   ],
-  "defaultModel": "gpt-5.4",
+  "defaultModel": "gemma4",
   "createdAt": 1737451800000
 }
 ```
 
+### Whole-endpoint opt-in
+
+If every model behind the endpoint is multimodal, you can opt in at the endpoint level:
+
+```json
+{
+  "customEndpoint": {
+    "api": "openai-completions",
+    "supportsImages": true
+  }
+}
+```
+
 <Note>
-Plain string model entries (e.g., `"gpt-5.4"`) continue to use the 128K default. Use object entries with `contextWindow` only when you need a different value.
+Craft Agents does **not** auto-detect image support for arbitrary endpoints. Custom endpoints stay text-only unless you explicitly set `supportsImages: true` at the endpoint or model level. Plain string model entries continue to use the default **128K** context window and **text-only** input.
 </Note>
+
+<Tip>
+For models like **Gemma 4** served through Ollama, vLLM, or another OpenAI-compatible proxy, prefer the per-model form so only the vision-capable model opts into image input.
+</Tip>
 
 ## Managing Connections
 

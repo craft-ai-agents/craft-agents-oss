@@ -406,21 +406,27 @@ export default function App() {
     })
   }, [])
 
-  const refreshSessionFromServer = useCallback(async (sessionId: string): Promise<boolean> => {
+  const refreshSessionFromServer = useCallback(async (sessionId: string): Promise<'refreshed' | 'preserved_stale_messages' | 'failed'> => {
     try {
       const fresh = await window.electronAPI.getSessionMessages(sessionId)
-      if (!fresh) return false
+      if (!fresh) return 'failed'
+
+      const prevSession = store.get(sessionAtomFamily(sessionId))
+      const preservedStaleMessages = !!prevSession && prevSession.messages.length > 0 && (!fresh.messages || fresh.messages.length === 0)
+      const nextSession = preservedStaleMessages
+        ? { ...fresh, messages: prevSession.messages }
+        : fresh
 
       clearStreamingState(sessionId)
-      updateSessionDirect(sessionId, () => fresh)
-      syncSessionOptionsFromSession(fresh)
+      updateSessionDirect(sessionId, () => nextSession)
+      syncSessionOptionsFromSession(nextSession)
       void reconcilePermissionModeState(sessionId)
-      return true
+      return preservedStaleMessages ? 'preserved_stale_messages' : 'refreshed'
     } catch (err) {
       console.error(`[App] Failed to refresh session ${sessionId}:`, err)
-      return false
+      return 'failed'
     }
-  }, [clearStreamingState, updateSessionDirect, syncSessionOptionsFromSession, reconcilePermissionModeState])
+  }, [clearStreamingState, updateSessionDirect, syncSessionOptionsFromSession, reconcilePermissionModeState, store])
 
   const loadSessionsFromServer = useCallback(async () => {
     setSessionLoadError(null)
@@ -996,14 +1002,21 @@ export default function App() {
       const metaMap = refreshedMetaMap ?? store.get(sessionMetaMapAtom)
       const refreshIds = getSessionsToRefreshAfterStaleReconnect(metaMap, sessionSelection.selected)
 
+      console.info(`[App] Stale reconnect — refreshing ${refreshIds.length} session(s):`, refreshIds)
+
       // Refresh full message content only for the active session plus any
       // session still marked processing after the metadata refresh.
       for (const sessionId of refreshIds) {
-        const ok = await refreshSessionFromServer(sessionId)
-        if (!ok) {
-          // Server may need time to restart session subprocess after reconnect — retry once
-          await new Promise(r => setTimeout(r, 2000))
-          await refreshSessionFromServer(sessionId)
+        let refreshResult = await refreshSessionFromServer(sessionId)
+        if (refreshResult !== 'refreshed') {
+          // Server may need time to restart session subprocess after reconnect,
+          // or it may still be lazily loading session messages.
+          for (const delay of [2000, 4000]) {
+            console.warn(`[App] Retrying session refresh for ${sessionId} after ${delay}ms (${refreshResult})`)
+            await new Promise(r => setTimeout(r, delay))
+            refreshResult = await refreshSessionFromServer(sessionId)
+            if (refreshResult === 'refreshed') break
+          }
         }
       }
 
@@ -1014,8 +1027,11 @@ export default function App() {
         if (session && (!session.messages || session.messages.length === 0)) {
           console.warn('[App] Active session still has no messages after stale reconnect refresh — forcing message reload')
           await store.set(forceSessionMessagesReloadAtom, sessionSelection.selected)
+        } else if (session) {
+          console.info(`[App] Stale reconnect recovery complete — active session has ${session.messages?.length ?? 0} messages`)
         }
       }
+
     })
 
     return cleanup

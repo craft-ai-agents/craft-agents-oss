@@ -107,6 +107,8 @@ export type CustomEndpointApi = 'openai-completions' | 'anthropic-messages';
  */
 export interface CustomEndpointConfig {
   api: CustomEndpointApi;
+  /** Explicit capability hint for arbitrary endpoints — never guessed automatically. */
+  supportsImages?: boolean;
 }
 
 /**

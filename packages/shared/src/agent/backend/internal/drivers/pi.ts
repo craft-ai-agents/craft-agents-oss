@@ -237,7 +237,15 @@ export const piDriver: ProviderDriver = {
     customEndpoint: context.connection?.customEndpoint,
     customModels: context.connection?.models?.map(m => {
       if (typeof m === 'string') return m;
-      return m.contextWindow ? { id: m.id, contextWindow: m.contextWindow } : m.id;
+      const supportsImages = 'supportsImages' in m && m.supportsImages === true
+      if (m.contextWindow || supportsImages) {
+        return {
+          id: m.id,
+          ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
+          ...(supportsImages ? { supportsImages: true } : {}),
+        }
+      }
+      return m.id;
     }),
   }),
   fetchModels: async ({ connection, credentials, timeoutMs }) => {

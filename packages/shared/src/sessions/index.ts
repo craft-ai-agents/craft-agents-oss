@@ -54,6 +54,7 @@ export {
   // Pending plan execution (Accept & Compact flow)
   setPendingPlanExecution,
   markCompactionComplete,
+  markPendingPlanExecutionDispatched,
   clearPendingPlanExecution,
   getPendingPlanExecution,
   // Session filtering

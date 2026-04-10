@@ -705,24 +705,44 @@ export function FreeFormInput({
 
     let hasExecuted = false
 
+    const isExpectedReconnectError = (error: unknown): boolean => {
+      const message = error instanceof Error ? error.message : String(error)
+      return message.includes('Connection closed')
+        || message.includes('Client disconnected')
+        || message.includes('transport')
+        || message.includes('socket')
+    }
+
     const executePendingPlan = async () => {
       if (hasExecuted) return
 
-      const pending = await window.electronAPI.getPendingPlanExecution(sessionId)
-      if (!pending || pending.awaitingCompaction) return
+      try {
+        const pending = await window.electronAPI.getPendingPlanExecution(sessionId)
+        if (!pending || pending.awaitingCompaction || pending.executionDispatched) return
 
-      // Compaction completed but we never sent the execution message (page reloaded).
-      // Send it now and clear the pending state.
-      hasExecuted = true
-      const executionMessage = buildPlanApprovalMessage({
-        planPath: pending.planPath,
-        draftInput: pending.draftInputSnapshot,
-      })
-      onSubmit(executionMessage, undefined)
+        // Mark dispatched before sending so reload recovery does not double-submit
+        // the same plan if onSubmit succeeds but cleanup fails during a reconnect.
+        await window.electronAPI.sessionCommand(sessionId, {
+          type: 'markPendingPlanExecutionDispatched',
+        })
 
-      await window.electronAPI.sessionCommand(sessionId, {
-        type: 'clearPendingPlanExecution',
-      })
+        // Compaction completed but we never sent the execution message (page reloaded).
+        // Send it now and clear the pending state.
+        hasExecuted = true
+        const executionMessage = buildPlanApprovalMessage({
+          planPath: pending.planPath,
+          draftInput: pending.draftInputSnapshot,
+        })
+        onSubmit(executionMessage, undefined)
+
+        await window.electronAPI.sessionCommand(sessionId, {
+          type: 'clearPendingPlanExecution',
+        })
+      } catch (error) {
+        if (!isExpectedReconnectError(error)) {
+          console.error('[FreeFormInput] Failed to resume pending plan execution:', error)
+        }
+      }
     }
 
     // Check immediately on mount (handles case where compaction already completed)

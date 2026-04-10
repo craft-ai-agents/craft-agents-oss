@@ -14,11 +14,18 @@ export const GUI_HANDLED_CHANNELS = [
 
 /**
  * Connect to a remote server and wait for handshake.
+ * When workspaceId is provided, the handshake is scoped to that workspace so
+ * workspace-context RPC handlers (for example sessions:export) can resolve it.
  * Returns the connected client or null + error message.
  */
-export async function connectToRemote(url: string, token: string) {
+export async function connectToRemote(url: string, token: string, workspaceId?: string) {
   const { WsRpcClient } = await import('../../transport/client')
-  const client = new WsRpcClient(url, { token, autoReconnect: false, tlsRejectUnauthorized: false })
+  const client = new WsRpcClient(url, {
+    token,
+    workspaceId,
+    autoReconnect: false,
+    tlsRejectUnauthorized: false,
+  })
 
   const connected = await new Promise<boolean>((resolve) => {
     const timeout = setTimeout(() => resolve(false), 10_000)

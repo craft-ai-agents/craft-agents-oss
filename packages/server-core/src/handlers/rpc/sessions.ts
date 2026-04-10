@@ -7,6 +7,7 @@ import { perf } from '@craft-agent/shared/utils'
 import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import { setTransferableHandler } from './transfer'
 
 interface ClientSessionWatchState {
   watcher: import('fs').FSWatcher
@@ -294,6 +295,8 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
         return sessionManager.setPendingPlanExecution(sessionId, command.planPath, command.draftInputSnapshot)
       case 'markCompactionComplete':
         return sessionManager.markCompactionComplete(sessionId)
+      case 'markPendingPlanExecutionDispatched':
+        return sessionManager.markPendingPlanExecutionDispatched(sessionId)
       case 'clearPendingPlanExecution':
         return sessionManager.clearPendingPlanExecution(sessionId)
       case 'addAnnotation':
@@ -474,13 +477,16 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   // Import a session bundle into a target workspace
   // targetWorkspaceId is passed explicitly (not from context) so the renderer
   // can import into any workspace the server manages, not just the active one.
-  server.handle(RPC_CHANNELS.sessions.IMPORT, async (_ctx, targetWorkspaceId: string, bundle: unknown, mode: string) => {
+  const importHandler = async (_ctx: any, targetWorkspaceId: string, bundle: unknown, mode: string) => {
     await sessionManager.waitForInit()
     if (!targetWorkspaceId || typeof targetWorkspaceId !== 'string') throw new Error('targetWorkspaceId is required')
     if (mode !== 'move' && mode !== 'fork') throw new Error(`Invalid dispatch mode: ${mode}`)
 
     return sessionManager.importSession(targetWorkspaceId, bundle as import('@craft-agent/shared/sessions').SessionBundle, mode)
-  })
+  }
+  server.handle(RPC_CHANNELS.sessions.IMPORT, importHandler)
+  // Also register as transferable so chunked transfer can invoke it on commit
+  setTransferableHandler(RPC_CHANNELS.sessions.IMPORT, importHandler)
 
   // Export a session as a summarized remote-transfer payload.
   server.handle(RPC_CHANNELS.sessions.EXPORT_REMOTE_TRANSFER, async (ctx, sessionId: string) => {

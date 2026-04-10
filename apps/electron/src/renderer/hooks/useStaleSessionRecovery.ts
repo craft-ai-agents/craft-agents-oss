@@ -24,7 +24,7 @@ const CHECK_INTERVAL_MS = 30_000   // Check every 30s
 
 interface UseStaleSessionRecoveryOptions {
   store: JotaiStore
-  refreshSessionFromServer: (sessionId: string) => Promise<boolean>
+  refreshSessionFromServer: (sessionId: string) => Promise<'refreshed' | 'preserved_stale_messages' | 'failed'>
 }
 
 /**
@@ -79,8 +79,8 @@ export function useStaleSessionRecovery({
         refreshingSessionIds.current.add(sessionId)
         try {
           const refreshed = await refreshSessionFromServer(sessionId)
-          if (refreshed) {
-            // Remove from tracking after successful refresh
+          if (refreshed === 'refreshed') {
+            // Remove from tracking after a true fresh reload.
             lastEventTimestamps.current.delete(sessionId)
           }
         } catch (err) {

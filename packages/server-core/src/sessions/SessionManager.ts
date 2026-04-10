@@ -48,6 +48,7 @@ import {
   canUpdateSdkCwd,
   setPendingPlanExecution as setStoredPendingPlanExecution,
   markCompactionComplete as markStoredCompactionComplete,
+  markPendingPlanExecutionDispatched as markStoredPendingPlanExecutionDispatched,
   clearPendingPlanExecution as clearStoredPendingPlanExecution,
   getPendingPlanExecution as getStoredPendingPlanExecution,
   getSessionAttachmentsPath,
@@ -75,6 +76,7 @@ import { getValidClaudeOAuthToken } from '@craft-agent/shared/auth'
 import { resolveAuthEnvVars } from '@craft-agent/shared/config'
 import { toolMetadataStore, getLastApiError } from '@craft-agent/shared/interceptor'
 import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
+import { restoreFiles } from '@craft-agent/shared/utils/bundle-files'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/shared/mcp'
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
@@ -3852,6 +3854,19 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
+   * Mark pending plan execution as already dispatched from the UI.
+   * This prevents reload recovery from double-submitting the same plan if
+   * sending succeeded but cleanup failed due a reconnect/disconnect.
+   */
+  async markPendingPlanExecutionDispatched(sessionId: string): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      await markStoredPendingPlanExecutionDispatched(managed.workspace.rootPath, sessionId)
+      sessionLog.info(`Session ${sessionId}: marked pending plan execution as dispatched`)
+    }
+  }
+
+  /**
    * Clear pending plan execution state.
    * Called after plan execution is triggered, on new user message,
    * or when the pending execution is no longer relevant.
@@ -3868,7 +3883,7 @@ export class SessionManager implements ISessionManager {
    * Get pending plan execution state for a session.
    * Used on reload/init to check if we need to resume plan execution.
    */
-  getPendingPlanExecution(sessionId: string): { planPath: string; draftInputSnapshot?: string; awaitingCompaction: boolean } | null {
+  getPendingPlanExecution(sessionId: string): { planPath: string; draftInputSnapshot?: string; awaitingCompaction: boolean; executionDispatched: boolean } | null {
     const managed = this.sessions.get(sessionId)
     if (!managed) return null
     return getStoredPendingPlanExecution(managed.workspace.rootPath, sessionId)
@@ -7101,12 +7116,8 @@ export class SessionManager implements ISessionManager {
     writeSessionJsonl(sessionFile, storedSession)
 
     // Write all bundle files (attachments, plans, data, downloads, etc.)
-    for (const file of bundle.files) {
-      const targetPath = join(sessionDir, file.relativePath)
-      const targetDir = dirname(targetPath)
-      await mkdir(targetDir, { recursive: true })
-      await writeFile(targetPath, Buffer.from(file.contentBase64, 'base64'))
-    }
+    // Uses restoreFiles() for path traversal, size, and base64 validation.
+    restoreFiles(sessionDir, bundle.files)
 
     // Register in-memory — pass session metadata without messages to avoid
     // StoredMessage[] vs Message[] type mismatch, then convert messages separately

@@ -117,6 +117,40 @@ For any API that implements the Anthropic Messages format:
 
 This works with self-hosted proxies, enterprise gateways, or any service that implements the `/v1/messages` endpoint.
 
+## Image Input for Custom Endpoints
+
+Custom endpoints are **text-only by default**. If your endpoint serves a multimodal model — for example **Gemma 4** via Ollama or another OpenAI-compatible proxy — you must opt it into image support explicitly in the connection config.
+
+These examples use the low-level **LLM connection** schema from [LLM Connections](/reference/config/llm-connections), where `customEndpoint.api` selects the endpoint wire format.
+
+### Per-model opt-in (recommended)
+
+```json
+{
+  "customEndpoint": { "api": "openai-completions" },
+  "models": [
+    { "id": "gemma4", "supportsImages": true }
+  ]
+}
+```
+
+### Whole-endpoint opt-in
+
+```json
+{
+  "customEndpoint": {
+    "api": "openai-completions",
+    "supportsImages": true
+  }
+}
+```
+
+<Note>
+There is currently no automatic capability detection for arbitrary endpoints. If `supportsImages` is not set, Craft Agents will treat the endpoint as text-only.
+</Note>
+
+For the full config schema, see [LLM Connections](/reference/config/llm-connections#custom-endpoint-capabilities).
+
 ## How It Works
 
 When you configure a non-default provider, Craft Agents stores:
