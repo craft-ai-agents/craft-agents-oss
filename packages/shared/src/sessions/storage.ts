@@ -644,6 +644,7 @@ export async function setPendingPlanExecution(
     planPath,
     draftInputSnapshot,
     awaitingCompaction: true,
+    executionDispatched: false,
   };
   await saveSession(session);
 }
@@ -661,6 +662,22 @@ export async function markCompactionComplete(
   if (!session?.pendingPlanExecution) return;
 
   session.pendingPlanExecution.awaitingCompaction = false;
+  await saveSession(session);
+}
+
+/**
+ * Mark pending plan execution as already dispatched from the UI.
+ * This prevents reload recovery from sending the same approval message twice
+ * if cleanup fails after the send has already been kicked off.
+ */
+export async function markPendingPlanExecutionDispatched(
+  workspaceRootPath: string,
+  sessionId: string
+): Promise<void> {
+  const session = loadSession(workspaceRootPath, sessionId);
+  if (!session?.pendingPlanExecution) return;
+
+  session.pendingPlanExecution.executionDispatched = true;
   await saveSession(session);
 }
 
@@ -687,9 +704,13 @@ export async function clearPendingPlanExecution(
 export function getPendingPlanExecution(
   workspaceRootPath: string,
   sessionId: string
-): { planPath: string; draftInputSnapshot?: string; awaitingCompaction: boolean } | null {
+): { planPath: string; draftInputSnapshot?: string; awaitingCompaction: boolean; executionDispatched: boolean } | null {
   const session = loadSession(workspaceRootPath, sessionId);
-  return session?.pendingPlanExecution ?? null;
+  if (!session?.pendingPlanExecution) return null;
+  return {
+    ...session.pendingPlanExecution,
+    executionDispatched: session.pendingPlanExecution.executionDispatched === true,
+  };
 }
 
 // ============================================================

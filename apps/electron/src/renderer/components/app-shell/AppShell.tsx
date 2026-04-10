@@ -1279,13 +1279,6 @@ function AppShellContent({
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
   const setSessionMetaMap = useSetAtom(sessionMetaMapAtom)
 
-  // Debug: track AppShell renders to diagnose stale reconnect re-render issue
-  const debugRenderCount = React.useRef(0)
-  debugRenderCount.current++
-  if (debugRenderCount.current <= 5 || debugRenderCount.current % 10 === 0) {
-    console.warn(`[Debug:render] AppShell render #${debugRenderCount.current}, sessionMetaMap has ${sessionMetaMap.size} entries`)
-  }
-
   const hasPendingPrompt = React.useCallback((sessionId: string) => {
     return (pendingPermissions.get(sessionId)?.length ?? 0) > 0
   }, [pendingPermissions])

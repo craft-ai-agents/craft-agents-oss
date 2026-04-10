@@ -48,6 +48,7 @@ import {
   canUpdateSdkCwd,
   setPendingPlanExecution as setStoredPendingPlanExecution,
   markCompactionComplete as markStoredCompactionComplete,
+  markPendingPlanExecutionDispatched as markStoredPendingPlanExecutionDispatched,
   clearPendingPlanExecution as clearStoredPendingPlanExecution,
   getPendingPlanExecution as getStoredPendingPlanExecution,
   getSessionAttachmentsPath,
@@ -3853,6 +3854,19 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
+   * Mark pending plan execution as already dispatched from the UI.
+   * This prevents reload recovery from double-submitting the same plan if
+   * sending succeeded but cleanup failed due a reconnect/disconnect.
+   */
+  async markPendingPlanExecutionDispatched(sessionId: string): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      await markStoredPendingPlanExecutionDispatched(managed.workspace.rootPath, sessionId)
+      sessionLog.info(`Session ${sessionId}: marked pending plan execution as dispatched`)
+    }
+  }
+
+  /**
    * Clear pending plan execution state.
    * Called after plan execution is triggered, on new user message,
    * or when the pending execution is no longer relevant.
@@ -3869,7 +3883,7 @@ export class SessionManager implements ISessionManager {
    * Get pending plan execution state for a session.
    * Used on reload/init to check if we need to resume plan execution.
    */
-  getPendingPlanExecution(sessionId: string): { planPath: string; draftInputSnapshot?: string; awaitingCompaction: boolean } | null {
+  getPendingPlanExecution(sessionId: string): { planPath: string; draftInputSnapshot?: string; awaitingCompaction: boolean; executionDispatched: boolean } | null {
     const managed = this.sessions.get(sessionId)
     if (!managed) return null
     return getStoredPendingPlanExecution(managed.workspace.rootPath, sessionId)

@@ -691,80 +691,104 @@ app.whenReady().then(async () => {
         }
       })
 
-      // Transfer session to remote workspace — orchestrated in main process
-      // to avoid shipping the full bundle through the renderer.
+      // Transfer session to another workspace — orchestrated in main process
+      // so large bundles can be moved directly between owning servers.
       ipcMain.handle('session:transferToRemoteWorkspace', async (_event, sessionId: string, targetWorkspaceId: string, sessionIndex?: number, sessionCount?: number) => {
         const idx = sessionIndex ?? 0
         const count = sessionCount ?? 1
         const { getWorkspaceByNameOrId } = await import('@craft-agent/shared/config')
-        const workspace = getWorkspaceByNameOrId(targetWorkspaceId)
-        if (!workspace?.remoteServer) throw new Error(`Workspace ${targetWorkspaceId} has no remote server`)
+        const { connectToRemote } = await import('./handlers/workspace')
+        const { CHUNKED_TRANSFER_THRESHOLD, getChunkCount, invokeChunked, prepareChunkedPayload } = await import('./chunked-rpc')
 
-        const { url, token, remoteWorkspaceId } = workspace.remoteServer
+        const targetWorkspace = getWorkspaceByNameOrId(targetWorkspaceId)
+        if (!targetWorkspace?.remoteServer) throw new Error(`Workspace ${targetWorkspaceId} has no remote server`)
         if (!sessionManager) throw new Error('Session manager not initialized')
 
-        // Find the session's source workspace (not the target!)
-        const session = await sessionManager.getSession(sessionId)
-        if (!session) throw new Error(`Session ${sessionId} not found`)
-        const sourceWorkspaceId = session.workspaceId
+        const sourceWorkspaceLocalId = windowManager?.getWorkspaceForWindow(_event.sender.id)
+        if (!sourceWorkspaceLocalId) throw new Error('Unable to resolve source workspace for transfer')
 
-        // 1. Export full session bundle (stays in main process memory)
-        console.log(`[Transfer] Exporting session ${sessionId} from workspace ${sourceWorkspaceId}...`)
-        const bundle = await sessionManager.exportSession(sessionId, sourceWorkspaceId)
-        if (!bundle) throw new Error(`Failed to export session ${sessionId}`)
-        console.log(`[Transfer] Export complete: ${bundle.session.messages.length} messages, ${bundle.files.length} files`)
+        const sourceWorkspace = getWorkspaceByNameOrId(sourceWorkspaceLocalId)
+        if (!sourceWorkspace) throw new Error(`Source workspace ${sourceWorkspaceLocalId} not found`)
 
-        // 2. Generate summary and inject into bundle header
-        try {
-          console.log('[Transfer] Generating conversation summary...')
-          const transferPayload = await sessionManager.exportRemoteSessionTransfer(sessionId, sourceWorkspaceId)
-          if (transferPayload?.summary && bundle.session?.header) {
-            ;(bundle.session.header as any).transferredSessionSummary = transferPayload.summary
-            ;(bundle.session.header as any).transferredSessionSummaryApplied = false
-            console.log(`[Transfer] Summary generated: ${transferPayload.summary.length} chars`)
+        let bundle: any = null
+
+        if (sourceWorkspace.remoteServer) {
+          const { url: sourceUrl, token: sourceToken, remoteWorkspaceId: sourceRemoteWorkspaceId } = sourceWorkspace.remoteServer
+          console.log(`[Transfer] Exporting remote-owned session ${sessionId} from workspace ${sourceRemoteWorkspaceId}...`)
+          const { client: sourceClient, error: sourceError } = await connectToRemote(sourceUrl, sourceToken, sourceRemoteWorkspaceId)
+          if (!sourceClient) throw new Error(sourceError ?? 'Connection failed to source remote server')
+
+          try {
+            bundle = await sourceClient.invoke('sessions:export', sessionId)
+            if (!bundle) throw new Error(`Failed to export session ${sessionId}`)
+
+            try {
+              console.log('[Transfer] Generating conversation summary on source server...')
+              const transferPayload = await sourceClient.invoke('sessions:exportRemoteTransfer', sessionId)
+              if (transferPayload?.summary && bundle.session?.header) {
+                ;(bundle.session.header as any).transferredSessionSummary = transferPayload.summary
+                ;(bundle.session.header as any).transferredSessionSummaryApplied = false
+                console.log(`[Transfer] Summary generated: ${transferPayload.summary.length} chars`)
+              }
+            } catch (err) {
+              console.warn('[Transfer] Source-server summary generation failed:', err)
+            }
+          } finally {
+            sourceClient.destroy()
           }
-        } catch (err) {
-          console.warn('[Transfer] Summary generation failed:', err)
+        } else {
+          console.log(`[Transfer] Exporting local-owned session ${sessionId} from workspace ${sourceWorkspace.id}...`)
+          bundle = await sessionManager.exportSession(sessionId, sourceWorkspace.id)
+          if (!bundle) throw new Error(`Failed to export session ${sessionId}`)
+
+          try {
+            console.log('[Transfer] Generating conversation summary...')
+            const transferPayload = await sessionManager.exportRemoteSessionTransfer(sessionId, sourceWorkspace.id)
+            if (transferPayload?.summary && bundle.session?.header) {
+              ;(bundle.session.header as any).transferredSessionSummary = transferPayload.summary
+              ;(bundle.session.header as any).transferredSessionSummaryApplied = false
+              console.log(`[Transfer] Summary generated: ${transferPayload.summary.length} chars`)
+            }
+          } catch (err) {
+            console.warn('[Transfer] Summary generation failed:', err)
+          }
         }
 
-        // 3. Connect to remote server (AFTER export to minimize idle time)
-        console.log(`[Transfer] Connecting to remote server: ${url}`)
-        const { connectToRemote } = await import('./handlers/workspace')
-        const { client, error } = await connectToRemote(url, token)
-        if (!client) throw new Error(error ?? 'Connection failed to remote server')
-        console.log('[Transfer] Connected to remote server')
+        console.log(`[Transfer] Export complete: ${bundle.session?.messages?.length ?? 0} messages, ${bundle.files?.length ?? 0} files`)
+
+        const { url, token, remoteWorkspaceId } = targetWorkspace.remoteServer
+        console.log(`[Transfer] Connecting to target remote server: ${url}`)
+        const { client, error } = await connectToRemote(url, token, remoteWorkspaceId)
+        if (!client) throw new Error(error ?? 'Connection failed to target remote server')
+        console.log('[Transfer] Connected to target remote server')
 
         try {
-          // 4. Choose transport based on payload size
-          const json = JSON.stringify(bundle)
-          const payloadSize = Buffer.byteLength(json, 'utf-8')
+          const preparedBundle = prepareChunkedPayload(bundle)
+          const payloadSize = preparedBundle.bytes.length
           const payloadMB = (payloadSize / (1024 * 1024)).toFixed(1)
-
-          const { CHUNKED_TRANSFER_THRESHOLD, invokeChunked } = await import('./chunked-rpc')
 
           const emitProgress = (chunkSent: number, chunkTotal: number) => {
             try { _event.sender.send('transfer:progress', { sessionIndex: idx, sessionCount: count, chunkSent, chunkTotal }) } catch { /* renderer may be gone */ }
           }
 
           if (payloadSize < CHUNKED_TRANSFER_THRESHOLD) {
-            // Small bundle → direct RPC (emit 0% then 100%)
             console.log(`[Transfer] Bundle size: ${payloadMB}MB (< 5MB threshold) → using direct RPC`)
             emitProgress(0, 1)
             const result = await client.invoke('sessions:import', remoteWorkspaceId, bundle, 'fork')
             emitProgress(1, 1)
             return result
-          } else {
-            // Large bundle → chunked transfer
-            const chunkCount = Math.ceil(payloadSize / (384 * 1024))
-            console.log(`[Transfer] Bundle size: ${payloadMB}MB (>= 5MB threshold) → using chunked transfer (${chunkCount} chunks)`)
-            return await invokeChunked(
-              client,
-              'sessions:import',
-              [remoteWorkspaceId, bundle, 'fork'],
-              1,  // bundle is args[1]
-              emitProgress,
-            )
           }
+
+          const chunkCount = getChunkCount(payloadSize)
+          console.log(`[Transfer] Bundle size: ${payloadMB}MB (>= 5MB threshold) → using chunked transfer (${chunkCount} chunks)`)
+          return await invokeChunked(
+            client,
+            'sessions:import',
+            [remoteWorkspaceId, bundle, 'fork'],
+            1,
+            emitProgress,
+            preparedBundle,
+          )
         } finally {
           client.destroy()
         }

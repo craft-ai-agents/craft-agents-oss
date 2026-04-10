@@ -406,31 +406,27 @@ export default function App() {
     })
   }, [])
 
-  const refreshSessionFromServer = useCallback(async (sessionId: string): Promise<boolean> => {
+  const refreshSessionFromServer = useCallback(async (sessionId: string): Promise<'refreshed' | 'preserved_stale_messages' | 'failed'> => {
     try {
       const fresh = await window.electronAPI.getSessionMessages(sessionId)
-      if (!fresh) return false
+      if (!fresh) return 'failed'
+
+      const prevSession = store.get(sessionAtomFamily(sessionId))
+      const preservedStaleMessages = !!prevSession && prevSession.messages.length > 0 && (!fresh.messages || fresh.messages.length === 0)
+      const nextSession = preservedStaleMessages
+        ? { ...fresh, messages: prevSession.messages }
+        : fresh
 
       clearStreamingState(sessionId)
-      updateSessionDirect(sessionId, (prev) => {
-        // Guard: don't clobber existing messages with an empty array.
-        // After sleep/wake the server may return messages:[] if the session
-        // subprocess hasn't finished lazy-loading yet. Preserving the
-        // renderer's copy keeps the UI intact while a retry fetches the
-        // full data.
-        if (prev && prev.messages.length > 0 && (!fresh.messages || fresh.messages.length === 0)) {
-          return { ...fresh, messages: prev.messages }
-        }
-        return fresh
-      })
-      syncSessionOptionsFromSession(fresh)
+      updateSessionDirect(sessionId, () => nextSession)
+      syncSessionOptionsFromSession(nextSession)
       void reconcilePermissionModeState(sessionId)
-      return true
+      return preservedStaleMessages ? 'preserved_stale_messages' : 'refreshed'
     } catch (err) {
       console.error(`[App] Failed to refresh session ${sessionId}:`, err)
-      return false
+      return 'failed'
     }
-  }, [clearStreamingState, updateSessionDirect, syncSessionOptionsFromSession, reconcilePermissionModeState])
+  }, [clearStreamingState, updateSessionDirect, syncSessionOptionsFromSession, reconcilePermissionModeState, store])
 
   const loadSessionsFromServer = useCallback(async () => {
     setSessionLoadError(null)
@@ -1011,15 +1007,15 @@ export default function App() {
       // Refresh full message content only for the active session plus any
       // session still marked processing after the metadata refresh.
       for (const sessionId of refreshIds) {
-        let ok = await refreshSessionFromServer(sessionId)
-        if (!ok) {
-          // Server may need time to restart session subprocess after reconnect.
-          // Retry with increasing delays (2s, 4s) to give the server time.
+        let refreshResult = await refreshSessionFromServer(sessionId)
+        if (refreshResult !== 'refreshed') {
+          // Server may need time to restart session subprocess after reconnect,
+          // or it may still be lazily loading session messages.
           for (const delay of [2000, 4000]) {
-            console.warn(`[App] Retrying session refresh for ${sessionId} after ${delay}ms`)
+            console.warn(`[App] Retrying session refresh for ${sessionId} after ${delay}ms (${refreshResult})`)
             await new Promise(r => setTimeout(r, delay))
-            ok = await refreshSessionFromServer(sessionId)
-            if (ok) break
+            refreshResult = await refreshSessionFromServer(sessionId)
+            if (refreshResult === 'refreshed') break
           }
         }
       }
@@ -1036,29 +1032,10 @@ export default function App() {
         }
       }
 
-      // Debug: verify store has the data after recovery
-      const debugIds = store.get(sessionIdsAtom)
-      const debugMeta = store.get(sessionMetaMapAtom)
-      console.warn(`[Debug:reconnect] Store state after recovery — sessionIdsAtom: ${debugIds.length} ids, sessionMetaMapAtom: ${debugMeta.size} entries`)
-      if (sessionSelection.selected) {
-        const debugSession = store.get(sessionAtomFamily(sessionSelection.selected))
-        console.warn(`[Debug:reconnect] Active session atom: ${debugSession?.messages?.length ?? 0} messages`)
-      }
     })
 
     return cleanup
   }, [store, sessionSelection.selected, refreshSessionFromServer, refreshSessionListMetadataFromServer])
-
-  // Debug: monitor if Jotai subscriptions fire after store.set()
-  useEffect(() => {
-    const unsub1 = store.sub(sessionIdsAtom, () => {
-      console.warn('[Debug:sub] sessionIdsAtom subscription fired!', store.get(sessionIdsAtom).length, 'ids')
-    })
-    const unsub2 = store.sub(sessionMetaMapAtom, () => {
-      console.warn('[Debug:sub] sessionMetaMapAtom subscription fired!', store.get(sessionMetaMapAtom).size, 'entries')
-    })
-    return () => { unsub1(); unsub2() }
-  }, [store])
 
   // Listen for menu bar events
   useEffect(() => {

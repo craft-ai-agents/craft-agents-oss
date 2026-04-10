@@ -705,12 +705,26 @@ export function FreeFormInput({
 
     let hasExecuted = false
 
+    const isExpectedReconnectError = (error: unknown): boolean => {
+      const message = error instanceof Error ? error.message : String(error)
+      return message.includes('Connection closed')
+        || message.includes('Client disconnected')
+        || message.includes('transport')
+        || message.includes('socket')
+    }
+
     const executePendingPlan = async () => {
       if (hasExecuted) return
 
       try {
         const pending = await window.electronAPI.getPendingPlanExecution(sessionId)
-        if (!pending || pending.awaitingCompaction) return
+        if (!pending || pending.awaitingCompaction || pending.executionDispatched) return
+
+        // Mark dispatched before sending so reload recovery does not double-submit
+        // the same plan if onSubmit succeeds but cleanup fails during a reconnect.
+        await window.electronAPI.sessionCommand(sessionId, {
+          type: 'markPendingPlanExecutionDispatched',
+        })
 
         // Compaction completed but we never sent the execution message (page reloaded).
         // Send it now and clear the pending state.
@@ -724,9 +738,10 @@ export function FreeFormInput({
         await window.electronAPI.sessionCommand(sessionId, {
           type: 'clearPendingPlanExecution',
         })
-      } catch {
-        // Connection may be lost (e.g. after sleep/wake) — safe to ignore,
-        // the pending plan will be retried on next mount.
+      } catch (error) {
+        if (!isExpectedReconnectError(error)) {
+          console.error('[FreeFormInput] Failed to resume pending plan execution:', error)
+        }
       }
     }
 

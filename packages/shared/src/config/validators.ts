@@ -74,6 +74,11 @@ const LlmAuthTypeSchema = z.enum([
   'bearer_token', 'service_account_file', 'environment', 'none',
 ]);
 
+const CustomEndpointSchema = z.object({
+  api: z.enum(['openai-completions', 'anthropic-messages']),
+  supportsImages: z.boolean().optional(),
+});
+
 const LlmConnectionSchema = z.object({
   slug: z.string().min(1),
   name: z.string().min(1),
@@ -83,6 +88,7 @@ const LlmConnectionSchema = z.object({
   models: z.array(z.union([z.string(), z.object({ id: z.string() }).passthrough()])).optional(),
   defaultModel: z.string().optional(),
   modelSelectionMode: z.enum(['automaticallySyncedFromProvider', 'userDefined3Tier']).optional(),
+  customEndpoint: CustomEndpointSchema.optional(),
   createdAt: z.number(),
   // Allow additional fields (codexPath, awsRegion, gcpProjectId, etc.)
 }).passthrough();

@@ -9,93 +9,88 @@
  *   1. transfer:start  → allocate temp dir, return transferId
  *   2. transfer:chunk  → write one chunk to temp file (repeat N times)
  *   3. transfer:commit → reassemble, execute deferred RPC, clean up
+ *   4. transfer:abort  → best-effort cleanup after client-side failure/cancel
  */
 
-import { randomUUID, createHash } from 'node:crypto'
-import { mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs'
+import { createHash, randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import type { RpcServer, HandlerFn } from '../../transport/types'
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import type { HandlerFn, RequestContext, RpcServer } from '../../transport/types'
 
 interface TransferState {
-  /** Unique transfer ID */
   id: string
-  /** Temp directory holding chunk files */
   dir: string
-  /** Total expected bytes (for validation) */
+  ownerClientId: string
   totalBytes: number
-  /** Number of expected chunks */
   chunkCount: number
-  /** Set of received chunk indices */
   received: Set<number>
-  /** The original RPC channel to invoke on commit */
   channel: string
-  /** The original RPC args (with a null placeholder for the large arg) */
   args: any[]
-  /** Index in args where the reassembled payload goes */
   largeArgIndex: number
-  /** SHA-256 hex digest of the original raw payload (for integrity verification) */
   checksum?: string
-  /** Cleanup timer */
-  timer: ReturnType<typeof setTimeout>
+  timer: ReturnType<typeof setTimeout> | null
 }
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const TRANSFER_TTL_MS = 5 * 60 * 1000  // 5 minutes
-
-// ---------------------------------------------------------------------------
-// State (module-scoped, shared across all connections)
-// ---------------------------------------------------------------------------
+const DEFAULT_TRANSFER_TTL_MS = 5 * 60 * 1000
 
 const activeTransfers = new Map<string, TransferState>()
+const transferableHandlers = new Map<string, HandlerFn>()
 
-function cleanupTransfer(transferId: string): void {
+function getTransferTtlMs(): number {
+  const raw = Number(process.env.CRAFT_TRANSFER_TTL_MS)
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_TRANSFER_TTL_MS
+}
+
+async function cleanupTransfer(transferId: string): Promise<void> {
   const transfer = activeTransfers.get(transferId)
   if (!transfer) return
 
-  clearTimeout(transfer.timer)
+  if (transfer.timer) {
+    clearTimeout(transfer.timer)
+    transfer.timer = null
+  }
   activeTransfers.delete(transferId)
 
-  // Remove temp directory
   try {
     if (existsSync(transfer.dir)) {
-      rmSync(transfer.dir, { recursive: true, force: true })
+      await rm(transfer.dir, { recursive: true, force: true })
     }
   } catch {
     // Best effort cleanup
   }
 }
 
-// ---------------------------------------------------------------------------
-// Handler registration
-// ---------------------------------------------------------------------------
+function rescheduleTransferCleanup(transfer: TransferState): void {
+  if (transfer.timer) clearTimeout(transfer.timer)
+  transfer.timer = setTimeout(() => {
+    console.warn(`[Transfer:server] TTL expired for transfer ${transfer.id} — cleaning up`)
+    void cleanupTransfer(transfer.id)
+  }, getTransferTtlMs())
+}
 
-/**
- * Map of channel → handler that the transfer system can delegate to on commit.
- * Populated by calling `setTransferableHandler()` for each channel that supports
- * chunked transfer (e.g. 'sessions:import', 'resources:import').
- */
-const transferableHandlers = new Map<string, HandlerFn>()
+function assertTransferOwner(ctx: RequestContext, transfer: TransferState): void {
+  if (ctx.clientId !== transfer.ownerClientId) {
+    throw new Error('Transfer owned by different client')
+  }
+}
 
-/**
- * Register a handler that can be invoked via chunked transfer.
- * Call this alongside the normal `server.handle()` registration.
- */
 export function setTransferableHandler(channel: string, handler: HandlerFn): void {
   transferableHandlers.set(channel, handler)
 }
 
+export function __resetTransferStateForTests(): void {
+  for (const transfer of activeTransfers.values()) {
+    if (transfer.timer) clearTimeout(transfer.timer)
+  }
+  activeTransfers.clear()
+  transferableHandlers.clear()
+}
+
 export function registerTransferHandlers(server: RpcServer): void {
-  // ── transfer:start ──
-  server.handle(RPC_CHANNELS.transfer.START, async (_ctx, opts: {
+  server.handle(RPC_CHANNELS.transfer.START, async (ctx, opts: {
     totalBytes: number
     chunkCount: number
     channel: string
@@ -106,28 +101,30 @@ export function registerTransferHandlers(server: RpcServer): void {
     if (!opts || typeof opts.chunkCount !== 'number' || opts.chunkCount < 1) {
       throw new Error('Invalid chunkCount')
     }
+    if (typeof opts.totalBytes !== 'number' || opts.totalBytes < 0) {
+      throw new Error('Invalid totalBytes')
+    }
     if (!opts.channel || typeof opts.channel !== 'string') {
       throw new Error('Missing target channel')
+    }
+    if (!Array.isArray(opts.args)) {
+      throw new Error('Missing deferred args')
     }
     if (!transferableHandlers.has(opts.channel)) {
       throw new Error(`Channel ${opts.channel} does not support chunked transfer`)
     }
-    if (typeof opts.largeArgIndex !== 'number') {
-      throw new Error('Missing largeArgIndex')
+    if (!Number.isInteger(opts.largeArgIndex) || opts.largeArgIndex < 0 || opts.largeArgIndex >= opts.args.length) {
+      throw new Error('Invalid largeArgIndex')
     }
 
     const transferId = randomUUID()
     const dir = join(tmpdir(), `craft-transfer-${transferId}`)
-    mkdirSync(dir, { recursive: true })
+    await mkdir(dir, { recursive: true })
 
-    const timer = setTimeout(() => {
-      console.warn(`[Transfer:server] TTL expired for transfer ${transferId} — cleaning up`)
-      cleanupTransfer(transferId)
-    }, TRANSFER_TTL_MS)
-
-    activeTransfers.set(transferId, {
+    const transfer: TransferState = {
       id: transferId,
       dir,
+      ownerClientId: ctx.clientId,
       totalBytes: opts.totalBytes,
       chunkCount: opts.chunkCount,
       received: new Set(),
@@ -135,8 +132,10 @@ export function registerTransferHandlers(server: RpcServer): void {
       args: opts.args,
       largeArgIndex: opts.largeArgIndex,
       checksum: opts.checksum,
-      timer,
-    })
+      timer: null,
+    }
+    activeTransfers.set(transferId, transfer)
+    rescheduleTransferCleanup(transfer)
 
     const totalMB = (opts.totalBytes / (1024 * 1024)).toFixed(1)
     console.log(`[Transfer:server] Started transfer ${transferId}: ${opts.chunkCount} chunks, ${totalMB}MB, channel: ${opts.channel}`)
@@ -144,8 +143,7 @@ export function registerTransferHandlers(server: RpcServer): void {
     return { transferId }
   })
 
-  // ── transfer:chunk ──
-  server.handle(RPC_CHANNELS.transfer.CHUNK, async (_ctx, opts: {
+  server.handle(RPC_CHANNELS.transfer.CHUNK, async (ctx, opts: {
     transferId: string
     index: number
     data: string
@@ -155,17 +153,19 @@ export function registerTransferHandlers(server: RpcServer): void {
       console.error(`[Transfer:server] Unknown transfer: ${opts.transferId}`)
       throw new Error(`Unknown transfer: ${opts.transferId}`)
     }
-    if (typeof opts.index !== 'number' || opts.index < 0 || opts.index >= transfer.chunkCount) {
+    assertTransferOwner(ctx, transfer)
+
+    if (!Number.isInteger(opts.index) || opts.index < 0 || opts.index >= transfer.chunkCount) {
       throw new Error(`Invalid chunk index: ${opts.index}`)
     }
-    if (typeof opts.data !== 'string') {
+    if (typeof opts.data !== 'string' || opts.data.length === 0) {
       throw new Error('Missing chunk data')
     }
 
-    // Write chunk to temp file
     const chunkPath = join(transfer.dir, `chunk-${String(opts.index).padStart(6, '0')}`)
-    writeFileSync(chunkPath, opts.data, 'utf-8')
+    await writeFile(chunkPath, opts.data, 'utf-8')
     transfer.received.add(opts.index)
+    rescheduleTransferCleanup(transfer)
 
     if ((opts.index + 1) % 10 === 0 || opts.index === transfer.chunkCount - 1) {
       console.log(`[Transfer:server] Received chunk ${opts.index + 1}/${transfer.chunkCount} for ${transfer.id.slice(0, 8)}`)
@@ -174,7 +174,6 @@ export function registerTransferHandlers(server: RpcServer): void {
     return { received: opts.index }
   })
 
-  // ── transfer:commit ──
   server.handle(RPC_CHANNELS.transfer.COMMIT, async (ctx, opts: {
     transferId: string
   }) => {
@@ -183,66 +182,63 @@ export function registerTransferHandlers(server: RpcServer): void {
       console.error(`[Transfer:server] Commit failed — unknown transfer: ${opts.transferId}`)
       throw new Error(`Unknown transfer: ${opts.transferId}`)
     }
+    assertTransferOwner(ctx, transfer)
 
     console.log(`[Transfer:server] Committing transfer ${transfer.id.slice(0, 8)}: ${transfer.received.size}/${transfer.chunkCount} chunks received`)
 
-    // Validate all chunks received
     if (transfer.received.size !== transfer.chunkCount) {
-      const missing = []
+      const missing: number[] = []
       for (let i = 0; i < transfer.chunkCount; i++) {
         if (!transfer.received.has(i)) missing.push(i)
       }
       throw new Error(`Missing ${missing.length} chunk(s): [${missing.slice(0, 10).join(', ')}${missing.length > 10 ? '...' : ''}]`)
     }
 
-    // Reassemble chunks into the original payload.
-    // Each chunk is independently base64-encoded, so we must decode each one
-    // separately (they have their own padding) and concatenate the raw buffers.
     const buffers: Buffer[] = []
     for (let i = 0; i < transfer.chunkCount; i++) {
       const chunkPath = join(transfer.dir, `chunk-${String(i).padStart(6, '0')}`)
-      buffers.push(Buffer.from(readFileSync(chunkPath, 'utf-8'), 'base64'))
+      const encoded = await readFile(chunkPath, 'utf-8')
+      buffers.push(Buffer.from(encoded, 'base64'))
     }
     const reassembled = Buffer.concat(buffers)
 
-    // Verify integrity via SHA-256 checksum (if provided by client)
+    if (reassembled.length !== transfer.totalBytes) {
+      await cleanupTransfer(transfer.id)
+      throw new Error(`Payload size mismatch: expected ${transfer.totalBytes} bytes, got ${reassembled.length}`)
+    }
+
     if (transfer.checksum) {
       const actual = createHash('sha256').update(reassembled).digest('hex')
       if (actual !== transfer.checksum) {
         console.error(`[Transfer:server] Checksum mismatch for ${transfer.id.slice(0, 8)}: expected ${transfer.checksum.slice(0, 12)}..., got ${actual.slice(0, 12)}...`)
-        cleanupTransfer(transfer.id)
+        await cleanupTransfer(transfer.id)
         throw new Error(`Checksum mismatch: expected ${transfer.checksum.slice(0, 12)}..., got ${actual.slice(0, 12)}...`)
       }
       console.log(`[Transfer:server] Checksum verified: ${actual.slice(0, 12)}...`)
     }
 
-    const jsonString = reassembled.toString('utf-8')
     let payload: any
     try {
-      payload = JSON.parse(jsonString)
+      payload = JSON.parse(reassembled.toString('utf-8'))
     } catch {
-      cleanupTransfer(transfer.id)
+      await cleanupTransfer(transfer.id)
       throw new Error(`Failed to parse reassembled payload (${(reassembled.length / (1024 * 1024)).toFixed(1)}MB, ${transfer.chunkCount} chunks)`)
     }
 
-    // Execute the deferred RPC handler
     const handler = transferableHandlers.get(transfer.channel)
     if (!handler) {
-      cleanupTransfer(transfer.id)
+      await cleanupTransfer(transfer.id)
       throw new Error(`No handler for channel: ${transfer.channel}`)
     }
 
-    const reassembledMB = (jsonString.length / (1024 * 1024)).toFixed(1)
+    const reassembledMB = (reassembled.length / (1024 * 1024)).toFixed(1)
     console.log(`[Transfer:server] Reassembled ${reassembledMB}MB payload for ${transfer.channel} — executing handler`)
 
-    // Reconstruct the original args with the reassembled payload
     const args = [...transfer.args]
     args[transfer.largeArgIndex] = payload
 
-    // Clean up temp files before executing (we have the payload in memory now)
-    cleanupTransfer(transfer.id)
+    await cleanupTransfer(transfer.id)
 
-    // Execute with the original request context
     try {
       const result = await handler(ctx, ...args)
       console.log(`[Transfer:server] Handler ${transfer.channel} completed successfully`)
@@ -251,5 +247,16 @@ export function registerTransferHandlers(server: RpcServer): void {
       console.error(`[Transfer:server] Handler ${transfer.channel} failed:`, err)
       throw err
     }
+  })
+
+  server.handle(RPC_CHANNELS.transfer.ABORT, async (ctx, opts: { transferId: string }) => {
+    const transfer = activeTransfers.get(opts.transferId)
+    if (!transfer) {
+      return { aborted: false }
+    }
+    assertTransferOwner(ctx, transfer)
+    await cleanupTransfer(transfer.id)
+    console.warn(`[Transfer:server] Transfer aborted by client: ${transfer.id.slice(0, 8)}`)
+    return { aborted: true }
   })
 }

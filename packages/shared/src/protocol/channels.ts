@@ -52,6 +52,7 @@ export const RPC_CHANNELS = {
     START: 'transfer:start',
     CHUNK: 'transfer:chunk',
     COMMIT: 'transfer:commit',
+    ABORT: 'transfer:abort',
   },
   tasks: {
     GET_OUTPUT: 'tasks:getOutput',

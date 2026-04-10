@@ -10,17 +10,18 @@
  */
 
 import { createHash } from 'node:crypto'
+import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { WsRpcClient } from '../transport/client'
 
 /**
  * 2MB raw → ~2.7MB after base64 encoding.
  * Larger chunks = fewer round trips (a 250MB payload = ~125 chunks instead of 651).
- * Still well under Cloudflare's per-message limits.
+ * Still well under common per-message proxy limits.
  */
-const CHUNK_SIZE = 2 * 1024 * 1024
+export const CHUNK_SIZE = 2 * 1024 * 1024
 
 /** Threshold above which we switch from direct RPC to chunked transfer. */
-export const CHUNKED_TRANSFER_THRESHOLD = 5 * 1024 * 1024  // 5MB
+export const CHUNKED_TRANSFER_THRESHOLD = 5 * 1024 * 1024
 
 /** Max retries per chunk before giving up. */
 const MAX_CHUNK_RETRIES = 3
@@ -28,15 +29,36 @@ const MAX_CHUNK_RETRIES = 3
 /** Delay between chunk retries (ms). */
 const CHUNK_RETRY_DELAY = 1000
 
+export interface PreparedChunkedPayload {
+  bytes: Buffer
+  checksum: string
+  chunkCount: number
+}
+
+export function getChunkCount(totalBytes: number): number {
+  return Math.ceil(totalBytes / CHUNK_SIZE)
+}
+
+export function prepareChunkedPayload(value: unknown): PreparedChunkedPayload {
+  const json = JSON.stringify(value)
+  const bytes = Buffer.from(json, 'utf-8')
+  return {
+    bytes,
+    checksum: createHash('sha256').update(bytes).digest('hex'),
+    chunkCount: getChunkCount(bytes.length),
+  }
+}
+
 /**
  * Send a large RPC call in chunks over the existing WebSocket connection.
  *
- * @param client      Connected WsRpcClient to the remote server
- * @param channel     The original RPC channel (e.g. 'sessions:import')
- * @param args        The original arguments array
+ * @param client         Connected WsRpcClient to the remote server
+ * @param channel        The original RPC channel (e.g. 'sessions:import')
+ * @param args           The original arguments array
  * @param largeArgIndex  Which argument is the large payload (will be chunked)
- * @param onProgress  Optional callback with (sentChunks, totalChunks) for UI progress
- * @returns           The result from the remote handler (same as a direct invoke)
+ * @param onProgress     Optional callback with (sentChunks, totalChunks) for UI progress
+ * @param prepared       Optional pre-serialized payload so callers can inspect size without re-serializing
+ * @returns              The result from the remote handler (same as a direct invoke)
  */
 export async function invokeChunked(
   client: WsRpcClient,
@@ -44,71 +66,79 @@ export async function invokeChunked(
   args: any[],
   largeArgIndex: number,
   onProgress?: (sent: number, total: number) => void,
+  prepared?: PreparedChunkedPayload,
 ): Promise<any> {
-  // 1. Serialize the large argument to JSON, then to raw bytes
-  const json = JSON.stringify(args[largeArgIndex])
-  const bytes = Buffer.from(json, 'utf-8')
+  const payload = prepared ?? prepareChunkedPayload(args[largeArgIndex])
 
-  // 2. Split into base64 chunks
-  const chunks: string[] = []
-  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-    chunks.push(bytes.subarray(i, i + CHUNK_SIZE).toString('base64'))
-  }
-
-  // 3. Build deferred args (replace large arg with null placeholder)
+  // Build deferred args (replace large arg with null placeholder)
   const deferredArgs = [...args]
   deferredArgs[largeArgIndex] = null
 
-  // 4. Compute checksum for integrity verification
-  const checksum = createHash('sha256').update(bytes).digest('hex')
+  const payloadMB = (payload.bytes.length / (1024 * 1024)).toFixed(1)
+  console.log(`[ChunkedRPC] Starting transfer: ${payload.chunkCount} chunks, ${payloadMB}MB, sha256: ${payload.checksum.slice(0, 12)}..., channel: ${channel}`)
 
-  // 5. Start transfer
-  const payloadMB = (bytes.length / (1024 * 1024)).toFixed(1)
-  console.log(`[ChunkedRPC] Starting transfer: ${chunks.length} chunks, ${payloadMB}MB, sha256: ${checksum.slice(0, 12)}..., channel: ${channel}`)
-  const { transferId } = await client.invoke('transfer:start', {
-    totalBytes: bytes.length,
-    chunkCount: chunks.length,
-    channel,
-    args: deferredArgs,
-    largeArgIndex,
-    checksum,
-  }) as { transferId: string }
-  console.log(`[ChunkedRPC] Transfer started: ${transferId}`)
+  let transferId: string | null = null
+  try {
+    const startResult = await client.invoke(RPC_CHANNELS.transfer.START, {
+      totalBytes: payload.bytes.length,
+      chunkCount: payload.chunkCount,
+      channel,
+      args: deferredArgs,
+      largeArgIndex,
+      checksum: payload.checksum,
+    }) as { transferId: string }
 
-  // 5. Send chunks sequentially with retry
-  for (let i = 0; i < chunks.length; i++) {
-    let lastError: Error | null = null
-    for (let attempt = 1; attempt <= MAX_CHUNK_RETRIES; attempt++) {
-      try {
-        await client.invoke('transfer:chunk', {
-          transferId,
-          index: i,
-          data: chunks[i],
-        })
-        lastError = null
-        break
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err))
-        if (attempt < MAX_CHUNK_RETRIES) {
-          console.warn(`[ChunkedRPC] Chunk ${i + 1}/${chunks.length} failed (attempt ${attempt}/${MAX_CHUNK_RETRIES}): ${lastError.message}. Retrying in ${CHUNK_RETRY_DELAY}ms...`)
-          await new Promise(r => setTimeout(r, CHUNK_RETRY_DELAY))
+    transferId = startResult.transferId
+    console.log(`[ChunkedRPC] Transfer started: ${transferId}`)
+
+    for (let i = 0; i < payload.chunkCount; i++) {
+      const start = i * CHUNK_SIZE
+      const end = Math.min(start + CHUNK_SIZE, payload.bytes.length)
+      const data = payload.bytes.subarray(start, end).toString('base64')
+
+      let lastError: Error | null = null
+      for (let attempt = 1; attempt <= MAX_CHUNK_RETRIES; attempt++) {
+        try {
+          await client.invoke(RPC_CHANNELS.transfer.CHUNK, {
+            transferId,
+            index: i,
+            data,
+          })
+          lastError = null
+          break
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error(String(err))
+          if (attempt < MAX_CHUNK_RETRIES) {
+            console.warn(`[ChunkedRPC] Chunk ${i + 1}/${payload.chunkCount} failed (attempt ${attempt}/${MAX_CHUNK_RETRIES}): ${lastError.message}. Retrying in ${CHUNK_RETRY_DELAY}ms...`)
+            await new Promise(r => setTimeout(r, CHUNK_RETRY_DELAY))
+          }
         }
       }
-    }
-    if (lastError) {
-      throw new Error(`Chunk ${i + 1}/${chunks.length} failed after ${MAX_CHUNK_RETRIES} attempts: ${lastError.message}`)
+
+      if (lastError) {
+        throw new Error(`Chunk ${i + 1}/${payload.chunkCount} failed after ${MAX_CHUNK_RETRIES} attempts: ${lastError.message}`)
+      }
+
+      onProgress?.(i + 1, payload.chunkCount)
+
+      if ((i + 1) % 10 === 0 || i === payload.chunkCount - 1) {
+        console.log(`[ChunkedRPC] Sent chunk ${i + 1}/${payload.chunkCount}`)
+      }
     }
 
-    onProgress?.(i + 1, chunks.length)
-
-    if ((i + 1) % 10 === 0 || i === chunks.length - 1) {
-      console.log(`[ChunkedRPC] Sent chunk ${i + 1}/${chunks.length}`)
+    console.log('[ChunkedRPC] All chunks sent, committing...')
+    const result = await client.invoke(RPC_CHANNELS.transfer.COMMIT, { transferId })
+    console.log('[ChunkedRPC] Transfer committed successfully')
+    transferId = null
+    return result
+  } catch (error) {
+    if (transferId) {
+      try {
+        await client.invoke(RPC_CHANNELS.transfer.ABORT, { transferId })
+      } catch {
+        // Best effort cleanup — the server may already have cleaned up.
+      }
     }
+    throw error
   }
-
-  // 6. Commit — returns the result of the original RPC call
-  console.log(`[ChunkedRPC] All chunks sent, committing...`)
-  const result = await client.invoke('transfer:commit', { transferId })
-  console.log(`[ChunkedRPC] Transfer committed successfully`)
-  return result
 }

@@ -249,6 +249,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.transfer.START,
   RPC_CHANNELS.transfer.CHUNK,
   RPC_CHANNELS.transfer.COMMIT,
+  RPC_CHANNELS.transfer.ABORT,
 
   // tasks — workspace content
   RPC_CHANNELS.tasks.GET_OUTPUT,

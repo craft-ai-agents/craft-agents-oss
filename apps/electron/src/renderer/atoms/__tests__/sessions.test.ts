@@ -70,4 +70,39 @@ describe('session message loading atoms', () => {
     expect(store.get(sessionAtomFamily(sessionId))?.messages.map((message) => message.id)).toEqual(['m1', 'm2'])
     expect(store.get(loadedSessionsAtom).has(sessionId)).toBe(true)
   })
+
+  it('does not mark stale empty-response fallback as loaded', async () => {
+    const store = createStore()
+    const sessionId = 'session-1'
+    const calls: string[] = []
+
+    globalThis.window = {
+      electronAPI: {
+        getSessionMessages: async (id: string) => {
+          calls.push(id)
+          if (calls.length === 1) {
+            return makeSession({ id, messages: [] })
+          }
+          return makeSession({
+            id,
+            messages: [msg('m1'), msg('m2', 'assistant')],
+          })
+        },
+      },
+    } as unknown as typeof window
+
+    store.set(sessionAtomFamily(sessionId), makeSession({
+      id: sessionId,
+      messages: [msg('local-1'), msg('local-2', 'assistant')],
+    }))
+
+    const firstResult = await store.set(ensureSessionMessagesLoadedAtom, sessionId)
+    expect(firstResult?.messages.map((message) => message.id)).toEqual(['local-1', 'local-2'])
+    expect(store.get(loadedSessionsAtom).has(sessionId)).toBe(false)
+
+    const secondResult = await store.set(forceSessionMessagesReloadAtom, sessionId)
+    expect(calls).toEqual([sessionId, sessionId])
+    expect(secondResult?.messages.map((message) => message.id)).toEqual(['m1', 'm2'])
+    expect(store.get(loadedSessionsAtom).has(sessionId)).toBe(true)
+  })
 })
