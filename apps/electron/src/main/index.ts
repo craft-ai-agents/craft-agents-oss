@@ -701,13 +701,18 @@ app.whenReady().then(async () => {
         const { url, token, remoteWorkspaceId } = workspace.remoteServer
         if (!sessionManager) throw new Error('Session manager not initialized')
 
+        // Find the session's source workspace (not the target!)
+        const session = await sessionManager.getSession(sessionId)
+        if (!session) throw new Error(`Session ${sessionId} not found`)
+        const sourceWorkspaceId = session.workspaceId
+
         // 1. Export full session bundle (stays in main process memory)
-        const bundle = await sessionManager.exportSession(sessionId, workspace.id)
+        const bundle = await sessionManager.exportSession(sessionId, sourceWorkspaceId)
         if (!bundle) throw new Error(`Failed to export session ${sessionId}`)
 
         // 2. Generate summary and inject into bundle header
         try {
-          const transferPayload = await sessionManager.exportRemoteSessionTransfer(sessionId, workspace.id)
+          const transferPayload = await sessionManager.exportRemoteSessionTransfer(sessionId, sourceWorkspaceId)
           if (transferPayload?.summary && bundle.session?.header) {
             ;(bundle.session.header as any).transferredSessionSummary = transferPayload.summary
             ;(bundle.session.header as any).transferredSessionSummaryApplied = false
