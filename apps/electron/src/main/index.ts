@@ -693,7 +693,9 @@ app.whenReady().then(async () => {
 
       // Transfer session to remote workspace — orchestrated in main process
       // to avoid shipping the full bundle through the renderer.
-      ipcMain.handle('session:transferToRemoteWorkspace', async (_event, sessionId: string, targetWorkspaceId: string) => {
+      ipcMain.handle('session:transferToRemoteWorkspace', async (_event, sessionId: string, targetWorkspaceId: string, sessionIndex?: number, sessionCount?: number) => {
+        const idx = sessionIndex ?? 0
+        const count = sessionCount ?? 1
         const { getWorkspaceByNameOrId } = await import('@craft-agent/shared/config')
         const workspace = getWorkspaceByNameOrId(targetWorkspaceId)
         if (!workspace?.remoteServer) throw new Error(`Workspace ${targetWorkspaceId} has no remote server`)
@@ -740,10 +742,17 @@ app.whenReady().then(async () => {
 
           const { CHUNKED_TRANSFER_THRESHOLD, invokeChunked } = await import('./chunked-rpc')
 
+          const emitProgress = (chunkSent: number, chunkTotal: number) => {
+            try { _event.sender.send('transfer:progress', { sessionIndex: idx, sessionCount: count, chunkSent, chunkTotal }) } catch { /* renderer may be gone */ }
+          }
+
           if (payloadSize < CHUNKED_TRANSFER_THRESHOLD) {
-            // Small bundle → direct RPC
+            // Small bundle → direct RPC (emit 0% then 100%)
             console.log(`[Transfer] Bundle size: ${payloadMB}MB (< 5MB threshold) → using direct RPC`)
-            return await client.invoke('sessions:import', remoteWorkspaceId, bundle, 'fork')
+            emitProgress(0, 1)
+            const result = await client.invoke('sessions:import', remoteWorkspaceId, bundle, 'fork')
+            emitProgress(1, 1)
+            return result
           } else {
             // Large bundle → chunked transfer
             const chunkCount = Math.ceil(payloadSize / (384 * 1024))
@@ -753,9 +762,7 @@ app.whenReady().then(async () => {
               'sessions:import',
               [remoteWorkspaceId, bundle, 'fork'],
               1,  // bundle is args[1]
-              (sent, total) => {
-                try { _event.sender.send('transfer:progress', { sent, total }) } catch { /* renderer may be gone */ }
-              },
+              emitProgress,
             )
           }
         } finally {

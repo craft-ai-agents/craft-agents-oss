@@ -53,16 +53,23 @@ export function SendToWorkspaceDialog({
   const { t } = useTranslation()
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null)
   const [isTransferring, setIsTransferring] = useState(false)
-  const [transferProgress, setTransferProgress] = useState<{ sent: number; total: number } | null>(null)
+  // Normalized overall progress (0–1) across all sessions in the batch
+  const [overallProgress, setOverallProgress] = useState(0)
   const workspaceIconMap = useWorkspaceIcons(workspaces)
 
-  // Listen for chunk upload progress from main process
+  // Listen for chunk upload progress from main process and normalize across batch
   useEffect(() => {
     if (!isTransferring) {
-      setTransferProgress(null)
+      setOverallProgress(0)
       return
     }
-    const cleanup = window.electronAPI.onTransferProgress(setTransferProgress)
+    const cleanup = window.electronAPI.onTransferProgress((p) => {
+      // Each session contributes 1/sessionCount to the total.
+      // Within a session, chunkSent/chunkTotal fills that slice.
+      const sessionSlice = 1 / p.sessionCount
+      const withinSession = p.chunkTotal > 0 ? p.chunkSent / p.chunkTotal : 1
+      setOverallProgress(p.sessionIndex * sessionSlice + withinSession * sessionSlice)
+    })
     return cleanup
   }, [isTransferring])
 
@@ -125,9 +132,10 @@ export function SendToWorkspaceDialog({
     try {
       const newSessionIds: string[] = []
 
-      for (const sessionId of sessionIds) {
+      for (let i = 0; i < sessionIds.length; i++) {
+        const sessionId = sessionIds[i]
         // Main process handles export + summary + transport (chunked for large bundles)
-        const result = await window.electronAPI.transferSessionToWorkspace(sessionId, selectedWorkspaceId)
+        const result = await window.electronAPI.transferSessionToWorkspace(sessionId, selectedWorkspaceId, i, sessionIds.length)
         newSessionIds.push(result.sessionId)
       }
 
@@ -232,7 +240,7 @@ export function SendToWorkspaceDialog({
             onClick={handleTransfer}
             disabled={!selectedWorkspaceId || isTransferring}
             isTransferring={isTransferring}
-            progress={transferProgress ? transferProgress.sent / transferProgress.total : 0}
+            progress={overallProgress}
           />
         </DialogFooter>
       </DialogContent>
