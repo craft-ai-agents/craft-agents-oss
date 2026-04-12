@@ -3505,6 +3505,14 @@ export class SessionManager implements ISessionManager {
         setSessionStatusFn: async (sessionId: string | undefined, status: string) => {
           await this.setSessionStatus(sessionId ?? managed.id, status as SessionStatus)
         },
+        archiveSessionFn: async (sessionId: string | undefined, archive: boolean) => {
+          const targetId = sessionId ?? managed.id
+          if (archive) {
+            await this.archiveSession(targetId)
+          } else {
+            await this.unarchiveSession(targetId)
+          }
+        },
         getSessionInfoFn: (sessionId?: string) => {
           const targetId = sessionId ?? managed.id
           const session = this.sessions.get(targetId)

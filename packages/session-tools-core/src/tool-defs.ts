@@ -38,6 +38,7 @@ import { handleSetSessionLabels } from './handlers/set-session-labels.ts';
 import { handleSetSessionStatus } from './handlers/set-session-status.ts';
 import { handleGetSessionInfo } from './handlers/get-session-info.ts';
 import { handleListSessions } from './handlers/list-sessions.ts';
+import { handleArchiveSession } from './handlers/archive-session.ts';
 
 // ============================================================
 // Canonical Zod Schemas
@@ -191,6 +192,11 @@ export const ListSessionsSchema = z.object({
   sortBy: z.enum(['recent', 'name', 'status']).optional().describe('Sort order (default: recent)'),
   limit: z.number().optional().describe('Max sessions to return (default 20, max 100)'),
   offset: z.number().optional().describe('Skip first N results (for pagination)'),
+});
+
+export const ArchiveSessionSchema = z.object({
+  sessionId: z.string().optional().describe('Session ID to archive. Omit to archive the current session.'),
+  unarchive: z.boolean().optional().describe('Set to true to unarchive instead of archive.'),
 });
 
 // ============================================================
@@ -435,6 +441,11 @@ Call with no arguments to introspect your own session state.`,
 
 Use filters (status, label, search) to narrow results instead of fetching everything. Default limit is 20 sessions.
 Use get_session_info for full details on a specific session (list-then-detail pattern).`,
+
+  archive_session: `Archive or unarchive a session. Archived sessions are hidden from the default session list.
+
+Use this to clean up completed sessions (e.g., after scheduled automation runs).
+Omit sessionId to target the current session. Set unarchive=true to restore an archived session.`,
 } as const;
 
 // ============================================================
@@ -505,6 +516,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'set_session_status', description: TOOL_DESCRIPTIONS.set_session_status, inputSchema: SetSessionStatusSchema, executionMode: 'registry', safeMode: 'block', handler: handleSetSessionStatus },
   { name: 'get_session_info', description: TOOL_DESCRIPTIONS.get_session_info, inputSchema: GetSessionInfoSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetSessionInfo },
   { name: 'list_sessions', description: TOOL_DESCRIPTIONS.list_sessions, inputSchema: ListSessionsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSessions },
+  { name: 'archive_session', description: TOOL_DESCRIPTIONS.archive_session, inputSchema: ArchiveSessionSchema, executionMode: 'registry', safeMode: 'block', handler: handleArchiveSession },
 ];
 
 export interface SessionToolFilterOptions {
