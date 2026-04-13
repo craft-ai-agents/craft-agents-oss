@@ -595,7 +595,7 @@ export function SessionFilesSection({ sessionId, className, sessionFolderPath, h
         {files.length === 0 ? (
           <div className="px-4 text-muted-foreground select-none">
             <p className="text-xs">
-              {isLoading ? 'Loading...' : 'Files attached or created by this chat will appear here.'}
+              {isLoading ? t('chat.sessionFilesLoading') : t('chat.sessionFilesEmpty')}
             </p>
           </div>
         ) : (
