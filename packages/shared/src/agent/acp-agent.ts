@@ -23,6 +23,50 @@ import type { LLMQueryRequest, LLMQueryResult } from './llm-tool.ts';
 import { EventQueue } from './backend/event-queue.ts';
 import type { AcpTransport } from './acp-transport.ts';
 import { AcpEventAdapter, type AcpSessionUpdate } from './acp-event-adapter.ts';
+import type { ModelDefinition } from '../config/models.ts';
+
+// ============================================================
+// Helpers
+// ============================================================
+
+interface SessionNewResult {
+  sessionId: string;
+  models?: { currentModelId?: string; availableModels?: Array<{ modelId: string; name: string; description?: string }> };
+  configOptions?: Array<{ id: string; category?: string; currentValue?: string; options?: Array<{ value: string; name: string; description?: string }> }>;
+}
+
+/**
+ * Extract ModelDefinition list from a session/new response.
+ * Supports both the legacy `models` field and the newer `configOptions[category=model]` format.
+ */
+function _extractModels(result: SessionNewResult): ModelDefinition[] {
+  // New format: configOptions with category=model takes precedence
+  if (result.configOptions) {
+    const modelOption = result.configOptions.find(o => o.category === 'model' || o.id === 'model');
+    if (modelOption?.options?.length) {
+      return modelOption.options.map(o => ({
+        id: o.value,
+        name: o.name,
+        shortName: o.name,
+        description: o.description ?? '',
+        provider: 'acp' as never,
+        contextWindow: 0,
+      }));
+    }
+  }
+  // Legacy format: models.availableModels
+  if (result.models?.availableModels?.length) {
+    return result.models.availableModels.map(m => ({
+      id: m.modelId,
+      name: m.name,
+      shortName: m.name,
+      description: m.description ?? '',
+      provider: 'acp' as never,
+      contextWindow: 0,
+    }));
+  }
+  return [];
+}
 
 // ============================================================
 // Constants
@@ -52,6 +96,9 @@ export class AcpAgent extends BaseAgent {
     (result: { allowed: boolean }) => void
   >();
   private _eventQueue = new EventQueue();
+
+  /** Models discovered from the last session/new response. Set after first chat. */
+  private _discoveredModels: ModelDefinition[] = [];
 
   /** Optional custom FS read handler (injected in tests or by factory) */
   private _fsReadHandler: ((path: string) => Promise<string>) | null = null;
@@ -149,21 +196,31 @@ export class AcpAgent extends BaseAgent {
     this._eventQueue.reset();
 
     try {
-      // 1. Initialize (protocol handshake)
+      // 1. Initialize (protocol handshake) — protocolVersion is an integer per ACP spec
       await this.transport.sendRequest('initialize', {
-        protocolVersion: '0.1.0',
-        capabilities: { fileSystem: { read: true, write: false } },
+        protocolVersion: 1,
+        clientCapabilities: { fs: { readTextFile: true, writeTextFile: false } },
         clientInfo: { name: 'craft-agents', version: '1.0.0' },
       });
 
-      // 2. Create a new session
-      const sessionResult = await this.transport.sendRequest('session/new', {}) as { sessionId: string };
+      // 2. Create a new session; response may include available models
+      const sessionResult = await this.transport.sendRequest('session/new', {
+        cwd: (typeof process !== 'undefined' ? process.cwd() : undefined),
+      }) as {
+        sessionId: string;
+        models?: { currentModelId?: string; availableModels?: Array<{ modelId: string; name: string; description?: string }> };
+        configOptions?: Array<{ id: string; category?: string; currentValue?: string; options?: Array<{ value: string; name: string; description?: string }> }>;
+      };
       this._activeSessionId = sessionResult.sessionId;
 
+      // Cache discovered models so the factory can expose them to the UI
+      this._discoveredModels = _extractModels(sessionResult);
+
       // 3. Send the user prompt (response comes via notifications)
+      // prompt is an array of content blocks per ACP spec
       await this.transport.sendRequest('session/prompt', {
         sessionId: this._activeSessionId,
-        message,
+        prompt: [{ type: 'text', text: message }],
       });
 
       // 4. Drain event queue until complete or typed_error
@@ -225,6 +282,14 @@ export class AcpAgent extends BaseAgent {
 
   override isProcessing(): boolean {
     return this._isProcessing;
+  }
+
+  /**
+   * Returns models discovered from the last session/new response.
+   * Empty until the first chat completes session/new successfully.
+   */
+  getDiscoveredModels(): ModelDefinition[] {
+    return this._discoveredModels;
   }
 
   override respondToPermission(

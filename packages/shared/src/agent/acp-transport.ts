@@ -270,83 +270,37 @@ export function createLinkedTransports(): [InProcessAcpTransport, InProcessAcpTr
 }
 
 // ============================================================
-// Environment sanitization helpers
+// Environment helpers
 // ============================================================
 
 /**
- * Prefixes of environment variables that MUST NOT be forwarded to ACP
- * subprocesses. These carry credentials for the host application's own
- * integrations and must never be visible to external agent processes.
- */
-const BLOCKED_ENV_PREFIXES = [
-  'ANTHROPIC_',
-  'CLAUDE_',
-  'AWS_',
-  'OPENAI_',
-  'GEMINI_',
-  'GOOGLE_',
-  'AZURE_',
-  'GITHUB_TOKEN',
-  'GH_TOKEN',
-  'NPM_TOKEN',
-  'CRAFT_',
-];
-
-/**
- * Exact variable names that MUST NOT be forwarded regardless of prefix.
- */
-const BLOCKED_ENV_EXACT = new Set([
-  'BEARER_TOKEN',
-  'ACCESS_TOKEN',
-  'SECRET_KEY',
-  'SECRET',
-  'TOKEN',
-  'PASSWORD',
-  'PASSWD',
-  'API_KEY',
-]);
-
-/**
- * Build a sanitized environment for ACP subprocesses.
+ * Build the environment for an ACP subprocess.
  *
- * Strategy: start from an allowlist of safe system variables, then merge in
- * any explicitly configured `acpEnv` overrides. This ensures credentials
- * present in `process.env` (API keys, AWS secrets, OAuth tokens) are never
- * forwarded to an external agent process.
+ * Strategy: inherit the full parent process.env (so the external agent
+ * can read its own config — e.g. ANTHROPIC_API_KEY for claude-code,
+ * GEMINI_API_KEY for gemini-cli), then merge in any per-connection
+ * `acpEnv` overrides specified by the user. acpEnv values take precedence.
  *
- * Safe system variables forwarded by default:
- *   PATH, HOME, USER, LOGNAME, SHELL, LANG, LC_*, TERM, TMPDIR, TMP, TEMP,
- *   XDG_*, DISPLAY, COLORTERM, NO_COLOR, CI (non-sensitive build context).
+ * The user is responsible for injecting any credentials the agent needs
+ * via the acpEnv field in the connection config.
  *
  * @param extraEnv - Per-connection overrides from `LlmConnection.acpEnv`.
- *   Keys in this map ARE forwarded as-is (operator-configured, intentional).
  */
 /** @internal exported for unit testing only */
 export function _buildSafeEnv(extraEnv?: Record<string, string>): Record<string, string> {
-  const safeEnv: Record<string, string> = {};
+  const env: Record<string, string> = {};
 
+  // Inherit full parent environment
   for (const [key, value] of Object.entries(process.env)) {
-    if (value === undefined) continue;
-
-    // Block exact matches
-    if (BLOCKED_ENV_EXACT.has(key.toUpperCase())) continue;
-
-    // Block by prefix
-    const keyUpper = key.toUpperCase();
-    if (BLOCKED_ENV_PREFIXES.some(prefix => keyUpper.startsWith(prefix))) continue;
-
-    // Block anything that looks like a credential by heuristic suffix
-    if (keyUpper.endsWith('_KEY') || keyUpper.endsWith('_SECRET') || keyUpper.endsWith('_TOKEN') || keyUpper.endsWith('_PASSWORD')) continue;
-
-    safeEnv[key] = value;
+    if (value !== undefined) env[key] = value;
   }
 
-  // Merge explicitly configured ACP env overrides (operator-controlled, intentional)
+  // Per-connection overrides take precedence
   if (extraEnv) {
-    Object.assign(safeEnv, extraEnv);
+    Object.assign(env, extraEnv);
   }
 
-  return safeEnv;
+  return env;
 }
 
 // ============================================================
