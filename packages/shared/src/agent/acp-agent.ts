@@ -206,6 +206,7 @@ export class AcpAgent extends BaseAgent {
       // 2. Create a new session; response may include available models
       const sessionResult = await this.transport.sendRequest('session/new', {
         cwd: (typeof process !== 'undefined' ? process.cwd() : undefined),
+        mcpServers: [],
       }) as {
         sessionId: string;
         models?: { currentModelId?: string; availableModels?: Array<{ modelId: string; name: string; description?: string }> };

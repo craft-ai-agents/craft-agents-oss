@@ -54,6 +54,7 @@ export const acpDriver: ProviderDriver = {
 
         const result = await transport.sendRequest('session/new', {
           cwd: (typeof process !== 'undefined' ? process.cwd() : undefined),
+          mcpServers: [],
         }) as {
           sessionId: string;
           models?: { currentModelId?: string; availableModels?: Array<{ modelId: string; name: string; description?: string }> };
