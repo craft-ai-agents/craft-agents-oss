@@ -1969,6 +1969,31 @@ Model
                     {connections.map((conn) => {
                       const isCurrentConnection = effectiveConnection === conn.slug
                       const isAuthenticated = conn.isAuthenticated
+                      const isAcpConn = conn.providerType === 'acp'
+
+                      // ACP connections have no model list — render as a direct selectable item
+                      if (isAcpConn) {
+                        return (
+                          <StyledDropdownMenuItem
+                            key={conn.slug}
+                            disabled={!isAuthenticated}
+                            onSelect={() => {
+                              if (onConnectionChange) onConnectionChange(conn.slug)
+                            }}
+                            className={cn(
+                              "flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer",
+                              isCurrentConnection && "bg-foreground/5"
+                            )}
+                          >
+                            <div className="font-medium text-sm flex items-center gap-1.5">
+                              <ConnectionIcon connection={conn} size={14} />
+                              {conn.name}
+                            </div>
+                            {isCurrentConnection && <Check className="h-3 w-3 text-foreground shrink-0 ml-3" />}
+                          </StyledDropdownMenuItem>
+                        )
+                      }
+
                       return (
                         <DropdownMenuSub key={conn.slug}>
                           <StyledDropdownMenuSubTrigger

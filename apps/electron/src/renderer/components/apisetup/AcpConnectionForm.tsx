@@ -83,7 +83,10 @@ export function AcpConnectionForm({
   const { t } = useTranslation()
 
   const [commandText, setCommandText] = useState<string>(
-    () => initialValues?.acpCommand?.join(' ') ?? ''
+    // Re-quote tokens that contain spaces so round-trip edit preserves semantics
+    () => initialValues?.acpCommand
+      ?.map(tok => tok.includes(' ') ? `"${tok}"` : tok)
+      .join(' ') ?? ''
   )
   const [commandError, setCommandError] = useState<string>('')
 
