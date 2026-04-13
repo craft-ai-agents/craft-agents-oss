@@ -25,6 +25,7 @@ import { PromptHandler, EventLogHandler, WebhookHandler, type AutomationsConfigP
 import { type AutomationsConfig, type AutomationEvent, type AutomationMatcher, type PendingPrompt, type WebhookActionResult, type AppEvent, type AgentEvent, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from './types.ts';
 import { validateAutomationsConfig } from './validation.ts';
 import { matcherMatchesSdk } from './utils.ts';
+import { executeWebhookRequest } from './webhook-utils.ts';
 import { SchedulerService, type SchedulerTickPayload } from '../scheduler/scheduler-service.ts';
 
 const log = createLogger('automation-system');
@@ -500,10 +501,14 @@ export class AutomationSystem implements AutomationsConfigProvider {
 
       matchedCount++;
 
-      // Note: Command execution has been removed. Prompt-based execution for
-      // non-Claude backends is not yet implemented. This method currently only
-      // validates matching (including condition gating) — actual execution is a no-op.
-      log.debug(`[AutomationSystem] Matched ${event} automation (prompt-based execution pending)`);
+      // Execute webhook actions (fire-and-forget, errors are non-fatal)
+      for (const action of matcher.actions) {
+        if (action.type === 'webhook') {
+          executeWebhookRequest(action).catch(err => {
+            log.debug(`[AutomationSystem] Webhook failed for ${event}: ${err}`);
+          });
+        }
+      }
     }
 
     return matchedCount;

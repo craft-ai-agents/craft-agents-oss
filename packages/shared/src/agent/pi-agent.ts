@@ -138,6 +138,7 @@ export class PiAgent extends BaseAgent {
 
   // State
   private _isProcessing: boolean = false;
+  private _sessionStartEmitted: boolean = false;
   private abortReason?: AbortReason;
 
   // Event adapter
@@ -1092,6 +1093,8 @@ export class PiAgent extends BaseAgent {
 
     // Check for agent end (turn complete)
     if (eventType === 'agent_end') {
+      // Fire Stop on natural completion (not just on user abort)
+      this.emitAutomationEvent('Stop', { hook_event_name: 'Stop' });
       this.eventQueue.complete();
     }
   }
@@ -1794,11 +1797,18 @@ export class PiAgent extends BaseAgent {
     this.currentUserMessage = message;
     this.adapter.startTurn();
 
-    // Fire UserPromptSubmit hook event (fire-and-forget)
-    this.emitAutomationEvent('UserPromptSubmit', {
-      hook_event_name: 'UserPromptSubmit',
-      prompt: message,
-    });
+    // On the first turn, fire SessionStart instead of UserPromptSubmit.
+    // This prevents audio overlap when both events trigger sounds (e.g. peon-ping).
+    if (!this._sessionStartEmitted) {
+      this._sessionStartEmitted = true;
+      this.emitAutomationEvent('SessionStart', { hook_event_name: 'SessionStart' });
+    } else {
+      // Fire UserPromptSubmit hook event (fire-and-forget)
+      this.emitAutomationEvent('UserPromptSubmit', {
+        hook_event_name: 'UserPromptSubmit',
+        prompt: message,
+      });
+    }
 
     // Refresh session-scoped tool callbacks (for SubmitPlan, source auth, etc.)
     // IMPORTANT: merge (don't replace) so SessionManager-provided browserPaneFns
