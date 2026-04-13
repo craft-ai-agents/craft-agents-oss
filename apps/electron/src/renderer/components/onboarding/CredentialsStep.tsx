@@ -16,6 +16,7 @@ import {
   type ApiKeySubmitData,
   OAuthConnect,
   type OAuthStatus,
+  AcpConnectionForm,
 } from "../apisetup"
 import type { CustomEndpointApi } from '@config/llm-connections'
 
@@ -42,6 +43,8 @@ interface CredentialsStepProps {
     activePreset?: string
     models?: string[]
     customApi?: CustomEndpointApi
+    acpCommand?: string[]
+    acpEnv?: Record<string, string>
   }
 }
 
@@ -59,6 +62,7 @@ export function CredentialsStep({
   editInitialValues,
 }: CredentialsStepProps) {
   const { t } = useTranslation()
+  const isAcp = apiSetupMethod === 'acp_command'
   const isClaudeOAuth = apiSetupMethod === 'claude_oauth'
   const isChatGptOAuth = apiSetupMethod === 'pi_chatgpt_oauth'
   const isCopilotOAuth = apiSetupMethod === 'pi_copilot_oauth'
@@ -88,6 +92,38 @@ export function CredentialsStep({
         setTimeout(() => setCopiedCode(false), 2000)
       })
     }
+  }
+
+  // --- ACP flow (no API key — command + env config) ---
+  if (isAcp) {
+    return (
+      <StepFormLayout
+        title={t("onboarding.credentials.acpTitle")}
+        description={t("onboarding.credentials.acpDescription")}
+        actions={
+          <>
+            <BackButton onClick={onBack} disabled={status === 'validating'} />
+            <ContinueButton
+              type="submit"
+              form="acp-connection-form"
+              disabled={false}
+              loading={status === 'validating'}
+              loadingText={t("common.validating")}
+            />
+          </>
+        }
+      >
+        <AcpConnectionForm
+          onSubmit={(data) => onSubmit({ ...data, apiKey: '' })}
+          initialValues={{
+            acpCommand: editInitialValues?.acpCommand,
+            acpEnv: editInitialValues?.acpEnv,
+          }}
+          status={status as 'idle' | 'validating' | 'success' | 'error'}
+          errorMessage={errorMessage}
+        />
+      </StepFormLayout>
+    )
   }
 
   // --- ChatGPT OAuth flow (native browser OAuth) ---

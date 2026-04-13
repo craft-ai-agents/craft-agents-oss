@@ -97,6 +97,7 @@ export const BASE_SLUG_FOR_METHOD: Record<ApiSetupMethod, string> = {
   pi_chatgpt_oauth: 'chatgpt-plus',
   pi_copilot_oauth: 'github-copilot',
   pi_api_key: 'pi-api-key',
+  acp_command: 'acp-agent',
 }
 
 /**
@@ -188,6 +189,10 @@ export function apiSetupMethodToConnectionSetup(
         awsRegion: options.awsRegion,
         bedrockAuthMethod: options.bedrockAuthMethod,
       }
+    case 'acp_command':
+      // ACP save bypasses setupLlmConnection entirely (goes via saveLlmConnection).
+      // This case exists only for slug resolution in resolveSlugForMethod.
+      return { slug }
   }
 }
 
@@ -381,6 +386,68 @@ export function useOnboarding({
     setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
 
     const isPiApiKeyFlow = state.apiSetupMethod === 'pi_api_key'
+
+    // ACP: bypass setupLlmConnection (which doesn't accept acpCommand/acpEnv).
+    // Directly persist via saveLlmConnection after client-side validation.
+    if (state.apiSetupMethod === 'acp_command') {
+      if (!data.acpCommand?.length) {
+        setState(s => ({
+          ...s,
+          credentialStatus: 'error',
+          errorMessage: 'Command is required',
+        }))
+        return
+      }
+
+      try {
+        const slug = resolveSlugForMethod('acp_command', editingSlug, existingSlugs)
+
+        let result: { success: boolean; error?: string }
+        if (editingSlug) {
+          // Edit mode: load existing connection to preserve name/createdAt, then overwrite ACP fields
+          const existing = await window.electronAPI.getLlmConnection(editingSlug)
+          if (!existing) throw new Error(`Connection not found: ${editingSlug}`)
+          result = await window.electronAPI.saveLlmConnection({
+            ...existing,
+            slug: editingSlug,              // ensure slug is non-undefined (satisfies LlmConnection)
+            name: existing.name ?? 'ACP Agent',
+            providerType: existing.providerType ?? 'acp',
+            acpCommand: data.acpCommand,
+            acpEnv: data.acpEnv ?? {},
+          })
+        } else {
+          // New connection
+          result = await window.electronAPI.saveLlmConnection({
+            slug,
+            name: 'ACP Agent',
+            providerType: 'acp',
+            authType: 'none',
+            acpTransport: 'stdio',
+            acpCommand: data.acpCommand,
+            acpEnv: data.acpEnv ?? {},
+            createdAt: Date.now(),
+          })
+        }
+
+        if (result.success) {
+          onConfigSaved?.()
+          setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
+        } else {
+          setState(s => ({
+            ...s,
+            credentialStatus: 'error',
+            errorMessage: result.error || 'Failed to save ACP connection',
+          }))
+        }
+      } catch (err) {
+        setState(s => ({
+          ...s,
+          credentialStatus: 'error',
+          errorMessage: err instanceof Error ? err.message : 'Failed to save ACP connection',
+        }))
+      }
+      return
+    }
 
     try {
       // Bedrock (Pi+amazon-bedrock) — skip API key validation and connection test
@@ -631,11 +698,23 @@ export function useOnboarding({
 
   // Map ProviderChoice → ApiSetupMethod and navigate to the right step
   const handleSelectProvider = useCallback((choice: ProviderChoice) => {
-    const CHOICE_TO_METHOD: Record<Exclude<ProviderChoice, 'local'>, ApiSetupMethod> = {
+    const CHOICE_TO_METHOD: Record<Exclude<ProviderChoice, 'local' | 'acp'>, ApiSetupMethod> = {
       claude: 'claude_oauth',
       chatgpt: 'pi_chatgpt_oauth',
       copilot: 'pi_copilot_oauth',
       api_key: 'pi_api_key',
+    }
+
+    if (choice === 'acp') {
+      // ACP: go directly to credentials step (no API key, no OAuth — just command config)
+      setState(s => ({
+        ...s,
+        step: 'credentials',
+        apiSetupMethod: 'acp_command',
+        credentialStatus: 'idle',
+        errorMessage: undefined,
+      }))
+      return
     }
 
     if (choice === 'local') {

@@ -229,6 +229,11 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
         break
       }
       case 'pi_compat': parts.push('Craft Agents Backend Compatible'); break
+      case 'acp': {
+        const cmdPreview = connection.acpCommand?.join(' ') ?? ''
+        parts.push(cmdPreview || 'ACP Agent')
+        break
+      }
       default: parts.push(provider || 'Unknown')
     }
 
@@ -548,6 +553,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
 /** Map a connection's provider type to the corresponding API key setup method. */
 function getApiKeyMethodForConnection(conn: LlmConnectionWithStatus): ApiSetupMethod {
   const provider = conn.providerType || conn.type
+  if (provider === 'acp') return 'acp_command'
   if (provider === 'pi' || provider === 'pi_compat') return 'pi_api_key'
   return 'anthropic_api_key'
 }
@@ -571,6 +577,8 @@ export default function AiSettingsPage() {
     activePreset?: string
     models?: string[]
     customApi?: CustomEndpointApi
+    acpCommand?: string[]
+    acpEnv?: Record<string, string>
   } | undefined>(undefined)
   const setFullscreenOverlayOpen = useSetAtom(fullscreenOverlayOpenAtom)
 
@@ -739,6 +747,19 @@ export default function AiSettingsPage() {
   }, [apiSetupOnboarding, openApiSetup])
 
   const handleEditConnection = useCallback(async (connection: LlmConnectionWithStatus) => {
+    // ACP: no API key to fetch — directly pass command/env for pre-fill
+    const provider = connection.providerType || connection.type
+    if (provider === 'acp') {
+      setEditInitialValues({
+        acpCommand: connection.acpCommand ?? [],
+        acpEnv: connection.acpEnv ?? {},
+      })
+      openApiSetup(connection.slug)
+      setIsDirectEdit(true)
+      apiSetupOnboarding.jumpToCredentials('acp_command')
+      return
+    }
+
     // Fetch stored API key (best-effort — if IPC not available yet, skip pre-fill)
     let apiKey: string | undefined
     try {

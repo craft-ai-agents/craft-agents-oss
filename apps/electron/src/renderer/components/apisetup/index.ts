@@ -4,3 +4,4 @@ export {
   type OAuthConnectProps,
   type OAuthStatus,
 } from './OAuthConnect'
+export { AcpConnectionForm, type AcpConnectionFormProps, tokenizeCommand } from './AcpConnectionForm'

@@ -35,11 +35,22 @@ describe('resolveSlugForMethod', () => {
     const methods: ApiSetupMethod[] = [
       'anthropic_api_key', 'claude_oauth',
       'pi_chatgpt_oauth', 'pi_copilot_oauth', 'pi_api_key',
+      'acp_command',
     ]
     for (const method of methods) {
       const slug = resolveSlugForMethod(method, null, new Set())
       expect(slug).toBe(BASE_SLUG_FOR_METHOD[method])
     }
+  })
+
+  it('acp_command resolves to acp-agent slug', () => {
+    const slug = resolveSlugForMethod('acp_command', null, new Set())
+    expect(slug).toBe('acp-agent')
+  })
+
+  it('acp_command generates unique slug when acp-agent is taken', () => {
+    const slug = resolveSlugForMethod('acp_command', null, new Set(['acp-agent']))
+    expect(slug).toBe('acp-agent-2')
   })
 })
 

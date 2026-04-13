@@ -55,6 +55,10 @@ export interface ApiKeySubmitData {
   awsRegion?: string
   /** Bedrock authentication method — determines auth type for Pi+Bedrock connections */
   bedrockAuthMethod?: 'iam_credentials' | 'environment'
+  /** ACP command array — only populated when apiSetupMethod = 'acp_command' */
+  acpCommand?: string[]
+  /** ACP env vars injected into subprocess — only populated when apiSetupMethod = 'acp_command' */
+  acpEnv?: Record<string, string>
 }
 
 export interface ApiKeyInputProps {

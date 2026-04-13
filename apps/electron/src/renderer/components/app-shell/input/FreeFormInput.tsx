@@ -360,6 +360,7 @@ export function FreeFormInput({
     const groups: Record<string, typeof llmConnections> = {
       'Anthropic': [],
       'Craft Agents Backend': [],
+      'ACP Agent': [],
     }
     for (const conn of llmConnections) {
       const provider = conn.providerType || 'anthropic'
@@ -368,6 +369,8 @@ export function FreeFormInput({
         groups['Anthropic'].push(conn)
       } else if (provider === 'pi' || provider === 'pi_compat') {
         groups['Craft Agents Backend'].push(conn)
+      } else if (provider === 'acp') {
+        groups['ACP Agent'].push(conn)
       }
     }
     // Return only non-empty groups

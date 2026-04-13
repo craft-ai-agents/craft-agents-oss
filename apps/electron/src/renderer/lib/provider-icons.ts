@@ -57,6 +57,7 @@ const providerDisplayNames: Record<string, string> = {
   pi: 'Craft Agents Backend',
   pi_compat: 'Craft Agents Backend',
   vercel: 'Vercel',
+  acp: 'ACP Agent',
 }
 
 /** Get a human-readable provider name from provider type and optional base URL */
@@ -190,6 +191,8 @@ export function getProviderIcon(
       }
       return null  // Unknown/custom Pi provider — caller shows brain icon
     }
+    case 'acp':
+      return null  // ACP has no static brand icon; callers render Terminal icon as fallback
     default:
       // Try URL detection as fallback
       if (baseUrl) {

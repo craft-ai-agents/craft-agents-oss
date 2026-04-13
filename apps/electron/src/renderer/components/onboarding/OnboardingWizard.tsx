@@ -74,6 +74,8 @@ interface OnboardingWizardProps {
     activePreset?: string
     models?: string[]
     customApi?: CustomEndpointApi
+    acpCommand?: string[]
+    acpEnv?: Record<string, string>
   }
 
   className?: string

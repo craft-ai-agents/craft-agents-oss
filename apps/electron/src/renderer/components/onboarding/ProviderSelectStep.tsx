@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
-import { Key, Monitor } from "lucide-react"
+import { Key, Monitor, Terminal } from "lucide-react"
 import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
 import { StepFormLayout } from "./primitives"
 
@@ -12,7 +12,7 @@ import copilotIcon from "@/assets/provider-icons/copilot.svg"
  * The high-level provider choice the user makes on first launch.
  * This maps to one or more ApiSetupMethods downstream.
  */
-export type ProviderChoice = 'claude' | 'chatgpt' | 'copilot' | 'api_key' | 'local'
+export type ProviderChoice = 'claude' | 'chatgpt' | 'copilot' | 'api_key' | 'local' | 'acp'
 
 interface ProviderOption {
   id: ProviderChoice
@@ -27,6 +27,7 @@ const PROVIDER_ICONS: Record<ProviderChoice, React.ReactNode> = {
   copilot: <img src={copilotIcon} alt="" className="size-5 rounded-[3px]" />,
   api_key: <Key className="size-5" />,
   local: <Monitor className="size-5" />,
+  acp: <Terminal className="size-5" />,
 }
 
 interface ProviderSelectStepProps {
@@ -75,6 +76,12 @@ export function ProviderSelectStep({ onSelect, onSkip }: ProviderSelectStepProps
       name: t("onboarding.providerSelect.localModel"),
       description: 'Run models locally with Ollama.',
       icon: PROVIDER_ICONS.local,
+    },
+    {
+      id: 'acp',
+      name: t("onboarding.providerSelect.acpAgent"),
+      description: t("onboarding.providerSelect.acpAgentDesc"),
+      icon: PROVIDER_ICONS.acp,
     },
   ]
 
