@@ -25,6 +25,18 @@ import type { AcpTransport } from './acp-transport.ts';
 import { AcpEventAdapter, type AcpSessionUpdate } from './acp-event-adapter.ts';
 
 // ============================================================
+// Constants
+// ============================================================
+
+/**
+ * Maximum number of simultaneous pending permission requests.
+ * Exceeding this limit causes new requests to be denied immediately (allowed: false)
+ * to prevent a malicious or misbehaving ACP server from exhausting process memory
+ * by sending an unbounded stream of permission/request messages.
+ */
+const MAX_PENDING_PERMISSIONS = 100;
+
+// ============================================================
 // AcpAgent
 // ============================================================
 
@@ -89,6 +101,13 @@ export class AcpAgent extends BaseAgent {
       // Permission requests (respondToPermission flow)
       if (method === 'permission/request') {
         const requestId = (params as any)?.requestId as string | number ?? id;
+
+        // Guard: deny immediately if the pending-permissions map is at capacity.
+        // This prevents a malicious ACP server from flooding the map and causing OOM.
+        if (this._pendingPermissions.size >= MAX_PENDING_PERMISSIONS) {
+          return { allowed: false };
+        }
+
         return new Promise<unknown>((resolve) => {
           const timeout = setTimeout(() => {
             this._pendingPermissions.delete(requestId);
