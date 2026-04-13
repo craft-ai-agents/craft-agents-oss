@@ -118,12 +118,13 @@ describe('createBackend / createAgent', () => {
 });
 
 describe('getAvailableProviders', () => {
-  it('should return anthropic and pi', () => {
+  it('should return anthropic, pi, and acp', () => {
     const providers = getAvailableProviders();
 
     expect(providers).toContain('anthropic');
     expect(providers).toContain('pi');
-    expect(providers).toHaveLength(2);
+    expect(providers).toContain('acp');
+    expect(providers).toHaveLength(3);
   });
 });
 

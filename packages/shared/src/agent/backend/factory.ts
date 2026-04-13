@@ -25,6 +25,9 @@ import type {
 } from './types.ts';
 import { ClaudeAgent } from '../claude-agent.ts';
 import { PiAgent } from '../pi-agent.ts';
+import { AcpAgent } from '../acp-agent.ts';
+import type { AcpTransport } from '../acp-transport.ts';
+import { createAcpTransport } from '../acp-transport.ts';
 import {
   getLlmConnection,
   getDefaultLlmConnection,
@@ -59,10 +62,12 @@ import {
 } from './internal/runtime-resolver.ts';
 import { anthropicDriver } from './internal/drivers/anthropic.ts';
 import { piDriver } from './internal/drivers/pi.ts';
+import { acpDriver } from './internal/drivers/acp.ts';
 
 const DRIVER_REGISTRY: Record<AgentProvider, ProviderDriver> = {
   anthropic: anthropicDriver,
   pi: piDriver,
+  acp: acpDriver,
 };
 
 function getProviderDriver(provider: AgentProvider): ProviderDriver {
@@ -140,6 +145,12 @@ export function createBackend(config: BackendConfig): AgentBackend {
       // Auth is API key based via Pi's AuthStorage
       return new PiAgent(config);
 
+    case 'acp': {
+      // AcpAgent requires a transport — create one from config fields
+      const transport = createAcpTransport(config);
+      return new AcpAgent(config, transport);
+    }
+
     default:
       throw new Error(`Unknown provider: ${config.provider}`);
   }
@@ -150,6 +161,21 @@ export function createBackend(config: BackendConfig): AgentBackend {
  * Alias for createBackend - prefer this name for new code.
  */
 export const createAgent = createBackend;
+
+/**
+ * Create an ACP backend with an explicitly provided transport.
+ * Use this in tests and when the caller controls the transport lifecycle.
+ * For production use, prefer createBackend() which calls createAcpTransport() automatically.
+ *
+ * @param config - Backend configuration (provider must be 'acp')
+ * @param transport - Pre-constructed AcpTransport to inject
+ */
+export function createBackendWithTransport(config: BackendConfig, transport: AcpTransport): AgentBackend {
+  if (config.provider !== 'acp') {
+    throw new Error(`createBackendWithTransport: expected provider='acp', got '${config.provider}'`);
+  }
+  return new AcpAgent(config, transport);
+}
 
 /**
  * Create backend from a pre-resolved context and provider-agnostic core config.
@@ -221,7 +247,7 @@ export function resolveBackendHostTooling(args: {
  * @returns Array of provider identifiers that have working implementations
  */
 export function getAvailableProviders(): AgentProvider[] {
-  return ['anthropic', 'pi'];
+  return ['anthropic', 'pi', 'acp'];
 }
 
 /**
@@ -258,6 +284,10 @@ export function providerTypeToAgentProvider(providerType: LlmProviderType): Agen
     case 'pi':
     case 'pi_compat':
       return 'pi';
+
+    // ACP (Agent Client Protocol) backend
+    case 'acp':
+      return 'acp';
 
     default:
       // Exhaustive check
@@ -588,6 +618,7 @@ export const BACKEND_CAPABILITIES: Record<AgentProvider, {
 }> = {
   anthropic: { needsHttpPoolServer: false },
   pi: { needsHttpPoolServer: false },
+  acp: { needsHttpPoolServer: false },
 };
 
 // ============================================================
@@ -604,6 +635,7 @@ export function getDefaultAuthType(provider: AgentProvider): LlmAuthType | undef
   switch (provider) {
     case 'anthropic': return undefined;
     case 'pi':        return 'api_key';
+    case 'acp':       return undefined;  // auth driven by acpTransport field
     default:          return undefined;
   }
 }

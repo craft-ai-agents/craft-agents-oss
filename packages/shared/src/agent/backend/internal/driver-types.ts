@@ -119,5 +119,7 @@ export function getDefaultProviderType(provider: AgentProvider): LlmProviderType
       return 'anthropic';
     case 'pi':
       return 'pi';
+    case 'acp':
+      return 'acp';
   }
 }

@@ -51,7 +51,8 @@ export function registerPiModelResolver(resolver: PiModelResolver): void {
 export type LlmProviderType =
   | 'anthropic'
   | 'pi'
-  | 'pi_compat';
+  | 'pi_compat'
+  | 'acp';
 
 /**
  * @deprecated Use LlmProviderType instead. Kept for migration compatibility.
@@ -163,6 +164,21 @@ export interface LlmConnection {
    * Determines which streaming adapter the Pi SDK uses for requests.
    */
   customEndpoint?: CustomEndpointConfig;
+
+  // --- ACP (Agent Client Protocol) fields ---
+  // Only relevant when providerType === 'acp'.
+
+  /** Transport protocol for ACP connections. 'stdio' spawns a local process; 'http' connects to an HTTP+SSE endpoint. */
+  acpTransport?: 'stdio' | 'http';
+
+  /** Command and arguments for stdio ACP transport (e.g. ['gemini', '--yolo']). */
+  acpCommand?: string[];
+
+  /** Base URL for HTTP ACP transport (e.g. 'http://localhost:8080'). */
+  acpUrl?: string;
+
+  /** Additional environment variables injected when spawning stdio ACP processes. */
+  acpEnv?: Record<string, string>;
 
   // --- Timestamps ---
 
@@ -406,6 +422,11 @@ export function getModelsForProviderType(providerType: LlmProviderType, piAuthPr
     return [];
   }
 
+  // ACP: external agents expose no model list.
+  if (providerType === 'acp') {
+    return [];
+  }
+
   // Pi: fetch models via registered resolver (avoids Pi SDK import in renderer)
   if (providerType === 'pi') {
     return _piModelResolver(piAuthProvider);
@@ -473,6 +494,7 @@ export function getDefaultModelsForConnection(providerType: LlmProviderType, piA
     return models;
   }
   if (providerType === 'pi_compat') return [];  // Dynamic — user specifies
+  if (providerType === 'acp') return [];  // ACP agents expose no model list
   // anthropic
   return ANTHROPIC_MODELS;
 }
@@ -560,6 +582,7 @@ export function isValidProviderAuthCombination(
     anthropic: ['api_key', 'oauth'],
     pi: ['api_key', 'oauth', 'iam_credentials', 'environment', 'none'],
     pi_compat: ['api_key_with_endpoint', 'none'],
+    acp: ['none', 'api_key'],
   };
 
   return validCombinations[providerType]?.includes(authType) ?? false;
