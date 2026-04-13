@@ -168,14 +168,11 @@ export interface LlmConnection {
   // --- ACP (Agent Client Protocol) fields ---
   // Only relevant when providerType === 'acp'.
 
-  /** Transport protocol for ACP connections. 'stdio' spawns a local process; 'http' connects to an HTTP+SSE endpoint. */
-  acpTransport?: 'stdio' | 'http';
+  /** Transport protocol for ACP connections. Currently only 'stdio' is supported (spawns a local process via stdin/stdout). */
+  acpTransport?: 'stdio';
 
   /** Command and arguments for stdio ACP transport (e.g. ['gemini', '--yolo']). */
   acpCommand?: string[];
-
-  /** Base URL for HTTP ACP transport (e.g. 'http://localhost:8080'). */
-  acpUrl?: string;
 
   /** Additional environment variables injected when spawning stdio ACP processes. */
   acpEnv?: Record<string, string>;

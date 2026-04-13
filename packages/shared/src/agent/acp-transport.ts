@@ -3,8 +3,7 @@
  *
  * Defines the AcpTransport interface and provides concrete implementations:
  * - InProcessAcpTransport: in-memory mock for unit tests
- * - StdioAcpTransport: spawns a local process via stdio (Task 3)
- * - HttpAcpTransport: connects via HTTP+SSE (Task 4)
+ * - StdioAcpTransport: spawns a local process, communicates via stdin/stdout (JSON-RPC 2.0 newline-delimited)
  *
  * JSON-RPC 2.0 framing is handled at the transport layer.
  * The AcpAgent interacts only through the AcpTransport interface.
@@ -532,33 +531,29 @@ export class StdioAcpTransport implements AcpTransport {
 }
 
 // ============================================================
-// Factory function (placeholder stubs for Task 3 & 4)
+// Factory function
 // ============================================================
 
 /**
- * Create the appropriate AcpTransport based on the connection's acpTransport field.
- * - 'stdio' → StdioAcpTransport (implemented in Task 3)
- * - 'http'  → HttpAcpTransport (implemented in Task 4)
+ * Create an AcpTransport for the given connection config.
+ * Only stdio transport is supported (JSON-RPC 2.0 over stdin/stdout).
  */
 export function createAcpTransport(config: BackendConfig): AcpTransport {
   const acpConfig = config as BackendConfig & {
     acpTransport?: string;
     acpCommand?: string[];
-    acpUrl?: string;
     acpEnv?: Record<string, string>;
   };
 
-  switch (acpConfig.acpTransport) {
-    case 'stdio':
-      if (!acpConfig.acpCommand?.length) {
-        throw new Error("acpCommand is required for stdio ACP transport");
-      }
-      return new StdioAcpTransport(acpConfig.acpCommand, acpConfig.acpEnv);
-    case 'http':
-      throw new Error('HttpAcpTransport not yet implemented (Task 4)');
-    default:
-      throw new Error(
-        `acpTransport field is required and must be 'stdio' or 'http', got: ${String(acpConfig.acpTransport)}`
-      );
+  if (acpConfig.acpTransport !== 'stdio') {
+    throw new Error(
+      `acpTransport must be 'stdio', got: ${String(acpConfig.acpTransport)}`
+    );
   }
+
+  if (!acpConfig.acpCommand?.length) {
+    throw new Error('acpCommand is required for ACP stdio transport');
+  }
+
+  return new StdioAcpTransport(acpConfig.acpCommand, acpConfig.acpEnv);
 }
