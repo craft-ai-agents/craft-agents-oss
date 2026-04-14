@@ -23,7 +23,7 @@
   "auth.continue": "Kontynuuj",
   "auth.enterApiCredentials": "Wprowadź dane uwierzytelniające API, aby kontynuować.",
   "auth.somethingWentWrong": "Coś poszło nie tak",
-  "auth.somethingWentWrongRetry": "Coś poszło nie tak. Dotknij, aby spróbować ponownie.",
+  "auth.somethingWentWrongRetry": "Coś poszło nie tak. Kliknij, aby spróbować ponownie.",
   "automations.addAutomation": "Dodaj automatyzację",
   "automations.at": "o",
   "automations.badgePrompt": "Prompt",
