@@ -256,7 +256,7 @@ export function TopBar({
         {!isCompact && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <TopBarButton onClick={onToggleSidebar} aria-label="Toggle sidebar">
+            <TopBarButton onClick={onToggleSidebar} aria-label={t("menu.toggleSidebar")}>
               <PanelLeftRounded className="h-[18px] w-[18px] text-foreground/70" />
             </TopBarButton>
           </TooltipTrigger>
@@ -267,7 +267,7 @@ export function TopBar({
         {/* Craft Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <TopBarButton aria-label="Craft menu">
+            <TopBarButton aria-label={t("menu.craftMenu")}>
               <CraftAgentsSymbol className="h-4 text-accent" />
             </TopBarButton>
           </DropdownMenuTrigger>
@@ -381,20 +381,20 @@ export function TopBar({
         <div className={cn("ml-1 flex min-w-0 items-center gap-1", isCompact ? "flex-1" : "w-[clamp(220px,42vw,640px)]")}>
           <Tooltip>
             <TooltipTrigger asChild>
-              <TopBarButton onClick={onBack} disabled={!canGoBack} aria-label="Go back">
+              <TopBarButton onClick={onBack} disabled={!canGoBack} aria-label={t("common.back")}>
                 <Icons.ChevronLeft className="h-[18px] w-[18px] text-foreground/70" strokeWidth={1.5} />
               </TopBarButton>
             </TooltipTrigger>
-            <TooltipContent side="bottom">Back {goBackHotkey}</TooltipContent>
+            <TooltipContent side="bottom">{t("common.back")} {goBackHotkey}</TooltipContent>
           </Tooltip>
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <TopBarButton onClick={onForward} disabled={!canGoForward} aria-label="Go forward">
+              <TopBarButton onClick={onForward} disabled={!canGoForward} aria-label={t("common.forward")}>
                 <Icons.ChevronRight className="h-[18px] w-[18px] text-foreground/70" strokeWidth={1.5} />
               </TopBarButton>
             </TooltipTrigger>
-            <TooltipContent side="bottom">Forward {goForwardHotkey}</TooltipContent>
+            <TooltipContent side="bottom">{t("common.forward")} {goForwardHotkey}</TooltipContent>
           </Tooltip>
 
           <div className="min-w-0 flex-1">
@@ -419,7 +419,7 @@ export function TopBar({
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <TopBarButton aria-label="Add panel menu" className="ml-1 h-[26px] w-[26px] rounded-lg">
+            <TopBarButton aria-label={t("menu.addPanelMenu")} className="ml-1 h-[26px] w-[26px] rounded-lg">
               <Icons.Plus className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
             </TopBarButton>
           </DropdownMenuTrigger>
@@ -430,7 +430,7 @@ export function TopBar({
             </StyledDropdownMenuItem>
             <StyledDropdownMenuItem onClick={onAddBrowserPanel}>
               <Icons.Globe className="h-3.5 w-3.5" />
-              New Browser Window
+              {t("browser.newWindow")}
             </StyledDropdownMenuItem>
           </StyledDropdownMenuContent>
         </DropdownMenu>
@@ -438,19 +438,19 @@ export function TopBar({
         {/* Help button */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <TopBarButton aria-label="Help & Documentation" className="h-[26px] w-[26px] rounded-lg">
+            <TopBarButton aria-label={t("menu.helpAndDocs")} className="h-[26px] w-[26px] rounded-lg">
               <Icons.HelpCircle className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
             </TopBarButton>
           </DropdownMenuTrigger>
           <StyledDropdownMenuContent align="end" minWidth="min-w-48">
             <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('sources'))}>
               <Icons.DatabaseZap className="h-3.5 w-3.5" />
-              <span className="flex-1">Sources</span>
+              <span className="flex-1">{t("sidebar.sources")}</span>
               <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
             </StyledDropdownMenuItem>
             <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('skills'))}>
               <Icons.Zap className="h-3.5 w-3.5" />
-              <span className="flex-1">Skills</span>
+              <span className="flex-1">{t("sidebar.skills")}</span>
               <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
             </StyledDropdownMenuItem>
             <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('statuses'))}>
@@ -460,18 +460,18 @@ export function TopBar({
             </StyledDropdownMenuItem>
             <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('permissions'))}>
               <Icons.Settings className="h-3.5 w-3.5" />
-              <span className="flex-1">Permissions</span>
+              <span className="flex-1">{t("settings.permissions.title")}</span>
               <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
             </StyledDropdownMenuItem>
             <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('automations'))}>
               <Icons.Webhook className="h-3.5 w-3.5" />
-              <span className="flex-1">Automations</span>
+              <span className="flex-1">{t("sidebar.automations")}</span>
               <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
             </StyledDropdownMenuItem>
             <StyledDropdownMenuSeparator />
             <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}>
               <Icons.ExternalLink className="h-3.5 w-3.5" />
-              <span className="flex-1">All Documentation</span>
+              <span className="flex-1">{t("menu.allDocumentation")}</span>
             </StyledDropdownMenuItem>
           </StyledDropdownMenuContent>
         </DropdownMenu>

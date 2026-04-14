@@ -10,6 +10,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '../../lib/utils'
 import { DiffSplitIcon, DiffUnifiedIcon, DiffBackgroundIcon } from './DiffIcons'
 
@@ -47,6 +48,7 @@ export function DiffViewerControls({
   onBackgroundChange,
   className,
 }: DiffViewerControlsProps) {
+  const { t } = useTranslation()
   return (
     <div className={cn('flex items-center gap-1.5', className)}>
       {/* Stats display: -X +Y */}
@@ -61,8 +63,8 @@ export function DiffViewerControls({
         onClick={() => onDiffStyleChange(diffStyle === 'unified' ? 'split' : 'unified')}
         className="cursor-pointer p-1.5 rounded-[6px] bg-background shadow-minimal opacity-70 hover:opacity-100 transition-opacity"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-        title={diffStyle === 'unified' ? 'Switch to split view' : 'Switch to unified view'}
-        aria-label={diffStyle === 'unified' ? 'Switch to split view' : 'Switch to unified view'}
+        title={diffStyle === 'unified' ? t('diff.switchToSplit') : t('diff.switchToUnified')}
+        aria-label={diffStyle === 'unified' ? t('diff.switchToSplit') : t('diff.switchToUnified')}
       >
         {/* Show split icon when in unified (to switch TO split), and vice versa */}
         {diffStyle === 'unified' ? <DiffSplitIcon /> : <DiffUnifiedIcon />}
@@ -77,8 +79,8 @@ export function DiffViewerControls({
           disableBackground ? 'opacity-40 hover:opacity-70' : 'opacity-70 hover:opacity-100'
         )}
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-        title={disableBackground ? 'Enable background highlighting' : 'Disable background highlighting'}
-        aria-label={disableBackground ? 'Enable background highlighting' : 'Disable background highlighting'}
+        title={disableBackground ? t('diff.enableBackground') : t('diff.disableBackground')}
+        aria-label={disableBackground ? t('diff.enableBackground') : t('diff.disableBackground')}
       >
         <DiffBackgroundIcon />
       </button>

@@ -130,25 +130,50 @@ fi
 
 staged_en="$(git diff --cached --name-only --diff-filter=ACMR | grep 'i18n/locales/en.json' || true)"
 if [ -n "$staged_en" ]; then
-  parity_result="$(python3 -c "
-import json, glob, os, sys
+  parity_result="$(python3 <<'PY'
+import glob, json, os, re, sys
+
 ROOT = 'packages/shared/src/i18n/locales'
-en = json.load(open(f'{ROOT}/en.json'))
+with open(f'{ROOT}/en.json', 'r', encoding='utf-8') as f:
+    en = json.load(f)
+
+plural_pattern = re.compile(r'_(?:zero|one|two|few|many|other)$')
+
+def is_plural_key(key: str) -> bool:
+    return bool(plural_pattern.search(key))
+
+def plural_base(key: str) -> str:
+    return plural_pattern.sub('', key)
+
 errors = []
 for f in sorted(glob.glob(f'{ROOT}/*.json')):
     lang = os.path.basename(f).replace('.json', '')
-    if lang == 'en': continue
-    other = json.load(open(f))
+    if lang == 'en':
+        continue
+
+    with open(f, 'r', encoding='utf-8') as locale_file:
+        other = json.load(locale_file)
+
     missing = sorted(set(en.keys()) - set(other.keys()))
-    extra = sorted(set(other.keys()) - set(en.keys()))
+    extra = []
+    for key in sorted(set(other.keys()) - set(en.keys())):
+        if is_plural_key(key):
+            base = plural_base(key)
+            if f'{base}_one' in en and f'{base}_other' in en:
+                continue
+        extra.append(key)
+
     if missing:
         errors.append(f'{lang}.json: {len(missing)} keys missing (e.g. {missing[0]})')
     if extra:
         errors.append(f'{lang}.json: {len(extra)} extra keys (e.g. {extra[0]})')
+
 if errors:
-    for e in errors: print(e)
+    for error in errors:
+        print(error)
     sys.exit(1)
-" 2>&1)" || {
+PY
+  2>&1)" || {
     echo ""
     echo "🌐 i18n: Locale parity check failed"
     echo "   en.json has keys that are missing from other locale files:"

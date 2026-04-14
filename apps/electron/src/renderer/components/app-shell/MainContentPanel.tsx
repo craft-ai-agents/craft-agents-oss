@@ -247,7 +247,7 @@ export function MainContentPanel({
         <Panel variant="grow" className={className}>
           <MultiSelectPanel
             count={sourceSelectionCount}
-            entityName="Source"
+            entityType="source"
             onSendToWorkspace={hasOtherWorkspaces ? () => openSendDialog('source', selectedSourceIds) : undefined}
             onClearSelection={clearSourceSelection}
           />
@@ -281,7 +281,7 @@ export function MainContentPanel({
         <Panel variant="grow" className={className}>
           <MultiSelectPanel
             count={skillSelectionCount}
-            entityName="Skill"
+            entityType="skill"
             onSendToWorkspace={hasOtherWorkspaces ? () => openSendDialog('skill', selectedSkillIds) : undefined}
             onClearSelection={clearSkillSelection}
           />
@@ -316,7 +316,7 @@ export function MainContentPanel({
         <Panel variant="grow" className={className}>
           <MultiSelectPanel
             count={automationSelectionCount}
-            entityName="Automation"
+            entityType="automation"
             onSendToWorkspace={hasOtherWorkspaces ? () => openSendDialog('automation', selectedAutomationIds) : undefined}
             onClearSelection={clearAutomationSelection}
           />
@@ -393,7 +393,7 @@ export function MainContentPanel({
   return wrapWithStoplight(
     <Panel variant="grow" className={className}>
       <div className="flex items-center justify-center h-full text-muted-foreground">
-        <p className="text-sm">Select a conversation to get started</p>
+        <p className="text-sm">{t("session.selectConversation")}</p>
       </div>
     </Panel>
   )

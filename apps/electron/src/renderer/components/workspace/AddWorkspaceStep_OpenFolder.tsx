@@ -60,7 +60,7 @@ export function AddWorkspaceStep_OpenFolder({
         )}
       >
         <ArrowLeft className="h-4 w-4" />
-        Back
+        {t("common.back")}
       </button>
 
       <AddWorkspaceStepHeader
@@ -80,14 +80,14 @@ export function AddWorkspaceStep_OpenFolder({
             {selectedPath ? (
               <p className="text-sm text-foreground truncate">{selectedPath}</p>
             ) : (
-              <p className="text-sm text-muted-foreground">No folder selected</p>
+              <p className="text-sm text-muted-foreground">{t("workspace.noFolderSelected")}</p>
             )}
           </div>
           <AddWorkspaceSecondaryButton
             onClick={pickDirectory}
             disabled={isCreating}
           >
-            Browse
+            {t("common.browse")}
           </AddWorkspaceSecondaryButton>
         </div>
 
@@ -95,7 +95,7 @@ export function AddWorkspaceStep_OpenFolder({
         {selectedPath && (
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground">
-              Workspace name
+              {t("workspace.nameLabel")}
             </label>
             <Input
               value={workspaceName}
@@ -111,9 +111,9 @@ export function AddWorkspaceStep_OpenFolder({
           onClick={handleOpen}
           disabled={!canOpen || isCreating}
           loading={isCreating}
-          loadingText="Opening..."
+          loadingText={t("workspace.opening")}
         >
-          Open
+          {t("common.open")}
         </AddWorkspacePrimaryButton>
       </div>
 

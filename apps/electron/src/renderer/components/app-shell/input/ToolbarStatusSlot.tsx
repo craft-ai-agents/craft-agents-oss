@@ -16,6 +16,7 @@ import * as React from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { Globe } from 'lucide-react'
 import { useAtomValue } from 'jotai'
+import { useTranslation, Trans } from 'react-i18next'
 import { Spinner } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { Kbd } from '@/components/ui/kbd'
@@ -79,7 +80,10 @@ export function ToolbarStatusSlot({
           } as React.CSSProperties}
         >
           <span className="text-sm font-medium flex items-center gap-1.5">
-            Press <Kbd className="text-inherit bg-current/10">Esc</Kbd> again to interrupt
+            <Trans
+              i18nKey="toolbar.escapeToInterrupt"
+              components={{ kbd: <Kbd className="text-inherit bg-current/10" /> }}
+            />
           </span>
         </motion.div>
       )}
@@ -106,6 +110,7 @@ function BrowserStatusBar({
   instance: BrowserInstanceInfo
   onClick: () => void
 }) {
+  const { t } = useTranslation()
   const hostname = getHostname(instance.url)
   const themeColor = instance.themeColor
   const themeLuminance = themeColor ? getThemeLuminance(themeColor) : null
@@ -182,7 +187,7 @@ function BrowserStatusBar({
         )}
       </span>
       <span className="text-sm font-medium truncate max-w-[200px]">
-        Using {hostname}
+        {t('chat.usingConnection', { name: hostname })}
       </span>
     </motion.button>
   )
