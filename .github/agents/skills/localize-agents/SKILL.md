@@ -13,16 +13,18 @@ Localization skill for the craft-agents repo. Detects missing/changed translatio
 ## Paths
 
 - **Locale files**: `packages/shared/src/i18n/locales/{lang}.json`
-- **Language config**: `packages/shared/src/i18n/languages.ts`
+- **Registry (single source of truth)**: `packages/shared/src/i18n/registry.ts`
+- **Derived exports**: `packages/shared/src/i18n/languages.ts` (auto-derived from registry)
 - **i18n setup**: `packages/shared/src/i18n/setupI18n.ts`
 - **i18n index**: `packages/shared/src/i18n/index.ts`
+- **Tests**: `packages/shared/src/i18n/__tests__/locale-parity.test.ts`, `locale-registry.test.ts`
 - **Glossary**: `../craft-localization/glossary.json` (relative to repo root)
 - **Guidelines**: `packages/shared/CLAUDE.md` → i18n section
 
 ## Supported Languages
 
-Read dynamically from `packages/shared/src/i18n/languages.ts`. Currently: `en`, `es`.
-Available for addition: `de`, `fr`, `it`, `ja`, `ko`, `pl`, `pt-BR`, `vi`, `zh-Hans`, `zh-Hant`, `hu`.
+Read dynamically from `packages/shared/src/i18n/registry.ts`. Currently: `en`, `es`, `zh-Hans`, `ja`, `hu`, `de`, `pl`.
+Available for addition: `fr`, `it`, `ko`, `pt-BR`, `vi`, `zh-Hant`.
 
 ## Token Optimization
 
@@ -91,7 +93,7 @@ if os.path.exists(glossary_path):
 else:
     print('Glossary not found — using built-in non-translatable list')
     # Fallback for when craft-localization is not cloned
-    g = {'nonTranslatable': ['Apple', 'Craft', 'Craft Agents', 'Agents', 'Workspace', 'MCP', 'API', 'SDK', 'Claude', 'Anthropic', 'OpenAI', 'GitHub Copilot', 'ChatGPT']}
+    g = {'nonTranslatable': ['Apple', 'Craft', 'Craft Agents', 'Agents', 'Workspace', 'Skill', 'MCP', 'API', 'SDK', 'Claude', 'Anthropic', 'OpenAI', 'GitHub Copilot', 'ChatGPT', 'Ollama', 'OpenRouter', 'Codex', 'Mermaid', 'Git', 'OAuth', 'WebSocket']}
     json.dump(g, open('/tmp/i18n-glossary.json', 'w'), indent=2, ensure_ascii=False)
 "
 ```
@@ -267,20 +269,17 @@ REPLACE values in each locale JSON (not append). Sort alphabetically. Verify par
 
 ### Step 1: Ask Which Language
 
-Show available languages:
+Show available languages (not yet in the registry):
 ```
 Available languages:
-  de  — Deutsch (German)
   fr  — Français (French)
   it  — Italiano (Italian)
-  ja  — 日本語 (Japanese)
   ko  — 한국어 (Korean)
-  pl  — Polski (Polish)
   pt-BR — Português (Brazilian Portuguese)
   vi  — Tiếng Việt (Vietnamese)
-  zh-Hans — 简体中文 (Simplified Chinese)
   zh-Hant — 繁體中文 (Traditional Chinese)
-  hu  — Magyar (Hungarian)
+
+Already supported: en, es, zh-Hans, ja, hu, de, pl
 
 Which language to add?
 ```
@@ -289,36 +288,33 @@ Which language to add?
 
 Create `packages/shared/src/i18n/locales/{lang}.json` with empty object `{}`.
 
-### Step 3: Register Language in Code
+### Step 3: Register Language in Registry
 
-**3a. Update `languages.ts`:**
+The registry (`packages/shared/src/i18n/registry.ts`) is the **single source of truth**. Everything else (language codes, display names, i18n resources, date locales) is derived automatically. Only this file needs to change.
+
+**3a. Update `registry.ts`:**
 ```typescript
-// Add to SUPPORTED_LANGUAGE_CODES
-export const SUPPORTED_LANGUAGE_CODES = ["en", "es", "de"] as const;  // ← add new
+// Add translation import
+import frMessages from "./locales/fr.json";
 
-// Add to LANGUAGES
-export const LANGUAGES: Record<LanguageCode, LanguageConfig> = {
-  en: { nativeName: "English" },
-  es: { nativeName: "Español" },
-  de: { nativeName: "Deutsch" },  // ← add new
-};
+// Add date-fns locale import
+import { fr as frDateLocale } from "date-fns/locale/fr";
+
+// Add entry to LOCALE_REGISTRY
+fr: { nativeName: "Français", messages: frMessages, dateLocale: frDateLocale },
 ```
 
-**3b. Update `setupI18n.ts`:**
+**3b. Add date locale test** in `packages/shared/src/i18n/__tests__/locale-registry.test.ts`:
 ```typescript
-import de from "./locales/de.json";  // ← add import
-
-instance.init({
-  resources: {
-    en: { translation: en },
-    es: { translation: es },
-    de: { translation: de },  // ← add resource
-  },
-  // ...
+it("fr resolves to French", () => {
+  const locale = getDateLocale("fr");
+  expect(locale.code).toBe("fr");
 });
 ```
 
-**3c. Update `CLAUDE.md` Rule 7** to list the new language in the key parity requirement.
+No changes needed to `languages.ts`, `setupI18n.ts`, or `CLAUDE.md` — they derive from the registry automatically.
+
+**3c. For languages with complex plurals** (e.g., Polish, Arabic, Russian): add `_few` and `_many` forms for all plural keys. The parity test allows extra plural forms when the base `_one`/`_other` pair exists in EN.
 
 ### Step 4: Translate ALL Keys
 
@@ -372,10 +368,10 @@ Suggest shorter alternatives for any flagged items.
 The glossary is loaded from `craft-localization/glossary.json` when available. Fallback built-in list:
 
 **Non-translatable** (always keep in English):
-Apple, Craft, Craft Agents, Agents, Workspace, MCP, API, SDK, Claude, Anthropic, OpenAI, GitHub Copilot, ChatGPT, Evernote, TeX, TextBundle, Unsplash, Imagine, Plus, Markdown
+Apple, Craft, Craft Agents, Agents, Workspace, MCP, API, SDK, Claude, Anthropic, OpenAI, GitHub Copilot, ChatGPT, Evernote, TeX, TextBundle, Unsplash, Imagine, Plus, Markdown, Ollama, OpenRouter, Codex, Mermaid, Playwright, Puppeteer, React, Git, WebSocket, OAuth
 
 **Additional non-translatable for craft-agents:**
-Explore, Execute (when used as mode names in UI badges — short forms stay English)
+Workspace (product term — never translate in any language), Skill (keep as loanword, not native equivalent)
 
 ---
 
@@ -391,12 +387,12 @@ Explore, Execute (when used as mode names in UI badges — short forms stay Engl
 
 ---
 
-### German (de) — Informal (du)
-- **Address**: du/dein/deine. NEVER Sie/Ihren/Ihrem.
+### German (de) — Formal (Sie)
+- **Address**: Sie/Ihr/Ihre. Consistent formal register throughout.
 - **Buttons**: Noun form — "Löschen" (not "Lösche"), "Hinzufügen" (not "Füge hinzu")
-- **Confirmations**: "Möchtest du wirklich...?" pattern
+- **Confirmations**: "Möchten Sie wirklich...?" pattern
 - **Reference vocabulary** (Apple standard): Löschen, Abbrechen, Fertig, Speichern, Teilen, Suchen, Kopieren, Hinzufügen, Entfernen, Öffnen, Schließen, Umbenennen, Einstellungen
-- **Note**: Keep established English tech terms (Workspace, Space, Block, Markdown)
+- **Note**: Keep established English tech terms (Workspace, Space, Block, Markdown). Declension: "Ihren Agenten" (not "Ihren Agent").
 
 ### Spanish (es) — Informal (tú)
 - **Address**: tú/tu/tus forms. NEVER usted. NEVER vosotros (Latin American neutral).
@@ -449,7 +445,8 @@ Explore, Execute (when used as mode names in UI badges — short forms stay Engl
 - **Buttons**: 2nd person imperative — "Usuń", "Dodaj", "Zamknij", "Otwórz", "Kopiuj", "Wklej", "Eksportuj", "Importuj"
 - **Confirmations**: "Czy na pewno chcesz...?" pattern
 - **Reference vocabulary** (Apple standard): Usuń, Anuluj, Gotowe, Zapisz/Zachowaj, Udostępnij, Szukaj, Kopiuj, Wklej, Zmień nazwę, Dodaj, Zamknij, Otwórz, Eksportuj, Importuj, Ustawienia, Pogrubienie, Kursywa, Tytuł, Nagłówek, Tabela, Tagi
-- **Note**: "Nie można..." for "Cannot..." errors.
+- **Plural forms**: Polish requires `_one`, `_few`, `_many`, and `_other` categories. Example: 1 etykieta (_one), 2 etykiety (_few), 5 etykiet (_many). All plural keys must have all four forms.
+- **Note**: "Nie można..." for "Cannot..." errors. Use "API" (not "APIs") as the uninflected acronym.
 
 ### Portuguese BR (pt-BR) — Informal (você)
 - **Address**: você/seu/sua. NEVER senhor/senhora. Casual-friendly tone.
