@@ -55,15 +55,31 @@ describe("i18n locale parity", () => {
     });
 
     it(`${lang} has no extra keys beyond EN`, () => {
-      const extra = langKeys.filter((k) => !(k in en));
+      const extra = langKeys.filter((k) => {
+        if (k in en) return false;
+        // Allow extra plural forms (_few, _many, _zero, _two) when the
+        // base plural pair (_one/_other) exists in EN. Languages like
+        // Polish need _few/_many for correct grammar.
+        if (isPluralKey(k)) {
+          const base = pluralBase(k);
+          return !(`${base}_one` in en && `${base}_other` in en);
+        }
+        return true;
+      });
       expect(extra).toEqual([]);
     });
 
     it(`${lang} interpolation variables match EN`, () => {
       const mismatches: string[] = [];
-      for (const key of enKeys) {
-        if (!(key in translations)) continue;
-        const enVars = extractVars(en[key]!);
+      for (const key of langKeys) {
+        // For keys that exist in EN, compare directly
+        let referenceKey = key;
+        if (!(key in en) && isPluralKey(key)) {
+          // Extra plural form (_few/_many) — compare vars against _one
+          referenceKey = `${pluralBase(key)}_one`;
+        }
+        if (!(referenceKey in en)) continue;
+        const enVars = extractVars(en[referenceKey]!);
         const langVars = extractVars(translations[key]!);
         if (enVars.join(",") !== langVars.join(",")) {
           mismatches.push(

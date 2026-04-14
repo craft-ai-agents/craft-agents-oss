@@ -6,10 +6,9 @@
  * shared session/cookie partition and CDP automation support.
  */
 
-import { join, parse as parsePath, normalize, isAbsolute, sep } from 'path'
+import { join, parse as parsePath } from 'path'
 import { existsSync, mkdirSync } from 'fs'
-import { realpath } from 'fs/promises'
-import { homedir, tmpdir } from 'os'
+import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
 import { BrowserView, BrowserWindow, app, ipcMain, nativeTheme, session, shell, type Session as ElectronSession } from 'electron'
 import { mainLog } from './logger'
 import type { WindowManager } from './window-manager'
@@ -1534,60 +1533,15 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     return instance.downloads.slice(-limit)
   }
 
-  private async validateUploadFilePath(filePath: string): Promise<string> {
-    let normalizedPath = normalize(filePath)
-
-    if (normalizedPath.startsWith('~')) {
-      normalizedPath = normalizedPath.replace(/^~/, homedir())
-    }
-
-    if (!isAbsolute(normalizedPath)) {
-      throw new Error(`Upload path must be absolute: ${filePath}`)
-    }
-
-    let realFilePath: string
-    try {
-      realFilePath = await realpath(normalizedPath)
-    } catch {
-      realFilePath = normalizedPath
-    }
-
-    const allowedDirs = [homedir(), tmpdir()]
-    const isAllowed = allowedDirs.some((dir) => {
-      const normalizedDir = normalize(dir)
-      const normalizedReal = normalize(realFilePath)
-      return normalizedReal.startsWith(normalizedDir + sep) || normalizedReal === normalizedDir
-    })
-
-    if (!isAllowed) {
-      throw new Error(`Access denied for upload path (outside allowed directories): ${filePath}`)
-    }
-
-    const sensitivePatterns = [
-      /\.ssh\//,
-      /\.gnupg\//,
-      /\.aws\/credentials/,
-      /\.env$/,
-      /\.env\./,
-      /credentials\.json$/,
-      /secrets?\./i,
-      /\.pem$/,
-      /\.key$/,
-    ]
-
-    if (sensitivePatterns.some((pattern) => pattern.test(realFilePath))) {
-      throw new Error(`Access denied for upload path (sensitive file): ${filePath}`)
-    }
-
-    return realFilePath
-  }
+  // validateUploadFilePath removed — uses shared validateFilePath from @craft-agent/server-core/handlers
 
   async uploadFile(id: string, ref: string, filePaths: string[]): Promise<ElementGeometry> {
     const instance = this.requireAliveInstance(id)
 
     const safePaths: string[] = []
     for (const p of filePaths) {
-      const safePath = await this.validateUploadFilePath(p)
+      const workspaceId = this.resolveLaunchWorkspaceId()
+      const safePath = await validateFilePath(p, getWorkspaceAllowedDirs(workspaceId))
       if (!existsSync(safePath)) throw new Error(`File not found: ${p}`)
       safePaths.push(safePath)
     }

@@ -1,10 +1,10 @@
 import type { EventSink } from '@craft-agent/server-core/transport'
 import type { ISessionManager, IBrowserPaneManager } from '@craft-agent/server-core/handlers'
+import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@craft-agent/server-core/runtime'
-import { basename, dirname, join, normalize, isAbsolute, sep } from 'path'
+import { basename, dirname, join } from 'path'
 import { existsSync } from 'fs'
-import { readFile, writeFile, mkdir, realpath } from 'fs/promises'
-import { homedir, tmpdir } from 'os'
+import { readFile, writeFile, mkdir } from 'fs/promises'
 import { randomUUID } from 'node:crypto'
 import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns, generateConversationSummary } from '@craft-agent/shared/agent'
 import {
@@ -70,7 +70,7 @@ import {
   type SessionHeader,
   pickSessionFields,
 } from '@craft-agent/shared/sessions'
-import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
+import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
 import { getValidClaudeOAuthToken } from '@craft-agent/shared/auth'
 import { resolveAuthEnvVars } from '@craft-agent/shared/config'
@@ -169,56 +169,7 @@ const MAX_ADMIN_REMEMBER_MINUTES = 60
 const MAX_ANNOTATIONS_PER_MESSAGE = 200
 const MAX_ANNOTATION_JSON_BYTES = 32 * 1024
 
-/**
- * Validate spawn attachment path using the same safety policy as IPC attachment reads.
- */
-async function validateSpawnAttachmentPath(filePath: string): Promise<string> {
-  let normalizedPath = normalize(filePath)
-
-  if (normalizedPath.startsWith('~')) {
-    normalizedPath = normalizedPath.replace(/^~/, homedir())
-  }
-
-  if (!isAbsolute(normalizedPath)) {
-    throw new Error('Only absolute file paths are allowed')
-  }
-
-  let realFilePath: string
-  try {
-    realFilePath = await realpath(normalizedPath)
-  } catch {
-    realFilePath = normalizedPath
-  }
-
-  const allowedDirs = [homedir(), tmpdir()]
-  const isAllowed = allowedDirs.some(dir => {
-    const normalizedDir = normalize(dir)
-    const normalizedReal = normalize(realFilePath)
-    return normalizedReal.startsWith(normalizedDir + sep) || normalizedReal === normalizedDir
-  })
-
-  if (!isAllowed) {
-    throw new Error('Access denied: file path is outside allowed directories')
-  }
-
-  const sensitivePatterns = [
-    /\.ssh\//,
-    /\.gnupg\//,
-    /\.aws\/credentials/,
-    /\.env$/,
-    /\.env\./,
-    /credentials\.json$/,
-    /secrets?\./i,
-    /\.pem$/,
-    /\.key$/,
-  ]
-
-  if (sensitivePatterns.some(pattern => pattern.test(realFilePath))) {
-    throw new Error('Access denied: cannot read sensitive files')
-  }
-
-  return realFilePath
-}
+// validateSpawnAttachmentPath removed — use shared validateFilePath from @craft-agent/server-core/handlers
 
 const PI_TURN_ANCHORS_VERSION = 1
 const PI_TURN_ANCHORS_FILE = 'pi-turn-anchors.json'
@@ -383,13 +334,19 @@ async function buildServersFromSources(
   )
   span.mark('credentials.loaded')
 
-  // Build token getter for OAuth sources (Google, Slack, Microsoft use OAuth)
+  // Build token getter for refreshable sources (OAuth + renew-endpoint)
   // Uses TokenRefreshManager for unified refresh logic (DRY principle)
   const getTokenForSource = (source: LoadedSource) => {
     const provider = source.config.provider
     // Provider-specific OAuth (Google, Slack, Microsoft) or generic OAuth (authType: 'oauth')
     if (isApiOAuthProvider(provider) || source.config.api?.authType === 'oauth') {
-      // Use TokenRefreshManager if provided, otherwise create temporary one
+      const manager = tokenRefreshManager ?? new TokenRefreshManager(credManager, {
+        log: (msg) => sessionLog.debug(msg),
+      })
+      return createTokenGetter(manager, source)
+    }
+    // API renew endpoint — non-OAuth token refresh
+    if (hasRenewEndpoint(source)) {
       const manager = tokenRefreshManager ?? new TokenRefreshManager(credManager, {
         log: (msg) => sessionLog.debug(msg),
       })
@@ -3462,7 +3419,9 @@ export class SessionManager implements ISessionManager {
           const attachments: FileAttachment[] = []
           for (const a of request.attachments) {
             try {
-              const safePath = await validateSpawnAttachmentPath(a.path)
+              const extraDirs = getWorkspaceAllowedDirs(managed.workspace.id)
+              if (request.workingDirectory) extraDirs.push(request.workingDirectory)
+              const safePath = await validateFilePath(a.path, extraDirs)
               const attachment = readFileAttachment(safePath)
               if (attachment) {
                 if (a.name) attachment.name = a.name

@@ -37,6 +37,7 @@ import {
   addSessionAtom,
   removeSessionAtom,
   updateSessionAtom,
+  refreshSessionsMetadataAtom,
   sessionAtomFamily,
   sessionMetaMapAtom,
   sessionIdsAtom,
@@ -483,63 +484,26 @@ export default function App() {
   const refreshSessionListMetadataFromServer = useCallback(async (): Promise<Map<string, SessionMeta> | null> => {
     try {
       const sessions = await window.electronAPI.getSessions()
+      console.info(`[App] getSessions returned ${sessions.length} session(s) for reconnect refresh`)
       const loadedSessionIds = store.get(loadedSessionsAtom)
-      const currentIds = store.get(sessionIdsAtom)
-      const latestIds = new Set(sessions.map(session => session.id))
 
-      for (const staleSessionId of currentIds) {
-        if (!latestIds.has(staleSessionId)) {
-          removeSession(staleSessionId)
-        }
-      }
+      // Single transactional atom write — all cross-atom mutations happen
+      // inside one Jotai write function so React subscribers see one
+      // consistent update instead of intermediate states.
+      const nextMetaMap = store.set(refreshSessionsMetadataAtom, { sessions, loadedSessionIds })
 
-      const unloadedIds: string[] = []
+      // Sync app-level state (React hooks / non-atom concerns) after the atom transaction
       for (const session of sessions) {
-        const currentSession = store.get(sessionAtomFamily(session.id))
-        const shouldPreserveMessages = !!currentSession && loadedSessionIds.has(session.id)
-        const nextSession = shouldPreserveMessages && currentSession
-          ? {
-              ...session,
-              messages: currentSession.messages,
-            }
-          : session
-
-        store.set(sessionAtomFamily(session.id), nextSession)
-
-        // Track sessions written without messages so lazy-loading re-fetches them
-        if (!shouldPreserveMessages && loadedSessionIds.has(session.id)) {
-          unloadedIds.push(session.id)
-        }
-
         syncSessionOptionsFromSession(session)
-        void reconcilePermissionModeState(session.id)
       }
-
-      // Remove from loadedSessionsAtom so ensureSessionMessagesLoaded will re-fetch
-      if (unloadedIds.length > 0) {
-        const nextLoaded = new Set(store.get(loadedSessionsAtom))
-        for (const id of unloadedIds) nextLoaded.delete(id)
-        store.set(loadedSessionsAtom, nextLoaded)
-      }
-
-      const nextMetaMap = new Map<string, SessionMeta>()
-      for (const session of sessions) {
-        nextMetaMap.set(session.id, extractSessionMeta(session))
-      }
-      store.set(sessionMetaMapAtom, nextMetaMap)
-
-      const nextIds = sessions
-        .slice()
-        .sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0))
-        .map(session => session.id)
-      store.set(sessionIdsAtom, nextIds)
+      await Promise.allSettled(sessions.map(s => reconcilePermissionModeState(s.id)))
 
       return nextMetaMap
     } catch (err) {
       console.error('[App] Failed to refresh session list metadata after reconnect:', err)
       return null
     }
-  }, [store, removeSession, syncSessionOptionsFromSession, reconcilePermissionModeState])
+  }, [store, syncSessionOptionsFromSession, reconcilePermissionModeState])
 
   // Stale session watchdog — catches stuck sessions that the reconnect protocol misses
   const { trackSessionActivity } = useStaleSessionRecovery({

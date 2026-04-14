@@ -11,7 +11,7 @@
  * - Session-isolated (each session can have its own manager)
  */
 
-import { isOAuthSource, type LoadedSource } from './types.ts';
+import { isRefreshableSource, hasRenewEndpoint, type LoadedSource } from './types.ts';
 import type { SourceCredentialManager } from './credential-manager.ts';
 import { markSourceAuthenticated } from './storage.ts';
 
@@ -95,7 +95,9 @@ export class TokenRefreshManager {
   async needsRefresh(source: LoadedSource): Promise<boolean> {
     const cred = await this.credManager.load(source);
     if (!cred) return false;
-    if (!cred.refreshToken) return false;
+    // Renew-endpoint sources don't need a separate refreshToken —
+    // they use the current access token for renewal.
+    if (!cred.refreshToken && !hasRenewEndpoint(source)) return false;
     // If no expiresAt, we can't determine token lifetime — proactively refresh.
     // This handles credentials stored before expiresAt defaulting was added.
     // After refresh, the new credential will have expiresAt set, preventing refresh every turn.
@@ -127,8 +129,8 @@ export class TokenRefreshManager {
     const cred = await this.credManager.load(source);
 
     // Non-refreshable tokens (e.g. Slack) — return as-is.
-    // Consistent with needsRefresh() which returns false when !refreshToken.
-    if (cred && !cred.refreshToken) {
+    // Renew-endpoint sources are refreshable even without a separate refreshToken.
+    if (cred && !cred.refreshToken && !hasRenewEndpoint(source)) {
       return { success: true, token: cred.value };
     }
 
@@ -176,21 +178,21 @@ export class TokenRefreshManager {
   }
 
   /**
-   * Get all OAuth sources that need token refresh.
-   * Includes both MCP OAuth sources and API OAuth sources (Google, Slack, Microsoft).
+   * Get all refreshable sources that need token refresh.
+   * Includes MCP OAuth, API OAuth (Google, Slack, Microsoft), and renew-endpoint sources.
    * Filters out sources in cooldown.
    */
   async getSourcesNeedingRefresh(sources: LoadedSource[]): Promise<LoadedSource[]> {
-    // Filter to OAuth sources (MCP OAuth + API OAuth providers)
-    const oauthSources = sources.filter(isOAuthSource);
+    // Filter to sources that can auto-refresh (OAuth + renew-endpoint)
+    const refreshableSources = sources.filter(isRefreshableSource);
 
-    if (oauthSources.length === 0) {
+    if (refreshableSources.length === 0) {
       return [];
     }
 
     // Check each source in parallel
     const results = await Promise.all(
-      oauthSources.map(async (source) => {
+      refreshableSources.map(async (source) => {
         // Skip if in cooldown
         if (this.isInCooldown(source.config.slug)) {
           this.log(`[TokenRefresh] Skipping ${source.config.slug} - in cooldown`);
@@ -238,7 +240,7 @@ export class TokenRefreshManager {
 }
 
 /**
- * Create a token getter function for API OAuth sources.
+ * Create a token getter function for refreshable API sources (OAuth or renew-endpoint).
  * This wraps the refresh manager for use with the server builder.
  */
 export function createTokenGetter(

@@ -1,5 +1,5 @@
 import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
-import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId } from '@craft-agent/shared/config'
+import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { setSetupDeferred } from '@craft-agent/shared/config/storage'
 import {
@@ -150,9 +150,11 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         const isBedrockPi = (updates.piAuthProvider ?? connection.piAuthProvider) === 'amazon-bedrock'
         // For Pi+Bedrock, normalize bare Anthropic IDs to Bedrock-native before adding pi/ prefix
         // so that resolvePiModel() can find them in the amazon-bedrock registry.
+        // Use the configured AWS region to select the correct inference profile prefix (us/eu).
+        const regionPrefix = isBedrockPi ? deriveBedrockRegionPrefix(setup.awsRegion) : undefined
         const toPiModelId = (id: string) => {
           const bare = id.startsWith('pi/') ? id.slice(3) : id
-          const normalized = isBedrockPi ? toBedrockNativeId(bare) : bare
+          const normalized = isBedrockPi ? toBedrockNativeId(bare, regionPrefix) : bare
           return `pi/${normalized}`
         }
         if (updates.models) {

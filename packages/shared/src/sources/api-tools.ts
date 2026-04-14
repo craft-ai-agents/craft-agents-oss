@@ -169,7 +169,8 @@ function buildUrl(
  */
 function buildToolDescription(config: ApiConfig): string {
   let desc = `Make authenticated requests to ${config.name} API (${config.baseUrl})\n\n`;
-  desc += `Authentication is handled automatically - just specify path, method, and params.\n\n`;
+  desc += `Authentication is handled automatically - just specify path, method, and params.\n`;
+  desc += `For non-JSON request bodies, use params: { _rawBody: "raw content", _contentType: "text/plain" }. The _rawBody value is sent as-is without JSON encoding.\n\n`;
 
   // Check for old cache format (no documentation field)
   if (!config.documentation) {
@@ -217,7 +218,7 @@ export function createApiTool(
     {
       path: z.string().describe('API endpoint path, e.g., "/search" or "/v1/completions"'),
       method: z.enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']).describe('HTTP method - check documentation for correct method per endpoint'),
-      params: z.record(z.string(), z.unknown()).optional().describe('Request body (POST/PUT/PATCH) or query parameters (GET)'),
+      params: z.record(z.string(), z.unknown()).optional().describe('Request body (POST/PUT/PATCH) or query parameters (GET). For non-JSON bodies, pass { _rawBody: "raw string content", _contentType: "text/plain" } — _rawBody is sent as-is without JSON encoding, _contentType defaults to text/plain if omitted'),
       _intent: z.string().optional().describe('REQUIRED: Describe what you are trying to accomplish with this API call (1-2 sentences)'),
     },
     async (args) => {
@@ -241,8 +242,18 @@ export function createApiTool(
 
         // Add body for non-GET requests
         if (method !== 'GET' && params && Object.keys(params).length > 0) {
-          fetchOptions.body = JSON.stringify(params);
+          // Support raw text bodies via _rawBody param (e.g., for endpoints expecting plain text)
+          if (typeof params._rawBody === 'string') {
+            fetchOptions.body = params._rawBody;
+            (fetchOptions.headers as Record<string, string>)['Content-Type'] =
+              typeof params._contentType === 'string' ? params._contentType : 'text/plain';
+            debug(`[api-tools] ${config.name}: raw body (${(fetchOptions.headers as Record<string, string>)['Content-Type']}): ${params._rawBody.substring(0, 200)}`);
+          } else {
+            fetchOptions.body = JSON.stringify(params);
+          }
         }
+
+        debug(`[api-tools] ${config.name}: headers=${JSON.stringify(fetchOptions.headers)}, bodyLength=${fetchOptions.body ? String(fetchOptions.body).length : 0}`);
 
         const response = await fetch(url, fetchOptions);
 

@@ -140,7 +140,7 @@ export function AnnotationIslandMenu({
           onSubmitAndSend={onSubmitAndSend}
           onDelete={onDelete}
           title={t('chat.followUp')}
-          submitLabel="Save"
+          submitLabel={t('common.save')}
           placeholder={t('chat.annotationPlaceholder')}
           maxInputHeight={320}
           sendMessageKey={sendMessageKey}

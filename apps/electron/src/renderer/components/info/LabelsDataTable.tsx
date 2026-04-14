@@ -106,7 +106,7 @@ function getColumns(t: TFunction): ColumnDef<LabelConfig>[] {
         <div className="p-1.5 pl-2.5">
           {row.original.valueType ? (
             <Info_Badge color="muted" className="capitalize whitespace-nowrap">
-              {row.original.valueType}
+              {t(`sidebar.labelValueType.${row.original.valueType}`)}
             </Info_Badge>
           ) : (
             <span className="text-muted-foreground/50 text-sm">—</span>

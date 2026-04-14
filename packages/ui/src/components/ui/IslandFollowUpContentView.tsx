@@ -49,12 +49,12 @@ export function IslandFollowUpContentView({
   onSubmit,
   onSubmitAndSend,
   onDelete,
-  title = 'Follow up',
-  placeholder = 'Add comments the agent should consider in the next turn…',
-  submitLabel = 'Continue',
-  submitAndSendLabel = 'Save & Send',
-  editLabel = 'Edit',
-  deleteLabel = 'Delete',
+  title: titleProp,
+  placeholder: placeholderProp,
+  submitLabel: submitLabelProp,
+  submitAndSendLabel: submitAndSendLabelProp,
+  editLabel: editLabelProp,
+  deleteLabel: deleteLabelProp,
   maxInputHeight = 400,
   sendMessageKey = 'enter',
   morphFrom = null,
@@ -64,6 +64,12 @@ export function IslandFollowUpContentView({
   onRequestEdit,
 }: IslandFollowUpContentViewProps) {
   const { t } = useTranslation()
+  const title = titleProp ?? t('chat.followUp')
+  const placeholder = placeholderProp ?? t('chat.annotationPlaceholder')
+  const submitLabel = submitLabelProp ?? t('common.continue')
+  const submitAndSendLabel = submitAndSendLabelProp ?? t('chat.followUpSaveAndSend')
+  const editLabel = editLabelProp ?? t('common.edit')
+  const deleteLabel = deleteLabelProp ?? t('common.delete')
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null)
   const measureTextareaRef = React.useRef<HTMLTextAreaElement | null>(null)
   const isViewMode = mode === 'view'
@@ -213,7 +219,7 @@ export function IslandFollowUpContentView({
               onClick={onCancel}
               className="h-8 px-3 rounded-[8px] text-sm text-foreground/75 hover:bg-foreground/5"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
 
             {canSubmitAndSend ? (

@@ -9,6 +9,7 @@ import {
   toBedrockNativeId,
   fromBedrockNativeId,
   normalizeBedrockModelId,
+  deriveBedrockRegionPrefix,
 } from '../llm-connections'
 import { ANTHROPIC_MODELS, getModelDisplayName, getModelContextWindow, getModelShortName, isClaudeModel } from '../models'
 
@@ -144,6 +145,51 @@ describe('toBedrockNativeId', () => {
     expect(toBedrockNativeId('some-custom-model')).toBe('some-custom-model')
     expect(toBedrockNativeId('gpt-5')).toBe('gpt-5')
   })
+
+  it('maps to EU inference profiles when regionPrefix is eu', () => {
+    expect(toBedrockNativeId('claude-opus-4-6', 'eu')).toBe('eu.anthropic.claude-opus-4-6-v1')
+    expect(toBedrockNativeId('claude-sonnet-4-6', 'eu')).toBe('eu.anthropic.claude-sonnet-4-6')
+  })
+
+  it('defaults to US when regionPrefix is omitted or us', () => {
+    expect(toBedrockNativeId('claude-opus-4-6')).toBe('us.anthropic.claude-opus-4-6-v1')
+    expect(toBedrockNativeId('claude-opus-4-6', 'us')).toBe('us.anthropic.claude-opus-4-6-v1')
+  })
+
+  it('passes through unknown IDs regardless of regionPrefix', () => {
+    expect(toBedrockNativeId('some-custom-model', 'eu')).toBe('some-custom-model')
+  })
+})
+
+describe('deriveBedrockRegionPrefix', () => {
+  it('returns us for US regions', () => {
+    expect(deriveBedrockRegionPrefix('us-east-1')).toBe('us')
+    expect(deriveBedrockRegionPrefix('us-west-2')).toBe('us')
+  })
+
+  it('returns eu for EU regions', () => {
+    expect(deriveBedrockRegionPrefix('eu-west-1')).toBe('eu')
+    expect(deriveBedrockRegionPrefix('eu-central-1')).toBe('eu')
+  })
+
+  it('returns us for other regions (fallback)', () => {
+    expect(deriveBedrockRegionPrefix('ap-southeast-1')).toBe('us')
+    expect(deriveBedrockRegionPrefix('me-south-1')).toBe('us')
+  })
+
+  it('returns us when undefined', () => {
+    expect(deriveBedrockRegionPrefix(undefined)).toBe('us')
+  })
+})
+
+describe('Bedrock preferred defaults ordering', () => {
+  it('sorts preferred models first for amazon-bedrock', () => {
+    const models = getDefaultModelsForConnection('pi', 'amazon-bedrock')
+    if (models.length === 0) return // Pi resolver not registered in test env
+    const firstId = typeof models[0] === 'string' ? models[0] : (models[0] as any).id
+    // First model should be a preferred model (claude-opus or claude-sonnet), not a deprecated one
+    expect(firstId).toMatch(/claude-(opus|sonnet)-4/)
+  })
 })
 
 describe('fromBedrockNativeId', () => {
@@ -188,6 +234,11 @@ describe('normalizeBedrockModelId', () => {
   it('handles empty/undefined', () => {
     expect(normalizeBedrockModelId(undefined)).toBe('')
     expect(normalizeBedrockModelId('')).toBe('')
+  })
+
+  it('respects regionPrefix for EU', () => {
+    expect(normalizeBedrockModelId('pi/claude-opus-4-6', 'eu')).toBe('eu.anthropic.claude-opus-4-6-v1')
+    expect(normalizeBedrockModelId('claude-sonnet-4-6', 'eu')).toBe('eu.anthropic.claude-sonnet-4-6')
   })
 })
 

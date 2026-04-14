@@ -115,6 +115,20 @@ Keys use **flat dot-notation** with a category prefix:
 2. Add the entry to `LOCALE_REGISTRY` in `src/i18n/registry.ts` (messages + date-fns locale + native name)
 3. Run tests — the registry tests will catch any missing wiring
 
+## Token refresh for API sources
+
+API sources can auto-refresh tokens via two paths:
+- **OAuth** — Google, Slack, Microsoft, or generic OAuth (`authType: 'oauth'`)
+- **Renew endpoint** — custom bearer-token APIs with `api.renewEndpoint` in config.json
+
+For renew-endpoint sources, the current access token is sent to the configured endpoint and a new token is extracted from the response. No separate refresh token is needed (MVP scope).
+
+Key integration points:
+- `isRefreshableSource()` in `types.ts` — single guard for "can this source auto-refresh?"
+- `SourceCredentialManager.refreshApiRenew()` — calls the renew endpoint
+- `TokenRefreshManager` — treats renew-endpoint sources as refreshable even without `refreshToken`
+- `server-builder.ts` — passes a token getter (not static credential) for renew-endpoint sources
+
 ## Source of truth
 - Package exports: `packages/shared/src/index.ts` and subpath export entries.
 - Agent exports: `packages/shared/src/agent/index.ts`

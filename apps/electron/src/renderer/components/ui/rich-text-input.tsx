@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { findMentionMatches, parseMentions, type MentionMatch } from '@/lib/mentions'
 import {
@@ -500,7 +501,7 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
     {
       value,
       onChange,
-      placeholder = 'Type a message...',
+      placeholder,
       skills = [],
       sources = [],
       workspaceId,
@@ -516,6 +517,7 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
     },
     forwardedRef
   ) {
+    const { t } = useTranslation()
     const divRef = React.useRef<HTMLDivElement>(null)
     const [isFocused, setIsFocused] = React.useState(false)
     const isComposing = React.useRef(false)
@@ -758,7 +760,7 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
 
     // Normalize placeholder to array for RotatingPlaceholder
     const placeholderArray = React.useMemo(() => {
-      if (!placeholder) return ['Type a message...']
+      if (!placeholder) return [t("chatInput.placeholder.typeMessage")]
       return Array.isArray(placeholder) ? placeholder : [placeholder]
     }, [placeholder])
 

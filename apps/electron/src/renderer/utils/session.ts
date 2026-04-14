@@ -1,4 +1,5 @@
 import * as React from "react"
+import i18next from "i18next"
 import type { Session, Message } from "../../shared/types"
 import type { SessionMeta } from "../atoms/sessions"
 import type { SessionStatusId } from "../config/session-status-config"
@@ -49,7 +50,7 @@ export function getSessionTitle(session: SessionLike | SessionMeta): string {
     }
   }
 
-  return 'New chat'
+  return i18next.t('session.defaultTitle', 'New chat')
 }
 
 /**
@@ -156,19 +157,21 @@ export function hasMessagesMeta(session: SessionMeta): boolean {
 // ---------------------------------------------------------------------------
 
 /** Short relative time locale for date-fns formatDistanceToNowStrict.
- *  Produces compact strings: "7m", "2h", "3d", "2w", "5mo", "1y" */
+ *  Produces compact strings: "7m", "2h", "3d", "2w", "5mo", "1y"
+ *  Uses i18n keys (time.compact.*) so output is localized. */
 export const shortTimeLocale = {
   formatDistance: (token: string, count: number) => {
-    const units: Record<string, string> = {
-      xSeconds: `${count}s`,
-      xMinutes: `${count}m`,
-      xHours: `${count}h`,
-      xDays: `${count}d`,
-      xWeeks: `${count}w`,
-      xMonths: `${count}mo`,
-      xYears: `${count}y`,
+    const tokenToKey: Record<string, string> = {
+      xSeconds: 'time.compact.seconds',
+      xMinutes: 'time.compact.minutes',
+      xHours: 'time.compact.hours',
+      xDays: 'time.compact.days',
+      xWeeks: 'time.compact.weeks',
+      xMonths: 'time.compact.months',
+      xYears: 'time.compact.years',
     }
-    return units[token] || `${count}`
+    const key = tokenToKey[token]
+    return key ? i18next.t(key, { count }) : `${count}`
   },
 }
 

@@ -7,7 +7,7 @@
  */
 
 import { describe, test, expect, mock, beforeEach } from 'bun:test';
-import { isOAuthSource, type LoadedSource, type FolderSourceConfig } from '../types.ts';
+import { isOAuthSource, hasRenewEndpoint, isRefreshableSource, type LoadedSource, type FolderSourceConfig } from '../types.ts';
 import { TokenRefreshManager } from '../token-refresh-manager.ts';
 import { isSourceUsable } from '../storage.ts';
 import type { SourceCredentialManager } from '../credential-manager.ts';
@@ -510,5 +510,159 @@ describe('TokenRefreshManager', () => {
       expect(source.config.connectionError).toBeUndefined();
       expect(mockMarkSourceAuthenticated).toHaveBeenCalledWith('/mock/workspace', 'craft-mcp');
     });
+  });
+
+  describe('renew-endpoint sources', () => {
+    test('needsRefresh returns true for renew-endpoint source without refreshToken', async () => {
+      const credManager = createMockCredManager({
+        load: mock(() => Promise.resolve({
+          value: 'expired-token',
+          expiresAt: Date.now() - 60_000,
+          // no refreshToken
+        })),
+        isExpired: mock(() => true),
+      });
+
+      const manager = new TokenRefreshManager(credManager);
+      const source = createMockSource({
+        type: 'api',
+        provider: 'custom-api',
+        api: {
+          baseUrl: 'https://api.example.com',
+          authType: 'bearer',
+          renewEndpoint: { path: '/auth/refresh', tokenField: 'token' },
+        },
+        isAuthenticated: true,
+      });
+
+      expect(await manager.needsRefresh(source)).toBe(true);
+    });
+
+    test('ensureFreshToken refreshes renew-endpoint source without refreshToken', async () => {
+      const credManager = createMockCredManager({
+        load: mock(() => Promise.resolve({
+          value: 'expired-token',
+          expiresAt: Date.now() - 60_000,
+          // no refreshToken
+        })),
+        isExpired: mock(() => true),
+        needsRefresh: mock(() => true),
+        refresh: mock(() => Promise.resolve('new-fresh-token')),
+      });
+
+      const manager = new TokenRefreshManager(credManager);
+      const source = createMockSource({
+        type: 'api',
+        provider: 'custom-api',
+        api: {
+          baseUrl: 'https://api.example.com',
+          authType: 'bearer',
+          renewEndpoint: { path: '/auth/refresh' },
+        },
+        isAuthenticated: true,
+      });
+
+      const result = await manager.ensureFreshToken(source);
+      expect(result.success).toBe(true);
+      expect(result.token).toBe('new-fresh-token');
+      expect(credManager.refresh).toHaveBeenCalled();
+    });
+
+    test('getSourcesNeedingRefresh includes renew-endpoint sources', async () => {
+      const credManager = createMockCredManager({
+        load: mock(() => Promise.resolve({
+          value: 'expired-token',
+          expiresAt: Date.now() - 60_000,
+        })),
+        isExpired: mock(() => true),
+      });
+
+      const manager = new TokenRefreshManager(credManager);
+      const renewSource = createMockSource({
+        slug: 'custom-api',
+        type: 'api',
+        provider: 'custom',
+        api: {
+          baseUrl: 'https://api.example.com',
+          authType: 'bearer',
+          renewEndpoint: { path: '/auth/renew' },
+        },
+        isAuthenticated: true,
+      });
+      const plainBearerSource = createMockSource({
+        slug: 'plain-api',
+        type: 'api',
+        provider: 'plain',
+        api: { baseUrl: 'https://api.plain.com', authType: 'bearer' },
+        isAuthenticated: true,
+      });
+
+      const result = await manager.getSourcesNeedingRefresh([renewSource, plainBearerSource]);
+      expect(result.length).toBe(1);
+      expect(result[0]!.config.slug).toBe('custom-api');
+    });
+  });
+});
+
+describe('hasRenewEndpoint', () => {
+  test('returns true for API source with renewEndpoint', () => {
+    const source = createMockSource({
+      type: 'api',
+      api: {
+        baseUrl: 'https://api.example.com',
+        authType: 'bearer',
+        renewEndpoint: { path: '/auth/refresh' },
+      },
+    });
+    expect(hasRenewEndpoint(source)).toBe(true);
+  });
+
+  test('returns false for API source without renewEndpoint', () => {
+    const source = createMockSource({
+      type: 'api',
+      api: { baseUrl: 'https://api.example.com', authType: 'bearer' },
+    });
+    expect(hasRenewEndpoint(source)).toBe(false);
+  });
+
+  test('returns false for MCP source', () => {
+    const source = createMockSource({
+      type: 'mcp',
+      mcp: { url: 'https://mcp.example.com', authType: 'oauth' },
+    });
+    expect(hasRenewEndpoint(source)).toBe(false);
+  });
+});
+
+describe('isRefreshableSource', () => {
+  test('returns true for OAuth source', () => {
+    const source = createMockSource({
+      type: 'mcp',
+      provider: 'linear',
+      mcp: { url: 'https://linear.example.com', authType: 'oauth' },
+    });
+    expect(isRefreshableSource(source)).toBe(true);
+  });
+
+  test('returns true for renew-endpoint source', () => {
+    const source = createMockSource({
+      type: 'api',
+      provider: 'custom',
+      api: {
+        baseUrl: 'https://api.example.com',
+        authType: 'bearer',
+        renewEndpoint: { path: '/auth/refresh' },
+      },
+    });
+    expect(isRefreshableSource(source)).toBe(true);
+  });
+
+  test('returns false for plain bearer source', () => {
+    const source = createMockSource({
+      type: 'api',
+      provider: 'custom',
+      api: { baseUrl: 'https://api.example.com', authType: 'bearer' },
+    });
+    expect(isRefreshableSource(source)).toBe(false);
   });
 });

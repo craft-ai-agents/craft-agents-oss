@@ -2,6 +2,7 @@ import { normalize, isAbsolute, sep } from 'path'
 import { homedir, tmpdir } from 'os'
 import { realpath } from 'fs/promises'
 import { getWorkspaceByNameOrId, type Workspace } from '@craft-agent/shared/config'
+import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
 import type { PlatformServices } from '../runtime/platform'
 
 /**
@@ -47,10 +48,32 @@ export function sanitizeFilename(name: string): string {
 }
 
 /**
- * Validates that a file path is within allowed directories to prevent path traversal attacks.
- * Allowed directories: user's home directory and /tmp
+ * Resolve allowed directories for a workspace: its root path and configured
+ * working directory (if set). Returns an empty array if the workspace is
+ * unknown or has no relevant paths.
  */
-export async function validateFilePath(filePath: string): Promise<string> {
+export function getWorkspaceAllowedDirs(workspaceId?: string | null): string[] {
+  if (!workspaceId) return []
+  const workspace = getWorkspaceByNameOrId(workspaceId)
+  if (!workspace) return []
+
+  const dirs: string[] = [workspace.rootPath]
+  const config = loadWorkspaceConfig(workspace.rootPath)
+  if (config?.defaults?.workingDirectory) {
+    dirs.push(config.defaults.workingDirectory)
+  }
+  return dirs
+}
+
+/**
+ * Validates that a file path is within allowed directories to prevent path traversal attacks.
+ * Allowed directories: user's home directory, /tmp, and any additional dirs passed by the caller
+ * (e.g. workspace root, workspace working directory).
+ */
+export async function validateFilePath(
+  filePath: string,
+  additionalAllowedDirs?: string[],
+): Promise<string> {
   // Normalize the path to resolve . and .. components
   let normalizedPath = normalize(filePath)
 
@@ -75,9 +98,10 @@ export async function validateFilePath(filePath: string): Promise<string> {
 
   // Define allowed base directories
   const allowedDirs = [
-    homedir(),      // User's home directory
-    tmpdir(),       // Platform-appropriate temp directory
-  ]
+    homedir(),
+    tmpdir(),
+    ...(additionalAllowedDirs ?? []),
+  ].filter(Boolean)
 
   // Check if the real path is within an allowed directory (cross-platform)
   const isAllowed = allowedDirs.some(dir => {
@@ -90,11 +114,12 @@ export async function validateFilePath(filePath: string): Promise<string> {
     throw new Error('Access denied: file path is outside allowed directories')
   }
 
-  // Block sensitive files even within home directory
+  // Block sensitive files even within allowed directories.
+  // Use [\\/] to match both Unix / and Windows \ separators.
   const sensitivePatterns = [
-    /\.ssh\//,
-    /\.gnupg\//,
-    /\.aws\/credentials/,
+    /\.ssh[\\/]/,
+    /\.gnupg[\\/]/,
+    /\.aws[\\/]credentials/,
     /\.env$/,
     /\.env\./,
     /credentials\.json$/,

@@ -20,6 +20,7 @@ export type {
   SourceGuide,
   LoadedSource,
   CreateSourceInput,
+  ApiRenewEndpoint,
 } from './types.ts';
 
 // Constants and helpers
@@ -27,6 +28,8 @@ export {
   API_OAUTH_PROVIDERS,
   isApiOAuthProvider,
   isGenericOAuthSource,
+  hasRenewEndpoint,
+  isRefreshableSource,
 } from './types.ts';
 
 // Storage functions

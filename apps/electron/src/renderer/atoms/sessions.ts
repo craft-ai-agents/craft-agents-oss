@@ -295,6 +295,76 @@ export const initializeSessionsAtom = atom(
 )
 
 /**
+ * Action atom: refresh session metadata after a stale reconnect.
+ *
+ * Unlike initializeSessionsAtom (which resets everything for workspace switches),
+ * this preserves messages for already-loaded sessions and only marks overwritten
+ * metadata-only sessions as unloaded for lazy re-fetching.
+ *
+ * All cross-atom mutations happen inside a single write transaction so that
+ * React subscribers see one consistent update instead of intermediate states.
+ */
+export const refreshSessionsMetadataAtom = atom(
+  null,
+  (
+    get,
+    set,
+    payload: { sessions: Session[]; loadedSessionIds: Set<string> }
+  ): Map<string, SessionMeta> => {
+    const { sessions, loadedSessionIds } = payload
+
+    // Remove stale sessions that no longer exist on the server
+    const currentIds = get(sessionIdsAtom)
+    const latestIds = new Set(sessions.map(s => s.id))
+    for (const staleId of currentIds) {
+      if (!latestIds.has(staleId)) {
+        set(removeSessionAtom, staleId)
+      }
+    }
+
+    // Update each session atom, preserving messages for loaded sessions
+    const unloadedIds: string[] = []
+    for (const session of sessions) {
+      const currentSession = get(sessionAtomFamily(session.id))
+      const shouldPreserveMessages = !!currentSession && loadedSessionIds.has(session.id)
+      const nextSession = shouldPreserveMessages && currentSession
+        ? { ...session, messages: currentSession.messages }
+        : session
+
+      set(sessionAtomFamily(session.id), nextSession)
+
+      // Track sessions that lost their messages so lazy-loading re-fetches them
+      if (!shouldPreserveMessages && loadedSessionIds.has(session.id)) {
+        unloadedIds.push(session.id)
+      }
+    }
+
+    // Remove overwritten sessions from loadedSessionsAtom
+    if (unloadedIds.length > 0) {
+      const nextLoaded = new Set(get(loadedSessionsAtom))
+      for (const id of unloadedIds) nextLoaded.delete(id)
+      set(loadedSessionsAtom, nextLoaded)
+    }
+
+    // Build and set metadata map
+    const nextMetaMap = new Map<string, SessionMeta>()
+    for (const session of sessions) {
+      nextMetaMap.set(session.id, extractSessionMeta(session))
+    }
+    set(sessionMetaMapAtom, nextMetaMap)
+
+    // Set ordered IDs
+    const nextIds = sessions
+      .slice()
+      .sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0))
+      .map(s => s.id)
+    set(sessionIdsAtom, nextIds)
+
+    return nextMetaMap
+  }
+)
+
+/**
  * Action atom: add a new session
  */
 export const addSessionAtom = atom(

@@ -76,7 +76,7 @@ import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient } from '@craf
 import type { PlatformServices } from '../runtime/platform'
 import { createElectronPlatform } from './platform'
 import type { HandlerDeps } from './handlers/handler-deps'
-import { bootstrapServer } from '@craft-agent/server-core/bootstrap'
+import { bootstrapServer, releaseServerLock } from '@craft-agent/server-core/bootstrap'
 import { initModelRefreshService, getModelRefreshService, setFetcherPlatform } from '@craft-agent/server-core/model-fetchers'
 import { setSearchPlatform, setImageProcessor } from '@craft-agent/server-core/services'
 import { createApplicationMenu } from './menu'
@@ -1083,6 +1083,10 @@ app.on('before-quit', async (event) => {
     // Clean up power manager (release power blocker)
     const { cleanup: cleanupPowerManager } = await import('./power-manager')
     cleanupPowerManager()
+
+    // Release the server lock file so the next launch doesn't see a stale PID.
+    // This must happen regardless of the exit path (normal quit or update quit).
+    releaseServerLock()
 
     // If update is in progress, let electron-updater handle the quit flow
     // Force exit breaks the NSIS installer on Windows

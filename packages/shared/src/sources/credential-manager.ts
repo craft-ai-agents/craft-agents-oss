@@ -17,11 +17,13 @@ import {
   inferSlackServiceFromUrl,
   inferMicrosoftServiceFromUrl,
   isApiOAuthProvider,
+  hasRenewEndpoint,
   type LoadedSource,
   type GoogleService,
   type SlackService,
   type MicrosoftService,
 } from './types.ts';
+import { buildAuthorizationHeader } from './api-tools.ts';
 import type { CredentialId, StoredCredential } from '../credentials/types.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { CraftOAuth, getMcpBaseUrl, prepareMcpOAuth, exchangeMcpOAuth, type OAuthCallbacks, type OAuthTokens } from '../auth/oauth.ts';
@@ -899,7 +901,20 @@ export class SourceCredentialManager {
    */
   private async doRefresh(source: LoadedSource): Promise<string | null> {
     const cred = await this.load(source);
-    if (!cred?.refreshToken) {
+    if (!cred) {
+      debug(`[SourceCredentialManager] No credential for ${source.config.slug}`);
+      return null;
+    }
+
+    // API renew endpoint (non-OAuth token refresh) — check before provider routing.
+    // These sources may not have a separate refreshToken; they use the current
+    // access token for renewal.
+    if (hasRenewEndpoint(source)) {
+      return this.refreshApiRenew(source, cred);
+    }
+
+    // For all other refresh strategies, a refreshToken is required.
+    if (!cred.refreshToken) {
       debug(`[SourceCredentialManager] No refresh token for ${source.config.slug}`);
       return null;
     }
@@ -941,6 +956,91 @@ export class SourceCredentialManager {
     }
 
     return null;
+  }
+
+  /**
+   * Refresh token via a custom API renew endpoint (non-OAuth).
+   * Uses the current access token for renewal — no separate refresh token needed.
+   */
+  private async refreshApiRenew(
+    source: LoadedSource,
+    cred: StoredCredential,
+  ): Promise<string | null> {
+    const renewConfig = source.config.api?.renewEndpoint;
+    if (!renewConfig?.path) return null;
+
+    const baseUrl = source.config.api!.baseUrl;
+    const authScheme = source.config.api!.authScheme;
+    const currentToken = cred.value;
+
+    try {
+      // 1. Resolve URL
+      const url = renewConfig.path.startsWith('http')
+        ? renewConfig.path
+        : new URL(renewConfig.path, baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`).toString();
+
+      // 2. Build headers: defaultHeaders < renewEndpoint.headers < Authorization
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...source.config.api!.defaultHeaders,
+        ...substituteTokenInHeaders(renewConfig.headers, currentToken),
+      };
+      // Add Authorization unless explicitly overridden in renewEndpoint.headers
+      if (!renewConfig.headers?.['Authorization'] && !renewConfig.headers?.['authorization']) {
+        headers['Authorization'] = buildAuthorizationHeader(authScheme, currentToken);
+      }
+
+      // 3. Build body with {{token}} substitution
+      const method = renewConfig.method ?? 'POST';
+      const fetchOptions: RequestInit = { method, headers };
+      if (renewConfig.body && method !== 'GET') {
+        fetchOptions.body = JSON.stringify(substituteTokenInBody(renewConfig.body, currentToken));
+      }
+
+      // 4. Execute
+      const response = await fetch(url, fetchOptions);
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`Renew endpoint returned ${response.status}: ${errorText.slice(0, 200)}`);
+      }
+
+      const json = await response.json() as Record<string, unknown>;
+
+      // 5. Extract new token
+      const tokenField = renewConfig.tokenField ?? 'access_token';
+      const newToken = json[tokenField];
+      if (typeof newToken !== 'string' || !newToken) {
+        throw new Error(`Renew response missing "${tokenField}" field`);
+      }
+
+      // 6. Extract expiry
+      const expiresInField = renewConfig.expiresInField ?? 'expires_in';
+      const expiresInRaw = json[expiresInField];
+      let expiresAt: number | undefined;
+      if (typeof expiresInRaw === 'number' && expiresInRaw > 0) {
+        expiresAt = Date.now() + expiresInRaw * 1000;
+      } else if (renewConfig.fallbackTtlSecs) {
+        expiresAt = Date.now() + renewConfig.fallbackTtlSecs * 1000;
+      }
+      // If neither is available, expiresAt stays undefined — needsRefresh() will
+      // trigger refresh on next session start (safe but noisy).
+
+      // 7. Save updated credential
+      await this.save(source, {
+        ...cred,
+        value: newToken,
+        ...(expiresAt !== undefined ? { expiresAt } : {}),
+      });
+
+      debug(`[SourceCredentialManager] Refreshed token via renew endpoint for ${source.config.slug}`);
+      return newToken;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      debug(`[SourceCredentialManager] Renew endpoint refresh failed for ${source.config.slug}:`, error);
+      this.markSourceNeedsReauth(source, `Token refresh failed: ${errorMsg}`);
+      return null;
+    }
   }
 
   /**
@@ -1137,6 +1237,48 @@ export class SourceCredentialManager {
       return null;
     }
   }
+}
+
+// ============================================================
+// Token substitution helpers for renew endpoint
+// ============================================================
+
+/**
+ * Recursively substitute {{token}} in string leaves of an object.
+ * Supports nested objects and arrays.
+ */
+function substituteTokenInBody(obj: Record<string, unknown>, token: string): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (typeof value === 'string') {
+      result[key] = value.replace(/\{\{token\}\}/g, token);
+    } else if (Array.isArray(value)) {
+      result[key] = value.map(item =>
+        typeof item === 'string' ? item.replace(/\{\{token\}\}/g, token) :
+          (item && typeof item === 'object' ? substituteTokenInBody(item as Record<string, unknown>, token) : item)
+      );
+    } else if (value && typeof value === 'object') {
+      result[key] = substituteTokenInBody(value as Record<string, unknown>, token);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/**
+ * Substitute {{token}} in header values.
+ */
+function substituteTokenInHeaders(
+  headers: Record<string, string> | undefined,
+  token: string,
+): Record<string, string> {
+  if (!headers) return {};
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    result[key] = value.replace(/\{\{token\}\}/g, token);
+  }
+  return result;
 }
 
 // ============================================================

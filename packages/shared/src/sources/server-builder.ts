@@ -222,6 +222,13 @@ export class SourceServerBuilder {
       return createApiServer(config, '', sessionPath, summarize);
     }
 
+    // Renew-endpoint sources use a token getter for auto-refresh instead of a static credential
+    if (getToken && apiConfig.renewEndpoint) {
+      debug(`[SourceServerBuilder] Building API server for ${source.config.slug} (auth: ${authType}, renew-endpoint)`);
+      const config = this.buildApiConfig(source);
+      return createApiServer(config, getToken, sessionPath, summarize);
+    }
+
     // API key/bearer/header/query/basic auth - use static credential
     if (!credential) {
       debug(`[SourceServerBuilder] API source ${source.config.slug} needs credentials`);

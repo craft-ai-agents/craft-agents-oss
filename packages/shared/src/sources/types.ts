@@ -218,6 +218,24 @@ export function isGenericOAuthSource(source: LoadedSource): boolean {
 }
 
 /**
+ * Check if an API source has a token renew endpoint configured.
+ */
+export function hasRenewEndpoint(source: LoadedSource): boolean {
+  return source.config.type === 'api' && !!source.config.api?.renewEndpoint?.path;
+}
+
+/**
+ * Check if a source can auto-refresh its token.
+ * Returns true for OAuth sources OR sources with a renewEndpoint.
+ *
+ * Use this as the single guard for "can this source refresh?" instead of
+ * sprinkling provider/authType/renewEndpoint checks in multiple places.
+ */
+export function isRefreshableSource(source: LoadedSource): boolean {
+  return isOAuthSource(source) || hasRenewEndpoint(source);
+}
+
+/**
  * MCP transport type for sources
  * - 'http': HTTP-based MCP server (URL endpoint)
  * - 'sse': Server-Sent Events MCP server (URL endpoint)
@@ -317,6 +335,36 @@ export interface ApiOAuthConfig {
 }
 
 /**
+ * Token renewal endpoint configuration for non-OAuth API sources.
+ * Allows custom bearer-token APIs to auto-renew expired tokens by calling
+ * a provider-specific endpoint (not OAuth-compliant).
+ *
+ * MVP scope: access-token-based renewal only. The current access token is
+ * sent via the Authorization header and/or substituted into body/headers
+ * using the {{token}} placeholder.
+ */
+export interface ApiRenewEndpoint {
+  /** Renew URL — relative path (resolved against baseUrl) or absolute URL */
+  path: string;
+  /** HTTP method (default: POST) */
+  method?: 'GET' | 'POST';
+  /** Request body — {{token}} in string leaves is substituted with current access token.
+   *  Supports nested objects (recursive substitution on string leaves). */
+  body?: Record<string, unknown>;
+  /** Extra headers for the renew request — {{token}} substitution applies here too.
+   *  Merged on top of defaultHeaders. Authorization header is always sent unless
+   *  explicitly overridden here. */
+  headers?: Record<string, string>;
+  /** JSON field name for the new access token in response (default: "access_token") */
+  tokenField?: string;
+  /** JSON field name for expiry in seconds in response (default: "expires_in") */
+  expiresInField?: string;
+  /** Fallback TTL in seconds when renew response doesn't include expiry (optional).
+   *  Without this, missing expiry causes refresh on every session start (safe but noisy). */
+  fallbackTtlSecs?: number;
+}
+
+/**
  * API-specific configuration
  */
 export interface ApiSourceConfig {
@@ -328,6 +376,7 @@ export interface ApiSourceConfig {
   authScheme?: string; // For 'bearer' auth (default: "Bearer", could be "Token")
   defaultHeaders?: Record<string, string>; // Headers to include with every request
   testEndpoint?: ApiTestEndpoint; // Endpoint to use for connection testing
+  renewEndpoint?: ApiRenewEndpoint; // Optional token renewal endpoint for non-OAuth sources
 
   // Google OAuth fields (used when provider is 'google')
   googleService?: GoogleService; // Predefined service for scope selection
