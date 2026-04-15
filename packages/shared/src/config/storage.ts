@@ -2404,6 +2404,10 @@ export function updateLlmConnection(slug: string, updates: Partial<Omit<LlmConne
     piAuthProvider: updates.piAuthProvider !== undefined ? updates.piAuthProvider : existing.piAuthProvider,
     // Custom endpoint protocol (Anthropic/OpenAI compatible)
     customEndpoint: updates.customEndpoint !== undefined ? updates.customEndpoint : existing.customEndpoint,
+    // ACP fields
+    acpTransport: updates.acpTransport !== undefined ? updates.acpTransport : existing.acpTransport,
+    acpCommand: updates.acpCommand !== undefined ? updates.acpCommand : existing.acpCommand,
+    acpEnv: updates.acpEnv !== undefined ? updates.acpEnv : existing.acpEnv,
     // Timestamps
     lastUsedAt: updates.lastUsedAt !== undefined ? updates.lastUsedAt : existing.lastUsedAt,
   };

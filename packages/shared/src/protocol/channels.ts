@@ -183,6 +183,7 @@ export const RPC_CHANNELS = {
     SET_DEFAULT: 'LLM_Connection:setDefault',
     SET_WORKSPACE_DEFAULT: 'LLM_Connection:setWorkspaceDefault',
     REFRESH_MODELS: 'LLM_Connection:refreshModels',
+    PROBE_ACP: 'LLM_Connection:probeAcp',
     CHANGED: 'LLM_Connection:changed',
   },
   chatgpt: {

@@ -97,6 +97,9 @@ describe('StdioAcpTransport — onNotification', () => {
       received.push({ method, params })
     })
 
+    // Subprocess is lazy — start it explicitly so the server can send its notification
+    transport.start()
+
     // Wait for server to send notification (it fires after 20ms)
     await new Promise(r => setTimeout(r, 100))
 
@@ -123,6 +126,9 @@ describe('StdioAcpTransport — onRequest (server → client)', () => {
     transport.onNotification((method, params) => {
       if (method === 'callback_received') callbackNotifications.push(params)
     })
+
+    // Subprocess is lazy — start it explicitly so the server can send its request
+    transport.start()
 
     // Server sends a request after 20ms; wait for it to be processed
     await new Promise(r => setTimeout(r, 200))

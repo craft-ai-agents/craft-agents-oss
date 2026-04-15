@@ -1,4 +1,5 @@
 import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
+import { acpDriver } from '@craft-agent/shared/agent/backend/internal/drivers/acp'
 import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { setSetupDeferred } from '@craft-agent/shared/config/storage'
@@ -29,6 +30,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.llmConnections.SET_DEFAULT,
   RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT,
   RPC_CHANNELS.llmConnections.REFRESH_MODELS,
+  RPC_CHANNELS.llmConnections.PROBE_ACP,
   RPC_CHANNELS.chatgpt.START_OAUTH,
   RPC_CHANNELS.chatgpt.COMPLETE_OAUTH,
   RPC_CHANNELS.chatgpt.CANCEL_OAUTH,
@@ -558,6 +560,37 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       const msg = error instanceof Error ? error.message : 'Unknown error'
       deps.platform.logger?.error(`Failed to refresh models for ${slug}: ${msg}`)
       return { success: false, error: msg }
+    }
+  })
+
+  // Probe an ACP connection before saving: spawn the process, run initialize+session/new,
+  // and return the discovered models. Used by the UI to validate and fetch models before persisting.
+  server.handle(RPC_CHANNELS.llmConnections.PROBE_ACP, async (_ctx, params: {
+    acpCommand: string[],
+    acpEnv?: Record<string, string>,
+    timeoutMs?: number,
+  }): Promise<{ success: boolean; models: import('@craft-agent/shared/config').ModelDefinition[]; error?: string }> => {
+    try {
+      const { acpCommand, acpEnv, timeoutMs = 15_000 } = params
+      if (!acpCommand?.length) {
+        return { success: false, models: [], error: 'acpCommand is required' }
+      }
+
+      // ACP driver fetchModels only reads connection.acpCommand / acpEnv / timeoutMs.
+      // hostRuntime and resolvedPaths are required by the interface but unused by this driver.
+      const result = await acpDriver.fetchModels!({
+        connection: { acpCommand, acpEnv } as any,
+        credentials: {},
+        timeoutMs,
+        hostRuntime: {} as any,
+        resolvedPaths: {} as any,
+      })
+
+      return { success: true, models: result.models }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      deps.platform.logger?.warn(`[probeAcp] Failed: ${msg}`)
+      return { success: false, models: [], error: msg }
     }
   })
 

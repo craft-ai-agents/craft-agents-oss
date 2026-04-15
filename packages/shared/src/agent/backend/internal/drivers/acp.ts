@@ -41,8 +41,12 @@ export const acpDriver: ProviderDriver = {
     const transport = new StdioAcpTransport(acpCommand, acpEnv);
 
     try {
+      // Use a shorter timeout for the ACP probe (initialize + session/new) so that
+      // agents which never respond (e.g. Cursor `agent acp`) fail fast and let the
+      // `--list-models` fallback run within the overall timeoutMs budget.
+      const probeTimeoutMs = Math.min(timeoutMs, 5_000);
       const timer = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('ACP fetchModels timeout')), timeoutMs)
+        setTimeout(() => reject(new Error('ACP fetchModels timeout')), probeTimeoutMs)
       );
 
       const probe = async () => {
@@ -66,8 +70,34 @@ export const acpDriver: ProviderDriver = {
 
       const result = await Promise.race([probe(), timer]);
       const models = extractModels(result);
+
+      // Some ACP servers (e.g. Cursor `agent acp`) don't return model lists via
+      // session/new. Fall back to running `<bin> --list-models` to discover them.
+      if (models.length === 0) {
+        const listModels = await _fetchCursorModels(acpCommand, acpEnv, timeoutMs);
+        if (listModels.length > 0) return { models: listModels };
+
+        // Final fallback: a "Default" entry so the UI can still start a chat
+        models.push({
+          id: 'default',
+          name: 'Default',
+          shortName: 'Default',
+          description: 'Agent-managed model',
+          provider: 'acp' as never,
+          contextWindow: 0,
+        });
+      }
+
       return { models };
     } catch {
+      // probe() failed or timed out — still try `--list-models` before giving up.
+      // This is the common path for Cursor `agent acp` which never responds to session/new.
+      try {
+        const listModels = await _fetchCursorModels(acpCommand, acpEnv, timeoutMs);
+        if (listModels.length > 0) return { models: listModels };
+      } catch {
+        // ignore
+      }
       return { models: [] };
     } finally {
       await transport.dispose().catch(() => {});
@@ -105,4 +135,76 @@ function extractModels(result: {
     }));
   }
   return [];
+}
+
+/**
+ * Fetch models from Cursor Agent CLI using `cursor agent models` (or `--list-models`).
+ * Falls back to a single "Default" entry if the command fails or times out.
+ */
+async function _fetchCursorModels(
+  acpCommand: string[],
+  acpEnv?: Record<string, string>,
+  timeoutMs = 10000,
+): Promise<ModelDefinition[]> {
+  try {
+    const { execFile } = require('node:child_process') as typeof import('node:child_process');
+
+    // Build the correct --list-models command.
+    // User may configure: ['cursor-agent'], ['cursor', 'agent'], ['cursor-agent', 'acp'], etc.
+    // We need: cursor-agent --list-models (or cursor agent --list-models)
+    const baseBin = acpCommand[0];
+    if (!baseBin) throw new Error('empty command');
+
+    // Determine args: skip 'acp' subcommand if present, keep 'agent' if separate
+    const args = acpCommand.slice(1).filter(a => a.toLowerCase() !== 'acp');
+    args.push('--list-models');
+
+    const result = await new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
+      execFile(baseBin, args, {
+        env: _buildSafeEnv(acpEnv),
+        timeout: timeoutMs,
+      }, (err, stdout) => {
+        clearTimeout(timer);
+        if (err) { reject(err); return; }
+        resolve(stdout);
+      });
+    });
+
+    // Parse output: `cursor agent --list-models` outputs lines in format:
+    //   id - Display Name  (current, default)
+    // Strip ANSI escape codes first, then parse each model line.
+    const clean = result.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+    const lines = clean.split('\n').map(l => l.trim()).filter(Boolean);
+    const models: ModelDefinition[] = [];
+    for (const line of lines) {
+      // Match lines like: "claude-4.6-sonnet-medium - Sonnet 4.6 1M" or "auto - Auto"
+      const match = line.match(/^(\S+)\s+-\s+(.+?)(?:\s+\(.*\))?$/);
+      if (!match) continue;
+      const [, id, displayName] = match;
+      if (!id || !displayName) continue;
+      models.push({
+        id,
+        name: displayName.trim(),
+        shortName: displayName.trim(),
+        description: '',
+        provider: 'acp' as never,
+        contextWindow: 0,
+      });
+    }
+
+    if (models.length > 0) return models;
+  } catch {
+    // Fall through to default
+  }
+
+  // Fallback: single Default entry so the UI can start a chat
+  return [{
+    id: 'default',
+    name: 'Cursor Agent',
+    shortName: 'Cursor',
+    description: 'Cursor Agent (model managed by Cursor)',
+    provider: 'acp' as never,
+    contextWindow: 0,
+  }];
 }

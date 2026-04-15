@@ -618,6 +618,7 @@ export interface ElectronAPI {
   saveLlmConnection(connection: LlmConnection): Promise<{ success: boolean; error?: string }>
   deleteLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   testLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
+  probeAcpConnection(params: { acpCommand: string[]; acpEnv?: Record<string, string>; timeoutMs?: number }): Promise<{ success: boolean; models: import('@craft-agent/shared/config').ModelDefinition[]; error?: string }>
   setDefaultLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   getDefaultThinkingLevel(): Promise<ThinkingLevel>
   setDefaultThinkingLevel(level: ThinkingLevel): Promise<{ success: boolean; error?: string }>

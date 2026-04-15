@@ -615,6 +615,14 @@ export interface BackendConfig extends CoreBackendConfig {
   /** Workspace-level automation system for user-defined SDK hooks (automations.json) */
   automationSystem?: AutomationSystem;
 
+  // ACP-specific fields (only present for provider='acp')
+  /** Transport type for ACP connections (currently only 'stdio' is supported) */
+  acpTransport?: 'stdio';
+  /** Command + args to spawn the ACP server process */
+  acpCommand?: string[];
+  /** Extra environment variables to inject into the ACP subprocess */
+  acpEnv?: Record<string, string>;
+
   /**
    * Opaque runtime payload resolved by backend drivers.
    * This keeps provider-specific runtime details out of the public config surface.

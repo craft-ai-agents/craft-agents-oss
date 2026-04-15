@@ -4,7 +4,18 @@
  * Converts ACP session/update payloads into AgentEvent[] streams.
  * Pure static-method adapter — no state, no side effects.
  *
- * Mapping rules (from execution-brief):
+ * Handles two ACP wire formats:
+ *
+ * 1. Standard ACP (e.g. claude-agent-acp):
+ *    { status: "running"|"completed"|"error"|"cancelled", content: AcpContent[] }
+ *    Completion is signalled by status === "completed".
+ *
+ * 2. Cursor ACP:
+ *    { sessionUpdate: "agent_message_chunk", content: AcpContent }  (single object)
+ *    Completion is signalled by the session/prompt response { stopReason: "end_turn" }
+ *    (handled in AcpAgent.chatImpl — adapter only produces content events here).
+ *
+ * Mapping rules:
  *
  * content.type | condition              | produces
  * -------------|------------------------|------------------
@@ -67,8 +78,12 @@ type AcpContent =
   | AcpUnknownContent;
 
 export interface AcpSessionUpdate {
-  status: 'running' | 'completed' | 'error' | 'cancelled' | string;
-  content?: AcpContent[];
+  // Standard ACP format (e.g. claude-agent-acp)
+  status?: 'running' | 'completed' | 'error' | 'cancelled' | string;
+  // Cursor ACP format — discriminator field
+  sessionUpdate?: string;
+  // content is an array in standard ACP, a single object in Cursor ACP
+  content?: AcpContent | AcpContent[];
   error?: { message?: string };
   usage?: { input_tokens?: number; output_tokens?: number };
 }
@@ -87,9 +102,39 @@ export class AcpEventAdapter {
   static adapt(update: AcpSessionUpdate): AgentEvent[] {
     const events: AgentEvent[] = [];
 
-    // Status-level events (completed / error / cancelled)
+    // ── Cursor ACP format (sessionUpdate discriminator) ──────────────────────
+    // Cursor uses { sessionUpdate: "agent_message_chunk", content: <single object> }
+    // instead of the standard { status, content: <array> } format.
+    if (update.sessionUpdate !== undefined) {
+      switch (update.sessionUpdate) {
+        case 'agent_message_chunk': {
+          // content is a single AcpContent object (not an array)
+          if (update.content && !Array.isArray(update.content)) {
+            events.push(...AcpEventAdapter._adaptContent(update.content as AcpContent));
+          }
+          break;
+        }
+        // Other Cursor-specific updates (available_commands_update, turn_complete, etc.)
+        // are informational — produce no AgentEvents
+        default:
+          break;
+      }
+      return events;
+    }
+
+    // ── Standard ACP format (status discriminator) ───────────────────────────
     switch (update.status) {
       case 'completed': {
+        // Process content first — some ACP servers (e.g. Claude Code) send the
+        // final text chunk in the same notification as status="completed".
+        const completedContent = Array.isArray(update.content)
+          ? update.content
+          : update.content
+            ? [update.content as AcpContent]
+            : [];
+        for (const item of completedContent) {
+          events.push(...AcpEventAdapter._adaptContent(item));
+        }
         const usage = update.usage
           ? {
               inputTokens: update.usage.input_tokens ?? 0,
@@ -112,9 +157,14 @@ export class AcpEventAdapter {
     }
 
     // Content-level events (status === 'running' or other streaming status)
-    for (const item of update.content ?? []) {
-      const adapted = AcpEventAdapter._adaptContent(item);
-      events.push(...adapted);
+    // Normalise: standard ACP sends content as an array, guard against single object
+    const contentItems = Array.isArray(update.content)
+      ? update.content
+      : update.content
+        ? [update.content as AcpContent]
+        : [];
+    for (const item of contentItems) {
+      events.push(...AcpEventAdapter._adaptContent(item));
     }
 
     return events;

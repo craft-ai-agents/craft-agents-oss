@@ -209,6 +209,10 @@ export function createBackendFromResolvedContext(args: {
     model: context.resolvedModel,
     connectionSlug: context.connection?.slug,
     runtime,
+    // ACP-specific fields — must be forwarded from the connection so createAcpTransport can read them
+    ...(context.connection?.acpTransport !== undefined && { acpTransport: context.connection.acpTransport }),
+    ...(context.connection?.acpCommand !== undefined && { acpCommand: context.connection.acpCommand }),
+    ...(context.connection?.acpEnv !== undefined && { acpEnv: context.connection.acpEnv }),
   };
 
   return createBackend(config);
@@ -544,6 +548,10 @@ export function createConfigFromConnection(
     connectionSlug: connection.slug,
     // Use connection's default model if no model specified in baseConfig
     model: baseConfig.model || connection.defaultModel,
+    // ACP-specific fields — passed through so createAcpTransport can read them
+    ...(connection.acpTransport !== undefined && { acpTransport: connection.acpTransport }),
+    ...(connection.acpCommand !== undefined && { acpCommand: connection.acpCommand }),
+    ...(connection.acpEnv !== undefined && { acpEnv: connection.acpEnv }),
   };
 }
 

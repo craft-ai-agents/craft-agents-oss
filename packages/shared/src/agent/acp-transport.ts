@@ -10,6 +10,7 @@
  */
 
 import type { BackendConfig } from './backend/types.ts';
+import { getNetworkProxySettings } from '../config/storage.ts';
 
 // ============================================================
 // AcpTransport Interface
@@ -295,7 +296,33 @@ export function _buildSafeEnv(extraEnv?: Record<string, string>): Record<string,
     if (value !== undefined) env[key] = value;
   }
 
-  // Per-connection overrides take precedence
+  // Inject app proxy settings as standard HTTP_PROXY/HTTPS_PROXY env vars if
+  // not already present. This allows ACP subprocesses (cursor-agent, claude-agent-acp,
+  // etc.) to route through the user's configured proxy — important for model fetching
+  // in environments where direct internet access requires a proxy.
+  if (!env.HTTP_PROXY && !env.HTTPS_PROXY && !env.http_proxy && !env.https_proxy) {
+    try {
+      const proxySettings = getNetworkProxySettings();
+      if (proxySettings?.enabled) {
+        if (proxySettings.httpProxy) {
+          env.HTTP_PROXY = proxySettings.httpProxy;
+          env.http_proxy = proxySettings.httpProxy;
+        }
+        if (proxySettings.httpsProxy) {
+          env.HTTPS_PROXY = proxySettings.httpsProxy;
+          env.https_proxy = proxySettings.httpsProxy;
+        }
+        if (proxySettings.noProxy) {
+          env.NO_PROXY = proxySettings.noProxy;
+          env.no_proxy = proxySettings.noProxy;
+        }
+      }
+    } catch {
+      // Config not yet initialized (e.g. in tests) — skip proxy injection
+    }
+  }
+
+  // Per-connection overrides take precedence over everything above
   if (extraEnv) {
     Object.assign(env, extraEnv);
   }
@@ -320,6 +347,7 @@ export function _buildSafeEnv(extraEnv?: Record<string, string>): Record<string,
  */
 export class StdioAcpTransport implements AcpTransport {
   private _disposed = false;
+  private _started = false;
   private _process: ReturnType<typeof import('node:child_process').spawn> | null = null;
   private _pendingRequests = new Map<string | number, {
     resolve: (value: unknown) => void;
@@ -334,7 +362,27 @@ export class StdioAcpTransport implements AcpTransport {
     private readonly _command: string[],
     private readonly _env?: Record<string, string>,
   ) {
-    this._start();
+    // Subprocess spawns lazily on first sendRequest() so that postInit() can
+    // inject credentials into process.env before the child process inherits it.
+  }
+
+  private _ensureStarted(): void {
+    if (!this._started && !this._disposed) {
+      this._started = true;
+      this._start();
+    }
+  }
+
+  /**
+   * Explicitly start the subprocess.
+   *
+   * Normally the subprocess spawns lazily on the first sendRequest() call so
+   * that postInit() can inject credentials into process.env first.
+   * Call start() in tests (or other contexts where you need the subprocess
+   * running before the first sendRequest).
+   */
+  start(): void {
+    this._ensureStarted();
   }
 
   private _start(): void {
@@ -436,6 +484,7 @@ export class StdioAcpTransport implements AcpTransport {
 
   sendRequest(method: string, params?: unknown): Promise<unknown> {
     if (this._disposed) return Promise.reject(new Error('Transport disposed'));
+    this._ensureStarted();
 
     const id = this._nextId++;
     const msg: JsonRpcRequest = { jsonrpc: '2.0', method, id };
@@ -489,25 +538,48 @@ export class StdioAcpTransport implements AcpTransport {
 // ============================================================
 
 /**
+ * Detect whether the command targets Cursor Agent CLI and ensure it
+ * uses the native ACP mode (`cursor-agent acp` / `cursor agent acp`).
+ *
+ * Cursor Agent supports two modes:
+ *   - `cursor agent` (stream-json, proprietary) — NOT ACP compatible
+ *   - `cursor agent acp` (JSON-RPC 2.0, standard ACP) — fully compatible
+ *
+ * If the user configured `['cursor-agent']` or `['cursor', 'agent']` without
+ * the `acp` subcommand, we auto-append it so StdioAcpTransport works directly.
+ */
+function _ensureCursorAcpMode(command: string[]): string[] {
+  const joined = command.join(' ').toLowerCase();
+  const isCursor =
+    (joined.includes('cursor') && joined.includes('agent')) ||
+    command[0]?.toLowerCase().endsWith('cursor-agent');
+
+  if (!isCursor) return command;
+
+  // Already has `acp` subcommand — no change needed
+  if (command.some(arg => arg.toLowerCase() === 'acp')) return command;
+
+  // Append `acp` to enable native ACP JSON-RPC mode
+  return [...command, 'acp'];
+}
+
+/**
  * Create an AcpTransport for the given connection config.
- * Only stdio transport is supported (JSON-RPC 2.0 over stdin/stdout).
+ * Auto-detects Cursor Agent CLI and ensures it runs in native ACP mode.
  */
 export function createAcpTransport(config: BackendConfig): AcpTransport {
-  const acpConfig = config as BackendConfig & {
-    acpTransport?: string;
-    acpCommand?: string[];
-    acpEnv?: Record<string, string>;
-  };
-
-  if (acpConfig.acpTransport !== 'stdio') {
+  if (config.acpTransport !== 'stdio') {
     throw new Error(
-      `acpTransport must be 'stdio', got: ${String(acpConfig.acpTransport)}`
+      `acpTransport must be 'stdio', got: ${String(config.acpTransport)}`
     );
   }
 
-  if (!acpConfig.acpCommand?.length) {
+  if (!config.acpCommand?.length) {
     throw new Error('acpCommand is required for ACP stdio transport');
   }
 
-  return new StdioAcpTransport(acpConfig.acpCommand, acpConfig.acpEnv);
+  // Ensure Cursor Agent uses native ACP mode (appends `acp` if missing)
+  const command = _ensureCursorAcpMode(config.acpCommand);
+
+  return new StdioAcpTransport(command, config.acpEnv);
 }

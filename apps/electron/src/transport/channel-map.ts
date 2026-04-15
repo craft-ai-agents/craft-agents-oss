@@ -360,6 +360,7 @@ export const CHANNEL_MAP = {
   saveLlmConnection: invoke(RPC_CHANNELS.llmConnections.SAVE),
   deleteLlmConnection: invoke(RPC_CHANNELS.llmConnections.DELETE),
   testLlmConnection: invoke(RPC_CHANNELS.llmConnections.TEST),
+  probeAcpConnection: invoke(RPC_CHANNELS.llmConnections.PROBE_ACP),
   setDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_DEFAULT),
   setWorkspaceDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT),
 

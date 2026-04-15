@@ -199,6 +199,22 @@ describe('AcpEventAdapter — completed status', () => {
     expect(e.type).toBe('complete')
     expect(e.usage).toBeDefined()
   })
+
+  it("status='completed' with content → text events then complete (Claude-style single-shot)", () => {
+    // Claude Code ACP sends the full response text in the same notification as status="completed"
+    const events = adapt({
+      status: 'completed',
+      content: [{ type: 'text', text: 'Here is the answer.', is_final: true }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    })
+    // Must produce: text_complete, complete — in that order
+    expect(events.length).toBeGreaterThanOrEqual(2)
+    const types = events.map(e => e.type)
+    expect(types).toContain('text_complete')
+    expect(types[types.length - 1]).toBe('complete')
+    const textEvent = events.find(e => e.type === 'text_complete') as any
+    expect(textEvent.text).toBe('Here is the answer.')
+  })
 })
 
 // ============================================================

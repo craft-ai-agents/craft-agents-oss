@@ -28,7 +28,6 @@ import type { LlmProviderType, LlmConnection } from './llm-connections';
  */
 export type FetchableProvider = Exclude<LlmProviderType,
   | 'pi_compat'
-  | 'acp'
 >;
 
 /**

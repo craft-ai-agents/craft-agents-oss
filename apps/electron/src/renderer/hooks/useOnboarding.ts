@@ -388,7 +388,8 @@ export function useOnboarding({
     const isPiApiKeyFlow = state.apiSetupMethod === 'pi_api_key'
 
     // ACP: bypass setupLlmConnection (which doesn't accept acpCommand/acpEnv).
-    // Directly persist via saveLlmConnection after client-side validation.
+    // Probe the ACP server first to validate the command and fetch models,
+    // then persist via saveLlmConnection with the discovered models.
     if (state.apiSetupMethod === 'acp_command') {
       if (!data.acpCommand?.length) {
         setState(s => ({
@@ -400,7 +401,28 @@ export function useOnboarding({
       }
 
       try {
+        // Step 1: probe the ACP server to validate and get models
+        setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
+
+        const probeResult = await window.electronAPI.probeAcpConnection({
+          acpCommand: data.acpCommand,
+          acpEnv: data.acpEnv,
+          timeoutMs: 15_000,
+        })
+
+        if (!probeResult.success) {
+          setState(s => ({
+            ...s,
+            credentialStatus: 'error',
+            errorMessage: probeResult.error || 'Failed to connect to ACP agent. Check the command and try again.',
+          }))
+          return
+        }
+
+        // Step 2: save connection with discovered models
         const slug = resolveSlugForMethod('acp_command', editingSlug, existingSlugs)
+        const discoveredModels = probeResult.models
+        const defaultModel = discoveredModels[0]?.id
 
         let result: { success: boolean; error?: string }
         if (editingSlug) {
@@ -409,11 +431,13 @@ export function useOnboarding({
           if (!existing) throw new Error(`Connection not found: ${editingSlug}`)
           result = await window.electronAPI.saveLlmConnection({
             ...existing,
-            slug: editingSlug,              // ensure slug is non-undefined (satisfies LlmConnection)
+            slug: editingSlug,
             name: existing.name ?? 'ACP Agent',
             providerType: existing.providerType ?? 'acp',
             acpCommand: data.acpCommand,
             acpEnv: data.acpEnv ?? {},
+            models: discoveredModels.length > 0 ? discoveredModels : existing.models,
+            defaultModel: defaultModel ?? existing.defaultModel,
           })
         } else {
           // New connection
@@ -425,13 +449,15 @@ export function useOnboarding({
             acpTransport: 'stdio',
             acpCommand: data.acpCommand,
             acpEnv: data.acpEnv ?? {},
+            models: discoveredModels,
+            defaultModel,
             createdAt: Date.now(),
           })
         }
 
         if (result.success) {
           onConfigSaved?.()
-          setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
+          setState(s => ({ ...s, credentialStatus: 'success', step: 'complete', completionStatus: 'complete' }))
         } else {
           setState(s => ({
             ...s,
