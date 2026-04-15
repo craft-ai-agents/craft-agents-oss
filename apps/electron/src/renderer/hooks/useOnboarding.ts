@@ -432,7 +432,7 @@ export function useOnboarding({
           result = await window.electronAPI.saveLlmConnection({
             ...existing,
             slug: editingSlug,
-            name: existing.name ?? 'ACP Agent',
+            name: data.presetName ?? existing.name ?? 'ACP Agent',
             providerType: existing.providerType ?? 'acp',
             acpCommand: data.acpCommand,
             acpEnv: data.acpEnv ?? {},
@@ -443,7 +443,7 @@ export function useOnboarding({
           // New connection
           result = await window.electronAPI.saveLlmConnection({
             slug,
-            name: 'ACP Agent',
+            name: data.presetName ?? 'ACP Agent',
             providerType: 'acp',
             authType: 'none',
             acpTransport: 'stdio',

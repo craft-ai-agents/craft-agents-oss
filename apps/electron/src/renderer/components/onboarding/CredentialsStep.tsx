@@ -114,7 +114,7 @@ export function CredentialsStep({
         }
       >
         <AcpConnectionForm
-          onSubmit={(data) => onSubmit({ ...data, apiKey: '' })}
+          onSubmit={(data) => onSubmit({ ...data, apiKey: '', presetName: data.presetName })}
           initialValues={{
             acpCommand: editInitialValues?.acpCommand,
             acpEnv: editInitialValues?.acpEnv,

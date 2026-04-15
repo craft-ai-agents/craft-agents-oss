@@ -59,6 +59,8 @@ export interface ApiKeySubmitData {
   acpCommand?: string[]
   /** ACP env vars injected into subprocess — only populated when apiSetupMethod = 'acp_command' */
   acpEnv?: Record<string, string>
+  /** ACP preset name — used as connection display name (e.g. 'Claude', 'Cursor') */
+  presetName?: string
 }
 
 export interface ApiKeyInputProps {
