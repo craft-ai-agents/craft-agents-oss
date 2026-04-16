@@ -360,6 +360,19 @@ export async function processAttachment(
   const filename = filePath.split('/').pop() || filePath;
   const safeFilename = escapeXml(filename); // Escape for use in XML-like tags
 
+  // --- Detect unresolved template tokens ({{...}}, <SESSION_...>, <%...%>) ---
+  // These tokens are only replaced in session logs, never in tool calls.
+  // Catching them early produces a self-documenting error instead of "File not found".
+  const TEMPLATE_TOKEN_RE = /\{\{.*?\}\}|\<SESSION_.*?\>|<%.*?%>/;
+  if (typeof filePath === 'string' && TEMPLATE_TOKEN_RE.test(filePath)) {
+    return {
+      type: 'error',
+      message: `Attachment ${index + 1}: Path contains an unresolved template token: "${filePath}". ` +
+        `Use the actual absolute path from <session_state> (e.g., dataFolderPath), not a placeholder like {{SESSION_PATH}}. ` +
+        `Template tokens are only replaced in session logs, not in tool calls.`
+    };
+  }
+
   // --- Validate path exists and is a file ---
   if (!filePath || typeof filePath !== 'string') {
     return { type: 'error', message: `Attachment ${index + 1}: Invalid path (got ${typeof filePath})` };

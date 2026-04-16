@@ -1180,7 +1180,11 @@ async function preExecuteCallLlm(input: Record<string, unknown>): Promise<LLMQue
   const sessionPath = initConfig
     ? getSessionPath(initConfig.workspaceRootPath, initConfig.sessionId)
     : undefined;
-  const request = await buildCallLlmRequest(input, { backendName: 'Pi', sessionPath });
+  const request = await buildCallLlmRequest(input, {
+    backendName: 'Pi',
+    sessionPath,
+    modelOverride: initConfig?.callLlmModelOverride,
+  });
   return queryLlm(request);
 }
 
