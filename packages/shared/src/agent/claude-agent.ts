@@ -208,7 +208,7 @@ export interface ClaudeAgentConfig {
   mcpPool?: McpClientPool;
   /** LLM connection slug for credential lookup in postInit(). */
   connectionSlug?: string;
-  /** Enable 1M context window for Opus 4.6. Default: true. Set false to use 200K and conserve usage limits. */
+  /** Enable 1M context window for Opus 4.7. Default: true. Set false to use 200K and conserve usage limits. */
   enable1MContext?: boolean;
 }
 

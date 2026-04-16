@@ -25,7 +25,7 @@ describe('getMiniModel()', () => {
 
   it('finds haiku for anthropic provider', () => {
     const conn = makeConnection('anthropic', [
-      'claude-opus-4-6',
+      'claude-opus-4-7',
       'claude-sonnet-4-6',
       'claude-haiku-4-5-20251001',
     ]);
@@ -112,7 +112,7 @@ describe('getMiniModel()', () => {
 
   it('falls back to last model when no keyword match', () => {
     const conn = makeConnection('anthropic', [
-      'claude-opus-4-6',
+      'claude-opus-4-7',
       'claude-sonnet-4-6',
     ]);
     // No haiku in list — falls back to last model

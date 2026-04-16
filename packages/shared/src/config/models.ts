@@ -14,25 +14,29 @@
 // Must stay in sync with BEDROCK_MODEL_MAP in llm-connections.ts.
 const BEDROCK_TO_BARE: Record<string, string> = {
   // US inference profile IDs (primary)
-  'us.anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
+  'us.anthropic.claude-opus-4-7-v1': 'claude-opus-4-7',
   'us.anthropic.claude-sonnet-4-6': 'claude-sonnet-4-6',
   'us.anthropic.claude-haiku-4-5-20251001-v1:0': 'claude-haiku-4-5-20251001',
+  'us.anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
   'us.anthropic.claude-opus-4-5-20251101-v1:0': 'claude-opus-4-5-20251101',
   'us.anthropic.claude-sonnet-4-5-20250929-v1:0': 'claude-sonnet-4-5-20250929',
   // EU inference profile IDs
-  'eu.anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
+  'eu.anthropic.claude-opus-4-7-v1': 'claude-opus-4-7',
   'eu.anthropic.claude-sonnet-4-6': 'claude-sonnet-4-6',
   'eu.anthropic.claude-haiku-4-5-20251001-v1:0': 'claude-haiku-4-5-20251001',
+  'eu.anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
   'eu.anthropic.claude-opus-4-5-20251101-v1:0': 'claude-opus-4-5-20251101',
   'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': 'claude-sonnet-4-5-20250929',
   // Global inference profile IDs
-  'global.anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
+  'global.anthropic.claude-opus-4-7-v1': 'claude-opus-4-7',
   'global.anthropic.claude-sonnet-4-6': 'claude-sonnet-4-6',
   'global.anthropic.claude-haiku-4-5-20251001-v1:0': 'claude-haiku-4-5-20251001',
+  'global.anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
   // Base IDs (no region prefix)
-  'anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
+  'anthropic.claude-opus-4-7-v1': 'claude-opus-4-7',
   'anthropic.claude-sonnet-4-6': 'claude-sonnet-4-6',
   'anthropic.claude-haiku-4-5-20251001-v1:0': 'claude-haiku-4-5-20251001',
+  'anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
   'anthropic.claude-opus-4-5-20251101-v1:0': 'claude-opus-4-5-20251101',
   'anthropic.claude-sonnet-4-5-20250929-v1:0': 'claude-sonnet-4-5-20250929',
 };
@@ -86,8 +90,8 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
   // Anthropic Claude Models
   // ----------------------------------------
   {
-    id: 'claude-opus-4-6',
-    name: 'Opus 4.6',
+    id: 'claude-opus-4-7',
+    name: 'Opus 4.7',
     shortName: 'Opus',
     description: 'Most capable for complex work',
     descriptionKey: 'model.opusDesc',
@@ -190,7 +194,7 @@ export function getDefaultSummarizationModel(): string {
 
 /**
  * Get a model by ID from the registry.
- * Also handles Bedrock-native IDs (e.g. "anthropic.claude-opus-4-6-v1")
+ * Also handles Bedrock-native IDs (e.g. "anthropic.claude-opus-4-7-v1")
  * by reverse-mapping to the bare Anthropic ID for lookup.
  */
 export function getModelById(modelId: string): ModelDefinition | undefined {
@@ -258,7 +262,7 @@ export function isOpusModel(modelId: string): boolean {
  * Check if a model ID refers to a Claude model.
  * Handles direct Anthropic IDs (e.g. "claude-sonnet-4-6"),
  * provider-prefixed IDs (e.g. "anthropic/claude-sonnet-4" via OpenRouter),
- * and Bedrock-native IDs (e.g. "anthropic.claude-opus-4-6-v1").
+ * and Bedrock-native IDs (e.g. "anthropic.claude-opus-4-7-v1").
  */
 export function isClaudeModel(modelId: string): boolean {
   const lower = modelId.toLowerCase();

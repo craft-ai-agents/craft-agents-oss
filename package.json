@@ -1,6 +1,6 @@
 {
   "name": "craft-agent",
-  "version": "0.8.8",
+  "version": "0.8.9",
   "license": "Apache-2.0",
   "description": "Claude Code-like agent for Craft documents",
   "type": "module",
@@ -130,7 +130,7 @@
     "vite": "^6.2.4"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.78",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.111",
     "@dnd-kit/dom": "^0.4.0-beta-20260227032529",
     "@dnd-kit/helpers": "^0.4.0-beta-20260227032529",
     "@github/copilot-sdk": "^0.1.23",

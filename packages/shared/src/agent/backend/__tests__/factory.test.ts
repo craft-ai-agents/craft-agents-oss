@@ -342,9 +342,9 @@ describe('phase4 backend abstraction APIs', () => {
 
 describe('ClaudeAgent model switching', () => {
   it('setModel updates getModel (regression: setModel used to write config.model but getModel reads _model)', () => {
-    const agent = createBackend(createTestConfig({ provider: 'anthropic', model: 'claude-opus-4-6' }));
+    const agent = createBackend(createTestConfig({ provider: 'anthropic', model: 'claude-opus-4-7' }));
 
-    expect(agent.getModel()).toBe('claude-opus-4-6');
+    expect(agent.getModel()).toBe('claude-opus-4-7');
 
     agent.setModel('claude-sonnet-4-6');
 

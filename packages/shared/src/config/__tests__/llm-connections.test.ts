@@ -127,18 +127,18 @@ describe('isPiProvider', () => {
 
 describe('toBedrockNativeId', () => {
   it('maps bare Anthropic IDs to US inference profile IDs', () => {
-    expect(toBedrockNativeId('claude-opus-4-6')).toBe('us.anthropic.claude-opus-4-6-v1')
+    expect(toBedrockNativeId('claude-opus-4-7')).toBe('us.anthropic.claude-opus-4-7-v1')
     expect(toBedrockNativeId('claude-sonnet-4-6')).toBe('us.anthropic.claude-sonnet-4-6')
     expect(toBedrockNativeId('claude-haiku-4-5-20251001')).toBe('us.anthropic.claude-haiku-4-5-20251001-v1:0')
   })
 
   it('maps base Bedrock IDs to US inference profile IDs', () => {
-    expect(toBedrockNativeId('anthropic.claude-opus-4-6-v1')).toBe('us.anthropic.claude-opus-4-6-v1')
+    expect(toBedrockNativeId('anthropic.claude-opus-4-7-v1')).toBe('us.anthropic.claude-opus-4-7-v1')
     expect(toBedrockNativeId('anthropic.claude-sonnet-4-6')).toBe('us.anthropic.claude-sonnet-4-6')
   })
 
   it('passes through already US-prefixed IDs', () => {
-    expect(toBedrockNativeId('us.anthropic.claude-opus-4-6-v1')).toBe('us.anthropic.claude-opus-4-6-v1')
+    expect(toBedrockNativeId('us.anthropic.claude-opus-4-7-v1')).toBe('us.anthropic.claude-opus-4-7-v1')
   })
 
   it('passes through unknown IDs', () => {
@@ -147,13 +147,13 @@ describe('toBedrockNativeId', () => {
   })
 
   it('maps to EU inference profiles when regionPrefix is eu', () => {
-    expect(toBedrockNativeId('claude-opus-4-6', 'eu')).toBe('eu.anthropic.claude-opus-4-6-v1')
+    expect(toBedrockNativeId('claude-opus-4-7', 'eu')).toBe('eu.anthropic.claude-opus-4-7-v1')
     expect(toBedrockNativeId('claude-sonnet-4-6', 'eu')).toBe('eu.anthropic.claude-sonnet-4-6')
   })
 
   it('defaults to US when regionPrefix is omitted or us', () => {
-    expect(toBedrockNativeId('claude-opus-4-6')).toBe('us.anthropic.claude-opus-4-6-v1')
-    expect(toBedrockNativeId('claude-opus-4-6', 'us')).toBe('us.anthropic.claude-opus-4-6-v1')
+    expect(toBedrockNativeId('claude-opus-4-7')).toBe('us.anthropic.claude-opus-4-7-v1')
+    expect(toBedrockNativeId('claude-opus-4-7', 'us')).toBe('us.anthropic.claude-opus-4-7-v1')
   })
 
   it('passes through unknown IDs regardless of regionPrefix', () => {
@@ -194,41 +194,41 @@ describe('Bedrock preferred defaults ordering', () => {
 
 describe('fromBedrockNativeId', () => {
   it('maps US inference profile IDs back to bare Anthropic', () => {
-    expect(fromBedrockNativeId('us.anthropic.claude-opus-4-6-v1')).toBe('claude-opus-4-6')
+    expect(fromBedrockNativeId('us.anthropic.claude-opus-4-7-v1')).toBe('claude-opus-4-7')
     expect(fromBedrockNativeId('us.anthropic.claude-sonnet-4-6')).toBe('claude-sonnet-4-6')
     expect(fromBedrockNativeId('us.anthropic.claude-haiku-4-5-20251001-v1:0')).toBe('claude-haiku-4-5-20251001')
   })
 
   it('maps EU/Global inference profile IDs back to bare', () => {
-    expect(fromBedrockNativeId('eu.anthropic.claude-opus-4-6-v1')).toBe('claude-opus-4-6')
-    expect(fromBedrockNativeId('global.anthropic.claude-opus-4-6-v1')).toBe('claude-opus-4-6')
+    expect(fromBedrockNativeId('eu.anthropic.claude-opus-4-7-v1')).toBe('claude-opus-4-7')
+    expect(fromBedrockNativeId('global.anthropic.claude-opus-4-7-v1')).toBe('claude-opus-4-7')
   })
 
   it('maps base Bedrock IDs back to bare', () => {
-    expect(fromBedrockNativeId('anthropic.claude-opus-4-6-v1')).toBe('claude-opus-4-6')
+    expect(fromBedrockNativeId('anthropic.claude-opus-4-7-v1')).toBe('claude-opus-4-7')
   })
 
   it('passes through bare IDs', () => {
-    expect(fromBedrockNativeId('claude-opus-4-6')).toBe('claude-opus-4-6')
+    expect(fromBedrockNativeId('claude-opus-4-7')).toBe('claude-opus-4-7')
   })
 })
 
 describe('normalizeBedrockModelId', () => {
   it('strips pi/ prefix and maps to US inference profile', () => {
-    expect(normalizeBedrockModelId('pi/claude-opus-4-6')).toBe('us.anthropic.claude-opus-4-6-v1')
+    expect(normalizeBedrockModelId('pi/claude-opus-4-7')).toBe('us.anthropic.claude-opus-4-7-v1')
     expect(normalizeBedrockModelId('pi/claude-sonnet-4-6')).toBe('us.anthropic.claude-sonnet-4-6')
   })
 
   it('maps bare IDs to US inference profile', () => {
-    expect(normalizeBedrockModelId('claude-opus-4-6')).toBe('us.anthropic.claude-opus-4-6-v1')
+    expect(normalizeBedrockModelId('claude-opus-4-7')).toBe('us.anthropic.claude-opus-4-7-v1')
   })
 
   it('maps base Bedrock IDs to US inference profile', () => {
-    expect(normalizeBedrockModelId('anthropic.claude-opus-4-6-v1')).toBe('us.anthropic.claude-opus-4-6-v1')
+    expect(normalizeBedrockModelId('anthropic.claude-opus-4-7-v1')).toBe('us.anthropic.claude-opus-4-7-v1')
   })
 
   it('is idempotent for already US-prefixed IDs', () => {
-    expect(normalizeBedrockModelId('us.anthropic.claude-opus-4-6-v1')).toBe('us.anthropic.claude-opus-4-6-v1')
+    expect(normalizeBedrockModelId('us.anthropic.claude-opus-4-7-v1')).toBe('us.anthropic.claude-opus-4-7-v1')
   })
 
   it('handles empty/undefined', () => {
@@ -237,7 +237,7 @@ describe('normalizeBedrockModelId', () => {
   })
 
   it('respects regionPrefix for EU', () => {
-    expect(normalizeBedrockModelId('pi/claude-opus-4-6', 'eu')).toBe('eu.anthropic.claude-opus-4-6-v1')
+    expect(normalizeBedrockModelId('pi/claude-opus-4-7', 'eu')).toBe('eu.anthropic.claude-opus-4-7-v1')
     expect(normalizeBedrockModelId('claude-sonnet-4-6', 'eu')).toBe('eu.anthropic.claude-sonnet-4-6')
   })
 })
@@ -248,28 +248,28 @@ describe('normalizeBedrockModelId', () => {
 
 describe('Bedrock-native model display', () => {
   it('getModelDisplayName resolves US inference profile IDs', () => {
-    expect(getModelDisplayName('us.anthropic.claude-opus-4-6-v1')).toBe('Opus 4.6')
+    expect(getModelDisplayName('us.anthropic.claude-opus-4-7-v1')).toBe('Opus 4.7')
     expect(getModelDisplayName('us.anthropic.claude-sonnet-4-6')).toBe('Sonnet 4.6')
     expect(getModelDisplayName('us.anthropic.claude-haiku-4-5-20251001-v1:0')).toBe('Haiku 4.5')
   })
 
   it('getModelDisplayName resolves EU/base Bedrock IDs', () => {
-    expect(getModelDisplayName('eu.anthropic.claude-opus-4-6-v1')).toBe('Opus 4.6')
-    expect(getModelDisplayName('anthropic.claude-opus-4-6-v1')).toBe('Opus 4.6')
+    expect(getModelDisplayName('eu.anthropic.claude-opus-4-7-v1')).toBe('Opus 4.7')
+    expect(getModelDisplayName('anthropic.claude-opus-4-7-v1')).toBe('Opus 4.7')
   })
 
   it('getModelShortName resolves Bedrock IDs', () => {
-    expect(getModelShortName('us.anthropic.claude-opus-4-6-v1')).toBe('Opus')
+    expect(getModelShortName('us.anthropic.claude-opus-4-7-v1')).toBe('Opus')
     expect(getModelShortName('us.anthropic.claude-sonnet-4-6')).toBe('Sonnet')
   })
 
   it('getModelContextWindow resolves Bedrock IDs', () => {
-    expect(getModelContextWindow('us.anthropic.claude-opus-4-6-v1')).toBe(1_000_000)
+    expect(getModelContextWindow('us.anthropic.claude-opus-4-7-v1')).toBe(1_000_000)
     expect(getModelContextWindow('us.anthropic.claude-sonnet-4-6')).toBe(200_000)
   })
 
   it('isClaudeModel recognizes Bedrock IDs', () => {
-    expect(isClaudeModel('us.anthropic.claude-opus-4-6-v1')).toBe(true)
+    expect(isClaudeModel('us.anthropic.claude-opus-4-7-v1')).toBe(true)
     expect(isClaudeModel('anthropic.claude-sonnet-4-6')).toBe(true)
     expect(isClaudeModel('eu.anthropic.claude-haiku-4-5-20251001-v1:0')).toBe(true)
   })

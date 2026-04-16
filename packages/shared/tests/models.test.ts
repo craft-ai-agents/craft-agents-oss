@@ -8,7 +8,7 @@ describe('isClaudeModel', () => {
   // Direct Anthropic model IDs
   it('detects direct Anthropic Claude model IDs', () => {
     expect(isClaudeModel('claude-sonnet-4-6')).toBe(true);
-    expect(isClaudeModel('claude-opus-4-6')).toBe(true);
+    expect(isClaudeModel('claude-opus-4-7')).toBe(true);
     expect(isClaudeModel('claude-haiku-4-5-20251001')).toBe(true);
     expect(isClaudeModel('claude-3-5-sonnet-20241022')).toBe(true);
   });
@@ -16,7 +16,7 @@ describe('isClaudeModel', () => {
   // OpenRouter provider-prefixed Claude IDs
   it('detects OpenRouter-prefixed Claude model IDs', () => {
     expect(isClaudeModel('anthropic/claude-sonnet-4')).toBe(true);
-    expect(isClaudeModel('anthropic/claude-opus-4-6')).toBe(true);
+    expect(isClaudeModel('anthropic/claude-opus-4-7')).toBe(true);
     expect(isClaudeModel('anthropic/claude-3.5-haiku')).toBe(true);
   });
 
@@ -41,7 +41,7 @@ describe('isClaudeModel', () => {
 
   // Bedrock-native model IDs
   it('detects Bedrock-native Claude model IDs', () => {
-    expect(isClaudeModel('anthropic.claude-opus-4-6-v1')).toBe(true);
+    expect(isClaudeModel('anthropic.claude-opus-4-7-v1')).toBe(true);
     expect(isClaudeModel('anthropic.claude-sonnet-4-6')).toBe(true);
     expect(isClaudeModel('anthropic.claude-haiku-4-5-20251001-v1:0')).toBe(true);
   });
@@ -49,14 +49,14 @@ describe('isClaudeModel', () => {
   // Case insensitivity
   it('handles case variations', () => {
     expect(isClaudeModel('Claude-Sonnet-4-6')).toBe(true);
-    expect(isClaudeModel('CLAUDE-OPUS-4-6')).toBe(true);
+    expect(isClaudeModel('CLAUDE-OPUS-4-7')).toBe(true);
     expect(isClaudeModel('Anthropic/Claude-Sonnet-4')).toBe(true);
   });
 });
 
 describe('getModelShortName', () => {
   it('returns registry shortName for known models', () => {
-    expect(getModelShortName('claude-opus-4-6')).toBe('Opus');
+    expect(getModelShortName('claude-opus-4-7')).toBe('Opus');
     expect(getModelShortName('claude-sonnet-4-6')).toBe('Sonnet');
     expect(getModelShortName('claude-haiku-4-5-20251001')).toBe('Haiku');
   });

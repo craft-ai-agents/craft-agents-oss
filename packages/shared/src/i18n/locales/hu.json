@@ -688,7 +688,7 @@
   "settings.ai.description": "Modell, gondolkodás, kapcsolatok",
   "settings.ai.enterConnectionName": "Add meg a kapcsolat nevét...",
   "settings.ai.extendedContext": "Kiterjesztett kontextus (1M)",
-  "settings.ai.extendedContextDesc": "1M tokenes kontextusablak használata az Opus 4.6-hoz. Letiltással 200K-ra vált, és megőrzi a használati korlátokat.",
+  "settings.ai.extendedContextDesc": "1M tokenes kontextusablak használata az Opus 4.7-hez. Letiltással 200K-ra vált, és megőrzi a használati korlátokat.",
   "settings.ai.extendedPromptCache": "Kiterjesztett prompt gyorsítótár (1 óra)",
   "settings.ai.extendedPromptCacheDesc": "Promptok gyorsítótárazása 1 óráig 5 perc helyett. Csak az Anthropic API-n keresztüli Claude modellekre vonatkozik. Csökkenti a hosszú munkamenetek költségét, de növeli a gyorsítótár-írás költségét.",
   "settings.ai.inheritFromApp": "Öröklés az alkalmazás beállításaiból",

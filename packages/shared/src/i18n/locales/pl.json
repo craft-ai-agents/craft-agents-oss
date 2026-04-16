@@ -688,7 +688,7 @@
   "settings.ai.description": "Model, myślenie, połączenia",
   "settings.ai.enterConnectionName": "Wprowadź nazwę połączenia...",
   "settings.ai.extendedContext": "Rozszerzony kontekst (1M)",
-  "settings.ai.extendedContextDesc": "Używaj okna kontekstu 1M tokenów dla Opus 4.6. Wyłącz, aby używać 200K i oszczędzać limity użycia.",
+  "settings.ai.extendedContextDesc": "Używaj okna kontekstu 1M tokenów dla Opus 4.7. Wyłącz, aby używać 200K i oszczędzać limity użycia.",
   "settings.ai.extendedPromptCache": "Rozszerzony cache promptów (1 godzina)",
   "settings.ai.extendedPromptCacheDesc": "Buforuj prompty przez 1 godzinę zamiast 5 minut. Dotyczy tylko modeli Claude przez Anthropic API. Obniża koszty długich sesji, ale zwiększa koszt zapisu do cache.",
   "settings.ai.inheritFromApp": "Dziedzicz z ustawień aplikacji",

@@ -471,7 +471,7 @@ Additional providers are supported through the **Claude / Anthropic API Key** co
 
 | Provider | Endpoint | Notes |
 |----------|----------|-------|
-| **OpenRouter** | `https://openrouter.ai/api` | Access Claude, GPT, Llama, Gemini, and hundreds of other models through a single API key. Use `provider/model-name` format (e.g. `anthropic/claude-opus-4.6`). |
+| **OpenRouter** | `https://openrouter.ai/api` | Access Claude, GPT, Llama, Gemini, and hundreds of other models through a single API key. Use `provider/model-name` format (e.g. `anthropic/claude-opus-4.7`). |
 | **Vercel AI Gateway** | `https://ai-gateway.vercel.sh` | Route requests through Vercel's AI Gateway with built-in observability and caching. |
 | **Ollama** | `http://localhost:11434` | Run open-source models locally. No API key required. |
 | **Custom** | Any URL | Any OpenAI-compatible or Anthropic-compatible endpoint. |

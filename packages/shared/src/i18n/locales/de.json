@@ -688,7 +688,7 @@
   "settings.ai.description": "Modell, Denken, Verbindungen",
   "settings.ai.enterConnectionName": "Verbindungsname eingeben...",
   "settings.ai.extendedContext": "Erweiterter Kontext (1M)",
-  "settings.ai.extendedContextDesc": "1M-Token-Kontextfenster für Opus 4.6 verwenden. Deaktivieren, um 200K zu nutzen und Nutzungslimits zu schonen.",
+  "settings.ai.extendedContextDesc": "1M-Token-Kontextfenster für Opus 4.7 verwenden. Deaktivieren, um 200K zu nutzen und Nutzungslimits zu schonen.",
   "settings.ai.extendedPromptCache": "Erweiterter Prompt-Cache (1 Stunde)",
   "settings.ai.extendedPromptCacheDesc": "Prompts 1 Stunde statt 5 Minuten zwischenspeichern. Gilt nur für Claude-Modelle über die Anthropic API. Reduziert Kosten bei langen Sitzungen, erhöht jedoch die Cache-Schreibkosten.",
   "settings.ai.inheritFromApp": "Von App-Einstellungen übernehmen",

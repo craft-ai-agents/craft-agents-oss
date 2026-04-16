@@ -11,7 +11,7 @@
  *   - Anthropic: STRIPS metadata from stream (SDK validates immediately)
  *   - OpenAI: CAPTURES metadata passthrough (hook strips before execution)
  * - Captures API errors (4xx/5xx) for error handler
- * - Fast mode support for Anthropic (Opus 4.6)
+ * - Fast mode support for Anthropic (Opus 4.7)
  *
  * Auto-detects API format based on request URL:
  * - Anthropic: baseUrl + /messages
@@ -340,11 +340,11 @@ export function upgradePromptCacheTtl(body: Record<string, unknown>): number {
 
 /**
  * Check if fast mode should be enabled for this request.
- * Only activates for Opus 4.6 on Anthropic's API when the feature flag is on.
+ * Only activates for Opus 4.7 on Anthropic's API when the feature flag is on.
  */
 function shouldEnableFastMode(model: unknown): boolean {
   if (!FEATURE_FLAGS.fastMode) return false;
-  return typeof model === 'string' && model === 'claude-opus-4-6';
+  return typeof model === 'string' && model === 'claude-opus-4-7';
 }
 
 /**

@@ -688,7 +688,7 @@
   "settings.ai.description": "モデル、思考、接続",
   "settings.ai.enterConnectionName": "接続名を入力...",
   "settings.ai.extendedContext": "拡張コンテキスト (1M)",
-  "settings.ai.extendedContextDesc": "Opus 4.6に1Mトークンのコンテキストウィンドウを使用します。無効にすると200Kを使用し、使用制限を節約できます。",
+  "settings.ai.extendedContextDesc": "Opus 4.7に1Mトークンのコンテキストウィンドウを使用します。無効にすると200Kを使用し、使用制限を節約できます。",
   "settings.ai.extendedPromptCache": "拡張プロンプトキャッシュ (1時間)",
   "settings.ai.extendedPromptCacheDesc": "プロンプトを5分ではなく1時間キャッシュします。Anthropic APIを経由するClaudeモデルにのみ適用されます。長いセッションのコストを削減しますが、キャッシュ書き込みコストが増加します。",
   "settings.ai.inheritFromApp": "アプリ設定から継承",
