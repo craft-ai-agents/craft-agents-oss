@@ -198,6 +198,8 @@ export const ListSessionsSchema = z.object({
 export const ArchiveSessionSchema = z.object({
   sessionId: z.string().optional().describe('Session ID to archive. Omit to archive the current session.'),
   unarchive: z.boolean().optional().describe('Set to true to unarchive instead of archive.'),
+});
+
 // Inter-session messaging
 export const SendAgentMessageSchema = z.object({
   sessionId: z.string().describe('Target session ID to send the message to'),

@@ -235,18 +235,25 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   }, [session])
 
   const handleOpenFile = React.useCallback(
-    async (path: string) => {
+    async (filePath: string) => {
       // Resolve bare relative paths against session working directory,
       // or workspace root as a fallback when workingDirectory is not set.
       const resolved = (() => {
-        if (path.startsWith('/') || path.startsWith('~/')) return path
+        // Already absolute POSIX or home-relative — pass through
+        if (filePath.startsWith('/') || filePath.startsWith('~/')) return filePath
+
+        // Windows absolute paths (C:\, D:/, etc.) — pass through unchanged
+        if (/^[A-Za-z]:[\\\/]/.test(filePath)) return filePath
 
         const baseDir = workingDirectory || activeWorkspace?.rootPath
-        if (!baseDir) return path
+        if (!baseDir) return filePath
 
-        const cleanedBase = baseDir.replace(/\/+$/, '')
-        const cleanedPath = path.replace(/^\.\//, '')
-        return `${cleanedBase}/${cleanedPath}`
+        // Use simple join with correct separator for the platform.
+        // Avoids mixed forward/back slashes on Windows from string concatenation.
+        const cleanedPath = filePath.replace(/^\.\//, '')
+        const sep = baseDir.includes('\\') ? '\\' : '/'
+        const cleanedBase = baseDir.replace(/[\/\\]+$/, '')
+        return `${cleanedBase}${sep}${cleanedPath}`
       })()
 
       // Smart fallback for missing files in AI output:
