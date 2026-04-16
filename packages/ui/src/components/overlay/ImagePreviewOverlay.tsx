@@ -174,7 +174,7 @@ export function ImagePreviewOverlay({
         }}
       >
         {!activeDataUrl && isLoading && (
-          <div className="text-muted-foreground text-sm">Loading image...</div>
+          <div className="text-muted-foreground text-sm">{t('preview.loadingImage')}</div>
         )}
         {activeDataUrl && (
           <img

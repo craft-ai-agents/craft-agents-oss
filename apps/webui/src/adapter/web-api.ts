@@ -8,6 +8,7 @@
  * on the WebSocket upgrade request — no bearer token needed.
  */
 
+import i18n from 'i18next'
 import { WsRpcClient } from '../../../electron/src/transport/client'
 import { buildClientApi } from '../../../electron/src/transport/build-api'
 import { CHANNEL_MAP } from '../../../electron/src/transport/channel-map'
@@ -201,8 +202,8 @@ export function createWebApi(options: WebApiOptions): {
     openSkillInFinder: () => Promise.resolve(),
 
     // Confirmation dialogs — use browser confirm()
-    showLogoutConfirmation: () => Promise.resolve(window.confirm('Are you sure you want to log out?')),
-    showDeleteSessionConfirmation: (name: string) => Promise.resolve(window.confirm(`Delete session "${name}"?`)),
+    showLogoutConfirmation: () => Promise.resolve(window.confirm(i18n.t('dialog.logoutConfirmation'))),
+    showDeleteSessionConfirmation: (name: string) => Promise.resolve(window.confirm(i18n.t('dialog.deleteSessionConfirmation', { name }))),
 
     // Power settings — not applicable
     getKeepAwakeWhileRunning: () => Promise.resolve(false),
@@ -277,7 +278,7 @@ export function createWebApi(options: WebApiOptions): {
     startChatGptOAuth: async () => {
       return {
         success: false,
-        error: 'ChatGPT OAuth is not available in the web UI. Use the desktop app or set up an API key instead.',
+        error: i18n.t('errors.chatGptOAuthNotAvailable'),
       }
     },
   }

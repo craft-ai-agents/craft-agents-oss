@@ -660,7 +660,7 @@ export function ApiKeyInput({
           {piModelsLoading ? (
             <div className="flex items-center gap-2 py-3 text-muted-foreground">
               <Loader2 className="size-3.5 animate-spin" />
-              <span className="text-xs">Loading models...</span>
+              <span className="text-xs">{t("apiSetup.loadingModels")}</span>
             </div>
           ) : (
             <>

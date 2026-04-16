@@ -180,6 +180,8 @@ export interface ClaudeAgentConfig {
   /** Mark transferred session summary as applied. */
   markTransferredSessionSummaryApplied?: () => void;
   isHeadless?: boolean;        // Running in headless mode (disables interactive tools)
+  /** Skip agent-level config file watching (server already owns a workspace-level watcher) */
+  skipConfigWatcher?: boolean;
   debugMode?: {                // Debug mode configuration (when running in dev)
     enabled: boolean;          // Whether debug mode is active
     logFilePath?: string;      // Path to the log file for querying
@@ -552,6 +554,7 @@ export class ClaudeAgent extends BaseAgent {
       thinkingLevel: config.thinkingLevel,
       mcpToken: config.mcpToken,
       isHeadless: config.isHeadless,
+      skipConfigWatcher: config.skipConfigWatcher,
       debugMode: config.debugMode,
       systemPromptPreset: config.systemPromptPreset,
       onSdkSessionIdUpdate: config.onSdkSessionIdUpdate,

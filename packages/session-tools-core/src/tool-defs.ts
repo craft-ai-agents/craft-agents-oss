@@ -39,6 +39,7 @@ import { handleSetSessionStatus } from './handlers/set-session-status.ts';
 import { handleGetSessionInfo } from './handlers/get-session-info.ts';
 import { handleListSessions } from './handlers/list-sessions.ts';
 import { handleArchiveSession } from './handlers/archive-session.ts';
+import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
 
 // ============================================================
 // Canonical Zod Schemas
@@ -197,6 +198,14 @@ export const ListSessionsSchema = z.object({
 export const ArchiveSessionSchema = z.object({
   sessionId: z.string().optional().describe('Session ID to archive. Omit to archive the current session.'),
   unarchive: z.boolean().optional().describe('Set to true to unarchive instead of archive.'),
+// Inter-session messaging
+export const SendAgentMessageSchema = z.object({
+  sessionId: z.string().describe('Target session ID to send the message to'),
+  message: z.string().describe('The message to send to the target session'),
+  attachments: z.array(z.object({
+    path: z.string().describe('Absolute file path on disk'),
+    name: z.string().optional().describe('Display name (defaults to file basename)'),
+  })).optional().describe('Files to include with the message'),
 });
 
 // ============================================================
@@ -442,10 +451,16 @@ Call with no arguments to introspect your own session state.`,
 Use filters (status, label, search) to narrow results instead of fetching everything. Default limit is 20 sessions.
 Use get_session_info for full details on a specific session (list-then-detail pattern).`,
 
-  archive_session: `Archive or unarchive a session. Archived sessions are hidden from the default session list.
+archive_session: `Archive or unarchive a session. Archived sessions are hidden from the default session list.
 
 Use this to clean up completed sessions (e.g., after scheduled automation runs).
 Omit sessionId to target the current session. Set unarchive=true to restore an archived session.`,
+send_agent_message: `Send a message to another session. The message is delivered with your session ID so the target can reply back.
+
+Use this to coordinate with spawned sessions, send follow-up instructions, or relay information between sessions.
+Use list_sessions to find session IDs, or use the sessionId returned by spawn_session.
+
+The target session receives your message with a sender envelope containing your session ID, so it can use send_agent_message to reply.`,
 } as const;
 
 // ============================================================
@@ -516,7 +531,9 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'set_session_status', description: TOOL_DESCRIPTIONS.set_session_status, inputSchema: SetSessionStatusSchema, executionMode: 'registry', safeMode: 'block', handler: handleSetSessionStatus },
   { name: 'get_session_info', description: TOOL_DESCRIPTIONS.get_session_info, inputSchema: GetSessionInfoSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetSessionInfo },
   { name: 'list_sessions', description: TOOL_DESCRIPTIONS.list_sessions, inputSchema: ListSessionsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSessions },
-  { name: 'archive_session', description: TOOL_DESCRIPTIONS.archive_session, inputSchema: ArchiveSessionSchema, executionMode: 'registry', safeMode: 'block', handler: handleArchiveSession },
+{ name: 'archive_session', description: TOOL_DESCRIPTIONS.archive_session, inputSchema: ArchiveSessionSchema, executionMode: 'registry', safeMode: 'block', handler: handleArchiveSession },
+// Inter-session messaging
+  { name: 'send_agent_message', description: TOOL_DESCRIPTIONS.send_agent_message, inputSchema: SendAgentMessageSchema, executionMode: 'registry', safeMode: 'block', handler: handleSendAgentMessage },
 ];
 
 export interface SessionToolFilterOptions {

@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 
 export interface BrowserEmptyPromptSample {
   short: string
@@ -22,6 +23,7 @@ export function BrowserEmptyStateCard({
   showSafetyHint = true,
   onPromptSelect,
 }: BrowserEmptyStateCardProps) {
+  const { t } = useTranslation()
   return (
     <div className="w-full h-full flex items-center justify-center p-8">
       <div className="w-full max-w-[700px] bg-background shadow-minimal rounded-[8px] overflow-hidden border border-border/30">
@@ -57,7 +59,7 @@ export function BrowserEmptyStateCard({
         {showSafetyHint && (
           <div className="px-4 py-2.5 border-t border-border/30 flex items-center gap-2 bg-muted/20 text-[13px] text-foreground/55">
             <p>
-              Craft Agents only control browser windows when you ask them to.
+              {t('browser.safetyHint')}
             </p>
           </div>
         )}

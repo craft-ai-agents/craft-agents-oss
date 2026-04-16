@@ -706,6 +706,7 @@ export function useOnboarding({
         baseUrl: data.baseUrl,
         connectionDefaultModel: data.model,
         models: data.models,
+        customEndpoint: { api: 'openai-completions' },
       })
 
       if (saved) {

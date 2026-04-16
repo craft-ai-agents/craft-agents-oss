@@ -1,5 +1,6 @@
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import { cn } from '../../lib/utils'
 
 export interface FilterableSelectRenderState {
@@ -42,13 +43,15 @@ export function FilterableSelectPopover<T>({
   isSelected,
   onToggle,
   renderItem,
-  filterPlaceholder = 'Search...',
+  filterPlaceholder,
   emptyState,
   noResultsState,
   closeOnSelect = false,
   minWidth = 200,
   maxWidth = 320,
 }: FilterableSelectPopoverProps<T>) {
+  const { t } = useTranslation()
+  const resolvedPlaceholder = filterPlaceholder ?? t('common.search')
   const [filter, setFilter] = React.useState('')
   const [highlightedIndex, setHighlightedIndex] = React.useState(0)
   const [position, setPosition] = React.useState<{ top: number; left: number } | null>(null)
@@ -177,7 +180,7 @@ export function FilterableSelectPopover<T>({
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
                 onKeyDown={handleInputKeyDown}
-                placeholder={filterPlaceholder}
+                placeholder={resolvedPlaceholder}
                 className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground placeholder:select-none"
               />
             </div>

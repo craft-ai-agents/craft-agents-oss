@@ -62,6 +62,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     if (!success) {
       throw new Error('Failed to persist default thinking level')
     }
+    return { success: true }
   })
 
   // ============================================================

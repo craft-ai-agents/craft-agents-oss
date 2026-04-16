@@ -83,7 +83,8 @@ describe('settings default thinking RPC handlers', () => {
     const setHandler = handlers.get(RPC_CHANNELS.settings.SET_DEFAULT_THINKING_LEVEL)
     expect(setHandler).toBeTruthy()
 
-    await setHandler!({ clientId: 'client-1' }, 'max')
+    const result = await setHandler!({ clientId: 'client-1' }, 'max')
+    expect(result).toEqual({ success: true })
     expect(setDefaultThinkingLevelMock).toHaveBeenCalledWith('max')
     expect(setDefaultThinkingLevelMock).toHaveBeenCalledTimes(1)
   })

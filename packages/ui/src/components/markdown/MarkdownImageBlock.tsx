@@ -259,7 +259,7 @@ export function MarkdownImageBlock({ code, className, onCreateRegionAnnotation: 
           )}
 
           {loading && (!activeDataUrl || (hasMultiple && stackItems.length === 0)) && (
-            <div className="py-8 text-center text-muted-foreground text-[13px]">Loading...</div>
+            <div className="py-8 text-center text-muted-foreground text-[13px]">{t('common.loading')}</div>
           )}
 
           {!loading && error && (!activeDataUrl || (hasMultiple && stackItems.length === 0)) && (

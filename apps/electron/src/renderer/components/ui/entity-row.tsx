@@ -154,11 +154,14 @@ export function EntityRow({
                   {titleTrailing}
                 </span>
                 {menuContent && !hideMoreButton && (
-                  <div className={cn(
-                    "absolute inset-0 flex items-center justify-end overflow-visible",
-                    menuOpen || contextMenuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                  )}>
-                    <DropdownMenu modal={true} onOpenChange={setMenuOpen}>
+                  <div
+                    className={cn(
+                      "absolute inset-0 flex items-center justify-end overflow-visible",
+                      menuOpen || contextMenuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                    )}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <DropdownMenu modal={true} open={menuOpen} onOpenChange={setMenuOpen}>
                       <DropdownMenuTrigger asChild>
                         <div className="p-1 rounded-[6px] hover:bg-foreground/10 data-[state=open]:bg-foreground/10 cursor-pointer">
                           <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
@@ -244,9 +247,10 @@ export function EntityRow({
             "absolute right-2 top-2 transition-opacity z-10",
             menuOpen || contextMenuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
           )}
+          onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="flex items-center rounded-[8px] overflow-hidden border border-transparent hover:border-border/50">
-            <DropdownMenu modal={true} onOpenChange={setMenuOpen}>
+            <DropdownMenu modal={true} open={menuOpen} onOpenChange={setMenuOpen}>
               <DropdownMenuTrigger asChild>
                 <div className="p-1.5 hover:bg-foreground/10 data-[state=open]:bg-foreground/10 cursor-pointer">
                   <MoreHorizontal className="h-4 w-4 text-muted-foreground" />

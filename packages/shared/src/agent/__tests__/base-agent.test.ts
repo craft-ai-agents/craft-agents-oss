@@ -237,4 +237,26 @@ describe('BaseAgent', () => {
       expect(mode).toBe('allow-all');
     });
   });
+
+  describe('Config Watcher', () => {
+    it('should not start config watcher when skipConfigWatcher is true', () => {
+      // Simulates the SessionManager scenario: isHeadless=false but server owns the watcher
+      const managedAgent = new TestAgent(createMockBackendConfig({
+        isHeadless: false,
+        skipConfigWatcher: true,
+      }));
+      // configWatcherManager should remain null — the guard in startConfigWatcher() returns early
+      expect(managedAgent.getConfigWatcherManager()).toBeNull();
+      managedAgent.destroy();
+    });
+
+    it('should not start config watcher when isHeadless is true (existing behavior)', () => {
+      // Simulates temp/headless agents — existing isHeadless guard still works
+      const headlessAgent = new TestAgent(createMockBackendConfig({
+        isHeadless: true,
+      }));
+      expect(headlessAgent.getConfigWatcherManager()).toBeNull();
+      headlessAgent.destroy();
+    });
+  });
 });

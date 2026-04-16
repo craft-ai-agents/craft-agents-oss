@@ -382,6 +382,19 @@ export function isAnthropicProvider(providerType: LlmProviderType): boolean {
   return providerType === 'anthropic';
 }
 
+/**
+ * Check if a connection points to a local model runtime (loopback URL).
+ */
+export function isLocalConnection(conn: Pick<LlmConnection, 'baseUrl'>): boolean {
+  if (!conn.baseUrl?.trim()) return false;
+  try {
+    const hostname = new URL(conn.baseUrl.trim()).hostname;
+    const h = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+    return h === 'localhost' || h === '127.0.0.1' || h === '::1';
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Check if a provider type uses Pi unified API.

@@ -179,6 +179,9 @@ export interface CoreBackendConfig {
   /** Headless mode flag (disables interactive tools) */
   isHeadless?: boolean;
 
+  /** Skip agent-level config file watching (server already owns a workspace-level watcher) */
+  skipConfigWatcher?: boolean;
+
   /** Debug mode configuration */
   debugMode?: {
     enabled: boolean;

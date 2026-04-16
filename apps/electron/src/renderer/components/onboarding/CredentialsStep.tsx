@@ -204,7 +204,7 @@ export function CredentialsStep({
           description={t("onboarding.credentials.copyCodeInstruction")}
           actions={
             <>
-              <BackButton onClick={onCancelOAuth} disabled={status === 'validating'}>Cancel</BackButton>
+              <BackButton onClick={onCancelOAuth} disabled={status === 'validating'}>{t("common.cancel")}</BackButton>
               <ContinueButton
                 type="submit"
                 form="auth-code-form"

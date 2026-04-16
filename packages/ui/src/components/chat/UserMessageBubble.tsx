@@ -333,6 +333,7 @@ export function UserMessageBubble({
   isQueued,
   compactMode,
 }: UserMessageBubbleProps) {
+  const { t } = useTranslation()
   const hasAttachments = attachments && attachments.length > 0
 
   // Separate edit_request badges (rendered above bubble) from other badges (rendered inline)
@@ -368,7 +369,7 @@ export function UserMessageBubble({
                 key={att.id || i}
                 className="shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
                 onClick={() => att.storedPath && onFileClick?.(att.storedPath)}
-                title={`Click to open ${att.name}`}
+                title={t('chat.clickToOpen', { name: att.name })}
               >
                 {isImage ? (
                   /* IMAGE: Square thumbnail only */

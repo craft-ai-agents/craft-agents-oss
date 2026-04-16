@@ -8,7 +8,7 @@ import {
   validateStoredBackendConnection,
 } from '@craft-agent/shared/agent/backend'
 import { getModelRefreshService } from '@craft-agent/server-core/model-fetchers'
-import { parseTestConnectionError, createBuiltInConnection, validateModelList, piAuthProviderDisplayName, validateSetupTestInput, setupTestRequiresApiKey } from '@craft-agent/server-core/domain'
+import { parseTestConnectionError, createBuiltInConnection, validateModelList, piAuthProviderDisplayName, validateSetupTestInput, setupTestRequiresApiKey, isLoopbackBaseUrl } from '@craft-agent/server-core/domain'
 import { getWorkspaceOrThrow, buildBackendHostRuntimeContext } from '@craft-agent/server-core/handlers'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -109,14 +109,25 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         updates.customEndpoint = customEndpoint
         // Route custom OpenAI/Anthropic-compatible endpoints through PiAgent.
         updates.providerType = 'pi_compat'
-        updates.authType = 'api_key_with_endpoint'
-        // Keep provider hint in lockstep with selected protocol toggle.
-        updates.piAuthProvider = customEndpoint.api === 'anthropic-messages' ? 'anthropic' : 'openai'
+        // Local loopback endpoints (Ollama, LM Studio) don't need API keys.
+        updates.authType = (isLoopbackBaseUrl(setup.baseUrl ?? undefined) && !setup.credential)
+          ? 'none'
+          : 'api_key_with_endpoint'
+        if (isLoopbackBaseUrl(setup.baseUrl ?? undefined)) {
+          // Local models use the OpenAI protocol but aren't "OpenAI".
+          // Leave piAuthProvider unset → generic icon in the selector.
+          updates.name = 'Local Model'
+        } else {
+          // Remote custom endpoints: keep provider hint for correct icon.
+          updates.piAuthProvider = customEndpoint.api === 'anthropic-messages' ? 'anthropic' : 'openai'
+        }
       } else if (setup.baseUrl !== undefined) {
         // Base URL was explicitly updated without custom protocol config.
         // Treat this as non-custom mode and clear stale custom endpoint metadata.
+        // Only downgrade existing connections — new ones already have the correct
+        // providerType from createBuiltInConnection().
         updates.customEndpoint = undefined
-        if (connection.providerType === 'pi_compat' && connection.authType !== 'oauth') {
+        if (connection.providerType === 'pi_compat' && connection.authType !== 'oauth' && !isNewConnection) {
           updates.providerType = 'pi'
           updates.authType = 'api_key'
         }

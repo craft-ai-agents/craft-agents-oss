@@ -443,9 +443,9 @@ export function MarkdownDatatableBlock({ code, className }: MarkdownDatatableBlo
     return (
       <div className={cn('rounded-[8px] overflow-hidden border bg-muted/10', className)}>
         <div className="px-3 py-2 bg-muted/50 border-b">
-          <span className="text-[12px] text-muted-foreground font-medium">{spec.title || 'Data Table'}</span>
+          <span className="text-[12px] text-muted-foreground font-medium">{spec.title || t('datatable.defaultTitle')}</span>
         </div>
-        <div className="py-8 text-center text-muted-foreground text-[13px]">Loading data...</div>
+        <div className="py-8 text-center text-muted-foreground text-[13px]">{t('datatable.loadingData')}</div>
       </div>
     )
   }
@@ -455,7 +455,7 @@ export function MarkdownDatatableBlock({ code, className }: MarkdownDatatableBlo
     return (
       <div className={cn('rounded-[8px] overflow-hidden border bg-muted/10', className)}>
         <div className="px-3 py-2 bg-muted/50 border-b">
-          <span className="text-[12px] text-muted-foreground font-medium">{spec.title || 'Data Table'}</span>
+          <span className="text-[12px] text-muted-foreground font-medium">{spec.title || t('datatable.defaultTitle')}</span>
         </div>
         <div className="py-6 text-center text-destructive/70 text-[13px]">{fileError}</div>
       </div>
@@ -562,7 +562,7 @@ export function MarkdownDatatableBlock({ code, className }: MarkdownDatatableBlo
         <DropdownMenuSub>
           <StyledDropdownMenuSubTrigger>
             <ArrowUpDown />
-            <span className="flex-1">Sort by</span>
+            <span className="flex-1">{t('table.sortBy')}</span>
             {sortKey && sortDir && <Check className="w-3 h-3 text-accent" />}
           </StyledDropdownMenuSubTrigger>
           <StyledDropdownMenuSubContent style={{ zIndex: 'calc(var(--z-floating-menu, 400) + 1)' }}>
@@ -584,7 +584,7 @@ export function MarkdownDatatableBlock({ code, className }: MarkdownDatatableBlo
         <DropdownMenuSub>
           <StyledDropdownMenuSubTrigger>
             <Group />
-            <span className="flex-1">Group by</span>
+            <span className="flex-1">{t('table.groupBy')}</span>
             {groupKey && <Check className="w-3 h-3 text-accent" />}
           </StyledDropdownMenuSubTrigger>
           <StyledDropdownMenuSubContent style={{ zIndex: 'calc(var(--z-floating-menu, 400) + 1)' }}>
@@ -654,7 +654,7 @@ export function MarkdownDatatableBlock({ code, className }: MarkdownDatatableBlo
           <>
             <StyledDropdownMenuSeparator />
             <StyledDropdownMenuItem onSelect={clearControls}>
-              <span className="text-accent">Clear all</span>
+              <span className="text-accent">{t('common.clearAll')}</span>
             </StyledDropdownMenuItem>
           </>
         )}
@@ -688,7 +688,7 @@ export function MarkdownDatatableBlock({ code, className }: MarkdownDatatableBlo
         {/* Header */}
         <div className="px-3 py-2 bg-muted/50 border-b">
           <span className="text-[12px] text-muted-foreground font-medium">
-            {parsed.title || 'Data Table'}
+            {parsed.title || t('datatable.defaultTitle')}
           </span>
         </div>
 
@@ -700,12 +700,12 @@ export function MarkdownDatatableBlock({ code, className }: MarkdownDatatableBlo
       <DataTableOverlay
         isOpen={isFullscreen}
         onClose={() => setIsFullscreen(false)}
-        title={parsed.title || 'Data Table'}
-        subtitle={`${parsed.rows.length} row${parsed.rows.length !== 1 ? 's' : ''}`}
+        title={parsed.title || t('datatable.defaultTitle')}
+        subtitle={t('datatable.rowCount', { count: parsed.rows.length })}
         headerActions={
           <div className="flex items-center gap-1.5">
             {renderControlsDropdown(true)}
-            <TableExportDropdown columns={parsed.columns} rows={parsed.rows} filename={parsed.title || 'Data Table'} />
+            <TableExportDropdown columns={parsed.columns} rows={parsed.rows} filename={parsed.title || t('datatable.defaultTitle')} />
           </div>
         }
       >

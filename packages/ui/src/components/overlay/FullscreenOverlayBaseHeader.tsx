@@ -11,6 +11,7 @@
  */
 
 import { useState, useCallback, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import { Check, Copy, ExternalLink, FolderOpen, type LucideIcon } from 'lucide-react'
 import { PreviewHeader, PreviewHeaderBadge, type PreviewBadgeVariant } from '../ui/PreviewHeader'
@@ -201,6 +202,7 @@ export function FullscreenOverlayBaseHeader({
   headerActions,
   copyContent,
 }: FullscreenOverlayBaseHeaderProps) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
 
   const handleCopy = useCallback(async () => {
@@ -225,7 +227,7 @@ export function FullscreenOverlayBaseHeader({
             'opacity-70 hover:opacity-100 transition-opacity',
             'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring'
           )}
-          title={copied ? 'Copied!' : 'Copy all'}
+          title={copied ? t('common.copied') : t('common.copyAll')}
         >
           {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
         </button>
