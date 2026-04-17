@@ -225,6 +225,37 @@ describe('parseArgs', () => {
     const args = parseArgs(['bun', 'index.ts', 'run', 'hello'])
     expect(args.workspaceDir).toBeUndefined()
   })
+
+  it('parses --provider minimax', () => {
+    const args = parseArgs(['bun', 'index.ts', '--provider', 'minimax', 'run', 'hello'])
+    expect(args.provider).toBe('minimax')
+  })
+
+  it('parses --provider minimax with --model MiniMax-M2.7', () => {
+    const args = parseArgs([
+      'bun', 'index.ts',
+      '--provider', 'minimax',
+      '--model', 'MiniMax-M2.7',
+      'run', 'hello',
+    ])
+    expect(args.provider).toBe('minimax')
+    expect(args.model).toBe('MiniMax-M2.7')
+  })
+
+  it('falls back to MINIMAX_API_KEY env var when provider is minimax', () => {
+    const prev = process.env.MINIMAX_API_KEY
+    process.env.MINIMAX_API_KEY = 'test-minimax-key'
+    try {
+      // LLM_API_KEY env var is the generic fallback; provider-specific key is resolved in setupLlmConnection
+      const args = parseArgs(['bun', 'index.ts', '--provider', 'minimax', 'run', 'hello'])
+      expect(args.provider).toBe('minimax')
+      // apiKey from CLI args is empty; env resolution happens in setupLlmConnection at runtime
+      expect(args.apiKey).toBe('')
+    } finally {
+      if (prev === undefined) delete process.env.MINIMAX_API_KEY
+      else process.env.MINIMAX_API_KEY = prev
+    }
+  })
 })
 
 // ---------------------------------------------------------------------------
