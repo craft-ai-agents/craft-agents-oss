@@ -397,7 +397,7 @@ app.whenReady().then(async () => {
   // Application menu is created after windowManager initialization (see below)
 
   // Set dock icon on macOS (required for dev mode, bundled apps use Info.plist)
-  if (process.platform === 'darwin' && app.dock) {
+  if (process.platform === 'darwin' && app.dock && !app.isPackaged) {
     // In packaged app, resources are at dist/resources/ (same level as __dirname)
     // In dev, resources are at ../resources/ (sibling of dist/)
     const dockIconPath = [
