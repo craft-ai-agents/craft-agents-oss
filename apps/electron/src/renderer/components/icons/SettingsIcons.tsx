@@ -158,6 +158,23 @@ export const ServerSettingsIcon = ({ className }: IconProps) => (
   </svg>
 )
 
+/** Message bubble icon for messaging settings */
+export const MessagingSettingsIcon = ({ className }: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M2 6C2 3.79086 3.79086 2 6 2H18C20.2091 2 22 3.79086 22 6V14C22 16.2091 20.2091 18 18 18H13.4142L9.70711 21.7071C9.07714 22.3371 8 21.8909 8 21V18H6C3.79086 18 2 16.2091 2 14V6ZM7 8C6.44772 8 6 8.44772 6 9C6 9.55228 6.44772 10 7 10H17C17.5523 10 18 9.55228 18 9C18 8.44772 17.5523 8 17 8H7ZM7 12C6.44772 12 6 12.4477 6 13C6 13.5523 6.44772 14 7 14H13C13.5523 14 14 13.5523 14 13C14 12.4477 13.5523 12 13 12H7Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
 /** User icon for preferences */
 export const PreferencesIcon = ({ className }: IconProps) => (
   <svg
@@ -187,6 +204,7 @@ export const SETTINGS_ICONS: Record<SettingsSubpage, React.ComponentType<IconPro
   workspace: WorkspaceIcon,
   permissions: PermissionsIcon,
   labels: LabelsIcon,
+  messaging: MessagingSettingsIcon,
   server: ServerSettingsIcon,
   shortcuts: ShortcutsIcon,
   preferences: PreferencesIcon,

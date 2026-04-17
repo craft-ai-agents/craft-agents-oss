@@ -336,6 +336,21 @@ export interface SessionToolContext {
   sendAgentMessage?(sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>): Promise<void>;
 
   // ============================================================
+  // Messaging Gateway (for list/unbind messaging channels)
+  // ============================================================
+
+  /** Get messaging bindings for a session. Injected by backend when messaging is configured. */
+  getMessagingBindings?(sessionId: string): Array<{
+    platform: string;
+    channelId: string;
+    channelName?: string;
+    enabled: boolean;
+  }>;
+
+  /** Unbind messaging channels from a session. Returns count of removed bindings. */
+  unbindMessagingChannel?(sessionId: string, platform?: string): number;
+
+  // ============================================================
   // Session Paths (for transform_data / render_template)
   // ============================================================
 

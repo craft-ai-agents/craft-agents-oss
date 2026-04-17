@@ -377,4 +377,19 @@ export const CHANNEL_MAP = {
   // Resources (cross-workspace export/import)
   exportResources: invoke(RPC_CHANNELS.resources.EXPORT),
   importResources: invoke(RPC_CHANNELS.resources.IMPORT),
+
+  // Messaging gateway
+  getMessagingConfig: invoke(RPC_CHANNELS.messaging.GET_CONFIG),
+  updateMessagingConfig: invoke(RPC_CHANNELS.messaging.UPDATE_CONFIG),
+  testTelegramToken: invoke(RPC_CHANNELS.messaging.TEST_TELEGRAM),
+  saveTelegramToken: invoke(RPC_CHANNELS.messaging.SAVE_TELEGRAM),
+  disconnectMessagingPlatform: invoke(RPC_CHANNELS.messaging.DISCONNECT),
+  getMessagingBindings: invoke(RPC_CHANNELS.messaging.GET_BINDINGS),
+  generateMessagingPairingCode: invoke(RPC_CHANNELS.messaging.GENERATE_CODE),
+  unbindMessagingSession: invoke(RPC_CHANNELS.messaging.UNBIND),
+  onMessagingBindingChanged: listener(RPC_CHANNELS.messaging.BINDING_CHANGED),
+  onMessagingPlatformStatus: listener(RPC_CHANNELS.messaging.PLATFORM_STATUS),
+  startWhatsAppConnect: invoke(RPC_CHANNELS.messaging.WA_START_CONNECT),
+  submitWhatsAppPhone: invoke(RPC_CHANNELS.messaging.WA_SUBMIT_PHONE),
+  onWhatsAppEvent: listener(RPC_CHANNELS.messaging.WA_UI_EVENT),
 } satisfies ChannelMap

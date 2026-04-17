@@ -77,6 +77,8 @@ import type { PlatformServices } from '../runtime/platform'
 import { createElectronPlatform } from './platform'
 import type { HandlerDeps } from './handlers/handler-deps'
 import { bootstrapServer, releaseServerLock } from '@craft-agent/server-core/bootstrap'
+import { MessagingGatewayRegistry } from '@craft-agent/messaging-gateway'
+import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { initModelRefreshService, getModelRefreshService, setFetcherPlatform } from '@craft-agent/server-core/model-fetchers'
 import { setSearchPlatform, setImageProcessor } from '@craft-agent/server-core/services'
 import { createApplicationMenu } from './menu'
@@ -190,6 +192,11 @@ let browserPaneManager: BrowserPaneManager | null = null
 let oauthFlowStore: OAuthFlowStore | null = null
 let moduleSink: EventSink | null = null
 let moduleClientResolver: ((webContentsId: number) => string | undefined) | null = null
+
+// Messaging gateway: constructed inside createHandlerDeps (needs sessionManager)
+// but populated after the server bootstrap (needs wsServer for push events).
+let moduleMessagingRegistry: import('@craft-agent/messaging-gateway').MessagingGatewayRegistry | null = null
+let messagingEventPublisher: ((channel: string, target: Parameters<EventSink>[1], ...args: unknown[]) => void) | null = null
 
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
@@ -626,13 +633,48 @@ app.whenReady().then(async () => {
           sm.setBrowserPaneManager(browserPaneManager!)
           return sm
         },
-        createHandlerDeps: ({ sessionManager: sm, platform: p, oauthFlowStore: ofs }) => ({
-          sessionManager: sm,
-          platform: p,
-          windowManager: windowManager ?? undefined,
-          browserPaneManager: browserPaneManager ?? undefined,
-          oauthFlowStore: ofs,
-        }),
+        createHandlerDeps: ({ sessionManager: sm, platform: p, oauthFlowStore: ofs }) => {
+          // Messaging registry is constructed here because it needs sessionManager.
+          // publishEvent is deferred via `messagingEventPublisher` because wsServer
+          // is constructed by the bootstrap around the same time and is only
+          // available to us on the returned `instance` after createHandlerDeps runs.
+          const messagingRegistry = new MessagingGatewayRegistry({
+            sessionManager: sm,
+            credentialManager: getCredentialManager(),
+            getMessagingDir: (wsId: string) =>
+              join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
+            getLegacyMessagingDir: (wsId: string) => {
+              const ws = getWorkspaces().find((w) => w.id === wsId)
+              return ws ? join(ws.rootPath, 'messaging') : undefined
+            },
+            publishEvent: (channel, target, ...args) => {
+              messagingEventPublisher?.(channel, target, ...args)
+            },
+            // Route gateway/adapter diagnostics through electron-log so
+            // polling failures (409 Conflict, bad token, stale webhook)
+            // surface in main.log instead of being dropped on stdout.
+            logger: mainLog,
+            // WhatsApp worker runs under Electron's embedded Node via
+            // ELECTRON_RUN_AS_NODE. In dev we resolve worker.cjs from the
+            // monorepo; in packaged builds it's shipped via extraResources
+            // (see apps/electron/electron-builder.yml).
+            whatsapp: {
+              workerEntry: app.isPackaged
+                ? join(process.resourcesPath, 'messaging-whatsapp-worker', 'worker.cjs')
+                : join(process.cwd(), 'packages', 'messaging-whatsapp-worker', 'dist', 'worker.cjs'),
+              pairingMode: 'qr',
+            },
+          })
+          moduleMessagingRegistry = messagingRegistry
+          return {
+            sessionManager: sm,
+            platform: p,
+            windowManager: windowManager ?? undefined,
+            browserPaneManager: browserPaneManager ?? undefined,
+            oauthFlowStore: ofs,
+            messagingRegistry,
+          }
+        },
         // Headless: register only core handlers (no GUI handlers for browser, settings, etc.)
         // GUI: register all handlers (core + GUI)
         registerAllRpcHandlers: isHeadless
@@ -670,6 +712,43 @@ app.whenReady().then(async () => {
       oauthFlowStore = instance.oauthFlowStore
       moduleSink = instance.wsServer.push.bind(instance.wsServer)
       moduleClientResolver = resolveClientId
+
+      // -----------------------------------------------------------------------
+      // Messaging Gateway — populate the registry that was wired into
+      // HandlerDeps, then install the fan-out event sink.
+      // -----------------------------------------------------------------------
+      try {
+        const { createFanOutSink } = await import('@craft-agent/messaging-gateway')
+        const registry = moduleMessagingRegistry
+        if (!registry) throw new Error('Messaging registry was not constructed in createHandlerDeps')
+
+        // The registry uses publishEvent to push UI events. Wire it up now that
+        // wsServer is available.
+        messagingEventPublisher = instance.wsServer.push.bind(instance.wsServer)
+
+        const allWorkspaces = getWorkspaces()
+        for (const ws of allWorkspaces) {
+          // Skip remote-owned workspaces — messaging runs on the remote server.
+          if (ws.remoteServer) continue
+          try {
+            await registry.initializeWorkspace(ws.id)
+          } catch (err) {
+            mainLog.error(`[messaging] Failed to initialize workspace ${ws.id}:`, err)
+          }
+        }
+
+        // Compose fan-out event sink: RPC push + messaging gateway dispatch.
+        // Always install — this lets workspaces enable messaging at runtime
+        // without a process restart.
+        const baseSink = instance.wsServer.push.bind(instance.wsServer)
+        const fanOut = createFanOutSink(baseSink, registry.onSessionEvent)
+        instance.sessionManager.setEventSink(fanOut)
+        if (registry.size > 0) {
+          mainLog.info(`[messaging] Fan-out sink active for ${registry.size} workspace(s)`)
+        }
+      } catch (err) {
+        mainLog.error('[messaging] Gateway initialization failed:', err)
+      }
 
       // IPC handlers — preload uses sendSync to get WS connection details
 

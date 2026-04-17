@@ -13,6 +13,17 @@ const ROOT_DIR = join(import.meta.dir, "..");
 const ELECTRON_DIR = join(ROOT_DIR, "apps/electron");
 const DIST_DIR = join(ELECTRON_DIR, "dist");
 
+// Replace grammY's bundled polyfills (node-fetch@2 + abort-controller@3) with
+// native Node globals. esbuild otherwise renames the polyfill's `class
+// AbortSignal` to `_AbortSignal` to dodge collision with the global, which
+// breaks node-fetch@2's `constructor.name === 'AbortSignal'` check and fails
+// every Telegram API call with a TypeError. Kept in sync with
+// `apps/electron/package.json` build:main and `scripts/electron-build-main.ts`.
+const MAIN_PROCESS_ALIAS: Record<string, string> = {
+  "node-fetch": join(ROOT_DIR, "apps/electron/src/main/shims/node-fetch.cjs"),
+  "abort-controller": join(ROOT_DIR, "apps/electron/src/main/shims/abort-controller.cjs"),
+};
+
 // MCP server paths
 const SESSION_SERVER_DIR = join(ROOT_DIR, "packages/session-mcp-server");
 const SESSION_SERVER_OUTPUT = join(SESSION_SERVER_DIR, "dist/index.js");
@@ -267,7 +278,7 @@ async function runEsbuild(
   entryPoint: string,
   outfile: string,
   defines: Record<string, string> = {},
-  options: { packagesExternal?: boolean } = {}
+  options: { packagesExternal?: boolean; alias?: Record<string, string> } = {}
 ): Promise<{ success: boolean; error?: string }> {
   try {
     await esbuild.build({
@@ -278,6 +289,7 @@ async function runEsbuild(
       outfile: join(ROOT_DIR, outfile),
       external: ["electron"],
       ...(options.packagesExternal ? { packages: "external" as const } : {}),
+      ...(options.alias ? { alias: options.alias } : {}),
       define: defines,
       logLevel: "warning",
     });
@@ -404,7 +416,8 @@ async function main(): Promise<void> {
     runEsbuild(
       "apps/electron/src/main/index.ts",
       "apps/electron/dist/main.cjs",
-      oauthDefines
+      oauthDefines,
+      { alias: MAIN_PROCESS_ALIAS }
     ),
     runEsbuild(
       "apps/electron/src/preload/bootstrap.ts",
@@ -496,6 +509,7 @@ async function main(): Promise<void> {
     format: "cjs",
     outfile: join(ROOT_DIR, "apps/electron/dist/main.cjs"),
     external: ["electron"],
+    alias: MAIN_PROCESS_ALIAS,
     define: oauthDefines,
     logLevel: "info",
   });

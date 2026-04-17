@@ -37,6 +37,7 @@ import {
   RefreshCw,
   Tag,
   Send,
+  MessageSquare,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { navigate, routes } from '@/lib/navigate'
@@ -49,6 +50,9 @@ import { LabelMenuItems, StatusMenuItems, ShareMenuItems } from './SessionMenuPa
 import { getFileManagerName } from '@/lib/platform'
 import type { SessionMeta } from '@/atoms/sessions'
 import { getSessionStatus, hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
+import { useSetAtom } from 'jotai'
+import type { TFunction } from 'i18next'
+import { messagingDialogAtom } from '@/atoms/messaging'
 
 export interface SessionMenuProps {
   /** Session data — display state is derived from this */
@@ -171,6 +175,60 @@ export function SessionMenu({
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator, Sub, SubTrigger, SubContent } = useMenuComponents()
 
+  // Messaging pairing flow — dispatches a global messagingDialogAtom so the
+  // dialog survives closing this context menu. First-run UX: if the platform
+  // isn't connected yet, route the user to the right setup entry point instead
+  // of silently failing on the server.
+  const setMessagingDialog = useSetAtom(messagingDialogAtom)
+
+  const handleConnectMessaging = async (platform: 'telegram' | 'whatsapp') => {
+    // First-run check — avoid hitting server if platform is not connected.
+    try {
+      const cfg = await window.electronAPI.getMessagingConfig()
+      const isConnected = Boolean(cfg?.platforms[platform]?.enabled)
+      if (!isConnected) {
+        if (platform === 'whatsapp') {
+          setMessagingDialog({ kind: 'wa_connect' })
+        } else {
+          navigate(routes.view.settings('messaging'))
+          toast.info(t('toast.telegramNotConfiguredOpenSettings'))
+        }
+        return
+      }
+    } catch {
+      // Treat config read failure as "unknown" and fall through to attempting
+      // pairing code generation — the server will surface a real error.
+    }
+
+    setMessagingDialog({
+      kind: 'pairing',
+      platform,
+      sessionId,
+      code: null,
+      expiresAt: null,
+    })
+    try {
+      const result = await window.electronAPI.generateMessagingPairingCode(sessionId, platform)
+      setMessagingDialog({
+        kind: 'pairing',
+        platform,
+        sessionId,
+        code: result.code,
+        expiresAt: result.expiresAt,
+        botUsername: result.botUsername,
+      })
+    } catch (err) {
+      setMessagingDialog({
+        kind: 'pairing',
+        platform,
+        sessionId,
+        code: null,
+        expiresAt: null,
+        error: classifyMessagingError(err, t),
+      })
+    }
+  }
+
   return (
     <>
       {/* Share/Shared based on shared state */}
@@ -198,6 +256,22 @@ export function SessionMenu({
           <span className="flex-1">{t("sessionMenu.sendToWorkspace")}</span>
         </MenuItem>
       )}
+
+      {/* Connect to Messaging — pairing code flow */}
+      <Sub>
+        <SubTrigger className="pr-2">
+          <MessageSquare className="h-3.5 w-3.5" />
+          <span className="flex-1">{t("sessionMenu.connectMessaging")}</span>
+        </SubTrigger>
+        <SubContent>
+          <MenuItem onClick={() => handleConnectMessaging('telegram')}>
+            <span>Telegram</span>
+          </MenuItem>
+          <MenuItem onClick={() => handleConnectMessaging('whatsapp')}>
+            <span>WhatsApp</span>
+          </MenuItem>
+        </SubContent>
+      </Sub>
 
       <Separator />
 
@@ -330,6 +404,22 @@ export function SessionMenu({
       </MenuItem>
     </>
   )
+}
+
+/**
+ * Translate raw errors from the pairing-code RPC into user-facing text.
+ * Kept narrow on purpose — only classifies well-known failure modes and
+ * surfaces anything else verbatim so real errors aren't hidden.
+ */
+function classifyMessagingError(err: unknown, t: TFunction): string {
+  const msg = err instanceof Error ? err.message : String(err)
+  if (/platform not connected|no adapter|not configured/i.test(msg)) {
+    return t('toast.messagingNotConfigured')
+  }
+  if (/rate.?limit/i.test(msg)) {
+    return t('toast.messagingRateLimited')
+  }
+  return msg
 }
 
 // LabelMenuItems now shared via SessionMenuParts

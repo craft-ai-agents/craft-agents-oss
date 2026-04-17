@@ -646,7 +646,32 @@ export interface ElectronAPI {
   // Resources (cross-workspace export/import)
   exportResources(workspaceId: string, options: ExportResourcesOptions): Promise<ExportResult>
   importResources(workspaceId: string, bundle: ResourceBundle, mode: ResourceImportMode): Promise<ResourceImportResult>
+
+  // Messaging gateway — workspaceId is taken from the client handshake (ctx.workspaceId)
+  getMessagingConfig(): Promise<{ enabled: boolean; platforms: Record<string, { enabled: boolean } | undefined> } | null>
+  updateMessagingConfig(config: Record<string, unknown>): Promise<void>
+  testTelegramToken(token: string): Promise<{ success: boolean; botName?: string; botUsername?: string; error?: string }>
+  saveTelegramToken(token: string): Promise<void>
+  disconnectMessagingPlatform(platform: string): Promise<void>
+  getMessagingBindings(): Promise<Array<{ id: string; workspaceId: string; sessionId: string; platform: string; channelId: string; channelName?: string; enabled: boolean; createdAt: number }>>
+  generateMessagingPairingCode(sessionId: string, platform: string): Promise<{ code: string; expiresAt: number; botUsername?: string }>
+  unbindMessagingSession(sessionId: string, platform?: string): Promise<void>
+  onMessagingBindingChanged(callback: (workspaceId: string) => void): () => void
+  onMessagingPlatformStatus(callback: (workspaceId: string, platform: string, connected: boolean) => void): () => void
+  // WhatsApp (subprocess-based Baileys adapter)
+  startWhatsAppConnect(): Promise<{ success: boolean }>
+  submitWhatsAppPhone(phoneNumber: string): Promise<{ success: boolean }>
+  onWhatsAppEvent(callback: (payload: { workspaceId: string; event: WhatsAppUiEvent }) => void): () => void
 }
+
+/** Event payloads broadcast from the WhatsApp subprocess to the UI. */
+export type WhatsAppUiEvent =
+  | { type: 'qr'; qr: string }
+  | { type: 'pairing_code'; code: string }
+  | { type: 'connected'; jid?: string; name?: string }
+  | { type: 'disconnected'; loggedOut: boolean; reason?: string }
+  | { type: 'unavailable'; reason: string; message: string }
+  | { type: 'error'; message: string }
 
 // =============================================================================
 // Navigation types (renderer-only)

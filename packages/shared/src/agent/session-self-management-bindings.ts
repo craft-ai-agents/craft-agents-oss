@@ -85,6 +85,27 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  // Messaging gateway bindings
+  Object.defineProperty(context, 'getMessagingBindings', {
+    get() {
+      const fn = getSessionScopedToolCallbacks(sessionId)?.getMessagingBindingsFn;
+      if (!fn) return undefined;
+      return (sid: string) => fn(sid ?? sessionId);
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'unbindMessagingChannel', {
+    get() {
+      const fn = getSessionScopedToolCallbacks(sessionId)?.unbindMessagingChannelFn;
+      if (!fn) return undefined;
+      return (sid: string, platform?: string) => fn(sid ?? sessionId, platform);
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   // getSessionInfo needs wrapping to default sid → sessionId
   Object.defineProperty(context, 'getSessionInfo', {
     get() {

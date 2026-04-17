@@ -119,6 +119,16 @@ packages/session-tools-core/**/*
 packages/server-core/**/*
 
 # =============================================================================
+# PACKAGES - MESSAGING GATEWAY (Telegram/WhatsApp channel bindings)
+# =============================================================================
+packages/messaging-gateway/**/*
+
+# =============================================================================
+# PACKAGES - MESSAGING WHATSAPP WORKER (Baileys subprocess)
+# =============================================================================
+packages/messaging-whatsapp-worker/**/*
+
+# =============================================================================
 # PACKAGES - PI AGENT SERVER (Out-of-process Pi SDK agent via stdio)
 # =============================================================================
 packages/pi-agent-server/**/*
@@ -163,6 +173,12 @@ scripts/electron-build-resources.ts
 scripts/electron-build-assets.ts
 scripts/electron-clean.ts
 scripts/electron-dev.ts
+
+# WhatsApp worker bundling (referenced by the Electron build pipeline)
+scripts/electron-build-wa-worker.ts
+
+# i18n locale parity check (referenced by CI)
+scripts/check-i18n-parity.ts
 
 # Server build + distribution scripts
 scripts/build-server.ts
