@@ -74,12 +74,12 @@ describe('resolvePiModel', () => {
 
     it('strips MiniMax- prefix for minimax-cn provider', () => {
       const registry = createMockRegistry({
-        'minimax-cn': [{ id: 'MiniMax-M2.5-highspeed', name: 'MiniMax-M2.5-highspeed', provider: 'minimax-cn' }],
+        'minimax-cn': [{ id: 'MiniMax-M3', name: 'MiniMax-M3', provider: 'minimax-cn' }],
       });
 
-      const result = resolvePiModel(registry, 'MiniMax-M2.5-highspeed', 'minimax-cn');
+      const result = resolvePiModel(registry, 'MiniMax-M3', 'minimax-cn');
       expect(result).toBeDefined();
-      expect(result!.id).toBe('M2.5-highspeed');
+      expect(result!.id).toBe('M3');
     });
   });
 
