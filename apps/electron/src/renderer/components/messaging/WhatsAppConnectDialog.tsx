@@ -1,20 +1,9 @@
 /**
  * WhatsAppConnectDialog — drives the Baileys QR-scan pairing flow from the UI.
- *
- * Flow:
- *   1. User opens dialog → renderer calls `startWhatsAppConnect`
- *   2. Worker emits `qr` event → dialog displays the QR as a scannable SVG
- *   3. User scans with WhatsApp → Settings → Linked Devices → Link a Device
- *   4. Worker emits `connected` → dialog closes
- *
- * QR is rendered via `qrcode.react` (<QRCodeSVG>).
- *
- * Unofficial-API disclaimer: Baileys is not sanctioned by WhatsApp/Meta and
- * may stop working or lead to account bans. This is shown to the user below.
  */
 
 import * as React from 'react'
-import { AlertTriangle, Loader2, Check } from 'lucide-react'
+import { AlertTriangle, Check } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -24,11 +13,13 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { Spinner } from '@craft-agent/ui'
 import type { WhatsAppUiEvent } from '../../../shared/types'
 
 interface WhatsAppConnectDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onConnected?: () => void
 }
 
 type Phase =
@@ -38,11 +29,10 @@ type Phase =
   | { kind: 'connected'; name?: string }
   | { kind: 'error'; message: string }
 
-export function WhatsAppConnectDialog({ open, onOpenChange }: WhatsAppConnectDialogProps) {
+export function WhatsAppConnectDialog({ open, onOpenChange, onConnected }: WhatsAppConnectDialogProps) {
   const { t } = useTranslation()
   const [phase, setPhase] = React.useState<Phase>({ kind: 'idle' })
 
-  // Subscribe to WA events whenever the dialog is open.
   React.useEffect(() => {
     if (!open) return
     const off = window.electronAPI.onWhatsAppEvent(({ event }) => handleEvent(event))
@@ -50,8 +40,6 @@ export function WhatsAppConnectDialog({ open, onOpenChange }: WhatsAppConnectDia
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  // Start the worker when the dialog opens. We stay in the `starting` phase
-  // until the worker emits the first `qr` event.
   React.useEffect(() => {
     if (!open || phase.kind !== 'idle') return
     setPhase({ kind: 'starting' })
@@ -61,7 +49,6 @@ export function WhatsAppConnectDialog({ open, onOpenChange }: WhatsAppConnectDia
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  // Reset when closed so the next open starts fresh.
   React.useEffect(() => {
     if (!open) {
       setPhase({ kind: 'idle' })
@@ -75,7 +62,13 @@ export function WhatsAppConnectDialog({ open, onOpenChange }: WhatsAppConnectDia
         return
       case 'connected':
         setPhase({ kind: 'connected', name: event.name })
-        setTimeout(() => onOpenChange(false), 1500)
+        setTimeout(() => {
+          if (onConnected) {
+            onConnected()
+          } else {
+            onOpenChange(false)
+          }
+        }, 1200)
         return
       case 'disconnected':
         if (event.loggedOut) {
@@ -88,7 +81,6 @@ export function WhatsAppConnectDialog({ open, onOpenChange }: WhatsAppConnectDia
       case 'error':
         setPhase({ kind: 'error', message: event.message })
         return
-      // `pairing_code` is ignored: pairingMode is 'qr' in this build.
     }
   }
 
@@ -107,9 +99,13 @@ export function WhatsAppConnectDialog({ open, onOpenChange }: WhatsAppConnectDia
           </div>
         </div>
 
+        <div className="rounded-md border border-sky-500/30 bg-sky-500/10 p-3 text-xs text-sky-800 dark:text-sky-200">
+          {t('dialog.whatsapp.selfChatHint')}
+        </div>
+
         <div className="flex flex-col gap-4 py-2">
           {phase.kind === 'starting' && (
-            <StatusRow icon={<Loader2 className="h-4 w-4 animate-spin" />}>
+            <StatusRow icon={<Spinner className="text-[16px]" />}>
               {t('dialog.whatsapp.starting')}
             </StatusRow>
           )}

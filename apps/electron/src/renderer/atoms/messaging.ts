@@ -3,7 +3,6 @@
  *
  * Workspace-level state for messaging bindings.
  * Populated by subscribing to messaging:bindingChanged push events.
- * SessionItem reads from the derived map for O(1) badge lookups.
  */
 
 import { atom } from 'jotai'
@@ -16,27 +15,29 @@ export interface MessagingBinding {
   channelId: string
   channelName?: string
   enabled: boolean
+  createdAt: number
 }
 
-/**
- * Map of sessionId → MessagingBinding for the active workspace.
- * Updated when messaging:bindingChanged events arrive.
- */
-export const messagingBindingsMapAtom = atom<Map<string, MessagingBinding>>(new Map())
+export const messagingBindingsAtom = atom<MessagingBinding[]>([])
 
-/**
- * Update the bindings map from a flat array (from getMessagingBindings RPC).
- */
+export const messagingBindingsBySessionAtom = atom((get) => {
+  const map = new Map<string, MessagingBinding[]>()
+  for (const binding of get(messagingBindingsAtom)) {
+    if (!binding.enabled) continue
+    const list = map.get(binding.sessionId)
+    if (list) {
+      list.push(binding)
+    } else {
+      map.set(binding.sessionId, [binding])
+    }
+  }
+  return map
+})
+
 export const setMessagingBindingsAtom = atom(
   null,
   (_get, set, bindings: MessagingBinding[]) => {
-    const map = new Map<string, MessagingBinding>()
-    for (const b of bindings) {
-      if (b.enabled) {
-        map.set(b.sessionId, b)
-      }
-    }
-    set(messagingBindingsMapAtom, map)
+    set(messagingBindingsAtom, bindings.filter((binding) => binding.enabled))
   },
 )
 
@@ -57,6 +58,9 @@ export type MessagingDialogState =
       botUsername?: string
       error?: string
     }
-  | { kind: 'wa_connect' }
+  | {
+      kind: 'wa_connect'
+      continueToPairingSessionId?: string
+    }
 
 export const messagingDialogAtom = atom<MessagingDialogState>({ kind: 'closed' })

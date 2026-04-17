@@ -88,6 +88,23 @@ describe('BindingStore', () => {
     expect(store.getAll()[0]?.sessionId).toBe('other')
   })
 
+  it('unbindById removes only the selected binding row', () => {
+    const store = new BindingStore(dir)
+    const a = store.bind('ws1', 'sess', 'telegram', 'c1')
+    const b = store.bind('ws1', 'sess', 'whatsapp', 'c2')
+
+    expect(store.unbindById(a.id)).toBe(true)
+    expect(store.findByChannel('telegram', 'c1')).toBeUndefined()
+    expect(store.findByChannel('whatsapp', 'c2')?.id).toBe(b.id)
+    expect(store.unbindById(a.id)).toBe(false)
+  })
+
+  it('forces WhatsApp bindings to use desktop-only approvals', () => {
+    const store = new BindingStore(dir)
+    const binding = store.bind('ws1', 'sess', 'whatsapp', 'c2')
+    expect(binding.config.approvalChannel).toBe('app')
+  })
+
   it('fires change listener after mutation', () => {
     const store = new BindingStore(dir)
     let calls = 0

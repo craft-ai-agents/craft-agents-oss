@@ -16,16 +16,27 @@ export interface MessagingBindingInfo {
   createdAt: number
 }
 
+export interface MessagingPlatformRuntimeInfo {
+  platform: string
+  configured: boolean
+  connected: boolean
+  state: 'disconnected' | 'connecting' | 'connected' | 'reconnect_required' | 'error'
+  identity?: string
+  lastError?: string
+  updatedAt: number
+}
+
 export interface MessagingConfigInfo {
   enabled: boolean
   platforms: Record<string, { enabled: boolean } | undefined>
+  runtime: Record<string, MessagingPlatformRuntimeInfo | undefined>
 }
 
 export interface IMessagingGatewayRegistry {
   /** Get bindings for a workspace. */
   getBindings(workspaceId: string): MessagingBindingInfo[]
 
-  /** Get messaging config for a workspace. */
+  /** Get messaging config and runtime state for a workspace. */
   getConfig(workspaceId: string): MessagingConfigInfo | null
 
   /** Update messaging config for a workspace. */
@@ -34,8 +45,11 @@ export interface IMessagingGatewayRegistry {
   /** Generate a pairing code for binding a session to a chat. */
   generatePairingCode(workspaceId: string, sessionId: string, platform: string): { code: string; expiresAt: number; botUsername?: string }
 
-  /** Unbind a session from messaging. */
+  /** Unbind all bindings for a session, optionally limited to one platform. */
   unbindSession(workspaceId: string, sessionId: string, platform?: string): void
+
+  /** Unbind one specific binding row by ID. */
+  unbindBinding(workspaceId: string, bindingId: string): boolean
 
   /** Test a Telegram bot token. */
   testTelegramToken(token: string): Promise<{ success: boolean; botName?: string; botUsername?: string; error?: string }>
@@ -43,6 +57,9 @@ export interface IMessagingGatewayRegistry {
   /** Save Telegram token and (re)initialize the adapter. */
   saveTelegramToken(workspaceId: string, token: string): Promise<void>
 
-  /** Disconnect a platform for a workspace. */
+  /** Disable a platform for a workspace, preserving WhatsApp auth state unless forgotten separately. */
   disconnectPlatform(workspaceId: string, platform: string): Promise<void>
+
+  /** Disable a platform and forget its local auth/device state when supported. */
+  forgetPlatform(workspaceId: string, platform: string): Promise<void>
 }

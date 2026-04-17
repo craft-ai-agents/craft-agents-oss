@@ -31,9 +31,19 @@ export type {
   ChannelBinding,
   BindingConfig,
   MessagingConfig,
+  MessagingLogger,
+  MessagingLogContext,
+  MessagingLogMeta,
+  MessagingPlatformRuntimeInfo,
+  MessagingPlatformRuntimeState,
 } from './types'
 
-export { DEFAULT_BINDING_CONFIG, DEFAULT_MESSAGING_CONFIG } from './types'
+export {
+  DEFAULT_BINDING_CONFIG,
+  DEFAULT_MESSAGING_CONFIG,
+  getDefaultBindingConfig,
+  normalizeBindingConfig,
+} from './types'
 
 export { createFanOutSink, type EventSinkFn } from './event-fanout'
 export {

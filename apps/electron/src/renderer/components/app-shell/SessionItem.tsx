@@ -15,7 +15,7 @@ import { useSessionListContext } from "@/context/SessionListContext"
 import { useAppShellContext } from "@/context/AppShellContext"
 import { navigate, routes } from "@/lib/navigate"
 import type { SessionMeta } from "@/atoms/sessions"
-import { messagingBindingsMapAtom } from "@/atoms/messaging"
+import { messagingBindingsBySessionAtom } from "@/atoms/messaging"
 import { useAtomValue } from "jotai"
 import { extractLabelId } from "@craft-agent/shared/labels"
 
@@ -59,8 +59,9 @@ export function SessionItem({
   }))
   const hasPendingPrompt = ctx.hasPendingPrompt?.(item.id) ?? false
   const previewText = isCompactMode ? getSessionPreviewText(item) : null
-  const messagingBindings = useAtomValue(messagingBindingsMapAtom)
-  const hasMessagingBinding = messagingBindings.has(item.id)
+  const messagingBindingsBySession = useAtomValue(messagingBindingsBySessionAtom)
+  const sessionBindings = messagingBindingsBySession.get(item.id) ?? []
+  const hasMessagingBinding = sessionBindings.length > 0
 
   const handleClick = (e: React.MouseEvent) => {
     ctx.onFocusZone()
@@ -184,7 +185,7 @@ export function SessionItem({
           <>
             {hasLabels && <SessionBadges item={item} />}
             {hasMessagingBinding && (
-              <span className="text-[10px] text-foreground/40" title={`Connected to ${messagingBindings.get(item.id)?.platform}`}>
+              <span className="text-[10px] text-foreground/40" title={`Connected to ${sessionBindings.map((binding) => binding.platform).join(', ')}`}>
                 📱
               </span>
             )}

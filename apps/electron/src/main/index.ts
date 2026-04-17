@@ -97,7 +97,7 @@ import { handleDeepLink } from './deep-link'
 import { BrowserPaneManager } from './browser-pane-manager'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
 import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-protocol'
-import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
+import log, { isDebugMode, mainLog, getLogFilePath, getMessagingGatewayLogFilePath, messagingGatewayLog } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { registerPiModelResolver } from '@craft-agent/shared/config'
 import { getPiModelsForAuthProvider, getAllPiModels } from '@craft-agent/shared/config'
@@ -650,10 +650,10 @@ app.whenReady().then(async () => {
             publishEvent: (channel, target, ...args) => {
               messagingEventPublisher?.(channel, target, ...args)
             },
-            // Route gateway/adapter diagnostics through electron-log so
-            // polling failures (409 Conflict, bad token, stale webhook)
-            // surface in main.log instead of being dropped on stdout.
-            logger: mainLog,
+            // Route messaging diagnostics through the dedicated messaging log
+            // at ~/.craft-agent/logs/messaging-gateway.log (and mirror higher-
+            // severity events into main.log).
+            logger: messagingGatewayLog,
             // WhatsApp worker runs under Electron's embedded Node via
             // ELECTRON_RUN_AS_NODE. In dev we resolve worker.cjs from the
             // monorepo; in packaged builds it's shipped via extraResources
@@ -1072,6 +1072,7 @@ app.whenReady().then(async () => {
     if (isDebugMode) {
       mainLog.info('Debug mode enabled - logs at:', getLogFilePath())
     }
+    mainLog.info('Messaging gateway log path:', getMessagingGatewayLogFilePath())
   } catch (error) {
     mainLog.error('Failed to initialize app:', error instanceof Error ? error.message : error, (error as any)?.stack)
     // Continue anyway - the app will show errors in the UI

@@ -185,10 +185,11 @@ export function SessionMenu({
     // First-run check — avoid hitting server if platform is not connected.
     try {
       const cfg = await window.electronAPI.getMessagingConfig()
-      const isConnected = Boolean(cfg?.platforms[platform]?.enabled)
+      const runtime = cfg?.runtime?.[platform]
+      const isConnected = Boolean(runtime?.connected)
       if (!isConnected) {
         if (platform === 'whatsapp') {
-          setMessagingDialog({ kind: 'wa_connect' })
+          setMessagingDialog({ kind: 'wa_connect', continueToPairingSessionId: sessionId })
         } else {
           navigate(routes.view.settings('messaging'))
           toast.info(t('toast.telegramNotConfiguredOpenSettings'))

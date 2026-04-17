@@ -2,19 +2,18 @@
  * MessagingSettingsPage
  *
  * Configure messaging platform connections (Telegram, WhatsApp) and view
- * active session bindings. Platform cards show connection status with
- * test/save/disconnect actions. BindingsTable reads live data via
- * getMessagingBindings and reacts to messaging:bindingChanged events.
+ * active session bindings. Platform cards show runtime connection status.
  */
 
 import * as React from 'react'
-import { useAtom } from 'jotai'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Check, X, Loader2 } from 'lucide-react'
+import { Check, X } from 'lucide-react'
+import { useAtomValue, useSetAtom } from 'jotai'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@craft-agent/ui'
 import { useActiveWorkspace } from '@/context/AppShellContext'
 import {
   SettingsSection,
@@ -22,9 +21,16 @@ import {
   SettingsRow,
   SettingsSecretInput,
 } from '@/components/settings'
-import { messagingBindingsMapAtom, setMessagingBindingsAtom, type MessagingBinding } from '@/atoms/messaging'
+import {
+  messagingBindingsAtom,
+  setMessagingBindingsAtom,
+  type MessagingBinding,
+} from '@/atoms/messaging'
 import { WhatsAppConnectDialog } from '@/components/messaging/WhatsAppConnectDialog'
+import { sessionMetaMapAtom } from '@/atoms/sessions'
+import { getSessionTitle } from '@/utils/session'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
+import type { MessagingPlatformRuntimeInfo } from '../../../shared/types'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -69,20 +75,19 @@ type TestResult =
 function TelegramCard({ workspaceId }: { workspaceId: string }) {
   const { t } = useTranslation()
   const [token, setToken] = React.useState('')
-  const [connected, setConnected] = React.useState(false)
+  const [runtime, setRuntime] = React.useState<MessagingPlatformRuntimeInfo>(() => defaultRuntime('telegram'))
   const [saving, setSaving] = React.useState(false)
   const [test, setTest] = React.useState<TestResult>({ state: 'idle' })
 
-  // Load config on mount + subscribe to platform status changes
   React.useEffect(() => {
     let cancelled = false
     window.electronAPI.getMessagingConfig().then((cfg) => {
       if (cancelled) return
-      setConnected(Boolean(cfg?.platforms.telegram?.enabled))
+      setRuntime((cfg?.runtime.telegram ?? defaultRuntime('telegram')) as MessagingPlatformRuntimeInfo)
     })
-    const off = window.electronAPI.onMessagingPlatformStatus((wsId, platform, isConnected) => {
+    const off = window.electronAPI.onMessagingPlatformStatus((wsId, platform, status) => {
       if (wsId !== workspaceId || platform !== 'telegram') return
-      setConnected(isConnected)
+      setRuntime(status)
     })
     return () => {
       cancelled = true
@@ -134,7 +139,7 @@ function TelegramCard({ workspaceId }: { workspaceId: string }) {
     }
   }
 
-  if (connected) {
+  if (runtime.connected) {
     return (
       <SettingsCard>
         <SettingsRow
@@ -155,7 +160,9 @@ function TelegramCard({ workspaceId }: { workspaceId: string }) {
         <div>
           <div className="text-sm font-medium">{t('settings.messaging.telegram.title')}</div>
           <div className="mt-1 whitespace-pre-line text-xs text-muted-foreground">
-            {t('settings.messaging.telegram.instructions')}
+            {runtime.state === 'error' && runtime.lastError
+              ? runtime.lastError
+              : t('settings.messaging.telegram.instructions')}
           </div>
         </div>
 
@@ -173,7 +180,7 @@ function TelegramCard({ workspaceId }: { workspaceId: string }) {
             onClick={handleTest}
             disabled={!token.trim() || test.state === 'testing' || saving}
           >
-            {test.state === 'testing' && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+            {test.state === 'testing' && <Spinner className="mr-1 text-[14px]" />}
             {t('settings.messaging.telegram.testConnection')}
           </Button>
           <Button
@@ -181,7 +188,7 @@ function TelegramCard({ workspaceId }: { workspaceId: string }) {
             onClick={handleSave}
             disabled={!token.trim() || test.state !== 'success' || saving}
           >
-            {saving && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+            {saving && <Spinner className="mr-1 text-[14px]" />}
             {t('settings.messaging.telegram.save')}
           </Button>
 
@@ -206,23 +213,23 @@ function TelegramCard({ workspaceId }: { workspaceId: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// WhatsApp Card (Phase 3 placeholder — subprocess-based Baileys integration)
+// WhatsApp Card
 // ---------------------------------------------------------------------------
 
 function WhatsAppCard({ workspaceId }: { workspaceId: string }) {
   const { t } = useTranslation()
-  const [connected, setConnected] = React.useState(false)
+  const [runtime, setRuntime] = React.useState<MessagingPlatformRuntimeInfo>(() => defaultRuntime('whatsapp'))
   const [dialogOpen, setDialogOpen] = React.useState(false)
 
   React.useEffect(() => {
     let cancelled = false
     window.electronAPI.getMessagingConfig().then((cfg) => {
       if (cancelled) return
-      setConnected(Boolean(cfg?.platforms.whatsapp?.enabled))
+      setRuntime((cfg?.runtime.whatsapp ?? defaultRuntime('whatsapp')) as MessagingPlatformRuntimeInfo)
     })
-    const off = window.electronAPI.onMessagingPlatformStatus((wsId, platform, isConnected) => {
+    const off = window.electronAPI.onMessagingPlatformStatus((wsId, platform, status) => {
       if (wsId !== workspaceId || platform !== 'whatsapp') return
-      setConnected(isConnected)
+      setRuntime(status)
     })
     return () => {
       cancelled = true
@@ -230,7 +237,7 @@ function WhatsAppCard({ workspaceId }: { workspaceId: string }) {
     }
   }, [workspaceId])
 
-  const handleDisconnect = async () => {
+  const handleDisable = async () => {
     try {
       await window.electronAPI.disconnectMessagingPlatform('whatsapp')
       toast.success(t('settings.messaging.whatsapp.disconnected'))
@@ -239,27 +246,53 @@ function WhatsAppCard({ workspaceId }: { workspaceId: string }) {
     }
   }
 
+  const handleForget = async () => {
+    try {
+      await window.electronAPI.forgetMessagingPlatform('whatsapp')
+      toast.success(t('settings.messaging.whatsapp.disconnected'))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('common.error'))
+    }
+  }
+
+  const description = runtime.connected
+    ? (runtime.identity
+      ? t('dialog.whatsapp.connectedAs', { name: runtime.identity })
+      : t('settings.messaging.whatsapp.connected'))
+    : runtime.state === 'connecting'
+      ? t('dialog.whatsapp.starting')
+      : runtime.lastError || t('settings.messaging.whatsapp.unofficialApiShort')
+
   return (
     <>
       <SettingsCard>
-        <SettingsRow
-          label={t('settings.messaging.whatsapp.title')}
-          description={
-            connected
-              ? t('settings.messaging.whatsapp.connected')
-              : t('settings.messaging.whatsapp.unofficialApiShort')
-          }
-        >
-          {connected ? (
-            <Button variant="outline" size="sm" onClick={handleDisconnect}>
-              {t('settings.messaging.telegram.disconnect')}
-            </Button>
-          ) : (
-            <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
-              {t('settings.messaging.telegram.configure')}
-            </Button>
-          )}
-        </SettingsRow>
+        <div className="space-y-3 p-4">
+          <SettingsRow
+            label={t('settings.messaging.whatsapp.title')}
+            description={description}
+          >
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
+                {runtime.connected || runtime.configured
+                  ? t('settings.messaging.whatsapp.reconnect')
+                  : t('settings.messaging.telegram.configure')}
+              </Button>
+              {runtime.configured && (
+                <>
+                  <Button variant="outline" size="sm" onClick={handleDisable}>
+                    {t('settings.messaging.whatsapp.disable')}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleForget}>
+                    {t('settings.messaging.whatsapp.forget')}
+                  </Button>
+                </>
+              )}
+            </div>
+          </SettingsRow>
+          <p className="text-xs text-muted-foreground">
+            {t('settings.messaging.whatsapp.desktopApprovalsOnly')}
+          </p>
+        </div>
       </SettingsCard>
       <WhatsAppConnectDialog open={dialogOpen} onOpenChange={setDialogOpen} />
     </>
@@ -272,10 +305,10 @@ function WhatsAppCard({ workspaceId }: { workspaceId: string }) {
 
 function BindingsTable({ workspaceId }: { workspaceId: string }) {
   const { t } = useTranslation()
-  const [bindingsMap] = useAtom(messagingBindingsMapAtom)
-  const [, setBindings] = useAtom(setMessagingBindingsAtom)
+  const bindings = useAtomValue(messagingBindingsAtom)
+  const setBindings = useSetAtom(setMessagingBindingsAtom)
+  const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
 
-  // Initial load + subscribe to changes
   React.useEffect(() => {
     let cancelled = false
     const load = async () => {
@@ -298,13 +331,11 @@ function BindingsTable({ workspaceId }: { workspaceId: string }) {
 
   const handleUnbind = async (binding: MessagingBinding) => {
     try {
-      await window.electronAPI.unbindMessagingSession(binding.sessionId, binding.platform)
+      await window.electronAPI.unbindMessagingBinding(binding.id)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('common.error'))
     }
   }
-
-  const bindings = Array.from(bindingsMap.values())
 
   if (bindings.length === 0) {
     return (
@@ -316,34 +347,53 @@ function BindingsTable({ workspaceId }: { workspaceId: string }) {
     )
   }
 
+  const sorted = [...bindings].sort((a, b) => b.createdAt - a.createdAt)
+
   return (
     <SettingsCard>
       <div className="divide-y divide-border">
-        {bindings.map((b) => (
-          <div
-            key={`${b.platform}:${b.sessionId}`}
-            className="flex items-center justify-between px-4 py-3"
-          >
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium capitalize">{b.platform}</span>
-              <span className="text-sm text-muted-foreground">
-                {b.channelName || b.channelId}
-              </span>
-              <span className="font-mono text-xs text-muted-foreground">
-                {b.sessionId.slice(0, 8)}
-              </span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              onClick={() => handleUnbind(b)}
+        {sorted.map((binding) => {
+          const sessionMeta = sessionMetaMap.get(binding.sessionId)
+          const sessionTitle = sessionMeta ? getSessionTitle(sessionMeta) : binding.sessionId.slice(0, 8)
+          return (
+            <div
+              key={binding.id}
+              className="flex items-center justify-between gap-4 px-4 py-3"
             >
-              {t('settings.messaging.bindings.unbind')}
-            </Button>
-          </div>
-        ))}
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-medium capitalize">{binding.platform}</span>
+                  <span className="truncate text-muted-foreground">
+                    {binding.channelName || binding.channelId}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="truncate">{sessionTitle}</span>
+                  <span className="font-mono">{binding.sessionId.slice(0, 8)}</span>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => handleUnbind(binding)}
+              >
+                {t('settings.messaging.bindings.unbind')}
+              </Button>
+            </div>
+          )
+        })}
       </div>
     </SettingsCard>
   )
+}
+
+function defaultRuntime(platform: 'telegram' | 'whatsapp'): MessagingPlatformRuntimeInfo {
+  return {
+    platform,
+    configured: false,
+    connected: false,
+    state: 'disconnected',
+    updatedAt: Date.now(),
+  }
 }

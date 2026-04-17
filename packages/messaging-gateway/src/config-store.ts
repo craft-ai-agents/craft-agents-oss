@@ -13,16 +13,25 @@ import {
   copyFileSync,
 } from 'node:fs'
 import { join } from 'node:path'
-import { DEFAULT_MESSAGING_CONFIG, type MessagingConfig } from './types'
+import { DEFAULT_MESSAGING_CONFIG, type MessagingConfig, type MessagingLogger } from './types'
+
+const NOOP_LOGGER: MessagingLogger = {
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  child: () => NOOP_LOGGER,
+}
 
 export class ConfigStore {
   private readonly dirPath: string
   private readonly filePath: string
+  private readonly log: MessagingLogger
   private config: MessagingConfig
 
-  constructor(storageDir: string, legacyDir?: string) {
+  constructor(storageDir: string, legacyDir?: string, logger: MessagingLogger = NOOP_LOGGER) {
     this.dirPath = storageDir
     this.filePath = join(storageDir, 'config.json')
+    this.log = logger
     this.migrateLegacy(legacyDir)
     this.config = this.load()
   }
@@ -52,9 +61,18 @@ export class ConfigStore {
     try {
       if (!existsSync(this.dirPath)) mkdirSync(this.dirPath, { recursive: true })
       copyFileSync(legacyFile, this.filePath)
-      console.log('[MessagingGateway] Migrated config:', legacyFile, '→', this.filePath)
+      this.log.info('messaging config migrated from legacy location', {
+        event: 'config_migrated',
+        legacyFile,
+        filePath: this.filePath,
+      })
     } catch (err) {
-      console.error('[MessagingGateway] Config migration failed:', err)
+      this.log.error('messaging config migration failed', {
+        event: 'config_migration_failed',
+        legacyFile,
+        filePath: this.filePath,
+        error: err,
+      })
     }
   }
 
@@ -69,7 +87,11 @@ export class ConfigStore {
         }
       }
     } catch (err) {
-      console.error('[MessagingGateway] Failed to load config:', err)
+      this.log.error('failed to load messaging config', {
+        event: 'config_load_failed',
+        filePath: this.filePath,
+        error: err,
+      })
     }
     return { ...DEFAULT_MESSAGING_CONFIG, platforms: {} }
   }
@@ -79,7 +101,11 @@ export class ConfigStore {
       if (!existsSync(this.dirPath)) mkdirSync(this.dirPath, { recursive: true })
       writeFileSync(this.filePath, JSON.stringify(this.config, null, 2), 'utf-8')
     } catch (err) {
-      console.error('[MessagingGateway] Failed to save config:', err)
+      this.log.error('failed to save messaging config', {
+        event: 'config_save_failed',
+        filePath: this.filePath,
+        error: err,
+      })
     }
   }
 }

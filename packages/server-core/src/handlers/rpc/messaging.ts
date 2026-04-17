@@ -8,7 +8,7 @@ import type { HandlerDeps } from '../handler-deps'
 
 export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps): void {
   const registry = deps.messagingRegistry
-  if (!registry) return // Messaging not configured — skip handler registration
+  if (!registry) return
 
   server.handle(RPC_CHANNELS.messaging.GET_CONFIG, async (ctx) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
@@ -37,6 +37,12 @@ export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps):
     return { success: true }
   })
 
+  server.handle(RPC_CHANNELS.messaging.FORGET, async (ctx, platform: string) => {
+    if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    await registry.forgetPlatform(ctx.workspaceId, platform)
+    return { success: true }
+  })
+
   server.handle(RPC_CHANNELS.messaging.GET_BINDINGS, async (ctx) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
     return registry.getBindings(ctx.workspaceId)
@@ -53,8 +59,11 @@ export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps):
     return { success: true }
   })
 
-  // WhatsApp — subprocess pairing flow. These handlers are no-ops unless the
-  // registry implementation exposes the WhatsApp subprocess methods.
+  server.handle(RPC_CHANNELS.messaging.UNBIND_BINDING, async (ctx, bindingId: string) => {
+    if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    return { success: registry.unbindBinding(ctx.workspaceId, bindingId) }
+  })
+
   server.handle(RPC_CHANNELS.messaging.WA_START_CONNECT, async (ctx) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
     const waRegistry = registry as { startWhatsAppConnect?: (wsId: string) => Promise<void> }

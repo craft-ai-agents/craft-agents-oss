@@ -22,6 +22,19 @@ import {
   type WorkerCommand,
   type WorkerEvent,
 } from './protocol'
+import { bareJid, classifyInbound, rememberSentId } from './filter'
+
+/**
+ * Build-time constants injected by `scripts/electron-build-wa-worker.ts`
+ * via esbuild `--define`. At dev-time (no bundle) they fall back to the
+ * `dev-*` values so typechecking and ad-hoc runs still work.
+ */
+declare const __WA_WORKER_BUILD_ID__: string
+declare const __WA_WORKER_GIT_SHA__: string
+const WORKER_BUILD_ID =
+  typeof __WA_WORKER_BUILD_ID__ !== 'undefined' ? __WA_WORKER_BUILD_ID__ : 'dev-unbundled'
+const WORKER_GIT_SHA =
+  typeof __WA_WORKER_GIT_SHA__ !== 'undefined' ? __WA_WORKER_GIT_SHA__ : 'dev-unbundled'
 
 // ---------------------------------------------------------------------------
 // Send helpers
@@ -90,7 +103,7 @@ type BaileysSock = {
     on(event: 'connection.update', fn: (u: Record<string, unknown>) => void): void
     on(event: 'messages.upsert', fn: (u: { messages: unknown[]; type: string }) => void): void
   }
-  user?: { id?: string; name?: string }
+  user?: { id?: string; name?: string; lid?: string }
   requestPairingCode(phoneNumber: string): Promise<string>
   sendMessage(jid: string, content: unknown): Promise<{ key?: { id?: string } } | undefined>
   logout(): Promise<void>
@@ -103,9 +116,66 @@ interface SessionState {
   saveCreds: () => Promise<void>
   pairingMode: 'qr' | 'code'
   authStateDir: string
+  /** Set when `shutdown` command arrives so any pending reconnect is cancelled. */
+  shuttingDown: boolean
+  /** Consecutive reconnect attempts; reset on successful `connection=open`. */
+  reconnectAttempts: number
+  /** Handle for a scheduled reconnect, so shutdown can clear it. */
+  reconnectTimer: NodeJS.Timeout | null
+  /** See `StartCommand.selfChatMode`. */
+  selfChatMode: boolean
+  /** Prefix prepended to outbound self-chat messages (non-empty). */
+  responsePrefix: string
+  /**
+   * Bounded LRU of recently-sent message IDs. Used to filter the agent's
+   * own echoes from `messages.upsert` — primary defence; the prefix check
+   * is the backup for IDs lost across worker restarts.
+   */
+  sentIds: Set<string>
+  /**
+   * Unix seconds at which the socket most recently transitioned to
+   * `connection: 'open'`. Used to skip history-sync messages that arrive
+   * as `upsert.type === 'append'` right after connect — we only route
+   * messages newer than this wall-clock cutoff (minus a small grace).
+   */
+  connectedAtSec: number
 }
 
 let session: SessionState | null = null
+
+/** Cap retries so a permanently-broken credential set doesn't loop forever. */
+const MAX_RECONNECT_ATTEMPTS = 10
+
+/** Fallback prefix when selfChatMode is on but caller didn't specify one. */
+const DEFAULT_RESPONSE_PREFIX = '[craft-agent]'
+
+/**
+ * Exponential backoff with a 30s ceiling: 1s, 2s, 4s, 8s, 16s, 30s, 30s, ...
+ * Called with attempts>=1.
+ */
+function reconnectDelayMs(attempts: number): number {
+  const exp = Math.min(attempts - 1, 5)
+  return Math.min(1_000 * 2 ** exp, 30_000)
+}
+
+/**
+ * Prepend `responsePrefix` to `text` when `selfChatMode` is on AND the
+ * target channel is the self-JID. Idempotent: if the text already starts
+ * with the prefix (e.g. relay/edit paths that re-send), leave it alone.
+ */
+function applyPrefixIfSelfChat(state: SessionState, channelId: string, text: string): string {
+  if (!state.selfChatMode) return text
+  const selfJid = bareJid(state.sock.user?.id)
+  const selfLid = bareJid(state.sock.user?.lid)
+  const bareChannel = bareJid(channelId)
+  if (!bareChannel) return text
+  const isSelfChat =
+    (selfJid !== null && bareChannel === selfJid) ||
+    (selfLid !== null && bareChannel === selfLid)
+  if (!isSelfChat) return text
+  if (text.startsWith(state.responsePrefix)) return text
+  return `${state.responsePrefix} ${text}`
+}
 
 async function loadBaileys(): Promise<BaileysModule | null> {
   try {
@@ -119,11 +189,22 @@ async function loadBaileys(): Promise<BaileysModule | null> {
   }
 }
 
-async function startSession(authStateDir: string, pairingMode: 'qr' | 'code'): Promise<void> {
+async function startSession(
+  authStateDir: string,
+  pairingMode: 'qr' | 'code',
+  selfChatMode: boolean,
+  responsePrefix: string,
+): Promise<void> {
   if (session) {
     emit({ type: 'error', message: 'Session already started' })
     return
   }
+  // Build provenance — first line the main process sees on stderr so an
+  // operator can confirm which bundle is actually running. Also included
+  // in the `ready` event for structured logging.
+  log(
+    `starting — build=${WORKER_BUILD_ID} sha=${WORKER_GIT_SHA} selfChatMode=${selfChatMode} pairingMode=${pairingMode}`,
+  )
   const baileys = await loadBaileys()
   if (!baileys) {
     emit({
@@ -148,7 +229,12 @@ async function startSession(authStateDir: string, pairingMode: 'qr' | 'code'): P
   const { state, saveCreds } = await baileys.useMultiFileAuthState(authStateDir)
   const { version } = await baileys.fetchLatestBaileysVersion().catch(() => ({ version: undefined }))
 
-  emit({ type: 'ready', baileysVersion: version?.join('.') })
+  emit({
+    type: 'ready',
+    baileysVersion: version?.join('.'),
+    buildId: WORKER_BUILD_ID,
+    gitSha: WORKER_GIT_SHA,
+  })
 
   const makeWASocket = baileys.makeWASocket ?? baileys.default
   if (typeof makeWASocket !== 'function') {
@@ -159,28 +245,43 @@ async function startSession(authStateDir: string, pairingMode: 'qr' | 'code'): P
     })
     process.exit(0)
   }
-  const sock = makeWASocket({
-    auth: state,
-    printQRInTerminal: false,
-    browser: baileys.Browsers.macOS('Craft Agent'),
-    version,
-    logger: silentLogger,
-  }) as BaileysSock
 
-  sock.ev.on('creds.update', () => void saveCreds())
+  /**
+   * Build a fresh Baileys socket bound to the persisted `state`. Called
+   * once at startup and again on every non-loggedOut reconnect. `creds.update`
+   * persistence keeps `state` current, so each new socket authenticates
+   * against the latest credentials on disk.
+   */
+  const bootSock = (): BaileysSock => {
+    const sock = makeWASocket({
+      auth: state,
+      printQRInTerminal: false,
+      browser: baileys.Browsers.macOS('Craft Agent'),
+      version,
+      logger: silentLogger,
+    }) as BaileysSock
 
-  sock.ev.on('connection.update', (u) => {
-    const { connection, lastDisconnect, qr } = u as {
-      connection?: string
-      lastDisconnect?: { error?: { output?: { statusCode?: number } } }
-      qr?: string
-    }
-    if (qr && pairingMode === 'qr') {
-      emit({ type: 'qr', qr })
-    }
-    if (connection === 'open') {
-      emit({ type: 'connected', jid: sock.user?.id, name: sock.user?.name })
-    } else if (connection === 'close') {
+    sock.ev.on('creds.update', () => void saveCreds())
+
+    sock.ev.on('connection.update', (u) => {
+      const { connection, lastDisconnect, qr } = u as {
+        connection?: string
+        lastDisconnect?: { error?: { output?: { statusCode?: number } } }
+        qr?: string
+      }
+      if (qr && pairingMode === 'qr') {
+        emit({ type: 'qr', qr })
+      }
+      if (connection === 'open') {
+        if (session) {
+          session.reconnectAttempts = 0
+          session.connectedAtSec = Math.floor(Date.now() / 1000)
+        }
+        emit({ type: 'connected', jid: sock.user?.id, name: sock.user?.name })
+        return
+      }
+      if (connection !== 'close') return
+
       const statusCode = lastDisconnect?.error?.output?.statusCode
       const loggedOut = statusCode === baileys.DisconnectReason.loggedOut
       emit({
@@ -188,43 +289,149 @@ async function startSession(authStateDir: string, pairingMode: 'qr' | 'code'): P
         loggedOut,
         reason: loggedOut ? 'Logged out' : `statusCode=${statusCode ?? 'unknown'}`,
       })
+
       if (loggedOut) {
         session = null
         process.exit(0)
+        return
       }
-    }
-  })
 
-  sock.ev.on('messages.upsert', (upsert) => {
-    if (upsert.type !== 'notify') return
-    for (const msg of upsert.messages as Array<Record<string, unknown>>) {
-      const key = msg.key as { remoteJid?: string; fromMe?: boolean; id?: string } | undefined
-      if (!key || key.fromMe || !key.remoteJid || !key.id) continue
-      const m = msg.message as Record<string, unknown> | undefined
-      const text =
-        (m?.conversation as string | undefined) ??
-        ((m?.extendedTextMessage as Record<string, unknown> | undefined)?.text as string | undefined) ??
-        ''
-      if (!text) continue
-      emit({
-        type: 'incoming',
-        channelId: key.remoteJid,
-        messageId: key.id,
-        senderId: key.remoteJid,
-        senderName: (msg.pushName as string | undefined) ?? undefined,
-        text,
-        timestamp: Number(msg.messageTimestamp) * 1000 || Date.now(),
-      })
-    }
-  })
+      // Non-logout close — this includes Baileys' 515 "Stream Errored
+      // (restart required)" emitted right after QR pairing, and any
+      // transient network failure later on. Rebuild the socket with the
+      // same persisted credentials. Honour shutdown, and cap retries
+      // so a permanently-broken state doesn't loop forever.
+      if (!session || session.shuttingDown) return
 
-  session = { baileys, sock, saveCreds, pairingMode, authStateDir }
+      session.reconnectAttempts++
+      if (session.reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
+        emit({
+          type: 'unavailable',
+          reason: 'reconnect_exhausted',
+          message: `WhatsApp reconnect failed after ${MAX_RECONNECT_ATTEMPTS} attempts (last statusCode=${statusCode ?? 'unknown'})`,
+        })
+        session = null
+        process.exit(0)
+        return
+      }
+
+      const delay = reconnectDelayMs(session.reconnectAttempts)
+      log(
+        `reconnecting in ${delay}ms (attempt ${session.reconnectAttempts}, statusCode=${statusCode ?? 'unknown'})`,
+      )
+      session.reconnectTimer = setTimeout(() => {
+        if (!session || session.shuttingDown) return
+        session.reconnectTimer = null
+        try {
+          session.sock = bootSock()
+        } catch (err) {
+          log('bootSock threw during reconnect:', err instanceof Error ? err.message : String(err))
+          // Let the next close event drive the backoff — or if the
+          // throw is synchronous and terminal, the attempts cap will
+          // stop the loop.
+        }
+      }, delay)
+    })
+
+    sock.ev.on('messages.upsert', (upsert) => {
+      // Accept 'notify' (new inbound from other accounts) AND 'append'
+      // (server sync — includes messages the user typed on another device
+      // into the self-chat, which is how self-chat arrives on this linked
+      // device). Reject unknown types (e.g. 'prepend' for pagination).
+      if (upsert.type !== 'notify' && upsert.type !== 'append') return
+      if (!session) return
+
+      // Visible at debug-level so `upsert.type`/batch-size anomalies are
+      // easy to spot in the main log when diagnosing routing issues.
+      log(`upsert type=${upsert.type} count=${upsert.messages.length}`)
+
+      // History-sync guard: Baileys re-emits old messages as 'append' on
+      // every connect. Only route messages newer than the last open
+      // timestamp, with a 5s grace for clock skew.
+      const cutoff = session.connectedAtSec - 5
+      const selfJid = bareJid(sock.user?.id)
+      const selfLid = bareJid(sock.user?.lid)
+
+      for (const msg of upsert.messages as Array<Record<string, unknown>>) {
+        const ts = Number((msg as { messageTimestamp?: unknown }).messageTimestamp)
+        if (Number.isFinite(ts) && ts > 0 && ts < cutoff) {
+          log(`upsert skip: history (ts=${ts} cutoff=${cutoff})`)
+          continue
+        }
+
+        // Debug context: surface the exact signals classifyInbound uses so
+        // silent-skip cases ('own_outbound', 'empty') are visible.
+        const dbgKey = (msg.key ?? {}) as {
+          remoteJid?: string
+          fromMe?: boolean
+          id?: string
+        }
+        const msgKeys = msg.message
+          ? Object.keys(msg.message as Record<string, unknown>).join(',')
+          : '<no message>'
+        log(
+          `upsert msg fromMe=${!!dbgKey.fromMe} remoteJid=${dbgKey.remoteJid ?? '?'} ` +
+            `selfJid=${selfJid ?? '?'} selfLid=${selfLid ?? '?'} ` +
+            `bareRemote=${bareJid(dbgKey.remoteJid) ?? '?'} msgKeys=${msgKeys}`,
+        )
+
+        const decision = classifyInbound(msg, {
+          selfChatMode: session.selfChatMode,
+          responsePrefix: session.responsePrefix,
+          selfJid,
+          selfLid,
+          sentIds: session.sentIds,
+        })
+        if (decision.action === 'skip') {
+          log(`upsert skip: ${decision.reason}`)
+          continue
+        }
+        const key = msg.key as { remoteJid?: string; id?: string }
+        log(`upsert emit: channelId=${key.remoteJid} textLen=${decision.text.length}`)
+        emit({
+          type: 'incoming',
+          channelId: key.remoteJid!,
+          messageId: key.id!,
+          senderId: key.remoteJid!,
+          senderName: (msg.pushName as string | undefined) ?? undefined,
+          text: decision.text,
+          timestamp: Number(msg.messageTimestamp) * 1000 || Date.now(),
+        })
+      }
+    })
+
+    return sock
+  }
+
+  const effectivePrefix =
+    selfChatMode && responsePrefix.trim().length > 0 ? responsePrefix : DEFAULT_RESPONSE_PREFIX
+
+  const sock = bootSock()
+  session = {
+    baileys,
+    sock,
+    saveCreds,
+    pairingMode,
+    authStateDir,
+    shuttingDown: false,
+    reconnectAttempts: 0,
+    reconnectTimer: null,
+    selfChatMode,
+    responsePrefix: effectivePrefix,
+    sentIds: new Set<string>(),
+    connectedAtSec: 0,
+  }
 }
 
 async function handleCommand(cmd: WorkerCommand): Promise<void> {
   switch (cmd.type) {
     case 'start': {
-      await startSession(cmd.authStateDir, cmd.pairingMode ?? 'code').catch((err) => {
+      await startSession(
+        cmd.authStateDir,
+        cmd.pairingMode ?? 'code',
+        cmd.selfChatMode ?? false,
+        cmd.responsePrefix ?? DEFAULT_RESPONSE_PREFIX,
+      ).catch((err) => {
         emit({ type: 'error', message: err instanceof Error ? err.message : String(err) })
       })
       return
@@ -248,7 +455,9 @@ async function handleCommand(cmd: WorkerCommand): Promise<void> {
         return
       }
       try {
-        const res = await session.sock.sendMessage(cmd.channelId, { text: cmd.text })
+        const text = applyPrefixIfSelfChat(session, cmd.channelId, cmd.text)
+        const res = await session.sock.sendMessage(cmd.channelId, { text })
+        if (res?.key?.id) rememberSentId(session.sentIds, res.key.id)
         emit({ type: 'send_result', id: cmd.id, ok: true, messageId: res?.key?.id })
       } catch (err) {
         emit({
@@ -267,12 +476,16 @@ async function handleCommand(cmd: WorkerCommand): Promise<void> {
       }
       try {
         const buf = Buffer.from(cmd.dataBase64, 'base64')
+        const caption = cmd.caption !== undefined
+          ? applyPrefixIfSelfChat(session, cmd.channelId, cmd.caption)
+          : undefined
         const res = await session.sock.sendMessage(cmd.channelId, {
           document: buf,
           fileName: cmd.filename,
           mimetype: cmd.mimeType ?? 'application/octet-stream',
-          caption: cmd.caption,
+          caption,
         })
+        if (res?.key?.id) rememberSentId(session.sentIds, res.key.id)
         emit({ type: 'send_result', id: cmd.id, ok: true, messageId: res?.key?.id })
       } catch (err) {
         emit({
@@ -286,6 +499,11 @@ async function handleCommand(cmd: WorkerCommand): Promise<void> {
     }
     case 'shutdown': {
       if (session) {
+        session.shuttingDown = true
+        if (session.reconnectTimer) {
+          clearTimeout(session.reconnectTimer)
+          session.reconnectTimer = null
+        }
         try {
           session.sock.end()
         } catch {
@@ -316,6 +534,11 @@ process.stdin.on('data', (chunk) => {
 
 process.stdin.on('end', () => {
   if (session) {
+    session.shuttingDown = true
+    if (session.reconnectTimer) {
+      clearTimeout(session.reconnectTimer)
+      session.reconnectTimer = null
+    }
     try {
       session.sock.end()
     } catch {

@@ -113,6 +113,14 @@ export class Renderer {
       await this.handlePermissionRequest(event, binding, adapter, this.getState(binding.id))
       return
     }
+    if (event.type === 'credential_request') {
+      await this.handleCredentialRequest(binding, adapter)
+      return
+    }
+    if (event.type === 'plan_submitted') {
+      await this.handlePlanSubmitted(binding, adapter)
+      return
+    }
     if (event.type === 'error' || event.type === 'typed_error') {
       await this.handleError(event, binding, adapter, this.getState(binding.id))
       return
@@ -416,7 +424,16 @@ export class Renderer {
       state.lastEditedLength = 0
     }
 
-    if (binding.config.approvalChannel === 'chat') {
+    if (binding.platform === 'whatsapp') {
+      await adapter.sendText(
+        binding.channelId,
+        `⏸ Permission required: ${request.description}
+Approve it in the desktop app to continue.`,
+      )
+      return
+    }
+
+    if (binding.config.approvalChannel === 'chat' && adapter.capabilities.inlineButtons) {
       const text = formatPermissionText(request)
       const buttons: InlineButton[] = [
         { id: `perm:allow:${request.requestId}`, label: '✅ Allow' },
@@ -426,9 +443,32 @@ export class Renderer {
     } else {
       await adapter.sendText(
         binding.channelId,
-        `⏸ Permission required: ${request.description}\nApprove in the desktop app to continue.`,
+        `⏸ Permission required: ${request.description}
+Approve in the desktop app to continue.`,
       )
     }
+  }
+
+  private async handleCredentialRequest(
+    binding: ChannelBinding,
+    adapter: PlatformAdapter,
+  ): Promise<void> {
+    if (binding.platform !== 'whatsapp') return
+    await adapter.sendText(
+      binding.channelId,
+      '🔐 Credentials are required to continue. Open the desktop app to review and submit them securely.',
+    )
+  }
+
+  private async handlePlanSubmitted(
+    binding: ChannelBinding,
+    adapter: PlatformAdapter,
+  ): Promise<void> {
+    if (binding.platform !== 'whatsapp') return
+    await adapter.sendText(
+      binding.channelId,
+      '📝 A plan is ready for review. Open the desktop app to inspect and approve it.',
+    )
   }
 
   private async handleError(

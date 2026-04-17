@@ -1,7 +1,8 @@
 /**
  * Core types for the messaging gateway.
  *
- * Workspace-scoped bindings, platform adapter interface, and message types.
+ * Workspace-scoped bindings, platform adapter interface, runtime state, and
+ * messaging-stack logging contracts.
  */
 
 // ---------------------------------------------------------------------------
@@ -14,15 +15,50 @@ export type PlatformType = 'telegram' | 'whatsapp'
 // Logger
 // ---------------------------------------------------------------------------
 
+export interface MessagingLogContext {
+  component?: string
+  workspaceId?: string
+  sessionId?: string
+  platform?: string
+  channelId?: string
+  bindingId?: string
+  event?: string
+}
+
+export type MessagingLogMeta = Record<string, unknown>
+
 /**
- * Minimal logger shape compatible with electron-log scoped loggers and
- * console. Injected so gateway/adapter failures surface in the host app's
- * log file instead of stdout only.
+ * Structured logger used by the messaging stack.
+ *
+ * Implementations should write structured logs and preserve contextual fields
+ * added via `child(...)`.
  */
 export interface MessagingLogger {
-  info: (...args: unknown[]) => void
-  warn: (...args: unknown[]) => void
-  error: (...args: unknown[]) => void
+  info(message: string, meta?: MessagingLogMeta): void
+  warn(message: string, meta?: MessagingLogMeta): void
+  error(message: string, meta?: MessagingLogMeta): void
+  child(context: MessagingLogContext): MessagingLogger
+}
+
+// ---------------------------------------------------------------------------
+// Runtime platform status
+// ---------------------------------------------------------------------------
+
+export type MessagingPlatformRuntimeState =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'reconnect_required'
+  | 'error'
+
+export interface MessagingPlatformRuntimeInfo {
+  platform: PlatformType
+  configured: boolean
+  connected: boolean
+  state: MessagingPlatformRuntimeState
+  identity?: string
+  lastError?: string
+  updatedAt: number
 }
 
 // ---------------------------------------------------------------------------
@@ -170,6 +206,30 @@ export const DEFAULT_BINDING_CONFIG: BindingConfig = {
   editIntervalMs: 3500,
 }
 
+export function getDefaultBindingConfig(platform: PlatformType): BindingConfig {
+  return {
+    ...DEFAULT_BINDING_CONFIG,
+    approvalChannel: platform === 'whatsapp' ? 'app' : DEFAULT_BINDING_CONFIG.approvalChannel,
+  }
+}
+
+export function normalizeBindingConfig(
+  platform: PlatformType,
+  config?: Partial<BindingConfig>,
+): BindingConfig {
+  const base = getDefaultBindingConfig(platform)
+  const resolvedResponseMode: ResponseMode =
+    config?.responseMode ??
+    (config?.streamResponses === false ? 'final_only' : config?.streamResponses === true ? 'streaming' : base.responseMode)
+
+  return {
+    ...base,
+    ...config,
+    responseMode: resolvedResponseMode,
+    approvalChannel: platform === 'whatsapp' ? 'app' : (config?.approvalChannel ?? base.approvalChannel),
+  }
+}
+
 export interface ChannelBinding {
   id: string
   workspaceId: string
@@ -194,6 +254,14 @@ export interface MessagingConfig {
     }
     whatsapp?: {
       enabled: boolean
+      /**
+       * When true, messages sent from other devices on the same WA account
+       * to the self-JID (your own number) are routed to a bound session.
+       * The worker filters its own echoes via sent-ID tracking + a response
+       * prefix. Defaults to `true` when unset — the no-second-phone flow is
+       * the expected UX for new users.
+       */
+      selfChatMode?: boolean
     }
   }
 }

@@ -394,9 +394,11 @@ export const RPC_CHANNELS = {
     TEST_TELEGRAM: 'messaging:testTelegram',
     SAVE_TELEGRAM: 'messaging:saveTelegram',
     DISCONNECT: 'messaging:disconnect',
+    FORGET: 'messaging:forget',
     GET_BINDINGS: 'messaging:getBindings',
     GENERATE_CODE: 'messaging:generateCode',
     UNBIND: 'messaging:unbind',
+    UNBIND_BINDING: 'messaging:unbindBinding',
     // UI ↔ Server — WhatsApp pairing/connection flow (Baileys subprocess adapter)
     WA_START_CONNECT: 'messaging:wa:startConnect',
     WA_SUBMIT_PHONE: 'messaging:wa:submitPhone',

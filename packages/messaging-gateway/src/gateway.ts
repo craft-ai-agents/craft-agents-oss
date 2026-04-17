@@ -20,13 +20,18 @@ import type {
   MessagingLogger,
 } from './types'
 
-const PREFIX = '[MessagingGateway]'
-
-/** Fallback logger routes to console so callers that don't pass a logger still see output. */
 const consoleLogger: MessagingLogger = {
-  info: (...args: unknown[]) => console.log(PREFIX, ...args),
-  warn: (...args: unknown[]) => console.warn(PREFIX, ...args),
-  error: (...args: unknown[]) => console.error(PREFIX, ...args),
+  info: (message, meta) => console.log('[MessagingGateway]', message, meta ?? ''),
+  warn: (message, meta) => console.warn('[MessagingGateway]', message, meta ?? ''),
+  error: (message, meta) => console.error('[MessagingGateway]', message, meta ?? ''),
+  child(context) {
+    return {
+      info: (message, meta) => console.log('[MessagingGateway]', context, message, meta ?? ''),
+      warn: (message, meta) => console.warn('[MessagingGateway]', context, message, meta ?? ''),
+      error: (message, meta) => console.error('[MessagingGateway]', context, message, meta ?? ''),
+      child: (next) => consoleLogger.child({ ...context, ...next }),
+    }
+  },
 }
 
 export interface GatewayOptions {
@@ -40,7 +45,7 @@ export interface GatewayOptions {
   pairingConsumer?: PairingCodeConsumer
   /** Fired after any binding mutation (bind/unbind). */
   onBindingChanged?: () => void
-  /** Optional logger — defaults to console. Pass electron-log scoped logger in Electron. */
+  /** Optional logger — defaults to console. Pass a structured host logger in Electron. */
   logger?: MessagingLogger
 }
 
@@ -58,8 +63,15 @@ export class MessagingGateway {
   constructor(opts: GatewayOptions) {
     this.sessionManager = opts.sessionManager
     this.workspaceId = opts.workspaceId
-    this.log = opts.logger ?? consoleLogger
-    this.bindingStore = new BindingStore(opts.storageDir, opts.legacyStorageDir)
+    this.log = (opts.logger ?? consoleLogger).child({
+      component: 'gateway',
+      workspaceId: opts.workspaceId,
+    })
+    this.bindingStore = new BindingStore(
+      opts.storageDir,
+      opts.legacyStorageDir,
+      this.log.child({ component: 'binding-store' }),
+    )
     if (opts.onBindingChanged) {
       this.bindingStore.onChange(opts.onBindingChanged)
     }
@@ -68,8 +80,14 @@ export class MessagingGateway {
       this.bindingStore,
       opts.workspaceId,
       opts.pairingConsumer,
+      this.log.child({ component: 'commands' }),
     )
-    this.router = new Router(opts.sessionManager, this.bindingStore, this.commands)
+    this.router = new Router(
+      opts.sessionManager,
+      this.bindingStore,
+      this.commands,
+      this.log.child({ component: 'router' }),
+    )
     this.renderer = new Renderer()
   }
 
@@ -80,8 +98,13 @@ export class MessagingGateway {
   registerAdapter(adapter: PlatformAdapter): void {
     const existing = this.adapters.get(adapter.platform)
     if (existing) {
-      // Replace: stop the old adapter before swapping in the new one.
-      existing.destroy().catch(() => {})
+      existing.destroy().catch((err) => {
+        this.log.warn('failed to destroy existing adapter during replacement', {
+          event: 'adapter_replace_destroy_failed',
+          platform: adapter.platform,
+          error: err,
+        })
+      })
     }
     this.adapters.set(adapter.platform, adapter)
     if (this.started) {
@@ -95,8 +118,16 @@ export class MessagingGateway {
     this.adapters.delete(platform)
     try {
       await adapter.destroy()
+      this.log.info('adapter unregistered', {
+        event: 'adapter_unregistered',
+        platform,
+      })
     } catch (err) {
-      this.log.error(`${PREFIX} Failed to destroy adapter ${platform}:`, err)
+      this.log.error('failed to destroy adapter', {
+        event: 'adapter_destroy_failed',
+        platform,
+        error: err,
+      })
     }
   }
 
@@ -118,6 +149,7 @@ export class MessagingGateway {
     for (const adapter of this.adapters.values()) {
       this.wireAdapter(adapter)
     }
+    this.log.info('gateway started', { event: 'gateway_started' })
   }
 
   async stop(): Promise<void> {
@@ -127,9 +159,16 @@ export class MessagingGateway {
     for (const [platform, adapter] of this.adapters) {
       try {
         await adapter.destroy()
-        this.log.info(`${PREFIX} Adapter stopped: ${platform}`)
+        this.log.info('adapter stopped', {
+          event: 'adapter_stopped',
+          platform,
+        })
       } catch (err) {
-        this.log.error(`${PREFIX} Failed to stop adapter ${platform}:`, err)
+        this.log.error('failed to stop adapter', {
+          event: 'adapter_stop_failed',
+          platform,
+          error: err,
+        })
       }
     }
     this.adapters.clear()
@@ -149,7 +188,11 @@ export class MessagingGateway {
       await this.handleButtonPress(adapter.platform, press)
     })
 
-    this.log.info(`${PREFIX} Adapter registered: ${adapter.platform}`)
+    this.log.info('adapter registered', {
+      event: 'adapter_registered',
+      platform: adapter.platform,
+      capabilities: adapter.capabilities,
+    })
   }
 
   // -------------------------------------------------------------------------
@@ -169,7 +212,14 @@ export class MessagingGateway {
       const adapter = this.adapters.get(binding.platform)
       if (!adapter || !adapter.isConnected()) continue
       this.renderer.handle(event, binding, adapter).catch((err) => {
-        this.log.error(`${PREFIX} Renderer error for ${binding.platform}/${binding.channelId}:`, err)
+        this.log.error('renderer failed to emit event to chat', {
+          event: 'renderer_failed',
+          sessionId: event.sessionId,
+          bindingId: binding.id,
+          platform: binding.platform,
+          channelId: binding.channelId,
+          error: err,
+        })
       })
     }
   }
@@ -206,6 +256,19 @@ export class MessagingGateway {
     }
 
     if (press.buttonId.startsWith('perm:')) {
+      if (platform === 'whatsapp') {
+        this.log.warn('ignored chat-side permission interaction for WhatsApp', {
+          event: 'whatsapp_permission_button_ignored',
+          channelId: press.channelId,
+          buttonId: press.buttonId,
+        })
+        await adapter.sendText(
+          press.channelId,
+          '⏸ Permission required. Approve it in the desktop app to continue.',
+        )
+        return
+      }
+
       const parts = press.buttonId.split(':')
       const action = parts[1]
       const requestId = parts[2]

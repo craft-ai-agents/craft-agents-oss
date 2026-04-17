@@ -18,13 +18,21 @@ import {
 } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import type { ChannelBinding, PlatformType, BindingConfig, ResponseMode } from './types'
-import { DEFAULT_BINDING_CONFIG } from './types'
+import type { ChannelBinding, MessagingLogger, PlatformType } from './types'
+import { normalizeBindingConfig } from './types'
+
+const NOOP_LOGGER: MessagingLogger = {
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  child: () => NOOP_LOGGER,
+}
 
 export class BindingStore {
   private bindings: ChannelBinding[] = []
   private readonly filePath: string
   private readonly dirPath: string
+  private readonly log: MessagingLogger
   private changeListener?: () => void
 
   /**
@@ -32,9 +40,10 @@ export class BindingStore {
    * @param legacyDir   Optional legacy directory. If its bindings.json exists and
    *                    the new location does not, the file is copied forward once.
    */
-  constructor(storageDir: string, legacyDir?: string) {
+  constructor(storageDir: string, legacyDir?: string, logger: MessagingLogger = NOOP_LOGGER) {
     this.dirPath = storageDir
     this.filePath = join(storageDir, 'bindings.json')
+    this.log = logger
     this.migrateLegacy(legacyDir)
     this.load()
   }
@@ -72,7 +81,7 @@ export class BindingStore {
     platform: PlatformType,
     channelId: string,
     channelName?: string,
-    config?: Partial<BindingConfig>,
+    config?: Partial<ChannelBinding['config']>,
   ): ChannelBinding {
     // One channel → one session: evict any existing binding for the channel.
     this.bindings = this.bindings.filter(
@@ -88,11 +97,20 @@ export class BindingStore {
       channelName,
       enabled: true,
       createdAt: Date.now(),
-      config: { ...DEFAULT_BINDING_CONFIG, ...config },
+      config: normalizeBindingConfig(platform, config),
     }
 
     this.bindings.push(binding)
     this.save()
+    this.log.info('binding created', {
+      event: 'binding_created',
+      workspaceId,
+      sessionId,
+      platform,
+      channelId,
+      bindingId: binding.id,
+      channelName,
+    })
     return binding
   }
 
@@ -103,21 +121,50 @@ export class BindingStore {
     )
     if (this.bindings.length !== before) {
       this.save()
+      this.log.info('binding removed by channel', {
+        event: 'binding_removed',
+        platform,
+        channelId,
+      })
       return true
     }
     return false
   }
 
-  unbindSession(sessionId: string, platform?: PlatformType): number {
-    const before = this.bindings.length
-    this.bindings = this.bindings.filter((b) => {
-      if (b.sessionId !== sessionId) return true
-      if (platform && b.platform !== platform) return true
-      return false
+  unbindById(bindingId: string): boolean {
+    const binding = this.bindings.find((b) => b.id === bindingId)
+    if (!binding) return false
+    this.bindings = this.bindings.filter((b) => b.id !== bindingId)
+    this.save()
+    this.log.info('binding removed by id', {
+      event: 'binding_removed',
+      bindingId,
+      workspaceId: binding.workspaceId,
+      sessionId: binding.sessionId,
+      platform: binding.platform,
+      channelId: binding.channelId,
     })
-    const removed = before - this.bindings.length
-    if (removed > 0) this.save()
-    return removed
+    return true
+  }
+
+  unbindSession(sessionId: string, platform?: PlatformType): number {
+    const removedBindings = this.bindings.filter((b) => {
+      if (b.sessionId !== sessionId) return false
+      if (platform && b.platform !== platform) return false
+      return true
+    })
+    if (removedBindings.length === 0) return 0
+
+    this.bindings = this.bindings.filter((b) => !removedBindings.includes(b))
+    this.save()
+    this.log.info('bindings removed by session', {
+      event: 'binding_removed',
+      sessionId,
+      platform,
+      removedCount: removedBindings.length,
+      bindingIds: removedBindings.map((b) => b.id),
+    })
+    return removedBindings.length
   }
 
   // -------------------------------------------------------------------------
@@ -134,9 +181,18 @@ export class BindingStore {
         mkdirSync(this.dirPath, { recursive: true })
       }
       copyFileSync(legacyFile, this.filePath)
-      console.log('[MessagingGateway] Migrated bindings:', legacyFile, '→', this.filePath)
+      this.log.info('bindings migrated from legacy location', {
+        event: 'bindings_migrated',
+        legacyFile,
+        filePath: this.filePath,
+      })
     } catch (err) {
-      console.error('[MessagingGateway] Binding migration failed:', err)
+      this.log.error('binding migration failed', {
+        event: 'bindings_migration_failed',
+        legacyFile,
+        filePath: this.filePath,
+        error: err,
+      })
     }
   }
 
@@ -149,7 +205,12 @@ export class BindingStore {
           this.bindings = parsed.map(normalizeBinding)
         }
       }
-    } catch {
+    } catch (err) {
+      this.log.error('failed to load bindings store; resetting to empty', {
+        event: 'bindings_load_failed',
+        filePath: this.filePath,
+        error: err,
+      })
       this.bindings = []
     }
   }
@@ -161,7 +222,11 @@ export class BindingStore {
       }
       writeFileSync(this.filePath, JSON.stringify(this.bindings, null, 2), 'utf-8')
     } catch (err) {
-      console.error('[MessagingGateway] Failed to save bindings:', err)
+      this.log.error('failed to save bindings store', {
+        event: 'bindings_save_failed',
+        filePath: this.filePath,
+        error: err,
+      })
     }
     this.changeListener?.()
   }
@@ -171,27 +236,9 @@ export class BindingStore {
 // Migration helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Fill in fields that were added after the binding was first persisted.
- *
- * `responseMode` was introduced alongside the `progress` rendering mode.
- * Records written before that field existed get a conservative default:
- *   - `streamResponses === false` → `final_only` (user had opted out of streaming)
- *   - otherwise → `streaming` (preserve today's behaviour)
- *
- * New bindings (created via `bind()`) always receive `DEFAULT_BINDING_CONFIG`
- * directly, which sets `responseMode: 'progress'`.
- */
 function normalizeBinding(raw: ChannelBinding): ChannelBinding {
-  const cfg = (raw.config ?? {}) as Partial<BindingConfig>
-  if (cfg.responseMode) return raw
-  const responseMode: ResponseMode = cfg.streamResponses === false ? 'final_only' : 'streaming'
   return {
     ...raw,
-    config: {
-      ...DEFAULT_BINDING_CONFIG,
-      ...cfg,
-      responseMode,
-    },
+    config: normalizeBindingConfig(raw.platform, raw.config ?? {}),
   }
 }

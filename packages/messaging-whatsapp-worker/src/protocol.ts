@@ -28,6 +28,24 @@ export interface StartCommand {
   authStateDir: string
   /** Optional: use pairing-code mode instead of QR mode. */
   pairingMode?: 'qr' | 'code'
+  /**
+   * When true, messages sent from OTHER devices on this account to the
+   * self-JID (user's own number) are treated as incoming user input.
+   * Defaults to `false` (preserves the original behaviour of dropping all
+   * `fromMe` traffic).
+   *
+   * The worker filters its own echoes two ways: by tracking the IDs it
+   * sent and by checking for the `responsePrefix` in the message text.
+   */
+  selfChatMode?: boolean
+  /**
+   * Prefix prepended to outbound messages when self-chat mode is active and
+   * the channel is the self-JID. Serves as a visual distinction in the
+   * self-chat AND a robust echo filter for cases where the worker restart
+   * wiped the sent-ID tracking set. Defaults to `[craft-agent]` when
+   * self-chat is on. Empty/missing → fall back to default.
+   */
+  responsePrefix?: string
 }
 
 export interface SubmitPairingPhoneCommand {
@@ -77,6 +95,10 @@ export interface ReadyEvent {
   type: 'ready'
   /** Baileys version reported by the worker, informational. */
   baileysVersion?: string
+  /** ISO timestamp the worker bundle was produced. Informational. */
+  buildId?: string
+  /** Short git SHA (or `unknown`/`dev-unbundled`) the bundle was built from. */
+  gitSha?: string
 }
 
 export interface QrEvent {
@@ -131,14 +153,15 @@ export interface ErrorEvent {
 export interface UnavailableEvent {
   type: 'unavailable'
   /**
-   * Fatal startup error — worker can't proceed.
+   * Fatal error — worker can't proceed (either startup or post-connect).
    *
    * `reason`:
-   * - `baileys_load_failed` — bundled Baileys threw during init (rare)
-   * - `auth_state_error`    — failed to read/write auth state dir
-   * - `unknown`             — check `message`
+   * - `baileys_load_failed`   — bundled Baileys threw during init (rare)
+   * - `auth_state_error`      — failed to read/write auth state dir
+   * - `reconnect_exhausted`   — repeated non-logout closes hit the retry cap
+   * - `unknown`               — check `message`
    */
-  reason: 'baileys_load_failed' | 'auth_state_error' | 'unknown'
+  reason: 'baileys_load_failed' | 'auth_state_error' | 'reconnect_exhausted' | 'unknown'
   message: string
 }
 

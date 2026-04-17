@@ -14,8 +14,30 @@
  */
 
 import { spawn } from "bun";
+import { execSync } from "child_process";
 import { existsSync, mkdirSync, statSync } from "fs";
 import { join } from "path";
+
+/**
+ * Resolve a short git SHA for the build, suffixed with `+dirty` when the
+ * working tree has uncommitted changes. Returns `unknown` outside a git
+ * checkout.
+ */
+function resolveGitSha(cwd: string): string {
+  try {
+    const sha = execSync("git rev-parse --short HEAD", { cwd }).toString().trim();
+    let dirty = false;
+    try {
+      const status = execSync("git status --porcelain", { cwd }).toString().trim();
+      dirty = status.length > 0;
+    } catch {
+      // ignore — treat as clean
+    }
+    return dirty ? `${sha}+dirty` : sha;
+  } catch {
+    return "unknown";
+  }
+}
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const WORKER_DIR = join(ROOT_DIR, "packages/messaging-whatsapp-worker");
@@ -49,7 +71,9 @@ async function main(): Promise<void> {
     mkdirSync(DIST_DIR, { recursive: true });
   }
 
-  console.log("📨 Building WhatsApp worker (bundling Baileys)...");
+  const buildId = new Date().toISOString();
+  const gitSha = resolveGitSha(ROOT_DIR);
+  console.log(`📨 Building WhatsApp worker (bundling Baileys) — build ${buildId} (${gitSha})...`);
 
   const proc = spawn({
     cmd: [
@@ -60,6 +84,11 @@ async function main(): Promise<void> {
       "--format=cjs",
       "--target=node20",
       `--outfile=${OUTPUT}`,
+      // Inject build provenance. The worker logs these on startup so an
+      // operator can confirm a rebuild actually propagated to the running
+      // subprocess after `bun run electron:build:wa-worker`.
+      `--define:__WA_WORKER_BUILD_ID__=${JSON.stringify(buildId)}`,
+      `--define:__WA_WORKER_GIT_SHA__=${JSON.stringify(gitSha)}`,
       // Mark only Electron + Baileys' runtime-optional peers external.
       // Baileys itself and all its required transitive deps get bundled.
       //

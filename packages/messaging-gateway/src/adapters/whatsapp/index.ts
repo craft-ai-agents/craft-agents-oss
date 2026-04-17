@@ -32,7 +32,15 @@ import type {
   SentMessage,
   InlineButton,
   ButtonPress,
+  MessagingLogger,
 } from '../../types'
+
+const NOOP_LOGGER: MessagingLogger = {
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  child: () => NOOP_LOGGER,
+}
 
 // ---------------------------------------------------------------------------
 // Config
@@ -47,6 +55,15 @@ export interface WhatsAppConfig extends PlatformConfig {
   nodeBin?: string
   /** Pairing flow: 'qr' (default) or 'code' (phone-number based 8-char code). */
   pairingMode?: 'qr' | 'code'
+  /**
+   * Accept messages sent from this account's other devices (phone/WA
+   * Desktop/WA Web) in the self-chat. Agent echoes are filtered by
+   * sent-ID tracking + the response prefix. See `WorkerCommand.StartCommand`
+   * for mechanics.
+   */
+  selfChatMode?: boolean
+  /** Prefix tagged onto outbound self-chat messages. Defaults to `[craft-agent]`. */
+  responsePrefix?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -82,9 +99,8 @@ export class WhatsAppAdapter implements PlatformAdapter {
   private stdoutBuffer = ''
   private connected = false
   private started = false
+  private log: MessagingLogger = NOOP_LOGGER
   private messageHandler: ((msg: IncomingMessage) => Promise<void>) | null = null
-  // `buttonHandler` is retained to satisfy PlatformAdapter; WhatsApp has no
-  // inline buttons in this adapter, but the interface is shared with Telegram.
   private buttonHandler: ((press: ButtonPress) => Promise<void>) | null = null
   private eventHandlers = new Set<EventHandler>()
   private pending = new Map<string, (r: { ok: boolean; messageId?: string; error?: string }) => void>()
@@ -99,10 +115,20 @@ export class WhatsAppAdapter implements PlatformAdapter {
       throw new Error('WhatsApp adapter already initialized')
     }
 
-    // Always use Node to run the worker — Baileys and its native-ish deps
-    // (noise-handler, libsignal) target Node. Ship it through whatever
-    // `nodeBin` resolves to (Electron's embedded node in packaged builds).
+    this.log = (cfg.logger ?? NOOP_LOGGER).child({
+      component: 'whatsapp-adapter',
+      platform: 'whatsapp',
+    })
+
     const nodeBin = cfg.nodeBin ?? process.execPath
+    this.log.info('starting WhatsApp worker', {
+      event: 'whatsapp_worker_starting',
+      workerEntry: cfg.workerEntry,
+      authStateDir: cfg.authStateDir,
+      pairingMode: cfg.pairingMode ?? 'qr',
+      nodeBin,
+    })
+
     this.proc = spawn(nodeBin, [cfg.workerEntry], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
@@ -117,16 +143,24 @@ export class WhatsAppAdapter implements PlatformAdapter {
     })
 
     this.proc.stderr?.on('data', (chunk: Buffer) => {
-      // Forward to main-process console so logs are visible in electron terminal.
-      // Intentionally not routed through `emit` — stderr is free-form.
       const lines = chunk.toString('utf8').split('\n').filter(Boolean)
-      for (const line of lines) console.error('[wa-worker]', line)
+      for (const line of lines) {
+        this.log.warn('WhatsApp worker stderr', {
+          event: 'whatsapp_worker_stderr',
+          line,
+        })
+      }
     })
 
-    this.proc.on('exit', (code) => {
+    this.proc.on('exit', (code, signal) => {
       this.connected = false
       this.started = false
       this.proc = null
+      this.log.warn('WhatsApp worker exited', {
+        event: 'whatsapp_worker_exited',
+        code,
+        signal,
+      })
       if (code !== 0) {
         this.fireEvent({
           type: 'error',
@@ -139,6 +173,8 @@ export class WhatsAppAdapter implements PlatformAdapter {
       type: 'start',
       authStateDir: cfg.authStateDir,
       pairingMode: cfg.pairingMode ?? 'qr',
+      selfChatMode: cfg.selfChatMode ?? false,
+      responsePrefix: cfg.responsePrefix,
     }
     this.sendCommand(startCmd)
     this.started = true
@@ -146,12 +182,15 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
   async destroy(): Promise<void> {
     if (!this.proc) return
+    this.log.info('shutting down WhatsApp worker', { event: 'whatsapp_worker_shutdown' })
     try {
       this.sendCommand({ type: 'shutdown' })
-    } catch {
-      // ignore — process may already be exiting
+    } catch (err) {
+      this.log.warn('failed to send shutdown to WhatsApp worker', {
+        event: 'whatsapp_worker_shutdown_signal_failed',
+        error: err,
+      })
     }
-    // Grace period then kill.
     const proc = this.proc
     await new Promise<void>((resolve) => {
       const timer = setTimeout(() => {
@@ -193,6 +232,9 @@ export class WhatsAppAdapter implements PlatformAdapter {
   /** Submit a phone number to obtain an 8-char pairing code (pairingMode=code). */
   async requestPairingCode(phoneNumber: string): Promise<void> {
     if (!this.started) throw new Error('WhatsApp adapter not started')
+    this.log.info('requesting WhatsApp pairing code', {
+      event: 'whatsapp_pairing_code_requested',
+    })
     this.sendCommand({ type: 'submit_pairing_phone', phoneNumber })
   }
 
@@ -208,8 +250,6 @@ export class WhatsAppAdapter implements PlatformAdapter {
   }
 
   async editMessage(_channelId: string, _messageId: string, _text: string): Promise<void> {
-    // WhatsApp does support message editing (introduced 2023), but Baileys
-    // coverage varies. For now, fall back to sending a new message upstream.
     throw new Error('WhatsApp edit not supported in this adapter')
   }
 
@@ -218,7 +258,6 @@ export class WhatsAppAdapter implements PlatformAdapter {
     text: string,
     buttons: InlineButton[],
   ): Promise<SentMessage> {
-    // No inline buttons — degrade to numbered list in the text.
     const numbered = buttons
       .map((b, i) => `${i + 1}. ${b.label}`)
       .join('\n')
@@ -274,6 +313,11 @@ export class WhatsAppAdapter implements PlatformAdapter {
         this.sendCommand(cmd)
       } catch (err) {
         this.pending.delete(cmd.id)
+        this.log.error('failed to send command to WhatsApp worker', {
+          event: 'whatsapp_worker_command_failed',
+          commandType: cmd.type,
+          error: err,
+        })
         resolve({ ok: false, error: err instanceof Error ? err.message : String(err) })
       }
     })
@@ -292,20 +336,37 @@ export class WhatsAppAdapter implements PlatformAdapter {
   private onWorkerEvent(ev: WorkerEvent): void {
     switch (ev.type) {
       case 'ready':
-        // Nothing to do — waiting for 'qr' or 'connected'.
+        this.log.info('WhatsApp worker ready', {
+          event: 'whatsapp_worker_ready',
+          baileysVersion: ev.baileysVersion,
+          buildId: ev.buildId,
+          gitSha: ev.gitSha,
+        })
         return
       case 'qr':
+        this.log.info('WhatsApp QR received', { event: 'whatsapp_qr_received' })
         this.fireEvent({ type: 'qr', qr: ev.qr })
         return
       case 'pairing_code':
+        this.log.info('WhatsApp pairing code received', { event: 'whatsapp_pairing_code_received' })
         this.fireEvent({ type: 'pairing_code', code: ev.code })
         return
       case 'connected':
         this.connected = true
+        this.log.info('WhatsApp connected', {
+          event: 'whatsapp_connected',
+          jid: ev.jid,
+          name: ev.name,
+        })
         this.fireEvent({ type: 'connected', jid: ev.jid, name: ev.name })
         return
       case 'disconnected':
         this.connected = false
+        this.log.warn('WhatsApp disconnected', {
+          event: 'whatsapp_disconnected',
+          loggedOut: ev.loggedOut,
+          reason: ev.reason,
+        })
         this.fireEvent({ type: 'disconnected', loggedOut: ev.loggedOut, reason: ev.reason })
         return
       case 'incoming':
@@ -329,12 +390,28 @@ export class WhatsAppAdapter implements PlatformAdapter {
           this.pending.delete(ev.id)
           resolver({ ok: ev.ok, messageId: ev.messageId, error: ev.error })
         }
+        if (!ev.ok) {
+          this.log.error('WhatsApp send failed', {
+            event: 'whatsapp_send_failed',
+            commandId: ev.id,
+            error: ev.error,
+          })
+        }
         return
       }
       case 'error':
+        this.log.error('WhatsApp worker reported error', {
+          event: 'whatsapp_worker_error',
+          error: ev.message,
+        })
         this.fireEvent({ type: 'error', message: ev.message })
         return
       case 'unavailable':
+        this.log.error('WhatsApp unavailable', {
+          event: 'whatsapp_unavailable',
+          reason: ev.reason,
+          error: ev.message,
+        })
         this.fireEvent({ type: 'unavailable', reason: ev.reason, message: ev.message })
         return
     }

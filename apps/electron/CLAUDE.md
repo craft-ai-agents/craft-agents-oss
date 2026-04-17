@@ -1074,11 +1074,18 @@ The utility auto-detects Electron and outputs to stderr (console).
 # Watch electron-log output
 tail -f ~/Library/Logs/Craft\ Agents/main.log
 
+# Dedicated messaging gateway log (structured JSONL)
+tail -f ~/.craft-agent/logs/messaging-gateway.log
+
 # Search by scope
 grep '"scope":"session"' ~/Library/Logs/Craft\ Agents/main.log
 
+# Search messaging events by component
+grep '"component":"whatsapp-adapter"' ~/.craft-agent/logs/messaging-gateway.log
+
 # Parse with jq
 cat ~/Library/Logs/Craft\ Agents/main.log | jq 'select(.level == "error")'
+cat ~/.craft-agent/logs/messaging-gateway.log | jq 'select(.level == "error")'
 ```
 
 ### Configuration

@@ -13,22 +13,37 @@ import { readFileAttachment } from '@craft-agent/shared/utils'
 import type { FileAttachment } from '@craft-agent/shared/protocol'
 import type { BindingStore } from './binding-store'
 import type { Commands } from './commands'
-import type { IncomingMessage, PlatformAdapter } from './types'
+import type { IncomingMessage, MessagingLogger, PlatformAdapter } from './types'
+
+const NOOP_LOGGER: MessagingLogger = {
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  child: () => NOOP_LOGGER,
+}
 
 export class Router {
   constructor(
     private readonly sessionManager: ISessionManager,
     private readonly bindingStore: BindingStore,
     private readonly commands: Commands,
+    private readonly log: MessagingLogger = NOOP_LOGGER,
   ) {}
 
   async route(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
     const binding = this.bindingStore.findByChannel(msg.platform, msg.channelId)
 
     if (binding) {
-      // Bound channel — forward message to session
       try {
         const fileAttachments = this.resolveAttachments(msg)
+        this.log.info('routing inbound chat message to session', {
+          event: 'message_routed',
+          platform: msg.platform,
+          channelId: msg.channelId,
+          sessionId: binding.sessionId,
+          bindingId: binding.id,
+          attachmentCount: fileAttachments?.length ?? 0,
+        })
         await this.sessionManager.sendMessage(
           binding.sessionId,
           msg.text,
@@ -38,6 +53,14 @@ export class Router {
         )
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+        this.log.error('failed to route inbound chat message', {
+          event: 'message_route_failed',
+          platform: msg.platform,
+          channelId: msg.channelId,
+          sessionId: binding.sessionId,
+          bindingId: binding.id,
+          error: err,
+        })
         await adapter.sendText(
           msg.channelId,
           `Failed to send message to session: ${errorMsg}`,
@@ -46,7 +69,12 @@ export class Router {
       return
     }
 
-    // Unbound channel — check for commands
+    this.log.info('routing inbound chat message to command handler', {
+      event: 'message_unbound',
+      platform: msg.platform,
+      channelId: msg.channelId,
+      messageId: msg.messageId,
+    })
     await this.commands.handle(adapter, msg)
   }
 

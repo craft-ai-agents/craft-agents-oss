@@ -53,6 +53,7 @@ const NOOP_LOGGER: MessagingLogger = {
   info: () => {},
   warn: () => {},
   error: () => {},
+  child: () => NOOP_LOGGER,
 }
 
 /**
