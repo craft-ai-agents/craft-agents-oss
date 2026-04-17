@@ -42,7 +42,7 @@ export interface StartCommand {
    * Prefix prepended to outbound messages when self-chat mode is active and
    * the channel is the self-JID. Serves as a visual distinction in the
    * self-chat AND a robust echo filter for cases where the worker restart
-   * wiped the sent-ID tracking set. Defaults to `[craft-agent]` when
+   * wiped the sent-ID tracking set. Defaults to 🤖 when
    * self-chat is on. Empty/missing → fall back to default.
    */
   responsePrefix?: string

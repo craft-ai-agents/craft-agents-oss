@@ -147,7 +147,7 @@ let session: SessionState | null = null
 const MAX_RECONNECT_ATTEMPTS = 10
 
 /** Fallback prefix when selfChatMode is on but caller didn't specify one. */
-const DEFAULT_RESPONSE_PREFIX = '[craft-agent]'
+const DEFAULT_RESPONSE_PREFIX = '🤖'
 
 /**
  * Exponential backoff with a 30s ceiling: 1s, 2s, 4s, 8s, 16s, 30s, 30s, ...

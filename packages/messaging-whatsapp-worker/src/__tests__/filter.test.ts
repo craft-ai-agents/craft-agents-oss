@@ -21,7 +21,7 @@ const OTHER = '4412345678@s.whatsapp.net'
 function ctx(overrides: Partial<ClassifyContext> = {}): ClassifyContext {
   return {
     selfChatMode: true,
-    responsePrefix: '[craft-agent]',
+    responsePrefix: '🤖',
     selfJid: SELF_BARE,
     selfLid: null,
     sentIds: new Set<string>(),
@@ -146,7 +146,7 @@ describe('classifyInbound — fromMe=true echo filtering', () => {
       makeMsg({
         jid: SELF_BARE,
         fromMe: true,
-        text: '[craft-agent] boot complete',
+        text: '🤖 boot complete',
       }),
       ctx(),
     )

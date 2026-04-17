@@ -62,7 +62,7 @@ export interface WhatsAppConfig extends PlatformConfig {
    * for mechanics.
    */
   selfChatMode?: boolean
-  /** Prefix tagged onto outbound self-chat messages. Defaults to `[craft-agent]`. */
+  /** Prefix tagged onto outbound self-chat messages. Defaults to 🤖. */
   responsePrefix?: string
 }
 

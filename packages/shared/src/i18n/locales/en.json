@@ -337,7 +337,7 @@
   "dialog.whatsapp.description": "Link your WhatsApp account to receive and send messages from this workspace.",
   "dialog.whatsapp.loggedOut": "WhatsApp logged out. Please reconnect.",
   "dialog.whatsapp.qrInstructions": "On your phone: WhatsApp → Settings → Linked Devices → Link a Device. Scan the code above.",
-  "dialog.whatsapp.selfChatHint": "Self-chat is supported: after connecting, open your own WhatsApp chat with yourself and type /new to start a session, or /pair <code> to link a session from the app. Agent replies are prefixed with [craft-agent].",
+  "dialog.whatsapp.selfChatHint": "Self-chat is supported: after connecting, open your own WhatsApp chat with yourself and type /new to start a session, or /pair <code> to link a session from the app. Agent replies are prefixed with 🤖.",
   "dialog.whatsapp.starting": "Starting WhatsApp service…",
   "dialog.whatsapp.title": "Connect WhatsApp",
   "dialog.whatsapp.unofficialApi": "WhatsApp does not provide an official API for this use case. The integration uses an unofficial library (Baileys) and may stop working without notice or risk your account being banned by Meta. Use at your own risk.",

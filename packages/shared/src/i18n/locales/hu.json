@@ -337,7 +337,7 @@
   "dialog.whatsapp.description": "Kapcsolja össze a WhatsApp-fiókját, hogy üzeneteket fogadhasson és küldhessen ebből a munkaterületből.",
   "dialog.whatsapp.loggedOut": "A WhatsApp kijelentkezett. Kérjük, csatlakozzon újra.",
   "dialog.whatsapp.qrInstructions": "A telefonján: WhatsApp → Beállítások → Csatolt eszközök → Eszköz csatolása. Olvassa be a fenti kódot.",
-  "dialog.whatsapp.selfChatHint": "Támogatott az önmagadnak küldött chat: csatlakozás után nyisd meg a saját WhatsApp-chatedet, és írd be a /new parancsot új munkamenet indításához, vagy a /pair <kód> parancsot, hogy az alkalmazásból származó munkamenethez kapcsold. Az ügynök válaszai a [craft-agent] előtaggal jelennek meg.",
+  "dialog.whatsapp.selfChatHint": "Támogatott az önmagadnak küldött chat: csatlakozás után nyisd meg a saját WhatsApp-chatedet, és írd be a /new parancsot új munkamenet indításához, vagy a /pair <kód> parancsot, hogy az alkalmazásból származó munkamenethez kapcsold. Az ügynök válaszai a 🤖 előtaggal jelennek meg.",
   "dialog.whatsapp.starting": "WhatsApp szolgáltatás indítása…",
   "dialog.whatsapp.title": "WhatsApp csatlakoztatása",
   "dialog.whatsapp.unofficialApi": "A WhatsApp nem kínál hivatalos API-t ehhez a használati esethez. Az integráció nem hivatalos könyvtárat (Baileys) használ, és figyelmeztetés nélkül leállhat, vagy a Meta letilthatja a fiókját. A használat saját felelősségre történik.",
