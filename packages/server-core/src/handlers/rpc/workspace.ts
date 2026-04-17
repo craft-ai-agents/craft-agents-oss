@@ -375,8 +375,9 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   // for display in the Appearance settings page
   server.handle(RPC_CHANNELS.toolIcons.GET_MAPPINGS, async () => {
     const { getToolIconsDir } = await import('@craft-agent/shared/config/storage')
-    const { loadToolIconConfig } = await import('@craft-agent/shared/utils/cli-icon-resolver')
+    const { loadToolIconConfig, findToolIconFile } = await import('@craft-agent/shared/utils/cli-icon-resolver')
     const { encodeIconToDataUrl } = await import('@craft-agent/shared/utils/icon-encoder')
+    const { isIconUrl } = await import('@craft-agent/shared/utils/icon-constants')
     const { join } = await import('path')
 
     const toolIconsDir = getToolIconsDir()
@@ -385,7 +386,10 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
 
     return config.tools
       .map(tool => {
-        const iconPath = join(toolIconsDir, tool.icon)
+        // URL icons are cached locally by ensureToolIcons/ConfigWatcher
+        const iconPath = isIconUrl(tool.icon)
+          ? findToolIconFile(toolIconsDir, tool.id)
+          : join(toolIconsDir, tool.icon)
         const iconDataUrl = encodeIconToDataUrl(iconPath)
         if (!iconDataUrl) return null
         return {

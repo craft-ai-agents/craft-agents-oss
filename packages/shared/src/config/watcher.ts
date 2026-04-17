@@ -16,7 +16,7 @@
  *   - permissions.json
  */
 
-import { watch, existsSync, readdirSync, statSync, readFileSync, mkdirSync } from 'fs';
+import { watch, existsSync, readdirSync, statSync, readFileSync, mkdirSync, rmSync } from 'fs';
 import { join, dirname, basename, relative } from 'path';
 import { platform } from 'os';
 import type { FSWatcher } from 'fs';
@@ -52,7 +52,9 @@ import {
 import { readSessionHeader } from '../sessions/jsonl.ts';
 import type { SessionHeader } from '../sessions/types.ts';
 import { AUTOMATIONS_CONFIG_FILE } from '../automations/constants.ts';
-import { loadAppTheme, loadPresetThemes, loadPresetTheme, getAppThemesDir } from './storage.ts';
+import { loadAppTheme, loadPresetThemes, loadPresetTheme, getAppThemesDir, getToolIconsDir } from './storage.ts';
+import { loadToolIconConfig, findToolIconFile } from '../utils/cli-icon-resolver.ts';
+import { isIconUrl, downloadIcon } from '../utils/icon.ts';
 import type { ThemeOverrides, PresetTheme } from './theme.ts';
 
 // ============================================================
@@ -155,6 +157,10 @@ export interface ConfigWatcherCallbacks {
   // Session callbacks
   /** Called when a session's JSONL header is modified externally (labels, name, flags, etc.) */
   onSessionMetadataChange?: (sessionId: string, header: SessionHeader) => void;
+
+  // Tool icon callbacks
+  /** Called when tool-icons.json changes */
+  onToolIconsChange?: () => void;
 
   // Theme callbacks (app-level only)
   /** Called when app-level theme.json changes */
@@ -285,6 +291,10 @@ export class ConfigWatcher {
     // Watch app-level permissions directory
     this.watchAppPermissionsDir();
     span.mark('watchAppPermissionsDir');
+
+    // Watch tool-icons directory
+    this.watchToolIconsDir();
+    span.mark('watchToolIconsDir');
 
     // Initial scan to populate known sources, skills, and themes
     this.scanSources();
@@ -1036,6 +1046,73 @@ export class ConfigWatcher {
     } catch (error) {
       debug('[ConfigWatcher] Error watching app permissions directory:', error);
     }
+  }
+
+  /**
+   * Watch tool-icons directory (~/.craft-agent/tool-icons/)
+   * Downloads URL icons when tool-icons.json changes.
+   */
+  private watchToolIconsDir(): void {
+    const toolIconsDir = getToolIconsDir();
+
+    if (!existsSync(toolIconsDir)) {
+      mkdirSync(toolIconsDir, { recursive: true });
+    }
+
+    try {
+      const watcher = watch(toolIconsDir, (eventType, filename) => {
+        if (!filename || filename !== 'tool-icons.json') return;
+        this.debounce('tool-icons', () => this.handleToolIconsChange());
+      });
+
+      this.watchers.push(watcher);
+      debug('[ConfigWatcher] Watching tool-icons directory:', toolIconsDir);
+    } catch (error) {
+      debug('[ConfigWatcher] Error watching tool-icons directory:', error);
+    }
+  }
+
+  /**
+   * Handle tool-icons.json change — download URL icons that aren't cached locally
+   */
+  private handleToolIconsChange(): void {
+    const toolIconsDir = getToolIconsDir();
+    const config = loadToolIconConfig(toolIconsDir);
+    if (!config) return;
+
+    // Download URL icons not yet cached locally
+    const referencedFiles = new Set(['tool-icons.json']);
+    for (const tool of config.tools) {
+      if (isIconUrl(tool.icon)) {
+        const cached = findToolIconFile(toolIconsDir, tool.id);
+        if (cached) {
+          referencedFiles.add(basename(cached));
+        } else {
+          debug('[ConfigWatcher] Downloading tool icon:', tool.id);
+          downloadIcon(toolIconsDir, tool.icon, 'ToolIcons', tool.id)
+            .then((iconPath) => {
+              if (iconPath) {
+                debug('[ConfigWatcher] Tool icon downloaded:', tool.id, iconPath);
+              }
+            })
+            .catch((err) => {
+              debug('[ConfigWatcher] Tool icon download failed:', tool.id, err);
+            });
+        }
+      } else {
+        referencedFiles.add(tool.icon);
+      }
+    }
+
+    // Remove orphaned icon files no longer referenced by the config
+    for (const file of readdirSync(toolIconsDir)) {
+      if (!referencedFiles.has(file)) {
+        debug('[ConfigWatcher] Removing orphaned tool icon:', file);
+        try { rmSync(join(toolIconsDir, file)); } catch { /* ignore */ }
+      }
+    }
+
+    this.callbacks.onToolIconsChange?.();
   }
 
   /**

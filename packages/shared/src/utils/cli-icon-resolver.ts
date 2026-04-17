@@ -22,6 +22,7 @@ import { join, basename } from 'path';
 import { parse as shellParse } from 'shell-quote';
 import { encodeIconToDataUrl } from './icon-encoder.ts';
 import { readJsonFileSync } from './files.ts';
+import { isIconUrl, ICON_EXTENSIONS } from './icon-constants.ts';
 
 // ============================================
 // Types
@@ -297,6 +298,20 @@ export function loadToolIconConfig(toolIconsDir: string): ToolIconConfig | null 
 // ============================================
 
 /**
+ * Find a cached icon file for a tool (downloaded from a URL).
+ * Checks for {toolId}.{ext} in the tool-icons directory.
+ */
+export function findToolIconFile(toolIconsDir: string, toolId: string): string | undefined {
+  for (const ext of ICON_EXTENSIONS) {
+    const iconPath = join(toolIconsDir, `${toolId}${ext}`);
+    if (existsSync(iconPath)) {
+      return iconPath;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Builds a lookup map from command name → tool entry for fast resolution.
  * Called once per config load, not per command.
  */
@@ -340,8 +355,10 @@ export function resolveToolIcon(
     const tool = commandMap.get(cmdName);
     if (!tool) continue;
 
-    // Resolve icon file path (icon filename is relative to toolIconsDir)
-    const iconPath = join(toolIconsDir, tool.icon);
+    // URL icons are cached locally by ensureToolIcons/ConfigWatcher
+    const iconPath = isIconUrl(tool.icon)
+      ? findToolIconFile(toolIconsDir, tool.id)
+      : join(toolIconsDir, tool.icon);
     const iconDataUrl = encodeIconToDataUrl(iconPath);
 
     if (iconDataUrl) {

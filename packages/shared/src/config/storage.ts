@@ -9,7 +9,8 @@ import {
   createWorkspaceAtPath,
   isValidWorkspace,
 } from '../workspaces/storage.ts';
-import { findIconFile } from '../utils/icon.ts';
+import { findIconFile, isIconUrl, downloadIcon } from '../utils/icon.ts';
+import { loadToolIconConfig, findToolIconFile } from '../utils/cli-icon-resolver.ts';
 import { extractWorkspaceSlugFromPath } from '../utils/workspace-slug.ts';
 import { initializeDocs } from '../docs/index.ts';
 import { expandPath, toPortablePath, getBundledAssetsDir } from '../utils/paths.ts';
@@ -2776,15 +2777,44 @@ export function ensureToolIcons(): void {
     return;
   }
 
-  // Copy each bundled file if it doesn't exist in the target dir
-  // This includes tool-icons.json and all icon files (png, ico, svg, jpg)
+  // Seed config and icon files. Only copy bundled icons referenced as local filenames.
+  // URL icons are downloaded and cached locally (same approach as source/skill icons).
   try {
-    const bundledFiles = readdirSync(bundledToolIconsDir);
-    for (const file of bundledFiles) {
-      const destPath = join(toolIconsDir, file);
-      if (!existsSync(destPath)) {
-        const srcPath = join(bundledToolIconsDir, file);
-        copyFileSync(srcPath, destPath);
+    // Seed the config first so we can read it
+    const configDest = join(toolIconsDir, 'tool-icons.json');
+    if (!existsSync(configDest)) {
+      copyFileSync(join(bundledToolIconsDir, 'tool-icons.json'), configDest);
+    }
+
+    const config = loadToolIconConfig(toolIconsDir);
+    if (!config) return;
+
+    // Seed/download icons and track which files are referenced
+    const referencedFiles = new Set(['tool-icons.json']);
+    for (const tool of config.tools) {
+      if (isIconUrl(tool.icon)) {
+        // Download URL icons if not already cached locally
+        const cached = findToolIconFile(toolIconsDir, tool.id);
+        if (cached) {
+          referencedFiles.add(basename(cached));
+        } else {
+          downloadIcon(toolIconsDir, tool.icon, 'ToolIcons', tool.id);
+        }
+      } else {
+        referencedFiles.add(tool.icon);
+        // Copy bundled local icon files if missing
+        const destPath = join(toolIconsDir, tool.icon);
+        if (!existsSync(destPath)) {
+          const srcPath = join(bundledToolIconsDir, tool.icon);
+          if (existsSync(srcPath)) copyFileSync(srcPath, destPath);
+        }
+      }
+    }
+
+    // Remove orphaned icon files no longer referenced by the config
+    for (const file of readdirSync(toolIconsDir)) {
+      if (!referencedFiles.has(file)) {
+        try { rmSync(join(toolIconsDir, file)); } catch { /* ignore */ }
       }
     }
   } catch {
