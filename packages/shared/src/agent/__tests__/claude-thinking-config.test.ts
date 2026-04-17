@@ -6,7 +6,7 @@ describe('resolveClaudeThinkingOptions', () => {
   it('uses adaptive thinking for true Anthropic backends', () => {
     const result = resolveClaudeThinkingOptions({
       thinkingLevel: 'medium',
-      model: 'claude-opus-4-6',
+      model: 'claude-opus-4-7',
       providerType: 'anthropic',
       minimizeThinking: false,
     })

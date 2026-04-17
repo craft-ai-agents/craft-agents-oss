@@ -63,6 +63,8 @@ export interface SessionScopedToolCallbacks {
   resolveLabelsFn?: (labels: string[]) => import('@craft-agent/session-tools-core').ResolvedLabelsResult;
   /** Resolve a status display name to its ID. */
   resolveStatusFn?: (status: string) => import('@craft-agent/session-tools-core').ResolvedStatusResult;
+  /** Send a message to another session (inter-session messaging). */
+  sendAgentMessageFn?: (sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>) => Promise<void>;
 }
 
 // Registry of callbacks keyed by sessionId

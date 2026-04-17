@@ -59,8 +59,8 @@ body:
     id: model
     attributes:
       label: Model
-      description: "Which model are you using? (e.g. Claude Opus 4.6, GPT-4.1)"
-      placeholder: "Claude Opus 4.6"
+      description: "Which model are you using? (e.g. Claude Opus 4.7, GPT-4.1)"
+      placeholder: "Claude Opus 4.7"
 
   - type: textarea
     id: description

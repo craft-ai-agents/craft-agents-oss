@@ -329,6 +329,13 @@ export interface SessionToolContext {
   resolveStatus?(status: string): ResolvedStatusResult;
 
   // ============================================================
+  // Inter-Session Messaging
+  // ============================================================
+
+  /** Send a message to another session. Injected by backend (SessionManager). */
+  sendAgentMessage?(sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>): Promise<void>;
+
+  // ============================================================
   // Session Paths (for transform_data / render_template)
   // ============================================================
 

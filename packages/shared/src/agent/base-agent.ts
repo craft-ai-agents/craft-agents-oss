@@ -281,6 +281,10 @@ export abstract class BaseAgent implements AgentBackend {
     if (this.configWatcherManager) {
       return; // Already running
     }
+    if (this.config.skipConfigWatcher) {
+      this.debug('Config watching skipped (managed by server)');
+      return;
+    }
 
     const callbacks: ConfigWatcherManagerCallbacks = {
       onSourceChange: (slug, source) => {

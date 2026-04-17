@@ -7,6 +7,7 @@
 
 import * as React from 'react'
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import JsonView from '@uiw/react-json-view'
 import { ContentFrame } from './ContentFrame'
 
@@ -104,6 +105,7 @@ export function JSONPreviewOverlay({
   error,
   embedded,
 }: JSONPreviewOverlayProps) {
+  const { t } = useTranslation()
   // Select theme based on mode
   const jsonTheme = useMemo(() => {
     return theme === 'dark' ? craftAgentDarkTheme : craftAgentLightTheme
@@ -131,7 +133,7 @@ export function JSONPreviewOverlay({
       filePath={filePath}
       title={title}
       theme={theme}
-      error={error ? { label: 'Parse Error', message: error } : undefined}
+      error={error ? { label: t('preview.parseError'), message: error } : undefined}
       embedded={embedded}
       className="bg-foreground-3"
     >

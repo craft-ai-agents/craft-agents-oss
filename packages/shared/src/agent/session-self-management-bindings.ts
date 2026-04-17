@@ -77,6 +77,14 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'sendAgentMessage', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.sendAgentMessageFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   // getSessionInfo needs wrapping to default sid → sessionId
   Object.defineProperty(context, 'getSessionInfo', {
     get() {

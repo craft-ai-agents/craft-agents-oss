@@ -7,20 +7,32 @@
 
 import * as React from 'react'
 import { Archive, Tag, CheckCircle2, Send } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Kbd, KbdGroup } from '@/components/ui/kbd'
 import { cn } from '@/lib/utils'
 import { isMac } from '@/lib/platform'
-import { DropdownMenu, DropdownMenuTrigger, StyledDropdownMenuContent, StyledDropdownMenuItem, StyledDropdownMenuSeparator, StyledDropdownMenuSubContent, StyledDropdownMenuSubTrigger, DropdownMenuSub } from '@/components/ui/styled-dropdown'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  StyledDropdownMenuContent,
+  StyledDropdownMenuItem,
+  StyledDropdownMenuSeparator,
+  StyledDropdownMenuSubContent,
+  StyledDropdownMenuSubTrigger,
+  DropdownMenuSub,
+} from '@/components/ui/styled-dropdown'
 import type { SessionStatusId, SessionStatus } from '@/config/session-status-config'
 import type { LabelConfig } from '@craft-agent/shared/labels'
 import { LabelMenuItems, StatusMenuItems } from './SessionMenuParts'
 
+type MultiSelectEntityType = 'automation' | 'session' | 'skill' | 'source'
+
 export interface MultiSelectPanelProps {
   /** Number of selected items */
   count: number
-  /** Entity type name for display (default: "Session") */
-  entityName?: string
+  /** Entity type used to resolve localized selection copy (default: "session") */
+  entityType?: MultiSelectEntityType
   /** Available todo states */
   sessionStatuses?: SessionStatus[]
   /** Active status if all selected share the same state */
@@ -45,7 +57,7 @@ export interface MultiSelectPanelProps {
 
 export function MultiSelectPanel({
   count,
-  entityName = 'Session',
+  entityType = 'session',
   sessionStatuses = [],
   activeStatusId,
   onSetStatus,
@@ -57,6 +69,23 @@ export function MultiSelectPanel({
   onClearSelection,
   className,
 }: MultiSelectPanelProps) {
+  const { t } = useTranslation()
+  const clickLabel = t('multiSelect.click')
+
+  const commandClick = (
+    <KbdGroup>
+      <Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd>
+      <Kbd>{clickLabel}</Kbd>
+    </KbdGroup>
+  )
+
+  const shiftClick = (
+    <KbdGroup>
+      <Kbd>⇧</Kbd>
+      <Kbd>{clickLabel}</Kbd>
+    </KbdGroup>
+  )
+
   return (
     <div
       className={cn(
@@ -70,24 +99,23 @@ export function MultiSelectPanel({
           <span className="text-2xl font-semibold text-accent">{count}</span>
         </div>
         <h2 className="text-lg font-medium text-foreground">
-          {count} {entityName}{count !== 1 ? 's' : ''} selected
+          {t(`multiSelect.selected.${entityType}`, { count })}
         </h2>
         <div className="text-sm text-foreground/50 flex flex-col items-center gap-1">
           <span>
-            Use{' '}
-            <KbdGroup>
-              <Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd>
-              <Kbd>Click</Kbd>
-            </KbdGroup>{' '}
-            to toggle,{' '}
-            <KbdGroup>
-              <Kbd>⇧</Kbd>
-              <Kbd>Click</Kbd>
-            </KbdGroup>{' '}
-            for range
+            <Trans
+              i18nKey="multiSelect.selectionHint"
+              components={{
+                cmdClick: commandClick,
+                shiftClick,
+              }}
+            />
           </span>
           <span>
-            Press <Kbd>Esc</Kbd> to clear selection
+            <Trans
+              i18nKey="multiSelect.clearSelection"
+              components={{ kbd: <Kbd /> }}
+            />
           </span>
         </div>
       </div>
@@ -103,7 +131,7 @@ export function MultiSelectPanel({
                 className="gap-2 bg-background shadow-minimal hover:bg-foreground/[0.03]"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                Change Status
+                {t('multiSelect.changeStatus')}
               </Button>
             </DropdownMenuTrigger>
             <StyledDropdownMenuContent align="center">
@@ -125,7 +153,7 @@ export function MultiSelectPanel({
                 className="gap-2 bg-background shadow-minimal hover:bg-foreground/[0.03]"
               >
                 <Tag className="w-4 h-4" />
-                Set Labels
+                {t('multiSelect.setLabels')}
               </Button>
             </DropdownMenuTrigger>
             <StyledDropdownMenuContent align="center" className="min-w-[220px]">
@@ -152,7 +180,7 @@ export function MultiSelectPanel({
             className="gap-2 bg-background shadow-minimal hover:bg-foreground/[0.03]"
           >
             <Send className="w-4 h-4" />
-            Send to Workspace
+            {t('sessionMenu.sendToWorkspace')}
           </Button>
         )}
         {onArchive && (
@@ -163,7 +191,7 @@ export function MultiSelectPanel({
             className="gap-2 bg-background shadow-minimal hover:bg-foreground/[0.03]"
           >
             <Archive className="w-4 h-4" />
-            Archive
+            {t('sessionMenu.archive')}
           </Button>
         )}
       </div>

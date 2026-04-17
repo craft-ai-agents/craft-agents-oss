@@ -364,7 +364,12 @@ function resolveCustomEndpointApiKey(): string {
     return initConfig.piAuth.credential.key;
   }
   const key = initConfig?.apiKey || '';
-  if (!key && initConfig?.baseUrl && !isLocalhostUrl(initConfig.baseUrl)) {
+  if (!key && initConfig?.baseUrl) {
+    if (isLocalhostUrl(initConfig.baseUrl)) {
+      // Local endpoints (Ollama, LM Studio) don't need auth.
+      // Pi SDK requires a truthy apiKey to register models, so use a placeholder.
+      return 'not-needed';
+    }
     debugLog('[custom-endpoint] Warning: no API key found for non-localhost endpoint — requests will likely fail');
   }
   return key;

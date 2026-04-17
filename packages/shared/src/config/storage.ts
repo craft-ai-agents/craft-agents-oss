@@ -1688,6 +1688,84 @@ function migrateOpus45ToOpus46(config: StoredConfig): boolean {
 }
 
 /**
+ * Migrate Opus 4.6 to Opus 4.7 for direct Anthropic connections (API key or OAuth).
+ * Only applies to anthropic provider type (not compat), as third-party providers
+ * like OpenRouter may not support the new model ID yet.
+ */
+function migrateOpus46ToOpus47(config: StoredConfig): boolean {
+  if (!config.llmConnections) return false;
+
+  const OPUS_46_ID = 'claude-opus-4-6';
+  const OPUS_47_ID = 'claude-opus-4-7';
+
+  let changed = false;
+
+  for (const connection of config.llmConnections) {
+    // Only migrate direct Anthropic connections (not compat/third-party)
+    if (connection.providerType !== 'anthropic') continue;
+
+    // Migrate defaultModel
+    if (connection.defaultModel === OPUS_46_ID) {
+      connection.defaultModel = OPUS_47_ID;
+      changed = true;
+    }
+
+    // Migrate models array
+    if (connection.models && Array.isArray(connection.models)) {
+      const hasNew = connection.models.some(m =>
+        (typeof m === 'string' ? m : m.id) === OPUS_47_ID
+      );
+
+      if (hasNew) {
+        // New model already exists — just remove the old entry to avoid duplicates
+        const before = connection.models.length;
+        connection.models = connection.models.filter(m =>
+          (typeof m === 'string' ? m : m.id) !== OPUS_46_ID
+        );
+        if (connection.models.length !== before) changed = true;
+      } else {
+        // New model doesn't exist — rename the old entry in place
+        for (let i = 0; i < connection.models.length; i++) {
+          const model = connection.models[i];
+          if (typeof model === 'string' && model === OPUS_46_ID) {
+            connection.models[i] = OPUS_47_ID;
+            changed = true;
+          } else if (typeof model === 'object' && model.id === OPUS_46_ID) {
+            model.id = OPUS_47_ID;
+            if (model.name?.includes('4.6')) {
+              model.name = model.name.replace('4.6', '4.7');
+            }
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+
+  return changed;
+}
+
+/**
+ * Migrate Opus 4.6 to Opus 4.7 in workspace default models.
+ */
+function migrateWorkspaceOpus46ToOpus47(config: StoredConfig): void {
+  if (!config.workspaces) return;
+
+  const OPUS_46_ID = 'claude-opus-4-6';
+  const OPUS_47_ID = 'claude-opus-4-7';
+
+  for (const workspace of config.workspaces) {
+    const wsConfig = loadWorkspaceConfig(workspace.rootPath);
+    if (!wsConfig?.defaults?.model) continue;
+
+    if (wsConfig.defaults.model === OPUS_46_ID) {
+      wsConfig.defaults.model = OPUS_47_ID;
+      saveWorkspaceConfig(workspace.rootPath, wsConfig);
+    }
+  }
+}
+
+/**
  * Migrate Sonnet 4.5 to Sonnet 4.6 for direct Anthropic connections.
  * Same pattern as migrateOpus45ToOpus46 — updates stored model IDs and names.
  */
@@ -1873,7 +1951,7 @@ function migrateLegacyProviderTypes(config: StoredConfig): boolean {
   return changed;
 }
 
-/** Normalize a pi/-prefixed model ID for Bedrock: pi/claude-opus-4-6 → pi/anthropic.claude-opus-4-6-v1 */
+/** Normalize a pi/-prefixed model ID for Bedrock: pi/claude-opus-4-7 → pi/anthropic.claude-opus-4-7-v1 */
 function normalizePiBedrockId(id: string): string {
   if (id.startsWith('pi/')) {
     const bare = id.slice(3);
@@ -2053,7 +2131,13 @@ export function migrateLegacyLlmConnectionsConfig(): void {
     }
     // Phase 1g: Migrate Sonnet 4.5 → Sonnet 4.6 in workspace default models
     migrateWorkspaceSonnet45ToSonnet46(config);
-    // Phase 1h: Migrate legacy provider types (bedrock/vertex/anthropic_compat → pi/pi_compat)
+    // Phase 1h: Migrate Opus 4.6 → Opus 4.7 for direct Anthropic connections
+    if (migrateOpus46ToOpus47(config)) {
+      needsSave = true;
+    }
+    // Phase 1i: Migrate Opus 4.6 → Opus 4.7 in workspace default models
+    migrateWorkspaceOpus46ToOpus47(config);
+    // Phase 1j: Migrate legacy provider types (bedrock/vertex/anthropic_compat → pi/pi_compat)
     if (migrateLegacyProviderTypes(config)) {
       needsSave = true;
     }

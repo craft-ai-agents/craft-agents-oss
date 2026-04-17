@@ -11,7 +11,7 @@
  * Session-level setting with workspace defaults.
  *
  * Provider mappings:
- * - Anthropic: adaptive thinking + effort levels (Opus 4.6+)
+ * - Anthropic: adaptive thinking + effort levels (Opus 4.7+)
  * - Pi/OpenAI: reasoning_effort via Pi SDK levels
  */
 

@@ -190,20 +190,20 @@ export function MarkdownSpreadsheetBlock({ code, className }: MarkdownSpreadshee
 
   // Loading state for file-backed spreadsheet
   if (spec?.src && fileLoading) {
-    const loadingLabel = [spec.filename, spec.sheetName].filter(Boolean).join(' — ') || 'Spreadsheet'
+    const loadingLabel = [spec.filename, spec.sheetName].filter(Boolean).join(' — ') || t('spreadsheet.defaultTitle')
     return (
       <div className={cn('rounded-[8px] overflow-hidden border bg-muted/10', className)}>
         <div className="px-3 py-2 bg-muted/50 border-b">
           <span className="text-[12px] text-muted-foreground font-medium">{loadingLabel}</span>
         </div>
-        <div className="py-8 text-center text-muted-foreground text-[13px]">Loading data...</div>
+        <div className="py-8 text-center text-muted-foreground text-[13px]">{t('datatable.loadingData')}</div>
       </div>
     )
   }
 
   // Error state for file-backed spreadsheet
   if (spec?.src && fileError) {
-    const errorLabel = [spec.filename, spec.sheetName].filter(Boolean).join(' — ') || 'Spreadsheet'
+    const errorLabel = [spec.filename, spec.sheetName].filter(Boolean).join(' — ') || t('spreadsheet.defaultTitle')
     return (
       <div className={cn('rounded-[8px] overflow-hidden border bg-muted/10', className)}>
         <div className="px-3 py-2 bg-muted/50 border-b">
@@ -219,7 +219,7 @@ export function MarkdownSpreadsheetBlock({ code, className }: MarkdownSpreadshee
   }
 
   const colLetters = parsed.columns.map((_, i) => String.fromCharCode(65 + i))
-  const label = [parsed.filename, parsed.sheetName].filter(Boolean).join(' — ') || 'Spreadsheet'
+  const label = [parsed.filename, parsed.sheetName].filter(Boolean).join(' — ') || t('spreadsheet.defaultTitle')
   const fallback = <CodeBlock code={code} language="json" mode="full" className={className} />
 
   const tableContent = (maxHeight?: boolean, scrollable?: boolean) => (
@@ -305,8 +305,8 @@ export function MarkdownSpreadsheetBlock({ code, className }: MarkdownSpreadshee
         isOpen={isFullscreen}
         onClose={() => setIsFullscreen(false)}
         title={label}
-        subtitle={`${parsed.rows.length} row${parsed.rows.length !== 1 ? 's' : ''} × ${parsed.columns.length} col${parsed.columns.length !== 1 ? 's' : ''}`}
-        headerActions={<TableExportDropdown columns={parsed.columns} rows={parsed.rows} filename={parsed.filename || parsed.sheetName || 'Spreadsheet'} />}
+        subtitle={`${t('datatable.rowCount', { count: parsed.rows.length })} × ${t('spreadsheet.colCount', { count: parsed.columns.length })}`}
+        headerActions={<TableExportDropdown columns={parsed.columns} rows={parsed.rows} filename={parsed.filename || parsed.sheetName || t('spreadsheet.defaultTitle')} />}
       >
         <div className="px-6">
           <div className="bg-background shadow-minimal rounded-[12px] overflow-hidden">

@@ -173,7 +173,7 @@ export function BatchSessionMenu({ onSendToWorkspace }: BatchSessionMenuProps = 
     <>
       {/* Header showing selection count */}
       <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium">
-        {count} {count === 1 ? 'session' : 'sessions'} selected
+        {t('multiSelect.selected.session', { count })}
       </div>
       <Separator />
 
@@ -187,7 +187,7 @@ export function BatchSessionMenu({ onSendToWorkspace }: BatchSessionMenuProps = 
           ) : (
             <span className="h-3.5 w-3.5" />
           )}
-          <span className="flex-1">Status</span>
+          <span className="flex-1">{t("sessionMenu.status")}</span>
         </SubTrigger>
         <SubContent>
           <StatusMenuItems
@@ -221,26 +221,26 @@ export function BatchSessionMenu({ onSendToWorkspace }: BatchSessionMenuProps = 
       {allFlagged ? (
         <MenuItem onClick={handleBatchUnflag}>
           <FlagOff className="h-3.5 w-3.5" />
-          <span className="flex-1">Unflag All</span>
+          <span className="flex-1">{t("sessionMenu.unflagAll")}</span>
         </MenuItem>
       ) : (
         <MenuItem onClick={handleBatchFlag}>
           <Flag className="h-3.5 w-3.5 text-info" />
-          <span className="flex-1">Flag All</span>
+          <span className="flex-1">{t("sessionMenu.flagAll")}</span>
         </MenuItem>
       )}
 
       {/* Archive */}
       <MenuItem onClick={handleBatchArchive}>
         <Archive className="h-3.5 w-3.5" />
-        <span className="flex-1">Archive</span>
+        <span className="flex-1">{t("sessionMenu.archive")}</span>
       </MenuItem>
 
       {/* Send to Workspace */}
       {hasRemoteWorkspaces && (
         <MenuItem onClick={handleSendToWorkspace}>
           <Send className="h-3.5 w-3.5" />
-          <span className="flex-1">Send to Workspace...</span>
+          <span className="flex-1">{t("sessionMenu.sendToWorkspace")}</span>
         </MenuItem>
       )}
 
@@ -249,7 +249,7 @@ export function BatchSessionMenu({ onSendToWorkspace }: BatchSessionMenuProps = 
       {/* Delete */}
       <MenuItem onClick={handleBatchDelete} variant="destructive">
         <Trash2 className="h-3.5 w-3.5" />
-        <span className="flex-1">Delete</span>
+        <span className="flex-1">{t("common.delete")}</span>
       </MenuItem>
     </>
   )

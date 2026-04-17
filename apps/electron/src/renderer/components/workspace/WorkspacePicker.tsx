@@ -56,7 +56,7 @@ export function WorkspacePicker({ onSelectWorkspace }: WorkspacePickerProps) {
       <div className="flex h-screen items-center justify-center bg-sidebar px-4">
         <AddWorkspaceContainer>
           <Spinner className="h-6 w-6" />
-          <p className="mt-3 text-sm text-muted-foreground">Loading workspaces...</p>
+          <p className="mt-3 text-sm text-muted-foreground">{t("workspace.loadingWorkspaces")}</p>
         </AddWorkspaceContainer>
       </div>
     )
@@ -112,11 +112,11 @@ export function WorkspacePicker({ onSelectWorkspace }: WorkspacePickerProps) {
             onClick={handleCreate}
             disabled={!newName.trim()}
             loading={creating}
-            loadingText="Creating..."
+            loadingText={t("workspace.creating")}
             className="bg-accent hover:bg-accent/90 text-white"
           >
             <Plus className="mr-1.5 h-4 w-4" />
-            Create Workspace
+            {t("workspace.createWorkspace")}
           </AddWorkspacePrimaryButton>
         </div>
       </AddWorkspaceContainer>

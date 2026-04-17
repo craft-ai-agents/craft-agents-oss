@@ -498,7 +498,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
         trigger={(
           <PanelHeaderCenterButton
             icon={<Info className="h-4 w-4" />}
-            aria-label="Session info"
+            aria-label={t("chat.sessionInfo")}
           />
         )}
       />

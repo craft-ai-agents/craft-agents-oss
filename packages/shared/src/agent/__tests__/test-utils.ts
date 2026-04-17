@@ -155,6 +155,9 @@ export class TestAgent extends BaseAgent {
     return { text: 'Test LLM Response' };
   }
 
+  // Expose protected state for testing
+  getConfigWatcherManager() { return this.configWatcherManager; }
+
   // Helper to reset tracking
   resetTracking(): void {
     this.chatCalls = [];

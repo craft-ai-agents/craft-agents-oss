@@ -172,6 +172,9 @@ export interface CoreBackendConfig {
   /** Headless mode flag (disables interactive tools) */
   isHeadless?: boolean;
 
+  /** Skip agent-level config file watching (server already owns a workspace-level watcher) */
+  skipConfigWatcher?: boolean;
+
   /** Debug mode configuration */
   debugMode?: {
     enabled: boolean;
@@ -242,7 +245,7 @@ export interface CoreBackendConfig {
    */
   onImageResize?: (filePath: string, maxSizeBytes: number) => Promise<string | null>;
 
-  /** Enable 1M context window for Opus 4.6. Default: true. Set false to use 200K and conserve usage limits. */
+  /** Enable 1M context window for Opus 4.7. Default: true. Set false to use 200K and conserve usage limits. */
   enable1MContext?: boolean;
 
   /**

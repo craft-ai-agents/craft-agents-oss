@@ -199,7 +199,7 @@ export default function PreferencesPage() {
           className="flex items-center gap-1 text-xs h-7 px-2 rounded-md bg-foreground/5 hover:bg-foreground/10 text-muted-foreground"
         >
           <RotateCcw className="h-3 w-3" />
-          Revert
+          {t("common.revert")}
         </button>
         <Button
           variant="default"
@@ -215,7 +215,7 @@ export default function PreferencesPage() {
           ) : (
             <Save className="h-3.5 w-3.5 mr-1" />
           )}
-          Save
+          {t("common.save")}
         </Button>
       </div>
       <HeaderMenu route={routes.view.settings('preferences')} />
@@ -230,7 +230,7 @@ export default function PreferencesPage() {
         <div className="p-4 space-y-6">
           {/* Basic Info */}
           <section>
-            <SectionHeader>Basic Info</SectionHeader>
+            <SectionHeader>{t("settings.preferences.basicInfo")}</SectionHeader>
             <div className="space-y-1">
               <FormField
                 label={t("settings.preferences.name")}
@@ -242,39 +242,39 @@ export default function PreferencesPage() {
                 label={t("settings.preferences.timezone")}
                 value={formState.timezone}
                 onChange={(v) => updateField('timezone', v)}
-                placeholder="e.g., America/New_York"
+                placeholder={t("settings.preferences.timezonePlaceholder")}
               />
               <FormField
                 label={t("settings.preferences.language")}
                 value={formState.language}
                 onChange={(v) => updateField('language', v)}
-                placeholder="e.g., English"
+                placeholder={t("settings.preferences.languagePlaceholder")}
               />
             </div>
           </section>
 
           {/* Location */}
           <section>
-            <SectionHeader>Location</SectionHeader>
+            <SectionHeader>{t("settings.preferences.location")}</SectionHeader>
             <div className="space-y-1">
               <FormField
                 label={t("settings.preferences.city")}
                 value={formState.city}
                 onChange={(v) => updateField('city', v)}
-                placeholder="e.g., New York"
+                placeholder={t("settings.preferences.cityPlaceholder")}
               />
               <FormField
                 label={t("settings.preferences.country")}
                 value={formState.country}
                 onChange={(v) => updateField('country', v)}
-                placeholder="e.g., USA"
+                placeholder={t("settings.preferences.countryPlaceholder")}
               />
             </div>
           </section>
 
           {/* Notes */}
           <section>
-            <SectionHeader>Notes</SectionHeader>
+            <SectionHeader>{t("settings.preferences.notes")}</SectionHeader>
             <Textarea
               value={formState.notes}
               onChange={(e) => updateField('notes', e.target.value)}

@@ -73,6 +73,7 @@ import { navigate, routes } from "@/lib/navigate"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } from "@/lib/file-changes"
 import { resolveBranchNewPanelOption } from "./branching"
+import { handleErrorMessageAction } from "./error-message-actions"
 
 // ============================================================================
 // CSS Custom Highlight API helper
@@ -1619,6 +1620,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                             message={turn.message}
                             onOpenFile={onOpenFile}
                             onOpenUrl={onOpenUrl}
+                            sessionId={session?.id}
                             compactMode={compactMode}
                           />
                         </div>
@@ -1641,6 +1643,16 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                             message={turn.message}
                             onOpenFile={onOpenFile}
                             onOpenUrl={onOpenUrl}
+                            sessionId={session?.id}
+                            onRetry={turn.message.role === 'error' ? () => {
+                              const msgs = session?.messages
+                              if (!msgs) return
+                              const errorIdx = msgs.findIndex(m => m.id === turn.message.id)
+                              const lastUserMsg = msgs.slice(0, errorIdx).findLast(m => m.role === 'user')
+                              if (lastUserMsg) {
+                                onSendMessage(lastUserMsg.content)
+                              }
+                            } : undefined}
                           />
                         </div>
                       )
@@ -2103,6 +2115,7 @@ interface MessageBubbleProps {
   message: Message
   onOpenFile: (path: string) => void
   onOpenUrl: (url: string) => void
+  sessionId?: string
   /**
    * Markdown render mode for assistant messages
    * @default 'minimal'
@@ -2114,12 +2127,14 @@ interface MessageBubbleProps {
   onPopOut?: (message: Message) => void
   /** Compact mode - reduces padding for popover embedding */
   compactMode?: boolean
+  /** Callback to resend the user message that preceded an error */
+  onRetry?: () => void
 }
 
 /**
  * ErrorMessage - Separate component for error messages to allow useState hook
  */
-function ErrorMessage({ message, onOpenUrl }: { message: Message; onOpenUrl?: (url: string) => void }) {
+function ErrorMessage({ message, onOpenUrl, sessionId, onRetry }: { message: Message; onOpenUrl?: (url: string) => void; sessionId?: string; onRetry?: () => void }) {
   const { t } = useTranslation()
   const hasDetails = (message.errorDetails && message.errorDetails.length > 0) || message.errorOriginal
   const [detailsOpen, setDetailsOpen] = React.useState(false)
@@ -2150,14 +2165,11 @@ function ErrorMessage({ message, onOpenUrl }: { message: Message; onOpenUrl?: (u
               <button
                 key={action.key}
                 onClick={() => {
-                  if (action.action === 'open_url' && action.url && onOpenUrl) {
-                    onOpenUrl(action.url)
-                  } else if (action.action === 'settings') {
-                    navigate(routes.view.settings())
-                  } else if (action.action === 'retry') {
-                    // Focus the chat input so user can re-send
-                    document.querySelector<HTMLTextAreaElement>('[data-chat-input]')?.focus()
-                  }
+                  handleErrorMessageAction(action, {
+                    sessionId,
+                    onOpenUrl,
+                    onRetry,
+                  })
                 }}
                 className="text-xs px-2 py-0.5 rounded border border-destructive/20 text-destructive/70 hover:text-destructive hover:border-destructive/40 transition-colors"
               >
@@ -2199,9 +2211,11 @@ function MessageBubble({
   message,
   onOpenFile,
   onOpenUrl,
+  sessionId,
   renderMode = 'minimal',
   onPopOut,
   compactMode,
+  onRetry,
 }: MessageBubbleProps) {
   const { t } = useTranslation()
 
@@ -2266,7 +2280,7 @@ function MessageBubble({
 
   // === ERROR MESSAGE: Red bordered bubble with warning icon and collapsible details ===
   if (message.role === 'error') {
-    return <ErrorMessage message={message} onOpenUrl={onOpenUrl} />
+    return <ErrorMessage message={message} onOpenUrl={onOpenUrl} sessionId={sessionId} onRetry={onRetry} />
   }
 
   // === STATUS MESSAGE: Matches ProcessingIndicator layout for visual consistency ===
@@ -2351,6 +2365,7 @@ const MemoizedMessageBubble = React.memo(MessageBubble, (prev, next) => {
     prev.message.id === next.message.id &&
     prev.message.content === next.message.content &&
     prev.message.role === next.message.role &&
+    prev.sessionId === next.sessionId &&
     prev.compactMode === next.compactMode
   )
 })

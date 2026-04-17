@@ -180,6 +180,8 @@ export interface ClaudeAgentConfig {
   /** Mark transferred session summary as applied. */
   markTransferredSessionSummaryApplied?: () => void;
   isHeadless?: boolean;        // Running in headless mode (disables interactive tools)
+  /** Skip agent-level config file watching (server already owns a workspace-level watcher) */
+  skipConfigWatcher?: boolean;
   debugMode?: {                // Debug mode configuration (when running in dev)
     enabled: boolean;          // Whether debug mode is active
     logFilePath?: string;      // Path to the log file for querying
@@ -200,7 +202,7 @@ export interface ClaudeAgentConfig {
   mcpPool?: McpClientPool;
   /** LLM connection slug for credential lookup in postInit(). */
   connectionSlug?: string;
-  /** Enable 1M context window for Opus 4.6. Default: true. Set false to use 200K and conserve usage limits. */
+  /** Enable 1M context window for Opus 4.7. Default: true. Set false to use 200K and conserve usage limits. */
   enable1MContext?: boolean;
 }
 
@@ -546,6 +548,7 @@ export class ClaudeAgent extends BaseAgent {
       thinkingLevel: config.thinkingLevel,
       mcpToken: config.mcpToken,
       isHeadless: config.isHeadless,
+      skipConfigWatcher: config.skipConfigWatcher,
       debugMode: config.debugMode,
       systemPromptPreset: config.systemPromptPreset,
       onSdkSessionIdUpdate: config.onSdkSessionIdUpdate,

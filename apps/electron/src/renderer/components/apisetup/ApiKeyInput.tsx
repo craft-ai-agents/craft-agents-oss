@@ -141,7 +141,7 @@ const GOOGLE_PRESETS: Preset[] = [
 /** Presets that require the Pi SDK for authentication — hidden in Anthropic API Key mode */
 const PI_ONLY_PRESET_KEYS: ReadonlySet<string> = new Set(['minimax-global', 'minimax-cn'])
 
-const COMPAT_ANTHROPIC_DEFAULTS = 'claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5'
+const COMPAT_ANTHROPIC_DEFAULTS = 'claude-opus-4-7, claude-sonnet-4-6, claude-haiku-4-5'
 const COMPAT_OPENAI_DEFAULTS = 'openai/gpt-5.2-codex, openai/gpt-5.1-codex-mini'
 const COMPAT_MINIMAX_DEFAULTS = 'MiniMax-M2.5, MiniMax-M2.5-highspeed'
 const COMPAT_KIMI_DEFAULTS = 'k2p5, kimi-k2-thinking'
@@ -666,7 +666,7 @@ export function ApiKeyInput({
           {piModelsLoading ? (
             <div className="flex items-center gap-2 py-3 text-muted-foreground">
               <Loader2 className="size-3.5 animate-spin" />
-              <span className="text-xs">Loading models...</span>
+              <span className="text-xs">{t("apiSetup.loadingModels")}</span>
             </div>
           ) : (
             <>
@@ -791,7 +791,7 @@ export function ApiKeyInput({
                 setConnectionDefaultModel(e.target.value)
                 setModelError(null)
               }}
-              placeholder="e.g. claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5"
+              placeholder="e.g. claude-opus-4-7, claude-sonnet-4-6, claude-haiku-4-5"
               className="border-0 bg-transparent shadow-none"
               disabled={isDisabled}
             />
