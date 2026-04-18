@@ -45,6 +45,7 @@ export const SETTINGS_PAGES = [
   { id: 'server' as const, labelKey: 'settings.server.title', descriptionKey: 'settings.server.description' },
   { id: 'shortcuts' as const, labelKey: 'settings.shortcuts.title', descriptionKey: 'settings.shortcuts.description' },
   { id: 'preferences' as const, labelKey: 'settings.preferences.title', descriptionKey: 'settings.preferences.description' },
+  { id: 'sound' as const, labelKey: 'settings.sound.title', descriptionKey: 'settings.sound.description' },
 ] satisfies readonly SettingsPageDefinition[]
 
 /**
