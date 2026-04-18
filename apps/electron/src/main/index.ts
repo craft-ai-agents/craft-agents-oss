@@ -605,6 +605,17 @@ app.whenReady().then(async () => {
         applyPlatformToSubsystems: (p) => {
           setFetcherPlatform(p)
           setSessionPlatform(p)
+
+          // Lazily initialized sound engine reference (avoids top-level Electron import issues)
+          let _soundEngine: import('./audio/index.js').SoundEngine | null = null
+          const getEngine = async () => {
+            if (!_soundEngine) {
+              const { getSoundEngine } = await import('./audio/index.js')
+              _soundEngine = getSoundEngine()
+            }
+            return _soundEngine
+          }
+
           setSessionRuntimeHooks({
             updateBadgeCount,
             onSessionStarted,
@@ -615,6 +626,17 @@ app.whenReady().then(async () => {
                   ...(context?.errorSource ? { errorSource: context.errorSource } : {}),
                   ...(context?.sessionId ? { sessionId: context.sessionId } : {}),
                 },
+              })
+            },
+            onAutomationEvent: (event: string, sessionId?: string) => {
+              // Map automation event to sound category and play
+              import('@craft-agent/shared/audio').then(({ mapEventToCategory }) => {
+                const category = mapEventToCategory(event)
+                if (category) {
+                  getEngine().then(engine => engine.play(category, sessionId))
+                }
+              }).catch(() => {
+                // Sound errors must never break automation flow
               })
             },
           })
@@ -670,6 +692,17 @@ app.whenReady().then(async () => {
       oauthFlowStore = instance.oauthFlowStore
       moduleSink = instance.wsServer.push.bind(instance.wsServer)
       moduleClientResolver = resolveClientId
+
+      // Initialize sound engine (non-blocking — sounds available once init completes)
+      if (!isHeadless) {
+        import('./audio/index.js').then(({ initSoundEngine }) => {
+          initSoundEngine().then(() => {
+            mainLog.info('[sound] Sound engine initialized')
+          }).catch((err) => {
+            mainLog.warn('[sound] Sound engine init failed:', err)
+          })
+        })
+      }
 
       // IPC handlers — preload uses sendSync to get WS connection details
 
@@ -1079,6 +1112,11 @@ app.on('before-quit', async (event) => {
 
     // Stop all model refresh timers
     getModelRefreshService().stopAll()
+
+    // Dispose sound engine (kills utility process)
+    import('./audio/index.js').then(({ disposeSoundEngine }) => {
+      disposeSoundEngine().catch(() => {})
+    })
 
     // Clean up power manager (release power blocker)
     const { cleanup: cleanupPowerManager } = await import('./power-manager')
