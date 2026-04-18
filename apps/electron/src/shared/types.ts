@@ -668,6 +668,31 @@ export interface ElectronAPI {
   startWhatsAppConnect(): Promise<{ success: boolean }>
   submitWhatsAppPhone(phoneNumber: string): Promise<{ success: boolean }>
   onWhatsAppEvent(callback: (payload: { workspaceId: string; event: WhatsAppUiEvent }) => void): () => void
+
+  // Sound notifications
+  getSoundSettings(): Promise<import('@craft-agent/shared/audio').SoundSettings>
+  setSoundSettings(settings: Partial<import('@craft-agent/shared/audio').SoundSettings>): Promise<{ success: boolean }>
+  getSoundPacks(): Promise<Array<{
+    name: string
+    displayName: string
+    version: string
+    soundCount: number
+    totalSizeBytes: number
+    source: string
+    description?: string
+    author?: { name: string; github?: string }
+    language?: string
+    categories: string[]
+    trustTier?: 'official' | 'community'
+  }>>
+  setSoundPack(sessionId: string, packName: string | undefined): Promise<{ success: boolean }>
+  getSoundRegistry(): Promise<{ packs: Array<Record<string, unknown>>; error?: string }>
+  installSoundPack(packName: string): Promise<{ success: boolean; packName: string }>
+  uninstallSoundPack(packName: string): Promise<{ success: boolean }>
+  previewSoundPack(packName: string): Promise<{ success: boolean }>
+  playSoundTest(filePath: string): Promise<{ success: boolean }>
+  importSoundFolder(folderPath: string): Promise<{ success: boolean; packName: string }>
+  importPeonPingPacks(): Promise<{ success: boolean; count: number; packs: string[] }>
 }
 
 export interface MessagingPlatformRuntimeInfo {

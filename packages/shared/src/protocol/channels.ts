@@ -367,6 +367,20 @@ export const RPC_CHANNELS = {
     REPLAY: 'automations:replay',
     CHANGED: 'automations:changed',
   },
+
+  sound: {
+    GET_SETTINGS: 'sound:getSettings',
+    SET_SETTINGS: 'sound:setSettings',
+    GET_PACKS: 'sound:getPacks',
+    SET_PACK: 'sound:setPack',
+    GET_REGISTRY: 'sound:getRegistry',
+    INSTALL_PACK: 'sound:installPack',
+    UNINSTALL_PACK: 'sound:uninstallPack',
+    PREVIEW_PACK: 'sound:previewPack',
+    PLAY_TEST: 'sound:playTest',
+    IMPORT_FOLDER: 'sound:importFolder',
+    IMPORT_PEON_PING: 'sound:importPeonPing',
+  },
   resources: {
     EXPORT: 'resources:export',
     IMPORT: 'resources:import',
