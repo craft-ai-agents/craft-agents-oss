@@ -97,6 +97,7 @@ export async function spawnServer(opts?: SpawnServerOptions): Promise<SpawnedSer
     }, startupTimeout)
 
     let url = ''
+    let resolved = false
     let buffer = ''
 
     const processLines = () => {
@@ -110,8 +111,9 @@ export async function spawnServer(opts?: SpawnServerOptions): Promise<SpawnedSer
           // Server echoes the token — we already have it but this confirms ready
         }
         // Once we have the URL, the server is ready
-        if (url) {
+        if (url && !resolved) {
           clearTimeout(timer)
+          resolved = true
           resolve({
             url,
             token,
