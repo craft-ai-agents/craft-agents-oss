@@ -14,6 +14,29 @@
  * separate process, avoiding bundling issues in the Electron main process.
  */
 
+// Compatibility shims: pi-coding-agent@0.66.1 calls agent.setTools() and
+// agent.setSystemPrompt(), but pi-agent-core@0.66.1's Agent class uses
+// agent.state.tools = [...] and agent.state.systemPrompt = '...' instead.
+// Patch the prototype so both APIs work.
+import { Agent } from '@mariozechner/pi-agent-core';
+
+if (typeof Agent.prototype.setTools !== 'function') {
+  Agent.prototype.setTools = function setTools(tools: unknown[]) {
+    this.state.tools = tools as any[];
+  };
+}
+if (typeof Agent.prototype.setSystemPrompt !== 'function') {
+  Agent.prototype.setSystemPrompt = function setSystemPrompt(prompt: string) {
+    this.state.systemPrompt = prompt;
+  };
+}
+if (typeof Agent.prototype.getSteeringMode !== 'function') {
+  // AgentSession.getActiveToolNames() accesses agent.getSteeringMode() in some builds
+  Agent.prototype.getSteeringMode = function getSteeringMode() {
+    return (this.state as any).steeringMode ?? 'all';
+  };
+}
+
 import http from 'node:http';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
