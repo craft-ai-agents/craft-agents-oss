@@ -515,7 +515,7 @@ function createAuthenticatedRegistry(): {
     debugLog('Injected API key into auth storage (legacy fallback)');
   }
 
-  const modelRegistry = PiModelRegistry.inMemory(authStorage);
+  const modelRegistry = new PiModelRegistry(authStorage, undefined);
 
   // Register custom endpoint models dynamically via Pi SDK's registerProvider API.
   // This makes arbitrary OpenAI/Anthropic-compatible endpoints work through the Pi SDK
@@ -930,7 +930,7 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
     callLlmAuthStorage.set(provider, credential);
     debugLog(`[queryLlm] Using secondary connection auth: provider=${provider}`);
     authStorage = callLlmAuthStorage;
-    modelRegistry = PiModelRegistry.inMemory(callLlmAuthStorage);
+    modelRegistry = new PiModelRegistry(callLlmAuthStorage, undefined);
   }
 
   const isModelNotFoundError = (message: string): boolean => {
