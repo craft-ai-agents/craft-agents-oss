@@ -37,6 +37,7 @@ import {
   RefreshCw,
   Tag,
   Send,
+  Hash,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { navigate, routes } from '@/lib/navigate'
@@ -133,6 +134,11 @@ export function SessionMenu({
       await navigator.clipboard.writeText(result.path)
       toast.success(t('toast.pathCopied'))
     }
+  }
+
+  const handleCopySessionId = async () => {
+    await navigator.clipboard.writeText(sessionId)
+    toast.success(t('toast.sessionIdCopied'))
   }
 
   const handleRefreshTitle = async () => {
@@ -319,6 +325,12 @@ export function SessionMenu({
       <MenuItem onClick={handleCopyPath}>
         <Copy className="h-3.5 w-3.5" />
         <span className="flex-1">{t("sessionMenu.copyPath")}</span>
+      </MenuItem>
+
+      {/* Copy Session ID */}
+      <MenuItem onClick={handleCopySessionId}>
+        <Hash className="h-3.5 w-3.5" />
+        <span className="flex-1">{t("sessionMenu.copySessionId")}</span>
       </MenuItem>
 
       <Separator />

@@ -1,6 +1,7 @@
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
+import { resolveSessionId } from '../utils.ts';
 
 export interface ArchiveSessionArgs {
   sessionId?: string;
@@ -17,8 +18,9 @@ export async function handleArchiveSession(
 
   try {
     const archive = !args.unarchive;
-    await ctx.archiveSession(args.sessionId, archive);
-    const target = args.sessionId ? `session ${args.sessionId}` : 'current session';
+    const resolvedId = resolveSessionId(args.sessionId);
+    await ctx.archiveSession(resolvedId, archive);
+    const target = resolvedId ? `session ${resolvedId}` : 'current session';
     const action = archive ? 'Archived' : 'Unarchived';
     return successResponse(`${action} ${target}.`);
   } catch (error) {

@@ -19,6 +19,7 @@
  */
 
 import type { SessionToolContext } from '@craft-agent/session-tools-core';
+import { resolveSessionId } from '@craft-agent/session-tools-core';
 import { getSessionScopedToolCallbacks } from './session-scoped-tool-callback-registry.ts';
 
 /**
@@ -93,12 +94,12 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
-  // getSessionInfo needs wrapping to default sid → sessionId
+  // getSessionInfo needs wrapping to default sid → sessionId and resolve paths
   Object.defineProperty(context, 'getSessionInfo', {
     get() {
       const fn = getSessionScopedToolCallbacks(sessionId)?.getSessionInfoFn;
       if (!fn) return undefined;
-      return (sid?: string) => fn(sid ?? sessionId);
+      return (sid?: string) => fn(resolveSessionId(sid) ?? sessionId);
     },
     configurable: true,
     enumerable: true,
