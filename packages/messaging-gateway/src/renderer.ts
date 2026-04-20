@@ -86,9 +86,14 @@ const THINKING_LABEL = '💭 thinking…'
  */
 const PLAN_INLINE_LIMIT = 3500
 
-/** Hook the renderer calls when it wants to remember a plan message id. */
+/**
+ * Hook the renderer calls when it wants to remember a plan message id.
+ * Passes the full `ChannelBinding` so callers can attribute the message
+ * to the exact chat that rendered it — not just the session, which may
+ * have multiple Telegram bindings.
+ */
 export type PlanMessageRecorder = (
-  sessionId: string,
+  binding: ChannelBinding,
   token: string,
   messageId: string,
 ) => void
@@ -517,7 +522,7 @@ Approve in the desktop app to continue.`,
     const planPath = planMessage?.planPath ?? ''
     const planContent = planMessage?.content ?? ''
 
-    const token = this.planTokens.issue(binding.sessionId, planPath)
+    const token = this.planTokens.issue(binding.id, binding.sessionId, planPath)
     const buttons: InlineButton[] = [
       { id: `plan:accept:${token}`, label: '✅ Accept plan' },
       { id: `plan:compact:${token}`, label: '♻️ Accept & compact' },
@@ -534,7 +539,7 @@ Approve in the desktop app to continue.`,
 
     try {
       const sent = await adapter.sendButtons(binding.channelId, bodyText, buttons)
-      this.recordPlanMessage?.(binding.sessionId, token, sent.messageId)
+      this.recordPlanMessage?.(binding, token, sent.messageId)
 
       if (!fitsInline && planContent.length > 0) {
         await adapter.sendFile(

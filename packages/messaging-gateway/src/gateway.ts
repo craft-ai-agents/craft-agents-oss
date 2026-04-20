@@ -119,12 +119,11 @@ export class MessagingGateway {
     this.planTokens = new PlanTokenRegistry()
     this.renderer = new Renderer({
       planTokens: this.planTokens,
-      recordPlanMessage: (sessionId, token, messageId) => {
-        // Resolve the binding for attribution so we can later call
-        // adapter.clearButtons() without re-scanning.
-        const bindings = this.bindingStore.findBySession(sessionId)
-        const binding = bindings.find((b) => b.platform === 'telegram')
-        if (!binding) return
+      // The renderer hands us the exact binding that sent the message.
+      // We must not resolve it ourselves — `findBySession` returns every
+      // binding and picking the first Telegram binding attributes the
+      // message to the wrong chat whenever the session has more than one.
+      recordPlanMessage: (binding, token, messageId) => {
         this.planMessages.set(token, {
           bindingId: binding.id,
           platform: binding.platform,

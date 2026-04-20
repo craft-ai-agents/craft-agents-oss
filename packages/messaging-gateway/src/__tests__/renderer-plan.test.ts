@@ -171,13 +171,13 @@ describe('Renderer — plan_submitted', () => {
     expect(adapter.calls[0]?.text).toContain('Open the desktop app')
   })
 
-  it('recordPlanMessage callback fires with sessionId, token, messageId', async () => {
+  it('recordPlanMessage callback fires with the rendering binding, token, messageId', async () => {
     const tokens = new PlanTokenRegistry()
-    const recorded: Array<[string, string, string]> = []
+    const recorded: Array<{ bindingId: string; sessionId: string; token: string; messageId: string }> = []
     const renderer = new Renderer({
       planTokens: tokens,
-      recordPlanMessage: (s, t, m) => {
-        recorded.push([s, t, m])
+      recordPlanMessage: (b, t, m) => {
+        recorded.push({ bindingId: b.id, sessionId: b.sessionId, token: t, messageId: m })
       },
     })
     const adapter = makeAdapter('telegram')
@@ -186,13 +186,16 @@ describe('Renderer — plan_submitted', () => {
     await renderer.handle(planEvent('plan'), binding, adapter)
 
     expect(recorded).toHaveLength(1)
-    const [sessionId, token, messageId] = recorded[0]!
-    expect(sessionId).toBe('sess-1')
-    expect(token).toMatch(/^[A-Za-z0-9_-]{8}$/)
-    expect(messageId).toBe('100')
+    const [rec] = recorded
+    expect(rec?.bindingId).toBe(binding.id)
+    expect(rec?.sessionId).toBe('sess-1')
+    expect(rec?.token).toMatch(/^[A-Za-z0-9_-]{8}$/)
+    expect(rec?.messageId).toBe('100')
 
-    // Token was actually issued into the registry
-    expect(tokens.resolve(token)?.sessionId).toBe('sess-1')
+    // Token was actually issued into the registry — including binding attribution.
+    const resolved = tokens.resolve(rec!.token)
+    expect(resolved?.sessionId).toBe('sess-1')
+    expect(resolved?.bindingId).toBe(binding.id)
   })
 
   it('Telegram with empty plan content: buttons + hint, no file', async () => {
