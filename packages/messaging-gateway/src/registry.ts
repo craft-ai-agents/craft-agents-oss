@@ -627,6 +627,8 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       legacyStorageDir,
       logger: baseLog,
       pairingConsumer: {
+        canConsume: (platform, senderId) =>
+          this.pairing.canConsume(workspaceId, platform, senderId),
         consume: (platform, code) => {
           const entry = this.pairing.consume(workspaceId, platform, code)
           if (!entry) return null

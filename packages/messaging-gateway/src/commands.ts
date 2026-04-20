@@ -32,6 +32,12 @@ const NOOP_LOGGER: MessagingLogger = {
  * gateway's own workspace are honored.
  */
 export interface PairingCodeConsumer {
+  /**
+   * Returns whether this sender may still attempt a /pair consume this minute.
+   * Defence-in-depth against brute-forcing the 6-digit code. Counted on entry,
+   * not after validation, so wrong guesses consume budget too.
+   */
+  canConsume(platform: PlatformType, senderId: string): boolean
   /** Returns the pending pairing (workspace + session) if the code is valid, or null. */
   consume(platform: PlatformType, code: string): { workspaceId: string; sessionId: string } | null
 }
@@ -228,6 +234,24 @@ export class Commands {
   private async handlePair(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
     if (!this.pairingConsumer) {
       await adapter.sendText(msg.channelId, 'Pairing is not available in this build.')
+      return
+    }
+
+    // Throttle BEFORE format validation — otherwise an attacker gets
+    // unlimited "is this a valid format" feedback that's almost as useful
+    // as a code check. Every `/pair` attempt counts against the budget.
+    if (!this.pairingConsumer.canConsume(adapter.platform, msg.senderId)) {
+      this.log.warn('pairing consume rate limit hit', {
+        event: 'pairing_consume_rate_limited',
+        workspaceId: this.workspaceId,
+        platform: adapter.platform,
+        channelId: msg.channelId,
+        senderId: msg.senderId,
+      })
+      await adapter.sendText(
+        msg.channelId,
+        '⏳ Too many pairing attempts. Try again in a minute.',
+      )
       return
     }
 

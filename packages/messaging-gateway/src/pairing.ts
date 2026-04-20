@@ -28,6 +28,13 @@ export interface GeneratedPairing {
 
 export const PAIRING_TTL_MS = 5 * 60 * 1000
 export const PAIRING_RATE_LIMIT_PER_MINUTE = 10
+/**
+ * Per-sender ceiling on `/pair` attempts. With a 6-digit decimal code and a
+ * 5-minute TTL, a brute-force needs on the order of 500k attempts per target
+ * code. 5/minute × 5 minutes = 25 tries across the TTL — a ~25/1,000,000
+ * upper bound. That's defence-in-depth; the real guarantee is the short TTL.
+ */
+export const PAIR_CONSUME_RATE_PER_MINUTE = 5
 
 interface Bucket {
   windowStart: number
@@ -39,10 +46,13 @@ export class PairingCodeManager {
   private readonly entries = new Map<string, PairingEntry>()
   /** Key: workspaceId */
   private readonly buckets = new Map<string, Bucket>()
+  /** Key: `${workspaceId}:${platform}:${senderId}` — counts attempts, right or wrong. */
+  private readonly consumeBuckets = new Map<string, Bucket>()
 
   constructor(
     private readonly ttlMs: number = PAIRING_TTL_MS,
     private readonly ratePerMinute: number = PAIRING_RATE_LIMIT_PER_MINUTE,
+    private readonly consumeRatePerMinute: number = PAIR_CONSUME_RATE_PER_MINUTE,
   ) {}
 
   /**
@@ -91,6 +101,28 @@ export class PairingCodeManager {
     for (const [k, v] of this.entries) {
       if (v.workspaceId === workspaceId) this.entries.delete(k)
     }
+  }
+
+  /**
+   * Per-sender throttle for `/pair` attempts. Counts on entry, NOT after
+   * validation — otherwise wrong guesses cost nothing and the throttle is
+   * decorative. Sender identity is always scoped with workspaceId+platform
+   * so a leaked senderId can't bleed across workspaces.
+   *
+   * Returns `true` if the caller may attempt another consume, `false` if
+   * they've hit the per-minute cap.
+   */
+  canConsume(workspaceId: string, platform: PlatformType, senderId: string): boolean {
+    const key = `${workspaceId}:${platform}:${senderId}`
+    const now = Date.now()
+    const bucket = this.consumeBuckets.get(key)
+    if (!bucket || now - bucket.windowStart > 60_000) {
+      this.consumeBuckets.set(key, { windowStart: now, count: 1 })
+      return true
+    }
+    if (bucket.count >= this.consumeRatePerMinute) return false
+    bucket.count += 1
+    return true
   }
 
   // -------------------------------------------------------------------------
