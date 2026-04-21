@@ -18,6 +18,7 @@ import { join } from 'node:path';
 
 import type { AgentEvent } from '@craft-agent/core/types';
 import type { FileAttachment } from '../utils/files.ts';
+import { expandPath } from '../utils/paths.ts';
 import { buildTransferredSessionContext } from './conversation-summary.ts';
 import type { ThinkingLevel } from './thinking-levels.ts';
 import { DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from './thinking-levels.ts';
@@ -1131,7 +1132,9 @@ ${formattedMessages}
       enabledSourceSlugs: input.enabledSourceSlugs as string[] | undefined,
       permissionMode: input.permissionMode as SpawnSessionRequest['permissionMode'],
       labels: input.labels as string[] | undefined,
-      workingDirectory: input.workingDirectory as string | undefined,
+      workingDirectory: typeof input.workingDirectory === 'string' && input.workingDirectory
+        ? expandPath(input.workingDirectory)
+        : undefined,
       attachments: input.attachments as SpawnSessionRequest['attachments'],
     };
 
