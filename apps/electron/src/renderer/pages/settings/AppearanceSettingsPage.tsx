@@ -16,9 +16,12 @@ import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopo
 import { useTheme } from '@/context/ThemeContext'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { routes } from '@/lib/navigate'
-import { Monitor, Sun, Moon } from 'lucide-react'
+import { Monitor, Sun, Moon, Terminal } from 'lucide-react'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { ToolIconMapping } from '../../../shared/types'
+import { EntityIcon } from '@/components/ui/entity-icon'
+import { resolveRawSvgIcon } from '@/lib/icon-cache'
+import type { ResolvedEntityIcon } from '@craft-agent/shared/icons'
 
 import {
   SettingsSection,
@@ -51,15 +54,17 @@ const getToolIconColumns = (t: (key: string) => string): ColumnDef<ToolIconMappi
   {
     accessorKey: 'iconDataUrl',
     header: () => <span className="p-1.5 pl-2.5">{t("settings.appearance.iconHeader")}</span>,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5">
-        <img
-          src={row.original.iconDataUrl}
-          alt={row.original.displayName}
-          className="w-5 h-5 object-contain"
-        />
-      </div>
-    ),
+    cell: ({ row }) => {
+      const { rawSvg, iconDataUrl } = row.original
+      const icon: ResolvedEntityIcon = rawSvg
+        ? resolveRawSvgIcon(rawSvg, iconDataUrl)
+        : { kind: 'file', value: iconDataUrl, colorable: false }
+      return (
+        <div className="p-1.5 pl-2.5">
+          <EntityIcon icon={icon} size="md" fallbackIcon={Terminal} />
+        </div>
+      )
+    },
     size: 60,
     enableSorting: false,
   },
