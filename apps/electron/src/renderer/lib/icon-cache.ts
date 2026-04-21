@@ -598,7 +598,7 @@ export function useEntityIcon(opts: UseEntityIconOptions): ResolvedEntityIcon {
     let cancelled = false
 
     async function loadIcon() {
-      let result: { dataUrl: string; colorable: boolean; rawSvg?: string } | null = null
+      let result: ResolvedEntityIcon | null = null
 
       if (iconPath) {
         // Known path - extract relative portion and load directly
@@ -703,12 +703,17 @@ function sanitizeSvgForInline(svg: string): string {
  * Determines colorability, sanitizes for inline rendering, and returns a ready-to-render icon.
  */
 export function resolveRawSvgIcon(rawSvg: string, dataUrl: string): ResolvedEntityIcon {
-  const colorable = rawSvg.includes('currentColor')
+  // Normalize to currentColor for theme-aware inline rendering:
+  // strip <style> blocks and replace all hardcoded fill colors with currentColor
+  let svg = rawSvg.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+  svg = svg.replace(/\bfill="(?!none|currentColor)[^"]*"/gi, 'fill="currentColor"')
+
+  const colorable = svg.includes('currentColor')
   return {
     kind: 'file',
     value: dataUrl,
     colorable,
-    rawSvg: colorable ? sanitizeSvgForInline(rawSvg) : undefined,
+    rawSvg: colorable ? sanitizeSvgForInline(svg) : undefined,
   }
 }
 
