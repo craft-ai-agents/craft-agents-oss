@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync } from 'fs';
-import { join, dirname, basename } from 'path';
+import { join, dirname, basename, extname } from 'path';
 import { getCredentialManager } from '../credentials/index.ts';
 import { getOrCreateLatestSession, type SessionConfig } from '../sessions/index.ts';
 import {
@@ -2793,10 +2793,14 @@ export function ensureToolIcons(): void {
     const referencedFiles = new Set(['tool-icons.json']);
     for (const tool of config.tools) {
       if (isIconUrl(tool.icon)) {
-        // Download URL icons if not already cached locally
-        const cached = findToolIconFile(toolIconsDir, tool.id);
-        if (cached) {
-          referencedFiles.add(basename(cached));
+        // Check for the specific file downloadIcon would produce ({toolId}.{ext}).
+        // Uses URL extension or defaults to .svg (CDN icons are typically SVG).
+        // This avoids matching stale bundled files with different extensions (e.g. git.ico).
+        let urlExt: string | null = null;
+        try { urlExt = extname(new URL(tool.icon).pathname).toLowerCase() || null; } catch {}
+        const expectedFile = `${tool.id}${urlExt || '.svg'}`;
+        if (existsSync(join(toolIconsDir, expectedFile))) {
+          referencedFiles.add(expectedFile);
         } else {
           downloadIcon(toolIconsDir, tool.icon, 'ToolIcons', tool.id);
         }
