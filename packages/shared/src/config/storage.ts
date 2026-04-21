@@ -45,6 +45,7 @@ import type { LlmConnection } from './llm-connections.ts';
 import { isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
 import {
   getModelProvider,
+  getModelById,
 } from './models.ts';
 
 // Config stored in JSON file (credentials stored in encrypted file, not here)
@@ -1705,11 +1706,24 @@ function migrateOpus45ToOpus46(config: StoredConfig): boolean {
  * default they had, and can switch models themselves.
  */
 function restoreOpus46ToAnthropicConnections(config: StoredConfig): boolean {
-  const MARKER = 'opus-4-6-restored';
-  if (config.migrationsApplied?.includes(MARKER)) return false;
-
   const OPUS_46_ID = 'claude-opus-4-6';
   const OPUS_47_ID = 'claude-opus-4-7';
+  const MARKER = 'opus-4-6-restored';
+  const alreadyRan = config.migrationsApplied?.includes(MARKER) ?? false;
+
+  // Anthropic connection.models entries are stored as full ModelDefinition
+  // objects (via backfillAllConnectionModels). The model picker reads
+  // model.name and falls back to the raw ID for bare strings, so we must
+  // push the object form to render as "Opus 4.6".
+  const opus46Model = getModelById(OPUS_46_ID);
+  if (!opus46Model) {
+    // Defensive — 4.6 is registered in this same PR, should never happen.
+    if (!alreadyRan) {
+      config.migrationsApplied = [...(config.migrationsApplied ?? []), MARKER];
+      return true;
+    }
+    return false;
+  }
 
   let changed = false;
 
@@ -1717,23 +1731,35 @@ function restoreOpus46ToAnthropicConnections(config: StoredConfig): boolean {
     if (connection.providerType !== 'anthropic') continue;
     if (!Array.isArray(connection.models) || connection.models.length === 0) continue;
 
-    const ids = connection.models.map(m => typeof m === 'string' ? m : m.id);
-    const has47 = ids.includes(OPUS_47_ID);
-    const has46 = ids.includes(OPUS_46_ID);
+    // Idempotent shape repair: normalize any bare-string 'claude-opus-4-6'
+    // entry to the ModelDefinition object form. Runs regardless of the
+    // one-shot marker because it's a display-shape fix, not a new entry.
+    for (let i = 0; i < connection.models.length; i++) {
+      const m = connection.models[i];
+      if (typeof m === 'string' && m === OPUS_46_ID) {
+        connection.models[i] = { ...opus46Model };
+        changed = true;
+      }
+    }
 
-    // Only restore when 4.7 is present (indicates the user was migrated) and
-    // 4.6 isn't already there. Skip connections that never had Opus at all,
-    // and connections where the user already re-added 4.6 manually.
-    if (has47 && !has46) {
-      connection.models.push(OPUS_46_ID);
+    // One-shot restore: only append 4.6 on the first run for a given user.
+    // A deliberate removal after the marker is set should stick.
+    if (alreadyRan) continue;
+
+    const ids = connection.models.map(m => typeof m === 'string' ? m : m.id);
+    if (ids.includes(OPUS_47_ID) && !ids.includes(OPUS_46_ID)) {
+      connection.models.push({ ...opus46Model });
       changed = true;
     }
   }
 
-  // Always set the marker — even when nothing changed, the migration has been
-  // "seen" and should not run again on subsequent startups.
-  config.migrationsApplied = [...(config.migrationsApplied ?? []), MARKER];
-  return true;
+  // Mark the migration as seen on the first run — even when no connection
+  // was eligible — so subsequent runs don't keep re-checking.
+  if (!alreadyRan) {
+    config.migrationsApplied = [...(config.migrationsApplied ?? []), MARKER];
+    return true;
+  }
+  return changed;
 }
 
 /**

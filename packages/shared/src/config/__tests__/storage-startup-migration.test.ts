@@ -266,9 +266,13 @@ function modelIdsOf(connection: any): string[] {
 }
 
 describe('restoreOpus46ToAnthropicConnections (integration)', () => {
-  it('re-adds claude-opus-4-6 to a migrated anthropic connection and sets marker', () => {
+  it('re-adds claude-opus-4-6 as a ModelDefinition object (not a bare string) and sets marker', () => {
     const { configDir, workspaceRoot, configPath } = setupWorkspaceConfigDir()
 
+    // Pre-existing anthropic entries are full ModelDefinition objects (written
+    // by backfillAllConnectionModels). The appended 4.6 entry must match that
+    // shape so the model picker renders "Opus 4.6" from model.name instead of
+    // falling back to the raw ID.
     writeRootConfig(configPath, workspaceRoot, [
       {
         slug: 'anthropic',
@@ -276,7 +280,11 @@ describe('restoreOpus46ToAnthropicConnections (integration)', () => {
         providerType: 'anthropic',
         authType: 'api_key',
         createdAt: Date.now(),
-        models: ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
+        models: [
+          { id: 'claude-opus-4-7', name: 'Opus 4.7', shortName: 'Opus', provider: 'anthropic', contextWindow: 1_000_000 },
+          { id: 'claude-sonnet-4-6', name: 'Sonnet 4.6', shortName: 'Sonnet', provider: 'anthropic', contextWindow: 200_000 },
+          { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5', shortName: 'Haiku', provider: 'anthropic', contextWindow: 200_000 },
+        ],
         defaultModel: 'claude-opus-4-7',
       },
     ])
@@ -290,8 +298,63 @@ describe('restoreOpus46ToAnthropicConnections (integration)', () => {
     // defaultModel is intentionally left alone — do not rewrite user choice.
     expect(connection.defaultModel).toBe('claude-opus-4-7')
 
+    const added = connection.models.find((m: any) =>
+      (typeof m === 'string' ? m : m.id) === 'claude-opus-4-6',
+    )
+    expect(typeof added).toBe('object')
+    expect(added.id).toBe('claude-opus-4-6')
+    expect(added.name).toBe('Opus 4.6')
+    expect(added.shortName).toBe('Opus')
+
     const config = readConfigJson(configPath)
     expect(config.migrationsApplied ?? []).toContain('opus-4-6-restored')
+  })
+
+  it('repairs bare-string claude-opus-4-6 entries to object form even when marker is set', () => {
+    // Protects users who briefly ran an earlier version of this migration
+    // that pushed a bare string. The picker reads model.name directly and
+    // shows 'claude-opus-4-6' for bare strings, so we normalize to the
+    // object form on subsequent runs.
+    const { configDir, workspaceRoot, configPath } = setupWorkspaceConfigDir()
+
+    const rawConfig = {
+      workspaces: [
+        {
+          id: 'ws-1',
+          name: 'My Workspace',
+          rootPath: workspaceRoot,
+          createdAt: Date.now(),
+        },
+      ],
+      activeWorkspaceId: 'ws-1',
+      activeSessionId: null,
+      defaultLlmConnection: 'anthropic',
+      migrationsApplied: ['opus-4-6-restored'],
+      llmConnections: [
+        {
+          slug: 'anthropic',
+          name: 'Anthropic',
+          providerType: 'anthropic',
+          authType: 'api_key',
+          createdAt: Date.now(),
+          models: [
+            { id: 'claude-opus-4-7', name: 'Opus 4.7', shortName: 'Opus', provider: 'anthropic', contextWindow: 1_000_000 },
+            'claude-opus-4-6',
+          ],
+          defaultModel: 'claude-opus-4-7',
+        },
+      ],
+    }
+    writeFileSync(configPath, JSON.stringify(rawConfig, null, 2), 'utf-8')
+
+    runMigration(configDir)
+
+    const connection = findConnection(configPath, 'anthropic')
+    const entry = connection.models.find((m: any) =>
+      (typeof m === 'string' ? m : m.id) === 'claude-opus-4-6',
+    )
+    expect(typeof entry).toBe('object')
+    expect(entry.name).toBe('Opus 4.6')
   })
 
   it('does not double-add 4.6 when it already exists', () => {
