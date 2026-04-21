@@ -54,7 +54,7 @@ export function SettingsSegmentedControl<T extends string = string>({
   return (
     <div
       role="radiogroup"
-      className={cn('inline-flex gap-1', className)}
+      className={cn('inline-flex flex-wrap gap-1', className)}
     >
       {options.map((option) => {
         const isSelected = option.value === value
