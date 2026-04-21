@@ -1,0 +1,154 @@
+---
+title: "WhatsApp"
+description: "Connect WhatsApp to Craft Agent via QR pairing — self-chat mode, Baileys worker architecture, attachment support"
+---
+
+<Warning>
+**Unofficial integration.** The WhatsApp adapter uses [Baileys](https://github.com/WhiskeySockets/Baileys), a community-maintained reverse-engineered client for WhatsApp Web. It's not an official WhatsApp Business API integration. Use it for personal automation and accept that Meta may rate-limit or block the session at their discretion — keep backups of important chats elsewhere.
+</Warning>
+
+WhatsApp integration uses a **QR-code pairing flow** (the same one WhatsApp Web uses) and runs in a **subprocess worker** to keep Baileys' global state isolated from the main Electron process.
+
+## Pair Your Account
+
+<Steps>
+  <Step title="Open Settings → Messaging">
+    In Craft Agent, click the WhatsApp tile's **Connect** button.
+  </Step>
+  <Step title="Scan the QR code with your phone">
+    A QR code appears in the dialog. On your phone, open WhatsApp → **Settings → Linked Devices → Link a Device** and scan the code.
+  </Step>
+  <Step title="Wait for connection">
+    The dialog updates to "Connected as <your-name>". Your Baileys session is persisted in:
+    ```
+    ~/.craft-agent/workspaces/{workspaceId}/messaging/whatsapp-session/
+    ```
+    Keep this folder — deleting it forces a re-pair.
+  </Step>
+</Steps>
+
+<Note>
+**No second phone needed.** Self-chat mode (on by default) lets you message **yourself** (your own number in WhatsApp) and have the agent drive the reply. See [Self-Chat Mode](#self-chat-mode) below.
+</Note>
+
+## First Conversation
+
+<Tabs>
+  <Tab title="Self-chat (recommended)">
+    <Steps>
+      <Step title="Message yourself on WhatsApp">
+        Open a chat with your own number (the "Message yourself" entry in WhatsApp's New Chat screen).
+      </Step>
+      <Step title="Send /new">
+        The worker sees the message from your own JID, creates a session, and binds the chat. Replies from the agent show up prefixed with 🤖 so you can tell them apart from your own messages.
+      </Step>
+      <Step title="Chat normally">
+        Everything you type is forwarded to the agent. The 🤖 prefix on replies is also how the worker filters its own echoes — so don't strip it if you copy/repost.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Second phone / contact">
+    <Steps>
+      <Step title="Ask a contact to message you">
+        (Or use a second phone.) They send `/new` to the paired number; the worker receives the message and binds the chat to a new session.
+      </Step>
+      <Step title="Agent replies in the chat">
+        Replies go back to the same contact. Every inbound message from that contact drives the bound session until they (or you) send `/unbind`.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Self-Chat Mode
+
+When enabled (default), messages you send from *another device on the same WhatsApp account* to your **own JID** are treated as inbound and routed to the bound session.
+
+| Behaviour | Why it matters |
+|-----------|----------------|
+| Reply prefix | All outbound messages from the worker to self are prefixed with 🤖 (U+1F916). This is how the worker filters its own echoes so it doesn't drive itself in an infinite loop. |
+| Sent-ID tracking | The worker also tracks message IDs it sent, so replies to those are handled as context rather than fresh prompts. |
+| LID support | Long-ID contacts (the new `lid` format WhatsApp rolls out gradually) are recognized as "self" when they map to your account. |
+
+Toggle self-chat off in **Settings → Messaging → WhatsApp** if you prefer to drive sessions only from a separate contact.
+
+## Attachments
+
+Supported media types: photos, documents, voice messages, video, audio. Same 20 MB cap as Telegram. Files land in the session as `FileAttachment` objects with the original MIME type.
+
+## Approval Channel
+
+For WhatsApp bindings, `approvalChannel` is **always `app`** — the gateway doesn't support inline approval replies on WhatsApp. When a bound session is in **Ask** mode and the agent requests approval for a bash command, the prompt appears in the desktop app, not in the chat. Everything else (prompts, replies) flows through WhatsApp as normal.
+
+### Plan Submission
+
+When the agent is in **Explore** mode and submits a plan via `SubmitPlan`, WhatsApp users see a text-only pointer:
+
+> 📝 A plan is ready for review. Open the desktop app to inspect and approve it.
+
+You **cannot accept or reject a plan from WhatsApp** — the approval round-trip happens in the desktop app only.
+
+Telegram bindings, by contrast, get two tappable buttons (`✅ Accept plan` and `♻️ Accept & compact`) attached to the plan message, plus the plan content inline (or as an attached `plan.md` if it exceeds Telegram's message length cap).
+
+<Info>
+**Why the difference?** Three stacked reasons:
+
+1. **WhatsApp has no inline buttons** in the adapter's current capability set. Telegram's flow relies on tappable buttons to carry a signed plan-approval token back; WhatsApp can't render those.
+2. **No text-reply redeem path** — plan-approval tokens are one-shot and designed to be consumed on button press. There's no command like `/accept <token>` implemented for chats that don't have buttons.
+3. **`approvalChannel` is hardcoded to `app` for WhatsApp** as belt-and-braces — bash-approval and plan-submission prompts both route to the desktop app.
+
+This is an explicit deferral, not a hard limit. WhatsApp does support quick-reply buttons in its newer protocol (Baileys' `buttonsMessage` / `interactiveMessage`), and a slash-command fallback would work even without protocol support. Track the limitation in the GitHub issues if you need this — it's not wired up yet.
+</Info>
+
+## Architecture (for the curious)
+
+<Info>
+Skip this section unless you're debugging or deploying headlessly. Day-to-day use doesn't require understanding the worker.
+</Info>
+
+The WhatsApp adapter is unusual because Baileys holds a lot of **global state** (credential stores, message queues, reconnect timers) and expects to be the only instance in its process. Running it inside the main Electron process would make crashes contagious. Instead:
+
+```
+┌──────────────────────────┐   NDJSON over stdio   ┌───────────────────────────┐
+│ Electron main process    │ ────────────────────► │ messaging-whatsapp-worker │
+│  (messaging-gateway      │ ◄──────────────────── │  (Baileys + grammY-like   │
+│   adapter client)        │   typed events        │   event loop, single CJS) │
+└──────────────────────────┘                       └───────────────────────────┘
+        ↑                                                      ↑
+        │                                                      │
+        └─ sends IncomingMessage                                └─ persists creds to
+           to Router                                              whatsapp-session/
+```
+
+- The worker is a **single bundled CJS file** (`packages/messaging-whatsapp-worker/dist`) launched under Electron's embedded Node via `ELECTRON_RUN_AS_NODE`.
+- Communication is **newline-delimited JSON over stdio** — requests from the main process, typed events (QR, connected, message, disconnect) from the worker.
+- On worker exit, the main process drains pending sends with a timeout so nothing is silently dropped.
+- In CI, the worker bundle is built and verified in release artifacts so broken bundles can't ship.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="QR code shows but never connects">
+    - Make sure the phone that scans is **online**.
+    - Check that WhatsApp on the phone is up to date — Meta sometimes rotates the linking protocol and Baileys takes a release to catch up.
+    - Try **Disconnect** from the three-dot menu and re-pair from scratch.
+  </Accordion>
+  <Accordion title="'Disconnect' vs 'Forget Device'">
+    The menu label is **Disconnect** (renamed from the earlier "Forget Device"). It clears the persisted Baileys session and forces a re-pair on next connect.
+  </Accordion>
+  <Accordion title="Agent replies appear on the phone but not on the desktop WhatsApp">
+    WhatsApp syncs linked devices lazily. Open WhatsApp on the paired device, wait 10–15 seconds, or send a dummy message from the phone to force a sync.
+  </Accordion>
+  <Accordion title="Pending messages lost when I quit the app">
+    The worker drains pending outbound sends on exit with a timeout. If the app is force-killed the queue is lost, but all **inbound** messages are persisted on WhatsApp's side — you won't miss anything you sent *to* the agent; you may miss agent replies that were mid-flight.
+  </Accordion>
+  <Accordion title="Self-chat isn't recognized">
+    - Confirm self-chat mode is enabled in **Settings → Messaging → WhatsApp**.
+    - If your account recently migrated to a LID, the binding may still reference the old JID. Unbind and re-bind from the self-chat.
+  </Accordion>
+  <Accordion title="Linked device was kicked by WhatsApp">
+    Meta periodically expires inactive linked devices. Re-pair from the app — your bindings and session data are preserved.
+  </Accordion>
+  <Accordion title="Can't accept a plan from WhatsApp">
+    By design, for now. When the agent submits a plan in Explore mode, WhatsApp bindings get a text pointer to "open the desktop app" instead of an interactive button. See [Plan Submission](#plan-submission) for the reasons and workarounds.
+  </Accordion>
+</AccordionGroup>

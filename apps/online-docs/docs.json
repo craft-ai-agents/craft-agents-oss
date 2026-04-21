@@ -86,6 +86,14 @@
             ]
           },
           {
+            "group": "Messaging",
+            "pages": [
+              "messaging/overview",
+              "messaging/telegram",
+              "messaging/whatsapp"
+            ]
+          },
+          {
             "group": "Browser",
             "pages": [
               "browser/overview",

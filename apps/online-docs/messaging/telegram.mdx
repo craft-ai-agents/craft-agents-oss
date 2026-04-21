@@ -1,0 +1,119 @@
+---
+title: "Telegram"
+description: "Connect a Telegram bot to Craft Agent — bot-token pairing, attachments, inline buttons"
+---
+
+Telegram integration uses the standard Bot API via a bot token you create with [@BotFather](https://t.me/BotFather). There's no account linking — you talk to *your* bot, and the bot drives a Craft Agent session.
+
+## Create a Bot
+
+<Steps>
+  <Step title="Open @BotFather in Telegram">
+    Search for `@BotFather` and start a chat.
+  </Step>
+  <Step title="Create a new bot">
+    Send `/newbot` and follow the prompts. Give it a display name and a username (must end in `bot`, e.g. `my_craft_agent_bot`).
+  </Step>
+  <Step title="Copy the token">
+    BotFather replies with a line like:
+    ```
+    1234567890:ABCdefGHIjklMNOpqrsTUVwxyz-0123456789
+    ```
+    This is your **bot token**. Treat it like a password — anyone with it can impersonate your bot.
+  </Step>
+  <Step title="(Optional) Disable privacy mode for group support">
+    If you want your bot to work in groups, send `/setprivacy` → choose your bot → **Disable**. For 1-on-1 use (the supported and recommended mode), you can skip this.
+  </Step>
+</Steps>
+
+<Warning>
+**Private chats only.** The gateway rejects group and channel messages at the adapter boundary. Even if your bot is added to a group, only DMs with the bot can drive a session.
+</Warning>
+
+## Connect in the App
+
+<Steps>
+  <Step title="Open Settings → Messaging">
+    In Craft Agent, open **Settings → Messaging**. You'll see a tile for each supported platform.
+  </Step>
+  <Step title="Click Connect on the Telegram tile">
+    A dialog opens asking for the bot token.
+  </Step>
+  <Step title="Paste the token and click Test">
+    Craft Agent calls Telegram's `getMe` endpoint. On success you'll see the bot's name and username; on failure you'll see Telegram's error message verbatim.
+  </Step>
+  <Step title="Click Save">
+    The token is persisted to your workspace keychain and the Telegram adapter starts listening.
+  </Step>
+</Steps>
+
+## First Conversation
+
+<Steps>
+  <Step title="Open your bot in Telegram">
+    Tap the `t.me/<your_bot_username>` link BotFather sent you, or search for your bot's username.
+  </Step>
+  <Step title="Send /new">
+    This creates a new session in your active workspace and binds the chat to it. You'll get a reply like:
+    ```
+    Created "abc123" — you're connected. Just type to start.
+    ```
+  </Step>
+  <Step title="Type anything">
+    Your message is forwarded to the agent. Replies come back as messages in the chat according to your response mode (default: `progress`).
+  </Step>
+</Steps>
+
+## Attachments
+
+Send a photo, document, voice message, video, or audio file and the gateway downloads the blob, wraps it as a `FileAttachment`, and forwards it to the session alongside your caption.
+
+| Type | Forwarded as |
+|------|--------------|
+| Photo | Image attachment (original resolution) |
+| Document | File attachment with original MIME type |
+| Voice | Audio attachment (ogg/opus) |
+| Video | Video attachment |
+| Audio | Audio attachment |
+
+**Hard cap: 20 MB per attachment.** Oversize files or failed downloads trigger a user-visible reply in the chat instead of being silently dropped.
+
+## Inline Buttons
+
+Telegram supports inline keyboard buttons, so flows like `/bind` render a tappable list of recent sessions instead of a numbered text list:
+
+```
+Recent sessions:
+[ Morning standup ]
+[ Release v0.8.10 ]
+[ Debug session  ]
+```
+
+Tap a button → bound. The gateway clears the keyboard on the posted message so stale buttons don't pile up.
+
+## Webhook vs Long-Poll
+
+- **In-app (desktop Electron):** the adapter uses **long-poll** (grammY's built-in updater). No public URL needed.
+- **Headless server:** the adapter uses **webhook** mode. You configure a public URL (e.g., `https://your-server.tld/telegram/webhook`), register it with `setWebhook`, and Telegram posts updates to it. The server verifies the `X-Telegram-Bot-Api-Secret-Token` header.
+
+See [Server → Headless](/server/headless) for the webhook deployment path.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Bot replies with 'No session bound to this chat'">
+    This is expected on the first message to a fresh bot. Send `/new` to create and bind a session, or `/pair <code>` to redeem a pairing code from the app.
+  </Accordion>
+  <Accordion title="Test fails with '401 Unauthorized'">
+    The bot token is wrong or was revoked in BotFather. Run `/token` in @BotFather to get a fresh one, or `/revoke` then `/newbot` if you want a clean slate.
+  </Accordion>
+  <Accordion title="Bot receives messages but nothing happens">
+    Check that the workspace the bot is configured in is the **active** workspace in the app. Each workspace has its own messaging config — a bot registered under workspace A won't drive sessions in workspace B.
+  </Accordion>
+  <Accordion title="Messages in a group don't work">
+    By design — only private DMs with the bot can drive a session. Group and channel messages are rejected at the adapter boundary.
+  </Accordion>
+  <Accordion title="Attachment 'too large' reply">
+    Telegram's Bot API caps file downloads at 20 MB. Upload the file via the app's attachment picker instead, or split it.
+  </Accordion>
+</AccordionGroup>

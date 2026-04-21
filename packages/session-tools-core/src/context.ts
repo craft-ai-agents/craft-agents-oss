@@ -379,6 +379,12 @@ export interface ResolvedLabelsResult {
   unknown: string[];
   /** All valid label IDs (for error messages) */
   available: string[];
+  /**
+   * Optional per-input rejection reason, keyed by the original input string.
+   * Populated by `resolveSessionLabels()` from `@craft-agent/shared/labels`.
+   * Handlers use this to build clearer errors (e.g. "label X doesn't accept a value").
+   */
+  reasons?: Record<string, string>;
 }
 
 /** Result of resolving a status name/ID against configured statuses. */

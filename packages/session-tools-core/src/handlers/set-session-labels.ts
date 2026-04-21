@@ -20,10 +20,16 @@ export async function handleSetSessionLabels(
 
     // Resolve display names → IDs, reject unknown labels
     if (ctx.resolveLabels) {
-      const { resolved, unknown, available } = ctx.resolveLabels(labels);
+      const { resolved, unknown, available, reasons } = ctx.resolveLabels(labels);
       if (unknown.length > 0) {
+        const lines = unknown.map((entry) => {
+          const reason = reasons?.[entry] ?? 'unknown label';
+          return `  - "${entry}" — ${reason}`;
+        });
         return errorResponse(
-          `Unknown labels: ${unknown.join(', ')}. Available label IDs: ${available.join(', ')}`
+          `Labels rejected:\n${lines.join('\n')}\n\n` +
+          `Available label IDs: ${available.join(', ')}.\n` +
+          `Use "id::value" only for labels configured with a valueType (number, date, or string).`
         );
       }
       labels = resolved;

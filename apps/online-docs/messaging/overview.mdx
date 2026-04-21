@@ -1,0 +1,133 @@
+---
+title: "Messaging"
+description: "Drive Craft Agent sessions from Telegram or WhatsApp — send messages from any device and get agent replies back in the chat"
+---
+
+<Tip>
+**Who this is for.** You want to talk to Craft Agent from your phone, keep a conversation going while away from your desktop, or trigger the agent from a chat without opening the app.
+</Tip>
+
+Messaging lets you **bind** an external chat (a Telegram DM or a WhatsApp contact) to a Craft Agent session. Messages you send in that chat drive the agent; the agent's output is rendered back into the same chat.
+
+## Supported Platforms
+
+<CardGroup cols={2}>
+  <Card title="Telegram" icon="paper-plane" href="/messaging/telegram">
+    Bot token (via @BotFather) — works over in-process long-poll or webhook. Supports inline buttons, photos, documents, voice, and video attachments up to 20 MB.
+  </Card>
+  <Card title="WhatsApp" icon="whatsapp" href="/messaging/whatsapp">
+    QR-code or code pairing via a Baileys-based worker subprocess. Supports text, media attachments, and a "self-chat" mode so you don't need a second phone to test.
+  </Card>
+</CardGroup>
+
+## How It Works
+
+<Steps>
+  <Step title="Enable a platform in Settings">
+    Open **Settings → Messaging** and configure Telegram (paste a bot token) or WhatsApp (scan a QR code). Each workspace has its own messaging config.
+  </Step>
+  <Step title="Bind a chat to a session">
+    From the external chat, send `/new` to create a fresh session, `/bind` to pick from recent sessions, or `/pair <code>` to redeem a pairing code generated from the app.
+  </Step>
+  <Step title="Chat drives the agent">
+    Once bound, everything you type is forwarded to the agent as a prompt. The agent's reply is rendered back into the chat using your chosen response mode.
+  </Step>
+</Steps>
+
+## Commands
+
+Available inside any chat — the gateway treats any message starting with `/` as a command.
+
+| Command | What it does |
+|---------|--------------|
+| `/new [name]` | Create a new session and bind this chat to it. Optional name. |
+| `/bind` | List up to 10 recent sessions. On Telegram, tap an inline button. On WhatsApp, reply with `/bind <number>`. |
+| `/bind <id>` | Bind directly to a session by its ID or by list index. |
+| `/pair <code>` | Redeem a 6-digit pairing code generated from the session menu in the app. |
+| `/unbind` | Disconnect this chat from its current session. |
+| `/status` | Show the bound session, approval channel, and response mode. |
+| `/stop` | Abort the current agent run. |
+| `/help` | Show available commands. |
+
+<Info>
+**Binding is workspace-scoped.** Each messaging binding lives inside one workspace — you can bind the same chat to different sessions in different workspaces, and the gateway only accepts commands/pairing codes originating from the current workspace.
+</Info>
+
+## Response Modes
+
+How the agent's output is rendered back to the chat.
+
+| Mode | What you see | When to use |
+|------|-------------|-------------|
+| **`progress`** *(default)* | One evolving message per run. A "💭 thinking…" bubble appears on first activity, edits in place as tools run, and is replaced by the final answer when complete. Intermediate text is dropped. | Keep the chat tidy — most users. |
+| **`streaming`** | Live edits during the final turn, plus every intermediate `text_complete` as its own message. Multiple messages per run. | Parity with the in-app streaming experience. |
+| **`final_only`** | Silent until the run completes, then one message with the final text. Nothing is posted if the run has no final text. | Quiet chats, batch-style workflows. |
+
+Response mode is configured **per binding** — you can have one chat on `progress` and another on `final_only` in the same workspace.
+
+<Note>
+**Telegram edit interval.** To stay within Telegram's rate limits, the renderer batches edits on a ~3.5 s interval (≈ 20 edits/min). WhatsApp doesn't support message editing, so `progress` mode on WhatsApp posts only the final "thinking" bubble and replaces it with the answer.
+</Note>
+
+## Pairing Codes
+
+When you already have a session open in the app and want to continue it from your phone, use a **pairing code** instead of typing the session ID:
+
+<Steps>
+  <Step title="Generate a code from the session menu">
+    In the app, open the session you want to bind, click the three-dot menu, and choose **Pair to messaging…**. A 6-digit code is shown.
+  </Step>
+  <Step title="Redeem it from the chat">
+    In the external chat, send `/pair 123456` (use your real code). The gateway validates the code, binds the chat, and confirms.
+  </Step>
+</Steps>
+
+**Security:**
+- Codes expire after a short TTL.
+- The `/pair` command is rate-limited per sender — wrong guesses still consume the budget.
+- Codes only work inside the workspace that issued them.
+
+## Attachments
+
+Supported on **Telegram**: photos, documents, voice messages, video, and audio. Files are downloaded to a temp location and forwarded to the session as `FileAttachment` objects — the same way uploads from the app are handled. Hard cap: **20 MB** per attachment.
+
+WhatsApp attachment forwarding follows the same pattern; platform-specific limits and MIME handling are documented in the WhatsApp page.
+
+## Approval Channel
+
+When the bound session is in **Ask** permission mode, the agent asks for approval before running a bash command. The `approvalChannel` per binding decides where that prompt appears:
+
+| Value | Behaviour |
+|-------|-----------|
+| `chat` *(Telegram default)* | The approval prompt is posted to the chat — you reply Approve/Deny inline. |
+| `app` *(WhatsApp default, enforced)* | The prompt is shown only in the desktop app. WhatsApp bindings don't support inline approvals. |
+
+The **session's own permission mode** is still authoritative — `approvalChannel` only controls *where* the prompt is shown, not *whether* it happens.
+
+### Plan Submission
+
+When the agent submits a plan in **Explore** mode, Telegram bindings get inline `✅ Accept plan` / `♻️ Accept & compact` buttons (plus the plan content inline or as a `plan.md` attachment). WhatsApp bindings get a text pointer telling you to open the desktop app — plans can't be accepted from WhatsApp yet. See [WhatsApp → Plan Submission](/messaging/whatsapp#plan-submission) for the reasons.
+
+## Security & Scope
+
+- **Per-workspace.** Each workspace has its own messaging config, bindings, and pairing codes. Binding in workspace A never accepts codes issued by workspace B.
+- **Plan-token revocation.** Plan tokens (used for bash-approval flows) are keyed by binding — rebinding a chat invalidates outstanding tokens for the old binding.
+- **Rate limiting.** `/pair` is throttled per sender. Inbound messages are routed through a per-binding queue so spam doesn't back-pressure other bindings.
+- **No group/channel chats.** Telegram group and channel messages are rejected at the adapter boundary — only private DMs can drive a session.
+
+## Configuration Location
+
+Messaging config is persisted per workspace:
+
+```
+~/.craft-agent/workspaces/{workspaceId}/messaging/
+  ├── config.json          # platform enable flags
+  ├── bindings.json        # chat → session mappings
+  └── whatsapp-session/    # Baileys credentials (WhatsApp only)
+```
+
+Edits to `bindings.json` take effect on the next inbound message. Deleting `whatsapp-session/` forces a re-pair.
+
+## Headless Server
+
+The gateway also runs inside the standalone headless Bun server (`packages/server`). Telegram uses webhook mode on the server (you configure a webhook URL), while WhatsApp still runs its Baileys worker subprocess. See [Server](/server/headless) for deployment details.

@@ -96,6 +96,40 @@ export function extractLabelId(entry: string): string {
 }
 
 /**
+ * Check whether `rawValue` is well-formed for the declared `valueType`.
+ *
+ * - `string` — always valid
+ * - `number` — matches DECIMAL_NUMBER_REGEX (rejects hex/octal/scientific)
+ * - `date`   — ISO date (YYYY-MM-DD) or datetime (YYYY-MM-DDTHH:mm), with a
+ *              round-trip check so `2026-02-29` doesn't silently clamp.
+ *
+ * Used by resolveSessionLabels to reject malformed values like `"priority::high"`
+ * when the label is configured with `valueType: "number"`.
+ */
+export function validateLabelValue(
+  rawValue: string,
+  valueType: 'string' | 'number' | 'date',
+): boolean {
+  switch (valueType) {
+    case 'string':
+      return true;
+    case 'number':
+      return DECIMAL_NUMBER_REGEX.test(rawValue);
+    case 'date': {
+      if (ISO_DATETIME_REGEX.test(rawValue)) {
+        const d = new Date(rawValue + ':00Z');
+        return !isNaN(d.getTime());
+      }
+      if (ISO_DATE_REGEX.test(rawValue)) {
+        const d = new Date(rawValue + 'T00:00:00Z');
+        return !isNaN(d.getTime()) && d.toISOString().split('T')[0] === rawValue;
+      }
+      return false;
+    }
+  }
+}
+
+/**
  * Format a raw label value for human-readable display.
  * Dates get locale-formatted (e.g. "Jan 30, 2026"), numbers and strings pass through.
  * Used by UI badge components to render the value portion after the interpunct.
