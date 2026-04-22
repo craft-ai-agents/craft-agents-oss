@@ -1071,17 +1071,40 @@ app.whenReady().then(async () => {
   // macOS: Re-create window when dock icon is clicked
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0 && windowManager) {
-      // Open first workspace or last focused
+      // Open using last closed/saved state first, then fall back to workspace default.
       const workspaces = getWorkspaces()
       if (workspaces.length > 0) {
         const savedState = loadWindowState()
-        const wsId = savedState?.lastFocusedWorkspaceId || workspaces[0].id
-        // Verify workspace still exists
-        if (workspaces.some(ws => ws.id === wsId)) {
-          windowManager.createWindow({ workspaceId: wsId })
-        } else {
-          windowManager.createWindow({ workspaceId: workspaces[0].id })
+        const validWorkspaceIds = new Set(workspaces.map(ws => ws.id))
+        const lastClosed = windowManager.getLastClosedWindowState()
+
+        const preferredSavedWindow = (() => {
+          if (lastClosed && validWorkspaceIds.has(lastClosed.workspaceId)) {
+            return lastClosed
+          }
+          if (!savedState?.windows.length) return null
+          const preferredWorkspaceId = savedState.lastFocusedWorkspaceId
+          const byFocus = preferredWorkspaceId
+            ? savedState.windows.find(w => w.workspaceId === preferredWorkspaceId && validWorkspaceIds.has(w.workspaceId))
+            : undefined
+          if (byFocus) return byFocus
+          return savedState.windows.find(w => validWorkspaceIds.has(w.workspaceId)) ?? null
+        })()
+
+        if (preferredSavedWindow) {
+          const win = windowManager.createWindow({
+            workspaceId: preferredSavedWindow.workspaceId,
+            focused: preferredSavedWindow.focused,
+            restoreUrl: preferredSavedWindow.url,
+          })
+          win.setBounds(preferredSavedWindow.bounds)
+          return
         }
+
+        const wsId = savedState?.lastFocusedWorkspaceId || workspaces[0].id
+        windowManager.createWindow({
+          workspaceId: validWorkspaceIds.has(wsId) ? wsId : workspaces[0].id,
+        })
       }
     }
   })
@@ -1108,20 +1131,29 @@ app.on('before-quit', async (event) => {
   windowManager?.setAppQuitting(true)
 
   if (windowManager) {
-    // Get full window states (includes bounds, type, and query)
+    // Get full window states (includes bounds, type, and query).
+    // On macOS users may quit while no windows are open; in that case preserve the
+    // last closed window snapshot so next launch can restore size/position correctly.
     const windows = windowManager.getWindowStates()
+    const lastClosedWindow = windowManager.getLastClosedWindowState()
+    const windowsToSave = windows.length > 0
+      ? windows
+      : (lastClosedWindow ? [lastClosedWindow] : [])
+
     // Get the focused window's workspace as last focused
     const focusedWindow = BrowserWindow.getFocusedWindow()
     let lastFocusedWorkspaceId: string | undefined
     if (focusedWindow) {
       lastFocusedWorkspaceId = windowManager.getWorkspaceForWindow(focusedWindow.webContents.id) ?? undefined
+    } else if (windowsToSave[0]) {
+      lastFocusedWorkspaceId = windowsToSave[0].workspaceId
     }
 
     saveWindowState({
-      windows,
+      windows: windowsToSave,
       lastFocusedWorkspaceId,
     })
-    mainLog.info('Saved window state:', windows.length, 'windows')
+    mainLog.info('Saved window state:', windowsToSave.length, 'windows')
   }
 
   // Flush all pending session writes before quitting

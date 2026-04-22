@@ -3,7 +3,7 @@ import { join } from 'path'
 import { homedir } from 'os'
 import { execSync } from 'child_process'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getGitBashPath, setGitBashPath, clearGitBashPath } from '@craft-agent/shared/config'
+import { getGitBashPath, setGitBashPath, clearGitBashPath, setWindowZoomFactor } from '@craft-agent/shared/config'
 import { isUsableGitBashPath, validateGitBashPath } from '@craft-agent/server-core/services'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
 import type { RpcServer } from '@craft-agent/server-core/transport'
@@ -330,7 +330,9 @@ export function registerSystemGuiHandlers(server: RpcServer, deps: HandlerDeps):
     const win = windowManager.getWindowByWebContentsId(ctx.webContentsId!)
     if (win) {
       const currentZoom = win.webContents.getZoomFactor()
-      win.webContents.setZoomFactor(Math.min(currentZoom + 0.1, 3.0))
+      const nextZoom = Math.min(currentZoom + 0.1, 3.0)
+      win.webContents.setZoomFactor(nextZoom)
+      setWindowZoomFactor(nextZoom)
     }
   })
 
@@ -339,7 +341,9 @@ export function registerSystemGuiHandlers(server: RpcServer, deps: HandlerDeps):
     const win = windowManager.getWindowByWebContentsId(ctx.webContentsId!)
     if (win) {
       const currentZoom = win.webContents.getZoomFactor()
-      win.webContents.setZoomFactor(Math.max(currentZoom - 0.1, 0.5))
+      const nextZoom = Math.max(currentZoom - 0.1, 0.5)
+      win.webContents.setZoomFactor(nextZoom)
+      setWindowZoomFactor(nextZoom)
     }
   })
 
@@ -347,6 +351,7 @@ export function registerSystemGuiHandlers(server: RpcServer, deps: HandlerDeps):
     if (!windowManager) return
     const win = windowManager.getWindowByWebContentsId(ctx.webContentsId!)
     win?.webContents.setZoomFactor(1.0)
+    setWindowZoomFactor(1.0)
   })
 
   server.handle(RPC_CHANNELS.menu.TOGGLE_DEV_TOOLS, async (ctx) => {

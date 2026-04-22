@@ -70,6 +70,8 @@ export interface StoredConfig {
   spellCheck?: boolean;  // Enable spell check in input (default: false)
   // Power settings
   keepAwakeWhileRunning?: boolean;  // Prevent screen sleep while sessions are running (default: false)
+  // Window zoom
+  windowZoomFactor?: number;  // Global window zoom factor (default: 1.0, range: 0.5-3.0)
   // Tool metadata
   richToolDescriptions?: boolean;  // Add intent/action metadata to all tool calls (default: true)
   // Tools
@@ -93,6 +95,10 @@ export interface StoredConfig {
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 const CONFIG_DEFAULTS_FILE = join(CONFIG_DIR, 'config-defaults.json');
+const MIN_WINDOW_ZOOM_FACTOR = 0.5;
+const MAX_WINDOW_ZOOM_FACTOR = 3.0;
+const DEFAULT_WINDOW_ZOOM_FACTOR = 1.0;
+const WINDOW_ZOOM_PRECISION = 100;
 
 // Track if config-defaults have been synced this session (prevents re-sync on hot reload)
 let configDefaultsSynced = false;
@@ -402,6 +408,34 @@ export function setKeepAwakeWhileRunning(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.keepAwakeWhileRunning = enabled;
+  saveConfig(config);
+}
+
+function normalizeWindowZoomFactor(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_WINDOW_ZOOM_FACTOR;
+  const clamped = Math.min(Math.max(value, MIN_WINDOW_ZOOM_FACTOR), MAX_WINDOW_ZOOM_FACTOR);
+  // Keep two decimal places to avoid noisy floating-point persistence updates.
+  return Math.round(clamped * WINDOW_ZOOM_PRECISION) / WINDOW_ZOOM_PRECISION;
+}
+
+/**
+ * Get global window zoom factor.
+ * Defaults to 1.0 when unset.
+ */
+export function getWindowZoomFactor(): number {
+  const config = loadStoredConfig();
+  return normalizeWindowZoomFactor(config?.windowZoomFactor ?? DEFAULT_WINDOW_ZOOM_FACTOR);
+}
+
+/**
+ * Persist global window zoom factor.
+ */
+export function setWindowZoomFactor(zoomFactor: number): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  const normalized = normalizeWindowZoomFactor(zoomFactor);
+  if (config.windowZoomFactor === normalized) return;
+  config.windowZoomFactor = normalized;
   saveConfig(config);
 }
 

@@ -3,6 +3,7 @@ import { windowLog } from './logger'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { release } from 'os'
+import { getWindowZoomFactor, setWindowZoomFactor } from '@craft-agent/shared/config'
 import { RPC_CHANNELS, type WindowCloseRequestSource } from '../shared/types'
 import type { SavedWindow } from './window-state'
 
@@ -53,6 +54,7 @@ export interface CreateWindowOptions {
 export class WindowManager {
   private windows: Map<number, ManagedWindow> = new Map()  // webContents.id → ManagedWindow
   private focusedModeWindows: Set<number> = new Set()  // webContents.id of windows in focused mode
+  private lastClosedWindowState: SavedWindow | null = null
   private pendingCloseTimeouts: Map<number, NodeJS.Timeout> = new Map()  // Fallback timeouts for window close
   private eventSink: ((channel: string, target: import('@craft-agent/shared/protocol').PushTarget, ...args: any[]) => void) | null = null
   private clientResolver: ((wcId: number) => string | undefined) | null = null
@@ -94,6 +96,22 @@ export class WindowManager {
     // Fallback: direct webContents.send (used before WS handshake completes)
     if (!window.isDestroyed() && !window.webContents.isDestroyed() && window.webContents.mainFrame) {
       window.webContents.send(channel, ...args)
+    }
+  }
+
+  private buildSavedWindowState(window: BrowserWindow, workspaceId: string): SavedWindow {
+    const webContentsId = window.webContents.id
+    const isFocused = this.focusedModeWindows.has(webContentsId)
+    let url = ''
+    if (!window.webContents.isDestroyed()) {
+      url = window.webContents.getURL()
+    }
+    return {
+      type: 'main',
+      workspaceId,
+      bounds: window.getBounds(),
+      ...(isFocused && { focused: true }),
+      ...(url && { url }),
     }
   }
 
@@ -169,6 +187,19 @@ export class WindowManager {
         sandbox: false,
         webviewTag: false // Browser integration uses WebContentsView, not <webview>
       }
+    })
+
+    const initialZoomFactor = getWindowZoomFactor()
+    window.webContents.setZoomFactor(initialZoomFactor)
+    window.webContents.once('did-finish-load', () => {
+      if (window.isDestroyed() || window.webContents.isDestroyed()) return
+      window.webContents.setZoomFactor(getWindowZoomFactor())
+    })
+    window.webContents.on('zoom-changed', () => {
+      setTimeout(() => {
+        if (window.isDestroyed() || window.webContents.isDestroyed()) return
+        setWindowZoomFactor(window.webContents.getZoomFactor())
+      }, 0)
     })
 
     // Show window when first paint is ready (faster perceived startup)
@@ -343,6 +374,14 @@ export class WindowManager {
     // Handle window close request (traffic-light button, menu close, Cmd/Ctrl+W)
     // and send source metadata so renderer can decide layered dismiss vs direct close.
     window.on('close', (event) => {
+      // Keep last known state so macOS can restore size/position when reopening from Dock
+      // without a full app quit (window-all-closed keeps app alive on macOS).
+      this.lastClosedWindowState = this.buildSavedWindowState(window, workspaceId)
+
+      if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+        setWindowZoomFactor(window.webContents.getZoomFactor())
+      }
+
       // During app quit, bypass layered close behavior and allow native close flow.
       // This preserves expected Cmd+Q semantics (quit app instead of closing overlays/panels first).
       if (this.isAppQuitting) {
@@ -486,6 +525,7 @@ export class WindowManager {
 
     const managed = this.windows.get(webContentsId)
     if (managed && !managed.window.isDestroyed()) {
+      this.lastClosedWindowState = this.buildSavedWindowState(managed.window, managed.workspaceId)
       // Remove close listener temporarily to avoid infinite loop,
       // then destroy the window directly
       managed.window.destroy()
@@ -573,17 +613,20 @@ export class WindowManager {
    */
   getWindowStates(): SavedWindow[] {
     return this.getAllWindows().map(managed => {
-      const webContentsId = managed.window.webContents.id
-      const isFocused = this.focusedModeWindows.has(webContentsId)
-      const url = managed.window.webContents.getURL()
-      return {
-        type: 'main' as const,
-        workspaceId: managed.workspaceId,
-        bounds: managed.window.getBounds(),
-        ...(isFocused && { focused: true }),
-        ...(url && { url }),
-      }
+      return this.buildSavedWindowState(managed.window, managed.workspaceId)
     })
+  }
+
+  /**
+   * Last window state captured during close flow.
+   * Used to restore macOS windows when the app remains alive with no windows.
+   */
+  getLastClosedWindowState(): SavedWindow | null {
+    if (!this.lastClosedWindowState) return null
+    return {
+      ...this.lastClosedWindowState,
+      bounds: { ...this.lastClosedWindowState.bounds },
+    }
   }
 
   /**
