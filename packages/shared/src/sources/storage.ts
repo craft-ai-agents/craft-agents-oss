@@ -308,8 +308,12 @@ export function loadSource(workspaceRootPath: string, sourceSlug: string): Loade
   // Credentials are keyed by folder name (e.g., "046a02d0-..."), not full path
   const workspaceId = basename(workspaceRootPath);
 
-  // Pre-compute icon path for renderer (avoids fs access in browser)
+  // Pre-compute icon path and raw SVG for renderer (avoids fs access in browser)
   const iconPath = findIconFile(folderPath);
+  let rawSvg: string | undefined;
+  if (iconPath?.endsWith('.svg')) {
+    try { rawSvg = readFileSync(iconPath, 'utf-8'); } catch {}
+  }
 
   return {
     config,
@@ -318,6 +322,7 @@ export function loadSource(workspaceRootPath: string, sourceSlug: string): Loade
     workspaceRootPath,
     workspaceId,
     iconPath,
+    rawSvg,
   };
 }
 
