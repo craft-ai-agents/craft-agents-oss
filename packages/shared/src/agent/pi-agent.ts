@@ -43,6 +43,7 @@ import { EventQueue } from './backend/event-queue.ts';
 
 // System prompt for Craft Agent context
 import { getSystemPrompt } from '../prompts/system.ts';
+import { getCoAuthorPreference } from '../config/preferences.ts';
 
 // Credential manager for token storage
 import { getCredentialManager } from '../credentials/manager.ts';
@@ -1800,7 +1801,8 @@ export class PiAgent extends BaseAgent {
         this.config.workspace.rootPath,
         this.config.session?.workingDirectory,
         this.config.systemPromptPreset,
-        'Craft Agents Backend' // backendName
+        'Craft Agents Backend', // backendName
+        getCoAuthorPreference() // respect user's includeCoAuthoredBy preference (#576)
       );
 
       // Build context from sources
