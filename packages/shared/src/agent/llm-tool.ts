@@ -58,6 +58,8 @@ export interface LLMQueryResult {
   model?: string;
   inputTokens?: number;
   outputTokens?: number;
+  /** Non-fatal warning attached to a partially-successful result (e.g. SDK stopped at max_turns). */
+  warning?: string;
 }
 
 /**
@@ -702,11 +704,15 @@ For large files (>2000 lines), use {path, startLine, endLine} to select a portio
           outputSchema: schema ? (schema as Record<string, unknown>) : undefined,
         });
 
-        if (!result.text) {
+        if (!result.text && !result.warning) {
           return { content: [{ type: 'text' as const, text: '(Model returned empty response)' }] };
         }
 
-        return { content: [{ type: 'text' as const, text: result.text }] };
+        const body = result.warning
+          ? `[Partial result — ${result.warning}]\n\n${result.text || '(no text produced before stop)'}`
+          : result.text;
+
+        return { content: [{ type: 'text' as const, text: body }] };
       } catch (error) {
         if (error instanceof Error) {
           return errorResponse(`call_llm failed: ${error.message}`);
