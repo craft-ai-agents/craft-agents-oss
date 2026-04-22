@@ -463,9 +463,9 @@ export function CardBeamAnimation() {
       const highlightedCards: CardData[] = []
 
       for (let i = 0; i < CARD_COUNT; i++) {
-        // Cycle through code snippets
-        const codeSnippet = CODE_SNIPPETS[i % CODE_SNIPPETS.length]
-        const docSnippet = DOCUMENT_SNIPPETS[i % DOCUMENT_SNIPPETS.length]
+        // Cycle through code snippets — modulo indices are always in range.
+        const codeSnippet = CODE_SNIPPETS[i % CODE_SNIPPETS.length]!
+        const docSnippet = DOCUMENT_SNIPPETS[i % DOCUMENT_SNIPPETS.length]!
 
         // Highlight with Shiki using a dark terminal-like theme
         const rawHtml = await codeToHtml(codeSnippet, {
@@ -635,7 +635,7 @@ export function CardBeamAnimation() {
               <div className="card card-code">
                 <div
                   className="code-content"
-                  dangerouslySetInnerHTML={{ __html: card.html }}
+                  dangerouslySetInnerHTML={{ __html: card.codeHtml }}
                 />
               </div>
             </div>
@@ -649,7 +649,7 @@ export function CardBeamAnimation() {
               <div className="card card-code">
                 <div
                   className="code-content"
-                  dangerouslySetInnerHTML={{ __html: card.html }}
+                  dangerouslySetInnerHTML={{ __html: card.codeHtml }}
                 />
               </div>
             </div>

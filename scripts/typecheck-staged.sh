@@ -1,4 +1,14 @@
 #!/usr/bin/env bash
+# Pre-commit typecheck for staged TypeScript changes.
+#
+# Auto-discovers workspaces: for every staged file under `apps/<X>/` or
+# `packages/<X>/`, if that directory has a `tsconfig.json`, the workspace
+# is typechecked. No hardcoded allowlist — new workspaces are picked up
+# automatically.
+#
+# Typecheck command per workspace:
+#   - `bun run typecheck` if package.json defines it (respects custom setups)
+#   - `bun run tsc --noEmit` otherwise (plain TS workspace)
 set -euo pipefail
 
 changed_files="$(git diff --cached --name-only --diff-filter=ACMR)"
@@ -8,71 +18,41 @@ if [ -z "$changed_files" ]; then
   exit 0
 fi
 
-has_changed_in() {
-  local pattern="$1"
-  echo "$changed_files" | grep -Eq "$pattern"
-}
-
-run_step() {
-  local label="$1"
-  local cmd="$2"
-  echo "→ $label"
-  eval "$cmd"
-}
-
-run_full=false
-
-# Config/tooling changes can affect multiple workspaces.
-if has_changed_in '^(package\.json|bun\.lock|tsconfig(\..+)?\.json|apps/electron/tsconfig\.json|packages/.+/tsconfig\.json)$'; then
-  run_full=true
+# Root config / tooling changes can ripple through every workspace, so
+# treat them as a full-run trigger.
+if echo "$changed_files" | grep -Eq '^(package\.json|bun\.lock|tsconfig(\..+)?\.json)$'; then
+  echo "→ Root config changed — running full typecheck"
+  bun run typecheck:all
+  exit 0
 fi
 
-if [ "$run_full" = true ]; then
-  run_step "Typecheck all" "bun run typecheck:all"
+# Collect `apps/<X>` + `packages/<X>` directories touched by staged files.
+workspaces="$(echo "$changed_files" \
+  | grep -E '^(apps|packages)/[^/]+/' \
+  | awk -F/ '{print $1"/"$2}' \
+  | sort -u || true)"
+
+if [ -z "$workspaces" ]; then
+  echo "No workspace files staged. Skipping typecheck."
   exit 0
 fi
 
 ran_any=false
+while IFS= read -r ws; do
+  [ -z "$ws" ] && continue
+  if [ ! -f "$ws/tsconfig.json" ]; then
+    continue
+  fi
 
-if has_changed_in '^apps/electron/'; then
-  run_step "Typecheck Electron" "bun run typecheck:electron"
+  if [ -f "$ws/package.json" ] && grep -Eq '"typecheck"[[:space:]]*:' "$ws/package.json"; then
+    echo "→ Typecheck $ws (npm script)"
+    (cd "$ws" && bun run typecheck)
+  else
+    echo "→ Typecheck $ws (tsc --noEmit)"
+    (cd "$ws" && bun run tsc --noEmit)
+  fi
   ran_any=true
-fi
-
-if has_changed_in '^apps/viewer/'; then
-  run_step "Typecheck Viewer" "bun run viewer:typecheck"
-  ran_any=true
-fi
-
-if has_changed_in '^packages/shared/'; then
-  run_step "Typecheck Shared" "bun run typecheck:shared"
-  ran_any=true
-fi
-
-if has_changed_in '^packages/core/'; then
-  run_step "Typecheck Core" "(cd packages/core && bun run tsc --noEmit)"
-  ran_any=true
-fi
-
-if has_changed_in '^packages/server-core/'; then
-  run_step "Typecheck Server Core" "(cd packages/server-core && bun run tsc --noEmit)"
-  ran_any=true
-fi
-
-if has_changed_in '^packages/server/'; then
-  run_step "Typecheck Server" "(cd packages/server && bun run tsc --noEmit)"
-  ran_any=true
-fi
-
-if has_changed_in '^packages/session-tools-core/'; then
-  run_step "Typecheck Session Tools" "(cd packages/session-tools-core && bun run tsc --noEmit)"
-  ran_any=true
-fi
-
-if has_changed_in '^packages/ui/'; then
-  run_step "Typecheck UI" "(cd packages/ui && bun run tsc --noEmit)"
-  ran_any=true
-fi
+done <<< "$workspaces"
 
 if [ "$ran_any" = false ]; then
   echo "No staged TypeScript workspaces changed. Skipping typecheck."
