@@ -2634,7 +2634,11 @@ This is a branched conversation. All prior messages in this conversation are par
     const options = {
       ...getDefaultOptions(this.config.envOverrides),
       model,
-      maxTurns: 1,
+      // call_llm has no tools, but long-form reasoning-model outputs can
+      // internally span multiple SDK turns, so a 1-turn cap drops them with
+      // "Reached maximum number of turns (1)". 10 is headroom with no
+      // tool-use loop risk since the tool surface here is empty.
+      maxTurns: 10,
       systemPrompt: request.systemPrompt ?? 'Reply with ONLY the requested text. No explanation.',
       ...(request.maxTokens ? { maxTokens: request.maxTokens } : {}),
       ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
