@@ -100,7 +100,6 @@ export function SoundPackBadge({
             showChevron={true}
             isOpen={open}
             disabled={disabled}
-            onClick={() => setOpen(prev => !prev)}
             tooltip={t('settings.sound.packTooltip', 'Sound Pack')}
           />
         </PopoverTrigger>

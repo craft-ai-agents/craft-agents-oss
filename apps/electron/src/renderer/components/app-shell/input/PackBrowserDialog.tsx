@@ -61,20 +61,27 @@ export function PackBrowserDialog({
 
   // Fetch registry on open
   React.useEffect(() => {
-    if (open && registry.length === 0) {
-      setLoading(true)
-      setError(null)
-      window.electronAPI.getSoundRegistry()
-        .then((result) => {
-          if (result.error) {
-            setError(result.error)
-          } else if (result.packs) {
-            setRegistry(result.packs as RegistryPack[])
-          }
-        })
-        .catch((err) => setError(String(err)))
-        .finally(() => setLoading(false))
-    }
+    if (!open) return
+    if (registry.length > 0) return // already loaded
+    setLoading(true)
+    setError(null)
+    window.electronAPI.getSoundRegistry()
+      .then((result) => {
+        if (!result) {
+          setError('No response from sound service')
+          return
+        }
+        if (result.error) {
+          setError(result.error)
+          return
+        }
+        const packs = Array.isArray(result.packs) ? result.packs : []
+        setRegistry(packs as RegistryPack[])
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : String(err))
+      })
+      .finally(() => setLoading(false))
   }, [open, registry.length])
 
   const handleInstall = async (packName: string) => {

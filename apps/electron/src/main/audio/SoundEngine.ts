@@ -232,7 +232,11 @@ export class SoundEngine {
    * Play a test sound (from settings page).
    */
   playTest(filePath: string): void {
-    if (!this.audioProcess) return
+    if (!this.audioProcess) {
+      console.warn('[sound] playTest called but audio process is not running')
+      return
+    }
+    console.info(`[sound] Playing test: ${filePath}`)
     this.playFile(filePath, this.settings.volume)
   }
 

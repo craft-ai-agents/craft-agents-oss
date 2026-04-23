@@ -76,12 +76,23 @@ export function registerSoundHandlers(server: RpcServer, deps: HandlerDeps): voi
   // Browse OpenPeon registry
   server.handle(RPC_CHANNELS.sound.GET_REGISTRY, async () => {
     try {
-      const response = await fetch('https://peonping.github.io/registry/index.json')
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 15000)
+      const response = await fetch('https://peonping.github.io/registry/index.json', {
+        signal: controller.signal,
+      })
+      clearTimeout(timeout)
       if (!response.ok) throw new Error(`Registry fetch failed: ${response.status}`)
-      return await response.json()
-    } catch (err) {
-      console.error('[sound] Registry fetch error:', err)
-      return { error: 'Failed to fetch registry', packs: [] }
+      const data = await response.json()
+      // Normalize: ensure .packs array exists
+      if (!data.packs || !Array.isArray(data.packs)) {
+        return { packs: [], error: 'Invalid registry format' }
+      }
+      return data
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      console.error('[sound] Registry fetch error:', message)
+      return { packs: [], error: `Failed to fetch registry: ${message}` }
     }
   })
 
