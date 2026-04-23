@@ -219,6 +219,16 @@ try {
     Pop-Location
 }
 
+# Build audio-player utility process (runs in Electron UtilityProcess for sound playback)
+Write-Host "  Building audio-player utility process..."
+Push-Location $RootDir
+try {
+    & npx esbuild "apps/electron/src/utility/audio-player.ts" --bundle --platform=node --format=cjs --outfile="apps/electron/dist/utility/audio-player.cjs" --external:electron
+    if ($LASTEXITCODE -ne 0) { throw "Audio-player utility process build failed" }
+} finally {
+    Pop-Location
+}
+
 # Build preload
 Write-Host "  Building preload..."
 Push-Location $RootDir

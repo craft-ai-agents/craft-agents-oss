@@ -20,6 +20,8 @@ const PI_AGENT_SERVER_OUTPUT = join(PI_AGENT_SERVER_DIR, "dist/index.js");
 const WA_WORKER_DIR = join(ROOT_DIR, "packages/messaging-whatsapp-worker");
 const WA_WORKER_SOURCE = join(WA_WORKER_DIR, "src/worker.ts");
 const WA_WORKER_OUTPUT = join(WA_WORKER_DIR, "dist/worker.cjs");
+const AUDIO_PLAYER_SOURCE = join(ROOT_DIR, "apps/electron/src/utility/audio-player.ts");
+const AUDIO_PLAYER_OUTPUT = join(DIST_DIR, "utility/audio-player.cjs");
 
 // Load .env file if it exists
 function loadEnvFile(): void {
@@ -310,6 +312,50 @@ async function buildWhatsAppWorker(): Promise<void> {
   console.log("✅ WhatsApp worker built successfully");
 }
 
+// Build the audio-player utility process (runs in Electron UtilityProcess for sound playback)
+async function buildAudioPlayer(): Promise<void> {
+  if (!existsSync(AUDIO_PLAYER_SOURCE)) {
+    console.log("⏭️  Audio player skipped (source not found)");
+    return;
+  }
+
+  console.log("🎙️ Building audio-player utility process...");
+
+  // Ensure utility directory exists
+  const utilityDir = join(DIST_DIR, "utility");
+  if (!existsSync(utilityDir)) {
+    mkdirSync(utilityDir, { recursive: true });
+  }
+
+  const proc = spawn({
+    cmd: [
+      "bun", "run", "esbuild",
+      AUDIO_PLAYER_SOURCE,
+      "--bundle",
+      "--platform=node",
+      "--format=cjs",
+      `--outfile=${AUDIO_PLAYER_OUTPUT}`,
+      "--external:electron",
+    ],
+    cwd: ROOT_DIR,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    console.error("❌ Audio player build failed with exit code", exitCode);
+    process.exit(exitCode);
+  }
+
+  if (!existsSync(AUDIO_PLAYER_OUTPUT)) {
+    console.error("❌ Audio player output not found at", AUDIO_PLAYER_OUTPUT);
+    process.exit(1);
+  }
+
+  console.log("✅ Audio player built successfully");
+}
+
 async function main(): Promise<void> {
   loadEnvFile();
 
@@ -333,6 +379,9 @@ async function main(): Promise<void> {
 
   // Build WhatsApp worker (Baileys subprocess — optional package)
   await buildWhatsAppWorker();
+
+  // Build audio-player utility process (runs in Electron UtilityProcess for sound playback)
+  await buildAudioPlayer();
 
   const buildDefines = getBuildDefines();
 

@@ -90,7 +90,7 @@ export class SoundEngine {
   }
 
   private spawnAudioProcess(): void {
-    const modulePath = join(__dirname, '..', 'utility', 'audio-player.js')
+    const modulePath = join(__dirname, 'utility', 'audio-player.cjs')
     // Note: In dev, this may need to point to the compiled output.
     // For now, we assume it's compiled alongside the main process.
     try {

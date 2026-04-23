@@ -5,7 +5,12 @@
  * validates them against the CESP schema, and resolves category aliases.
  */
 
-import { readFile, readdir, stat, mkdir } from 'node:fs/promises'
+import {
+  readFile,
+  readdir,
+  stat,
+  mkdir,
+} from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { existsSync } from 'node:fs'
 import { app } from 'electron'
@@ -20,13 +25,15 @@ import {
   SUPPORTED_AUDIO_EXTENSIONS,
   AUDIO_MAGIC_BYTES,
 } from '@craft-agent/shared/audio'
+import { getBundledAssetsDir } from '@craft-agent/shared/utils'
 
 // ---------------------------------------------------------------------------
 // Paths
 // ---------------------------------------------------------------------------
 
 function getBuiltinPackDir(): string {
-  return join(process.resourcesPath, 'sound-packs')
+  const dir = getBundledAssetsDir('sound-packs')
+  return dir ?? join(process.resourcesPath, 'sound-packs')
 }
 
 function getUserPackDir(): string {
