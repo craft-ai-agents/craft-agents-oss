@@ -41,7 +41,8 @@ async function loadAudioBuffer(filePath: string): Promise<AudioBuffer> {
 
   const { ctx } = ensureAudioContext()
   const buffer = await readFile(filePath)
-  const audioBuffer = await ctx.decodeAudioData(buffer.buffer.slice(0))
+  const audioData = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+  const audioBuffer = await ctx.decodeAudioData(audioData)
   cache.set(filePath, audioBuffer)
 
   // Notify main process of cache size
