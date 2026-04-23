@@ -224,83 +224,12 @@ interface ChatDisplayProps {
   connectionUnavailable?: boolean
 }
 
-type PendingFollowUpAnnotation = {
-  messageId: string
-  annotationId: string
-  note: string
-  selectedText: string
-  createdAt: number
-  color?: string
-  meta?: Record<string, unknown>
-}
-
-function normalizeExcerptForMessage(text: string, maxLength = 280): string {
-  const normalized = normalizeFollowUpText(text)
-  if (normalized.length <= maxLength) return normalized
-  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`
-}
-
-function formatFollowUpSection(
-  followUps: PendingFollowUpAnnotation[],
-  options?: { includeTopSeparator?: boolean }
-): string {
-  if (followUps.length === 0) return ''
-
-  const includeTopSeparator = options?.includeTopSeparator ?? true
-
-  const items = followUps.map((followUp, idx) => {
-    const quoteText = normalizeExcerptForMessage(followUp.selectedText)
-    return [
-      `> [#${idx + 1}] ${quoteText}`,
-      `→ ${followUp.note}`,
-    ].join('\n')
-  })
-
-  const body = ['**Follow-ups**', items.join('\n\n---\n\n')].join('\n\n')
-  return includeTopSeparator ? `---\n\n${body}` : body
-}
-
-function normalizeFollowUpsMarkdown(message: string): string {
-  const normalizedInput = message.replace(/\r\n/g, '\n')
-  const headingMatch = /(?:\*\*Follow-ups\*\*|Follow-up annotations:)/i.exec(normalizedInput)
-  if (!headingMatch || headingMatch.index == null) return message
-
-  const headingIndex = headingMatch.index
-  const beforeHeading = normalizedInput.slice(0, headingIndex).trimEnd()
-  const hasTrailingSeparator = /(?:^|\n)\s*---\s*$/.test(beforeHeading)
-  const sectionText = normalizedInput.slice(headingIndex)
-
-  // Remove heading and optional leading separator so we can parse items robustly.
-  const body = sectionText
-    .replace(/^\s*(?:---\s*)?(?:\*\*Follow-ups\*\*|Follow-up annotations:)\s*/i, '')
-
-  const itemRegex = />?\s*\[#(\d+)\]\s*([\s\S]*?)\s*→\s*([\s\S]*?)(?=(?:\s*---\s*>?\s*\[#\d+\])|$)/g
-  const parsedItems: Array<{ quote: string; note: string }> = []
-
-  for (const match of body.matchAll(itemRegex)) {
-    const quote = match[2]?.replace(/\s+/g, ' ').trim()
-    const note = match[3]?.replace(/\s+/g, ' ').trim()
-    if (!quote || !note) continue
-    parsedItems.push({ quote, note })
-  }
-
-  if (parsedItems.length === 0) {
-    return message
-  }
-
-  const rebuiltItems = parsedItems.map((item, idx) => [
-    `> [#${idx + 1}] ${item.quote}`,
-    `→ ${item.note}`,
-  ].join('\n'))
-
-  const includeTopSeparator = beforeHeading.length > 0 && !hasTrailingSeparator
-  const rebuiltBody = ['**Follow-ups**', rebuiltItems.join('\n\n---\n\n')].join('\n\n')
-  const rebuiltSection = includeTopSeparator
-    ? `---\n\n${rebuiltBody}`
-    : rebuiltBody
-
-  return beforeHeading.length > 0 ? `${beforeHeading}\n\n${rebuiltSection}` : rebuiltSection
-}
+import {
+  formatFollowUpSection,
+  normalizeFollowUpsMarkdown,
+  truncateForChipTooltip,
+  type PendingFollowUpAnnotation,
+} from './ChatDisplay.follow-ups'
 
 /**
  * Imperative handle exposed via forwardRef for navigation between matches
@@ -1135,8 +1064,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       messageId: followUp.messageId,
       annotationId: followUp.annotationId,
       index: idx + 1,
-      noteLabel: normalizeExcerptForMessage(followUp.note, 140),
-      selectedText: normalizeExcerptForMessage(followUp.selectedText, 260),
+      noteLabel: normalizeFollowUpText(followUp.note),
+      selectedText: truncateForChipTooltip(followUp.selectedText, 260),
       color: followUp.color,
     }))
   }, [pendingFollowUpAnnotations])

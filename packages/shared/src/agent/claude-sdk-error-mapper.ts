@@ -41,6 +41,26 @@ const NETWORK_HINTS = [
   'connection refused',
 ] as const;
 
+// Signals that an invalid_request error is caused by the 1M context beta
+// (the user's API tier doesn't support it, or the request exceeded even 1M).
+// Anthropic's error strings evolve — match on multiple hints.
+const ONE_M_CONTEXT_HINTS = [
+  'context-1m',
+  'context_1m',
+  'context window',
+  'context_window',
+  'tier',
+  'exceeds the context',
+] as const;
+
+function isOneMContextError(context: ClaudeSdkErrorContext): boolean {
+  const haystack = [
+    normalize(context.capturedApiError?.message),
+    normalize(context.actualError?.message),
+  ].join(' ');
+  return includesAny(haystack, ONE_M_CONTEXT_HINTS);
+}
+
 function normalize(value?: string | null): string {
   return value?.toLowerCase() ?? '';
 }
@@ -205,6 +225,25 @@ export function mapClaudeSdkAssistantError(
       };
 
     case 'invalid_request':
+      if (isOneMContextError(context)) {
+        return {
+          code: 'invalid_request',
+          title: '1M Context Not Available',
+          message: 'The request exceeded the standard 200K context window, and 1M context is not available on your API tier.',
+          details: [
+            ...apiDetails,
+            'Disable "Extended Context (1M)" in AI Settings → Performance',
+            'Or start a new conversation, or run /compact to reduce context',
+          ],
+          actions: [
+            { key: 's', label: 'Settings', action: 'settings' },
+            { key: 'r', label: 'Retry', action: 'retry' },
+          ],
+          canRetry: true,
+          retryDelayMs: 1000,
+          providerInfo,
+        };
+      }
       return {
         code: 'invalid_request',
         title: 'Invalid Request',

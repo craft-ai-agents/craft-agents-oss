@@ -355,7 +355,11 @@ function copyProductionDeps(config: ServerBuildConfig): void {
   //    This catches everything — declared deps, undeclared deps, transitive
   //    imports that happen to work due to hoisting. No more whack-a-mole.
   // -------------------------------------------------------------------------
-  const SERVER_PACKAGES = ['server', 'server-core', 'shared', 'core', 'session-tools-core', 'session-mcp-server'];
+  // messaging-gateway is included so its runtime deps (grammy, etc.) land in node_modules.
+  // messaging-whatsapp-worker is intentionally OMITTED: Baileys and its transitive deps
+  // are bundled directly into packages/messaging-whatsapp-worker/dist/worker.cjs by
+  // scripts/build-wa-worker.ts — pulling them into node_modules would duplicate the tree.
+  const SERVER_PACKAGES = ['server', 'server-core', 'shared', 'core', 'session-tools-core', 'session-mcp-server', 'messaging-gateway'];
 
   const allImports = new Set<string>();
   for (const pkg of SERVER_PACKAGES) {
@@ -466,7 +470,19 @@ function getDirSize(dir: string): number {
 function copyWorkspacePackages(config: ServerBuildConfig): void {
   const { rootDir, outputDir } = config;
 
-  const packages = ['server', 'server-core', 'shared', 'core', 'session-tools-core', 'session-mcp-server'];
+  // messaging-whatsapp-worker is included so dist/worker.cjs (built in step 4) ships.
+  // The worker is spawned as a Node subprocess against that file at runtime; see
+  // CRAFT_MESSAGING_WA_WORKER env resolution in packages/server/src/index.ts.
+  const packages = [
+    'server',
+    'server-core',
+    'shared',
+    'core',
+    'session-tools-core',
+    'session-mcp-server',
+    'messaging-gateway',
+    'messaging-whatsapp-worker',
+  ];
 
   for (const pkg of packages) {
     const src = join(rootDir, 'packages', pkg);
@@ -858,6 +874,12 @@ async function main(): Promise<void> {
     electronDir,
   };
   buildMcpServers(buildConfig);
+
+  // Build the WhatsApp worker bundle. Must happen before copyWorkspacePackages
+  // so dist/worker.cjs exists when we copy the messaging-whatsapp-worker package.
+  // The bundle embeds Baileys + transitive deps; see scripts/build-wa-worker.ts.
+  console.log('  Building WhatsApp worker bundle...');
+  await $`bun run ${join(rootDir, 'scripts', 'build-wa-worker.ts')}`.cwd(rootDir);
 
   // Step 5: Assemble resources
   console.log('\n[5/8] Assembling resources...');

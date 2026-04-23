@@ -68,4 +68,42 @@ describe('resolveClaudeThinkingOptions', () => {
       thinking: { type: 'disabled' },
     })
   })
+
+  it('passes xhigh as effort on adaptive backends (Opus 4.7+)', () => {
+    const result = resolveClaudeThinkingOptions({
+      thinkingLevel: 'xhigh',
+      model: 'claude-opus-4-7',
+      providerType: 'anthropic',
+      minimizeThinking: false,
+    })
+
+    expect(result).toEqual({
+      thinking: { type: 'adaptive' },
+      effort: 'xhigh',
+    })
+  })
+
+  it('uses xhigh token budget on Haiku (non-adaptive)', () => {
+    const result = resolveClaudeThinkingOptions({
+      thinkingLevel: 'xhigh',
+      model: 'claude-haiku-4-5-20251001',
+      providerType: 'anthropic',
+      minimizeThinking: false,
+    })
+
+    expect(result).toEqual({
+      maxThinkingTokens: 7_000,
+    })
+  })
+})
+
+describe('getThinkingTokens', () => {
+  it('returns the default (non-haiku) xhigh budget', () => {
+    // Any non-haiku model id — provider routing happens elsewhere.
+    expect(getThinkingTokens('xhigh', 'claude-sonnet-4-6')).toBe(26_000)
+  })
+
+  it('returns the haiku xhigh budget', () => {
+    expect(getThinkingTokens('xhigh', 'claude-haiku-4-5-20251001')).toBe(7_000)
+  })
 })

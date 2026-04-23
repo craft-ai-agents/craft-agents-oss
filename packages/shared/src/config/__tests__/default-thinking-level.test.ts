@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { pathToFileURL } from 'url'
+import { THINKING_LEVEL_IDS } from '../../agent/thinking-levels.ts'
 
 const STORAGE_MODULE_PATH = pathToFileURL(join(import.meta.dir, '..', 'storage.ts')).href
 
@@ -103,9 +104,9 @@ describe('default thinking level storage', () => {
     expect(output).toBe('medium')
   })
 
-  it('supports all five thinking levels', () => {
+  it('supports every thinking level', () => {
     const { configDir } = setupWorkspaceConfigDir()
-    for (const level of ['off', 'low', 'medium', 'high', 'max']) {
+    for (const level of THINKING_LEVEL_IDS) {
       runEval(configDir, `setDefaultThinkingLevel('${level}')`)
       const output = runEval(configDir, "console.log(String(getDefaultThinkingLevel()))")
       expect(output).toBe(level)

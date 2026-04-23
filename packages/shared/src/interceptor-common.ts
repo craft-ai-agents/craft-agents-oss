@@ -141,11 +141,13 @@ export function isExtendedPromptCacheEnabled(): boolean {
 /**
  * Check if 1M context window is enabled.
  * When disabled, the interceptor strips the context-1m beta header.
- * Defaults to true if config is unreadable or field is not set.
+ * Defaults to false — the 1M beta requires Anthropic Tier 4+, so it's opt-in
+ * to avoid 400 "Invalid Request" on lower-tier API keys (issue #567).
+ * Must stay in sync with getEnable1MContext() in config/storage.ts.
  */
 export function is1MContextEnabled(): boolean {
   const config = getInterceptorConfig();
-  return config?.enable1MContext !== false;
+  return config?.enable1MContext === true;
 }
 
 // ============================================================================

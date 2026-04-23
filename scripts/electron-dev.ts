@@ -13,6 +13,17 @@ const ROOT_DIR = join(import.meta.dir, "..");
 const ELECTRON_DIR = join(ROOT_DIR, "apps/electron");
 const DIST_DIR = join(ELECTRON_DIR, "dist");
 
+// Replace grammY's bundled polyfills (node-fetch@2 + abort-controller@3) with
+// native Node globals. esbuild otherwise renames the polyfill's `class
+// AbortSignal` to `_AbortSignal` to dodge collision with the global, which
+// breaks node-fetch@2's `constructor.name === 'AbortSignal'` check and fails
+// every Telegram API call with a TypeError. Kept in sync with
+// `apps/electron/package.json` build:main and `scripts/electron-build-main.ts`.
+const MAIN_PROCESS_ALIAS: Record<string, string> = {
+  "node-fetch": join(ROOT_DIR, "apps/electron/src/main/shims/node-fetch.cjs"),
+  "abort-controller": join(ROOT_DIR, "apps/electron/src/main/shims/abort-controller.cjs"),
+};
+
 // MCP server paths
 const SESSION_SERVER_DIR = join(ROOT_DIR, "packages/session-mcp-server");
 const SESSION_SERVER_OUTPUT = join(SESSION_SERVER_DIR, "dist/index.js");
@@ -186,6 +197,24 @@ function copyResources(): void {
   }
 }
 
+// Build the WhatsApp worker bundle (dist/worker.cjs). Runs the canonical
+// `scripts/build-wa-worker.ts` as a subprocess so the dev path stays in
+// sync with the packaged/CI build. Cheap (~70ms) so we always rebuild.
+async function buildWaWorker(): Promise<void> {
+  console.log("📨 Building WhatsApp worker...");
+  const proc = spawn({
+    cmd: ["bun", "run", "scripts/build-wa-worker.ts"],
+    cwd: ROOT_DIR,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    console.error("❌ WhatsApp worker build failed");
+    process.exit(1);
+  }
+}
+
 // Build MCP servers for Codex sessions and Pi agent server (one-time, no watch needed)
 async function buildMcpServers(): Promise<void> {
   console.log("🌉 Building MCP servers and Pi agent server...");
@@ -267,7 +296,7 @@ async function runEsbuild(
   entryPoint: string,
   outfile: string,
   defines: Record<string, string> = {},
-  options: { packagesExternal?: boolean } = {}
+  options: { packagesExternal?: boolean; alias?: Record<string, string> } = {}
 ): Promise<{ success: boolean; error?: string }> {
   try {
     await esbuild.build({
@@ -278,6 +307,7 @@ async function runEsbuild(
       outfile: join(ROOT_DIR, outfile),
       external: ["electron"],
       ...(options.packagesExternal ? { packages: "external" as const } : {}),
+      ...(options.alias ? { alias: options.alias } : {}),
       define: defines,
       logLevel: "warning",
     });
@@ -310,23 +340,36 @@ async function buildPiAgentServer(): Promise<{ success: boolean; error?: string 
   }
 }
 
-// Verify a JavaScript file exists and has content.
-// Note: We don't use `node --check` because it evaluates module-level code,
-// which fails for Electron-specific packages like @sentry/electron that
-// require Electron's runtime. esbuild's successful build already guarantees
-// valid JavaScript syntax.
+// Verify a built JavaScript bundle is parseable. `node --check` performs
+// syntax-only validation — it does NOT execute module-level code or resolve
+// `require()`, so Electron-specific top-level requires (e.g. @sentry/electron)
+// are safe. This catches truncated writes, FS corruption, and edge cases that
+// esbuild's build-success signal doesn't cover.
 async function verifyJsFile(filePath: string): Promise<{ valid: boolean; error?: string }> {
   if (!existsSync(filePath)) {
     return { valid: false, error: "File does not exist" };
   }
 
-  // Check file has content
   const stats = statSync(filePath);
   if (stats.size === 0) {
     return { valid: false, error: "File is empty" };
   }
 
-  return { valid: true };
+  try {
+    const proc = spawn({
+      cmd: ["node", "--check", filePath],
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stderr = await new Response(proc.stderr).text();
+    const exitCode = await proc.exited;
+    if (exitCode !== 0) {
+      return { valid: false, error: stderr.trim() || `node --check exited ${exitCode}` };
+    }
+    return { valid: true };
+  } catch (err) {
+    return { valid: false, error: String(err) };
+  }
 }
 
 // Wait for file to stabilize (no size changes)
@@ -379,6 +422,9 @@ async function main(): Promise<void> {
   // Build MCP servers for Codex sessions
   await buildMcpServers();
 
+  // Build WhatsApp worker bundle so the adapter can spawn it on demand
+  await buildWaWorker();
+
   const vitePort = process.env.CRAFT_VITE_PORT || "5173";
   const oauthDefines = getOAuthDefines();
 
@@ -404,7 +450,8 @@ async function main(): Promise<void> {
     runEsbuild(
       "apps/electron/src/main/index.ts",
       "apps/electron/dist/main.cjs",
-      oauthDefines
+      oauthDefines,
+      { alias: MAIN_PROCESS_ALIAS }
     ),
     runEsbuild(
       "apps/electron/src/preload/bootstrap.ts",
@@ -496,6 +543,7 @@ async function main(): Promise<void> {
     format: "cjs",
     outfile: join(ROOT_DIR, "apps/electron/dist/main.cjs"),
     external: ["electron"],
+    alias: MAIN_PROCESS_ALIAS,
     define: oauthDefines,
     logLevel: "info",
   });

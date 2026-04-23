@@ -77,6 +77,8 @@ import type { PlatformServices } from '../runtime/platform'
 import { createElectronPlatform } from './platform'
 import type { HandlerDeps } from './handlers/handler-deps'
 import { bootstrapServer, releaseServerLock } from '@craft-agent/server-core/bootstrap'
+import { createMessagingBootstrap, type MessagingBootstrapHandle } from '@craft-agent/messaging-gateway'
+import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { initModelRefreshService, getModelRefreshService, setFetcherPlatform } from '@craft-agent/server-core/model-fetchers'
 import { setSearchPlatform, setImageProcessor } from '@craft-agent/server-core/services'
 import { createApplicationMenu } from './menu'
@@ -95,7 +97,7 @@ import { handleDeepLink } from './deep-link'
 import { BrowserPaneManager } from './browser-pane-manager'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
 import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-protocol'
-import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
+import log, { isDebugMode, mainLog, getLogFilePath, getMessagingGatewayLogFilePath, messagingGatewayLog } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { registerPiModelResolver } from '@craft-agent/shared/config'
 import { getPiModelsForAuthProvider, getAllPiModels } from '@craft-agent/shared/config'
@@ -190,6 +192,13 @@ let browserPaneManager: BrowserPaneManager | null = null
 let oauthFlowStore: OAuthFlowStore | null = null
 let moduleSink: EventSink | null = null
 let moduleClientResolver: ((webContentsId: number) => string | undefined) | null = null
+
+// Messaging gateway: the bootstrap handle is created once sessionManager is
+// available (inside createHandlerDeps) and populated with the WS publisher
+// after bootstrapServer resolves. Both hosts (Electron + standalone) wire
+// through createMessagingBootstrap — do not construct MessagingGatewayRegistry
+// directly.
+let messagingHandle: MessagingBootstrapHandle | null = null
 
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
@@ -648,13 +657,43 @@ app.whenReady().then(async () => {
           sm.setBrowserPaneManager(browserPaneManager!)
           return sm
         },
-        createHandlerDeps: ({ sessionManager: sm, platform: p, oauthFlowStore: ofs }) => ({
-          sessionManager: sm,
-          platform: p,
-          windowManager: windowManager ?? undefined,
-          browserPaneManager: browserPaneManager ?? undefined,
-          oauthFlowStore: ofs,
-        }),
+        createHandlerDeps: ({ sessionManager: sm, platform: p, oauthFlowStore: ofs }) => {
+          // The messaging handle is built here because it needs sessionManager.
+          // The WS publisher is attached after bootstrapServer resolves (via
+          // handle.setPublisher) because wsServer isn't available yet.
+          messagingHandle = createMessagingBootstrap({
+            sessionManager: sm,
+            credentialManager: getCredentialManager(),
+            getMessagingDir: (wsId: string) =>
+              join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
+            getLegacyMessagingDir: (wsId: string) => {
+              const ws = getWorkspaces().find((w) => w.id === wsId)
+              return ws ? join(ws.rootPath, 'messaging') : undefined
+            },
+            // Route messaging diagnostics through the dedicated messaging log
+            // at ~/.craft-agent/logs/messaging-gateway.log.
+            logger: messagingGatewayLog,
+            // WhatsApp worker runs under Electron's embedded Node via
+            // ELECTRON_RUN_AS_NODE (WhatsAppAdapter defaults nodeBin to
+            // process.execPath). In dev we resolve worker.cjs from the
+            // monorepo; in packaged builds it's shipped via extraResources
+            // (see apps/electron/electron-builder.yml).
+            whatsapp: {
+              workerEntry: app.isPackaged
+                ? join(process.resourcesPath, 'messaging-whatsapp-worker', 'worker.cjs')
+                : join(process.cwd(), 'packages', 'messaging-whatsapp-worker', 'dist', 'worker.cjs'),
+              pairingMode: 'qr',
+            },
+          })
+          return {
+            sessionManager: sm,
+            platform: p,
+            windowManager: windowManager ?? undefined,
+            browserPaneManager: browserPaneManager ?? undefined,
+            oauthFlowStore: ofs,
+            messagingRegistry: messagingHandle.registry,
+          }
+        },
         // Headless: register only core handlers (no GUI handlers for browser, settings, etc.)
         // GUI: register all handlers (core + GUI)
         registerAllRpcHandlers: isHeadless
@@ -702,6 +741,36 @@ app.whenReady().then(async () => {
             mainLog.warn('[sound] Sound engine init failed:', err)
           })
         })
+      }
+
+      // -----------------------------------------------------------------------
+      // Messaging Gateway — attach the WS publisher, init local workspaces,
+      // install the fan-out event sink. The handle was created inside
+      // createHandlerDeps so the registry could be wired into HandlerDeps.
+      // -----------------------------------------------------------------------
+      try {
+        if (!messagingHandle) {
+          throw new Error('Messaging handle was not constructed in createHandlerDeps')
+        }
+
+        messagingHandle.setPublisher(instance.wsServer.push.bind(instance.wsServer))
+
+        // Skip remote-owned workspaces — messaging runs on the remote server.
+        const localWorkspaceIds = getWorkspaces()
+          .filter((ws) => !ws.remoteServer)
+          .map((ws) => ws.id)
+        await messagingHandle.initializeWorkspaces(localWorkspaceIds)
+
+        // Compose fan-out event sink: RPC push + messaging gateway dispatch.
+        // Always install — this lets workspaces enable messaging at runtime
+        // without a process restart.
+        const baseSink = instance.wsServer.push.bind(instance.wsServer)
+        instance.sessionManager.setEventSink(messagingHandle.wrapSink(baseSink))
+        if (messagingHandle.registry.size > 0) {
+          mainLog.info(`[messaging] Fan-out sink active for ${messagingHandle.registry.size} workspace(s)`)
+        }
+      } catch (err) {
+        mainLog.error('[messaging] Gateway initialization failed:', err)
       }
 
       // IPC handlers — preload uses sendSync to get WS connection details
@@ -1026,6 +1095,7 @@ app.whenReady().then(async () => {
     if (isDebugMode) {
       mainLog.info('Debug mode enabled - logs at:', getLogFilePath())
     }
+    mainLog.info('Messaging gateway log path:', getMessagingGatewayLogFilePath())
   } catch (error) {
     mainLog.error('Failed to initialize app:', error instanceof Error ? error.message : error, (error as any)?.stack)
     // Continue anyway - the app will show errors in the UI
@@ -1117,6 +1187,15 @@ app.on('before-quit', async (event) => {
     import('./audio/index.js').then(({ disposeSoundEngine }) => {
       disposeSoundEngine().catch(() => {})
     })
+
+    // Stop messaging gateways so the WhatsApp worker subprocess exits cleanly.
+    if (messagingHandle) {
+      try {
+        await messagingHandle.dispose()
+      } catch (err) {
+        mainLog.error('[messaging] dispose failed:', err)
+      }
+    }
 
     // Clean up power manager (release power blocker)
     const { cleanup: cleanupPowerManager } = await import('./power-manager')

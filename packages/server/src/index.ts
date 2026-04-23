@@ -21,15 +21,21 @@
  *   CRAFT_WEBUI_PASSWORD       — optional shorter password for web login (falls back to CRAFT_SERVER_TOKEN)
  *   CRAFT_WEBUI_SECURE_COOKIE  — optional true/false override for the session cookie Secure flag
  *   CRAFT_WEBUI_WS_URL         — optional browser-facing ws:// or wss:// URL returned by /api/config
+ *   CRAFT_MESSAGING_WA_WORKER  — absolute path to worker.cjs (default: packages/messaging-whatsapp-worker/dist/worker.cjs)
+ *   CRAFT_MESSAGING_NODE_BIN   — Node binary used to spawn the WhatsApp worker (default: node)
  */
 
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { readFileSync, existsSync } from 'node:fs'
 import { version as packageVersion } from '../package.json'
 import { enableDebug } from '@craft-agent/shared/utils/debug'
 import { bootstrapServer, startHealthHttpServer, generateServerToken } from '@craft-agent/server-core/bootstrap'
 import { validateSession, createWebuiHandler, nodeHttpAdapter } from '@craft-agent/server-core/webui'
 import type { WebuiHandler } from '@craft-agent/server-core/webui'
+import { getCredentialManager } from '@craft-agent/shared/credentials'
+import { getWorkspaces } from '@craft-agent/shared/config'
+import { createMessagingBootstrap, type MessagingBootstrapHandle } from '@craft-agent/messaging-gateway'
 
 // --generate-token: print a crypto-random token and exit
 if (process.argv.includes('--generate-token')) {
@@ -145,6 +151,18 @@ if (webuiEnabled && serverToken) {
   webuiNodeHandler = nodeHttpAdapter(webuiHandler.fetch)
 }
 
+// Resolve WhatsApp worker paths up-front so the helper + Docker env stay in sync.
+// The worker is a Node subprocess — Bun cannot run it directly — so we must
+// pass an explicit `nodeBin` (Electron defaults nodeBin to process.execPath
+// which is correct there but wrong under Bun).
+const waWorkerEntry = process.env.CRAFT_MESSAGING_WA_WORKER
+  ?? join(bundledAssetsRoot, 'packages', 'messaging-whatsapp-worker', 'dist', 'worker.cjs')
+const waNodeBin = process.env.CRAFT_MESSAGING_NODE_BIN ?? 'node'
+
+// Built inside createHandlerDeps (needs sessionManager), populated with the WS
+// publisher after bootstrapServer resolves.
+let messagingHandle: MessagingBootstrapHandle | null = null
+
 const instance = await (async () => {
   try {
     return await bootstrapServer<SessionManager, HandlerDeps>({
@@ -174,7 +192,6 @@ const instance = await (async () => {
         setImageProcessor(platform.imageProcessor)
       },
       initModelRefreshService: () => initModelRefreshService(async (slug: string) => {
-        const { getCredentialManager } = await import('@craft-agent/shared/credentials')
         const manager = getCredentialManager()
         const [apiKey, oauth] = await Promise.all([
           manager.getLlmApiKey(slug).catch(() => null),
@@ -188,14 +205,35 @@ const instance = await (async () => {
         }
       }),
       createSessionManager: () => new SessionManager(),
-      createHandlerDeps: ({ sessionManager, platform, oauthFlowStore }) => ({
-        sessionManager,
-        platform,
-        oauthFlowStore,
-      }),
+      createHandlerDeps: ({ sessionManager, platform, oauthFlowStore }) => {
+        messagingHandle = createMessagingBootstrap({
+          sessionManager,
+          credentialManager: getCredentialManager(),
+          getMessagingDir: (wsId: string) =>
+            join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
+          // Headless has no legacy messaging dir — workspaces start clean.
+          whatsapp: {
+            workerEntry: waWorkerEntry,
+            nodeBin: waNodeBin,
+            pairingMode: 'qr',
+          },
+        })
+        return {
+          sessionManager,
+          platform,
+          oauthFlowStore,
+          messagingRegistry: messagingHandle.registry,
+        }
+      },
       registerAllRpcHandlers: registerCoreRpcHandlers,
       setSessionEventSink: (sessionManager, sink) => {
-        sessionManager.setEventSink(sink)
+        if (!messagingHandle) {
+          // createHandlerDeps always runs before setSessionEventSink, but be
+          // defensive in case bootstrapServer's ordering ever changes.
+          sessionManager.setEventSink(sink)
+          return
+        }
+        sessionManager.setEventSink(messagingHandle.wrapSink(sink))
       },
       initializeSessionManager: async (sessionManager) => {
         await sessionManager.initialize()
@@ -214,6 +252,24 @@ const instance = await (async () => {
     process.exit(1)
   }
 })()
+
+// ---------------------------------------------------------------------------
+// Messaging post-bootstrap: bind the WS publisher and initialize local
+// workspaces. Remote-owned workspaces are skipped because their messaging
+// runs on the remote server.
+// ---------------------------------------------------------------------------
+if (messagingHandle !== null) {
+  const handle: MessagingBootstrapHandle = messagingHandle
+  handle.setPublisher(instance.wsServer.push.bind(instance.wsServer))
+  try {
+    const localWorkspaceIds = getWorkspaces()
+      .filter((ws) => !ws.remoteServer)
+      .map((ws) => ws.id)
+    await handle.initializeWorkspaces(localWorkspaceIds)
+  } catch (error) {
+    console.error('[messaging] Workspace initialization failed:', error)
+  }
+}
 
 // Wire up the lazy health check now that the session manager is ready
 if (webuiHandler) {
@@ -281,6 +337,13 @@ if (!isLocalBind && instance.protocol === 'ws') {
 const shutdown = async () => {
   webuiHandler?.dispose()
   healthServer?.stop()
+  if (messagingHandle) {
+    try {
+      await messagingHandle.dispose()
+    } catch (error) {
+      console.error('[messaging] dispose failed:', error)
+    }
+  }
   await instance.stop()
   process.exit(0)
 }

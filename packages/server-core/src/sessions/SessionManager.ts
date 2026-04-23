@@ -90,9 +90,8 @@ import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
-import { extractLabelId } from '@craft-agent/shared/labels'
+import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels'
 import { ensureLabelsExist } from '@craft-agent/shared/labels/crud'
-import { flattenLabels } from '@craft-agent/shared/labels/tree'
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
 import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
 
@@ -168,6 +167,14 @@ export const AGENT_FLAGS = {
 const MAX_ADMIN_REMEMBER_MINUTES = 60
 const MAX_ANNOTATIONS_PER_MESSAGE = 200
 const MAX_ANNOTATION_JSON_BYTES = 32 * 1024
+
+/**
+ * Text sent to the session when a plan is approved from outside the desktop
+ * UI (e.g. Telegram button). Mirrors the English `plan.approved` i18n key
+ * used by the desktop flow at `plan-approval-message.ts`. Not localized —
+ * the agent reads this, not the end user.
+ */
+const PLAN_APPROVAL_MESSAGE = 'Plan approved, please execute.'
 
 // validateSpawnAttachmentPath removed — use shared validateFilePath from @craft-agent/server-core/handlers
 
@@ -3539,23 +3546,7 @@ export class SessionManager implements ISessionManager {
         },
         resolveLabelsFn: (labels: string[]) => {
           const labelConfig = loadLabelConfig(managed.workspace.rootPath)
-          const allLabels = flattenLabels(labelConfig.labels)
-          const available = allLabels.map(l => l.id)
-
-          const resolved: string[] = []
-          const unknown: string[] = []
-
-          for (const input of labels) {
-            // Exact ID match
-            const byId = allLabels.find(l => l.id === input)
-            if (byId) { resolved.push(byId.id); continue }
-            // Case-insensitive name → ID
-            const byName = allLabels.find(l => l.name.toLowerCase() === input.toLowerCase())
-            if (byName) { resolved.push(byName.id); continue }
-            unknown.push(input)
-          }
-
-          return { resolved, unknown, available }
+          return resolveSessionLabels(labels, labelConfig.labels)
         },
         resolveStatusFn: (status: string) => {
           const statusConfig = loadStatusConfig(managed.workspace.rootPath)
@@ -3894,6 +3885,27 @@ export class SessionManager implements ISessionManager {
     const managed = this.sessions.get(sessionId)
     if (!managed) return null
     return getStoredPendingPlanExecution(managed.workspace.rootPath, sessionId)
+  }
+
+  /**
+   * Dispatch a plan approval for a session, equivalent to the desktop
+   * "Accept plan" button. Switches the session out of Explore mode (safe)
+   * into allow-all if needed so the plan can execute without per-tool
+   * prompts, then sends the approval message through the normal sendMessage
+   * path.
+   */
+  async acceptPlan(sessionId: string, _planPath?: string): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) {
+      sessionLog.warn(`acceptPlan: session ${sessionId} not found`)
+      return
+    }
+
+    if (managed.permissionMode === 'safe') {
+      this.setSessionPermissionMode(sessionId, 'allow-all')
+    }
+
+    await this.sendMessage(sessionId, PLAN_APPROVAL_MESSAGE)
   }
 
   // ============================================
@@ -5938,7 +5950,7 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
-   * Set the thinking level for a session ('off', 'low', 'medium', 'high', 'max')
+   * Set the thinking level for a session. See {@link ThinkingLevel} for valid values.
    * This is sticky and persisted across messages.
    */
   setSessionThinkingLevel(sessionId: string, level: ThinkingLevel): void {

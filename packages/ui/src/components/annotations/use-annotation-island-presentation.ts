@@ -15,6 +15,32 @@ export interface AnnotationIslandPresentationState {
   resetPresentation: () => void
 }
 
+export type AnnotationIslandPresentationDecision =
+  | { kind: 'open' }
+  | { kind: 'close-now' }
+  | { kind: 'defer-close'; afterMs: number }
+
+export interface DecidePresentationInput {
+  hasAnchor: boolean
+  hasRenderAnchor: boolean
+  now: number
+  openedAt: number
+  closeGraceMs: number
+}
+
+// Pure decision logic for the presentation effect.
+// Exposed for unit testing without a React renderer.
+export function decideAnnotationIslandPresentation(
+  input: DecidePresentationInput,
+): AnnotationIslandPresentationDecision {
+  if (input.hasAnchor) return { kind: 'open' }
+  const elapsed = input.now - input.openedAt
+  if (elapsed < input.closeGraceMs && input.hasRenderAnchor) {
+    return { kind: 'defer-close', afterMs: input.closeGraceMs - elapsed }
+  }
+  return { kind: 'close-now' }
+}
+
 export function useAnnotationIslandPresentation({
   anchor,
   sourceKey,
@@ -26,7 +52,15 @@ export function useAnnotationIslandPresentation({
   const openedAtRef = React.useRef(0)
 
   React.useEffect(() => {
-    if (anchor) {
+    const decision = decideAnnotationIslandPresentation({
+      hasAnchor: !!anchor,
+      hasRenderAnchor: !!renderAnchor,
+      now: Date.now(),
+      openedAt: openedAtRef.current,
+      closeGraceMs,
+    })
+
+    if (decision.kind === 'open' && anchor) {
       openedAtRef.current = Date.now()
       setRenderAnchor(anchor)
       setRenderSourceKey(sourceKey)
@@ -34,9 +68,11 @@ export function useAnnotationIslandPresentation({
       return
     }
 
-    const openedRecently = Date.now() - openedAtRef.current < closeGraceMs
-    if (openedRecently && renderAnchor) {
-      return
+    if (decision.kind === 'defer-close') {
+      // Defer the close so transient anchor-null blips mid-enter-animation
+      // don't snap-close the island. Cleanup cancels if anchor comes back.
+      const timer = setTimeout(() => setIsVisible(false), decision.afterMs)
+      return () => clearTimeout(timer)
     }
 
     setIsVisible(false)

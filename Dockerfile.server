@@ -29,8 +29,14 @@ LABEL org.opencontainers.image.source="https://github.com/lukilabs/craft-agents-
 LABEL org.opencontainers.image.description="Craft Agents Server — headless AI workflow server"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 
+# Install system deps + Node.js (required by the WhatsApp worker subprocess;
+# Bun cannot run Baileys' crypto deps). Pin Node to a major via NodeSource so
+# upgrades are explicit — must match the --target in scripts/build-wa-worker.ts.
+ARG NODE_MAJOR=20
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates git ripgrep && \
+    apt-get install -y --no-install-recommends ca-certificates git ripgrep curl gnupg && \
+    curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
 # Create non-root user (Claude Code SDK refuses to run as root).
@@ -52,6 +58,8 @@ COPY packages/pi-agent-server/package.json packages/pi-agent-server/
 COPY packages/craft-agents-commands/package.json packages/craft-agents-commands/
 COPY packages/craft-cli/package.json packages/craft-cli/
 COPY packages/ui/package.json packages/ui/
+COPY packages/messaging-gateway/package.json packages/messaging-gateway/
+COPY packages/messaging-whatsapp-worker/package.json packages/messaging-whatsapp-worker/
 COPY apps/electron/package.json apps/electron/
 COPY apps/cli/package.json apps/cli/
 COPY apps/marketing/package.json apps/marketing/
@@ -69,8 +77,14 @@ RUN bun build packages/session-mcp-server/src/index.ts \
     bun build packages/pi-agent-server/src/index.ts \
       --outfile packages/pi-agent-server/dist/index.js --target node --format cjs
 
-# Build web UI assets (served by the server on the RPC port)
-RUN bunx vite build --config apps/webui/vite.config.ts
+# Build the WhatsApp worker bundle (CJS, Node target — Bun cannot run it).
+RUN bun run scripts/build-wa-worker.ts
+
+# Build web UI assets (served by the server on the RPC port).
+# vite's bundler runs under Node (via shebang in vite's bin) and hits V8's
+# default ~2GB heap cap on the rendering phase (>5k modules). Raise to 4GB
+# so low-RAM build hosts (e.g. 4GB VPS) can complete the build.
+RUN NODE_OPTIONS="--max-old-space-size=4096" bunx vite build --config apps/webui/vite.config.ts
 
 # Pre-create .craft-agent so Docker named volumes inherit the correct permissions.
 RUN mkdir -p /home/craftagents/.craft-agent
@@ -88,6 +102,12 @@ ENV CRAFT_RPC_HOST=0.0.0.0
 ENV CRAFT_RPC_PORT=9100
 ENV CRAFT_WEBUI_DIR=/app/apps/webui/dist
 ENV CRAFT_BUNDLED_ASSETS_ROOT=/app/apps/electron
+# WhatsApp worker — Bun cannot run the CJS worker, so we point the adapter at
+# system `node` (installed above). If CRAFT_BUNDLED_ASSETS_ROOT changes, update
+# CRAFT_MESSAGING_WA_WORKER to match; the default in packages/server resolves
+# against CRAFT_BUNDLED_ASSETS_ROOT, but the layout above flattens to /app.
+ENV CRAFT_MESSAGING_WA_WORKER=/app/packages/messaging-whatsapp-worker/dist/worker.cjs
+ENV CRAFT_MESSAGING_NODE_BIN=node
 
 EXPOSE 9100
 

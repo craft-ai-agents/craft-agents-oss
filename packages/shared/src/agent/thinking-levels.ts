@@ -1,21 +1,40 @@
 /**
  * Thinking Level Configuration
  *
- * Five-tier thinking system for extended reasoning:
+ * Six-tier thinking system for extended reasoning:
  * - OFF: No extended thinking (disabled)
  * - Low: Light reasoning, faster responses
  * - Medium: Balanced speed and reasoning (default)
  * - High: Deep reasoning for complex tasks
+ * - XHigh: Extra-high reasoning — Anthropic's recommended level for Opus 4.7 agentic/coding work
  * - Max: Maximum effort reasoning
  *
  * Session-level setting with workspace defaults.
  *
  * Provider mappings:
- * - Anthropic: adaptive thinking + effort levels (Opus 4.7+)
- * - Pi/OpenAI: reasoning_effort via Pi SDK levels
+ * - Anthropic: adaptive thinking + effort levels (Opus 4.7+). On models that
+ *   don't accept `xhigh`, the Anthropic SDK silently falls back to `high`.
+ * - Pi/OpenAI: reasoning_effort via Pi SDK levels. Pi's ceiling is `xhigh`,
+ *   so Craft's `max` saturates there.
  */
 
-export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'max';
+/**
+ * Ordered list of valid thinking level IDs. Single source of truth — the
+ * `ThinkingLevel` type, `THINKING_LEVELS` metadata, the Zod schema in
+ * `validators.ts`, and runtime validation/error messages all derive from this.
+ *
+ * Order is significant: it determines UI ordering (low → max).
+ */
+export const THINKING_LEVEL_IDS = [
+  'off',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+] as const;
+
+export type ThinkingLevel = (typeof THINKING_LEVEL_IDS)[number];
 
 export interface ThinkingLevelDefinition {
   id: ThinkingLevel;
@@ -36,6 +55,7 @@ export const THINKING_LEVELS: readonly ThinkingLevelDefinition[] = [
   { id: 'low', nameKey: 'thinking.low', descriptionKey: 'thinking.lowDesc' },
   { id: 'medium', nameKey: 'thinking.medium', descriptionKey: 'thinking.mediumDesc' },
   { id: 'high', nameKey: 'thinking.high', descriptionKey: 'thinking.highDesc' },
+  { id: 'xhigh', nameKey: 'thinking.xhigh', descriptionKey: 'thinking.xhighDesc' },
   { id: 'max', nameKey: 'thinking.max', descriptionKey: 'thinking.maxDesc' },
 ] as const;
 
@@ -47,11 +67,12 @@ export const DEFAULT_THINKING_LEVEL: ThinkingLevel = 'medium';
  * Used with adaptive thinking (thinking: { type: 'adaptive' }).
  * Returns null for 'off' (thinking should be disabled entirely).
  */
-export const THINKING_TO_EFFORT: Record<ThinkingLevel, 'low' | 'medium' | 'high' | 'max' | null> = {
+export const THINKING_TO_EFFORT: Record<ThinkingLevel, 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null> = {
   off: null,
   low: 'low',
   medium: 'medium',
   high: 'high',
+  xhigh: 'xhigh',
   max: 'max',
 };
 
@@ -70,6 +91,7 @@ const TOKEN_BUDGETS = {
     low: 2_000,
     medium: 4_000,
     high: 6_000,
+    xhigh: 7_000,
     max: 8_000,
   },
   default: {
@@ -77,6 +99,7 @@ const TOKEN_BUDGETS = {
     low: 4_000,
     medium: 10_000,
     high: 20_000,
+    xhigh: 26_000,
     max: 32_000,
   },
 } as const;
@@ -108,7 +131,7 @@ export function getThinkingLevelNameKey(level: ThinkingLevel): string {
  * Validate that a value is a valid ThinkingLevel.
  */
 export function isValidThinkingLevel(value: unknown): value is ThinkingLevel {
-  return value === 'off' || value === 'low' || value === 'medium' || value === 'high' || value === 'max';
+  return typeof value === 'string' && (THINKING_LEVEL_IDS as readonly string[]).includes(value);
 }
 
 /**

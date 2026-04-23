@@ -122,6 +122,17 @@ export interface ISessionManager {
   getPendingPlanExecution(sessionId: string): { planPath: string; draftInputSnapshot?: string; awaitingCompaction: boolean; executionDispatched: boolean } | null
   markCompactionComplete(sessionId: string): Promise<void>
 
+  /**
+   * Send the plan-approval "I approve this plan, please execute it" message
+   * to the session as if the user had clicked "Accept plan" in the desktop UI.
+   * If the session is in Explore (safe) mode, also switches it to allow-all
+   * so the plan can actually run without per-tool prompts.
+   *
+   * Used by the messaging gateway so Telegram/WhatsApp accept buttons produce
+   * the same server-side effect as the desktop accept button.
+   */
+  acceptPlan(sessionId: string, planPath?: string): Promise<void>
+
   // ---------------------------------------------------------------------------
   // Sharing
   // ---------------------------------------------------------------------------

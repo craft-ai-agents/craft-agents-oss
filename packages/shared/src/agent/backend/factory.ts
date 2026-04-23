@@ -754,18 +754,36 @@ export async function testBackendConnection(args: {
       providerOptions: { piAuthProvider: args.connection?.piAuthProvider },
     });
 
+    const readAgentStderr = (): string => {
+      const maybe = agent as unknown as { getRecentStderr?: () => string };
+      return typeof maybe.getRecentStderr === 'function' ? maybe.getRecentStderr() : '';
+    };
+    const withStderrContext = (message: string): string => {
+      const stderr = readAgentStderr();
+      if (!stderr) return `${message} (subprocess produced no stderr output)`;
+      return `${message}\n--- subprocess stderr (last ~8KB) ---\n${stderr}`;
+    };
+
     try {
       const timeoutMs = args.timeoutMs ?? 20000;
       const text = await Promise.race([
         agent.runMiniCompletion('Say ok'),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Connection test timed out')), timeoutMs)
+          setTimeout(
+            () => reject(new Error(withStderrContext(`Connection test timed out after ${timeoutMs}ms`))),
+            timeoutMs
+          )
         ),
       ]);
 
       return text
         ? { success: true }
         : { success: false, error: 'No response from provider. Check your API key.' };
+    } catch (error) {
+      const base = error instanceof Error ? error.message : String(error);
+      // Avoid double-appending if the timeout branch already included stderr context.
+      const enriched = base.includes('subprocess stderr') ? base : withStderrContext(base);
+      return { success: false, error: enriched };
     } finally {
       agent.destroy();
     }

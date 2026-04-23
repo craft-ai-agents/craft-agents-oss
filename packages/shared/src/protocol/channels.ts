@@ -390,6 +390,40 @@ export const RPC_CHANNELS = {
     EXPORT: 'resources:export',
     IMPORT: 'resources:import',
   },
+  messaging: {
+    // WhatsApp subprocess → Gateway (subprocess invokes on server)
+    WA_REGISTER: 'messaging:wa:register',
+    WA_INCOMING: 'messaging:wa:incoming',
+    WA_BUTTON_PRESS: 'messaging:wa:buttonPress',
+    WA_STATUS: 'messaging:wa:status',
+    WA_QR: 'messaging:wa:qr',
+    // Gateway → WhatsApp subprocess (server invokes on client)
+    WA_SEND: 'messaging:wa:send',
+    WA_SEND_BUTTONS: 'messaging:wa:sendButtons',
+    WA_SEND_TYPING: 'messaging:wa:sendTyping',
+    WA_SEND_FILE: 'messaging:wa:sendFile',
+    WA_CONNECT: 'messaging:wa:connect',
+    WA_DISCONNECT: 'messaging:wa:disconnect',
+    // Gateway → UI clients (broadcast)
+    BINDING_CHANGED: 'messaging:bindingChanged',
+    PLATFORM_STATUS: 'messaging:platformStatus',
+    // UI ↔ Server (config/binding CRUD)
+    GET_CONFIG: 'messaging:getConfig',
+    UPDATE_CONFIG: 'messaging:updateConfig',
+    TEST_TELEGRAM: 'messaging:testTelegram',
+    SAVE_TELEGRAM: 'messaging:saveTelegram',
+    DISCONNECT: 'messaging:disconnect',
+    FORGET: 'messaging:forget',
+    GET_BINDINGS: 'messaging:getBindings',
+    GENERATE_CODE: 'messaging:generateCode',
+    UNBIND: 'messaging:unbind',
+    UNBIND_BINDING: 'messaging:unbindBinding',
+    // UI ↔ Server — WhatsApp pairing/connection flow (Baileys subprocess adapter)
+    WA_START_CONNECT: 'messaging:wa:startConnect',
+    WA_SUBMIT_PHONE: 'messaging:wa:submitPhone',
+    /** Broadcast to UI clients: QR string, pairing code, status, unavailable, error. */
+    WA_UI_EVENT: 'messaging:wa:uiEvent',
+  },
 } as const
 
 // IPC_CHANNELS compat alias removed — all consumers now use RPC_CHANNELS

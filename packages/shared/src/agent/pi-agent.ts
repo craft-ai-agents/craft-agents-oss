@@ -44,6 +44,7 @@ import { EventQueue } from './backend/event-queue.ts';
 
 // System prompt for Craft Agent context
 import { getSystemPrompt } from '../prompts/system.ts';
+import { getCoAuthorPreference } from '../config/preferences.ts';
 
 // Credential manager for token storage
 import { getCredentialManager } from '../credentials/manager.ts';
@@ -156,6 +157,31 @@ export class PiAgent extends BaseAgent {
   private resetSubprocessErrorDedup(): void {
     this.lastSubprocessError = null;
     this.subprocessErrorRepeatCount = 0;
+  }
+
+  // Ring buffer of recent subprocess stderr. Always on (independent of CRAFT_DEBUG)
+  // so that connection-test and other failures can surface what the subprocess
+  // actually said, instead of a bare "timed out" with no context.
+  private stderrBuffer: string[] = [];
+  private stderrBufferBytes = 0;
+  private static readonly STDERR_BUFFER_MAX_BYTES = 8 * 1024;
+
+  private recordStderr(chunk: string): void {
+    if (!chunk) return;
+    const effective = chunk.length > PiAgent.STDERR_BUFFER_MAX_BYTES
+      ? chunk.slice(chunk.length - PiAgent.STDERR_BUFFER_MAX_BYTES)
+      : chunk;
+    this.stderrBuffer.push(effective);
+    this.stderrBufferBytes += effective.length;
+    while (this.stderrBufferBytes > PiAgent.STDERR_BUFFER_MAX_BYTES && this.stderrBuffer.length > 1) {
+      const dropped = this.stderrBuffer.shift()!;
+      this.stderrBufferBytes -= dropped.length;
+    }
+  }
+
+  /** Returns the most recent subprocess stderr output (up to ~8KB). Empty string if nothing captured. */
+  getRecentStderr(): string {
+    return this.stderrBuffer.join('');
   }
 
   // Pending permission requests (used by handlePreToolUseRequest for ask-mode prompting)
@@ -389,11 +415,15 @@ export class PiAgent extends BaseAgent {
       this.handleLine(line);
     });
 
-    // Forward stderr to debug log
+    // Always capture stderr into a bounded ring buffer so callers (e.g. the
+    // connection-test timeout path in factory.ts) can surface it on failure.
+    // Keep the CRAFT_DEBUG-gated log for interactive dev work.
     child.stderr?.on('data', (data: Buffer) => {
-      const text = data.toString().trim();
-      if (text) {
-        this.debug(`[subprocess stderr] ${text}`);
+      const text = data.toString();
+      this.recordStderr(text);
+      const trimmed = text.trim();
+      if (trimmed) {
+        this.debug(`[subprocess stderr] ${trimmed}`);
       }
     });
 
@@ -1872,7 +1902,8 @@ export class PiAgent extends BaseAgent {
         this.config.workspace.rootPath,
         this.config.session?.workingDirectory,
         this.config.systemPromptPreset,
-        'Craft Agents Backend' // backendName
+        'Craft Agents Backend', // backendName
+        getCoAuthorPreference() // respect user's includeCoAuthoredBy preference (#576)
       );
 
       // Build context from sources

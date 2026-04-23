@@ -56,4 +56,72 @@ describe('mapClaudeSdkAssistantError', () => {
     expect(error.code).toBe('network_error');
     expect(error.message.toLowerCase()).toContain('internet connection');
   });
+
+  describe('invalid_request — 1M context specialization', () => {
+    it('maps invalid_request with context-1m hint to 1M-context-specific error', () => {
+      const error = mapClaudeSdkAssistantError('invalid_request', {
+        ...baseContext,
+        capturedApiError: {
+          status: 400,
+          statusText: 'Bad Request',
+          message: 'The beta header context-1m-2025-08-07 is not available on your tier',
+          timestamp: Date.now(),
+        },
+      });
+
+      expect(error.code).toBe('invalid_request');
+      expect(error.title).toBe('1M Context Not Available');
+      expect(error.message).toContain('200K');
+      expect(error.details?.some(d => d.includes('Extended Context (1M)'))).toBe(true);
+      expect(error.actions?.some(a => a.action === 'settings')).toBe(true);
+    });
+
+    it('matches on context_window hint even without context-1m phrase', () => {
+      const error = mapClaudeSdkAssistantError('invalid_request', {
+        ...baseContext,
+        actualError: {
+          errorType: 'invalid_request_error',
+          message: 'prompt exceeds the context window for this model',
+        },
+      });
+
+      expect(error.title).toBe('1M Context Not Available');
+    });
+
+    it('matches on tier hint', () => {
+      const error = mapClaudeSdkAssistantError('invalid_request', {
+        ...baseContext,
+        capturedApiError: {
+          status: 400,
+          statusText: 'Bad Request',
+          message: 'Your tier does not have access to this feature',
+          timestamp: Date.now(),
+        },
+      });
+
+      expect(error.title).toBe('1M Context Not Available');
+    });
+
+    it('falls back to generic invalid_request when no 1M hints present', () => {
+      const error = mapClaudeSdkAssistantError('invalid_request', {
+        ...baseContext,
+        capturedApiError: {
+          status: 400,
+          statusText: 'Bad Request',
+          message: 'image format not supported',
+          timestamp: Date.now(),
+        },
+      });
+
+      expect(error.code).toBe('invalid_request');
+      expect(error.title).toBe('Invalid Request');
+      expect(error.details?.some(d => d.toLowerCase().includes('attachments'))).toBe(true);
+    });
+
+    it('falls back to generic invalid_request when no captured/actual error info exists', () => {
+      const error = mapClaudeSdkAssistantError('invalid_request', baseContext);
+
+      expect(error.title).toBe('Invalid Request');
+    });
+  });
 });

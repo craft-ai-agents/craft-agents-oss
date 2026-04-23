@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/server",
-  "version": "0.8.9",
+  "version": "0.8.11",
   "description": "Standalone headless Craft Agent server (Bun runtime)",
   "type": "module",
   "main": "src/index.ts",
@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",
+    "@craft-agent/messaging-gateway": "workspace:*",
     "@craft-agent/server-core": "workspace:*",
     "@craft-agent/shared": "workspace:*"
   },

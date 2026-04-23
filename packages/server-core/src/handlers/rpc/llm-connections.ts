@@ -313,26 +313,33 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
     const hint = resolveSetupTestConnectionHint({ provider, baseUrl, piAuthProvider, customEndpoint })
     deps.platform.logger?.info(`[testLlmConnectionSetup] Testing: provider=${provider}${piAuthProvider ? ` piAuth=${piAuthProvider}` : ''}${baseUrl ? ` baseUrl=${baseUrl}` : ''} hasCustomEndpoint=${!!customEndpoint} hintProvider=${hint.providerType}`)
 
+    const startedAt = Date.now()
     try {
       const testModel = model || getDefaultModelForConnection(provider, piAuthProvider)
+      deps.platform.logger?.info(`[testLlmConnectionSetup] Resolved model: ${testModel}`)
       const result = await testBackendConnection({
         provider,
         apiKey: trimmedKey,
         allowEmptyApiKey,
         model: testModel,
         baseUrl,
-        timeoutMs: 20000,
+        timeoutMs: 45000,
         hostRuntime: buildBackendHostRuntimeContext(deps.platform),
         connection: hint,
       })
+      const elapsed = Date.now() - startedAt
 
       if (!result.success) {
+        deps.platform.logger?.info(`[testLlmConnectionSetup] Elapsed: ${elapsed}ms, success=false`)
+        deps.platform.logger?.info(`[testLlmConnectionSetup] Raw error: ${(result.error || '').slice(0, 1000)}`)
         return { success: false, error: parseTestConnectionError(result.error || 'Unknown error') }
       }
+      deps.platform.logger?.info(`[testLlmConnectionSetup] Elapsed: ${elapsed}ms, success=true`)
       return { success: true }
     } catch (error) {
+      const elapsed = Date.now() - startedAt
       const msg = error instanceof Error ? error.message : String(error)
-      deps.platform.logger?.info(`[testLlmConnectionSetup] Error: ${msg.slice(0, 500)}`)
+      deps.platform.logger?.info(`[testLlmConnectionSetup] Elapsed: ${elapsed}ms, threw: ${msg.slice(0, 1000)}`)
       return { success: false, error: parseTestConnectionError(msg) }
     }
   })

@@ -98,6 +98,22 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
     provider: 'anthropic',
     contextWindow: 1_000_000,
   },
+  // TODO(opus-4.6-sunset): remove this entry when Opus 4.6 is deprecated by
+  // Anthropic or we stop offering it. Also drop the related 4.6 pieces in
+  // llm-connections.ts PI_PREFERRED_DEFAULTS and the restoreOpus46ToAnthropicConnections
+  // migration in storage.ts (grep for TODO(opus-4.6-sunset) to find them all).
+  {
+    id: 'claude-opus-4-6',
+    name: 'Opus 4.6',
+    // shortName intentionally collides with 4.7. 4.7 is listed first, so
+    // findModelIdByShortName('Opus') keeps returning 4.7 — zero behavior
+    // change for callers that reference "Opus" abstractly.
+    shortName: 'Opus',
+    description: 'Previous Opus release',
+    descriptionKey: 'model.opusDesc',
+    provider: 'anthropic',
+    contextWindow: 200_000,
+  },
   {
     id: 'claude-sonnet-4-6',
     name: 'Sonnet 4.6',

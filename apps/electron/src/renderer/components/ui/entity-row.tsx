@@ -42,6 +42,11 @@ export interface EntityRowProps {
   /** Content rendered inline after the title (e.g. timestamp). On hover, swapped with the more button.
    *  When set, the title row becomes single-line (truncated) and the absolute more button is hidden. */
   titleTrailing?: React.ReactNode
+  /** Content rendered inline immediately after the title, on the same row.
+   *  Lives between the title and the trailing slot. Use for tiny, high-priority
+   *  inline chips (e.g. platform bindings) that should read as part of the title
+   *  area, not as badges below. `shrink-0` so long titles truncate first. */
+  titleSuffix?: React.ReactNode
   /** Optional subtitle line beneath the title */
   subtitle?: React.ReactNode
   /** Badge/subtitle row beneath the title */
@@ -90,6 +95,7 @@ export function EntityRow({
   title,
   titleClassName,
   titleTrailing,
+  titleSuffix,
   subtitle,
   badges,
   trailing,
@@ -149,6 +155,7 @@ export function EntityRow({
               <div className={cn("font-sans truncate min-w-0", titleClassName)}>
                 {title}
               </div>
+              {titleSuffix && <div className="shrink-0 flex items-center">{titleSuffix}</div>}
               <div className="shrink-0 ml-auto relative -mr-1">
                 <span className={cn(menuOpen || contextMenuOpen ? "invisible" : "group-hover:invisible")}>
                   {titleTrailing}
@@ -187,6 +194,7 @@ export function EntityRow({
               <div className={cn("font-medium font-sans line-clamp-2 min-w-0 -mb-[2px]", titleClassName)}>
                 {title}
               </div>
+              {titleSuffix && <div className="shrink-0 self-center flex items-center">{titleSuffix}</div>}
             </div>
           )}
 

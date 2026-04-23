@@ -106,6 +106,9 @@ mac:
         - "!vendor/ripgrep/arm64-linux/**"
         - "!vendor/ripgrep/x64-linux/**"
         - "!vendor/ripgrep/x64-win32/**"
+    # WhatsApp worker subprocess (self-contained; Baileys bundled in).
+    - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
+      to: messaging-whatsapp-worker/worker.cjs
   # Exclude binaries for other platforms
   files:
     - "!**/vendor/codex/linux-*/**"
@@ -184,6 +187,9 @@ win:
       to: app/vendor/copilot/win32-x64
     - from: resources/bin/win32-x64
       to: app/resources/bin/win32-x64
+    # WhatsApp worker subprocess (self-contained; Baileys bundled in).
+    - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
+      to: messaging-whatsapp-worker/worker.cjs
 
 nsis:
   oneClick: true
@@ -209,6 +215,9 @@ linux:
         - "!vendor/ripgrep/arm64-darwin/**"
         - "!vendor/ripgrep/x64-darwin/**"
         - "!vendor/ripgrep/x64-win32/**"
+    # WhatsApp worker subprocess (self-contained; Baileys bundled in).
+    - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
+      to: messaging-whatsapp-worker/worker.cjs
   # Exclude binaries for other platforms
   files:
     - "!**/vendor/codex/darwin-*/**"

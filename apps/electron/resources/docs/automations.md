@@ -123,7 +123,7 @@ Send a prompt to Craft Agent (creates a new session for scheduled prompts).
   "type": "prompt",
   "prompt": "Quick code review of recent changes",
   "llmConnection": "my-copilot-connection",
-  "model": "gemini-3-pro-preview"
+  "model": "gemini-2.5-flash"
 }
 ```
 

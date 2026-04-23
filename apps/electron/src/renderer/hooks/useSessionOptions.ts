@@ -22,7 +22,7 @@ export interface SessionOptions {
   permissionMode: PermissionMode
   /** Monotonic version from backend permission mode state (used to ignore stale events) */
   permissionModeVersion?: number
-  /** Session-level thinking level ('off', 'low', 'medium', 'high', 'max') - sticky, persisted */
+  /** Session-level thinking level — sticky, persisted. See {@link ThinkingLevel}. */
   thinkingLevel: ThinkingLevel
 }
 

@@ -339,6 +339,21 @@ export interface SessionToolContext {
   sendAgentMessage?(sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>): Promise<void>;
 
   // ============================================================
+  // Messaging Gateway (for list/unbind messaging channels)
+  // ============================================================
+
+  /** Get messaging bindings for a session. Injected by backend when messaging is configured. */
+  getMessagingBindings?(sessionId: string): Array<{
+    platform: string;
+    channelId: string;
+    channelName?: string;
+    enabled: boolean;
+  }>;
+
+  /** Unbind messaging channels from a session. Returns count of removed bindings. */
+  unbindMessagingChannel?(sessionId: string, platform?: string): number;
+
+  // ============================================================
   // Session Paths (for transform_data / render_template)
   // ============================================================
 
@@ -367,6 +382,12 @@ export interface ResolvedLabelsResult {
   unknown: string[];
   /** All valid label IDs (for error messages) */
   available: string[];
+  /**
+   * Optional per-input rejection reason, keyed by the original input string.
+   * Populated by `resolveSessionLabels()` from `@craft-agent/shared/labels`.
+   * Handlers use this to build clearer errors (e.g. "label X doesn't accept a value").
+   */
+  reasons?: Record<string, string>;
 }
 
 /** Result of resolving a status name/ID against configured statuses. */

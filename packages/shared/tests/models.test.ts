@@ -2,7 +2,14 @@
  * Tests for model detection utilities in config/models.ts
  */
 import { describe, it, expect } from 'bun:test';
-import { isClaudeModel, isOpusModel, getModelShortName } from '../src/config/models.ts';
+import {
+  isClaudeModel,
+  isOpusModel,
+  getModelShortName,
+  getModelDisplayName,
+  ANTHROPIC_MODELS,
+  getModelIdByShortName,
+} from '../src/config/models.ts';
 
 describe('isClaudeModel', () => {
   // Direct Anthropic model IDs
@@ -84,5 +91,35 @@ describe('getModelShortName', () => {
 
   it('strips date suffix for unknown claude models', () => {
     expect(getModelShortName('claude-sonnet-3-5-20241022')).toBe('Sonnet 3.5');
+  });
+});
+
+// TODO(opus-4.6-sunset): drop this block when Opus 4.6 is deprecated.
+describe('Opus 4.6 registry presence', () => {
+  it('recognizes claude-opus-4-6 as a Claude model', () => {
+    expect(isClaudeModel('claude-opus-4-6')).toBe(true);
+  });
+
+  it('recognizes claude-opus-4-6 as an Opus model', () => {
+    expect(isOpusModel('claude-opus-4-6')).toBe(true);
+  });
+
+  it('returns Opus shortName for claude-opus-4-6', () => {
+    expect(getModelShortName('claude-opus-4-6')).toBe('Opus');
+  });
+
+  it('returns "Opus 4.6" display name for claude-opus-4-6', () => {
+    expect(getModelDisplayName('claude-opus-4-6')).toBe('Opus 4.6');
+  });
+
+  it('includes both claude-opus-4-7 and claude-opus-4-6 in ANTHROPIC_MODELS', () => {
+    const ids = ANTHROPIC_MODELS.map(m => m.id);
+    expect(ids).toContain('claude-opus-4-7');
+    expect(ids).toContain('claude-opus-4-6');
+  });
+
+  it('resolves "Opus" shortName to 4.7 (first match wins)', () => {
+    // 4.7 is listed first in MODEL_REGISTRY so default Opus callers unchanged.
+    expect(getModelIdByShortName('Opus')).toBe('claude-opus-4-7');
   });
 });

@@ -396,4 +396,21 @@ export const CHANNEL_MAP = {
   playSoundTest: invoke(RPC_CHANNELS.sound.PLAY_TEST),
   importSoundFolder: invoke(RPC_CHANNELS.sound.IMPORT_FOLDER),
   importPeonPingPacks: invoke(RPC_CHANNELS.sound.IMPORT_PEON_PING),
+
+  // Messaging gateway
+  getMessagingConfig: invoke(RPC_CHANNELS.messaging.GET_CONFIG),
+  updateMessagingConfig: invoke(RPC_CHANNELS.messaging.UPDATE_CONFIG),
+  testTelegramToken: invoke(RPC_CHANNELS.messaging.TEST_TELEGRAM),
+  saveTelegramToken: invoke(RPC_CHANNELS.messaging.SAVE_TELEGRAM),
+  disconnectMessagingPlatform: invoke(RPC_CHANNELS.messaging.DISCONNECT),
+  forgetMessagingPlatform: invoke(RPC_CHANNELS.messaging.FORGET),
+  getMessagingBindings: invoke(RPC_CHANNELS.messaging.GET_BINDINGS),
+  generateMessagingPairingCode: invoke(RPC_CHANNELS.messaging.GENERATE_CODE),
+  unbindMessagingSession: invoke(RPC_CHANNELS.messaging.UNBIND),
+  unbindMessagingBinding: invoke(RPC_CHANNELS.messaging.UNBIND_BINDING),
+  onMessagingBindingChanged: listener(RPC_CHANNELS.messaging.BINDING_CHANGED),
+  onMessagingPlatformStatus: listener(RPC_CHANNELS.messaging.PLATFORM_STATUS),
+  startWhatsAppConnect: invoke(RPC_CHANNELS.messaging.WA_START_CONNECT),
+  submitWhatsAppPhone: invoke(RPC_CHANNELS.messaging.WA_SUBMIT_PHONE),
+  onWhatsAppEvent: listener(RPC_CHANNELS.messaging.WA_UI_EVENT),
 } satisfies ChannelMap

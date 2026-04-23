@@ -40,6 +40,7 @@ import { handleGetSessionInfo } from './handlers/get-session-info.ts';
 import { handleListSessions } from './handlers/list-sessions.ts';
 import { handleArchiveSession } from './handlers/archive-session.ts';
 import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
+import { handleListMessagingChannels, handleUnbindMessagingChannel } from './handlers/messaging.ts';
 
 // ============================================================
 // Canonical Zod Schemas
@@ -208,6 +209,14 @@ export const SendAgentMessageSchema = z.object({
     path: z.string().describe('Absolute file path on disk'),
     name: z.string().optional().describe('Display name (defaults to file basename)'),
   })).optional().describe('Files to include with the message'),
+});
+
+export const ListMessagingChannelsSchema = z.object({
+  sessionId: z.string().optional().describe('Session ID to list bindings for. Defaults to current session.'),
+});
+
+export const UnbindMessagingChannelSchema = z.object({
+  platform: z.enum(['telegram', 'whatsapp']).optional().describe('Platform to unbind. If omitted, unbinds all.'),
 });
 
 // ============================================================
@@ -463,6 +472,12 @@ Use this to coordinate with spawned sessions, send follow-up instructions, or re
 Use list_sessions to find session IDs, or use the sessionId returned by spawn_session.
 
 The target session receives your message with a sender envelope containing your session ID, so it can use send_agent_message to reply.`,
+
+  list_messaging_channels: `List messaging channels (Telegram, WhatsApp) bound to a session.
+Shows which external chat apps are connected and can send/receive messages.`,
+
+  unbind_messaging_channel: `Disconnect a messaging channel from the current session.
+Messages will no longer be forwarded between the chat app and this session.`,
 } as const;
 
 // ============================================================
@@ -536,6 +551,9 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
 { name: 'archive_session', description: TOOL_DESCRIPTIONS.archive_session, inputSchema: ArchiveSessionSchema, executionMode: 'registry', safeMode: 'block', handler: handleArchiveSession },
 // Inter-session messaging
   { name: 'send_agent_message', description: TOOL_DESCRIPTIONS.send_agent_message, inputSchema: SendAgentMessageSchema, executionMode: 'registry', safeMode: 'block', handler: handleSendAgentMessage },
+  // Messaging gateway tools
+  { name: 'list_messaging_channels', description: TOOL_DESCRIPTIONS.list_messaging_channels, inputSchema: ListMessagingChannelsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListMessagingChannels },
+  { name: 'unbind_messaging_channel', description: TOOL_DESCRIPTIONS.unbind_messaging_channel, inputSchema: UnbindMessagingChannelSchema, executionMode: 'registry', safeMode: 'block', handler: handleUnbindMessagingChannel },
 ];
 
 export interface SessionToolFilterOptions {

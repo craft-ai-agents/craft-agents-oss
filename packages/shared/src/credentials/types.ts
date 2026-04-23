@@ -31,7 +31,9 @@ export type CredentialType =
   | 'source_oauth'       // OAuth tokens for MCP/API sources
   | 'source_bearer'      // Bearer tokens
   | 'source_apikey'      // API keys
-  | 'source_basic';      // Basic auth (base64 encoded user:pass)
+  | 'source_basic'       // Basic auth (base64 encoded user:pass)
+  // Messaging gateway credentials (keyed by workspaceId + platform)
+  | 'messaging_bearer';  // Platform tokens (e.g., Telegram bot token)
 
 /** Valid credential types for validation */
 const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
@@ -46,6 +48,7 @@ const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
   'source_bearer',
   'source_apikey',
   'source_basic',
+  'messaging_bearer',
 ] as const;
 
 /** Check if a string is a valid CredentialType */
@@ -136,6 +139,16 @@ export const SOURCE_CREDENTIAL_TYPES = [
   'source_basic',
 ] as const;
 
+/** Messaging credential types */
+const MESSAGING_CREDENTIAL_TYPES = [
+  'messaging_bearer',
+] as const;
+
+/** Check if type is a messaging credential */
+function isMessagingCredential(type: CredentialType): boolean {
+  return (MESSAGING_CREDENTIAL_TYPES as readonly string[]).includes(type);
+}
+
 /** LLM connection credential types */
 const LLM_CREDENTIAL_TYPES = [
   'llm_api_key',
@@ -178,6 +191,14 @@ export function credentialIdToAccount(id: CredentialId): string {
   if (isSourceCredential(id.type) && id.workspaceId && id.sourceId) {
     parts.push(id.workspaceId);
     parts.push(id.sourceId);
+    return parts.join(CREDENTIAL_DELIMITER);
+  }
+
+  // Messaging-scoped format:
+  // messaging_bearer::{workspaceId}::{platform}
+  if (isMessagingCredential(id.type) && id.workspaceId && id.name) {
+    parts.push(id.workspaceId);
+    parts.push(id.name);
     return parts.join(CREDENTIAL_DELIMITER);
   }
 
@@ -241,6 +262,12 @@ export function accountToCredentialId(account: string): CredentialId | null {
   // Source credentials: source_oauth::{workspaceId}::{sourceId}
   if (isSourceCredential(type) && parts.length === 3) {
     return { type, workspaceId: parts[1], sourceId: parts[2] };
+  }
+
+  // Messaging-scoped format:
+  // messaging_bearer::{workspaceId}::{platform}
+  if (isMessagingCredential(type) && parts.length === 3) {
+    return { type, workspaceId: parts[1], name: parts[2] };
   }
 
   if (parts.length === 2 && parts[1] === 'global') {
