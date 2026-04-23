@@ -465,7 +465,7 @@ export function UserMessageBubble({
               copied ? "text-success" : "text-muted-foreground hover:text-foreground hover:bg-foreground/5",
               "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             )}
-            title={copied ? "Copied!" : "Copy message"}
+            title={copied ? t('common.copied') : t('chat.copyMessage')}
           >
             {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
           </button>

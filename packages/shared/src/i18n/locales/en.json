@@ -128,6 +128,7 @@
   "chat.clickForTaskActions": "Click for task actions",
   "chat.clickToOpen": "Click to open {{name}}",
   "chat.connectionDefault": "Connection default",
+  "chat.copyMessage": "Copy message",
   "chat.connectionUnavailable": "Connection Unavailable",
   "chat.connectionUnavailableDescription": "The connection used by this session has been removed. Create a new session to continue.",
   "chat.context": "Context",
