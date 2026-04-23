@@ -3,3 +3,9 @@ export { SUPPORTED_LANGUAGE_CODES, LANGUAGES } from "./languages";
 export type { LanguageCode, LanguageConfig } from "./languages";
 export { getDateLocale } from "./date-locale";
 export { LOCALE_REGISTRY } from "./registry";
+export {
+  applyPersistedAppLanguage,
+  loadPersistedAppLanguage,
+  persistAppLanguage,
+  resolveAppLanguage,
+} from "./persisted-language";
