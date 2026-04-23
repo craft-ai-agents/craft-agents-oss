@@ -103,7 +103,17 @@ interface InitMessage {
   branchFromSessionPath?: string;
   branchFromSdkTurnId?: string;
   customEndpoint?: { api: CustomEndpointApi; supportsImages?: boolean };
-  customModels?: Array<string | { id: string; contextWindow?: number; supportsImages?: boolean }>;
+  customModels?: Array<
+    | string
+    | {
+        id: string;
+        contextWindow?: number;
+        supportsImages?: boolean;
+        reasoning?: boolean;
+        supportsReasoningEffort?: boolean;
+        reasoningEffortMap?: Record<string, string>;
+      }
+  >;
   piAuth?: { provider: string; credential: PiCredential };
 }
 
@@ -409,10 +419,21 @@ function registerCustomEndpointModels(
 ): void {
   for (const m of models) {
     customEndpointModelIds.add(m.id);
-    if (m.contextWindow || m.supportsImages !== undefined) {
+    const hasAnyOverride =
+      m.contextWindow !== undefined ||
+      m.supportsImages !== undefined ||
+      m.reasoning !== undefined ||
+      m.supportsReasoningEffort !== undefined ||
+      m.reasoningEffortMap !== undefined;
+    if (hasAnyOverride) {
       customModelOverrides.set(m.id, {
         ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
         ...(m.supportsImages !== undefined ? { supportsImages: m.supportsImages } : {}),
+        ...(m.reasoning !== undefined ? { reasoning: m.reasoning } : {}),
+        ...(m.supportsReasoningEffort !== undefined
+          ? { supportsReasoningEffort: m.supportsReasoningEffort }
+          : {}),
+        ...(m.reasoningEffortMap ? { reasoningEffortMap: m.reasoningEffortMap } : {}),
       });
     }
   }
@@ -468,7 +489,16 @@ function createAuthenticatedRegistry(): {
       : [initConfig.model || 'default']
     ).map(m => typeof m === 'string'
       ? { id: stripPiPrefix(m) }
-      : { id: stripPiPrefix(m.id), contextWindow: m.contextWindow });
+      : {
+          id: stripPiPrefix(m.id),
+          ...(m.contextWindow !== undefined ? { contextWindow: m.contextWindow } : {}),
+          ...(m.supportsImages !== undefined ? { supportsImages: m.supportsImages } : {}),
+          ...(m.reasoning !== undefined ? { reasoning: m.reasoning } : {}),
+          ...(m.supportsReasoningEffort !== undefined
+            ? { supportsReasoningEffort: m.supportsReasoningEffort }
+            : {}),
+          ...(m.reasoningEffortMap ? { reasoningEffortMap: m.reasoningEffortMap } : {}),
+        });
     customEndpointModelIds = new Set();  // Reset on fresh registry creation
     registerCustomEndpointModels(modelRegistry, api, initConfig.baseUrl!.trim(), modelEntries);
   } else if (hasCustomEndpoint && !initConfig?.customEndpoint) {

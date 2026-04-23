@@ -104,6 +104,11 @@ export const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
   providerType: LlmConnection['providerType'] | ((hasCustomEndpoint: boolean) => LlmConnection['providerType'])
   authType: LlmConnection['authType'] | ((hasCustomEndpoint: boolean) => LlmConnection['authType'])
   piAuthProvider?: string
+  /** Pre-populated custom endpoint protocol for local-proxy providers (e.g. Cursor). */
+  customEndpoint?: LlmConnection['customEndpoint']
+  /** Pre-populated base URL. For Cursor this is a placeholder — the real URL is
+   *  injected by the Electron main process at runtime. */
+  baseUrl?: string
 }> = {
   'anthropic-api': {
     name: (h) => h ? 'Custom Anthropic-Compatible' : 'Anthropic (API Key)',
@@ -126,6 +131,16 @@ export const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
     providerType: 'pi',
     authType: 'oauth',
     piAuthProvider: 'github-copilot',
+  },
+  'cursor': {
+    name: 'Cursor',
+    providerType: 'pi_compat',
+    authType: 'oauth',
+    piAuthProvider: 'cursor',
+    customEndpoint: { api: 'openai-completions', supportsImages: false },
+    // Placeholder — replaced at runtime with the local proxy URL
+    // (http://127.0.0.1:<port>/v1) once CursorManager starts the proxy.
+    baseUrl: 'http://127.0.0.1:0/v1',
   },
   'pi-api-key': {
     name: 'Craft Agents Backend (API Key)',
@@ -157,6 +172,7 @@ const PI_AUTH_PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   'minimax-cn': 'Minimax CN',
   'kimi-coding': 'Kimi (Coding)',
   'vercel-ai-gateway': 'Vercel AI Gateway',
+  cursor: 'Cursor',
 }
 
 /** Get a human-readable display name for a Pi auth provider key */
@@ -207,6 +223,8 @@ export function createBuiltInConnection(slug: string, baseUrl?: string | null): 
     defaultModel: getDefaultModelForConnection(providerType, template.piAuthProvider),
     modelSelectionMode: providerType === 'pi' ? 'automaticallySyncedFromProvider' : undefined,
     piAuthProvider: template.piAuthProvider,
+    baseUrl: template.baseUrl ?? (hasCustomEndpoint ? (baseUrl ?? undefined) : undefined),
+    customEndpoint: template.customEndpoint,
     createdAt: Date.now(),
   }
 }

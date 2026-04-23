@@ -379,6 +379,26 @@ app.whenReady().then(async () => {
   // (Windows only: validates PowerShell commands in Explore mode using AST analysis)
   setPowerShellValidatorRoot(join(__dirname, 'resources'))
 
+  // Point the Cursor provider at the bundled h2-bridge.mjs (copied into
+  // dist/resources/ by scripts/copy-assets.ts). Must happen before any
+  // proxy spawn, since the env var is read at module load.
+  process.env.CRAFT_CURSOR_BRIDGE_PATH = join(__dirname, 'resources', 'h2-bridge.mjs')
+
+  // The h2-bridge script needs a Node interpreter. A .app launched from
+  // Finder inherits an almost empty $PATH (/usr/bin:/bin:/usr/sbin:/sbin)
+  // so `spawn("node", …)` throws ENOENT and the stream hangs with no
+  // response. Tell the proxy to spawn Electron itself as Node — we set
+  // ELECTRON_RUN_AS_NODE=1 at spawn time so the binary behaves like a
+  // plain `node` interpreter for the duration of that subprocess.
+  process.env.CRAFT_CURSOR_NODE_PATH = process.execPath
+
+  // Restore the Cursor connection (if the user was already logged in).
+  // Runs in the background so it never blocks the main window from opening.
+  {
+    const { initCursorOnStartup } = await import('./cursor-manager')
+    void initCursorOnStartup()
+  }
+
   // Initialize bundled docs
   initializeDocs()
 
@@ -1106,6 +1126,14 @@ app.on('before-quit', async (event) => {
 
   // Ensure Cmd+Q/app quit bypasses layered window close interception (Cmd+W behavior).
   windowManager?.setAppQuitting(true)
+
+  // Stop the Cursor proxy + cancel any in-flight OAuth polling.
+  try {
+    const { shutdownCursorManager } = await import('./cursor-manager')
+    shutdownCursorManager()
+  } catch (err) {
+    mainLog.warn('[cursor] Shutdown failed (non-fatal):', err)
+  }
 
   if (windowManager) {
     // Get full window states (includes bounds, type, and query)

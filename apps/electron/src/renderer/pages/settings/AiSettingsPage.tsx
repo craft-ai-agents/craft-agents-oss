@@ -161,6 +161,7 @@ const PI_AUTH_PROVIDER_LABELS: Record<string, string> = {
   huggingface: 'Hugging Face',
   'vercel-ai-gateway': 'Vercel AI Gateway',
   'github-copilot': 'GitHub Copilot',
+  cursor: 'Cursor',
 }
 
 // ============================================
@@ -731,14 +732,28 @@ export default function AiSettingsPage() {
     apiSetupOnboarding.reset()
 
     if (connection.authType === 'oauth') {
-      const method = connection.providerType === 'pi'
-                   ? (connection.piAuthProvider === 'github-copilot' ? 'pi_copilot_oauth' : 'pi_chatgpt_oauth')
-                   : 'claude_oauth'
+      let method: 'claude_oauth' | 'pi_chatgpt_oauth' | 'pi_copilot_oauth' | 'pi_cursor_oauth'
+      if (connection.providerType === 'pi_compat' && connection.piAuthProvider === 'cursor') {
+        method = 'pi_cursor_oauth'
+      } else if (connection.providerType === 'pi') {
+        method = connection.piAuthProvider === 'github-copilot' ? 'pi_copilot_oauth' : 'pi_chatgpt_oauth'
+      } else {
+        method = 'claude_oauth'
+      }
       apiSetupOnboarding.handleStartOAuth(method, connection.slug)
     }
   }, [apiSetupOnboarding, openApiSetup])
 
   const handleEditConnection = useCallback(async (connection: LlmConnectionWithStatus) => {
+    // OAuth-only connections (Cursor, Claude Max, ChatGPT Plus, Copilot) have
+    // no user-editable credential — the access token is managed by the OAuth
+    // flow. Route "Edit" straight to the re-auth path so we don't drop users
+    // into an API-key form that doesn't apply.
+    if (connection.authType === 'oauth') {
+      handleReauthenticateConnection(connection)
+      return
+    }
+
     // Fetch stored API key (best-effort — if IPC not available yet, skip pre-fill)
     let apiKey: string | undefined
     try {
@@ -773,7 +788,7 @@ export default function AiSettingsPage() {
     setIsDirectEdit(true)
     const method = getApiKeyMethodForConnection(connection)
     apiSetupOnboarding.jumpToCredentials(method)
-  }, [apiSetupOnboarding, openApiSetup])
+  }, [apiSetupOnboarding, openApiSetup, handleReauthenticateConnection])
 
   const handleDeleteConnection = useCallback(async (slug: string) => {
     if (!window.electronAPI) return

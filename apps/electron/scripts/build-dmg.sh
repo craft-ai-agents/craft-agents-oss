@@ -148,6 +148,14 @@ echo "Building Electron app..."
 cd "$ROOT_DIR"
 bun run electron:build
 
+# 6b. Build + stage the subprocess servers (session-mcp-server, pi-agent-server)
+# into apps/electron/resources/<server>/ so electron-builder can bundle them.
+# Without this, the runtime resolver can't find piServerPath and every
+# non-Anthropic connection (Cursor, ChatGPT Plus, Copilot, Ollama, OpenRouter,
+# …) throws "piServerPath not configured" when the user sends a message.
+echo "Building Electron subprocess servers..."
+bun run scripts/build-electron-servers.ts --arch=$ARCH --platform=darwin
+
 # 7. Package with electron-builder
 echo "Packaging app with electron-builder..."
 cd "$ELECTRON_DIR"

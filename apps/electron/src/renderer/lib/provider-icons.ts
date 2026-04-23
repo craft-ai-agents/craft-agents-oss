@@ -50,6 +50,7 @@ const providerDisplayNames: Record<string, string> = {
   openai: 'OpenAI',
   openai_compat: 'OpenAI',
   copilot: 'GitHub Copilot',
+  cursor: 'Cursor',
   kimi: 'Kimi',
   minimax: 'Minimax',
   ollama: 'Ollama',
@@ -142,6 +143,7 @@ const PI_AUTH_PROVIDER_DOMAINS: Record<string, string> = {
   xai: 'x.ai',
   cerebras: 'cerebras.ai',
   zai: 'z.ai',
+  cursor: 'cursor.com',
 }
 
 /**

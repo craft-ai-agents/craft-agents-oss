@@ -64,6 +64,11 @@ const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
     name: 'xAI',
     dashboardUrl: 'https://console.x.ai',
   },
+  cursor: {
+    name: 'Cursor',
+    statusPageUrl: 'https://status.cursor.com',
+    dashboardUrl: 'https://cursor.com/settings',
+  },
 }
 
 /**

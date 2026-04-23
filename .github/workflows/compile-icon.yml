@@ -1,0 +1,117 @@
+name: Compile macOS app icon
+
+# Recompiles apps/electron/resources/Assets.car from
+# apps/electron/resources/AppIcon.icon whenever the icon source changes.
+#
+# Why this lives in CI:
+#
+# The macOS 26 Liquid Glass / adaptive-color icon format (.icon bundle) is
+# compiled by `xcrun actool --compile …`, which ships with Xcode's
+# macOS 26 SDK. That toolchain is only available on macOS; the ubuntu-
+# latest runner we use for typechecks can't produce a valid Assets.car.
+# Previously the rebuild had to happen on someone's laptop and was
+# committed by hand — which made it easy for the .icon source and the
+# .car binary to drift, which is exactly what happened: the committed
+# Assets.car didn't contain an `AppIcon` asset matching
+# `CFBundleIconName: AppIcon` in electron-builder.yml, so macOS fell back
+# to the flat purple-on-white icon.icns on every install.
+#
+# Running actool on macos-14 gives us a reproducible build. The default
+# branch rule below is intentional: we don't want every PR to commit a
+# binary diff against Assets.car (electron-builder's afterPack.cjs
+# already copies it into the bundle, so the PR pipeline gets the latest
+# committed artifact automatically). Instead we rebuild + commit the
+# binary only on pushes that actually touch the icon source.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/electron/resources/AppIcon.icon/**"
+      - ".github/workflows/compile-icon.yml"
+  pull_request:
+    paths:
+      - "apps/electron/resources/AppIcon.icon/**"
+  workflow_dispatch:
+
+concurrency:
+  group: compile-icon-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    # macos-14 runners ship Xcode 15; Xcode 26 (with macOS 26 SDK and the
+    # .icon compiler) requires macos-15+ with a recent Xcode selected.
+    # GitHub rolls these out periodically — if the compile step fails
+    # with "actool: unknown argument: --platform macosx" that usually
+    # means the default Xcode on the runner is too old. Switch to the
+    # macos-15 label or add a `sudo xcode-select -s /Applications/Xcode_26.app`
+    # step once GitHub ships that image.
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # We push the compiled Assets.car back to the branch on
+          # main-pushes, so we need full history + a writable token.
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show actool version
+        run: |
+          xcrun --find actool
+          xcrun actool --version
+
+      - name: Compile AppIcon.icon → Assets.car
+        working-directory: apps/electron/resources
+        run: |
+          # --app-icon AppIcon must match CFBundleIconName set in
+          # electron-builder.yml. --minimum-deployment-target 26.0 tells
+          # actool to emit the Liquid Glass adaptive variants. Without
+          # this, the .car only contains the legacy flat raster.
+          xcrun actool "AppIcon.icon" \
+            --compile "." \
+            --app-icon AppIcon \
+            --minimum-deployment-target 26.0 \
+            --platform macosx \
+            --output-partial-info-plist /dev/null
+
+          echo "Assets.car contents:"
+          xcrun --sdk macosx assetutil --info Assets.car | head -40 || true
+
+      - name: Verify AppIcon asset exists
+        working-directory: apps/electron/resources
+        run: |
+          # assetutil prints the catalog contents as JSON-ish. Search for
+          # the AppIcon identifier so we fail fast if the compile step
+          # silently produced the wrong asset name (historic bug).
+          if ! xcrun --sdk macosx assetutil --info Assets.car | grep -q '"AppIcon"'; then
+            echo "ERROR: Compiled Assets.car does not contain an 'AppIcon' asset."
+            echo "Check that AppIcon.icon/icon.json names the app icon 'AppIcon'."
+            exit 1
+          fi
+          echo "Verified: Assets.car contains AppIcon asset."
+
+      - name: Commit updated Assets.car (main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          if git diff --quiet apps/electron/resources/Assets.car; then
+            echo "Assets.car unchanged — nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/electron/resources/Assets.car
+          git commit -m "chore(icon): recompile Assets.car from AppIcon.icon"
+          git push origin main
+
+      - name: Upload Assets.car artifact (PR / dispatch runs)
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Assets.car
+          path: apps/electron/resources/Assets.car
+          if-no-files-found: error
+          retention-days: 14

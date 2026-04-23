@@ -96,6 +96,7 @@ export const BASE_SLUG_FOR_METHOD: Record<ApiSetupMethod, string> = {
   claude_oauth: 'claude-max',
   pi_chatgpt_oauth: 'chatgpt-plus',
   pi_copilot_oauth: 'github-copilot',
+  pi_cursor_oauth: 'cursor',
   pi_api_key: 'pi-api-key',
 }
 
@@ -170,6 +171,7 @@ export function apiSetupMethodToConnectionSetup(
       }
     case 'pi_chatgpt_oauth':
     case 'pi_copilot_oauth':
+    case 'pi_cursor_oauth':
       return {
         slug,
         credential: options.credential,
@@ -566,6 +568,66 @@ export function useOnboarding({
         return
       }
 
+      // Cursor OAuth (PKCE flow — opens browser, background polls /auth/poll)
+      //
+      // Unlike the other OAuth methods, the Cursor flow is driven end-to-end
+      // by the CursorManager in the Electron main process: it completes
+      // PKCE, persists credentials, starts the local proxy, discovers models,
+      // and upserts the `cursor` LlmConnection via addLlmConnection() on
+      // success. So by the time `getCursorAuthStatus()` returns
+      // authenticated=true, the connection already exists, its models are
+      // populated, and there's nothing left for the renderer to save.
+      //
+      // If we called saveAndValidateConnection() here like the other OAuth
+      // flows, it would route through setupLlmConnection → validateModelList
+      // with an empty `models` array from the (unused) renderer form state
+      // and fail with "Default model is required for compatible endpoints."
+      // That's exactly the red error users were hitting — the login was
+      // actually working behind the scenes, it was the redundant save that
+      // failed and prevented the UI from advancing.
+      if (effectiveMethod === 'pi_cursor_oauth') {
+        try {
+          await window.electronAPI.startCursorOAuth()
+
+          // Poll for auth completion (max ~2 minutes of UI patience).
+          // The manager keeps polling Cursor in the background for up to
+          // ~25 minutes; the status check is just for the onboarding UX.
+          const started = Date.now()
+          const POLL_INTERVAL_MS = 1500
+          const POLL_TIMEOUT_MS = 120_000
+          while (Date.now() - started < POLL_TIMEOUT_MS) {
+            await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+            const status = await window.electronAPI.getCursorAuthStatus()
+            if (status?.authenticated) {
+              // The main process already upserted the connection; just
+              // notify the app shell so the connection list refreshes and
+              // advance the wizard to the completion step.
+              onConfigSaved?.()
+              setState((s) => ({
+                ...s,
+                credentialStatus: 'success',
+                completionStatus: 'complete',
+                step: 'complete',
+              }))
+              return
+            }
+          }
+
+          setState((s) => ({
+            ...s,
+            credentialStatus: 'error',
+            errorMessage: 'Cursor login timed out. Please try again.',
+          }))
+        } catch (err) {
+          setState((s) => ({
+            ...s,
+            credentialStatus: 'error',
+            errorMessage: err instanceof Error ? err.message : 'Cursor authentication failed',
+          }))
+        }
+        return
+      }
+
       // Copilot OAuth (device flow — polls for token after user enters code on GitHub)
       if (effectiveMethod === 'pi_copilot_oauth') {
         const effectiveEditingSlug = connectionSlugOverride ?? editingSlug
@@ -627,7 +689,7 @@ export function useOnboarding({
         errorMessage: error instanceof Error ? error.message : 'OAuth failed',
       }))
     }
-  }, [state.apiSetupMethod, saveAndValidateConnection, editingSlug, existingSlugs])
+  }, [state.apiSetupMethod, saveAndValidateConnection, editingSlug, existingSlugs, onConfigSaved])
 
   // Map ProviderChoice → ApiSetupMethod and navigate to the right step
   const handleSelectProvider = useCallback((choice: ProviderChoice) => {
@@ -635,6 +697,7 @@ export function useOnboarding({
       claude: 'claude_oauth',
       chatgpt: 'pi_chatgpt_oauth',
       copilot: 'pi_copilot_oauth',
+      cursor: 'pi_cursor_oauth',
       api_key: 'pi_api_key',
     }
 
@@ -654,7 +717,7 @@ export function useOnboarding({
     }))
 
     // OAuth methods start immediately
-    if (choice === 'claude' || choice === 'chatgpt' || choice === 'copilot') {
+    if (choice === 'claude' || choice === 'chatgpt' || choice === 'copilot' || choice === 'cursor') {
       // Defer to next tick so state is updated before handleStartOAuth reads it
       setTimeout(() => handleStartOAuth(method), 0)
     }

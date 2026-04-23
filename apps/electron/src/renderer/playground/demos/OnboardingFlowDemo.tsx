@@ -23,6 +23,7 @@ const CHOICE_TO_METHOD: Record<Exclude<ProviderChoice, 'local'>, ApiSetupMethod>
   claude: 'claude_oauth',
   chatgpt: 'pi_chatgpt_oauth',
   copilot: 'pi_copilot_oauth',
+  cursor: 'pi_cursor_oauth',
   api_key: 'pi_api_key',
 }
 

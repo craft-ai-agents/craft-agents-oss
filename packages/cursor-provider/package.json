@@ -1,0 +1,26 @@
+{
+  "name": "@craft-agent/cursor-provider",
+  "version": "0.0.1",
+  "description": "Cursor LLM provider for Craft Agents — OAuth login + local OpenAI-compatible proxy translating to Cursor's gRPC Connect protocol.",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./auth": "./src/auth.ts",
+    "./proxy": "./src/proxy.ts",
+    "./models": "./src/models.ts",
+    "./fallback-models": "./src/fallback-models.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

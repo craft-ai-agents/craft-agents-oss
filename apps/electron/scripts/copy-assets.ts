@@ -19,6 +19,19 @@ cpSync('resources', 'dist/resources', { recursive: true });
 
 console.log('✓ Copied resources/ → dist/resources/');
 
+// Copy Cursor HTTP/2 bridge script (used by the Cursor provider proxy
+// to talk to api2.cursor.sh). It runs as a `node` subprocess, so it must
+// stay as a plain .mjs file shipped to dist/resources/.
+const cursorBridgeSrc = join('..', '..', 'packages', 'cursor-provider', 'src', 'h2-bridge.mjs');
+const cursorBridgeDest = join('dist', 'resources', 'h2-bridge.mjs');
+try {
+  copyFileSync(cursorBridgeSrc, cursorBridgeDest);
+  console.log('✓ Copied Cursor h2-bridge.mjs → dist/resources/');
+} catch (err) {
+  console.error('✗ Failed to copy Cursor h2-bridge.mjs:', err);
+  process.exit(1);
+}
+
 // Copy PowerShell parser script (for Windows command validation in Explore mode)
 // Source: packages/shared/src/agent/powershell-parser.ps1
 // Destination: dist/resources/powershell-parser.ps1

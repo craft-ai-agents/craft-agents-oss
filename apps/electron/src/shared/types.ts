@@ -405,6 +405,13 @@ export interface ElectronAPI {
   copilotLogout(connectionSlug: string): Promise<{ success: boolean }>
   onCopilotDeviceCode(callback: (data: { userCode: string; verificationUri: string }) => void): () => void
 
+  // Cursor OAuth (PKCE via api2.cursor.sh; local gRPC proxy)
+  startCursorOAuth(): Promise<{ loginUrl: string; flowId: string }>
+  cancelCursorOAuth(): Promise<{ success: boolean }>
+  getCursorAuthStatus(): Promise<{ authenticated: boolean; expiresAt?: number; hasRefreshToken?: boolean; pendingLoginUrl?: string }>
+  cursorLogout(): Promise<{ success: boolean }>
+  getCursorProxyUrl(): Promise<{ baseUrl: string }>
+
   /** Unified LLM connection setup */
   setupLlmConnection(setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }>
   /** Unified connection test — spawns a lightweight agent subprocess to validate credentials */

@@ -22,6 +22,7 @@ const BetaBadge = ({ label }: { label: string }) => (
  * - 'anthropic_api_key' → anthropic + api_key
  * - 'pi_chatgpt_oauth' → pi + oauth
  * - 'pi_copilot_oauth' → pi + oauth
+ * - 'pi_cursor_oauth' → pi_compat + oauth (Cursor local proxy)
  * - 'pi_api_key' → pi + api_key
  */
 export type ApiSetupMethod =
@@ -29,6 +30,7 @@ export type ApiSetupMethod =
   | 'claude_oauth'
   | 'pi_chatgpt_oauth'
   | 'pi_copilot_oauth'
+  | 'pi_cursor_oauth'
   | 'pi_api_key'
 
 /**
@@ -47,6 +49,8 @@ export function apiSetupMethodToConnectionTypes(method: ApiSetupMethod): {
       return { providerType: 'pi', authType: 'oauth' };
     case 'pi_copilot_oauth':
       return { providerType: 'pi', authType: 'oauth' };
+    case 'pi_cursor_oauth':
+      return { providerType: 'pi_compat', authType: 'oauth' };
     case 'pi_api_key':
       return { providerType: 'pi', authType: 'api_key' };
   }
@@ -65,6 +69,7 @@ const API_SETUP_ICONS: Record<ApiSetupMethod, React.ReactNode> = {
   anthropic_api_key: <Key className="size-4" />,
   pi_chatgpt_oauth: <Cpu className="size-4" />,
   pi_copilot_oauth: <Cpu className="size-4" />,
+  pi_cursor_oauth: <Cpu className="size-4" />,
   pi_api_key: <Key className="size-4" />,
 }
 
@@ -225,6 +230,13 @@ export function APISetupStep({
       name: 'GitHub Copilot',
       description: t("onboarding.apiSetup.githubCopilotDesc"),
       icon: API_SETUP_ICONS.pi_copilot_oauth,
+      providerType: 'pi',
+    },
+    {
+      id: 'pi_cursor_oauth',
+      name: 'Cursor',
+      description: t("onboarding.apiSetup.cursorDesc"),
+      icon: API_SETUP_ICONS.pi_cursor_oauth,
       providerType: 'pi',
     },
     {

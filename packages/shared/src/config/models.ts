@@ -75,6 +75,19 @@ export interface ModelDefinition {
   contextWindow: number;
   /** Whether this model supports thinking/reasoning effort. Defaults to true when undefined. */
   supportsThinking?: boolean;
+  /**
+   * Optional mapping from Pi thinking levels (minimal/low/medium/high/xhigh)
+   * to provider-specific reasoning_effort suffixes. Used by custom-endpoint
+   * providers that expose effort-suffixed model variants (e.g. Cursor's
+   * claude-4.6-opus-{low,medium,high}-thinking).
+   *
+   * When the connection is routed through Pi's openai-completions driver,
+   * this map populates compat.reasoningEffortMap on the synthetic model
+   * definition, so Pi's internal mapReasoningEffort() translates Craft's
+   * thinking level to the upstream-expected suffix. Providers that
+   * naturally speak reasoning_effort (OpenAI, Groq) leave this undefined.
+   */
+  reasoningEffortMap?: Record<string, string>;
 }
 
 // ============================================

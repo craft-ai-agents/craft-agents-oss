@@ -1,0 +1,136 @@
+name: Build macOS DMG
+
+# Produces unsigned .dmg installers for Craft Agents on GitHub-hosted
+# macOS runners. The build is otherwise identical to running
+# `bun run dist:mac` locally — it downloads the pinned Bun binary, copies
+# the Claude Agent SDK + network interceptor into apps/electron/, builds
+# main/preload/renderer/resources, then packages with electron-builder.
+#
+# Outputs (apps/electron/release/):
+#   - Craft-Agents-<arch>.dmg      (installer)
+#   - Craft-Agents-<arch>-mac.zip  (self-contained app bundle, if produced)
+#
+# These are unsigned, so first-launch on macOS will require
+#   xattr -cr "/Applications/Craft Agents.app"
+# to clear the Gatekeeper quarantine attribute.
+#
+# Triggers:
+#   - Manual (workflow_dispatch) — pick arm64 / x64 / both (default arm64)
+#   - Push to any cursor/** branch — builds arm64 so PR authors always
+#     have a fresh Apple-silicon DMG to download from the run summary
+#   - Tag push (v*) — builds both arm64 and x64 and attaches them to the
+#     GitHub Release created for that tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: "Target architecture"
+        required: true
+        default: "arm64"
+        type: choice
+        options:
+          - arm64
+          - x64
+          - both
+  push:
+    branches:
+      - "cursor/**"
+    tags:
+      - "v*"
+
+concurrency:
+  group: build-macos-dmg-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Compute which architectures to build based on the trigger. Centralising
+  # this here keeps the build job body identical regardless of how the
+  # workflow was invoked.
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            case "${ARCH_INPUT}" in
+              both) echo 'matrix={"arch":["arm64","x64"]}' >> "$GITHUB_OUTPUT" ;;
+              x64)  echo 'matrix={"arch":["x64"]}'         >> "$GITHUB_OUTPUT" ;;
+              *)    echo 'matrix={"arch":["arm64"]}'       >> "$GITHUB_OUTPUT" ;;
+            esac
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo 'matrix={"arch":["arm64","x64"]}' >> "$GITHUB_OUTPUT"
+          else
+            echo 'matrix={"arch":["arm64"]}' >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          ARCH_INPUT: ${{ inputs.arch }}
+
+  build:
+    needs: plan
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+
+    env:
+      # Unsigned dev builds: don't let electron-builder try to discover a
+      # signing identity on the runner (the job would fail if keychain
+      # lookup hit an ambiguous cert).
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node (required by electron-builder)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      - name: Install workspace dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build DMG (${{ matrix.arch }})
+        run: bash apps/electron/scripts/build-dmg.sh ${{ matrix.arch }}
+
+      - name: Compute artifact metadata
+        id: meta
+        run: |
+          VERSION=$(node -p "require('./apps/electron/package.json').version")
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Craft-Agents-${{ matrix.arch }}-v${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.short_sha }}
+          path: apps/electron/release/Craft-Agents-${{ matrix.arch }}.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload zip artifact (if produced)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Craft-Agents-${{ matrix.arch }}-v${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.short_sha }}-zip
+          path: apps/electron/release/Craft-Agents-${{ matrix.arch }}-mac.zip
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Attach DMG to GitHub Release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            apps/electron/release/Craft-Agents-${{ matrix.arch }}.dmg
+            apps/electron/release/Craft-Agents-${{ matrix.arch }}-mac.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -238,11 +238,32 @@ export const piDriver: ProviderDriver = {
     customModels: context.connection?.models?.map(m => {
       if (typeof m === 'string') return m;
       const supportsImages = 'supportsImages' in m && m.supportsImages === true
-      if (m.contextWindow || supportsImages) {
+      // Pi SDK's openai-completions provider only emits `reasoning_effort`
+      // on chat requests when (model.reasoning && compat.supportsReasoningEffort).
+      // Mirror supportsThinking onto both so any provider that Craft knows
+      // is reasoning-capable actually has its thinking level honoured. The
+      // reasoningEffortMap, when supplied (e.g. by Cursor's dedup), maps
+      // Pi levels → upstream suffixes (medium → medium, high → max, …).
+      const supportsThinking =
+        'supportsThinking' in m && m.supportsThinking === true
+      const reasoningEffortMap =
+        'reasoningEffortMap' in m && m.reasoningEffortMap
+          ? (m.reasoningEffortMap as Record<string, string>)
+          : undefined
+      const needsDetailedEntry =
+        !!m.contextWindow ||
+        supportsImages ||
+        supportsThinking ||
+        !!reasoningEffortMap
+      if (needsDetailedEntry) {
         return {
           id: m.id,
           ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
           ...(supportsImages ? { supportsImages: true } : {}),
+          ...(supportsThinking
+            ? { reasoning: true, supportsReasoningEffort: true }
+            : {}),
+          ...(reasoningEffortMap ? { reasoningEffortMap } : {}),
         }
       }
       return m.id;

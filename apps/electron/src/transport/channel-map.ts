@@ -144,6 +144,13 @@ export const CHANNEL_MAP = {
   copilotLogout: invoke(RPC_CHANNELS.copilot.LOGOUT),
   onCopilotDeviceCode: listener(RPC_CHANNELS.copilot.DEVICE_CODE),
 
+  // Cursor OAuth (PKCE + local gRPC proxy)
+  startCursorOAuth: invoke(RPC_CHANNELS.cursor.START_OAUTH),
+  cancelCursorOAuth: invoke(RPC_CHANNELS.cursor.CANCEL_OAUTH),
+  getCursorAuthStatus: invoke(RPC_CHANNELS.cursor.GET_AUTH_STATUS),
+  cursorLogout: invoke(RPC_CHANNELS.cursor.LOGOUT),
+  getCursorProxyUrl: invoke(RPC_CHANNELS.cursor.GET_PROXY_URL),
+
   // Server info (REMOTE_ELIGIBLE)
   getServerHomeDir: invoke(RPC_CHANNELS.server.HOME_DIR),
 

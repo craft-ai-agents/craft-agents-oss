@@ -8,11 +8,17 @@ import claudeIcon from "@/assets/provider-icons/claude.svg"
 import openaiIcon from "@/assets/provider-icons/openai.svg"
 import copilotIcon from "@/assets/provider-icons/copilot.svg"
 
+/** Cursor has no bundled SVG in provider-icons — use a Google favicon as a
+ *  reasonable stand-in until we add a proper asset. Matches the favicon
+ *  fallback path used in provider-icons.ts for providers without an SVG. */
+const cursorIconUrl =
+  "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&size=128&url=https://cursor.com"
+
 /**
  * The high-level provider choice the user makes on first launch.
  * This maps to one or more ApiSetupMethods downstream.
  */
-export type ProviderChoice = 'claude' | 'chatgpt' | 'copilot' | 'api_key' | 'local'
+export type ProviderChoice = 'claude' | 'chatgpt' | 'copilot' | 'cursor' | 'api_key' | 'local'
 
 interface ProviderOption {
   id: ProviderChoice
@@ -25,6 +31,7 @@ const PROVIDER_ICONS: Record<ProviderChoice, React.ReactNode> = {
   claude: <img src={claudeIcon} alt="" className="size-5 rounded-[3px]" />,
   chatgpt: <img src={openaiIcon} alt="" className="size-5 rounded-[3px]" />,
   copilot: <img src={copilotIcon} alt="" className="size-5 rounded-[3px]" />,
+  cursor: <img src={cursorIconUrl} alt="" className="size-5 rounded-[3px]" />,
   api_key: <Key className="size-5" />,
   local: <Monitor className="size-5" />,
 }
@@ -63,6 +70,12 @@ export function ProviderSelectStep({ onSelect, onSkip }: ProviderSelectStepProps
       name: t("onboarding.providerSelect.githubCopilot"),
       description: t("onboarding.providerSelect.githubCopilotDesc"),
       icon: PROVIDER_ICONS.copilot,
+    },
+    {
+      id: 'cursor',
+      name: t("onboarding.providerSelect.cursor"),
+      description: t("onboarding.providerSelect.cursorDesc"),
+      icon: PROVIDER_ICONS.cursor,
     },
     {
       id: 'api_key',

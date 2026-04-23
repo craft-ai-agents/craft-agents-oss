@@ -62,6 +62,7 @@ export function CredentialsStep({
   const isClaudeOAuth = apiSetupMethod === 'claude_oauth'
   const isChatGptOAuth = apiSetupMethod === 'pi_chatgpt_oauth'
   const isCopilotOAuth = apiSetupMethod === 'pi_copilot_oauth'
+  const isCursorOAuth = apiSetupMethod === 'pi_cursor_oauth'
   const isAnthropicApiKey = apiSetupMethod === 'anthropic_api_key'
   const isPiApiKey = apiSetupMethod === 'pi_api_key'
   const isApiKey = isAnthropicApiKey || isPiApiKey
@@ -123,6 +124,46 @@ export function CredentialsStep({
           {status === 'success' && (
             <div className="rounded-lg bg-success/10 text-success text-sm p-3">
               {t("onboarding.credentials.chatGPTConnected")}
+            </div>
+          )}
+        </div>
+      </StepFormLayout>
+    )
+  }
+
+  // --- Cursor OAuth flow (PKCE — background poll, same UX shape as ChatGPT) ---
+  if (isCursorOAuth) {
+    return (
+      <StepFormLayout
+        title={t("onboarding.credentials.connectCursor")}
+        description={t("onboarding.credentials.connectCursorDesc")}
+        actions={
+          <>
+            <BackButton onClick={onBack} disabled={status === 'validating'} />
+            <ContinueButton
+              onClick={() => onStartOAuth?.()}
+              className="gap-2"
+              loading={status === 'validating'}
+              loadingText={t("onboarding.credentials.waitingForAuth")}
+            >
+              <ExternalLink className="size-4" />
+              {t("onboarding.credentials.signInCursor")}
+            </ContinueButton>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl bg-foreground-2 p-4 text-sm text-muted-foreground">
+            <p>{t("onboarding.credentials.cursorInstructions")}</p>
+          </div>
+          {status === 'error' && errorMessage && (
+            <div className="rounded-lg bg-destructive/10 text-destructive text-sm p-3">
+              {errorMessage}
+            </div>
+          )}
+          {status === 'success' && (
+            <div className="rounded-lg bg-success/10 text-success text-sm p-3">
+              {t("onboarding.credentials.cursorConnected")}
             </div>
           )}
         </div>

@@ -579,7 +579,7 @@ export function isValidProviderAuthCombination(
   const validCombinations: Record<LlmProviderType, LlmAuthType[]> = {
     anthropic: ['api_key', 'oauth'],
     pi: ['api_key', 'oauth', 'iam_credentials', 'environment', 'none'],
-    pi_compat: ['api_key_with_endpoint', 'none'],
+    pi_compat: ['api_key_with_endpoint', 'none', 'oauth'],
   };
 
   return validCombinations[providerType]?.includes(authType) ?? false;

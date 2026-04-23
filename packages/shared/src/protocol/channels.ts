@@ -199,6 +199,13 @@ export const RPC_CHANNELS = {
     LOGOUT: 'copilot:logout',
     DEVICE_CODE: 'copilot:deviceCode',
   },
+  cursor: {
+    START_OAUTH: 'cursor:startOAuth',
+    CANCEL_OAUTH: 'cursor:cancelOAuth',
+    GET_AUTH_STATUS: 'cursor:getAuthStatus',
+    LOGOUT: 'cursor:logout',
+    GET_PROXY_URL: 'cursor:getProxyUrl',
+  },
   settings: {
     SETUP_LLM_CONNECTION: 'settings:setupLlmConnection',
     TEST_LLM_CONNECTION_SETUP: 'settings:testLlmConnectionSetup',

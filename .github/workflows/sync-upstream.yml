@@ -1,0 +1,178 @@
+name: Sync with upstream
+
+# Periodically fetches lukilabs/craft-agents-oss's `main` branch into this
+# fork's `main`. Runs unattended on a schedule and can also be triggered
+# manually from the Actions tab.
+#
+# Two strategies are supported via the `strategy` workflow_dispatch input
+# (scheduled runs use 'auto'):
+#
+#   - auto (default):
+#       Attempt a fast-forward merge. If upstream's main cleanly fast-
+#       forwards onto ours, push it. If ours has diverged (any commit not
+#       on upstream — including this branch's Cursor work once it's
+#       merged to main), open/update a PR titled
+#       "chore: sync with upstream main" instead of forcing a merge. You
+#       review + merge the PR like any other change.
+#   - reset:
+#       Hard-reset our main to upstream main. DESTRUCTIVE — only use from
+#       workflow_dispatch when you've intentionally decided to abandon
+#       any local divergence. Will force-push. Guarded by the input so
+#       it can never fire on the cron.
+#
+# Why not a git submodule or a direct `git pull` on your laptop:
+#   - This fork's history divergence (the Cursor integration, the macOS
+#     DMG workflow, the subprocess-server build script) can't cleanly
+#     fast-forward from upstream. The PR path surfaces conflicts in
+#     GitHub's UI instead of silently failing mid-sync.
+#   - Running on a schedule means you don't have to remember to do it.
+
+on:
+  schedule:
+    # 07:00 UTC Mon / Wed / Fri — picks up upstream changes 3x/week.
+    # Change the cron if you want different cadence; GitHub Actions
+    # cron uses the POSIX cron syntax in UTC.
+    - cron: "0 7 * * 1,3,5"
+  workflow_dispatch:
+    inputs:
+      strategy:
+        description: "Sync strategy"
+        required: true
+        default: "auto"
+        type: choice
+        options:
+          - auto
+          - reset
+
+concurrency:
+  # Never run two sync jobs concurrently — they'd race on the same branch.
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      # Need contents:write to push the updated main; pull-requests:write
+      # so we can open the fallback PR when fast-forward isn't possible.
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout (all history)
+        uses: actions/checkout@v4
+        with:
+          # Sync branch needs the full history so `git merge-base` can
+          # tell divergence from fast-forwardable state.
+          fetch-depth: 0
+          # Use the default GITHUB_TOKEN. Works for branch pushes +
+          # opening PRs against the same repo. No PAT needed for public
+          # forks syncing from another public repo.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          # Idempotent — delete first so re-runs don't fail with
+          # "remote already exists".
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream https://github.com/lukilabs/craft-agents-oss.git
+          git fetch upstream main --tags
+
+      - name: Determine sync state
+        id: state
+        run: |
+          LOCAL_SHA=$(git rev-parse origin/main)
+          UPSTREAM_SHA=$(git rev-parse upstream/main)
+          MERGE_BASE=$(git merge-base origin/main upstream/main)
+
+          echo "local_sha=$LOCAL_SHA"     >> "$GITHUB_OUTPUT"
+          echo "upstream_sha=$UPSTREAM_SHA" >> "$GITHUB_OUTPUT"
+
+          if [ "$LOCAL_SHA" = "$UPSTREAM_SHA" ]; then
+            echo "state=up_to_date" >> "$GITHUB_OUTPUT"
+          elif [ "$MERGE_BASE" = "$LOCAL_SHA" ]; then
+            # We're strictly behind upstream → fast-forward is safe.
+            echo "state=ff" >> "$GITHUB_OUTPUT"
+          else
+            # Our main has commits not on upstream → needs a PR (or a
+            # manual reset).
+            echo "state=diverged" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Already up to date — nothing to do
+        if: steps.state.outputs.state == 'up_to_date'
+        run: echo "origin/main == upstream/main; exiting cleanly."
+
+      - name: Fast-forward main
+        if: steps.state.outputs.state == 'ff'
+        run: |
+          git checkout main
+          git merge --ff-only upstream/main
+          git push origin main
+          echo "Fast-forwarded origin/main from ${{ steps.state.outputs.local_sha }} to ${{ steps.state.outputs.upstream_sha }}"
+
+      - name: Hard-reset main (reset strategy, manual only)
+        if: github.event_name == 'workflow_dispatch' && inputs.strategy == 'reset'
+        run: |
+          echo "WARNING: hard-resetting origin/main to upstream/main and force-pushing."
+          git checkout main
+          git reset --hard upstream/main
+          git push --force-with-lease origin main
+
+      - name: Open / update upstream-sync PR (diverged, auto strategy)
+        if: |
+          steps.state.outputs.state == 'diverged' &&
+          (github.event_name == 'schedule' ||
+           (github.event_name == 'workflow_dispatch' && inputs.strategy == 'auto'))
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create / update a branch that rebases our divergent commits
+          # on top of upstream/main. Conflicts don't auto-resolve — if
+          # rebase fails, we abort it and fall back to a merge commit so
+          # the PR still opens and you can resolve in-browser.
+          BRANCH="chore/upstream-sync"
+          git checkout -B "$BRANCH" origin/main
+
+          # Try a merge (not a rebase) first — keeps the divergent work
+          # visible in the PR diff instead of rewriting history, and
+          # makes conflict resolution more natural in the GitHub UI.
+          if git merge --no-ff --no-edit upstream/main; then
+            echo "Merge clean — pushing branch."
+          else
+            echo "Merge had conflicts — committing the in-progress merge so the PR surfaces them."
+            # Leave conflict markers in the tree so the PR clearly shows
+            # what needs resolving. GitHub won't let the PR merge until
+            # the conflicts are resolved anyway.
+            git add -A
+            git commit --no-edit || true
+          fi
+
+          git push -f origin "$BRANCH"
+
+          # Open or update the PR. --fill pulls title/body from the most
+          # recent commit on the branch; we override with a predictable
+          # title so re-runs update instead of creating duplicates.
+          TITLE="chore: sync with upstream lukilabs/craft-agents-oss"
+          BODY=$(printf "%s\n" \
+            "Automated sync of upstream \`lukilabs/craft-agents-oss\` \`main\` into this fork's \`main\`." \
+            "" \
+            "- Upstream SHA: \`${{ steps.state.outputs.upstream_sha }}\`" \
+            "- Local SHA:    \`${{ steps.state.outputs.local_sha }}\`" \
+            "" \
+            "If there are conflicts, resolve them in this PR, then merge. If not, merging brings upstream's changes into \`main\` without disturbing open PR branches." \
+            "" \
+            "Triggered by: \`${{ github.event_name }}\`")
+
+          EXISTING=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number' || true)
+          if [ -n "$EXISTING" ]; then
+            gh pr edit "$EXISTING" --title "$TITLE" --body "$BODY"
+            echo "Updated existing PR #$EXISTING"
+          else
+            gh pr create --base main --head "$BRANCH" --title "$TITLE" --body "$BODY"
+          fi

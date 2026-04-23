@@ -2,12 +2,20 @@
  * electron-builder afterPack hook
  *
  * Copies the pre-compiled macOS 26+ Liquid Glass icon (Assets.car) into the
- * app bundle. The Assets.car file is compiled locally using actool with the
- * macOS 26 SDK (not available in CI), then committed to the repo.
+ * app bundle. The Assets.car file is compiled from AppIcon.icon and checked
+ * into the repo.
  *
- * To regenerate Assets.car after icon changes:
- *   cd apps/electron
- *   xcrun actool "resources/icon.icon" --compile "resources" \
+ * Preferred regeneration path (automated): edit anything under
+ *   apps/electron/resources/AppIcon.icon/  (e.g. swap the SVG)
+ * and push. The `.github/workflows/compile-icon.yml` workflow rebuilds
+ * Assets.car on a macos-15 runner with Xcode + macOS 26 SDK and commits
+ * the refreshed binary back to main. PRs touching the .icon source run
+ * the same compile and expose the resulting Assets.car as a downloadable
+ * artifact for review.
+ *
+ * Manual regeneration (only needed if you can't use CI):
+ *   cd apps/electron/resources
+ *   xcrun actool "AppIcon.icon" --compile "." \
  *     --app-icon AppIcon --minimum-deployment-target 26.0 \
  *     --platform macosx --output-partial-info-plist /dev/null
  *
