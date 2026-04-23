@@ -413,4 +413,17 @@ export const CHANNEL_MAP = {
   startWhatsAppConnect: invoke(RPC_CHANNELS.messaging.WA_START_CONNECT),
   submitWhatsAppPhone: invoke(RPC_CHANNELS.messaging.WA_SUBMIT_PHONE),
   onWhatsAppEvent: listener(RPC_CHANNELS.messaging.WA_UI_EVENT),
+
+  // Sound notifications
+  getSoundSettings: invoke(RPC_CHANNELS.sound.GET_SETTINGS),
+  setSoundSettings: invoke(RPC_CHANNELS.sound.SET_SETTINGS),
+  getSoundPacks: invoke(RPC_CHANNELS.sound.GET_PACKS),
+  setSoundPack: invoke(RPC_CHANNELS.sound.SET_PACK),
+  getSoundRegistry: invoke(RPC_CHANNELS.sound.GET_REGISTRY),
+  installSoundPack: invoke(RPC_CHANNELS.sound.INSTALL_PACK),
+  uninstallSoundPack: invoke(RPC_CHANNELS.sound.UNINSTALL_PACK),
+  previewSoundPack: invoke(RPC_CHANNELS.sound.PREVIEW_PACK),
+  playSoundTest: invoke(RPC_CHANNELS.sound.PLAY_TEST),
+  importSoundFolder: invoke(RPC_CHANNELS.sound.IMPORT_FOLDER),
+  importPeonPingPacks: invoke(RPC_CHANNELS.sound.IMPORT_PEON_PING),
 } satisfies ChannelMap

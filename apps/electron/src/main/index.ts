@@ -773,6 +773,17 @@ app.whenReady().then(async () => {
         mainLog.error('[messaging] Gateway initialization failed:', err)
       }
 
+      // Initialize sound engine (non-blocking — sounds available once init completes)
+      if (!isHeadless) {
+        import('./audio/index.js').then(({ initSoundEngine }) => {
+          initSoundEngine().then(() => {
+            mainLog.info('[sound] Sound engine initialized')
+          }).catch((err) => {
+            mainLog.warn('[sound] Sound engine init failed:', err)
+          })
+        })
+      }
+
       // IPC handlers — preload uses sendSync to get WS connection details
 
       // Remove workspace from config (cleanup stale entries)
@@ -1196,6 +1207,11 @@ app.on('before-quit', async (event) => {
         mainLog.error('[messaging] dispose failed:', err)
       }
     }
+
+    // Dispose sound engine (kills utility process)
+    import('./audio/index.js').then(({ disposeSoundEngine }) => {
+      disposeSoundEngine().catch(() => {})
+    })
 
     // Clean up power manager (release power blocker)
     const { cleanup: cleanupPowerManager } = await import('./power-manager')
