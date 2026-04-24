@@ -14,9 +14,9 @@
     "typecheck": "bun run build"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "0.66.1",
-    "@mariozechner/pi-agent-core": "0.66.1",
-    "@mariozechner/pi-ai": "0.66.1",
+    "@mariozechner/pi-coding-agent": "0.70.0",
+    "@mariozechner/pi-agent-core": "0.70.0",
+    "@mariozechner/pi-ai": "0.70.0",
     "duck-duck-scrape": "^2.2.7",
     "@sinclair/typebox": "^0.34.0",
     "node-html-parser": "^6.1.0",

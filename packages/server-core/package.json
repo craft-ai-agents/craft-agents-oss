@@ -29,7 +29,7 @@
     "jose": "^6.0.0",
     "ws": "^8.19.0",
     "sharp": "0.34.5",
-    "@mariozechner/pi-ai": "0.66.1"
+    "@mariozechner/pi-ai": "0.70.0"
   },
   "devDependencies": {
     "typescript": "^5.8.2",

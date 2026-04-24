@@ -26,7 +26,7 @@ import {
   SessionManager as PiSessionManager,
   AuthStorage as PiAuthStorage,
   ModelRegistry as PiModelRegistry,
-  codingTools,
+  createCodingTools,
 } from '@mariozechner/pi-coding-agent';
 import type {
   AgentSession,
@@ -47,7 +47,7 @@ import type { TextContent as PiTextContent } from '@mariozechner/pi-ai';
 // Pre-register the Bedrock provider module so the Pi SDK doesn't attempt a
 // dynamic import of "./amazon-bedrock.js" — which fails in the bundled output
 // because bun collapses everything into a single file.
-// With the current Pi SDK (0.66.1 here), pi-ai is deduped (single hoisted
+// With the current Pi SDK (0.70.0 here), pi-ai is deduped (single hoisted
 // copy), so one registration covers both pi-ai and pi-agent-core module scopes.
 import { setBedrockProviderModule } from '@mariozechner/pi-ai';
 import { bedrockProviderModule } from '@mariozechner/pi-ai/bedrock-provider';
@@ -523,7 +523,7 @@ async function ensureSession(): Promise<AgentSession> {
     initConfig ? getSessionPath(initConfig.workspaceRootPath, initConfig.sessionId) : null
   );
   const webTools = [searchTool, webFetchTool];
-  const wrappedCodingTools = wrapToolsWithHooks([...codingTools, ...webTools]);
+  const wrappedCodingTools = wrapToolsWithHooks([...createCodingTools(cwd), ...webTools]);
   const proxyTools = buildProxyTools();
   const allTools = [...wrappedCodingTools, ...proxyTools];
   debugLog(`Session tools: ${wrappedCodingTools.length} coding + ${proxyTools.length} proxy = ${allTools.length} total`);

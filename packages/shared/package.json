@@ -77,9 +77,9 @@
     "i18next": "^26.0.3",
     "incr-regex-package": "^1.0.4",
     "shell-quote": "^1.8.3",
-    "@mariozechner/pi-agent-core": "0.66.1",
-    "@mariozechner/pi-ai": "0.66.1",
-    "@mariozechner/pi-coding-agent": "0.66.1"
+    "@mariozechner/pi-agent-core": "0.70.0",
+    "@mariozechner/pi-ai": "0.70.0",
+    "@mariozechner/pi-coding-agent": "0.70.0"
   },
   "peerDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.19",
