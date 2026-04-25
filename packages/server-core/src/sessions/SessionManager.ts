@@ -117,12 +117,14 @@ interface SessionRuntimeHooks {
   captureException: (error: unknown, context?: { errorSource?: string; sessionId?: string }) => void
   onSessionStarted: () => void
   onSessionStopped: () => void
+  onAutomationEvent?: (event: string, sessionId?: string) => void
 }
 
 const defaultSessionRuntimeHooks: SessionRuntimeHooks = {
   updateBadgeCount: () => {},
   onSessionStarted: () => {},
   onSessionStopped: () => {},
+  onAutomationEvent: () => {},
   captureException: (error, context) => {
     const err = error instanceof Error ? error : new Error(String(error))
     if (_platform?.captureError) {
@@ -1380,11 +1382,20 @@ export class SessionManager implements ISessionManager {
             }
           }
         },
+        onEvent: (event, _input) => {
+          sessionRuntimeHooks.onAutomationEvent?.(event as string, undefined)
+        },
         onError: (event, error) => {
           sessionLog.error(`Automation failed for ${event}:`, error.message)
         },
       })
       this.automationSystems.set(workspaceRootPath, automationSystem)
+      // Bridge automation events to sound notifications via runtime hooks
+      if (sessionRuntimeHooks.onAutomationEvent) {
+        automationSystem.eventBus.onAny((event, payload) => {
+          sessionRuntimeHooks.onAutomationEvent(event, payload.sessionId)
+        })
+      }
       sessionLog.info(`Initialized AutomationSystem for workspace ${workspaceId}`)
     }
   }

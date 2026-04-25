@@ -57,6 +57,8 @@ export interface AutomationSystemOptions {
   onError?: (event: AutomationEvent, error: Error) => void;
   /** Called when events are lost after retries */
   onEventLost?: (events: string[], error: Error) => void;
+  /** Called when an agent event fires (before automation matching). Used for sound notifications. */
+  onEvent?: (event: AgentEvent, input: SdkAutomationInput) => void;
 }
 
 // ============================================================================
@@ -489,6 +491,8 @@ export class AutomationSystem implements AutomationsConfigProvider {
    * @returns Number of matched matchers (for diagnostics/testing)
    */
   async executeAgentEvent(event: AgentEvent, input: SdkAutomationInput, signal?: AbortSignal): Promise<number> {
+    // Always notify external subscribers (e.g., sound notifications) even if no automations match
+    this.options.onEvent?.(event, input)
     if (!this.config) return 0;
 
     const matchers = this.config.automations[event];
