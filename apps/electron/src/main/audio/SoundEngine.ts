@@ -1,19 +1,19 @@
 /**
  * SoundEngine — Core singleton managing sound notification playback.
  *
- * Uses a hidden BrowserWindow with Web Audio API for reliable cross-platform
- * audio playback. Electron's UtilityProcess does NOT have access to browser
- * APIs (AudioContext, GainNode), so a BrowserWindow is required.
+ * Uses a hidden BrowserWindow with HTMLAudioElement for reliable cross-platform
+ * audio playback. Avoids Web Audio API because AudioContext is suspended
+ * in hidden windows until user interaction (which never happens).
  *
  * Architecture:
  *   Main process (SoundEngine):
  *     - Manages state: packs, settings, cooldowns, spam detection
  *     - Reads audio files from disk
- *     - Sends ArrayBuffer data + metadata to the player window via IPC
+ *     - Sends Uint8Array data to the player window via IPC
  *   Hidden BrowserWindow (sound-player HTML):
  *     - Receives audio data via IPC
- *     - Decodes and plays using Web Audio API
- *     - Reports status back via IPC
+ *     - Creates a Blob URL and plays via new Audio(url).play()
+ *     - No AudioContext, no decodeAudioData — Chromium handles everything
  */
 
 import { BrowserWindow } from 'electron'
@@ -74,7 +74,7 @@ export class SoundEngine {
   private spamDetector = new SpamDetector()
   private lastPlayedFile: string | null = null
   private ready = false
-  private pendingPlays: Array<{ data: ArrayBuffer; filePath: string; volume: number }> = []
+  private pendingPlays: Array<{ data: Uint8Array; filePath: string; volume: number; ext: string }> = []
 
   // Per-session active pack
   private sessionPacks = new Map<string, string>() // sessionId → packName
@@ -117,28 +117,31 @@ export class SoundEngine {
     this.playerWindow.on('closed', () => {
       this.playerWindow = null
       this.ready = false
+      console.warn('[sound] Player window closed, restarting in 2s...')
       setTimeout(() => this.createPlayerWindow(), 2000)
     })
 
-    // Handle IPC from the audio player
+    // Listen for player errors
+    this.playerWindow.webContents.ipc.on('sound:player-error', (_event, error: string) => {
+      console.error('[sound] Audio player error:', error)
+    })
+
+    // Player is ready
     this.playerWindow.webContents.ipc.on('sound:ready', () => {
       this.ready = true
       console.info('[sound] Audio player window ready')
       // Set initial volume
       this.playerWindow?.webContents.send('sound:set-volume', this.settings.volume)
       // Play any queued sounds
-      for (const { data, filePath, volume } of this.pendingPlays) {
-        this.playerWindow?.webContents.send('sound:play-buffer', filePath, data, volume)
+      for (const { data, filePath, volume, ext } of this.pendingPlays) {
+        this.playerWindow?.webContents.send('sound:play', data, volume, ext)
       }
       this.pendingPlays = []
     })
 
-    this.playerWindow.webContents.ipc.on('sound:error', (_event, error: string) => {
-      console.error('[sound] Audio player error:', error)
-    })
-
-    // Load minimal HTML with Web Audio player
+    // Load minimal HTML player
     this.playerWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(PLAYER_HTML)}`)
+      .catch(err => console.error('[sound] Failed to load player HTML:', err))
   }
 
   async dispose(): Promise<void> {
@@ -214,12 +217,21 @@ export class SoundEngine {
    * Play a sound for a CESP event category.
    */
   async play(category: CespCategory, sessionId?: string): Promise<void> {
-    if (!this.settings.enabled) return
+    if (!this.settings.enabled) {
+      console.debug(`[sound] Playback skipped: sound notifications disabled`)
+      return
+    }
 
     const catSettings = this.settings.categories[category]
-    if (catSettings && !catSettings.enabled) return
+    if (catSettings && !catSettings.enabled) {
+      console.debug(`[sound] Playback skipped: category ${category} disabled`)
+      return
+    }
 
-    if (!this.cooldownTracker.canPlay(category, this.settings.cooldownMs)) return
+    if (!this.cooldownTracker.canPlay(category, this.settings.cooldownMs)) {
+      console.debug(`[sound] Playback skipped: category ${category} on cooldown`)
+      return
+    }
 
     const pack = this.getActivePack(sessionId)
     if (!pack) {
@@ -235,13 +247,20 @@ export class SoundEngine {
     }
 
     const categoryDef = resolveCategory(pack.manifest, category)
-    if (!categoryDef || categoryDef.sounds.length === 0) return
+    if (!categoryDef || categoryDef.sounds.length === 0) {
+      console.warn(`[sound] Category ${category} has no sounds in pack ${pack.name}`)
+      return
+    }
 
     const lastFile = this.settings.noRepeat ? this.lastPlayedFile : null
     const result = pickRandomSound(categoryDef, pack.directory, lastFile)
-    if (!result) return
+    if (!result) {
+      console.warn(`[sound] No sound picked for category ${category}`)
+      return
+    }
 
     this.lastPlayedFile = result.entry.file
+    console.info(`[sound] Playing ${category}: ${result.filePath}`)
     await this.playFile(result.filePath, catSettings?.volume ?? this.settings.volume)
     this.cooldownTracker.record(category)
   }
@@ -250,11 +269,14 @@ export class SoundEngine {
    * Play a test sound (from settings page).
    */
   async playTest(filePath: string): Promise<void> {
-    if (!this.playerWindow && !this.ready) {
-      console.warn('[sound] playTest called but audio player is not ready')
+    console.info(`[sound] Playing test: ${filePath}`)
+    if (!this.playerWindow) {
+      console.warn('[sound] playTest called but player window does not exist')
       return
     }
-    console.info(`[sound] Playing test: ${filePath}`)
+    if (!this.ready) {
+      console.warn('[sound] playTest called but player is not ready yet')
+    }
     await this.playFile(filePath, this.settings.volume)
   }
 
@@ -272,16 +294,23 @@ export class SoundEngine {
   private async playFile(filePath: string, volume: number): Promise<void> {
     const clampedVolume = Math.max(0, Math.min(1, volume))
 
+    // Extract extension for MIME type detection
+    const ext = filePath.slice(filePath.lastIndexOf('.')).toLowerCase()
+
     try {
-      const data = await readFile(filePath)
+      const buf = await readFile(filePath)
+      // Create a standalone Uint8Array copy to avoid Buffer pooling issues
+      const data = new Uint8Array(buf)
 
       if (!this.ready || !this.playerWindow || this.playerWindow.isDestroyed()) {
         // Queue the sound if player isn't ready yet
-        this.pendingPlays.push({ data: data.buffer, filePath, volume: clampedVolume })
+        console.debug(`[sound] Queuing ${filePath} (player not ready)`)
+        this.pendingPlays.push({ data, filePath, volume: clampedVolume, ext })
         return
       }
 
-      this.playerWindow.webContents.send('sound:play-buffer', filePath, data.buffer, clampedVolume)
+      console.debug(`[sound] Sending ${data.byteLength} bytes to player: ${filePath}`)
+      this.playerWindow.webContents.send('sound:play', data, clampedVolume, ext)
     } catch (err) {
       console.error(`[sound] Failed to read audio file: ${filePath}`, err)
     }
@@ -290,6 +319,7 @@ export class SoundEngine {
 
 // ---------------------------------------------------------------------------
 // HTML for the hidden audio player BrowserWindow
+// Uses HTMLAudioElement (not Web Audio API) to avoid AudioContext suspension.
 // ---------------------------------------------------------------------------
 
 const PLAYER_HTML = `<!DOCTYPE html>
@@ -297,65 +327,76 @@ const PLAYER_HTML = `<!DOCTYPE html>
 <head><title>Sound Player</title></head>
 <body>
 <script>
-// Web Audio API setup
-let audioCtx = null;
-let masterGain = null;
-const cache = new Map();
-
-function ensureAudioContext() {
-  if (!audioCtx || audioCtx.state === 'closed') {
-    audioCtx = new AudioContext();
-    masterGain = audioCtx.createGain();
-    masterGain.connect(audioCtx.destination);
+// Map file extensions to MIME types
+function getMimeType(ext) {
+  switch (ext) {
+    case '.mp3': return 'audio/mpeg';
+    case '.ogg': return 'audio/ogg';
+    case '.oga': return 'audio/ogg';
+    case '.wav': return 'audio/wav';
+    default: return 'audio/mpeg';
   }
-  return audioCtx;
 }
 
-async function playFromBuffer(filePath, arrayBuffer, volume) {
-  try {
-    const ctx = ensureAudioContext();
-    if (ctx.state === 'suspended') await ctx.resume();
+let currentAudio = null;
+let masterVolume = 0.8;
 
-    let buffer = cache.get(filePath);
-    if (!buffer) {
-      buffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
-      cache.set(filePath, buffer);
+function playSound(uint8Array, volume, ext) {
+  try {
+    // Stop any currently playing sound
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
     }
 
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    const playGain = ctx.createGain();
-    playGain.gain.value = volume;
-    source.connect(playGain);
-    playGain.connect(masterGain);
-    source.start();
+    const mimeType = getMimeType(ext || '');
+    const blob = new Blob([uint8Array], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.volume = volume * masterVolume;
+
+    audio.play().then(() => {
+      // Success — nothing to do
+    }).catch(err => {
+      window.electronAPI.reportError('Playback failed: ' + (err.message || String(err)));
+    });
+
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      if (currentAudio === audio) currentAudio = null;
+    };
+
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      window.electronAPI.reportError('Audio error: ' + (audio.error?.message || 'unknown'));
+      if (currentAudio === audio) currentAudio = null;
+    };
+
+    currentAudio = audio;
   } catch (err) {
-    window.electronAPI.onPlayError(err.message || String(err));
+    window.electronAPI.reportError('playSound error: ' + (err.message || String(err)));
   }
 }
 
-// Listen for IPC commands from main process via preload
-window.electronAPI.onPlayCommand((filePath, volume) => {
-  // Legacy path — not used, main process sends buffers directly
-});
+function setVolume(v) {
+  masterVolume = Math.max(0, Math.min(1, v));
+  if (currentAudio) currentAudio.volume = masterVolume;
+}
 
-window.electronAPI.onSetVolume((v) => {
-  if (masterGain) masterGain.gain.value = v;
-});
-
-window.electronAPI.onClearCache(() => {
-  cache.clear();
-});
-
-// Handle buffer-based playback from main process
-// (The preload exposes this as window.electronAPI.onPlayBuffer)
-if (window.electronAPI.onPlayBuffer) {
-  window.electronAPI.onPlayBuffer((filePath, buffer, volume) => {
-    playFromBuffer(filePath, buffer, volume);
+// IPC from main process
+if (window.electronAPI.onPlay) {
+  window.electronAPI.onPlay((data, volume, ext) => {
+    playSound(data, volume, ext);
   });
 }
 
-// Signal ready
+if (window.electronAPI.onSetVolume) {
+  window.electronAPI.onSetVolume((v) => {
+    setVolume(v);
+  });
+}
+
+// Signal ready to main process
 window.electronAPI.signalReady();
 </script>
 </body>
