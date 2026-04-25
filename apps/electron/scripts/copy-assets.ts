@@ -19,14 +19,7 @@ cpSync('resources', 'dist/resources', { recursive: true });
 
 console.log('✓ Copied resources/ → dist/resources/');
 
-// Verify sound-player preload (built separately by esbuild)
-// This ensures the compiled sound-player-preload.cjs is available in the packaged app.
-const soundPreloadSrc = join('dist', 'sound-player-preload.cjs');
-if (existsSync(soundPreloadSrc)) {
-  console.log('✓ sound-player-preload.cjs found in dist/');
-} else {
-  console.log('⚠ sound-player-preload.cjs not found in dist/ — sound notifications will not work');
-}
+// Note: sound-player-preload.cjs was removed in v4 (uses nodeIntegration window instead)
 
 // Copy PowerShell parser script (for Windows command validation in Explore mode)
 // Source: packages/shared/src/agent/powershell-parser.ps1
