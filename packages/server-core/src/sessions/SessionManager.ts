@@ -2163,8 +2163,13 @@ export class SessionManager implements ISessionManager {
       ?? globalDefaults.workspaceDefaults.permissionMode
 
     const userDefaultWorkingDir = wsConfig?.defaults?.workingDirectory || undefined
-    // Get default thinking level from workspace config, fallback to app-level default
-    const defaultThinkingLevel = normalizeThinkingLevel(wsConfig?.defaults?.thinkingLevel) ?? getDefaultThinkingLevel()
+    // Resolve thinking level with caller-first precedence, matching permissionMode above:
+    //   caller override → workspace default → global default.
+    // normalizeThinkingLevel() tolerates undefined/unknown inputs.
+    const defaultThinkingLevel =
+      normalizeThinkingLevel(options?.thinkingLevel)
+      ?? normalizeThinkingLevel(wsConfig?.defaults?.thinkingLevel)
+      ?? getDefaultThinkingLevel()
     // Get default model from workspace config (used when no session-specific model is set)
     const defaultModel = wsConfig?.defaults?.model
     // Get default enabled sources from workspace config
@@ -3417,6 +3422,7 @@ export class SessionManager implements ISessionManager {
           model: request.model ?? managed.model,
           enabledSourceSlugs: request.enabledSourceSlugs ?? managed.enabledSourceSlugs,
           permissionMode: request.permissionMode ?? managed.permissionMode,
+          thinkingLevel: request.thinkingLevel ?? managed.thinkingLevel,
           labels: request.labels ?? managed.labels,
           workingDirectory: request.workingDirectory,
         })
@@ -3585,6 +3591,32 @@ export class SessionManager implements ISessionManager {
           }
 
           await this.sendMessage(sessionId, message, fileAttachments)
+        },
+        activateSourceInSessionFn: async (sourceSlug: string) => {
+          const cb = managed.agent?.onSourceActivationRequest
+          if (!cb) {
+            return { ok: false, reason: 'Agent has no activation callback wired' }
+          }
+          const ok = await cb(sourceSlug)
+          if (!ok) {
+            return {
+              ok: false,
+              reason: 'Activation failed — source may be unusable (disabled/unauthenticated) or server build failed. Check session logs.',
+            }
+          }
+          // Both backends need the current turn to end before new tools are visible:
+          // Claude SDK freezes mcpServers at query() start; Pi only picks up new proxy
+          // tool defs on the next handlePrompt (`toolsChanged` flag in pi-agent-server).
+          // Mark a pending restart on the agent — ClaudeAgent/PiAgent consume it after
+          // the next tool_result, yield source_activated, and forceAbort. The renderer's
+          // auto_retry effect then resends the original user message with a
+          // "[{slug} activated]" suffix — landing in a fresh turn with tools live.
+          // Same machinery as the tool-call-error auto-retry path.
+          const userMessage = managed.agent?.getCurrentTurnUserMessage?.() ?? ''
+          if (userMessage) {
+            managed.agent?.setPendingSourceActivationRestart({ sourceSlug, userMessage })
+          }
+          return { ok: true, availability: 'next-turn' as const }
         },
       })
 

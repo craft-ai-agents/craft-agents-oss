@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { parseArgs } from './index.ts'
+import { parseArgs, resolveApiKey, shouldSetupLlmConnection } from './index.ts'
 
 // ---------------------------------------------------------------------------
 // Arg parsing tests
@@ -224,6 +224,43 @@ describe('parseArgs', () => {
   it('defaults workspaceDir to undefined', () => {
     const args = parseArgs(['bun', 'index.ts', 'run', 'hello'])
     expect(args.workspaceDir).toBeUndefined()
+  })
+
+  it('parses --provider deepseek for run', () => {
+    const args = parseArgs(['bun', 'index.ts', '--provider', 'deepseek', 'run', 'hello'])
+    expect(args.provider).toBe('deepseek')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Provider credential resolution tests
+// ---------------------------------------------------------------------------
+
+describe('resolveApiKey', () => {
+  it('uses DEEPSEEK_API_KEY for the deepseek provider', () => {
+    const prev = process.env.DEEPSEEK_API_KEY
+    process.env.DEEPSEEK_API_KEY = 'deepseek-test-key'
+
+    try {
+      expect(resolveApiKey('deepseek', '')).toBe('deepseek-test-key')
+    } finally {
+      if (prev === undefined) delete process.env.DEEPSEEK_API_KEY
+      else process.env.DEEPSEEK_API_KEY = prev
+    }
+  })
+})
+
+describe('shouldSetupLlmConnection', () => {
+  it('forces setup for non-default providers even when connections already exist', () => {
+    expect(shouldSetupLlmConnection(2, { provider: 'deepseek', baseUrl: '' })).toBe(true)
+  })
+
+  it('skips setup for the default anthropic provider when connections already exist', () => {
+    expect(shouldSetupLlmConnection(2, { provider: 'anthropic', baseUrl: '' })).toBe(false)
+  })
+
+  it('forces setup for custom endpoints', () => {
+    expect(shouldSetupLlmConnection(2, { provider: 'anthropic', baseUrl: 'https://api.example.com' })).toBe(true)
   })
 })
 

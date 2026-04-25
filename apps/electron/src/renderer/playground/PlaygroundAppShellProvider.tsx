@@ -38,6 +38,8 @@ const playgroundValue: AppShellContextType = {
   pendingPermissions: new Map(),
   pendingCredentials: new Map(),
   getDraft: () => '',
+  getDraftAttachmentRefs: () => [],
+  hydrateDraftAttachments: async () => [],
   sessionOptions: new Map(),
   onCreateSession: (async () => {
     throw new Error('[Playground] onCreateSession is not available')
@@ -65,6 +67,7 @@ const playgroundValue: AppShellContextType = {
   onReset: logCall('onReset'),
   onSessionOptionsChange: logCall('onSessionOptionsChange'),
   onInputChange: logCall('onInputChange'),
+  onAttachmentsChange: logCall('onAttachmentsChange'),
 }
 
 export function PlaygroundAppShellProvider({ children }: { children: React.ReactNode }) {

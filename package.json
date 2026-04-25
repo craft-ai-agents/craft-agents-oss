@@ -1,6 +1,6 @@
 {
   "name": "craft-agent",
-  "version": "0.8.11",
+  "version": "0.8.12",
   "license": "Apache-2.0",
   "description": "Claude Code-like agent for Craft documents",
   "type": "module",
@@ -24,7 +24,7 @@
     "typecheck": "bun run typecheck:shared",
     "typecheck:shared": "cd packages/shared && bun run tsc --noEmit",
     "typecheck:staged": "bash scripts/typecheck-staged.sh",
-    "typecheck:all": "cd packages/core && bun run tsc --noEmit && cd ../shared && bun run tsc --noEmit && cd ../server-core && bun run tsc --noEmit && cd ../server && bun run tsc --noEmit && cd ../session-tools-core && bun run tsc --noEmit && cd ../../apps/electron && bun run typecheck && cd ../../packages/ui && bun run tsc --noEmit",
+    "typecheck:all": "cd packages/core && bun run tsc --noEmit && cd ../shared && bun run tsc --noEmit && cd ../server-core && bun run tsc --noEmit && cd ../server && bun run tsc --noEmit && cd ../session-tools-core && bun run tsc --noEmit && cd ../pi-agent-server && bun run typecheck && cd ../../apps/electron && bun run typecheck && cd ../../packages/ui && bun run tsc --noEmit",
     "server:start": "bun run packages/server/src/index.ts",
     "server:dev": "bun run server:build:subprocess && CRAFT_DEBUG=true CRAFT_BUNDLED_ASSETS_ROOT=$PWD/apps/electron bun run packages/server/src/index.ts",
     "server:build": "bun run scripts/build-server.ts",
@@ -132,12 +132,12 @@
     "vite": "^6.2.4"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.111",
+    "@anthropic-ai/claude-agent-sdk": "0.2.111",
     "@dnd-kit/dom": "^0.4.0-beta-20260227032529",
     "@dnd-kit/helpers": "^0.4.0-beta-20260227032529",
     "@github/copilot-sdk": "^0.1.23",
-    "@mariozechner/pi-ai": "^0.66.1",
-    "@mariozechner/pi-coding-agent": "^0.66.1",
+    "@mariozechner/pi-ai": "^0.70.2",
+    "@mariozechner/pi-coding-agent": "^0.70.2",
     "@modelcontextprotocol/sdk": "^1.24.3",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-collapsible": "^1.1.12",

@@ -173,6 +173,10 @@ interface ChatDisplayProps {
   inputValue?: string
   /** Callback when input value changes */
   onInputChange?: (value: string) => void
+  /** Persisted attachment draft for this session (hydrated from disk in ChatPage) */
+  attachmentsValue?: FileAttachment[]
+  /** Callback when attachment draft changes (add, remove, clear on send) */
+  onAttachmentsChange?: (attachments: FileAttachment[]) => void
   // Source selection
   /** Available sources (enabled only) */
   sources?: LoadedSource[]
@@ -442,6 +446,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Input value preservation
   inputValue,
   onInputChange,
+  attachmentsValue,
+  onAttachmentsChange,
   // Sources
   sources,
   onSourcesChange,
@@ -1866,6 +1872,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               onStructuredResponse: handleStructuredResponse,
               inputValue,
               onInputChange,
+              attachmentsValue,
+              onAttachmentsChange,
               sources,
               enabledSourceSlugs: session.enabledSourceSlugs,
               onSourcesChange,

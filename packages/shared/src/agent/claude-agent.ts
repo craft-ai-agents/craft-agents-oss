@@ -1431,6 +1431,27 @@ This is a branched conversation. All prior messages in this conversation are par
 
           const events = await this.eventAdapter.adapt(message);
           for (const event of events) {
+            // After source_test (or any session-scoped tool) successfully activates a
+            // new source, activateSourceInSessionFn stashes a restart descriptor on the
+            // agent. Consume it here — right after the source_test tool_result has
+            // landed — so the model sees "activated" in its prior turn, then the
+            // renderer auto-resends the user's original message with a
+            // "[{slug} activated]" suffix. Same machinery as the tool-call-error path.
+            if (event.type === 'tool_result') {
+              const pendingRestart = this.consumePendingSourceActivationRestart();
+              if (pendingRestart) {
+                yield event;
+                this.onDebug?.(`source_test activated "${pendingRestart.sourceSlug}", interrupting turn for auto-retry`);
+                yield {
+                  type: 'source_activated' as const,
+                  sourceSlug: pendingRestart.sourceSlug,
+                  originalMessage: pendingRestart.userMessage,
+                };
+                this.forceAbort(AbortReason.SourceActivated);
+                return;
+              }
+            }
+
             // Check for tool-not-found errors on inactive sources and attempt auto-activation
             const inactiveSourceError = this.detectInactiveSourceToolError(event, this.eventAdapter.getToolIndex());
 

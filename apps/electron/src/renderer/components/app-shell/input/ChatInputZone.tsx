@@ -7,6 +7,7 @@ import type { SessionStatus } from '@/config/session-status-config'
 import type { BackgroundTask } from '../ActiveTasksBar'
 import { ActiveOptionBadges } from '../ActiveOptionBadges'
 import { InputContainer } from './InputContainer'
+import { InputErrorBoundary } from './InputErrorBoundary'
 
 interface ChatInputZoneProps {
   compactMode?: boolean
@@ -49,6 +50,12 @@ export function ChatInputZone({
 }: ChatInputZoneProps) {
   const [autoOpenLabelId, setAutoOpenLabelId] = React.useState<string | null>(null)
   const shouldShowOptionBadges = showOptionBadges ?? !compactMode
+  const inputResetKey = `${sessionId}::${inputProps.structuredInput?.type ?? 'freeform'}`
+
+  const handleClearDraft = React.useCallback(() => {
+    inputProps.onInputChange?.('')
+    inputProps.onAttachmentsChange?.([])
+  }, [inputProps])
 
   const handleLabelAdd = React.useCallback((labelId: string) => {
     const current = sessionLabels || []
@@ -93,18 +100,24 @@ export function ChatInputZone({
         />
       )}
 
-      <InputContainer
-        {...inputProps}
-        compactMode={compactMode}
-        permissionMode={permissionMode}
-        onPermissionModeChange={onPermissionModeChange}
-        labels={labels}
-        sessionLabels={sessionLabels}
-        onLabelAdd={handleLabelAdd}
-        sessionFolderPath={sessionFolderPath}
+      <InputErrorBoundary
         sessionId={sessionId}
-        currentSessionStatus={currentSessionStatus}
-      />
+        resetKey={inputResetKey}
+        onClearDraft={handleClearDraft}
+      >
+        <InputContainer
+          {...inputProps}
+          compactMode={compactMode}
+          permissionMode={permissionMode}
+          onPermissionModeChange={onPermissionModeChange}
+          labels={labels}
+          sessionLabels={sessionLabels}
+          onLabelAdd={handleLabelAdd}
+          sessionFolderPath={sessionFolderPath}
+          sessionId={sessionId}
+          currentSessionStatus={currentSessionStatus}
+        />
+      </InputErrorBoundary>
     </div>
   )
 }

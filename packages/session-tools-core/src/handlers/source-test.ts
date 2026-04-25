@@ -23,6 +23,12 @@ import {
 
 export interface SourceTestArgs {
   sourceSlug: string;
+  /**
+   * Auto-enable the source on success (flip `enabled: true` if needed
+   * and activate it in the running session).
+   * Defaults to `true`. Pass `false` for pure validation behavior.
+   */
+  autoEnable?: boolean;
 }
 
 /**
@@ -130,19 +136,55 @@ export async function handleSourceTest(
   lines.push(...authResult.lines);
   if (authResult.hasWarning) hasWarnings = true;
 
-  // 8. Update metadata if saveSourceConfig available
+  // 8. Auto-enable + metadata update
+  // Defaults to true; pass autoEnable: false to keep pure validation behavior.
+  const autoEnable = args.autoEnable !== false;
+  const shouldAutoEnable = autoEnable && !hasErrors;
+  const willFlipEnabled = shouldAutoEnable && source.enabled === false;
+
   if (ctx.saveSourceConfig) {
     const updatedSource: SourceConfig = {
       ...source,
       lastTestedAt: new Date().toISOString(),
       connectionStatus,
       connectionError,
+      // Fold enabled flip into the same save — one write, not two.
+      ...(willFlipEnabled ? { enabled: true } : {}),
     };
     try {
       ctx.saveSourceConfig(updatedSource);
       lines.push('\n_Config updated with test results._');
+      if (willFlipEnabled) {
+        lines.push('✓ Source auto-enabled in config');
+      }
     } catch {
       // Silently ignore save errors
+    }
+  }
+
+  // Try to activate the source in the running session (backend may not support this).
+  if (shouldAutoEnable) {
+    if (ctx.activateSourceInSession) {
+      try {
+        const result = await ctx.activateSourceInSession(sourceSlug);
+        if (result.ok) {
+          // Activation succeeded — the backend will abort this turn after the
+          // tool result lands, and the renderer auto-resends the original user
+          // message with a "[{slug} activated]" suffix. From the model's POV,
+          // the "next step" is a new turn where the tools are live.
+          lines.push('✓ Source activated — the current turn will auto-restart with tools available');
+        } else {
+          lines.push(`⚠ Config updated, but session activation failed: ${result.reason ?? 'unknown error'}. Restart session to load tools.`);
+          hasWarnings = true;
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'unknown error';
+        lines.push(`⚠ Config updated, but session activation threw: ${msg}. Restart session to load tools.`);
+        hasWarnings = true;
+      }
+    } else if (willFlipEnabled) {
+      // Only nag about restart if we actually flipped the flag.
+      lines.push('ℹ Config updated. Restart session to load tools (mid-session activation not available in this backend).');
     }
   }
 

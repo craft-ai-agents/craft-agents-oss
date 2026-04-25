@@ -75,6 +75,7 @@ export const CHANNEL_MAP = {
   readFileBinary: invoke(RPC_CHANNELS.file.READ_BINARY),
   openFileDialog: invoke(RPC_CHANNELS.file.OPEN_DIALOG),
   readFileAttachment: invoke(RPC_CHANNELS.file.READ_ATTACHMENT),
+  readUserAttachment: invoke(RPC_CHANNELS.file.READ_USER_ATTACHMENT),
   storeAttachment: invoke(RPC_CHANNELS.file.STORE_ATTACHMENT),
   generateThumbnail: invoke(RPC_CHANNELS.file.GENERATE_THUMBNAIL),
 

@@ -84,6 +84,7 @@ export const RPC_CHANNELS = {
     READ_BINARY: 'file:readBinary',
     OPEN_DIALOG: 'file:openDialog',
     READ_ATTACHMENT: 'file:readAttachment',
+    READ_USER_ATTACHMENT: 'file:readUserAttachment',
     STORE_ATTACHMENT: 'file:storeAttachment',
     GENERATE_THUMBNAIL: 'file:generateThumbnail',
   },

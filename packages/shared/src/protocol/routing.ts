@@ -40,6 +40,11 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
 
   // file — native file dialog
   RPC_CHANNELS.file.OPEN_DIALOG,
+  // file — draft hydration for user-attached paths. Paths in drafts.json were captured
+  // via webUtils.getPathForFile in the renderer, so they point at the user's local machine
+  // — even when the workspace itself lives on a remote server. Routing this REMOTE_ELIGIBLE
+  // would send the local path to a remote filesystem that can't resolve it.
+  RPC_CHANNELS.file.READ_USER_ATTACHMENT,
 
   // dialog — native folder dialog
   RPC_CHANNELS.dialog.OPEN_FOLDER,

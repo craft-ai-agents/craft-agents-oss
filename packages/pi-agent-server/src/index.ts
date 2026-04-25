@@ -14,33 +14,10 @@
  * separate process, avoiding bundling issues in the Electron main process.
  */
 
-// Compatibility shims: pi-coding-agent@0.66.1 calls agent.setTools() and
-// agent.setSystemPrompt(), but pi-agent-core@0.66.1's Agent class uses
-// agent.state.tools = [...] and agent.state.systemPrompt = '...' instead.
-// Patch the prototype so both APIs work.
-import { Agent } from '@mariozechner/pi-agent-core';
-
-if (typeof Agent.prototype.setTools !== 'function') {
-  Agent.prototype.setTools = function setTools(tools: unknown[]) {
-    this.state.tools = tools as any[];
-  };
-}
-if (typeof Agent.prototype.setSystemPrompt !== 'function') {
-  Agent.prototype.setSystemPrompt = function setSystemPrompt(prompt: string) {
-    this.state.systemPrompt = prompt;
-  };
-}
-if (typeof Agent.prototype.getSteeringMode !== 'function') {
-  // AgentSession.getActiveToolNames() accesses agent.getSteeringMode() in some builds
-  Agent.prototype.getSteeringMode = function getSteeringMode() {
-    return (this.state as any).steeringMode ?? 'all';
-  };
-}
-
 import http from 'node:http';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
-import { mkdirSync, readdirSync, statSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 
 // Pi SDK
@@ -49,20 +26,22 @@ import {
   SessionManager as PiSessionManager,
   AuthStorage as PiAuthStorage,
   ModelRegistry as PiModelRegistry,
-  codingTools,
+  createReadToolDefinition,
+  createBashToolDefinition,
+  createEditToolDefinition,
+  createWriteToolDefinition,
+  createGrepToolDefinition,
+  createFindToolDefinition,
+  createLsToolDefinition,
 } from '@mariozechner/pi-coding-agent';
 import type {
   AgentSession,
   AgentSessionEvent,
   AgentToolResult,
+  AuthCredential,
   CreateAgentSessionOptions,
   ToolDefinition,
 } from '@mariozechner/pi-coding-agent';
-
-// Pi Agent Core types
-import type {
-  AgentTool,
-} from '@mariozechner/pi-agent-core';
 
 // Pi AI types
 import type { TextContent as PiTextContent } from '@mariozechner/pi-ai';
@@ -70,7 +49,7 @@ import type { TextContent as PiTextContent } from '@mariozechner/pi-ai';
 // Pre-register the Bedrock provider module so the Pi SDK doesn't attempt a
 // dynamic import of "./amazon-bedrock.js" — which fails in the bundled output
 // because bun collapses everything into a single file.
-// With the current Pi SDK (0.66.1 here), pi-ai is deduped (single hoisted
+// With the current Pi SDK (0.70.0 here), pi-ai is deduped (single hoisted
 // copy), so one registration covers both pi-ai and pi-agent-core module scopes.
 import { setBedrockProviderModule } from '@mariozechner/pi-ai';
 import { bedrockProviderModule } from '@mariozechner/pi-ai/bedrock-provider';
@@ -78,6 +57,7 @@ setBedrockProviderModule(bedrockProviderModule);
 
 // Model resolution (extracted for testability + custom-endpoint precedence)
 import { resolvePiModel, isDeniedMiniModelId, isModelNotFoundError } from './model-resolution.ts';
+import { pickProviderAppropriateMiniModel } from './pick-mini-model.ts';
 import { buildCustomEndpointModelDef, type CustomEndpointModelOverrides } from './custom-endpoint-models.ts';
 
 // Direct source imports from shared (bundled by bun build)
@@ -117,9 +97,6 @@ interface InitMessage {
   workingDirectory: string;
   plansFolderPath: string;
   miniModel?: string;
-  callLlmModelOverride?: string;
-  callLlmThinkingLevel?: string;
-  callLlmPiAuth?: { provider: string; credential: PiCredential; baseUrl?: string };
   agentDir?: string;
   providerType?: string;
   authType?: string;
@@ -142,6 +119,7 @@ type InboundMessage =
   | { type: 'pre_tool_use_response'; requestId: string; action: 'allow' | 'block' | 'modify'; input?: Record<string, unknown>; reason?: string }
   | { type: 'abort' }
   | { type: 'mini_completion'; id: string; prompt: string }
+  | { type: 'llm_query'; id: string; request: LLMQueryRequest }
   | { type: 'ensure_session_ready'; id: string }
   | { type: 'set_model'; model: string }
   | { type: 'set_thinking_level'; level: string }
@@ -184,6 +162,17 @@ interface OutboundPreToolUseReq {
 interface OutboundToolExecReq { type: 'tool_execute_request'; requestId: string; toolName: string; args: Record<string, unknown> }
 interface OutboundSessionToolCompleted { type: 'session_tool_completed'; toolName: string; args: Record<string, unknown>; isError: boolean }
 interface OutboundMiniResult { type: 'mini_completion_result'; id: string; text: string | null }
+interface OutboundLlmQueryResult {
+  type: 'llm_query_result';
+  id: string;
+  result: LLMQueryResult | null;
+  errorMessage?: string;
+  /**
+   * When set, signals the main process that a generic `error` with the same code
+   * was also emitted on the error channel (for centralized auth-refresh detection).
+   */
+  errorCode?: string;
+}
 interface OutboundEnsureSessionReadyResult { type: 'ensure_session_ready_result'; id: string; sessionId: string | null }
 interface OutboundCompactResult {
   type: 'compact_result';
@@ -209,6 +198,7 @@ type OutboundMessage =
   | OutboundToolExecReq
   | OutboundSessionToolCompleted
   | OutboundMiniResult
+  | OutboundLlmQueryResult
   | OutboundEnsureSessionReadyResult
   | OutboundCompactResult
   | OutboundSetAutoCompactionResult
@@ -222,8 +212,6 @@ type OutboundMessage =
 let piSession: AgentSession | null = null;
 let piModelRegistry: PiModelRegistry | null = null;
 let moduleAuthStorage: PiAuthStorage | null = null;
-/** Separate auth storage for the Secondary Model connection (callLlmPiAuth). Refreshed by token_update. */
-let callLlmAuthStorage: PiAuthStorage | null = null;
 let unsubscribeEvents: (() => void) | null = null;
 
 // Init config (set on 'init' message)
@@ -460,61 +448,6 @@ function registerCustomEndpointModels(
 }
 
 /**
- * Dynamically register a model that isn't in the Pi SDK's static registry.
- * Clones properties (api, baseUrl, compat, etc.) from an existing model in the
- * same provider, then re-registers the full set via registerProvider().
- *
- * Returns the newly-registered model, or undefined if registration isn't possible
- * (no existing models for the provider, or no API key credential available).
- */
-function registerDynamicPiModel(
-  registry: PiModelRegistry,
-  bareId: string,
-  piAuthProvider: string,
-  overrideBaseUrl?: string,
-): ReturnType<PiModelRegistry['find']> | undefined {
-  // Find all existing models for this provider to preserve them
-  const existing = registry.getAll().filter(m => m.provider === piAuthProvider);
-  if (existing.length === 0) return undefined;
-
-  // Need API key for registerProvider (required when defining models)
-  const apiKey = initConfig?.piAuth?.credential?.type === 'api_key'
-    ? initConfig.piAuth.credential.key
-    : undefined;
-  if (!apiKey) return undefined;
-
-  const ref = existing[0];
-
-  // Use the override baseUrl when provided (e.g. secondary connection with a custom
-  // endpoint that differs from the SDK-registered default for this provider).
-  const effectiveBaseUrl = overrideBaseUrl ?? ref.baseUrl;
-
-  // Preserve all existing models and add the new one
-  const allModels = existing.map(m => ({
-    id: m.id, name: m.name, reasoning: m.reasoning,
-    input: m.input, cost: m.cost, contextWindow: m.contextWindow,
-    maxTokens: m.maxTokens,
-    ...(m.compat ? { compat: m.compat } : {}),
-  }));
-  allModels.push({
-    id: bareId, name: bareId, reasoning: ref.reasoning,
-    input: [...ref.input], cost: { ...ref.cost },
-    contextWindow: ref.contextWindow, maxTokens: ref.maxTokens,
-    ...(ref.compat ? { compat: ref.compat } : {}),
-  });
-
-  registry.registerProvider(piAuthProvider, {
-    baseUrl: effectiveBaseUrl,
-    api: ref.api,
-    apiKey,
-    models: allModels,
-  });
-  debugLog(`Dynamically registered model '${bareId}' under provider '${piAuthProvider}' baseUrl=${effectiveBaseUrl} (${allModels.length} total models)`);
-
-  return registry.find(piAuthProvider, bareId) ?? undefined;
-}
-
-/**
  * Create an in-memory auth storage pre-loaded with the user's credentials
  * and a model registry backed by it. Used by both the main session and
  * ephemeral queryLlm sessions.
@@ -531,14 +464,18 @@ function createAuthenticatedRegistry(): {
   const authStorage = moduleAuthStorage;
   if (initConfig?.piAuth) {
     const { provider, credential } = initConfig.piAuth;
-    authStorage.set(provider, credential);
+    // Pi SDK 0.70.0's AuthCredential union (ApiKeyCredential | OAuthCredential) doesn't
+    // include 'iam' as a first-class member, but the auth storage accepts it at runtime
+    // — the Bedrock provider module reads AWS env directly; this `set` keeps Pi SDK's
+    // internal provider-tracking consistent regardless of credential shape.
+    authStorage.set(provider, credential as unknown as AuthCredential);
     debugLog(`Injected ${credential.type} credential for provider: ${provider}`);
   } else if (initConfig?.apiKey) {
     authStorage.set('anthropic', { type: 'api_key', key: initConfig.apiKey });
     debugLog('Injected API key into auth storage (legacy fallback)');
   }
 
-  const modelRegistry = new PiModelRegistry(authStorage, undefined);
+  const modelRegistry = PiModelRegistry.inMemory(authStorage);
 
   // Register custom endpoint models dynamically via Pi SDK's registerProvider API.
   // This makes arbitrary OpenAI/Anthropic-compatible endpoints work through the Pi SDK
@@ -593,17 +530,37 @@ async function ensureSession(): Promise<AgentSession> {
     initConfig ? getSessionPath(initConfig.workspaceRootPath, initConfig.sessionId) : null
   );
   const webTools = [searchTool, webFetchTool];
-  const wrappedCodingTools = wrapToolsWithHooks([...codingTools, ...webTools]);
+
+  // Pi SDK 0.70.0 registration contract:
+  //   - `customTools` accepts ToolDefinition[] — our hook-wrapped objects go here
+  //   - `tools` is a string[] name allowlist — MUST include every tool we want active,
+  //     otherwise Pi SDK defaults to the built-in [read, bash, edit, write] set and
+  //     silently filters out everything else. Custom tool names with matching built-in
+  //     names override the SDK's raw implementation inside _refreshToolRegistry, so
+  //     our hooked versions take effect (permissions + large-response summarization).
+  //   - Do NOT pass tool *objects* to `tools` — `allowedToolNames = new Set(options.tools)`
+  //     then `.has(name)` returns false for every string lookup → zero tools active.
+  const builtinDefs = [
+    createReadToolDefinition(cwd),
+    createBashToolDefinition(cwd),
+    createEditToolDefinition(cwd),
+    createWriteToolDefinition(cwd),
+    createGrepToolDefinition(cwd),
+    createFindToolDefinition(cwd),
+    createLsToolDefinition(cwd),
+  ];
   const proxyTools = buildProxyTools();
-  const allTools = [...wrappedCodingTools, ...proxyTools];
-  debugLog(`Session tools: ${wrappedCodingTools.length} coding + ${proxyTools.length} proxy = ${allTools.length} total`);
+  const wrappedAll = wrapToolsWithHooks([...builtinDefs, ...webTools, ...proxyTools]);
+  const toolAllowlist = wrappedAll.map(t => t.name);
+  debugLog(`Session tools: ${builtinDefs.length} builtin + ${webTools.length} web + ${proxyTools.length} proxy = ${wrappedAll.length} total`);
 
   // Build session options
   const sessionOptions: CreateAgentSessionOptions = {
     cwd,
     authStorage,
     modelRegistry,
-    tools: allTools,
+    customTools: wrappedAll,
+    tools: toolAllowlist,
   };
 
   // Extension isolation: set agentDir to a temp directory under session path
@@ -654,15 +611,7 @@ async function ensureSession(): Promise<AgentSession> {
   // Set model if specified
   if (initConfig.model) {
     try {
-      let piModel = resolvePiModel(modelRegistry, initConfig.model, initConfig.piAuth?.provider, shouldPreferCustomEndpoint());
-
-      // Fallback: if the model isn't in the SDK's static registry, dynamically register it
-      // by cloning properties from an existing model in the same provider.
-      if (!piModel && initConfig.piAuth?.provider) {
-        const bareId = stripPiPrefix(initConfig.model);
-        piModel = registerDynamicPiModel(modelRegistry, bareId, initConfig.piAuth.provider);
-      }
-
+      const piModel = resolvePiModel(modelRegistry, initConfig.model, initConfig.piAuth?.provider, shouldPreferCustomEndpoint());
       if (piModel) {
         // Verify resolved model's provider is compatible with the authenticated provider.
         // Without this, a model that resolves to a different provider (e.g. azure-openai-responses
@@ -695,35 +644,12 @@ async function ensureSession(): Promise<AgentSession> {
     sessionOptions.thinkingLevel = piThinkingLevel;
   }
 
-  // Create the session
+  // Create the session — tools flow through customTools + allowlist (see comment above).
   const { session } = await createAgentSession(sessionOptions);
   piSession = session;
 
-  // Pi SDK's createAgentSession ignores custom AgentTool objects passed via
-  // `tools` — it only accepts its own internal Tool type and creates instances
-  // internally. Inject our wrapped tools (with permission hooks) and proxy
-  // tools via _baseToolsOverride, then rebuild the runtime so the session
-  // actually uses them.
-  const sessionInternal = piSession as any;
-  if (typeof sessionInternal._buildRuntime !== 'function') {
-    throw new Error(
-      'Pi SDK internal API changed: _buildRuntime not found. ' +
-      'Update ensureSession() for the new SDK version.',
-    );
-  }
-
-  const baseToolsOverride: Record<string, AgentTool<any>> = {};
-  for (const tool of allTools) {
-    baseToolsOverride[tool.name] = tool;
-  }
-  sessionInternal._baseToolsOverride = baseToolsOverride;
-  sessionInternal._buildRuntime({
-    activeToolNames: Object.keys(baseToolsOverride),
-    includeAllExtensionTools: true,
-  });
-
   toolsChanged = false;
-  debugLog(`Created Pi session: ${session.sessionId} (${Object.keys(baseToolsOverride).length} tools)`);
+  debugLog(`Created Pi session: ${session.sessionId} (${wrappedAll.length} tools)`);
 
   // Notify main process of session ID
   send({ type: 'session_id_update', sessionId: session.sessionId });
@@ -772,7 +698,7 @@ async function requestPreToolUseApproval(
   return response.action === 'modify' && response.input ? response.input : input;
 }
 
-function wrapToolsWithHooks(tools: AgentTool<any>[]): AgentTool<any>[] {
+function wrapToolsWithHooks(tools: ToolDefinition<any, any>[]): ToolDefinition<any, any>[] {
   return tools.map(tool => wrapSingleTool(tool));
 }
 
@@ -783,15 +709,16 @@ function makeErrorResult(message: string): AgentToolResult<any> {
   };
 }
 
-function wrapSingleTool(tool: AgentTool<any>): AgentTool<any> {
+function wrapSingleTool(tool: ToolDefinition<any, any>): ToolDefinition<any, any> {
   const originalExecute = tool.execute;
 
-  const wrappedExecute = async (
-    toolCallId: string,
-    params: any,
-    signal?: AbortSignal,
-    onUpdate?: (partialResult: AgentToolResult<any>) => void,
-  ): Promise<AgentToolResult<any>> => {
+  const wrappedExecute: ToolDefinition<any, any>['execute'] = async (
+    toolCallId,
+    params,
+    signal,
+    onUpdate,
+    ctx,
+  ) => {
     const sdkToolName = PI_TOOL_NAME_MAP[tool.name] || tool.name;
     let inputObj: Record<string, unknown> = { ...(params as Record<string, unknown>) };
 
@@ -808,7 +735,7 @@ function wrapSingleTool(tool: AgentTool<any>): AgentTool<any> {
     inputObj = await requestPreToolUseApproval(sdkToolName, inputObj, toolCallId);
 
     // Execute original tool with (potentially modified) input
-    const result = await originalExecute(toolCallId, inputObj, signal, onUpdate);
+    const result = await originalExecute(toolCallId, inputObj, signal, onUpdate, ctx);
 
     // --- Post-execute: large response summarization ---
 
@@ -862,10 +789,10 @@ function wrapSingleTool(tool: AgentTool<any>): AgentTool<any> {
 // Proxy Tools (tools executed in main process)
 // ============================================================
 
-function buildProxyTools(): AgentTool<any>[] {
+function buildProxyTools(): ToolDefinition<any, any>[] {
   debugLog(`Building proxy tools from ${proxyToolDefs.length} definitions: ${proxyToolDefs.map(t => t.name).join(', ')}`);
 
-  return proxyToolDefs.map(def => ({
+  return proxyToolDefs.map<ToolDefinition<any, any>>(def => ({
     name: def.name,
     label: def.name
       .replace(/^mcp__.*?__/, '')
@@ -933,28 +860,14 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
 
   debugLog('[queryLlm] Starting');
 
-  // Pick mini model. If callLlmModelOverride is set, it takes priority.
-  // If the configured miniModel uses a different provider than what the user
-  // authenticated with, fall back to the default summarization model.
-  let model = initConfig.callLlmModelOverride ?? request.model ?? initConfig.miniModel ?? getDefaultSummarizationModel();
+  // Pick mini model. If the configured miniModel uses a different provider than
+  // what the user authenticated with (e.g. gemini-2.5-pro when only anthropic
+  // credentials exist), fall back to the default summarization model which uses
+  // the same provider family.
+  let model = request.model ?? initConfig.miniModel ?? getDefaultSummarizationModel();
 
   // Create authenticated registry upfront — used by both the provider guard and the ephemeral session.
-  let { authStorage, modelRegistry } = createAuthenticatedRegistry();
-
-  // When a secondary connection is configured (callLlmPiAuth), build a separate auth registry
-  // so queryLlm uses the secondary connection's credentials instead of the main session's.
-  const useCallLlmAuth = !!initConfig.callLlmPiAuth;
-  if (useCallLlmAuth) {
-    // Build or reuse the secondary auth storage
-    if (!callLlmAuthStorage) {
-      callLlmAuthStorage = PiAuthStorage.inMemory();
-    }
-    const { provider, credential } = initConfig.callLlmPiAuth!;
-    callLlmAuthStorage.set(provider, credential);
-    debugLog(`[queryLlm] Using secondary connection auth: provider=${provider}`);
-    authStorage = callLlmAuthStorage;
-    modelRegistry = new PiModelRegistry(callLlmAuthStorage, undefined);
-  }
+  const { authStorage, modelRegistry } = createAuthenticatedRegistry();
 
   const piAuthProvider = initConfig.piAuth?.provider;
 
@@ -962,18 +875,21 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
   // Pi SDK will fail with "No API key found" if the model requires a different provider.
   // Exception: 'custom-endpoint' provider is always compatible because it has its own
   // API key configured via resolveCustomEndpointApiKey() and doesn't use authStorage.
-  // When callLlmPiAuth is active, use the secondary connection's provider instead.
-  const activeProvider = useCallLlmAuth
-    ? initConfig.callLlmPiAuth?.provider
-    : initConfig.piAuth?.provider;
-  if (activeProvider) {
+  if (initConfig.piAuth) {
+    const authProvider = initConfig.piAuth.provider;
     const bareModel = model.startsWith('pi/') ? model.slice(3) : model;
-    const resolved = resolvePiModel(modelRegistry, bareModel, activeProvider, shouldPreferCustomEndpoint());
+    const resolved = resolvePiModel(modelRegistry, bareModel, authProvider, shouldPreferCustomEndpoint());
     const resolvedProvider = (resolved as any)?.provider;
-    const isCompatible = resolvedProvider === activeProvider || resolvedProvider === 'custom-endpoint';
+    const isCompatible = resolvedProvider === authProvider || resolvedProvider === 'custom-endpoint';
     if (!resolved || !isCompatible || isDeniedMiniModelId(model, piAuthProvider)) {
-      const fallback = getDefaultSummarizationModel();
-      debugLog(`[queryLlm] Model ${bareModel} incompatible with ${activeProvider} (resolved: ${resolvedProvider}), falling back to ${fallback}`);
+      // Anthropic: keep Haiku (the cheap/fast mini). For every other provider
+      // Haiku is unresolvable, so walk PI_PREFERRED_DEFAULTS for a model that
+      // actually works under the user's auth.
+      const providerDefault = authProvider === 'anthropic'
+        ? undefined
+        : pickProviderAppropriateMiniModel(authProvider, modelRegistry, shouldPreferCustomEndpoint());
+      const fallback = providerDefault ?? getDefaultSummarizationModel();
+      debugLog(`[queryLlm] Model ${bareModel} incompatible with ${authProvider} (resolved: ${resolvedProvider}), falling back to ${fallback}`);
       model = fallback;
     }
   }
@@ -981,15 +897,16 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
   const runQueryWithModel = async (modelId: string): Promise<string> => {
     debugLog(`[queryLlm] Using model: ${modelId}`);
 
-    // Resolve thinking level for ephemeral session.
-    // - Default to 'off' to prevent reasoning models (e.g. gemini-3-flash-preview,
-    //   claude reasoning models) from producing only thinking blocks with empty text.
-    // - Honour callLlmThinkingLevel when explicitly configured.
-    const callLlmThinkingLevelRaw = initConfig.callLlmThinkingLevel;
-    const ephemeralThinkingLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' =
-      callLlmThinkingLevelRaw && callLlmThinkingLevelRaw in THINKING_TO_PI
-        ? THINKING_TO_PI[callLlmThinkingLevelRaw as keyof typeof THINKING_TO_PI] as any
-        : 'off';
+    // Resolve model — fail fast if unresolvable so we don't let the Pi SDK
+    // fall back to its own internal default (which may require a provider
+    // the user hasn't authenticated with, surfacing as a misleading
+    // "No API key found for <provider>" error).
+    const piModel = resolvePiModel(modelRegistry, modelId, initConfig!.piAuth?.provider, shouldPreferCustomEndpoint());
+    if (!piModel) {
+      throw new Error(
+        `Could not resolve mini model "${modelId}" for provider "${initConfig!.piAuth?.provider ?? '(unknown)'}"`,
+      );
+    }
 
     // Create minimal ephemeral session
     const ephemeralOptions: CreateAgentSessionOptions = {
@@ -998,43 +915,17 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
       modelRegistry,
       tools: [],
       sessionManager: PiSessionManager.inMemory(),
-      thinkingLevel: ephemeralThinkingLevel,
+      model: piModel,
     };
-
-    // Resolve model
-    let piModel: ReturnType<typeof resolvePiModel>;
-    try {
-      // Resolve model — use secondary connection's provider when callLlmPiAuth is active
-      const resolveProvider = useCallLlmAuth
-        ? initConfig.callLlmPiAuth?.provider
-        : initConfig.piAuth?.provider;
-      piModel = resolvePiModel(modelRegistry, modelId, resolveProvider, shouldPreferCustomEndpoint());
-
-      // For secondary connections (e.g. Z.ai), the SDK registers built-in models
-      // under the provider, but the user might configure a model that's too new for
-      // the SDK registry. Dynamically register it using the secondary baseUrl.
-      if (!piModel && resolveProvider) {
-        const overrideBaseUrl = useCallLlmAuth ? initConfig.callLlmPiAuth?.baseUrl : undefined;
-        piModel = registerDynamicPiModel(modelRegistry, modelId, resolveProvider, overrideBaseUrl);
-      }
-
-      if (piModel) {
-        ephemeralOptions.model = piModel;
-      }
-    } catch {
-      debugLog(`[queryLlm] Could not resolve model: ${modelId}`);
-    }
 
     const { session: ephemeralSession } = await createAgentSession(ephemeralOptions);
 
     // Pi SDK ignores options.model for ephemeral sessions (same issue as options.tools).
     // Explicitly set the model after creation to ensure the mini model is used.
-    if (piModel) {
-      try {
-        await ephemeralSession.setModel(piModel);
-      } catch {
-        debugLog(`[queryLlm] Failed to set model on ephemeral session, proceeding with default`);
-      }
+    try {
+      await ephemeralSession.setModel(piModel);
+    } catch {
+      debugLog(`[queryLlm] Failed to set model on ephemeral session, proceeding with default`);
     }
 
     debugLog(`[queryLlm] Created ephemeral session: ${ephemeralSession.sessionId}`);
@@ -1049,20 +940,12 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
     // Collect response text and errors from events
     let result = '';
     let lastError = '';
-    const diagEvents: string[] = [];
-    const allEvents: Array<{ type: string; raw: string }> = [];
     let completionResolve: () => void;
     const completionPromise = new Promise<void>((resolve) => {
       completionResolve = resolve;
     });
 
     const unsub = ephemeralSession.subscribe((event: AgentSessionEvent) => {
-      // Capture ALL events for diagnostics
-      try {
-        const raw = JSON.stringify(event, (_k, v) => typeof v === 'string' && v.length > 500 ? v.slice(0, 500) + '...' : v);
-        allEvents.push({ type: event.type, raw });
-      } catch { allEvents.push({ type: event.type, raw: '(non-serializable)' }); }
-
       if (event.type === 'message_end') {
         // Only capture assistant messages — Pi SDK emits message_end for user messages too
         const msg = event.message as {
@@ -1082,33 +965,11 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
         if (typeof msg.content === 'string') {
           result = msg.content;
         } else if (Array.isArray(msg.content)) {
-          // Prefer text blocks; fall back to thinking blocks for reasoning models
-          // where callLlmThinkingLevel is enabled and the answer is inside thinking.
-          const textParts = msg.content
+          result = msg.content
             .filter((c) => c.type === 'text' && c.text)
-            .map((c) => c.text!);
-          if (textParts.length > 0) {
-            result = textParts.join('');
-          } else {
-            // Fallback: collect thinking content (reasoning models with thinking enabled)
-            result = msg.content
-              .filter((c) => (c.type === 'thinking' || c.type === 'reasoning') && (c as any).text)
-              .map((c) => (c as any).text!)
-              .join('');
-          }
+            .map((c) => c.text!)
+            .join('');
         }
-
-        // Diagnostic: capture content shape for debugging
-        diagEvents.push(`msg_end role=${msg.role} stopReason=${msg.stopReason ?? 'none'} ` +
-          `contentType=${typeof msg.content} ` +
-          (Array.isArray(msg.content)
-            ? `blocks=[${msg.content.map((c: any) => `${c.type}(${c.text?.length ?? 0})`).join(',')}]`
-            : `len=${(msg.content as string)?.length ?? 0}`));
-      }
-      if (event.type === 'error') {
-        const errMsg = (event as any).message ?? String(event);
-        lastError = lastError || errMsg;
-        diagEvents.push(`error: ${errMsg}`);
       }
       if (event.type === 'agent_end') {
         completionResolve();
@@ -1137,7 +998,8 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
   };
 
   const fallbackCandidates = [
-    'pi/gpt-5.1-codex-mini',
+    // Removed 'pi/gpt-5.1-codex-mini' (#596) — stale on several OpenAI catalogs.
+    // The connection-configured miniModel is still tried via `initConfig.miniModel`.
     'pi/gpt-5-mini',
     initConfig.miniModel,
     getDefaultSummarizationModel(),
@@ -1162,11 +1024,11 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
       const retryModel = fallbackCandidates.find(candidate => {
         if (triedModels.has(candidate)) return false;
         try {
-          const resolved = resolvePiModel(modelRegistry, candidate, initConfig.piAuth?.provider, shouldPreferCustomEndpoint());
+          const resolved = resolvePiModel(modelRegistry, candidate, initConfig!.piAuth?.provider, shouldPreferCustomEndpoint());
           if (!resolved) return false;
-          if (initConfig.piAuth) {
+          if (initConfig!.piAuth) {
             const rp = (resolved as any).provider;
-            if (rp !== initConfig.piAuth.provider && rp !== 'custom-endpoint') {
+            if (rp !== initConfig!.piAuth.provider && rp !== 'custom-endpoint') {
               return false;
             }
           }
@@ -1190,11 +1052,7 @@ async function preExecuteCallLlm(input: Record<string, unknown>): Promise<LLMQue
   const sessionPath = initConfig
     ? getSessionPath(initConfig.workspaceRootPath, initConfig.sessionId)
     : undefined;
-  const request = await buildCallLlmRequest(input, {
-    backendName: 'Pi',
-    sessionPath,
-    modelOverride: initConfig?.callLlmModelOverride,
-  });
+  const request = await buildCallLlmRequest(input, { backendName: 'Pi', sessionPath });
   return queryLlm(request);
 }
 
@@ -1242,10 +1100,13 @@ function handleSessionEvent(event: AgentSessionEvent): void {
     if (msg?.role === 'assistant' && piSession) {
       const sdkTurnAnchor = piSession.sessionManager.getLeafId();
       if (sdkTurnAnchor) {
+        // Enrichment: main process reads `sdkTurnAnchor` off the forwarded event to
+        // set branch cutoff points. The SDK's event shape doesn't declare this field,
+        // so the cast is intentional.
         forwardedEvent = {
           ...(event as Record<string, unknown>),
           sdkTurnAnchor,
-        } as OutboundAgentEvent;
+        } as unknown as OutboundAgentEvent;
       }
 
       // Speculative prefetch: if the assistant message contains 2+ prefetchable tool calls,
@@ -1327,7 +1188,6 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
     piSession.dispose();
     piSession = null;
     moduleAuthStorage = null; // Reset so createAuthenticatedRegistry() creates fresh storage
-    callLlmAuthStorage = null; // Reset secondary auth too
     debugLog('Cleaned up existing session for re-init');
   }
 
@@ -1446,7 +1306,7 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
           message: `Prompt overflow recovery failed: ${retryMsg}`,
           code: 'prompt_overflow_recovery_failed',
         });
-        send({ type: 'event', event: { type: 'agent_end' } });
+        send({ type: 'event', event: { type: 'agent_end', messages: [] } });
         return;
       }
     }
@@ -1454,7 +1314,7 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
     debugLog(`Prompt failed: ${errorMsg}`);
     send({ type: 'error', message: errorMsg, code: 'prompt_error' });
     // Send synthetic agent_end so the main process event queue unblocks
-    send({ type: 'event', event: { type: 'agent_end' } });
+    send({ type: 'event', event: { type: 'agent_end', messages: [] } });
   }
 }
 
@@ -1525,6 +1385,25 @@ async function handleMiniCompletion(msg: Extract<InboundMessage, { type: 'mini_c
     const errorMsg = error instanceof Error ? error.message : String(error);
     debugLog(`[handleMiniCompletion] Error: ${errorMsg}`);
     send({ type: 'error', message: errorMsg, code: 'mini_completion_error' });
+  }
+}
+
+// INVARIANT: the full LLMQueryRequest shape must pass through this RPC unchanged.
+// Adding a field to LLMQueryRequest? Nothing to do here — we pass `msg.request`
+// to queryLlm() verbatim. But verify queryLlm() actually honors the new field;
+// request-propagation + request-honoring are independent (see #596).
+async function handleLlmQuery(msg: Extract<InboundMessage, { type: 'llm_query' }>): Promise<void> {
+  try {
+    const result = await queryLlm(msg.request);
+    send({ type: 'llm_query_result', id: msg.id, result });
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    debugLog(`[handleLlmQuery] Error: ${errorMsg}`);
+    // Dual-emit: the generic `error` channel drives main-process OAuth
+    // auth-refresh detection (centralized in PiAgent), while the targeted
+    // `llm_query_result` rejects the pending promise for this specific call.
+    send({ type: 'error', message: errorMsg, code: 'llm_query_error' });
+    send({ type: 'llm_query_result', id: msg.id, result: null, errorMessage: errorMsg, errorCode: 'llm_query_error' });
   }
 }
 
@@ -1599,15 +1478,9 @@ async function handleSetModel(msg: Extract<InboundMessage, { type: 'set_model' }
   // (registerProvider replaces, so we track all IDs and re-register the full set).
   if (!piModel && initConfig?.baseUrl?.trim() && initConfig?.customEndpoint) {
     const bareId = stripPiPrefix(msg.model);
-    registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint.api, initConfig.baseUrl!.trim(), [bareId]);
+    registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint.api, initConfig.baseUrl!.trim(), [{ id: bareId }]);
     piModel = piModelRegistry.find('custom-endpoint', bareId) ?? undefined;
     debugLog(`[set_model] Dynamically registered custom endpoint model: ${bareId}`);
-  }
-
-  // Fallback: dynamically register unknown models for provider-based connections
-  if (!piModel && initConfig?.piAuth?.provider) {
-    const bareId = stripPiPrefix(msg.model);
-    piModel = registerDynamicPiModel(piModelRegistry, bareId, initConfig.piAuth.provider);
   }
 
   if (!piModel) {
@@ -1714,6 +1587,10 @@ async function processMessage(msg: InboundMessage): Promise<void> {
       await handleMiniCompletion(msg);
       break;
 
+    case 'llm_query':
+      await handleLlmQuery(msg);
+      break;
+
     case 'ensure_session_ready':
       await handleEnsureSessionReady(msg);
       break;
@@ -1746,16 +1623,12 @@ async function processMessage(msg: InboundMessage): Promise<void> {
     case 'token_update':
       if (moduleAuthStorage) {
         const { provider, credential } = msg.piAuth;
-        moduleAuthStorage.set(provider, credential);
+        // See ambient comment at the initial `authStorage.set` call — same shape reason.
+        moduleAuthStorage.set(provider, credential as unknown as AuthCredential);
         if (initConfig) {
           initConfig.piAuth = msg.piAuth;
         }
         debugLog(`Updated ${credential.type} credential for provider: ${provider}`);
-        // Also refresh the secondary auth storage if it exists
-        if (callLlmAuthStorage && initConfig?.callLlmPiAuth?.provider === provider) {
-          callLlmAuthStorage.set(provider, credential);
-          debugLog(`Also refreshed secondary (callLlm) auth for provider: ${provider}`);
-        }
       } else {
         debugLog('token_update received but no authStorage initialized');
       }

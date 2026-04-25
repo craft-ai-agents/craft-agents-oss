@@ -233,6 +233,10 @@ export {
 // Utilities
 export { cn } from './lib/utils'
 export {
+  openExternalUrl,
+  type OpenExternalUrlResult,
+} from './lib/open-external-url'
+export {
   setDismissibleLayerBridge,
   getDismissibleLayerBridge,
   type DismissibleLayerBridge,

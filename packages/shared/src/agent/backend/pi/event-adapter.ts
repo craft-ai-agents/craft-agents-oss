@@ -60,7 +60,10 @@ export class PiEventAdapter extends BaseEventAdapter {
   // Model context window for usage_update events
   private contextWindow: number | undefined;
 
-  // Mini model ID for call_llm display override (Pi ignores model param, always uses miniModel)
+  // Mini model ID for call_llm display default (#596).
+  // Used when the caller didn't specify an explicit model — we fill args.model
+  // on the tool_start event so the UI shows the effective default instead of
+  // leaving the badge blank.
   private miniModel: string | undefined;
 
   // Track last usage for emitting with complete event
@@ -78,9 +81,10 @@ export class PiEventAdapter extends BaseEventAdapter {
   }
 
   /**
-   * Set the mini model ID for call_llm display override.
-   * Pi ignores the model param in call_llm — always uses miniModel.
-   * This ensures the UI shows the actual model used.
+   * Set the mini model ID for call_llm badge default.
+   * When the agent's call_llm invocation omits `args.model`, we fill it with
+   * this so the UI badge shows the effective default instead of nothing.
+   * Explicit `args.model` values from the agent are always preserved.
    */
   setMiniModel(model: string | undefined): void {
     this.miniModel = model;
@@ -249,9 +253,10 @@ export class PiEventAdapter extends BaseEventAdapter {
         // (diff stats, diff overlay, document routing all expect Claude Code format)
         const args = this.normalizeToolInput(toolName, (event.args ?? {}) as Record<string, unknown>);
 
-        // For call_llm, Pi ignores the model param and always uses miniModel.
-        // Override the displayed model so the UI shows the actual model used.
-        if (toolName.includes('call_llm') && this.miniModel) {
+        // For call_llm, fill in the default display model when the caller didn't
+        // specify one — Pi's call_llm defaults to miniModel. We only fill the gap;
+        // we never overwrite an explicit agent-provided model (that was the #596 bug).
+        if (toolName.includes('call_llm') && this.miniModel && !args.model) {
           args.model = this.miniModel;
         }
 

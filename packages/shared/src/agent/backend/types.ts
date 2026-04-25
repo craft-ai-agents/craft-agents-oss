@@ -487,6 +487,22 @@ export interface AgentBackend {
   getActiveSourceSlugs(): string[];
 
   /**
+   * Get the raw user message for the current turn (cleared between turns).
+   * Used by SessionManager.activateSourceInSessionFn to capture the message
+   * that should be re-sent after a source_test-triggered auto-restart.
+   */
+  getCurrentTurnUserMessage(): string | null;
+
+  /**
+   * Schedule a source-activation auto-restart. Consumed by the backend's
+   * event loop after the next tool_result, which yields `source_activated`
+   * and `forceAbort`s the turn — triggering the renderer's existing
+   * auto_retry effect. Set by SessionManager after a successful mid-turn
+   * activation (source_test auto-enable).
+   */
+  setPendingSourceActivationRestart(pending: { sourceSlug: string; userMessage: string }): void;
+
+  /**
    * Get all sources (for context injection).
    */
   getAllSources(): LoadedSource[];

@@ -109,6 +109,13 @@ export interface CreateSessionOptions {
   name?: string
   permissionMode?: PermissionMode
   /**
+   * Reasoning/thinking level override. When set, takes precedence over workspace
+   * and global defaults. Silently ignored by the underlying SDK on non-reasoning
+   * models (e.g. gpt-4o) — provider drivers don't attach the reasoning param to
+   * the API request for models with `reasoning: false` in the Pi SDK catalog.
+   */
+  thinkingLevel?: ThinkingLevel
+  /**
    * Working directory for the session:
    * - 'user_default' or undefined: Use workspace's configured default working directory
    * - 'none': No working directory (session folder only)

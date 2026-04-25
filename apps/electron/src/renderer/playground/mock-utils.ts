@@ -230,6 +230,7 @@ export const mockElectronAPI = {
     { key: 'anthropic', label: 'Anthropic', placeholder: 'sk-ant-...' },
     { key: 'openai', label: 'OpenAI', placeholder: 'sk-...' },
     { key: 'google', label: 'Google AI Studio', placeholder: 'AIza...' },
+    { key: 'deepseek', label: 'DeepSeek', placeholder: 'sk-...' },
   ],
   getPiProviderBaseUrl: async () => '',
   getPiProviderModels: async (provider: string) => {
@@ -267,6 +268,10 @@ export const mockElectronAPI = {
         { id: 'mistral-large-2512', name: 'Mistral Large', costInput: 2, costOutput: 6, contextWindow: 131072, reasoning: false },
         { id: 'mistral-medium-3.1', name: 'Mistral Medium 3.1', costInput: 1, costOutput: 3, contextWindow: 131072, reasoning: false },
         { id: 'mistral-small-3.2-24b-instruct', name: 'Mistral Small 3.2', costInput: 0.1, costOutput: 0.3, contextWindow: 131072, reasoning: false },
+      ],
+      'deepseek': [
+        { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', costInput: 0.56, costOutput: 1.68, contextWindow: 128000, reasoning: true },
+        { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', costInput: 0.14, costOutput: 0.42, contextWindow: 128000, reasoning: true },
       ],
       'xai': [
         { id: 'grok-4', name: 'Grok 4', costInput: 6, costOutput: 18, contextWindow: 256000, reasoning: true },

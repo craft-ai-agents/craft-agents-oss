@@ -1,4 +1,5 @@
 import i18n from 'i18next'
+import { coerceInputText } from '@/lib/input-text'
 
 export interface BuildPlanApprovalMessageOptions {
   /** Optional accepted plan path (kept for call-site compatibility; message remains path-agnostic). */
@@ -7,7 +8,7 @@ export interface BuildPlanApprovalMessageOptions {
 }
 
 function normalizeDraftInput(input?: string): string {
-  return (input ?? '').trim()
+  return coerceInputText(input).trim()
 }
 
 export function buildPlanApprovalMessage(options: BuildPlanApprovalMessageOptions = {}): string {

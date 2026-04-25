@@ -1,5 +1,5 @@
 import { readFile, writeFile, unlink, mkdir, readdir, stat } from 'fs/promises'
-import { join, resolve, dirname, parse as parsePath } from 'path'
+import { isAbsolute, join, resolve, dirname, parse as parsePath } from 'path'
 import { homedir } from 'os'
 import { validatePathFormat } from '../../utils/path-validation'
 import { randomUUID } from 'crypto'
@@ -22,6 +22,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.file.READ_BINARY,
   RPC_CHANNELS.file.OPEN_DIALOG,
   RPC_CHANNELS.file.READ_ATTACHMENT,
+  RPC_CHANNELS.file.READ_USER_ATTACHMENT,
   RPC_CHANNELS.file.STORE_ATTACHMENT,
   RPC_CHANNELS.file.GENERATE_THUMBNAIL,
   RPC_CHANNELS.fs.SEARCH,
@@ -157,6 +158,39 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
       deps.platform.logger.error('readFileAttachment error:', message)
+      return null
+    }
+  })
+
+  // Read a user-attached file (bypasses workspace-dir validation).
+  // Used only by renderer draft hydration: the path was written to drafts.json by a
+  // previous user-initiated OS-picker / Finder-drag attach, so the path implies consent.
+  // NOT exposed to agent code — no equivalent MCP tool. Kept separate from readFileAttachment
+  // on purpose to preserve the agent-facing read's narrow trust boundary.
+  const USER_ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024
+  server.handle(RPC_CHANNELS.file.READ_USER_ATTACHMENT, async (_ctx, path: string) => {
+    try {
+      if (!path || typeof path !== 'string' || !isAbsolute(path)) return null
+      const info = await stat(path).catch(() => null)
+      if (!info || !info.isFile()) return null
+      if (info.size > USER_ATTACHMENT_MAX_BYTES) {
+        deps.platform.logger.warn(`[readUserAttachment] file exceeds ${USER_ATTACHMENT_MAX_BYTES} bytes, skipping: ${path}`)
+        return null
+      }
+      const attachment = readFileAttachment(path)
+      if (!attachment) return null
+      try {
+        const thumbBuffer = await deps.platform.imageProcessor.process(path, {
+          resize: { width: 200, height: 200 },
+          format: 'png',
+        })
+        ;(attachment as { thumbnailBase64?: string }).thumbnailBase64 = thumbBuffer.toString('base64')
+      } catch {
+        // Non-image or corrupt — icon fallback, same as readFileAttachment
+      }
+      return attachment
+    } catch (error) {
+      deps.platform.logger.error('readUserAttachment error:', error instanceof Error ? error.message : error)
       return null
     }
   })

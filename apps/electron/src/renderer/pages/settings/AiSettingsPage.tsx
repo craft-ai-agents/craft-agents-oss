@@ -155,6 +155,7 @@ const PI_AUTH_PROVIDER_LABELS: Record<string, string> = {
   'amazon-bedrock': 'Amazon Bedrock',
   groq: 'Groq',
   mistral: 'Mistral',
+  deepseek: 'DeepSeek',
   xai: 'xAI',
   cerebras: 'Cerebras',
   zai: 'z.ai',

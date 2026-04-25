@@ -137,6 +137,7 @@ const PI_PROVIDER_DISPLAY: Partial<Record<KnownProvider, { label: string; placeh
   'openrouter':             { label: 'OpenRouter',         placeholder: 'sk-or-...' },
   'groq':                   { label: 'Groq',               placeholder: 'gsk_...' },
   'mistral':                { label: 'Mistral',            placeholder: 'Paste your key here...' },
+  'deepseek':               { label: 'DeepSeek',           placeholder: 'sk-...' },
   'xai':                    { label: 'xAI (Grok)',         placeholder: 'xai-...' },
   'cerebras':               { label: 'Cerebras',           placeholder: 'csk-...' },
   'amazon-bedrock':         { label: 'Amazon Bedrock',     placeholder: 'AKIA...' },

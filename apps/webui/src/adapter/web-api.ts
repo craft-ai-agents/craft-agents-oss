@@ -9,6 +9,8 @@
  */
 
 import i18n from 'i18next'
+import { toast } from 'sonner'
+import { openExternalUrl } from '@craft-agent/ui'
 import { WsRpcClient } from '../../../electron/src/transport/client'
 import { buildClientApi } from '../../../electron/src/transport/build-api'
 import { CHANNEL_MAP } from '../../../electron/src/transport/channel-map'
@@ -85,7 +87,16 @@ export function createWebApi(options: WebApiOptions): {
   const webOverrides: Partial<ElectronAPI> = {
     // Shell operations — use browser APIs
     openUrl: (url: string) => {
-      window.open(url, '_blank', 'noopener,noreferrer')
+      const result = openExternalUrl(url)
+      if (!result.opened) {
+        if (result.reason === 'dangerous') {
+          toast.error(`Blocked unsafe URL (${result.detail})`)
+        } else if (result.reason === 'internal-deeplink') {
+          console.warn('[openUrl] craftagents:// deep links require the desktop app')
+        } else {
+          console.warn('[openUrl] Malformed URL:', url)
+        }
+      }
       return Promise.resolve()
     },
     openFile: () => Promise.resolve(), // no-op in browser
