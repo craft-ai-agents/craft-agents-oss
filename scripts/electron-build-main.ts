@@ -20,8 +20,8 @@ const PI_AGENT_SERVER_OUTPUT = join(PI_AGENT_SERVER_DIR, "dist/index.js");
 const WA_WORKER_DIR = join(ROOT_DIR, "packages/messaging-whatsapp-worker");
 const WA_WORKER_SOURCE = join(WA_WORKER_DIR, "src/worker.ts");
 const WA_WORKER_OUTPUT = join(WA_WORKER_DIR, "dist/worker.cjs");
-const AUDIO_PLAYER_SOURCE = join(ROOT_DIR, "apps/electron/src/utility/audio-player.ts");
-const AUDIO_PLAYER_OUTPUT = join(DIST_DIR, "utility/audio-player.cjs");
+const AUDIO_PLAYER_SOURCE = join(ROOT_DIR, "apps/electron/src/main/audio/sound-player-preload.ts");
+const AUDIO_PLAYER_OUTPUT = join(DIST_DIR, "sound-player-preload.cjs");
 
 // Load .env file if it exists
 function loadEnvFile(): void {
@@ -312,19 +312,15 @@ async function buildWhatsAppWorker(): Promise<void> {
   console.log("✅ WhatsApp worker built successfully");
 }
 
-// Build the audio-player utility process (runs in Electron UtilityProcess for sound playback)
+// Build the sound-player BrowserWindow preload (for sound notifications)
 async function buildAudioPlayer(): Promise<void> {
   if (!existsSync(AUDIO_PLAYER_SOURCE)) {
-    console.log("⏭️  Audio player skipped (source not found)");
+    console.log("⏭️  Sound-player preload skipped (source not found)");
     return;
   }
 
-  console.log("🎙️ Building audio-player utility process...");
+  console.log("🎙️ Building sound-player preload...");
 
-  // Ensure utility directory exists
-  const utilityDir = join(DIST_DIR, "utility");
-  if (!existsSync(utilityDir)) {
-    mkdirSync(utilityDir, { recursive: true });
   }
 
   const proc = spawn({
@@ -344,16 +340,16 @@ async function buildAudioPlayer(): Promise<void> {
 
   const exitCode = await proc.exited;
   if (exitCode !== 0) {
-    console.error("❌ Audio player build failed with exit code", exitCode);
+    console.error("❌ Sound-player preload build failed with exit code", exitCode);
     process.exit(exitCode);
   }
 
   if (!existsSync(AUDIO_PLAYER_OUTPUT)) {
-    console.error("❌ Audio player output not found at", AUDIO_PLAYER_OUTPUT);
+    console.error("❌ Sound-player preload output not found at", AUDIO_PLAYER_OUTPUT);
     process.exit(1);
   }
 
-  console.log("✅ Audio player built successfully");
+  console.log("✅ Sound-player preload built successfully");
 }
 
 async function main(): Promise<void> {

@@ -23,8 +23,8 @@ files:
   - resources/pi-agent-server/**/*
   # Note: Bundled assets (docs, themes, permissions, tool-icons) are in resources/
   # and copied to dist/resources/ by build:copy. They're included via dist/**/* above.
-  # Include audio-player utility process (runs in Electron UtilityProcess)
-  - dist/utility/**/*
+  # Include sound-player preload (BrowserWindow IPC for sound notifications)
+  - dist/sound-player-preload.cjs
   # Include network interceptor for API error capture and MCP schema injection
   - packages/shared/src/unified-network-interceptor.ts
   - packages/shared/src/interceptor-common.ts

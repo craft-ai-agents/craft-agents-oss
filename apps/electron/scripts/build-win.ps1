@@ -219,12 +219,12 @@ try {
     Pop-Location
 }
 
-# Build audio-player utility process (runs in Electron UtilityProcess for sound playback)
-Write-Host "  Building audio-player utility process..."
+# Build audio-player BrowserWindow preload (for sound notifications)
+Write-Host "  Building sound-player preload..."
 Push-Location $RootDir
 try {
-    & npx esbuild "apps/electron/src/utility/audio-player.ts" --bundle --platform=node --format=cjs --outfile="apps/electron/dist/utility/audio-player.cjs" --external:electron
-    if ($LASTEXITCODE -ne 0) { throw "Audio-player utility process build failed" }
+    & npx esbuild "apps/electron/src/main/audio/sound-player-preload.ts --bundle --platform=node --format=cjs --outfile="apps/electron/dist/sound-player-preload.cjs" --external:electron
+    if ($LASTEXITCODE -ne 0) { throw "Sound-player preload build failed" }
 } finally {
     Pop-Location
 }

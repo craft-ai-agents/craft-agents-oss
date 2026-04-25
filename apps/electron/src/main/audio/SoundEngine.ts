@@ -1,21 +1,25 @@
 /**
  * SoundEngine — Core singleton managing sound notification playback.
  *
- * Responsibilities:
- * - Manages the UtilityProcess audio player lifecycle
- * - Tracks active sound pack per session
- * - Enforces cooldowns and no-repeat rules
- * - Dispatches play commands to the audio utility process
+ * Uses a hidden BrowserWindow with Web Audio API for reliable cross-platform
+ * audio playback. Electron's UtilityProcess does NOT have access to browser
+ * APIs (AudioContext, GainNode), so a BrowserWindow is required.
+ *
+ * Architecture:
+ *   Main process (SoundEngine):
+ *     - Manages state: packs, settings, cooldowns, spam detection
+ *     - Reads audio files from disk
+ *     - Sends ArrayBuffer data + metadata to the player window via IPC
+ *   Hidden BrowserWindow (sound-player HTML):
+ *     - Receives audio data via IPC
+ *     - Decodes and plays using Web Audio API
+ *     - Reports status back via IPC
  */
 
-import { utilityProcess, app } from 'electron'
+import { BrowserWindow } from 'electron'
 import { join } from 'node:path'
-import type { UtilityProcess } from 'electron'
-import type {
-  CespCategory,
-  SoundPack,
-  SoundSettings,
-} from '@craft-agent/shared/audio'
+import { readFile } from 'node:fs/promises'
+import type { CespCategory, SoundPack, SoundSettings } from '@craft-agent/shared/audio'
 import { DEFAULT_SOUND_SETTINGS } from '@craft-agent/shared/audio'
 import { discoverPacks, resolveCategory, pickRandomSound } from './PackLoader.js'
 
@@ -63,12 +67,14 @@ class SpamDetector {
 // ---------------------------------------------------------------------------
 
 export class SoundEngine {
-  private audioProcess: UtilityProcess | null = null
+  private playerWindow: BrowserWindow | null = null
   private packs = new Map<string, SoundPack>()
   private settings: SoundSettings = { ...DEFAULT_SOUND_SETTINGS }
   private cooldownTracker = new CooldownTracker()
   private spamDetector = new SpamDetector()
   private lastPlayedFile: string | null = null
+  private ready = false
+  private pendingPlays: Array<{ data: ArrayBuffer; filePath: string; volume: number }> = []
 
   // Per-session active pack
   private sessionPacks = new Map<string, string>() // sessionId → packName
@@ -83,44 +89,64 @@ export class SoundEngine {
     // Discover available packs
     this.packs = await discoverPacks()
 
-    // Spawn the audio utility process
-    this.spawnAudioProcess()
+    // Create the hidden audio player window
+    this.createPlayerWindow()
 
     console.info(`[sound] Initialized with ${this.packs.size} packs: ${[...this.packs.keys()].join(', ')}`)
   }
 
-  private spawnAudioProcess(): void {
-    const modulePath = join(__dirname, 'utility', 'audio-player.cjs')
-    // Note: In dev, this may need to point to the compiled output.
-    // For now, we assume it's compiled alongside the main process.
-    try {
-      this.audioProcess = utilityProcess.fork(modulePath, [], {
-        serviceName: 'audio-player',
-      })
+  private createPlayerWindow(): void {
+    const preloadPath = join(__dirname, 'sound-player-preload.cjs')
 
-      this.audioProcess.on('message', (msg: { type: string; [key: string]: unknown }) => {
-        if (msg.type === 'error') {
-          console.error('[sound] Audio process error:', msg.error)
-        }
-      })
+    this.playerWindow = new BrowserWindow({
+      width: 1,
+      height: 1,
+      show: false,
+      skipTaskbar: true,
+      backgroundColor: '#000000',
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: preloadPath,
+      },
+    })
 
-      this.audioProcess.on('exit', (code) => {
-        console.warn(`[sound] Audio process exited with code ${code} — restarting`)
-        this.audioProcess = null
-        // Auto-restart after a brief delay
-        setTimeout(() => this.spawnAudioProcess(), 1000)
-      })
-    } catch (err) {
-      console.error('[sound] Failed to spawn audio process:', err)
-    }
+    this.playerWindow.setMenu(null)
+
+    // Auto-restart on crash
+    this.playerWindow.on('closed', () => {
+      this.playerWindow = null
+      this.ready = false
+      setTimeout(() => this.createPlayerWindow(), 2000)
+    })
+
+    // Handle IPC from the audio player
+    this.playerWindow.webContents.ipc.on('sound:ready', () => {
+      this.ready = true
+      console.info('[sound] Audio player window ready')
+      // Set initial volume
+      this.playerWindow?.webContents.send('sound:set-volume', this.settings.volume)
+      // Play any queued sounds
+      for (const { data, filePath, volume } of this.pendingPlays) {
+        this.playerWindow?.webContents.send('sound:play-buffer', filePath, data, volume)
+      }
+      this.pendingPlays = []
+    })
+
+    this.playerWindow.webContents.ipc.on('sound:error', (_event, error: string) => {
+      console.error('[sound] Audio player error:', error)
+    })
+
+    // Load minimal HTML with Web Audio player
+    this.playerWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(PLAYER_HTML)}`)
   }
 
   async dispose(): Promise<void> {
-    if (this.audioProcess) {
-      this.audioProcess.postMessage({ type: 'stop' })
-      this.audioProcess.kill()
-      this.audioProcess = null
+    if (this.playerWindow) {
+      this.playerWindow.close()
+      this.playerWindow = null
     }
+    this.ready = false
   }
 
   // -----------------------------------------------------------------------
@@ -147,9 +173,9 @@ export class SoundEngine {
   updateSettings(settings: Partial<SoundSettings>): void {
     this.settings = { ...this.settings, ...settings }
 
-    // Push volume to audio process
-    if (settings.volume !== undefined && this.audioProcess) {
-      this.audioProcess.postMessage({ type: 'set-volume', volume: settings.volume })
+    // Push volume to audio player
+    if (settings.volume !== undefined && this.ready && this.playerWindow) {
+      this.playerWindow.webContents.send('sound:set-volume', settings.volume)
     }
   }
 
@@ -170,7 +196,6 @@ export class SoundEngine {
   }
 
   private getActivePack(sessionId?: string): SoundPack | undefined {
-    // Session-specific override first
     if (sessionId) {
       const sessionPack = this.sessionPacks.get(sessionId)
       if (sessionPack) {
@@ -178,7 +203,6 @@ export class SoundEngine {
         if (pack) return pack
       }
     }
-    // Global default
     return this.packs.get(this.settings.defaultPack)
   }
 
@@ -189,18 +213,14 @@ export class SoundEngine {
   /**
    * Play a sound for a CESP event category.
    */
-  play(category: CespCategory, sessionId?: string): void {
+  async play(category: CespCategory, sessionId?: string): Promise<void> {
     if (!this.settings.enabled) return
-    if (!this.audioProcess) return
 
-    // Check per-category settings
     const catSettings = this.settings.categories[category]
     if (catSettings && !catSettings.enabled) return
 
-    // Check cooldown
     if (!this.cooldownTracker.canPlay(category, this.settings.cooldownMs)) return
 
-    // Get the active pack
     const pack = this.getActivePack(sessionId)
     if (!pack) {
       console.warn(`[sound] No active pack found for session ${sessionId}`)
@@ -209,35 +229,33 @@ export class SoundEngine {
 
     // Check for per-category override file
     if (catSettings?.overrideFilePath) {
-      this.playFile(catSettings.overrideFilePath, catSettings.volume ?? this.settings.volume)
+      await this.playFile(catSettings.overrideFilePath, catSettings.volume ?? this.settings.volume)
       this.cooldownTracker.record(category)
       return
     }
 
-    // Resolve category from pack (considering aliases)
     const categoryDef = resolveCategory(pack.manifest, category)
-    if (!categoryDef || categoryDef.sounds.length === 0) return // Silently skip
+    if (!categoryDef || categoryDef.sounds.length === 0) return
 
-    // Pick random sound (no-repeat if enabled)
     const lastFile = this.settings.noRepeat ? this.lastPlayedFile : null
     const result = pickRandomSound(categoryDef, pack.directory, lastFile)
     if (!result) return
 
     this.lastPlayedFile = result.entry.file
-    this.playFile(result.filePath, catSettings?.volume ?? this.settings.volume)
+    await this.playFile(result.filePath, catSettings?.volume ?? this.settings.volume)
     this.cooldownTracker.record(category)
   }
 
   /**
    * Play a test sound (from settings page).
    */
-  playTest(filePath: string): void {
-    if (!this.audioProcess) {
-      console.warn('[sound] playTest called but audio process is not running')
+  async playTest(filePath: string): Promise<void> {
+    if (!this.playerWindow && !this.ready) {
+      console.warn('[sound] playTest called but audio player is not ready')
       return
     }
     console.info(`[sound] Playing test: ${filePath}`)
-    this.playFile(filePath, this.settings.volume)
+    await this.playFile(filePath, this.settings.volume)
   }
 
   /**
@@ -247,14 +265,101 @@ export class SoundEngine {
     return this.spamDetector.check()
   }
 
-  private playFile(filePath: string, volume: number): void {
-    this.audioProcess?.postMessage({
-      type: 'play',
-      filePath,
-      volume: Math.max(0, Math.min(1, volume)),
-    })
+  // -----------------------------------------------------------------------
+  // Internal: Read file and send to player window
+  // -----------------------------------------------------------------------
+
+  private async playFile(filePath: string, volume: number): Promise<void> {
+    const clampedVolume = Math.max(0, Math.min(1, volume))
+
+    try {
+      const data = await readFile(filePath)
+
+      if (!this.ready || !this.playerWindow || this.playerWindow.isDestroyed()) {
+        // Queue the sound if player isn't ready yet
+        this.pendingPlays.push({ data: data.buffer, filePath, volume: clampedVolume })
+        return
+      }
+
+      this.playerWindow.webContents.send('sound:play-buffer', filePath, data.buffer, clampedVolume)
+    } catch (err) {
+      console.error(`[sound] Failed to read audio file: ${filePath}`, err)
+    }
   }
 }
+
+// ---------------------------------------------------------------------------
+// HTML for the hidden audio player BrowserWindow
+// ---------------------------------------------------------------------------
+
+const PLAYER_HTML = `<!DOCTYPE html>
+<html>
+<head><title>Sound Player</title></head>
+<body>
+<script>
+// Web Audio API setup
+let audioCtx = null;
+let masterGain = null;
+const cache = new Map();
+
+function ensureAudioContext() {
+  if (!audioCtx || audioCtx.state === 'closed') {
+    audioCtx = new AudioContext();
+    masterGain = audioCtx.createGain();
+    masterGain.connect(audioCtx.destination);
+  }
+  return audioCtx;
+}
+
+async function playFromBuffer(filePath, arrayBuffer, volume) {
+  try {
+    const ctx = ensureAudioContext();
+    if (ctx.state === 'suspended') await ctx.resume();
+
+    let buffer = cache.get(filePath);
+    if (!buffer) {
+      buffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
+      cache.set(filePath, buffer);
+    }
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    const playGain = ctx.createGain();
+    playGain.gain.value = volume;
+    source.connect(playGain);
+    playGain.connect(masterGain);
+    source.start();
+  } catch (err) {
+    window.electronAPI.onPlayError(err.message || String(err));
+  }
+}
+
+// Listen for IPC commands from main process via preload
+window.electronAPI.onPlayCommand((filePath, volume) => {
+  // Legacy path — not used, main process sends buffers directly
+});
+
+window.electronAPI.onSetVolume((v) => {
+  if (masterGain) masterGain.gain.value = v;
+});
+
+window.electronAPI.onClearCache(() => {
+  cache.clear();
+});
+
+// Handle buffer-based playback from main process
+// (The preload exposes this as window.electronAPI.onPlayBuffer)
+if (window.electronAPI.onPlayBuffer) {
+  window.electronAPI.onPlayBuffer((filePath, buffer, volume) => {
+    playFromBuffer(filePath, buffer, volume);
+  });
+}
+
+// Signal ready
+window.electronAPI.signalReady();
+</script>
+</body>
+</html>`
 
 // ---------------------------------------------------------------------------
 // Singleton
