@@ -321,8 +321,6 @@ async function buildAudioPlayer(): Promise<void> {
 
   console.log("🎙️ Building sound-player preload...");
 
-  }
-
   const proc = spawn({
     cmd: [
       "bun", "run", "esbuild",
