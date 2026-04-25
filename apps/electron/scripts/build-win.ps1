@@ -223,7 +223,7 @@ try {
 Write-Host "  Building sound-player preload..."
 Push-Location $RootDir
 try {
-    & npx esbuild "apps/electron/src/main/audio/sound-player-preload.ts --bundle --platform=node --format=cjs --outfile="apps/electron/dist/sound-player-preload.cjs" --external:electron
+    & npx esbuild "apps/electron/src/main/audio/sound-player-preload.ts" --bundle --platform=node --format=cjs --outfile="apps/electron/dist/sound-player-preload.cjs" --external:electron
     if ($LASTEXITCODE -ne 0) { throw "Sound-player preload build failed" }
 } finally {
     Pop-Location
