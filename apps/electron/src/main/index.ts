@@ -206,6 +206,10 @@ let pendingDeepLink: string | null = null
 // Set app name early (before app.whenReady) to ensure correct macOS menu bar title
 // Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "Craft Agents [1]")
 app.setName(process.env.CRAFT_APP_NAME || 'Craft Agents')
+n// Allow audio playback in hidden BrowserWindows without user interaction.
+// The sound engine uses a hidden BrowserWindow with HTMLAudioElement.
+// Chrome autoplay policy normally blocks audio until user interaction.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
 // Register as default protocol client for craftagents:// URLs
 // This must be done before app.whenReady() on some platforms

@@ -1,24 +1,15 @@
 /**
  * SoundEngine — Core singleton managing sound notification playback.
  *
- * Uses a hidden BrowserWindow with HTMLAudioElement for reliable cross-platform
- * audio playback. Avoids Web Audio API because AudioContext is suspended
- * in hidden windows until user interaction (which never happens).
- *
- * Architecture:
- *   Main process (SoundEngine):
- *     - Manages state: packs, settings, cooldowns, spam detection
- *     - Reads audio files from disk
- *     - Sends Uint8Array data to the player window via IPC
- *   Hidden BrowserWindow (sound-player HTML):
- *     - Receives audio data via IPC
- *     - Creates a Blob URL and plays via new Audio(url).play()
- *     - No AudioContext, no decodeAudioData — Chromium handles everything
+ * Uses a temporary-file BrowserWindow with nodeIntegration: true for
+ * rock-solid IPC. No preload, no data: URL quirks, no contextIsolation.
+ * Electron's IPC handles all the complexity.
  */
 
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import type { CespCategory, SoundPack, SoundSettings } from '@craft-agent/shared/audio'
 import { DEFAULT_SOUND_SETTINGS } from '@craft-agent/shared/audio'
 import { discoverPacks, resolveCategory, pickRandomSound } from './PackLoader.js'
@@ -63,6 +54,119 @@ class SpamDetector {
 }
 
 // ---------------------------------------------------------------------------
+// Minimal HTML player — loaded from a temp file for reliable origin + preload
+// ---------------------------------------------------------------------------
+
+const PLAYER_HTML = `<!DOCTYPE html>
+<html>
+<head><title>Sound Player</title></head>
+<body>
+<div id="status" style="font-size:10px;font-family:monospace;" >Initializing...</div>
+<script>
+(function() {
+  const { ipcRenderer } = require('electron');
+
+  let currentAudio = null;
+  let currentUrl = null;
+  let masterVolume = 0.8;
+  const status = document.getElementById('status');
+
+  function setStatus(msg) {
+    if (status) status.textContent = msg;
+    console.log('[SoundPlayer]', msg);
+  }
+
+  function getMimeType(ext) {
+    switch (ext) {
+      case '.mp3': return 'audio/mpeg';
+      case '.ogg': return 'audio/ogg';
+      case '.oga': return 'audio/ogg';
+      case '.wav': return 'audio/wav';
+      default: return 'audio/mpeg';
+    }
+  }
+
+  function playSound(data, volume, ext) {
+    try {
+      setStatus('Received ' + data.length + ' bytes, ext=' + ext);
+
+      // Stop previous audio
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio = null;
+      }
+      if (currentUrl) {
+        URL.revokeObjectURL(currentUrl);
+        currentUrl = null;
+      }
+
+      const mimeType = getMimeType(ext || '');
+      const blob = new Blob([data], { type: mimeType });
+      currentUrl = URL.createObjectURL(blob);
+      const audio = new Audio(currentUrl);
+      audio.volume = volume * masterVolume;
+      setStatus('Created Audio(' + mimeType + ') vol=' + audio.volume);
+
+      audio.onended = function() {
+        URL.revokeObjectURL(currentUrl);
+        currentAudio = null; currentUrl = null;
+        setStatus('Playback ended');
+      };
+
+      audio.onerror = function() {
+        URL.revokeObjectURL(currentUrl);
+        currentAudio = null; currentUrl = null;
+        setStatus('Playback error: ' + (audio.error ? audio.error.message : 'unknown'));
+      };
+
+      audio.oncanplay = function() {
+        setStatus('Can play — starting playback');
+      };
+
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.then(function() {
+          setStatus('Playback started successfully');
+        }).catch(function(err) {
+          setStatus('PLAY PROMISE REJECTED: ' + (err.message || String(err)));
+          URL.revokeObjectURL(currentUrl);
+          currentAudio = null; currentUrl = null;
+        });
+      } else {
+        setStatus('play() returned undefined (old API?)');
+      }
+
+      currentAudio = audio;
+    } catch (err) {
+      setStatus('playSound() JS error: ' + (err.message || String(err)));
+    }
+  }
+
+  function setVolume(v) {
+    masterVolume = Math.max(0, Math.min(1, v));
+    if (currentAudio) currentAudio.volume = masterVolume;
+    setStatus('Volume set to ' + masterVolume);
+  }
+
+  ipcRenderer.on('sound:play', function(event, data, volume, ext) {
+    setStatus('IPC sound:play received — data.length=' + data.length);
+    playSound(data, volume, ext);
+  });
+
+  ipcRenderer.on('sound:set-volume', function(event, v) {
+    setStatus('IPC sound:set-volume received');
+    setVolume(v);
+  });
+
+  // Signal ready
+  setStatus('Ready');
+  ipcRenderer.send('sound:ready');
+})();
+</script>
+</body>
+</html>`
+
+// ---------------------------------------------------------------------------
 // SoundEngine
 // ---------------------------------------------------------------------------
 
@@ -75,9 +179,12 @@ export class SoundEngine {
   private lastPlayedFile: string | null = null
   private ready = false
   private pendingPlays: Array<{ data: Uint8Array; filePath: string; volume: number; ext: string }> = []
+  private tempHtmlPath: string | null = null
+  private ipcReadyHandler: any = null
+  private ipcErrorHandler: any = null
 
   // Per-session active pack
-  private sessionPacks = new Map<string, string>() // sessionId → packName
+  private sessionPacks = new Map<string, string>()
 
   constructor() {}
 
@@ -86,28 +193,33 @@ export class SoundEngine {
   // -----------------------------------------------------------------------
 
   async init(): Promise<void> {
-    // Discover available packs
+    console.info('[sound] === SoundEngine.init() starting ===')
     this.packs = await discoverPacks()
+    console.info(`[sound] Discovered ${this.packs.size} packs`)
 
-    // Create the hidden audio player window
-    this.createPlayerWindow()
+    await this.createPlayerWindow()
 
-    console.info(`[sound] Initialized with ${this.packs.size} packs: ${[...this.packs.keys()].join(', ')}`)
+    console.info(`[sound] === Initialized with ${this.packs.size} packs: ${[...this.packs.keys()].join(', ')} ===`)
   }
 
-  private createPlayerWindow(): void {
-    const preloadPath = join(__dirname, 'sound-player-preload.cjs')
+  private async createPlayerWindow(): Promise<void> {
+    // Write HTML to a temp file for reliable file:// origin
+    const tempDir = join(tmpdir(), 'craft-agents-sound-player')
+    await mkdir(tempDir, { recursive: true })
+    this.tempHtmlPath = join(tempDir, 'sound-player.html')
+    await writeFile(this.tempHtmlPath, PLAYER_HTML, 'utf-8')
+    console.info('[sound] Created temp HTML at:', this.tempHtmlPath)
 
     this.playerWindow = new BrowserWindow({
-      width: 1,
-      height: 1,
+      width: 300,
+      height: 150,
       show: false,
       skipTaskbar: true,
       backgroundColor: '#000000',
       webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        preload: preloadPath,
+        nodeIntegration: true,        // allow require('electron') in HTML
+        contextIsolation: false,      // needed for nodeIntegration to work
+        backgroundThrottling: false,  // keep audio processing alive
       },
     })
 
@@ -115,41 +227,80 @@ export class SoundEngine {
 
     // Auto-restart on crash
     this.playerWindow.on('closed', () => {
+      console.warn('[sound] Player window closed')
       this.playerWindow = null
       this.ready = false
-      console.warn('[sound] Player window closed, restarting in 2s...')
-      setTimeout(() => this.createPlayerWindow(), 2000)
+      // Clean up temp file
+      this.cleanupTempFile()
+      // Restart after 2s
+      setTimeout(() => this.createPlayerWindow().catch(err => {
+        console.error('[sound] Failed to restart player window:', err)
+      }), 2000)
     })
 
-    // Listen for player errors
-    this.playerWindow.webContents.ipc.on('sound:player-error', (_event, error: string) => {
-      console.error('[sound] Audio player error:', error)
-    })
-
-    // Player is ready
-    this.playerWindow.webContents.ipc.on('sound:ready', () => {
+    // Handle IPC
+    this.ipcReadyHandler = (_event: any) => {
+      console.info('[sound] Player window reported READY')
       this.ready = true
-      console.info('[sound] Audio player window ready')
-      // Set initial volume
+      // Set volume
       this.playerWindow?.webContents.send('sound:set-volume', this.settings.volume)
-      // Play any queued sounds
-      for (const { data, filePath, volume, ext } of this.pendingPlays) {
-        this.playerWindow?.webContents.send('sound:play', data, volume, ext)
+      // Play queued
+      for (const p of this.pendingPlays) {
+        console.info('[sound] Sending queued sound:', p.filePath)
+        this.playerWindow?.webContents.send('sound:play', p.data, p.volume, p.ext)
       }
       this.pendingPlays = []
+    }
+    ipcMain.on('sound:ready', this.ipcReadyHandler)
+
+    this.ipcErrorHandler = (_event: any, err: string) => {
+      console.error('[sound] Player window error:', err)
+    }
+    ipcMain.on('sound:player-error', this.ipcErrorHandler)
+
+    // Load the temp HTML file
+    const fileUrl = 'file://' + this.tempHtmlPath.replace(/\\/g, '/')
+    console.info('[sound] Loading player URL:', fileUrl)
+
+    this.playerWindow.webContents.on('did-finish-load', () => {
+      console.info('[sound] Player window did-finish-load')
     })
 
-    // Load minimal HTML player
-    this.playerWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(PLAYER_HTML)}`)
-      .catch(err => console.error('[sound] Failed to load player HTML:', err))
+    this.playerWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+      console.error('[sound] Player window FAILED to load:', errorCode, errorDescription)
+    })
+
+    await this.playerWindow.loadURL(fileUrl)
+    console.info('[sound] BrowserWindow.loadURL() returned for:', fileUrl)
+  }
+
+  private cleanupTempFile(): void {
+    if (this.tempHtmlPath) {
+      try {
+        const { unlinkSync } = require('node:fs')
+        unlinkSync(this.tempHtmlPath)
+      } catch {
+        // ignore cleanup errors
+      }
+      this.tempHtmlPath = null
+    }
   }
 
   async dispose(): Promise<void> {
+    if (this.ipcReadyHandler) {
+      ipcMain.off('sound:ready', this.ipcReadyHandler)
+      this.ipcReadyHandler = null
+    }
+    if (this.ipcErrorHandler) {
+      ipcMain.off('sound:player-error', this.ipcErrorHandler)
+      this.ipcErrorHandler = null
+    }
     if (this.playerWindow) {
       this.playerWindow.close()
       this.playerWindow = null
     }
     this.ready = false
+    this.cleanupTempFile()
   }
 
   // -----------------------------------------------------------------------
@@ -175,8 +326,6 @@ export class SoundEngine {
 
   updateSettings(settings: Partial<SoundSettings>): void {
     this.settings = { ...this.settings, ...settings }
-
-    // Push volume to audio player
     if (settings.volume !== undefined && this.ready && this.playerWindow) {
       this.playerWindow.webContents.send('sound:set-volume', settings.volume)
     }
@@ -191,19 +340,16 @@ export class SoundEngine {
   // -----------------------------------------------------------------------
 
   setSessionPack(sessionId: string, packName: string | undefined): void {
-    if (packName) {
-      this.sessionPacks.set(sessionId, packName)
-    } else {
-      this.sessionPacks.delete(sessionId)
-    }
+    if (packName) this.sessionPacks.set(sessionId, packName)
+    else this.sessionPacks.delete(sessionId)
   }
 
   private getActivePack(sessionId?: string): SoundPack | undefined {
     if (sessionId) {
-      const sessionPack = this.sessionPacks.get(sessionId)
-      if (sessionPack) {
-        const pack = this.packs.get(sessionPack)
-        if (pack) return pack
+      const sp = this.sessionPacks.get(sessionId)
+      if (sp) {
+        const p = this.packs.get(sp)
+        if (p) return p
       }
     }
     return this.packs.get(this.settings.defaultPack)
@@ -213,34 +359,33 @@ export class SoundEngine {
   // Playback
   // -----------------------------------------------------------------------
 
-  /**
-   * Play a sound for a CESP event category.
-   */
   async play(category: CespCategory, sessionId?: string): Promise<void> {
+    console.info(`[sound] === play() called: category=${category} sessionId=${sessionId} ===`)
+
     if (!this.settings.enabled) {
-      console.debug(`[sound] Playback skipped: sound notifications disabled`)
+      console.info('[sound] Skipped: sound notifications disabled globally')
       return
     }
 
     const catSettings = this.settings.categories[category]
     if (catSettings && !catSettings.enabled) {
-      console.debug(`[sound] Playback skipped: category ${category} disabled`)
+      console.info(`[sound] Skipped: category ${category} disabled`)
       return
     }
 
     if (!this.cooldownTracker.canPlay(category, this.settings.cooldownMs)) {
-      console.debug(`[sound] Playback skipped: category ${category} on cooldown`)
+      console.info(`[sound] Skipped: category ${category} on cooldown`)
       return
     }
 
     const pack = this.getActivePack(sessionId)
     if (!pack) {
-      console.warn(`[sound] No active pack found for session ${sessionId}`)
+      console.warn(`[sound] No active pack for session ${sessionId}`)
       return
     }
 
-    // Check for per-category override file
     if (catSettings?.overrideFilePath) {
+      console.info(`[sound] Using override file: ${catSettings.overrideFilePath}`)
       await this.playFile(catSettings.overrideFilePath, catSettings.volume ?? this.settings.volume)
       this.cooldownTracker.record(category)
       return
@@ -255,7 +400,7 @@ export class SoundEngine {
     const lastFile = this.settings.noRepeat ? this.lastPlayedFile : null
     const result = pickRandomSound(categoryDef, pack.directory, lastFile)
     if (!result) {
-      console.warn(`[sound] No sound picked for category ${category}`)
+      console.warn(`[sound] No sound picked for ${category}`)
       return
     }
 
@@ -265,142 +410,49 @@ export class SoundEngine {
     this.cooldownTracker.record(category)
   }
 
-  /**
-   * Play a test sound (from settings page).
-   */
   async playTest(filePath: string): Promise<void> {
-    console.info(`[sound] Playing test: ${filePath}`)
+    console.info(`[sound] === playTest() called: ${filePath} ===`)
     if (!this.playerWindow) {
-      console.warn('[sound] playTest called but player window does not exist')
+      console.warn('[sound] playTest: NO player window exists')
       return
     }
-    if (!this.ready) {
-      console.warn('[sound] playTest called but player is not ready yet')
-    }
+    console.info(`[sound] playTest: ready=${this.ready} destroyed=${this.playerWindow?.isDestroyed()}`)
     await this.playFile(filePath, this.settings.volume)
   }
 
-  /**
-   * Check if user input constitutes spam (rapid-fire).
-   */
   checkSpam(): boolean {
     return this.spamDetector.check()
   }
 
   // -----------------------------------------------------------------------
-  // Internal: Read file and send to player window
+  // Internal
   // -----------------------------------------------------------------------
 
   private async playFile(filePath: string, volume: number): Promise<void> {
     const clampedVolume = Math.max(0, Math.min(1, volume))
-
-    // Extract extension for MIME type detection
     const ext = filePath.slice(filePath.lastIndexOf('.')).toLowerCase()
+    console.info(`[sound] playFile: ${filePath} ext=${ext} vol=${clampedVolume}`)
 
     try {
       const buf = await readFile(filePath)
-      // Create a standalone Uint8Array copy to avoid Buffer pooling issues
+      console.info(`[sound] Read ${buf.length} bytes from ${filePath}`)
       const data = new Uint8Array(buf)
+      console.info(`[sound] Created Uint8Array length=${data.length}`)
 
       if (!this.ready || !this.playerWindow || this.playerWindow.isDestroyed()) {
-        // Queue the sound if player isn't ready yet
-        console.debug(`[sound] Queuing ${filePath} (player not ready)`)
+        console.info('[sound] Player not ready, queuing sound')
         this.pendingPlays.push({ data, filePath, volume: clampedVolume, ext })
         return
       }
 
-      console.debug(`[sound] Sending ${data.byteLength} bytes to player: ${filePath}`)
+      console.info(`[sound] Sending sound:play IPC with ${data.length} bytes`)
       this.playerWindow.webContents.send('sound:play', data, clampedVolume, ext)
+      console.info('[sound] IPC sent successfully')
     } catch (err) {
-      console.error(`[sound] Failed to read audio file: ${filePath}`, err)
+      console.error(`[sound] FAILED to read/play ${filePath}:`, err)
     }
   }
 }
-
-// ---------------------------------------------------------------------------
-// HTML for the hidden audio player BrowserWindow
-// Uses HTMLAudioElement (not Web Audio API) to avoid AudioContext suspension.
-// ---------------------------------------------------------------------------
-
-const PLAYER_HTML = `<!DOCTYPE html>
-<html>
-<head><title>Sound Player</title></head>
-<body>
-<script>
-// Map file extensions to MIME types
-function getMimeType(ext) {
-  switch (ext) {
-    case '.mp3': return 'audio/mpeg';
-    case '.ogg': return 'audio/ogg';
-    case '.oga': return 'audio/ogg';
-    case '.wav': return 'audio/wav';
-    default: return 'audio/mpeg';
-  }
-}
-
-let currentAudio = null;
-let masterVolume = 0.8;
-
-function playSound(uint8Array, volume, ext) {
-  try {
-    // Stop any currently playing sound
-    if (currentAudio) {
-      currentAudio.pause();
-      currentAudio = null;
-    }
-
-    const mimeType = getMimeType(ext || '');
-    const blob = new Blob([uint8Array], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    audio.volume = volume * masterVolume;
-
-    audio.play().then(() => {
-      // Success — nothing to do
-    }).catch(err => {
-      window.electronAPI.reportError('Playback failed: ' + (err.message || String(err)));
-    });
-
-    audio.onended = () => {
-      URL.revokeObjectURL(url);
-      if (currentAudio === audio) currentAudio = null;
-    };
-
-    audio.onerror = () => {
-      URL.revokeObjectURL(url);
-      window.electronAPI.reportError('Audio error: ' + (audio.error?.message || 'unknown'));
-      if (currentAudio === audio) currentAudio = null;
-    };
-
-    currentAudio = audio;
-  } catch (err) {
-    window.electronAPI.reportError('playSound error: ' + (err.message || String(err)));
-  }
-}
-
-function setVolume(v) {
-  masterVolume = Math.max(0, Math.min(1, v));
-  if (currentAudio) currentAudio.volume = masterVolume;
-}
-
-// IPC from main process
-if (window.electronAPI.onPlay) {
-  window.electronAPI.onPlay((data, volume, ext) => {
-    playSound(data, volume, ext);
-  });
-}
-
-if (window.electronAPI.onSetVolume) {
-  window.electronAPI.onSetVolume((v) => {
-    setVolume(v);
-  });
-}
-
-// Signal ready to main process
-window.electronAPI.signalReady();
-</script>
-</body>
-</html>`
 
 // ---------------------------------------------------------------------------
 // Singleton
@@ -409,9 +461,7 @@ window.electronAPI.signalReady();
 let instance: SoundEngine | null = null
 
 export function getSoundEngine(): SoundEngine {
-  if (!instance) {
-    instance = new SoundEngine()
-  }
+  if (!instance) instance = new SoundEngine()
   return instance
 }
 
