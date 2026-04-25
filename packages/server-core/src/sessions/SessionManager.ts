@@ -117,6 +117,7 @@ interface SessionRuntimeHooks {
   captureException: (error: unknown, context?: { errorSource?: string; sessionId?: string }) => void
   onSessionStarted: () => void
   onSessionStopped: () => void
+  onSessionCompleted?: (reason: 'complete' | 'interrupted' | 'error' | 'timeout') => void
   onAutomationEvent?: (event: string, sessionId?: string) => void
 }
 
@@ -5539,6 +5540,11 @@ export class SessionManager implements ISessionManager {
     // 1. Cleanup state
     this.setProcessing(managed, false)
     managed.stopRequested = false  // Reset for next turn
+
+    // Notify sound system of completion reason (interrupted already handled by abort/Stop event)
+    if (reason !== 'interrupted') {
+      sessionRuntimeHooks.onSessionCompleted?.(reason)
+    }
 
     const turnStartFinalMessageId = managed.turnStartFinalMessageId
     managed.turnStartFinalMessageId = undefined

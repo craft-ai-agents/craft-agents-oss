@@ -631,8 +631,22 @@ app.whenReady().then(async () => {
 
           setSessionRuntimeHooks({
             updateBadgeCount,
-            onSessionStarted,
-            onSessionStopped,
+            onSessionStarted: () => {
+              onSessionStarted() // power manager
+              // Play session start sound when processing begins
+              getEngine().then(engine => engine.play('session.start')).catch(() => {})
+            },
+            onSessionStopped: () => {
+              onSessionStopped() // power manager
+            },
+            onSessionCompleted: (reason) => {
+              // Play completion/error sounds (interrupted already handled by Stop event)
+              if (reason === 'complete') {
+                getEngine().then(engine => engine.play('task.complete')).catch(() => {})
+              } else if (reason === 'error' || reason === 'timeout') {
+                getEngine().then(engine => engine.play('task.error')).catch(() => {})
+              }
+            },
             captureException: (error, context) => {
               Sentry.captureException(error instanceof Error ? error : new Error(String(error)), {
                 tags: {
