@@ -752,9 +752,29 @@ app.whenReady().then(async () => {
 
       // Initialize sound engine (non-blocking — sounds available once init completes)
       if (!isHeadless) {
-        import('./audio/index.js').then(({ initSoundEngine }) => {
+        import('./audio/index.js').then(({ initSoundEngine, getSoundEngine }) => {
           initSoundEngine().then(() => {
             mainLog.info('[sound] Sound engine initialized')
+
+            // Load per-session sound packs from existing sessions
+            try {
+              const sessions = instance.sessionManager?.getSessions() ?? []
+              const engine = getSoundEngine()
+              let loaded = 0
+              for (const s of sessions) {
+                if (s.soundPack) {
+                  engine.setSessionPack(s.id, s.soundPack)
+                  loaded++
+                }
+              }
+              if (sessions.length > 0) {
+                mainLog.info(
+                  `[sound] Loaded ${loaded}/${sessions.length} session pack overrides`
+                )
+              }
+            } catch (err) {
+              mainLog.warn('[sound] Failed to load session sound packs:', err)
+            }
           }).catch((err) => {
             mainLog.warn('[sound] Sound engine init failed:', err)
           })
@@ -789,17 +809,6 @@ app.whenReady().then(async () => {
         }
       } catch (err) {
         mainLog.error('[messaging] Gateway initialization failed:', err)
-      }
-
-      // Initialize sound engine (non-blocking — sounds available once init completes)
-      if (!isHeadless) {
-        import('./audio/index.js').then(({ initSoundEngine }) => {
-          initSoundEngine().then(() => {
-            mainLog.info('[sound] Sound engine initialized')
-          }).catch((err) => {
-            mainLog.warn('[sound] Sound engine init failed:', err)
-          })
-        })
       }
 
       // IPC handlers — preload uses sendSync to get WS connection details

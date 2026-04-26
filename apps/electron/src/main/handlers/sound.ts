@@ -59,16 +59,8 @@ export function registerSoundHandlers(server: RpcServer, deps: HandlerDeps): voi
     const engine = getSoundEngine()
     engine.setSessionPack(sessionId, packName)
 
-    // Persist to disk via shared storage utility
-    const session = await deps.sessionManager.getSession(sessionId)
-    if (session?.workspaceId) {
-      const { getWorkspaceByNameOrId } = await import('@craft-agent/shared/workspaces')
-      const workspace = getWorkspaceByNameOrId(session.workspaceId)
-      if (workspace?.rootPath) {
-        const { updateSessionMetadata } = await import('@craft-agent/shared/sessions/storage')
-        await updateSessionMetadata(workspace.rootPath, sessionId, { soundPack: packName })
-      }
-    }
+    // Persist to disk and update managed session in memory
+    await deps.sessionManager.updateSessionSoundPack(sessionId, packName)
 
     return { success: true }
   })

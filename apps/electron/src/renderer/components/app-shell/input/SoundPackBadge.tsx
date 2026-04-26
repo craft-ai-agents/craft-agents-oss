@@ -55,7 +55,13 @@ export function SoundPackBadge({
   const [open, setOpen] = React.useState(false)
   const [packs, setPacks] = React.useState<PackInfo[]>([])
   const [loading, setLoading] = React.useState(false)
+  const [optimisticPack, setOptimisticPack] = React.useState<string | undefined>(activePack)
   const buttonRef = React.useRef<HTMLButtonElement>(null)
+
+  // Sync optimistic pack when activePack prop changes (e.g., after server update)
+  React.useEffect(() => {
+    setOptimisticPack(activePack)
+  }, [activePack])
 
   // Load available packs when popover opens
   React.useEffect(() => {
@@ -71,16 +77,19 @@ export function SoundPackBadge({
   }, [open, packs.length])
 
   const handleSelectPack = React.useCallback(async (packName: string | undefined) => {
+    const previousPack = optimisticPack
+    setOptimisticPack(packName)
     try {
       await window.electronAPI.setSoundPack(sessionId, packName)
     } catch (err) {
       console.error('[sound] Failed to set pack:', err)
+      setOptimisticPack(previousPack)
     }
     setOpen(false)
-  }, [sessionId])
+  }, [sessionId, optimisticPack])
 
-  const selectedPack = activePack
-    ? packs.find(p => p.name === activePack)
+  const selectedPack = optimisticPack
+    ? packs.find(p => p.name === optimisticPack)
     : undefined
 
   const label = selectedPack
@@ -96,7 +105,7 @@ export function SoundPackBadge({
             icon={<Volume2 className="h-3.5 w-3.5" />}
             label={label}
             isExpanded={isEmptySession}
-            hasSelection={!!activePack}
+            hasSelection={!!optimisticPack}
             showChevron={true}
             isOpen={open}
             disabled={disabled}
@@ -118,12 +127,12 @@ export function SoundPackBadge({
             onClick={() => handleSelectPack(undefined)}
             className={cn(
               'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-foreground/5 transition-colors text-left',
-              !activePack && 'bg-foreground/5'
+              !optimisticPack && 'bg-foreground/5'
             )}
           >
             <Volume2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <span className="flex-1 truncate">{t('settings.sound.defaultPack', 'Default')}</span>
-            {!activePack && (
+            {!optimisticPack && (
               <span className="text-[10px] text-primary">✓</span>
             )}
           </button>
@@ -140,7 +149,7 @@ export function SoundPackBadge({
               onClick={() => handleSelectPack(pack.name)}
               className={cn(
                 'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-foreground/5 transition-colors text-left',
-                activePack === pack.name && 'bg-foreground/5'
+                optimisticPack === pack.name && 'bg-foreground/5'
               )}
             >
               <span className="flex-1 truncate">{pack.displayName}</span>
@@ -150,7 +159,7 @@ export function SoundPackBadge({
               {pack.trustTier === 'official' && (
                 <span className="text-[10px] text-green-500">✓</span>
               )}
-              {activePack === pack.name && (
+              {optimisticPack === pack.name && (
                 <span className="text-[10px] text-primary">✓</span>
               )}
             </button>

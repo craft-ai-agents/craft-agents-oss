@@ -65,6 +65,7 @@ import { SourceAvatar } from '@/components/ui/source-avatar'
 import { SourceSelectorPopover } from '@/components/ui/SourceSelectorPopover'
 import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
+import { SoundPackBadge } from './SoundPackBadge'
 import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelNameKey } from '@craft-agent/shared/agent/thinking-levels'
@@ -232,6 +233,8 @@ export interface FreeFormInputProps {
   onConnectionChange?: (connectionSlug: string) => void
   /** When true, the session's locked connection has been removed */
   connectionUnavailable?: boolean
+  /** Sound pack name for this session (overrides global default) */
+  soundPack?: string
 }
 
 /**
@@ -288,6 +291,7 @@ export function FreeFormInput({
   currentConnection,
   onConnectionChange,
   connectionUnavailable = false,
+  soundPack,
 }: FreeFormInputProps) {
   const { t } = useTranslation()
 
@@ -1834,6 +1838,14 @@ export function FreeFormInput({
               workspaceId={workspaceId}
             />
           )}
+          {sessionId && (
+            <SoundPackBadge
+              sessionId={sessionId}
+              activePack={soundPack}
+              isEmptySession={false}
+              disabled={disabled}
+            />
+          )}
           </>
           )}
 
@@ -1940,6 +1952,16 @@ export function FreeFormInput({
               sessionFolderPath={sessionFolderPath}
               isEmptySession={isEmptySession}
               workspaceId={workspaceId}
+            />
+          )}
+
+          {/* 4. Sound Pack Selector Badge */}
+          {sessionId && (
+            <SoundPackBadge
+              sessionId={sessionId}
+              activePack={soundPack}
+              isEmptySession={isEmptySession}
+              disabled={disabled}
             />
           )}
           </div>

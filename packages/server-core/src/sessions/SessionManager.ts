@@ -789,6 +789,8 @@ interface ManagedSession {
   connectionLocked?: boolean
   // Thinking level for this session ('off', 'think', 'max')
   thinkingLevel?: ThinkingLevel
+  // Sound pack name for this session (overrides global default)
+  soundPack?: string
   // System prompt preset for mini agents ('default' | 'mini')
   systemPromptPreset?: 'default' | 'mini' | string
   // Role/type of the last message (for badge display without loading messages)
@@ -4340,6 +4342,16 @@ export class SessionManager implements ISessionManager {
       // Workaround: Bun's fs.watch({ recursive: true }) on Linux doesn't track
       // directories created after the watcher started.
       // https://github.com/oven-sh/bun/issues/15939
+      const watcher = this.configWatchers.get(managed.workspace.rootPath)
+      watcher?.notifyFileChange(`sessions/${sessionId}/session.jsonl`)
+    }
+  }
+
+  async updateSessionSoundPack(sessionId: string, soundPack: string | undefined): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.soundPack = soundPack
+      this.persistSession(managed)
       const watcher = this.configWatchers.get(managed.workspace.rootPath)
       watcher?.notifyFileChange(`sessions/${sessionId}/session.jsonl`)
     }
