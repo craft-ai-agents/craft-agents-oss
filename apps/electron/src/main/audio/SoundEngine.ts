@@ -364,14 +364,22 @@ export class SoundEngine {
   }
 
   private getActivePack(sessionId?: string): SoundPack | undefined {
+    // 1. Try session-specific pack
     if (sessionId) {
       const sp = this.sessionPacks.get(sessionId)
       if (sp) {
         const p = this.packs.get(sp)
         if (p) return p
+        console.warn(`[sound] Session pack '${sp}' not found for session ${sessionId}, falling back`)
       }
     }
-    return this.packs.get(this.settings.defaultPack)
+    // 2. Try global default pack
+    const defaultPack = this.packs.get(this.settings.defaultPack)
+    if (defaultPack) return defaultPack
+    // 3. Fall back to first available pack
+    const first = [...this.packs.values()][0]
+    if (first) return first
+    return undefined
   }
 
   // -----------------------------------------------------------------------

@@ -115,9 +115,9 @@ export function setSessionPlatform(platform: PlatformServices): void {
 interface SessionRuntimeHooks {
   updateBadgeCount: (count: number) => void
   captureException: (error: unknown, context?: { errorSource?: string; sessionId?: string }) => void
-  onSessionStarted: () => void
-  onSessionStopped: () => void
-  onSessionCompleted?: (reason: 'complete' | 'interrupted' | 'error' | 'timeout') => void
+  onSessionStarted: (sessionId: string) => void
+  onSessionStopped: (sessionId: string) => void
+  onSessionCompleted?: (reason: 'complete' | 'interrupted' | 'error' | 'timeout', sessionId: string) => void
   onAutomationEvent?: (event: string, sessionId?: string) => void
 }
 
@@ -1043,9 +1043,9 @@ export class SessionManager implements ISessionManager {
     const was = managed.isProcessing
     managed.isProcessing = processing
     if (!was && processing) {
-      sessionRuntimeHooks.onSessionStarted()
+      sessionRuntimeHooks.onSessionStarted(managed.id)
     } else if (was && !processing) {
-      sessionRuntimeHooks.onSessionStopped()
+      sessionRuntimeHooks.onSessionStopped(managed.id)
     }
   }
 
@@ -4352,6 +4352,8 @@ export class SessionManager implements ISessionManager {
     if (managed) {
       managed.soundPack = soundPack
       this.persistSession(managed)
+      // Notify renderer of the sound pack change
+      this.sendEvent({ type: 'sound_pack_changed', sessionId, soundPack }, managed.workspace.id)
       const watcher = this.configWatchers.get(managed.workspace.rootPath)
       watcher?.notifyFileChange(`sessions/${sessionId}/session.jsonl`)
     }
@@ -5555,7 +5557,7 @@ export class SessionManager implements ISessionManager {
 
     // Notify sound system of completion reason (interrupted already handled by abort/Stop event)
     if (reason !== 'interrupted') {
-      sessionRuntimeHooks.onSessionCompleted?.(reason)
+      sessionRuntimeHooks.onSessionCompleted?.(reason, managed.id)
     }
 
     const turnStartFinalMessageId = managed.turnStartFinalMessageId

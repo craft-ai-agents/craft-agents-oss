@@ -631,20 +631,20 @@ app.whenReady().then(async () => {
 
           setSessionRuntimeHooks({
             updateBadgeCount,
-            onSessionStarted: () => {
+            onSessionStarted: (sessionId) => {
               onSessionStarted() // power manager
               // Play session start sound when processing begins
-              getEngine().then(engine => engine.play('session.start')).catch(() => {})
+              getEngine().then(engine => engine.play('session.start', sessionId)).catch(() => {})
             },
-            onSessionStopped: () => {
+            onSessionStopped: (_sessionId) => {
               onSessionStopped() // power manager
             },
-            onSessionCompleted: (reason) => {
+            onSessionCompleted: (reason, sessionId) => {
               // Play completion/error sounds (interrupted already handled by Stop event)
               if (reason === 'complete') {
-                getEngine().then(engine => engine.play('task.complete')).catch(() => {})
+                getEngine().then(engine => engine.play('task.complete', sessionId)).catch(() => {})
               } else if (reason === 'error' || reason === 'timeout') {
-                getEngine().then(engine => engine.play('task.error')).catch(() => {})
+                getEngine().then(engine => engine.play('task.error', sessionId)).catch(() => {})
               }
             },
             captureException: (error, context) => {
