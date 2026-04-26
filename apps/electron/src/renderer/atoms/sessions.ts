@@ -75,6 +75,8 @@ export interface SessionMeta {
   isArchived?: boolean
   /** Timestamp when session was archived (for retention policy) */
   archivedAt?: number
+  /** Sound pack override for this session (uses global default if unset) */
+  soundPack?: string
 }
 
 /**

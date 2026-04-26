@@ -91,8 +91,11 @@ export function SoundPackBadge({
     ? packs.find(p => p.name === optimisticPack)
     : undefined
 
-  const label = selectedPack
-    ? selectedPack.displayName
+  // Show the pack name even before the pack list is loaded.
+  // When the popover hasn't been opened yet, packs is empty so
+  // selectedPack is undefined — but we still know the raw name.
+  const label = optimisticPack
+    ? (selectedPack?.displayName ?? optimisticPack)
     : t('settings.sound.defaultPack', 'Default')
 
   return (
