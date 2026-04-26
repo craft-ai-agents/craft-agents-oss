@@ -21,12 +21,17 @@ import { cn } from '@/lib/utils'
 // Registry types
 // ---------------------------------------------------------------------------
 
+interface RegistryPackAuthor {
+  name?: string
+  github?: string
+}
+
 interface RegistryPack {
   name: string
   display_name?: string
   description?: string
   version?: string
-  author?: string
+  author?: string | RegistryPackAuthor
   language?: string
   category_count?: number
   sound_count?: number
@@ -186,7 +191,7 @@ export function PackBrowserDialog({
 
           {!loading && !error && (
             <div className="space-y-1 py-1">
-              {filteredPacks.map(pack => (
+              {filteredPacks.slice(0, 100).map(pack => (
                 <div
                   key={pack.name}
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-foreground/[0.03] transition-colors"
@@ -214,7 +219,7 @@ export function PackBrowserDialog({
                       </p>
                     )}
                     <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
-                      {pack.author && <span>by {pack.author}</span>}
+                      {pack.author && <span>by {typeof pack.author === 'string' ? pack.author : (pack.author as RegistryPackAuthor).name ?? 'Unknown'}</span>}
                       {pack.sound_count !== undefined && <span>{pack.sound_count} sounds</span>}
                       {pack.version && <span>v{pack.version}</span>}
                     </div>
@@ -249,6 +254,11 @@ export function PackBrowserDialog({
                   </div>
                 </div>
               ))}
+              {filteredPacks.length > 100 && (
+                <div className="text-xs text-muted-foreground text-center py-2">
+                  Showing 100 of {filteredPacks.length} packs — use search to narrow results
+                </div>
+              )}
             </div>
           )}
         </ScrollArea>
