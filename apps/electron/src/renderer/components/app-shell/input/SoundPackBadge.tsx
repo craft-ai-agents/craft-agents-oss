@@ -56,7 +56,6 @@ export function SoundPackBadge({
   const [packs, setPacks] = React.useState<PackInfo[]>([])
   const [loading, setLoading] = React.useState(false)
   const [optimisticPack, setOptimisticPack] = React.useState<string | undefined>(activePack)
-  const buttonRef = React.useRef<HTMLButtonElement>(null)
 
   // Sync optimistic pack when activePack prop changes (e.g., after server update)
   React.useEffect(() => {
@@ -97,11 +96,10 @@ export function SoundPackBadge({
     : t('settings.sound.defaultPack', 'Default')
 
   return (
-    <div className="relative shrink min-w-0">
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <span className="shrink min-w-0">
           <FreeFormInputContextBadge
-            buttonRef={buttonRef}
             icon={<Volume2 className="h-3.5 w-3.5" />}
             label={label}
             isExpanded={isEmptySession}
@@ -109,15 +107,15 @@ export function SoundPackBadge({
             showChevron={true}
             isOpen={open}
             disabled={disabled}
-            tooltip={t('settings.sound.packTooltip', 'Sound Pack')}
           />
-        </PopoverTrigger>
-        <PopoverContent
-          side="top"
-          align="start"
-          sideOffset={4}
-          className="w-56 p-1 popover-styled"
-        >
+        </span>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="start"
+        sideOffset={4}
+        className="w-56 p-1 popover-styled"
+      >
           <div className="text-xs font-medium text-muted-foreground px-2 py-1.5">
             Sound Pack
           </div>
@@ -171,7 +169,6 @@ export function SoundPackBadge({
             </div>
           )}
         </PopoverContent>
-      </Popover>
-    </div>
+    </Popover>
   )
 }

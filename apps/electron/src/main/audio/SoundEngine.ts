@@ -12,6 +12,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import type { CespCategory, SoundPack, SoundSettings } from '@craft-agent/shared/audio'
 import { DEFAULT_SOUND_SETTINGS } from '@craft-agent/shared/audio'
+import { loadPreferences, updatePreferences as updatePrefs } from '@craft-agent/shared/config'
 import { discoverPacks, resolveCategory, pickRandomSound } from './PackLoader.js'
 
 // ---------------------------------------------------------------------------
@@ -194,6 +195,18 @@ export class SoundEngine {
 
   async init(): Promise<void> {
     console.info('[sound] === SoundEngine.init() starting ===')
+
+    // Load persisted settings from preferences.json
+    try {
+      const prefs = loadPreferences()
+      if (prefs.sound) {
+        this.settings = { ...DEFAULT_SOUND_SETTINGS, ...prefs.sound }
+        console.info(`[sound] Loaded persisted settings: enabled=${this.settings.enabled} volume=${this.settings.volume} defaultPack=${this.settings.defaultPack}`)
+      }
+    } catch (err) {
+      console.warn('[sound] Failed to load persisted settings, using defaults:', err)
+    }
+
     this.packs = await discoverPacks()
     console.info(`[sound] Discovered ${this.packs.size} packs`)
 
@@ -326,6 +339,12 @@ export class SoundEngine {
 
   updateSettings(settings: Partial<SoundSettings>): void {
     this.settings = { ...this.settings, ...settings }
+    // Persist to preferences.json
+    try {
+      updatePrefs({ sound: settings })
+    } catch (err) {
+      console.error('[sound] Failed to persist settings:', err)
+    }
     if (settings.volume !== undefined && this.ready && this.playerWindow) {
       this.playerWindow.webContents.send('sound:set-volume', settings.volume)
     }
