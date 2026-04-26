@@ -205,6 +205,11 @@ export const RPC_CHANNELS = {
     TEST_LLM_CONNECTION_SETUP: 'settings:testLlmConnectionSetup',
     GET_DEFAULT_THINKING_LEVEL: 'settings:getDefaultThinkingLevel',
     SET_DEFAULT_THINKING_LEVEL: 'settings:setDefaultThinkingLevel',
+    // Secondary Model (call_llm overrides)
+    GET_CALL_LLM_SETTINGS: 'settings:getCallLlmSettings',
+    SET_CALL_LLM_CONNECTION: 'settings:setCallLlmConnection',
+    SET_CALL_LLM_MODEL: 'settings:setCallLlmModel',
+    SET_CALL_LLM_THINKING_LEVEL: 'settings:setCallLlmThinkingLevel',
     GET_NETWORK_PROXY: 'settings:getNetworkProxy',
     SET_NETWORK_PROXY: 'settings:setNetworkProxy',
     GET_SERVER_CONFIG: 'settings:getServerConfig',
@@ -367,6 +372,20 @@ export const RPC_CHANNELS = {
     GET_LAST_EXECUTED: 'automations:getLastExecuted',
     REPLAY: 'automations:replay',
     CHANGED: 'automations:changed',
+  },
+
+  sound: {
+    GET_SETTINGS: 'sound:getSettings',
+    SET_SETTINGS: 'sound:setSettings',
+    GET_PACKS: 'sound:getPacks',
+    SET_PACK: 'sound:setPack',
+    GET_REGISTRY: 'sound:getRegistry',
+    INSTALL_PACK: 'sound:installPack',
+    UNINSTALL_PACK: 'sound:uninstallPack',
+    PREVIEW_PACK: 'sound:previewPack',
+    PLAY_TEST: 'sound:playTest',
+    IMPORT_FOLDER: 'sound:importFolder',
+    IMPORT_PEON_PING: 'sound:importPeonPing',
   },
   resources: {
     EXPORT: 'resources:export',

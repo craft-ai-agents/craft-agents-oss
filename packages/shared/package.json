@@ -62,7 +62,8 @@
     "./automations/resolve-config-path": "./src/automations/resolve-config-path.ts",
     "./protocol": "./src/protocol/index.ts",
     "./i18n": "./src/i18n/index.ts",
-    "./resources": "./src/resources/index.ts"
+    "./resources": "./src/resources/index.ts",
+    "./audio": "./src/audio/index.ts"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",

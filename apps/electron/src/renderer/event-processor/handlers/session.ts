@@ -32,6 +32,7 @@ import type {
   PermissionModeChangedEvent,
   SessionModelChangedEvent,
   LLMConnectionChangedEvent,
+  SoundPackChangedEvent,
   UserMessageEvent,
   MessageAnnotationsUpdatedEvent,
   SessionSharedEvent,
@@ -165,13 +166,6 @@ export function handleTypedError(
     errorDetails: event.error.details,
     errorOriginal: event.error.originalError,
     errorCanRetry: event.error.canRetry,
-    errorActions: event.error.actions?.map(a => ({
-      key: a.key,
-      label: a.label,
-      action: a.action,
-      url: a.url,
-      sourceSlug: a.sourceSlug,
-    })),
   }
 
   return {
@@ -472,6 +466,27 @@ export function handleConnectionChanged(
         ...session,
         llmConnection: event.connectionSlug,
         ...(event.supportsBranching !== undefined && { supportsBranching: event.supportsBranching }),
+      },
+      streaming,
+    },
+    effects: [],
+  }
+}
+
+/**
+ * Handle sound_pack_changed - sync session.soundPack to renderer state
+ */
+export function handleSoundPackChanged(
+  state: SessionState,
+  event: SoundPackChangedEvent
+): ProcessResult {
+  const { session, streaming } = state
+
+  return {
+    state: {
+      session: {
+        ...session,
+        soundPack: event.soundPack,
       },
       streaming,
     },

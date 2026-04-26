@@ -5,6 +5,7 @@ import { CONFIG_DIR } from './paths.ts';
 import { readJsonFileSync } from '../utils/files.ts';
 import { i18n } from '../i18n/index.ts';
 import { LOCALE_REGISTRY, type LanguageCode } from '../i18n/registry.ts';
+import type { SoundSettings } from '../audio/types.ts';
 
 export interface UserLocation {
   city?: string;
@@ -34,6 +35,8 @@ export interface UserPreferences {
   diffViewer?: DiffViewerPreferences;
   // Whether to include Co-Authored-By trailer on git commits (default: true)
   includeCoAuthoredBy?: boolean;
+  // Sound notification settings (persisted across restarts)
+  sound?: Partial<SoundSettings>;
   // When the preferences were last updated
   updatedAt?: number;
 }
@@ -70,6 +73,10 @@ export function updatePreferences(updates: Partial<UserPreferences>): UserPrefer
     diffViewer: updates.diffViewer
       ? { ...current.diffViewer, ...updates.diffViewer }
       : current.diffViewer,
+    // Deep merge sound settings
+    sound: updates.sound
+      ? { ...(current.sound ?? {}), ...updates.sound }
+      : current.sound,
   };
   savePreferences(updated);
   return updated;
