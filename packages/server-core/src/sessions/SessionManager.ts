@@ -4746,6 +4746,12 @@ export class SessionManager implements ISessionManager {
     // Get workspace slug before deleting
     const workspaceRootPath = managed.workspace.rootPath
 
+    // Fire onSessionDeleted hook early — before any cleanup that could throw.
+    // This ensures session.end sounds always play, even if later cleanup fails.
+    if (sessionRuntimeHooks.onSessionDeleted) {
+      sessionRuntimeHooks.onSessionDeleted(sessionId)
+    }
+
     // If processing is in progress, force-abort via Query.close() and wait for cleanup
     if (managed.isProcessing && managed.agent) {
       managed.agent.forceAbort(AbortReason.UserStop)
@@ -4794,8 +4800,14 @@ export class SessionManager implements ISessionManager {
     }
 
     // Dispose agent to clean up ConfigWatchers, event listeners, MCP connections
+    // Wrapped in try/catch because dispose() should not prevent session deletion.
+    // The onSessionDeleted hook has already fired at this point.
     if (managed.agent) {
-      managed.agent.dispose()
+      try {
+        managed.agent.dispose()
+      } catch (err) {
+        sessionLog.warn(`Failed to dispose agent for ${sessionId}: ${err instanceof Error ? err.message : err}`)
+      }
     }
 
     // Stop pool server (HTTP MCP server for external SDK subprocesses)
@@ -4803,12 +4815,6 @@ export class SessionManager implements ISessionManager {
       managed.poolServer.stop().catch(err => {
         sessionLog.warn(`Failed to stop pool server for ${sessionId}: ${err instanceof Error ? err.message : err}`)
       })
-    }
-
-    // Fire onSessionDeleted hook before removing session from the map
-    // (so the hook can still access session metadata like soundPack)
-    if (sessionRuntimeHooks.onSessionDeleted) {
-      sessionRuntimeHooks.onSessionDeleted(sessionId)
     }
 
     this.sessions.delete(sessionId)
