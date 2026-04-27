@@ -16,6 +16,12 @@ import { loadPreferences, updatePreferences as updatePrefs } from '@craft-agent/
 import { discoverPacks, resolveCategory, pickRandomSound } from './PackLoader.js'
 
 // ---------------------------------------------------------------------------
+// Sentinel pack name — means "silence all sounds for this session"
+// ---------------------------------------------------------------------------
+
+export const NO_SOUND_PACK = '__none__'
+
+// ---------------------------------------------------------------------------
 // Cooldown Tracker
 // ---------------------------------------------------------------------------
 
@@ -364,6 +370,11 @@ export class SoundEngine {
   }
 
   private getActivePack(sessionId?: string): SoundPack | undefined {
+    // 0. Explicit "no sounds" sentinel — skip all playback for this session
+    if (sessionId) {
+      const sp = this.sessionPacks.get(sessionId)
+      if (sp === NO_SOUND_PACK) return undefined // explicitly no pack
+    }
     // 1. Try session-specific pack
     if (sessionId) {
       const sp = this.sessionPacks.get(sessionId)
@@ -405,9 +416,18 @@ export class SoundEngine {
       return
     }
 
+    // Check for explicit "no sounds" sentinel before resolving pack
+    if (sessionId) {
+      const sp = this.sessionPacks.get(sessionId)
+      if (sp === NO_SOUND_PACK) {
+        console.info(`[sound] Skipped: session ${sessionId} has No Sounds selected`)
+        return
+      }
+    }
+
     const pack = this.getActivePack(sessionId)
     if (!pack) {
-      console.warn(`[sound] No active pack for session ${sessionId}`)
+      console.info(`[sound] No active pack for session ${sessionId}`)
       return
     }
 
