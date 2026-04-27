@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { Volume2 } from 'lucide-react'
+import { Volume2, VolumeX } from 'lucide-react'
 import {
   FreeFormInputContextBadge,
 } from './FreeFormInputContextBadge'
@@ -21,6 +21,9 @@ import { cn } from '@/lib/utils'
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+// Sentinel pack name — means "silence all sounds for this session"
+const NO_SOUND_PACK = '__none__'
 
 interface PackInfo {
   name: string
@@ -94,9 +97,12 @@ export function SoundPackBadge({
   // Show the pack name even before the pack list is loaded.
   // When the popover hasn't been opened yet, packs is empty so
   // selectedPack is undefined — but we still know the raw name.
-  const label = optimisticPack
-    ? (selectedPack?.displayName ?? optimisticPack)
-    : t('settings.sound.defaultPack', 'Default')
+  // Special case: __none__ sentinel means "No Sounds"
+  const label = optimisticPack === NO_SOUND_PACK
+    ? t('settings.sound.noSounds', 'No Sounds')
+    : optimisticPack
+      ? (selectedPack?.displayName ?? optimisticPack)
+      : t('settings.sound.defaultPack', 'Default')
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -134,6 +140,21 @@ export function SoundPackBadge({
             <Volume2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <span className="flex-1 truncate">{t('settings.sound.defaultPack', 'Default')}</span>
             {!optimisticPack && (
+              <span className="text-[10px] text-primary">✓</span>
+            )}
+          </button>
+
+          {/* No Sounds (mute this session) option */}
+          <button
+            onClick={() => handleSelectPack(NO_SOUND_PACK)}
+            className={cn(
+              'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-foreground/5 transition-colors text-left',
+              optimisticPack === NO_SOUND_PACK && 'bg-foreground/5'
+            )}
+          >
+            <VolumeX className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="flex-1 truncate">{t('settings.sound.noSounds', 'No Sounds')}</span>
+            {optimisticPack === NO_SOUND_PACK && (
               <span className="text-[10px] text-primary">✓</span>
             )}
           </button>
