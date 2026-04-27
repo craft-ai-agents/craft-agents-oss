@@ -649,11 +649,20 @@ app.whenReady().then(async () => {
             },
             onSessionDeleted: (sessionId) => {
               // Play session.end sound when a session is deleted
-              getEngine().then(engine => {
-                engine.play('session.end', sessionId).catch(() => {})
-                // Clean up session pack state after sound fires
+              console.info('[sound] onSessionDeleted hook fired for', sessionId)
+              getEngine().then(async (engine) => {
+                console.info('[sound] Engine acquired, playing session.end for', sessionId)
+                try {
+                  await engine.play('session.end', sessionId)
+                  console.info('[sound] session.end played successfully for', sessionId)
+                } catch (err) {
+                  console.error('[sound] session.end play failed for', sessionId, err)
+                }
+                // Clean up session pack state after sound completes
                 engine.removeSession(sessionId)
-              }).catch(() => {})
+              }).catch((err) => {
+                console.error('[sound] Failed to get engine for session.end:', err)
+              })
             },
             captureException: (error, context) => {
               Sentry.captureException(error instanceof Error ? error : new Error(String(error)), {
