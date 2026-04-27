@@ -166,7 +166,7 @@ export const DEFAULT_SOUND_SETTINGS: SoundSettings = {
     'input.required': { enabled: true },
     'resource.limit': { enabled: true },
     'user.spam': { enabled: false },
-    'session.end': { enabled: false },
+    'session.end': { enabled: true },
     'task.progress': { enabled: false },
   },
 }
