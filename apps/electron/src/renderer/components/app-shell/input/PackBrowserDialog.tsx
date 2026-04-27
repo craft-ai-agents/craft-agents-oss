@@ -3,8 +3,7 @@
  *
  * Full-featured modal dialog that fetches the OpenPeon registry index,
  * displays available packs with filtering, preview, and one-click install.
- * Supports pagination and random-sound preview for both installed and
- * uninstalled packs.
+ * Preview cycles through sounds sequentially per pack.
  */
 
 import * as React from 'react'
@@ -18,12 +17,6 @@ import {
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const PAGE_SIZE = 30
 
 // ---------------------------------------------------------------------------
 // Registry types
@@ -71,7 +64,9 @@ export function PackBrowserDialog({
   const [filter, setFilter] = React.useState('')
   const [installing, setInstalling] = React.useState<string | null>(null)
   const [previewing, setPreviewing] = React.useState<string | null>(null)
-  const [visibleCount, setVisibleCount] = React.useState(PAGE_SIZE)
+
+  // Track the next sequential preview index per pack name
+  const previewIndexRef = React.useRef<Map<string, number>>(new Map())
 
   // Fetch registry on open
   React.useEffect(() => {
@@ -98,11 +93,6 @@ export function PackBrowserDialog({
       .finally(() => setLoading(false))
   }, [open, registry.length])
 
-  // Reset visible count when filter changes
-  React.useEffect(() => {
-    setVisibleCount(PAGE_SIZE)
-  }, [filter])
-
   const handleInstall = async (packName: string) => {
     setInstalling(packName)
     try {
@@ -119,12 +109,17 @@ export function PackBrowserDialog({
 
   const handlePreview = async (packName: string) => {
     setPreviewing(packName)
+    // Get current index and advance for next click
+    const currentIndex = previewIndexRef.current.get(packName) ?? 0
     try {
-      await window.electronAPI.previewSoundPack(packName)
+      const result = await window.electronAPI.previewSoundPack(packName, currentIndex)
+      // Advance index (wrap around when we reach the end)
+      if (result.totalSounds) {
+        previewIndexRef.current.set(packName, (currentIndex + 1) % result.totalSounds)
+      }
     } catch (err) {
       console.error('[sound] Preview failed:', err)
     } finally {
-      // Reset after a short delay so the user can re-click for another random sound
       setTimeout(() => setPreviewing(null), 1500)
     }
   }
@@ -140,9 +135,6 @@ export function PackBrowserDialog({
       pack.tags?.some(tag => tag.toLowerCase().includes(lower))
     )
   }, [registry, filter])
-
-  const visiblePacks = filteredPacks.slice(0, visibleCount)
-  const hasMore = visibleCount < filteredPacks.length
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -177,7 +169,7 @@ export function PackBrowserDialog({
           )}
         </div>
 
-        {/* Pack List */}
+        {/* Pack List — scrolls natively via ScrollArea */}
         <ScrollArea className="flex-1 min-h-0">
           {loading && (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
@@ -208,7 +200,7 @@ export function PackBrowserDialog({
 
           {!loading && !error && (
             <div className="space-y-1 py-1">
-              {visiblePacks.map(pack => (
+              {filteredPacks.map(pack => (
                 <div
                   key={pack.name}
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-foreground/[0.03] transition-colors"
@@ -253,7 +245,7 @@ export function PackBrowserDialog({
                           ? 'bg-primary/10 text-primary'
                           : 'bg-muted hover:bg-muted/80'
                       )}
-                      title="Play a random sound from this pack"
+                      title="Preview next sound (clicks cycle through sounds)"
                     >
                       {previewing === pack.name ? '🔊...' : '▶'}
                     </button>
@@ -272,23 +264,6 @@ export function PackBrowserDialog({
                   </div>
                 </div>
               ))}
-
-              {/* Load More / Pagination info */}
-              {hasMore && (
-                <div className="flex flex-col items-center gap-1 py-3">
-                  <button
-                    onClick={() => setVisibleCount(c => c + PAGE_SIZE)}
-                    className="text-xs px-4 py-1.5 rounded-md bg-muted hover:bg-muted/80 transition-colors font-medium"
-                  >
-                    Show more ({filteredPacks.length - visibleCount} remaining)
-                  </button>
-                </div>
-              )}
-              {!hasMore && filteredPacks.length > PAGE_SIZE && (
-                <div className="text-xs text-muted-foreground text-center py-2">
-                  Showing all {filteredPacks.length} packs
-                </div>
-              )}
             </div>
           )}
         </ScrollArea>

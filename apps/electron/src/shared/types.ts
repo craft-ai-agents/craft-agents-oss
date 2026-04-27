@@ -678,7 +678,7 @@ export interface ElectronAPI {
   getSoundRegistry(): Promise<{ packs: Array<Record<string, unknown>>; error?: string }>
   installSoundPack(packName: string): Promise<{ success: boolean; packName: string }>
   uninstallSoundPack(packName: string): Promise<{ success: boolean }>
-  previewSoundPack(packName: string): Promise<{ success: boolean }>
+  previewSoundPack(packName: string, soundIndex?: number): Promise<{ success: boolean; totalSounds: number }>
   playSoundTest(filePath: string): Promise<{ success: boolean }>
   importSoundFolder(folderPath: string): Promise<{ success: boolean; packName: string }>
   importPeonPingPacks(): Promise<{ success: boolean; count: number; packs: string[] }>
@@ -725,7 +725,7 @@ export interface ElectronAPI {
   getSoundRegistry(): Promise<{ packs: Array<Record<string, unknown>>; error?: string }>
   installSoundPack(packName: string): Promise<{ success: boolean; packName: string }>
   uninstallSoundPack(packName: string): Promise<{ success: boolean }>
-  previewSoundPack(packName: string): Promise<{ success: boolean }>
+  previewSoundPack(packName: string, soundIndex?: number): Promise<{ success: boolean; totalSounds: number }>
   playSoundTest(filePath: string): Promise<{ success: boolean }>
   importSoundFolder(folderPath: string): Promise<{ success: boolean; packName: string }>
   importPeonPingPacks(): Promise<{ success: boolean; count: number; packs: string[] }>

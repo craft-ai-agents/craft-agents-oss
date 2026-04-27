@@ -24,15 +24,21 @@ import { writeFileSync, unlinkSync } from 'node:fs'
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Pick a random sound file from a pack and return its absolute path. */
-function pickRandomSoundFromPack(pack: SoundPack): string | null {
-  const allSounds: { file: string }[] = []
+/** Collect all sound files from a pack into a flat list. */
+function collectAllSounds(pack: SoundPack): { file: string; label?: string }[] {
+  const all: { file: string; label?: string }[] = []
   for (const catDef of Object.values(pack.manifest.categories)) {
-    if (catDef.sounds?.length) allSounds.push(...catDef.sounds)
+    if (catDef.sounds?.length) all.push(...catDef.sounds)
   }
-  if (allSounds.length === 0) return null
-  const sound = allSounds[Math.floor(Math.random() * allSounds.length)]
-  return join(pack.directory, sound.file)
+  return all
+}
+
+/** Pick a sound at a specific index from a pack, wrapping around. Returns absolute path. */
+function pickSoundAtIndex(pack: SoundPack, index: number): { filePath: string; total: number } | null {
+  const all = collectAllSounds(pack)
+  if (all.length === 0) return null
+  const wrapped = ((index % all.length) + all.length) % all.length
+  return { filePath: join(pack.directory, all[wrapped].file), total: all.length }
 }
 
 // ---------------------------------------------------------------------------
@@ -165,18 +171,19 @@ export function registerSoundHandlers(server: RpcServer, deps: HandlerDeps): voi
     return { success: true }
   })
 
-  // Preview a pack (play a random sound from the pack)
-  // Works for both installed packs (local files) and uninstalled registry packs (downloads from GitHub)
-  server.handle(RPC_CHANNELS.sound.PREVIEW_PACK, async (_ctx, packName: string) => {
+  // Preview a pack — cycle through sounds sequentially per click.
+  // soundIndex is tracked by the renderer (increments on each click, wraps around).
+  // Works for both installed packs (local files) and uninstalled registry packs (downloads from GitHub).
+  server.handle(RPC_CHANNELS.sound.PREVIEW_PACK, async (_ctx, packName: string, soundIndex = 0) => {
     const engine = getSoundEngine()
 
-    // Try installed pack first — play a random sound from it
+    // Try installed pack first — cycle through all sounds
     const installedPack = engine.getPack(packName)
     if (installedPack) {
-      const filePath = pickRandomSoundFromPack(installedPack)
-      if (filePath) {
-        engine.playTest(filePath)
-        return { success: true }
+      const result = pickSoundAtIndex(installedPack, soundIndex)
+      if (result) {
+        engine.playTest(result.filePath)
+        return { success: true, totalSounds: result.total }
       }
       throw new Error('Pack has no sounds to preview')
     }
@@ -198,11 +205,13 @@ export function registerSoundHandlers(server: RpcServer, deps: HandlerDeps): voi
       const previewSounds: string[] = regPack.preview_sounds || []
       if (previewSounds.length === 0) throw new Error('Pack has no preview sounds available')
 
-      // Pick a random preview sound (each click gets a different one)
-      const soundFile = previewSounds[Math.floor(Math.random() * previewSounds.length)]
+      // Cycle through preview_sounds sequentially (wrapping around)
+      const wrapped = ((soundIndex % previewSounds.length) + previewSounds.length) % previewSounds.length
+      const soundFile = previewSounds[wrapped]
       const sourceRepo = regPack.source_repo
       const sourceRef = regPack.source_ref || 'main'
       const sourcePath = regPack.source_path || '.'
+
       // Build raw.githubusercontent.com URL to the sound file
       const rawUrl = `https://raw.githubusercontent.com/${sourceRepo}/${sourceRef}/${sourcePath === '.' ? '' : sourcePath + '/'}sounds/${soundFile}`
 
@@ -218,7 +227,7 @@ export function registerSoundHandlers(server: RpcServer, deps: HandlerDeps): voi
         try { engine.playTest(tmpFile) } finally {
           setTimeout(() => { try { unlinkSync(tmpFile) } catch {} }, 5000)
         }
-        return { success: true }
+        return { success: true, totalSounds: previewSounds.length }
       }
 
       const tmpFile = join(tmpdir(), `sound-preview-${packName}-${Date.now()}.mp3`)
@@ -226,7 +235,7 @@ export function registerSoundHandlers(server: RpcServer, deps: HandlerDeps): voi
       try { engine.playTest(tmpFile) } finally {
         setTimeout(() => { try { unlinkSync(tmpFile) } catch {} }, 5000)
       }
-      return { success: true }
+      return { success: true, totalSounds: previewSounds.length }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       console.error('[sound] Preview failed:', message)
