@@ -3,6 +3,8 @@
  *
  * Full-featured modal dialog that fetches the OpenPeon registry index,
  * displays available packs with filtering, preview, and one-click install.
+ * Supports pagination and random-sound preview for both installed and
+ * uninstalled packs.
  */
 
 import * as React from 'react'
@@ -16,6 +18,12 @@ import {
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const PAGE_SIZE = 30
 
 // ---------------------------------------------------------------------------
 // Registry types
@@ -63,6 +71,7 @@ export function PackBrowserDialog({
   const [filter, setFilter] = React.useState('')
   const [installing, setInstalling] = React.useState<string | null>(null)
   const [previewing, setPreviewing] = React.useState<string | null>(null)
+  const [visibleCount, setVisibleCount] = React.useState(PAGE_SIZE)
 
   // Fetch registry on open
   React.useEffect(() => {
@@ -89,6 +98,11 @@ export function PackBrowserDialog({
       .finally(() => setLoading(false))
   }, [open, registry.length])
 
+  // Reset visible count when filter changes
+  React.useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [filter])
+
   const handleInstall = async (packName: string) => {
     setInstalling(packName)
     try {
@@ -110,7 +124,7 @@ export function PackBrowserDialog({
     } catch (err) {
       console.error('[sound] Preview failed:', err)
     } finally {
-      // Preview is quick, reset after a moment
+      // Reset after a short delay so the user can re-click for another random sound
       setTimeout(() => setPreviewing(null), 1500)
     }
   }
@@ -127,6 +141,9 @@ export function PackBrowserDialog({
     )
   }, [registry, filter])
 
+  const visiblePacks = filteredPacks.slice(0, visibleCount)
+  const hasMore = visibleCount < filteredPacks.length
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col">
@@ -136,7 +153,7 @@ export function PackBrowserDialog({
           </DialogTitle>
           <DialogDescription>
             {registry.length > 0
-              ? `${registry.length} packs available on OpenPeon registry`
+              ? `${filteredPacks.length} pack${filteredPacks.length !== 1 ? 's' : ''} available${filter ? ` (filtered from ${registry.length})` : ''}`
               : 'Download sound packs from the community registry'}
           </DialogDescription>
         </DialogHeader>
@@ -191,7 +208,7 @@ export function PackBrowserDialog({
 
           {!loading && !error && (
             <div className="space-y-1 py-1">
-              {filteredPacks.slice(0, 100).map(pack => (
+              {visiblePacks.map(pack => (
                 <div
                   key={pack.name}
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-foreground/[0.03] transition-colors"
@@ -236,6 +253,7 @@ export function PackBrowserDialog({
                           ? 'bg-primary/10 text-primary'
                           : 'bg-muted hover:bg-muted/80'
                       )}
+                      title="Play a random sound from this pack"
                     >
                       {previewing === pack.name ? '🔊...' : '▶'}
                     </button>
@@ -254,9 +272,21 @@ export function PackBrowserDialog({
                   </div>
                 </div>
               ))}
-              {filteredPacks.length > 100 && (
+
+              {/* Load More / Pagination info */}
+              {hasMore && (
+                <div className="flex flex-col items-center gap-1 py-3">
+                  <button
+                    onClick={() => setVisibleCount(c => c + PAGE_SIZE)}
+                    className="text-xs px-4 py-1.5 rounded-md bg-muted hover:bg-muted/80 transition-colors font-medium"
+                  >
+                    Show more ({filteredPacks.length - visibleCount} remaining)
+                  </button>
+                </div>
+              )}
+              {!hasMore && filteredPacks.length > PAGE_SIZE && (
                 <div className="text-xs text-muted-foreground text-center py-2">
-                  Showing 100 of {filteredPacks.length} packs — use search to narrow results
+                  Showing all {filteredPacks.length} packs
                 </div>
               )}
             </div>

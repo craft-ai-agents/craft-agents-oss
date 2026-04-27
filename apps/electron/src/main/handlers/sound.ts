@@ -15,6 +15,25 @@ import {
   validateManifest,
 } from '../audio/index.js'
 import type { SoundSettings } from '@craft-agent/shared/audio'
+import type { SoundPack } from '@craft-agent/shared/audio'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { writeFileSync, unlinkSync } from 'node:fs'
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Pick a random sound file from a pack and return its absolute path. */
+function pickRandomSoundFromPack(pack: SoundPack): string | null {
+  const allSounds: { file: string }[] = []
+  for (const catDef of Object.values(pack.manifest.categories)) {
+    if (catDef.sounds?.length) allSounds.push(...catDef.sounds)
+  }
+  if (allSounds.length === 0) return null
+  const sound = allSounds[Math.floor(Math.random() * allSounds.length)]
+  return join(pack.directory, sound.file)
+}
 
 // ---------------------------------------------------------------------------
 // Handler Registration
@@ -115,7 +134,6 @@ export function registerSoundHandlers(server: RpcServer, deps: HandlerDeps): voi
 
     // Validate the installed manifest
     const { readFileSync } = await import('node:fs')
-    const { join } = await import('node:path')
     const manifestPath = join(packDir, packName, 'openpeon.json')
     const manifestRaw = JSON.parse(readFileSync(manifestPath, 'utf-8'))
     const { valid, errors } = validateManifest(manifestRaw)
@@ -141,29 +159,79 @@ export function registerSoundHandlers(server: RpcServer, deps: HandlerDeps): voi
     if (pack.source === 'builtin') throw new Error('Cannot uninstall built-in packs')
 
     const { rmSync } = await import('node:fs')
-    const { join } = await import('node:path')
     rmSync(pack.directory, { recursive: true, force: true })
 
     await engine.refreshPacks()
     return { success: true }
   })
 
-  // Preview a pack (play a sample sound)
+  // Preview a pack (play a random sound from the pack)
+  // Works for both installed packs (local files) and uninstalled registry packs (downloads from GitHub)
   server.handle(RPC_CHANNELS.sound.PREVIEW_PACK, async (_ctx, packName: string) => {
     const engine = getSoundEngine()
-    const pack = engine.getPack(packName)
-    if (!pack) throw new Error(`Pack not found: ${packName}`)
 
-    // Find first sound from any category
-    for (const [, catDef] of Object.entries(pack.manifest.categories)) {
-      if (catDef.sounds.length > 0) {
-        const { join } = await import('node:path')
-        const filePath = join(pack.directory, catDef.sounds[0].file)
+    // Try installed pack first — play a random sound from it
+    const installedPack = engine.getPack(packName)
+    if (installedPack) {
+      const filePath = pickRandomSoundFromPack(installedPack)
+      if (filePath) {
         engine.playTest(filePath)
         return { success: true }
       }
+      throw new Error('Pack has no sounds to preview')
     }
-    throw new Error('Pack has no sounds to preview')
+
+    // Not installed — fetch registry data and download a preview sound from GitHub
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 10000)
+      const response = await fetch('https://peonping.github.io/registry/index.json', {
+        signal: controller.signal,
+      })
+      clearTimeout(timeout)
+      if (!response.ok) throw new Error(`Registry fetch failed: ${response.status}`)
+      const index = await response.json()
+      const regPack = index.packs?.find((p: { name: string }) => p.name === packName)
+      if (!regPack) throw new Error(`Pack not found in registry: ${packName}`)
+
+      // Use preview_sounds from registry entry (already lists filenames)
+      const previewSounds: string[] = regPack.preview_sounds || []
+      if (previewSounds.length === 0) throw new Error('Pack has no preview sounds available')
+
+      // Pick a random preview sound (each click gets a different one)
+      const soundFile = previewSounds[Math.floor(Math.random() * previewSounds.length)]
+      const sourceRepo = regPack.source_repo
+      const sourceRef = regPack.source_ref || 'main'
+      const sourcePath = regPack.source_path || '.'
+      // Build raw.githubusercontent.com URL to the sound file
+      const rawUrl = `https://raw.githubusercontent.com/${sourceRepo}/${sourceRef}/${sourcePath === '.' ? '' : sourcePath + '/'}sounds/${soundFile}`
+
+      // Download to temp file and play
+      const soundResp = await fetch(rawUrl)
+      if (!soundResp.ok) {
+        // Fallback: try without the sounds/ prefix (some packs may put files at root)
+        const fallbackUrl = `https://raw.githubusercontent.com/${sourceRepo}/${sourceRef}/${sourcePath === '.' ? '' : sourcePath + '/'}${soundFile}`
+        const fallbackResp = await fetch(fallbackUrl)
+        if (!fallbackResp.ok) throw new Error(`Failed to download preview sound: ${soundResp.status}`)
+        const tmpFile = join(tmpdir(), `sound-preview-${packName}-${Date.now()}.mp3`)
+        writeFileSync(tmpFile, Buffer.from(await fallbackResp.arrayBuffer()))
+        try { engine.playTest(tmpFile) } finally {
+          setTimeout(() => { try { unlinkSync(tmpFile) } catch {} }, 5000)
+        }
+        return { success: true }
+      }
+
+      const tmpFile = join(tmpdir(), `sound-preview-${packName}-${Date.now()}.mp3`)
+      writeFileSync(tmpFile, Buffer.from(await soundResp.arrayBuffer()))
+      try { engine.playTest(tmpFile) } finally {
+        setTimeout(() => { try { unlinkSync(tmpFile) } catch {} }, 5000)
+      }
+      return { success: true }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      console.error('[sound] Preview failed:', message)
+      throw new Error(`Preview unavailable: ${message}`)
+    }
   })
 
   // Play a test sound (arbitrary file)
@@ -176,7 +244,7 @@ export function registerSoundHandlers(server: RpcServer, deps: HandlerDeps): voi
   // Import pack from a local folder
   server.handle(RPC_CHANNELS.sound.IMPORT_FOLDER, async (_ctx, folderPath: string) => {
     const { existsSync, readFileSync, cpSync } = await import('node:fs')
-    const { join, basename } = await import('node:path')
+    const { basename } = await import('node:path')
 
     const manifestPath = join(folderPath, 'openpeon.json')
     if (!existsSync(manifestPath)) {

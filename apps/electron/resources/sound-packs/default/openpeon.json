@@ -42,6 +42,11 @@
       "sounds": [
         { "file": "sounds/resource-limit.mp3", "label": "Warning" }
       ]
+    },
+    "session.end": {
+      "sounds": [
+        { "file": "sounds/session-end.mp3", "label": "Close" }
+      ]
     }
   }
 }
