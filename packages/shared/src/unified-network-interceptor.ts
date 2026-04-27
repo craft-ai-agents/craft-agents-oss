@@ -739,6 +739,7 @@ const anthropicAdapter: ApiAdapter = {
 interface TrackedToolCall {
   id: string;
   name: string;
+  type: string;
   choiceIndex: number;
   toolIndex: number;
   arguments: string;
@@ -768,45 +769,43 @@ export function createOpenAiSseStrippingStream(): TransformStream<Uint8Array, Ui
     controller.enqueue(encoder.encode(`data: ${dataStr}\n\n`));
   }
 
+  function emitTrackedCall(tc: TrackedToolCall, args: string, controller: TransformStreamDefaultController<Uint8Array>): void {
+    const deltaEvent = {
+      choices: [{
+        index: tc.choiceIndex,
+        delta: {
+          tool_calls: [{
+            index: tc.toolIndex,
+            id: tc.id,
+            type: tc.type || 'function',
+            function: {
+              name: tc.name,
+              arguments: args,
+            },
+          }],
+        },
+      }],
+    };
+    emitSseLine(JSON.stringify(deltaEvent), controller);
+  }
+
   function flushTrackedCalls(controller: TransformStreamDefaultController<Uint8Array>): void {
-    for (const tc of trackedCalls.values()) {
-      if (!tc.arguments) continue;
+    const calls = [...trackedCalls.values()].sort((a, b) => (
+      a.choiceIndex - b.choiceIndex || a.toolIndex - b.toolIndex
+    ));
+
+    for (const tc of calls) {
+      const rawArgs = tc.arguments || '{}';
 
       try {
-        const parsed = JSON.parse(tc.arguments);
+        const parsed = JSON.parse(rawArgs);
         captureMetadataFromInput(tc.id, tc.name, parsed);
         delete parsed._intent;
         delete parsed._displayName;
-        const cleanArgs = JSON.stringify(parsed);
-
-        // Re-emit as a single argument delta with the clean JSON
-        const deltaEvent = {
-          choices: [{
-            index: tc.choiceIndex,
-            delta: {
-              tool_calls: [{
-                index: tc.toolIndex,
-                function: { arguments: cleanArgs },
-              }],
-            },
-          }],
-        };
-        emitSseLine(JSON.stringify(deltaEvent), controller);
+        emitTrackedCall(tc, JSON.stringify(parsed), controller);
       } catch {
         debugLog(`[OpenAI SSE] Failed to parse arguments for ${tc.name} (${tc.id}), passing through`);
-        // Emit original buffered arguments on parse failure
-        const deltaEvent = {
-          choices: [{
-            index: tc.choiceIndex,
-            delta: {
-              tool_calls: [{
-                index: tc.toolIndex,
-                function: { arguments: tc.arguments },
-              }],
-            },
-          }],
-        };
-        emitSseLine(JSON.stringify(deltaEvent), controller);
+        emitTrackedCall(tc, tc.arguments, controller);
       }
     }
     trackedCalls.clear();
@@ -851,7 +850,7 @@ export function createOpenAiSseStrippingStream(): TransformStream<Uint8Array, Ui
 
     let handledToolCalls = false;
 
-    // Buffer tool_call argument deltas (across all choices)
+    // Buffer tool_call deltas (across all choices) and replay complete calls on finish.
     for (const choice of choices) {
       if (!choice?.delta?.tool_calls) continue;
       handledToolCalls = true;
@@ -860,50 +859,26 @@ export function createOpenAiSseStrippingStream(): TransformStream<Uint8Array, Ui
       for (const tc of choice.delta.tool_calls) {
         const toolIndex = tc.index ?? 0;
         const key = `${choiceIndex}:${toolIndex}`;
+        let tracked = trackedCalls.get(key);
 
-        if (tc.id) {
-          // First chunk for a tool call — has id, name, maybe initial args
-          trackedCalls.set(key, {
-            id: tc.id,
-            name: tc.function?.name || 'unknown',
+        if (!tracked) {
+          tracked = {
+            id: '',
+            name: '',
+            type: 'function',
             choiceIndex,
             toolIndex,
-            arguments: tc.function?.arguments || '',
-          });
-          bufferingToolCalls = true;
-
-          // Emit the initial tool_call event WITHOUT arguments (preserves id/name/type)
-          const initEvent = {
-            ...data,
-            choices: [{
-              ...choice,
-              delta: {
-                ...choice.delta,
-                tool_calls: [{
-                  ...tc,
-                  function: {
-                    name: tc.function?.name,
-                    // Omit arguments from initial event — we'll emit clean args on flush
-                    arguments: '',
-                  },
-                }],
-              },
-            }],
+            arguments: '',
           };
-          emitSseLine(JSON.stringify(initEvent), controller);
-        } else {
-          // Subsequent argument delta — buffer and suppress
-          const existing = trackedCalls.get(key);
-          if (existing && tc.function?.arguments) {
-            existing.arguments += tc.function.arguments;
-          }
+          trackedCalls.set(key, tracked);
         }
-      }
-    }
 
-    // Suppress original tool_call delta payloads (we re-emit cleaned payloads later)
-    if (handledToolCalls) {
-      return;
+        if (tc.id) tracked.id = tc.id;
+        if (tc.type) tracked.type = tc.type;
+        if (tc.function?.name) tracked.name = tc.function.name;
+        if (tc.function?.arguments) tracked.arguments += tc.function.arguments;
+        bufferingToolCalls = true;
+      }
     }
 
     // On finish, flush buffered tool calls with clean args BEFORE emitting finish event
@@ -912,7 +887,22 @@ export function createOpenAiSseStrippingStream(): TransformStream<Uint8Array, Ui
       if (bufferingToolCalls) {
         flushTrackedCalls(controller);
       }
-      emitSseLine(dataStr, controller);
+      const finishEvent = handledToolCalls
+        ? {
+          ...data,
+          choices: choices.map(choice => {
+            if (!choice?.delta?.tool_calls) return choice;
+            const { tool_calls: _toolCalls, ...delta } = choice.delta;
+            return { ...choice, delta };
+          }),
+        }
+        : data;
+      emitSseLine(JSON.stringify(finishEvent), controller);
+      return;
+    }
+
+    // Suppress original tool_call delta payloads (we re-emit cleaned payloads later)
+    if (handledToolCalls) {
       return;
     }
 

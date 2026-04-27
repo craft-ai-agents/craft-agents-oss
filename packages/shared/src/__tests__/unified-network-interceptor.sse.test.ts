@@ -12,6 +12,15 @@ let stripMetadataFieldsFromRawJson: typeof import('../unified-network-intercepto
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
+function parseSseData(output: string): unknown[] {
+  return output
+    .split('\n')
+    .filter(line => line.startsWith('data: '))
+    .map(line => line.slice(6))
+    .filter(data => data !== '[DONE]')
+    .map(data => JSON.parse(data));
+}
+
 async function runThroughProcessor(
   processor: TransformStream<Uint8Array, Uint8Array>,
   chunks: string[],
@@ -81,6 +90,142 @@ describe('unified-network-interceptor SSE processors', () => {
     expect(toolMetadataStore.get('call_2', sessionDir)?.displayName).toBe('Display 2');
 
     rmSync(sessionDir, { recursive: true, force: true });
+  });
+
+  it('OpenAI: replays complete multi-tool calls when init chunks precede argument chunks', async () => {
+    const sse = [
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_ls","type":"function","function":{"name":"ls","arguments":""}},{"index":1,"id":"call_find","type":"function","function":{"name":"find","arguments":""}}]}}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"path\\":\\".\\",\\"_intent\\":\\"list files\\""}},{"index":1,"function":{"arguments":"{\\"path\\":\\".\\",\\"pattern\\":\\"*.txt\\""}}]}}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":",\\"_displayName\\":\\"List Files\\"}"}},{"index":1,"function":{"arguments":",\\"_intent\\":\\"find text\\",\\"_displayName\\":\\"Find Text\\"}"}}]}}]}\n\n',
+      'data: {"choices":[{"index":0,"finish_reason":"tool_calls"}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const out = await runThroughProcessor(createOpenAiSseStrippingStream(), sse);
+    const events = parseSseData(out) as Array<{
+      choices: Array<{
+        delta?: {
+          tool_calls?: Array<{
+            index: number;
+            id: string;
+            type: string;
+            function: { name: string; arguments: string };
+          }>;
+        };
+        finish_reason?: string;
+      }>;
+    }>;
+    const toolCalls = events.flatMap(event => event.choices.flatMap(choice => choice.delta?.tool_calls ?? []));
+
+    expect(toolCalls).toHaveLength(2);
+    expect(toolCalls[0]).toEqual({
+      index: 0,
+      id: 'call_ls',
+      type: 'function',
+      function: { name: 'ls', arguments: '{"path":"."}' },
+    });
+    expect(toolCalls[1]).toEqual({
+      index: 1,
+      id: 'call_find',
+      type: 'function',
+      function: { name: 'find', arguments: '{"path":".","pattern":"*.txt"}' },
+    });
+    expect(out).not.toContain('_intent');
+    expect(out).not.toContain('_displayName');
+    expect(out).not.toContain('"id":""');
+    expect(out).not.toContain('"name":""');
+    expect(events.at(-1)?.choices[0]?.finish_reason).toBe('tool_calls');
+
+    expect(toolMetadataStore.get('call_ls', sessionDir)?.displayName).toBe('List Files');
+    expect(toolMetadataStore.get('call_find', sessionDir)?.intent).toBe('find text');
+  });
+
+  it('OpenAI: strips original tool_calls from finish events after replaying complete calls', async () => {
+    const sse = [
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_finish","type":"function","function":{"name":"finishTool","arguments":"{\\"ok\\":true,\\"_intent\\":\\"finish\\"}"}}]},"finish_reason":"tool_calls"}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const out = await runThroughProcessor(createOpenAiSseStrippingStream(), sse);
+    const events = parseSseData(out) as Array<{
+      choices: Array<{
+        delta?: {
+          tool_calls?: Array<{
+            id: string;
+            function: { name: string; arguments: string };
+          }>;
+        };
+        finish_reason?: string;
+      }>;
+    }>;
+    const toolCalls = events.flatMap(event => event.choices.flatMap(choice => choice.delta?.tool_calls ?? []));
+
+    expect(toolCalls).toHaveLength(1);
+    expect(toolCalls[0]?.id).toBe('call_finish');
+    expect(toolCalls[0]?.function.arguments).toBe('{"ok":true}');
+    expect(events.at(-1)?.choices[0]?.finish_reason).toBe('tool_calls');
+    expect(events.at(-1)?.choices[0]?.delta?.tool_calls).toBeUndefined();
+    expect(out).not.toContain('_intent');
+  });
+
+  it('OpenAI: flushes pending complete tool calls before DONE without finish_reason', async () => {
+    const sse = [
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_done","type":"function","function":{"name":"toolDone","arguments":"{\\"ok\\":true,\\"_intent\\":\\"done\\"}"}}]}}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const out = await runThroughProcessor(createOpenAiSseStrippingStream(), sse);
+    const events = parseSseData(out) as Array<{
+      choices: Array<{
+        delta?: {
+          tool_calls?: Array<{
+            id: string;
+            function: { name: string; arguments: string };
+          }>;
+        };
+      }>;
+    }>;
+    expect(events[0]).toBeDefined();
+    expect(events[0]?.choices[0]).toBeDefined();
+    const toolCall = events[0]?.choices[0]?.delta?.tool_calls?.[0];
+
+    expect(toolCall?.id).toBe('call_done');
+    expect(toolCall?.function.name).toBe('toolDone');
+    expect(toolCall?.function.arguments).toBe('{"ok":true}');
+    expect(out.trim().endsWith('data: [DONE]')).toBe(true);
+    expect(toolMetadataStore.get('call_done', sessionDir)?.intent).toBe('done');
+  });
+
+  it('OpenAI: preserves complete tool-call identity when JSON parsing fails', async () => {
+    const sse = [
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_bad","type":"function","function":{"name":"badTool","arguments":"{\\"path\\":"}}]}}]}\n\n',
+      'data: {"choices":[{"index":0,"finish_reason":"tool_calls"}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const out = await runThroughProcessor(createOpenAiSseStrippingStream(), sse);
+    const events = parseSseData(out) as Array<{
+      choices: Array<{
+        delta?: {
+          tool_calls?: Array<{
+            index: number;
+            id: string;
+            type: string;
+            function: { name: string; arguments: string };
+          }>;
+        };
+      }>;
+    }>;
+    expect(events[0]).toBeDefined();
+    expect(events[0]?.choices[0]).toBeDefined();
+    const toolCall = events[0]?.choices[0]?.delta?.tool_calls?.[0];
+
+    expect(toolCall).toEqual({
+      index: 0,
+      id: 'call_bad',
+      type: 'function',
+      function: { name: 'badTool', arguments: '{"path":' },
+    });
   });
 
   it('OpenAI: processes tool calls for multiple choices', async () => {
