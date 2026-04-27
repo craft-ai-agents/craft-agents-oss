@@ -119,6 +119,7 @@ interface SessionRuntimeHooks {
   onSessionStopped: (sessionId: string) => void
   onSessionCompleted?: (reason: 'complete' | 'interrupted' | 'error' | 'timeout', sessionId: string) => void
   onAutomationEvent?: (event: string, sessionId?: string) => void
+  onSessionDeleted?: (sessionId: string) => void
 }
 
 const defaultSessionRuntimeHooks: SessionRuntimeHooks = {
@@ -4826,6 +4827,12 @@ export class SessionManager implements ISessionManager {
       managed.poolServer.stop().catch(err => {
         sessionLog.warn(`Failed to stop pool server for ${sessionId}: ${err instanceof Error ? err.message : err}`)
       })
+    }
+
+    // Fire onSessionDeleted hook before removing session from the map
+    // (so the hook can still access session metadata like soundPack)
+    if (sessionRuntimeHooks.onSessionDeleted) {
+      sessionRuntimeHooks.onSessionDeleted(sessionId)
     }
 
     this.sessions.delete(sessionId)

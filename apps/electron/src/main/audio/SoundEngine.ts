@@ -369,6 +369,11 @@ export class SoundEngine {
     else this.sessionPacks.delete(sessionId)
   }
 
+  /** Remove all session-specific state (call after session is deleted). */
+  removeSession(sessionId: string): void {
+    this.sessionPacks.delete(sessionId)
+  }
+
   private getActivePack(sessionId?: string): SoundPack | undefined {
     // 0. Explicit "no sounds" sentinel — skip all playback for this session
     if (sessionId) {

@@ -647,6 +647,14 @@ app.whenReady().then(async () => {
                 getEngine().then(engine => engine.play('task.error', sessionId)).catch(() => {})
               }
             },
+            onSessionDeleted: (sessionId) => {
+              // Play session.end sound when a session is deleted
+              getEngine().then(engine => {
+                engine.play('session.end', sessionId).catch(() => {})
+                // Clean up session pack state after sound fires
+                engine.removeSession(sessionId)
+              }).catch(() => {})
+            },
             captureException: (error, context) => {
               Sentry.captureException(error instanceof Error ? error : new Error(String(error)), {
                 tags: {
