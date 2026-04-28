@@ -213,6 +213,7 @@
   "chat.renameSession": "セッション名を変更",
   "chat.scrollUpForEarlier": "上にスクロールして以前のメッセージを表示 (あと {{count}} 件)",
   "chat.selectedText": "選択テキスト",
+  "chat.sentBadge": "送信済み",
   "chat.session": "セッション",
   "chat.sessionFiles": "セッションファイル",
   "chat.sessionFilesEmpty": "このチャットで添付または作成されたファイルがここに表示されます。",

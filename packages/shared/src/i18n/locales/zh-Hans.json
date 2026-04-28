@@ -213,6 +213,7 @@
   "chat.renameSession": "重命名会话",
   "chat.scrollUpForEarlier": "向上滚动查看更早的消息 (还有 {{count}} 条)",
   "chat.selectedText": "选中文本",
+  "chat.sentBadge": "已发送",
   "chat.session": "会话",
   "chat.sessionFiles": "会话文件",
   "chat.sessionFilesEmpty": "此聊天中附加或创建的文件将显示在这里。",

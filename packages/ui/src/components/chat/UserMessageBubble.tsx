@@ -11,8 +11,8 @@
  * - Pending/queued states (Electron only)
  */
 
-import type { ReactNode } from 'react'
-import { Clock } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Check, Clock } from 'lucide-react'
 import type { StoredAttachment, ContentBadge } from '@craft-agent/core'
 import { normalizePath } from '@craft-agent/core/utils'
 import { cn } from '../../lib/utils'
@@ -323,6 +323,9 @@ export interface UserMessageBubbleProps {
   compactMode?: boolean
 }
 
+/** How long to show the "Sent" transition before the chip clears entirely. */
+const SENT_BADGE_LINGER_MS = 1500
+
 export function UserMessageBubble({
   content,
   className,
@@ -336,6 +339,24 @@ export function UserMessageBubble({
 }: UserMessageBubbleProps) {
   const { t } = useTranslation()
   const hasAttachments = attachments && attachments.length > 0
+
+  // Queued → Sent → cleared transition. When `isQueued` flips from true to
+  // false (agent has picked up / accepted the message), show "Sent" briefly
+  // so users see the state change instead of the chip just disappearing.
+  // Local-only state — the underlying message field is `isQueued` only;
+  // the "Sent" affordance is a transient UI flourish, not persisted state.
+  const wasQueuedRef = useRef(isQueued ?? false)
+  const [showSentBadge, setShowSentBadge] = useState(false)
+
+  useEffect(() => {
+    const wasQueued = wasQueuedRef.current
+    wasQueuedRef.current = isQueued ?? false
+    if (wasQueued && !isQueued) {
+      setShowSentBadge(true)
+      const timer = setTimeout(() => setShowSentBadge(false), SENT_BADGE_LINGER_MS)
+      return () => clearTimeout(timer)
+    }
+  }, [isQueued])
 
   // Separate edit_request badges (rendered above bubble) from other badges (rendered inline)
   const editRequestBadges = badges?.filter(isEditRequestBadge) ?? []
@@ -438,14 +459,20 @@ export function UserMessageBubble({
           isPending && "animate-shimmer"
         )}
       >
-        {isQueued && (
+        {(isQueued || showSentBadge) && (
           <div
             className="flex items-center gap-1.5 text-foreground/55 mb-1.5"
             role="status"
             aria-live="polite"
           >
-            <Clock className="h-3 w-3 animate-pulse" aria-hidden="true" />
-            <span className="text-[11px] italic">{t('chat.queuedBadge')}</span>
+            {isQueued ? (
+              <Clock className="h-3 w-3 animate-pulse" aria-hidden="true" />
+            ) : (
+              <Check className="h-3 w-3" aria-hidden="true" />
+            )}
+            <span className="text-[11px] italic">
+              {isQueued ? t('chat.queuedBadge') : t('chat.sentBadge')}
+            </span>
           </div>
         )}
         {hasInlineBadges

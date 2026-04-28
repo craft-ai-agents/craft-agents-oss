@@ -213,6 +213,7 @@
   "chat.renameSession": "Sitzung umbenennen",
   "chat.scrollUpForEarlier": "Nach oben scrollen für ältere Nachrichten ({{count}} weitere)",
   "chat.selectedText": "Ausgewählter Text",
+  "chat.sentBadge": "Gesendet",
   "chat.session": "Sitzung",
   "chat.sessionFiles": "Sitzungsdateien",
   "chat.sessionFilesEmpty": "Dateien, die in diesem Chat angehängt oder erstellt werden, erscheinen hier.",

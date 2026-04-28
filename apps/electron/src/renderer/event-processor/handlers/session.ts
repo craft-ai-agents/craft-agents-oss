@@ -542,21 +542,16 @@ export function handleUserMessage(
     //
     // - 'queued'     → isQueued = true  (Claude path: backend queued for re-send)
     // - 'processing' → isQueued = false (queued message is now actually running)
-    // - 'accepted'   → isQueued = preserve from optimistic state (Pi steer path:
-    //   the backend just acknowledges receipt; the optimistic message already
-    //   knows whether this was a mid-stream send and we keep that flag visible
-    //   until the current turn ends or the message gets picked up).
+    // - 'accepted'   → isQueued = false (Pi steer path: agent has the message;
+    //                                    triggers the bubble's Queued→Sent
+    //                                    transient indicator)
     updatedMessages = session.messages.map((m, i) => {
       if (i === existingIndex) {
-        const nextIsQueued =
-          status === 'queued' ? true
-          : status === 'processing' ? false
-          : (existingMessage.isQueued ?? false)
         return {
           ...m,
           id: message.id,  // Use backend's ID as canonical
           isPending: false,
-          isQueued: nextIsQueued,
+          isQueued: status === 'queued',
         }
       }
       return m

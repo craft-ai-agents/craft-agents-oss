@@ -213,6 +213,7 @@
   "chat.renameSession": "Rename Session",
   "chat.scrollUpForEarlier": "Scroll up for earlier messages ({{count}} more)",
   "chat.selectedText": "Selected text",
+  "chat.sentBadge": "Sent",
   "chat.session": "Session",
   "chat.sessionFiles": "Session Files",
   "chat.sessionFilesEmpty": "Files attached or created by this chat will appear here.",

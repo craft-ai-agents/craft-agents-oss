@@ -213,6 +213,7 @@
   "chat.renameSession": "Renombrar sesión",
   "chat.scrollUpForEarlier": "Sube para ver mensajes anteriores ({{count}} más)",
   "chat.selectedText": "Texto seleccionado",
+  "chat.sentBadge": "Enviado",
   "chat.session": "Sesión",
   "chat.sessionFiles": "Archivos de sesión",
   "chat.sessionFilesEmpty": "Los archivos adjuntados o creados en este chat aparecerán aquí.",

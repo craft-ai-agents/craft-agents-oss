@@ -213,6 +213,7 @@
   "chat.renameSession": "Zmień nazwę sesji",
   "chat.scrollUpForEarlier": "Przewiń w górę, aby zobaczyć wcześniejsze wiadomości (jeszcze {{count}})",
   "chat.selectedText": "Zaznaczony tekst",
+  "chat.sentBadge": "Wysłano",
   "chat.session": "Sesja",
   "chat.sessionFiles": "Pliki sesji",
   "chat.sessionFilesEmpty": "Pliki załączone lub utworzone w tym czacie pojawią się tutaj.",
