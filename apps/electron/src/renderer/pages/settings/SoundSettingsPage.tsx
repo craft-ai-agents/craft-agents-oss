@@ -83,6 +83,7 @@ export default function SoundSettingsPage() {
   const [packs, setPacks] = useState<PackInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [browseDialogOpen, setBrowseDialogOpen] = useState(false)
+  const previewIndexRef = React.useRef<Map<string, number>>(new Map())
 
   // Load settings and packs on mount
   useEffect(() => {
@@ -278,7 +279,7 @@ export default function SoundSettingsPage() {
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => {
-                              window.electronAPI.previewSoundPack(pack.name)
+                              (() => { const idx = previewIndexRef.current.get(pack.name) ?? 0; window.electronAPI.previewSoundPack(pack.name, idx).then(r => { if (r.totalSounds) previewIndexRef.current.set(pack.name, (idx + 1) % r.totalSounds) }) })()
                             }}
                             className="text-xs px-2 py-1 rounded bg-muted hover:bg-muted/80"
                           >
