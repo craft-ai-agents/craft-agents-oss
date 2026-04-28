@@ -221,24 +221,28 @@ Send a prompt to Craft Agent, creating a new session. Only works with App events
 | `prompt` | string | Required | Prompt text to send |
 | `llmConnection` | string | Workspace default | LLM connection slug (configured in AI Settings) |
 | `model` | string | Workspace default | Model ID for the created session |
+| `thinkingLevel` | `"off"` \| `"low"` \| `"medium"` \| `"high"` \| `"xhigh"` \| `"max"` | Workspace default | Thinking level for the spawned session |
 
 **Features:**
 - Use `@mentions` to reference sources or skills (e.g., `@github`, `@linear`)
 - Environment variables are expanded (e.g., `$CRAFT_LABEL`, `${CRAFT_SESSION_NAME}`)
 - Mentioned sources are automatically activated for the new session
 
-**LLM Connection & Model:** You can specify which AI provider and model to use for the session created by a prompt action. If omitted, the workspace default connection and model are used.
+**Per-Action Overrides:** You can override the AI provider, model, and thinking level for the session created by a prompt action. Each field is independent — omit any of them to inherit the workspace default.
 
 ```json
 {
   "type": "prompt",
   "prompt": "Quick code review of recent changes",
   "llmConnection": "my-copilot-connection",
-  "model": "gemini-2.5-flash"
+  "model": "gemini-2.5-flash",
+  "thinkingLevel": "high"
 }
 ```
 
 The `llmConnection` value is the slug of an LLM connection configured in AI Settings. The `model` value is a model ID supported by the provider. If either is invalid or not found, it gracefully falls back to the workspace default.
+
+**Thinking level resolution:** `thinkingLevel` on the action takes precedence; if omitted, the workspace default applies; if neither is set, sessions default to `"medium"`. The legacy `"think"` value from older configs is silently migrated to `"medium"`. Backends gracefully cap unsupported values (e.g. Anthropic auto-degrades `xhigh` → `high` on models that don't support it; Pi caps `max` at `xhigh`).
 
 ## Matchers
 
@@ -722,9 +726,9 @@ Run different automations at different times, and disable some without deleting:
 
 The second automation (Friday summary) is disabled and won't run until `"enabled"` is set to `true` or removed.
 
-### Prompt with Specific LLM Connection
+### Prompt with Custom Connection, Model, and Thinking Level
 
-Use a different AI provider for a specific automation:
+Override provider, model, and thinking level for a specific automation:
 
 ```json
 {
@@ -740,7 +744,8 @@ Use a different AI provider for a specific automation:
             "type": "prompt",
             "prompt": "Review overnight @github pull requests",
             "llmConnection": "openrouter",
-            "model": "anthropic/claude-sonnet-4.6"
+            "model": "anthropic/claude-sonnet-4.6",
+            "thinkingLevel": "high"
           }
         ]
       }
@@ -770,6 +775,7 @@ The validator checks for:
 - Condition nesting depth exceeding limits
 - Missing `llmConnection` slugs (error — will fail at runtime)
 - Model/provider mismatches when both `llmConnection` and `model` are specified (warning)
+- Invalid `thinkingLevel` values (legacy `"think"` is silently migrated to `"medium"`)
 
 ## Security
 
