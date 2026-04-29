@@ -539,10 +539,10 @@ export interface AgentEventUsage {
  * turnId: Correlation ID from the API's message.id, groups all events in an assistant turn
  */
 export type AgentEvent =
-  | { type: 'status'; message: string }
-  | { type: 'info'; message: string }
+  | { type: 'status'; message: string; format?: 'plain' | 'html' }
+  | { type: 'info'; message: string; format?: 'plain' | 'html' }
   | { type: 'text_delta'; text: string; turnId?: string; parentToolUseId?: string }
-  | { type: 'text_complete'; text: string; isIntermediate?: boolean; turnId?: string; parentToolUseId?: string; sdkTurnAnchor?: string }
+  | { type: 'text_complete'; text: string; format?: 'plain' | 'html'; isIntermediate?: boolean; turnId?: string; parentToolUseId?: string; sdkTurnAnchor?: string }
   | { type: 'tool_start'; toolName: string; toolUseId: string; input: Record<string, unknown>; intent?: string; displayName?: string; turnId?: string; parentToolUseId?: string; toolDisplayMeta?: ToolDisplayMeta }
   | { type: 'tool_result'; toolUseId: string; toolName?: string; result: string; isError: boolean; input?: Record<string, unknown>; turnId?: string; parentToolUseId?: string }
   | {
@@ -560,7 +560,7 @@ export type AgentEvent =
       commandHash?: string;
       approvalTtlSeconds?: number;
     }
-  | { type: 'error'; message: string }
+  | { type: 'error'; message: string; format?: 'plain' | 'html' }
   | { type: 'typed_error'; error: TypedError }
   | { type: 'complete'; usage?: AgentEventUsage }
   | { type: 'working_directory_changed'; workingDirectory: string }

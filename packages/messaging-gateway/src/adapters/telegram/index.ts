@@ -19,8 +19,9 @@ import type {
   InlineButton,
   ButtonPress,
   MessagingLogger,
+  OutboundTextOptions,
 } from '../../types'
-import { formatForTelegram, TELEGRAM_PARSE_MODE } from './format'
+import { prepareTelegramText } from './format'
 
 /**
  * Hard cap for downloaded attachment size. Matches `MAX_FILE_SIZE` in
@@ -501,12 +502,14 @@ export class TelegramAdapter implements PlatformAdapter {
     this.buttonHandler = handler
   }
 
-  async sendText(channelId: string, text: string): Promise<SentMessage> {
+  async sendText(channelId: string, text: string, options?: OutboundTextOptions): Promise<SentMessage> {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
-    const formatted = formatForTelegram(text)
-    const sent = await this.bot.api.sendMessage(Number(channelId), formatted, {
-      parse_mode: TELEGRAM_PARSE_MODE,
-    })
+    const payload = prepareTelegramText(text, options)
+    const sent = payload.parseMode
+      ? await this.bot.api.sendMessage(Number(channelId), payload.text, {
+        parse_mode: payload.parseMode,
+      })
+      : await this.bot.api.sendMessage(Number(channelId), payload.text)
     return {
       platform: 'telegram',
       channelId,
@@ -514,18 +517,22 @@ export class TelegramAdapter implements PlatformAdapter {
     }
   }
 
-  async editMessage(channelId: string, messageId: string, text: string): Promise<void> {
+  async editMessage(channelId: string, messageId: string, text: string, options?: OutboundTextOptions): Promise<void> {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
-    const formatted = formatForTelegram(text)
-    await this.bot.api.editMessageText(Number(channelId), Number(messageId), formatted, {
-      parse_mode: TELEGRAM_PARSE_MODE,
-    })
+    const payload = prepareTelegramText(text, options)
+    if (payload.parseMode) {
+      await this.bot.api.editMessageText(Number(channelId), Number(messageId), payload.text, {
+        parse_mode: payload.parseMode,
+      })
+      return
+    }
+    await this.bot.api.editMessageText(Number(channelId), Number(messageId), payload.text)
   }
 
-  async sendButtons(channelId: string, text: string, buttons: InlineButton[]): Promise<SentMessage> {
+  async sendButtons(channelId: string, text: string, buttons: InlineButton[], options?: OutboundTextOptions): Promise<SentMessage> {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
 
-    const formatted = formatForTelegram(text)
+    const payload = prepareTelegramText(text, options)
     const keyboard = {
       inline_keyboard: buttons.map((b) => [{
         text: b.label,
@@ -533,8 +540,8 @@ export class TelegramAdapter implements PlatformAdapter {
       }]),
     }
 
-    const sent = await this.bot.api.sendMessage(Number(channelId), formatted, {
-      parse_mode: TELEGRAM_PARSE_MODE,
+    const sent = await this.bot.api.sendMessage(Number(channelId), payload.text, {
+      ...(payload.parseMode ? { parse_mode: payload.parseMode } : {}),
       reply_markup: keyboard,
     })
 
@@ -550,14 +557,15 @@ export class TelegramAdapter implements PlatformAdapter {
     await this.bot.api.sendChatAction(Number(channelId), 'typing').catch(() => {})
   }
 
-  async sendFile(channelId: string, file: Buffer, filename: string, caption?: string): Promise<SentMessage> {
+  async sendFile(channelId: string, file: Buffer, filename: string, caption?: string, captionOptions?: OutboundTextOptions): Promise<SentMessage> {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
 
     const inputFile = new InputFile(file, filename)
-    const sent = await this.bot.api.sendDocument(Number(channelId), inputFile, caption
+    const captionPayload = caption ? prepareTelegramText(caption, captionOptions) : undefined
+    const sent = await this.bot.api.sendDocument(Number(channelId), inputFile, captionPayload
       ? {
-        caption: formatForTelegram(caption),
-        parse_mode: TELEGRAM_PARSE_MODE,
+        caption: captionPayload.text,
+        ...(captionPayload.parseMode ? { parse_mode: captionPayload.parseMode } : {}),
       }
       : undefined)
 

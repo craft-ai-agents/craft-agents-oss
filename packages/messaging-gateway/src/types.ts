@@ -113,6 +113,12 @@ export interface SentMessage {
   messageId: string
 }
 
+export type OutboundTextFormat = 'plain' | 'html'
+
+export interface OutboundTextOptions {
+  format?: OutboundTextFormat
+}
+
 export interface InlineButton {
   id: string
   label: string
@@ -152,11 +158,11 @@ export interface PlatformAdapter {
   onMessage(handler: (msg: IncomingMessage) => Promise<void>): void
   onButtonPress(handler: (press: ButtonPress) => Promise<void>): void
 
-  sendText(channelId: string, text: string): Promise<SentMessage>
-  editMessage(channelId: string, messageId: string, text: string): Promise<void>
-  sendButtons(channelId: string, text: string, buttons: InlineButton[]): Promise<SentMessage>
+  sendText(channelId: string, text: string, options?: OutboundTextOptions): Promise<SentMessage>
+  editMessage(channelId: string, messageId: string, text: string, options?: OutboundTextOptions): Promise<void>
+  sendButtons(channelId: string, text: string, buttons: InlineButton[], options?: OutboundTextOptions): Promise<SentMessage>
   sendTyping(channelId: string): Promise<void>
-  sendFile(channelId: string, file: Buffer, filename: string, caption?: string): Promise<SentMessage>
+  sendFile(channelId: string, file: Buffer, filename: string, caption?: string, captionOptions?: OutboundTextOptions): Promise<SentMessage>
 
   /**
    * Clear the inline keyboard on a previously-sent message. Optional because

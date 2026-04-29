@@ -8,7 +8,7 @@ function makeAdapterWithApi(api: Record<string, (...args: unknown[]) => Promise<
 }
 
 describe('TelegramAdapter outbound formatting', () => {
-  it('sendText formats content and passes HTML parse_mode', async () => {
+  it('sendText keeps plain text plain by default', async () => {
     const calls: unknown[][] = []
     const adapter = makeAdapterWithApi({
       sendMessage: async (...args) => {
@@ -17,13 +17,27 @@ describe('TelegramAdapter outbound formatting', () => {
       },
     })
 
-    const sent = await adapter.sendText('123', '**bold**')
+    const sent = await adapter.sendText('123', '<b>bold</b>')
 
-    expect(calls).toEqual([[123, '<b>bold</b>', { parse_mode: 'HTML' }]])
+    expect(calls).toEqual([[123, '<b>bold</b>']])
     expect(sent).toEqual({ platform: 'telegram', channelId: '123', messageId: '42' })
   })
 
-  it('editMessage formats content and passes HTML parse_mode', async () => {
+  it('sendText uses parse_mode HTML only when explicitly requested', async () => {
+    const calls: unknown[][] = []
+    const adapter = makeAdapterWithApi({
+      sendMessage: async (...args) => {
+        calls.push(args)
+        return { message_id: 43 }
+      },
+    })
+
+    await adapter.sendText('123', '<b>bold</b>', { format: 'html' })
+
+    expect(calls).toEqual([[123, '<b>bold</b>', { parse_mode: 'HTML' }]])
+  })
+
+  it('editMessage forwards explicit HTML format', async () => {
     const calls: unknown[][] = []
     const adapter = makeAdapterWithApi({
       editMessageText: async (...args) => {
@@ -31,12 +45,12 @@ describe('TelegramAdapter outbound formatting', () => {
       },
     })
 
-    await adapter.editMessage('123', '77', '*italic*')
+    await adapter.editMessage('123', '77', '<i>italic</i>', { format: 'html' })
 
     expect(calls).toEqual([[123, 77, '<i>italic</i>', { parse_mode: 'HTML' }]])
   })
 
-  it('sendButtons formats content and keeps the inline keyboard', async () => {
+  it('sendButtons preserves inline keyboard and optional HTML format', async () => {
     const calls: unknown[][] = []
     const adapter = makeAdapterWithApi({
       sendMessage: async (...args) => {
@@ -45,7 +59,7 @@ describe('TelegramAdapter outbound formatting', () => {
       },
     })
 
-    await adapter.sendButtons('123', '# Plan', [{ id: 'accept', label: 'Accept' }])
+    await adapter.sendButtons('123', '<b>Plan</b>', [{ id: 'accept', label: 'Accept' }], { format: 'html' })
 
     expect(calls).toEqual([[
       123,
@@ -59,7 +73,7 @@ describe('TelegramAdapter outbound formatting', () => {
     ]])
   })
 
-  it('sendFile formats caption and passes HTML parse_mode', async () => {
+  it('sendFile keeps captions plain by default and formats explicitly when requested', async () => {
     const calls: unknown[][] = []
     const adapter = makeAdapterWithApi({
       sendDocument: async (...args) => {
@@ -68,12 +82,13 @@ describe('TelegramAdapter outbound formatting', () => {
       },
     })
 
-    await adapter.sendFile('123', Buffer.from('hello'), 'note.txt', '**caption**')
+    await adapter.sendFile('123', Buffer.from('hello'), 'note.txt', '<b>plain</b>')
+    await adapter.sendFile('123', Buffer.from('hello'), 'note.txt', '<b>html</b>', { format: 'html' })
 
-    expect(calls).toHaveLength(1)
-    expect(calls[0]?.[0]).toBe(123)
-    expect(calls[0]?.[2]).toEqual({
-      caption: '<b>caption</b>',
+    expect(calls).toHaveLength(2)
+    expect(calls[0]?.[2]).toEqual({ caption: '<b>plain</b>' })
+    expect(calls[1]?.[2]).toEqual({
+      caption: '<b>html</b>',
       parse_mode: 'HTML',
     })
   })

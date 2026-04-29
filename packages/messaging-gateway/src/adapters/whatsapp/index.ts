@@ -33,6 +33,7 @@ import type {
   InlineButton,
   ButtonPress,
   MessagingLogger,
+  OutboundTextOptions,
 } from '../../types'
 
 const NOOP_LOGGER: MessagingLogger = {
@@ -274,7 +275,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
     this.sendCommand({ type: 'submit_pairing_phone', phoneNumber })
   }
 
-  async sendText(channelId: string, text: string): Promise<SentMessage> {
+  async sendText(channelId: string, text: string, _options?: OutboundTextOptions): Promise<SentMessage> {
     const id = String(this.nextCmdId++)
     const result = await this.sendWithResult({ id, type: 'send_text', channelId, text })
     if (!result.ok) throw new Error(result.error ?? 'Send failed')
@@ -285,7 +286,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
     }
   }
 
-  async editMessage(_channelId: string, _messageId: string, _text: string): Promise<void> {
+  async editMessage(_channelId: string, _messageId: string, _text: string, _options?: OutboundTextOptions): Promise<void> {
     throw new Error('WhatsApp edit not supported in this adapter')
   }
 
@@ -293,6 +294,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
     channelId: string,
     text: string,
     buttons: InlineButton[],
+    _options?: OutboundTextOptions,
   ): Promise<SentMessage> {
     const numbered = buttons
       .map((b, i) => `${i + 1}. ${b.label}`)
@@ -311,6 +313,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
     file: Buffer,
     filename: string,
     caption?: string,
+    _captionOptions?: OutboundTextOptions,
   ): Promise<SentMessage> {
     const id = String(this.nextCmdId++)
     const result = await this.sendWithResult({
