@@ -105,6 +105,7 @@ export class PromptHandler implements AutomationHandler {
           permissionMode,
           llmConnection: prompt.llmConnection,
           model: prompt.model,
+          thinkingLevel: prompt.thinkingLevel,
         });
       }
 

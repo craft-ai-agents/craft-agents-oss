@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { validateAutomationsConfig, validateAutomationsContent } from './validation.ts';
-import { AutomationsConfigSchema } from './schemas.ts';
+import { AutomationsConfigSchema, PromptActionSchema } from './schemas.ts';
 
 describe('validation', () => {
   describe('validateAutomationsConfig', () => {
@@ -80,6 +80,64 @@ describe('validation', () => {
       };
       const result = validateAutomationsConfig(config);
       expect(result.valid).toBe(true);
+    });
+
+    it('should accept thinkingLevel on prompt actions', () => {
+      const config = {
+        automations: {
+          LabelAdd: [{
+            matcher: 'review',
+            actions: [{ type: 'prompt', prompt: 'Audit changes', thinkingLevel: 'high' }],
+          }],
+        },
+      };
+      const result = validateAutomationsConfig(config);
+      expect(result.valid).toBe(true);
+      const action = result.config?.automations.LabelAdd?.[0]?.actions[0];
+      expect(action).toMatchObject({ thinkingLevel: 'high' });
+    });
+
+    it('PromptActionSchema rejects invalid thinkingLevel values', () => {
+      // ActionDefinitionSchema has a passthrough fallback that absorbs malformed
+      // actions (so old configs with unknown action types don't crash). To verify
+      // the schema's own contract for thinkingLevel, parse with PromptActionSchema
+      // directly — that's the strict path.
+      const result = PromptActionSchema.safeParse({
+        type: 'prompt', prompt: 'echo', thinkingLevel: 'extreme',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should migrate legacy thinkingLevel "think" to "medium"', () => {
+      // Mirrors the workspace-default migration in config/validators.ts so persisted
+      // 'think' values from old configs don't break automation parsing.
+      const config = {
+        automations: {
+          LabelAdd: [{
+            matcher: 'review',
+            actions: [{ type: 'prompt', prompt: 'echo', thinkingLevel: 'think' }],
+          }],
+        },
+      };
+      const result = validateAutomationsConfig(config);
+      expect(result.valid).toBe(true);
+      const action = result.config?.automations.LabelAdd?.[0]?.actions[0];
+      expect(action).toMatchObject({ thinkingLevel: 'medium' });
+    });
+
+    it('should accept prompt actions without thinkingLevel (backward compat)', () => {
+      const config = {
+        automations: {
+          LabelAdd: [{
+            matcher: 'review',
+            actions: [{ type: 'prompt', prompt: 'echo' }],
+          }],
+        },
+      };
+      const result = validateAutomationsConfig(config);
+      expect(result.valid).toBe(true);
+      const action = result.config?.automations.LabelAdd?.[0]?.actions[0];
+      expect(action).toEqual({ type: 'prompt', prompt: 'echo' });
     });
 
     it('should reject state conditions with no operator', () => {

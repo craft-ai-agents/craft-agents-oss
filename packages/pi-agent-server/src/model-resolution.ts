@@ -1,5 +1,9 @@
 import type { ModelRegistry as PiModelRegistry } from '@mariozechner/pi-coding-agent';
 
+// Re-export from shared so the auth-aware mini-model denylist has a single
+// source of truth (also used by `getMiniModel()` at selection time).
+export { isDeniedMiniModelId } from '../../shared/src/config/llm-connections.ts';
+
 // Re-export the PiModel type used by callers
 type PiModel<T = any> = ReturnType<PiModelRegistry['find']>;
 
@@ -66,24 +70,6 @@ export function resolvePiModel(
   }
 
   return undefined;
-}
-
-/**
- * Returns true when `modelId` must NOT be used as the mini/summarization model given
- * the current auth provider.
- *
- * - `codex-mini-latest` is always denied (Pi SDK rejects it outright).
- * - When `piAuthProvider === 'openai-codex'` (ChatGPT Plus/Pro OAuth or ChatGPT-JWT API key),
- *   all `*codex-mini*` variants (e.g. `gpt-5.1-codex-mini`) are denied — the ChatGPT
- *   backend refuses them with: "The '<model>' model is not supported when using Codex
- *   with a ChatGPT account." A regular OpenAI API key uses provider `'openai'`, which is
- *   unaffected.
- */
-export function isDeniedMiniModelId(modelId: string, piAuthProvider?: string): boolean {
-  const bare = modelId.startsWith('pi/') ? modelId.slice(3) : modelId;
-  if (bare === 'codex-mini-latest') return true;
-  if (piAuthProvider === 'openai-codex' && bare.includes('codex-mini')) return true;
-  return false;
 }
 
 /**

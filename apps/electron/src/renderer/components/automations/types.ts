@@ -12,6 +12,7 @@
 
 import { computeNextRuns } from './utils'
 import type { PermissionMode } from '../../../shared/types'
+import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { DEFAULT_WEBHOOK_METHOD } from './constants'
 
 // ============================================================================
@@ -59,6 +60,12 @@ export const AGENT_EVENTS: AgentEvent[] = [
 export interface PromptAction {
   type: 'prompt'
   prompt: string
+  /** LLM connection slug override for the spawned session */
+  llmConnection?: string
+  /** Model ID override for the spawned session */
+  model?: string
+  /** Thinking level override for the spawned session */
+  thinkingLevel?: ThinkingLevel
 }
 
 export interface WebhookAction {
@@ -359,7 +366,7 @@ interface AutomationsConfigFile {
 }
 
 type RawAction =
-  | { type: 'prompt'; prompt: string }
+  | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string; thinkingLevel?: ThinkingLevel }
   | { type: 'webhook'; url: string; method?: string; headers?: Record<string, string>; bodyFormat?: 'json' | 'form' | 'raw'; body?: unknown; captureResponse?: boolean; auth?: WebhookAction['auth'] }
 
 interface AutomationsConfigMatcher {

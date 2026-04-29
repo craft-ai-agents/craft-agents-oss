@@ -128,3 +128,66 @@ describe('resolveRipgrepPath', () => {
     }
   });
 });
+
+describe('resolveInterceptorBundlePath dev-mode source preference', () => {
+  const tmpBase = join(tmpdir(), `interceptor-resolver-test-${Date.now()}`);
+
+  afterEach(() => {
+    try { rmSync(tmpBase, { recursive: true, force: true }); } catch {}
+  });
+
+  it('prefers .ts source over the bundled .cjs in dev (non-packaged) so changes propagate without rebuild', () => {
+    const appRoot = join(tmpBase, 'monorepo', 'apps', 'electron');
+    const sourceDir = join(tmpBase, 'monorepo', 'packages', 'shared', 'src');
+    const bundleDir = join(tmpBase, 'monorepo', 'apps', 'electron', 'dist');
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(bundleDir, { recursive: true });
+    const sourcePath = join(sourceDir, 'unified-network-interceptor.ts');
+    const bundlePath = join(bundleDir, 'interceptor.cjs');
+    writeFileSync(sourcePath, '// ts source\n');
+    writeFileSync(bundlePath, '// cjs bundle\n');
+
+    const hostRuntime: BackendHostRuntimeContext = {
+      appRootPath: appRoot,
+      resourcesPath: appRoot,
+      isPackaged: false,
+    };
+    const paths = resolveBackendRuntimePaths(hostRuntime);
+    expect(paths.interceptorBundlePath).toBe(sourcePath);
+  });
+
+  it('uses the bundled .cjs in packaged builds even when source is reachable', () => {
+    const appRoot = join(tmpBase, 'packaged-app');
+    const sourceDir = join(tmpBase, 'packaged-app', 'packages', 'shared', 'src');
+    const bundleDir = join(tmpBase, 'packaged-app', 'dist');
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(bundleDir, { recursive: true });
+    writeFileSync(join(sourceDir, 'unified-network-interceptor.ts'), '// source\n');
+    const bundlePath = join(bundleDir, 'interceptor.cjs');
+    writeFileSync(bundlePath, '// bundle\n');
+
+    const hostRuntime: BackendHostRuntimeContext = {
+      appRootPath: appRoot,
+      resourcesPath: appRoot,
+      isPackaged: true,
+    };
+    const paths = resolveBackendRuntimePaths(hostRuntime);
+    expect(paths.interceptorBundlePath).toBe(bundlePath);
+  });
+
+  it('honors explicit hostRuntime.interceptorBundlePath override regardless of mode', () => {
+    const appRoot = join(tmpBase, 'override');
+    mkdirSync(appRoot, { recursive: true });
+    const overridePath = join(appRoot, 'custom-interceptor.cjs');
+    writeFileSync(overridePath, '// custom\n');
+
+    const hostRuntime: BackendHostRuntimeContext = {
+      appRootPath: appRoot,
+      resourcesPath: appRoot,
+      isPackaged: false,
+      interceptorBundlePath: overridePath,
+    };
+    const paths = resolveBackendRuntimePaths(hostRuntime);
+    expect(paths.interceptorBundlePath).toBe(overridePath);
+  });
+});

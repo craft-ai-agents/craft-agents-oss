@@ -5,6 +5,7 @@
  */
 
 import type { PermissionMode } from '../agent/mode-types.ts';
+import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 
 // ============================================================================
 // Event Types
@@ -61,6 +62,11 @@ export interface PromptAction {
   llmConnection?: string;
   /** Model ID for the created session (falls back to provider default if invalid) */
   model?: string;
+  /**
+   * Thinking level for the created session.
+   * When omitted, falls back to the workspace default (then DEFAULT_THINKING_LEVEL).
+   */
+  thinkingLevel?: ThinkingLevel;
 }
 
 /** HTTP method for webhook actions */
@@ -236,6 +242,8 @@ export interface PendingPrompt {
   llmConnection?: string;
   /** Model ID for the created session (falls back to provider default if invalid) */
   model?: string;
+  /** Thinking level for the created session (falls back to workspace default when omitted) */
+  thinkingLevel?: ThinkingLevel;
 }
 
 export interface AutomationResult {

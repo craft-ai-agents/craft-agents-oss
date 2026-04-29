@@ -1,5 +1,5 @@
 import type { EventSink } from '@craft-agent/server-core/transport'
-import type { ISessionManager, IBrowserPaneManager } from '@craft-agent/server-core/handlers'
+import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput } from '@craft-agent/server-core/handlers'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@craft-agent/server-core/runtime'
 import { basename, dirname, join } from 'path'
@@ -1350,17 +1350,18 @@ export class SessionManager implements ISessionManager {
           // Execute prompt automations by creating new sessions
           const settled = await Promise.allSettled(
             prompts.map((pending) =>
-              this.executePromptAutomation(
+              this.executePromptAutomation({
                 workspaceId,
                 workspaceRootPath,
-                pending.prompt,
-                pending.labels,
-                pending.permissionMode,
-                pending.mentions,
-                pending.llmConnection,
-                pending.model,
-                pending.automationName,
-              )
+                prompt: pending.prompt,
+                labels: pending.labels,
+                permissionMode: pending.permissionMode,
+                mentions: pending.mentions,
+                llmConnection: pending.llmConnection,
+                model: pending.model,
+                thinkingLevel: pending.thinkingLevel,
+                automationName: pending.automationName,
+              })
             )
           )
 
@@ -4860,7 +4861,23 @@ export class SessionManager implements ISessionManager {
     sessionLog.info(`Deleted session ${sessionId}`)
   }
 
-  async sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: StoredAttachment[], options?: SendMessageOptions, existingMessageId?: string, _isAuthRetry?: boolean): Promise<void> {
+  async sendMessage(
+    sessionId: string,
+    message: string,
+    attachments?: FileAttachment[],
+    storedAttachments?: StoredAttachment[],
+    options?: SendMessageOptions,
+    existingMessageId?: string,
+    _isAuthRetry?: boolean,
+    /**
+     * Internal hook fired after the user message has been pushed to
+     * `managed.messages` and persisted to disk, but before the model-streaming
+     * work begins. The RPC handler uses this to send a synchronous "accepted"
+     * ack to the client so a crash mid-stream doesn't lose the user message
+     * (#616). Pre-persist errors still reject the outer promise as before.
+     */
+    onAck?: (messageId: string) => void,
+  ): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (!managed) {
       throw new Error(`Session ${sessionId} not found`)
@@ -4881,7 +4898,12 @@ export class SessionManager implements ISessionManager {
       const agent = managed.agent
       const steered = agent?.redirect(message) ?? false
 
-      sessionLog.info(`Session ${sessionId} ${steered ? 'redirected mid-stream (steer)' : 'aborting to queue message'}`)
+      sessionLog.info('mid-stream send', {
+        sessionId,
+        steered,
+        queueLengthBefore: managed.messageQueue.length,
+        backend: agent ? agent.constructor.name : 'none',
+      })
 
       // Create user message for UI
       const userMessage: Message = {
@@ -4911,6 +4933,11 @@ export class SessionManager implements ISessionManager {
       }
 
       this.persistSession(managed)
+      // Force a synchronous flush so the user message is genuinely on disk
+      // before we tell the renderer "accepted" — `persistSession` only
+      // enqueues with a 500ms debounce. (#616 reliability fix.)
+      await this.flushSession(managed.id)
+      onAck?.(userMessage.id)
       return
     }
 
@@ -4937,6 +4964,13 @@ export class SessionManager implements ISessionManager {
 
       // Update lastMessageRole for badge display
       managed.lastMessageRole = 'user'
+
+      // Persist + flush before announcing — the user message must be
+      // genuinely on disk before we tell the renderer "accepted", and
+      // `persistSession` is debounced (500ms). #616.
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
+      onAck?.(userMessage.id)
 
       // Emit user_message event so UI can confirm the optimistic message
       this.sendEvent({
@@ -5657,7 +5691,11 @@ export class SessionManager implements ISessionManager {
     if (!managed || managed.messageQueue.length === 0) return
 
     const next = managed.messageQueue.shift()!
-    sessionLog.info(`Processing queued message for session ${sessionId}`)
+    sessionLog.info('replay queued', {
+      sessionId,
+      messageId: next.messageId,
+      queueLengthAfterShift: managed.messageQueue.length,
+    })
 
     // Update UI: queued → processing
     if (next.messageId) {
@@ -5687,13 +5725,26 @@ export class SessionManager implements ISessionManager {
         next.options,
         next.messageId
       ).catch(err => {
-        sessionLog.error('Error processing queued message:', err)
+        sessionLog.error('replay failed', {
+          sessionId,
+          messageId: next.messageId,
+          error: err instanceof Error ? err.message : String(err),
+        })
         // Report queued message failures via runtime hooks
         sessionRuntimeHooks.captureException(err, { errorSource: 'chat-queue', sessionId })
+        // Surface a typed error so the UI can show a clear, actionable banner
+        // instead of a generic "Unknown error" (#616).
         this.sendEvent({
-          type: 'error',
+          type: 'typed_error',
           sessionId,
-          error: err instanceof Error ? err.message : 'Unknown error'
+          error: {
+            code: 'queued_message_replay_failed',
+            title: 'Queued message could not be sent',
+            message: 'A message you sent while the agent was running could not be re-sent automatically. Tap retry to send it now.',
+            actions: [{ key: 'r', label: 'Retry', action: 'retry' }],
+            canRetry: true,
+            originalError: err instanceof Error ? err.message : String(err),
+          },
         }, managed.workspace.id)
         // Call onProcessingStopped to handle cleanup and check for more queued messages
         this.onProcessingStopped(sessionId, 'error')
@@ -6803,19 +6854,29 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
-   * Execute a prompt automation by creating a new session and sending the prompt
+   * Execute a prompt automation by creating a new session and sending the prompt.
+   *
+   * The options-object form replaced the previous positional-args signature
+   * once the param list outgrew readability — `thinkingLevel` was the trigger.
+   * When `thinkingLevel` is omitted, `createSession` falls back to the
+   * workspace default (then DEFAULT_THINKING_LEVEL).
    */
   async executePromptAutomation(
-    workspaceId: string,
-    workspaceRootPath: string,
-    prompt: string,
-    labels?: string[],
-    permissionMode?: PermissionMode,
-    mentions?: string[],
-    llmConnection?: string,
-    model?: string,
-    automationName?: string,
+    input: ExecutePromptAutomationInput,
   ): Promise<{ sessionId: string }> {
+    const {
+      workspaceId,
+      workspaceRootPath,
+      prompt,
+      labels,
+      permissionMode,
+      mentions,
+      llmConnection,
+      model,
+      thinkingLevel,
+      automationName,
+    } = input
+
     // Warn if llmConnection was specified but doesn't resolve
     if (llmConnection) {
       const connection = resolveSessionConnection(llmConnection)
@@ -6844,6 +6905,7 @@ export class SessionManager implements ISessionManager {
       enabledSourceSlugs: resolved?.sourceSlugs,
       llmConnection,
       model,
+      thinkingLevel,
     })
 
     // Populate triggeredBy metadata so title generation is explicitly skipped

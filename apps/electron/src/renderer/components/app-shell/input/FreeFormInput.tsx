@@ -1253,9 +1253,11 @@ export function FreeFormInput({
       }
     }
 
+    const attachmentSnapshot = attachments
+
     onSubmit(
       input.trim(),
-      attachments.length > 0 ? attachments : undefined,
+      attachmentSnapshot.length > 0 ? attachmentSnapshot : undefined,
       mentions.skills.length > 0 ? mentions.skills : undefined
     )
     setInput('')
@@ -1263,6 +1265,7 @@ export function FreeFormInput({
     // Clear draft immediately (cancel any pending debounced sync)
     if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
     onInputChange?.('')
+    onAttachmentsChange?.([])
     prevInputValueRef.current = ''
 
     // Restore focus after state updates
@@ -1271,7 +1274,7 @@ export function FreeFormInput({
     })
 
     return true
-  }, [input, attachments, followUpItems, disabled, disableSend, onInputChange, onSubmit, skills, sources, optimisticSourceSlugs, onSourcesChange, onWorkingDirectoryChange, homeDir])
+  }, [input, attachments, followUpItems, disabled, disableSend, onInputChange, onAttachmentsChange, onSubmit, skills, sources, optimisticSourceSlugs, onSourcesChange, onWorkingDirectoryChange, homeDir])
 
   // Listen for craft:submit-input events (simulate pressing the Send button)
   React.useEffect(() => {

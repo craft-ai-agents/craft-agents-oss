@@ -110,6 +110,65 @@ describe('PromptHandler', () => {
 
       handler.dispose();
     });
+
+    it('should propagate thinkingLevel from PromptAction to PendingPrompt', async () => {
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        LabelAdd: [{
+          matcher: 'review',
+          actions: [{
+            type: 'prompt',
+            prompt: 'Audit changes',
+            llmConnection: 'anthropic',
+            model: 'claude-opus-4-7',
+            thinkingLevel: 'high',
+          }],
+        }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+
+      await bus.emit('LabelAdd', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'review',
+      });
+
+      const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+      expect(prompts).toHaveLength(1);
+      expect(prompts[0]).toMatchObject({
+        llmConnection: 'anthropic',
+        model: 'claude-opus-4-7',
+        thinkingLevel: 'high',
+      });
+
+      handler.dispose();
+    });
+
+    it('should leave thinkingLevel undefined when omitted (workspace default applies downstream)', async () => {
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        LabelAdd: [{
+          matcher: 'bug',
+          actions: [{ type: 'prompt', prompt: 'Triage' }],
+        }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+
+      await bus.emit('LabelAdd', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'bug',
+      });
+
+      const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+      expect(prompts[0]!.thinkingLevel).toBeUndefined();
+
+      handler.dispose();
+    });
   });
 
   describe('agent events are ignored', () => {

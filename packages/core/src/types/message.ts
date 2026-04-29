@@ -466,6 +466,7 @@ export type ErrorCode =
   | 'invalid_request'        // API rejected the request (e.g., bad image, invalid content)
   | 'image_too_large'        // Image exceeds API dimension/size limits
   | 'provider_error'         // AI provider experiencing issues (overloaded, unavailable)
+  | 'queued_message_replay_failed'  // A message queued during an active turn could not be auto-replayed (#616)
   | 'unknown_error';
 
 /**
