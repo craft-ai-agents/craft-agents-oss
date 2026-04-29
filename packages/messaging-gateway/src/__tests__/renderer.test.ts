@@ -320,6 +320,41 @@ describe('Renderer — final_only mode', () => {
     expect(sends[0]!.text).toBe('<b>ready</b>')
     expect(sends[0]!.options).toEqual({ format: 'html' })
   })
+
+
+  it('keeps near-limit Telegram HTML formatted when the rendered text still fits', async () => {
+    const adapter = makeAdapter()
+    const binding = makeBinding({ responseMode: 'final_only' as ResponseMode })
+    const html = `<b>${'x'.repeat(4094)}</b>`
+    await play(renderer, binding, adapter, [ev.finalHtml(html), ev.complete()])
+
+    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
+    expect(sends.length).toBe(1)
+    expect(sends[0]!.options).toEqual({ format: 'html' })
+  })
+
+
+  it('falls back to plain text when explicit HTML exceeds adapter limits', async () => {
+    const adapter = makeAdapter({ maxMessageLength: 20 })
+    const binding = makeBinding({ responseMode: 'final_only' as ResponseMode })
+    await play(renderer, binding, adapter, [ev.finalHtml('<b>' + 'x'.repeat(30) + '</b>'), ev.complete()])
+
+    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
+    expect(sends.length).toBeGreaterThan(1)
+    expect(sends.every((call) => call.options === undefined)).toBe(true)
+  })
+
+
+  it('downgrades mixed plain and HTML final buffers to readable plain text', async () => {
+    const adapter = makeAdapter()
+    const binding = makeBinding({ responseMode: 'final_only' as ResponseMode })
+    await play(renderer, binding, adapter, [ev.final('plain'), ev.finalHtml('<b>html</b>'), ev.complete()])
+
+    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
+    expect(sends.length).toBe(1)
+    expect(sends[0]!.text).toBe(`plain\n\nhtml`)
+    expect(sends[0]!.options).toBeUndefined()
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -492,5 +527,27 @@ describe('Renderer — WhatsApp desktop-only approvals', () => {
     expect(sends).toHaveLength(1)
     expect(sends[0]!.text).toContain('plan is ready')
     expect(sends[0]!.text).toContain('desktop app')
+  })
+
+  it('HTML-formatted errors are downgraded for WhatsApp adapters', async () => {
+    const renderer = new Renderer()
+    const adapter = makeAdapter({ inlineButtons: false, messageEditing: false, markdown: 'whatsapp' })
+    ;(adapter as any).platform = 'whatsapp'
+    const binding = {
+      ...makeBinding(),
+      platform: 'whatsapp' as const,
+      channelId: 'wa-1',
+    }
+
+    await renderer.handle(
+      { type: 'error', sessionId: 's', error: '<b>boom</b>', format: 'html' } as SessionEvent,
+      binding,
+      adapter,
+    )
+
+    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
+    expect(sends).toHaveLength(1)
+    expect(sends[0]!.text).toBe('❌ boom')
+    expect(sends[0]!.options).toBeUndefined()
   })
 })

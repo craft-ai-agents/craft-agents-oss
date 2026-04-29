@@ -84,12 +84,16 @@ describe('TelegramAdapter outbound formatting', () => {
 
     await adapter.sendFile('123', Buffer.from('hello'), 'note.txt', '<b>plain</b>')
     await adapter.sendFile('123', Buffer.from('hello'), 'note.txt', '<b>html</b>', { format: 'html' })
+    await adapter.sendFile('123', Buffer.from('hello'), 'note.txt', `<b>${'x'.repeat(1025)}</b>`, { format: 'html' })
 
-    expect(calls).toHaveLength(2)
+    expect(calls).toHaveLength(3)
     expect(calls[0]?.[2]).toEqual({ caption: '<b>plain</b>' })
     expect(calls[1]?.[2]).toEqual({
       caption: '<b>html</b>',
       parse_mode: 'HTML',
+    })
+    expect(calls[2]?.[2]).toEqual({
+      caption: 'x'.repeat(1024),
     })
   })
 })

@@ -21,7 +21,7 @@ import type {
   MessagingLogger,
   OutboundTextOptions,
 } from '../../types'
-import { prepareTelegramText } from './format'
+import { getTelegramHtmlTextLength, prepareTelegramText, telegramHtmlToPlainText } from './format'
 
 /**
  * Hard cap for downloaded attachment size. Matches `MAX_FILE_SIZE` in
@@ -30,6 +30,7 @@ import { prepareTelegramText } from './format'
  * with a user-visible reply instead of silently dropping.
  */
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+const MAX_CAPTION_LENGTH = 1024
 
 /**
  * Minimal mime → extension fallback used when Telegram's `file_path` is
@@ -48,6 +49,19 @@ const MIME_EXT_FALLBACK: Record<string, string> = {
   'audio/mp4': '.m4a',
   'video/mp4': '.mp4',
   'video/quicktime': '.mov',
+}
+
+
+function normalizeTelegramPayload(
+  text: string,
+  maxLength: number,
+  options?: OutboundTextOptions,
+): ReturnType<typeof prepareTelegramText> {
+  if (options?.format === 'html' && getTelegramHtmlTextLength(text) > maxLength) {
+    return { text: telegramHtmlToPlainText(text).slice(0, maxLength) }
+  }
+
+  return prepareTelegramText(text, options)
 }
 
 const NOOP_LOGGER: MessagingLogger = {
@@ -504,7 +518,7 @@ export class TelegramAdapter implements PlatformAdapter {
 
   async sendText(channelId: string, text: string, options?: OutboundTextOptions): Promise<SentMessage> {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
-    const payload = prepareTelegramText(text, options)
+    const payload = normalizeTelegramPayload(text, this.capabilities.maxMessageLength, options)
     const sent = payload.parseMode
       ? await this.bot.api.sendMessage(Number(channelId), payload.text, {
         parse_mode: payload.parseMode,
@@ -519,7 +533,7 @@ export class TelegramAdapter implements PlatformAdapter {
 
   async editMessage(channelId: string, messageId: string, text: string, options?: OutboundTextOptions): Promise<void> {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
-    const payload = prepareTelegramText(text, options)
+    const payload = normalizeTelegramPayload(text, this.capabilities.maxMessageLength, options)
     if (payload.parseMode) {
       await this.bot.api.editMessageText(Number(channelId), Number(messageId), payload.text, {
         parse_mode: payload.parseMode,
@@ -532,7 +546,7 @@ export class TelegramAdapter implements PlatformAdapter {
   async sendButtons(channelId: string, text: string, buttons: InlineButton[], options?: OutboundTextOptions): Promise<SentMessage> {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
 
-    const payload = prepareTelegramText(text, options)
+    const payload = normalizeTelegramPayload(text, this.capabilities.maxMessageLength, options)
     const keyboard = {
       inline_keyboard: buttons.map((b) => [{
         text: b.label,
@@ -561,7 +575,7 @@ export class TelegramAdapter implements PlatformAdapter {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
 
     const inputFile = new InputFile(file, filename)
-    const captionPayload = caption ? prepareTelegramText(caption, captionOptions) : undefined
+    const captionPayload = caption ? normalizeTelegramPayload(caption, MAX_CAPTION_LENGTH, captionOptions) : undefined
     const sent = await this.bot.api.sendDocument(Number(channelId), inputFile, captionPayload
       ? {
         caption: captionPayload.text,
