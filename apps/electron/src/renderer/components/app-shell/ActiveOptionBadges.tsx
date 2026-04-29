@@ -346,7 +346,9 @@ function StateBadge({
   const applyColor = state.iconColorable
 
   const DEFAULT_STATUS_IDS = new Set(['backlog', 'todo', 'needs-review', 'done', 'cancelled'])
-  const stateLabel = DEFAULT_STATUS_IDS.has(state.id) ? t(`status.${state.id}`, state.label) : state.label
+  // Only apply i18n translation when the user hasn't customized the label.
+  const defaultLabel = DEFAULT_STATUS_IDS.has(state.id) ? t(`status.${state.id}`) : null
+  const stateLabel = defaultLabel && state.label === defaultLabel ? t(`status.${state.id}`, state.label) : state.label
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

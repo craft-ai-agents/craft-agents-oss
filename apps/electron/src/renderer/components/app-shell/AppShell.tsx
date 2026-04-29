@@ -2102,7 +2102,10 @@ function AppShellContent({
         return t("sidebar.flagged")
       case 'state': {
         const state = effectiveSessionStatuses.find(s => s.id === sessionFilter.stateId)
-        return state ? t(`status.${state.id}`, state.label) : t("sidebar.allSessions")
+        return state ? (() => {
+          const defaultLabel = t(`status.${state.id}`)
+          return defaultLabel && state.label === defaultLabel ? t(`status.${state.id}`, state.label) : state.label
+        })() : t("sidebar.allSessions")
       }
       case 'label':
         return sessionFilter.labelId === '__all__' ? t("sidebar.labels") : getLabelDisplayName(labelConfigs, sessionFilter.labelId)
@@ -2288,7 +2291,10 @@ function AppShellContent({
                         // Status items (sortable via SortableStatusList)
                         ...effectiveSessionStatuses.map(state => ({
                           id: `nav:state:${state.id}`,
-                          title: t(`status.${state.id}`, state.label),
+                          title: (() => {
+                            const defaultLabel = t(`status.${state.id}`)
+                            return defaultLabel && state.label === defaultLabel ? t(`status.${state.id}`, state.label) : state.label
+                          })(),
                           label: String(sessionStatusCounts[state.id] || 0),
                           icon: state.icon,
                           iconColor: state.resolvedColor,

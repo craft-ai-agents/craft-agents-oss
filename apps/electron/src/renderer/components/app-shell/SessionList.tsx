@@ -311,7 +311,10 @@ export function SessionList({
         const collapsedMeta = collapsedGroupsMeta.find(m => m.key === key)
         orderedGroups.push({
           key,
-          label: t(`status.${state.id}`, state.label),
+          label: (() => {
+            const defaultLabel = t(`status.${state.id}`)
+            return defaultLabel && state.label === defaultLabel ? t(`status.${state.id}`, state.label) : state.label
+          })(),
           items: groupRows,
           collapsible: true,
           ...(collapsedMeta ? { collapsedCount: collapsedMeta.count } : {}),

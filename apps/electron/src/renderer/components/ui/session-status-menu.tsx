@@ -30,7 +30,10 @@ const DEFAULT_STATUS_IDS = new Set(['backlog', 'todo', 'needs-review', 'done', '
 
 function StateItemContent({ state }: { state: SessionStatus }) {
   const { t } = useTranslation()
-  const label = DEFAULT_STATUS_IDS.has(state.id) ? t(`status.${state.id}`, state.label) : state.label
+  // Only apply i18n translation when the user hasn't customized the label.
+  // i18next ignores the fallback arg when the key exists, so we check manually.
+  const defaultLabel = DEFAULT_STATUS_IDS.has(state.id) ? t(`status.${state.id}`) : null
+  const label = defaultLabel && state.label === defaultLabel ? t(`status.${state.id}`, state.label) : state.label
   return (
     <>
       <span className="shrink-0 flex items-center" style={getStatusIconStyle(state)}>
