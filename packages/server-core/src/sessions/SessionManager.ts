@@ -6130,7 +6130,7 @@ export class SessionManager implements ISessionManager {
           }
         }
 
-        this.sendEvent({ type: 'text_complete', sessionId, text: event.text, isIntermediate: event.isIntermediate, turnId: event.turnId, parentToolUseId: event.parentToolUseId, timestamp: assistantMessage.timestamp, messageId: assistantMessage.id }, workspaceId)
+        this.sendEvent({ type: 'text_complete', sessionId, text: event.text, format: event.format, isIntermediate: event.isIntermediate, turnId: event.turnId, parentToolUseId: event.parentToolUseId, timestamp: assistantMessage.timestamp, messageId: assistantMessage.id }, workspaceId)
 
         // Persist session after complete message to prevent data loss on quit
         this.persistSession(managed)
@@ -6381,6 +6381,7 @@ export class SessionManager implements ISessionManager {
           type: 'status',
           sessionId,
           message: event.message,
+          format: event.format,
           statusType: event.message.includes('Compacting') ? 'compacting' : undefined
         }, workspaceId)
         break
@@ -6426,6 +6427,7 @@ export class SessionManager implements ISessionManager {
           type: 'info',
           sessionId,
           message: event.message,
+          format: event.format,
           statusType: isCompactionComplete ? 'compaction_complete' : undefined,
           timestamp: infoTimestamp,
         }, workspaceId)
@@ -6467,7 +6469,7 @@ export class SessionManager implements ISessionManager {
           timestamp: this.monotonic()
         }
         managed.messages.push(errorMessage)
-        this.sendEvent({ type: 'error', sessionId, error: event.message, timestamp: errorMessage.timestamp }, workspaceId)
+        this.sendEvent({ type: 'error', sessionId, error: event.message, format: event.format, timestamp: errorMessage.timestamp }, workspaceId)
         break
       }
 

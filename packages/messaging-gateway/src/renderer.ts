@@ -31,7 +31,10 @@ import type {
   SentMessage,
   InlineButton,
   ResponseMode,
+  OutboundTextFormat,
+  OutboundTextOptions,
 } from './types'
+import { getTelegramHtmlTextLength, telegramHtmlToPlainText } from './adapters/telegram/format'
 import type { PlanTokenRegistry } from './plan-tokens'
 
 /** Session event shape (subset of the full SessionEvent from server-core). */
@@ -72,6 +75,8 @@ interface RenderState {
   progressMessageId: string | null
   /** Progress: last status label written to the bubble, to avoid redundant edits. */
   progressStatus: string | null
+  /** Format of accumulated final assistant text for this run. */
+  finalFormat: OutboundTextFormat | undefined
 }
 
 const DEFAULT_EDIT_INTERVAL_MS = 3500
@@ -125,6 +130,7 @@ export class Renderer {
         finalBuffer: '',
         progressMessageId: null,
         progressStatus: null,
+        finalFormat: undefined,
       }
       this.states.set(bindingId, state)
     }
@@ -193,14 +199,15 @@ export class Renderer {
 
       case 'text_complete': {
         const text = typeof event.text === 'string' ? event.text : state.textBuffer
+        const options = toOutboundTextOptions(event.format)
         this.cancelEditTimer(state)
 
         if (state.streamingMessageId && adapter.capabilities.messageEditing) {
           if (text.trim()) {
-            await this.tryEditMessage(adapter, binding.channelId, state.streamingMessageId, text.trim(), state)
+            await this.tryEditMessage(adapter, binding.channelId, state.streamingMessageId, text.trim(), state, options)
           }
         } else if (text.trim()) {
-          await this.sendText(adapter, binding, text.trim())
+          await this.sendText(adapter, binding, text.trim(), options)
         }
 
         state.textBuffer = ''
@@ -309,8 +316,9 @@ export class Renderer {
         const isIntermediate = Boolean(event.isIntermediate)
         const text = typeof event.text === 'string' ? event.text : ''
         if (!isIntermediate && text.trim()) {
-          // Last assistant text of the run — keep it for the final edit.
-          state.finalBuffer = appendFinal(state.finalBuffer, text)
+          const next = appendFinalWithFormat(state.finalBuffer, state.finalFormat, text, event.format)
+          state.finalBuffer = next.text
+          state.finalFormat = next.format
         }
         // Intermediate text is dropped. Make sure the bubble exists and shows
         // thinking status so the user knows the run is alive.
@@ -345,8 +353,9 @@ export class Renderer {
               adapter,
               binding.channelId,
               state.progressMessageId,
-              truncateForAdapter(finalText, adapter),
+              finalText,
               state,
+              toOutboundTextOptions(state.finalFormat),
             )
           }
           // If the run ended with no final text, leave the last status in
@@ -354,7 +363,7 @@ export class Renderer {
           // Telegram "message is not modified" errors and keeps a trace.
         } else if (finalText) {
           // Adapter can't edit (WhatsApp) — send one message at the end.
-          await this.sendText(adapter, binding, finalText)
+          await this.sendText(adapter, binding, finalText, toOutboundTextOptions(state.finalFormat))
         }
         this.resetRun(state)
         return
@@ -408,7 +417,9 @@ export class Renderer {
         const isIntermediate = Boolean(event.isIntermediate)
         const text = typeof event.text === 'string' ? event.text : ''
         if (!isIntermediate && text.trim()) {
-          state.finalBuffer = appendFinal(state.finalBuffer, text)
+          const next = appendFinalWithFormat(state.finalBuffer, state.finalFormat, text, event.format)
+          state.finalBuffer = next.text
+          state.finalFormat = next.format
         }
         return
       }
@@ -416,7 +427,7 @@ export class Renderer {
       case 'complete': {
         const finalText = state.finalBuffer.trim()
         if (finalText) {
-          await this.sendText(adapter, binding, finalText)
+          await this.sendText(adapter, binding, finalText, toOutboundTextOptions(state.finalFormat))
         }
         this.resetRun(state)
         return
@@ -568,7 +579,7 @@ Approve in the desktop app to continue.`,
   ): Promise<void> {
     const errorMsg = extractErrorMessage(event.error)
     this.cancelEditTimer(state)
-    await adapter.sendText(binding.channelId, `❌ ${errorMsg}`)
+    await this.sendText(adapter, binding, `❌ ${errorMsg}`, toOutboundTextOptions(event.format))
     this.resetRun(state)
   }
 
@@ -582,11 +593,15 @@ Approve in the desktop app to continue.`,
     messageId: string,
     text: string,
     state: RenderState,
+    options?: OutboundTextOptions,
   ): Promise<void> {
-    const truncated = truncateForAdapter(text, adapter)
+    const normalized = normalizeOutboundTextPayload(text, adapter, options)
+    const truncated = normalized.length <= adapter.capabilities.maxMessageLength
+      ? normalized.text
+      : truncateForAdapter(normalized.text, adapter)
 
     try {
-      await adapter.editMessage(channelId, messageId, truncated)
+      await adapter.editMessage(channelId, messageId, truncated, normalized.options)
       state.currentEditIntervalMs = DEFAULT_EDIT_INTERVAL_MS
     } catch (err: unknown) {
       const is429 =
@@ -619,6 +634,7 @@ Approve in the desktop app to continue.`,
     state.finalBuffer = ''
     state.progressMessageId = null
     state.progressStatus = null
+    state.finalFormat = undefined
   }
 
   /** Send text, splitting if it exceeds platform limits. */
@@ -626,16 +642,18 @@ Approve in the desktop app to continue.`,
     adapter: PlatformAdapter,
     binding: ChannelBinding,
     text: string,
+    options?: OutboundTextOptions,
   ): Promise<SentMessage | undefined> {
+    const normalized = normalizeOutboundTextPayload(text, adapter, options)
     const maxLen = adapter.capabilities.maxMessageLength
-    if (text.length <= maxLen) {
-      return adapter.sendText(binding.channelId, text)
+    if (normalized.length <= maxLen) {
+      return adapter.sendText(binding.channelId, normalized.text, normalized.options)
     }
 
-    const chunks = splitText(text, maxLen)
+    const chunks = splitText(normalized.text, maxLen)
     let last: SentMessage | undefined
     for (const chunk of chunks) {
-      last = await adapter.sendText(binding.channelId, chunk)
+      last = await adapter.sendText(binding.channelId, chunk, normalized.options)
     }
     return last
   }
@@ -653,6 +671,57 @@ Approve in the desktop app to continue.`,
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+
+
+function normalizeOutboundTextPayload(
+  text: string,
+  adapter: PlatformAdapter,
+  options?: OutboundTextOptions,
+): { text: string; options?: OutboundTextOptions; length: number } {
+  if (options?.format === 'html') {
+    if (adapter.platform === 'telegram') {
+      const length = getTelegramHtmlTextLength(text)
+      if (length <= adapter.capabilities.maxMessageLength) {
+        return { text, options, length }
+      }
+      const plainText = telegramHtmlToPlainText(text)
+      return { text: plainText, length: plainText.length }
+    }
+
+    const plainText = telegramHtmlToPlainText(text)
+    return { text: plainText, length: plainText.length }
+  }
+
+  return { text, options, length: text.length }
+}
+
+function appendFinalWithFormat(
+  currentText: string,
+  currentFormat: OutboundTextFormat | undefined,
+  nextText: string,
+  nextFormatValue: unknown,
+): { text: string; format: OutboundTextFormat } {
+  const nextFormat = nextFormatValue === 'html' ? 'html' : 'plain'
+  if (!currentFormat) {
+    return { text: appendFinal('', nextText), format: nextFormat }
+  }
+  if (currentFormat === nextFormat) {
+    return { text: appendFinal(currentText, nextText), format: currentFormat }
+  }
+  return {
+    text: appendFinal(toPlainTextForFormat(currentText, currentFormat), toPlainTextForFormat(nextText, nextFormat)),
+    format: 'plain',
+  }
+}
+
+function toPlainTextForFormat(text: string, format: OutboundTextFormat): string {
+  return format === 'html' ? telegramHtmlToPlainText(text) : text
+}
+
+function toOutboundTextOptions(format: unknown): OutboundTextOptions | undefined {
+  return format === 'html' ? { format: 'html' } : undefined
+}
 
 function resolveResponseMode(
   responseMode: ResponseMode | undefined,

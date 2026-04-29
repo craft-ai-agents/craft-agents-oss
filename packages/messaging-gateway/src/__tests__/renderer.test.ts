@@ -21,6 +21,7 @@ import {
   type SentMessage,
   type BindingConfig,
   type ResponseMode,
+  type OutboundTextOptions,
 } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -32,6 +33,7 @@ interface Call {
   channelId: string
   messageId?: string
   text?: string
+  options?: OutboundTextOptions
 }
 
 function makeAdapter(
@@ -61,17 +63,17 @@ function makeAdapter(
     },
     onMessage() {},
     onButtonPress() {},
-    async sendText(channelId: string, text: string): Promise<SentMessage> {
+    async sendText(channelId: string, text: string, options?: OutboundTextOptions): Promise<SentMessage> {
       const messageId = String(nextId++)
-      calls.push({ kind: 'sendText', channelId, text, messageId })
+      calls.push({ kind: 'sendText', channelId, text, messageId, options })
       return { platform: 'telegram', channelId, messageId }
     },
-    async editMessage(channelId: string, messageId: string, text: string): Promise<void> {
-      calls.push({ kind: 'editMessage', channelId, messageId, text })
+    async editMessage(channelId: string, messageId: string, text: string, options?: OutboundTextOptions): Promise<void> {
+      calls.push({ kind: 'editMessage', channelId, messageId, text, options })
     },
-    async sendButtons(channelId: string, text: string): Promise<SentMessage> {
+    async sendButtons(channelId: string, text: string, _buttons: unknown[], options?: OutboundTextOptions): Promise<SentMessage> {
       const messageId = String(nextId++)
-      calls.push({ kind: 'sendButtons', channelId, text, messageId })
+      calls.push({ kind: 'sendButtons', channelId, text, messageId, options })
       return { platform: 'telegram', channelId, messageId }
     },
     async sendTyping(channelId: string): Promise<void> {
@@ -134,6 +136,13 @@ const ev = {
     type: 'text_complete',
     sessionId: 's',
     text,
+  }),
+  finalHtml: (text: string): SessionEvent => ({
+    type: 'text_complete',
+    sessionId: 's',
+    text,
+    format: 'html',
+    isIntermediate: false,
   }),
   toolStart: (displayName?: string): SessionEvent => ({
     type: 'tool_start',
@@ -298,6 +307,53 @@ describe('Renderer — final_only mode', () => {
     const sends = adapter.calls.filter((c) => c.kind === 'sendText')
     expect(sends.length).toBe(1)
     expect(sends[0]!.text).toBe('legacy-shape-text')
+  })
+
+
+  it('forwards explicit HTML format from final assistant text', async () => {
+    const adapter = makeAdapter()
+    const binding = makeBinding({ responseMode: 'final_only' as ResponseMode })
+    await play(renderer, binding, adapter, [ev.finalHtml('<b>ready</b>'), ev.complete()])
+
+    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
+    expect(sends.length).toBe(1)
+    expect(sends[0]!.text).toBe('<b>ready</b>')
+    expect(sends[0]!.options).toEqual({ format: 'html' })
+  })
+
+
+  it('keeps near-limit Telegram HTML formatted when the rendered text still fits', async () => {
+    const adapter = makeAdapter()
+    const binding = makeBinding({ responseMode: 'final_only' as ResponseMode })
+    const html = `<b>${'x'.repeat(4094)}</b>`
+    await play(renderer, binding, adapter, [ev.finalHtml(html), ev.complete()])
+
+    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
+    expect(sends.length).toBe(1)
+    expect(sends[0]!.options).toEqual({ format: 'html' })
+  })
+
+
+  it('falls back to plain text when explicit HTML exceeds adapter limits', async () => {
+    const adapter = makeAdapter({ maxMessageLength: 20 })
+    const binding = makeBinding({ responseMode: 'final_only' as ResponseMode })
+    await play(renderer, binding, adapter, [ev.finalHtml('<b>' + 'x'.repeat(30) + '</b>'), ev.complete()])
+
+    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
+    expect(sends.length).toBeGreaterThan(1)
+    expect(sends.every((call) => call.options === undefined)).toBe(true)
+  })
+
+
+  it('downgrades mixed plain and HTML final buffers to readable plain text', async () => {
+    const adapter = makeAdapter()
+    const binding = makeBinding({ responseMode: 'final_only' as ResponseMode })
+    await play(renderer, binding, adapter, [ev.final('plain'), ev.finalHtml('<b>html</b>'), ev.complete()])
+
+    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
+    expect(sends.length).toBe(1)
+    expect(sends[0]!.text).toBe(`plain\n\nhtml`)
+    expect(sends[0]!.options).toBeUndefined()
   })
 })
 
@@ -471,5 +527,27 @@ describe('Renderer — WhatsApp desktop-only approvals', () => {
     expect(sends).toHaveLength(1)
     expect(sends[0]!.text).toContain('plan is ready')
     expect(sends[0]!.text).toContain('desktop app')
+  })
+
+  it('HTML-formatted errors are downgraded for WhatsApp adapters', async () => {
+    const renderer = new Renderer()
+    const adapter = makeAdapter({ inlineButtons: false, messageEditing: false, markdown: 'whatsapp' })
+    ;(adapter as any).platform = 'whatsapp'
+    const binding = {
+      ...makeBinding(),
+      platform: 'whatsapp' as const,
+      channelId: 'wa-1',
+    }
+
+    await renderer.handle(
+      { type: 'error', sessionId: 's', error: '<b>boom</b>', format: 'html' } as SessionEvent,
+      binding,
+      adapter,
+    )
+
+    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
+    expect(sends).toHaveLength(1)
+    expect(sends[0]!.text).toBe('❌ boom')
+    expect(sends[0]!.options).toBeUndefined()
   })
 })
