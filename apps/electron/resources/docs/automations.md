@@ -508,6 +508,17 @@ forum topic. The topic is created on first use and reused thereafter.
 
 Names are case-sensitive: `"Reports"` and `"reports"` create separate topics.
 
+### Setting up the Telegram supergroup
+
+If you haven't paired a supergroup yet:
+
+1. **Create / convert a supergroup with Topics enabled.** In Telegram, open the group → tap the group name → Edit (pencil icon) → toggle **Topics** on → Save. The group must be a forum supergroup; regular groups can't host topics.
+2. **Add the bot to the supergroup.** Group name → Add members → search for your bot's username → add.
+3. **Promote the bot to admin with "Manage Topics".** Group name → Edit → Administrators → Add Administrator → pick the bot → toggle on **Manage Topics** → Save. This is the step most people miss; without it, topic creation fails with `400: not enough rights to create a topic`.
+4. **Pair the supergroup.** In Craft Agent: Settings → Messaging → Telegram → **Pair Supergroup**. Copy the 6-digit code, then in any topic of the supergroup type `/pair <code>`. The bot confirms and the Settings row updates with the group's title.
+
+Verify by checking the supergroup row in Settings shows the group title. If automation runs fail later, `~/.craft-agent/logs/messaging-gateway.log` will show `automation_topic_bind_failed` with the underlying Telegram error.
+
 ## Complete Examples
 
 ### Daily Weather Report

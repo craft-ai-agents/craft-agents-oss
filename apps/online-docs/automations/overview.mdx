@@ -477,6 +477,63 @@ session runs without a Telegram binding (same as if the field were absent):
 - The Telegram bot is connected
 - The bot has the **Manage Topics** admin permission in the supergroup
 
+### Setting up the Telegram supergroup
+
+If you haven't paired a supergroup yet, follow these steps. The whole flow takes
+about a minute.
+
+#### 1. Create a supergroup with topics enabled
+
+A regular Telegram group can't host topics — you need a **supergroup with
+"Topics" mode enabled**.
+
+- **New group**: Telegram → New Group → add anyone (or yourself for a solo
+  workspace) → set a name. Telegram converts groups to supergroups
+  automatically once members exceed a threshold or you flip Topics on.
+- **Enable Topics**: Open the group → tap the group name → **Edit**
+  (pencil icon on mobile, ⋯ on desktop) → toggle **Topics** on → **Save**.
+  The group is now a forum supergroup; you'll see a "General" topic and a
+  "+" button to create more.
+
+#### 2. Add the bot to the supergroup
+
+Open the supergroup → tap the group name → **Add members** → search for your
+bot's username (e.g. `@CraftAgentsBot`) → add it.
+
+#### 3. Make the bot an admin with "Manage Topics"
+
+This is the step most people miss — the bot needs explicit permission to
+create new topics, otherwise topic-creation calls return
+`400: Bad Request: not enough rights to create a topic`.
+
+1. In the supergroup, tap the group name → **Edit** → **Administrators**.
+2. Tap **Add Administrator** → pick the bot.
+3. In the permissions list, **toggle on Manage Topics** (other permissions
+   like Delete Messages or Pin Messages are optional and not required by
+   the topic-routing feature).
+4. Tap **Save** / **Done**.
+
+<Tip>
+**Verify after pairing**: in your Craft Agent app, open Settings → Messaging
+→ Telegram and check the "Supergroup" row shows the group title. The first
+automation run will surface an error in
+`~/.craft-agent/logs/messaging-gateway.log` if the bot is still missing
+"Manage Topics" — look for `automation_topic_bind_failed`.
+</Tip>
+
+#### 4. Pair the supergroup with the workspace
+
+1. In the Craft Agent app: **Settings → Messaging → Telegram → Pair Supergroup**.
+2. The dialog shows a 6-digit code, a deep link to the bot, and a 5-minute
+   countdown.
+3. In Telegram, in **any topic** of your supergroup, type `/pair <code>`
+   (replace `<code>` with the digits from the dialog).
+4. The bot replies with a confirmation. The dialog closes automatically and
+   the Settings row updates with the supergroup's title and chat ID.
+
+That's it — automations with `telegramTopic` set will now create topics in
+this supergroup.
+
 ### Notes
 
 - Topic names are 1–128 characters and **case-sensitive** (`"Reports"` and `"reports"` are different topics).
