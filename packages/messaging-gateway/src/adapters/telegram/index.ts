@@ -20,7 +20,7 @@ import type {
   ButtonPress,
   MessagingLogger,
 } from '../../types'
-import { formatForTelegram } from './format'
+import { formatForTelegram, TELEGRAM_PARSE_MODE } from './format'
 
 /**
  * Hard cap for downloaded attachment size. Matches `MAX_FILE_SIZE` in
@@ -504,7 +504,9 @@ export class TelegramAdapter implements PlatformAdapter {
   async sendText(channelId: string, text: string): Promise<SentMessage> {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
     const formatted = formatForTelegram(text)
-    const sent = await this.bot.api.sendMessage(Number(channelId), formatted)
+    const sent = await this.bot.api.sendMessage(Number(channelId), formatted, {
+      parse_mode: TELEGRAM_PARSE_MODE,
+    })
     return {
       platform: 'telegram',
       channelId,
@@ -515,12 +517,15 @@ export class TelegramAdapter implements PlatformAdapter {
   async editMessage(channelId: string, messageId: string, text: string): Promise<void> {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
     const formatted = formatForTelegram(text)
-    await this.bot.api.editMessageText(Number(channelId), Number(messageId), formatted)
+    await this.bot.api.editMessageText(Number(channelId), Number(messageId), formatted, {
+      parse_mode: TELEGRAM_PARSE_MODE,
+    })
   }
 
   async sendButtons(channelId: string, text: string, buttons: InlineButton[]): Promise<SentMessage> {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
 
+    const formatted = formatForTelegram(text)
     const keyboard = {
       inline_keyboard: buttons.map((b) => [{
         text: b.label,
@@ -528,7 +533,8 @@ export class TelegramAdapter implements PlatformAdapter {
       }]),
     }
 
-    const sent = await this.bot.api.sendMessage(Number(channelId), text, {
+    const sent = await this.bot.api.sendMessage(Number(channelId), formatted, {
+      parse_mode: TELEGRAM_PARSE_MODE,
       reply_markup: keyboard,
     })
 
@@ -548,7 +554,12 @@ export class TelegramAdapter implements PlatformAdapter {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
 
     const inputFile = new InputFile(file, filename)
-    const sent = await this.bot.api.sendDocument(Number(channelId), inputFile, { caption })
+    const sent = await this.bot.api.sendDocument(Number(channelId), inputFile, caption
+      ? {
+        caption: formatForTelegram(caption),
+        parse_mode: TELEGRAM_PARSE_MODE,
+      }
+      : undefined)
 
     return {
       platform: 'telegram',
