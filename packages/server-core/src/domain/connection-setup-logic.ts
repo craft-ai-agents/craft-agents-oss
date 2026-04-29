@@ -91,6 +91,24 @@ export function setupTestRequiresApiKey(baseUrl?: string): boolean {
   return !isLoopbackBaseUrl(baseUrl)
 }
 
+/**
+ * Infer the Pi provider hint for custom endpoint connections.
+ *
+ * Keyless loopback endpoints (Ollama, LM Studio) intentionally stay generic,
+ * but authenticated custom endpoints still need a provider hint so Craft can
+ * reload the stored credential at runtime.
+ */
+export function resolveCompatPiAuthProvider(params: {
+  authType: LlmConnection['authType']
+  customEndpointApi: 'openai-completions' | 'anthropic-messages'
+}): LlmConnection['piAuthProvider'] | undefined {
+  if (params.authType === 'none') {
+    return undefined
+  }
+
+  return params.customEndpointApi === 'anthropic-messages' ? 'anthropic' : 'openai'
+}
+
 // ============================================================
 // Built-in Connection Templates
 // ============================================================

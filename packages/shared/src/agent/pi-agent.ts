@@ -46,7 +46,7 @@ import { getSystemPrompt } from '../prompts/system.ts';
 import { getCoAuthorPreference } from '../config/preferences.ts';
 
 // Credential manager for token storage
-import { getCredentialManager } from '../credentials/manager.ts';
+import { getCredentialManager, type CredentialManager } from '../credentials/manager.ts';
 
 // ChatGPT OAuth token refresh (shared with CodexAgent)
 import { refreshChatGptTokens } from '../auth/chatgpt-oauth.ts';
@@ -109,6 +109,95 @@ export const PI_BACKEND_SESSION_TOOL_NAMES = new Set<string>([
   'spawn_session',
   'browser_tool',
 ]);
+
+type PiAuthCredential =
+  | { type: 'api_key'; key: string }
+  | { type: 'oauth'; access: string; refresh: string; expires: number }
+  | { type: 'iam'; accessKeyId: string; secretAccessKey: string; region?: string; sessionToken?: string }
+
+export interface ResolvedPiAuth {
+  provider: string
+  credential: PiAuthCredential
+}
+
+export function resolvePiAuthProviderFromRuntime(
+  runtime: Pick<ReturnType<typeof getBackendRuntime>, 'customEndpoint' | 'piAuthProvider'>,
+  authType?: BackendConfig['authType'],
+): string | null {
+  if (runtime.piAuthProvider) {
+    return runtime.piAuthProvider
+  }
+
+  if (!runtime.customEndpoint || authType === 'none') {
+    return null
+  }
+
+  return runtime.customEndpoint.api === 'anthropic-messages' ? 'anthropic' : 'openai'
+}
+
+export async function resolvePiAuthForConnection(params: {
+  authType?: BackendConfig['authType']
+  connectionSlug?: string
+  credentialManager: Pick<CredentialManager, 'getLlmApiKey' | 'getLlmOAuth' | 'getLlmIamCredentials'>
+  runtime: Pick<ReturnType<typeof getBackendRuntime>, 'customEndpoint' | 'piAuthProvider'>
+  debug?: (message: string) => void
+}): Promise<ResolvedPiAuth | null> {
+  const piAuthProvider = resolvePiAuthProviderFromRuntime(params.runtime, params.authType)
+  if (!piAuthProvider) return null
+
+  const debug = params.debug ?? (() => {})
+  const slug = params.connectionSlug || 'pi'
+
+  if (params.authType === 'oauth') {
+    const oauth = await params.credentialManager.getLlmOAuth(slug)
+    if (oauth?.accessToken) {
+      if (piAuthProvider === 'github-copilot' && oauth.refreshToken) {
+        debug(`Retrieved Copilot OAuth credential for Pi provider: ${piAuthProvider}`)
+        return {
+          provider: piAuthProvider,
+          credential: {
+            type: 'oauth',
+            access: oauth.accessToken,
+            refresh: oauth.refreshToken,
+            expires: oauth.expiresAt ?? 0,
+          },
+        }
+      }
+      debug(`Retrieved OAuth access token for Pi provider: ${piAuthProvider}`)
+      return {
+        provider: piAuthProvider,
+        credential: { type: 'api_key', key: oauth.accessToken },
+      }
+    }
+  } else if (params.authType === 'iam_credentials') {
+    const iam = await params.credentialManager.getLlmIamCredentials(slug)
+    if (iam) {
+      debug(`Retrieved IAM credentials for Pi provider: ${piAuthProvider}`)
+      return {
+        provider: piAuthProvider,
+        credential: {
+          type: 'iam',
+          accessKeyId: iam.accessKeyId,
+          secretAccessKey: iam.secretAccessKey,
+          region: iam.region,
+          sessionToken: iam.sessionToken,
+        },
+      }
+    }
+  } else {
+    const apiKey = await params.credentialManager.getLlmApiKey(slug)
+    if (apiKey) {
+      debug(`Retrieved API key credential for Pi provider: ${piAuthProvider}`)
+      return {
+        provider: piAuthProvider,
+        credential: { type: 'api_key', key: apiKey },
+      }
+    }
+  }
+
+  debug(`No credentials found for Pi provider: ${piAuthProvider}`)
+  return null
+}
 
 /**
  * Backend implementation using the Pi coding agent SDK via subprocess.
@@ -539,81 +628,15 @@ export class PiAgent extends BaseAgent {
    * modules use directly. The OAuth exchange happens on the Craft side; by the time
    * it reaches Pi, it's just an access token.
    */
-  private async getPiAuth(): Promise<{
-    provider: string;
-    credential:
-      | { type: 'api_key'; key: string }
-      | { type: 'oauth'; access: string; refresh: string; expires: number }
-      | { type: 'iam'; accessKeyId: string; secretAccessKey: string; region?: string; sessionToken?: string }
-  } | null> {
-    const piAuthProvider = getBackendRuntime(this.config).piAuthProvider;
-    if (!piAuthProvider) return null;
-
+  private async getPiAuth(): Promise<ResolvedPiAuth | null> {
     try {
-      const credentialManager = getCredentialManager();
-      const slug = this.config.connectionSlug || 'pi';
-
-      if (this.config.authType === 'oauth') {
-        const oauth = await credentialManager.getLlmOAuth(slug);
-        if (oauth?.accessToken) {
-          // Copilot: pass full OAuth credential so the Pi SDK can derive the
-          // correct API endpoint from the Copilot token's proxy-ep field.
-          // The refresh token is the GitHub access token used to obtain fresh
-          // Copilot tokens when they expire (~1 hour).
-          if (piAuthProvider === 'github-copilot' && oauth.refreshToken) {
-            this.debug(`Retrieved Copilot OAuth credential for Pi provider: ${piAuthProvider}`);
-            return {
-              provider: piAuthProvider,
-              credential: {
-                type: 'oauth',
-                access: oauth.accessToken,
-                refresh: oauth.refreshToken,
-                expires: oauth.expiresAt ?? 0,
-              },
-            };
-          }
-          // Other OAuth providers: pass as api_key (bearer token)
-          this.debug(`Retrieved OAuth access token for Pi provider: ${piAuthProvider}`);
-          return {
-            provider: piAuthProvider,
-            credential: { type: 'api_key', key: oauth.accessToken },
-          };
-        }
-      } else if (this.config.authType === 'iam_credentials') {
-        // AWS IAM credentials — pass structured fields so the subprocess can
-        // identify the credential type. Actual AWS env var injection happens
-        // at spawn time (see spawnSubprocess) for proper process isolation.
-        const iam = await credentialManager.getLlmIamCredentials(slug);
-        if (iam) {
-          this.debug(`Retrieved IAM credentials for Pi provider: ${piAuthProvider}`);
-          return {
-            provider: piAuthProvider,
-            credential: {
-              type: 'iam',
-              accessKeyId: iam.accessKeyId,
-              secretAccessKey: iam.secretAccessKey,
-              region: iam.region,
-              sessionToken: iam.sessionToken,
-            },
-          };
-        }
-      } else {
-        // API key-based connections.
-        // NOTE: authType === 'environment' (e.g. Bedrock with ~/.aws/credentials)
-        // intentionally falls through here, finds no API key, and returns null.
-        // The subprocess inherits process.env which contains the AWS credential chain.
-        const apiKey = await credentialManager.getLlmApiKey(slug);
-        if (apiKey) {
-          this.debug(`Retrieved API key credential for Pi provider: ${piAuthProvider}`);
-          return {
-            provider: piAuthProvider,
-            credential: { type: 'api_key', key: apiKey },
-          };
-        }
-      }
-
-      this.debug(`No credentials found for Pi provider: ${piAuthProvider}`);
-      return null;
+      return await resolvePiAuthForConnection({
+        authType: this.config.authType,
+        connectionSlug: this.config.connectionSlug,
+        credentialManager: getCredentialManager(),
+        runtime: getBackendRuntime(this.config),
+        debug: (message) => this.debug(message),
+      })
     } catch (error) {
       this.debug(`Failed to retrieve Pi auth: ${error}`);
       return null;
