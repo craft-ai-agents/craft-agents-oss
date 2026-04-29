@@ -311,14 +311,14 @@ jobs:
           unzip -q Craft-Agents-arm64.zip -d verify
           RES="verify/Craft Agents.app/Contents/Resources"
           APP="$RES/app"
-          SDK="$APP/node_modules/@anthropic-ai/claude-agent-sdk/cli.js"
+          SDK="$APP/node_modules/@anthropic-ai/claude-agent-sdk-binary/claude"
           if [ ! -f "$SDK" ]; then
-            echo "::error::SDK missing in macOS ARM64 bundle"
+            echo "::error::SDK native binary missing in macOS ARM64 bundle"
             ls -la "$APP/" || true
             ls -la "$APP/node_modules/" || true
             exit 1
           fi
-          echo "✓ macOS ARM64: SDK found ($(stat -c%s "$SDK") bytes)"
+          echo "✓ macOS ARM64: SDK native binary found ($(stat -c%s "$SDK") bytes)"
           WORKER="$RES/messaging-whatsapp-worker/worker.cjs"
           if [ ! -f "$WORKER" ]; then
             echo "::error::WhatsApp worker missing in macOS ARM64 bundle"
@@ -333,12 +333,12 @@ jobs:
           unzip -q Craft-Agents-x64.zip -d verify
           RES="verify/Craft Agents.app/Contents/Resources"
           APP="$RES/app"
-          SDK="$APP/node_modules/@anthropic-ai/claude-agent-sdk/cli.js"
+          SDK="$APP/node_modules/@anthropic-ai/claude-agent-sdk-binary/claude"
           if [ ! -f "$SDK" ]; then
-            echo "::error::SDK missing in macOS x64 bundle"
+            echo "::error::SDK native binary missing in macOS x64 bundle"
             exit 1
           fi
-          echo "✓ macOS x64: SDK found ($(stat -c%s "$SDK") bytes)"
+          echo "✓ macOS x64: SDK native binary found ($(stat -c%s "$SDK") bytes)"
           WORKER="$RES/messaging-whatsapp-worker/worker.cjs"
           if [ ! -f "$WORKER" ]; then
             echo "::error::WhatsApp worker missing in macOS x64 bundle"
@@ -353,12 +353,12 @@ jobs:
           ./Craft-Agents-x64.AppImage --appimage-extract >/dev/null 2>&1
           RES="squashfs-root/resources"
           APP="$RES/app"
-          SDK="$APP/node_modules/@anthropic-ai/claude-agent-sdk/cli.js"
+          SDK="$APP/node_modules/@anthropic-ai/claude-agent-sdk-binary/claude"
           if [ ! -f "$SDK" ]; then
-            echo "::error::SDK missing in Linux bundle"
+            echo "::error::SDK native binary missing in Linux bundle"
             exit 1
           fi
-          echo "✓ Linux: SDK found ($(stat -c%s "$SDK") bytes)"
+          echo "✓ Linux: SDK native binary found ($(stat -c%s "$SDK") bytes)"
           WORKER="$RES/messaging-whatsapp-worker/worker.cjs"
           if [ ! -f "$WORKER" ]; then
             echo "::error::WhatsApp worker missing in Linux bundle"
@@ -379,12 +379,12 @@ jobs:
           7z x -y "$NSIS" -oapp >/dev/null
           RES="app/resources"
           APP="$RES/app"
-          SDK_PATH="$APP/node_modules/@anthropic-ai/claude-agent-sdk/cli.js"
+          SDK_PATH="$APP/node_modules/@anthropic-ai/claude-agent-sdk-binary/claude.exe"
           if [ ! -f "$SDK_PATH" ]; then
-            echo "::error::SDK missing in Windows bundle"
+            echo "::error::SDK native binary missing in Windows bundle"
             exit 1
           fi
-          echo "✓ Windows: SDK found ($(stat -c%s "$SDK_PATH") bytes)"
+          echo "✓ Windows: SDK native binary found ($(stat -c%s "$SDK_PATH") bytes)"
           WORKER="$RES/messaging-whatsapp-worker/worker.cjs"
           if [ ! -f "$WORKER" ]; then
             echo "::error::WhatsApp worker missing in Windows bundle"

@@ -41,6 +41,7 @@ import {
   downloadBun,
   downloadUv,
   copySDK,
+  copyRipgrep,
   copyInterceptor,
   copyInterceptorBundle,
   buildMcpServers,
@@ -177,8 +178,9 @@ async function main(): Promise<void> {
     console.log('\n[5/9] Downloading uv runtime...');
     await downloadUv(config);
 
-    console.log('\n[6/9] Copying SDK and interceptors...');
+    console.log('\n[6/9] Copying SDK, ripgrep, and interceptors...');
     copySDK(config);
+    copyRipgrep(config);
     copyInterceptor(config);
     copyInterceptorBundle(config);
 

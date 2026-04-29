@@ -201,20 +201,18 @@ info "Installing SDK files to $VERSION_DIR..."
 rm -rf "$VERSION_DIR"
 mkdir -p "$VERSION_DIR"
 
-# Copy claude-agent-sdk folder (required for subprocess spawning)
+# Copy claude-agent-sdk folder. Since SDK 0.2.113 this directory contains
+# the native `claude` (or `claude.exe`) binary instead of `cli.js` — the Craft
+# CLI subprocess-spawns it directly.
 if [ -d "$extract_dir/claude-agent-sdk" ]; then
     cp -r "$extract_dir/claude-agent-sdk" "$VERSION_DIR/"
+    # Ensure the native binary is executable on Unix.
+    if [ -f "$VERSION_DIR/claude-agent-sdk/claude" ]; then
+        chmod +x "$VERSION_DIR/claude-agent-sdk/claude"
+    fi
     success "Installed claude-agent-sdk"
 else
     warn "claude-agent-sdk not found in archive"
-fi
-
-# Copy cache-ttl-interceptor.ts (for extended prompt cache TTL)
-if [ -f "$extract_dir/cache-ttl-interceptor.ts" ]; then
-    cp "$extract_dir/cache-ttl-interceptor.ts" "$VERSION_DIR/"
-    success "Installed cache-ttl-interceptor.ts"
-else
-    warn "cache-ttl-interceptor.ts not found in archive"
 fi
 
 # Clean up

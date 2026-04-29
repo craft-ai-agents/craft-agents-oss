@@ -782,17 +782,20 @@ craftagents://workspace/{workspaceId}/{compoundRoute}
 
 ## Critical SDK Setup
 
-The Claude Agent SDK requires explicit setup in the Electron main process:
+Since SDK 0.2.113 the Claude Agent SDK ships a **native `claude` binary** per platform (no more `cli.js`). The thin core (`@anthropic-ai/claude-agent-sdk`) provides `sdk.mjs` and types; the binary lives in a per-arch optional dependency (`@anthropic-ai/claude-agent-sdk-{platform}-{arch}`).
 
-### 1. SDK Path (in `sessions.ts`)
-```typescript
-// Must set before creating any CraftAgent instances
-const cliPath = join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js')
-setPathToClaudeCodeExecutable(cliPath)
-```
-Without this, you'll get: `Error: The "path" argument must be of type string...`
+### 1. SDK path resolution
 
-### 2. Authentication Environment
+Resolution is centralized in `packages/shared/src/agent/backend/internal/runtime-resolver.ts:resolveClaudeBinaryPath`. It probes, in order:
+1. The build-script alias `node_modules/@anthropic-ai/claude-agent-sdk-binary/{claude,claude.exe}` (what `build-dmg.sh` / `build-linux.sh` / `build-win.ps1` populate before electron-builder runs).
+2. The real per-arch package `node_modules/@anthropic-ai/claude-agent-sdk-{platform}-{arch}/...` (what plain `bun install` produces in dev).
+3. A dev-mode walk-up (when `CRAFT_DEV_RUNTIME=1` is set, e.g. `electron:dist:dev:mac`).
+
+Once found, `applyAnthropicRuntimeBootstrap()` calls `setPathToClaudeCodeExecutable(path)`. The SDK then executes the binary directly — **no Bun runtime, no `--preload`, no `--env-file` flag**: those are Bun-specific and the native binary doesn't accept them.
+
+If the binary can't be found, you'll see: `Claude Agent SDK native binary not found. The app package may be corrupted.`
+
+### 2. Authentication environment
 Authentication env vars must be set BEFORE creating agents:
 ```typescript
 // Claude Max OAuth
@@ -1455,9 +1458,9 @@ open "apps/electron/release/mac-arm64/Craft Agents.app"
 ```
 
 `electron:dist:dev:mac` bakes `CRAFT_DEV_RUNTIME=1` into the build at compile time (via esbuild `--define`). This tells the runtime resolver to look outside the `.app` bundle for dependencies that `build-dmg.sh` would normally copy in:
-- **SDK**: walks up from the bundle to find `node_modules/@anthropic-ai/claude-agent-sdk/cli.js` in the monorepo root
-- **Interceptor**: walks up to find `packages/shared/src/unified-network-interceptor.ts`
-- **Bun**: falls back to system `bun` instead of requiring the vendored copy
+- **SDK native binary**: walks up from the bundle to find `node_modules/@anthropic-ai/claude-agent-sdk-{platform}-{arch}/{claude,claude.exe}` in the monorepo root.
+- **Interceptor (Pi only)**: walks up to find `packages/shared/src/unified-network-interceptor.ts`.
+- **Bun**: falls back to system `bun` for non-SDK subprocesses instead of requiring the vendored copy.
 
 Production builds (`build-dmg.sh`, `electron:dist:mac`) don't set this flag — they bundle all dependencies and use strict path resolution.
 
@@ -1501,32 +1504,35 @@ bash scripts/build-linux.sh arm64
 
 ### What the build scripts do
 
-1. Downloads pinned Bun runtime (v1.3.5) with SHA256 checksum verification
-2. Copies SDK from root `node_modules` (monorepo hoisting workaround)
-3. Copies `network-interceptor.ts` for API error capture and MCP schema injection
-4. Builds the Electron app (`bun run electron:build`)
-5. Packages with `electron-builder` for the target platform
+1. Downloads pinned Bun runtime (with SHA256 checksum verification) — used by Pi / session-mcp-server / bridge-mcp-server subprocesses, **not** the Claude SDK.
+2. Copies the thin core SDK (`@anthropic-ai/claude-agent-sdk`) from root `node_modules` (monorepo hoisting workaround).
+3. Stages the matching arch's native binary package (`@anthropic-ai/claude-agent-sdk-{platform}-{arch}`) at the stable alias `node_modules/@anthropic-ai/claude-agent-sdk-binary/`. Cross-arch builds fetch from npm if the host arch differs from the target.
+4. Copies `@vscode/ripgrep` (used by the search service; SDK 0.2.113 stopped shipping its own ripgrep).
+5. Copies `unified-network-interceptor.ts` for the **Pi** subprocess (it still runs under Bun and accepts `--preload`). Claude doesn't use this anymore — see Phase 2 in `plans/sdk-uplift-plan.md`.
+6. Builds the Electron app (`bun run electron:build`).
+7. Packages with `electron-builder` for the target platform.
 
 **Requirements:**
 - Platform-specific tools (hdiutil for macOS, NSIS for Windows, AppImage tools for Linux)
 - Bun installed (for build step)
-- Run `bun install` from repo root first
+- Run `bun install` from repo root first; the postinstall for `@vscode/ripgrep` must be trusted (`bun pm trust @vscode/ripgrep`).
 
 **Build artifacts (gitignored):**
-- `vendor/` - Bundled Bun runtime
-- `packages/` - Copied interceptor
-- `release/` - Packaged app and installers
-- `node_modules/@anthropic-ai/` - Copied SDK
+- `vendor/bun/`, `vendor/codex/`, `vendor/copilot/` — bundled runtimes / binaries
+- `packages/shared/src/` — copied interceptor (Pi-only; Phase 2 will retire this)
+- `release/` — packaged app and installers
+- `node_modules/@anthropic-ai/claude-agent-sdk{,-binary}` — copied core SDK + staged native binary
+- `node_modules/@vscode/ripgrep` — copied ripgrep
 
 **Architecture:**
 ```
-Development:
-  system bun → cli.js (root node_modules) → interceptor (packages/shared)
+Development (`bun run electron:dev` / `electron:dist:dev:mac`):
+  per-arch binary auto-found at <repo>/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude
 
 Packaged App:
-  vendor/bun/bun → cli.js (bundled) → interceptor (bundled)
-                      ↑                     ↑
-               app.getAppPath()/...   app.getAppPath()/...
+  alias → <Resources>/app/node_modules/@anthropic-ai/claude-agent-sdk-binary/claude
+                 ↑
+        runtime-resolver.ts:resolveClaudeBinaryPath
 ```
 
-The packaged app uses `app.isPackaged` to detect runtime environment and resolves paths via `app.getAppPath()` instead of `process.cwd()`.
+The packaged app uses `app.isPackaged` to detect runtime environment and resolves paths via `app.getAppPath()` instead of `process.cwd()`. The Bun runtime under `vendor/bun/` exists only for non-SDK subprocesses; the native Claude binary runs directly.

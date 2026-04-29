@@ -61,11 +61,18 @@ files:
   # Exclude everything from node_modules (will use extraResources for SDK)
   - "!node_modules/**/*"
 
-# SDK is included as per-platform extraResources (below) to bypass node_modules auto-exclusion
-# and to apply platform-specific ripgrep binary filtering.
-# Since electron-builder v20.15.2, directories named "node_modules" are automatically excluded.
-# Using extraResources with explicit from/to paths works around this limitation.
-# See: https://github.com/electron-userland/electron-builder/issues/3104
+# Since SDK 0.2.113 the SDK ships a thin core (`@anthropic-ai/claude-agent-sdk`)
+# and a per-platform optional dependency (`-darwin-arm64`, `-darwin-x64`, etc.)
+# containing the ~210 MB native `claude` binary. We bundle both as extraResources
+# below — only the binary matching the build target is shipped per artifact, so
+# the platform `files` rules below also exclude the wrong-platform binaries.
+#
+# Why extraResources instead of `files`: since electron-builder v20.15.2,
+# `node_modules` directories are auto-excluded from `files`. extraResources
+# bypasses that. See: https://github.com/electron-userland/electron-builder/issues/3104
+#
+# Ripgrep is sourced from `@vscode/ripgrep` (was previously bundled inside the
+# SDK as `vendor/ripgrep/<platform>/rg`; removed in 0.2.113).
 
 extraMetadata:
   main: dist/main.cjs
@@ -99,13 +106,18 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extraResources:
+    # Thin core SDK (sdk.mjs + types). ~4 MB — present on every platform.
     - from: node_modules/@anthropic-ai/claude-agent-sdk
       to: app/node_modules/@anthropic-ai/claude-agent-sdk
-      filter:
-        - "**/*"
-        - "!vendor/ripgrep/arm64-linux/**"
-        - "!vendor/ripgrep/x64-linux/**"
-        - "!vendor/ripgrep/x64-win32/**"
+    # Stable alias pointing at the target-arch native binary package.
+    # Populated by build-dmg.sh / build-linux.sh / build-win.ps1 before
+    # electron-builder runs (`apps/electron/node_modules/@anthropic-ai/claude-agent-sdk-binary/`).
+    # The runtime resolver (runtime-resolver.ts) looks here first.
+    - from: node_modules/@anthropic-ai/claude-agent-sdk-binary
+      to: app/node_modules/@anthropic-ai/claude-agent-sdk-binary
+    # ripgrep (used by packages/server-core/src/services/search.ts).
+    - from: node_modules/@vscode/ripgrep
+      to: app/node_modules/@vscode/ripgrep
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs
@@ -173,12 +185,10 @@ win:
   extraResources:
     - from: node_modules/@anthropic-ai/claude-agent-sdk
       to: app/node_modules/@anthropic-ai/claude-agent-sdk
-      filter:
-        - "**/*"
-        - "!vendor/ripgrep/arm64-darwin/**"
-        - "!vendor/ripgrep/x64-darwin/**"
-        - "!vendor/ripgrep/arm64-linux/**"
-        - "!vendor/ripgrep/x64-linux/**"
+    - from: node_modules/@anthropic-ai/claude-agent-sdk-binary
+      to: app/node_modules/@anthropic-ai/claude-agent-sdk-binary
+    - from: node_modules/@vscode/ripgrep
+      to: app/node_modules/@vscode/ripgrep
     - from: vendor/bun/bun.exe
       to: vendor/bun/bun.exe
     - from: vendor/codex/win32-x64
@@ -210,11 +220,10 @@ linux:
   extraResources:
     - from: node_modules/@anthropic-ai/claude-agent-sdk
       to: app/node_modules/@anthropic-ai/claude-agent-sdk
-      filter:
-        - "**/*"
-        - "!vendor/ripgrep/arm64-darwin/**"
-        - "!vendor/ripgrep/x64-darwin/**"
-        - "!vendor/ripgrep/x64-win32/**"
+    - from: node_modules/@anthropic-ai/claude-agent-sdk-binary
+      to: app/node_modules/@anthropic-ai/claude-agent-sdk-binary
+    - from: node_modules/@vscode/ripgrep
+      to: app/node_modules/@vscode/ripgrep
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs
