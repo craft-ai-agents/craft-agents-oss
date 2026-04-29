@@ -55,6 +55,8 @@ export interface SessionScopedToolCallbacks {
   setSessionLabelsFn?: (sessionId: string | undefined, labels: string[]) => void | Promise<void>;
   /** Set status on a session (defaults to current). */
   setSessionStatusFn?: (sessionId: string | undefined, status: string) => void | Promise<void>;
+  /** Change the current session's working directory. */
+  setWorkingDirectoryFn?: (path: string) => Promise<{ ok: boolean; reason?: string; path?: string }>;
   /** Get detailed info about a session (defaults to current). */
   getSessionInfoFn?: (sessionId?: string) => import('@craft-agent/session-tools-core').SessionInfo | null;
   /** List sessions in the workspace with pagination. */

@@ -53,6 +53,14 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'setWorkingDirectory', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.setWorkingDirectoryFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'listSessions', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.listSessionsFn;

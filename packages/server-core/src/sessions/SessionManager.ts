@@ -2,7 +2,7 @@ import type { EventSink } from '@craft-agent/server-core/transport'
 import type { ISessionManager, IBrowserPaneManager } from '@craft-agent/server-core/handlers'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@craft-agent/server-core/runtime'
-import { basename, dirname, join } from 'path'
+import { basename, dirname, join, isAbsolute, resolve as resolvePath } from 'path'
 import { existsSync } from 'fs'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { randomUUID } from 'node:crypto'
@@ -3462,6 +3462,65 @@ export class SessionManager implements ISessionManager {
         },
         setSessionStatusFn: async (sessionId: string | undefined, status: string) => {
           await this.setSessionStatus(sessionId ?? managed.id, status as SessionStatus)
+        },
+        setWorkingDirectoryFn: async (newPath: string) => {
+          // Resolve relative paths against the session's authoritative
+          // working directory (NOT process.cwd, which is the app/server
+          // launch directory). The handler intentionally forwards the
+          // tilde-expanded path verbatim so this layer owns resolution.
+          //
+          // Fallback chain mirrors getWorkingDirectoryContext: explicit
+          // session.workingDirectory → sdkCwd (set at session creation,
+          // never changes) → the session's storage folder. We deliberately
+          // do NOT fall back to workspace.rootPath or process.cwd — the
+          // former is wrong for default sessions, the latter is the
+          // app/server launch directory.
+          const base =
+            managed.workingDirectory ?? managed.sdkCwd ?? this.getSessionPath(managed.id) ?? process.cwd()
+          const resolved = isAbsolute(newPath) ? newPath : resolvePath(base, newPath)
+          const validation = isValidWorkingDirectory(resolved)
+          if (!validation.valid) {
+            return { ok: false, reason: validation.reason ?? 'invalid path', path: resolved }
+          }
+
+          // Detect whether the live SDK subprocess will pick up the new cwd.
+          // SessionManager.updateWorkingDirectory only updates sdkCwd when no
+          // SDK interaction has occurred yet (no messages, no agent). For an
+          // already-running session the Claude SDK / Bash subprocess stays
+          // rooted at the original sdkCwd — file/shell tools that rely on
+          // the SDK process cwd will keep using the old path until the
+          // session is restarted. Surface this so the LLM doesn't claim a
+          // full cwd switch when only the working-directory context moved.
+          const sdkLocked =
+            managed.messages.length > 0 || !!managed.sdkSessionId || !!managed.agent
+
+          this.updateWorkingDirectory(managed.id, resolved)
+          // updateWorkingDirectory only enqueues a debounced persist (~500ms).
+          // Flush synchronously so that follow-up session tools (e.g.
+          // skill_validate) which read workingDirectory from session.jsonl
+          // when the live context is missing don't observe the stale value.
+          await sessionPersistenceQueue.flush(managed.id)
+
+          // Emit the partial-apply note whenever the SDK process is locked,
+          // regardless of whether we know the original cwd — legacy sessions
+          // can have a live agent rooted at the session folder via the
+          // ClaudeAgent fallback while `managed.sdkCwd` is still undefined.
+          // Only suppress the note when we definitively know the SDK is
+          // already at the new path.
+          const sdkAtTarget = managed.sdkCwd === resolved
+          return {
+            ok: true,
+            path: resolved,
+            ...(sdkLocked && !sdkAtTarget
+              ? {
+                  reason:
+                    `note: working-directory context updated to ${resolved}, but the live SDK session ` +
+                    `is still rooted at ${managed.sdkCwd ?? 'its original cwd'} and reopening this session ` +
+                    `will reuse that original cwd. Use absolute paths in subsequent Bash/Read/Edit calls, or ` +
+                    `start a brand-new session if the SDK process must be re-rooted.`,
+                }
+              : {}),
+          }
         },
         getSessionInfoFn: (sessionId?: string) => {
           const targetId = sessionId ?? managed.id

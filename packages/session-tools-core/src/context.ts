@@ -316,6 +316,17 @@ export interface SessionToolContext {
   /** Set status on a session. Defaults to current session if no ID given. Injected by backend. */
   setSessionStatus?(sessionId: string | undefined, status: string): void | Promise<void>;
 
+  /**
+   * Change the working directory of the current session.
+   *
+   * The backend is responsible for resolving relative paths against the
+   * session's authoritative working directory (the SessionToolContext does
+   * not reliably carry it). On success returns `{ ok: true, path }` with the
+   * absolute path that was applied; on failure returns `{ ok: false, reason }`.
+   * Injected by backend.
+   */
+  setWorkingDirectory?(path: string): Promise<{ ok: boolean; reason?: string; path?: string }>;
+
   /** Get detailed info about a session. Defaults to current session if no ID given. Injected by backend. */
   getSessionInfo?(sessionId?: string): SessionInfo | null;
 

@@ -36,6 +36,7 @@ import { handleRenderTemplate } from './handlers/render-template.ts';
 import { handleSendDeveloperFeedback } from './handlers/send-developer-feedback.ts';
 import { handleSetSessionLabels } from './handlers/set-session-labels.ts';
 import { handleSetSessionStatus } from './handlers/set-session-status.ts';
+import { handleSetWorkingDirectory } from './handlers/set-working-directory.ts';
 import { handleGetSessionInfo } from './handlers/get-session-info.ts';
 import { handleListSessions } from './handlers/list-sessions.ts';
 import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
@@ -188,6 +189,12 @@ export const SetSessionLabelsSchema = z.object({
 export const SetSessionStatusSchema = z.object({
   sessionId: z.string().optional().describe('Session ID to update. Omit to update the current session.'),
   status: z.string().describe('Status to set (e.g., "todo", "in_progress", "done")'),
+});
+
+export const SetWorkingDirectorySchema = z.object({
+  path: z.string().describe(
+    'New working directory for the current session. Absolute paths are used as-is. Tilde (~), $HOME and ${HOME} are expanded. Relative paths resolve against the current working directory. The directory must already exist.'
+  ),
 });
 
 export const GetSessionInfoSchema = z.object({
@@ -461,6 +468,23 @@ Pass an empty array to clear all labels. Omit sessionId to target the current se
 Use this to signal completion or trigger status-based automations (SessionStatusChange events).
 Omit sessionId to target the current session.`,
 
+  set_working_directory: `Change the working directory of the current session.
+
+Use this when the user asks you to switch context to another folder — for example, "cd into ~/code/foo" or "work on the other repo now" — instead of spawning a new session.
+
+**What this updates:**
+- The session's recorded \`workingDirectory\` and the working-directory context that gets injected into the prompt.
+- Permission checks that scope file/shell tools by working directory.
+- A \`working_directory_changed\` event so the UI stays in sync.
+
+**What this does NOT update on the live SDK process:**
+- The Claude SDK / shell subprocess cwd. Because this tool is invoked from inside a running session, the SDK has already been spawned with its original \`sdkCwd\` and that cwd is persisted with the session — reopening the same session reuses it. Bash, file reads, and other process-cwd-bound tools therefore keep using the original directory; restarting THIS session will not change that. The tool response includes a note when this happens; treat it as a warning and use **absolute paths** in subsequent Bash / Read / Edit calls, or ask the user to start a brand-new session, instead of assuming relative paths now resolve from the new cwd.
+
+**Path semantics:**
+- \`~\`, \`$HOME\` and \`\${HOME}\` are expanded.
+- Relative paths are resolved by the backend against the session's authoritative cwd (NOT the host process cwd).
+- The target must exist and be a directory; otherwise the call returns an error and nothing changes.`,
+
   get_session_info: `Get metadata about the current session or a specific session by ID.
 
 Returns labels, status, name, permission mode, and other details.
@@ -551,6 +575,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   // Session self-management tools (registry — use context callbacks to reach SessionManager)
   { name: 'set_session_labels', description: TOOL_DESCRIPTIONS.set_session_labels, inputSchema: SetSessionLabelsSchema, executionMode: 'registry', safeMode: 'block', handler: handleSetSessionLabels },
   { name: 'set_session_status', description: TOOL_DESCRIPTIONS.set_session_status, inputSchema: SetSessionStatusSchema, executionMode: 'registry', safeMode: 'block', handler: handleSetSessionStatus },
+  { name: 'set_working_directory', description: TOOL_DESCRIPTIONS.set_working_directory, inputSchema: SetWorkingDirectorySchema, executionMode: 'registry', safeMode: 'block', handler: handleSetWorkingDirectory },
   { name: 'get_session_info', description: TOOL_DESCRIPTIONS.get_session_info, inputSchema: GetSessionInfoSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetSessionInfo },
   { name: 'list_sessions', description: TOOL_DESCRIPTIONS.list_sessions, inputSchema: ListSessionsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSessions },
   // Inter-session messaging

@@ -2466,12 +2466,17 @@ This is a branched conversation. All prior messages in this conversation are par
 
   /**
    * Update the working directory for this agent's session.
-   * Called when user changes the working directory in the UI.
+   * Called when user changes the working directory in the UI, and also from
+   * the agent-initiated `set_working_directory` tool. Must keep the
+   * PermissionManager in sync — otherwise pre-tool-use checks for `Read`,
+   * `Edit`, `Bash`, etc. continue to enforce the old project root and can
+   * block legitimate operations under the new directory.
    */
   updateWorkingDirectory(path: string): void {
     if (this.config.session) {
       this.config.session.workingDirectory = path;
     }
+    this.permissionManager.updateWorkingDirectory(path);
   }
 
   /**
