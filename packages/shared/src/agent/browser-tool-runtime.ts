@@ -7,6 +7,7 @@ import type {
   BrowserScreenshotRegionArgs,
   BrowserWaitArgs,
 } from './browser-tools.ts';
+import { FEATURE_FLAGS } from '../feature-flags.ts';
 
 export interface BrowserCommandImage {
   data: string;
@@ -37,7 +38,7 @@ interface BrowserPageMetrics {
   activeElementName?: string;
 }
 
-export function getBrowserToolHelp(): string {
+function getLegacyBrowserToolHelp(): string {
   return [
     'browser_tool command help',
     '',
@@ -111,6 +112,68 @@ export function getBrowserToolHelp(): string {
     '  focus browser-1',
     '  windows',
   ].join('\n');
+}
+
+function getLibrettoBrowserToolHelp(): string {
+  return [
+    'browser_tool command help',
+    '',
+    'Usage:',
+    '  --help',
+    '  open [url] [--foreground|-f]                  open a browser pane and start a session',
+    '  windows',
+    '  focus [windowId]',
+    '  hide [windowId]',
+    '  release [windowId|all]',
+    '  close [windowId]',
+    '  snapshot ...',
+    '  exec <expression>',
+    '  run <workflow-file> [args...]',
+    '  resume [args...]',
+    '',
+    'Notes:',
+    '  - Always run "open" first — other commands require an active session.',
+    '  - If the session is missing or stale, run "close" then "open" to recreate it.',
+    '  - Hidden/released panes stay reserved to the current session until you "close" them.',
+    '',
+    'Examples:',
+    '  open https://example.com',
+    '  snapshot --objective "Find the primary CTA"',
+    '  exec "return await page.title()"',
+    '  run ./integration.ts --headless',
+    '  resume',
+    '  windows',
+  ].join('\n');
+}
+
+export function getBrowserToolHelp(): string {
+  return FEATURE_FLAGS.librettoBrowserTool
+    ? getLibrettoBrowserToolHelp()
+    : getLegacyBrowserToolHelp();
+}
+
+const LIBRETTO_RECREATE_SESSION_HINT =
+  'Browser automation session is missing or stale. Run "browser_tool close" and then "browser_tool open" to recreate it.';
+
+function looksLikeMissingLibrettoSession(details: string): boolean {
+  const normalized = details.toLowerCase();
+  return [
+    'session not found',
+    'no such session',
+    'missing session',
+    'could not find session',
+    'unknown session',
+    'session does not exist',
+    'target page, context or session has been closed',
+  ].some((needle) => normalized.includes(needle));
+}
+
+function formatLibrettoFailure(command: string, result: { stdout: string; stderr: string; exitCode: number }): string {
+  const details = [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join('\n\n');
+  if (details && looksLikeMissingLibrettoSession(details)) {
+    return `${LIBRETTO_RECREATE_SESSION_HINT}\n\n${details}`;
+  }
+  return details || `Browser command ${command} failed with exit code ${result.exitCode}.`;
 }
 
 function formatNodeLine(
@@ -340,6 +403,267 @@ function formatLifecycleResultLine(result: BrowserLifecycleActionResult): string
     `affected=[${affected}]`,
     result.requestedInstanceId ? `requested=${result.requestedInstanceId}` : undefined,
   ].filter(Boolean).join(', ');
+}
+
+const LIBRETTO_PASSTHROUGH_COMMANDS = new Set([
+  'snapshot',
+  'exec',
+  'run',
+  'resume',
+]);
+
+function parseLibrettoOpenArgs(parts: string[]): { url?: string; foreground: boolean } {
+  let foreground = false;
+  const positional: string[] = [];
+
+  for (let i = 1; i < parts.length; i += 1) {
+    const part = parts[i]!;
+    if (part === '--foreground' || part === '-f') {
+      foreground = true;
+      continue;
+    }
+    positional.push(part);
+  }
+
+  if (positional.length > 1) {
+    throw new Error('open accepts at most one URL. Example: open https://example.com --foreground');
+  }
+
+  return {
+    url: positional[0],
+    foreground,
+  };
+}
+
+function getLibrettoRunner(fns: BrowserPaneFns): NonNullable<BrowserPaneFns['runLibretto']> {
+  if (!fns.runLibretto) {
+    throw new Error('Browser automation is enabled, but the desktop runtime did not provide the command runner.');
+  }
+  return fns.runLibretto;
+}
+
+function formatLibrettoCommandResult(command: string, result: { stdout: string; stderr: string; exitCode: number }): string {
+  const sections: string[] = [`Browser command ${command} completed (exit ${result.exitCode}).`];
+
+  const stdout = result.stdout.trim();
+  const stderr = result.stderr.trim();
+  if (stdout) {
+    sections.push('', stdout);
+  }
+  if (stderr) {
+    sections.push('', 'stderr:', stderr);
+  }
+
+  return sections.join('\n');
+}
+
+async function executeLibrettoBrowserToolCommand(args: {
+  command: string | string[];
+  fns: BrowserPaneFns;
+  sessionId: string;
+}): Promise<BrowserCommandResult> {
+  const parts = Array.isArray(args.command)
+    ? args.command
+    : tokenizeCommand(args.command.trim());
+  const cmd = parts[0]?.toLowerCase();
+
+  if (!cmd || cmd === '--help' || cmd === '-h' || cmd === 'help') {
+    return { output: getBrowserToolHelp(), appendReleaseHint: false };
+  }
+
+  const { fns } = args;
+
+  if (cmd === 'open') {
+    const { url, foreground } = parseLibrettoOpenArgs(parts);
+    const windowsBefore = await fns.listWindows();
+    const result = await fns.openPanel({ background: !foreground, url });
+    let windowsAfter = await fns.listWindows();
+    let win = windowsAfter.find((w) => w.id === result.instanceId);
+    let settledByWait = true;
+    let usedFocusFallback = false;
+
+    if (foreground) {
+      const visibilityResult = await waitForForegroundOpenVisibility({
+        fns,
+        instanceId: result.instanceId,
+      });
+      windowsAfter = visibilityResult.windows;
+      win = visibilityResult.win;
+      settledByWait = visibilityResult.settledByWait;
+      usedFocusFallback = visibilityResult.usedFocusFallback;
+    }
+
+    const reused = windowsBefore.some((w) => w.id === result.instanceId);
+
+    const lines = [
+      `Opened browser pane ${result.instanceId}${foreground ? ' in foreground' : ''}.`,
+      `Pane state: ${reused ? 'reused existing pane' : 'created new pane'}`,
+      `Session windows: ${summarizeWindows(windowsAfter)}`,
+    ];
+
+    if (foreground) {
+      lines.push(`Visibility settle: ${settledByWait ? 'wait-loop' : 'timeout'}${usedFocusFallback ? ' + focus retry' : ''}`);
+    }
+
+    if (url) {
+      lines.push(`URL: ${result.url ?? url}`);
+    } else if (result.url) {
+      lines.push(`URL: ${result.url}`);
+    }
+
+    if (result.title) {
+      lines.push(`Title: ${result.title}`);
+    }
+
+    if (result.librettoSession) {
+      lines.push('Session: active');
+    }
+
+    if (win) {
+      lines.push(`Visible: ${win.isVisible}, boundSessionId: ${win.boundSessionId ?? 'none'}`);
+    }
+
+    return {
+      output: lines.join('\n'),
+      appendReleaseHint: true,
+    };
+  }
+
+  if (cmd === 'focus') {
+    const instanceId = parts[1];
+    const result = await fns.focusWindow(instanceId);
+    const windows = await fns.listWindows();
+    const target = windows.find((w) => w.id === result.instanceId);
+
+    const lines = [
+      `Focused browser window ${result.instanceId}`,
+      `Title: ${result.title || 'New Tab'}`,
+      `URL: ${result.url || 'about:blank'}`,
+      `Session windows: ${summarizeWindows(windows)}`,
+    ];
+    if (target) {
+      lines.push(`Visible: ${target.isVisible}, session: ${target.librettoSession ? 'active' : 'none'}`);
+    }
+
+    return { output: lines.join('\n'), appendReleaseHint: false };
+  }
+
+  if (cmd === 'windows') {
+    const windows = await fns.listWindows();
+    const isAvailableToSession = (w: Awaited<ReturnType<BrowserPaneFns['listWindows']>>[number]) => {
+      if (w.boundSessionId && w.boundSessionId !== args.sessionId) return false;
+      if (!w.boundSessionId && w.ownerSessionId && w.ownerSessionId !== args.sessionId) return false;
+      return true;
+    };
+
+    const available = windows.filter(isAvailableToSession).length;
+    const lines: string[] = [`Browser windows (${windows.length}) — ${summarizeWindows(windows)}, availableToSession=${available}`];
+
+    for (const w of windows) {
+      const lockState = w.boundSessionId ? `locked-session(${w.boundSessionId})` : 'unlocked';
+      const availableToSession = isAvailableToSession(w);
+      lines.push(
+        '',
+        `- ${w.id}`,
+        `  title: ${w.title || 'New Tab'}`,
+        `  url: ${w.url || 'about:blank'}`,
+        `  visible: ${w.isVisible}`,
+        `  ownerType: ${w.ownerType}`,
+        `  ownerSessionId: ${w.ownerSessionId ?? 'none'}`,
+        `  boundSessionId: ${w.boundSessionId ?? 'none'}`,
+        `  lockState: ${lockState}`,
+        `  availableToSession: ${availableToSession}`,
+        `  agentControlActive: ${!!w.agentControlActive}`,
+        `  session: ${w.librettoSession ? 'active' : 'none'}`,
+      );
+    }
+
+    return { output: lines.join('\n'), appendReleaseHint: false };
+  }
+
+  if (cmd === 'release') {
+    const targetArg = parts[1];
+    if (parts.length > 2) {
+      throw new Error('release accepts at most one optional argument: [windowId|all]');
+    }
+
+    const before = await fns.listWindows();
+    const activeOverlays = before.filter((w) => !!w.agentControlActive).length;
+    const lifecycle = await fns.releaseControl(targetArg);
+    const after = await fns.listWindows();
+    const activeAfter = after.filter((w) => !!w.agentControlActive).length;
+
+    return {
+      output: [
+        lifecycle.action === 'released'
+          ? 'Browser control released. Agent overlay dismissed.'
+          : 'No browser overlay was released.',
+        formatLifecycleResultLine(lifecycle),
+        `Overlays active: ${activeOverlays} → ${activeAfter}`,
+      ].join('\n'),
+      appendReleaseHint: false,
+    };
+  }
+
+  if (cmd === 'close') {
+    const targetArg = parts[1];
+    if (parts.length > 2) {
+      throw new Error('close accepts at most one optional argument: [windowId]');
+    }
+
+    const before = await fns.listWindows();
+    const lifecycle = await fns.closeWindow(targetArg);
+    const after = await fns.listWindows();
+
+    return {
+      output: [
+        lifecycle.action === 'closed'
+          ? 'Browser window closed and destroyed.'
+          : 'No browser window was closed.',
+        formatLifecycleResultLine(lifecycle),
+        `Session windows: ${summarizeWindows(before)} → ${summarizeWindows(after)}`,
+      ].join('\n'),
+      appendReleaseHint: false,
+    };
+  }
+
+  if (cmd === 'hide') {
+    const targetArg = parts[1];
+    if (parts.length > 2) {
+      throw new Error('hide accepts at most one optional argument: [windowId]');
+    }
+
+    const before = await fns.listWindows();
+    const lifecycle = await fns.hideWindow(targetArg);
+    const after = await fns.listWindows();
+
+    return {
+      output: [
+        lifecycle.action === 'hidden'
+          ? 'Browser window hidden. Use "open" to show it again.'
+          : 'No browser window was hidden.',
+        formatLifecycleResultLine(lifecycle),
+        `Session windows: ${summarizeWindows(before)} → ${summarizeWindows(after)}`,
+      ].join('\n'),
+      appendReleaseHint: false,
+    };
+  }
+
+  if (!LIBRETTO_PASSTHROUGH_COMMANDS.has(cmd)) {
+    throw new Error(`Unknown browser_tool command "${cmd}". Use "--help" to see supported commands.`);
+  }
+
+  const runLibretto = getLibrettoRunner(fns);
+  const result = await runLibretto(parts);
+
+  if (result.exitCode !== 0) {
+    throw new Error(formatLibrettoFailure(cmd, result));
+  }
+
+  return {
+    output: formatLibrettoCommandResult(cmd, result),
+    appendReleaseHint: true,
+  };
 }
 
 const NAVIGATION_COMMANDS = new Set([
@@ -625,6 +949,10 @@ export async function executeBrowserToolCommand(args: {
   sessionId: string;
   platform?: NodeJS.Platform;
 }): Promise<BrowserCommandResult> {
+  if (FEATURE_FLAGS.librettoBrowserTool) {
+    return executeLibrettoBrowserToolCommand(args);
+  }
+
   // Array mode: no batch splitting, pass directly to single command execution
   if (Array.isArray(args.command)) {
     if (args.command.length === 0) {

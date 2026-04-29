@@ -10,6 +10,7 @@
 import type {
   IBrowserPaneManager,
   AccessibilitySnapshot,
+  BrowserLibrettoAttachment,
   BrowserConsoleEntry,
   BrowserConsoleOptions,
   BrowserDownloadEntry,
@@ -35,6 +36,7 @@ function unavailable(method: string): never {
 export class NullBrowserPaneManager implements IBrowserPaneManager {
   // -- Session lifecycle (no-ops) --
   setSessionPathResolver(_fn: (sessionId: string) => string | null): void {}
+  onInstanceDestroyed(_callback: (instanceId: string) => void): void {}
   destroyForSession(_sessionId: string): void {}
   async clearVisualsForSession(_sessionId: string): Promise<void> {}
   unbindAllForSession(_sessionId: string): void {}
@@ -54,6 +56,10 @@ export class NullBrowserPaneManager implements IBrowserPaneManager {
   clearAgentControlForInstance(_instanceId: string, _sessionId?: string): { released: boolean; reason?: string } {
     return { released: false, reason: NOT_AVAILABLE }
   }
+  async getPageViewTargetId(_id: string): Promise<string | null> { return unavailable('getPageViewTargetId') }
+  setLibrettoAttachment(_id: string, _attachment: BrowserLibrettoAttachment): void { unavailable('setLibrettoAttachment') }
+  getLibrettoAttachment(_id: string): BrowserLibrettoAttachment | null { return null }
+  clearLibrettoAttachment(_id: string): void {}
 
   // -- Navigation --
   async navigate(_id: string, _url: string): Promise<{ url: string; title: string }> { unavailable('navigate') }

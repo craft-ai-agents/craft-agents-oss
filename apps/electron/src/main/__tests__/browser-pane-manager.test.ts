@@ -406,6 +406,36 @@ describe('BrowserPaneManager', () => {
     expect(manager.listInstances()).toHaveLength(1)
   })
 
+  it('createForSession does not reuse an attached manual window', () => {
+    manager.createInstance('manual-attached')
+    manager.setLibrettoAttachment('manual-attached', {
+      librettoSession: 'craft-manual-attached',
+      pageTargetId: 'target-2',
+    })
+    manager.unbindSession('manual-attached')
+
+    const id = manager.createForSession('sess-fresh')
+
+    expect(id).not.toBe('manual-attached')
+    expect(manager.listInstances()).toHaveLength(2)
+  })
+
+  it('unbindAllForSession preserves attached panes', () => {
+    manager.createInstance('pinned-1')
+    manager.bindSession('pinned-1', 'sess-pinned')
+    manager.setLibrettoAttachment('pinned-1', {
+      librettoSession: 'craft-pinned-1',
+      pageTargetId: 'target-3',
+    })
+
+    manager.unbindAllForSession('sess-pinned')
+
+    const info = manager.listInstances().find((instance) => instance.id === 'pinned-1')
+    expect(info?.boundSessionId).toBe('sess-pinned')
+    expect(info?.ownerSessionId).toBe('sess-pinned')
+    expect(info?.librettoSession).toBe('craft-pinned-1')
+  })
+
   it('navigate normalizes hostnames to https', async () => {
     manager.createInstance('nav-1')
     await manager.navigate('nav-1', 'example.com')

@@ -52,6 +52,13 @@ export interface ViewportMetrics {
   scrollY: number
 }
 
+export interface CdpTargetInfo {
+  targetId: string
+  type: string
+  url: string
+  title: string
+}
+
 // Roles that are typically interactive or contain meaningful content
 const INTERACTIVE_ROLES = new Set([
   'button', 'link', 'textbox', 'searchbox', 'combobox',
@@ -180,6 +187,20 @@ export class BrowserCDP {
     }
 
     return ref
+  }
+
+  async getTargetInfo(): Promise<CdpTargetInfo> {
+    const { targetInfo } = await this.send('Target.getTargetInfo')
+    if (!targetInfo?.targetId) {
+      throw new Error('Target.getTargetInfo did not return a targetId')
+    }
+
+    return {
+      targetId: targetInfo.targetId,
+      type: String(targetInfo.type ?? ''),
+      url: String(targetInfo.url ?? ''),
+      title: String(targetInfo.title ?? ''),
+    }
   }
 
   // ---------------------------------------------------------------------------

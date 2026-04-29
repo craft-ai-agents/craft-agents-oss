@@ -794,7 +794,9 @@ Use the \`call_llm\` tool to invoke a secondary LLM for focused subtasks. It run
 ## Browser Tools
 
 You can control built-in browser windows through \`browser_tool\`, a unified CLI-like interface.
-Multiple commands can be batched with semicolons (e.g., \`fill @e1 x; fill @e2 y; click @e3\`). Batches stop after navigation commands.
+${FEATURE_FLAGS.librettoBrowserTool
+  ? 'Commands: open, windows, focus, hide, release, close, snapshot, exec, run, resume.'
+  : 'Multiple commands can be batched with semicolons (e.g., \`fill @e1 x; fill @e2 y; click @e3\`). Batches stop after navigation commands.'}
 
 **IMPORTANT:** All browser tool calls are **blocked** until you read \`${DOC_REFS.browserTools}\`. Always read this guide before your first browser tool call in a session.
 
@@ -802,7 +804,31 @@ Use the browser as an **alternative/fallback** path when source setup is fragile
 
 **Start here:** Run \`browser_tool --help\` to see all available commands and usage examples. Use it whenever you're unsure what's available or how to call something.
 
-**Recommended workflow:**
+${FEATURE_FLAGS.librettoBrowserTool
+  ? `**Recommended workflow:**
+1. \`browser_tool open [url]\` — open a browser pane (creates the automation session)
+2. \`browser_tool snapshot ...\` — inspect the page
+3. \`browser_tool exec ...\` / \`browser_tool run ...\` / \`browser_tool resume ...\` — run browser automation
+
+**Key commands:**
+- \`browser_tool open https://example.com\` — open a pane and navigate to URL
+- \`browser_tool snapshot --objective "Find the primary CTA"\`
+- \`browser_tool exec "return await page.title()"\`
+- \`browser_tool run ./workflow.ts\`
+- \`browser_tool resume\`
+- \`browser_tool windows\` — list browser windows
+- \`browser_tool focus [windowId]\` — focus an existing browser window
+- \`browser_tool close [windowId]\` — close and destroy the browser window
+- \`browser_tool hide [windowId]\` — hide the window (preserves session)
+- \`browser_tool release [windowId|all]\` — dismiss the overlay only
+
+**Tips:**
+- Always run \`open\` first — other commands require an active session
+- If the session is missing or stale, run \`browser_tool close\` then \`browser_tool open\`
+- Hidden or released panes stay reserved to the current session until you \`close\` them
+- Run \`browser_tool --help\` if you need syntax for any command
+- Full reference: \`${DOC_REFS.browserTools}\``
+  : `**Recommended workflow:**
 1. \`browser_tool open\` — ensure browser window exists (opens in background)
 2. \`browser_tool navigate <url>\` — load a page
 3. \`browser_tool snapshot\` — get element refs (@e1, @e2, ...)
@@ -836,7 +862,7 @@ Use the browser as an **alternative/fallback** path when source setup is fragile
 - Prefer \`snapshot\` over \`screenshot\` for element interaction
 - Re-run \`snapshot\` after navigation (refs change with DOM)
 - Run \`browser_tool --help\` if you need syntax for any command
-- Full reference: \`${DOC_REFS.browserTools}\`
+- Full reference: \`${DOC_REFS.browserTools}\``}
 
 **Lifecycle — when you're done:**
 - \`close\` — task fully complete, browser no longer needed (destroys window)

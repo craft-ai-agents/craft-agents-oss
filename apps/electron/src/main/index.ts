@@ -203,6 +203,17 @@ let messagingHandle: MessagingBootstrapHandle | null = null
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
 
+// Enable Chrome DevTools Protocol remote debugging when CRAFT_CDP_PORT is set.
+// This exposes a CDP server on localhost:<port> that external tools (e.g. Libretto)
+// can connect to for browser automation. Only enable in development for now.
+// Example: CRAFT_CDP_PORT=9229
+const cdpPort = process.env.CRAFT_CDP_PORT
+if (cdpPort) {
+  app.commandLine.appendSwitch('remote-debugging-port', cdpPort)
+  app.commandLine.appendSwitch('remote-allow-origins', 'http://127.0.0.1')
+  console.log(`[craft-cdp] Remote debugging enabled on port ${cdpPort}`)
+}
+
 // Set app name early (before app.whenReady) to ensure correct macOS menu bar title
 // Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "Craft Agents [1]")
 app.setName(process.env.CRAFT_APP_NAME || 'Craft Agents')

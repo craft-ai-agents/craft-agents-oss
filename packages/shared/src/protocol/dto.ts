@@ -573,6 +573,7 @@ export interface BrowserInstanceInfo {
   isVisible: boolean
   agentControlActive: boolean
   themeColor: string | null
+  librettoSession?: string | null
 }
 
 export interface DeepLinkNavigation {

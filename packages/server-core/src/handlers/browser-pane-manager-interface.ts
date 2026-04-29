@@ -1,7 +1,7 @@
 /**
  * IBrowserPaneManager — interface for browser pane operations used by SessionManager.
  *
- * Covers all 40 methods SessionManager calls on BrowserPaneManager.
+ * Covers the browser pane methods SessionManager calls on BrowserPaneManager.
  * The concrete BrowserPaneManager in apps/electron implements this.
  *
  * Structurally compatible with BrowserOwnershipReleaser (domain layer)
@@ -21,6 +21,11 @@ export interface BrowserInstanceSnapshot {
   isVisible: boolean
   title: string
   currentUrl: string
+}
+
+export interface BrowserLibrettoAttachment {
+  librettoSession: string
+  pageTargetId: string | null
 }
 
 export interface BrowserScreenshotOptions {
@@ -143,6 +148,9 @@ export interface IBrowserPaneManager {
   /** Register a callback that resolves session IDs to file paths */
   setSessionPathResolver(fn: (sessionId: string) => string | null): void
 
+  /** Register a callback for instance destruction notifications */
+  onInstanceDestroyed(callback: (instanceId: string) => void): void
+
   /** Destroy all browser instances bound to a session */
   destroyForSession(sessionId: string): void
 
@@ -189,6 +197,18 @@ export interface IBrowserPaneManager {
 
   /** Clear agent control overlay for a specific instance */
   clearAgentControlForInstance(instanceId: string, sessionId?: string): { released: boolean; reason?: string }
+
+  /** Resolve the CDP target ID for the instance's page view */
+  getPageViewTargetId(id: string): Promise<string | null>
+
+  /** Persist Libretto attachment metadata on the instance */
+  setLibrettoAttachment(id: string, attachment: BrowserLibrettoAttachment): void
+
+  /** Read Libretto attachment metadata for the instance */
+  getLibrettoAttachment(id: string): BrowserLibrettoAttachment | null
+
+  /** Clear Libretto attachment metadata for the instance */
+  clearLibrettoAttachment(id: string): void
 
   // -- Navigation ----------------------------------------------------------
 

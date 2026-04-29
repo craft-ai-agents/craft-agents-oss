@@ -59,6 +59,17 @@ export function isEmbeddedServerEnabled(): boolean {
   return false;
 }
 
+/**
+ * Runtime-evaluated check for the Libretto-backed browser tool.
+ *
+ * Defaults to disabled. Override with CRAFT_FEATURE_LIBRETTO_BROWSER_TOOL=1|0.
+ */
+export function isLibrettoBrowserToolEnabled(): boolean {
+  const override = parseBooleanEnv(getEnv('CRAFT_FEATURE_LIBRETTO_BROWSER_TOOL'));
+  if (override !== undefined) return override;
+  return false;
+}
+
 export const FEATURE_FLAGS = {
   /** Enable Opus 4.7 fast mode (speed:"fast" + beta header). 6x pricing. */
   fastMode: false,
@@ -86,5 +97,13 @@ export const FEATURE_FLAGS = {
    */
   get embeddedServer(): boolean {
     return isEmbeddedServerEnabled();
+  },
+  /**
+   * Enable the Libretto-backed browser_tool implementation.
+   *
+   * Defaults to disabled. Override with CRAFT_FEATURE_LIBRETTO_BROWSER_TOOL=1|0.
+   */
+  get librettoBrowserTool(): boolean {
+    return isLibrettoBrowserToolEnabled();
   },
 } as const;
