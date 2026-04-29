@@ -203,6 +203,33 @@ export const updateSessionMetaAtom = atom(
 )
 
 /**
+ * Action atom: replace a session with an authoritative full session payload.
+ *
+ * Use this for data returned by getSessionMessages() or createSession(), where
+ * the `messages` array is known to represent the loaded transcript. Keeping the
+ * full session atom and loadedSessionsAtom in one write prevents the chat panel
+ * from hiding real messages behind a stale lazy-loading spinner.
+ */
+export const replaceLoadedSessionAtom = atom(
+  null,
+  (get, set, session: Session) => {
+    set(sessionAtomFamily(session.id), session)
+
+    const metaMap = get(sessionMetaMapAtom)
+    const newMetaMap = new Map(metaMap)
+    newMetaMap.set(session.id, extractSessionMeta(session))
+    set(sessionMetaMapAtom, newMetaMap)
+
+    const loadedSessions = get(loadedSessionsAtom)
+    if (!loadedSessions.has(session.id)) {
+      const newLoadedSessions = new Set(loadedSessions)
+      newLoadedSessions.add(session.id)
+      set(loadedSessionsAtom, newLoadedSessions)
+    }
+  }
+)
+
+/**
  * Action atom: append message to session (for streaming)
  * Optimized to only update the specific session
  * Note: Does NOT update lastMessageAt - caller must handle timestamp updates

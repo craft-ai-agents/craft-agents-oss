@@ -40,6 +40,7 @@ import {
   addSessionAtom,
   removeSessionAtom,
   updateSessionAtom,
+  replaceLoadedSessionAtom,
   refreshSessionsMetadataAtom,
   sessionAtomFamily,
   sessionMetaMapAtom,
@@ -217,6 +218,7 @@ export default function App() {
   const addSession = useSetAtom(addSessionAtom)
   const removeSession = useSetAtom(removeSessionAtom)
   const updateSessionDirect = useSetAtom(updateSessionAtom)
+  const replaceLoadedSession = useSetAtom(replaceLoadedSessionAtom)
   const store = useStore()
 
   // Helper to update a session by ID with partial fields
@@ -423,7 +425,7 @@ export default function App() {
         : fresh
 
       clearStreamingState(sessionId)
-      updateSessionDirect(sessionId, () => nextSession)
+      replaceLoadedSession(nextSession)
       syncSessionOptionsFromSession(nextSession)
       void reconcilePermissionModeState(sessionId)
       return preservedStaleMessages ? 'preserved_stale_messages' : 'refreshed'
@@ -431,7 +433,7 @@ export default function App() {
       console.error(`[App] Failed to refresh session ${sessionId}:`, err)
       return 'failed'
     }
-  }, [clearStreamingState, updateSessionDirect, syncSessionOptionsFromSession, reconcilePermissionModeState, store])
+  }, [clearStreamingState, replaceLoadedSession, syncSessionOptionsFromSession, reconcilePermissionModeState, store])
 
   const loadSessionsFromServer = useCallback(async () => {
     setSessionLoadError(null)
@@ -828,11 +830,7 @@ export default function App() {
             if (createdSession) {
               const existingMeta = store.get(sessionMetaMapAtom).has(sessionId)
               if (existingMeta) {
-                updateSessionDirect(sessionId, () => createdSession)
-                const metaMap = store.get(sessionMetaMapAtom)
-                const nextMetaMap = new Map(metaMap)
-                nextMetaMap.set(sessionId, extractSessionMeta(createdSession))
-                store.set(sessionMetaMapAtom, nextMetaMap)
+                replaceLoadedSession(createdSession)
               } else {
                 addSession(createdSession)
               }
@@ -949,6 +947,7 @@ export default function App() {
     windowWorkspaceId,
     store,
     updateSessionDirect,
+    replaceLoadedSession,
     showSessionNotification,
     initializeSessions,
     addSession,

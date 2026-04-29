@@ -10,6 +10,7 @@ import {
   forceSessionMessagesReloadAtom,
   refreshSessionsMetadataAtom,
   initializeSessionsAtom,
+  replaceLoadedSessionAtom,
 } from '../sessions'
 
 function msg(id: string, role: Message['role'] = 'user'): Message {
@@ -42,6 +43,20 @@ describe('session message loading atoms', () => {
       // @ts-expect-error test cleanup for window shim
       delete globalThis.window
     }
+  })
+
+  it('replaceLoadedSessionAtom marks authoritative full sessions as loaded', () => {
+    const store = createStore()
+    const sessionId = 'session-1'
+
+    store.set(replaceLoadedSessionAtom, makeSession({
+      id: sessionId,
+      messages: [msg('m1'), msg('m2', 'assistant')],
+    }))
+
+    expect(store.get(loadedSessionsAtom).has(sessionId)).toBe(true)
+    expect(store.get(sessionAtomFamily(sessionId))?.messages.map((message) => message.id)).toEqual(['m1', 'm2'])
+    expect(store.get(sessionMetaMapAtom).get(sessionId)?.messageCount).toBe(2)
   })
 
   it('forceSessionMessagesReloadAtom reloads an empty-but-loaded session', async () => {
