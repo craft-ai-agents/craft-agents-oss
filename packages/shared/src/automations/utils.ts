@@ -109,6 +109,8 @@ export function getMatchValue(event: AutomationEvent, data: Record<string, unkno
       return String(data.relativePath ?? '');
     case 'PollUrl':
       return String(data.url ?? '');
+    case 'MessageReceive':
+      return String(data.text ?? '');
     default:
       return JSON.stringify(data);
   }

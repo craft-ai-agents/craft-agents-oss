@@ -45,6 +45,12 @@ export interface MessagingBootstrapOptions {
     nodeBin?: string
     pairingMode?: 'qr' | 'code'
   }
+  /**
+   * Optional hook fired once per inbound chat message on any workspace's gateway.
+   * Hosts wire this to the workspace's AutomationSystem to power the
+   * `MessageReceive` automation event.
+   */
+  onIncomingMessage?: (workspaceId: string, event: import('./gateway').IncomingMessageEvent) => void | Promise<void>
 }
 
 export interface MessagingBootstrapHandle {
@@ -80,6 +86,7 @@ export function createMessagingBootstrap(opts: MessagingBootstrapOptions): Messa
     publishEvent: (channel, target, ...args) => {
       publisher?.(channel, target, ...args)
     },
+    onIncomingMessage: opts.onIncomingMessage,
   })
 
   const log = opts.logger?.child({ component: 'bootstrap' })

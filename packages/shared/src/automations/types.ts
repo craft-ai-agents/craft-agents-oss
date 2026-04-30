@@ -22,7 +22,8 @@ export type AppEvent =
   | 'SchedulerTick'
   | 'WebhookReceive'
   | 'FileWatch'
-  | 'PollUrl';
+  | 'PollUrl'
+  | 'MessageReceive';
 
 /** Agent events - passed to Claude SDK */
 export type AgentEvent =
@@ -45,7 +46,7 @@ export type AutomationEvent = AppEvent | AgentEvent;
 export const APP_EVENTS: AppEvent[] = [
   'LabelAdd', 'LabelRemove', 'LabelConfigChange',
   'PermissionModeChange', 'FlagChange', 'SessionStatusChange', 'SchedulerTick',
-  'WebhookReceive', 'FileWatch', 'PollUrl',
+  'WebhookReceive', 'FileWatch', 'PollUrl', 'MessageReceive',
 ];
 
 export const AGENT_EVENTS: AgentEvent[] = [

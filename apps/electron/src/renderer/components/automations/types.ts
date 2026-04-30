@@ -31,6 +31,7 @@ export type AppEvent =
   | 'WebhookReceive'
   | 'FileWatch'
   | 'PollUrl'
+  | 'MessageReceive'
 
 export type FileWatchChangeType = 'add' | 'change' | 'remove'
 
@@ -54,11 +55,11 @@ export type AutomationTrigger = AppEvent | AgentEvent
 export const APP_EVENTS: AppEvent[] = [
   'LabelAdd', 'LabelRemove', 'LabelConfigChange',
   'PermissionModeChange', 'FlagChange', 'TodoStateChange', 'SessionStatusChange', 'SchedulerTick',
-  'WebhookReceive', 'FileWatch', 'PollUrl',
+  'WebhookReceive', 'FileWatch', 'PollUrl', 'MessageReceive',
 ]
 
 /** Subset of AppEvent that represents an external input source. */
-export const EXTERNAL_INPUT_EVENTS: AppEvent[] = ['WebhookReceive', 'FileWatch', 'PollUrl']
+export const EXTERNAL_INPUT_EVENTS: AppEvent[] = ['WebhookReceive', 'FileWatch', 'PollUrl', 'MessageReceive']
 
 export function isExternalInputEvent(event: AutomationTrigger): boolean {
   return (EXTERNAL_INPUT_EVENTS as string[]).includes(event)
@@ -356,6 +357,7 @@ export const EVENT_DISPLAY_NAMES: Record<AutomationTrigger, string> = {
   WebhookReceive:       'Inbound Webhook',
   FileWatch:            'File Changed',
   PollUrl:              'URL Poll',
+  MessageReceive:       'Chat Message',
 
   // Agent events
   PreToolUse:           'Before Tool Runs',
@@ -483,6 +485,10 @@ function deriveAutomationSummary(event: string, matcher: AutomationsConfigMatche
     const fp = matcher.pollFingerprint ?? 'body'
     return `Poll ${url} every ${interval}s (${fp})`
   }
+  if (event === 'MessageReceive') {
+    if (matcher.matcher) return `When chat message matches: ${matcher.matcher}`
+    return 'On every inbound chat message'
+  }
   if (matcher.cron) {
     const runs = computeNextRuns(matcher.cron, 1)
     if (runs.length > 0) {
@@ -575,6 +581,7 @@ export function getEventCategory(event: AutomationTrigger): EventCategory {
     case 'WebhookReceive':
     case 'FileWatch':
     case 'PollUrl':
+    case 'MessageReceive':
       return 'scheduled'
     case 'LabelAdd':
     case 'LabelRemove':

@@ -74,6 +74,7 @@ craft-agent automation validate
 | `WebhookReceive` | External HTTP request to the trigger server | Slug (the URL path component) |
 | `FileWatch` | File added, modified, or removed under a watched directory | Relative path of the changed file |
 | `PollUrl` | Polled HTTP endpoint's response fingerprint changed | Polled URL |
+| `MessageReceive` | Inbound message on a connected chat adapter (Telegram, WhatsApp) | Message text |
 
 > **Note:** `TodoStateChange` is a deprecated alias for `SessionStatusChange`. Existing configs using the old name will continue to work but will show a deprecation warning during validation.
 
@@ -977,6 +978,75 @@ Fire automations when a polled HTTP endpoint's response changes. Covers the "no 
 | `$CRAFT_PREVIOUS_FINGERPRINT` | Previous fingerprint (or empty on first change) |
 | `$CRAFT_BODY` | Response body (truncated to 4 KB) when fingerprint kind is `body` |
 | `$CRAFT_EVENT_DATA` | Full payload as JSON |
+
+## Inbound Chat Triggers (`MessageReceive`)
+
+Fires when a message arrives on a connected messaging adapter (Telegram, WhatsApp). The matcher's regex applies to the message text, and conditions can filter by platform, sender, bound-state, etc.
+
+### Example: triage every un-bound message
+
+```json
+{
+  "version": 2,
+  "automations": {
+    "MessageReceive": [
+      {
+        "name": "Inbox triage",
+        "conditions": [
+          { "condition": "state", "field": "bound", "value": false }
+        ],
+        "actions": [
+          {
+            "type": "prompt",
+            "prompt": "New chat message from $CRAFT_SENDER_NAME on $CRAFT_PLATFORM:\n\n$CRAFT_TEXT\n\nTriage this and respond."
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Example: react to a slash command
+
+```json
+{
+  "MessageReceive": [
+    {
+      "name": "/triage command",
+      "matcher": "^/triage(\\s|$)",
+      "actions": [
+        { "type": "prompt", "prompt": "Triage request: $CRAFT_TEXT" }
+      ]
+    }
+  ]
+}
+```
+
+### Setup
+
+Connect at least one chat adapter in **Settings → Messaging** (Telegram or WhatsApp). Once connected, every inbound message — bound or not — fires `MessageReceive` automations whose matcher and conditions pass.
+
+### Behavior notes
+
+- Slash-commands handled by the messaging gateway (`/bind`, `/new`, etc.) **still** fire `MessageReceive`. Filter them out with `matcher: "^[^/]"` if needed.
+- Messages arriving on a **bound** channel are ALSO routed to the bound session as a normal user prompt — `MessageReceive` fires on top of that. Use `{ "condition": "state", "field": "bound", "value": false }` to react only to un-bound (inbox-style) messages.
+- Errors in your automation never block message routing.
+
+### Variables available to actions
+
+| Variable | Description |
+|----------|-------------|
+| `$CRAFT_TEXT` | Message text |
+| `$CRAFT_PLATFORM` | `telegram`, `whatsapp`, … |
+| `$CRAFT_CHANNEL_ID` | Adapter-specific chat/channel ID |
+| `$CRAFT_MESSAGE_ID` | Adapter-specific message ID |
+| `$CRAFT_SENDER_ID` | Sender ID (phone, user ID, …) |
+| `$CRAFT_SENDER_NAME` | Display name when the adapter provides one |
+| `$CRAFT_BOUND` | `true` / `false` — whether the channel is bound to a session |
+| `$CRAFT_ATTACHMENT_COUNT` | Number of attachments |
+| `$CRAFT_HAS_ATTACHMENT` | `true` / `false` |
+| `$CRAFT_SENT_AT` | Platform timestamp (epoch ms) |
 
 ## Validation
 

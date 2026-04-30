@@ -16,7 +16,7 @@ export interface AutomationTemplate {
   /** Stable unique ID for the template (used as React key). */
   id: string
   /** Display category for grouping in the picker UI. */
-  category: 'webhook' | 'file' | 'poll'
+  category: 'webhook' | 'file' | 'poll' | 'message'
   /** Short headline shown on the card. */
   title: string
   /** One-sentence summary shown under the title. */
@@ -205,6 +205,48 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
       ],
     },
   },
+  // ----- MessageReceive -----
+  {
+    id: 'msg-triage',
+    category: 'message',
+    title: 'Inbound chat → triage',
+    description: 'Every message arriving on a connected chat platform spawns a triage agent.',
+    glyph: '💬',
+    event: 'MessageReceive',
+    matcher: {
+      name: 'Chat triage',
+      conditions: [
+        // Only fire on un-bound channels — bound channels already route into
+        // an existing session, so firing here would double-handle.
+        { condition: 'state', field: 'bound', value: false },
+      ],
+      actions: [
+        {
+          type: 'prompt',
+          prompt: 'New chat message from $CRAFT_SENDER_NAME on $CRAFT_PLATFORM:\n\n$CRAFT_TEXT\n\nTriage this and respond.',
+        },
+      ],
+    },
+    setupHint: 'Connect a Telegram or WhatsApp adapter in Settings → Messaging first.',
+  },
+  {
+    id: 'msg-slash-triage',
+    category: 'message',
+    title: 'Slash command — /triage',
+    description: 'A /triage command from any chat fires this — works alongside binding.',
+    glyph: '🛎️',
+    event: 'MessageReceive',
+    matcher: {
+      name: 'Triage command',
+      matcher: '^/triage(\\s|$)',
+      actions: [
+        {
+          type: 'prompt',
+          prompt: 'A /triage command came in from $CRAFT_SENDER_NAME (chat $CRAFT_CHANNEL_ID): $CRAFT_TEXT',
+        },
+      ],
+    },
+  },
   {
     id: 'poll-etag-doc',
     category: 'poll',
@@ -231,4 +273,5 @@ export const TEMPLATE_CATEGORY_LABELS: Record<AutomationTemplate['category'], st
   webhook: 'Inbound Webhooks',
   file: 'File Watchers',
   poll: 'URL Polling',
+  message: 'Chat Messages',
 }

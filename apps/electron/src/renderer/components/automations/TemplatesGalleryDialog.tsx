@@ -68,6 +68,7 @@ export function TemplatesGalleryDialog({ trigger }: TemplatesGalleryDialogProps)
       webhook: [],
       file: [],
       poll: [],
+      message: [],
     }
     for (const t of AUTOMATION_TEMPLATES) byCategory[t.category].push(t)
     return byCategory

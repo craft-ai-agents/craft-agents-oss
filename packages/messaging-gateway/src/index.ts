@@ -4,7 +4,7 @@
  * Messaging gateway for Craft Agent — Telegram & WhatsApp.
  */
 
-export { MessagingGateway, type GatewayOptions } from './gateway'
+export { MessagingGateway, type GatewayOptions, type IncomingMessageEvent } from './gateway'
 export { TelegramAdapter } from './adapters/telegram/index'
 export {
   WhatsAppAdapter,

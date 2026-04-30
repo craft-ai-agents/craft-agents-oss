@@ -72,6 +72,13 @@ export interface MessagingGatewayRegistryOptions {
   }
   /** Optional logger — shared with the gateway and adapters. */
   logger?: MessagingLogger
+  /**
+   * Optional hook invoked once per inbound message on any workspace's gateway.
+   * The host wires this to the workspace's AutomationSystem to fire
+   * MessageReceive events. The hook receives the workspaceId so the host
+   * can resolve the right AutomationSystem.
+   */
+  onIncomingMessage?: (workspaceId: string, event: import('./gateway').IncomingMessageEvent) => void | Promise<void>
 }
 
 interface WorkspaceState {
@@ -620,6 +627,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       baseLog.child({ component: 'config-store' }),
     )
     const cfg = configStore.get()
+    const onIncomingMessage = this.opts.onIncomingMessage
     const gateway = new MessagingGateway({
       sessionManager: this.opts.sessionManager,
       workspaceId,
@@ -636,6 +644,9 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         },
       },
       onBindingChanged: () => this.emitBindingChanged(workspaceId),
+      onIncomingMessage: onIncomingMessage
+        ? (event) => onIncomingMessage(workspaceId, event)
+        : undefined,
     })
 
     const state: WorkspaceState = {

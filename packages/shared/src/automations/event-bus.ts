@@ -114,6 +114,40 @@ export interface PollUrlPayload extends BaseEventPayload {
 }
 
 /**
+ * MessageReceive payload — fired when a chat message arrives on a configured
+ * messaging adapter (WhatsApp, Telegram, etc.). Fires for every inbound
+ * message, regardless of whether the channel is bound to a session.
+ *
+ * Use the `bound` field in conditions to filter:
+ *   { condition: 'state', field: 'bound', value: false }   // un-bound only
+ *
+ * `text` is also exposed as the matcher's match value, so a regex `matcher`
+ * field can filter by message body directly.
+ */
+export interface MessageReceivePayload extends BaseEventPayload {
+  /** Source platform — 'telegram' | 'whatsapp' | future adapters */
+  platform: string;
+  /** Adapter-specific channel/chat ID */
+  channelId: string;
+  /** Adapter-specific message ID (for dedup / reply targeting) */
+  messageId: string;
+  /** Sender ID (phone number, user ID, etc. — adapter specific) */
+  senderId: string;
+  /** Display name when the adapter provides one */
+  senderName: string | null;
+  /** Message text body */
+  text: string;
+  /** True when the message arrived on a channel already bound to a session */
+  bound: boolean;
+  /** Number of attachments in the message */
+  attachmentCount: number;
+  /** True when at least one attachment is present */
+  hasAttachment: boolean;
+  /** When the message was sent on the platform (epoch ms) */
+  sentAt: number;
+}
+
+/**
  * Inbound webhook payload — fired when an external system POSTs to /v1/triggers/:workspaceId/:slug.
  * The body is parsed as JSON when Content-Type is application/json; otherwise the raw string is in bodyRaw.
  */
@@ -153,6 +187,7 @@ export interface EventPayloadMap {
   WebhookReceive: WebhookReceivePayload;
   FileWatch: FileWatchPayload;
   PollUrl: PollUrlPayload;
+  MessageReceive: MessageReceivePayload;
 
   // Agent events (generic payload)
   PreToolUse: GenericEventPayload;

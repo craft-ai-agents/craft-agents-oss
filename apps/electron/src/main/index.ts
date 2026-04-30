@@ -646,6 +646,24 @@ app.whenReady().then(async () => {
           messagingHandle = createMessagingBootstrap({
             sessionManager: sm,
             credentialManager: getCredentialManager(),
+            // Fires MessageReceive automations on every inbound chat message.
+            // Errors are swallowed inside the gateway so a bad automation
+            // never blocks chat routing.
+            onIncomingMessage: async (workspaceId, event) => {
+              const automationSystem = sm.getAutomationSystemForWorkspaceId(workspaceId)
+              if (!automationSystem) return
+              await automationSystem.fireMessageReceive({
+                platform: event.platform,
+                channelId: event.channelId,
+                messageId: event.messageId,
+                senderId: event.senderId,
+                senderName: event.senderName,
+                text: event.text,
+                bound: event.bound,
+                attachmentCount: event.attachmentCount,
+                sentAt: event.sentAt,
+              })
+            },
             getMessagingDir: (wsId: string) =>
               join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
             getLegacyMessagingDir: (wsId: string) => {

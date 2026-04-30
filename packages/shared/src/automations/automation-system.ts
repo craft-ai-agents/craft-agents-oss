@@ -259,6 +259,39 @@ export class AutomationSystem implements AutomationsConfigProvider {
   }
 
   /**
+   * Fire a MessageReceive event on this workspace's bus.
+   * Called by the messaging gateway for every inbound chat message.
+   * Matchers filter by text (matcher regex) and metadata (conditions).
+   */
+  async fireMessageReceive(input: {
+    platform: string;
+    channelId: string;
+    messageId: string;
+    senderId: string;
+    senderName: string | null;
+    text: string;
+    bound: boolean;
+    attachmentCount: number;
+    sentAt: number;
+  }): Promise<void> {
+    if (this.disposed) return;
+    await this.eventBus.emit('MessageReceive', {
+      workspaceId: this.options.workspaceId,
+      timestamp: Date.now(),
+      platform: input.platform,
+      channelId: input.channelId,
+      messageId: input.messageId,
+      senderId: input.senderId,
+      senderName: input.senderName,
+      text: input.text,
+      bound: input.bound,
+      attachmentCount: input.attachmentCount,
+      hasAttachment: input.attachmentCount > 0,
+      sentAt: input.sentAt,
+    });
+  }
+
+  /**
    * Fire a WebhookReceive event on this workspace's bus.
    * The caller (trigger HTTP server) is responsible for slug routing, HMAC
    * verification, body-size enforcement, and method allow-listing — by the

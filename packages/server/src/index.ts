@@ -218,6 +218,22 @@ const instance = await (async () => {
         messagingHandle = createMessagingBootstrap({
           sessionManager,
           credentialManager: getCredentialManager(),
+          // Fires MessageReceive automations on every inbound chat message.
+          onIncomingMessage: async (workspaceId, event) => {
+            const automationSystem = sessionManager.getAutomationSystemForWorkspaceId(workspaceId)
+            if (!automationSystem) return
+            await automationSystem.fireMessageReceive({
+              platform: event.platform,
+              channelId: event.channelId,
+              messageId: event.messageId,
+              senderId: event.senderId,
+              senderName: event.senderName,
+              text: event.text,
+              bound: event.bound,
+              attachmentCount: event.attachmentCount,
+              sentAt: event.sentAt,
+            })
+          },
           getMessagingDir: (wsId: string) =>
             join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
           // Headless has no legacy messaging dir — workspaces start clean.

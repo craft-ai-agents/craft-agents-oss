@@ -48,6 +48,33 @@ export interface GatewayOptions {
   onBindingChanged?: () => void
   /** Optional logger — defaults to console. Pass a structured host logger in Electron. */
   logger?: MessagingLogger
+  /**
+   * Optional hook invoked once per inbound message (after slash-command
+   * handling but regardless of whether it routed to a bound session).
+   * Used to fire `MessageReceive` automations. Errors are logged and
+   * swallowed — automation failures must not block message routing.
+   */
+  onIncomingMessage?: (event: IncomingMessageEvent) => void | Promise<void>
+}
+
+/**
+ * Snapshot of an inbound message handed to the optional onIncomingMessage
+ * hook. Excludes raw adapter payloads to keep the surface stable across
+ * platform adapters.
+ */
+export interface IncomingMessageEvent {
+  platform: PlatformType
+  channelId: string
+  messageId: string
+  senderId: string
+  senderName: string | null
+  text: string
+  /** True when the message arrived on a channel already bound to a session. */
+  bound: boolean
+  /** Number of attachments present on the message. */
+  attachmentCount: number
+  /** Timestamp from the platform (epoch ms). */
+  sentAt: number
 }
 
 /**
@@ -86,11 +113,13 @@ export class MessagingGateway {
   private readonly pendingCompactAccepts = new Map<string, PendingCompactAccept>()
   private readonly adapters = new Map<PlatformType, PlatformAdapter>()
   private readonly log: MessagingLogger
+  private readonly onIncomingMessage?: (event: IncomingMessageEvent) => void | Promise<void>
   private started = false
 
   constructor(opts: GatewayOptions) {
     this.sessionManager = opts.sessionManager
     this.workspaceId = opts.workspaceId
+    this.onIncomingMessage = opts.onIncomingMessage
     this.log = (opts.logger ?? consoleLogger).child({
       component: 'gateway',
       workspaceId: opts.workspaceId,
@@ -225,6 +254,34 @@ export class MessagingGateway {
         if (handled) return
       }
       await this.router.route(adapter, msg)
+
+      // Notify the host so it can fire MessageReceive automations.
+      // Runs AFTER routing so a bound session has already received the
+      // message; fired regardless of binding so users can react to inbox
+      // messages with automations. Errors here must never block routing.
+      if (this.onIncomingMessage) {
+        try {
+          const bound = !!this.bindingStore.findByChannel(msg.platform, msg.channelId)
+          await this.onIncomingMessage({
+            platform: msg.platform,
+            channelId: msg.channelId,
+            messageId: msg.messageId,
+            senderId: msg.senderId,
+            senderName: msg.senderName ?? null,
+            text: msg.text,
+            bound,
+            attachmentCount: msg.attachments?.length ?? 0,
+            sentAt: msg.timestamp,
+          })
+        } catch (err) {
+          this.log.warn('onIncomingMessage hook threw', {
+            event: 'on_incoming_message_failed',
+            platform: msg.platform,
+            channelId: msg.channelId,
+            error: err,
+          })
+        }
+      }
     })
 
     adapter.onButtonPress(async (press: ButtonPress) => {

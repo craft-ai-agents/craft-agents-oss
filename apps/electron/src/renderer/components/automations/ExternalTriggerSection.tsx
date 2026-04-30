@@ -41,6 +41,9 @@ export function ExternalTriggerSection({ automation, editActions }: ExternalTrig
   if (event === 'PollUrl') {
     return <PollUrlPanel automation={automation} editActions={editActions} />
   }
+  if (event === 'MessageReceive') {
+    return <MessageReceivePanel automation={automation} editActions={editActions} />
+  }
   return null
 }
 
@@ -242,6 +245,41 @@ function PollUrlPanel({ automation, editActions }: ExternalTriggerSectionProps) 
         <code className="font-mono">$CRAFT_FINGERPRINT</code>{' '}
         <code className="font-mono">$CRAFT_PREVIOUS_FINGERPRINT</code>{' '}
         <code className="font-mono">$CRAFT_BODY</code>
+      </p>
+    </Info_Section>
+  )
+}
+
+// ============================================================================
+// MessageReceive
+// ============================================================================
+
+function MessageReceivePanel({ automation, editActions }: ExternalTriggerSectionProps) {
+  const matcherText = automation.matcher
+  const fires = matcherText ? `When the message text matches: ${matcherText}` : 'On every inbound chat message'
+
+  return (
+    <Info_Section
+      title="Chat Message Trigger"
+      description="Fires when a message arrives on a connected messaging adapter (Telegram, WhatsApp)."
+      actions={editActions}
+    >
+      <Info_Table>
+        <Info_Table.Row label="Fires" value={fires} />
+        <Info_Table.Row label="Channel filter" value={automation.matcher ? 'regex on text' : 'all messages'} />
+      </Info_Table>
+
+      <p className="text-xs text-foreground/60 mt-2">
+        Available variables: <code className="font-mono">$CRAFT_TEXT</code>{' '}
+        <code className="font-mono">$CRAFT_PLATFORM</code>{' '}
+        <code className="font-mono">$CRAFT_CHANNEL_ID</code>{' '}
+        <code className="font-mono">$CRAFT_SENDER_ID</code>{' '}
+        <code className="font-mono">$CRAFT_SENDER_NAME</code>{' '}
+        <code className="font-mono">$CRAFT_BOUND</code>{' '}
+        <code className="font-mono">$CRAFT_HAS_ATTACHMENT</code>
+      </p>
+      <p className="text-xs text-foreground/60 mt-1">
+        Tip: add a state condition like <code className="font-mono">{`{ "condition": "state", "field": "bound", "value": false }`}</code> so this only fires on un-bound messages and doesn't double-handle bound chats.
       </p>
     </Info_Section>
   )
