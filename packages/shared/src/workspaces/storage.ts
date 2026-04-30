@@ -88,6 +88,15 @@ export function getWorkspaceSkillsPath(rootPath: string): string {
   return join(rootPath, 'skills');
 }
 
+/**
+ * Get path to workspace's "activated agents" manifest file.
+ * Agents live globally; this file says which subset is visible/usable here.
+ * @param rootPath - Absolute path to workspace root folder
+ */
+export function getActivatedAgentsManifestPath(rootPath: string): string {
+  return join(rootPath, 'activated-agents.json');
+}
+
 // ============================================================
 // Config Operations
 // ============================================================

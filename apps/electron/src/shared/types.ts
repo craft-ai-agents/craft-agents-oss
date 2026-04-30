@@ -63,6 +63,12 @@ export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 import type { LoadedSkill, SkillMetadata } from '@craft-agent/shared/skills/types';
 export type { LoadedSkill, SkillMetadata };
 
+// Agent definitions — DTOs match the shared `LoadedAgent` shape but are
+// re-named here so the renderer doesn't import the storage module (which
+// uses node:fs).
+import type { AgentMetadata as AgentDefinitionMetadataDTO, LoadedAgent as AgentDefinitionDTO } from '@craft-agent/shared/agent-definitions/types';
+export type { AgentDefinitionMetadataDTO, AgentDefinitionDTO };
+
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
 export type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult };
@@ -642,6 +648,20 @@ export interface ElectronAPI {
   createAutomationFromTemplate(workspaceId: string, eventName: string, matcher: Record<string, unknown>): Promise<void>
   /** Live status of the inbound webhook trigger HTTP server (port and URL). */
   getTriggerServerInfo(): Promise<{ enabled: boolean; url: string | null }>
+
+  // Agent definitions (saved personas)
+  listAllAgentDefinitions(): Promise<AgentDefinitionDTO[]>
+  listActiveAgentDefinitions(workspaceId: string): Promise<string[]>
+  getAgentDefinition(slug: string): Promise<AgentDefinitionDTO | null>
+  upsertAgentDefinition(payload: {
+    slug: string
+    metadata: AgentDefinitionMetadataDTO
+    systemPrompt: string
+    activateInWorkspaceId?: string
+  }): Promise<AgentDefinitionDTO>
+  deleteAgentDefinition(slug: string): Promise<boolean>
+  setAgentDefinitionActive(workspaceId: string, slug: string, active: boolean): Promise<{ active: string[] }>
+  onAgentDefinitionsChanged(callback: (workspaceId: string | null) => void): () => void
   getAutomationHistory(workspaceId: string, automationId: string, limit?: number): Promise<Array<{ id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string; webhook?: { method: string; url: string; statusCode: number; durationMs: number; attempts?: number; error?: string; responseBody?: string } }>>
   getAutomationLastExecuted(workspaceId: string): Promise<Record<string, number>>
   replayAutomation(workspaceId: string, automationId: string, eventName: string): Promise<{ results: Array<{ type: string; url: string; statusCode: number; success: boolean; error?: string; duration: number }> }>

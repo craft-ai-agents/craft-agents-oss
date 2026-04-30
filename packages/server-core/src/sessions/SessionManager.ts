@@ -1568,6 +1568,18 @@ export class SessionManager implements ISessionManager {
 
   async initialize(): Promise<void> {
     try {
+      // Seed the global agent-definitions library on first run (idempotent —
+      // never overwrites existing AGENT.md files; respects the .seeded marker).
+      try {
+        const { seedGlobalLibraryIfEmpty, STARTER_AGENTS } = await import('@craft-agent/shared/agent-definitions')
+        const { seeded } = seedGlobalLibraryIfEmpty(STARTER_AGENTS)
+        if (seeded > 0) {
+          sessionLog.info(`[agent-definitions] Seeded ${seeded} starter agent(s) into global library`)
+        }
+      } catch (err) {
+        sessionLog.warn('[agent-definitions] Library seed skipped:', err as Error)
+      }
+
       // Backfill missing `models` arrays on existing LLM connections
       migrateLegacyLlmConnectionsConfig()
 

@@ -372,6 +372,15 @@ export const CHANNEL_MAP = {
   deleteAutomation: invoke(RPC_CHANNELS.automations.DELETE),
   createAutomationFromTemplate: invoke(RPC_CHANNELS.automations.CREATE_FROM_TEMPLATE),
   getTriggerServerInfo: invoke(RPC_CHANNELS.automations.GET_TRIGGER_SERVER_INFO),
+
+  // Agent definitions (saved agent personas — global library + per-workspace activation)
+  listAllAgentDefinitions: invoke(RPC_CHANNELS.agentDefinitions.LIST_ALL),
+  listActiveAgentDefinitions: invoke(RPC_CHANNELS.agentDefinitions.LIST_ACTIVE_IN_WORKSPACE),
+  getAgentDefinition: invoke(RPC_CHANNELS.agentDefinitions.GET),
+  upsertAgentDefinition: invoke(RPC_CHANNELS.agentDefinitions.UPSERT),
+  deleteAgentDefinition: invoke(RPC_CHANNELS.agentDefinitions.DELETE),
+  setAgentDefinitionActive: invoke(RPC_CHANNELS.agentDefinitions.SET_ACTIVE),
+  onAgentDefinitionsChanged: listener(RPC_CHANNELS.agentDefinitions.CHANGED),
   getAutomationHistory: invoke(RPC_CHANNELS.automations.GET_HISTORY),
   getAutomationLastExecuted: invoke(RPC_CHANNELS.automations.GET_LAST_EXECUTED),
   replayAutomation: invoke(RPC_CHANNELS.automations.REPLAY),

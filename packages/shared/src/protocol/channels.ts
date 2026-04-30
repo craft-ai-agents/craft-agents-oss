@@ -370,6 +370,22 @@ export const RPC_CHANNELS = {
     CREATE_FROM_TEMPLATE: 'automations:createFromTemplate',
     GET_TRIGGER_SERVER_INFO: 'automations:getTriggerServerInfo',
   },
+  agentDefinitions: {
+    /** List every agent in the global library. */
+    LIST_ALL: 'agentDefinitions:listAll',
+    /** List the slugs activated in a given workspace. */
+    LIST_ACTIVE_IN_WORKSPACE: 'agentDefinitions:listActiveInWorkspace',
+    /** Load a single agent by slug. */
+    GET: 'agentDefinitions:get',
+    /** Create or update an agent in the global library. */
+    UPSERT: 'agentDefinitions:upsert',
+    /** Delete an agent from the global library + every workspace's activation. */
+    DELETE: 'agentDefinitions:delete',
+    /** Toggle activation of an agent in a workspace. */
+    SET_ACTIVE: 'agentDefinitions:setActive',
+    /** Push event when the global library or a workspace's activation changed. */
+    CHANGED: 'agentDefinitions:changed',
+  },
   resources: {
     EXPORT: 'resources:export',
     IMPORT: 'resources:import',
