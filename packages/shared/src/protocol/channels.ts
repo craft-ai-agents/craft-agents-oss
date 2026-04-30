@@ -370,6 +370,20 @@ export const RPC_CHANNELS = {
     CREATE_FROM_TEMPLATE: 'automations:createFromTemplate',
     GET_TRIGGER_SERVER_INFO: 'automations:getTriggerServerInfo',
   },
+  workspaceContext: {
+    /** List every context doc in a workspace. */
+    LIST: 'workspaceContext:list',
+    /** Load a single doc by slug. */
+    GET: 'workspaceContext:get',
+    /** List active docs filtered by routing for a given agent slug (or null for ad-hoc). */
+    LIST_FOR_AGENT: 'workspaceContext:listForAgent',
+    /** Create or update a doc. */
+    UPSERT: 'workspaceContext:upsert',
+    /** Delete a doc. */
+    DELETE: 'workspaceContext:delete',
+    /** Push event when a workspace's context docs changed. */
+    CHANGED: 'workspaceContext:changed',
+  },
   agentDefinitions: {
     /** List every agent in the global library. */
     LIST_ALL: 'agentDefinitions:listAll',

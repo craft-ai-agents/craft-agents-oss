@@ -381,6 +381,14 @@ export const CHANNEL_MAP = {
   deleteAgentDefinition: invoke(RPC_CHANNELS.agentDefinitions.DELETE),
   setAgentDefinitionActive: invoke(RPC_CHANNELS.agentDefinitions.SET_ACTIVE),
   onAgentDefinitionsChanged: listener(RPC_CHANNELS.agentDefinitions.CHANGED),
+
+  // Workspace context docs (per-workspace markdown context injected into agents)
+  listWorkspaceContextDocs: invoke(RPC_CHANNELS.workspaceContext.LIST),
+  getWorkspaceContextDoc: invoke(RPC_CHANNELS.workspaceContext.GET),
+  listWorkspaceContextDocsForAgent: invoke(RPC_CHANNELS.workspaceContext.LIST_FOR_AGENT),
+  upsertWorkspaceContextDoc: invoke(RPC_CHANNELS.workspaceContext.UPSERT),
+  deleteWorkspaceContextDoc: invoke(RPC_CHANNELS.workspaceContext.DELETE),
+  onWorkspaceContextChanged: listener(RPC_CHANNELS.workspaceContext.CHANGED),
   getAutomationHistory: invoke(RPC_CHANNELS.automations.GET_HISTORY),
   getAutomationLastExecuted: invoke(RPC_CHANNELS.automations.GET_LAST_EXECUTED),
   replayAutomation: invoke(RPC_CHANNELS.automations.REPLAY),
