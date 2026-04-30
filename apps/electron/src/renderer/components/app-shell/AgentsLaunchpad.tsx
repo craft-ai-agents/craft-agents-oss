@@ -18,8 +18,7 @@ import { Sparkles, Settings2 } from 'lucide-react'
 import { useAgents } from '@/hooks/useAgents'
 import { AgentLibraryDialog } from './AgentLibraryDialog'
 import { navigate, routes } from '@/lib/navigate'
-
-const ORCHESTRATOR_SLUG = 'orchestrator'
+import { ORCHESTRATOR_SLUG } from '@craft-agent/shared/agent-definitions/types'
 
 interface AgentsLaunchpadProps {
   workspaceId: string | null | undefined
@@ -80,6 +79,7 @@ export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
                 name={agent.metadata.name}
                 description={agent.metadata.description}
                 avatar={agent.metadata.avatar}
+                tags={agent.metadata.tags}
                 isOrchestrator={agent.slug === ORCHESTRATOR_SLUG}
                 onClick={() => navigate(routes.view.agents(agent.slug))}
               />
@@ -102,11 +102,12 @@ interface AgentCardProps {
   name: string
   description: string
   avatar?: string
+  tags?: string[]
   isOrchestrator: boolean
   onClick: () => void
 }
 
-function AgentCard({ name, description, avatar, isOrchestrator, onClick }: AgentCardProps) {
+function AgentCard({ name, description, avatar, tags, isOrchestrator, onClick }: AgentCardProps) {
   return (
     <button
       type="button"
@@ -138,6 +139,18 @@ function AgentCard({ name, description, avatar, isOrchestrator, onClick }: Agent
         </div>
       </div>
       <p className="text-xs text-foreground/60 leading-snug">{description}</p>
+      {tags && tags.length > 0 && (
+        <div className="flex gap-1 flex-wrap mt-1">
+          {tags.slice(0, 4).map((tag) => (
+            <span
+              key={tag}
+              className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-foreground/5 text-foreground/55"
+            >
+              #{tag}
+            </span>
+          ))}
+        </div>
+      )}
     </button>
   )
 }

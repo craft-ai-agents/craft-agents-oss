@@ -26,8 +26,7 @@ import {
 } from '@/components/ui/dialog'
 import { useAgents } from '@/hooks/useAgents'
 import type { AgentDefinitionDTO } from '../../../shared/types'
-
-const ORCHESTRATOR_SLUG = 'orchestrator'
+import { ORCHESTRATOR_SLUG } from '@craft-agent/shared/agent-definitions/types'
 
 interface AgentLibraryDialogProps {
   open: boolean

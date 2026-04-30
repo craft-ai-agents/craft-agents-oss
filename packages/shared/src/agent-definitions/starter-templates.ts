@@ -10,6 +10,7 @@
  */
 
 import type { CreateAgentInput } from './storage.ts'
+import { ORCHESTRATOR_SLUG } from './types.ts'
 
 /**
  * Reserved slug for the Orchestrator. The sidebar pins this agent first;
@@ -18,8 +19,6 @@ import type { CreateAgentInput } from './storage.ts'
  * system prompt teaches it to *plan and decompose* rather than execute,
  * which is useful even before Rooms ship.
  */
-export const ORCHESTRATOR_SLUG = 'orchestrator';
-
 export const STARTER_AGENTS: CreateAgentInput[] = [
   {
     slug: ORCHESTRATOR_SLUG,
@@ -30,6 +29,9 @@ export const STARTER_AGENTS: CreateAgentInput[] = [
       permissionMode: 'ask',
       thinkingLevel: 'high',
       greeting: 'Tell me the goal. I plan the path and call in the right agents.',
+      inputs: 'A goal or outcome you want to achieve.',
+      outputs: 'A step-by-step plan with named owners, plus the executed result.',
+      tags: ['planning', 'coordination', 'multi-step'],
     },
     systemPrompt: `You are the Orchestrator.
 
@@ -53,6 +55,9 @@ Never silently swallow an agent's output; always show the user what was learned.
       permissionMode: 'safe',
       thinkingLevel: 'high',
       greeting: 'Give me a topic and the depth you want.',
+      inputs: 'A topic, question, or subject area to investigate.',
+      outputs: 'A structured summary with TL;DR, findings, open questions, and numbered citations.',
+      tags: ['research', 'summarize', 'cite'],
     },
     systemPrompt: `You are a research specialist.
 
@@ -77,6 +82,9 @@ Default output format:
       permissionMode: 'ask',
       thinkingLevel: 'medium',
       greeting: 'What are we writing? Give me the audience and the angle.',
+      inputs: 'A topic + audience, or an existing draft to revise.',
+      outputs: 'A clean draft (or edited version) in a direct, specific voice.',
+      tags: ['writing', 'editing', 'prose'],
     },
     systemPrompt: `You are an editor's writer.
 
@@ -96,6 +104,9 @@ Always offer at least one alternative draft when the user requests an edit.`,
       permissionMode: 'ask',
       thinkingLevel: 'high',
       greeting: 'Show me the codebase or the problem and what you want changed.',
+      inputs: 'A code change request, bug report, or codebase to modify.',
+      outputs: 'Code edits matching the project\'s conventions, with tests and root-cause notes.',
+      tags: ['code', 'refactor', 'debug'],
     },
     systemPrompt: `You are a careful, conventional coding partner.
 
@@ -121,6 +132,9 @@ When debugging:
       permissionMode: 'safe',
       thinkingLevel: 'medium',
       greeting: 'Drop the inbox / messages / issues here and I will triage.',
+      inputs: 'An unsorted list of items (emails, messages, issues, tasks).',
+      outputs: 'Each item grouped by urgency with a single-verb next action and owner.',
+      tags: ['triage', 'inbox', 'prioritize'],
     },
     systemPrompt: `You are a triage specialist.
 
@@ -141,6 +155,9 @@ Group output by urgency. Be ruthless about "drop" — most items don't need acti
       permissionMode: 'safe',
       thinkingLevel: 'medium',
       greeting: 'Show me the work. I will be honest, not nice.',
+      inputs: 'A finished or in-progress piece of work (writing, code, design, plan).',
+      outputs: 'What is working, what is not, and the single highest-leverage change.',
+      tags: ['review', 'critique', 'feedback'],
     },
     systemPrompt: `You are a critic.
 

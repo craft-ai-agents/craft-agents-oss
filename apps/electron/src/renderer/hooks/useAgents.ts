@@ -9,7 +9,9 @@
  * fresh when other clients (or background mutations) edit the library.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
+import { useAtom } from 'jotai'
+import { agentsStateAtomFamily, type AgentsState } from '@/atoms/agents'
 import type { AgentDefinitionDTO } from '../../shared/types'
 
 export interface UseAgentsResult {
@@ -37,53 +39,102 @@ export interface UseAgentsResult {
   remove: (slug: string) => Promise<boolean>
 }
 
+const NULL_WORKSPACE_KEY = '__no_workspace__'
+const loadedWorkspaceKeys = new Set<string>()
+const inFlightRefreshes = new Map<string, Promise<void>>()
+const mountedWorkspaceKeys = new Map<string, number>()
+let globalDefinitionsCleanup: (() => void) | null = null
+const refreshersByWorkspaceKey = new Map<string, () => Promise<void>>()
+
+function getWorkspaceKey(activeWorkspaceId: string | null | undefined): string {
+  return activeWorkspaceId ?? NULL_WORKSPACE_KEY
+}
+
+function sortAgents(agents: AgentDefinitionDTO[]): AgentDefinitionDTO[] {
+  return [...agents].sort((a, b) => a.metadata.name.localeCompare(b.metadata.name))
+}
+
 export function useAgents(activeWorkspaceId: string | null | undefined): UseAgentsResult {
-  const [allAgents, setAllAgents] = useState<AgentDefinitionDTO[]>([])
-  const [activeSlugs, setActiveSlugs] = useState<string[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const workspaceKey = getWorkspaceKey(activeWorkspaceId)
+  const [state, setState] = useAtom(agentsStateAtomFamily(workspaceKey))
 
   const refresh = useCallback(async () => {
-    try {
-      const [libraryRaw, activeRaw] = await Promise.all([
-        window.electronAPI.listAllAgentDefinitions(),
-        activeWorkspaceId
-          ? window.electronAPI.listActiveAgentDefinitions(activeWorkspaceId)
-          : Promise.resolve([] as string[]),
-      ])
-      const sorted = [...libraryRaw].sort((a, b) =>
-        a.metadata.name.localeCompare(b.metadata.name),
-      )
-      setAllAgents(sorted)
-      setActiveSlugs(activeRaw)
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setLoading(false)
+    const existing = inFlightRefreshes.get(workspaceKey)
+    if (existing) return existing
+
+    const run = (async () => {
+      setState((prev) => ({ ...prev, loading: true }))
+      try {
+        const [libraryRaw, activeRaw] = await Promise.all([
+          window.electronAPI.listAllAgentDefinitions(),
+          activeWorkspaceId
+            ? window.electronAPI.listActiveAgentDefinitions(activeWorkspaceId)
+            : Promise.resolve([] as string[]),
+        ])
+        const next: AgentsState = {
+          allAgents: sortAgents(libraryRaw),
+          activeSlugs: activeRaw,
+          loading: false,
+          error: null,
+        }
+        setState(next)
+        loadedWorkspaceKeys.add(workspaceKey)
+      } catch (err) {
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          error: err instanceof Error ? err.message : String(err),
+        }))
+      } finally {
+        inFlightRefreshes.delete(workspaceKey)
+      }
+    })()
+
+    inFlightRefreshes.set(workspaceKey, run)
+    return run
+  }, [activeWorkspaceId, setState, workspaceKey])
+
+  useEffect(() => {
+    refreshersByWorkspaceKey.set(workspaceKey, refresh)
+    return () => {
+      if (refreshersByWorkspaceKey.get(workspaceKey) === refresh) {
+        refreshersByWorkspaceKey.delete(workspaceKey)
+      }
     }
-  }, [activeWorkspaceId])
+  }, [refresh, workspaceKey])
 
-  // Initial load + reload on workspace switch.
   useEffect(() => {
-    setLoading(true)
-    refresh()
-  }, [refresh])
-
-  // Subscribe to library/activation broadcasts. Reload either way — both the
-  // library shape and the activation list can change.
-  useEffect(() => {
-    const cleanup = window.electronAPI.onAgentDefinitionsChanged(() => {
+    if (!loadedWorkspaceKeys.has(workspaceKey)) {
       refresh()
-    })
-    return () => cleanup()
-  }, [refresh])
+    }
+  }, [refresh, workspaceKey])
+
+  useEffect(() => {
+    mountedWorkspaceKeys.set(workspaceKey, (mountedWorkspaceKeys.get(workspaceKey) ?? 0) + 1)
+    if (!globalDefinitionsCleanup) {
+      globalDefinitionsCleanup = window.electronAPI.onAgentDefinitionsChanged(() => {
+        for (const refreshWorkspace of refreshersByWorkspaceKey.values()) {
+          refreshWorkspace()
+        }
+      })
+    }
+    return () => {
+      const nextCount = (mountedWorkspaceKeys.get(workspaceKey) ?? 1) - 1
+      if (nextCount <= 0) mountedWorkspaceKeys.delete(workspaceKey)
+      else mountedWorkspaceKeys.set(workspaceKey, nextCount)
+
+      if (mountedWorkspaceKeys.size === 0 && globalDefinitionsCleanup) {
+        globalDefinitionsCleanup()
+        globalDefinitionsCleanup = null
+      }
+    }
+  }, [workspaceKey])
 
   const setActive = useCallback(async (slug: string, active: boolean) => {
     if (!activeWorkspaceId) return
     const result = await window.electronAPI.setAgentDefinitionActive(activeWorkspaceId, slug, active)
-    setActiveSlugs(result.active)
-  }, [activeWorkspaceId])
+    setState((prev) => ({ ...prev, activeSlugs: result.active }))
+  }, [activeWorkspaceId, setState])
 
   const upsert = useCallback(async (input: {
     slug: string
@@ -96,37 +147,47 @@ export function useAgents(activeWorkspaceId: string | null | undefined): UseAgen
     })
     // Optimistic update — the broadcast will refresh too, but updating
     // immediately removes the latency before a freshly-saved agent shows up.
-    setAllAgents((prev) => {
-      const next = prev.filter((a) => a.slug !== created.slug)
+    setState((prev) => {
+      const next = prev.allAgents.filter((a) => a.slug !== created.slug)
       next.push(created)
       next.sort((a, b) => a.metadata.name.localeCompare(b.metadata.name))
-      return next
+      return { ...prev, allAgents: next }
     })
     if (activeWorkspaceId) {
-      setActiveSlugs((prev) => (prev.includes(created.slug) ? prev : [...prev, created.slug]))
+      setState((prev) => ({
+        ...prev,
+        activeSlugs: prev.activeSlugs.includes(created.slug)
+          ? prev.activeSlugs
+          : [...prev.activeSlugs, created.slug],
+      }))
     }
     return created
-  }, [activeWorkspaceId])
+  }, [activeWorkspaceId, setState])
 
   const remove = useCallback(async (slug: string) => {
     const ok = await window.electronAPI.deleteAgentDefinition(slug)
     if (ok) {
-      setAllAgents((prev) => prev.filter((a) => a.slug !== slug))
-      setActiveSlugs((prev) => prev.filter((s) => s !== slug))
+      setState((prev) => ({
+        ...prev,
+        allAgents: prev.allAgents.filter((a) => a.slug !== slug),
+        activeSlugs: prev.activeSlugs.filter((s) => s !== slug),
+      }))
     }
     return ok
-  }, [])
+  }, [setState])
 
   // Derived: agents that are both globally available and active here.
-  const activeSet = new Set(activeSlugs)
-  const activeAgents = allAgents.filter((a) => activeSet.has(a.slug))
+  const activeAgents = useMemo(() => {
+    const activeSet = new Set(state.activeSlugs)
+    return state.allAgents.filter((a) => activeSet.has(a.slug))
+  }, [state.activeSlugs, state.allAgents])
 
   return {
-    allAgents,
-    activeSlugs,
+    allAgents: state.allAgents,
+    activeSlugs: state.activeSlugs,
     activeAgents,
-    loading,
-    error,
+    loading: state.loading,
+    error: state.error,
     refresh,
     setActive,
     upsert,

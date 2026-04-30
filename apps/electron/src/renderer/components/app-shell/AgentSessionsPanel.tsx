@@ -10,18 +10,23 @@
  * That field is set at session-creation time when the user summons an
  * agent (via the upcoming run button or `/slug` mention syntax).
  *
- * For now (before run-from-agent is wired), this panel is the
- * onboarding surface: a Run CTA + framing copy explaining what'll
- * accumulate here as the user works.
+ * Empty states expose the same Run behavior as the detail page: create a
+ * normal session from the saved agent config and open the composer.
  */
 
 import * as React from 'react'
 import { useAtomValue } from 'jotai'
 import { Play, Inbox } from 'lucide-react'
+import { toast } from 'sonner'
 import { sessionMetaMapAtom, type SessionMeta } from '@/atoms/sessions'
+import { skillsAtom } from '@/atoms/skills'
+import { sourcesAtom } from '@/atoms/sources'
 import { useAgents } from '@/hooks/useAgents'
+import { useAppShellContext } from '@/context/AppShellContext'
+import { openAgentSessionComposer } from '@/lib/run-agent'
 import { navigate, routes } from '@/lib/navigate'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { ORCHESTRATOR_SLUG } from '@craft-agent/shared/agent-definitions/types'
 
 interface AgentSessionsPanelProps {
   agentSlug: string
@@ -30,7 +35,10 @@ interface AgentSessionsPanelProps {
 
 export function AgentSessionsPanel({ agentSlug, workspaceId }: AgentSessionsPanelProps) {
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
+  const skills = useAtomValue(skillsAtom)
+  const sources = useAtomValue(sourcesAtom)
   const { allAgents } = useAgents(workspaceId)
+  const { onCreateSession, onInputChange } = useAppShellContext()
 
   const agent = React.useMemo(
     () => allAgents.find((a) => a.slug === agentSlug),
@@ -51,14 +59,28 @@ export function AgentSessionsPanel({ agentSlug, workspaceId }: AgentSessionsPane
     return out
   }, [sessionMetaMap, agentSlug, workspaceId])
 
-  const handleRunStub = React.useCallback(() => {
-    // Run-from-agent lands in the next commit. For now, open the agent's
-    // detail page where the same Run button lives — a placeholder route
-    // that keeps muscle memory consistent.
-    navigate(routes.view.agents(agentSlug))
-  }, [agentSlug])
+  const handleRun = React.useCallback(async () => {
+    if (!workspaceId || !agent) {
+      navigate(routes.view.agents(agentSlug))
+      return
+    }
+    try {
+      await openAgentSessionComposer({
+        agent,
+        workspaceId,
+        onCreateSession,
+        onInputChange,
+        skills,
+        sources,
+      })
+    } catch (err) {
+      toast.error('Failed to run agent', {
+        description: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }, [agent, agentSlug, onCreateSession, onInputChange, skills, sources, workspaceId])
 
-  const avatar = agent?.metadata.avatar?.trim() || (agentSlug === 'orchestrator' ? '🎯' : '🤖')
+  const avatar = agent?.metadata.avatar?.trim() || (agentSlug === ORCHESTRATOR_SLUG ? '🎯' : '🤖')
   const name = agent?.metadata.name ?? agentSlug
 
   return (
@@ -85,7 +107,7 @@ export function AgentSessionsPanel({ agentSlug, workspaceId }: AgentSessionsPane
         </div>
         <button
           type="button"
-          onClick={handleRunStub}
+          onClick={handleRun}
           className="inline-flex items-center gap-1 px-2 py-1 text-[11px] rounded-md border border-border/40 hover:bg-foreground/5 shrink-0"
           title={`Run ${name}`}
         >
@@ -96,7 +118,7 @@ export function AgentSessionsPanel({ agentSlug, workspaceId }: AgentSessionsPane
 
       {/* Sessions list */}
       {sessions.length === 0 ? (
-        <EmptyState agentName={name} onRun={handleRunStub} />
+        <EmptyState agentName={name} onRun={handleRun} />
       ) : (
         <ScrollArea className="flex-1 min-h-0">
           <div className="flex flex-col">

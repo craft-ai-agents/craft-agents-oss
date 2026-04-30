@@ -49,6 +49,54 @@ export interface AgentMetadata {
    * Pure UX hint — does not affect the model's behavior.
    */
   greeting?: string;
+
+  // ============================================================================
+  // Capabilities — declarative I/O contract
+  //
+  // Three short, structured fields that future orchestration layers (Rooms,
+  // a decision step, agent-to-agent handoff) can reason about without
+  // re-reading the full system prompt every turn. They also make the picker
+  // UI useful at scale: search by tag, browse by what an agent does.
+  //
+  // All three are optional and natural-language. We deliberately don't try to
+  // type-check the contents — that would lock the schema before we know what
+  // shapes orchestrators actually need. Today: human-readable hints.
+  // Tomorrow: an orchestrator that prefers the agent whose `inputs` matches
+  // what it has and whose `outputs` matches what it needs next.
+  // ============================================================================
+
+  /**
+   * One short sentence describing what this agent expects as input.
+   * Example: "A topic and the depth you want."
+   */
+  inputs?: string;
+
+  /**
+   * One short sentence describing what this agent produces.
+   * Example: "A cited summary with TL;DR and open questions."
+   */
+  outputs?: string;
+
+  /**
+   * 1-8 lowercase capability tags. Used by the picker for browse/filter and
+   * (eventually) by the Orchestrator for routing. Free-form strings; a small
+   * shared vocabulary will emerge from real use.
+   * Example: ["research", "summarize", "cite"]
+   */
+  tags?: string[];
+}
+
+export type AgentParseWarningCode =
+  | 'invalid-permission-mode'
+  | 'invalid-thinking-level'
+  | 'invalid-skills'
+  | 'invalid-sources'
+  | 'invalid-tags';
+
+export interface AgentParseWarning {
+  field: keyof AgentMetadata;
+  code: AgentParseWarningCode;
+  message: string;
 }
 
 /**
@@ -65,6 +113,8 @@ export interface LoadedAgent {
   path: string;
   /** Where this agent was loaded from. */
   source: AgentDefinitionSource;
+  /** Non-fatal parse issues from AGENT.md frontmatter. */
+  parseWarnings?: AgentParseWarning[];
 }
 
 /**
@@ -94,3 +144,6 @@ export interface ActivatedAgentsManifest {
  * and the picker's @-resolver can use a single matcher.
  */
 export const AGENT_SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+
+/** Built-in coordinator agent slug. */
+export const ORCHESTRATOR_SLUG = 'orchestrator';

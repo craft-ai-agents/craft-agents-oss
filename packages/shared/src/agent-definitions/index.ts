@@ -11,10 +11,11 @@ export type {
   AgentDefinitionSource,
   AgentMetadata,
   LoadedAgent,
+  AgentParseWarning,
   ActivatedAgentsManifest,
 } from './types.ts';
 
-export { AGENT_SLUG_REGEX } from './types.ts';
+export { AGENT_SLUG_REGEX, ORCHESTRATOR_SLUG } from './types.ts';
 
 export {
   GLOBAL_AGENTS_DIR,
@@ -34,7 +35,8 @@ export {
   deleteGlobalAgent,
   seedGlobalLibraryIfEmpty,
   ensureRequiredAgents,
+  type AgentStorageOptions,
   type CreateAgentInput,
 } from './storage.ts';
 
-export { STARTER_AGENTS, ORCHESTRATOR_SLUG } from './starter-templates.ts';
+export { STARTER_AGENTS } from './starter-templates.ts';

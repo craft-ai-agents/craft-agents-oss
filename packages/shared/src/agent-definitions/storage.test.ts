@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -9,18 +9,21 @@ import {
   readActivatedAgents,
   writeActivatedAgents,
   setAgentActive,
+  loadActivatedAgents,
+  loadAllGlobalAgents,
+  loadGlobalAgent,
+  writeGlobalAgent,
+  deleteGlobalAgent,
+  seedGlobalLibraryIfEmpty,
+  ensureRequiredAgents,
 } from './storage.ts'
-
-/**
- * The storage module's library functions read from `~/.agents/agents/` —
- * which we don't want to touch from tests. We exercise the *pure* helpers
- * (parse, serialize, slug validation) and the workspace-scoped activation
- * manifest (which uses a path we control). Library-tier reads/writes get
- * their own integration test once the seed-on-first-run flow lands.
- */
 
 function tmpWorkspace(): string {
   return mkdtempSync(join(tmpdir(), 'craft-agent-defs-test-'))
+}
+
+function tmpGlobalAgentsDir(): string {
+  return mkdtempSync(join(tmpdir(), 'craft-agent-defs-global-test-'))
 }
 
 describe('isValidAgentSlug', () => {
@@ -95,7 +98,7 @@ body
     expect(parseAgentFile(md)).toBeNull()
   })
 
-  test('coerces invalid permissionMode to undefined (not a hard error)', () => {
+  test('coerces invalid permissionMode to undefined and returns a warning', () => {
     const md = `---
 name: x
 description: y
@@ -105,6 +108,43 @@ body
 `
     const parsed = parseAgentFile(md)
     expect(parsed!.metadata.permissionMode).toBeUndefined()
+    expect(parsed!.warnings).toContainEqual({
+      field: 'permissionMode',
+      code: 'invalid-permission-mode',
+      message: 'permissionMode must be one of: safe, ask, allow-all.',
+    })
+  })
+
+  test('coerces invalid thinkingLevel to undefined and returns a warning', () => {
+    const md = `---
+name: x
+description: y
+thinkingLevel: galaxy-brain
+---
+body
+`
+    const parsed = parseAgentFile(md)
+    expect(parsed!.metadata.thinkingLevel).toBeUndefined()
+    expect(parsed!.warnings[0]?.field).toBe('thinkingLevel')
+    expect(parsed!.warnings[0]?.code).toBe('invalid-thinking-level')
+  })
+
+  test('warns when skills and sources have invalid shapes', () => {
+    const md = `---
+name: x
+description: y
+skills:
+  nested: nope
+sources:
+  - github
+  - 123
+---
+body
+`
+    const parsed = parseAgentFile(md)
+    expect(parsed!.metadata.skills).toBeUndefined()
+    expect(parsed!.metadata.sources).toEqual(['github'])
+    expect(parsed!.warnings.map((w) => w.field)).toEqual(['skills', 'sources'])
   })
 
   test('handles single-string skill / source as array', () => {
@@ -134,6 +174,76 @@ body
     const parsed = parseAgentFile(md)
     expect(parsed === null || (!parsed.metadata.name)).toBe(true)
   })
+
+  test('parses capability fields (inputs, outputs, tags)', () => {
+    const md = `---
+name: x
+description: y
+inputs: A topic and the depth.
+outputs: A cited summary.
+tags:
+  - research
+  - summarize
+---
+body
+`
+    const parsed = parseAgentFile(md)
+    expect(parsed!.metadata.inputs).toBe('A topic and the depth.')
+    expect(parsed!.metadata.outputs).toBe('A cited summary.')
+    expect(parsed!.metadata.tags).toEqual(['research', 'summarize'])
+  })
+
+  test('accepts comma-separated tags string', () => {
+    const md = `---
+name: x
+description: y
+tags: research, summarize, cite
+---
+body
+`
+    const parsed = parseAgentFile(md)
+    expect(parsed!.metadata.tags).toEqual(['research', 'summarize', 'cite'])
+  })
+
+  test('drops malformed tags with a warning', () => {
+    const md = `---
+name: x
+description: y
+tags:
+  - research
+  - "Bad Tag With Spaces"
+  - SHOUTING
+---
+body
+`
+    const parsed = parseAgentFile(md)
+    // SHOUTING normalizes to 'shouting' (valid); the spaces tag is dropped.
+    expect(parsed!.metadata.tags).toEqual(['research', 'shouting'])
+    expect(parsed!.warnings.some((w) => w.code === 'invalid-tags')).toBe(true)
+  })
+
+  test('caps tags at 8', () => {
+    const md = `---
+name: x
+description: y
+tags:
+  - a
+  - b
+  - c
+  - d
+  - e
+  - f
+  - g
+  - h
+  - i
+  - j
+---
+body
+`
+    const parsed = parseAgentFile(md)
+    expect(parsed!.metadata.tags).toHaveLength(8)
+    expect(parsed!.warnings.some((w) => w.code === 'invalid-tags')).toBe(true)
+  })
 })
 
 describe('serializeAgent', () => {
@@ -147,6 +257,9 @@ describe('serializeAgent', () => {
         permissionMode: 'safe',
         skills: ['a', 'b'],
         sources: ['s1'],
+        inputs: 'A topic.',
+        outputs: 'A summary.',
+        tags: ['research', 'summarize'],
       },
       'You are a test agent.',
     )
@@ -157,6 +270,9 @@ describe('serializeAgent', () => {
     expect(parsed!.metadata.permissionMode).toBe('safe')
     expect(parsed!.metadata.skills).toEqual(['a', 'b'])
     expect(parsed!.metadata.sources).toEqual(['s1'])
+    expect(parsed!.metadata.inputs).toBe('A topic.')
+    expect(parsed!.metadata.outputs).toBe('A summary.')
+    expect(parsed!.metadata.tags).toEqual(['research', 'summarize'])
     expect(parsed!.systemPrompt).toBe('You are a test agent.')
   })
 
@@ -229,36 +345,139 @@ describe('activation manifest', () => {
 })
 
 describe('library + activation interplay (using a fake global dir)', () => {
-  // For this test we need a configurable global dir. The storage module
-  // uses ~/.agents/agents/ unconditionally — so we test by writing real
-  // AGENT.md files into a tmp workspace and using parseAgentFile / serializeAgent
-  // directly. Full end-to-end with the global dir lives in an integration
-  // test next to seed-on-first-run.
+  let workspace: string
+  let globalAgentsDir: string
 
-  test('serialize → write → parse round-trips a realistic agent', () => {
-    const workspace = tmpWorkspace()
-    try {
-      const dir = join(workspace, 'fake-global', 'researcher')
-      mkdirSync(dir, { recursive: true })
-      const file = join(dir, 'AGENT.md')
+  beforeEach(() => {
+    workspace = tmpWorkspace()
+    globalAgentsDir = tmpGlobalAgentsDir()
+  })
 
-      const serialized = serializeAgent(
-        {
+  afterEach(() => {
+    rmSync(workspace, { recursive: true, force: true })
+    rmSync(globalAgentsDir, { recursive: true, force: true })
+  })
+
+  test('writeGlobalAgent writes to the injected global dir and can reload', () => {
+    const loaded = writeGlobalAgent(
+      {
+        slug: 'researcher',
+        metadata: {
           name: 'Researcher',
           description: 'Investigates topics.',
           skills: ['web-research'],
         },
-        'You are a researcher.\nReturn structured findings.',
-      )
-      writeFileSync(file, serialized, 'utf-8')
+        systemPrompt: 'You are a researcher.\nReturn structured findings.',
+      },
+      { globalAgentsDir },
+    )
 
-      expect(existsSync(file)).toBe(true)
-      const re = parseAgentFile(readFileSync(file, 'utf-8'))
-      expect(re!.metadata.name).toBe('Researcher')
-      expect(re!.metadata.skills).toEqual(['web-research'])
-      expect(re!.systemPrompt).toContain('structured findings')
-    } finally {
-      rmSync(workspace, { recursive: true, force: true })
-    }
+    expect(loaded.slug).toBe('researcher')
+    expect(loaded.path).toBe(join(globalAgentsDir, 'researcher'))
+    expect(existsSync(join(globalAgentsDir, 'researcher', 'AGENT.md'))).toBe(true)
+
+    const reloaded = loadGlobalAgent('researcher', { globalAgentsDir })
+    expect(reloaded!.metadata.name).toBe('Researcher')
+    expect(reloaded!.metadata.skills).toEqual(['web-research'])
+    expect(reloaded!.systemPrompt).toContain('structured findings')
+  })
+
+  test('loadAllGlobalAgents includes non-fatal parse warnings', () => {
+    const dir = join(globalAgentsDir, 'warns')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'AGENT.md'), `---
+name: Warns
+description: Has bad optional fields.
+permissionMode: nope
+sources: 42
+---
+body
+`, 'utf-8')
+
+    const agents = loadAllGlobalAgents({ globalAgentsDir })
+    expect(agents).toHaveLength(1)
+    expect(agents[0]!.parseWarnings?.map((w) => w.field)).toEqual(['permissionMode', 'sources'])
+  })
+
+  test('deleteGlobalAgent removes the agent and cleans workspace manifests', () => {
+    writeGlobalAgent(
+      {
+        slug: 'writer',
+        metadata: { name: 'Writer', description: 'Writes.' },
+        systemPrompt: 'Write.',
+      },
+      { globalAgentsDir },
+    )
+    writeActivatedAgents(workspace, ['writer', 'researcher'])
+
+    expect(deleteGlobalAgent('writer', [workspace], { globalAgentsDir })).toBe(true)
+    expect(existsSync(join(globalAgentsDir, 'writer'))).toBe(false)
+    expect(readActivatedAgents(workspace).active).toEqual(['researcher'])
+  })
+
+  test('loadActivatedAgents self-heals stale manifest entries for missing globals', () => {
+    writeGlobalAgent(
+      {
+        slug: 'present',
+        metadata: { name: 'Present', description: 'Still exists.' },
+        systemPrompt: 'Present.',
+      },
+      { globalAgentsDir },
+    )
+    writeActivatedAgents(workspace, ['missing', 'present'])
+
+    const loaded = loadActivatedAgents(workspace, { globalAgentsDir })
+    expect(loaded.map((a) => a.slug)).toEqual(['present'])
+    expect(readActivatedAgents(workspace).active).toEqual(['present'])
+  })
+
+  test('seedGlobalLibraryIfEmpty writes starters once to the injected global dir', () => {
+    const starters = [
+      {
+        slug: 'starter',
+        metadata: { name: 'Starter', description: 'Seeded.' },
+        systemPrompt: 'Seed.',
+      },
+    ]
+
+    expect(seedGlobalLibraryIfEmpty(starters, { globalAgentsDir }).seeded).toBe(1)
+    expect(loadGlobalAgent('starter', { globalAgentsDir })!.metadata.name).toBe('Starter')
+
+    rmSync(join(globalAgentsDir, 'starter'), { recursive: true, force: true })
+    expect(seedGlobalLibraryIfEmpty(starters, { globalAgentsDir }).seeded).toBe(0)
+    expect(loadGlobalAgent('starter', { globalAgentsDir })).toBeNull()
+  })
+
+  test('ensureRequiredAgents can be tested against the injected global dir', () => {
+    const required = [
+      {
+        slug: 'orchestrator',
+        metadata: { name: 'Orchestrator', description: 'Coordinates.' },
+        systemPrompt: 'Coordinate.',
+      },
+    ]
+
+    expect(ensureRequiredAgents(required, { globalAgentsDir }).ensured).toBe(1)
+    expect(ensureRequiredAgents(required, { globalAgentsDir }).ensured).toBe(0)
+    expect(loadGlobalAgent('orchestrator', { globalAgentsDir })!.metadata.name).toBe('Orchestrator')
+  })
+
+  test('ensureRequiredAgents does not recreate an app-deleted required agent', () => {
+    const required = [
+      {
+        slug: 'orchestrator',
+        metadata: { name: 'Orchestrator', description: 'Coordinates.' },
+        systemPrompt: 'Coordinate.',
+      },
+    ]
+
+    ensureRequiredAgents(required, { globalAgentsDir })
+    expect(deleteGlobalAgent('orchestrator', [], { globalAgentsDir })).toBe(true)
+
+    expect(ensureRequiredAgents(required, { globalAgentsDir }).ensured).toBe(0)
+    expect(loadGlobalAgent('orchestrator', { globalAgentsDir })).toBeNull()
+
+    writeGlobalAgent(required[0]!, { globalAgentsDir })
+    expect(loadGlobalAgent('orchestrator', { globalAgentsDir })!.metadata.name).toBe('Orchestrator')
   })
 })
