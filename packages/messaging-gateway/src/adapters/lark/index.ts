@@ -172,11 +172,24 @@ interface LarkMessageEvent {
   }
 }
 
+/**
+ * Card-action press event after the SDK's `EventDispatcher.parse()` flattens
+ * the v2 envelope. Schema 2.0 nests the chat id under `context` instead of
+ * at the top level — handle both shapes so the same code path works for v1
+ * and v2 cards.
+ */
 interface LarkCardActionEvent {
   operator?: { user_id?: string; open_id?: string; union_id?: string }
+  /** Schema 1.0 location for the chat id. */
   open_chat_id?: string
+  /** Schema 2.0 location — `context.open_chat_id` and friends. */
+  context?: {
+    open_chat_id?: string
+    open_message_id?: string
+  }
   action?: {
     value?: unknown
+    tag?: string
   }
 }
 
@@ -758,6 +771,19 @@ export class LarkAdapter implements PlatformAdapter {
   }
 
   private async handleCardAction(data: LarkCardActionEvent): Promise<void> {
+    // Visibility log: if this never fires when the user presses a button,
+    // the missing piece is on the Lark Open Platform side — schema-2.0
+    // cards only emit `card.action.trigger` events when the app has the
+    // **Card Callback Communication** subscription enabled under
+    // Events & Callbacks (separate from `im.message.receive_v1`).
+    const channelId = data.context?.open_chat_id ?? data.open_chat_id ?? ''
+    this.log.info('[lark] card action received', {
+      event: 'lark_card_action_received',
+      chatId: channelId,
+      tag: data.action?.tag,
+      hasValue: data.action?.value !== undefined,
+    })
+
     if (!this.buttonHandler) return
     const value = data.action?.value as
       | { buttonId?: string; messageId?: string; data?: string }
@@ -774,7 +800,7 @@ export class LarkAdapter implements PlatformAdapter {
 
     const press: ButtonPress = {
       platform: 'lark',
-      channelId: data.open_chat_id ?? '',
+      channelId,
       messageId: value.messageId,
       buttonId: value.buttonId,
       senderId,
