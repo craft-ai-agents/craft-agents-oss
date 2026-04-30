@@ -170,7 +170,7 @@ export function PackBrowserDialog({
         </div>
 
         {/* Pack List — scrolls natively via ScrollArea */}
-        <ScrollArea className="flex-1 min-h-0 overflow-hidden">
+        <ScrollArea className="flex-1 min-h-0 max-h-[50vh]" type="always">
           {loading && (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
               <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full mb-2" />
