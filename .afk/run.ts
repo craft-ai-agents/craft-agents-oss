@@ -50,7 +50,15 @@ const localProvider = createBindMountSandboxProvider({
           const child = spawn("/bin/sh", ["-c", command], {
             cwd,
             env: { ...process.env, ...env },
+            stdio: ["pipe", "pipe", "pipe"],
           });
+
+          // Pipe stdin when provided (sandcastle passes the prompt this way
+          // to avoid the 128KB argv limit on Linux)
+          if (options.stdin) {
+            child.stdin!.write(options.stdin);
+          }
+          child.stdin!.end();
 
           let stdout = "";
           let stderr = "";
