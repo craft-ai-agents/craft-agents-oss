@@ -640,6 +640,8 @@ export interface ElectronAPI {
   deleteAutomation(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
   /** Append a fully-formed matcher under the given event. Server assigns id and de-dupes WebhookReceive slugs. */
   createAutomationFromTemplate(workspaceId: string, eventName: string, matcher: Record<string, unknown>): Promise<void>
+  /** Live status of the inbound webhook trigger HTTP server (port and URL). */
+  getTriggerServerInfo(): Promise<{ enabled: boolean; url: string | null }>
   getAutomationHistory(workspaceId: string, automationId: string, limit?: number): Promise<Array<{ id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string; webhook?: { method: string; url: string; statusCode: number; durationMs: number; attempts?: number; error?: string; responseBody?: string } }>>
   getAutomationLastExecuted(workspaceId: string): Promise<Record<string, number>>
   replayAutomation(workspaceId: string, automationId: string, eventName: string): Promise<{ results: Array<{ type: string; url: string; statusCode: number; success: boolean; error?: string; duration: number }> }>

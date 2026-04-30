@@ -166,6 +166,12 @@ const waNodeBin = process.env.CRAFT_MESSAGING_NODE_BIN ?? 'node'
 // publisher after bootstrapServer resolves.
 let messagingHandle: MessagingBootstrapHandle | null = null
 
+// The trigger HTTP server is started *after* bootstrapServer resolves, but
+// HandlerDeps (built inside bootstrap) needs to expose its status to the
+// renderer via a closure. Forward-declare with a `let` so the closure can
+// read the live value at RPC invocation time.
+let triggerServer: TriggerHttpServerHandle | null = null
+
 const instance = await (async () => {
   try {
     return await bootstrapServer<SessionManager, HandlerDeps>({
@@ -226,6 +232,11 @@ const instance = await (async () => {
           platform,
           oauthFlowStore,
           messagingRegistry: messagingHandle.registry,
+          // Closure: trigger server starts after bootstrapServer resolves.
+          getTriggerServerInfo: () => ({
+            enabled: triggerServer != null,
+            url: triggerServer?.url ?? null,
+          }),
         }
       },
       registerAllRpcHandlers: registerCoreRpcHandlers,
@@ -311,7 +322,7 @@ const healthServer = await startHealthHttpServer({
 // Off by default — opt-in for users who want to fire automations from external systems.
 const triggerPort = parseInt(process.env.CRAFT_TRIGGER_PORT ?? '0', 10)
 const triggerHost = process.env.CRAFT_TRIGGER_HOST ?? '127.0.0.1'
-const triggerServer: TriggerHttpServerHandle | null = await startTriggerHttpServer({
+triggerServer = await startTriggerHttpServer({
   port: triggerPort,
   host: triggerHost,
   resolver: instance.sessionManager,

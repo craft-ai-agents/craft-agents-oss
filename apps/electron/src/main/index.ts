@@ -674,6 +674,13 @@ app.whenReady().then(async () => {
             browserPaneManager: browserPaneManager ?? undefined,
             oauthFlowStore: ofs,
             messagingRegistry: messagingHandle.registry,
+            // Closure: trigger server starts after bootstrapServer resolves.
+            // Reading the live module-scoped handle on each call gives the
+            // renderer the current URL even if the server is restarted.
+            getTriggerServerInfo: () => ({
+              enabled: triggerServerHandle != null,
+              url: triggerServerHandle?.url ?? null,
+            }),
           }
         },
         // Headless: register only core handlers (no GUI handlers for browser, settings, etc.)
@@ -715,12 +722,32 @@ app.whenReady().then(async () => {
       moduleClientResolver = resolveClientId
 
       // -----------------------------------------------------------------------
-      // Inbound webhook trigger HTTP server. Off by default — opt-in via
-      // CRAFT_TRIGGER_PORT (e.g. 9101). Lets external systems fire automations
-      // by POSTing to /v1/triggers/<workspaceId>/<slug>.
+      // Inbound webhook trigger HTTP server.
+      //
+      // **On by default** in the desktop app, bound to loopback (127.0.0.1).
+      // External services can fire automations by POSTing to
+      // /v1/triggers/<workspaceId>/<slug>.
+      //
+      // Override behavior:
+      //   CRAFT_TRIGGER_PORT=0           → disable
+      //   CRAFT_TRIGGER_PORT=NNNN        → use NNNN instead of the default
+      //   CRAFT_TRIGGER_HOST=0.0.0.0     → bind to all interfaces (only safe
+      //                                    behind a tunnel + with HMAC enabled)
+      //
+      // Loopback binding makes auto-start safe — outsiders can't reach the
+      // port. Users who want public exposure must explicitly bind to 0.0.0.0.
       // -----------------------------------------------------------------------
       try {
-        const triggerPort = parseInt(process.env.CRAFT_TRIGGER_PORT ?? '0', 10)
+        const DEFAULT_TRIGGER_PORT = 9101
+        const envPort = process.env.CRAFT_TRIGGER_PORT
+        let triggerPort: number
+        if (envPort === undefined || envPort === '') {
+          triggerPort = DEFAULT_TRIGGER_PORT
+        } else {
+          const parsed = parseInt(envPort, 10)
+          // Negative → disable. NaN → fall back to default.
+          triggerPort = Number.isNaN(parsed) ? DEFAULT_TRIGGER_PORT : parsed
+        }
         if (triggerPort > 0) {
           const { startTriggerHttpServer } = await import('@craft-agent/server-core/triggers')
           triggerServerHandle = await startTriggerHttpServer({
@@ -736,8 +763,13 @@ app.whenReady().then(async () => {
           if (triggerServerHandle) {
             mainLog.info(`[trigger-server] Listening on ${triggerServerHandle.url}`)
           }
+        } else {
+          mainLog.info('[trigger-server] Disabled (CRAFT_TRIGGER_PORT=0)')
         }
       } catch (err) {
+        // Most likely cause: port already in use. Don't crash — webhook
+        // automations simply won't fire until the port is free or the user
+        // sets CRAFT_TRIGGER_PORT to a different value.
         mainLog.error('[trigger-server] Failed to start:', err)
       }
 

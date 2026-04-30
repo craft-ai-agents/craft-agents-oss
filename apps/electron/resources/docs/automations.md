@@ -753,20 +753,29 @@ External systems (GitHub, Stripe, Linear, Zapier, your own scripts, etc.) can fi
 
 ### Enabling the trigger server
 
-The trigger server is **off by default**. Start the desktop app or standalone server with `CRAFT_TRIGGER_PORT` set:
+In the **desktop app**, the trigger server **auto-starts** on `127.0.0.1:9101` — no setup required. Loopback binding means external machines can't reach it, so it's safe to leave on.
+
+In the **standalone (headless) server**, the trigger server is opt-in — set `CRAFT_TRIGGER_PORT=9101` to enable. This is intentional: headless contexts often run multiple instances on shared hosts where port conflicts and exposure risks are real.
+
+To override the default:
 
 ```bash
-# Standalone server
-CRAFT_TRIGGER_PORT=9101 bun run server:start
+# Use a different port
+CRAFT_TRIGGER_PORT=9200 bun run electron:start
 
-# Electron desktop (set env before launching)
-CRAFT_TRIGGER_PORT=9101 bun run electron:start
+# Disable entirely
+CRAFT_TRIGGER_PORT=0 bun run electron:start
+
+# Bind publicly (only safe behind a tunnel + with HMAC on every automation)
+CRAFT_TRIGGER_HOST=0.0.0.0 CRAFT_TRIGGER_PORT=9101 bun run electron:start
 ```
 
-| Env var | Default | Description |
-|---------|---------|-------------|
-| `CRAFT_TRIGGER_PORT` | _(off)_ | Listen port. Server is disabled when unset or `0`. |
-| `CRAFT_TRIGGER_HOST` | `127.0.0.1` | Bind address. Set to `0.0.0.0` only behind a tunnel/reverse proxy with HMAC enabled. |
+| Env var | Desktop default | Headless default | Description |
+|---------|-----------------|------------------|-------------|
+| `CRAFT_TRIGGER_PORT` | `9101` | `0` (off) | Listen port. `0` disables. |
+| `CRAFT_TRIGGER_HOST` | `127.0.0.1` | `127.0.0.1` | Bind address. Set to `0.0.0.0` only behind a tunnel/reverse proxy with HMAC enabled. |
+
+The automation detail page in the desktop app shows the live URL (and an inline warning if the server isn't running, e.g. because the port was already taken at launch).
 
 ### Trigger URL format
 

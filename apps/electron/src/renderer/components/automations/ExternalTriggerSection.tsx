@@ -50,10 +50,14 @@ export function ExternalTriggerSection({ automation, editActions }: ExternalTrig
 
 function WebhookReceivePanel({ automation, editActions }: ExternalTriggerSectionProps) {
   const workspace = useActiveWorkspace()
-  const port = readTriggerPort()
+  const triggerInfo = useTriggerServerInfo()
 
+  // Build URL from the live server info when available; fall back to a
+  // sensible localhost guess so users still see *some* URL when the server
+  // hasn't started yet (e.g. another process bound the port).
+  const baseUrl = triggerInfo.url ?? 'http://127.0.0.1:9101'
   const url = automation.slug && workspace?.id
-    ? `http://${readTriggerHost()}:${port}/v1/triggers/${encodeURIComponent(workspace.id)}/${encodeURIComponent(automation.slug)}`
+    ? `${baseUrl}/v1/triggers/${encodeURIComponent(workspace.id)}/${encodeURIComponent(automation.slug)}`
     : null
 
   const allowedMethods = automation.allowedMethods ?? ['POST']
@@ -65,6 +69,18 @@ function WebhookReceivePanel({ automation, editActions }: ExternalTriggerSection
       description="External services can fire this automation by POSTing to the URL below."
       actions={editActions}
     >
+      {!triggerInfo.enabled && (
+        <Info_Alert variant="warning" icon={<AlertTriangle className="h-4 w-4" />}>
+          <Info_Alert.Title>Trigger server not running</Info_Alert.Title>
+          <Info_Alert.Description>
+            The HTTP server that receives webhooks is disabled or failed to start.
+            By default it auto-starts on <code>127.0.0.1:9101</code>. Set{' '}
+            <code className="font-mono">CRAFT_TRIGGER_PORT</code> to a free port and restart the app,
+            or set <code className="font-mono">CRAFT_TRIGGER_PORT=0</code> to keep it off.
+          </Info_Alert.Description>
+        </Info_Alert>
+      )}
+
       {!automation.slug && (
         <Info_Alert variant="warning" icon={<AlertTriangle className="h-4 w-4" />}>
           <Info_Alert.Title>No slug configured</Info_Alert.Title>
@@ -120,11 +136,6 @@ function WebhookReceivePanel({ automation, editActions }: ExternalTriggerSection
         )}
       </Info_Table>
 
-      {!port && (
-        <p className="text-xs text-foreground/60 mt-2">
-          The trigger HTTP server is off. Start the app with <code className="font-mono">CRAFT_TRIGGER_PORT=9101</code> to enable inbound webhooks.
-        </p>
-      )}
     </Info_Section>
   )
 }
@@ -256,16 +267,36 @@ function describeFingerprint(kind: string): string {
 // Helpers
 // ============================================================================
 
-function readTriggerHost(): string {
-  // Best-effort. The renderer can't read process.env directly; this is just a
-  // sensible default. Users who customized via CRAFT_TRIGGER_HOST will know to
-  // substitute the value.
-  return '127.0.0.1'
-}
+/**
+ * Subscribe to live trigger HTTP server status. Polls the main process on
+ * mount + every 30 seconds afterwards. Cheap (no payload to speak of) and
+ * keeps the UI accurate even if the server starts late or restarts.
+ */
+function useTriggerServerInfo(): { enabled: boolean; url: string | null } {
+  const [info, setInfo] = React.useState<{ enabled: boolean; url: string | null }>({
+    enabled: false,
+    url: null,
+  })
 
-function readTriggerPort(): number {
-  // Same caveat as above. We default to 9101 (the documented default).
-  return 9101
+  React.useEffect(() => {
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const result = await window.electronAPI.getTriggerServerInfo()
+        if (!cancelled) setInfo(result)
+      } catch {
+        if (!cancelled) setInfo({ enabled: false, url: null })
+      }
+    }
+    refresh()
+    const id = setInterval(refresh, 30_000)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [])
+
+  return info
 }
 
 interface CopyableValueProps {

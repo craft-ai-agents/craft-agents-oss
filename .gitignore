@@ -72,3 +72,11 @@ credentials.enc
 # act (local GitHub Actions runner)
 .secrets
 .actrc
+
+# Personal note files (TextEdit RTF bundles, scratch ideas, etc.)
+*.rtfd
+*.rtf
+NOTES.md
+notes.md
+SCRATCH.md
+scratch.md

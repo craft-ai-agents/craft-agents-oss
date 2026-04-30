@@ -64,6 +64,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.automations.GET_LAST_EXECUTED,
   RPC_CHANNELS.automations.REPLAY,
   RPC_CHANNELS.automations.CREATE_FROM_TEMPLATE,
+  RPC_CHANNELS.automations.GET_TRIGGER_SERVER_INFO,
 ] as const
 
 export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -203,6 +204,14 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
         matchers[idx].enabled = false
       }
     })
+  })
+
+  // Report inbound webhook trigger server state to the renderer.
+  // Returns { enabled: false, url: null } when the host didn't wire the
+  // closure (older bootstraps) or when the server is disabled.
+  server.handle(RPC_CHANNELS.automations.GET_TRIGGER_SERVER_INFO, async () => {
+    if (!deps.getTriggerServerInfo) return { enabled: false, url: null }
+    return deps.getTriggerServerInfo()
   })
 
   // Append a new automation matcher built from a template. The renderer

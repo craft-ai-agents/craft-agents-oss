@@ -27,4 +27,12 @@ export interface HandlerDeps<
   browserPaneManager?: TBrowserPaneManager
   oauthFlowStore: TOAuthFlowStore
   messagingRegistry?: IMessagingGatewayRegistry
+  /**
+   * Reads the current state of the inbound webhook trigger HTTP server.
+   * Used by the renderer to display the live trigger URL and an
+   * "enabled/disabled" indicator. The closure is stable for the host's
+   * lifetime; the *contents* it reports change as the trigger server
+   * starts/stops.
+   */
+  getTriggerServerInfo?: () => { enabled: boolean; url: string | null }
 }

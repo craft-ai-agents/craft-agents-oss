@@ -371,6 +371,7 @@ export const CHANNEL_MAP = {
   duplicateAutomation: invoke(RPC_CHANNELS.automations.DUPLICATE),
   deleteAutomation: invoke(RPC_CHANNELS.automations.DELETE),
   createAutomationFromTemplate: invoke(RPC_CHANNELS.automations.CREATE_FROM_TEMPLATE),
+  getTriggerServerInfo: invoke(RPC_CHANNELS.automations.GET_TRIGGER_SERVER_INFO),
   getAutomationHistory: invoke(RPC_CHANNELS.automations.GET_HISTORY),
   getAutomationLastExecuted: invoke(RPC_CHANNELS.automations.GET_LAST_EXECUTED),
   replayAutomation: invoke(RPC_CHANNELS.automations.REPLAY),

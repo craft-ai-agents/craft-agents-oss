@@ -368,6 +368,7 @@ export const RPC_CHANNELS = {
     REPLAY: 'automations:replay',
     CHANGED: 'automations:changed',
     CREATE_FROM_TEMPLATE: 'automations:createFromTemplate',
+    GET_TRIGGER_SERVER_INFO: 'automations:getTriggerServerInfo',
   },
   resources: {
     EXPORT: 'resources:export',
