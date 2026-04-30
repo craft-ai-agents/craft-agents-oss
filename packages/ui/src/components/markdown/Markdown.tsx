@@ -71,6 +71,8 @@ export interface MarkdownProps {
    * @default true
    */
   hideFirstMermaidExpand?: boolean
+  /** Absolute path to the current session folder for resolving preview src values like data/... or plans/... */
+  sessionFolderPath?: string
 }
 
 /** Context for collapsible sections */
@@ -106,7 +108,8 @@ function createComponents(
   onFileClick?: (path: string) => void,
   collapsibleContext?: CollapsibleContext | null,
   firstMermaidCodeRef?: React.RefObject<string | null>,
-  hideFirstMermaidExpand: boolean = true
+  hideFirstMermaidExpand: boolean = true,
+  sessionFolderPath?: string
 ): Partial<Components> {
   let blockIndex = 0
   const wrapBlock = (
@@ -256,7 +259,7 @@ function createComponents(
           }
           // Image preview blocks → inline image with expand to full viewer
           if (match?.[1] === 'image-preview') {
-            return wrapBlock('image-preview', code, <MarkdownImageBlock code={code} className="my-2" />, props.node?.position)
+            return wrapBlock('image-preview', code, <MarkdownImageBlock code={code} className="my-2" sessionFolderPath={sessionFolderPath} />, props.node?.position)
           }
           // LaTeX/math code blocks → KaTeX rendered display math
           if (match?.[1] === 'latex' || match?.[1] === 'math') {
@@ -385,7 +388,7 @@ function createComponents(
         }
         // Image preview blocks → inline image with expand to full viewer
         if (match?.[1] === 'image-preview') {
-          return wrapBlock('image-preview', code, <MarkdownImageBlock code={code} className="my-2" />, props.node?.position)
+          return wrapBlock('image-preview', code, <MarkdownImageBlock code={code} className="my-2" sessionFolderPath={sessionFolderPath} />, props.node?.position)
         }
         // LaTeX/math code blocks → KaTeX rendered display math
         if (match?.[1] === 'latex' || match?.[1] === 'math') {
@@ -510,6 +513,7 @@ export function Markdown({
   onFileClick,
   collapsible = false,
   hideFirstMermaidExpand = true,
+  sessionFolderPath,
 }: MarkdownProps) {
   // Get collapsible context if enabled
   const collapsibleContext = useCollapsibleMarkdown()
@@ -528,8 +532,8 @@ export function Markdown({
   }
 
   const components = React.useMemo(
-    () => wrapWithSafeProxy(createComponents(mode, onUrlClick, onFileClick, collapsible ? collapsibleContext : null, firstMermaidCodeRef, hideFirstMermaidExpand)),
-    [mode, onUrlClick, onFileClick, collapsible, collapsibleContext, hideFirstMermaidExpand]
+    () => wrapWithSafeProxy(createComponents(mode, onUrlClick, onFileClick, collapsible ? collapsibleContext : null, firstMermaidCodeRef, hideFirstMermaidExpand, sessionFolderPath)),
+    [mode, onUrlClick, onFileClick, collapsible, collapsibleContext, hideFirstMermaidExpand, sessionFolderPath]
   )
 
   // Preprocess to convert raw URLs and file paths to markdown links
@@ -581,13 +585,15 @@ export const MemoizedMarkdown = React.memo(
       return (
         prevProps.id === nextProps.id &&
         prevProps.children === nextProps.children &&
-        prevProps.mode === nextProps.mode
+        prevProps.mode === nextProps.mode &&
+        prevProps.sessionFolderPath === nextProps.sessionFolderPath
       )
     }
     // Otherwise compare content and mode
     return (
       prevProps.children === nextProps.children &&
-      prevProps.mode === nextProps.mode
+      prevProps.mode === nextProps.mode &&
+      prevProps.sessionFolderPath === nextProps.sessionFolderPath
     )
   }
 )

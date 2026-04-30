@@ -1393,6 +1393,8 @@ export interface ResponseCardProps {
   variant?: 'response' | 'plan'
   /** Parent session ID (used to reset local annotation/island UI state on session switches) */
   sessionId?: string
+  /** Session folder path for resolving preview src values like data/... or plans/... */
+  sessionFolderPath?: string
   /** Underlying message ID for annotation actions */
   messageId?: string
   /** Persisted annotations for this response */
@@ -1649,6 +1651,7 @@ export function ResponseCard({
   onPopOut,
   variant = 'response',
   sessionId,
+  sessionFolderPath,
   messageId,
   annotations,
   onAccept,
@@ -2469,6 +2472,7 @@ export function ResponseCard({
                 mode="minimal"
                 onUrlClick={onOpenUrl}
                 onFileClick={onOpenFile}
+                sessionFolderPath={sessionFolderPath}
               >
                 {text}
               </Markdown>
@@ -2554,6 +2558,7 @@ export function ResponseCard({
           onOpenUrl={onOpenUrl}
           onOpenFile={onOpenFile}
           sessionId={sessionId}
+          sessionFolderPath={sessionFolderPath}
           messageId={messageId}
           annotations={annotations}
           onAddAnnotation={onAddAnnotation}
@@ -2594,6 +2599,7 @@ export function ResponseCard({
               mode="minimal"
               onUrlClick={onOpenUrl}
               onFileClick={onOpenFile}
+              sessionFolderPath={sessionFolderPath}
             >
               {displayedText}
             </Markdown>
@@ -3087,6 +3093,7 @@ export const TurnCard = React.memo(function TurnCard({
             text={planActivity.content || ''}
             isStreaming={false}
             sessionId={sessionId}
+            sessionFolderPath={sessionFolderPath}
             onOpenFile={onOpenFile}
             onOpenUrl={onOpenUrl}
             onPopOut={onPopOut ? () => onPopOut(planActivity.content || '') : undefined}
@@ -3126,6 +3133,7 @@ export const TurnCard = React.memo(function TurnCard({
                 isStreaming={response.isStreaming}
                 streamStartTime={response.streamStartTime}
                 sessionId={sessionId}
+                sessionFolderPath={sessionFolderPath}
                 onOpenFile={onOpenFile}
                 onOpenUrl={onOpenUrl}
                 onPopOut={onPopOut ? () => onPopOut(response.text) : undefined}
@@ -3158,6 +3166,7 @@ export const TurnCard = React.memo(function TurnCard({
             isStreaming={response.isStreaming}
             streamStartTime={response.streamStartTime}
             sessionId={sessionId}
+            sessionFolderPath={sessionFolderPath}
             onOpenFile={onOpenFile}
             onOpenUrl={onOpenUrl}
             onPopOut={onPopOut ? () => onPopOut(response.text) : undefined}

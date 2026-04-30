@@ -40,6 +40,8 @@ export interface DocumentFormattedMarkdownOverlayProps {
   error?: string
   /** Optional session id used for annotation payload source metadata */
   sessionId?: string
+  /** Absolute path to the current session folder for resolving preview src values like data/... or plans/... */
+  sessionFolderPath?: string
   /** Optional message id; when present with callbacks, overlay becomes annotatable */
   messageId?: string
   /** Persisted annotations for the message */
@@ -69,6 +71,7 @@ export function DocumentFormattedMarkdownOverlay({
   typeBadge,
   error,
   sessionId,
+  sessionFolderPath,
   messageId,
   annotations,
   onAddAnnotation,
@@ -107,6 +110,7 @@ export function DocumentFormattedMarkdownOverlay({
                 <AnnotatableMarkdownDocument
                   content={content}
                   sessionId={sessionId}
+                  sessionFolderPath={sessionFolderPath}
                   messageId={messageId}
                   annotations={annotations}
                   onAddAnnotation={onAddAnnotation}
@@ -125,6 +129,7 @@ export function DocumentFormattedMarkdownOverlay({
                   onUrlClick={onOpenUrl}
                   onFileClick={onOpenFile}
                   hideFirstMermaidExpand={false}
+                  sessionFolderPath={sessionFolderPath}
                 >
                   {content}
                 </Markdown>

@@ -12,7 +12,7 @@ The `image-preview` block renders local image files inline in chat messages — 
 | **`pdf-preview` block** | PDF reports and documents | First page inline + full navigation |
 | **`html-preview` block** | Rich HTML content | Sandboxed iframe rendering |
 
-**Key principle:** Images are already files on disk. Reference them directly with an absolute path in `src`.
+**Key principle:** Images are already files on disk. Reference them directly with either an absolute path in `src` or, inside a session transcript, a current-session relative path under `data/` or `plans/`.
 
 ## When to Use
 
@@ -35,7 +35,7 @@ Do NOT use `image-preview` when:
 ````
 ```image-preview
 {
-  "src": "/absolute/path/to/screenshot.png",
+  "src": "data/screenshot.png",
   "title": "Settings screen"
 }
 ```
@@ -50,8 +50,8 @@ Use `items` to show related images with tab navigation.
 {
   "title": "Before / After",
   "items": [
-    { "src": "/path/to/before.png", "label": "Before" },
-    { "src": "/path/to/after.png", "label": "After" }
+    { "src": "data/before.png", "label": "Before" },
+    { "src": "data/after.png", "label": "After" }
   ]
 }
 ```
@@ -63,10 +63,10 @@ Content loads lazily on tab switch and is cached once loaded.
 
 | Field | Required | Type | Description |
 |-------|----------|------|-------------|
-| `src` | Yes* | string | Absolute path to image file (single item mode) |
+| `src` | Yes* | string | Absolute path to image file, or session-relative `data/...` / `plans/...` path (single item mode) |
 | `title` | No | string | Header title (defaults to "Image Preview") |
 | `items` | Yes* | array | Array of image items with `src` and optional `label` |
-| `items[].src` | Yes | string | Absolute path to image file |
+| `items[].src` | Yes | string | Absolute path to image file, or session-relative `data/...` / `plans/...` path |
 | `items[].label` | No | string | Tab label |
 
 *Either `src` (single) or `items` (multiple) is required. If both are present, `items` takes precedence.
@@ -95,7 +95,7 @@ Formats like HEIC/HEIF/TIFF may not render in-app. For those files, use external
 ## Troubleshooting
 
 ### "Loading..." shown indefinitely
-- Verify `src` is an **absolute path**
+- Verify `src` is an **absolute path** or a session-relative `data/...` / `plans/...` path rendered inside a session
 - Confirm the file exists and is readable
 - Check that file extension is one of the supported formats
 

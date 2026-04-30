@@ -21,6 +21,8 @@ export interface ActivityCardsOverlayProps {
   theme?: 'light' | 'dark'
   onOpenUrl?: (url: string) => void
   onOpenFile?: (path: string) => void
+  /** Absolute path to the current session folder for resolving preview src values like data/... or plans/... */
+  sessionFolderPath?: string
 }
 
 const craftAgentDarkTheme = {
@@ -65,6 +67,7 @@ export function ActivityCardsOverlay({
   theme = 'light',
   onOpenUrl,
   onOpenFile,
+  sessionFolderPath,
 }: ActivityCardsOverlayProps) {
   const jsonTheme = useMemo(() => (theme === 'dark' ? craftAgentDarkTheme : craftAgentLightTheme), [theme])
 
@@ -78,6 +81,7 @@ export function ActivityCardsOverlay({
               onUrlClick={onOpenUrl}
               onFileClick={onOpenFile}
               hideFirstMermaidExpand={false}
+              sessionFolderPath={sessionFolderPath}
             >
               {content}
             </Markdown>

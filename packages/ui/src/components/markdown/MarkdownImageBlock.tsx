@@ -29,6 +29,7 @@ import { ImagePreviewOverlay } from '../overlay/ImagePreviewOverlay'
 import { usePlatform } from '../../context/PlatformContext'
 import { ImageCardStack } from './ImageCardStack'
 import { useTranslation } from 'react-i18next'
+import { resolveSessionPreviewPath } from './preview-paths'
 
 interface PreviewItem {
   src: string
@@ -60,6 +61,7 @@ class ImageBlockErrorBoundary extends React.Component<
 export interface MarkdownImageBlockProps {
   code: string
   className?: string
+  sessionFolderPath?: string
   onCreateRegionAnnotation?: (region: { x: number; y: number; w: number; h: number; unit: 'pixel' | 'percent' }) => void
 }
 
@@ -78,7 +80,7 @@ function detectImageRatio(src: string): Promise<number | null> {
   })
 }
 
-export function MarkdownImageBlock({ code, className, onCreateRegionAnnotation: _onCreateRegionAnnotation }: MarkdownImageBlockProps) {
+export function MarkdownImageBlock({ code, className, sessionFolderPath, onCreateRegionAnnotation: _onCreateRegionAnnotation }: MarkdownImageBlockProps) {
   const { t } = useTranslation()
   const { onReadFileDataUrl } = usePlatform()
 
@@ -98,11 +100,20 @@ export function MarkdownImageBlock({ code, className, onCreateRegionAnnotation: 
   }, [code])
 
   const items = React.useMemo<PreviewItem[]>(() => {
-    if (!spec) return []
-    if (spec.items && spec.items.length > 0) return spec.items
-    if (spec.src) return [{ src: spec.src }]
-    return []
-  }, [spec])
+    const rawItems = (() => {
+      if (!spec) return []
+      if (spec.items && spec.items.length > 0) return spec.items
+      if (spec.src) return [{ src: spec.src }]
+      return []
+    })()
+
+    return rawItems
+      .filter((item): item is PreviewItem => !!item && typeof item.src === 'string')
+      .map((item) => ({
+        ...item,
+        src: resolveSessionPreviewPath(item.src, sessionFolderPath),
+      }))
+  }, [spec, sessionFolderPath])
 
   const [activeIndex, setActiveIndex] = React.useState(0)
   const [isFullscreen, setIsFullscreen] = React.useState(false)
