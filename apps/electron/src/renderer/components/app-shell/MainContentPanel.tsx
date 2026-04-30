@@ -40,6 +40,7 @@ import type { SessionStatusId } from '@/config/session-status-config'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import AgentInfoPage from '@/pages/AgentInfoPage'
+import { AgentsLaunchpad } from './AgentsLaunchpad'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { AutomationInfoPage } from '../automations/AutomationInfoPage'
 import type { ExecutionEntry } from '../automations/types'
@@ -311,8 +312,10 @@ export function MainContentPanel({
     )
   }
 
-  // Agents navigator - show agent info or an empty state pointing at the
-  // global library on disk.
+  // Agents navigator - show agent info, or a launchpad/welcome view when
+  // no agent is selected. Sidebar children carry the active list now, so
+  // we don't repeat them here — instead we show a friendly orientation
+  // surface that points users at the Orchestrator and the Manage modal.
   if (isAgentsNavigation(navState)) {
     if (navState.details?.type === 'agent') {
       return wrapWithStoplight(
@@ -326,9 +329,7 @@ export function MainContentPanel({
     }
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <div className="flex items-center justify-center h-full text-muted-foreground">
-          <p className="text-sm">Pick an agent on the left to view or activate it.</p>
-        </div>
+        <AgentsLaunchpad workspaceId={activeWorkspaceId} />
       </Panel>
     )
   }

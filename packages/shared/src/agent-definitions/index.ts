@@ -33,7 +33,8 @@ export {
   writeGlobalAgent,
   deleteGlobalAgent,
   seedGlobalLibraryIfEmpty,
+  ensureRequiredAgents,
   type CreateAgentInput,
 } from './storage.ts';
 
-export { STARTER_AGENTS } from './starter-templates.ts';
+export { STARTER_AGENTS, ORCHESTRATOR_SLUG } from './starter-templates.ts';

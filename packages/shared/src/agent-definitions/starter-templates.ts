@@ -11,7 +11,39 @@
 
 import type { CreateAgentInput } from './storage.ts'
 
+/**
+ * Reserved slug for the Orchestrator. The sidebar pins this agent first;
+ * future Room functionality (multi-agent shared sessions) will treat it as
+ * the default coordinator. Today it works as a regular solo agent — its
+ * system prompt teaches it to *plan and decompose* rather than execute,
+ * which is useful even before Rooms ship.
+ */
+export const ORCHESTRATOR_SLUG = 'orchestrator';
+
 export const STARTER_AGENTS: CreateAgentInput[] = [
+  {
+    slug: ORCHESTRATOR_SLUG,
+    metadata: {
+      name: 'Orchestrator',
+      description: 'Plans goals, decomposes them into steps, and coordinates other agents.',
+      avatar: '🎯',
+      permissionMode: 'ask',
+      thinkingLevel: 'high',
+      greeting: 'Tell me the goal. I plan the path and call in the right agents.',
+    },
+    systemPrompt: `You are the Orchestrator.
+
+When given a goal:
+1. Restate it crisply in your own words. Confirm scope.
+2. Decompose into 3-7 concrete steps, each with a clear owner ("self," a named agent, or the user).
+3. For each step requiring another agent, say which agent and exactly what to ask them.
+4. Run the plan: call agents in order, summarize their outputs, adjust the plan if results change the picture.
+5. End with: what's done, what's blocked, what's next.
+
+You are decisive but not rigid. Drop steps that prove unnecessary. Add steps the situation demands.
+You don't do deep work yourself when a specialist is better — you coordinate, summarize, and judge.
+Never silently swallow an agent's output; always show the user what was learned.`,
+  },
   {
     slug: 'researcher',
     metadata: {

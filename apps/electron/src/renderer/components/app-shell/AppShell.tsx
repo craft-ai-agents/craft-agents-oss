@@ -118,7 +118,11 @@ import {
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
-import { AgentsListPanel } from "./AgentsListPanel"
+// AgentsListPanel intentionally not imported — sidebar children carry the
+// per-workspace list now. Component preserved for a possible "all agents"
+// admin view in a later round.
+import { AgentLibraryDialog } from "./AgentLibraryDialog"
+import { useAgents } from "@/hooks/useAgents"
 import { AutomationsListPanel } from "../automations/AutomationsListPanel"
 import { APP_EVENTS, AGENT_EVENTS, EXTERNAL_INPUT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
 import { useAutomations } from "@/hooks/useAutomations"
@@ -1435,6 +1439,58 @@ function AppShellContent({
     return counts
   }, [automations])
 
+  // Agents sidebar (expandable). Pinned first: Orchestrator. Then: every other
+  // agent activated in this workspace. Last row: a "+ Manage" entry that
+  // opens the full library picker. Keeping it lean — users curate their
+  // working set, the global library lives behind the modal.
+  const { activeAgents } = useAgents(activeWorkspaceId)
+  const [agentLibraryOpen, setAgentLibraryOpen] = useState(false)
+  const ORCHESTRATOR_AGENT_SLUG = 'orchestrator'
+  const agentSidebarChildren = useMemo(() => {
+    const orchestrator = activeAgents.find((a) => a.slug === ORCHESTRATOR_AGENT_SLUG)
+    const others = activeAgents
+      .filter((a) => a.slug !== ORCHESTRATOR_AGENT_SLUG)
+      .sort((a, b) => a.metadata.name.localeCompare(b.metadata.name))
+
+    type AgentChildEntry = {
+      id: string
+      title: string
+      icon: React.ReactNode
+      variant: 'default' | 'ghost'
+      onClick: () => void
+    }
+
+    const buildEntry = (slug: string, name: string, avatar: string): AgentChildEntry => ({
+      id: `nav:agents:${slug}`,
+      title: name,
+      icon: (
+        <span style={{ fontSize: 13, lineHeight: 1, display: 'inline-block', width: 14, textAlign: 'center' }}>
+          {avatar?.trim() || '🤖'}
+        </span>
+      ),
+      variant: (isAgentsNavigation(navState) && navState.details?.type === 'agent' && navState.details.agentSlug === slug)
+        ? 'default'
+        : 'ghost',
+      onClick: () => navigate(routes.view.agents(slug)),
+    })
+
+    const entries: AgentChildEntry[] = []
+    if (orchestrator) {
+      entries.push(buildEntry(orchestrator.slug, orchestrator.metadata.name, orchestrator.metadata.avatar ?? '🎯'))
+    }
+    for (const a of others) {
+      entries.push(buildEntry(a.slug, a.metadata.name, a.metadata.avatar ?? '🤖'))
+    }
+    entries.push({
+      id: 'nav:agents:manage',
+      title: 'Manage agents',
+      icon: <Plus className="h-3.5 w-3.5" />,
+      variant: 'ghost',
+      onClick: () => setAgentLibraryOpen(true),
+    })
+    return entries
+  }, [activeAgents, navState])
+
   // Filter session metadata based on sidebar mode and chat filter
   const filteredSessionMetas = useMemo(() => {
     // When in sources mode, return empty (no sessions to show)
@@ -2439,6 +2495,10 @@ function AppShellContent({
                       icon: Bot,
                       variant: isAgentsNavigation(navState) ? "default" : "ghost",
                       onClick: handleAgentsClick,
+                      expandable: true,
+                      expanded: isExpanded('nav:agents'),
+                      onToggle: () => toggleExpanded('nav:agents'),
+                      items: agentSidebarChildren,
                     },
                     {
                       id: "nav:automations",
@@ -3179,14 +3239,9 @@ function AppShellContent({
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
               />
             )}
-            {isAgentsNavigation(navState) && (
-              /* Agents List */
-              <AgentsListPanel
-                workspaceId={activeWorkspaceId}
-                onAgentClick={(agent) => navigate(routes.view.agents(agent.slug))}
-                selectedSlug={isAgentsNavigation(navState) && navState.details?.type === 'agent' ? navState.details.agentSlug : null}
-              />
-            )}
+            {/* Agents navigator: sidebar children show the active agents directly,
+                so there's no middle list panel. Main content (right pane) renders
+                AgentInfoPage when a slug is selected, or a launchpad otherwise. */}
             {isAutomationsNavigation(navState) && (
               /* Automations List - filtered by type if automationFilter is active */
               <AutomationsListPanel
@@ -3559,6 +3614,13 @@ function AppShellContent({
         workspaces={workspaces}
         activeWorkspaceId={activeWorkspaceId}
         onTransferComplete={handleTransferComplete}
+      />
+
+      {/* Agent library picker — opened from the sidebar's "+ Manage agents" entry */}
+      <AgentLibraryDialog
+        open={agentLibraryOpen}
+        onOpenChange={setAgentLibraryOpen}
+        workspaceId={activeWorkspaceId}
       />
 
       {/* Messaging dialogs (pairing-code + WA connect) — driven by messagingDialogAtom.

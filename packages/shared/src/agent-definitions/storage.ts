@@ -357,6 +357,36 @@ export function deleteGlobalAgent(slug: string, workspaceRootPaths: string[]): b
 // ============================================================================
 
 /**
+ * Ensure a specific set of agent slugs exists in the global library, writing
+ * any that are missing. Use this for "load-bearing" agents whose absence
+ * would break the UI (today: the Orchestrator, which the sidebar pins).
+ *
+ * Unlike seedGlobalLibraryIfEmpty, this runs on EVERY startup and ignores
+ * the .seeded marker. Existing AGENT.md files are still never overwritten —
+ * users who customize the Orchestrator keep their changes — but a deleted
+ * required agent is recreated. The trade-off (no permanent deletion of
+ * required agents) is acceptable because:
+ *   - Required agents are few and load-bearing.
+ *   - A user who wants their behavior changed can edit the file in place.
+ *   - A user who wants the agent inert can set `description: disabled` and
+ *     remove its skills/sources — the file persists, behavior is empty.
+ */
+export function ensureRequiredAgents(required: ReadonlyArray<{ slug: string; metadata: AgentMetadata; systemPrompt: string }>): { ensured: number } {
+  mkdirSync(GLOBAL_AGENTS_DIR, { recursive: true });
+  let ensured = 0;
+  for (const a of required) {
+    if (!isValidAgentSlug(a.slug)) continue;
+    const dir = getGlobalAgentDir(a.slug);
+    const file = join(dir, AGENT_FILE);
+    if (existsSync(file)) continue;
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(file, serializeAgent(a.metadata, a.systemPrompt), 'utf-8');
+    ensured += 1;
+  }
+  return { ensured };
+}
+
+/**
  * Seed the global library with starter agents on first run.
  *
  * Idempotent: existing AGENT.md files are NEVER overwritten. A user who

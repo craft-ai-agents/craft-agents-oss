@@ -1570,11 +1570,24 @@ export class SessionManager implements ISessionManager {
     try {
       // Seed the global agent-definitions library on first run (idempotent —
       // never overwrites existing AGENT.md files; respects the .seeded marker).
+      // Then ensure load-bearing agents (Orchestrator) exist on EVERY startup
+      // — these are foundational to the sidebar UX and shouldn't be missing
+      // even on installs that pre-date the agents feature.
       try {
-        const { seedGlobalLibraryIfEmpty, STARTER_AGENTS } = await import('@craft-agent/shared/agent-definitions')
+        const {
+          seedGlobalLibraryIfEmpty,
+          ensureRequiredAgents,
+          STARTER_AGENTS,
+          ORCHESTRATOR_SLUG,
+        } = await import('@craft-agent/shared/agent-definitions')
         const { seeded } = seedGlobalLibraryIfEmpty(STARTER_AGENTS)
         if (seeded > 0) {
           sessionLog.info(`[agent-definitions] Seeded ${seeded} starter agent(s) into global library`)
+        }
+        const required = STARTER_AGENTS.filter((a) => a.slug === ORCHESTRATOR_SLUG)
+        const { ensured } = ensureRequiredAgents(required)
+        if (ensured > 0) {
+          sessionLog.info(`[agent-definitions] Ensured ${ensured} required agent(s) (Orchestrator)`)
         }
       } catch (err) {
         sessionLog.warn('[agent-definitions] Library seed skipped:', err as Error)
