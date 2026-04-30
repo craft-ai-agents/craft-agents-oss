@@ -71,6 +71,7 @@ import {
 import { SessionList, type ChatGroupingMode } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
 import { PanelStackContainer } from "./PanelStackContainer"
+import { RightSidebarPanel } from "@/components/right-sidebar/RightSidebarPanel"
 import type { ChatDisplayHandle } from "./ChatDisplay"
 import { LeftSidebar } from "./LeftSidebar"
 import { useSession } from "@/hooks/useSession"
@@ -3226,9 +3227,14 @@ function AppShellContent({
           }
           navigatorWidth={isAutoCompact ? sessionListWidth : (effectiveSidebarAndNavigatorHidden ? 0 : sessionListWidth)}
           isSidebarAndNavigatorHidden={effectiveSidebarAndNavigatorHidden}
-          isRightSidebarVisible={false}
+          isRightSidebarVisible={true}
           isCompact={isAutoCompact}
           isResizing={!!isResizing}
+        />
+
+        <RightSidebarPanel
+          workspaceId={activeWorkspaceId ?? undefined}
+          sessionId={focusedSessionId ?? undefined}
         />
 
         {/* Sidebar Resize Handle (absolute, hidden in focused mode) */}
