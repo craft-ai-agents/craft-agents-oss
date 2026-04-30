@@ -1,0 +1,29 @@
+diff --git a/packages/server-core/src/domain/connection-setup-logic.ts b/packages/server-core/src/domain/connection-setup-logic.ts
+index 9e0db8b..c20a510 100644
+--- a/packages/server-core/src/domain/connection-setup-logic.ts
++++ b/packages/server-core/src/domain/connection-setup-logic.ts
+@@ -115,6 +115,11 @@ export const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
+     providerType: 'anthropic',
+     authType: 'oauth',
+   },
++  'claude-code-env': {
++    name: 'Claude Code (SDK self-auth)',
++    providerType: 'anthropic',
++    authType: 'environment',
++  },
+   'chatgpt-plus': {
+     name: 'ChatGPT Plus',
+     providerType: 'pi',
+diff --git a/packages/shared/src/config/llm-connections.ts b/packages/shared/src/config/llm-connections.ts
+index d815ed9..47d4dfc 100644
+--- a/packages/shared/src/config/llm-connections.ts
++++ b/packages/shared/src/config/llm-connections.ts
+@@ -599,7 +599,7 @@ export function isValidProviderAuthCombination(
+   authType: LlmAuthType
+ ): boolean {
+   const validCombinations: Record<LlmProviderType, LlmAuthType[]> = {
+-    anthropic: ['api_key', 'oauth'],
++    anthropic: ['api_key', 'oauth', 'environment'],
+     pi: ['api_key', 'oauth', 'iam_credentials', 'environment', 'none'],
+     pi_compat: ['api_key_with_endpoint', 'none'],
+   };

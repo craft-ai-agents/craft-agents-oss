@@ -147,6 +147,11 @@ export const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
     providerType: 'anthropic',
     authType: 'oauth',
   },
+  'claude-code-env': {
+    name: 'Claude Code (SDK self-auth)',
+    providerType: 'anthropic',
+    authType: 'environment',
+  },
   'chatgpt-plus': {
     name: 'ChatGPT Plus',
     providerType: 'pi',
