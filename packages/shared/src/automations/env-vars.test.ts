@@ -1,8 +1,66 @@
 import { describe, expect, test } from 'bun:test';
-import { buildEnvFromPayload, buildWebhookEnv } from './utils.ts';
+import { buildEnvFromPayload, buildPromptEnvFromPayload, buildWebhookEnv } from './utils.ts';
 import type { WebhookReceivePayload, FileWatchPayload, PollUrlPayload } from './event-bus.ts';
 
 describe('env-var expansion for external triggers', () => {
+  test('prompt env for external events excludes arbitrary process env and keeps CRAFT_WH allowlist', () => {
+    const oldOpenAi = process.env.OPENAI_API_KEY;
+    const oldAllowed = process.env.CRAFT_WH_ALLOWED;
+    const oldCraftSecret = process.env.CRAFT_SECRET_INTERNAL;
+    process.env.OPENAI_API_KEY = 'sk-secret';
+    process.env.CRAFT_WH_ALLOWED = 'allowed-secret';
+    process.env.CRAFT_SECRET_INTERNAL = 'not-allowed';
+
+    try {
+      const payload: WebhookReceivePayload = {
+        workspaceId: 'ws-1',
+        timestamp: 0,
+        slug: 'github-push',
+        method: 'POST',
+        headers: { 'x-github-event': 'push' },
+        query: {},
+        body: { ok: true },
+        bodyRaw: '{"ok":true}',
+        remoteIp: '127.0.0.1',
+      };
+
+      const env = buildPromptEnvFromPayload('WebhookReceive', payload);
+
+      expect(env.OPENAI_API_KEY).toBeUndefined();
+      expect(env.CRAFT_SECRET_INTERNAL).toBeUndefined();
+      expect(env.CRAFT_WH_ALLOWED).toBe('allowed-secret');
+      expect(env.CRAFT_EVENT).toBe('WebhookReceive');
+      expect(env.CRAFT_BODY_RAW).toBe('{"ok":true}');
+      expect(env.CRAFT_HEADER_X_GITHUB_EVENT).toBe('push');
+    } finally {
+      if (oldOpenAi === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = oldOpenAi;
+      if (oldAllowed === undefined) delete process.env.CRAFT_WH_ALLOWED;
+      else process.env.CRAFT_WH_ALLOWED = oldAllowed;
+      if (oldCraftSecret === undefined) delete process.env.CRAFT_SECRET_INTERNAL;
+      else process.env.CRAFT_SECRET_INTERNAL = oldCraftSecret;
+    }
+  });
+
+  test('prompt env for internal events preserves legacy process env expansion', () => {
+    const oldInternal = process.env.CRAFT_INTERNAL_COMPAT;
+    process.env.CRAFT_INTERNAL_COMPAT = 'legacy-value';
+
+    try {
+      const env = buildPromptEnvFromPayload('LabelAdd', {
+        workspaceId: 'ws-1',
+        timestamp: 0,
+        label: 'urgent',
+      });
+
+      expect(env.CRAFT_INTERNAL_COMPAT).toBe('legacy-value');
+      expect(env.CRAFT_LABEL).toBe('urgent');
+    } finally {
+      if (oldInternal === undefined) delete process.env.CRAFT_INTERNAL_COMPAT;
+      else process.env.CRAFT_INTERNAL_COMPAT = oldInternal;
+    }
+  });
+
   test('WebhookReceive — explodes headers and query params', () => {
     const payload: WebhookReceivePayload = {
       workspaceId: 'ws-1',

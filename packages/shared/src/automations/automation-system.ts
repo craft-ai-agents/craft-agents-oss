@@ -19,8 +19,9 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveAutomationsConfigPath, generateShortId } from './resolve-config-path.ts';
 import { compactAutomationHistorySync } from './history-store.ts';
+import { compactWebhookDeliveryHistorySync } from './delivery-history.ts';
 import { createLogger } from '../utils/debug.ts';
-import { WorkspaceEventBus, type EventPayloadMap } from './event-bus.ts';
+import { WorkspaceEventBus, type EventPayloadMap, type EventDeliveryResult } from './event-bus.ts';
 import { PromptHandler, EventLogHandler, WebhookHandler, type AutomationsConfigProvider } from './handlers/index.ts';
 import { type AutomationsConfig, type AutomationEvent, type AutomationMatcher, type PendingPrompt, type WebhookActionResult, type AppEvent, type AgentEvent, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from './types.ts';
 import { validateAutomationsConfig } from './validation.ts';
@@ -220,6 +221,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
   private rotateHistory(): void {
     try {
       compactAutomationHistorySync(this.options.workspaceRootPath);
+      compactWebhookDeliveryHistorySync(this.options.workspaceRootPath);
     } catch {
       // Non-critical — compaction failure doesn't affect functionality
     }
@@ -242,6 +244,10 @@ export class AutomationSystem implements AutomationsConfigProvider {
 
   getConfig(): AutomationsConfig | null {
     return this.config;
+  }
+
+  getWorkspaceRootPath(): string {
+    return this.options.workspaceRootPath;
   }
 
   getMatchersForEvent(event: AutomationEvent): AutomationMatcher[] {
@@ -271,6 +277,8 @@ export class AutomationSystem implements AutomationsConfigProvider {
     senderName: string | null;
     text: string;
     bound: boolean;
+    wasBound?: boolean;
+    boundAfterRoute?: boolean;
     attachmentCount: number;
     sentAt: number;
   }): Promise<void> {
@@ -285,6 +293,8 @@ export class AutomationSystem implements AutomationsConfigProvider {
       senderName: input.senderName,
       text: input.text,
       bound: input.bound,
+      wasBound: input.wasBound ?? input.bound,
+      boundAfterRoute: input.boundAfterRoute ?? input.bound,
       attachmentCount: input.attachmentCount,
       hasAttachment: input.attachmentCount > 0,
       sentAt: input.sentAt,
@@ -307,9 +317,9 @@ export class AutomationSystem implements AutomationsConfigProvider {
     body: unknown;
     bodyRaw: string;
     remoteIp: string;
-  }): Promise<void> {
-    if (this.disposed) return;
-    await this.eventBus.emit('WebhookReceive', {
+  }): Promise<EventDeliveryResult> {
+    if (this.disposed) return { status: 'disposed' };
+    return await this.eventBus.emitWithResult('WebhookReceive', {
       workspaceId: this.options.workspaceId,
       timestamp: Date.now(),
       slug: input.slug,

@@ -775,6 +775,7 @@ CRAFT_TRIGGER_HOST=0.0.0.0 CRAFT_TRIGGER_PORT=9101 bun run electron:start
 |---------|-----------------|------------------|-------------|
 | `CRAFT_TRIGGER_PORT` | `9101` | `0` (off) | Listen port. `0` disables. |
 | `CRAFT_TRIGGER_HOST` | `127.0.0.1` | `127.0.0.1` | Bind address. Set to `0.0.0.0` only behind a tunnel/reverse proxy with HMAC enabled. |
+| `CRAFT_TRIGGER_TRUSTED_PROXIES` | empty | empty | Comma-separated proxy IPs whose `X-Forwarded-For` header may be trusted. |
 
 The automation detail page in the desktop app shows the live URL (and an inline warning if the server isn't running, e.g. because the port was already taken at launch).
 
@@ -818,7 +819,8 @@ Then on the GitHub webhook side: set the URL to `http://your-host:9101/v1/trigge
 | Field | Type | Description |
 |-------|------|-------------|
 | `slug` | string | **Required.** URL slug. Lowercase letters, digits, hyphens; 1-64 chars; unique per workspace. |
-| `secretEnv` | string | Name of an env var holding the HMAC-SHA256 shared secret. When set, requests must include `X-Craft-Signature: sha256=<hex>` over the raw body. |
+| `secretEnv` | string | Name of an env var holding the HMAC-SHA256 shared secret. When set, requests must include `X-Craft-Timestamp` and `X-Craft-Signature: sha256=<hex>` over `${timestamp}.${rawBody}`. |
+| `allowUnauthenticated` | boolean | Explicitly allow unsigned requests when `secretEnv` is omitted. Use only for loopback/local development. |
 | `allowedMethods` | array | HTTP methods this trigger accepts. Defaults to `["POST"]`. |
 | `matcher` | regex | Optional extra filter on the slug (rarely needed since slug is already exact). |
 | `conditions` | array | Standard condition filters — useful for matching against `body`, `headers`, `query` fields. |
@@ -828,12 +830,13 @@ Then on the GitHub webhook side: set the URL to `http://your-host:9101/v1/trigge
 When `secretEnv` is set, the trigger server requires:
 
 ```
+X-Craft-Timestamp: <unix-seconds-or-ms>
 X-Craft-Signature: sha256=<hex>
 ```
 
-…where `<hex>` is `HMAC-SHA256(secret, raw_body)`. The check is constant-time. If `secretEnv` is set but the env var is empty/unset, the trigger fails closed with `500 misconfigured_secret` — never silently downgraded to unauthenticated.
+…where `<hex>` is `HMAC-SHA256(secret, "${timestamp}.${raw_body}")`. The timestamp must be within the replay window (5 minutes by default), and the signature check is constant-time. If `secretEnv` is set but the env var is empty/unset, the trigger fails closed with `500 misconfigured_secret` — never silently downgraded to unauthenticated.
 
-If `secretEnv` is **omitted**, the trigger accepts unauthenticated requests. Only safe on a loopback bind.
+If `secretEnv` is **omitted**, the trigger rejects requests unless `allowUnauthenticated` is explicitly `true`. Unsigned triggers are only safe on a loopback bind.
 
 ### Variables available to actions
 
@@ -844,7 +847,7 @@ In addition to the standard `CRAFT_*` vars, prompts and webhook actions get:
 | `$CRAFT_SLUG` | The slug that fired |
 | `$CRAFT_METHOD` | HTTP method (`POST`, etc.) |
 | `$CRAFT_BODY_RAW` | Raw request body string |
-| `$CRAFT_REMOTE_IP` | Sender's IP (or `X-Forwarded-For`'s first hop) |
+| `$CRAFT_REMOTE_IP` | Sender's socket IP. `X-Forwarded-For` is used only when the remote proxy is explicitly trusted. |
 | `$CRAFT_EVENT_DATA` | Full payload as JSON — pipe through `jq` in your prompt for nested access |
 
 ### Limits
@@ -859,13 +862,19 @@ In addition to the standard `CRAFT_*` vars, prompts and webhook actions get:
 
 | Code | Meaning |
 |------|---------|
-| `200` | Accepted — actions started in the background |
-| `401` | Bad HMAC signature |
+| `202` | Accepted — actions started in the background |
+| `401` | Missing/stale timestamp or bad HMAC signature |
 | `404` | Workspace or slug not found |
 | `405` | Method not in `allowedMethods` |
 | `413` | Body too large |
+| `408` | Request body timed out |
 | `429` | Rate limited (try again next minute) |
 | `500` | `secretEnv` set but the env var is empty |
+| `503` | Automation system unavailable |
+
+### Delivery log
+
+Inbound webhook deliveries are recorded per workspace in `webhook-deliveries.jsonl` next to `automations.json`. The log records the timestamp, workspace ID, slug, method, sanitized remote IP, outcome, HTTP status, and short reason for accepted and rejected requests. It does **not** store request bodies or sensitive headers. The file is compacted to the most recent 1,000 deliveries.
 
 ### Why a separate port?
 
@@ -885,6 +894,7 @@ Fire automations when files appear, change, or disappear. Local-only — no netw
       {
         "name": "Screenshots → describe",
         "watchPath": "/Users/me/Desktop",
+        "allowExternalWatchPath": true,
         "watchGlob": "Screenshot*.png",
         "watchChangeTypes": ["add"],
         "actions": [
@@ -900,7 +910,8 @@ Fire automations when files appear, change, or disappear. Local-only — no netw
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `watchPath` | string | Directory to watch (recursive). Absolute, or relative to the workspace root. Defaults to the workspace root. |
+| `watchPath` | string | Directory to watch (recursive). Relative to the workspace root by default. External absolute paths require `allowExternalWatchPath: true`. Defaults to the workspace root. |
+| `allowExternalWatchPath` | boolean | Explicitly allow `watchPath` to resolve outside the workspace root. Defaults to `false`. |
 | `watchGlob` | string | Glob pattern for matching paths under `watchPath`. Supports `*`, `**`, `?`, `[abc]`. Defaults to all files. |
 | `watchChangeTypes` | array | Subset of `["add", "change", "remove"]`. Defaults to all three. |
 | `watchDebounceMs` | number | Coalesce rapid successive events on the same file. Defaults to `500`. |

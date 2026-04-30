@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, unlinkSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FileWatchService, globToRegex } from './file-watch-service.ts';
@@ -39,9 +39,128 @@ describe('globToRegex', () => {
     expect(globToRegex('[ab].txt').test('a.txt')).toBe(true);
     expect(globToRegex('[ab].txt').test('c.txt')).toBe(false);
   });
+
+  test('throws on malformed character class ranges', () => {
+    expect(() => globToRegex('[z-a].txt')).toThrow();
+  });
 });
 
 describe('FileWatchService', () => {
+  test('invalid glob skips only that matcher', async () => {
+    const dir = makeTempDir();
+    try {
+      const events: FileWatchPayload[] = [];
+      const svc = new FileWatchService({
+        workspaceRootPath: dir,
+        workspaceId: 'ws-test',
+        onEvent: (p) => { events.push(p); },
+      });
+
+      expect(() => svc.applyMatchers([
+        {
+          id: 'bad-glob',
+          watchGlob: '[z-a].txt',
+          watchDebounceMs: 30,
+          actions: [{ type: 'prompt', prompt: 'noop' }],
+        },
+        {
+          id: 'good-glob',
+          watchGlob: '**/*.txt',
+          watchDebounceMs: 30,
+          actions: [{ type: 'prompt', prompt: 'noop' }],
+        },
+      ])).not.toThrow();
+
+      await sleep(100);
+      writeFileSync(join(dir, 'ok.txt'), 'x');
+      await sleep(250);
+      svc.dispose();
+
+      const ids = new Set(events.map((e) => e.matcherId));
+      expect(ids.has('bad-glob')).toBe(false);
+      expect(ids.has('good-glob')).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('rejects external watchPath unless explicitly allowed', () => {
+    const workspace = makeTempDir();
+    const external = makeTempDir();
+    try {
+      const svc = new FileWatchService({
+        workspaceRootPath: workspace,
+        workspaceId: 'ws-test',
+        onEvent: () => {},
+      });
+
+      svc.applyMatchers([{
+        id: 'external',
+        watchPath: external,
+        watchGlob: '**/*.txt',
+        actions: [{ type: 'prompt', prompt: 'noop' }],
+      }]);
+
+      expect((svc as unknown as { watchers: Map<string, unknown> }).watchers.size).toBe(0);
+      svc.dispose();
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+      rmSync(external, { recursive: true, force: true });
+    }
+  });
+
+  test('allows external watchPath with explicit opt-in', () => {
+    const workspace = makeTempDir();
+    const external = makeTempDir();
+    try {
+      const svc = new FileWatchService({
+        workspaceRootPath: workspace,
+        workspaceId: 'ws-test',
+        onEvent: () => {},
+      });
+
+      svc.applyMatchers([{
+        id: 'external',
+        watchPath: external,
+        allowExternalWatchPath: true,
+        watchGlob: '**/*.txt',
+        actions: [{ type: 'prompt', prompt: 'noop' }],
+      }]);
+
+      expect((svc as unknown as { watchers: Map<string, unknown> }).watchers.size).toBe(1);
+      svc.dispose();
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+      rmSync(external, { recursive: true, force: true });
+    }
+  });
+
+  test('rejects symlink watchPath that escapes the workspace', () => {
+    const workspace = makeTempDir();
+    const external = makeTempDir();
+    try {
+      symlinkSync(external, join(workspace, 'external-link'));
+      const svc = new FileWatchService({
+        workspaceRootPath: workspace,
+        workspaceId: 'ws-test',
+        onEvent: () => {},
+      });
+
+      svc.applyMatchers([{
+        id: 'symlink',
+        watchPath: 'external-link',
+        watchGlob: '**/*.txt',
+        actions: [{ type: 'prompt', prompt: 'noop' }],
+      }]);
+
+      expect((svc as unknown as { watchers: Map<string, unknown> }).watchers.size).toBe(0);
+      svc.dispose();
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+      rmSync(external, { recursive: true, force: true });
+    }
+  });
+
   test('fires on new file matching glob', async () => {
     const dir = makeTempDir();
     try {

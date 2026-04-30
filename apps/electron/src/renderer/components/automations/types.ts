@@ -248,11 +248,15 @@ export interface AutomationListItem {
   slug?: string
   /** WebhookReceive: env var holding the HMAC-SHA256 shared secret */
   secretEnv?: string
+  /** WebhookReceive: explicitly allow unsigned local/dev requests when secretEnv is unset */
+  allowUnauthenticated?: boolean
   /** WebhookReceive: allowed HTTP methods (default ['POST']) */
   allowedMethods?: ('GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE')[]
 
   /** FileWatch: directory to watch (absolute or workspace-relative) */
   watchPath?: string
+  /** FileWatch: explicitly allow watching outside the workspace root */
+  allowExternalWatchPath?: boolean
   /** FileWatch: glob pattern under watchPath (`**` matches across path segments) */
   watchGlob?: string
   /** FileWatch: which change types to fire on (default all three) */
@@ -435,8 +439,10 @@ interface AutomationsConfigMatcher {
   // External input fields
   slug?: string
   secretEnv?: string
+  allowUnauthenticated?: boolean
   allowedMethods?: ('GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE')[]
   watchPath?: string
+  allowExternalWatchPath?: boolean
   watchGlob?: string
   watchChangeTypes?: FileWatchChangeType[]
   watchDebounceMs?: number
@@ -471,7 +477,11 @@ function deriveAutomationName(event: string, matcher: AutomationsConfigMatcher):
 /** Derive a summary line from the matcher/cron/event */
 function deriveAutomationSummary(event: string, matcher: AutomationsConfigMatcher): string {
   if (event === 'WebhookReceive') {
-    const auth = matcher.secretEnv ? ' (HMAC-signed)' : ' (unauthenticated)'
+    const auth = matcher.secretEnv
+      ? ' (HMAC-signed)'
+      : matcher.allowUnauthenticated
+        ? ' (unauthenticated)'
+        : ' (auth required)'
     return matcher.slug ? `Slug: ${matcher.slug}${auth}` : 'No slug configured — will not fire'
   }
   if (event === 'FileWatch') {
@@ -556,8 +566,10 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
         // External input fields
         slug: matcher.slug,
         secretEnv: matcher.secretEnv,
+        allowUnauthenticated: matcher.allowUnauthenticated,
         allowedMethods: matcher.allowedMethods,
         watchPath: matcher.watchPath,
+        allowExternalWatchPath: matcher.allowExternalWatchPath,
         watchGlob: matcher.watchGlob,
         watchChangeTypes: matcher.watchChangeTypes,
         watchDebounceMs: matcher.watchDebounceMs,

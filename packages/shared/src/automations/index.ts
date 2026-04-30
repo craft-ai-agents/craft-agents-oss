@@ -96,6 +96,17 @@ export { AUTOMATIONS_CONFIG_FILE, AUTOMATIONS_HISTORY_FILE, AUTOMATIONS_RETRY_QU
 // History store
 export { appendAutomationHistoryEntry, compactAutomationHistory, compactAutomationHistorySync } from './history-store.ts';
 
+// Webhook delivery history
+export {
+  appendWebhookDeliveryRecord,
+  compactWebhookDeliveryHistory,
+  compactWebhookDeliveryHistorySync,
+  WEBHOOK_DELIVERY_HISTORY_FILE,
+  WEBHOOK_DELIVERY_HISTORY_MAX_ENTRIES,
+  type WebhookDeliveryOutcome,
+  type WebhookDeliveryRecord,
+} from './delivery-history.ts';
+
 // Config path resolution
 export { resolveAutomationsConfigPath, generateShortId } from './resolve-config-path.ts';
 
@@ -107,6 +118,7 @@ export {
   WorkspaceEventBus,
   type EventBus,
   type EventPayloadMap,
+  type EventDeliveryResult,
   type BaseEventPayload,
   type LabelEventPayload,
   type PermissionModeChangePayload,

@@ -19,8 +19,9 @@
  *   - Per-matcher debounce buckets (matcherId|relPath → timer).
  */
 
-import { watch, statSync, type FSWatcher } from 'node:fs';
-import { resolve, relative, sep, posix } from 'node:path';
+import { watch, statSync, realpathSync, type FSWatcher } from 'node:fs';
+import { resolve, sep, posix } from 'node:path';
+import { homedir } from 'node:os';
 import type { AutomationMatcher, FileWatchChangeType } from './types.ts';
 import type { FileWatchPayload } from './event-bus.ts';
 import { createLogger } from '../utils/debug.ts';
@@ -96,6 +97,7 @@ export interface FileWatchServiceOptions {
 
 export class FileWatchService {
   private readonly options: FileWatchServiceOptions;
+  private readonly workspaceRootRealPath: string;
   /** dir absolute path → { watcher, matcherIds linked to this dir } */
   private readonly watchers = new Map<string, { watcher: FSWatcher; matchers: WatchedMatcher[] }>();
   /** Per-matcher debounce timers keyed by `${matcherId}|${relPath}` */
@@ -104,6 +106,7 @@ export class FileWatchService {
 
   constructor(options: FileWatchServiceOptions) {
     this.options = options;
+    this.workspaceRootRealPath = realpathSync(options.workspaceRootPath);
   }
 
   /**
@@ -117,13 +120,23 @@ export class FileWatchService {
     const byDir = new Map<string, WatchedMatcher[]>();
     for (const m of matchers) {
       if (!m.id) continue; // Should be backfilled by AutomationSystem; skip if missing
-      const dir = m.watchPath
-        ? resolve(this.options.workspaceRootPath, m.watchPath)
-        : this.options.workspaceRootPath;
+      const dir = this.resolveWatchPath(m);
+      if (!dir) continue;
+
+      let regex: RegExp | null = null;
+      if (m.watchGlob) {
+        try {
+          regex = globToRegex(m.watchGlob);
+        } catch (err) {
+          log.warn(`[file-watch] Skipping matcher ${m.id}: invalid watchGlob "${m.watchGlob}"`, err);
+          continue;
+        }
+      }
+
       const compiled: WatchedMatcher = {
         matcherId: m.id,
         watchPathAbs: dir,
-        regex: m.watchGlob ? globToRegex(m.watchGlob) : null,
+        regex,
         changeTypes: m.watchChangeTypes ?? ALL_CHANGE_TYPES,
         debounceMs: m.watchDebounceMs ?? DEFAULT_DEBOUNCE_MS,
       };
@@ -175,6 +188,34 @@ export class FileWatchService {
   }
 
   // -------------------------------------------------------------------------
+
+  private resolveWatchPath(m: AutomationMatcher): string | null {
+    const requestedPath = m.watchPath
+      ? resolveWatchPathInput(this.options.workspaceRootPath, m.watchPath)
+      : this.options.workspaceRootPath;
+
+    let realPath: string;
+    try {
+      realPath = realpathSync(requestedPath);
+    } catch (err) {
+      log.warn(`[file-watch] Skipping matcher ${m.id}: watchPath does not resolve (${requestedPath})`, err);
+      return null;
+    }
+
+    if (m.allowExternalWatchPath === true) {
+      return realPath;
+    }
+
+    if (!isWithinPath(realPath, this.workspaceRootRealPath)) {
+      log.warn(
+        `[file-watch] Skipping matcher ${m.id}: watchPath escapes workspace root (${requestedPath}). ` +
+        `Set allowExternalWatchPath: true to watch external directories.`,
+      );
+      return null;
+    }
+
+    return realPath;
+  }
 
   private handleRawEvent(dir: string, eventType: string, filename: Buffer | string | null): void {
     if (this.disposed) return;
@@ -261,6 +302,18 @@ export class FileWatchService {
       }
     }
   }
+}
+
+function isWithinPath(path: string, root: string): boolean {
+  return path === root || path.startsWith(root.endsWith(sep) ? root : `${root}${sep}`);
+}
+
+function resolveWatchPathInput(workspaceRootPath: string, watchPath: string): string {
+  if (watchPath === '~') return homedir();
+  if (watchPath.startsWith(`~${sep}`) || watchPath.startsWith('~/')) {
+    return resolve(homedir(), watchPath.slice(2));
+  }
+  return resolve(workspaceRootPath, watchPath);
 }
 
 interface WatchedMatcher {

@@ -88,6 +88,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     matcher: {
       name: 'Zapier inbound',
       slug: 'zapier',
+      allowUnauthenticated: true,
       allowedMethods: ['POST', 'GET'],
       actions: [
         {
@@ -96,7 +97,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
         },
       ],
     },
-    setupHint: 'No HMAC required for prototyping — add secretEnv before going to production.',
+    setupHint: 'Unsigned requests are explicitly allowed for prototyping — add secretEnv and remove allowUnauthenticated before going to production.',
   },
 
   // ----- FileWatch -----
@@ -110,6 +111,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     matcher: {
       name: 'Screenshot describer',
       watchPath: '~/Desktop',
+      allowExternalWatchPath: true,
       watchGlob: 'Screenshot*.png',
       watchChangeTypes: ['add'],
       actions: [
@@ -131,6 +133,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     matcher: {
       name: 'PDF inbox',
       watchPath: '~/Inbox',
+      allowExternalWatchPath: true,
       watchGlob: '**/*.pdf',
       watchChangeTypes: ['add'],
       actions: [
@@ -151,6 +154,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     matcher: {
       name: 'Notes change watcher',
       watchPath: '~/Notes',
+      allowExternalWatchPath: true,
       watchGlob: '**/*.md',
       watchChangeTypes: ['change', 'add'],
       watchDebounceMs: 1500,

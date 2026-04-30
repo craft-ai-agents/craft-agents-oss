@@ -118,7 +118,7 @@ export interface PollUrlPayload extends BaseEventPayload {
  * messaging adapter (WhatsApp, Telegram, etc.). Fires for every inbound
  * message, regardless of whether the channel is bound to a session.
  *
- * Use the `bound` field in conditions to filter:
+ * Use the `bound`/`wasBound` field in conditions to filter:
  *   { condition: 'state', field: 'bound', value: false }   // un-bound only
  *
  * `text` is also exposed as the matcher's match value, so a regex `matcher`
@@ -139,6 +139,10 @@ export interface MessageReceivePayload extends BaseEventPayload {
   text: string;
   /** True when the message arrived on a channel already bound to a session */
   bound: boolean;
+  /** Same semantics as bound; explicit name survives bind/unbind command side effects */
+  wasBound: boolean;
+  /** True when the channel is bound after command handling and routing complete */
+  boundAfterRoute: boolean;
   /** Number of attachments in the message */
   attachmentCount: number;
   /** True when at least one attachment is present */
@@ -218,6 +222,11 @@ export type AnyEventHandler = (
   payload: BaseEventPayload
 ) => void | Promise<void>;
 
+export type EventDeliveryResult =
+  | { status: 'accepted'; handlerCount: number; anyHandlerCount: number }
+  | { status: 'rate_limited'; limit: number; count: number; windowStart: number }
+  | { status: 'disposed' };
+
 // ============================================================================
 // Rate Limiting
 // ============================================================================
@@ -242,6 +251,12 @@ function getRateLimit(event: AutomationEvent): number {
 export interface EventBus {
   /** Emit an event to all registered handlers */
   emit<T extends AutomationEvent>(event: T, payload: EventPayloadMap[T]): Promise<void>;
+
+  /** Emit an event and return whether the bus accepted or dropped it */
+  emitWithResult<T extends AutomationEvent>(
+    event: T,
+    payload: EventPayloadMap[T]
+  ): Promise<EventDeliveryResult>;
 
   /** Register a handler for a specific event type */
   on<T extends AutomationEvent>(event: T, handler: EventHandler<T>): void;
@@ -280,9 +295,20 @@ export class WorkspaceEventBus implements EventBus {
    * Handlers are called in parallel, errors are caught and logged.
    */
   async emit<T extends AutomationEvent>(event: T, payload: EventPayloadMap[T]): Promise<void> {
+    await this.emitWithResult(event, payload);
+  }
+
+  /**
+   * Emit an event to all registered handlers and return a minimal delivery result.
+   * Handlers are still called in parallel, errors are caught and logged.
+   */
+  async emitWithResult<T extends AutomationEvent>(
+    event: T,
+    payload: EventPayloadMap[T]
+  ): Promise<EventDeliveryResult> {
     if (this.disposed) {
       log.warn(`[EventBus] Attempted to emit after disposal: ${event}`);
-      return;
+      return { status: 'disposed' };
     }
 
     // Rate limiting: prevent runaway event loops (sync and async)
@@ -297,7 +323,12 @@ export class WorkspaceEventBus implements EventBus {
       log.warn(
         `[EventBus] Rate limit: ${event} fired ${rateWindow.count} times in ${Math.round((now - rateWindow.windowStart) / 1000)}s (limit: ${limit}/min), dropping`
       );
-      return;
+      return {
+        status: 'rate_limited',
+        limit,
+        count: rateWindow.count,
+        windowStart: rateWindow.windowStart,
+      };
     }
     rateWindow.count++;
     this.rateCounts.set(event, rateWindow);
@@ -330,6 +361,12 @@ export class WorkspaceEventBus implements EventBus {
     await Promise.all([...eventPromises, ...anyPromises]);
 
     log.debug(`[EventBus] Emitted: ${event} (${eventHandlers.size} handlers, ${anyHandlersCopy.size} any-handlers)`);
+
+    return {
+      status: 'accepted',
+      handlerCount: eventHandlers.size,
+      anyHandlerCount: anyHandlersCopy.size,
+    };
   }
 
   /**

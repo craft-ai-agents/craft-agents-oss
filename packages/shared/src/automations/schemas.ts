@@ -162,9 +162,11 @@ export const AutomationMatcherSchema = z.object({
     /^[A-Z_][A-Z0-9_]*$/,
     'secretEnv must be a valid env var name (uppercase letters, digits, underscore; cannot start with digit)',
   ).optional(),
+  allowUnauthenticated: z.boolean().optional(),
   allowedMethods: z.array(z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])).min(1).optional(),
   // FileWatch fields
   watchPath: z.string().min(1).optional(),
+  allowExternalWatchPath: z.boolean().optional(),
   watchGlob: z.string().min(1).optional(),
   watchChangeTypes: z.array(z.enum(['add', 'change', 'remove'])).min(1).optional(),
   watchDebounceMs: z.number().int().min(0).max(60_000).optional(),

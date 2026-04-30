@@ -188,11 +188,17 @@ export interface AutomationMatcher {
 
   /**
    * Name of the env var holding the HMAC-SHA256 shared secret for verifying inbound requests.
-   * When set, requests must include `X-Craft-Signature: sha256=<hex>` over the raw body.
+   * When set, requests must include `X-Craft-Timestamp` and `X-Craft-Signature: sha256=<hex>`
+   * over `${timestamp}.${rawBody}`.
    * Convention: env var name should start with `CRAFT_WH_` (e.g. `CRAFT_WH_STRIPE_SECRET`).
-   * If unset, the trigger accepts unauthenticated requests — only safe for trusted networks.
    */
   secretEnv?: string;
+
+  /**
+   * Explicitly allow unsigned inbound requests when `secretEnv` is unset.
+   * Only safe for local/dev workflows or trusted loopback-only trigger servers.
+   */
+  allowUnauthenticated?: boolean;
 
   /**
    * Restrict which HTTP methods this trigger accepts. Defaults to ['POST'] for WebhookReceive.
@@ -205,10 +211,17 @@ export interface AutomationMatcher {
 
   /**
    * Directory to watch for FileWatch automations. Resolved against the workspace
-   * root if relative; absolute paths are used as-is. Defaults to the workspace root.
-   * Symlinks are not followed.
+   * root if relative. Defaults to the workspace root. By default, the resolved
+   * real path must stay inside the workspace root.
    */
   watchPath?: string;
+
+  /**
+   * Explicitly allow watchPath to resolve outside the workspace root.
+   * Use only for trusted local directories; symlinks and absolute paths are
+   * resolved before this check.
+   */
+  allowExternalWatchPath?: boolean;
 
   /**
    * Glob pattern for matching file paths under watchPath. Supports `*` (one path

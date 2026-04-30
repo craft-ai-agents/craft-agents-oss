@@ -31,6 +31,8 @@ describe('MessageReceive — AutomationSystem integration', () => {
         senderName: 'Mikey',
         text: 'process this please',
         bound: false,
+        wasBound: false,
+        boundAfterRoute: true,
         attachmentCount: 1,
         sentAt: 1714560000000,
       })
@@ -41,6 +43,8 @@ describe('MessageReceive — AutomationSystem integration', () => {
       expect(ev.channelId).toBe('chat-42')
       expect(ev.text).toBe('process this please')
       expect(ev.bound).toBe(false)
+      expect(ev.wasBound).toBe(false)
+      expect(ev.boundAfterRoute).toBe(true)
       expect(ev.attachmentCount).toBe(1)
       expect(ev.hasAttachment).toBe(true)
       expect(ev.workspaceId).toBe('ws-1')

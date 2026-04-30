@@ -107,6 +107,24 @@ describe('WorkspaceEventBus', () => {
 
       expect(handler).not.toHaveBeenCalled();
     });
+
+    it('should return accepted result from emitWithResult', async () => {
+      const handler = jest.fn();
+      const anyHandler = jest.fn();
+      bus.on('LabelAdd', handler);
+      bus.onAny(anyHandler);
+
+      const result = await bus.emitWithResult('LabelAdd', {
+        sessionId: 'session-1',
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'test-label',
+      });
+
+      expect(result).toEqual({ status: 'accepted', handlerCount: 1, anyHandlerCount: 1 });
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(anyHandler).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('on/off', () => {
@@ -223,6 +241,19 @@ describe('WorkspaceEventBus', () => {
         await bus.emit('LabelAdd', labelPayload());
       }
 
+      expect(handler).toHaveBeenCalledTimes(10);
+    });
+
+    it('should return rate_limited result from emitWithResult', async () => {
+      const handler = jest.fn();
+      bus.on('LabelAdd', handler);
+
+      for (let i = 0; i < 10; i++) {
+        await bus.emit('LabelAdd', labelPayload());
+      }
+      const result = await bus.emitWithResult('LabelAdd', labelPayload());
+
+      expect(result).toEqual(expect.objectContaining({ status: 'rate_limited', limit: 10, count: 10 }));
       expect(handler).toHaveBeenCalledTimes(10);
     });
 

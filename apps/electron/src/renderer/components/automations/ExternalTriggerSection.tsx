@@ -95,10 +95,21 @@ function WebhookReceivePanel({ automation, editActions }: ExternalTriggerSection
 
       {!automation.secretEnv && (
         <Info_Alert variant="warning" icon={<AlertTriangle className="h-4 w-4" />}>
-          <Info_Alert.Title>Unauthenticated</Info_Alert.Title>
+          <Info_Alert.Title>
+            {automation.allowUnauthenticated ? 'Unauthenticated' : 'Authentication required'}
+          </Info_Alert.Title>
           <Info_Alert.Description>
-            No HMAC secret configured. Anyone who can reach the trigger port can fire this automation.
-            Add <code>secretEnv: "CRAFT_WH_..."</code> for production.
+            {automation.allowUnauthenticated ? (
+              <>
+                This trigger explicitly allows unsigned requests. Anyone who can reach the trigger port can fire it.
+                Add <code>secretEnv: "CRAFT_WH_..."</code> for production.
+              </>
+            ) : (
+              <>
+                No HMAC secret is configured, and unsigned requests are denied by default.
+                Add <code>secretEnv: "CRAFT_WH_..."</code> or set <code>allowUnauthenticated: true</code> for local/dev use only.
+              </>
+            )}
           </Info_Alert.Description>
         </Info_Alert>
       )}
@@ -123,6 +134,13 @@ function WebhookReceivePanel({ automation, editActions }: ExternalTriggerSection
             <Info_Badge color="muted">none</Info_Badge>
           )}
         </Info_Table.Row>
+        {!automation.secretEnv && (
+          <Info_Table.Row label="Unsigned requests">
+            <Info_Badge color={automation.allowUnauthenticated ? 'warning' : 'muted'}>
+              {automation.allowUnauthenticated ? 'allowed' : 'denied'}
+            </Info_Badge>
+          </Info_Table.Row>
+        )}
         {url && (
           <Info_Table.Row label="Trigger URL">
             <CopyableValue value={url} />
@@ -131,7 +149,7 @@ function WebhookReceivePanel({ automation, editActions }: ExternalTriggerSection
         {url && (
           <Info_Table.Row label="Test (curl)">
             <CopyableValue
-              value={buildCurlExample(url, primaryMethod, automation.secretEnv)}
+              value={buildCurlExample(url, primaryMethod, automation.secretEnv, automation.allowUnauthenticated)}
               monospace={false}
               multiline
             />
@@ -143,20 +161,30 @@ function WebhookReceivePanel({ automation, editActions }: ExternalTriggerSection
   )
 }
 
-function buildCurlExample(url: string, method: string, secretEnv: string | undefined): string {
+function buildCurlExample(
+  url: string,
+  method: string,
+  secretEnv: string | undefined,
+  allowUnauthenticated: boolean | undefined,
+): string {
   const lines: string[] = []
   if (secretEnv) {
-    lines.push(`# Compute the HMAC and POST. Set $${secretEnv} in your shell first.`)
+    lines.push(`# Compute the timestamped HMAC. Set $${secretEnv} in your shell first.`)
     lines.push(`BODY='{"hello":"world"}'`)
-    lines.push(`SIG="sha256=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$${secretEnv}" -hex | cut -d' ' -f2)"`)
+    lines.push(`TS="$(date +%s)"`)
+    lines.push(`SIG="sha256=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$${secretEnv}" -hex | cut -d' ' -f2)"`)
     lines.push(`curl -X ${method} "${url}" \\`)
     lines.push(`  -H "Content-Type: application/json" \\`)
+    lines.push(`  -H "X-Craft-Timestamp: $TS" \\`)
     lines.push(`  -H "X-Craft-Signature: $SIG" \\`)
     lines.push(`  -d "$BODY"`)
-  } else {
+  } else if (allowUnauthenticated) {
     lines.push(`curl -X ${method} "${url}" \\`)
     lines.push(`  -H "Content-Type: application/json" \\`)
     lines.push(`  -d '{"hello":"world"}'`)
+  } else {
+    lines.push(`# This trigger denies unsigned requests by default.`)
+    lines.push(`# Add secretEnv for HMAC signing or set allowUnauthenticated: true for local/dev use.`)
   }
   return lines.join('\n')
 }

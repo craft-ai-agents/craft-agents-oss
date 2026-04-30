@@ -200,6 +200,34 @@ describe('validation', () => {
       expect(result.valid).toBe(false);
       expect(result.errors.some(e => e.includes('exceeds maximum depth'))).toBe(true);
     });
+
+    it('should reject external FileWatch paths without explicit opt-in', () => {
+      const config = {
+        automations: {
+          FileWatch: [{
+            watchPath: '/tmp',
+            actions: [{ type: 'prompt', prompt: 'test' }],
+          }],
+        },
+      };
+      const result = validateAutomationsConfig(config);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('External FileWatch paths require explicit opt-in'))).toBe(true);
+    });
+
+    it('should accept external FileWatch paths with explicit opt-in', () => {
+      const config = {
+        automations: {
+          FileWatch: [{
+            watchPath: '/tmp',
+            allowExternalWatchPath: true,
+            actions: [{ type: 'prompt', prompt: 'test' }],
+          }],
+        },
+      };
+      const result = validateAutomationsConfig(config);
+      expect(result.valid).toBe(true);
+    });
   });
 
   describe('validateAutomationsContent', () => {

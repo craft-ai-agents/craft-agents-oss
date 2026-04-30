@@ -230,6 +230,8 @@ const instance = await (async () => {
               senderName: event.senderName,
               text: event.text,
               bound: event.bound,
+              wasBound: event.wasBound,
+              boundAfterRoute: event.boundAfterRoute,
               attachmentCount: event.attachmentCount,
               sentAt: event.sentAt,
             })

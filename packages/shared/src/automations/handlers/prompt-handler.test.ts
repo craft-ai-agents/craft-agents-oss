@@ -288,6 +288,82 @@ describe('PromptHandler', () => {
 
       handler.dispose();
     });
+
+    it('should not expose arbitrary process env to external WebhookReceive prompts', async () => {
+      const oldOpenAi = process.env.OPENAI_API_KEY;
+      const oldAllowed = process.env.CRAFT_WH_ALLOWED;
+      process.env.OPENAI_API_KEY = 'sk-should-not-leak';
+      process.env.CRAFT_WH_ALLOWED = 'allowed-secret';
+
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        WebhookReceive: [{
+          slug: 'github-push',
+          actions: [{
+            type: 'prompt',
+            prompt: 'event=$CRAFT_EVENT body=$CRAFT_BODY_RAW allowed=$CRAFT_WH_ALLOWED leaked=$OPENAI_API_KEY',
+          }],
+        }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+
+      try {
+        await bus.emit('WebhookReceive', {
+          workspaceId: 'test-workspace',
+          timestamp: Date.now(),
+          slug: 'github-push',
+          method: 'POST',
+          headers: {},
+          query: {},
+          body: { ok: true },
+          bodyRaw: '{"ok":true}',
+          remoteIp: '127.0.0.1',
+        });
+
+        expect(onPromptsReady).toHaveBeenCalledTimes(1);
+        const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+        expect(prompts[0]!.prompt).toBe('event=WebhookReceive body={"ok":true} allowed=allowed-secret leaked=');
+      } finally {
+        handler.dispose();
+        if (oldOpenAi === undefined) delete process.env.OPENAI_API_KEY;
+        else process.env.OPENAI_API_KEY = oldOpenAi;
+        if (oldAllowed === undefined) delete process.env.CRAFT_WH_ALLOWED;
+        else process.env.CRAFT_WH_ALLOWED = oldAllowed;
+      }
+    });
+
+    it('should preserve process env expansion for internal app event prompts', async () => {
+      const oldInternal = process.env.CRAFT_INTERNAL_COMPAT;
+      process.env.CRAFT_INTERNAL_COMPAT = 'legacy-value';
+
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        LabelAdd: [{
+          actions: [{ type: 'prompt', prompt: 'Label $CRAFT_LABEL uses $CRAFT_INTERNAL_COMPAT' }],
+        }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+
+      try {
+        await bus.emit('LabelAdd', {
+          workspaceId: 'test-workspace',
+          timestamp: Date.now(),
+          label: 'urgent',
+        });
+
+        expect(onPromptsReady).toHaveBeenCalledTimes(1);
+        const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+        expect(prompts[0]!.prompt).toBe('Label urgent uses legacy-value');
+      } finally {
+        handler.dispose();
+        if (oldInternal === undefined) delete process.env.CRAFT_INTERNAL_COMPAT;
+        else process.env.CRAFT_INTERNAL_COMPAT = oldInternal;
+      }
+    });
   });
 
   describe('@mention parsing and deduplication', () => {

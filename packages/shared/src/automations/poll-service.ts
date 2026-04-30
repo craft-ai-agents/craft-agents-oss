@@ -34,6 +34,8 @@ const MIN_POLL_INTERVAL_SEC = 30;
 const DEFAULT_POLL_INTERVAL_SEC = 300;
 /** Captured response body is truncated for memory safety. */
 const BODY_TRUNCATE_BYTES = 4096;
+/** Maximum response body bytes read when body fingerprinting is enabled. */
+const BODY_FINGERPRINT_MAX_BYTES = 1024 * 1024;
 /** HTTP request timeout. */
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -181,9 +183,9 @@ export class PollService {
     }
 
     let bodyText = '';
-    if (fingerprintKind === 'body' || method !== 'HEAD') {
+    if (fingerprintKind === 'body') {
       try {
-        bodyText = await response.text();
+        bodyText = await readResponseBodyLimited(response, BODY_FINGERPRINT_MAX_BYTES);
       } catch {
         bodyText = '';
       }
@@ -264,4 +266,42 @@ function computeFingerprint(
     default:
       return createHash('sha256').update(bodyText, 'utf8').digest('hex');
   }
+}
+
+async function readResponseBodyLimited(response: Response, maxBytes: number): Promise<string> {
+  if (maxBytes <= 0) return '';
+  const body = response.body;
+  if (!body) return '';
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  try {
+    while (total < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done || !value) break;
+
+      const remaining = maxBytes - total;
+      const chunk = value.byteLength > remaining ? value.slice(0, remaining) : value;
+      chunks.push(chunk);
+      total += chunk.byteLength;
+
+      if (value.byteLength > remaining) break;
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      // Ignore cancellation failures; we already have the bounded body prefix.
+    }
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 }

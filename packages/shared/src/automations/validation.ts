@@ -6,7 +6,7 @@
  */
 
 import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { resolveAutomationsConfigPath } from './resolve-config-path.ts';
 import { AUTOMATIONS_CONFIG_FILE } from './constants.ts';
 import { AutomationsConfigSchema, zodErrorToIssues, DEPRECATED_EVENT_ALIASES } from './schemas.ts';
@@ -95,11 +95,19 @@ function runMatcherSemanticValidations(
             suggestion: 'Add a slug field — this becomes part of the trigger URL: /v1/triggers/<workspaceId>/<slug>',
           });
         }
-        if (!matcher.secretEnv) {
-          warnings.push({
+        if (!matcher.secretEnv && !matcher.allowUnauthenticated) {
+          errors.push({
             file,
             path: `automations.WebhookReceive[${i}].secretEnv`,
-            message: 'No HMAC secret configured — this trigger accepts unauthenticated requests',
+            message: 'WebhookReceive automations require secretEnv unless allowUnauthenticated is explicitly true',
+            severity: 'error',
+            suggestion: 'Set secretEnv (e.g. "CRAFT_WH_STRIPE_SECRET") or set allowUnauthenticated: true for local/dev triggers only',
+          });
+        } else if (!matcher.secretEnv) {
+          warnings.push({
+            file,
+            path: `automations.WebhookReceive[${i}].allowUnauthenticated`,
+            message: 'Unauthenticated webhook trigger enabled — only safe for local/dev or trusted networks',
             severity: 'warning',
             suggestion: 'Set secretEnv (e.g. "CRAFT_WH_STRIPE_SECRET") and configure HMAC signing on the sender',
           });
@@ -116,12 +124,26 @@ function runMatcherSemanticValidations(
             });
           }
         }
-        if (matcher.watchPath && matcher.watchPath.includes('..')) {
-          warnings.push({
+        if (matcher.watchPath && matcher.watchPath.includes('..') && !matcher.allowExternalWatchPath) {
+          errors.push({
             file,
             path: `automations.FileWatch[${i}].watchPath`,
-            message: 'watchPath contains ".." — relative parent traversal may behave unexpectedly',
-            severity: 'warning',
+            message: 'watchPath contains ".." and may escape the workspace root',
+            severity: 'error',
+            suggestion: 'Use a workspace-contained path, or set allowExternalWatchPath: true for trusted external directories',
+          });
+        }
+        if (
+          matcher.watchPath &&
+          !matcher.allowExternalWatchPath &&
+          (isAbsolute(matcher.watchPath) || matcher.watchPath === '~' || matcher.watchPath.startsWith('~/'))
+        ) {
+          errors.push({
+            file,
+            path: `automations.FileWatch[${i}].watchPath`,
+            message: 'External FileWatch paths require explicit opt-in',
+            severity: 'error',
+            suggestion: 'Set allowExternalWatchPath: true for trusted external directories, or use a workspace-relative path',
           });
         }
       } else if (event === 'PollUrl') {
@@ -167,6 +189,14 @@ function runMatcherSemanticValidations(
             file,
             path: `automations.${event}[${i}].allowedMethods`,
             message: 'allowedMethods is only used by WebhookReceive automations',
+            severity: 'warning',
+          });
+        }
+        if (matcher.allowUnauthenticated) {
+          warnings.push({
+            file,
+            path: `automations.${event}[${i}].allowUnauthenticated`,
+            message: 'allowUnauthenticated is only used by WebhookReceive automations',
             severity: 'warning',
           });
         }

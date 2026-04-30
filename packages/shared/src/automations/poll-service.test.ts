@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, test } from 'bun:test';
 import { PollService } from './poll-service.ts';
 import type { AutomationMatcher } from './types.ts';
@@ -153,6 +154,48 @@ describe('PollService', () => {
     svc.dispose();
   });
 
+  test('etag fingerprint mode does not read the response body', async () => {
+    let bodyRead = false;
+    const events: PollUrlPayload[] = [];
+    const fetcher = {
+      impl: (async () => ({
+        status: 200,
+        headers: new Headers({ etag: '"v1"' }),
+        get body() {
+          bodyRead = true;
+          throw new Error('body should not be read');
+        },
+        text: async () => {
+          bodyRead = true;
+          throw new Error('text should not be read');
+        },
+      })) as unknown as typeof fetch,
+    };
+
+    const svc = new PollService({
+      workspaceId: 'ws-1',
+      onEvent: (p) => { events.push(p); },
+      fetchImpl: fetcher.impl,
+      emitOnFirstPoll: true,
+    });
+
+    svc.applyMatchers([{
+      id: 'p',
+      pollUrl: 'https://example.com/api',
+      pollIntervalSec: 9999,
+      pollFingerprint: 'etag',
+      actions: [{ type: 'prompt', prompt: 'noop' }],
+    }]);
+
+    await svc.runOnce('p');
+
+    expect(bodyRead).toBe(false);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.fingerprint).toBe('"v1"');
+    expect(events[0]!.body).toBeNull();
+    svc.dispose();
+  });
+
   test('status fingerprint mode fires on status transitions', async () => {
     const events: PollUrlPayload[] = [];
     const fetcher = makeQueuedFetch([
@@ -184,6 +227,37 @@ describe('PollService', () => {
     expect(events).toHaveLength(2);
     expect(events[0]!.fingerprint).toBe('503');
     expect(events[1]!.fingerprint).toBe('200');
+    svc.dispose();
+  });
+
+  test('body fingerprint reads a bounded response body', async () => {
+    const bigBody = 'a'.repeat(1024 * 1024) + 'b'.repeat(1024 * 1024);
+    const events: PollUrlPayload[] = [];
+    const fetcher = makeQueuedFetch([{ status: 200, body: bigBody }]);
+
+    const svc = new PollService({
+      workspaceId: 'ws-1',
+      onEvent: (p) => { events.push(p); },
+      fetchImpl: fetcher.impl,
+      emitOnFirstPoll: true,
+    });
+
+    svc.applyMatchers([{
+      id: 'p',
+      pollUrl: 'https://example.com/huge',
+      pollIntervalSec: 9999,
+      pollFingerprint: 'body',
+      actions: [{ type: 'prompt', prompt: 'noop' }],
+    }]);
+
+    await svc.runOnce('p');
+
+    const expectedBoundedBody = 'a'.repeat(1024 * 1024);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.fingerprint).toBe(
+      createHash('sha256').update(expectedBoundedBody, 'utf8').digest('hex'),
+    );
+    expect(events[0]!.body).toBe('a'.repeat(4096));
     svc.dispose();
   });
 

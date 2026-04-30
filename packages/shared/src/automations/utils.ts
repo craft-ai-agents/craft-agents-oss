@@ -257,6 +257,13 @@ export function matcherMatchesSdk(matcher: AutomationMatcher, event: AgentEvent,
 // Environment Variable Utilities
 // ============================================================================
 
+const EXTERNAL_INPUT_EVENTS = new Set<AutomationEvent>([
+  'WebhookReceive',
+  'FileWatch',
+  'PollUrl',
+  'MessageReceive',
+]);
+
 /**
  * Get process.env as a clean Record<string, string> with undefined values filtered out.
  * Avoids the unsafe `process.env as Record<string, string>` cast that turns undefined
@@ -360,6 +367,30 @@ export function buildEnvFromPayload(event: AutomationEvent, payload: BaseEventPa
   const base = buildBaseEventEnv(event, payload);
   const env: Record<string, string> = { ...cleanEnv(), ...base };
 
+  sanitizeEventEnvValues(env, payload);
+
+  return env;
+}
+
+/**
+ * Build environment variables for prompt actions.
+ *
+ * Internal app/session events keep the legacy process.env expansion behavior.
+ * External-input events are intentionally constrained to event-derived CRAFT_*
+ * vars plus explicit CRAFT_WH_* allowlisted process vars, so prompt templates
+ * cannot accidentally leak arbitrary host secrets into model context.
+ */
+export function buildPromptEnvFromPayload(event: AutomationEvent, payload: BaseEventPayload): Record<string, string> {
+  if (!EXTERNAL_INPUT_EVENTS.has(event)) {
+    return buildEnvFromPayload(event, payload);
+  }
+
+  const env = buildBaseEventEnv(event, payload);
+  addWebhookAllowlistedEnv(env);
+  return env;
+}
+
+function sanitizeEventEnvValues(env: Record<string, string>, payload: BaseEventPayload): void {
   // Sanitize session name for shell context
   if (payload.sessionName) env.CRAFT_SESSION_NAME = sanitizeForShell(payload.sessionName);
 
@@ -375,8 +406,6 @@ export function buildEnvFromPayload(event: AutomationEvent, payload: BaseEventPa
       env[envKey] = payloadValueToEnvString(value);
     }
   }
-
-  return env;
 }
 
 /**
@@ -399,12 +428,16 @@ export function buildEnvFromPayload(event: AutomationEvent, payload: BaseEventPa
 export function buildWebhookEnv(event: AutomationEvent, payload: BaseEventPayload): Record<string, string> {
   const env = buildBaseEventEnv(event, payload);
 
-  // User-defined webhook secrets: only CRAFT_WH_* from process.env
+  addWebhookAllowlistedEnv(env);
+
+  return env;
+}
+
+function addWebhookAllowlistedEnv(env: Record<string, string>): void {
+  // User-defined webhook/prompt external-event secrets: only CRAFT_WH_* from process.env
   for (const [key, value] of Object.entries(process.env)) {
     if (key.startsWith('CRAFT_WH_') && value !== undefined) {
       env[key] = value;
     }
   }
-
-  return env;
 }

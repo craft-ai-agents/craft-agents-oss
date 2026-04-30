@@ -10,7 +10,7 @@ import type { EventBus, BaseEventPayload } from '../event-bus.ts';
 import type { AutomationHandler, PromptHandlerOptions, AutomationsConfigProvider } from './types.ts';
 import { APP_EVENTS, type AutomationEvent, type PromptAction, type PendingPrompt, type AppEvent } from '../types.ts';
 import type { PermissionMode } from '../../agent/mode-types.ts';
-import { matcherMatches, buildEnvFromPayload, expandEnvVars, parsePromptReferences } from '../utils.ts';
+import { matcherMatches, buildPromptEnvFromPayload, expandEnvVars, parsePromptReferences } from '../utils.ts';
 import { deriveAutomationName } from '../name-utils.ts';
 
 const log = createLogger('prompt-handler');
@@ -79,7 +79,7 @@ export class PromptHandler implements AutomationHandler {
     log.debug(`[PromptHandler] Processing ${totalPrompts} prompts for ${event}`);
 
     // Build environment variables
-    const env = buildEnvFromPayload(event, payload);
+    const env = buildPromptEnvFromPayload(event, payload);
 
     // Process prompts per matcher
     const pendingPrompts: PendingPrompt[] = [];
