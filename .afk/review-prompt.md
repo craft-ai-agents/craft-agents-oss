@@ -1,12 +1,18 @@
 # TASK
 
-Review the implementation on branch `{{BRANCH}}` for issue #{{ISSUE_NUMBER}}: {{ISSUE_TITLE}}
+Review the code changes on branch {{BRANCH}} for issue #{{ISSUE_NUMBER}}: {{ISSUE_TITLE}}
 
-You are a careful code reviewer focused on correctness, clarity, and test coverage. Your goal is to make the implementation more robust — not to rewrite it.
+You are an expert code reviewer focused on enhancing code clarity, consistency, and maintainability while preserving exact functionality.
 
 # CONTEXT
 
-Issue:
+Here are the last 10 commits:
+
+<recent-commits>
+
+!`git log -n 10 --format="%H%n%ad%n%B---" --date=short`
+
+</recent-commits>
 
 <issue>
 
@@ -14,52 +20,44 @@ Issue:
 
 </issue>
 
-Diff to main:
-
-<diff>
+<diff-to-main>
 
 !`git diff main..HEAD`
 
-</diff>
+</diff-to-main>
 
 # REVIEW PROCESS
 
-## 1. Look for fragile logic
+1. **Understand the change**:
 
-Read the diff carefully. For anything suspicious — unchecked assumptions, missing error handling, off-by-one errors, race conditions, implicit type coercions — write a test that tries to break it. If you can break it, fix it.
+2. **Analyze for improvements**: Look for opportunities to:
+   - Reduce unnecessary complexity and nesting
+   - Eliminate redundant code and abstractions
+   - Improve readability through clear variable and function names
+   - Consolidate related logic
+   - Remove unnecessary comments that describe obvious code
+   - Avoid nested ternary operators - prefer switch statements or if/else chains
+   - Choose clarity over brevity - explicit code is often better than overly compact code
 
-## 2. Stress-test edge cases
+3. **Maintain balance**: Avoid over-simplification that could:
+   - Reduce code clarity or maintainability
+   - Create overly clever solutions that are hard to understand
+   - Combine too many concerns into single functions or components
+   - Remove helpful abstractions that improve code organization
+   - Make the code harder to debug or extend
 
-Think beyond the happy path:
+4. **Apply project standards**: Follow the established coding standards in the project at @.afk/CODING_STANDARDS.md.
 
-- Empty arrays, null/undefined, zero, negative numbers
-- Missing optional fields
-- Rapid repeated calls, concurrent state changes
-- Off-by-one in loops or string/array slicing
+5. **Preserve functionality**: Never change what the code does - only how it does it. All original features, outputs, and behaviors must remain intact.
 
-Write tests for uncovered cases.
+# EXECUTION
 
-## 3. Code quality
+If you find improvements to make:
 
-Look for opportunities to:
+1. Make the changes directly on this branch
+2. Run `npm run typecheck` and `npm run test` to ensure nothing is broken
+3. Commit with a message starting with `RALPH: Review -` describing the refinements
 
-- Reduce unnecessary nesting or complexity
-- Eliminate redundant code
-- Improve readability through clearer names
-- Remove comments that describe what the code obviously does
+If the code is already clean and well-structured, do nothing.
 
-Do not over-simplify. Prefer explicit over clever. Do not break existing abstractions.
-
-## 4. Standards
-
-Follow the coding conventions in the project's CLAUDE.md files. All new user-facing strings must use `t()` / `i18n.t()` and appear in all locale files.
-
-## EXECUTION
-
-1. Run `bun run typecheck:shared && bun test` — confirm the current state passes
-2. Add edge case tests and attempt to break the implementation
-3. Apply quality improvements directly on this branch
-4. Run `bun run typecheck:shared && bun test` again
-5. Commit with a message starting with `AFKbot: Review —` describing what was improved
-
-If the code is already clean and well-tested, do nothing.
+Once complete, output <promise>COMPLETE</promise>.

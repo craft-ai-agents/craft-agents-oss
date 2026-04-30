@@ -21,6 +21,7 @@
   ],
   "scripts": {
     "afk": "bun run .afk/main.ts",
+    "ralph": "bun run .afk/run.ts",
     "test": "bun test && for f in $(find . -name '*.isolated.ts' -not -path './node_modules/*'); do bun test \"$f\" || exit 1; done",
     "typecheck": "bun run typecheck:shared",
     "typecheck:shared": "cd packages/shared && bun run tsc --noEmit",
@@ -97,6 +98,7 @@
     "prepare": "husky"
   },
   "devDependencies": {
+    "@ai-hero/sandcastle": "^0.5.6",
     "@aws-sdk/client-s3": "^3.947.0",
     "@electron/packager": "^19.0.1",
     "@rollup/rollup-win32-arm64-msvc": "^4.55.1",
