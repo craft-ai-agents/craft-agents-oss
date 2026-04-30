@@ -197,6 +197,13 @@ export interface SessionConfig {
   transferredSessionSummaryApplied?: boolean;
   /** Metadata for sessions created by automations */
   triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
+  /**
+   * Provenance for sessions spawned by summoning a saved Agent.
+   * Set at session-creation time; never updated thereafter.
+   * The middle pane in the Agents navigator filters sessions by this field
+   * so each agent becomes its own work-stream.
+   */
+  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number };
 }
 
 /**
@@ -288,6 +295,13 @@ export interface SessionHeader {
   transferredSessionSummaryApplied?: boolean;
   /** Metadata for sessions created by automations */
   triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
+  /**
+   * Provenance for sessions spawned by summoning a saved Agent.
+   * Set at session-creation time; never updated thereafter.
+   * The middle pane in the Agents navigator filters sessions by this field
+   * so each agent becomes its own work-stream.
+   */
+  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number };
   // Pre-computed fields for fast list loading
   /** Number of messages in session */
   messageCount: number;

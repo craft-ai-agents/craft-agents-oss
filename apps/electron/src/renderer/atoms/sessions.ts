@@ -75,6 +75,8 @@ export interface SessionMeta {
   isArchived?: boolean
   /** Timestamp when session was archived (for retention policy) */
   archivedAt?: number
+  /** Provenance: the saved Agent this session was spawned from. */
+  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
 }
 
 /**

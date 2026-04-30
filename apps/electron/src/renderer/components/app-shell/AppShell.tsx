@@ -122,6 +122,7 @@ import { SkillsListPanel } from "./SkillsListPanel"
 // per-workspace list now. Component preserved for a possible "all agents"
 // admin view in a later round.
 import { AgentLibraryDialog } from "./AgentLibraryDialog"
+import { AgentSessionsPanel } from "./AgentSessionsPanel"
 import { useAgents } from "@/hooks/useAgents"
 import { AutomationsListPanel } from "../automations/AutomationsListPanel"
 import { APP_EVENTS, AGENT_EVENTS, EXTERNAL_INPUT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
@@ -3239,9 +3240,15 @@ function AppShellContent({
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
               />
             )}
-            {/* Agents navigator: sidebar children show the active agents directly,
-                so there's no middle list panel. Main content (right pane) renders
-                AgentInfoPage when a slug is selected, or a launchpad otherwise. */}
+            {/* Agents navigator: sidebar carries the active agent list (children
+                of the parent nav). Middle pane shows past sessions for the
+                selected agent — each agent becomes its own work-stream. */}
+            {isAgentsNavigation(navState) && navState.details?.type === 'agent' && (
+              <AgentSessionsPanel
+                agentSlug={navState.details.agentSlug}
+                workspaceId={activeWorkspaceId}
+              />
+            )}
             {isAutomationsNavigation(navState) && (
               /* Automations List - filtered by type if automationFilter is active */
               <AutomationsListPanel
