@@ -1,4 +1,4 @@
-# Build script for Windows NSIS installer
+﻿# Build script for Windows NSIS installer
 # Usage: powershell -ExecutionPolicy Bypass -File scripts/build-win.ps1
 
 $ErrorActionPreference = "Stop"
