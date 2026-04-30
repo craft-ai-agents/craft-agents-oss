@@ -71,6 +71,9 @@ craft-agent automation validate
 | `FlagChange` | Session flagged/unflagged | `true` or `false` |
 | `SessionStatusChange` | Session status changed | New status (e.g., `done`, `in_progress`) |
 | `SchedulerTick` | Runs every minute | Uses cron matching |
+| `WebhookReceive` | External HTTP request to the trigger server | Slug (the URL path component) |
+| `FileWatch` | File added, modified, or removed under a watched directory | Relative path of the changed file |
+| `PollUrl` | Polled HTTP endpoint's response fingerprint changed | Polled URL |
 
 > **Note:** `TodoStateChange` is a deprecated alias for `SessionStatusChange`. Existing configs using the old name will continue to work but will show a deprecation warning during validation.
 
@@ -743,6 +746,228 @@ A single automation can have both prompt and webhook actions. They execute in or
   }
 }
 ```
+
+## Inbound Webhook Triggers (`WebhookReceive`)
+
+External systems (GitHub, Stripe, Linear, Zapier, your own scripts, etc.) can fire automations by POSTing to the **trigger HTTP server**. This turns Craft into a programmable inbox for any system that can send an HTTP request.
+
+### Enabling the trigger server
+
+The trigger server is **off by default**. Start the desktop app or standalone server with `CRAFT_TRIGGER_PORT` set:
+
+```bash
+# Standalone server
+CRAFT_TRIGGER_PORT=9101 bun run server:start
+
+# Electron desktop (set env before launching)
+CRAFT_TRIGGER_PORT=9101 bun run electron:start
+```
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `CRAFT_TRIGGER_PORT` | _(off)_ | Listen port. Server is disabled when unset or `0`. |
+| `CRAFT_TRIGGER_HOST` | `127.0.0.1` | Bind address. Set to `0.0.0.0` only behind a tunnel/reverse proxy with HMAC enabled. |
+
+### Trigger URL format
+
+```
+POST http://<host>:<port>/v1/triggers/<workspaceId>/<slug>
+```
+
+`workspaceId` is the global workspace ID (visible in the workspace settings).
+`slug` is the matcher's `slug` field — your stable, human-readable trigger identifier.
+
+### Example: GitHub `push` events
+
+```json
+{
+  "version": 2,
+  "automations": {
+    "WebhookReceive": [
+      {
+        "name": "GitHub push",
+        "slug": "github-push",
+        "secretEnv": "CRAFT_WH_GITHUB_SECRET",
+        "allowedMethods": ["POST"],
+        "actions": [
+          {
+            "type": "prompt",
+            "prompt": "A push event arrived from GitHub. The full payload is in $CRAFT_EVENT_DATA — summarize the commits and flag any that look risky."
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Then on the GitHub webhook side: set the URL to `http://your-host:9101/v1/triggers/<workspaceId>/github-push` and the secret to the same value as `$CRAFT_WH_GITHUB_SECRET`.
+
+### Matcher fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `slug` | string | **Required.** URL slug. Lowercase letters, digits, hyphens; 1-64 chars; unique per workspace. |
+| `secretEnv` | string | Name of an env var holding the HMAC-SHA256 shared secret. When set, requests must include `X-Craft-Signature: sha256=<hex>` over the raw body. |
+| `allowedMethods` | array | HTTP methods this trigger accepts. Defaults to `["POST"]`. |
+| `matcher` | regex | Optional extra filter on the slug (rarely needed since slug is already exact). |
+| `conditions` | array | Standard condition filters — useful for matching against `body`, `headers`, `query` fields. |
+
+### HMAC signing (recommended for production)
+
+When `secretEnv` is set, the trigger server requires:
+
+```
+X-Craft-Signature: sha256=<hex>
+```
+
+…where `<hex>` is `HMAC-SHA256(secret, raw_body)`. The check is constant-time. If `secretEnv` is set but the env var is empty/unset, the trigger fails closed with `500 misconfigured_secret` — never silently downgraded to unauthenticated.
+
+If `secretEnv` is **omitted**, the trigger accepts unauthenticated requests. Only safe on a loopback bind.
+
+### Variables available to actions
+
+In addition to the standard `CRAFT_*` vars, prompts and webhook actions get:
+
+| Variable | Description |
+|----------|-------------|
+| `$CRAFT_SLUG` | The slug that fired |
+| `$CRAFT_METHOD` | HTTP method (`POST`, etc.) |
+| `$CRAFT_BODY_RAW` | Raw request body string |
+| `$CRAFT_REMOTE_IP` | Sender's IP (or `X-Forwarded-For`'s first hop) |
+| `$CRAFT_EVENT_DATA` | Full payload as JSON — pipe through `jq` in your prompt for nested access |
+
+### Limits
+
+| Limit | Default | Notes |
+|-------|---------|-------|
+| Per-slug rate | 60 req/min | Token bucket per `(workspaceId, slug)` |
+| Per-event-type rate | 10 fires/min | Existing event-bus rate limit (downstream of the HTTP layer) |
+| Body size | 1 MB | Larger bodies return `413` |
+
+### Response codes
+
+| Code | Meaning |
+|------|---------|
+| `200` | Accepted — actions started in the background |
+| `401` | Bad HMAC signature |
+| `404` | Workspace or slug not found |
+| `405` | Method not in `allowedMethods` |
+| `413` | Body too large |
+| `429` | Rate limited (try again next minute) |
+| `500` | `secretEnv` set but the env var is empty |
+
+### Why a separate port?
+
+The trigger server runs separately from the WebUI/RPC port because the audiences differ: the WebUI uses session JWTs and is meant for browsers, while triggers use per-automation HMAC and are meant for arbitrary external services. Keeping them split lets you bind the trigger port to `0.0.0.0` (or behind a tunnel) without weakening WebUI auth.
+
+## File-Change Triggers (`FileWatch`)
+
+Fire automations when files appear, change, or disappear. Local-only — no network. Useful for "drop a file in a folder and let an agent process it" workflows, screenshot-to-summary pipelines, design-handoff flows, or anything that maps "file mutation" to "agent action".
+
+### Example: process new screenshots
+
+```json
+{
+  "version": 2,
+  "automations": {
+    "FileWatch": [
+      {
+        "name": "Screenshots → describe",
+        "watchPath": "/Users/me/Desktop",
+        "watchGlob": "Screenshot*.png",
+        "watchChangeTypes": ["add"],
+        "actions": [
+          { "type": "prompt", "prompt": "A new screenshot was saved at $CRAFT_PATH. Describe what it shows." }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Matcher fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `watchPath` | string | Directory to watch (recursive). Absolute, or relative to the workspace root. Defaults to the workspace root. |
+| `watchGlob` | string | Glob pattern for matching paths under `watchPath`. Supports `*`, `**`, `?`, `[abc]`. Defaults to all files. |
+| `watchChangeTypes` | array | Subset of `["add", "change", "remove"]`. Defaults to all three. |
+| `watchDebounceMs` | number | Coalesce rapid successive events on the same file. Defaults to `500`. |
+
+### Variables available to actions
+
+| Variable | Description |
+|----------|-------------|
+| `$CRAFT_PATH` | Absolute file path |
+| `$CRAFT_RELATIVE_PATH` | Path relative to `watchPath` |
+| `$CRAFT_CHANGE_TYPE` | `add`, `change`, or `remove` |
+| `$CRAFT_SIZE` | File size in bytes (0 for `remove`) |
+
+### Notes
+
+- Symlinks are not followed (recursive watching follows the OS default).
+- On Linux, recursive watching requires Node 20+ / Bun. macOS and Windows support it natively.
+- Each automation has its own debounce bucket; a noisy editor flooding writes won't fire 50 times.
+
+## URL Polling Triggers (`PollUrl`)
+
+Fire automations when a polled HTTP endpoint's response changes. Covers the "no webhook, but I have an API" case — RSS feeds, GitHub status, custom JSON endpoints, internal dashboards.
+
+### Example: alert on outage
+
+```json
+{
+  "version": 2,
+  "automations": {
+    "PollUrl": [
+      {
+        "name": "API health watch",
+        "pollUrl": "https://api.example.com/health",
+        "pollIntervalSec": 60,
+        "pollFingerprint": "status",
+        "actions": [
+          {
+            "type": "prompt",
+            "prompt": "API health endpoint changed status. Was $CRAFT_PREVIOUS_FINGERPRINT, now $CRAFT_FINGERPRINT. Investigate."
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Matcher fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pollUrl` | string | **Required.** Target URL. Supports `$VAR` env-var expansion. Must resolve to `http://` or `https://`. |
+| `pollIntervalSec` | number | Poll cadence in seconds. Minimum `30`, default `300`. |
+| `pollMethod` | `"GET"` \| `"POST"` \| `"HEAD"` | Default `GET`. |
+| `pollHeaders` | object | Custom request headers; values support `$VAR` expansion. |
+| `pollFingerprint` | enum | What to compare. `body` (SHA-256, default), `etag`, `last-modified`, or `status`. |
+| `pollAuth` | object | `{ type: "bearer", token: "..." }` or `{ type: "basic", username, password }`. Values support `$VAR` expansion. |
+
+### Behavior
+
+- The first poll establishes a **baseline** silently — no event fires.
+- Subsequent polls only fire when the fingerprint changes.
+- Errors (network, timeout, non-2xx) are logged and the next poll is rescheduled normally — transient failures don't reset the baseline.
+- Initial polls are jittered 1-5 seconds to avoid burst on workspace load.
+- HTTP request timeout is 30 seconds.
+
+### Variables available to actions
+
+| Variable | Description |
+|----------|-------------|
+| `$CRAFT_URL` | The polled URL |
+| `$CRAFT_STATUS` | HTTP status code |
+| `$CRAFT_FINGERPRINT_KIND` | `body`, `etag`, `last-modified`, or `status` |
+| `$CRAFT_FINGERPRINT` | New fingerprint value |
+| `$CRAFT_PREVIOUS_FINGERPRINT` | Previous fingerprint (or empty on first change) |
+| `$CRAFT_BODY` | Response body (truncated to 4 KB) when fingerprint kind is `body` |
+| `$CRAFT_EVENT_DATA` | Full payload as JSON |
 
 ## Validation
 

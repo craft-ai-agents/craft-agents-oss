@@ -34,6 +34,22 @@ describe('route-parser: automations routes', () => {
     expect(result!.details).toBeNull()
   })
 
+  it('parses "automations/external" as automations with external filter', () => {
+    const result = parseCompoundRoute('automations/external')
+    expect(result).not.toBeNull()
+    expect(result!.navigator).toBe('automations')
+    expect(result!.automationFilter).toEqual({ kind: 'type', automationType: 'external' })
+    expect(result!.details).toBeNull()
+  })
+
+  it('parses "automations/external/automation/abc" as external filter + details', () => {
+    const result = parseCompoundRoute('automations/external/automation/abc')
+    expect(result).not.toBeNull()
+    expect(result!.navigator).toBe('automations')
+    expect(result!.automationFilter).toEqual({ kind: 'type', automationType: 'external' })
+    expect(result!.details).toEqual({ type: 'automation', id: 'abc' })
+  })
+
   it('parses "automations/scheduled/automation/automation-1" as filtered + details', () => {
     const result = parseCompoundRoute('automations/scheduled/automation/automation-1')
     expect(result).not.toBeNull()

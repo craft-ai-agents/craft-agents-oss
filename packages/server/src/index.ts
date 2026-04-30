@@ -23,6 +23,8 @@
  *   CRAFT_WEBUI_WS_URL         — optional browser-facing ws:// or wss:// URL returned by /api/config
  *   CRAFT_MESSAGING_WA_WORKER  — absolute path to worker.cjs (default: packages/messaging-whatsapp-worker/dist/worker.cjs)
  *   CRAFT_MESSAGING_NODE_BIN   — Node binary used to spawn the WhatsApp worker (default: node)
+ *   CRAFT_TRIGGER_PORT         — opt-in: enable inbound webhook trigger server on this port (off when unset/0)
+ *   CRAFT_TRIGGER_HOST         — bind address for the trigger server (default: 127.0.0.1)
  */
 
 import { join } from 'node:path'
@@ -36,6 +38,7 @@ import type { WebuiHandler } from '@craft-agent/server-core/webui'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { getWorkspaces } from '@craft-agent/shared/config'
 import { createMessagingBootstrap, type MessagingBootstrapHandle } from '@craft-agent/messaging-gateway'
+import { startTriggerHttpServer, type TriggerHttpServerHandle } from '@craft-agent/server-core/triggers'
 
 // --generate-token: print a crypto-random token and exit
 if (process.argv.includes('--generate-token')) {
@@ -304,6 +307,20 @@ const healthServer = await startHealthHttpServer({
   platform: instance.platform,
 })
 
+// Start inbound webhook trigger server if CRAFT_TRIGGER_PORT is set.
+// Off by default — opt-in for users who want to fire automations from external systems.
+const triggerPort = parseInt(process.env.CRAFT_TRIGGER_PORT ?? '0', 10)
+const triggerHost = process.env.CRAFT_TRIGGER_HOST ?? '127.0.0.1'
+const triggerServer: TriggerHttpServerHandle | null = await startTriggerHttpServer({
+  port: triggerPort,
+  host: triggerHost,
+  resolver: instance.sessionManager,
+  logger: { info: console.log, warn: console.warn, error: console.error },
+})
+if (triggerServer) {
+  console.log(`CRAFT_TRIGGER_URL=${triggerServer.url}`)
+}
+
 const serverProto = instance.protocol === 'wss' ? 'https' : 'http'
 console.log(`CRAFT_SERVER_URL=${instance.protocol}://${instance.host}:${instance.port}`)
 console.log(`CRAFT_SERVER_TOKEN=${instance.token}`)
@@ -337,6 +354,13 @@ if (!isLocalBind && instance.protocol === 'ws') {
 const shutdown = async () => {
   webuiHandler?.dispose()
   healthServer?.stop()
+  if (triggerServer) {
+    try {
+      await triggerServer.stop()
+    } catch (error) {
+      console.error('[trigger-server] stop failed:', error)
+    }
+  }
   if (messagingHandle) {
     try {
       await messagingHandle.dispose()

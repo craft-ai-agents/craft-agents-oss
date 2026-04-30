@@ -12,7 +12,7 @@
 import * as React from 'react'
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Webhook } from 'lucide-react'
+import { Webhook, Sparkles } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { EntityListEmptyScreen } from '@/components/ui/entity-list-empty'
@@ -21,12 +21,13 @@ import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { SessionSearchHeader } from '@/components/app-shell/SessionSearchHeader'
 import { AutomationMenu } from './AutomationMenu'
 import { BatchAutomationMenu } from './BatchAutomationMenu'
+import { TemplatesGalleryDialog } from './TemplatesGalleryDialog'
 import { AutomationAvatar } from './AutomationAvatar'
 import { SendResourceToWorkspaceDialog } from '@/components/app-shell/SendResourceToWorkspaceDialog'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { cn } from '@/lib/utils'
 import { automationSelection } from '@/hooks/useEntitySelection'
-import { APP_EVENTS, AGENT_EVENTS, getEventDisplayName, type AutomationListItem, type AutomationListFilter } from './types'
+import { APP_EVENTS, AGENT_EVENTS, EXTERNAL_INPUT_EVENTS, getEventDisplayName, type AutomationListItem, type AutomationListFilter } from './types'
 import { formatShortRelativeTime } from './utils'
 
 const {
@@ -211,7 +212,12 @@ export function AutomationsListPanel({
     const kind = automationFilter?.kind ?? 'all'
     if (kind === 'all') return automations
     if (kind === 'scheduled') return automations.filter(a => a.event === 'SchedulerTick')
-    if (kind === 'app') return automations.filter(a => (APP_EVENTS as string[]).includes(a.event) && a.event !== 'SchedulerTick')
+    if (kind === 'external') return automations.filter(a => (EXTERNAL_INPUT_EVENTS as string[]).includes(a.event))
+    if (kind === 'app') return automations.filter(a =>
+      (APP_EVENTS as string[]).includes(a.event)
+      && a.event !== 'SchedulerTick'
+      && !(EXTERNAL_INPUT_EVENTS as string[]).includes(a.event)
+    )
     if (kind === 'agent') return automations.filter(a => (AGENT_EVENTS as string[]).includes(a.event))
     return automations
   }, [automations, automationFilter?.kind])
@@ -261,17 +267,27 @@ export function AutomationsListPanel({
           description={t('automations.emptyDescription')}
           docKey="automations"
         >
-          {workspaceRootPath && (
-            <EditPopover
-              align="center"
+          <div className="flex items-center gap-2">
+            <TemplatesGalleryDialog
               trigger={
-                <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
-                  {t('automations.addAutomation')}
+                <button className="inline-flex items-center gap-1.5 h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Start from template
                 </button>
               }
-              {...getEditConfig('automation-config', workspaceRootPath)}
             />
-          )}
+            {workspaceRootPath && (
+              <EditPopover
+                align="center"
+                trigger={
+                  <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
+                    {t('automations.addAutomation')}
+                  </button>
+                }
+                {...getEditConfig('automation-config', workspaceRootPath)}
+              />
+            )}
+          </div>
         </EntityListEmptyScreen>
       </div>
     )
@@ -291,6 +307,24 @@ export function AutomationsListPanel({
           placeholder={t('automations.searchPlaceholder')}
           resultCount={isSearchMode ? filteredAutomations.length : undefined}
         />
+      )}
+
+      {/* Quick-add bar (hidden during search to keep UX focused) */}
+      {!searchActive && (
+        <div className="flex justify-end px-2 pt-1.5 pb-1">
+          <TemplatesGalleryDialog
+            trigger={
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] rounded-md text-foreground/70 hover:text-foreground hover:bg-foreground/5"
+                title="Add automation from template"
+              >
+                <Sparkles className="h-3 w-3" />
+                From template
+              </button>
+            }
+          />
+        </div>
       )}
 
       {/* Filtered empty state */}

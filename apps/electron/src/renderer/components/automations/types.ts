@@ -28,6 +28,11 @@ export type AppEvent =
   | 'TodoStateChange'
   | 'SessionStatusChange'
   | 'SchedulerTick'
+  | 'WebhookReceive'
+  | 'FileWatch'
+  | 'PollUrl'
+
+export type FileWatchChangeType = 'add' | 'change' | 'remove'
 
 export type AgentEvent =
   | 'PreToolUse'
@@ -48,8 +53,16 @@ export type AutomationTrigger = AppEvent | AgentEvent
 
 export const APP_EVENTS: AppEvent[] = [
   'LabelAdd', 'LabelRemove', 'LabelConfigChange',
-  'PermissionModeChange', 'FlagChange', 'TodoStateChange', 'SessionStatusChange', 'SchedulerTick'
+  'PermissionModeChange', 'FlagChange', 'TodoStateChange', 'SessionStatusChange', 'SchedulerTick',
+  'WebhookReceive', 'FileWatch', 'PollUrl',
 ]
+
+/** Subset of AppEvent that represents an external input source. */
+export const EXTERNAL_INPUT_EVENTS: AppEvent[] = ['WebhookReceive', 'FileWatch', 'PollUrl']
+
+export function isExternalInputEvent(event: AutomationTrigger): boolean {
+  return (EXTERNAL_INPUT_EVENTS as string[]).includes(event)
+}
 
 export const AGENT_EVENTS: AgentEvent[] = [
   'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'Notification',
@@ -225,13 +238,46 @@ export interface AutomationListItem {
   actions: AutomationAction[]
   /** Timestamp of last execution (ms since epoch) */
   lastExecutedAt?: number
+
+  // ============================================================================
+  // External input fields (mirrored from shared AutomationMatcher)
+  // ============================================================================
+
+  /** WebhookReceive: URL slug for /v1/triggers/<workspaceId>/<slug> */
+  slug?: string
+  /** WebhookReceive: env var holding the HMAC-SHA256 shared secret */
+  secretEnv?: string
+  /** WebhookReceive: allowed HTTP methods (default ['POST']) */
+  allowedMethods?: ('GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE')[]
+
+  /** FileWatch: directory to watch (absolute or workspace-relative) */
+  watchPath?: string
+  /** FileWatch: glob pattern under watchPath (`**` matches across path segments) */
+  watchGlob?: string
+  /** FileWatch: which change types to fire on (default all three) */
+  watchChangeTypes?: FileWatchChangeType[]
+  /** FileWatch: debounce window in ms for rapid successive changes (default 500) */
+  watchDebounceMs?: number
+
+  /** PollUrl: target URL (supports $VAR expansion) */
+  pollUrl?: string
+  /** PollUrl: interval in seconds (min 30, default 300) */
+  pollIntervalSec?: number
+  /** PollUrl: HTTP method (default GET) */
+  pollMethod?: 'GET' | 'POST' | 'HEAD'
+  /** PollUrl: custom request headers */
+  pollHeaders?: Record<string, string>
+  /** PollUrl: what to fingerprint to detect change */
+  pollFingerprint?: 'body' | 'etag' | 'last-modified' | 'status'
+  /** PollUrl: auth shorthand */
+  pollAuth?: { type: 'basic'; username: string; password: string } | { type: 'bearer'; token: string }
 }
 
 // ============================================================================
 // Filter
 // ============================================================================
 
-export type AutomationFilterKind = 'all' | 'app' | 'agent' | 'scheduled'
+export type AutomationFilterKind = 'all' | 'app' | 'agent' | 'scheduled' | 'external'
 
 export interface AutomationListFilter {
   kind: AutomationFilterKind
@@ -242,6 +288,7 @@ export const AUTOMATION_TYPE_TO_FILTER_KIND: Record<string, AutomationFilterKind
   scheduled: 'scheduled',
   event: 'app',
   agentic: 'agent',
+  external: 'external',
 }
 
 // ============================================================================
@@ -306,6 +353,9 @@ export const EVENT_DISPLAY_NAMES: Record<AutomationTrigger, string> = {
   TodoStateChange:      'Task Updated',
   SessionStatusChange:  'Status Changed',
   SchedulerTick:        'Scheduled',
+  WebhookReceive:       'Inbound Webhook',
+  FileWatch:            'File Changed',
+  PollUrl:              'URL Poll',
 
   // Agent events
   PreToolUse:           'Before Tool Runs',
@@ -380,6 +430,20 @@ interface AutomationsConfigMatcher {
   conditions?: AutomationConditionUI[]
   enabled?: boolean
   actions?: RawAction[]
+  // External input fields
+  slug?: string
+  secretEnv?: string
+  allowedMethods?: ('GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE')[]
+  watchPath?: string
+  watchGlob?: string
+  watchChangeTypes?: FileWatchChangeType[]
+  watchDebounceMs?: number
+  pollUrl?: string
+  pollIntervalSec?: number
+  pollMethod?: 'GET' | 'POST' | 'HEAD'
+  pollHeaders?: Record<string, string>
+  pollFingerprint?: 'body' | 'etag' | 'last-modified' | 'status'
+  pollAuth?: AutomationListItem['pollAuth']
 }
 
 /** Derive a human-readable name from task actions and event */
@@ -404,6 +468,21 @@ function deriveAutomationName(event: string, matcher: AutomationsConfigMatcher):
 
 /** Derive a summary line from the matcher/cron/event */
 function deriveAutomationSummary(event: string, matcher: AutomationsConfigMatcher): string {
+  if (event === 'WebhookReceive') {
+    const auth = matcher.secretEnv ? ' (HMAC-signed)' : ' (unauthenticated)'
+    return matcher.slug ? `Slug: ${matcher.slug}${auth}` : 'No slug configured — will not fire'
+  }
+  if (event === 'FileWatch') {
+    const where = matcher.watchPath ?? '<workspace root>'
+    const what = matcher.watchGlob ?? '<all files>'
+    return `Watching ${where} · ${what}`
+  }
+  if (event === 'PollUrl') {
+    const url = matcher.pollUrl ?? '<no URL>'
+    const interval = matcher.pollIntervalSec ?? 300
+    const fp = matcher.pollFingerprint ?? 'body'
+    return `Poll ${url} every ${interval}s (${fp})`
+  }
   if (matcher.cron) {
     const runs = computeNextRuns(matcher.cron, 1)
     if (runs.length > 0) {
@@ -468,6 +547,20 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
         labels: matcher.labels,
         conditions: matcher.conditions,
         actions,
+        // External input fields
+        slug: matcher.slug,
+        secretEnv: matcher.secretEnv,
+        allowedMethods: matcher.allowedMethods,
+        watchPath: matcher.watchPath,
+        watchGlob: matcher.watchGlob,
+        watchChangeTypes: matcher.watchChangeTypes,
+        watchDebounceMs: matcher.watchDebounceMs,
+        pollUrl: matcher.pollUrl,
+        pollIntervalSec: matcher.pollIntervalSec,
+        pollMethod: matcher.pollMethod,
+        pollHeaders: matcher.pollHeaders,
+        pollFingerprint: matcher.pollFingerprint,
+        pollAuth: matcher.pollAuth,
       })
       index++
     }
@@ -479,6 +572,9 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
 export function getEventCategory(event: AutomationTrigger): EventCategory {
   switch (event) {
     case 'SchedulerTick':
+    case 'WebhookReceive':
+    case 'FileWatch':
+    case 'PollUrl':
       return 'scheduled'
     case 'LabelAdd':
     case 'LabelRemove':

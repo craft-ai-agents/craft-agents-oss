@@ -31,6 +31,7 @@ import {
   Radio,
   Bot,
   Info,
+  Webhook,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -117,7 +118,7 @@ import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
 import { AutomationsListPanel } from "../automations/AutomationsListPanel"
-import { APP_EVENTS, AGENT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
+import { APP_EVENTS, AGENT_EVENTS, EXTERNAL_INPUT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
 import { useAutomations } from "@/hooks/useAutomations"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { PanelHeader } from "./PanelHeader"
@@ -1422,9 +1423,10 @@ function AppShellContent({
 
   // Count automations by type for the Automations dropdown subcategories
   const automationTypeCounts = useMemo(() => {
-    const counts = { scheduled: 0, event: 0, agentic: 0 }
+    const counts = { scheduled: 0, event: 0, agentic: 0, external: 0 }
     for (const automation of automations) {
-      if (automation.event === 'SchedulerTick') counts.scheduled++
+      if ((EXTERNAL_INPUT_EVENTS as string[]).includes(automation.event)) counts.external++
+      else if (automation.event === 'SchedulerTick') counts.scheduled++
       else if ((APP_EVENTS as string[]).includes(automation.event)) counts.event++
       else if ((AGENT_EVENTS as string[]).includes(automation.event)) counts.agentic++
     }
@@ -1711,6 +1713,10 @@ function AppShellContent({
 
   const handleAutomationsAgenticClick = useCallback(() => {
     navigate(routes.view.automationsAgentic())
+  }, [])
+
+  const handleAutomationsExternalClick = useCallback(() => {
+    navigate(routes.view.automationsExternal())
   }, [])
 
   // Handler for settings view
@@ -2087,6 +2093,7 @@ function AppShellContent({
         case 'scheduled': return t("sidebar.scheduled")
         case 'event': return t("sidebar.eventBased")
         case 'agentic': return t("sidebar.agentic")
+        case 'external': return 'External Triggers'
         default: return t("sidebar.allAutomations")
       }
     }
@@ -2454,6 +2461,15 @@ function AppShellContent({
                           icon: Bot,
                           variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'agentic') ? "default" : "ghost",
                           onClick: handleAutomationsAgenticClick,
+                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
+                        },
+                        {
+                          id: "nav:automations:external",
+                          title: 'External',
+                          label: String(automationTypeCounts.external),
+                          icon: Webhook,
+                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'external') ? "default" : "ghost",
+                          onClick: handleAutomationsExternalClick,
                           contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
                         },
                       ],

@@ -370,6 +370,7 @@ export const CHANNEL_MAP = {
   setAutomationEnabled: invoke(RPC_CHANNELS.automations.SET_ENABLED),
   duplicateAutomation: invoke(RPC_CHANNELS.automations.DUPLICATE),
   deleteAutomation: invoke(RPC_CHANNELS.automations.DELETE),
+  createAutomationFromTemplate: invoke(RPC_CHANNELS.automations.CREATE_FROM_TEMPLATE),
   getAutomationHistory: invoke(RPC_CHANNELS.automations.GET_HISTORY),
   getAutomationLastExecuted: invoke(RPC_CHANNELS.automations.GET_LAST_EXECUTED),
   replayAutomation: invoke(RPC_CHANNELS.automations.REPLAY),

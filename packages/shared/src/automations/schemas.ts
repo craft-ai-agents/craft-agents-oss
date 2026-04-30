@@ -137,6 +137,9 @@ export const AutomationConditionSchema: z.ZodType = z.lazy(() =>
 // Matcher Schema
 // ============================================================================
 
+/** Slug format for inbound webhook triggers: lowercase letters, digits, hyphen; 1-64 chars; no leading/trailing hyphen. */
+export const WEBHOOK_SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+
 export const AutomationMatcherSchema = z.object({
   id: z.string().optional(),
   name: z.string().optional(),
@@ -148,6 +151,44 @@ export const AutomationMatcherSchema = z.object({
   enabled: z.boolean().optional(),
   conditions: z.array(AutomationConditionSchema).optional(),
   actions: z.array(ActionDefinitionSchema).min(1, 'At least one action required'),
+  // WebhookReceive-specific fields. Validated structurally here; cross-field
+  // requirements (e.g. slug required for WebhookReceive) are enforced in
+  // validation.ts where the parent event name is known.
+  slug: z.string().regex(
+    WEBHOOK_SLUG_REGEX,
+    'Slug must be 1-64 chars: lowercase letters, digits, hyphens (no leading/trailing hyphen)',
+  ).optional(),
+  secretEnv: z.string().regex(
+    /^[A-Z_][A-Z0-9_]*$/,
+    'secretEnv must be a valid env var name (uppercase letters, digits, underscore; cannot start with digit)',
+  ).optional(),
+  allowedMethods: z.array(z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])).min(1).optional(),
+  // FileWatch fields
+  watchPath: z.string().min(1).optional(),
+  watchGlob: z.string().min(1).optional(),
+  watchChangeTypes: z.array(z.enum(['add', 'change', 'remove'])).min(1).optional(),
+  watchDebounceMs: z.number().int().min(0).max(60_000).optional(),
+  // PollUrl fields
+  pollUrl: z.string().min(1).refine(
+    (url) => {
+      if (url.includes('$')) return true;
+      try {
+        const parsed = new URL(url);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+      } catch {
+        return false;
+      }
+    },
+    'pollUrl must be a valid http/https URL or contain $VAR templates',
+  ).optional(),
+  pollIntervalSec: z.number().int().min(30, 'pollIntervalSec minimum is 30').max(86_400).optional(),
+  pollMethod: z.enum(['GET', 'POST', 'HEAD']).optional(),
+  pollHeaders: z.record(z.string(), z.string()).optional(),
+  pollFingerprint: z.enum(['body', 'etag', 'last-modified', 'status']).optional(),
+  pollAuth: z.union([
+    z.object({ type: z.literal('basic'), username: z.string().min(1), password: z.string() }),
+    z.object({ type: z.literal('bearer'), token: z.string().min(1) }),
+  ]).optional(),
 });
 
 /**

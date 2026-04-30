@@ -163,10 +163,10 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
       return { navigator: 'automations', details: null }
     }
 
-    // Check for type filter: automations/scheduled, automations/event, automations/agentic
-    const validAutomationTypes = ['scheduled', 'event', 'agentic']
+    // Check for type filter: automations/{scheduled,event,agentic,external}
+    const validAutomationTypes = ['scheduled', 'event', 'agentic', 'external']
     if (validAutomationTypes.includes(segments[1])) {
-      const automationType = segments[1] as 'scheduled' | 'event' | 'agentic'
+      const automationType = segments[1] as 'scheduled' | 'event' | 'agentic' | 'external'
       const automationFilter: AutomationFilter = { kind: 'type', automationType }
 
       // Check for automation selection within filtered view: automations/scheduled/automation/{automationId}

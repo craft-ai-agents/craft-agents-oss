@@ -19,7 +19,10 @@ export type AppEvent =
   | 'PermissionModeChange'
   | 'FlagChange'
   | 'SessionStatusChange'
-  | 'SchedulerTick';
+  | 'SchedulerTick'
+  | 'WebhookReceive'
+  | 'FileWatch'
+  | 'PollUrl';
 
 /** Agent events - passed to Claude SDK */
 export type AgentEvent =
@@ -41,7 +44,8 @@ export type AutomationEvent = AppEvent | AgentEvent;
 
 export const APP_EVENTS: AppEvent[] = [
   'LabelAdd', 'LabelRemove', 'LabelConfigChange',
-  'PermissionModeChange', 'FlagChange', 'SessionStatusChange', 'SchedulerTick'
+  'PermissionModeChange', 'FlagChange', 'SessionStatusChange', 'SchedulerTick',
+  'WebhookReceive', 'FileWatch', 'PollUrl',
 ];
 
 export const AGENT_EVENTS: AgentEvent[] = [
@@ -168,7 +172,108 @@ export interface AutomationMatcher {
   /** Optional conditions that must all pass (AND) after matcher matches, before actions fire */
   conditions?: AutomationCondition[];
   actions: AutomationAction[];
+
+  // ============================================================================
+  // WebhookReceive-specific fields
+  // ============================================================================
+
+  /**
+   * URL slug for inbound webhook triggers (WebhookReceive events).
+   * Forms part of the trigger URL: /v1/triggers/:workspaceId/:slug
+   * Required for WebhookReceive automations. Must be unique per workspace.
+   * Allowed characters: a-z, 0-9, hyphen (1-64 chars).
+   */
+  slug?: string;
+
+  /**
+   * Name of the env var holding the HMAC-SHA256 shared secret for verifying inbound requests.
+   * When set, requests must include `X-Craft-Signature: sha256=<hex>` over the raw body.
+   * Convention: env var name should start with `CRAFT_WH_` (e.g. `CRAFT_WH_STRIPE_SECRET`).
+   * If unset, the trigger accepts unauthenticated requests — only safe for trusted networks.
+   */
+  secretEnv?: string;
+
+  /**
+   * Restrict which HTTP methods this trigger accepts. Defaults to ['POST'] for WebhookReceive.
+   */
+  allowedMethods?: WebhookHttpMethod[];
+
+  // ============================================================================
+  // FileWatch-specific fields
+  // ============================================================================
+
+  /**
+   * Directory to watch for FileWatch automations. Resolved against the workspace
+   * root if relative; absolute paths are used as-is. Defaults to the workspace root.
+   * Symlinks are not followed.
+   */
+  watchPath?: string;
+
+  /**
+   * Glob pattern for matching file paths under watchPath. Supports `*` (one path
+   * segment), `**` (any depth), `?` (single char). When omitted, matches everything.
+   * Example: `**`/`*.md` (without backticks) matches any markdown file recursively.
+   */
+  watchGlob?: string;
+
+  /**
+   * Which file change types this matcher fires on. Defaults to all three.
+   * - `add` — new file appeared (or rename target)
+   * - `change` — file modified
+   * - `remove` — file deleted (or rename source)
+   */
+  watchChangeTypes?: FileWatchChangeType[];
+
+  /**
+   * Coalesce rapid successive changes to the same path within this many ms.
+   * Useful for editors that do atomic writes (vim, IntelliJ). Defaults to 500ms.
+   */
+  watchDebounceMs?: number;
+
+  // ============================================================================
+  // PollUrl-specific fields
+  // ============================================================================
+
+  /**
+   * URL to poll for PollUrl automations. Supports `$VAR` env-var expansion.
+   * Must resolve to http:// or https://.
+   */
+  pollUrl?: string;
+
+  /**
+   * Polling interval in seconds. Minimum is 30 seconds — anything lower is
+   * clamped at runtime to protect external services from accidental DoS.
+   * Defaults to 300 (5 minutes) when omitted.
+   */
+  pollIntervalSec?: number;
+
+  /**
+   * HTTP method for the poll request. Defaults to GET.
+   */
+  pollMethod?: 'GET' | 'POST' | 'HEAD';
+
+  /**
+   * Optional headers for the poll request. Values support `$VAR` expansion.
+   */
+  pollHeaders?: Record<string, string>;
+
+  /**
+   * What to fingerprint to detect change.
+   * - `body` (default) — SHA256 of response body
+   * - `etag` — value of the `etag` response header
+   * - `last-modified` — value of the `last-modified` response header
+   * - `status` — HTTP status code (fires on status transitions, e.g. 200 ↔ 503)
+   */
+  pollFingerprint?: 'body' | 'etag' | 'last-modified' | 'status';
+
+  /**
+   * Auth shorthand for the poll request (matches webhook action's auth shape).
+   */
+  pollAuth?: WebhookAuth;
 }
+
+/** File change type for FileWatch automations. */
+export type FileWatchChangeType = 'add' | 'change' | 'remove';
 
 export interface AutomationsConfig {
   automations: Partial<Record<AutomationEvent, AutomationMatcher[]>>;

@@ -58,9 +58,120 @@ function runMatcherSemanticValidations(
 ): void {
   for (const [event, matchers] of Object.entries(config.automations)) {
     if (!matchers) continue;
+
+    // WebhookReceive: slugs must be unique within the event group
+    if (event === 'WebhookReceive') {
+      const seenSlugs = new Map<string, number>();
+      for (let i = 0; i < matchers.length; i++) {
+        const slug = matchers[i]?.slug;
+        if (!slug) continue;
+        const prev = seenSlugs.get(slug);
+        if (prev !== undefined) {
+          errors.push({
+            file,
+            path: `automations.WebhookReceive[${i}].slug`,
+            message: `Duplicate slug "${slug}" — also used by automation at index ${prev}`,
+            severity: 'error',
+            suggestion: 'Each WebhookReceive automation must have a unique slug',
+          });
+        } else {
+          seenSlugs.set(slug, i);
+        }
+      }
+    }
+
     for (let i = 0; i < matchers.length; i++) {
       const matcher = matchers[i];
       if (!matcher) continue;
+
+      // WebhookReceive-specific semantic checks
+      if (event === 'WebhookReceive') {
+        if (!matcher.slug) {
+          errors.push({
+            file,
+            path: `automations.WebhookReceive[${i}].slug`,
+            message: 'WebhookReceive automations require a slug',
+            severity: 'error',
+            suggestion: 'Add a slug field — this becomes part of the trigger URL: /v1/triggers/<workspaceId>/<slug>',
+          });
+        }
+        if (!matcher.secretEnv) {
+          warnings.push({
+            file,
+            path: `automations.WebhookReceive[${i}].secretEnv`,
+            message: 'No HMAC secret configured — this trigger accepts unauthenticated requests',
+            severity: 'warning',
+            suggestion: 'Set secretEnv (e.g. "CRAFT_WH_STRIPE_SECRET") and configure HMAC signing on the sender',
+          });
+        }
+      } else if (event === 'FileWatch') {
+        if (matcher.watchGlob) {
+          // Quick smoke test of the glob (full validation happens in the service).
+          if (matcher.watchGlob.length > 256) {
+            errors.push({
+              file,
+              path: `automations.FileWatch[${i}].watchGlob`,
+              message: 'Glob too long (max 256 chars)',
+              severity: 'error',
+            });
+          }
+        }
+        if (matcher.watchPath && matcher.watchPath.includes('..')) {
+          warnings.push({
+            file,
+            path: `automations.FileWatch[${i}].watchPath`,
+            message: 'watchPath contains ".." — relative parent traversal may behave unexpectedly',
+            severity: 'warning',
+          });
+        }
+      } else if (event === 'PollUrl') {
+        if (!matcher.pollUrl) {
+          errors.push({
+            file,
+            path: `automations.PollUrl[${i}].pollUrl`,
+            message: 'PollUrl automations require a pollUrl',
+            severity: 'error',
+            suggestion: 'Add pollUrl — the http(s) URL to poll on each interval',
+          });
+        }
+        const interval = matcher.pollIntervalSec ?? 300;
+        if (interval < 30) {
+          errors.push({
+            file,
+            path: `automations.PollUrl[${i}].pollIntervalSec`,
+            message: `pollIntervalSec must be at least 30s (got ${interval})`,
+            severity: 'error',
+            suggestion: 'Use a reasonable interval (>=30s) to avoid hammering external services',
+          });
+        }
+      } else {
+        // Slug/secretEnv/allowedMethods only meaningful for WebhookReceive
+        if (matcher.slug) {
+          warnings.push({
+            file,
+            path: `automations.${event}[${i}].slug`,
+            message: 'slug is only used by WebhookReceive automations',
+            severity: 'warning',
+          });
+        }
+        if (matcher.secretEnv) {
+          warnings.push({
+            file,
+            path: `automations.${event}[${i}].secretEnv`,
+            message: 'secretEnv is only used by WebhookReceive automations',
+            severity: 'warning',
+          });
+        }
+        if (matcher.allowedMethods) {
+          warnings.push({
+            file,
+            path: `automations.${event}[${i}].allowedMethods`,
+            message: 'allowedMethods is only used by WebhookReceive automations',
+            severity: 'warning',
+          });
+        }
+      }
+
       // Warn about allow-all permission mode
       if (matcher.permissionMode === 'allow-all') {
         warnings.push({

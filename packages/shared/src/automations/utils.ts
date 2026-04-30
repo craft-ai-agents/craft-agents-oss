@@ -103,6 +103,12 @@ export function getMatchValue(event: AutomationEvent, data: Record<string, unkno
     case 'SchedulerTick':
       // SchedulerTick uses cron matching, not regex
       return '';
+    case 'WebhookReceive':
+      return String(data.slug ?? '');
+    case 'FileWatch':
+      return String(data.relativePath ?? '');
+    case 'PollUrl':
+      return String(data.url ?? '');
     default:
       return JSON.stringify(data);
   }
@@ -153,6 +159,38 @@ function matchesBasePredicate(matcher: AutomationMatcher, event: AutomationEvent
   if (event === 'SchedulerTick') {
     return !!matcher.cron && matchesCron(matcher.cron, matcher.timezone);
   }
+  // WebhookReceive: slug is an exact-match URL identifier. The trigger server
+  // already routes by slug, but matchers without a slug must NOT match (they'd
+  // fire on every inbound webhook regardless of URL).
+  if (event === 'WebhookReceive') {
+    if (!matcher.slug) return false;
+    if (matcher.slug !== matchValue) return false;
+    // After slug match, the optional regex `matcher` provides extra filtering on slug
+    if (!matcher.matcher) return true;
+    try {
+      return new RegExp(matcher.matcher).test(matchValue);
+    } catch {
+      return false;
+    }
+  }
+  // FileWatch and PollUrl are per-matcher: the producing service has already
+  // selected the target matcher and stamped its ID into the payload. The base
+  // predicate's job here is to ensure no OTHER matcher of the same event type
+  // accidentally fires. The `matcher` field of the event-bus iteration loop
+  // is checked against the payload's matcherId via matcherMatchesWithContext
+  // (see below). Without a matcher.id, fail closed to avoid cross-firing.
+  if (event === 'FileWatch' || event === 'PollUrl') {
+    if (!matcher.id) return false;
+    // matchValue here is the relativePath (FileWatch) or url (PollUrl).
+    // Optional regex `matcher` is an additional filter; matcherId equality
+    // is enforced separately below.
+    if (!matcher.matcher) return true;
+    try {
+      return new RegExp(matcher.matcher).test(matchValue);
+    } catch {
+      return false;
+    }
+  }
   if (!matcher.matcher) return true; // No matcher means match all
   try {
     return new RegExp(matcher.matcher).test(matchValue);
@@ -169,6 +207,16 @@ export function matcherMatchesWithContext(
   event: AutomationEvent,
   context: MatcherContext,
 ): boolean {
+  // Per-matcher events (FileWatch, PollUrl): the producing service has already
+  // selected the target matcher and stamped its ID. Reject any other matcher
+  // of the same event type so they don't cross-fire on shared payloads.
+  if (event === 'FileWatch' || event === 'PollUrl') {
+    const payloadMatcherId = context.payload.matcherId;
+    if (typeof payloadMatcherId === 'string' && matcher.id !== payloadMatcherId) {
+      return false;
+    }
+  }
+
   if (!matchesBasePredicate(matcher, event, context.matchValue)) return false;
 
   if (matcher.conditions?.length) {
@@ -222,6 +270,29 @@ export function cleanEnv(): Record<string, string> {
 const PAYLOAD_SKIP_KEYS = new Set(['sessionId', 'sessionName', 'workspaceId', 'timestamp']);
 
 /**
+ * Convert a single payload value to its env-var string form.
+ * Strings/numbers/booleans pass through cleanly; objects/arrays become JSON;
+ * null/undefined become an empty string (env-var convention).
+ */
+function payloadValueToEnvString(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  // Objects, arrays — JSON-stringify so users can pipe through jq.
+  // Avoid the legacy "[object Object]" footgun.
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '';
+  }
+}
+
+/** Sanitize a string segment for use as an env-var name suffix. */
+function envKeySanitize(s: string): string {
+  return s.replace(/[^A-Za-z0-9]/g, '_').toUpperCase();
+}
+
+/**
  * Build the base CRAFT_* environment variables shared by both prompt and webhook actions.
  * Contains event info, session metadata, scheduler time, and payload fields (unsanitized).
  */
@@ -254,10 +325,29 @@ function buildBaseEventEnv(event: AutomationEvent, payload: BaseEventPayload): R
   for (const [key, value] of Object.entries(payload)) {
     if (PAYLOAD_SKIP_KEYS.has(key)) continue;
     const envKey = `CRAFT_${toSnakeCase(key).toUpperCase()}`;
-    env[envKey] = typeof value === 'string' ? value : String(value);
+    env[envKey] = payloadValueToEnvString(value);
+  }
+
+  // External-input convenience vars: explode `headers` and `query` records into
+  // CRAFT_HEADER_<KEY> / CRAFT_QUERY_<KEY> so users can `${CRAFT_HEADER_X_GITHUB_EVENT}`
+  // in prompts without piping CRAFT_EVENT_DATA through jq.
+  if (event === 'WebhookReceive') {
+    const p = payload as unknown as Record<string, unknown>;
+    expandRecord(env, 'CRAFT_HEADER_', p.headers);
+    expandRecord(env, 'CRAFT_QUERY_', p.query);
   }
 
   return env;
+}
+
+function expandRecord(env: Record<string, string>, prefix: string, source: unknown): void {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return;
+  for (const [k, v] of Object.entries(source as Record<string, unknown>)) {
+    if (!k) continue;
+    const key = `${prefix}${envKeySanitize(k)}`;
+    if (typeof v === 'string') env[key] = v;
+    else if (v != null) env[key] = payloadValueToEnvString(v);
+  }
 }
 
 /**
@@ -271,11 +361,17 @@ export function buildEnvFromPayload(event: AutomationEvent, payload: BaseEventPa
   // Sanitize session name for shell context
   if (payload.sessionName) env.CRAFT_SESSION_NAME = sanitizeForShell(payload.sessionName);
 
-  // Sanitize payload field values for shell context
+  // Sanitize payload field values for shell context. Re-stringify objects
+  // properly here too — base already did this, but the loop overwrites with
+  // the sanitized string version.
   for (const [key, value] of Object.entries(payload)) {
     if (PAYLOAD_SKIP_KEYS.has(key)) continue;
     const envKey = `CRAFT_${toSnakeCase(key).toUpperCase()}`;
-    env[envKey] = typeof value === 'string' ? sanitizeForShell(value) : String(value);
+    if (typeof value === 'string') {
+      env[envKey] = sanitizeForShell(value);
+    } else {
+      env[envKey] = payloadValueToEnvString(value);
+    }
   }
 
   return env;

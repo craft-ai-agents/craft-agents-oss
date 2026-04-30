@@ -68,6 +68,72 @@ export interface GenericEventPayload extends BaseEventPayload {
   data: Record<string, unknown>;
 }
 
+/**
+ * FileWatch payload — fired when a watched file is added, modified, or removed.
+ * Routing is per-matcher (each matcher has its own watchPath/watchGlob), so
+ * the FileWatch service stamps the matcher ID into the payload and the event
+ * bus's matcher-iteration uses it to dispatch only to the matcher that fired.
+ */
+export interface FileWatchPayload extends BaseEventPayload {
+  /** ID of the FileWatch matcher that fired this event */
+  matcherId: string;
+  /** Absolute path to the changed file */
+  path: string;
+  /** Path relative to the watcher's watchPath (e.g. "notes/idea.md") */
+  relativePath: string;
+  /** Type of change */
+  changeType: 'add' | 'change' | 'remove';
+  /** File size in bytes (0 for `remove` events) */
+  size: number;
+  /** True when the path is a directory */
+  isDirectory: boolean;
+}
+
+/**
+ * PollUrl payload — fired when a polled HTTP endpoint's fingerprint changes.
+ * Routing is per-matcher (each matcher has its own URL/interval), so the
+ * Poll service stamps the matcher ID into the payload.
+ */
+export interface PollUrlPayload extends BaseEventPayload {
+  /** ID of the PollUrl matcher that fired this event */
+  matcherId: string;
+  /** The URL that was polled (post env-var expansion) */
+  url: string;
+  /** HTTP status of the latest response */
+  status: number;
+  /** Type of fingerprint that detected the change */
+  fingerprintKind: 'body' | 'etag' | 'last-modified' | 'status';
+  /** New fingerprint value (truncated for body kind) */
+  fingerprint: string;
+  /** Previous fingerprint value, or null on first run */
+  previousFingerprint: string | null;
+  /** Response body (truncated to 4 KB) — null when fingerprint kind is not `body` */
+  body: string | null;
+  /** Selected response headers (lowercased keys) */
+  headers: Record<string, string>;
+}
+
+/**
+ * Inbound webhook payload — fired when an external system POSTs to /v1/triggers/:workspaceId/:slug.
+ * The body is parsed as JSON when Content-Type is application/json; otherwise the raw string is in bodyRaw.
+ */
+export interface WebhookReceivePayload extends BaseEventPayload {
+  /** The matcher slug from the URL path */
+  slug: string;
+  /** HTTP method (uppercase) */
+  method: string;
+  /** HTTP headers (lowercased keys) */
+  headers: Record<string, string>;
+  /** URL query parameters */
+  query: Record<string, string>;
+  /** Parsed JSON body when Content-Type is application/json; otherwise null */
+  body: unknown;
+  /** Raw body as a string (truncated to bodyMaxBytes) */
+  bodyRaw: string;
+  /** Remote IP address as observed by the trigger server */
+  remoteIp: string;
+}
+
 // ============================================================================
 // Event Payload Map
 // ============================================================================
@@ -84,6 +150,9 @@ export interface EventPayloadMap {
   FlagChange: FlagChangePayload;
   SessionStatusChange: SessionStatusChangePayload;
   SchedulerTick: SchedulerTickPayload;
+  WebhookReceive: WebhookReceivePayload;
+  FileWatch: FileWatchPayload;
+  PollUrl: PollUrlPayload;
 
   // Agent events (generic payload)
   PreToolUse: GenericEventPayload;

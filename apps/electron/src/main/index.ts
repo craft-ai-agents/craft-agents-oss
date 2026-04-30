@@ -200,6 +200,10 @@ let moduleClientResolver: ((webContentsId: number) => string | undefined) | null
 // directly.
 let messagingHandle: MessagingBootstrapHandle | null = null
 
+// Inbound webhook trigger HTTP server handle. Held at module scope so the
+// before-quit handler can stop it cleanly.
+let triggerServerHandle: { url: string; stop: () => Promise<void> } | null = null
+
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
 
@@ -711,6 +715,33 @@ app.whenReady().then(async () => {
       moduleClientResolver = resolveClientId
 
       // -----------------------------------------------------------------------
+      // Inbound webhook trigger HTTP server. Off by default — opt-in via
+      // CRAFT_TRIGGER_PORT (e.g. 9101). Lets external systems fire automations
+      // by POSTing to /v1/triggers/<workspaceId>/<slug>.
+      // -----------------------------------------------------------------------
+      try {
+        const triggerPort = parseInt(process.env.CRAFT_TRIGGER_PORT ?? '0', 10)
+        if (triggerPort > 0) {
+          const { startTriggerHttpServer } = await import('@craft-agent/server-core/triggers')
+          triggerServerHandle = await startTriggerHttpServer({
+            port: triggerPort,
+            host: process.env.CRAFT_TRIGGER_HOST ?? '127.0.0.1',
+            resolver: instance.sessionManager,
+            logger: {
+              info: (m, ...a) => mainLog.info(m, ...a),
+              warn: (m, ...a) => mainLog.warn(m, ...a),
+              error: (m, ...a) => mainLog.error(m, ...a),
+            },
+          })
+          if (triggerServerHandle) {
+            mainLog.info(`[trigger-server] Listening on ${triggerServerHandle.url}`)
+          }
+        }
+      } catch (err) {
+        mainLog.error('[trigger-server] Failed to start:', err)
+      }
+
+      // -----------------------------------------------------------------------
       // Messaging Gateway — attach the WS publisher, init local workspaces,
       // install the fan-out event sink. The handle was created inside
       // createHandlerDeps so the registry could be wired into HandlerDeps.
@@ -1149,6 +1180,15 @@ app.on('before-quit', async (event) => {
 
     // Stop all model refresh timers
     getModelRefreshService().stopAll()
+
+    // Stop the inbound webhook trigger HTTP server.
+    if (triggerServerHandle) {
+      try {
+        await triggerServerHandle.stop()
+      } catch (err) {
+        mainLog.error('[trigger-server] stop failed:', err)
+      }
+    }
 
     // Stop messaging gateways so the WhatsApp worker subprocess exits cleanly.
     if (messagingHandle) {

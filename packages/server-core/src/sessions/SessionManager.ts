@@ -1400,6 +1400,18 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
+   * Look up the AutomationSystem for a given workspace ID.
+   * Used by the trigger HTTP server to route inbound webhooks to the correct
+   * workspace's event bus. Returns undefined if no workspace matches the ID
+   * or its AutomationSystem hasn't been initialized yet.
+   */
+  getAutomationSystemForWorkspaceId(workspaceId: string): AutomationSystem | undefined {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return undefined
+    return this.automationSystems.get(workspace.rootPath)
+  }
+
+  /**
    * Reload sources for all sessions in a workspace, skipping those currently processing.
    */
   private async reloadSourcesForWorkspace(workspaceRootPath: string): Promise<void> {

@@ -63,6 +63,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.automations.GET_HISTORY,
   RPC_CHANNELS.automations.GET_LAST_EXECUTED,
   RPC_CHANNELS.automations.REPLAY,
+  RPC_CHANNELS.automations.CREATE_FROM_TEMPLATE,
 ] as const
 
 export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -201,6 +202,66 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
       } else {
         matchers[idx].enabled = false
       }
+    })
+  })
+
+  // Append a new automation matcher built from a template. The renderer
+  // sends the event name plus a fully-formed matcher object (already
+  // validated client-side). The server appends, ensures a unique ID, and
+  // creates the file if absent.
+  server.handle(RPC_CHANNELS.automations.CREATE_FROM_TEMPLATE, async (_ctx, workspaceId: string, eventName: string, matcher: Record<string, unknown>) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    await withConfigMutex(workspace.rootPath, async () => {
+      const { resolveAutomationsConfigPath, generateShortId } = await import('@craft-agent/shared/automations/resolve-config-path')
+      const configPath = resolveAutomationsConfigPath(workspace.rootPath)
+
+      let config: AutomationsConfigJson
+      try {
+        const raw = await readFile(configPath, 'utf-8')
+        config = JSON.parse(raw)
+      } catch (err) {
+        if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+          config = { version: 2, automations: {} }
+        } else {
+          throw err
+        }
+      }
+
+      if (!config.automations) config.automations = {}
+      const eventMap = config.automations
+      if (!eventMap[eventName]) eventMap[eventName] = []
+      const matchers = eventMap[eventName]!
+
+      const cloned = JSON.parse(JSON.stringify(matcher)) as Record<string, unknown>
+      cloned.id = generateShortId()
+      // For WebhookReceive, ensure the slug is unique within the event group
+      if (eventName === 'WebhookReceive' && typeof cloned.slug === 'string') {
+        const existingSlugs = new Set(
+          matchers
+            .map((m) => (typeof (m as { slug?: unknown }).slug === 'string' ? (m as { slug: string }).slug : null))
+            .filter((s): s is string => s !== null)
+        )
+        let candidate = cloned.slug
+        let n = 2
+        while (existingSlugs.has(candidate)) {
+          candidate = `${cloned.slug}-${n}`
+          n += 1
+        }
+        cloned.slug = candidate
+      }
+      matchers.push(cloned)
+
+      // Backfill missing IDs across the whole config (matches DUPLICATE handler convention)
+      for (const e of Object.values(eventMap)) {
+        if (!Array.isArray(e)) continue
+        for (const m of e as Record<string, unknown>[]) {
+          if (!m.id) m.id = generateShortId()
+        }
+      }
+
+      await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
     })
   })
 

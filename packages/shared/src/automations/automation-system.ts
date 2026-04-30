@@ -26,6 +26,8 @@ import { type AutomationsConfig, type AutomationEvent, type AutomationMatcher, t
 import { validateAutomationsConfig } from './validation.ts';
 import { matcherMatchesSdk } from './utils.ts';
 import { SchedulerService, type SchedulerTickPayload } from '../scheduler/scheduler-service.ts';
+import { FileWatchService } from './file-watch-service.ts';
+import { PollService } from './poll-service.ts';
 
 const log = createLogger('automation-system');
 
@@ -71,6 +73,8 @@ export class AutomationSystem implements AutomationsConfigProvider {
   private webhookHandler: WebhookHandler | null = null;
   private eventLogHandler: EventLogHandler | null = null;
   private scheduler: SchedulerService | null = null;
+  private fileWatchService: FileWatchService | null = null;
+  private pollService: PollService | null = null;
   private disposed = false;
 
   // Session metadata tracking (moved from SessionManager)
@@ -90,6 +94,11 @@ export class AutomationSystem implements AutomationsConfigProvider {
     if (options.enableScheduler) {
       this.startScheduler();
     }
+
+    // External-input services. Both are routed through the event bus so the
+    // existing PromptHandler/WebhookHandler pipeline runs unchanged.
+    this.startFileWatchService();
+    this.startPollService();
 
     log.debug(`[AutomationSystem] Created for workspace: ${options.workspaceId}`);
   }
@@ -162,6 +171,9 @@ export class AutomationSystem implements AutomationsConfigProvider {
 
       this.config = validation.config;
       this.backfillIds(configPath, raw);
+      // Refresh per-matcher external-input services
+      this.fileWatchService?.applyMatchers(this.getMatchersForEvent('FileWatch'));
+      this.pollService?.applyMatchers(this.getMatchersForEvent('PollUrl'));
       const actionCount = this.getActionCount();
       log.debug(`[AutomationSystem] Reloaded ${actionCount} actions`);
       return { success: true, automationCount: actionCount, errors: [] };
@@ -234,6 +246,47 @@ export class AutomationSystem implements AutomationsConfigProvider {
 
   getMatchersForEvent(event: AutomationEvent): AutomationMatcher[] {
     return this.config?.automations[event] ?? [];
+  }
+
+  /**
+   * Look up a WebhookReceive matcher by exact slug.
+   * Used by the trigger HTTP server to validate inbound requests before firing the event.
+   * Returns the first matching enabled matcher, or undefined if no match.
+   */
+  findWebhookReceiveMatcher(slug: string): AutomationMatcher | undefined {
+    const matchers = this.getMatchersForEvent('WebhookReceive');
+    return matchers.find((m) => m.slug === slug && m.enabled !== false);
+  }
+
+  /**
+   * Fire a WebhookReceive event on this workspace's bus.
+   * The caller (trigger HTTP server) is responsible for slug routing, HMAC
+   * verification, body-size enforcement, and method allow-listing — by the
+   * time we reach this method, those checks must have already passed.
+   *
+   * Returns the number of automation matchers that fired actions.
+   */
+  async fireWebhookReceive(input: {
+    slug: string;
+    method: string;
+    headers: Record<string, string>;
+    query: Record<string, string>;
+    body: unknown;
+    bodyRaw: string;
+    remoteIp: string;
+  }): Promise<void> {
+    if (this.disposed) return;
+    await this.eventBus.emit('WebhookReceive', {
+      workspaceId: this.options.workspaceId,
+      timestamp: Date.now(),
+      slug: input.slug,
+      method: input.method,
+      headers: input.headers,
+      query: input.query,
+      body: input.body,
+      bodyRaw: input.bodyRaw,
+      remoteIp: input.remoteIp,
+    });
   }
 
   // ============================================================================
@@ -311,6 +364,35 @@ export class AutomationSystem implements AutomationsConfigProvider {
       this.scheduler = null;
       log.debug(`[AutomationSystem] Scheduler stopped`);
     }
+  }
+
+  // ============================================================================
+  // External-input services
+  // ============================================================================
+
+  private startFileWatchService(): void {
+    if (this.fileWatchService) return;
+    this.fileWatchService = new FileWatchService({
+      workspaceRootPath: this.options.workspaceRootPath,
+      workspaceId: this.options.workspaceId,
+      onEvent: async (payload) => {
+        await this.eventBus.emit('FileWatch', payload);
+      },
+    });
+    this.fileWatchService.applyMatchers(this.getMatchersForEvent('FileWatch'));
+    log.debug(`[AutomationSystem] FileWatch service started`);
+  }
+
+  private startPollService(): void {
+    if (this.pollService) return;
+    this.pollService = new PollService({
+      workspaceId: this.options.workspaceId,
+      onEvent: async (payload) => {
+        await this.eventBus.emit('PollUrl', payload);
+      },
+    });
+    this.pollService.applyMatchers(this.getMatchersForEvent('PollUrl'));
+    log.debug(`[AutomationSystem] Poll service started`);
   }
 
   // ============================================================================
@@ -545,6 +627,12 @@ export class AutomationSystem implements AutomationsConfigProvider {
 
     // Stop scheduler
     this.stopScheduler();
+
+    // Dispose external-input services
+    this.fileWatchService?.dispose();
+    this.fileWatchService = null;
+    this.pollService?.dispose();
+    this.pollService = null;
 
     // Dispose handlers
     this.promptHandler?.dispose();

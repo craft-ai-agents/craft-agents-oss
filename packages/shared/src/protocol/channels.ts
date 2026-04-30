@@ -367,6 +367,7 @@ export const RPC_CHANNELS = {
     GET_LAST_EXECUTED: 'automations:getLastExecuted',
     REPLAY: 'automations:replay',
     CHANGED: 'automations:changed',
+    CREATE_FROM_TEMPLATE: 'automations:createFromTemplate',
   },
   resources: {
     EXPORT: 'resources:export',

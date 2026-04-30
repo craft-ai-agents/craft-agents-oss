@@ -26,6 +26,7 @@ import { AutomationEventTimeline } from './AutomationEventTimeline'
 import { PhaseBadge } from './PhaseBadge'
 import { getEventDisplayName, getPermissionDisplayName, flattenConditions, type AutomationListItem, type ExecutionEntry, type TestResult } from './types'
 import { describeCron, computeNextRuns } from './utils'
+import { ExternalTriggerSection } from './ExternalTriggerSection'
 
 // ============================================================================
 // Component
@@ -152,6 +153,9 @@ export function AutomationInfoPage({
           </Info_Table>
         </Info_Section>
 
+        {/* Section: External input (WebhookReceive / FileWatch / PollUrl) */}
+        <ExternalTriggerSection automation={automation} editActions={editActions} />
+
         {/* Section: If (conditions) — hidden when empty */}
         {automation.conditions && automation.conditions.length > 0 && (
           <Info_Section
@@ -231,6 +235,20 @@ export function AutomationInfoPage({
                 permissionMode: automation.permissionMode,
                 labels: automation.labels,
                 enabled: automation.enabled,
+                // External input fields — only included when set
+                ...(automation.slug && { slug: automation.slug }),
+                ...(automation.secretEnv && { secretEnv: automation.secretEnv }),
+                ...(automation.allowedMethods && { allowedMethods: automation.allowedMethods }),
+                ...(automation.watchPath && { watchPath: automation.watchPath }),
+                ...(automation.watchGlob && { watchGlob: automation.watchGlob }),
+                ...(automation.watchChangeTypes && { watchChangeTypes: automation.watchChangeTypes }),
+                ...(automation.watchDebounceMs != null && { watchDebounceMs: automation.watchDebounceMs }),
+                ...(automation.pollUrl && { pollUrl: automation.pollUrl }),
+                ...(automation.pollIntervalSec && { pollIntervalSec: automation.pollIntervalSec }),
+                ...(automation.pollMethod && { pollMethod: automation.pollMethod }),
+                ...(automation.pollFingerprint && { pollFingerprint: automation.pollFingerprint }),
+                ...(automation.pollHeaders && { pollHeaders: automation.pollHeaders }),
+                ...(automation.pollAuth && { pollAuth: automation.pollAuth }),
                 actions: automation.actions,
               }, null, 2)}\n\`\`\``}
             </Info_Markdown>
