@@ -1,12 +1,5 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="24px" height="24px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-    <title>favicon</title>
-    <defs>
-        <path d="M0,0 L24,0 L24,24 L0,24 L0,0 Z" id="path-1"></path>
-    </defs>
-    <g id="favicon" stroke="none" fill="none" xlink:href="#path-1" fill-rule="evenodd" stroke-width="1">
-        <g id="Group" transform="translate(3.4502, 3)" fill="#9570BE">
-            <path d="M3.17890888,3.6 L3.17890888,0 L16,0 L16,3.6 L3.17890888,3.6 Z M9.642,7.2 L9.64218223,10.8 L0,10.8 L0,3.6 L16,3.6 L16,7.2 L9.642,7.2 Z M3.17890888,18 L3.178,14.4 L0,14.4 L0,10.8 L16,10.8 L16,18 L3.17890888,18 Z" id="Combined-Shape" fill-rule="nonzero"></path>
-        </g>
-    </g>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="1024" rx="224" fill="#101828"/>
+  <path d="M258 772V252h278c62 0 111 15 147 45 36 30 54 72 54 126 0 39-10 72-31 99-20 27-49 47-86 59l135 191H596L483 602h-73v170H258Zm152-291h112c20 0 35-5 46-14 11-10 17-24 17-42 0-17-6-31-17-41-11-10-26-15-46-15H410v112Z" fill="#F9FAFB"/>
+  <path d="M244 814h536" stroke="#2DD4BF" stroke-width="48" stroke-linecap="round"/>
 </svg>

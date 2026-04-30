@@ -1,7 +1,8 @@
 {
   "name": "@craft-agent/electron",
   "version": "0.8.13",
-  "description": "Electron desktop app for Craft Agents",
+  "productName": "Runner",
+  "description": "Electron desktop app for Runner",
   "main": "dist/main.cjs",
   "private": true,
   "author": {
