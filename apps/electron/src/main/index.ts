@@ -673,11 +673,27 @@ app.whenReady().then(async () => {
               })
             },
             onAutomationEvent: (event: string, sessionId?: string) => {
+              // Skip events already handled by direct hooks to avoid double-playing sounds.
+              // SessionStart → onSessionStarted, Stop → onSessionCompleted/onSessionStopped,
+              // SessionEnd → onSessionDeleted. These fire via setProcessing()/onProcessingStopped().
+              const handledByDirectHooks = new Set(['SessionStart', 'Stop', 'SessionEnd'])
+              if (handledByDirectHooks.has(event)) return
+
               // Map automation event to sound category and play
               import('@craft-agent/shared/audio').then(({ mapEventToCategory }) => {
                 const category = mapEventToCategory(event)
                 if (category) {
-                  getEngine().then(engine => engine.play(category, sessionId))
+                  // When sessionId is not in the automation payload (e.g. UserPromptSubmit),
+                  // try to find the active session for the workspace from the session manager.
+                  // This ensures sounds play from the correct session pack instead of default.
+                  const sid = sessionId ?? (() => {
+                    try {
+                      const sessions = sessionManager?.getSessions() ?? []
+                      const processing = sessions.find(s => s.isProcessing)
+                      return processing?.id
+                    } catch { return undefined }
+                  })()
+                  getEngine().then(engine => engine.play(category, sid))
                 }
               }).catch(() => {
                 // Sound errors must never break automation flow

@@ -138,7 +138,7 @@ export function PackBrowserDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col">
+      <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col overflow-hidden" style={{ display: 'flex' }}>
         <DialogHeader>
           <DialogTitle>
             {t('settings.sound.browsePacks', 'Browse Sound Packs')}
@@ -170,7 +170,7 @@ export function PackBrowserDialog({
         </div>
 
         {/* Pack List — scrolls natively via ScrollArea */}
-        <ScrollArea className="flex-1 min-h-0">
+        <ScrollArea className="flex-1 min-h-0 overflow-hidden">
           {loading && (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
               <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full mb-2" />
@@ -198,7 +198,7 @@ export function PackBrowserDialog({
             </div>
           )}
 
-          {!loading && !error && (
+          {!loading && !error && filteredPacks.length > 0 && (
             <div className="space-y-1 py-1">
               {filteredPacks.map(pack => (
                 <div

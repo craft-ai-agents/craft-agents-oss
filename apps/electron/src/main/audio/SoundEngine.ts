@@ -193,6 +193,11 @@ export class SoundEngine {
   // Per-session active pack
   private sessionPacks = new Map<string, string>()
 
+  // Tracks whether init() has completed (packs discovered, player window created)
+  private initialized = false
+  // Queue of play requests made before init() completed
+  private pendingInitPlays: Array<{ category: CespCategory; sessionId?: string }> = []
+
   constructor() {}
 
   // -----------------------------------------------------------------------
@@ -218,7 +223,17 @@ export class SoundEngine {
 
     await this.createPlayerWindow()
 
+    this.initialized = true
     console.info(`[sound] === Initialized with ${this.packs.size} packs: ${[...this.packs.keys()].join(', ')} ===`)
+
+    // Drain any play requests that were queued before init completed
+    if (this.pendingInitPlays.length > 0) {
+      console.info(`[sound] Draining ${this.pendingInitPlays.length} queued play requests`)
+      for (const { category, sessionId } of this.pendingInitPlays) {
+        this.play(category, sessionId).catch(() => {})
+      }
+      this.pendingInitPlays = []
+    }
   }
 
   private async createPlayerWindow(): Promise<void> {
@@ -405,6 +420,14 @@ export class SoundEngine {
   async play(category: CespCategory, sessionId?: string): Promise<void> {
     console.info(`[sound] === play() called: category=${category} sessionId=${sessionId} ===`)
 
+    // If init() hasn't completed yet (packs not discovered), queue the request
+    // instead of silently dropping it.
+    if (!this.initialized) {
+      console.info(`[sound] Not yet initialized, queuing ${category} for later`)
+      this.pendingInitPlays.push({ category, sessionId })
+      return
+    }
+
     if (!this.settings.enabled) {
       console.info('[sound] Skipped: sound notifications disabled globally')
       return
@@ -445,7 +468,27 @@ export class SoundEngine {
 
     const categoryDef = resolveCategory(pack.manifest, category)
     if (!categoryDef || categoryDef.sounds.length === 0) {
-      console.warn(`[sound] Category ${category} has no sounds in pack ${pack.name}`)
+      // If the active pack doesn't have this category, try falling back to the default pack
+      // This handles cases where custom packs don't include extended categories like session.end
+      if (pack.name !== 'default') {
+        const defaultPack = this.packs.get('default')
+        if (defaultPack) {
+          const defaultCatDef = resolveCategory(defaultPack.manifest, category)
+          if (defaultCatDef && defaultCatDef.sounds.length > 0) {
+            console.info(`[sound] Category ${category} not in pack ${pack.name}, falling back to default pack`)
+            const lastFile2 = this.lastPlayedFile
+            const result2 = pickRandomSound(defaultCatDef, defaultPack.directory, lastFile2)
+            if (result2) {
+              this.lastPlayedFile = result2.entry.file
+              console.info(`[sound] Playing ${category} from default pack: ${result2.filePath}`)
+              await this.playFile(result2.filePath, catSettings?.volume ?? this.settings.volume)
+              this.cooldownTracker.record(category)
+              return
+            }
+          }
+        }
+      }
+      console.warn(`[sound] Category ${category} has no sounds in pack ${pack.name} (and no default fallback)`)
       return
     }
 
