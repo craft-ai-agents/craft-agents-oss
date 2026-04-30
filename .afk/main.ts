@@ -30,6 +30,7 @@ function parseArg(flag: string, fallback: number): number {
 const MAX_ITERATIONS = parseArg('--iterations', 10)
 const MAX_PARALLEL = parseArg('--parallel', 4)
 const PUSH_RETRIES = 3
+const CLAUDE_RETRIES = 3
 const ROOT = resolve(import.meta.dir, '..')
 const PROMPTS = import.meta.dir
 
@@ -95,21 +96,31 @@ function loadPrompt(name: string, cwd: string, args: Record<string, string> = {}
 }
 
 function runClaude(label: string, prompt: string, cwd: string): { stdout: string } {
-  console.log(`  [${label}] starting…`)
-  try {
-    const stdout = execFileSync('claude', ['--print', '--dangerously-skip-permissions'], {
-      input: prompt,
-      cwd,
-      encoding: 'utf8',
-      timeout: 20 * 60 * 1000,
-      maxBuffer: 50 * 1024 * 1024,
-    }) as string
-    console.log(`  [${label}] done.`)
-    return { stdout }
-  } catch (err: any) {
-    console.error(`  [${label}] failed: ${err.message}`)
-    return { stdout: err.stdout ?? '' }
+  for (let attempt = 1; attempt <= CLAUDE_RETRIES; attempt++) {
+    console.log(`  [${label}] starting… (attempt ${attempt}/${CLAUDE_RETRIES})`)
+    try {
+      const stdout = execFileSync(
+        'claude',
+        ['--print', '--dangerously-skip-permissions', '--model', 'claude-sonnet-4-5', '--effort', 'medium'],
+        {
+          input: prompt,
+          cwd,
+          encoding: 'utf8',
+          timeout: 12 * 60 * 60 * 1000,
+          maxBuffer: 100 * 1024 * 1024,
+        }
+      ) as string
+      console.log(`  [${label}] done.`)
+      return { stdout }
+    } catch (err: any) {
+      console.error(`  [${label}] attempt ${attempt} failed: ${err.message}`)
+      if (attempt === CLAUDE_RETRIES) return { stdout: err.stdout ?? '' }
+      const delayMs = attempt * 5000
+      console.log(`  [${label}] retrying in ${delayMs / 1000}s…`)
+      Bun.sleepSync(delayMs)
+    }
   }
+  return { stdout: '' }
 }
 
 function newCommits(cwd: string): string[] {
