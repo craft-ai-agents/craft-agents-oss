@@ -32,6 +32,10 @@ import {
   Bot,
   Info,
   Webhook,
+  MessageSquare,
+  BookOpen,
+  History,
+  FileText,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -113,6 +117,7 @@ import {
   isSkillsNavigation,
   isAgentsNavigation,
   isAutomationsNavigation,
+  isWorkspaceContextNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
@@ -124,6 +129,8 @@ import { SkillsListPanel } from "./SkillsListPanel"
 import { AgentLibraryDialog } from "./AgentLibraryDialog"
 import { AgentSessionsPanel } from "./AgentSessionsPanel"
 import { useAgents } from "@/hooks/useAgents"
+import { ORCHESTRATOR_SLUG, CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
+import { openAgentSessionComposer } from "@/lib/run-agent"
 import { AutomationsListPanel } from "../automations/AutomationsListPanel"
 import { APP_EVENTS, AGENT_EVENTS, EXTERNAL_INPUT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
 import { useAutomations } from "@/hooks/useAutomations"
@@ -804,7 +811,7 @@ function AppShellContent({
   const [collapsedItems, setCollapsedItems] = React.useState<Set<string>>(() => {
     const saved = storage.get<string[] | null>(storage.KEYS.collapsedSidebarItems, null)
     if (saved !== null) return new Set(saved)
-    return new Set(['nav:labels'])
+    return new Set<string>()
   })
   const isExpanded = React.useCallback((id: string) => !collapsedItems.has(id), [collapsedItems])
   const toggleExpanded = React.useCallback((id: string) => {
@@ -900,7 +907,7 @@ function AppShellContent({
       setExpandedFolders(new Set(newExpandedFolders))
 
       const newCollapsedItems = storage.get<string[] | null>(storage.KEYS.collapsedSidebarItems, null, activeWorkspaceId)
-      setCollapsedItems(newCollapsedItems !== null ? new Set(newCollapsedItems) : new Set(['nav:labels']))
+      setCollapsedItems(newCollapsedItems !== null ? new Set(newCollapsedItems) : new Set<string>())
     }
 
     previousWorkspaceRef.current = activeWorkspaceId
@@ -1444,13 +1451,12 @@ function AppShellContent({
   // agent activated in this workspace. Last row: a "+ Manage" entry that
   // opens the full library picker. Keeping it lean — users curate their
   // working set, the global library lives behind the modal.
-  const { activeAgents } = useAgents(activeWorkspaceId)
+  const { activeAgents, allAgents: allAgentsForChat, setActive: setAgentActiveForChat } = useAgents(activeWorkspaceId)
   const [agentLibraryOpen, setAgentLibraryOpen] = useState(false)
-  const ORCHESTRATOR_AGENT_SLUG = 'orchestrator'
   const agentSidebarChildren = useMemo(() => {
-    const orchestrator = activeAgents.find((a) => a.slug === ORCHESTRATOR_AGENT_SLUG)
+    const orchestrator = activeAgents.find((a) => a.slug === ORCHESTRATOR_SLUG)
     const others = activeAgents
-      .filter((a) => a.slug !== ORCHESTRATOR_AGENT_SLUG)
+      .filter((a) => a.slug !== ORCHESTRATOR_SLUG)
       .sort((a, b) => a.metadata.name.localeCompare(b.metadata.name))
 
     type AgentChildEntry = {
@@ -1491,6 +1497,11 @@ function AppShellContent({
     })
     return entries
   }, [activeAgents, navState])
+
+  // Build the Past entry as a separate sibling appended to Agents children at
+  // render time — it needs i18n + the same allSessions click handler used by
+  // the previous "All Sessions" header. Keep it out of agentSidebarChildren so
+  // its memo deps stay tight and its unselected state is handled here.
 
   // Filter session metadata based on sidebar mode and chat filter
   const filteredSessionMetas = useMemo(() => {
@@ -1945,6 +1956,36 @@ function AppShellContent({
     setTimeout(() => focusZone('chat', { intent: 'programmatic' }), 50)
   }, [activeWorkspace, focusZone, navigate])
 
+  // Open or create a Concierge session ("Chat" sidebar entry).
+  // Always creates a new session for now; the Concierge agent is auto-activated
+  // in this workspace if it isn't already.
+  const handleChatClick = useCallback(async () => {
+    if (!activeWorkspace) return
+    let concierge = allAgentsForChat.find((a) => a.slug === CONCIERGE_SLUG)
+      ?? activeAgents.find((a) => a.slug === CONCIERGE_SLUG)
+    if (!concierge) {
+      navigate(routes.action.newSession())
+      return
+    }
+    if (!activeAgents.some((a) => a.slug === CONCIERGE_SLUG)) {
+      try { await setAgentActiveForChat(CONCIERGE_SLUG, true) } catch { /* fall through */ }
+    }
+    try {
+      await openAgentSessionComposer({
+        agent: concierge,
+        workspaceId: activeWorkspace.id,
+        onCreateSession: contextValue.onCreateSession,
+        onInputChange: contextValue.onInputChange,
+        skills,
+        sources,
+      })
+    } catch (err) {
+      toast.error('Failed to open Chat', {
+        description: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }, [activeWorkspace, allAgentsForChat, activeAgents, setAgentActiveForChat, contextValue.onCreateSession, contextValue.onInputChange, skills, sources])
+
   // Create a brand new dedicated browser window and focus it.
   // Intentionally unbound: this action should always create a NEW window.
   const handleNewBrowserWindow = useCallback(async () => {
@@ -2002,36 +2043,29 @@ function AppShellContent({
   const unifiedSidebarItems = React.useMemo((): SidebarItem[] => {
     const result: SidebarItem[] = []
 
-    // 1. Sessions section: All Sessions (expandable) with status items, Flagged, Archived as children
-    result.push({ id: 'nav:allSessions', type: 'nav', action: handleAllSessionsClick })
-    for (const state of effectiveSessionStatuses) {
-      result.push({ id: `nav:state:${state.id}`, type: 'nav', action: () => handleSessionStatusClick(state.id) })
-    }
-    result.push({ id: 'nav:flagged', type: 'nav', action: handleFlaggedClick })
-    result.push({ id: 'nav:archived', type: 'nav', action: handleArchivedClick })
+    // 1. Chat (Concierge entry point)
+    result.push({ id: 'nav:chat', type: 'nav', action: handleChatClick })
 
-    // 2. Labels section header + regular label tree for keyboard nav
-    result.push({ id: 'nav:labels', type: 'nav', action: () => handleLabelClick('__all__') })
-    // Flatten regular label tree for keyboard navigation (depth-first)
-    const flattenTree = (nodes: LabelTreeNode[]) => {
-      for (const node of nodes) {
-        if (node.label) {
-          result.push({ id: `nav:label:${node.fullId}`, type: 'nav', action: () => handleLabelClick(node.fullId) })
-        }
-        if (node.children.length > 0) flattenTree(node.children)
-      }
+    // 2. Agents (expandable with per-workspace agents + Past)
+    result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
+    for (const a of activeAgents) {
+      result.push({ id: `nav:agents:${a.slug}`, type: 'nav', action: () => navigate(routes.view.agents(a.slug)) })
     }
-    flattenTree(labelTree)
+    result.push({ id: 'nav:agents:past', type: 'nav', action: handleAllSessionsClick })
 
-    // 3. Sources, Skills, Settings
+    // 3. Library (Tools / Skills / Workspace Context)
+    result.push({ id: 'nav:library', type: 'nav' })
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
+    result.push({ id: 'nav:workspace-context', type: 'nav', action: () => navigate(routes.view.workspaceContext()) })
+
+    // 4. Automations, Settings, What's New (preserved)
     result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
 
     return result
-  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleSessionStatusClick, effectiveSessionStatuses, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
+  }, [handleChatClick, handleAgentsClick, activeAgents, handleAllSessionsClick, handleSourcesClick, handleSkillsClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -2153,6 +2187,10 @@ function AppShellContent({
     // Skills navigator
     if (isSkillsNavigation(navState)) {
       return t("sidebar.allSkills")
+    }
+
+    if (isWorkspaceContextNavigation(navState)) {
+      return t("sidebar.workspaceContext")
     }
 
     // Automations navigator
@@ -2328,168 +2366,15 @@ function AppShellContent({
                   getItemProps={getSidebarItemProps}
                   focusedItemId={focusedSidebarItemId}
                   links={[
-                    // --- Sessions Section ---
-                    // All Sessions: expandable with status children (sortable) + Flagged & Archived as trailing items
+                    // --- Chat (Concierge) ---
                     {
-                      id: "nav:allSessions",
-                      title: t("sidebar.allSessions"),
-                      label: String(workspaceSessionMetas.length),
-                      icon: Inbox,
-                      variant: sessionFilter?.kind === 'allSessions' ? "default" : "ghost",
-                      onClick: handleAllSessionsClick,
-                      expandable: true,
-                      expanded: isExpanded('nav:allSessions'),
-                      onToggle: () => toggleExpanded('nav:allSessions'),
-                      contextMenu: {
-                        type: 'allSessions',
-                        onConfigureStatuses: openConfigureStatuses,
-                        onMarkAllRead: () => {
-                          if (!activeWorkspaceId) return
-                          // Optimistic: clear hasUnread on all workspace session metas
-                          setSessionMetaMap(prev => {
-                            const next = new Map(prev)
-                            for (const [id, meta] of next) {
-                              if (meta.workspaceId === activeWorkspaceId && meta.hasUnread) {
-                                next.set(id, { ...meta, hasUnread: false })
-                              }
-                            }
-                            return next
-                          })
-                          window.electronAPI.markAllSessionsRead(activeWorkspaceId)
-                        },
-                      },
-                      // Enable flat DnD reorder for status items
-                      sortable: { onReorder: handleStatusReorder },
-                      items: [
-                        // Status items (sortable via SortableStatusList)
-                        ...effectiveSessionStatuses.map(state => ({
-                          id: `nav:state:${state.id}`,
-                          title: t(`status.${state.id}`, state.label),
-                          label: String(sessionStatusCounts[state.id] || 0),
-                          icon: state.icon,
-                          iconColor: state.resolvedColor,
-                          iconColorable: state.iconColorable,
-                          variant: (sessionFilter?.kind === 'state' && sessionFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
-                          onClick: () => handleSessionStatusClick(state.id),
-                          contextMenu: {
-                            type: 'status' as const,
-                            statusId: state.id,
-                            onConfigureStatuses: openConfigureStatuses,
-                          },
-                        })),
-                        // Separator: SortableStatusList splits here — items after become non-sortable trailingItems
-                        { id: 'separator:states-flagged', type: 'separator' as const },
-                        // Flagged (trailing, non-sortable)
-                        {
-                          id: "nav:flagged",
-                          title: t("sidebar.flagged"),
-                          label: String(flaggedCount),
-                          icon: <Flag className="h-3.5 w-3.5" />,
-                          variant: (sessionFilter?.kind === 'flagged' ? "default" : "ghost") as "default" | "ghost",
-                          onClick: handleFlaggedClick,
-                        },
-                        // Archived (trailing, non-sortable)
-                        {
-                          id: "nav:archived",
-                          title: t("sidebar.archived"),
-                          label: archivedCount > 0 ? String(archivedCount) : undefined,
-                          icon: Archive,
-                          variant: (sessionFilter?.kind === 'archived' ? "default" : "ghost") as "default" | "ghost",
-                          onClick: handleArchivedClick,
-                        },
-                      ],
+                      id: "nav:chat",
+                      title: t("sidebar.chat"),
+                      icon: MessageSquare,
+                      variant: "ghost",
+                      onClick: handleChatClick,
                     },
-                    // Labels: navigable header (shows all labeled sessions) + hierarchical tree (drag-and-drop reorder + re-parent)
-                    {
-                      id: "nav:labels",
-                      title: t("sidebar.labels"),
-                      icon: Tag,
-                      // Only highlighted when "Labels" itself is selected (not sub-labels)
-                      variant: (sessionFilter?.kind === 'label' && sessionFilter.labelId === '__all__') ? "default" as const : "ghost" as const,
-                      // Clicking navigates to "all labeled sessions" view
-                      onClick: () => handleLabelClick('__all__'),
-                      expandable: true,
-                      expanded: isExpanded('nav:labels'),
-                      onToggle: () => toggleExpanded('nav:labels'),
-                      contextMenu: {
-                        type: 'labels' as const,
-                        onConfigureLabels: openConfigureLabels,
-                        onAddLabel: handleAddLabel,
-                      },
-                      items: buildLabelSidebarItems(labelTree),
-                    },
-                    // --- Separator ---
-                    { id: "separator:chats-sources", type: "separator" },
-                    // --- Sources & Skills Section ---
-                    {
-                      id: "nav:sources",
-                      title: t("sidebar.sources"),
-                      label: String(sources.length),
-                      icon: DatabaseZap,
-                      variant: (isSourcesNavigation(navState) && !sourceFilter) ? "default" : "ghost",
-                      onClick: handleSourcesClick,
-                      dataTutorial: "sources-nav",
-                      expandable: true,
-                      expanded: isExpanded('nav:sources'),
-                      onToggle: () => toggleExpanded('nav:sources'),
-                      contextMenu: {
-                        type: 'sources',
-                        onAddSource: () => openAddSource(),
-                      },
-                      items: [
-                        {
-                          id: "nav:sources:api",
-                          title: t("sidebar.apis"),
-                          label: String(sourceTypeCounts.api),
-                          icon: Globe,
-                          variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'api') ? "default" : "ghost",
-                          onClick: handleSourcesApiClick,
-                          contextMenu: {
-                            type: 'sources' as const,
-                            onAddSource: () => openAddSource('api'),
-                            sourceType: 'api',
-                          },
-                        },
-                        {
-                          id: "nav:sources:mcp",
-                          title: t("sidebar.mcps"),
-                          label: String(sourceTypeCounts.mcp),
-                          icon: <McpIcon className="h-3.5 w-3.5" />,
-                          variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'mcp') ? "default" : "ghost",
-                          onClick: handleSourcesMcpClick,
-                          contextMenu: {
-                            type: 'sources' as const,
-                            onAddSource: () => openAddSource('mcp'),
-                            sourceType: 'mcp',
-                          },
-                        },
-                        {
-                          id: "nav:sources:local",
-                          title: t("sidebar.localFolders"),
-                          label: String(sourceTypeCounts.local),
-                          icon: FolderOpen,
-                          variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'local') ? "default" : "ghost",
-                          onClick: handleSourcesLocalClick,
-                          contextMenu: {
-                            type: 'sources' as const,
-                            onAddSource: () => openAddSource('local'),
-                            sourceType: 'local',
-                          },
-                        },
-                      ],
-                    },
-                    {
-                      id: "nav:skills",
-                      title: t("sidebar.skills"),
-                      label: String(skills.length),
-                      icon: Zap,
-                      variant: isSkillsNavigation(navState) ? "default" : "ghost",
-                      onClick: handleSkillsClick,
-                      contextMenu: {
-                        type: 'skills',
-                        onAddSkill: openAddSkill,
-                      },
-                    },
+                    // --- Agents (with Past as a chronological "all sessions" view) ---
                     {
                       id: "nav:agents",
                       title: 'Agents',
@@ -2499,7 +2384,60 @@ function AppShellContent({
                       expandable: true,
                       expanded: isExpanded('nav:agents'),
                       onToggle: () => toggleExpanded('nav:agents'),
-                      items: agentSidebarChildren,
+                      items: [
+                        ...agentSidebarChildren,
+                        {
+                          id: "nav:agents:past",
+                          title: t("sidebar.past"),
+                          icon: History,
+                          variant: (sessionFilter?.kind === 'allSessions' ? "default" : "ghost") as "default" | "ghost",
+                          onClick: handleAllSessionsClick,
+                        },
+                      ],
+                    },
+                    // --- Library (Tools / Skills / Workspace Context) ---
+                    {
+                      id: "nav:library",
+                      title: t("sidebar.library"),
+                      icon: BookOpen,
+                      variant: "ghost",
+                      expandable: true,
+                      expanded: isExpanded('nav:library'),
+                      onToggle: () => toggleExpanded('nav:library'),
+                      items: [
+                        {
+                          id: "nav:sources",
+                          title: t("sidebar.tools"),
+                          label: String(sources.length),
+                          icon: DatabaseZap,
+                          variant: (isSourcesNavigation(navState) && !sourceFilter) ? "default" : "ghost",
+                          onClick: handleSourcesClick,
+                          dataTutorial: "sources-nav",
+                          contextMenu: {
+                            type: 'sources',
+                            onAddSource: () => openAddSource(),
+                          },
+                        },
+                        {
+                          id: "nav:skills",
+                          title: t("sidebar.skills"),
+                          label: String(skills.length),
+                          icon: Zap,
+                          variant: isSkillsNavigation(navState) ? "default" : "ghost",
+                          onClick: handleSkillsClick,
+                          contextMenu: {
+                            type: 'skills',
+                            onAddSkill: openAddSkill,
+                          },
+                        },
+                        {
+                          id: "nav:workspace-context",
+                          title: t("sidebar.workspaceContext"),
+                          icon: FileText,
+                          variant: isWorkspaceContextNavigation(navState) ? "default" : "ghost",
+                          onClick: () => navigate(routes.view.workspaceContext()),
+                        },
+                      ],
                     },
                     {
                       id: "nav:automations",

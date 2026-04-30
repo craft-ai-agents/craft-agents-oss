@@ -32,6 +32,7 @@ import {
   isSkillsNavigation,
   isAgentsNavigation,
   isAutomationsNavigation,
+  isWorkspaceContextNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
@@ -40,6 +41,7 @@ import type { SessionStatusId } from '@/config/session-status-config'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import AgentInfoPage from '@/pages/AgentInfoPage'
+import WorkspaceContextPage from '@/pages/WorkspaceContextPage'
 import { AgentsLaunchpad } from './AgentsLaunchpad'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { AutomationInfoPage } from '../automations/AutomationInfoPage'
@@ -330,6 +332,14 @@ export function MainContentPanel({
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <AgentsLaunchpad workspaceId={activeWorkspaceId} />
+      </Panel>
+    )
+  }
+
+  if (isWorkspaceContextNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <WorkspaceContextPage workspaceId={activeWorkspaceId || ''} />
       </Panel>
     )
   }

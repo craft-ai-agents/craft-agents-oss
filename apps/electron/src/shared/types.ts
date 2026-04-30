@@ -69,6 +69,10 @@ export type { LoadedSkill, SkillMetadata };
 import type { AgentMetadata as AgentDefinitionMetadataDTO, LoadedAgent as AgentDefinitionDTO } from '@craft-agent/shared/agent-definitions/types';
 export type { AgentDefinitionMetadataDTO, AgentDefinitionDTO };
 
+// Workspace context docs — same DTO shape as the shared LoadedContextDoc.
+import type { LoadedContextDoc as ContextDocDTO, ContextDocMetadata, ContextDocRouting } from '@craft-agent/shared/workspace-context/types';
+export type { ContextDocDTO, ContextDocMetadata, ContextDocRouting };
+
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
 export type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult };
@@ -662,6 +666,18 @@ export interface ElectronAPI {
   deleteAgentDefinition(slug: string): Promise<boolean>
   setAgentDefinitionActive(workspaceId: string, slug: string, active: boolean): Promise<{ active: string[] }>
   onAgentDefinitionsChanged(callback: (workspaceId: string | null) => void): () => void
+
+  // Workspace context docs (per-workspace markdown injected into agent prompts)
+  listWorkspaceContextDocs(workspaceId: string): Promise<ContextDocDTO[]>
+  getWorkspaceContextDoc(workspaceId: string, slug: string): Promise<ContextDocDTO | null>
+  listWorkspaceContextDocsForAgent(workspaceId: string, agentSlug: string | null): Promise<ContextDocDTO[]>
+  upsertWorkspaceContextDoc(workspaceId: string, payload: {
+    slug: string
+    metadata: ContextDocMetadata
+    body: string
+  }): Promise<ContextDocDTO>
+  deleteWorkspaceContextDoc(workspaceId: string, slug: string): Promise<boolean>
+  onWorkspaceContextChanged(callback: (workspaceId: string, docs: ContextDocDTO[]) => void): () => void
   getAutomationHistory(workspaceId: string, automationId: string, limit?: number): Promise<Array<{ id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string; webhook?: { method: string; url: string; statusCode: number; durationMs: number; attempts?: number; error?: string; responseBody?: string } }>>
   getAutomationLastExecuted(workspaceId: string): Promise<Record<string, number>>
   replayAutomation(workspaceId: string, automationId: string, eventName: string): Promise<{ results: Array<{ type: string; url: string; statusCode: number; success: boolean; error?: string; duration: number }> }>
@@ -823,6 +839,14 @@ export interface AutomationsNavigationState {
 }
 
 /**
+ * Workspace Context navigation state
+ */
+export interface WorkspaceContextNavigationState {
+  navigator: 'workspaceContext'
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Unified navigation state
  */
 export type NavigationState =
@@ -832,6 +856,7 @@ export type NavigationState =
   | SkillsNavigationState
   | AgentsNavigationState
   | AutomationsNavigationState
+  | WorkspaceContextNavigationState
 
 export const isSessionsNavigation = (
   state: NavigationState
@@ -856,6 +881,10 @@ export const isAgentsNavigation = (
 export const isAutomationsNavigation = (
   state: NavigationState
 ): state is AutomationsNavigationState => state.navigator === 'automations'
+
+export const isWorkspaceContextNavigation = (
+  state: NavigationState
+): state is WorkspaceContextNavigationState => state.navigator === 'workspaceContext'
 
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
   navigator: 'sessions',
@@ -887,6 +916,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
       return `automations/automation/${state.details.automationId}`
     }
     return 'automations'
+  }
+  if (state.navigator === 'workspaceContext') {
+    return 'workspace-context'
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
@@ -944,6 +976,9 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
     }
     return { navigator: 'automations', details: null }
   }
+
+  // Handle settings
+  if (key === 'workspace-context') return { navigator: 'workspaceContext' }
 
   // Handle settings
   if (key === 'settings') return { navigator: 'settings', subpage: 'app' }

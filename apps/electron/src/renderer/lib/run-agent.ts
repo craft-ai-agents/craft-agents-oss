@@ -2,7 +2,7 @@ import { toast } from 'sonner'
 import { navigate, routes } from '@/lib/navigate'
 import { resolveAgentReferences, hasMissingReferences, describeMissingReferences } from '@/lib/agent-references'
 import { composeAgentSystemPrompt } from '@/lib/compose-agent-prompt'
-import type { AgentDefinitionDTO, CreateSessionOptions, Session, LoadedSkill, LoadedSource } from '../../shared/types'
+import type { AgentDefinitionDTO, ContextDocDTO, CreateSessionOptions, Session, LoadedSkill, LoadedSource } from '../../shared/types'
 
 export function buildAgentDraftInput(agent: AgentDefinitionDTO): string {
   const parts: string[] = []
@@ -29,7 +29,7 @@ export function buildAgentCreateSessionOptions(
    * When omitted (legacy callers), all declared slugs pass through verbatim
    * and no footer is generated.
    */
-  context?: { skills: LoadedSkill[]; sources: LoadedSource[] },
+  context?: { skills: LoadedSkill[]; sources: LoadedSource[]; contextDocs?: ContextDocDTO[] },
 ): CreateSessionOptions {
   let skillSlugs = agent.metadata.skills ?? []
   let sourceSlugs = agent.metadata.sources ?? []
@@ -40,10 +40,10 @@ export function buildAgentCreateSessionOptions(
     sourceSlugs = resolution.resolvedSources
   }
 
-  // Compose the prompt: persona body + auto-generated bundle footer.
-  // Empty skills + empty sources → returns the body unchanged (no footer).
+  // Compose the prompt: persona body + workspace context + bundle footer.
+  // Each section is optional; pure absence collapses cleanly.
   const composedPrompt = context
-    ? composeAgentSystemPrompt(agent, context.skills, context.sources)
+    ? composeAgentSystemPrompt(agent, context.skills, context.sources, context.contextDocs ?? [])
     : agent.systemPrompt
 
   const options: CreateSessionOptions = {
@@ -81,7 +81,15 @@ export async function openAgentSessionComposer(params: {
    */
   skills?: LoadedSkill[]
   sources?: LoadedSource[]
+  /**
+   * Workspace context docs already filtered by routing for this agent. When
+   * omitted, the composer asks the server for the source-of-truth filtered set.
+   */
+  contextDocs?: ContextDocDTO[]
 }): Promise<Session> {
+  const contextDocs = params.contextDocs
+    ?? await window.electronAPI.listWorkspaceContextDocsForAgent(params.workspaceId, params.agent.slug)
+
   // Surface a one-off toast if the agent declares slugs that don't resolve in
   // this workspace. The session still spawns without them; the warning is so
   // the user knows why output may be reduced.
@@ -99,8 +107,10 @@ export async function openAgentSessionComposer(params: {
   // gets a composed system prompt (persona body + bundle footer) and any
   // missing slugs are dropped from agentSkillSlugs/enabledSourceSlugs.
   const context = params.skills && params.sources
-    ? { skills: params.skills, sources: params.sources }
-    : undefined
+    ? { skills: params.skills, sources: params.sources, contextDocs }
+    : contextDocs.length > 0
+      ? { skills: [], sources: [], contextDocs }
+      : undefined
 
   const session = await params.onCreateSession(
     params.workspaceId,

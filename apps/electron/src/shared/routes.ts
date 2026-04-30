@@ -187,6 +187,9 @@ export const routes = {
     automationsExternal: (automationId?: string) =>
       automationId ? `automations/external/automation/${automationId}` as const : 'automations/external' as const,
 
+    /** Workspace Context placeholder route (full page implemented in a later phase) */
+    workspaceContext: () => 'workspace-context' as const,
+
     /** Settings view (settings navigator) - uses SettingsSubpage from registry */
     settings: (subpage?: SettingsSubpage) =>
       subpage

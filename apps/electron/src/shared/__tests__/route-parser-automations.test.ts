@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { parseCompoundRoute, buildCompoundRoute } from '../route-parser'
+import { parseCompoundRoute, buildCompoundRoute, parseRouteToNavigationState } from '../route-parser'
 
 describe('route-parser: automations routes', () => {
   it('parses "automations" as automations navigator with no filter or details', () => {
@@ -90,5 +90,19 @@ describe('route-parser: automations routes', () => {
     const parsed = parseCompoundRoute('automations/automation/automation-1')!
     const built = buildCompoundRoute(parsed)
     expect(built).toBe('automations/automation/automation-1')
+  })
+})
+
+describe('route-parser: library routes', () => {
+  it('parses "agents" as the agents navigator', () => {
+    const state = parseRouteToNavigationState('agents')
+    expect(state).toEqual({ navigator: 'agents', details: null })
+  })
+
+  it('parses "workspace-context" as the workspace context page', () => {
+    const parsed = parseCompoundRoute('workspace-context')
+    expect(parsed).toEqual({ navigator: 'workspaceContext', details: null })
+    expect(buildCompoundRoute(parsed!)).toBe('workspace-context')
+    expect(parseRouteToNavigationState('workspace-context')).toEqual({ navigator: 'workspaceContext' })
   })
 })

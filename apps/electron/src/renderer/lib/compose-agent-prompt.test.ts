@@ -1,6 +1,21 @@
 import { describe, expect, test } from 'bun:test'
-import { buildAgentBundleFooter, composeAgentSystemPrompt } from './compose-agent-prompt'
-import type { AgentDefinitionDTO, LoadedSkill, LoadedSource } from '../../shared/types'
+import { buildAgentBundleFooter, buildWorkspaceContextSection, composeAgentSystemPrompt } from './compose-agent-prompt'
+import type { AgentDefinitionDTO, ContextDocDTO, LoadedSkill, LoadedSource } from '../../shared/types'
+
+function makeDoc(slug: string, name: string, body: string, overrides: Partial<ContextDocDTO['metadata']> = {}): ContextDocDTO {
+  return {
+    slug,
+    metadata: {
+      name,
+      routing: { mode: 'broadcast' },
+      enabled: true,
+      ...overrides,
+    },
+    body,
+    path: `/tmp/ctx/${slug}`,
+    workspaceRootPath: '/tmp/ws',
+  } as ContextDocDTO
+}
 
 // ----------------------------------------------------------------------------
 // Fixtures
@@ -174,6 +189,87 @@ describe('composeAgentSystemPrompt', () => {
     const result = composeAgentSystemPrompt(agent, [], [])
     expect(result).toBe('You are a test agent.')
     expect(result).not.toContain('---')
+  })
+})
+
+describe('composeAgentSystemPrompt with context docs', () => {
+  test('appends a workspace-context section between body and bundle footer', () => {
+    const agent = makeAgent({ metadata: { name: 'X', description: 'Y', skills: ['s'] } })
+    const skills = [makeSkill('s', 'S', 'desc')]
+    const docs = [makeDoc('vision', 'Vision', 'We build agent OS.')]
+    const result = composeAgentSystemPrompt(agent, skills, [], docs)
+
+    expect(result).toContain('You are a test agent.')
+    expect(result).toContain('Workspace context — read this before starting work:')
+    expect(result).toContain('## Vision')
+    expect(result).toContain('We build agent OS.')
+    expect(result).toContain('You have these skills bundled')
+
+    const bodyIdx = result.indexOf('You are a test agent.')
+    const ctxIdx = result.indexOf('Workspace context')
+    const footerIdx = result.indexOf('You have these skills bundled')
+    expect(bodyIdx).toBeLessThan(ctxIdx)
+    expect(ctxIdx).toBeLessThan(footerIdx)
+  })
+
+  test('skips disabled docs', () => {
+    const agent = makeAgent()
+    const docs = [
+      makeDoc('on', 'On', 'visible'),
+      makeDoc('off', 'Off', 'hidden', { enabled: false }),
+    ]
+    const result = composeAgentSystemPrompt(agent, [], [], docs)
+    expect(result).toContain('visible')
+    expect(result).not.toContain('hidden')
+  })
+
+  test('skips docs with empty bodies', () => {
+    const agent = makeAgent()
+    const docs = [makeDoc('blank', 'Blank', '   ')]
+    const result = composeAgentSystemPrompt(agent, [], [], docs)
+    expect(result).toBe('You are a test agent.')
+    expect(result).not.toContain('Workspace context')
+  })
+
+  test('renders multiple docs as separate ## sections in given order', () => {
+    const agent = makeAgent()
+    const docs = [
+      makeDoc('vision', 'Vision', 'A'),
+      makeDoc('voice', 'Voice', 'B'),
+    ]
+    const result = composeAgentSystemPrompt(agent, [], [], docs)
+    const visionIdx = result.indexOf('## Vision')
+    const voiceIdx = result.indexOf('## Voice')
+    expect(visionIdx).toBeGreaterThan(0)
+    expect(voiceIdx).toBeGreaterThan(visionIdx)
+  })
+
+  test('omits the section entirely when no docs supplied', () => {
+    const agent = makeAgent()
+    const result = composeAgentSystemPrompt(agent, [], [], [])
+    expect(result).toBe('You are a test agent.')
+    expect(result).not.toContain('Workspace context')
+  })
+
+  test('falls back to slug when name is empty', () => {
+    const agent = makeAgent()
+    const docs = [makeDoc('vision', '', 'body text')]
+    const result = composeAgentSystemPrompt(agent, [], [], docs)
+    expect(result).toContain('## vision')
+  })
+})
+
+describe('buildWorkspaceContextSection', () => {
+  test('returns empty string for empty list', () => {
+    expect(buildWorkspaceContextSection([])).toBe('')
+  })
+
+  test('returns empty string when all docs are disabled or blank', () => {
+    const docs = [
+      makeDoc('a', 'A', '', { enabled: true }),
+      makeDoc('b', 'B', 'has body', { enabled: false }),
+    ]
+    expect(buildWorkspaceContextSection(docs)).toBe('')
   })
 })
 

@@ -1,52 +1,64 @@
 /**
- * Compose an agent's runtime system prompt from its persona body + a
- * generated footer enumerating bundled skills and sources.
+ * Compose an agent's runtime system prompt from its persona body + workspace
+ * context docs (filtered by routing) + a generated footer enumerating bundled
+ * skills and sources.
  *
  * Why this exists: the agent's saved AGENT.md is just the persona text. At
- * run time we want the LLM to also see "here's your menu — prefer these
- * first." Hand-maintaining that menu in every prompt is brittle (skills get
- * renamed, descriptions change, users forget). Instead, we regenerate it
- * fresh every Run from the live workspace state.
+ * run time we want the LLM to also see "here's the workspace's voice/goals"
+ * and "here's your menu — prefer these first." Hand-maintaining all of that
+ * in every prompt is brittle (skills get renamed, docs change, users
+ * forget). Instead, we regenerate it fresh every Run from the live
+ * workspace state.
  *
- * Output is the original body (unchanged) followed by an optional footer
- * delimited by a horizontal rule. When neither skills nor sources are
- * bundled, the body is returned untouched.
+ * Layout:
+ *   <persona body>
+ *   ---
+ *   <workspace context section>      (only if any docs apply)
+ *   ---
+ *   <skills/tools bundle footer>     (only if any bundles resolve)
  *
  * Pure function — no I/O, no atoms. Easy to test.
  */
 
-import type { AgentDefinitionDTO, LoadedSkill, LoadedSource } from '../../shared/types'
+import type { AgentDefinitionDTO, ContextDocDTO, LoadedSkill, LoadedSource } from '../../shared/types'
 
-const FOOTER_DELIMITER = '\n\n---\n\n'
+const SECTION_DELIMITER = '\n\n---\n\n'
 
 const SKILLS_HEADER = 'You have these skills bundled with you (always available — reach for them when relevant):'
 const SOURCES_HEADER = 'You have these tools bundled with you (MCP servers, APIs, and local connectors):'
 const PLANNING_NUDGE = 'When planning, check your bundled skills and tools before working from scratch.'
 
+const CONTEXT_HEADER = 'Workspace context — read this before starting work:'
+
 /**
  * Compose the final system prompt for a session spawned from this agent.
  *
- * The footer is built from agent.metadata.skills + agent.metadata.sources
- * cross-referenced against the live workspace. Slugs declared by the agent
- * but not present in `skills` / `sources` are silently dropped (the user
- * already saw a "missing" warning on the detail page; we don't pollute the
- * model's context with absent menus).
+ * Slugs declared by the agent but not present in `skills` / `sources` are
+ * silently dropped. Context docs are passed in already filtered by routing
+ * (the caller is responsible for honoring the Concierge override and
+ * disabled-doc rules — see `loadActiveContextDocsForAgent` in the shared
+ * workspace-context storage module).
  */
 export function composeAgentSystemPrompt(
   agent: AgentDefinitionDTO,
   skills: LoadedSkill[],
   sources: LoadedSource[],
+  contextDocs: ContextDocDTO[] = [],
 ): string {
   const body = (agent.systemPrompt ?? '').trimEnd()
+  const contextSection = buildWorkspaceContextSection(contextDocs)
   const footer = buildAgentBundleFooter(agent, skills, sources)
-  if (!footer) return body
-  return `${body}${FOOTER_DELIMITER}${footer}`
+
+  const parts: string[] = [body]
+  if (contextSection) parts.push(contextSection)
+  if (footer) parts.push(footer)
+  return parts.join(SECTION_DELIMITER)
 }
 
 /**
- * Build just the footer (no body, no delimiter). Returns an empty string
- * when there's nothing to enumerate. Exposed for tests + future surfaces
- * (e.g. an "inspect runtime prompt" action on AgentInfoPage).
+ * Build just the bundle footer (no body, no delimiter). Returns an empty
+ * string when there's nothing to enumerate. Exposed for tests + future
+ * surfaces (e.g. an "inspect runtime prompt" action on AgentInfoPage).
  */
 export function buildAgentBundleFooter(
   agent: AgentDefinitionDTO,
@@ -68,6 +80,23 @@ export function buildAgentBundleFooter(
   return sections.join('\n\n')
 }
 
+/**
+ * Render the workspace-context section. Each doc becomes a "## Name" block
+ * followed by its body. Returns an empty string when the list is empty so
+ * the caller can decide whether to include the delimiter.
+ *
+ * Routing has already been resolved upstream — this helper just renders.
+ */
+export function buildWorkspaceContextSection(docs: ContextDocDTO[]): string {
+  const usable = docs.filter((d) => d.metadata.enabled !== false && d.body.trim().length > 0)
+  if (usable.length === 0) return ''
+  const blocks = usable.map((doc) => {
+    const heading = doc.metadata.name.trim() || doc.slug
+    return `## ${heading}\n\n${doc.body.trim()}`
+  })
+  return `${CONTEXT_HEADER}\n\n${blocks.join('\n\n')}`
+}
+
 // ----------------------------------------------------------------------------
 // Helpers
 // ----------------------------------------------------------------------------
@@ -78,7 +107,7 @@ function collectSkillBullets(declaredSlugs: string[], skills: LoadedSkill[]): st
   const out: string[] = []
   for (const slug of declaredSlugs) {
     const skill = bySlug.get(slug)
-    if (!skill) continue // missing → skip; the detail-page banner already surfaces this
+    if (!skill) continue
     out.push(formatBullet(slug, skill.metadata.name, skill.metadata.description))
   }
   return out
@@ -91,9 +120,6 @@ function collectSourceBullets(declaredSlugs: string[], sources: LoadedSource[]):
   for (const slug of declaredSlugs) {
     const source = bySlug.get(slug)
     if (!source) continue
-    // Sources expose `tagline` as the short agent-context description, with
-    // optional fallback to the guide's scope section. We don't reach into
-    // guide.md here to keep the helper synchronous + cheap.
     const description = source.config.tagline?.trim() ?? ''
     out.push(formatBullet(slug, source.config.name, description))
   }
