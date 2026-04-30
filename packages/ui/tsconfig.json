@@ -8,9 +8,12 @@
     "jsx": "react-jsx",
     "moduleResolution": "bundler",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["node", "bun"],
     "paths": {
       "@craft-agent/core": ["../core/src/index.ts"],
-      "@craft-agent/core/*": ["../core/src/*"]
+      "@craft-agent/core/*": ["../core/src/*"],
+      "@craft-agent/shared": ["../shared/src/index.ts"],
+      "@craft-agent/shared/*": ["../shared/src/*"]
     }
   },
   "include": ["src/**/*"],

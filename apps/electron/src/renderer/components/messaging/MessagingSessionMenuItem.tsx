@@ -22,10 +22,11 @@ import { useTranslation } from 'react-i18next'
 import { useSetAtom } from 'jotai'
 import { MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
-import type { TFunction } from 'i18next'
 import { navigate, routes } from '@/lib/navigate'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { messagingDialogAtom } from '@/atoms/messaging'
+
+type TranslationFn = ReturnType<typeof useTranslation>['t']
 
 export interface MessagingSessionMenuItemProps {
   /** Session to bind the pairing code to. */
@@ -41,7 +42,7 @@ export interface MessagingSessionMenuItemProps {
    * Default: {@link classifyMessagingError} — matches "not connected" and
    * "rate limit" messages into i18n keys.
    */
-  classifyError?: (err: unknown, t: TFunction) => string
+  classifyError?: (err: unknown, t: TranslationFn) => string
 }
 
 export function MessagingSessionMenuItem({
@@ -128,7 +129,7 @@ export function MessagingSessionMenuItem({
  * Narrow on purpose — only classifies well-known failure modes; anything else
  * is surfaced verbatim so real errors aren't hidden.
  */
-export function classifyMessagingError(err: unknown, t: TFunction): string {
+export function classifyMessagingError(err: unknown, t: TranslationFn): string {
   const msg = err instanceof Error ? err.message : String(err)
   if (/platform not connected|no adapter|not configured/i.test(msg)) {
     return t('toast.messagingNotConfigured')

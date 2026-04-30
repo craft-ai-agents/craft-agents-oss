@@ -111,6 +111,7 @@
     "@types/semver": "^7.7.1",
     "@types/shell-quote": "^1.7.5",
     "@types/uuid": "^11.0.0",
+    "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.52.0",
     "@typescript-eslint/parser": "^8.52.0",
     "@vitejs/plugin-react": "^5.1.2",
