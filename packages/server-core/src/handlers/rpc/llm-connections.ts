@@ -149,6 +149,12 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       // providerType stays 'pi' (Bedrock routes through Pi SDK).
       if (setup.bedrockAuthMethod) {
         updates.authType = setup.bedrockAuthMethod
+        if (setup.awsRegion) updates.awsRegion = setup.awsRegion
+        if (setup.awsProfile !== undefined) updates.awsProfile = setup.awsProfile || undefined
+        // Update display name to include profile when set and not 'default'
+        if (setup.awsProfile && setup.awsProfile !== 'default') {
+          updates.name = `Amazon Bedrock \u2014 ${setup.awsProfile} Profile`
+        }
       }
 
       const effectiveProviderType = updates.providerType ?? connection.providerType

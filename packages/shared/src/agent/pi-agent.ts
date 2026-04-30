@@ -35,7 +35,7 @@ import { getModelById } from '../config/models.ts';
 
 // BaseAgent provides common functionality
 import { BaseAgent } from './base-agent.ts';
-import type { Workspace } from '../config/storage.ts';
+import { getLlmConnection, type Workspace } from '../config/storage.ts';
 
 // Event adapter
 import { PiEventAdapter } from './backend/pi/event-adapter.ts';
@@ -553,6 +553,9 @@ export class PiAgent extends BaseAgent {
       const credentialManager = getCredentialManager();
       const slug = this.config.connectionSlug || 'pi';
 
+      // DEBUG: Log auth resolution path
+      this.debug(`[getPiAuth] authType=${this.config.authType}, piAuthProvider=${piAuthProvider}, slug=${slug}`);
+
       if (this.config.authType === 'oauth') {
         const oauth = await credentialManager.getLlmOAuth(slug);
         if (oauth?.accessToken) {
@@ -598,17 +601,77 @@ export class PiAgent extends BaseAgent {
           };
         }
       } else {
-        // API key-based connections.
-        // NOTE: authType === 'environment' (e.g. Bedrock with ~/.aws/credentials)
-        // intentionally falls through here, finds no API key, and returns null.
-        // The subprocess inherits process.env which contains the AWS credential chain.
-        const apiKey = await credentialManager.getLlmApiKey(slug);
-        if (apiKey) {
-          this.debug(`Retrieved API key credential for Pi provider: ${piAuthProvider}`);
-          return {
-            provider: piAuthProvider,
-            credential: { type: 'api_key', key: apiKey },
-          };
+        // Check if the stored connection uses 'environment' auth for Bedrock.
+        // this.config.authType is unreliable here — the factory maps 'environment' → undefined
+        // → falls back to 'api_key' for Pi provider. We check the connection directly.
+        const storedConnection = getLlmConnection(slug);
+
+        if (storedConnection?.authType === 'environment' && piAuthProvider === 'amazon-bedrock') {
+          // Bedrock environment auth — resolve credentials from the AWS credential chain
+          // (SSO, named profiles, ~/.aws/credentials, IAM roles, etc.) in the main Node
+          // process, then pass as IAM credentials to the Pi subprocess.
+          // The subprocess runs in Bun which has issues with AWS credential chain resolution.
+          try {
+            const profile = storedConnection.awsProfile;
+            const region = storedConnection.awsRegion;
+
+            // Use the AWS CLI to resolve credentials — avoids bundling @aws-sdk/credential-providers
+            // (which causes esbuild issues) and the Bun credential chain hang.
+            const { execFileSync } = await import('node:child_process');
+            const { existsSync } = await import('node:fs');
+
+            // Electron apps don't inherit shell PATH — find the aws CLI explicitly
+            const awsPaths = [
+              '/usr/local/bin/aws',
+              '/opt/homebrew/bin/aws',
+              `${process.env.HOME}/.local/bin/aws`,
+              '/usr/bin/aws',
+            ];
+            const awsBin = awsPaths.find(p => existsSync(p)) || 'aws';
+            this.debug(`[getPiAuth] Resolving Bedrock env credentials via ${awsBin} (profile=${profile || 'default'})`);
+
+            const env = { ...process.env };
+            if (profile) env.AWS_PROFILE = profile;
+
+            const output = execFileSync(awsBin, ['configure', 'export-credentials', '--format', 'process'], {
+              timeout: 10000,
+              encoding: 'utf-8',
+              env,
+            });
+            const creds = JSON.parse(output) as {
+              Version: number;
+              AccessKeyId: string;
+              SecretAccessKey: string;
+              SessionToken?: string;
+            };
+
+            this.debug(`[getPiAuth] Resolved AWS credentials for Bedrock (profile=${profile || 'default'})`);
+            return {
+              provider: piAuthProvider,
+              credential: {
+                type: 'iam',
+                accessKeyId: creds.AccessKeyId,
+                secretAccessKey: creds.SecretAccessKey,
+                region: region || process.env.AWS_REGION || 'us-east-1',
+                sessionToken: creds.SessionToken,
+              },
+            };
+          } catch (awsError) {
+            const errMsg = awsError instanceof Error ? awsError.message : String(awsError);
+            this.debug(`[getPiAuth] AWS credential resolution failed: ${errMsg}`);
+            console.error(`[getPiAuth] AWS credential resolution failed: ${errMsg}`);
+            // Fall through to return null
+          }
+        } else {
+          // API key-based connections (default).
+          const apiKey = await credentialManager.getLlmApiKey(slug);
+          if (apiKey) {
+            this.debug(`Retrieved API key credential for Pi provider: ${piAuthProvider}`);
+            return {
+              provider: piAuthProvider,
+              credential: { type: 'api_key', key: apiKey },
+            };
+          }
         }
       }
 

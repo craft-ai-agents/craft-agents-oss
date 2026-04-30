@@ -2664,6 +2664,16 @@ export class SessionManager implements ISessionManager {
         // use the correct model for summarization (instead of hardcoded Haiku)
         ...(miniModel ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: miniModel } : {}),
       }
+
+      // Resolve per-connection auth env vars (e.g. AWS_PROFILE for Bedrock environment auth)
+      const authEnvResult = connection
+        ? await resolveAuthEnvVars(connection, connection.slug, getCredentialManager(), getValidClaudeOAuthToken)
+        : { envVars: {}, success: true }
+      if (!authEnvResult.success) {
+        sessionLog.warn(`Auth env resolution failed for ${connection?.slug}: ${authEnvResult.warning}`)
+      }
+      Object.assign(envOverrides, authEnvResult.envVars)
+
       managed.envOverrides = envOverrides
 
       // ============================================================

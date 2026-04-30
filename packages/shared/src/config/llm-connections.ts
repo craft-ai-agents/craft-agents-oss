@@ -164,6 +164,14 @@ export interface LlmConnection {
    */
   customEndpoint?: CustomEndpointConfig;
 
+  // --- Cloud provider specific fields ---
+
+  /** AWS region (for 'bedrock' provider) */
+  awsRegion?: string;
+
+  /** AWS named profile (for 'bedrock' provider with environment auth). Maps to AWS_PROFILE env var. */
+  awsProfile?: string;
+
   // --- Timestamps ---
 
   /** Timestamp when connection was created */
