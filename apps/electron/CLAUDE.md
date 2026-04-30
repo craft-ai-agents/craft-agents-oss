@@ -1299,6 +1299,8 @@ export const componentRegistry = [
 
 Permission requests for bash commands are handled by the `PermissionRequest` component in `components/app-shell/input/structured/PermissionRequest.tsx`. This is rendered as a structured input within the `InputContainer`.
 
+Structured input prompts must clamp to a viewport-aware height and keep action rows visible; put long prompt bodies/commands in an internal scroll region rather than letting buttons move off-screen.
+
 ## Background Tasks
 
 The app has infrastructure for running long-running tasks (tests, builds, agents) in the background.

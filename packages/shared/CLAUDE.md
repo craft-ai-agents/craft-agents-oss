@@ -30,6 +30,7 @@ cd packages/shared && bun run tsc --noEmit
 - Claude SDK subprocess env is sanitized to strip Claude-specific Bedrock routing vars (`CLAUDE_CODE_USE_BEDROCK`, `AWS_BEARER_TOKEN_BEDROCK`, `ANTHROPIC_BEDROCK_BASE_URL`). Pi Bedrock uses its own AWS env path instead.
 - Backward alias export (`CraftAgent`) exists for compatibility.
 - Prefer routing new model vendors through the existing Pi path (`providerType: 'pi'` + `piAuthProvider`) unless they truly need a distinct runtime/backend. The Pi provider catalog and display metadata live in `src/config/models-pi.ts`.
+- Custom endpoint model capabilities must preserve explicit per-model overrides end-to-end. In particular, `supportsImages: true` enables image input for one model and `supportsImages: false` must remain available to override a global endpoint image default.
 - Session lifecycle distinguishes **hard aborts** from **UI handoff interrupts**:
   - use hard aborts for true cancellation/teardown (`UserStop`, redirect fallback)
   - use handoff interrupts for pause points where control moves to the UI (`AuthRequest`, `PlanSubmitted`)
