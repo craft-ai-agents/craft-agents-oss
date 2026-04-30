@@ -74,6 +74,9 @@ export interface Session {
   model?: string
   llmConnection?: string
   thinkingLevel?: ThinkingLevel
+  customSystemPrompt?: string
+  agentSkillSlugs?: string[]
+  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
   lastFinalMessageId?: string
   isAsyncOperationOngoing?: boolean
@@ -123,11 +126,17 @@ export interface CreateSessionOptions {
   model?: string
   llmConnection?: string
   systemPromptPreset?: 'default' | 'mini' | string
+  /** Full custom persona prompt appended to the backend system prompt. */
+  customSystemPrompt?: string
   hidden?: boolean
   sessionStatus?: SessionStatus
   labels?: string[]
   isFlagged?: boolean
   enabledSourceSlugs?: string[]
+  /** Saved Agent skills applied implicitly to every turn in this session. */
+  agentSkillSlugs?: string[]
+  /** Provenance for sessions spawned from a saved Agent. */
+  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
   /**
    * Message ID to branch from. This is a hard context cutoff:
    * the new session must not include model context from later parent messages.

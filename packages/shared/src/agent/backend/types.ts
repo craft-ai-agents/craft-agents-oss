@@ -184,6 +184,12 @@ export interface CoreBackendConfig {
   /** System prompt preset ('default' | 'mini' | custom string) */
   systemPromptPreset?: 'default' | 'mini' | string;
 
+  /** Full custom persona prompt appended to the backend system prompt. */
+  customSystemPrompt?: string;
+
+  /** Saved Agent skills applied implicitly to every turn in this session. */
+  agentSkillSlugs?: string[];
+
   /** Workspace-level automation system for user-defined automations (automations.json) */
   automationSystem?: AutomationSystem;
 

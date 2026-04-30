@@ -943,20 +943,23 @@ export class ClaudeAgent extends BaseAgent {
         // - Mini agents: Use custom (lean) system prompt without Claude Code preset
         // - Normal agents: Append to Claude Code's system prompt (recommended by docs)
         systemPrompt: miniConfig.enabled
-          ? this.getMiniSystemPrompt()
+          ? [this.getMiniSystemPrompt(), this.config.customSystemPrompt].filter(Boolean).join('\n\n')
           : {
               type: 'preset' as const,
               preset: 'claude_code' as const,
               // Working directory included for monorepo context file discovery
-              append: getSystemPrompt(
-                this.pinnedPreferencesPrompt ?? undefined,
-                this.config.debugMode,
-                this.workspaceRootPath,
-                this.config.session?.workingDirectory,
-                undefined, // preset
-                undefined, // backendName
-                this.pinnedIncludeCoAuthoredBy ?? undefined
-              ),
+              append: [
+                getSystemPrompt(
+                  this.pinnedPreferencesPrompt ?? undefined,
+                  this.config.debugMode,
+                  this.workspaceRootPath,
+                  this.config.session?.workingDirectory,
+                  undefined, // preset
+                  undefined, // backendName
+                  this.pinnedIncludeCoAuthoredBy ?? undefined
+                ),
+                this.config.customSystemPrompt,
+              ].filter(Boolean).join('\n\n'),
             },
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
         // This ensures SDK can always find session transcripts regardless of workingDirectory changes.

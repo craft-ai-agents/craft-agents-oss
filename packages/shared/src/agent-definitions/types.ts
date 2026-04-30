@@ -147,3 +147,19 @@ export const AGENT_SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
 /** Built-in coordinator agent slug. */
 export const ORCHESTRATOR_SLUG = 'orchestrator';
+
+/**
+ * Built-in concierge agent slug.
+ *
+ * The Concierge is a workspace-wide chat agent that knows about every
+ * agent, skill, and tool in the workspace. It's reachable from a top-level
+ * "Chat" entry in the sidebar (separate from the Agents subtree). Its
+ * defining behavior:
+ *
+ *   - Conversational, not task-decomposing — different from Orchestrator
+ *   - Routes the user to the right agent for any specific job
+ *   - Always receives EVERY workspace context doc, regardless of per-doc
+ *     routing — the Concierge's job is to know everything, so we deliberately
+ *     bypass narrow targeting for it
+ */
+export const CONCIERGE_SLUG = 'concierge';

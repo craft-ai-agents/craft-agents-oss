@@ -92,6 +92,8 @@ export interface PromptBuilderConfig {
   };
   /** System prompt preset ('default' | 'mini' | custom string) */
   systemPromptPreset?: 'default' | 'mini' | string;
+  /** Full custom persona prompt appended to the backend system prompt. */
+  customSystemPrompt?: string;
   /** Whether running in headless mode */
   isHeadless?: boolean;
 }

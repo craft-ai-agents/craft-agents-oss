@@ -183,6 +183,9 @@ export async function createSession(
     enabledSourceSlugs?: string[];
     model?: string;
     llmConnection?: string;
+    customSystemPrompt?: string;
+    agentSkillSlugs?: string[];
+    spawnedFromAgent?: SessionConfig['spawnedFromAgent'];
     hidden?: boolean;
     sessionStatus?: SessionConfig['sessionStatus'];
     labels?: string[];
@@ -214,6 +217,9 @@ export async function createSession(
     enabledSourceSlugs: options?.enabledSourceSlugs,
     model: options?.model,
     llmConnection: options?.llmConnection,
+    customSystemPrompt: options?.customSystemPrompt,
+    agentSkillSlugs: options?.agentSkillSlugs,
+    spawnedFromAgent: options?.spawnedFromAgent,
     hidden: options?.hidden,
     sessionStatus: options?.sessionStatus,
     labels: options?.labels,
@@ -405,6 +411,7 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
     const {
       enabledSourceSlugs: _es, pendingPlanExecution: _pp,
       sessionStatus: _ss, workingDirectory: _wd, sdkCwd: _sc,
+      customSystemPrompt: _csp, agentSkillSlugs: _asl,
       workspaceRootPath: _wrp, ...headerFields
     } = header;
 

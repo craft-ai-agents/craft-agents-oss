@@ -786,6 +786,10 @@ interface ManagedSession {
   connectionLocked?: boolean
   // Thinking level for this session ('off', 'think', 'max')
   thinkingLevel?: ThinkingLevel
+  // Full custom persona prompt appended to the backend system prompt.
+  customSystemPrompt?: string
+  // Saved Agent skills applied implicitly to every turn in this session.
+  agentSkillSlugs?: string[]
   // System prompt preset for mini agents ('default' | 'mini')
   systemPromptPreset?: 'default' | 'mini' | string
   // Role/type of the last message (for badge display without loading messages)
@@ -864,6 +868,8 @@ interface ManagedSession {
   tokenRefreshManager: TokenRefreshManager
   // Metadata for sessions created by automations
   triggeredBy?: { automationName?: string; event?: string; timestamp?: number }
+  // Provenance for sessions spawned by summoning a saved Agent.
+  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
   // Promise that resolves when the agent instance is ready (for title gen to await)
   agentReady?: Promise<void>
   agentReadyResolve?: () => void
@@ -1579,15 +1585,21 @@ export class SessionManager implements ISessionManager {
           ensureRequiredAgents,
           STARTER_AGENTS,
           ORCHESTRATOR_SLUG,
+          CONCIERGE_SLUG,
         } = await import('@craft-agent/shared/agent-definitions')
         const { seeded } = seedGlobalLibraryIfEmpty(STARTER_AGENTS)
         if (seeded > 0) {
           sessionLog.info(`[agent-definitions] Seeded ${seeded} starter agent(s) into global library`)
         }
-        const required = STARTER_AGENTS.filter((a) => a.slug === ORCHESTRATOR_SLUG)
+        // Two load-bearing agents must exist on every startup: Orchestrator
+        // (sidebar pin + future Rooms coordinator) and Concierge (top-level
+        // Chat nav entry — without it the Chat link goes nowhere).
+        const required = STARTER_AGENTS.filter(
+          (a) => a.slug === ORCHESTRATOR_SLUG || a.slug === CONCIERGE_SLUG,
+        )
         const { ensured } = ensureRequiredAgents(required)
         if (ensured > 0) {
-          sessionLog.info(`[agent-definitions] Ensured ${ensured} required agent(s) (Orchestrator)`)
+          sessionLog.info(`[agent-definitions] Ensured ${ensured} required agent(s)`)
         }
       } catch (err) {
         sessionLog.warn('[agent-definitions] Library seed skipped:', err as Error)
@@ -2450,6 +2462,12 @@ export class SessionManager implements ISessionManager {
       sessionStatus: options?.sessionStatus,
       labels: options?.labels,
       isFlagged: options?.isFlagged,
+      enabledSourceSlugs: defaultEnabledSourceSlugs,
+      model: resolvedModelOption,
+      llmConnection: options?.llmConnection,
+      customSystemPrompt: options?.customSystemPrompt,
+      agentSkillSlugs: options?.agentSkillSlugs,
+      spawnedFromAgent: options?.spawnedFromAgent,
     })
 
     // Branch: copy messages from source session up to and including the branch point
@@ -2512,6 +2530,9 @@ export class SessionManager implements ISessionManager {
       thinkingLevel: defaultThinkingLevel,
       systemPromptPreset: options?.systemPromptPreset,
       enabledSourceSlugs: defaultEnabledSourceSlugs,
+      customSystemPrompt: options?.customSystemPrompt,
+      agentSkillSlugs: options?.agentSkillSlugs,
+      spawnedFromAgent: options?.spawnedFromAgent,
       branchFromMessageId: validatedBranch?.sourceMessageId,
       branchContextStrategy: validatedBranch?.branchContextStrategy,
       branchFromSdkSessionId: validatedBranch?.branchFromSdkSessionId,
@@ -2812,6 +2833,8 @@ export class SessionManager implements ISessionManager {
         skipConfigWatcher: true, // Server owns workspace-level ConfigWatcher — don't duplicate in agents
         automationSystem: this.automationSystems.get(managed.workspace.rootPath),
         systemPromptPreset: managed.systemPromptPreset,
+        customSystemPrompt: managed.customSystemPrompt,
+        agentSkillSlugs: managed.agentSkillSlugs,
         debugMode: _platform?.isDebugMode ? { enabled: true, logFilePath: _platform.getLogFilePath?.() } : undefined,
         enable1MContext: await (async () => { const { getEnable1MContext } = await import('@craft-agent/shared/config/storage'); return getEnable1MContext(); })(),
         // Image resize callback — prevents oversized images from entering conversation history

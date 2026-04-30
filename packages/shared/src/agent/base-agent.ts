@@ -916,7 +916,7 @@ ${formattedMessages}
    *   - cleanMessage: Message with mentions stripped, or default directive
    *   - missingSkills: Array of skill slugs that were mentioned but not found
    */
-  protected extractSkillPaths(message: string): {
+  protected extractSkillPaths(message: string, implicitSkillSlugs: string[] = []): {
     skillPaths: Map<string, string>;
     cleanMessage: string;
     missingSkills: string[];
@@ -934,9 +934,15 @@ ${formattedMessages}
       this.debug(`[extractSkillPaths] Invalid skills: ${JSON.stringify(parsed.invalidSkills)}`);
     }
 
-    // Resolve SKILL.md paths for matched skills
+    const requestedSkillSlugs = [...new Set([...parsed.skills, ...implicitSkillSlugs])]
+    const missingImplicitSkills = implicitSkillSlugs.filter(slug => !skillSlugs.includes(slug))
+    if (missingImplicitSkills.length > 0) {
+      this.debug(`[extractSkillPaths] Missing implicit agent skills: ${JSON.stringify(missingImplicitSkills)}`);
+    }
+
+    // Resolve SKILL.md paths for matched and implicit saved-agent skills
     const skillPaths = new Map<string, string>();
-    for (const slug of parsed.skills) {
+    for (const slug of requestedSkillSlugs) {
       const skill = skills.find(s => s.slug === slug);
       if (skill) {
         const skillMdPath = join(skill.path, 'SKILL.md');
@@ -968,7 +974,7 @@ ${formattedMessages}
     return {
       skillPaths,
       cleanMessage,
-      missingSkills: parsed.invalidSkills || []
+      missingSkills: [...(parsed.invalidSkills || []), ...missingImplicitSkills]
     };
   }
 
@@ -999,7 +1005,10 @@ ${formattedMessages}
     attachments?: FileAttachment[],
     options?: ChatOptions
   ): AsyncGenerator<AgentEvent> {
-    const { skillPaths, cleanMessage, missingSkills } = this.extractSkillPaths(message);
+    const { skillPaths, cleanMessage, missingSkills } = this.extractSkillPaths(
+      message,
+      this.config.agentSkillSlugs ?? [],
+    );
     if (missingSkills.length > 0) {
       yield { type: 'error', message: `Skill(s) not found: ${missingSkills.join(', ')}` };
       yield { type: 'complete' };

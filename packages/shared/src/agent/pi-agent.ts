@@ -1892,6 +1892,7 @@ export class PiAgent extends BaseAgent {
       // blocks and will echo <session_state>, <sources>, etc. back in their response.
       const fullSystemPrompt = [
         systemPrompt,
+        this.config.customSystemPrompt,
         ...contextParts,
       ].filter(Boolean).join('\n\n');
 

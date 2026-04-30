@@ -34,6 +34,7 @@ export const SESSION_PERSISTENT_FIELDS = [
   'lastReadMessageId', 'hasUnread',
   // Config
   'enabledSourceSlugs', 'permissionMode', 'previousPermissionMode', 'workingDirectory',
+  'customSystemPrompt', 'agentSkillSlugs',
   // Model/Connection
   'model', 'llmConnection', 'connectionLocked', 'thinkingLevel',
   // Sharing
@@ -53,6 +54,8 @@ export const SESSION_PERSISTENT_FIELDS = [
   'transferredSessionSummaryApplied',
   // Automation origin
   'triggeredBy',
+  // Saved Agent origin
+  'spawnedFromAgent',
 ] as const;
 
 export type SessionPersistentField = typeof SESSION_PERSISTENT_FIELDS[number];
@@ -145,6 +148,10 @@ export interface SessionConfig {
   connectionLocked?: boolean;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
+  /** Full custom persona prompt appended to the backend system prompt. */
+  customSystemPrompt?: string;
+  /** Saved Agent skills applied implicitly to every turn in this session. */
+  agentSkillSlugs?: string[];
   /**
    * Pending plan execution state - tracks "Accept & Compact" flow.
    * When set, indicates a plan needs to be executed after compaction completes.
@@ -268,6 +275,10 @@ export interface SessionHeader {
   connectionLocked?: boolean;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
+  /** Full custom persona prompt appended to the backend system prompt. */
+  customSystemPrompt?: string;
+  /** Saved Agent skills applied implicitly to every turn in this session. */
+  agentSkillSlugs?: string[];
   /**
    * Pending plan execution state - tracks "Accept & Compact" flow.
    * When set, indicates a plan needs to be executed after compaction completes.
@@ -380,4 +391,6 @@ export interface SessionMetadata {
   archivedAt?: number;
   /** Message ID that this session was branched from (hard context cutoff marker). */
   branchFromMessageId?: string;
+  /** Provenance for sessions spawned by summoning a saved Agent. */
+  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number };
 }

@@ -1132,10 +1132,17 @@ export default function App() {
 
   const handleSendMessage = useCallback(async (sessionId: string, message: string, attachments?: FileAttachment[], skillSlugs?: string[], externalBadges?: ContentBadge[]) => {
     try {
+      const sessionAtSend = store.get(sessionAtomFamily(sessionId))
       // Capture pre-send processing state so we can flag mid-stream sends
       // for the queued badge (#616 follow-up — covers Pi steer path which
       // returns status 'accepted', not 'queued').
-      const sendingMidStream = store.get(sessionAtomFamily(sessionId))?.isProcessing === true
+      const sendingMidStream = sessionAtSend?.isProcessing === true
+      const effectiveSkillSlugs = [
+        ...new Set([
+          ...(skillSlugs ?? []),
+          ...(sessionAtSend?.agentSkillSlugs ?? []),
+        ]),
+      ]
 
       // Step 1: Store attachments and get persistent metadata
       let storedAttachments: StoredAttachment[] | undefined
@@ -1275,7 +1282,7 @@ export default function App() {
 
       // Step 6: Send to Claude with processed attachments + stored attachments for persistence
       await window.electronAPI.sendMessage(sessionId, message, processedAttachments, storedAttachments, {
-        skillSlugs,
+        skillSlugs: effectiveSkillSlugs.length > 0 ? effectiveSkillSlugs : undefined,
         badges: badges.length > 0 ? badges : undefined,
         optimisticMessageId: userMessage.id,
       })
@@ -1294,7 +1301,7 @@ export default function App() {
         ]
       }))
     }
-  }, [sessionOptions, updateSessionById, skills, sources, windowWorkspaceId])
+  }, [store, sessionOptions, updateSessionById, skills, sources, windowWorkspaceId])
 
   /**
    * Unified handler for all session option changes.
