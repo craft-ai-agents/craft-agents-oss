@@ -47,22 +47,26 @@ export function RightSidebarPanel({
   const [activeTab, setActiveTab] = useState<Tab>('files')
   const [sashHandleY, setSashHandleY] = useState<number | null>(null)
 
-  // Persist open/closed and width changes
-  useEffect(() => {
-    storage.set(storage.KEYS.rightSidebarVisible, isOpen, workspaceId)
-  }, [isOpen, workspaceId])
-
-  useEffect(() => {
-    storage.set(storage.KEYS.rightSidebarWidth, width, workspaceId)
-  }, [width, workspaceId])
+  // Tracks current workspaceId so persist effects can write to the correct key
+  // without needing workspaceId in their deps (which would cause them to fire on
+  // workspace switch before the load effect restores the new workspace's values).
+  const workspaceIdRef = useRef(workspaceId)
 
   // Re-read from storage when workspaceId changes (workspace switch)
   useEffect(() => {
+    workspaceIdRef.current = workspaceId
     setIsOpen(storage.get(storage.KEYS.rightSidebarVisible, true, workspaceId))
     setWidth(storage.get(storage.KEYS.rightSidebarWidth, DEFAULT_WIDTH, workspaceId))
   }, [workspaceId])
 
-  // Left-edge resize sash
+  useEffect(() => {
+    storage.set(storage.KEYS.rightSidebarVisible, isOpen, workspaceIdRef.current)
+  }, [isOpen])
+
+  useEffect(() => {
+    storage.set(storage.KEYS.rightSidebarWidth, width, workspaceIdRef.current)
+  }, [width])
+
   const sashRef = useRef<HTMLDivElement>(null)
   const isDraggingRef = useRef(false)
   const dragStartXRef = useRef(0)
@@ -117,7 +121,6 @@ export function RightSidebarPanel({
           borderBottomRightRadius: RADIUS_EDGE,
         }}
       >
-        {/* Left resize sash — only shown when panel is open */}
         <AnimatePresence>
           {isOpen && (
             <motion.div
@@ -156,7 +159,6 @@ export function RightSidebarPanel({
           )}
         </AnimatePresence>
 
-        {/* Content area */}
         <AnimatePresence>
           {isOpen && (
             <motion.div
@@ -183,7 +185,6 @@ export function RightSidebarPanel({
           )}
         </AnimatePresence>
 
-        {/* Right tab strip — always visible */}
         <div
           className={cn(
             'shrink-0 flex flex-col items-center bg-background',
@@ -195,7 +196,6 @@ export function RightSidebarPanel({
             paddingBottom: PANEL_EDGE_INSET,
           }}
         >
-          {/* Collapse / expand toggle */}
           <button
             type="button"
             onClick={() => setIsOpen(v => !v)}
@@ -215,7 +215,6 @@ export function RightSidebarPanel({
             </motion.div>
           </button>
 
-          {/* Tab buttons */}
           <button
             type="button"
             onClick={() => { setActiveTab('files'); if (!isOpen) setIsOpen(true) }}
