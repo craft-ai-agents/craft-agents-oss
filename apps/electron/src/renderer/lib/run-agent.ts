@@ -1,6 +1,7 @@
 import { toast } from 'sonner'
 import { navigate, routes } from '@/lib/navigate'
 import { resolveAgentReferences, hasMissingReferences, describeMissingReferences } from '@/lib/agent-references'
+import { composeAgentSystemPrompt } from '@/lib/compose-agent-prompt'
 import type { AgentDefinitionDTO, CreateSessionOptions, Session, LoadedSkill, LoadedSource } from '../../shared/types'
 
 export function buildAgentDraftInput(agent: AgentDefinitionDTO): string {
@@ -19,25 +20,37 @@ export function buildAgentDraftInput(agent: AgentDefinitionDTO): string {
 export function buildAgentCreateSessionOptions(
   agent: AgentDefinitionDTO,
   /**
-   * Optional resolved skills/sources. When provided, missing slugs are dropped
-   * from the spawned session config (the agent still runs, just without the
-   * unavailable bundles). When omitted (legacy callers), all declared slugs
-   * pass through verbatim.
+   * Optional live skill / source snapshots. When provided:
+   *   - missing slugs are dropped from `agentSkillSlugs` / `enabledSourceSlugs`
+   *     so the session doesn't try to activate things that don't exist
+   *   - the system prompt gets a generated footer enumerating each bundled
+   *     skill + tool with their description (so the LLM has clear "here's
+   *     your menu" guidance, not just an opaque list of slugs)
+   * When omitted (legacy callers), all declared slugs pass through verbatim
+   * and no footer is generated.
    */
-  resolved?: { resolvedSkills: string[]; resolvedSources: string[] },
+  context?: { skills: LoadedSkill[]; sources: LoadedSource[] },
 ): CreateSessionOptions {
-  const skills = resolved
-    ? resolved.resolvedSkills
-    : agent.metadata.skills ?? []
-  const sources = resolved
-    ? resolved.resolvedSources
-    : agent.metadata.sources ?? []
+  let skillSlugs = agent.metadata.skills ?? []
+  let sourceSlugs = agent.metadata.sources ?? []
+
+  if (context) {
+    const resolution = resolveAgentReferences(agent, context.skills, context.sources)
+    skillSlugs = resolution.resolvedSkills
+    sourceSlugs = resolution.resolvedSources
+  }
+
+  // Compose the prompt: persona body + auto-generated bundle footer.
+  // Empty skills + empty sources → returns the body unchanged (no footer).
+  const composedPrompt = context
+    ? composeAgentSystemPrompt(agent, context.skills, context.sources)
+    : agent.systemPrompt
 
   const options: CreateSessionOptions = {
     name: agent.metadata.name,
-    customSystemPrompt: agent.systemPrompt || undefined,
-    agentSkillSlugs: skills.length ? skills : undefined,
-    enabledSourceSlugs: sources.length ? sources : undefined,
+    customSystemPrompt: composedPrompt || undefined,
+    agentSkillSlugs: skillSlugs.length ? skillSlugs : undefined,
+    enabledSourceSlugs: sourceSlugs.length ? sourceSlugs : undefined,
     llmConnection: agent.metadata.llmConnection,
     model: agent.metadata.model,
     permissionMode: agent.metadata.permissionMode,
@@ -69,26 +82,29 @@ export async function openAgentSessionComposer(params: {
   skills?: LoadedSkill[]
   sources?: LoadedSource[]
 }): Promise<Session> {
-  let resolved: { resolvedSkills: string[]; resolvedSources: string[] } | undefined
+  // Surface a one-off toast if the agent declares slugs that don't resolve in
+  // this workspace. The session still spawns without them; the warning is so
+  // the user knows why output may be reduced.
   if (params.skills && params.sources) {
     const resolution = resolveAgentReferences(params.agent, params.skills, params.sources)
-    resolved = {
-      resolvedSkills: resolution.resolvedSkills,
-      resolvedSources: resolution.resolvedSources,
-    }
     if (hasMissingReferences(resolution)) {
       const summary = describeMissingReferences(resolution)
-      // Inform the user what got dropped, but don't block — the agent still
-      // produces useful output without the unavailable bundles.
       toast.warning(`${params.agent.metadata.name}: ${summary}`, {
         description: 'The session will run without those bundles. Activate them in this workspace to fix.',
       })
     }
   }
 
+  // When live skills/sources are available, pass them through so the session
+  // gets a composed system prompt (persona body + bundle footer) and any
+  // missing slugs are dropped from agentSkillSlugs/enabledSourceSlugs.
+  const context = params.skills && params.sources
+    ? { skills: params.skills, sources: params.sources }
+    : undefined
+
   const session = await params.onCreateSession(
     params.workspaceId,
-    buildAgentCreateSessionOptions(params.agent, resolved),
+    buildAgentCreateSessionOptions(params.agent, context),
   )
   navigate(routes.view.allSessions(session.id))
 
