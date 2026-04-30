@@ -153,7 +153,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       // Pi+Bedrock auth method override — set authType for IAM or environment auth.
       // providerType stays 'pi' (Bedrock routes through Pi SDK).
       if (setup.bedrockAuthMethod) {
-        updates.authType = setup.bedrockAuthMethod
+        updates.authType = setup.bedrockAuthMethod === 'bedrock_api_key' ? 'api_key' : setup.bedrockAuthMethod
       }
 
       const effectiveProviderType = updates.providerType ?? connection.providerType
@@ -241,6 +241,9 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         if (authType === 'oauth') {
           await manager.setLlmOAuth(setup.slug, { accessToken: setup.credential })
           deps.platform.logger?.info('Saved OAuth access token to LLM connection')
+        } else if (setup.bedrockAuthMethod === 'bedrock_api_key') {
+          await manager.setLlmApiKeyWithRegion(setup.slug, setup.credential, setup.awsRegion)
+          deps.platform.logger?.info('Saved Bedrock API key with region to LLM connection')
         } else {
           await manager.setLlmApiKey(setup.slug, setup.credential)
           deps.platform.logger?.info('Saved API key to LLM connection')

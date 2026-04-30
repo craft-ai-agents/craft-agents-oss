@@ -146,7 +146,7 @@ export function apiSetupMethodToConnectionSetup(
     customEndpoint?: CustomEndpointConfig
     iamCredentials?: { accessKeyId: string; secretAccessKey: string; sessionToken?: string }
     awsRegion?: string
-    bedrockAuthMethod?: 'iam_credentials' | 'environment'
+    bedrockAuthMethod?: 'iam_credentials' | 'environment' | 'bedrock_api_key'
   },
   editingSlug: string | null,
   existingSlugs: Set<string>,
@@ -251,7 +251,7 @@ export function useOnboarding({
       customEndpoint?: CustomEndpointConfig
       iamCredentials?: { accessKeyId: string; secretAccessKey: string; sessionToken?: string }
       awsRegion?: string
-      bedrockAuthMethod?: 'iam_credentials' | 'environment'
+      bedrockAuthMethod?: 'iam_credentials' | 'environment' | 'bedrock_api_key'
     },
     methodOverride?: ApiSetupMethod,
     connectionSlugOverride?: string,
@@ -384,7 +384,7 @@ export function useOnboarding({
 
     try {
       // Bedrock (Pi+amazon-bedrock) — skip API key validation and connection test
-      if (data.bedrockAuthMethod) {
+      if (data.bedrockAuthMethod && data.bedrockAuthMethod !== 'bedrock_api_key') {
         const saved = await handleSaveConfig(undefined, {
           baseUrl: data.baseUrl,
           connectionDefaultModel: data.connectionDefaultModel,
@@ -392,6 +392,38 @@ export function useOnboarding({
           piAuthProvider: data.piAuthProvider,
           modelSelectionMode: data.modelSelectionMode,
           iamCredentials: data.iamCredentials,
+          awsRegion: data.awsRegion,
+          bedrockAuthMethod: data.bedrockAuthMethod,
+        })
+        if (saved) {
+          setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
+        } else {
+          setState(s => ({ ...s, credentialStatus: 'error' }))
+        }
+        return
+      }
+
+      // Bedrock API Key — validate the bearer token with a connection test before saving
+      if (data.bedrockAuthMethod === 'bedrock_api_key') {
+        if (!data.apiKey.trim()) {
+          setState(s => ({ ...s, credentialStatus: 'error', errorMessage: 'Please enter a valid Bedrock API key' }))
+          return
+        }
+        const testResult = await window.electronAPI.testLlmConnectionSetup({
+          provider: 'pi',
+          apiKey: data.apiKey,
+          piAuthProvider: data.piAuthProvider,
+          model: data.models?.[0],
+        })
+        if (!testResult.success) {
+          setState(s => ({ ...s, credentialStatus: 'error', errorMessage: testResult.error || 'Connection test failed' }))
+          return
+        }
+        const saved = await handleSaveConfig(data.apiKey, {
+          connectionDefaultModel: data.connectionDefaultModel,
+          models: data.models,
+          piAuthProvider: data.piAuthProvider,
+          modelSelectionMode: data.modelSelectionMode,
           awsRegion: data.awsRegion,
           bedrockAuthMethod: data.bedrockAuthMethod,
         })

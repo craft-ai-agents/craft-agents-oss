@@ -1,5 +1,7 @@
 {
   "apiSetup.authorizationCode": "Engedélyezési kód",
+  "apiSetup.credentials.bedrockApiKey": "API kulcs",
+  "apiSetup.credentials.bedrockApiKeyHelp": "Használjon AWS Bedrock API kulcsot az egyszerűsített, egyetlen tokennel történő hitelesítéshez. Hozzon létre egyet az AWS Bedrock konzolon.",
   "apiSetup.credentials.environment": "Környezet (AWS CLI)",
   "apiSetup.credentials.iam": "IAM hitelesítő adatok",
   "apiSetup.format.anthropicCompatible": "Anthropic kompatibilis",

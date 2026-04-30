@@ -1,5 +1,7 @@
 {
   "apiSetup.authorizationCode": "授权码",
+  "apiSetup.credentials.bedrockApiKey": "API 密钥",
+  "apiSetup.credentials.bedrockApiKeyHelp": "使用 AWS Bedrock API 密钥进行简化的单令牌身份验证。在 AWS Bedrock 控制台中生成。",
   "apiSetup.credentials.environment": "环境 (AWS CLI)",
   "apiSetup.credentials.iam": "IAM 凭证",
   "apiSetup.format.anthropicCompatible": "Anthropic 兼容",

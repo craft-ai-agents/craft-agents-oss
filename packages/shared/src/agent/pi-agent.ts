@@ -542,7 +542,7 @@ export class PiAgent extends BaseAgent {
   private async getPiAuth(): Promise<{
     provider: string;
     credential:
-      | { type: 'api_key'; key: string }
+      | { type: 'api_key'; key: string; region?: string }
       | { type: 'oauth'; access: string; refresh: string; expires: number }
       | { type: 'iam'; accessKeyId: string; secretAccessKey: string; region?: string; sessionToken?: string }
   } | null> {
@@ -602,13 +602,24 @@ export class PiAgent extends BaseAgent {
         // NOTE: authType === 'environment' (e.g. Bedrock with ~/.aws/credentials)
         // intentionally falls through here, finds no API key, and returns null.
         // The subprocess inherits process.env which contains the AWS credential chain.
-        const apiKey = await credentialManager.getLlmApiKey(slug);
-        if (apiKey) {
-          this.debug(`Retrieved API key credential for Pi provider: ${piAuthProvider}`);
-          return {
-            provider: piAuthProvider,
-            credential: { type: 'api_key', key: apiKey },
-          };
+        if (piAuthProvider === 'amazon-bedrock') {
+          const result = await credentialManager.getLlmApiKeyWithRegion(slug);
+          if (result) {
+            this.debug(`Retrieved Bedrock API key credential for Pi provider: ${piAuthProvider}`);
+            return {
+              provider: piAuthProvider,
+              credential: { type: 'api_key', key: result.apiKey, region: result.awsRegion },
+            };
+          }
+        } else {
+          const apiKey = await credentialManager.getLlmApiKey(slug);
+          if (apiKey) {
+            this.debug(`Retrieved API key credential for Pi provider: ${piAuthProvider}`);
+            return {
+              provider: piAuthProvider,
+              credential: { type: 'api_key', key: apiKey },
+            };
+          }
         }
       }
 
@@ -645,6 +656,10 @@ export class PiAgent extends BaseAgent {
       if (piAuth.credential.region) env.AWS_REGION = piAuth.credential.region;
       if (piAuth.credential.sessionToken) env.AWS_SESSION_TOKEN = piAuth.credential.sessionToken;
       this.debug('Injecting IAM credentials into subprocess env for AWS SDK');
+    } else if (piAuth?.credential.type === 'api_key') {
+      env.AWS_BEARER_TOKEN_BEDROCK = piAuth.credential.key;
+      if (piAuth.credential.region) env.AWS_REGION = piAuth.credential.region;
+      this.debug('Injecting Bedrock API key (bearer token) into subprocess env');
     }
 
     // Defensive: force HTTP/1.1 for Bedrock. AWS SDK v3 defaults to HTTP/2

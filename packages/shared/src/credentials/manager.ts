@@ -293,6 +293,30 @@ export class CredentialManager {
   }
 
   /**
+   * Get API key with AWS region for an LLM connection (used by Bedrock API key auth).
+   * @param connectionSlug - The connection slug
+   * @returns API key and optional AWS region, or null if not found
+   */
+  async getLlmApiKeyWithRegion(connectionSlug: string): Promise<{ apiKey: string; awsRegion?: string } | null> {
+    const cred = await this.get({ type: 'llm_api_key', connectionSlug });
+    if (!cred?.value) return null;
+    return { apiKey: cred.value, awsRegion: cred.awsRegion };
+  }
+
+  /**
+   * Set API key with AWS region for an LLM connection (used by Bedrock API key auth).
+   * @param connectionSlug - The connection slug
+   * @param apiKey - The API key to store
+   * @param awsRegion - Optional AWS region to store alongside the key
+   */
+  async setLlmApiKeyWithRegion(connectionSlug: string, apiKey: string, awsRegion?: string): Promise<void> {
+    await this.set({ type: 'llm_api_key', connectionSlug }, {
+      value: apiKey,
+      ...(awsRegion ? { awsRegion } : {}),
+    });
+  }
+
+  /**
    * Delete API key for an LLM connection.
    * @param connectionSlug - The connection slug
    * @returns true if deleted, false if not found

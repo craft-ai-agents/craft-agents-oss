@@ -363,7 +363,7 @@ export interface LlmConnectionSetup {
   /** AWS region for Pi+Bedrock connections */
   awsRegion?: string
   /** Bedrock authentication method — determines auth type for Pi+Bedrock connections */
-  bedrockAuthMethod?: 'iam_credentials' | 'environment'
+  bedrockAuthMethod?: 'iam_credentials' | 'environment' | 'bedrock_api_key'
 }
 
 export interface TestLlmConnectionParams {
