@@ -14,7 +14,8 @@
  */
 
 import * as React from 'react'
-import { Bot, FileEdit, Play, Trash2, AlertTriangle } from 'lucide-react'
+import { Bot, FileEdit, Play, Trash2, AlertTriangle, Pencil } from 'lucide-react'
+import { AgentEditDialog } from '@/components/app-shell/AgentEditDialog'
 import { useAtomValue } from 'jotai'
 import { toast } from 'sonner'
 import {
@@ -41,6 +42,7 @@ interface AgentInfoPageProps {
 export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageProps) {
   const [agent, setAgent] = React.useState<AgentDefinitionDTO | null>(null)
   const [loadError, setLoadError] = React.useState<string | null>(null)
+  const [editOpen, setEditOpen] = React.useState(false)
   const activeWorkspace = useActiveWorkspace()
   const { onCreateSession, onInputChange } = useAppShellContext()
   const canRevealLocally = !activeWorkspace?.remoteServer
@@ -214,6 +216,14 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
             <Play className="h-3 w-3" />
             Run
           </button>
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-border/50 hover:bg-foreground/5"
+          >
+            <Pencil className="h-3 w-3" />
+            Edit
+          </button>
           {canRevealLocally && (
             <button
               type="button"
@@ -352,6 +362,13 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
           </Info_Section>
         )}
       </Info_Page.Content>
+
+      <AgentEditDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        agent={agent}
+        workspaceId={workspaceId}
+      />
     </Info_Page>
   )
 }

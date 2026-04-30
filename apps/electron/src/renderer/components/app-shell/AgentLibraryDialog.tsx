@@ -16,7 +16,7 @@
  */
 
 import * as React from 'react'
-import { Search } from 'lucide-react'
+import { Plus, Search } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { useAgents } from '@/hooks/useAgents'
+import { AgentEditDialog } from './AgentEditDialog'
 import type { AgentDefinitionDTO } from '../../../shared/types'
 import { ORCHESTRATOR_SLUG } from '@craft-agent/shared/agent-definitions/types'
 
@@ -37,6 +38,7 @@ interface AgentLibraryDialogProps {
 export function AgentLibraryDialog({ open, onOpenChange, workspaceId }: AgentLibraryDialogProps) {
   const { allAgents, activeSlugs, setActive } = useAgents(workspaceId)
   const [query, setQuery] = React.useState('')
+  const [createOpen, setCreateOpen] = React.useState(false)
 
   const sortedAgents = React.useMemo(() => {
     // Orchestrator first, then alphabetical. The Orchestrator is foundational
@@ -71,16 +73,27 @@ export function AgentLibraryDialog({ open, onOpenChange, workspaceId }: AgentLib
           </DialogDescription>
         </DialogHeader>
 
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
-          <input
-            type="text"
-            placeholder="Search agents…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 text-sm border border-border/40 rounded-md bg-background"
-          />
+        {/* Search + new */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
+            <input
+              type="text"
+              placeholder="Search agents…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-sm border border-border/40 rounded-md bg-background"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-border/40 hover:bg-foreground/5 shrink-0"
+            title="Create a new agent from scratch"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New agent
+          </button>
         </div>
 
         {/* List */}
@@ -104,6 +117,12 @@ export function AgentLibraryDialog({ open, onOpenChange, workspaceId }: AgentLib
           {activeSet.size} of {allAgents.length} active in this workspace.
         </p>
       </DialogContent>
+
+      <AgentEditDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        workspaceId={workspaceId}
+      />
     </Dialog>
   )
 }

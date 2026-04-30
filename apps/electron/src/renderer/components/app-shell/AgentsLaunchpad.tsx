@@ -14,9 +14,10 @@
  */
 
 import * as React from 'react'
-import { Sparkles, Settings2 } from 'lucide-react'
+import { Plus, Sparkles, Settings2 } from 'lucide-react'
 import { useAgents } from '@/hooks/useAgents'
 import { AgentLibraryDialog } from './AgentLibraryDialog'
+import { AgentEditDialog } from './AgentEditDialog'
 import { navigate, routes } from '@/lib/navigate'
 import { ORCHESTRATOR_SLUG } from '@craft-agent/shared/agent-definitions/types'
 
@@ -27,6 +28,7 @@ interface AgentsLaunchpadProps {
 export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
   const { activeAgents, allAgents, loading } = useAgents(workspaceId)
   const [libraryOpen, setLibraryOpen] = React.useState(false)
+  const [createOpen, setCreateOpen] = React.useState(false)
 
   // Pin orchestrator first; alphabetical for the rest.
   const sorted = React.useMemo(() => {
@@ -52,14 +54,24 @@ export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
               need. Summon one to start a session, or open the library to activate more.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setLibraryOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-border/40 hover:bg-foreground/5 shrink-0"
-          >
-            <Settings2 className="h-3.5 w-3.5" />
-            Manage library
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-border/40 hover:bg-foreground/5"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New agent
+            </button>
+            <button
+              type="button"
+              onClick={() => setLibraryOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-border/40 hover:bg-foreground/5"
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+              Manage library
+            </button>
+          </div>
         </div>
 
         {/* Active agent cards */}
@@ -91,6 +103,12 @@ export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
       <AgentLibraryDialog
         open={libraryOpen}
         onOpenChange={setLibraryOpen}
+        workspaceId={workspaceId}
+      />
+
+      <AgentEditDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
         workspaceId={workspaceId}
       />
     </div>
