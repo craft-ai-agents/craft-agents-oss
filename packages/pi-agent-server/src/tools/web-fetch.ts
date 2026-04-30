@@ -383,9 +383,9 @@ export function createWebFetchTool(
       // Use the final URL after redirects for all output messages
       const finalUrl = response.url || url;
 
-      const contentType = (response.headers.get('content-type') || '')
+      const contentType = ((response.headers.get('content-type') || '')
         .toLowerCase()
-        .split(';')[0]
+        .split(';')[0] ?? '')
         .trim();
 
       // Binary content types — stream with size limit
