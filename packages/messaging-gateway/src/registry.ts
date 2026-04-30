@@ -29,6 +29,7 @@ import { ConfigStore } from './config-store'
 import { PairingCodeManager } from './pairing'
 import { TelegramAdapter } from './adapters/telegram/index'
 import { WhatsAppAdapter, type WhatsAppEvent } from './adapters/whatsapp/index'
+import { LarkAdapter, parseLarkCredentials, type LarkCredentials } from './adapters/lark/index'
 import { TopicRegistry } from './topic-registry'
 import type { SessionEvent } from './renderer'
 import type { EventSinkFn } from './event-fanout'
@@ -145,6 +146,22 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       })
     }
 
+    if (isPlatformConfigured(config, 'lark')) {
+      this.setPlatformRuntime(workspaceId, state, 'lark', {
+        configured: true,
+        connected: false,
+        state: 'connecting',
+        lastError: undefined,
+      })
+      void this.tryConnectLark(workspaceId, state).catch((err) => {
+        this.log.error('background Lark connect failed', {
+          event: 'lark_connect_failed',
+          workspaceId,
+          error: err,
+        })
+      })
+    }
+
     if (isPlatformConfigured(config, 'whatsapp')) {
       if (this.hasWhatsAppAuthState(workspaceId)) {
         this.setPlatformRuntime(workspaceId, state, 'whatsapp', {
@@ -208,6 +225,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       runtime: {
         telegram: cloneRuntime(state.runtime.telegram),
         whatsapp: cloneRuntime(state.runtime.whatsapp),
+        lark: cloneRuntime(state.runtime.lark),
       },
     }
   }
@@ -226,6 +244,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     if (!cfg.enabled) {
       await state.gateway.unregisterAdapter('telegram').catch(() => {})
       await state.gateway.unregisterAdapter('whatsapp').catch(() => {})
+      await state.gateway.unregisterAdapter('lark').catch(() => {})
       state.whatsappOffEvent?.()
       state.whatsappOffEvent = undefined
       state.whatsapp = null
@@ -243,10 +262,17 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         identity: undefined,
         lastError: undefined,
       })
+      this.setPlatformRuntime(workspaceId, state, 'lark', {
+        configured: false,
+        connected: false,
+        state: 'disconnected',
+        identity: undefined,
+        lastError: undefined,
+      })
       return
     }
 
-    for (const platform of ['telegram', 'whatsapp'] as const) {
+    for (const platform of ['telegram', 'whatsapp', 'lark'] as const) {
       const configured = isPlatformConfigured(cfg, platform)
       if (!configured && state.gateway.getAdapter(platform)) {
         await state.gateway.unregisterAdapter(platform).catch(() => {})
@@ -620,6 +646,76 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     await state.gateway.start()
   }
 
+  /**
+   * Verify a Lark/Feishu App ID + App Secret pair by exchanging them for a
+   * tenant access token. The Open Platform returns a structured error code
+   * we forward to the user when the credentials are bad — saves a confused
+   * round-trip through "Invalid token" guesses.
+   */
+  async testLarkCredentials(
+    creds: LarkCredentials,
+  ): Promise<{ success: boolean; botName?: string; error?: string }> {
+    if (!creds.appId || !creds.appSecret) {
+      return { success: false, error: 'App ID or App Secret is empty' }
+    }
+    try {
+      const url =
+        creds.domain === 'feishu'
+          ? 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal'
+          : 'https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal'
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ app_id: creds.appId, app_secret: creds.appSecret }),
+      })
+      const body = (await res.json()) as { code?: number; msg?: string; tenant_access_token?: string }
+      if (body.code !== 0 || !body.tenant_access_token) {
+        return { success: false, error: body.msg ?? 'Invalid credentials' }
+      }
+      return { success: true }
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Network error',
+      }
+    }
+  }
+
+  async saveLarkCredentials(workspaceId: string, creds: LarkCredentials): Promise<void> {
+    if (!creds.appId || !creds.appSecret) throw new Error('App ID or App Secret is empty')
+    if (creds.domain !== 'lark' && creds.domain !== 'feishu') {
+      throw new Error('Domain must be "lark" or "feishu"')
+    }
+
+    const test = await this.testLarkCredentials(creds)
+    if (!test.success) throw new Error(test.error ?? 'Invalid Lark credentials')
+
+    await this.opts.credentialManager.set(
+      {
+        type: 'messaging_bearer',
+        workspaceId,
+        name: 'lark',
+      },
+      { value: JSON.stringify(creds) },
+    )
+
+    const state = this.workspaces.get(workspaceId) ?? this.bootstrapWorkspace(workspaceId)
+    state.configStore.update({
+      enabled: true,
+      platforms: { lark: { enabled: true, domain: creds.domain } },
+    })
+
+    this.setPlatformRuntime(workspaceId, state, 'lark', {
+      configured: true,
+      connected: false,
+      state: 'connecting',
+      lastError: undefined,
+    })
+
+    await this.tryConnectLark(workspaceId, state)
+    await state.gateway.start()
+  }
+
   async disconnectPlatform(workspaceId: string, platform: string): Promise<void> {
     if (!isKnownPlatform(platform)) return
     const state = this.workspaces.get(workspaceId)
@@ -916,10 +1012,89 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       runtime: {
         telegram: createRuntime('telegram', isPlatformConfigured(cfg, 'telegram')),
         whatsapp: createRuntime('whatsapp', isPlatformConfigured(cfg, 'whatsapp')),
+        lark: createRuntime('lark', isPlatformConfigured(cfg, 'lark')),
       },
     }
     this.workspaces.set(workspaceId, state)
     return state
+  }
+
+  private async tryConnectLark(workspaceId: string, state: WorkspaceState): Promise<void> {
+    const cred = await this.opts.credentialManager
+      .get({ type: 'messaging_bearer', workspaceId, name: 'lark' })
+      .catch(() => null)
+
+    if (!cred?.value) {
+      this.setPlatformRuntime(workspaceId, state, 'lark', {
+        configured: true,
+        connected: false,
+        state: 'error',
+        lastError: 'Lark credentials are missing.',
+      })
+      return
+    }
+
+    let creds: LarkCredentials
+    try {
+      creds = parseLarkCredentials(cred.value)
+    } catch (err) {
+      this.setPlatformRuntime(workspaceId, state, 'lark', {
+        configured: true,
+        connected: false,
+        state: 'error',
+        lastError: err instanceof Error ? err.message : 'Lark credentials are malformed',
+      })
+      return
+    }
+
+    await state.gateway.unregisterAdapter('lark').catch((err) => {
+      this.log.warn('unregisterAdapter(lark) failed (non-fatal)', {
+        event: 'lark_unregister_failed',
+        workspaceId,
+        error: err,
+      })
+    })
+
+    try {
+      const adapter = new LarkAdapter()
+      await adapter.initialize({
+        token: cred.value,
+        logger: this.log.child({
+          component: 'lark-adapter',
+          workspaceId,
+          platform: 'lark',
+        }),
+      })
+
+      try {
+        const info = await adapter.getBotInfo()
+        state.botUsernames.lark = info?.name
+      } catch {
+        // non-fatal
+      }
+
+      state.gateway.registerAdapter(adapter)
+      this.setPlatformRuntime(workspaceId, state, 'lark', {
+        configured: true,
+        connected: true,
+        state: 'connected',
+        identity: state.botUsernames.lark ?? creds.domain,
+        lastError: undefined,
+      })
+    } catch (err) {
+      this.log.error('failed to connect Lark', {
+        event: 'lark_connect_failed',
+        workspaceId,
+        error: err,
+      })
+      this.setPlatformRuntime(workspaceId, state, 'lark', {
+        configured: true,
+        connected: false,
+        state: 'error',
+        lastError: err instanceof Error ? err.message : String(err),
+      })
+      throw err
+    }
   }
 
   private async tryConnectTelegram(workspaceId: string, state: WorkspaceState): Promise<void> {
@@ -1062,7 +1237,7 @@ function toBindingInfo(b: ChannelBinding): MessagingBindingInfo {
 }
 
 function isKnownPlatform(p: string): p is PlatformType {
-  return p === 'telegram' || p === 'whatsapp'
+  return p === 'telegram' || p === 'whatsapp' || p === 'lark'
 }
 
 function capitalize(value: string): string {

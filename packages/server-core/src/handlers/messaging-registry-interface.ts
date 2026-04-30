@@ -124,6 +124,23 @@ export interface IMessagingGatewayRegistry {
   /** Save Telegram token and (re)initialize the adapter. */
   saveTelegramToken(workspaceId: string, token: string): Promise<void>
 
+  /**
+   * Test Lark/Feishu credentials by exchanging them for a tenant access
+   * token. Domain selects which Open Platform to talk to.
+   */
+  testLarkCredentials(creds: {
+    appId: string
+    appSecret: string
+    domain: 'lark' | 'feishu'
+  }): Promise<{ success: boolean; botName?: string; error?: string }>
+
+  /** Save Lark/Feishu credentials and (re)initialize the adapter. */
+  saveLarkCredentials(workspaceId: string, creds: {
+    appId: string
+    appSecret: string
+    domain: 'lark' | 'feishu'
+  }): Promise<void>
+
   /** Disable a platform for a workspace, preserving WhatsApp auth state unless forgotten separately. */
   disconnectPlatform(workspaceId: string, platform: string): Promise<void>
 

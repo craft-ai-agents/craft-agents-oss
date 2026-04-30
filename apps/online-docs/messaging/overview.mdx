@@ -1,22 +1,25 @@
 ---
 title: "Messaging"
-description: "Drive Craft Agent sessions from Telegram or WhatsApp — send messages from any device and get agent replies back in the chat"
+description: "Drive Craft Agent sessions from Telegram, WhatsApp, or Lark/Feishu — send messages from any device and get agent replies back in the chat"
 ---
 
 <Tip>
 **Who this is for.** You want to talk to Craft Agent from your phone, keep a conversation going while away from your desktop, or trigger the agent from a chat without opening the app.
 </Tip>
 
-Messaging lets you **bind** an external chat (a Telegram DM or a WhatsApp contact) to a Craft Agent session. Messages you send in that chat drive the agent; the agent's output is rendered back into the same chat.
+Messaging lets you **bind** an external chat (a Telegram DM, a WhatsApp contact, or a Lark/Feishu chat) to a Craft Agent session. Messages you send in that chat drive the agent; the agent's output is rendered back into the same chat.
 
 ## Supported Platforms
 
-<CardGroup cols={2}>
+<CardGroup cols={3}>
   <Card title="Telegram" icon="paper-plane" href="/messaging/telegram">
     Bot token (via @BotFather) — works over in-process long-poll or webhook. Supports inline buttons, photos, documents, voice, and video attachments up to 20 MB.
   </Card>
   <Card title="WhatsApp" icon="whatsapp" href="/messaging/whatsapp">
     QR-code or code pairing via a Baileys-based worker subprocess. Supports text, media attachments, and a "self-chat" mode so you don't need a second phone to test.
+  </Card>
+  <Card title="Lark / Feishu" icon="message" href="/messaging/lark">
+    App ID + App Secret pairing via Lark Open Platform (international) or Feishu Open Platform (China). Long-connection mode, rich-text replies via Lark `post`, interactive cards, image/file attachments.
   </Card>
 </CardGroup>
 

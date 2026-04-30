@@ -1,0 +1,150 @@
+---
+title: "Lark / Feishu"
+description: "Connect a Lark or Feishu bot to Craft Agent — long-connection mode, rich-text replies, interactive cards, attachments"
+---
+
+Lark (international) and Feishu (China) are the same platform on different domains — Lark lives at `open.larksuite.com`, Feishu at `open.feishu.cn`. They share the same SDK, message types, and event protocol. A Custom App is registered with **one** of them; pick the region you need at setup time.
+
+Craft Agent uses the official `@larksuiteoapi/node-sdk`'s long-connection (WebSocket) mode — no public webhook URL or reverse tunnel needed. Same lifecycle as the Telegram adapter, just talking to Lark instead.
+
+## Create an App
+
+<Steps>
+  <Step title="Open the Open Platform">
+    - **Lark**: <https://open.larksuite.com/>
+    - **Feishu**: <https://open.feishu.cn/>
+
+    Sign in with the work / tenant account you want the bot to belong to.
+  </Step>
+
+  <Step title="Create a Custom App">
+    Developer Console → **Create Custom App**. Set a name and icon.
+  </Step>
+
+  <Step title="Copy App ID and App Secret">
+    On the app's home page, copy the **App ID** (starts with `cli_`) and the **App Secret** (32-character string). Treat the secret like a password.
+  </Step>
+
+  <Step title="Enable required scopes">
+    Under **Permissions & Scopes**, enable:
+
+    - `im:message` — read message events
+    - `im:message.group_at_msg` — receive @mentions in groups
+    - `im:message:send_as_bot` — send messages as the bot
+
+    Skipping any of these means the bot will silently miss events or fail to send.
+  </Step>
+
+  <Step title="Subscribe to message events in long-connection mode">
+    Under **Events & Callbacks**, set the delivery method to **Long connection mode** (NOT webhooks). Then add a subscription for:
+
+    - `im.message.receive_v1`
+
+    <Tip>
+    **Leave the Encrypt Key field blank.** Long-connection mode doesn't use webhook payload encryption — filling in an Encrypt Key here will break inbound events with no clear error.
+    </Tip>
+  </Step>
+
+  <Step title="Publish the app version">
+    Lark/Feishu requires you to publish a version (or use the dev tenant) before the bot can receive messages. Submit for review or activate the dev mode.
+  </Step>
+</Steps>
+
+## Connect in the App
+
+<Steps>
+  <Step title="Open Settings → Messaging in Craft Agent">
+    You'll see a third tile alongside Telegram and WhatsApp: **Lark / Feishu**.
+  </Step>
+  <Step title="Click Connect">
+    A dialog opens with a region selector and two secret fields.
+  </Step>
+  <Step title="Pick your region">
+    **Lark (international)** uses `open.larksuite.com`; **Feishu (China)** uses `open.feishu.cn`. A bot belongs to one or the other — they're separate ecosystems.
+  </Step>
+  <Step title="Paste App ID + App Secret, then Test">
+    Craft Agent exchanges them for a `tenant_access_token`. On success the button shows a green check; on failure you'll see Lark's error message verbatim.
+  </Step>
+  <Step title="Click Save">
+    Credentials are stored in your workspace keychain and the Lark adapter starts the long-connection socket.
+  </Step>
+</Steps>
+
+## First Conversation
+
+<Steps>
+  <Step title="Find your bot in Lark / Feishu">
+    Search for the bot by name in your Lark/Feishu app. DM it.
+  </Step>
+  <Step title="Send /pair">
+    The bot replies with a usage hint.
+  </Step>
+  <Step title="Generate a code in Craft Agent">
+    Open any session's menu → **Pair with Messaging** → **Lark**. Copy the 6-digit code.
+  </Step>
+  <Step title="Type /pair <code> in Lark">
+    The bot confirms in chat and the binding is created.
+  </Step>
+  <Step title="Send any message">
+    Craft Agent receives it. The assistant's response streams back into the same chat.
+  </Step>
+</Steps>
+
+## Group chats
+
+In groups, the bot only receives messages where it's **@mentioned** — that's Lark's default scope behaviour for `im:message.group_at_msg`. Without an @mention, the event isn't delivered server-side, so there's nothing for the adapter to drop. Messages addressed to the bot work the same way as DMs.
+
+## Rich Text
+
+The agent's responses preserve common formatting when sent to Lark:
+
+- **bold**, *italic*, ~~strikethrough~~ render natively via Lark's `post` message type
+- `[Links](https://example.com)` are clickable
+- Fenced code blocks (` ```python ... ``` `) render with their language tag
+- Paragraph breaks are preserved
+
+What doesn't translate (sent as plain text within the post):
+
+- Headers (`#`, `##`, …) — Lark `post` has no header element
+- Bullet / numbered lists — bullets appear as plain `•` or `1.` prefixes
+- Tables — rendered as space-padded plain text
+- Inline `` `code` `` — rendered as bold text (Lark `post` has no inline-code element)
+
+This subset covers the bulk of agent output. If your workflow leans heavily on tables, ask the agent to summarize them as prose instead.
+
+## Rich Cards
+
+When the agent needs your input mid-flow (e.g. plan approval), buttons render as a Lark **interactive card** with native action buttons. Tap a button — the agent receives the press and proceeds. The card auto-clears once the choice is processed.
+
+Phase-2 limits:
+
+- Up to 10 buttons per card
+- Button labels truncated at 30 characters
+
+## Attachments
+
+Both directions are supported in DMs and group @mentions:
+
+- **Inbound**: send images and files to the bot. They're downloaded server-side and made available to the agent under the session's working directory.
+- **Outbound**: the agent can send images and documents back. Captions accompanying a file are sent as a follow-up text message (Lark API can't combine caption + file in a single message).
+
+Limits enforced by the adapter:
+
+- Max attachment size: 20 MB (matches the renderer's read limit)
+- Audio, video, and stickers are dropped with a polite "unsupported attachment" log line
+
+## Limitations
+
+- Lark and Feishu are separate domains — a bot belongs to one or the other, not both
+- Bot only sees @mentions in groups (Lark's default `im:message.group_at_msg` scope; cannot be widened without enterprise approvals)
+- Edits to messages older than 24 hours are silently dropped (Lark API limit)
+- Markdown headers, lists, and tables are rendered as plain text within `post` (Lark `post` has no native equivalents)
+
+## Troubleshooting
+
+- **"Bot doesn't receive messages"** — verify `im:message` is enabled and `im.message.receive_v1` is subscribed under Events & Callbacks. Double-check the delivery mode is **Long connection**, not webhooks.
+- **"Connection failed during Test"** — if the App Secret was regenerated in the Open Platform, copy the new value. If you switched the app's tenant, the old credentials are revoked.
+- **"Bot received my DM but ignores my group message"** — bot needs the `im:message.group_at_msg` scope, AND the message must @mention the bot.
+- **"Cards arrive but button presses don't reach the agent"** — confirm the app is **published** (or the tenant is in dev-mode). Cards from a draft app can render but card-action callbacks won't fire.
+- **"Can't send files larger than ~20 MB"** — that's the adapter's hard cap. Compress or split before sending.
+- **Logs**: `~/.craft-agent/logs/messaging-gateway.log` — search for `component:"lark-adapter"` or `event:"lark_*"`.

@@ -53,7 +53,7 @@ export type MessagingDialogState =
   | { kind: 'closed' }
   | {
       kind: 'pairing'
-      platform: 'telegram' | 'whatsapp'
+      platform: 'telegram' | 'whatsapp' | 'lark'
       sessionId: string
       code: string | null
       expiresAt: number | null

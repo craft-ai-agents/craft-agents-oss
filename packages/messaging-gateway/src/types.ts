@@ -9,7 +9,7 @@
 // Platform types
 // ---------------------------------------------------------------------------
 
-export type PlatformType = 'telegram' | 'whatsapp'
+export type PlatformType = 'telegram' | 'whatsapp' | 'lark'
 
 // ---------------------------------------------------------------------------
 // Logger
@@ -70,7 +70,7 @@ export interface AdapterCapabilities {
   inlineButtons: boolean
   maxButtons: number
   maxMessageLength: number
-  markdown: 'v2' | 'whatsapp'
+  markdown: 'v2' | 'whatsapp' | 'lark-post'
   webhookSupport: boolean
 }
 
@@ -337,6 +337,17 @@ export interface MessagingConfig {
        * the expected UX for new users.
        */
       selfChatMode?: boolean
+    }
+    lark?: {
+      enabled: boolean
+      /**
+       * Which Lark/Feishu domain the bot belongs to. A bot is registered
+       * with one Open Platform — they're separate ecosystems despite
+       * sharing the same SDK + protocols.
+       *  - `lark` → open.larksuite.com (international)
+       *  - `feishu` → open.feishu.cn (China)
+       */
+      domain?: 'lark' | 'feishu'
     }
   }
 }
