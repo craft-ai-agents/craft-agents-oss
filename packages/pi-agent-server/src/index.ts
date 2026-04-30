@@ -71,6 +71,7 @@ import { createWebFetchTool } from './tools/web-fetch.ts';
 import { resolveSearchProvider } from './tools/search/resolve-provider.ts';
 import { createSearchTool } from './tools/search/create-search-tool.ts';
 import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
+import { buildCustomEndpointRequestHeaders } from './custom-endpoint-headers.ts';
 
 // ============================================================
 // Types — JSONL Protocol
@@ -439,6 +440,7 @@ function registerCustomEndpointModels(
     apiKey: resolveCustomEndpointApiKey(),
     api,
     authHeader: true,
+    headers: buildCustomEndpointRequestHeaders(),
     models: allIds.map(id => buildCustomEndpointModelDef(
       id,
       { supportsImages: initConfig?.customEndpoint?.supportsImages === true },
