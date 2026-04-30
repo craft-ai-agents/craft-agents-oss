@@ -1036,6 +1036,19 @@ export class SessionManager implements ISessionManager {
   private lastTimestamp = 0
 
   /**
+   * Optional binder installed by the messaging-gateway bootstrap. When set,
+   * `executePromptAutomation` calls it after creating a session whose matcher
+   * declared `telegramTopic`, so the new session is bound to a Telegram forum
+   * topic in the workspace's paired supergroup. Best-effort — failures must
+   * not block the session.
+   */
+  private automationBinder?: (input: {
+    workspaceId: string
+    sessionId: string
+    topicName: string
+  }) => Promise<void>
+
+  /**
    * Centralized setter for session processing state.
    * Automatically notifies the power manager on transitions (true→false, false→true)
    * so callers don't need to remember to call onSessionStarted/onSessionStopped.
@@ -1054,6 +1067,17 @@ export class SessionManager implements ISessionManager {
    *  Resolves immediately if already initialized. */
   waitForInit(): Promise<void> {
     return this.initGate.wait()
+  }
+
+  /**
+   * Install the automation→topic binder. Wired by the messaging-gateway
+   * bootstrap so SessionManager doesn't need to import the messaging
+   * package (avoids a package-level circular dependency).
+   */
+  setAutomationBinder(
+    fn: (input: { workspaceId: string; sessionId: string; topicName: string }) => Promise<void>,
+  ): void {
+    this.automationBinder = fn
   }
 
   private browserPaneManager: IBrowserPaneManager | null = null
@@ -1361,6 +1385,7 @@ export class SessionManager implements ISessionManager {
                 model: pending.model,
                 thinkingLevel: pending.thinkingLevel,
                 automationName: pending.automationName,
+                telegramTopic: pending.telegramTopic,
               })
             )
           )
@@ -6875,6 +6900,7 @@ export class SessionManager implements ISessionManager {
       model,
       thinkingLevel,
       automationName,
+      telegramTopic,
     } = input
 
     // Warn if llmConnection was specified but doesn't resolve
@@ -6920,6 +6946,26 @@ export class SessionManager implements ISessionManager {
     // before streaming events arrive. Without this, the renderer may create
     // a synthetic empty session and temporarily show "New chat".
     this.sendEvent({ type: 'session_created', sessionId: session.id }, workspaceId)
+
+    // Bind the new session to its Telegram forum topic if the matcher
+    // declared `telegramTopic`. Done before `sendMessage` so the first
+    // assistant tokens already route through the bound topic. Failure
+    // is logged inside the binder; the session continues unbound.
+    if (this.automationBinder && telegramTopic && telegramTopic.trim().length > 0) {
+      try {
+        await this.automationBinder({
+          workspaceId,
+          sessionId: session.id,
+          topicName: telegramTopic.trim(),
+        })
+      } catch (err) {
+        sessionLog.warn('[Automations] automation binder threw', {
+          sessionId: session.id,
+          telegramTopic,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
 
     // Send the prompt
     await this.sendMessage(session.id, prompt, undefined, undefined, {

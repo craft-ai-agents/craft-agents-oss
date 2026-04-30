@@ -20,6 +20,26 @@ interface ClientSessionWatchState {
 // Per-client session file watcher state (supports concurrent windows/clients safely)
 const clientSessionWatches = new Map<string, ClientSessionWatchState>()
 
+const SESSION_GET_LOG_ID_LIMIT = 25
+
+function summarizeIds(ids: Iterable<string>, limit = SESSION_GET_LOG_ID_LIMIT) {
+  const all = Array.from(ids)
+  return {
+    count: all.length,
+    ids: all.slice(0, limit),
+    truncated: all.length > limit,
+  }
+}
+
+function sessionWorkspaceDistribution(sessions: Array<{ workspaceId?: string }>): Record<string, number> {
+  const distribution: Record<string, number> = {}
+  for (const session of sessions) {
+    const key = session.workspaceId || '(missing)'
+    distribution[key] = (distribution[key] ?? 0) + 1
+  }
+  return distribution
+}
+
 /**
  * Clean up session file watcher for a client.
  * Called from main process disconnect hooks to prevent watcher leaks.
@@ -122,9 +142,23 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
       log.error('GET_SESSIONS continuing after initialization failure:', error)
     }
     const end = perf.start('rpc.getSessions')
-    const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
+    const windowWorkspaceId = ctx.webContentsId != null
+      ? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId)
+      : undefined
+    const workspaceId = ctx.workspaceId ?? windowWorkspaceId
     const sessions = sessionManager.getSessions(workspaceId ?? undefined)
     end()
+
+    log.info('[sessions:get] result', {
+      ctxWorkspaceId: ctx.workspaceId,
+      webContentsId: ctx.webContentsId,
+      windowWorkspaceId,
+      resolvedWorkspaceId: workspaceId,
+      returnedCount: sessions.length,
+      returnedWorkspaceIds: sessionWorkspaceDistribution(sessions),
+      returnedIds: summarizeIds(sessions.map(s => s.id)),
+    })
+
     return sessions
   })
 

@@ -57,9 +57,21 @@ export class BindingStore {
   // Query
   // -------------------------------------------------------------------------
 
-  findByChannel(platform: PlatformType, channelId: string): ChannelBinding | undefined {
+  /**
+   * Find the active binding for a (platform, channelId, threadId) tuple.
+   * `threadId` distinguishes Telegram supergroup forum topics from each
+   * other and from the supergroup's General topic / DMs (undefined).
+   *
+   * Bindings created without `threadId` (DMs, pre-topics-feature data)
+   * only match calls passing `threadId === undefined`.
+   */
+  findByChannel(platform: PlatformType, channelId: string, threadId?: number): ChannelBinding | undefined {
     return this.bindings.find(
-      (b) => b.platform === platform && b.channelId === channelId && b.enabled,
+      (b) =>
+        b.platform === platform &&
+        b.channelId === channelId &&
+        (b.threadId ?? undefined) === threadId &&
+        b.enabled,
     )
   }
 
@@ -82,10 +94,13 @@ export class BindingStore {
     channelId: string,
     channelName?: string,
     config?: Partial<ChannelBinding['config']>,
+    threadId?: number,
   ): ChannelBinding {
-    // One channel → one session: evict any existing binding for the channel.
+    // One channel → one session: evict any existing binding for the
+    // (platform, channelId, threadId) tuple. Different topics in the same
+    // supergroup are independently bindable.
     this.bindings = this.bindings.filter(
-      (b) => !(b.platform === platform && b.channelId === channelId),
+      (b) => !(b.platform === platform && b.channelId === channelId && (b.threadId ?? undefined) === threadId),
     )
 
     const binding: ChannelBinding = {
@@ -94,6 +109,7 @@ export class BindingStore {
       sessionId,
       platform,
       channelId,
+      ...(threadId !== undefined ? { threadId } : {}),
       channelName,
       enabled: true,
       createdAt: Date.now(),
@@ -108,16 +124,17 @@ export class BindingStore {
       sessionId,
       platform,
       channelId,
+      threadId,
       bindingId: binding.id,
       channelName,
     })
     return binding
   }
 
-  unbind(platform: PlatformType, channelId: string): boolean {
+  unbind(platform: PlatformType, channelId: string, threadId?: number): boolean {
     const before = this.bindings.length
     this.bindings = this.bindings.filter(
-      (b) => !(b.platform === platform && b.channelId === channelId),
+      (b) => !(b.platform === platform && b.channelId === channelId && (b.threadId ?? undefined) === threadId),
     )
     if (this.bindings.length !== before) {
       this.save()
@@ -125,6 +142,7 @@ export class BindingStore {
         event: 'binding_removed',
         platform,
         channelId,
+        threadId,
       })
       return true
     }

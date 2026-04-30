@@ -37,7 +37,7 @@ export interface SessionListRow {
 }
 
 /** Grouping mode for chat list */
-export type ChatGroupingMode = 'date' | 'status'
+export type ChatGroupingMode = 'date' | 'status' | 'unread'
 
 interface SessionListProps {
   items: SessionMeta[]
@@ -282,6 +282,53 @@ export function SessionList({
     // can insert header-only placeholder groups in the correct position.
     const rows: SessionListRow[] = flatItems.map(item => ({ item }))
 
+    if (groupingMode === 'unread') {
+      // Two fixed buckets: unread on top, read below. Within each, items keep
+      // the same `lastMessageAt`-descending order they already arrive in.
+      // Both buckets always render — even when empty — so the user can see at
+      // a glance which mode they're in. The header shows a count, so an empty
+      // bucket is unambiguous (e.g. "Unread (0)").
+      const unreadRows: SessionListRow[] = []
+      const readRows: SessionListRow[] = []
+      for (const row of rows) {
+        if (row.item.hasUnread) unreadRows.push(row)
+        else readRows.push(row)
+      }
+      unreadRows.sort((a, b) => (b.item.lastMessageAt || 0) - (a.item.lastMessageAt || 0))
+      readRows.sort((a, b) => (b.item.lastMessageAt || 0) - (a.item.lastMessageAt || 0))
+
+      const collapsedUnread = collapsedGroupsMeta.find(m => m.key === 'unread-yes')
+      const collapsedRead = collapsedGroupsMeta.find(m => m.key === 'unread-no')
+
+      // For collapsed groups prefer the persisted count (matches how the
+      // date/status branches surface the size of a collapsed bucket).
+      const unreadCount = collapsedUnread ? collapsedUnread.count : unreadRows.length
+      const readCount = collapsedRead ? collapsedRead.count : readRows.length
+
+      const orderedGroups: EntityListGroup<SessionListRow>[] = [
+        {
+          key: 'unread-yes',
+          label: t('session.unreadGroup', { count: unreadCount }),
+          items: unreadRows,
+          // Empty groups have nothing to collapse into; suppress the caret.
+          collapsible: unreadRows.length > 0 || !!collapsedUnread,
+          ...(collapsedUnread ? { collapsedCount: collapsedUnread.count } : {}),
+        },
+        {
+          key: 'unread-no',
+          label: t('session.readGroup', { count: readCount }),
+          items: readRows,
+          collapsible: readRows.length > 0 || !!collapsedRead,
+          ...(collapsedRead ? { collapsedCount: collapsedRead.count } : {}),
+        },
+      ]
+
+      return {
+        rows: orderedGroups.flatMap(g => g.items),
+        groups: orderedGroups,
+      }
+    }
+
     if (groupingMode === 'status') {
       const statusOrder = new Map<string, number>()
       sessionStatuses.forEach((state, index) => statusOrder.set(state.id, index))
@@ -392,6 +439,9 @@ export function SessionList({
   const collapseAllGroups = useCallback(() => {
     if (groupingMode === 'status') {
       const allKeys = new Set(items.map(item => `status-${getSessionStatus(item)}`))
+      setCollapsedGroups(allKeys)
+    } else if (groupingMode === 'unread') {
+      const allKeys = new Set(items.map(item => item.hasUnread ? 'unread-yes' : 'unread-no'))
       setCollapsedGroups(allKeys)
     } else {
       const allKeys = new Set(items.map(item =>

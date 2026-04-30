@@ -27,6 +27,15 @@ const NOOP_LOGGER: MessagingLogger = {
 }
 
 /**
+ * Result of consuming a pairing code. The `kind` discriminator tells the
+ * caller which downstream flow to run (bind a session, or register the
+ * supergroup chat at the workspace level).
+ */
+export type PairingConsumeResult =
+  | { kind: 'session'; workspaceId: string; sessionId: string }
+  | { kind: 'workspace-supergroup'; workspaceId: string }
+
+/**
  * Supplied by the registry. The gateway passes the consumer down to Commands so
  * /pair can redeem codes issued via the app UI. Only codes belonging to the
  * gateway's own workspace are honored.
@@ -38,8 +47,20 @@ export interface PairingCodeConsumer {
    * not after validation, so wrong guesses consume budget too.
    */
   canConsume(platform: PlatformType, senderId: string): boolean
-  /** Returns the pending pairing (workspace + session) if the code is valid, or null. */
-  consume(platform: PlatformType, code: string): { workspaceId: string; sessionId: string } | null
+  /** Returns the pending pairing if the code is valid, or null. */
+  consume(platform: PlatformType, code: string): PairingConsumeResult | null
+  /**
+   * Register the supergroup that just paired itself. Invoked from
+   * Commands.handlePair when the consumed code's kind is
+   * `workspace-supergroup`. Performs the persistence + adapter-reconfigure
+   * dance that lives in the registry.
+   */
+  bindWorkspaceSupergroup?(args: {
+    platform: PlatformType
+    chatId: string
+    /** Optional fall-back display name; the registry can fetch a real one via getChat. */
+    fallbackTitle?: string
+  }): Promise<{ title: string }>
 }
 
 export class Commands {
@@ -57,6 +78,7 @@ export class Commands {
 
   async handle(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
     const text = msg.text.trim()
+    const replyOpts = msg.threadId !== undefined ? { threadId: msg.threadId } : {}
 
     if (text.startsWith('/new')) {
       await this.handleNew(adapter, msg)
@@ -76,6 +98,7 @@ export class Commands {
         '/bind — connect to an existing session\n' +
         '/pair <code> — redeem a pairing code from the app\n' +
         '/help — show all commands',
+        replyOpts,
       )
     }
   }
@@ -128,6 +151,7 @@ export class Commands {
 
   private async handleNew(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
     const name = msg.text.replace(/^\/new\s*/, '').trim() || undefined
+    const replyOpts = msg.threadId !== undefined ? { threadId: msg.threadId } : {}
 
     try {
       const session = await this.sessionManager.createSession(this.workspaceId, { name })
@@ -138,12 +162,15 @@ export class Commands {
         adapter.platform,
         msg.channelId,
         msg.senderName,
+        undefined,
+        msg.threadId,
       )
 
       const displayName = session.name || session.id
       await adapter.sendText(
         msg.channelId,
         `Created "${displayName}" — you're connected. Just type to start.`,
+        replyOpts,
       )
       this.log.info('session created and bound from chat', {
         event: 'session_created_from_chat',
@@ -151,6 +178,7 @@ export class Commands {
         sessionId: session.id,
         platform: adapter.platform,
         channelId: msg.channelId,
+        threadId: msg.threadId,
       })
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown error'
@@ -161,18 +189,19 @@ export class Commands {
         channelId: msg.channelId,
         error: err,
       })
-      await adapter.sendText(msg.channelId, `Failed to create session: ${errorMsg}`)
+      await adapter.sendText(msg.channelId, `Failed to create session: ${errorMsg}`, replyOpts)
     }
   }
 
   private async handleBind(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
     const bindArg = msg.text.replace(/^\/bind\s*/, '').trim()
     const recent = this.getRecentSessions()
+    const replyOpts = msg.threadId !== undefined ? { threadId: msg.threadId } : {}
 
     if (bindArg) {
       const session = await this.resolveBindTarget(bindArg, recent)
       if (!session) {
-        await adapter.sendText(msg.channelId, `Session not found: ${bindArg}`)
+        await adapter.sendText(msg.channelId, `Session not found: ${bindArg}`, replyOpts)
         return
       }
 
@@ -182,6 +211,8 @@ export class Commands {
         adapter.platform,
         msg.channelId,
         msg.senderName,
+        undefined,
+        msg.threadId,
       )
 
       this.log.info('chat bound to existing session', {
@@ -190,10 +221,11 @@ export class Commands {
         sessionId: session.id,
         platform: adapter.platform,
         channelId: msg.channelId,
+        threadId: msg.threadId,
         bindArg,
       })
 
-      await adapter.sendText(msg.channelId, `Bound to "${session.name || session.id}"`)
+      await adapter.sendText(msg.channelId, `Bound to "${session.name || session.id}"`, replyOpts)
       return
     }
 
@@ -201,6 +233,7 @@ export class Commands {
       await adapter.sendText(
         msg.channelId,
         'No sessions found. Use /new to create one.',
+        replyOpts,
       )
       return
     }
@@ -216,6 +249,7 @@ export class Commands {
         msg.channelId,
         'Recent sessions:',
         buttons,
+        replyOpts,
       )
       return
     }
@@ -228,12 +262,15 @@ export class Commands {
     await adapter.sendText(
       msg.channelId,
       'Recent sessions:\n' + lines.join('\n') + '\n\nUse /bind <number> to connect, or /bind <session-id> if you already know it.',
+      replyOpts,
     )
   }
 
   private async handlePair(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
+    const replyOpts = msg.threadId !== undefined ? { threadId: msg.threadId } : {}
+
     if (!this.pairingConsumer) {
-      await adapter.sendText(msg.channelId, 'Pairing is not available in this build.')
+      await adapter.sendText(msg.channelId, 'Pairing is not available in this build.', replyOpts)
       return
     }
 
@@ -251,6 +288,7 @@ export class Commands {
       await adapter.sendText(
         msg.channelId,
         '⏳ Too many pairing attempts. Try again in a minute.',
+        replyOpts,
       )
       return
     }
@@ -261,20 +299,27 @@ export class Commands {
     if (!/^\d{6}$/.test(code)) {
       await adapter.sendText(
         msg.channelId,
-        'Usage: /pair <6-digit code>\n\nGenerate a code from the session menu in the Craft Agent app.',
+        'Usage: /pair <6-digit code>\n\nGenerate a code from the session menu or the Telegram supergroup setup in the Craft Agent app.',
+        replyOpts,
       )
       return
     }
 
     const entry = this.pairingConsumer.consume(adapter.platform, code)
     if (!entry) {
-      await adapter.sendText(msg.channelId, 'Invalid or expired pairing code.')
+      await adapter.sendText(msg.channelId, 'Invalid or expired pairing code.', replyOpts)
       return
     }
 
+    if (entry.kind === 'workspace-supergroup') {
+      await this.handleSupergroupPair(adapter, msg, entry, replyOpts)
+      return
+    }
+
+    // entry.kind === 'session'
     const session = await this.sessionManager.getSession(entry.sessionId)
     if (!session) {
-      await adapter.sendText(msg.channelId, 'Session no longer exists.')
+      await adapter.sendText(msg.channelId, 'Session no longer exists.', replyOpts)
       return
     }
 
@@ -284,35 +329,111 @@ export class Commands {
       adapter.platform,
       msg.channelId,
       msg.senderName,
+      undefined,
+      msg.threadId,
     )
 
     this.log.info('pairing code redeemed', {
       event: 'pairing_redeemed',
+      kind: 'session',
       workspaceId: entry.workspaceId,
       sessionId: entry.sessionId,
       platform: adapter.platform,
       channelId: msg.channelId,
+      threadId: msg.threadId,
     })
 
+    const topicHint = msg.threadId !== undefined
+      ? ` (topic #${msg.threadId})`
+      : ''
     await adapter.sendText(
       msg.channelId,
-      `✅ Paired with "${session.name || session.id}". You can start chatting now.`,
+      `✅ Paired with "${session.name || session.id}"${topicHint}. You can start chatting now.`,
+      replyOpts,
     )
   }
 
+  /**
+   * Workspace-supergroup pairing: a `/pair <code>` typed in a Telegram
+   * supergroup with a workspace-supergroup-kind code. We register the
+   * supergroup's chat_id at the workspace level so the adapter starts
+   * accepting messages from it (in addition to DMs).
+   */
+  private async handleSupergroupPair(
+    adapter: PlatformAdapter,
+    msg: IncomingMessage,
+    entry: { workspaceId: string },
+    replyOpts: { threadId?: number },
+  ): Promise<void> {
+    if (adapter.platform !== 'telegram') {
+      await adapter.sendText(
+        msg.channelId,
+        'Workspace-supergroup pairing is only supported on Telegram.',
+        replyOpts,
+      )
+      return
+    }
+
+    if (!this.pairingConsumer?.bindWorkspaceSupergroup) {
+      await adapter.sendText(
+        msg.channelId,
+        'Supergroup pairing is not enabled in this build.',
+        replyOpts,
+      )
+      return
+    }
+
+    try {
+      const result = await this.pairingConsumer.bindWorkspaceSupergroup({
+        platform: adapter.platform,
+        chatId: msg.channelId,
+        fallbackTitle: msg.senderName,
+      })
+      this.log.info('pairing code redeemed', {
+        event: 'pairing_redeemed',
+        kind: 'workspace-supergroup',
+        workspaceId: entry.workspaceId,
+        platform: adapter.platform,
+        channelId: msg.channelId,
+        title: result.title,
+      })
+      await adapter.sendText(
+        msg.channelId,
+        `✅ Supergroup *${result.title}* paired. Sessions can now be bound to topics in this group.`,
+        replyOpts,
+      )
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      this.log.error('workspace supergroup bind failed', {
+        event: 'workspace_supergroup_bind_failed',
+        workspaceId: entry.workspaceId,
+        platform: adapter.platform,
+        channelId: msg.channelId,
+        error: err,
+      })
+      await adapter.sendText(
+        msg.channelId,
+        `❌ Couldn't pair this supergroup: ${message}`,
+        replyOpts,
+      )
+    }
+  }
+
   private async handleUnbind(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
-    const removed = this.bindingStore.unbind(adapter.platform, msg.channelId)
+    const replyOpts = msg.threadId !== undefined ? { threadId: msg.threadId } : {}
+    const removed = this.bindingStore.unbind(adapter.platform, msg.channelId, msg.threadId)
     if (removed) {
-      await adapter.sendText(msg.channelId, 'Disconnected from session.')
+      await adapter.sendText(msg.channelId, 'Disconnected from session.', replyOpts)
     } else {
-      await adapter.sendText(msg.channelId, 'No session is bound to this chat.')
+      await adapter.sendText(msg.channelId, 'No session is bound to this chat.', replyOpts)
     }
   }
 
   private async handleStatus(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
-    const binding = this.bindingStore.findByChannel(adapter.platform, msg.channelId)
+    const replyOpts = msg.threadId !== undefined ? { threadId: msg.threadId } : {}
+    const binding = this.bindingStore.findByChannel(adapter.platform, msg.channelId, msg.threadId)
     if (!binding) {
-      await adapter.sendText(msg.channelId, 'No session bound. Use /bind, /new, or /pair.')
+      await adapter.sendText(msg.channelId, 'No session bound. Use /bind, /new, or /pair.', replyOpts)
       return
     }
 
@@ -324,21 +445,23 @@ export class Commands {
     await adapter.sendText(
       msg.channelId,
       `Bound to "${name}"\nApproval: ${mode}\nResponse mode: ${responseMode}`,
+      replyOpts,
     )
   }
 
   private async handleStop(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
-    const binding = this.bindingStore.findByChannel(adapter.platform, msg.channelId)
+    const replyOpts = msg.threadId !== undefined ? { threadId: msg.threadId } : {}
+    const binding = this.bindingStore.findByChannel(adapter.platform, msg.channelId, msg.threadId)
     if (!binding) {
-      await adapter.sendText(msg.channelId, 'No session bound.')
+      await adapter.sendText(msg.channelId, 'No session bound.', replyOpts)
       return
     }
 
     try {
       await this.sessionManager.cancelProcessing(binding.sessionId)
-      await adapter.sendText(msg.channelId, 'Stopped.')
+      await adapter.sendText(msg.channelId, 'Stopped.', replyOpts)
     } catch {
-      await adapter.sendText(msg.channelId, 'Nothing to stop.')
+      await adapter.sendText(msg.channelId, 'Nothing to stop.', replyOpts)
     }
   }
 
@@ -346,6 +469,7 @@ export class Commands {
     const bindLine = adapter.platform === 'whatsapp'
       ? '/bind — list recent sessions (then use /bind <number>)\n'
       : '/bind — pick from recent sessions\n'
+    const replyOpts = msg.threadId !== undefined ? { threadId: msg.threadId } : {}
 
     await adapter.sendText(
       msg.channelId,
@@ -358,6 +482,7 @@ export class Commands {
       '/status — show current binding\n' +
       '/stop — abort current agent run\n' +
       '/help — show this message',
+      replyOpts,
     )
   }
 

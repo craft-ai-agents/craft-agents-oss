@@ -13,6 +13,7 @@ import { tiptapCodeBlock } from './TiptapCodeBlockView'
 import { TiptapBubbleMenus, INLINE_MATH_EDIT_EVENT } from './TiptapBubbleMenus'
 import { TiptapSlashMenu } from './TiptapSlashMenu'
 import { MermaidBlock } from './extensions/MermaidBlock'
+import { looksLikeMermaidSource } from './mermaid-source'
 import { LatexBlock } from './extensions/LatexBlock'
 import { RichBlockInteractions } from './extensions/RichBlockInteractions'
 import { cn } from '../../lib/utils'
@@ -97,20 +98,6 @@ export function postprocessMarkdownFromOfficial(markdown: string): string {
 }
 
 const MERMAID_FILE_EXTENSIONS = new Set(['mmd', 'mermaid'])
-const MERMAID_DIAGRAM_PREFIXES = [
-  'graph ',
-  'flowchart ',
-  'sequenceDiagram',
-  'classDiagram',
-  'stateDiagram',
-  'stateDiagram-v2',
-  'erDiagram',
-  'journey',
-  'gantt',
-  'pie',
-  'mindmap',
-  'timeline',
-]
 
 export function isMermaidFilename(fileName: string): boolean {
   const ext = fileName.toLowerCase().split('.').pop()
@@ -127,15 +114,7 @@ export function extractMermaidSource(text: string): string | null {
     return source.length > 0 ? source : null
   }
 
-  const lines = trimmed.split('\n')
-  const firstMeaningful = lines
-    .map(line => line.trim())
-    .find((line) => line.length > 0 && !line.startsWith('%%'))
-
-  if (!firstMeaningful) return null
-
-  const looksLikeMermaid = MERMAID_DIAGRAM_PREFIXES.some(prefix => firstMeaningful.startsWith(prefix))
-  return looksLikeMermaid ? trimmed : null
+  return looksLikeMermaidSource(trimmed) ? trimmed : null
 }
 
 async function readFileAsDataUrl(file: File): Promise<string> {

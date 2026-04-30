@@ -8,24 +8,26 @@ import { join } from 'path';
 import type { Arch, BuildConfig } from './common';
 
 /**
- * Verify SDK is bundled in the packaged Linux app
+ * Verify SDK native binary is bundled in the packaged Linux app.
+ * Since SDK 0.2.113 the SDK ships a per-platform native binary instead of cli.js.
  */
-export function verifyPackagedSDK(unpackedPath: string, arch: Arch): void {
+export function verifyPackagedSDK(unpackedPath: string, _arch: Arch): void {
   const appPath = join(unpackedPath, 'resources', 'app');
+  const binaryPath = join(
+    appPath,
+    'node_modules', '@anthropic-ai', 'claude-agent-sdk-binary', 'claude',
+  );
 
-  // Verify SDK
-  const sdkPath = join(appPath, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js');
-
-  if (!existsSync(sdkPath)) {
-    throw new Error(`CRITICAL: SDK not bundled! Expected at: ${sdkPath}`);
+  if (!existsSync(binaryPath)) {
+    throw new Error(`CRITICAL: SDK native binary not bundled! Expected at: ${binaryPath}`);
   }
 
-  const stats = statSync(sdkPath);
-  if (stats.size < 1_000_000) {
-    throw new Error(`CRITICAL: SDK cli.js too small (${stats.size} bytes, expected ~11MB)`);
+  const stats = statSync(binaryPath);
+  if (stats.size < 50_000_000) {
+    throw new Error(`CRITICAL: SDK native binary too small (${stats.size} bytes, expected ~210 MB)`);
   }
 
-  console.log(`  SDK bundled: cli.js is ${(stats.size / 1024 / 1024).toFixed(1)} MB`);
+  console.log(`  SDK bundled: claude binary is ${(stats.size / 1024 / 1024).toFixed(1)} MB`);
 }
 
 /**

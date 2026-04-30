@@ -1,10 +1,68 @@
 import type { ComponentEntry } from './types'
 import { MessagingSettingsPagePreview } from '../demos/messaging/MessagingSettingsPagePreview'
+import { MessagingTelegramReworkedPreview } from '../demos/messaging/MessagingTelegramReworkedPreview'
 import { PairingCodeDialogPreview } from '../demos/messaging/PairingCodeDialogPreview'
 import { WhatsAppConnectDialogPreview } from '../demos/messaging/WhatsAppConnectDialogPreview'
 import { MessagingSubmenuPreview } from '../demos/messaging/MessagingSubmenuPreview'
 
 export const messagingComponents: ComponentEntry[] = [
+  {
+    id: 'messaging-telegram-reworked',
+    name: 'Telegram Settings (rework draft)',
+    category: 'Messaging',
+    description:
+      'Prototype: bot header → direct sessions → separator → collapsible supergroup with topics',
+    component: MessagingTelegramReworkedPreview,
+    layout: 'full',
+    props: [
+      {
+        name: 'telegramConnected',
+        description: 'Whether the Telegram bot is connected',
+        control: { type: 'boolean' },
+        defaultValue: true,
+      },
+      {
+        name: 'supergroupPaired',
+        description: 'Whether a supergroup is paired (controls chevron section vs Pair CTA)',
+        control: { type: 'boolean' },
+        defaultValue: true,
+      },
+      {
+        name: 'directSessions',
+        description: 'Direct (DM) session present? — only one direct session can be paired per bot.',
+        control: { type: 'number', min: 0, max: 1, step: 1 },
+        defaultValue: 1,
+      },
+      {
+        name: 'supergroupTopics',
+        description: 'Number of topic-bound bindings under the supergroup (0–3)',
+        control: { type: 'number', min: 0, max: 3, step: 1 },
+        defaultValue: 2,
+      },
+    ],
+    variants: [
+      {
+        name: 'Connected · DM + supergroup with topics',
+        props: { telegramConnected: true, supergroupPaired: true, directSessions: 1, supergroupTopics: 2 },
+      },
+      {
+        name: 'Connected · DM only (no supergroup)',
+        props: { telegramConnected: true, supergroupPaired: false, directSessions: 1, supergroupTopics: 0 },
+      },
+      {
+        name: 'Connected · Supergroup with no topics yet',
+        props: { telegramConnected: true, supergroupPaired: true, directSessions: 0, supergroupTopics: 0 },
+      },
+      {
+        name: 'Connected · No bindings, no supergroup',
+        props: { telegramConnected: true, supergroupPaired: false, directSessions: 0, supergroupTopics: 0 },
+      },
+      {
+        name: 'Disconnected',
+        props: { telegramConnected: false, supergroupPaired: false, directSessions: 0, supergroupTopics: 0 },
+      },
+    ],
+  },
   {
     id: 'messaging-settings-page',
     name: 'Messaging Settings Page',

@@ -31,6 +31,22 @@ export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps):
     return { success: true }
   })
 
+  server.handle(RPC_CHANNELS.messaging.TEST_LARK, async (
+    _ctx,
+    creds: { appId: string; appSecret: string; domain: 'lark' | 'feishu' },
+  ) => {
+    return registry.testLarkCredentials(creds)
+  })
+
+  server.handle(RPC_CHANNELS.messaging.SAVE_LARK, async (
+    ctx,
+    creds: { appId: string; appSecret: string; domain: 'lark' | 'feishu' },
+  ) => {
+    if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    await registry.saveLarkCredentials(ctx.workspaceId, creds)
+    return { success: true }
+  })
+
   server.handle(RPC_CHANNELS.messaging.DISCONNECT, async (ctx, platform: string) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
     await registry.disconnectPlatform(ctx.workspaceId, platform)
@@ -62,6 +78,23 @@ export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps):
   server.handle(RPC_CHANNELS.messaging.UNBIND_BINDING, async (ctx, bindingId: string) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
     return { success: registry.unbindBinding(ctx.workspaceId, bindingId) }
+  })
+
+  // Workspace-supergroup pairing (Telegram forum support — Phase A)
+  server.handle(RPC_CHANNELS.messaging.GENERATE_SUPERGROUP_CODE, async (ctx, platform: string) => {
+    if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    return registry.generateSupergroupPairingCode(ctx.workspaceId, platform)
+  })
+
+  server.handle(RPC_CHANNELS.messaging.GET_SUPERGROUP, async (ctx) => {
+    if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    return registry.getWorkspaceSupergroup(ctx.workspaceId)
+  })
+
+  server.handle(RPC_CHANNELS.messaging.UNBIND_SUPERGROUP, async (ctx) => {
+    if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    await registry.unbindWorkspaceSupergroup(ctx.workspaceId)
+    return { success: true }
   })
 
   server.handle(RPC_CHANNELS.messaging.WA_START_CONNECT, async (ctx) => {

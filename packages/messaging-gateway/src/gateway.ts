@@ -67,6 +67,8 @@ interface PendingCompactAccept {
   bindingId: string
   platform: PlatformType
   channelId: string
+  /** Forum topic id where the press came from (Telegram supergroup), if any. */
+  threadId?: number
   messageId: string
   planPath: string
   createdAt: number
@@ -285,11 +287,15 @@ export class MessagingGateway {
     const adapter = this.adapters.get(platform)
     if (!adapter) return
 
+    // Press metadata reused across all branches so responses post back into
+    // the same topic (Telegram supergroup) the button was tapped from.
+    const pressOpts = press.threadId !== undefined ? { threadId: press.threadId } : {}
+
     if (press.buttonId.startsWith('bind:')) {
       const sessionId = press.buttonId.slice('bind:'.length)
       const session = await this.sessionManager.getSession(sessionId)
       if (!session) {
-        await adapter.sendText(press.channelId, 'Session not found.')
+        await adapter.sendText(press.channelId, 'Session not found.', pressOpts)
         return
       }
 
@@ -299,11 +305,14 @@ export class MessagingGateway {
         platform,
         press.channelId,
         undefined,
+        undefined,
+        press.threadId,
       )
 
       await adapter.sendText(
         press.channelId,
         `Bound to "${session.name || session.id}"`,
+        pressOpts,
       )
       return
     }
@@ -318,6 +327,7 @@ export class MessagingGateway {
         await adapter.sendText(
           press.channelId,
           '⏸ Permission required. Approve it in the desktop app to continue.',
+          pressOpts,
         )
         return
       }
@@ -327,7 +337,7 @@ export class MessagingGateway {
       const requestId = parts[2]
       if (!requestId) return
 
-      const binding = this.bindingStore.findByChannel(platform, press.channelId)
+      const binding = this.bindingStore.findByChannel(platform, press.channelId, press.threadId)
       if (!binding) return
 
       const allowed = action === 'allow'
@@ -338,7 +348,7 @@ export class MessagingGateway {
         false,
       )
 
-      await adapter.sendText(press.channelId, allowed ? '✅ Allowed' : '❌ Denied')
+      await adapter.sendText(press.channelId, allowed ? '✅ Allowed' : '❌ Denied', pressOpts)
       return
     }
 
@@ -358,11 +368,14 @@ export class MessagingGateway {
     const token = parts[2]
     if (!token || (action !== 'accept' && action !== 'compact')) return
 
+    const pressOpts = press.threadId !== undefined ? { threadId: press.threadId } : {}
+
     const entry = this.planTokens.resolve(token)
     if (!entry) {
       await adapter.sendText(
         press.channelId,
         '⚠️ This plan has expired. Retry from the desktop app.',
+        pressOpts,
       )
       return
     }
@@ -379,7 +392,7 @@ export class MessagingGateway {
     if (action === 'accept') {
       try {
         await this.sessionManager.acceptPlan(entry.sessionId, entry.planPath)
-        await adapter.sendText(press.channelId, '✅ Plan accepted. Agent resuming.')
+        await adapter.sendText(press.channelId, '✅ Plan accepted. Agent resuming.', pressOpts)
       } catch (err) {
         this.log.error('acceptPlan failed', {
           event: 'plan_accept_failed',
@@ -389,6 +402,7 @@ export class MessagingGateway {
         await adapter.sendText(
           press.channelId,
           '❌ Couldn\'t accept the plan. Check the desktop app.',
+          pressOpts,
         )
       }
       return
@@ -397,7 +411,7 @@ export class MessagingGateway {
     // action === 'compact': persist the "waiting for compaction" intent, send
     // /compact, and let onSessionEvent → finishPendingCompactAccept dispatch
     // the approval once compaction finishes.
-    const binding = this.bindingStore.findByChannel(platform, press.channelId)
+    const binding = this.bindingStore.findByChannel(platform, press.channelId, press.threadId)
     if (!binding) return
 
     this.pendingCompactAccepts.set(entry.sessionId, {
@@ -406,6 +420,7 @@ export class MessagingGateway {
       bindingId: binding.id,
       platform,
       channelId: press.channelId,
+      ...(press.threadId !== undefined ? { threadId: press.threadId } : {}),
       messageId: record?.messageId ?? '',
       planPath: entry.planPath,
       createdAt: Date.now(),
@@ -417,6 +432,7 @@ export class MessagingGateway {
       await adapter.sendText(
         press.channelId,
         '♻️ Compacting conversation, then executing the plan…',
+        pressOpts,
       )
     } catch (err) {
       this.pendingCompactAccepts.delete(entry.sessionId)
@@ -428,6 +444,7 @@ export class MessagingGateway {
       await adapter.sendText(
         press.channelId,
         '❌ Couldn\'t start compaction. Check the desktop app.',
+        pressOpts,
       )
     }
   }
@@ -446,11 +463,12 @@ export class MessagingGateway {
     }
 
     const adapter = this.adapters.get(entry.platform)
+    const opts = entry.threadId !== undefined ? { threadId: entry.threadId } : {}
     try {
       await this.sessionManager.acceptPlan(sessionId, entry.planPath)
       await this.sessionManager.clearPendingPlanExecution(sessionId)
       if (adapter?.isConnected()) {
-        await adapter.sendText(entry.channelId, '✅ Plan executing after compaction.')
+        await adapter.sendText(entry.channelId, '✅ Plan executing after compaction.', opts)
       }
     } catch (err) {
       this.log.error('post-compaction acceptPlan failed', {
@@ -462,6 +480,7 @@ export class MessagingGateway {
         await adapter.sendText(
           entry.channelId,
           '❌ Compaction finished but the plan couldn\'t execute. Check the desktop app.',
+          opts,
         )
       }
     }

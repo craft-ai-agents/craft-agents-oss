@@ -2,6 +2,18 @@
 
 Craft Agent renders Mermaid diagrams natively as beautiful themed SVGs. Use this reference for syntax details.
 
+## Optional YAML Frontmatter
+
+Mermaid code blocks may start with YAML frontmatter. Craft Agent accepts the frontmatter for compatibility and renders the diagram syntax that follows it. For visible chart titles, prefer diagram-level title syntax (for example, `title "Monthly Revenue"` in `xychart-beta`).
+
+```mermaid
+---
+title: Example Diagram
+---
+graph LR
+    A --> B
+```
+
 ## Flowcharts
 
 **Header:** `graph LR` (left-right, preferred) or `graph TD` (top-down)
@@ -405,6 +417,66 @@ erDiagram
     CUSTOMER ||--o{ ORDER : places
     ORDER ||--|{ LINE_ITEM : contains
     PRODUCT ||--o{ LINE_ITEM : "included in"
+```
+
+## XY Charts
+
+**Header:** `xychart-beta` (vertical charts) or `xychart-beta horizontal` (horizontal charts)
+
+Use XY charts for metrics, trends, comparisons, and simple bar/line visualizations.
+
+### Directives
+
+| Syntax | Meaning |
+|--------|---------|
+| `title "Chart Title"` | Optional chart title |
+| `x-axis [A, B, C]` | Categorical X axis |
+| `x-axis "Label" [A, B, C]` | Categorical X axis with title |
+| `x-axis 0 --> 100` | Numeric X axis range |
+| `x-axis "Label" 0 --> 100` | Numeric X axis with title |
+| `y-axis "Label" 0 --> 100` | Numeric Y axis with title/range |
+| `bar [10, 20, 30]` | Bar series |
+| `line [12, 18, 28]` | Line series |
+
+### Bar Chart
+
+```mermaid
+xychart-beta
+    title "Monthly Revenue"
+    x-axis [Jan, Feb, Mar, Apr]
+    y-axis "Revenue ($k)" 0 --> 100
+    bar [25, 45, 60, 80]
+```
+
+### Line Chart
+
+```mermaid
+xychart-beta
+    title "Latency Trend"
+    x-axis [Mon, Tue, Wed, Thu, Fri]
+    y-axis "Latency (ms)" 0 --> 500
+    line [320, 280, 240, 210, 180]
+```
+
+### Mixed Bar + Line Chart
+
+```mermaid
+xychart-beta
+    title "Signups vs Activations"
+    x-axis [Week 1, Week 2, Week 3, Week 4]
+    y-axis "Users" 0 --> 1000
+    bar [420, 560, 690, 820]
+    line [210, 330, 520, 700]
+```
+
+### Horizontal Bar Chart
+
+```mermaid
+xychart-beta horizontal
+    title "Issue Counts by Severity"
+    x-axis [Low, Medium, High, Critical]
+    y-axis "Issues" 0 --> 50
+    bar [42, 28, 12, 4]
 ```
 
 ## Best Practices

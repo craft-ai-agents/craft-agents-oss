@@ -3,6 +3,7 @@ import {
   validateSetupTestInput,
   isLoopbackBaseUrl,
   setupTestRequiresApiKey,
+  resolveCustomEndpointSetup,
 } from './connection-setup-logic'
 
 describe('validateSetupTestInput', () => {
@@ -43,5 +44,68 @@ describe('setup test API key requirements', () => {
   it('allows keyless setup tests for loopback endpoints', () => {
     expect(setupTestRequiresApiKey('http://localhost:11434/v1')).toBe(false)
     expect(setupTestRequiresApiKey('http://127.0.0.1:11434/v1')).toBe(false)
+  })
+})
+
+describe('resolveCustomEndpointSetup', () => {
+  it('treats loopback URL with no credential as keyless local model', () => {
+    const result = resolveCustomEndpointSetup({
+      baseUrl: 'http://localhost:11434/v1',
+      credential: undefined,
+      customEndpointApi: 'openai-completions',
+    })
+
+    expect(result).toEqual({ authType: 'none', name: 'Local Model' })
+    expect(result.piAuthProvider).toBeUndefined()
+  })
+
+  it('treats loopback URL *with* a credential as a keyed custom endpoint (#636)', () => {
+    // Real-world case: vLLM, LiteLLM, or any local OpenAI-compat server with --api-key.
+    // Without piAuthProvider, getPiAuth() returns null at runtime → 401 on every chat request.
+    const result = resolveCustomEndpointSetup({
+      baseUrl: 'http://127.0.0.1:11111/v1',
+      credential: 'sk-local-test',
+      customEndpointApi: 'openai-completions',
+    })
+
+    expect(result).toEqual({ authType: 'api_key_with_endpoint', piAuthProvider: 'openai' })
+    expect(result.name).toBeUndefined()
+  })
+
+  it('uses the anthropic provider hint for anthropic-messages protocol', () => {
+    const result = resolveCustomEndpointSetup({
+      baseUrl: 'http://127.0.0.1:8080',
+      credential: 'sk-ant-local',
+      customEndpointApi: 'anthropic-messages',
+    })
+
+    expect(result).toEqual({ authType: 'api_key_with_endpoint', piAuthProvider: 'anthropic' })
+  })
+
+  it('treats remote endpoints with a credential as keyed custom endpoints', () => {
+    expect(resolveCustomEndpointSetup({
+      baseUrl: 'https://api.example.com/v1',
+      credential: 'sk-remote',
+      customEndpointApi: 'openai-completions',
+    })).toEqual({ authType: 'api_key_with_endpoint', piAuthProvider: 'openai' })
+  })
+
+  it('treats remote endpoints without a credential as keyed (still requires a key)', () => {
+    // Non-loopback URLs are never assumed keyless, even if credential is missing —
+    // setup validation handles "missing key" separately. We still set piAuthProvider
+    // so the saved connection has a useful icon.
+    expect(resolveCustomEndpointSetup({
+      baseUrl: 'https://api.example.com/v1',
+      credential: undefined,
+      customEndpointApi: 'openai-completions',
+    })).toEqual({ authType: 'api_key_with_endpoint', piAuthProvider: 'openai' })
+  })
+
+  it('treats undefined baseUrl as a non-loopback (keyed) endpoint', () => {
+    expect(resolveCustomEndpointSetup({
+      baseUrl: undefined,
+      credential: 'sk-anything',
+      customEndpointApi: 'openai-completions',
+    })).toEqual({ authType: 'api_key_with_endpoint', piAuthProvider: 'openai' })
   })
 })

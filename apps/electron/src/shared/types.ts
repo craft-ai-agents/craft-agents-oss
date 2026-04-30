@@ -692,10 +692,18 @@ export interface ElectronAPI {
   updateMessagingConfig(config: Record<string, unknown>): Promise<void>
   testTelegramToken(token: string): Promise<{ success: boolean; botName?: string; botUsername?: string; error?: string }>
   saveTelegramToken(token: string): Promise<void>
+  testLarkCredentials(creds: { appId: string; appSecret: string; domain: 'lark' | 'feishu' }): Promise<{ success: boolean; botName?: string; error?: string }>
+  saveLarkCredentials(creds: { appId: string; appSecret: string; domain: 'lark' | 'feishu' }): Promise<void>
   disconnectMessagingPlatform(platform: string): Promise<void>
   forgetMessagingPlatform(platform: string): Promise<void>
-  getMessagingBindings(): Promise<Array<{ id: string; workspaceId: string; sessionId: string; platform: string; channelId: string; channelName?: string; enabled: boolean; createdAt: number }>>
+  getMessagingBindings(): Promise<Array<{ id: string; workspaceId: string; sessionId: string; platform: string; channelId: string; threadId?: number; channelName?: string; enabled: boolean; createdAt: number }>>
   generateMessagingPairingCode(sessionId: string, platform: string): Promise<{ code: string; expiresAt: number; botUsername?: string }>
+  /** Telegram supergroup pairing — returns a code typed in the supergroup to capture its chatId. */
+  generateMessagingSupergroupCode(platform: string): Promise<{ code: string; expiresAt: number; botUsername?: string }>
+  /** Read the workspace's currently paired Telegram supergroup, if any. */
+  getMessagingSupergroup(): Promise<{ chatId: string; title: string; capturedAt: number } | null>
+  /** Forget the paired Telegram supergroup (existing topic bindings stay on disk but stop matching). */
+  unbindMessagingSupergroup(): Promise<{ success: boolean }>
   unbindMessagingSession(sessionId: string, platform?: string): Promise<void>
   unbindMessagingBinding(bindingId: string): Promise<{ success: boolean }>
   onMessagingBindingChanged(callback: (workspaceId: string) => void): () => void
