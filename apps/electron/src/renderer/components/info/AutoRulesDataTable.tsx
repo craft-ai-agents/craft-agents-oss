@@ -12,7 +12,6 @@
 import * as React from 'react'
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { TFunction } from 'i18next'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Maximize2 } from 'lucide-react'
 import { Info_DataTable, SortableHeader } from './Info_DataTable'
@@ -24,6 +23,8 @@ import { cn } from '@/lib/utils'
 import { useTheme } from '@/hooks/useTheme'
 import { toast } from 'sonner'
 import type { LabelConfig, AutoLabelRule } from '@craft-agent/shared/labels'
+
+type TranslationFn = ReturnType<typeof useTranslation>['t']
 
 /**
  * Flattened auto-rule row: associates a rule with its parent label
@@ -87,7 +88,7 @@ function PatternBadge({ pattern }: { pattern: string }) {
 }
 
 // Column definitions for the auto-rules flat table
-function getColumns(t: TFunction): ColumnDef<AutoRuleRow>[] {
+function getColumns(t: TranslationFn): ColumnDef<AutoRuleRow>[] {
   return [
     {
       id: 'label',

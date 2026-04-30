@@ -8,7 +8,6 @@
 import * as React from 'react'
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { TFunction } from 'i18next'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Maximize2 } from 'lucide-react'
 import { Info_DataTable, SortableHeader } from './Info_DataTable'
@@ -19,6 +18,8 @@ import { DataTableOverlay } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/hooks/useTheme'
 import { toast } from 'sonner'
+
+type TranslationFn = ReturnType<typeof useTranslation>['t']
 
 export type PermissionAccess = 'allowed' | 'blocked'
 export type PermissionType = 'tool' | 'bash' | 'api' | 'mcp'
@@ -87,7 +88,7 @@ function PatternBadge({ pattern }: { pattern: string }) {
 }
 
 // Column definitions with sorting
-function getColumnsWithType(t: TFunction): ColumnDef<PermissionRow>[] {
+function getColumnsWithType(t: TranslationFn): ColumnDef<PermissionRow>[] {
   return [
     {
       accessorKey: 'access',
@@ -137,7 +138,7 @@ function getColumnsWithType(t: TFunction): ColumnDef<PermissionRow>[] {
   ]
 }
 
-function getColumnsWithoutType(t: TFunction): ColumnDef<PermissionRow>[] {
+function getColumnsWithoutType(t: TranslationFn): ColumnDef<PermissionRow>[] {
   return [
     {
       accessorKey: 'access',

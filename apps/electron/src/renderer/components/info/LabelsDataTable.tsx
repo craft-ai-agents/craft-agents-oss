@@ -9,7 +9,6 @@
 import * as React from 'react'
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { TFunction } from 'i18next'
 import type { ColumnDef, Row } from '@tanstack/react-table'
 import { ChevronRight, Maximize2 } from 'lucide-react'
 import { Info_DataTable, SortableHeader } from './Info_DataTable'
@@ -19,6 +18,8 @@ import { LabelIcon } from '@/components/ui/label-icon'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/hooks/useTheme'
 import type { LabelConfig } from '@craft-agent/shared/labels'
+
+type TranslationFn = ReturnType<typeof useTranslation>['t']
 
 interface LabelsDataTableProps {
   /** Label tree (root-level nodes with nested children) */
@@ -75,7 +76,7 @@ function ExpandableNameCell({ row }: { row: Row<LabelConfig> }) {
 }
 
 // Column definitions for the labels tree table
-function getColumns(t: TFunction): ColumnDef<LabelConfig>[] {
+function getColumns(t: TranslationFn): ColumnDef<LabelConfig>[] {
   return [
     {
       id: 'color',

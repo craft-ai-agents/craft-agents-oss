@@ -8,11 +8,12 @@
 import * as React from 'react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { TFunction } from 'i18next'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Info_DataTable, SortableHeader } from './Info_DataTable'
 import { Info_Badge } from './Info_Badge'
 import { Info_StatusBadge } from './Info_StatusBadge'
+
+type TranslationFn = ReturnType<typeof useTranslation>['t']
 
 export type ToolPermission = 'allowed' | 'requires-permission'
 
@@ -33,7 +34,7 @@ interface ToolsDataTableProps {
   className?: string
 }
 
-function getColumns(t: TFunction): ColumnDef<ToolRow>[] {
+function getColumns(t: TranslationFn): ColumnDef<ToolRow>[] {
   return [
     {
       accessorKey: 'permission',
