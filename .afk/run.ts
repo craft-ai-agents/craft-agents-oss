@@ -26,7 +26,9 @@ function parseAgent(): AgentProvider {
   const idx = process.argv.indexOf("--agent");
   const name = idx !== -1 ? process.argv[idx + 1] : "claude";
   if (name === "codex") return sandcastle.codex("gpt-5.5", { effort: "medium" });
-  return sandcastle.claudeCode("claude-sonnet-4-6", { effort: "medium" });
+  // captureSessions: false — local provider runs Claude in the host's ~/.claude/projects/,
+  // not in a container path, so sandcastle's session transfer always fails.
+  return sandcastle.claudeCode("claude-sonnet-4-6", { effort: "medium", captureSessions: false });
 }
 
 const MAX_ITERATIONS = parseArg("--iterations", 10);
