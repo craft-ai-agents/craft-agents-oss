@@ -71,6 +71,10 @@ export interface IncomingMessageEvent {
   text: string
   /** True when the message arrived on a channel already bound to a session. */
   bound: boolean
+  /** Alias for bound-at-arrival semantics, preserved after route/command side effects. */
+  wasBound: boolean
+  /** True when the channel is bound after command handling and routing complete. */
+  boundAfterRoute: boolean
   /** Number of attachments present on the message. */
   attachmentCount: number
   /** Timestamp from the platform (epoch ms). */
@@ -248,10 +252,14 @@ export class MessagingGateway {
 
   private wireAdapter(adapter: PlatformAdapter): void {
     adapter.onMessage(async (msg: IncomingMessage) => {
+      const wasBound = !!this.bindingStore.findByChannel(msg.platform, msg.channelId)
       const isCommand = msg.text.trim().startsWith('/')
       if (isCommand) {
         const handled = await this.commands.handleCommand(adapter, msg)
-        if (handled) return
+        if (handled) {
+          await this.emitIncomingMessageHook(msg, wasBound)
+          return
+        }
       }
       await this.router.route(adapter, msg)
 
@@ -259,29 +267,7 @@ export class MessagingGateway {
       // Runs AFTER routing so a bound session has already received the
       // message; fired regardless of binding so users can react to inbox
       // messages with automations. Errors here must never block routing.
-      if (this.onIncomingMessage) {
-        try {
-          const bound = !!this.bindingStore.findByChannel(msg.platform, msg.channelId)
-          await this.onIncomingMessage({
-            platform: msg.platform,
-            channelId: msg.channelId,
-            messageId: msg.messageId,
-            senderId: msg.senderId,
-            senderName: msg.senderName ?? null,
-            text: msg.text,
-            bound,
-            attachmentCount: msg.attachments?.length ?? 0,
-            sentAt: msg.timestamp,
-          })
-        } catch (err) {
-          this.log.warn('onIncomingMessage hook threw', {
-            event: 'on_incoming_message_failed',
-            platform: msg.platform,
-            channelId: msg.channelId,
-            error: err,
-          })
-        }
-      }
+      await this.emitIncomingMessageHook(msg, wasBound)
     })
 
     adapter.onButtonPress(async (press: ButtonPress) => {
@@ -293,6 +279,34 @@ export class MessagingGateway {
       platform: adapter.platform,
       capabilities: adapter.capabilities,
     })
+  }
+
+  private async emitIncomingMessageHook(msg: IncomingMessage, wasBound: boolean): Promise<void> {
+    if (!this.onIncomingMessage) return
+
+    try {
+      const boundAfterRoute = !!this.bindingStore.findByChannel(msg.platform, msg.channelId)
+      await this.onIncomingMessage({
+        platform: msg.platform,
+        channelId: msg.channelId,
+        messageId: msg.messageId,
+        senderId: msg.senderId,
+        senderName: msg.senderName ?? null,
+        text: msg.text,
+        bound: wasBound,
+        wasBound,
+        boundAfterRoute,
+        attachmentCount: msg.attachments?.length ?? 0,
+        sentAt: msg.timestamp,
+      })
+    } catch (err) {
+      this.log.warn('onIncomingMessage hook threw', {
+        event: 'on_incoming_message_failed',
+        platform: msg.platform,
+        channelId: msg.channelId,
+        error: err,
+      })
+    }
   }
 
   // -------------------------------------------------------------------------

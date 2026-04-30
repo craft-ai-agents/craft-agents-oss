@@ -24,7 +24,7 @@ import type {
   ShareResult,
 } from '@craft-agent/shared/protocol'
 import type { SessionBundle, DispatchMode } from '@craft-agent/shared/sessions'
-import type { EventSink } from '../transport'
+import type { EventSink } from '../transport/types.ts'
 
 export interface ISessionManager {
   // ---------------------------------------------------------------------------

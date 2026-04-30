@@ -5,5 +5,5 @@
     "outDir": "dist",
     "composite": true
   },
-  "include": ["src"]
+  "include": ["src", "../shared/src/agent/bash-parser.d.ts"]
 }
