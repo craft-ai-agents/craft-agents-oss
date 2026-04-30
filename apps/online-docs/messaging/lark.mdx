@@ -7,6 +7,25 @@ Lark (international) and Feishu (China) are the same platform on different domai
 
 Craft Agent uses the official `@larksuiteoapi/node-sdk`'s long-connection (WebSocket) mode — no public webhook URL or reverse tunnel needed. Same lifecycle as the Telegram adapter, just talking to Lark instead.
 
+## Two ways to set up
+
+<CardGroup cols={2}>
+  <Card title="Recommended: Built for agents quick-create" icon="bolt">
+    On the Open Platform's app-creation page, look for the **"Built for agents. Ready to connect"** banner with a **Create** button. Clicking it produces an app with the right permissions and event settings pre-configured — you skip the scope toggles and event-subscription steps entirely.
+
+    Then jump straight to [Connect in the App](#connect-in-the-app) below to paste your App ID and Secret into Craft Agent.
+  </Card>
+  <Card title="Manual setup" icon="screwdriver-wrench">
+    Create a Custom App and configure scopes + events yourself. Useful if the agent banner isn't visible in your tenant's UI yet, or if you want explicit control over which permissions you grant.
+
+    Full walkthrough below.
+  </Card>
+</CardGroup>
+
+<Info>
+**You still copy App ID + Secret either way.** Lark/Feishu issue per-tenant credentials regardless of which create flow you use — the agent quick-create path saves you the permissions and events configuration, not the credential paste.
+</Info>
+
 ## Create an App
 
 <Steps>
