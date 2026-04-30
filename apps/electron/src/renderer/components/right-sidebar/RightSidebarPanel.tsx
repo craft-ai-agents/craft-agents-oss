@@ -1,0 +1,254 @@
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { motion, AnimatePresence } from 'motion/react'
+import { Files, GitBranch, ChevronRight } from 'lucide-react'
+import { useAtomValue } from 'jotai'
+import { cn } from '@/lib/utils'
+import * as storage from '@/lib/local-storage'
+import { sessionAtomFamily } from '@/atoms/sessions'
+import { SessionFilesSection } from './SessionFilesSection'
+import {
+  PANEL_EDGE_INSET,
+  PANEL_SASH_HIT_WIDTH,
+  PANEL_SASH_LINE_WIDTH,
+  PANEL_SASH_FLEX_MARGIN,
+  PANEL_STACK_VERTICAL_OVERFLOW,
+  RADIUS_EDGE,
+  RADIUS_INNER,
+} from '../app-shell/panel-constants'
+import { getResizeGradientStyle } from '@/hooks/useResizeGradient'
+
+const TAB_STRIP_WIDTH = 36
+const DEFAULT_WIDTH = 260
+const MIN_WIDTH = 180
+const MAX_WIDTH = 520
+const SPRING = { type: 'spring' as const, stiffness: 600, damping: 49 }
+
+type Tab = 'files' | 'git'
+
+export interface RightSidebarPanelProps {
+  /** Active workspace ID — scopes localStorage persistence */
+  workspaceId?: string
+  /** Focused session ID — passed to SessionFilesSection */
+  sessionId?: string
+}
+
+export function RightSidebarPanel({
+  workspaceId,
+  sessionId,
+}: RightSidebarPanelProps) {
+  const focusedSession = useAtomValue(sessionAtomFamily(sessionId ?? ''))
+  const sessionFolderPath = focusedSession?.sessionFolderPath
+  const [isOpen, setIsOpen] = useState<boolean>(() =>
+    storage.get(storage.KEYS.rightSidebarVisible, true, workspaceId)
+  )
+  const [width, setWidth] = useState<number>(() =>
+    storage.get(storage.KEYS.rightSidebarWidth, DEFAULT_WIDTH, workspaceId)
+  )
+  const [activeTab, setActiveTab] = useState<Tab>('files')
+  const [sashHandleY, setSashHandleY] = useState<number | null>(null)
+
+  // Persist open/closed and width changes
+  useEffect(() => {
+    storage.set(storage.KEYS.rightSidebarVisible, isOpen, workspaceId)
+  }, [isOpen, workspaceId])
+
+  useEffect(() => {
+    storage.set(storage.KEYS.rightSidebarWidth, width, workspaceId)
+  }, [width, workspaceId])
+
+  // Re-read from storage when workspaceId changes (workspace switch)
+  useEffect(() => {
+    setIsOpen(storage.get(storage.KEYS.rightSidebarVisible, true, workspaceId))
+    setWidth(storage.get(storage.KEYS.rightSidebarWidth, DEFAULT_WIDTH, workspaceId))
+  }, [workspaceId])
+
+  // Left-edge resize sash
+  const sashRef = useRef<HTMLDivElement>(null)
+  const isDraggingRef = useRef(false)
+  const dragStartXRef = useRef(0)
+  const dragStartWidthRef = useRef(0)
+
+  const handleSashMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    isDraggingRef.current = true
+    dragStartXRef.current = e.clientX
+    dragStartWidthRef.current = width
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!isDraggingRef.current) return
+      const delta = dragStartXRef.current - ev.clientX
+      const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, dragStartWidthRef.current + delta))
+      setWidth(next)
+    }
+
+    const handleMouseUp = () => {
+      isDraggingRef.current = false
+      setSashHandleY(null)
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }, [width])
+
+  const totalWidth = isOpen ? width + TAB_STRIP_WIDTH : TAB_STRIP_WIDTH
+
+  return (
+    <motion.div
+      initial={false}
+      animate={{ width: totalWidth }}
+      transition={SPRING}
+      className="shrink-0 h-full flex"
+      style={{
+        // Mirror the vertical overflow trick used in PanelStackContainer
+        paddingBlock: PANEL_STACK_VERTICAL_OVERFLOW,
+        marginBlock: -PANEL_STACK_VERTICAL_OVERFLOW,
+        marginBottom: -6,
+        paddingBottom: 6,
+      }}
+    >
+      <div
+        className="flex h-full w-full overflow-hidden"
+        style={{
+          borderTopLeftRadius: RADIUS_INNER,
+          borderBottomLeftRadius: RADIUS_INNER,
+          borderTopRightRadius: RADIUS_EDGE,
+          borderBottomRightRadius: RADIUS_EDGE,
+        }}
+      >
+        {/* Left resize sash — only shown when panel is open */}
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              key="sash"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="shrink-0 relative cursor-col-resize z-10 flex justify-center"
+              style={{
+                width: PANEL_SASH_HIT_WIDTH,
+                marginLeft: PANEL_SASH_FLEX_MARGIN,
+                marginRight: PANEL_SASH_FLEX_MARGIN,
+                top: PANEL_STACK_VERTICAL_OVERFLOW,
+                bottom: PANEL_STACK_VERTICAL_OVERFLOW,
+              }}
+              ref={sashRef}
+              onMouseDown={handleSashMouseDown}
+              onMouseMove={(e) => {
+                if (sashRef.current) {
+                  const rect = sashRef.current.getBoundingClientRect()
+                  setSashHandleY(e.clientY - rect.top)
+                }
+              }}
+              onMouseLeave={() => {
+                if (!isDraggingRef.current) setSashHandleY(null)
+              }}
+            >
+              <div
+                className="h-full"
+                style={{
+                  width: PANEL_SASH_LINE_WIDTH,
+                  ...getResizeGradientStyle(sashHandleY, sashRef.current?.clientHeight ?? null),
+                }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Content area */}
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              key="content"
+              initial={{ opacity: 0, width: 0 }}
+              animate={{ opacity: 1, width }}
+              exit={{ opacity: 0, width: 0 }}
+              transition={SPRING}
+              className="h-full shrink-0 bg-background overflow-hidden flex flex-col"
+            >
+              {activeTab === 'files' && (
+                <SessionFilesSection
+                  sessionId={sessionId}
+                  sessionFolderPath={sessionFolderPath}
+                  className="h-full"
+                />
+              )}
+              {activeTab === 'git' && (
+                <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm select-none">
+                  Git — coming soon
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Right tab strip — always visible */}
+        <div
+          className={cn(
+            'shrink-0 flex flex-col items-center bg-background',
+            isOpen ? 'border-l border-border/50' : '',
+          )}
+          style={{
+            width: TAB_STRIP_WIDTH,
+            paddingTop: PANEL_EDGE_INSET,
+            paddingBottom: PANEL_EDGE_INSET,
+          }}
+        >
+          {/* Collapse / expand toggle */}
+          <button
+            type="button"
+            onClick={() => setIsOpen(v => !v)}
+            className={cn(
+              'mb-2 flex items-center justify-center rounded-[6px]',
+              'h-7 w-7 text-foreground/50 hover:text-foreground hover:bg-sidebar-hover',
+              'transition-colors focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring outline-none',
+            )}
+            title={isOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+          >
+            <motion.div
+              initial={false}
+              animate={{ rotate: isOpen ? 0 : 180 }}
+              transition={SPRING}
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </motion.div>
+          </button>
+
+          {/* Tab buttons */}
+          <button
+            type="button"
+            onClick={() => { setActiveTab('files'); if (!isOpen) setIsOpen(true) }}
+            className={cn(
+              'flex items-center justify-center rounded-[6px]',
+              'h-7 w-7 transition-colors',
+              'focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring outline-none',
+              activeTab === 'files' && isOpen
+                ? 'text-foreground bg-sidebar-hover'
+                : 'text-foreground/50 hover:text-foreground hover:bg-sidebar-hover',
+            )}
+            title="Files"
+          >
+            <Files className="h-3.5 w-3.5" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setActiveTab('git'); if (!isOpen) setIsOpen(true) }}
+            className={cn(
+              'flex items-center justify-center rounded-[6px]',
+              'h-7 w-7 transition-colors',
+              'focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring outline-none',
+              activeTab === 'git' && isOpen
+                ? 'text-foreground bg-sidebar-hover'
+                : 'text-foreground/50 hover:text-foreground hover:bg-sidebar-hover',
+            )}
+            title="Git"
+          >
+            <GitBranch className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
