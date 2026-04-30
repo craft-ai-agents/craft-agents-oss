@@ -79,7 +79,12 @@ function branchCommits(branch: string, cwd: string): string[] {
 function loadPrompt(name: string, cwd: string, args: Record<string, string> = {}): string {
   let content = readFileSync(join(PROMPTS, `${name}.md`), 'utf8')
 
-  // Evaluate !`command` blocks — commands come from our own prompt files (trusted input)
+  // Substitute args first so !`cmd` blocks can reference {{KEY}} placeholders
+  for (const [key, value] of Object.entries(args)) {
+    content = content.replaceAll(`{{${key}}}`, value)
+  }
+
+  // Then evaluate !`command` blocks from trusted prompt files
   content = content.replace(/!\`([^`]+)\`/g, (_, cmd) => {
     try {
       return execSync(cmd, { cwd, encoding: 'utf8' }).trim()
@@ -87,10 +92,6 @@ function loadPrompt(name: string, cwd: string, args: Record<string, string> = {}
       return ''
     }
   })
-
-  for (const [key, value] of Object.entries(args)) {
-    content = content.replaceAll(`{{${key}}}`, value)
-  }
 
   return content
 }
@@ -237,7 +238,11 @@ for (let i = 1; i <= MAX_ITERATIONS; i++) {
             }),
             wtPath
           )
-          pushWithRetry(issue.branch, wtPath)
+          try {
+            pushWithRetry(issue.branch, wtPath)
+          } catch (pushErr: any) {
+            console.warn(`  #${issue.number}: push failed (work committed locally): ${pushErr.message?.split('\n')[0]}`)
+          }
         }
 
         return { issue, commits }
