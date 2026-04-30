@@ -71,6 +71,12 @@ import { createWebFetchTool } from './tools/web-fetch.ts';
 import { resolveSearchProvider } from './tools/search/resolve-provider.ts';
 import { createSearchTool } from './tools/search/create-search-tool.ts';
 import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
+import {
+  DEFAULT_AUTO_COMPACT_THRESHOLD,
+  MAX_OVERFLOW_RECOVERY_ATTEMPTS,
+  isContextOverflowErrorMessage,
+  shouldPrePromptCompact,
+} from './context-overflow.ts';
 
 // ============================================================
 // Types — JSONL Protocol
@@ -220,6 +226,19 @@ let initConfig: Extract<InboundMessage, { type: 'init' }> | null = null;
 
 // Mutable state
 let currentUserMessage = '';
+let currentUserImages: Array<{ type: 'image'; data: string; mimeType: string }> | undefined;
+
+// When a context overflow is detected mid-stream, defer compact+retry to agent_end.
+let pendingOverflowRecovery = false;
+let overflowRecoveryAttempts = 0;
+
+// Proactive compaction: compact after a turn when approaching the context window limit.
+// Mirrors Codex's 90% effective-context threshold - compact fires after agent_end so
+// the next prompt starts with headroom instead of hitting the wall mid-stream.
+const PROACTIVE_COMPACT_THRESHOLD = DEFAULT_AUTO_COMPACT_THRESHOLD;
+let sessionContextWindow: number | undefined;  // resolved from model definition at session creation
+let lastKnownInputTokens = 0;                  // last successful provider input usage
+let lastTurnInputTokens = 0;                   // updated from message_end usage events
 
 // Pending promises for async handshakes
 const pendingPreToolUse = new Map<string, { resolve: (response: { action: string; input?: Record<string, unknown>; reason?: string }) => void }>();
@@ -624,6 +643,8 @@ async function ensureSession(): Promise<AgentSession> {
         if (isCompatible) {
           sessionOptions.model = piModel;
           setInterceptorApiHints(piModel as { api?: string; provider?: string; baseUrl?: string });
+          sessionContextWindow = (piModel as any).contextWindow as number | undefined;
+          debugLog(`Session context window: ${sessionContextWindow ?? 'unknown'}`);
         } else {
           debugLog(`Model ${initConfig.model} resolved to incompatible provider ${resolvedProvider} (expected ${initConfig.piAuth!.provider}), skipping`);
           setInterceptorApiHints(undefined);
@@ -1100,9 +1121,31 @@ function handleSessionEvent(event: AgentSessionEvent): void {
 
   // Log API errors for debugging and attach provider-native turn anchor for branch cutoffs.
   if (event.type === 'message_end') {
-    const msg = event.message as { role?: string; stopReason?: string; errorMessage?: string } | undefined;
+    const msg = event.message as { role?: string; stopReason?: string; errorMessage?: string; usage?: { input: number; cacheRead?: number } } | undefined;
     if (msg?.stopReason === 'error') {
       debugLog(`API error in message_end: ${msg.errorMessage || 'unknown'}`);
+      // Detect context overflow surfaced as a streaming error event (not a thrown exception).
+      // The compact+retry in handlePrompt's catch block never fires for streaming errors,
+      // so we flag here and intercept the upcoming agent_end to trigger recovery instead.
+      if (
+        msg.errorMessage &&
+        isContextOverflowErrorMessage(msg.errorMessage) &&
+        currentUserMessage &&
+        overflowRecoveryAttempts < MAX_OVERFLOW_RECOVERY_ATTEMPTS
+      ) {
+        debugLog('Context overflow detected in event stream - will compact+retry on agent_end');
+        pendingOverflowRecovery = true;
+        return;
+      }
+      if (msg.errorMessage && isContextOverflowErrorMessage(msg.errorMessage)) {
+        debugLog('Context overflow recovery limit reached; forwarding error');
+      }
+    }
+
+    // Track cumulative input token usage for proactive compaction threshold check.
+    if (msg?.usage && typeof msg.usage.input === 'number') {
+      lastTurnInputTokens = msg.usage.input + (msg.usage.cacheRead || 0);
+      lastKnownInputTokens = lastTurnInputTokens;
     }
 
     if (msg?.role === 'assistant' && piSession) {
@@ -1178,8 +1221,55 @@ function handleSessionEvent(event: AgentSessionEvent): void {
     }
   }
 
+  // Intercept agent_end when a streaming context overflow was detected.
+  // Suppress forwarding the end event and attempt compact+retry instead.
+  if (event.type === 'agent_end' && pendingOverflowRecovery) {
+    pendingOverflowRecovery = false;
+    overflowRecoveryAttempts++;
+    const recoveryMessage = currentUserMessage;
+    const recoveryImages = currentUserImages;
+    debugLog('Intercepting agent_end for compact+retry after context overflow');
+    setImmediate(() => {
+      (async () => {
+        try {
+          const session = await ensureSession();
+          await compactSessionForContextHeadroom(session, 'stream overflow recovery');
+          await session.prompt(recoveryMessage, {
+            images: recoveryImages && recoveryImages.length > 0 ? recoveryImages : undefined,
+            streamingBehavior: 'followUp',
+          });
+          debugLog('Compact+retry succeeded after stream overflow');
+        } catch (retryError) {
+          const retryMsg = retryError instanceof Error ? retryError.message : String(retryError);
+          debugLog(`Compact+retry failed: ${retryMsg}`);
+          send({ type: 'error', message: `Overflow recovery failed: ${retryMsg}`, code: 'prompt_overflow_recovery_failed' });
+          send({ type: 'event', event: { type: 'agent_end', messages: [] } });
+        }
+      })();
+    });
+    return;
+  }
+
   // Forward all events to main process
   send({ type: 'event', event: forwardedEvent });
+
+  // Proactive compaction: after a successful turn, check if we're approaching the limit.
+  // Compact in the background so the next prompt starts with headroom.
+  // waitForCompaction() in handlePrompt will wait if compaction is still running.
+  if (event.type === 'agent_end' && !pendingOverflowRecovery && sessionContextWindow && lastTurnInputTokens > 0) {
+    const ratio = lastTurnInputTokens / sessionContextWindow;
+    if (ratio >= PROACTIVE_COMPACT_THRESHOLD) {
+      const pct = Math.round(ratio * 100);
+      debugLog(`Proactive compact triggered: ${lastTurnInputTokens}/${sessionContextWindow} tokens (${pct}%) >= ${PROACTIVE_COMPACT_THRESHOLD * 100}% threshold`);
+      setImmediate(() => {
+        ensureSession().then(session => {
+          return compactSessionForContextHeadroom(session, 'post-turn proactive threshold');
+        }).catch(err => {
+          debugLog(`Proactive compact failed: ${err instanceof Error ? err.message : String(err)}`);
+        });
+      });
+    }
+  }
 }
 
 // ============================================================
@@ -1196,6 +1286,13 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
     piSession.dispose();
     piSession = null;
     moduleAuthStorage = null; // Reset so createAuthenticatedRegistry() creates fresh storage
+    currentUserMessage = '';
+    currentUserImages = undefined;
+    pendingOverflowRecovery = false;
+    overflowRecoveryAttempts = 0;
+    sessionContextWindow = undefined;
+    lastKnownInputTokens = 0;
+    lastTurnInputTokens = 0;
     debugLog('Cleaned up existing session for re-init');
   }
 
@@ -1216,17 +1313,6 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
     sessionId: null,
     callbackPort,
   });
-}
-
-function isContextOverflowErrorMessage(message: string): boolean {
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes('context_length_exceeded') ||
-    normalized.includes('exceeds the context window') ||
-    normalized.includes('context window') && normalized.includes('exceed') ||
-    normalized.includes('too many tokens') ||
-    normalized.includes('token limit exceeded')
-  );
 }
 
 /**
@@ -1250,8 +1336,46 @@ async function waitForCompaction(session: { isCompacting: boolean }, timeoutMs =
   }
 }
 
+async function compactSessionForContextHeadroom(session: AgentSession, reason: string): Promise<void> {
+  debugLog(`Compacting session for context headroom (${reason})`);
+  if (!session.isCompacting) {
+    await session.compact();
+  } else {
+    debugLog(`Compaction already in progress (${reason})`);
+  }
+  await waitForCompaction(session);
+  lastKnownInputTokens = 0;
+  lastTurnInputTokens = 0;
+}
+
+async function compactBeforePromptIfNeeded(
+  session: AgentSession,
+  msg: Extract<InboundMessage, { type: 'prompt' }>,
+): Promise<void> {
+  const pendingInputTokens = estimateTokens([msg.systemPrompt, msg.message].filter(Boolean).join('\n\n'));
+  const decision = shouldPrePromptCompact({
+    contextWindow: sessionContextWindow,
+    lastKnownInputTokens,
+    pendingInputTokens,
+  });
+
+  if (!decision.shouldCompact) return;
+
+  debugLog(
+    `Pre-prompt compact triggered (${decision.reason}): ` +
+    `known=${lastKnownInputTokens}, pending~${pendingInputTokens}, ` +
+    `projected~${decision.projectedTokens}, limit=${decision.autoCompactLimit}, ` +
+    `prePromptLimit=${decision.prePromptLimit}`,
+  );
+  await compactSessionForContextHeadroom(session, `pre-prompt ${decision.reason}`);
+}
+
 async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): Promise<void> {
   currentUserMessage = msg.message;
+  currentUserImages = msg.images && msg.images.length > 0 ? msg.images : undefined;
+  pendingOverflowRecovery = false;
+  overflowRecoveryAttempts = 0;
+  lastTurnInputTokens = 0;
 
   try {
     // If proxy tools changed since last session creation, dispose and recreate.
@@ -1283,6 +1407,8 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
     // Wait for any in-flight auto-compaction to avoid race (craft-agents-oss#464)
     await waitForCompaction(session);
 
+    await compactBeforePromptIfNeeded(session, msg);
+
     // Fire prompt — use followUp when session is already streaming so the
     // message is queued instead of throwing "Agent is already processing".
     await session.prompt(msg.message, {
@@ -1298,8 +1424,7 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
       debugLog(`Prompt overflow detected, attempting compact+retry: ${errorMsg}`);
       try {
         const session = await ensureSession();
-        await session.compact();
-        await waitForCompaction(session);
+        await compactSessionForContextHeadroom(session, 'prompt throw overflow recovery');
         await session.prompt(msg.message, {
           images: msg.images && msg.images.length > 0 ? msg.images : undefined,
           streamingBehavior: 'followUp',
