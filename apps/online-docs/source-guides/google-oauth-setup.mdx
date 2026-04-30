@@ -52,30 +52,26 @@ External apps in "Testing" mode are limited to 100 users. For personal use, this
 
 ## Step 4: Create OAuth Credentials
 
-Choose the OAuth client type based on **how you will authenticate**:
-
-### Electron / Desktop app
-
-1. Go to **APIs & Services → Credentials**
-2. Click **Create Credentials → OAuth Client ID**
-3. Application type: **Desktop app**
-4. Name: e.g., "Craft Agent Desktop"
-5. Click **Create**
-6. **Copy the Client ID and Client Secret** - you'll need these next
-
-### WebUI / Headless server
+<Warning>
+**Always pick "Web application" — not "Desktop app".** Even though the desktop app authenticates via a local loopback callback, Google's "Desktop app" client type rejects the loopback redirect URI as `redirect_uri_mismatch` in many tenants (especially newer Google Cloud projects and Workspace accounts with stricter OAuth policies). The "Web application" client type accepts an explicitly-registered loopback URI and works reliably in both desktop and WebUI flows.
+</Warning>
 
 1. Go to **APIs & Services → Credentials**
 2. Click **Create Credentials → OAuth Client ID**
 3. Application type: **Web application**
-4. Name: e.g., "Craft Agent WebUI"
-5. Under **Authorized redirect URIs**, add this exact URI:
-   - `https://agents.craft.do/auth/callback`
+4. Name: e.g., "Craft Agent"
+5. Under **Authorized redirect URIs**, add **both** of the following so the same client works for desktop and WebUI:
+   - `http://localhost:6477/callback` — used by the desktop app's local callback server
+   - `https://agents.craft.do/auth/callback` — used by WebUI / headless server access
 6. Click **Create**
-7. **Copy the Client ID and Client Secret** - you'll need these next
+7. **Copy the Client ID and Client Secret** — you'll need these next
 
 <Tip>
-Use the **Desktop app** client when authenticating from the desktop app, and the **Web application** client when authenticating through WebUI / headless browser access.
+**Why port 6477?** The desktop app's callback server binds the first available port in the range `6477–6576` (it scans upward if a port is in use). On most machines port 6477 is free and is what gets used. If you frequently have port conflicts on 6477, add a few more URIs (`http://localhost:6478/callback`, etc.) — Google allows multiple redirect URIs per client.
+</Tip>
+
+<Tip>
+**One client for both surfaces.** A single "Web application" OAuth client with both redirect URIs registered will work for the desktop app *and* the WebUI / headless server — no need to create separate clients per surface.
 </Tip>
 
 ## Step 5: Add Credentials to Your Source
