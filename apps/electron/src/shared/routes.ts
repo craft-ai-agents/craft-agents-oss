@@ -157,6 +157,12 @@ export const routes = {
       return `skills/skill/${skillSlug}` as const
     },
 
+    /** Agents view (agent-definitions navigator). Pass a slug for the detail view. */
+    agents: (agentSlug?: string) => {
+      if (!agentSlug) return 'agents' as const
+      return `agents/agent/${agentSlug}` as const
+    },
+
     /** Automations view (automations navigator) - supports type filtering */
     automations: (params?: { automationId?: string; type?: 'scheduled' | 'event' | 'agentic' | 'external' }) => {
       const { automationId, type } = params ?? {}

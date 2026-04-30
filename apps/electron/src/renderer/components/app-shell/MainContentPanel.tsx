@@ -30,6 +30,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isAgentsNavigation,
   isAutomationsNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
@@ -38,6 +39,7 @@ import { extractLabelId } from '@craft-agent/shared/labels'
 import type { SessionStatusId } from '@/config/session-status-config'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
+import AgentInfoPage from '@/pages/AgentInfoPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { AutomationInfoPage } from '../automations/AutomationInfoPage'
 import type { ExecutionEntry } from '../automations/types'
@@ -304,6 +306,28 @@ export function MainContentPanel({
       <Panel variant="grow" className={className}>
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">{t("skillsList.noSkillsConfigured")}</p>
+        </div>
+      </Panel>
+    )
+  }
+
+  // Agents navigator - show agent info or an empty state pointing at the
+  // global library on disk.
+  if (isAgentsNavigation(navState)) {
+    if (navState.details?.type === 'agent') {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <AgentInfoPage
+            agentSlug={navState.details.agentSlug}
+            workspaceId={activeWorkspaceId || ''}
+          />
+        </Panel>
+      )
+    }
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <div className="flex items-center justify-center h-full text-muted-foreground">
+          <p className="text-sm">Pick an agent on the left to view or activate it.</p>
         </div>
       </Panel>
     )

@@ -111,12 +111,14 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isAgentsNavigation,
   isAutomationsNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
+import { AgentsListPanel } from "./AgentsListPanel"
 import { AutomationsListPanel } from "../automations/AutomationsListPanel"
 import { APP_EVENTS, AGENT_EVENTS, EXTERNAL_INPUT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
 import { useAutomations } from "@/hooks/useAutomations"
@@ -1698,6 +1700,11 @@ function AppShellContent({
     navigate(routes.view.skills())
   }, [])
 
+  // Handler for agents view (saved agent personas)
+  const handleAgentsClick = useCallback(() => {
+    navigate(routes.view.agents())
+  }, [])
+
   // Handlers for automations view
   const handleAutomationsClick = useCallback(() => {
     navigate(routes.view.automations())
@@ -2081,6 +2088,11 @@ function AppShellContent({
       return t("sidebar.sources")
     }
 
+    // Agents navigator (saved personas — agent-definitions library)
+    if (isAgentsNavigation(navState)) {
+      return 'Agents'
+    }
+
     // Skills navigator
     if (isSkillsNavigation(navState)) {
       return t("sidebar.allSkills")
@@ -2420,6 +2432,13 @@ function AppShellContent({
                         type: 'skills',
                         onAddSkill: openAddSkill,
                       },
+                    },
+                    {
+                      id: "nav:agents",
+                      title: 'Agents',
+                      icon: Bot,
+                      variant: isAgentsNavigation(navState) ? "default" : "ghost",
+                      onClick: handleAgentsClick,
                     },
                     {
                       id: "nav:automations",
@@ -3158,6 +3177,14 @@ function AppShellContent({
                 onSkillClick={handleSkillSelect}
                 onDeleteSkill={handleDeleteSkill}
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
+              />
+            )}
+            {isAgentsNavigation(navState) && (
+              /* Agents List */
+              <AgentsListPanel
+                workspaceId={activeWorkspaceId}
+                onAgentClick={(agent) => navigate(routes.view.agents(agent.slug))}
+                selectedSlug={isAgentsNavigation(navState) && navState.details?.type === 'agent' ? navState.details.agentSlug : null}
               />
             )}
             {isAutomationsNavigation(navState) && (

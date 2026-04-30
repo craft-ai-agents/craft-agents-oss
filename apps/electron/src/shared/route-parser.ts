@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'settings'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -151,6 +151,23 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
       return {
         navigator: 'skills',
         details: { type: 'skill', id: segments[2] },
+      }
+    }
+
+    return null
+  }
+
+  // Agents navigator (saved agent personas / definitions)
+  if (first === 'agents') {
+    if (segments.length === 1) {
+      return { navigator: 'agents', details: null }
+    }
+
+    // agents/agent/{agentSlug}
+    if (segments[1] === 'agent' && segments[2]) {
+      return {
+        navigator: 'agents',
+        details: { type: 'agent', id: segments[2] },
       }
     }
 
@@ -273,6 +290,11 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   if (parsed.navigator === 'skills') {
     if (!parsed.details) return 'skills'
     return `skills/skill/${parsed.details.id}`
+  }
+
+  if (parsed.navigator === 'agents') {
+    if (!parsed.details) return 'agents'
+    return `agents/agent/${parsed.details.id}`
   }
 
   if (parsed.navigator === 'automations') {
@@ -400,6 +422,14 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
     return { type: 'view', name: 'skill-info', id: compound.details.id, params: {} }
   }
 
+  // Agents
+  if (compound.navigator === 'agents') {
+    if (!compound.details) {
+      return { type: 'view', name: 'agents', params: {} }
+    }
+    return { type: 'view', name: 'agent-info', id: compound.details.id, params: {} }
+  }
+
   // Automations
   if (compound.navigator === 'automations') {
     if (!compound.details) {
@@ -525,6 +555,17 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
+  // Agents (saved personas — agent-definitions library)
+  if (compound.navigator === 'agents') {
+    if (!compound.details) {
+      return { navigator: 'agents', details: null }
+    }
+    return {
+      navigator: 'agents',
+      details: { type: 'agent', agentSlug: compound.details.id },
+    }
+  }
+
   // Automations - include filter if present
   if (compound.navigator === 'automations') {
     if (!compound.details) {
@@ -605,6 +646,19 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
         }
       }
       return { navigator: 'skills', details: null }
+    case 'agents':
+      return { navigator: 'agents', details: null }
+    case 'agent-info':
+      if (parsed.id) {
+        return {
+          navigator: 'agents',
+          details: {
+            type: 'agent',
+            agentSlug: parsed.id,
+          },
+        }
+      }
+      return { navigator: 'agents', details: null }
     case 'automations':
       return { navigator: 'automations', details: null }
     case 'automation-info':
@@ -712,6 +766,13 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
     return {
       navigator: 'skills',
       details: state.details?.type === 'skill' ? { type: 'skill', id: state.details.skillSlug } : null,
+    }
+  }
+
+  if (state.navigator === 'agents') {
+    return {
+      navigator: 'agents',
+      details: state.details?.type === 'agent' ? { type: 'agent', id: state.details.agentSlug } : null,
     }
   }
 

@@ -80,3 +80,17 @@ NOTES.md
 notes.md
 SCRATCH.md
 scratch.md
+
+# Workspace data dropped at repo root when launching the app from this directory
+# (the electron app treats cwd as a workspace root). Real workspace data lives
+# at ~/.craft-agent/workspaces/ — these top-level entries are accidental.
+/.claude-plugin/
+/config.json
+/events.jsonl
+/labels/
+/statuses/
+/views.json
+/sessions/
+/automations.json
+/automations-history.jsonl
+/activated-agents.json

@@ -802,6 +802,17 @@ export interface SkillsNavigationState {
 }
 
 /**
+ * Agent-definitions navigation state. Distinct from runtime "agent"
+ * concepts (subagents, claude-agent runtime). The slug here resolves to a
+ * persisted persona in the global library at ~/.agents/agents/.
+ */
+export interface AgentsNavigationState {
+  navigator: 'agents'
+  details: { type: 'agent'; agentSlug: string } | null
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Automations navigation state
  */
 export interface AutomationsNavigationState {
@@ -819,6 +830,7 @@ export type NavigationState =
   | SourcesNavigationState
   | SettingsNavigationState
   | SkillsNavigationState
+  | AgentsNavigationState
   | AutomationsNavigationState
 
 export const isSessionsNavigation = (
@@ -836,6 +848,10 @@ export const isSettingsNavigation = (
 export const isSkillsNavigation = (
   state: NavigationState
 ): state is SkillsNavigationState => state.navigator === 'skills'
+
+export const isAgentsNavigation = (
+  state: NavigationState
+): state is AgentsNavigationState => state.navigator === 'agents'
 
 export const isAutomationsNavigation = (
   state: NavigationState
@@ -859,6 +875,12 @@ export const getNavigationStateKey = (state: NavigationState): string => {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'
+  }
+  if (state.navigator === 'agents') {
+    if (state.details?.type === 'agent') {
+      return `agents/agent/${state.details.agentSlug}`
+    }
+    return 'agents'
   }
   if (state.navigator === 'automations') {
     if (state.details?.type === 'automation') {
@@ -901,6 +923,16 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
       return { navigator: 'skills', details: { type: 'skill', skillSlug } }
     }
     return { navigator: 'skills', details: null }
+  }
+
+  // Handle agents
+  if (key === 'agents') return { navigator: 'agents', details: null }
+  if (key.startsWith('agents/agent/')) {
+    const agentSlug = key.slice(13)
+    if (agentSlug) {
+      return { navigator: 'agents', details: { type: 'agent', agentSlug } }
+    }
+    return { navigator: 'agents', details: null }
   }
 
   // Handle automations
