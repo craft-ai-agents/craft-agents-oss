@@ -191,10 +191,14 @@ jobs:
       - name: Install dependencies (Unix)
         if: steps.check.outputs.skip != 'true' && matrix.platform != 'win32'
         run: bun install --frozen-lockfile
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install dependencies (Windows)
         if: steps.check.outputs.skip != 'true' && matrix.platform == 'win32'
         run: bun install --frozen-lockfile --linker=hoisted
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # macOS code signing
       - name: Import Code Signing Certificate (macOS)
@@ -439,6 +443,8 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
