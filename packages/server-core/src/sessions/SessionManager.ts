@@ -90,6 +90,12 @@ import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
+import {
+  loadAllGlobalWorkflows,
+  loadGlobalWorkflow,
+  readActivatedWorkflows,
+  readRun as readWorkflowRun,
+} from '@craft-agent/shared/workflows'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
 import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels'
@@ -3926,6 +3932,114 @@ export class SessionManager implements ISessionManager {
             returned: agents.length,
             agents,
           }
+        },
+        listWorkflowsFn: (options) => {
+          const activeSlugs = new Set(readActivatedWorkflows(managed.workspace.rootPath).active)
+          let workflows = loadAllGlobalWorkflows().map(workflow => ({
+            slug: workflow.slug,
+            name: workflow.metadata.name,
+            description: workflow.metadata.description,
+            avatar: workflow.metadata.avatar,
+            active: activeSlugs.has(workflow.slug),
+            triggerType: workflow.metadata.trigger.type,
+            triggerInputs: (workflow.metadata.trigger.inputs ?? []).map(input => ({
+              name: input.name,
+              type: input.type,
+              required: input.required,
+              description: input.description,
+            })),
+            steps: workflow.metadata.steps.map(step => ({
+              id: step.id,
+              agent: step.agent,
+              description: step.description,
+              hasOutputSchema: !!step.outputSchema,
+              timeout: step.timeout,
+              retries: step.retries,
+              onFailure: step.onFailure,
+            })),
+          }))
+
+          if (options?.activeOnly) workflows = workflows.filter(workflow => workflow.active)
+          if (options?.search?.trim()) {
+            const needle = options.search.trim().toLowerCase()
+            workflows = workflows.filter(workflow => [
+              workflow.slug,
+              workflow.name,
+              workflow.description,
+              workflow.triggerInputs.map(input => `${input.name} ${input.description ?? ''}`).join(' '),
+              workflow.steps.map(step => `${step.id} ${step.agent} ${step.description ?? ''}`).join(' '),
+            ].join(' ').toLowerCase().includes(needle))
+          }
+
+          workflows.sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name))
+          return {
+            total: workflows.length,
+            returned: workflows.length,
+            workflows,
+          }
+        },
+        getWorkflowFn: (slug: string) => {
+          const workflow = loadGlobalWorkflow(slug)
+          if (!workflow) return null
+          const activeSlugs = new Set(readActivatedWorkflows(managed.workspace.rootPath).active)
+          return {
+            slug: workflow.slug,
+            name: workflow.metadata.name,
+            description: workflow.metadata.description,
+            avatar: workflow.metadata.avatar,
+            active: activeSlugs.has(workflow.slug),
+            triggerType: workflow.metadata.trigger.type,
+            triggerInputs: (workflow.metadata.trigger.inputs ?? []).map(input => ({
+              name: input.name,
+              type: input.type,
+              required: input.required,
+              description: input.description,
+            })),
+            steps: workflow.metadata.steps.map(step => ({
+              id: step.id,
+              agent: step.agent,
+              description: step.description,
+              hasOutputSchema: !!step.outputSchema,
+              timeout: step.timeout,
+              retries: step.retries,
+              onFailure: step.onFailure,
+            })),
+            body: workflow.body,
+          }
+        },
+        startWorkflowFn: async (slug: string, triggerInputs: Record<string, unknown>) => {
+          const workflow = loadGlobalWorkflow(slug)
+          if (!workflow) throw new Error(`Workflow not found: ${slug}`)
+          const normalizedInputs: Record<string, unknown> = {}
+          for (const def of workflow.metadata.trigger.inputs ?? []) {
+            let value = triggerInputs[def.name]
+            if (value === undefined) value = def.default
+            if (def.required && (value === undefined || value === null || value === '')) {
+              throw new Error(`Missing required workflow input: ${def.name}`)
+            }
+            if (value === undefined || value === null || value === '') continue
+            if (def.type === 'string') {
+              if (typeof value !== 'string') throw new Error(`Workflow input "${def.name}" must be a string.`)
+              normalizedInputs[def.name] = value
+            } else if (def.type === 'number') {
+              if (typeof value !== 'number' || Number.isNaN(value)) throw new Error(`Workflow input "${def.name}" must be a number.`)
+              normalizedInputs[def.name] = value
+            } else if (def.type === 'boolean') {
+              if (typeof value !== 'boolean') throw new Error(`Workflow input "${def.name}" must be a boolean.`)
+              normalizedInputs[def.name] = value
+            }
+          }
+          return this.workflowRunner.start({
+            workflow,
+            workspaceId: managed.workspace.id,
+            triggerInputs: normalizedInputs,
+          })
+        },
+        getWorkflowRunFn: (runId: string) => {
+          return readWorkflowRun(managed.workspace.rootPath, runId)
+        },
+        cancelWorkflowRunFn: async (runId: string) => {
+          await this.workflowRunner.cancel(managed.workspace.id, runId)
         },
         resolveLabelsFn: (labels: string[]) => {
           const labelConfig = loadLabelConfig(managed.workspace.rootPath)

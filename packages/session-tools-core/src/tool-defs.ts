@@ -43,6 +43,13 @@ import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
 import { handleListMessagingChannels, handleUnbindMessagingChannel } from './handlers/messaging.ts';
 import { handleCreateAgent } from './handlers/create-agent.ts';
 import { handleCreateAutomation } from './handlers/create-automation.ts';
+import {
+  handleListWorkflows,
+  handleGetWorkflow,
+  handleStartWorkflow,
+  handleGetWorkflowRun,
+  handleCancelWorkflowRun,
+} from './handlers/workflows.ts';
 
 // ============================================================
 // Canonical Zod Schemas
@@ -210,6 +217,28 @@ export const ListAgentsSchema = z.object({
   activeOnly: z.boolean().optional().describe('If true, return only agents active in the current workspace. Defaults to false.'),
   search: z.string().optional().describe('Optional case-insensitive search across slug, name, description, tags, inputs, and outputs.'),
   tags: z.array(z.string()).optional().describe('Optional capability tags to require. Matching is case-insensitive.'),
+});
+
+export const ListWorkflowsSchema = z.object({
+  activeOnly: z.boolean().optional().describe('If true, return only workflows active in the current workspace. Defaults to false.'),
+  search: z.string().optional().describe('Optional case-insensitive search across slug, name, description, trigger inputs, and step agents.'),
+});
+
+export const GetWorkflowSchema = z.object({
+  slug: z.string().describe('Workflow slug.'),
+});
+
+export const StartWorkflowSchema = z.object({
+  slug: z.string().describe('Workflow slug to start.'),
+  triggerInputs: z.record(z.string(), z.unknown()).optional().describe('Manual trigger inputs keyed by input name.'),
+});
+
+export const GetWorkflowRunSchema = z.object({
+  runId: z.string().describe('Workflow run ID.'),
+});
+
+export const CancelWorkflowRunSchema = z.object({
+  runId: z.string().describe('Workflow run ID to cancel.'),
 });
 
 // Inter-session messaging
@@ -547,6 +576,26 @@ Use this before recommending which agent should handle a task. It returns each a
 
 Prefer this over filesystem searches for AGENT.md files. For normal routing questions, call with activeOnly=true so recommendations come from the user's active workspace agents.`,
 
+  list_workflows: `List workflows available to this workspace. Returns active status, trigger inputs, and step summaries.
+
+Use this before recommending or starting a workflow. For normal user-facing suggestions, call with activeOnly=true.`,
+
+  get_workflow: `Get a workflow definition by slug, including trigger inputs, step details, and body notes.
+
+Use this before starting a workflow when you need to explain what it will do or gather required trigger inputs.`,
+
+  start_workflow: `Start a workflow run in the current workspace.
+
+Only call this after the user explicitly asks to run a workflow or confirms the workflow and required trigger inputs.`,
+
+  get_workflow_run: `Get the latest persisted workflow run snapshot by run ID.
+
+Use this to inspect progress, step outputs, errors, and final state.`,
+
+  cancel_workflow_run: `Cancel a running workflow run by run ID.
+
+Use this only when the user asks to stop/cancel a workflow run.`,
+
   send_agent_message: `Send a message to another session. The message is delivered with your session ID so the target can reply back.
 
 Use this to coordinate with spawned sessions, send follow-up instructions, or relay information between sessions.
@@ -680,6 +729,11 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'get_session_info', description: TOOL_DESCRIPTIONS.get_session_info, inputSchema: GetSessionInfoSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetSessionInfo },
   { name: 'list_sessions', description: TOOL_DESCRIPTIONS.list_sessions, inputSchema: ListSessionsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSessions },
   { name: 'list_agents', description: TOOL_DESCRIPTIONS.list_agents, inputSchema: ListAgentsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListAgents },
+  { name: 'list_workflows', description: TOOL_DESCRIPTIONS.list_workflows, inputSchema: ListWorkflowsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListWorkflows },
+  { name: 'get_workflow', description: TOOL_DESCRIPTIONS.get_workflow, inputSchema: GetWorkflowSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetWorkflow },
+  { name: 'start_workflow', description: TOOL_DESCRIPTIONS.start_workflow, inputSchema: StartWorkflowSchema, executionMode: 'registry', safeMode: 'block', handler: handleStartWorkflow },
+  { name: 'get_workflow_run', description: TOOL_DESCRIPTIONS.get_workflow_run, inputSchema: GetWorkflowRunSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetWorkflowRun },
+  { name: 'cancel_workflow_run', description: TOOL_DESCRIPTIONS.cancel_workflow_run, inputSchema: CancelWorkflowRunSchema, executionMode: 'registry', safeMode: 'block', handler: handleCancelWorkflowRun },
   // Inter-session messaging
   { name: 'send_agent_message', description: TOOL_DESCRIPTIONS.send_agent_message, inputSchema: SendAgentMessageSchema, executionMode: 'registry', safeMode: 'block', handler: handleSendAgentMessage },
   // Messaging gateway tools

@@ -133,6 +133,10 @@ export type {
   AgentListItem,
   ListAgentsOptions,
   ListAgentsResult,
+  WorkflowListItem,
+  WorkflowToolDetail,
+  ListWorkflowsOptions,
+  ListWorkflowsResult,
   ResolvedLabelsResult,
   ResolvedStatusResult,
 } from './context.ts';
@@ -170,6 +174,12 @@ export {
   handleSendDeveloperFeedback,
   // Agent catalog
   handleListAgents,
+  // Workflows
+  handleListWorkflows,
+  handleGetWorkflow,
+  handleStartWorkflow,
+  handleGetWorkflowRun,
+  handleCancelWorkflowRun,
 } from './handlers/index.ts';
 
 export type {
@@ -213,6 +223,11 @@ export type {
   RenderTemplateArgs,
   SendDeveloperFeedbackArgs,
   ListAgentsArgs,
+  ListWorkflowsArgs,
+  GetWorkflowArgs,
+  StartWorkflowArgs,
+  GetWorkflowRunArgs,
+  CancelWorkflowRunArgs,
 } from './handlers/index.ts';
 
 // Tool definitions — single source of truth
@@ -231,6 +246,11 @@ export {
   ScriptSandboxSchema,
   RenderTemplateSchema,
   ListAgentsSchema,
+  ListWorkflowsSchema,
+  GetWorkflowSchema,
+  StartWorkflowSchema,
+  GetWorkflowRunSchema,
+  CancelWorkflowRunSchema,
   // Browser tool schema
   BrowserToolSchema,
   // Developer feedback schema

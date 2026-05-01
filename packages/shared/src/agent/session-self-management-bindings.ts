@@ -69,6 +69,46 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'listWorkflows', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.listWorkflowsFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'getWorkflow', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.getWorkflowFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'startWorkflow', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.startWorkflowFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'getWorkflowRun', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.getWorkflowRunFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'cancelWorkflowRun', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.cancelWorkflowRunFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'resolveLabels', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.resolveLabelsFn;

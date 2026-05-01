@@ -325,6 +325,21 @@ export interface SessionToolContext {
   /** List saved agents available to this workspace. Injected by backend. */
   listAgents?(options?: ListAgentsOptions): ListAgentsResult;
 
+  /** List workflows available to this workspace. Injected by backend. */
+  listWorkflows?(options?: ListWorkflowsOptions): ListWorkflowsResult;
+
+  /** Get a workflow definition by slug. Injected by backend. */
+  getWorkflow?(slug: string): WorkflowToolDetail | null;
+
+  /** Start a workflow run in the current workspace. Injected by backend. */
+  startWorkflow?(slug: string, triggerInputs: Record<string, unknown>): Promise<unknown>;
+
+  /** Get a workflow run snapshot by run ID. Injected by backend. */
+  getWorkflowRun?(runId: string): unknown | null;
+
+  /** Cancel a workflow run by run ID. Injected by backend. */
+  cancelWorkflowRun?(runId: string): Promise<void>;
+
   /** Resolve label display names to IDs against configured labels. Injected by backend. */
   resolveLabels?(labels: string[]): ResolvedLabelsResult;
 
@@ -508,6 +523,49 @@ export interface ListAgentsResult {
   total: number;
   returned: number;
   agents: AgentListItem[];
+}
+
+/** Compact workflow summary (returned by list_workflows). */
+export interface WorkflowListItem {
+  slug: string;
+  name: string;
+  description: string;
+  avatar?: string;
+  active: boolean;
+  triggerType: string;
+  triggerInputs: Array<{
+    name: string;
+    type: string;
+    required?: boolean;
+    description?: string;
+  }>;
+  steps: Array<{
+    id: string;
+    agent: string;
+    description?: string;
+    hasOutputSchema: boolean;
+    timeout?: number;
+    retries?: number;
+    onFailure?: string;
+  }>;
+}
+
+/** Full workflow detail (returned by get_workflow). */
+export interface WorkflowToolDetail extends WorkflowListItem {
+  body: string;
+}
+
+/** Options for list_workflows filtering. */
+export interface ListWorkflowsOptions {
+  activeOnly?: boolean;
+  search?: string;
+}
+
+/** Result from list_workflows. */
+export interface ListWorkflowsResult {
+  total: number;
+  returned: number;
+  workflows: WorkflowListItem[];
 }
 
 // ============================================================

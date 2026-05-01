@@ -61,6 +61,16 @@ export interface SessionScopedToolCallbacks {
   listSessionsFn?: (options?: import('@craft-agent/session-tools-core').ListSessionsOptions) => import('@craft-agent/session-tools-core').ListSessionsResult;
   /** List saved agents available to the workspace. */
   listAgentsFn?: (options?: import('@craft-agent/session-tools-core').ListAgentsOptions) => import('@craft-agent/session-tools-core').ListAgentsResult;
+  /** List workflows available to the workspace. */
+  listWorkflowsFn?: (options?: import('@craft-agent/session-tools-core').ListWorkflowsOptions) => import('@craft-agent/session-tools-core').ListWorkflowsResult;
+  /** Get workflow details by slug. */
+  getWorkflowFn?: (slug: string) => import('@craft-agent/session-tools-core').WorkflowToolDetail | null;
+  /** Start a workflow run. */
+  startWorkflowFn?: (slug: string, triggerInputs: Record<string, unknown>) => Promise<unknown>;
+  /** Get workflow run snapshot. */
+  getWorkflowRunFn?: (runId: string) => unknown | null;
+  /** Cancel workflow run. */
+  cancelWorkflowRunFn?: (runId: string) => Promise<void>;
   /** Resolve label display names to IDs. */
   resolveLabelsFn?: (labels: string[]) => import('@craft-agent/session-tools-core').ResolvedLabelsResult;
   /** Resolve a status display name to its ID. */
