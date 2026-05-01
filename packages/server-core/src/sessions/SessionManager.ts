@@ -4,7 +4,7 @@ import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-c
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@craft-agent/server-core/runtime'
 import { basename, dirname, join } from 'path'
 import { existsSync } from 'fs'
-import { readFile, writeFile, mkdir } from 'fs/promises'
+import { readFile, writeFile, mkdir, rename } from 'fs/promises'
 import { randomUUID } from 'node:crypto'
 import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns, generateConversationSummary } from '@craft-agent/shared/agent'
 import {
@@ -79,7 +79,7 @@ import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
 import { restoreFiles } from '@craft-agent/shared/utils/bundle-files'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/shared/mcp'
-import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
+import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, type CreateSessionOptions, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
 import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
 import { loadAllSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
@@ -88,6 +88,7 @@ import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
+import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
 import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels'
@@ -136,6 +137,86 @@ const defaultSessionRuntimeHooks: SessionRuntimeHooks = {
       stack: err.stack,
     })
   },
+}
+
+const SECTION_DELIMITER = '\n\n---\n\n'
+const WORKSPACE_CONTEXT_HEADER = 'Workspace context — read this before starting work:'
+const SKILLS_HEADER = 'You have these skills bundled with you (always available — reach for them when relevant):'
+const SOURCES_HEADER = 'You have these tools bundled with you (MCP servers, APIs, and local connectors):'
+const PLANNING_NUDGE = 'When planning, check your bundled skills and tools before working from scratch.'
+
+function buildWorkflowWorkspaceContextSection(docs: Array<{ slug: string; metadata: { name: string; enabled?: boolean }; body: string }>): string {
+  const usable = docs.filter((d) => d.metadata.enabled !== false && d.body.trim().length > 0)
+  if (usable.length === 0) return ''
+  return `${WORKSPACE_CONTEXT_HEADER}\n\n${usable.map((doc) => {
+    const heading = doc.metadata.name.trim() || doc.slug
+    return `## ${heading}\n\n${doc.body.trim()}`
+  }).join('\n\n')}`
+}
+
+function formatWorkflowBundleBullet(slug: string, name: string | undefined, description: string | undefined): string {
+  const head = `  • @${slug}`
+  const displayName = name?.trim()
+  const desc = description?.trim()
+  if (displayName && desc) return `${head} (${displayName}) — ${desc}`
+  if (displayName) return `${head} — ${displayName}`
+  if (desc) return `${head} — ${desc}`
+  return head
+}
+
+function buildWorkflowAgentPrompt(
+  agent: { systemPrompt: string; metadata: { skills?: string[]; sources?: string[] } },
+  skills: LoadedSkill[],
+  sources: LoadedSource[],
+  contextDocs: Array<{ slug: string; metadata: { name: string; enabled?: boolean }; body: string }>,
+): string {
+  const body = (agent.systemPrompt ?? '').trimEnd()
+  const contextSection = buildWorkflowWorkspaceContextSection(contextDocs)
+  const skillBySlug = new Map(skills.map((s) => [s.slug, s]))
+  const sourceBySlug = new Map(sources.map((s) => [s.config.slug, s]))
+  const skillBullets = (agent.metadata.skills ?? [])
+    .map((slug) => {
+      const skill = skillBySlug.get(slug)
+      return skill ? formatWorkflowBundleBullet(slug, skill.metadata.name, skill.metadata.description) : null
+    })
+    .filter((line): line is string => Boolean(line))
+  const sourceBullets = (agent.metadata.sources ?? [])
+    .map((slug) => {
+      const source = sourceBySlug.get(slug)
+      return source ? formatWorkflowBundleBullet(slug, source.config.name, source.config.tagline) : null
+    })
+    .filter((line): line is string => Boolean(line))
+  const footerParts: string[] = []
+  if (skillBullets.length > 0) footerParts.push(`${SKILLS_HEADER}\n${skillBullets.join('\n')}`)
+  if (sourceBullets.length > 0) footerParts.push(`${SOURCES_HEADER}\n${sourceBullets.join('\n')}`)
+  if (footerParts.length > 0) footerParts.push(PLANNING_NUDGE)
+  const parts = [body]
+  if (contextSection) parts.push(contextSection)
+  if (footerParts.length > 0) parts.push(footerParts.join('\n\n'))
+  return parts.join(SECTION_DELIMITER)
+}
+
+function normalizeStandardFiveFieldCron(expr: string | undefined): string | null {
+  const trimmed = expr?.trim()
+  if (!trimmed) return null
+  const parts = trimmed.split(/\s+/)
+  if (parts.length !== 5) return null
+  if (trimmed.startsWith('@')) return null
+  return trimmed
+}
+
+const automationConfigMutexes = new Map<string, Promise<void>>()
+function withAutomationConfigMutex<T>(configPath: string, fn: () => Promise<T>): Promise<T> {
+  const prev = automationConfigMutexes.get(configPath) ?? Promise.resolve()
+  const next = prev.then(fn, fn)
+  automationConfigMutexes.set(configPath, next.then(() => {}, () => {}))
+  return next
+}
+
+async function writeFileAtomic(path: string, data: string): Promise<void> {
+  const tmpPath = `${path}.${process.pid}.${randomUUID()}.tmp`
+  await writeFile(tmpPath, data, 'utf-8')
+  await rename(tmpPath, path)
 }
 
 let sessionRuntimeHooks: SessionRuntimeHooks = defaultSessionRuntimeHooks
@@ -1034,6 +1115,8 @@ export class SessionManager implements ISessionManager {
   private taskOutputIndex: Map<string, string> = new Map()
   /** Monotonic clock to ensure strictly increasing message timestamps */
   private lastTimestamp = 0
+  /** Workflow runner — bootstrapped during `initialize()`. */
+  private workflowRunner!: WorkflowRunner
 
   /**
    * Centralized setter for session processing state.
@@ -1473,6 +1556,24 @@ export class SessionManager implements ISessionManager {
     this.eventSink(RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
   }
 
+  private broadcastWorkflowRunUpdated(event: WorkflowRunEvent): void {
+    if (!this.eventSink) return
+    const eventType: 'created' | 'updated' | 'completed' =
+      event.type === 'run.created' ? 'created' : event.type === 'run.completed' ? 'completed' : 'updated'
+    this.eventSink(
+      RPC_CHANNELS.workflowRuns.UPDATED,
+      { to: 'workspace', workspaceId: event.run.workspaceId },
+      event.run.workspaceId,
+      event.run,
+      eventType,
+    )
+  }
+
+  /** Expose the workflow runner so RPC handlers can reach it via HandlerDeps. */
+  getWorkflowRunner(): WorkflowRunner {
+    return this.workflowRunner
+  }
+
   private broadcastDefaultPermissionsChanged(): void {
     if (!this.eventSink) return
     sessionLog.info('Broadcasting default permissions changed')
@@ -1601,8 +1702,42 @@ export class SessionManager implements ISessionManager {
         if (ensured > 0) {
           sessionLog.info(`[agent-definitions] Ensured ${ensured} required agent(s)`)
         }
+        // Seed built-in skills (creator skills) and silently migrate Concierge/Orchestrator
+        // frontmatter so existing installs pick up new load-bearing skills without
+        // overwriting hand-edited AGENT.md bodies.
+        try {
+          const { ensureRequiredGlobalSkills, STARTER_SKILLS } = await import('@craft-agent/shared/skills')
+          const { ensured: skillsEnsured } = ensureRequiredGlobalSkills(STARTER_SKILLS)
+          if (skillsEnsured > 0) {
+            sessionLog.info(`[skills] Seeded ${skillsEnsured} built-in skill(s) into global library`)
+          }
+        } catch (err) {
+          sessionLog.warn('[skills] Built-in skill seed skipped:', err as Error)
+        }
+        try {
+          const { ensureBuiltInAgentSkills } = await import('@craft-agent/shared/agent-definitions')
+          const { updated } = ensureBuiltInAgentSkills(['agent-creator', 'automation-creator'])
+          if (updated > 0) {
+            sessionLog.info(`[agent-definitions] Migrated ${updated} built-in agent(s) to add creator skills`)
+          }
+        } catch (err) {
+          sessionLog.warn('[agent-definitions] Built-in skill migration skipped:', err as Error)
+        }
       } catch (err) {
         sessionLog.warn('[agent-definitions] Library seed skipped:', err as Error)
+      }
+
+      // Seed starter workflows (idempotent; skipped after the first run).
+      // Starters are NOT load-bearing — if the user deletes one, the tombstone
+      // mechanism keeps it gone, so we don't call ensureRequiredWorkflows here.
+      try {
+        const { seedGlobalWorkflowLibraryIfEmpty, STARTER_WORKFLOWS } = await import('@craft-agent/shared/workflows')
+        const { seeded: workflowsSeeded } = seedGlobalWorkflowLibraryIfEmpty(STARTER_WORKFLOWS)
+        if (workflowsSeeded > 0) {
+          sessionLog.info(`[workflows] Seeded ${workflowsSeeded} starter workflow(s) into global library`)
+        }
+      } catch (err) {
+        sessionLog.warn('[workflows] Starter seed skipped:', err as Error)
       }
 
       // Backfill missing `models` arrays on existing LLM connections
@@ -1629,6 +1764,59 @@ export class SessionManager implements ISessionManager {
 
       // Load existing sessions from disk
       this.loadSessionsFromDisk()
+
+      this.workflowRunner = new WorkflowRunner({
+        createSession: (wsId, opts) => this.createSession(wsId, opts).then((s) => ({ id: s.id })),
+        resolveAgentSessionOptions: async (wsId, agentSlug): Promise<Partial<CreateSessionOptions>> => {
+          const ws = getWorkspaceByNameOrId(wsId)
+          if (!ws) throw new Error(`Workspace not found: ${wsId}`)
+          const { loadGlobalAgent } = await import('@craft-agent/shared/agent-definitions')
+          const { loadActiveContextDocsForAgent } = await import('@craft-agent/shared/workspace-context')
+          const agent = loadGlobalAgent(agentSlug)
+          if (!agent) throw new Error(`Workflow step agent not found: ${agentSlug}`)
+          const skills = loadAllSkills(ws.rootPath)
+          const skillBySlug = new Map(skills.map((s) => [s.slug, s]))
+          const resolvedSkillSlugs = (agent.metadata.skills ?? []).filter((slug) => skillBySlug.has(slug))
+          const sources = getSourcesBySlugs(ws.rootPath, agent.metadata.sources ?? [])
+          const resolvedSourceSlugs = sources.map((s) => s.config.slug)
+          const contextDocs = loadActiveContextDocsForAgent(ws.rootPath, agent.slug)
+          return {
+            customSystemPrompt: buildWorkflowAgentPrompt(agent, skills, sources, contextDocs),
+            agentSkillSlugs: resolvedSkillSlugs.length > 0 ? resolvedSkillSlugs : undefined,
+            enabledSourceSlugs: resolvedSourceSlugs.length > 0 ? resolvedSourceSlugs : undefined,
+            llmConnection: agent.metadata.llmConnection,
+            model: agent.metadata.model,
+            permissionMode: agent.metadata.permissionMode,
+            thinkingLevel: agent.metadata.thinkingLevel,
+            spawnedFromAgent: {
+              agentSlug: agent.slug,
+              agentName: agent.metadata.name,
+              timestamp: Date.now(),
+            },
+          }
+        },
+        sendMessage: (sessionId, prompt) => this.sendMessage(sessionId, prompt),
+        getLastAssistantText: (sessionId) => {
+          const managed = this.sessions.get(sessionId)
+          if (!managed) return ''
+          for (let i = managed.messages.length - 1; i >= 0; i--) {
+            const m = managed.messages[i]!
+            if (m.role === 'assistant') return m.content ?? ''
+          }
+          return ''
+        },
+        abortSession: async (sessionId) => {
+          const managed = this.sessions.get(sessionId)
+          if (!managed) return
+          managed.agent?.forceAbort(AbortReason.UserStop)
+        },
+        getWorkspaceRootPath: (wsId) => {
+          const ws = getWorkspaceByNameOrId(wsId)
+          if (!ws) throw new Error(`Workspace not found: ${wsId}`)
+          return ws.rootPath
+        },
+        emit: (event) => this.broadcastWorkflowRunUpdated(event),
+      })
 
       // Signal that initialization is complete — IPC handlers waiting on initGate will proceed
       this.initGate.markReady()
@@ -3629,6 +3817,151 @@ export class SessionManager implements ISessionManager {
           }
 
           await this.sendMessage(sessionId, message, fileAttachments)
+        },
+        createAgentFn: async (input) => {
+          const {
+            writeGlobalAgent,
+            loadGlobalAgent,
+            setAgentActive,
+            CONCIERGE_SLUG: CONCIERGE,
+            ORCHESTRATOR_SLUG: ORCHESTRATOR,
+            isValidAgentSlug,
+          } = await import('@craft-agent/shared/agent-definitions')
+
+          const slug = input.slug
+          if (!isValidAgentSlug(slug)) {
+            return { ok: false, error: `Invalid agent slug: "${slug}".` }
+          }
+          if (slug === CONCIERGE || slug === ORCHESTRATOR) {
+            return { ok: false, error: `"${slug}" is a built-in agent and cannot be overwritten.` }
+          }
+
+          const existing = loadGlobalAgent(slug)
+          if (existing && !input.overwrite) {
+            // Suggest the next free numbered variant. v2..v99 covers ~all realistic cases.
+            let suggested: string | undefined
+            for (let n = 2; n < 100; n++) {
+              const candidate = `${slug}-v${n}`
+              if (!loadGlobalAgent(candidate)) {
+                suggested = candidate
+                break
+              }
+            }
+            return {
+              ok: false,
+              error: `An agent with slug "${slug}" already exists.`,
+              suggestedSlug: suggested,
+            }
+          }
+
+          try {
+            writeGlobalAgent({
+              slug,
+              metadata: input.metadata,
+              systemPrompt: input.systemPrompt,
+            })
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            return { ok: false, error: `Failed to write agent: ${msg}` }
+          }
+
+          if (input.activateInWorkspace !== false) {
+            try {
+              setAgentActive(managed.workspace.rootPath, slug, true)
+            } catch (err) {
+              sessionLog.warn(`create_agent: failed to activate ${slug} in workspace:`, err as Error)
+            }
+          }
+
+          return { ok: true, slug }
+        },
+        createAutomationFn: async (input) => {
+          const targetWorkspaceId = input.workspaceId ?? managed.workspace.id
+          const targetWorkspace = getWorkspaceByNameOrId(targetWorkspaceId)
+          if (!targetWorkspace) {
+            return { ok: false, error: `Workspace not found: ${targetWorkspaceId}` }
+          }
+
+          const { eventName, matcher } = input
+          const SUPPORTED = new Set(['SchedulerTick', 'WebhookReceive', 'FileWatch', 'PollUrl', 'MessageReceive'])
+          if (!SUPPORTED.has(eventName)) {
+            return { ok: false, error: `Unsupported eventName: ${eventName}` }
+          }
+
+          let nextFireAt: string | undefined
+          if (eventName === 'SchedulerTick') {
+            const cron = normalizeStandardFiveFieldCron(typeof matcher.cron === 'string' ? matcher.cron : undefined)
+            if (!cron) return { ok: false, error: 'invalid-cron: a 5-field standard cron expression is required' }
+            try {
+              const { Cron } = await import('croner')
+              const job = new Cron(cron, matcher.timezone ? { timezone: matcher.timezone } : {})
+              nextFireAt = job.nextRun()?.toISOString() ?? undefined
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
+              return { ok: false, error: `invalid-cron: ${msg}` }
+            }
+          }
+
+          const { resolveAutomationsConfigPath, generateShortId } = await import('@craft-agent/shared/automations/resolve-config-path')
+          const { validateAutomationsConfig } = await import('@craft-agent/shared/automations')
+          const configPath = resolveAutomationsConfigPath(targetWorkspace.rootPath)
+
+          return withAutomationConfigMutex(configPath, async () => {
+            let config: { version?: number; automations?: Record<string, Record<string, unknown>[]>; [key: string]: unknown }
+            try {
+              const raw = await readFile(configPath, 'utf-8')
+              config = JSON.parse(raw)
+            } catch (err) {
+              if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+                config = { version: 2, automations: {} }
+              } else {
+                const msg = err instanceof Error ? err.message : String(err)
+                return { ok: false, error: `Failed to read automations.json: ${msg}` }
+              }
+            }
+
+            if (!config.automations) config.automations = {}
+            const eventMap = config.automations
+            if (!eventMap[eventName]) eventMap[eventName] = []
+            const matchers = eventMap[eventName]!
+
+            if (eventName === 'WebhookReceive' && typeof matcher.slug === 'string') {
+              for (const eventMatchers of Object.values(eventMap)) {
+                if (!Array.isArray(eventMatchers)) continue
+                for (const m of eventMatchers as Record<string, unknown>[]) {
+                  if (typeof m.slug === 'string' && m.slug === matcher.slug) {
+                    return { ok: false, error: `slug-exists: a webhook automation with slug "${matcher.slug}" already exists.` }
+                  }
+                }
+              }
+            }
+
+            const cloned = JSON.parse(JSON.stringify(matcher)) as Record<string, unknown>
+            cloned.id = generateShortId()
+            matchers.push(cloned)
+
+            for (const e of Object.values(eventMap)) {
+              if (!Array.isArray(e)) continue
+              for (const m of e as Record<string, unknown>[]) {
+                if (!m.id) m.id = generateShortId()
+              }
+            }
+
+            const validation = validateAutomationsConfig(config)
+            if (!validation.valid) {
+              return { ok: false, error: `Validation failed: ${validation.errors.join('; ')}` }
+            }
+
+            try {
+              await writeFileAtomic(configPath, JSON.stringify(config, null, 2) + '\n')
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
+              return { ok: false, error: `Failed to write automations.json: ${msg}` }
+            }
+
+            const slug = (typeof cloned.slug === 'string' && cloned.slug) || (cloned.id as string)
+            return { ok: true, slug, eventName, nextFireAt }
+          })
         },
         activateSourceInSessionFn: async (sourceSlug: string) => {
           const cb = managed.agent?.onSourceActivationRequest

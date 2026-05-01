@@ -97,6 +97,15 @@ export function getActivatedAgentsManifestPath(rootPath: string): string {
   return join(rootPath, 'activated-agents.json');
 }
 
+/**
+ * Get path to workspace's "activated workflows" manifest file.
+ * Workflows live globally; this file says which subset is visible/runnable here.
+ * @param rootPath - Absolute path to workspace root folder
+ */
+export function getActivatedWorkflowsManifestPath(rootPath: string): string {
+  return join(rootPath, 'activated-workflows.json');
+}
+
 // ============================================================
 // Config Operations
 // ============================================================

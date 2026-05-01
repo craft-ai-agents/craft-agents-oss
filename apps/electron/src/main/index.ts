@@ -701,6 +701,7 @@ app.whenReady().then(async () => {
               enabled: triggerServerHandle != null,
               url: triggerServerHandle?.url ?? null,
             }),
+            getWorkflowRunner: () => sm.getWorkflowRunner(),
           }
         },
         // Headless: register only core handlers (no GUI handlers for browser, settings, etc.)

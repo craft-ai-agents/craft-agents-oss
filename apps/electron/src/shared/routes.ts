@@ -190,6 +190,21 @@ export const routes = {
     /** Workspace Context placeholder route (full page implemented in a later phase) */
     workspaceContext: () => 'workspace-context' as const,
 
+    /** Workflows list (Phase 1: manual triggers only) */
+    workflows: () => 'workflows' as const,
+
+    /** Workflow detail page */
+    workflow: (slug: string) => `workflows/${slug}` as const,
+
+    /** Raw WORKFLOW.md editor */
+    workflowEdit: (slug: string) => `workflows/${slug}/edit` as const,
+
+    /** Workflow run page (per-run pipeline view) */
+    workflowRun: (runId: string) => `runs/${runId}` as const,
+
+    /** Cross-workflow run history */
+    recentRuns: () => 'workflows/runs' as const,
+
     /** Settings view (settings navigator) - uses SettingsSubpage from registry */
     settings: (subpage?: SettingsSubpage) =>
       subpage

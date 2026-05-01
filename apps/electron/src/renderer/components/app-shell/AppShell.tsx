@@ -36,6 +36,7 @@ import {
   BookOpen,
   History,
   FileText,
+  Workflow as WorkflowIcon,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -120,6 +121,7 @@ import {
   isWorkspaceContextNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
+import { isWorkflowsNavigation, isWorkflowRunNavigation } from "../../../shared/types"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
@@ -129,6 +131,7 @@ import { SkillsListPanel } from "./SkillsListPanel"
 import { AgentLibraryDialog } from "./AgentLibraryDialog"
 import { AgentSessionsPanel } from "./AgentSessionsPanel"
 import { useAgents } from "@/hooks/useAgents"
+import { useWorkflows } from "@/hooks/useWorkflows"
 import { ORCHESTRATOR_SLUG, CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
 import { openAgentSessionComposer } from "@/lib/run-agent"
 import { AutomationsListPanel } from "../automations/AutomationsListPanel"
@@ -1452,6 +1455,7 @@ function AppShellContent({
   // opens the full library picker. Keeping it lean — users curate their
   // working set, the global library lives behind the modal.
   const { activeAgents, allAgents: allAgentsForChat, setActive: setAgentActiveForChat } = useAgents(activeWorkspaceId)
+  const { activeWorkflows } = useWorkflows(activeWorkspaceId)
   const [agentLibraryOpen, setAgentLibraryOpen] = useState(false)
   const agentSidebarChildren = useMemo(() => {
     const orchestrator = activeAgents.find((a) => a.slug === ORCHESTRATOR_SLUG)
@@ -1497,6 +1501,55 @@ function AppShellContent({
     })
     return entries
   }, [activeAgents, navState])
+
+  // Workflows sidebar children: per-workspace activated workflows + Manage + Recent runs.
+  // The slug-row links navigate to the workflow detail page; "Manage" goes to the list.
+  const workflowSidebarChildren = useMemo(() => {
+    type WfEntry = {
+      id: string
+      title: string
+      icon: React.ReactNode
+      variant: 'default' | 'ghost'
+      onClick: () => void
+    }
+    const entries: WfEntry[] = []
+    for (const wf of activeWorkflows) {
+      const isActive =
+        isWorkflowsNavigation(navState) &&
+        navState.details.type === 'workflow' &&
+        navState.details.workflowSlug === wf.slug
+      entries.push({
+        id: `nav:workflows:${wf.slug}`,
+        title: wf.metadata.name,
+        icon: (
+          <span style={{ fontSize: 13, lineHeight: 1, display: 'inline-block', width: 14, textAlign: 'center' }}>
+            {wf.metadata.avatar?.trim() || '🪄'}
+          </span>
+        ),
+        variant: isActive ? 'default' : 'ghost',
+        onClick: () => navigate(routes.view.workflow(wf.slug)),
+      })
+    }
+    entries.push({
+      id: 'nav:workflows:manage',
+      title: t('sidebar.workflows.manage'),
+      icon: <WorkflowIcon className="h-3.5 w-3.5" />,
+      variant: (isWorkflowsNavigation(navState) && navState.details.type === 'list') ? 'default' : 'ghost',
+      onClick: () => navigate(routes.view.workflows()),
+    })
+    entries.push({
+      id: 'nav:workflows:runs',
+      title: t('sidebar.workflows.recentRuns'),
+      icon: <History className="h-3.5 w-3.5" />,
+      variant:
+        (isWorkflowsNavigation(navState) && navState.details.type === 'recent-runs') ||
+        isWorkflowRunNavigation(navState)
+          ? 'default'
+          : 'ghost',
+      onClick: () => navigate(routes.view.recentRuns()),
+    })
+    return entries
+  }, [activeWorkflows, navState, t])
 
   // Build the Past entry as a separate sibling appended to Agents children at
   // render time — it needs i18n + the same allSessions click handler used by
@@ -1971,6 +2024,10 @@ function AppShellContent({
       try { await setAgentActiveForChat(CONCIERGE_SLUG, true) } catch { /* fall through */ }
     }
     try {
+      // Concierge always receives every enabled context doc (server-side override).
+      const contextDocs = await window.electronAPI
+        .listWorkspaceContextDocsForAgent(activeWorkspace.id, CONCIERGE_SLUG)
+        .catch(() => [])
       await openAgentSessionComposer({
         agent: concierge,
         workspaceId: activeWorkspace.id,
@@ -1978,6 +2035,7 @@ function AppShellContent({
         onInputChange: contextValue.onInputChange,
         skills,
         sources,
+        contextDocs,
       })
     } catch (err) {
       toast.error('Failed to open Chat', {
@@ -2053,7 +2111,15 @@ function AppShellContent({
     }
     result.push({ id: 'nav:agents:past', type: 'nav', action: handleAllSessionsClick })
 
-    // 3. Library (Tools / Skills / Workspace Context)
+    // 3. Workflows (top-level, between Agents and Library)
+    result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
+    for (const wf of activeWorkflows) {
+      result.push({ id: `nav:workflows:${wf.slug}`, type: 'nav', action: () => navigate(routes.view.workflow(wf.slug)) })
+    }
+    result.push({ id: 'nav:workflows:manage', type: 'nav', action: () => navigate(routes.view.workflows()) })
+    result.push({ id: 'nav:workflows:runs', type: 'nav', action: () => navigate(routes.view.recentRuns()) })
+
+    // 4. Library (Tools / Skills / Workspace Context)
     result.push({ id: 'nav:library', type: 'nav' })
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
@@ -2065,7 +2131,7 @@ function AppShellContent({
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
 
     return result
-  }, [handleChatClick, handleAgentsClick, activeAgents, handleAllSessionsClick, handleSourcesClick, handleSkillsClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
+  }, [handleChatClick, handleAgentsClick, activeAgents, activeWorkflows, handleAllSessionsClick, handleSourcesClick, handleSkillsClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -2394,6 +2460,18 @@ function AppShellContent({
                           onClick: handleAllSessionsClick,
                         },
                       ],
+                    },
+                    // --- Workflows (top-level — see docs/workflows/03-ux.md) ---
+                    {
+                      id: "nav:workflows",
+                      title: t("sidebar.workflows"),
+                      icon: WorkflowIcon,
+                      variant: (isWorkflowsNavigation(navState) || isWorkflowRunNavigation(navState)) ? "default" : "ghost",
+                      onClick: () => navigate(routes.view.workflows()),
+                      expandable: true,
+                      expanded: isExpanded('nav:workflows'),
+                      onToggle: () => toggleExpanded('nav:workflows'),
+                      items: workflowSidebarChildren,
                     },
                     // --- Library (Tools / Skills / Workspace Context) ---
                     {

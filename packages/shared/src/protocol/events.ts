@@ -7,6 +7,7 @@ import type { ThemeOverrides } from '../config/index'
 import type { LoadedSource } from '../sources/types'
 import type { LoadedSkill } from '../skills/types'
 import type { LoadedContextDoc } from '../workspace-context/types'
+import type { LoadedWorkflow, WorkflowRunSnapshot } from '../workflows'
 import { RPC_CHANNELS } from './channels'
 import type {
   SessionEvent,
@@ -29,6 +30,12 @@ export interface BroadcastEventMap {
   [RPC_CHANNELS.automations.CHANGED]: [workspaceId: string]
   [RPC_CHANNELS.agentDefinitions.CHANGED]: [workspaceId: string | null]
   [RPC_CHANNELS.workspaceContext.CHANGED]: [workspaceId: string, docs: LoadedContextDoc[]]
+  [RPC_CHANNELS.workflows.CHANGED]: [workspaceId: string | null, workflows: LoadedWorkflow[]]
+  [RPC_CHANNELS.workflowRuns.UPDATED]: [
+    workspaceId: string,
+    run: WorkflowRunSnapshot,
+    eventType: 'created' | 'updated' | 'completed',
+  ]
   [RPC_CHANNELS.skills.CHANGED]: [workspaceId: string, skills: LoadedSkill[]]
   [RPC_CHANNELS.llmConnections.CHANGED]: []
   [RPC_CHANNELS.permissions.DEFAULTS_CHANGED]: [value: null]

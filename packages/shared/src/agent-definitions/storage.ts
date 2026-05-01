@@ -563,5 +563,40 @@ export function seedGlobalLibraryIfEmpty(
   return { seeded };
 }
 
+/**
+ * Ensure built-in agents (Concierge, Orchestrator) have the given skill slugs
+ * in their `skills:` frontmatter. Used for one-time silent migration when new
+ * load-bearing skills ship — users with existing AGENT.md files (which the
+ * seeder doesn't overwrite) still get the new bundle without manual edits.
+ *
+ * No-op for slugs already present. Only mutates the two built-in slugs by name.
+ * User-customized agents are deliberately untouched.
+ */
+export function ensureBuiltInAgentSkills(
+  requiredSkills: ReadonlyArray<string>,
+  options?: AgentStorageOptions,
+): { updated: number } {
+  const builtIns = ['concierge', 'orchestrator'];
+  let updated = 0;
+  for (const slug of builtIns) {
+    const loaded = loadGlobalAgent(slug, options);
+    if (!loaded) continue;
+    const current = new Set(loaded.metadata.skills ?? []);
+    const missing = requiredSkills.filter((s) => !current.has(s));
+    if (missing.length === 0) continue;
+    const next: AgentMetadata = {
+      ...loaded.metadata,
+      skills: [...(loaded.metadata.skills ?? []), ...missing],
+    };
+    try {
+      writeGlobalAgent({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
+      updated += 1;
+    } catch {
+      // Best-effort migration; loading must not fail because of a malformed write.
+    }
+  }
+  return { updated };
+}
+
 // Re-export for convenience
 export { statSync as _internalStatSync };

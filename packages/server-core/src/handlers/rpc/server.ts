@@ -55,8 +55,19 @@ export function registerServerHandlers(
       rootPath = join(baseDir, uniqueSlug)
     }
 
+    const rootExistedBeforeAdd = existsSync(rootPath)
     const workspace = addWorkspace({ name: trimmed, rootPath })
     setActiveWorkspace(workspace.id)
+    try {
+      const { setWorkflowActive, STARTER_WORKFLOW_SLUGS } = await import('@craft-agent/shared/workflows')
+      if (!rootExistedBeforeAdd) {
+        for (const slug of STARTER_WORKFLOW_SLUGS) {
+          try { setWorkflowActive(workspace.rootPath, slug, true) } catch { /* ignore */ }
+        }
+      }
+    } catch (err) {
+      deps.platform.logger.warn?.(`[workflows] Failed to auto-activate starters in new workspace: ${(err as Error).message}`)
+    }
     deps.platform.logger.info(`Created workspace "${trimmed}" at ${rootPath} (server:createWorkspace)`)
 
     const { rootPath: _rp, createdAt: _ca, ...info } = workspace

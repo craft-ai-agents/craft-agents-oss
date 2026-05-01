@@ -35,6 +35,7 @@ export {
   deleteGlobalAgent,
   seedGlobalLibraryIfEmpty,
   ensureRequiredAgents,
+  ensureBuiltInAgentSkills,
   type AgentStorageOptions,
   type CreateAgentInput,
 } from './storage.ts';

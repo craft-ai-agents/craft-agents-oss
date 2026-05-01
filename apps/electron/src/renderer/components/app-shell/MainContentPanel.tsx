@@ -34,6 +34,7 @@ import {
   isAutomationsNavigation,
   isWorkspaceContextNavigation,
 } from '@/contexts/NavigationContext'
+import { isWorkflowsNavigation, isWorkflowRunNavigation } from '../../../shared/types'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
 import { extractLabelId } from '@craft-agent/shared/labels'
@@ -42,6 +43,11 @@ import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import AgentInfoPage from '@/pages/AgentInfoPage'
 import WorkspaceContextPage from '@/pages/WorkspaceContextPage'
+import WorkflowsListPage from '@/pages/WorkflowsListPage'
+import WorkflowInfoPage from '@/pages/WorkflowInfoPage'
+import WorkflowEditPage from '@/pages/WorkflowEditPage'
+import WorkflowRunPage from '@/pages/WorkflowRunPage'
+import RecentRunsPage from '@/pages/RecentRunsPage'
 import { AgentsLaunchpad } from './AgentsLaunchpad'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { AutomationInfoPage } from '../automations/AutomationInfoPage'
@@ -340,6 +346,45 @@ export function MainContentPanel({
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <WorkspaceContextPage workspaceId={activeWorkspaceId || ''} />
+      </Panel>
+    )
+  }
+
+  if (isWorkflowsNavigation(navState)) {
+    const wsId = activeWorkspaceId || ''
+    switch (navState.details.type) {
+      case 'workflow':
+        return wrapWithStoplight(
+          <Panel variant="grow" className={className}>
+            <WorkflowInfoPage workflowSlug={navState.details.workflowSlug} workspaceId={wsId} />
+          </Panel>
+        )
+      case 'workflow-edit':
+        return wrapWithStoplight(
+          <Panel variant="grow" className={className}>
+            <WorkflowEditPage workflowSlug={navState.details.workflowSlug} workspaceId={wsId} />
+          </Panel>
+        )
+      case 'recent-runs':
+        return wrapWithStoplight(
+          <Panel variant="grow" className={className}>
+            <RecentRunsPage workspaceId={wsId} />
+          </Panel>
+        )
+      case 'list':
+      default:
+        return wrapWithStoplight(
+          <Panel variant="grow" className={className}>
+            <WorkflowsListPage workspaceId={wsId} />
+          </Panel>
+        )
+    }
+  }
+
+  if (isWorkflowRunNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <WorkflowRunPage runId={navState.runId} workspaceId={activeWorkspaceId || ''} />
       </Panel>
     )
   }

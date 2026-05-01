@@ -400,6 +400,31 @@ export const RPC_CHANNELS = {
     /** Push event when the global library or a workspace's activation changed. */
     CHANGED: 'agentDefinitions:changed',
   },
+  workflows: {
+    /** Every workflow in the global library. */
+    LIST_ALL: 'workflows:list-all',
+    /** Slugs activated in a given workspace. */
+    LIST_ACTIVE_IN_WORKSPACE: 'workflows:list-active',
+    /** Load a single workflow by slug. */
+    GET: 'workflows:get',
+    /** Create or update a workflow in the global library. */
+    UPSERT: 'workflows:upsert',
+    /** Delete a workflow from the library + every workspace's activation. */
+    DELETE: 'workflows:delete',
+    /** Toggle activation of a workflow in a workspace. */
+    SET_ACTIVE: 'workflows:set-active',
+    /** Push event when the global library or a workspace's activation changed. */
+    CHANGED: 'workflows:changed',
+  },
+  workflowRuns: {
+    START: 'workflow-runs:start',
+    GET: 'workflow-runs:get',
+    LIST: 'workflow-runs:list',
+    CANCEL: 'workflow-runs:cancel',
+    DELETE: 'workflow-runs:delete',
+    /** Single push event covering created / updated / completed transitions. */
+    UPDATED: 'workflow-runs:updated',
+  },
   resources: {
     EXPORT: 'resources:export',
     IMPORT: 'resources:import',

@@ -136,6 +136,9 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
 
   const handleRun = async () => {
     try {
+      const contextDocs = await window.electronAPI
+        .listWorkspaceContextDocsForAgent(workspaceId, agent.slug)
+        .catch(() => [])
       await openAgentSessionComposer({
         agent,
         workspaceId,
@@ -146,6 +149,7 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
         // to bind them at session start).
         skills,
         sources,
+        contextDocs,
       })
     } catch (err) {
       toast.error('Failed to run agent', {

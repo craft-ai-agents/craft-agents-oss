@@ -394,6 +394,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.automations.GET_HISTORY,
   RPC_CHANNELS.automations.GET_LAST_EXECUTED,
   RPC_CHANNELS.automations.REPLAY,
+  RPC_CHANNELS.automations.CREATE_FROM_TEMPLATE,
+  RPC_CHANNELS.automations.GET_TRIGGER_SERVER_INFO,
   RPC_CHANNELS.automations.CHANGED,
 
   // git — workspace filesystem
@@ -402,6 +404,23 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   // resources — workspace resource export/import
   RPC_CHANNELS.resources.EXPORT,
   RPC_CHANNELS.resources.IMPORT,
+
+  // workflows — global library + per-workspace activation, runs on workspace server
+  RPC_CHANNELS.workflows.LIST_ALL,
+  RPC_CHANNELS.workflows.LIST_ACTIVE_IN_WORKSPACE,
+  RPC_CHANNELS.workflows.GET,
+  RPC_CHANNELS.workflows.UPSERT,
+  RPC_CHANNELS.workflows.DELETE,
+  RPC_CHANNELS.workflows.SET_ACTIVE,
+  RPC_CHANNELS.workflows.CHANGED,
+
+  // workflow runs — execute on workspace server
+  RPC_CHANNELS.workflowRuns.START,
+  RPC_CHANNELS.workflowRuns.GET,
+  RPC_CHANNELS.workflowRuns.LIST,
+  RPC_CHANNELS.workflowRuns.CANCEL,
+  RPC_CHANNELS.workflowRuns.DELETE,
+  RPC_CHANNELS.workflowRuns.UPDATED,
 
   // messaging — gateway channels run on workspace server
   RPC_CHANNELS.messaging.WA_REGISTER,

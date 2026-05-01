@@ -51,9 +51,22 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
       throw new Error(validation.reason!)
     }
 
+    const rootExistedBeforeAdd = existsSync(rootPath)
     const workspace = addWorkspace({ name, rootPath, ...(remoteServer && { remoteServer }) })
     // Make it active
     setActiveWorkspace(workspace.id)
+    // Auto-activate starter workflows only for app-created roots. Existing
+    // folders may be re-imports or deliberately have an empty activation list.
+    try {
+      const { setWorkflowActive, STARTER_WORKFLOW_SLUGS } = await import('@craft-agent/shared/workflows')
+      if (!rootExistedBeforeAdd) {
+        for (const slug of STARTER_WORKFLOW_SLUGS) {
+          try { setWorkflowActive(workspace.rootPath, slug, true) } catch { /* ignore */ }
+        }
+      }
+    } catch (err) {
+      deps.platform.logger.warn?.(`[workflows] Failed to auto-activate starters in new workspace: ${(err as Error).message}`)
+    }
     deps.platform.logger.info(`Created workspace "${name}" at ${rootPath}${remoteServer ? ` (remote: ${remoteServer.url})` : ''}`)
     return workspace
   })

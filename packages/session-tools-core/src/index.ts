@@ -168,6 +168,30 @@ export {
 } from './handlers/index.ts';
 
 export type {
+  CreateAgentToolInput,
+  CreateAgentToolMetadata,
+  CreateAgentResult,
+} from './handlers/index.ts';
+
+export {
+  handleCreateAgent,
+} from './handlers/index.ts';
+
+export type {
+  CreateAutomationToolInput,
+  CreateAutomationResult,
+  CreateAutomationMatcher,
+  CreateAutomationAction,
+  CreateAutomationPromptAction,
+  CreateAutomationWebhookAction,
+  CreateAutomationEventName,
+} from './handlers/index.ts';
+
+export {
+  handleCreateAutomation,
+} from './handlers/index.ts';
+
+export type {
   SubmitPlanArgs,
   ConfigValidateArgs,
   SkillValidateArgs,
@@ -204,6 +228,7 @@ export {
   BrowserToolSchema,
   // Developer feedback schema
   SendDeveloperFeedbackSchema,
+  CreateAgentSchema,
   // Descriptions
   TOOL_DESCRIPTIONS,
   // Registry

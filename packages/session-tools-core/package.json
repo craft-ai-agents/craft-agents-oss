@@ -16,7 +16,8 @@
     "beautiful-mermaid": "*",
     "zod": "^3.23.0",
     "zod-to-json-schema": "^3.25.0",
-    "gray-matter": "^4.0.3"
+    "gray-matter": "^4.0.3",
+    "croner": "^10.0.1"
   },
   "devDependencies": {
     "typescript": "^5.8.2"

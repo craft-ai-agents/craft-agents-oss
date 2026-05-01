@@ -73,6 +73,17 @@ export type { AgentDefinitionMetadataDTO, AgentDefinitionDTO };
 import type { LoadedContextDoc as ContextDocDTO, ContextDocMetadata, ContextDocRouting } from '@craft-agent/shared/workspace-context/types';
 export type { ContextDocDTO, ContextDocMetadata, ContextDocRouting };
 
+// Workflows — DTOs match the shared LoadedWorkflow / WorkflowRunSnapshot.
+import type {
+  LoadedWorkflow as WorkflowDTO,
+  WorkflowMetadata as WorkflowMetadataDTO,
+  WorkflowRunSnapshot as WorkflowRunDTO,
+  WorkflowRunState,
+  WorkflowRunStep,
+  WorkflowRunStepState,
+} from '@craft-agent/shared/workflows';
+export type { WorkflowDTO, WorkflowMetadataDTO, WorkflowRunDTO, WorkflowRunState, WorkflowRunStep, WorkflowRunStepState };
+
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
 export type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult };
@@ -678,6 +689,30 @@ export interface ElectronAPI {
   }): Promise<ContextDocDTO>
   deleteWorkspaceContextDoc(workspaceId: string, slug: string): Promise<boolean>
   onWorkspaceContextChanged(callback: (workspaceId: string, docs: ContextDocDTO[]) => void): () => void
+
+  // Workflows (global library + per-workspace activation)
+  listAllWorkflows(): Promise<WorkflowDTO[]>
+  listActiveWorkflowsInWorkspace(workspaceId: string): Promise<string[]>
+  getWorkflow(slug: string): Promise<WorkflowDTO | null>
+  upsertWorkflow(payload: {
+    slug: string
+    metadata: WorkflowMetadataDTO
+    body: string
+    activateInWorkspaceId?: string
+  }): Promise<WorkflowDTO>
+  deleteWorkflow(slug: string): Promise<boolean>
+  setWorkflowActive(workspaceId: string, slug: string, active: boolean): Promise<{ active: string[] }>
+  onWorkflowsChanged(callback: (workspaceId: string | null, workflows: WorkflowDTO[]) => void): () => void
+
+  // Workflow runs
+  startWorkflowRun(workspaceId: string, workflowSlug: string, triggerInputs: Record<string, unknown>): Promise<WorkflowRunDTO>
+  getWorkflowRun(workspaceId: string, runId: string): Promise<WorkflowRunDTO | null>
+  listWorkflowRuns(workspaceId: string): Promise<WorkflowRunDTO[]>
+  cancelWorkflowRun(workspaceId: string, runId: string): Promise<void>
+  deleteWorkflowRun(workspaceId: string, runId: string): Promise<boolean>
+  onWorkflowRunUpdated(
+    callback: (workspaceId: string, run: WorkflowRunDTO, eventType: 'created' | 'updated' | 'completed') => void,
+  ): () => void
   getAutomationHistory(workspaceId: string, automationId: string, limit?: number): Promise<Array<{ id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string; webhook?: { method: string; url: string; statusCode: number; durationMs: number; attempts?: number; error?: string; responseBody?: string } }>>
   getAutomationLastExecuted(workspaceId: string): Promise<Record<string, number>>
   replayAutomation(workspaceId: string, automationId: string, eventName: string): Promise<{ results: Array<{ type: string; url: string; statusCode: number; success: boolean; error?: string; duration: number }> }>
@@ -847,6 +882,29 @@ export interface WorkspaceContextNavigationState {
 }
 
 /**
+ * Workflows navigator. Hosts the list, detail, editor, and recent-runs
+ * pages. The Run page (per-run pipeline view) is its own navigator below
+ * because the URL shape `/runs/<id>` doesn't fit the workflows hierarchy.
+ */
+export type WorkflowsDetails =
+  | { type: 'list' }
+  | { type: 'workflow'; workflowSlug: string }
+  | { type: 'workflow-edit'; workflowSlug: string }
+  | { type: 'recent-runs' }
+
+export interface WorkflowsNavigationState {
+  navigator: 'workflows'
+  details: WorkflowsDetails
+  rightSidebar?: RightSidebarPanel
+}
+
+export interface WorkflowRunNavigationState {
+  navigator: 'workflowRun'
+  runId: string
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Unified navigation state
  */
 export type NavigationState =
@@ -857,6 +915,8 @@ export type NavigationState =
   | AgentsNavigationState
   | AutomationsNavigationState
   | WorkspaceContextNavigationState
+  | WorkflowsNavigationState
+  | WorkflowRunNavigationState
 
 export const isSessionsNavigation = (
   state: NavigationState
@@ -885,6 +945,14 @@ export const isAutomationsNavigation = (
 export const isWorkspaceContextNavigation = (
   state: NavigationState
 ): state is WorkspaceContextNavigationState => state.navigator === 'workspaceContext'
+
+export const isWorkflowsNavigation = (
+  state: NavigationState
+): state is WorkflowsNavigationState => state.navigator === 'workflows'
+
+export const isWorkflowRunNavigation = (
+  state: NavigationState
+): state is WorkflowRunNavigationState => state.navigator === 'workflowRun'
 
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
   navigator: 'sessions',
@@ -919,6 +987,17 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'workspaceContext') {
     return 'workspace-context'
+  }
+  if (state.navigator === 'workflows') {
+    switch (state.details.type) {
+      case 'list': return 'workflows'
+      case 'workflow': return `workflows/workflow/${state.details.workflowSlug}`
+      case 'workflow-edit': return `workflows/workflow/${state.details.workflowSlug}/edit`
+      case 'recent-runs': return 'workflows/runs'
+    }
+  }
+  if (state.navigator === 'workflowRun') {
+    return `runs/${state.runId}`
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
@@ -979,6 +1058,23 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
 
   // Handle settings
   if (key === 'workspace-context') return { navigator: 'workspaceContext' }
+
+  // Handle workflows
+  if (key === 'workflows') return { navigator: 'workflows', details: { type: 'list' } }
+  if (key === 'workflows/runs') return { navigator: 'workflows', details: { type: 'recent-runs' } }
+  if (key.startsWith('workflows/workflow/')) {
+    const rest = key.slice('workflows/workflow/'.length)
+    if (rest.endsWith('/edit')) {
+      const slug = rest.slice(0, -'/edit'.length)
+      if (slug) return { navigator: 'workflows', details: { type: 'workflow-edit', workflowSlug: slug } }
+    } else if (rest) {
+      return { navigator: 'workflows', details: { type: 'workflow', workflowSlug: rest } }
+    }
+  }
+  if (key.startsWith('runs/')) {
+    const runId = key.slice('runs/'.length)
+    if (runId) return { navigator: 'workflowRun', runId }
+  }
 
   // Handle settings
   if (key === 'settings') return { navigator: 'settings', subpage: 'app' }

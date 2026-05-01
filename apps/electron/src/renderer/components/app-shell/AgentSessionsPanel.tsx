@@ -65,6 +65,11 @@ export function AgentSessionsPanel({ agentSlug, workspaceId }: AgentSessionsPane
       return
     }
     try {
+      // Fetch context docs filtered by routing for this agent. Server applies
+      // the Concierge omniscience override.
+      const contextDocs = await window.electronAPI
+        .listWorkspaceContextDocsForAgent(workspaceId, agent.slug)
+        .catch(() => [])
       await openAgentSessionComposer({
         agent,
         workspaceId,
@@ -72,6 +77,7 @@ export function AgentSessionsPanel({ agentSlug, workspaceId }: AgentSessionsPane
         onInputChange,
         skills,
         sources,
+        contextDocs,
       })
     } catch (err) {
       toast.error('Failed to run agent', {

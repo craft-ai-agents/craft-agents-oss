@@ -40,6 +40,8 @@ import { handleGetSessionInfo } from './handlers/get-session-info.ts';
 import { handleListSessions } from './handlers/list-sessions.ts';
 import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
 import { handleListMessagingChannels, handleUnbindMessagingChannel } from './handlers/messaging.ts';
+import { handleCreateAgent } from './handlers/create-agent.ts';
+import { handleCreateAutomation } from './handlers/create-automation.ts';
 
 // ============================================================
 // Canonical Zod Schemas
@@ -219,6 +221,67 @@ export const ListMessagingChannelsSchema = z.object({
 
 export const UnbindMessagingChannelSchema = z.object({
   platform: z.enum(['telegram', 'whatsapp']).optional().describe('Platform to unbind. If omitted, unbinds all.'),
+});
+
+export const CreateAgentSchema = z.object({
+  slug: z.string().describe('kebab-case slug (1-64 chars, lowercase + digits + hyphens).'),
+  metadata: z.object({
+    name: z.string().describe('Display name shown in pickers.'),
+    description: z.string().describe('One-sentence description shown in lists.'),
+    avatar: z.string().optional().describe('Single emoji avatar.'),
+    permissionMode: z.enum(['safe', 'ask', 'allow-all']).optional().describe('Defaults to "ask". Only set "allow-all" with explicit user opt-in.'),
+    thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional().describe('Reasoning depth. Default to "medium" for most agents.'),
+    skills: z.array(z.string()).optional().describe('Skill slugs to bundle.'),
+    sources: z.array(z.string()).optional().describe('Source slugs to bundle.'),
+    inputs: z.string().optional().describe('One sentence describing expected inputs.'),
+    outputs: z.string().optional().describe('One sentence describing produced outputs.'),
+    tags: z.array(z.string()).optional().describe('1-8 lowercase capability tags.'),
+    greeting: z.string().optional().describe('Optional opening line shown in the composer.'),
+    model: z.string().optional().describe('Model ID override.'),
+    llmConnection: z.string().optional().describe('LLM connection slug.'),
+  }).describe('Agent frontmatter metadata.'),
+  systemPrompt: z.string().describe('The agent persona / operating instructions. Required, non-empty.'),
+  activateInWorkspace: z.boolean().optional().describe('Activate the new agent in the current workspace. Defaults to true.'),
+  overwrite: z.boolean().optional().describe('If true, overwrite an existing agent with the same slug. Defaults to false.'),
+});
+
+const CreateAutomationActionSchema = z.union([
+  z.object({
+    type: z.literal('prompt'),
+    prompt: z.string().describe('Prompt the spawned session receives. May reference $CRAFT_* env vars (e.g. $CRAFT_BODY, $CRAFT_TEXT).'),
+    llmConnection: z.string().optional().describe('LLM connection slug to use for this run.'),
+    model: z.string().optional().describe('Model ID override.'),
+    thinkingLevel: z.enum(['high', 'medium', 'low', 'disabled']).optional().describe('Reasoning depth for the run.'),
+  }).passthrough(),
+  z.object({
+    type: z.literal('webhook'),
+    url: z.string().describe('Outbound URL to POST. May reference $CRAFT_* env vars.'),
+    method: z.string().optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    body: z.unknown().optional(),
+  }).passthrough(),
+]);
+
+export const CreateAutomationSchema = z.object({
+  workspaceId: z.string().optional().describe('Target workspace ID. Defaults to the current workspace.'),
+  eventName: z.enum(['SchedulerTick', 'WebhookReceive', 'FileWatch', 'PollUrl', 'MessageReceive'])
+    .describe('Trigger event type for the automation.'),
+  matcher: z.object({
+    name: z.string().optional().describe('Display name for the automation.'),
+    slug: z.string().optional().describe('Webhook slug (required for WebhookReceive). 1-64 chars: lowercase letters, digits, hyphens.'),
+    secretEnv: z.string().optional().describe('Env var name holding the webhook shared secret (WebhookReceive).'),
+    cron: z.string().optional().describe('Cron expression in 5-field format (required for SchedulerTick).'),
+    timezone: z.string().optional().describe('IANA timezone for cron evaluation (e.g. "America/New_York").'),
+    watchPath: z.string().optional().describe('Path to watch (FileWatch).'),
+    watchGlob: z.string().optional().describe('Glob filter (FileWatch).'),
+    watchChangeTypes: z.array(z.enum(['add', 'change', 'remove'])).optional(),
+    pollUrl: z.string().optional().describe('URL to poll (PollUrl).'),
+    pollIntervalSec: z.number().optional().describe('Poll interval in seconds (min 30).'),
+    matcher: z.string().optional().describe('Optional regex matcher applied to event payload.'),
+    enabled: z.boolean().optional().describe('Defaults to true (enabled).'),
+    permissionMode: z.enum(['safe', 'ask', 'allow-all']).optional().describe('Permission mode for spawned sessions. Default to "ask".'),
+    actions: z.array(CreateAutomationActionSchema).min(1).describe('At least one prompt or webhook action.'),
+  }).passthrough().describe('Matcher fields. Trigger-specific fields are passed through and validated server-side.'),
 });
 
 // ============================================================
@@ -483,6 +546,56 @@ Shows which external chat apps are connected and can send/receive messages.`,
 
   unbind_messaging_channel: `Disconnect a messaging channel from the current session.
 Messages will no longer be forwarded between the chat app and this session.`,
+
+  create_agent: `Create a new agent in the global agent library and activate it in the current workspace.
+
+Use this only after walking the user through the agent-creator interview and getting explicit confirmation. Always show a complete draft (name, slug, avatar, system prompt, etc.) BEFORE calling this tool — never silent-write.
+
+**Inputs:**
+- \`slug\`: kebab-case (1-64 chars). If unsure, derive from the agent name.
+- \`metadata\`: name + description are required; the rest are strongly preferred (avatar, permissionMode, thinkingLevel, inputs, outputs, tags) and free for you to infer sensibly.
+- \`systemPrompt\`: the agent's identity + operating instructions. Required, non-empty.
+- \`activateInWorkspace\` (default true): activate in this workspace immediately so the user sees it.
+- \`overwrite\` (default false): only set true if the user explicitly asked to replace an existing agent.
+
+**Refusals (returned as errors):**
+- Built-in slug clash (\`concierge\`, \`orchestrator\`).
+- Slug already exists without \`overwrite: true\` — tool will suggest a numbered variant like \`<slug>-v2\`.
+- Empty \`systemPrompt\`.
+
+After success, post a one-line confirmation to the user with a link to /agents/<slug>.`,
+
+  create_automation: `Create a new automation matcher in the workspace's automations.json and activate it.
+
+Use this only after walking the user through the automation-creator interview and getting explicit confirmation. Always show a complete draft (trigger type, schedule/slug/path, the action prompt, permission mode) BEFORE calling this tool.
+
+**Trigger types:**
+- \`SchedulerTick\` — cron-based. Required: \`matcher.cron\` (5-field). Optional: \`matcher.timezone\`.
+- \`WebhookReceive\` — inbound HTTP. Required: \`matcher.slug\` (kebab-case). Optional: \`matcher.secretEnv\`, \`matcher.allowedMethods\`.
+- \`FileWatch\` — filesystem changes. Required: \`matcher.watchPath\`. Optional: \`matcher.watchGlob\`, \`matcher.watchChangeTypes\`.
+- \`PollUrl\` — periodic URL polling. Required: \`matcher.pollUrl\`, \`matcher.pollIntervalSec\` (min 30).
+- \`MessageReceive\` — inbound chat from a messaging gateway (Telegram/WhatsApp).
+
+**Actions** (at least one required in \`matcher.actions\`):
+- \`{ type: 'prompt', prompt, llmConnection?, model?, thinkingLevel? }\` — spawns a session with the rendered prompt.
+- \`{ type: 'webhook', url, method?, headers?, body? }\` — sends an outbound HTTP request.
+
+**Templating:** Action prompts and URLs use **shell-style \`$VAR\` / \`\${VAR}\` env-var expansion** (NOT mustache/handlebars). The trigger payload is exposed as \`CRAFT_*\` env vars:
+- Always available: \`$CRAFT_EVENT\`, \`$CRAFT_EVENT_DATA\` (full JSON), \`$CRAFT_SESSION_ID\`, \`$CRAFT_WORKSPACE_ID\`.
+- Payload fields become \`CRAFT_<SNAKE_CASE>\`. Examples by trigger:
+  - \`SchedulerTick\` → \`$CRAFT_LOCAL_TIME\`, \`$CRAFT_LOCAL_DATE\`
+  - \`WebhookReceive\` → \`$CRAFT_BODY\`, \`$CRAFT_HEADER_<KEY>\`, \`$CRAFT_QUERY_<KEY>\`
+  - \`FileWatch\` → \`$CRAFT_RELATIVE_PATH\`, \`$CRAFT_CHANGE_TYPE\`
+  - \`PollUrl\` → response fields exposed as \`$CRAFT_*\` (check \`$CRAFT_EVENT_DATA\` for the full payload)
+  - \`MessageReceive\` → \`$CRAFT_FROM\`, \`$CRAFT_TEXT\`, \`$CRAFT_PLATFORM\`
+
+**Refusals:**
+- Unsupported \`eventName\`.
+- Empty \`actions\` array, or any prompt action with empty \`prompt\`.
+- \`SchedulerTick\` without a valid cron.
+- \`WebhookReceive\` without a valid slug, or slug that already exists in the workspace.
+
+After success, post a one-line confirmation. For SchedulerTick automations, surface the next-fire time.`,
 } as const;
 
 // ============================================================
@@ -558,6 +671,9 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   // Messaging gateway tools
   { name: 'list_messaging_channels', description: TOOL_DESCRIPTIONS.list_messaging_channels, inputSchema: ListMessagingChannelsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListMessagingChannels },
   { name: 'unbind_messaging_channel', description: TOOL_DESCRIPTIONS.unbind_messaging_channel, inputSchema: UnbindMessagingChannelSchema, executionMode: 'registry', safeMode: 'block', handler: handleUnbindMessagingChannel },
+  // Creator skills — agent-creator structured write tool
+  { name: 'create_agent', description: TOOL_DESCRIPTIONS.create_agent, inputSchema: CreateAgentSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateAgent },
+  { name: 'create_automation', description: TOOL_DESCRIPTIONS.create_automation, inputSchema: CreateAutomationSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateAutomation },
 ];
 
 export interface SessionToolFilterOptions {

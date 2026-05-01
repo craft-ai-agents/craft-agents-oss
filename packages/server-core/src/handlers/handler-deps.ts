@@ -35,4 +35,11 @@ export interface HandlerDeps<
    * starts/stops.
    */
   getTriggerServerInfo?: () => { enabled: boolean; url: string | null }
+  /**
+   * Resolve the host's `WorkflowRunner`. Lazy-resolved via a getter so the
+   * dep bag doesn't have to import the runner at construction time and so
+   * hosts that don't yet wire workflows can omit it. Workflow handlers
+   * call this once on use and surface a clear error when undefined.
+   */
+  getWorkflowRunner?: () => import('../workflows/runner').WorkflowRunner
 }

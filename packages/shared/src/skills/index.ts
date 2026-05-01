@@ -18,4 +18,8 @@ export {
   listSkillSlugs,
   skillNeedsIconDownload,
   downloadSkillIcon,
+  ensureRequiredGlobalSkills,
 } from './storage.ts';
+
+export { STARTER_SKILLS } from './starter-templates.ts';
+export type { StarterSkill } from './starter-templates.ts';

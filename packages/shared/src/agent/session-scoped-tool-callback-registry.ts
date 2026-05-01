@@ -79,6 +79,14 @@ export interface SessionScopedToolCallbacks {
   getMessagingBindingsFn?: (sessionId: string) => Array<{ platform: string; channelId: string; channelName?: string; enabled: boolean }>;
   /** Unbind messaging channels from a session. Returns count of removed bindings. */
   unbindMessagingChannelFn?: (sessionId: string, platform?: string) => number;
+  /** Create an agent in the global library (used by the agent-creator skill's create_agent tool). */
+  createAgentFn?: (
+    input: import('@craft-agent/session-tools-core').CreateAgentToolInput,
+  ) => Promise<import('@craft-agent/session-tools-core').CreateAgentResult>;
+  /** Create an automation matcher in the workspace (used by the automation-creator skill's create_automation tool). */
+  createAutomationFn?: (
+    input: import('@craft-agent/session-tools-core').CreateAutomationToolInput,
+  ) => Promise<import('@craft-agent/session-tools-core').CreateAutomationResult>;
 }
 
 // Registry of callbacks keyed by sessionId

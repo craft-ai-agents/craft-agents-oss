@@ -5,6 +5,8 @@ import { registerAuthHandlers } from './auth'
 import { registerAutomationsHandlers } from './automations'
 import { registerAgentDefinitionsHandlers } from './agent-definitions'
 import { registerWorkspaceContextHandlers } from './workspace-context'
+import { registerWorkflowsHandlers } from './workflows'
+import { registerWorkflowRunsHandlers } from './workflow-runs'
 import { registerFilesHandlers } from './files'
 import { registerLabelsHandlers } from './labels'
 import { registerLlmConnectionsHandlers } from './llm-connections'
@@ -35,6 +37,8 @@ export function registerCoreRpcHandlers(
   registerAutomationsHandlers(server, deps)
   registerAgentDefinitionsHandlers(server, deps)
   registerWorkspaceContextHandlers(server, deps)
+  registerWorkflowsHandlers(server, deps)
+  registerWorkflowRunsHandlers(server, deps)
   registerFilesHandlers(server, deps)
   registerLabelsHandlers(server, deps)
   registerLlmConnectionsHandlers(server, deps)

@@ -7,10 +7,12 @@
 
 import {
   existsSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -377,3 +379,30 @@ export function skillNeedsIconDownload(skill: LoadedSkill): boolean {
 
 // Re-export icon utilities for convenience
 export { isIconUrl } from '../utils/icon.ts';
+
+// ============================================================
+// Global skills seeding (built-in load-bearing skills)
+// ============================================================
+
+/**
+ * Ensure built-in SKILL.md files exist in the global skills library.
+ *
+ * Idempotent: existing SKILL.md files are NEVER overwritten so user edits
+ * survive across upgrades. Used by SessionManager.initialize for skills like
+ * `agent-creator` that Concierge/Orchestrator's frontmatter references.
+ */
+export function ensureRequiredGlobalSkills(
+  required: ReadonlyArray<{ slug: string; content: string }>,
+): { ensured: number } {
+  mkdirSync(GLOBAL_AGENT_SKILLS_DIR, { recursive: true });
+  let ensured = 0;
+  for (const s of required) {
+    const dir = join(GLOBAL_AGENT_SKILLS_DIR, s.slug);
+    const file = join(dir, 'SKILL.md');
+    if (existsSync(file)) continue;
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(file, s.content, 'utf-8');
+    ensured += 1;
+  }
+  return { ensured };
+}

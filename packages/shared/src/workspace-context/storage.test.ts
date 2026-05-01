@@ -224,6 +224,11 @@ describe('loadActiveContextDocsForAgent', () => {
     expect(got.map((d) => d.slug).sort()).toEqual(['broadcast-doc', 'writer-only']);
   });
 
+  test('Concierge override is normalized at the RPC boundary', () => {
+    const got = loadActiveContextDocsForAgent(workspace, ` ${CONCIERGE_SLUG.toUpperCase()} `);
+    expect(got.map((d) => d.slug).sort()).toEqual(['broadcast-doc', 'writer-only']);
+  });
+
   test('disabled docs are never delivered, even to Concierge', () => {
     const got = loadActiveContextDocsForAgent(workspace, CONCIERGE_SLUG);
     expect(got.find((d) => d.slug === 'disabled-doc')).toBeUndefined();

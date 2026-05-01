@@ -389,6 +389,23 @@ export const CHANNEL_MAP = {
   upsertWorkspaceContextDoc: invoke(RPC_CHANNELS.workspaceContext.UPSERT),
   deleteWorkspaceContextDoc: invoke(RPC_CHANNELS.workspaceContext.DELETE),
   onWorkspaceContextChanged: listener(RPC_CHANNELS.workspaceContext.CHANGED),
+
+  // Workflows (global library + per-workspace activation)
+  listAllWorkflows: invoke(RPC_CHANNELS.workflows.LIST_ALL),
+  listActiveWorkflowsInWorkspace: invoke(RPC_CHANNELS.workflows.LIST_ACTIVE_IN_WORKSPACE),
+  getWorkflow: invoke(RPC_CHANNELS.workflows.GET),
+  upsertWorkflow: invoke(RPC_CHANNELS.workflows.UPSERT),
+  deleteWorkflow: invoke(RPC_CHANNELS.workflows.DELETE),
+  setWorkflowActive: invoke(RPC_CHANNELS.workflows.SET_ACTIVE),
+  onWorkflowsChanged: listener(RPC_CHANNELS.workflows.CHANGED),
+
+  // Workflow runs
+  startWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.START),
+  getWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.GET),
+  listWorkflowRuns: invoke(RPC_CHANNELS.workflowRuns.LIST),
+  cancelWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.CANCEL),
+  deleteWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.DELETE),
+  onWorkflowRunUpdated: listener(RPC_CHANNELS.workflowRuns.UPDATED),
   getAutomationHistory: invoke(RPC_CHANNELS.automations.GET_HISTORY),
   getAutomationLastExecuted: invoke(RPC_CHANNELS.automations.GET_LAST_EXECUTED),
   replayAutomation: invoke(RPC_CHANNELS.automations.REPLAY),

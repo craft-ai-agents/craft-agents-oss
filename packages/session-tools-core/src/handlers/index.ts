@@ -72,3 +72,23 @@ export { handleGetSessionInfo } from './get-session-info.ts';
 export type { GetSessionInfoArgs } from './get-session-info.ts';
 export { handleListSessions } from './list-sessions.ts';
 export type { ListSessionsArgs } from './list-sessions.ts';
+
+// Create Agent (agent-creator skill)
+export { handleCreateAgent } from './create-agent.ts';
+export type {
+  CreateAgentToolInput,
+  CreateAgentToolMetadata,
+  CreateAgentResult,
+} from './create-agent.ts';
+
+// Create Automation (automation-creator skill)
+export { handleCreateAutomation } from './create-automation.ts';
+export type {
+  CreateAutomationToolInput,
+  CreateAutomationResult,
+  CreateAutomationMatcher,
+  CreateAutomationAction,
+  CreateAutomationPromptAction,
+  CreateAutomationWebhookAction,
+  CreateAutomationEventName,
+} from './create-automation.ts';

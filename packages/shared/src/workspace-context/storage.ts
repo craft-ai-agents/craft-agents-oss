@@ -262,12 +262,15 @@ export function loadActiveContextDocsForAgent(
   workspaceRootPath: string,
   agentSlug: string | null,
 ): LoadedContextDoc[] {
+  const normalizedAgentSlug = typeof agentSlug === 'string'
+    ? agentSlug.trim().toLowerCase()
+    : null;
   const all = loadAllContextDocs(workspaceRootPath).filter((d) => d.metadata.enabled);
-  if (agentSlug === CONCIERGE_SLUG) return all;
+  if (normalizedAgentSlug === CONCIERGE_SLUG) return all;
   return all.filter((doc) => {
     if (doc.metadata.routing.mode === 'broadcast') return true;
-    if (agentSlug == null) return false;
-    return doc.metadata.routing.agents.includes(agentSlug);
+    if (normalizedAgentSlug == null) return false;
+    return doc.metadata.routing.agents.includes(normalizedAgentSlug);
   });
 }
 

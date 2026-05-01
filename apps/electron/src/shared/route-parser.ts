@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'workflows' | 'workflowRun' | 'settings'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -46,6 +46,10 @@ export interface ParsedCompoundRoute {
   sourceFilter?: SourceFilter
   /** Automation filter (only for automations navigator) */
   automationFilter?: AutomationFilter
+  /** Sub-page kind for workflows navigator (list / workflow / edit / recent-runs). */
+  workflowsKind?: 'list' | 'workflow' | 'workflow-edit' | 'recent-runs'
+  /** Run id for workflowRun navigator. */
+  runId?: string
   /** Details page info (null for empty state) */
   details: {
     type: string
@@ -61,7 +65,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'settings'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'workflows', 'runs', 'settings'
 ]
 
 /**
@@ -214,6 +218,40 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     return { navigator: 'workspaceContext', details: null }
   }
 
+  // Workflows navigator
+  if (first === 'workflows') {
+    if (segments.length === 1) {
+      return { navigator: 'workflows', workflowsKind: 'list', details: null }
+    }
+    if (segments[1] === 'runs' && segments.length === 2) {
+      return { navigator: 'workflows', workflowsKind: 'recent-runs', details: null }
+    }
+    // workflows/<slug> or workflows/<slug>/edit
+    const slug = segments[1]
+    if (slug && segments[2] === 'edit') {
+      return {
+        navigator: 'workflows',
+        workflowsKind: 'workflow-edit',
+        details: { type: 'workflow', id: slug },
+      }
+    }
+    if (slug) {
+      return {
+        navigator: 'workflows',
+        workflowsKind: 'workflow',
+        details: { type: 'workflow', id: slug },
+      }
+    }
+    return null
+  }
+
+  // Workflow run page (per-run pipeline view)
+  if (first === 'runs') {
+    const runId = segments[1]
+    if (!runId) return null
+    return { navigator: 'workflowRun', runId, details: null }
+  }
+
   // Sessions navigator (allSessions, flagged, state)
   let sessionFilter: SessionFilter
   let detailsStartIndex: number
@@ -313,6 +351,25 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
 
   if (parsed.navigator === 'workspaceContext') {
     return 'workspace-context'
+  }
+
+  if (parsed.navigator === 'workflows') {
+    switch (parsed.workflowsKind) {
+      case 'recent-runs': return 'workflows/runs'
+      case 'workflow':
+        if (parsed.details) return `workflows/${parsed.details.id}`
+        return 'workflows'
+      case 'workflow-edit':
+        if (parsed.details) return `workflows/${parsed.details.id}/edit`
+        return 'workflows'
+      case 'list':
+      default:
+        return 'workflows'
+    }
+  }
+
+  if (parsed.navigator === 'workflowRun') {
+    return parsed.runId ? `runs/${parsed.runId}` : 'workflows/runs'
   }
 
   // Sessions navigator
@@ -448,6 +505,23 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
 
   if (compound.navigator === 'workspaceContext') {
     return { type: 'view', name: 'workspace-context', params: {} }
+  }
+
+  if (compound.navigator === 'workflows') {
+    if (compound.workflowsKind === 'recent-runs') {
+      return { type: 'view', name: 'workflows-recent-runs', params: {} }
+    }
+    if (compound.workflowsKind === 'workflow' && compound.details) {
+      return { type: 'view', name: 'workflow-info', id: compound.details.id, params: {} }
+    }
+    if (compound.workflowsKind === 'workflow-edit' && compound.details) {
+      return { type: 'view', name: 'workflow-edit', id: compound.details.id, params: {} }
+    }
+    return { type: 'view', name: 'workflows', params: {} }
+  }
+
+  if (compound.navigator === 'workflowRun') {
+    return { type: 'view', name: 'workflow-run', id: compound.runId, params: {} }
   }
 
   // Sessions
@@ -598,6 +672,23 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     return { navigator: 'workspaceContext' }
   }
 
+  if (compound.navigator === 'workflows') {
+    if (compound.workflowsKind === 'recent-runs') {
+      return { navigator: 'workflows', details: { type: 'recent-runs' } }
+    }
+    if (compound.workflowsKind === 'workflow' && compound.details) {
+      return { navigator: 'workflows', details: { type: 'workflow', workflowSlug: compound.details.id } }
+    }
+    if (compound.workflowsKind === 'workflow-edit' && compound.details) {
+      return { navigator: 'workflows', details: { type: 'workflow-edit', workflowSlug: compound.details.id } }
+    }
+    return { navigator: 'workflows', details: { type: 'list' } }
+  }
+
+  if (compound.navigator === 'workflowRun') {
+    return { navigator: 'workflowRun', runId: compound.runId ?? '' }
+  }
+
   // Sessions
   const filter = compound.sessionFilter || { kind: 'allSessions' as const }
   if (compound.details) {
@@ -690,6 +781,19 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'automations', details: null }
     case 'workspace-context':
       return { navigator: 'workspaceContext' }
+    case 'workflows':
+      return { navigator: 'workflows', details: { type: 'list' } }
+    case 'workflows-recent-runs':
+      return { navigator: 'workflows', details: { type: 'recent-runs' } }
+    case 'workflow-info':
+      if (parsed.id) return { navigator: 'workflows', details: { type: 'workflow', workflowSlug: parsed.id } }
+      return { navigator: 'workflows', details: { type: 'list' } }
+    case 'workflow-edit':
+      if (parsed.id) return { navigator: 'workflows', details: { type: 'workflow-edit', workflowSlug: parsed.id } }
+      return { navigator: 'workflows', details: { type: 'list' } }
+    case 'workflow-run':
+      if (parsed.id) return { navigator: 'workflowRun', runId: parsed.id }
+      return { navigator: 'workflows', details: { type: 'recent-runs' } }
     case 'session':
       if (parsed.id) {
         // Reconstruct filter from params
@@ -807,6 +911,23 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
       navigator: 'workspaceContext',
       details: null,
     }
+  }
+
+  if (state.navigator === 'workflows') {
+    switch (state.details.type) {
+      case 'list':
+        return { navigator: 'workflows', workflowsKind: 'list', details: null }
+      case 'workflow':
+        return { navigator: 'workflows', workflowsKind: 'workflow', details: { type: 'workflow', id: state.details.workflowSlug } }
+      case 'workflow-edit':
+        return { navigator: 'workflows', workflowsKind: 'workflow-edit', details: { type: 'workflow', id: state.details.workflowSlug } }
+      case 'recent-runs':
+        return { navigator: 'workflows', workflowsKind: 'recent-runs', details: null }
+    }
+  }
+
+  if (state.navigator === 'workflowRun') {
+    return { navigator: 'workflowRun', runId: state.runId, details: null }
   }
 
   // Sessions

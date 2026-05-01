@@ -328,6 +328,23 @@ export interface SessionToolContext {
   /** Resolve a status display name to its ID against configured statuses. Injected by backend. */
   resolveStatus?(status: string): ResolvedStatusResult;
 
+  /**
+   * Create an agent in the global agent library.
+   * Backend handles slug-conflict detection (returns suggestedSlug like `<slug>-v2`),
+   * built-in slug refusal, the actual write, and optional workspace activation.
+   * Returns a structured result rather than throwing so the handler can format
+   * conflict suggestions cleanly for the calling LLM.
+   */
+  createAgent?(input: import('./handlers/create-agent.ts').CreateAgentToolInput): Promise<import('./handlers/create-agent.ts').CreateAgentResult>;
+
+  /**
+   * Create an automation matcher in the workspace's automations.json.
+   * Backend handles slug-uniqueness checks (WebhookReceive), cron validation,
+   * and computes next-fire timestamp for SchedulerTick triggers. Returns a
+   * structured result so the handler can format failures cleanly for the LLM.
+   */
+  createAutomation?(input: import('./handlers/create-automation.ts').CreateAutomationToolInput): Promise<import('./handlers/create-automation.ts').CreateAutomationResult>;
+
   // ============================================================
   // Inter-Session Messaging
   // ============================================================

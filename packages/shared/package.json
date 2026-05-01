@@ -62,6 +62,8 @@
     "./automations/resolve-config-path": "./src/automations/resolve-config-path.ts",
     "./agent-definitions": "./src/agent-definitions/index.ts",
     "./agent-definitions/types": "./src/agent-definitions/types.ts",
+    "./workflows": "./src/workflows/index.ts",
+    "./workflows/types": "./src/workflows/types.ts",
     "./workspace-context": "./src/workspace-context/index.ts",
     "./workspace-context/types": "./src/workspace-context/types.ts",
     "./protocol": "./src/protocol/index.ts",
