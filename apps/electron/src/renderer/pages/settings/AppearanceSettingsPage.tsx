@@ -29,6 +29,7 @@ import {
   SettingsToggle,
 } from '@/components/settings'
 import * as storage from '@/lib/local-storage'
+import { WORKSPACE_SELECTOR_RAIL_CHANGED_EVENT } from '@/components/app-shell/workspace-rail'
 import { useWorkspaceIcons } from '@/hooks/useWorkspaceIcon'
 import { Info_DataTable, SortableHeader } from '@/components/info/Info_DataTable'
 import { Info_Badge } from '@/components/info/Info_Badge'
@@ -134,6 +135,16 @@ export default function AppearanceSettingsPage() {
   const handleConnectionIconsChange = useCallback((checked: boolean) => {
     setShowConnectionIcons(checked)
     storage.set(storage.KEYS.showConnectionIcons, checked)
+  }, [])
+
+  // Workspace selector placement toggle
+  const [workspaceSelectorRail, setWorkspaceSelectorRail] = useState(() =>
+    storage.get(storage.KEYS.workspaceSelectorRail, false)
+  )
+  const handleWorkspaceSelectorRailChange = useCallback((checked: boolean) => {
+    setWorkspaceSelectorRail(checked)
+    storage.set(storage.KEYS.workspaceSelectorRail, checked)
+    window.dispatchEvent(new CustomEvent(WORKSPACE_SELECTOR_RAIL_CHANGED_EVENT, { detail: checked }))
   }, [])
 
   // Rich tool descriptions toggle (persisted in config.json, read by SDK subprocess)
@@ -357,6 +368,12 @@ export default function AppearanceSettingsPage() {
                     description={t("settings.appearance.connectionIconsDesc")}
                     checked={showConnectionIcons}
                     onCheckedChange={handleConnectionIconsChange}
+                  />
+                  <SettingsToggle
+                    label={t("settings.appearance.workspaceIconRail")}
+                    description={t("settings.appearance.workspaceIconRailDesc")}
+                    checked={workspaceSelectorRail}
+                    onCheckedChange={handleWorkspaceSelectorRailChange}
                   />
                   <SettingsToggle
                     label={t("settings.appearance.richToolDescriptions")}

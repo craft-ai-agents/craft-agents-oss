@@ -752,6 +752,8 @@
   "settings.appearance.commandsHeader": "コマンド",
   "settings.appearance.connectionIcons": "接続アイコン",
   "settings.appearance.connectionIconsDesc": "セッションリストとモデルセレクターにプロバイダーアイコンを表示します",
+  "settings.appearance.workspaceIconRail": "ワークスペースのアイコンレール",
+  "settings.appearance.workspaceIconRailDesc": "上部バーのドロップダウンの代わりに、左側のレールにワークスペースのアイコンを表示します",
   "settings.appearance.dark": "ダーク",
   "settings.appearance.defaultTheme": "デフォルトテーマ",
   "settings.appearance.description": "テーマ、フォント、ツールアイコン",
