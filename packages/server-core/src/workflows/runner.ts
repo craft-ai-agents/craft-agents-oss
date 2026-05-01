@@ -136,6 +136,23 @@ function concurrencyKey(workspaceId: string, workflowSlug: string): string {
 
 const MAX_RECEIPT_CONTEXT_DOCS = 20;
 
+function normalizeWorkflowPermissionMode(options: Partial<CreateSessionOptions>): Partial<CreateSessionOptions> {
+  if (options.permissionMode !== 'ask') return options;
+  return {
+    ...options,
+    permissionMode: 'safe',
+    launchReceipt: options.launchReceipt
+      ? {
+          ...options.launchReceipt,
+          config: {
+            ...options.launchReceipt.config,
+            permissionMode: 'safe',
+          },
+        }
+      : options.launchReceipt,
+  };
+}
+
 export class WorkflowRunner {
   private readonly active = new Map<string /* runId */, ActiveRun>();
   private readonly activeByKey = new Map<string /* concurrencyKey */, string /* runId */>();
@@ -499,10 +516,11 @@ export class WorkflowRunner {
     const stepRecord = active.snapshot.steps.find((s) => s.id === stepDef.id);
     if (!stepRecord) throw new StepAttemptError('step-record-missing', `Missing run step record for "${stepDef.id}".`);
 
-    const agentOptions = await this.deps.resolveAgentSessionOptions?.(
+    const resolvedAgentOptions = await this.deps.resolveAgentSessionOptions?.(
       active.snapshot.workspaceId,
       stepDef.agent,
     ) ?? {};
+    const agentOptions = normalizeWorkflowPermissionMode(resolvedAgentOptions);
     const stepPrompt = this.buildStepPrompt(prompt, stepDef);
     stepRecord.executionReceipt = this.buildExecutionReceipt(stepDef, agentOptions, stepPrompt);
     this.touch(active);

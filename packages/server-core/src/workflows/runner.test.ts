@@ -83,7 +83,7 @@ interface MockHarness {
   setStepBehavior: (index: number, fn: (record: SessionRecord) => Promise<void>) => void;
 }
 
-function makeHarness(opts: { stepOutputs?: string[] } = {}): MockHarness {
+function makeHarness(opts: { stepOutputs?: string[]; permissionMode?: 'safe' | 'ask' | 'allow-all' } = {}): MockHarness {
   const sessions = new Map<string, SessionRecord>();
   const promptsSent: Array<{ sessionId: string; prompt: string }> = [];
   const events: WorkflowRunEvent[] = [];
@@ -103,7 +103,7 @@ function makeHarness(opts: { stepOutputs?: string[] } = {}): MockHarness {
       enabledSourceSlugs: [`${agentSlug}-source`],
       llmConnection: `${agentSlug}-conn`,
       model: `${agentSlug}-model`,
-      permissionMode: 'safe',
+      permissionMode: opts.permissionMode ?? 'safe',
       thinkingLevel: 'high',
       spawnedFromAgent: {
         agentSlug,
@@ -277,6 +277,32 @@ describe('WorkflowRunner', () => {
 
     const onDisk = readRun(workspaceRoot, completed.id);
     expect(onDisk?.steps[0]!.executionReceipt).toEqual(receipt);
+  });
+
+  test('hidden workflow steps downgrade interactive ask permission mode to safe', async () => {
+    const h = makeHarness({ stepOutputs: ['DONE'], permissionMode: 'ask' });
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [{ id: 'first', agent: 'writer', input: 'Write {{trigger.topic}}' }],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'permission checks' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    expect(h.sessions.get('sess-1')!.options).toMatchObject({
+      hidden: true,
+      permissionMode: 'safe',
+      launchReceipt: {
+        config: {
+          permissionMode: 'safe',
+        },
+      },
+    });
+    expect(lastCompleted(h.events)!.steps[0]!.executionReceipt?.config.permissionMode).toBe('safe');
   });
 
   test('cancel mid-run: run is cancelled and active session is aborted exactly once', async () => {
