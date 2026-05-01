@@ -27,6 +27,7 @@ export type ErrorCode =
   | 'image_too_large'        // Image exceeds API dimension/size limits
   | 'provider_error'         // AI provider experiencing issues (overloaded, unavailable)
   | 'queued_message_replay_failed'  // A message queued during an active turn could not be auto-replayed (#616)
+  | 'context_overflow'       // Provider rejected request because input/context exceeded the model's window (#666)
   | 'unknown_error';
 
 /** Provider info attached to errors for user-facing context */
@@ -235,6 +236,15 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
     ],
     canRetry: true,
   },
+  context_overflow: {
+    title: 'Context Window Full',
+    message: 'The conversation has grown larger than the model can handle in one turn. Compact the session to summarize older messages, then retry.',
+    actions: [
+      { key: 'c', label: 'Compact session', command: '/compact' },
+      { key: 'r', label: 'Retry', action: 'retry' },
+    ],
+    canRetry: true,
+  },
   unknown_error: {
     title: 'Error',
     message: 'Something went wrong. If this persists, check the provider status page or retry.',
@@ -351,6 +361,22 @@ function buildProxyErrorMessage(errorMessage: string, fullErrorText: string): st
 }
 
 /**
+ * Detect whether an error message indicates a provider-side context window
+ * overflow (e.g. `context_length_exceeded`). Exported so subprocess code paths
+ * can apply the same recovery / classification logic (#666).
+ */
+export function isContextOverflowMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('context_length_exceeded') ||
+    normalized.includes('exceeds the context window') ||
+    (normalized.includes('context window') && normalized.includes('exceed')) ||
+    normalized.includes('too many tokens') ||
+    normalized.includes('token limit exceeded')
+  );
+}
+
+/**
  * Parse an error and return a typed AgentError with user-friendly info
  */
 export function parseError(
@@ -390,6 +416,11 @@ export function parseError(
   // page would otherwise be misclassified as service_error or invalid_api_key.
   } else if (isLikelyProxyInterception(lowerMessage)) {
     code = 'proxy_error';
+  // Context-window overflow from the provider (#666). Must be checked BEFORE
+  // image_too_large (which also matches "exceed") and any generic 4xx checks
+  // so the user gets an actionable "compact and retry" message.
+  } else if (isContextOverflowMessage(lowerMessage)) {
+    code = 'context_overflow';
   // Check for specific HTTP status codes or patterns
   } else if (lowerMessage.includes('402') || lowerMessage.includes('payment required')) {
     code = 'billing_error';

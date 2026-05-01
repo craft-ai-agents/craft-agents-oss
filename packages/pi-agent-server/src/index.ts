@@ -68,6 +68,7 @@ import {
 
 // Direct source imports from shared (bundled by bun build)
 import { handleLargeResponse, estimateTokens, TOKEN_LIMIT } from '../../shared/src/utils/large-response.ts';
+import { isContextOverflowMessage } from '../../shared/src/agent/errors.ts';
 import { getSessionPlansPath, getSessionPath } from '../../shared/src/sessions/storage.ts';
 import { buildCallLlmRequest, withTimeout, LLM_QUERY_TIMEOUT_MS } from '../../shared/src/agent/llm-tool.ts';
 import type { LLMQueryRequest, LLMQueryResult } from '../../shared/src/agent/llm-tool.ts';
@@ -1098,6 +1099,14 @@ function handleSessionEvent(event: AgentSessionEvent): void {
     const msg = event.message as { role?: string; stopReason?: string; errorMessage?: string } | undefined;
     if (msg?.stopReason === 'error') {
       debugLog(`API error in message_end: ${msg.errorMessage || 'unknown'}`);
+      // TODO(#666): when errorMessage is a context overflow, this is the place
+      // to trigger compact + replay (mirroring the synchronous-throw recovery
+      // at handlePrompt's catch block). Deferred from this change because
+      // mid-stream recovery needs to align with the renderer's UI cleanup
+      // semantics for the partial assistant message that's already on screen.
+      // For now the parent's parseError will at least classify the surfaced
+      // error as 'context_overflow' so the user gets an actionable message
+      // instead of a raw provider error string.
     }
 
     if (msg?.role === 'assistant' && piSession) {
@@ -1213,16 +1222,9 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
   });
 }
 
-function isContextOverflowErrorMessage(message: string): boolean {
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes('context_length_exceeded') ||
-    normalized.includes('exceeds the context window') ||
-    normalized.includes('context window') && normalized.includes('exceed') ||
-    normalized.includes('too many tokens') ||
-    normalized.includes('token limit exceeded')
-  );
-}
+// Context-overflow detection lives in @craft-agent/shared (errors.ts) so the
+// subprocess and the parent's parseError stay in sync (#666).
+const isContextOverflowErrorMessage = isContextOverflowMessage;
 
 /**
  * Wait for any in-flight compaction to finish before sending a prompt.
@@ -1689,7 +1691,12 @@ function main(): void {
     const msg = reason instanceof Error ? reason.message : String(reason);
     debugLog(`Unhandled rejection: ${msg}`);
     try {
-      send({ type: 'error', message: `Unhandled rejection: ${msg}`, code: 'unhandled_rejection' });
+      // Tag overflow rejections so the parent's parseError can classify them
+      // as context_overflow rather than generic unhandled_rejection (#666).
+      const code = isContextOverflowErrorMessage(msg)
+        ? 'context_overflow_unhandled'
+        : 'unhandled_rejection';
+      send({ type: 'error', message: `Unhandled rejection: ${msg}`, code });
     } catch {
       // stdout may be broken — swallow to avoid re-triggering
     }
