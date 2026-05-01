@@ -8,7 +8,7 @@ A pair of bundled skills that let a conversational agent (default: Concierge) **
 |-------|--------|--------------|
 | [`agent-creator`](./01-agent-creator.md) | ✅ Build now | Interviews the user, drafts an AGENT.md, writes it. |
 | [`automation-creator`](./02-automation-creator.md) | ✅ Build now | Interviews the user, drafts an automation matcher, writes it. |
-| `workflow-creator` | ⏸ Deferred | Until workflows ship and we know what an interview needs to extract, building this is premature. |
+| [`workflow-creator`](./04-workflow-creator.md) | ✅ Build now | Interviews the user, drafts a valid manual `WORKFLOW.md`, and hands it to the workflow editor. |
 | `skill-creator` | ⏸ Maybe later | Useful but lower-priority — skills are easier to write by hand than agents/automations. |
 
 ## Why "creator skills" and not "creator agents"
@@ -25,10 +25,10 @@ If we hardcoded "agent creation" into the Concierge slug, every other agent woul
 Every creator skill follows the same pattern:
 
 1. **Conversational interview.** The skill body teaches the calling agent how to ask: minimum questions to extract, when to defer, how to propose, when to confirm.
-2. **Structured write tool.** The skill bundles a session-tool (defined in `@craft-agent/session-tools-core`) that takes a typed payload and calls the appropriate existing RPC (`upsertAgentDefinition`, `upsertAutomation`, etc.). The agent never writes the file directly.
+2. **Structured handoff.** When a session-tool exists, the skill uses it to call the appropriate save path (`create_agent`, `create_automation`, etc.). When no tool exists yet, as with `workflow-creator`, the skill produces validated source for the existing editor instead of pretending it can save directly.
 3. **Always confirm before write.** The agent shows a draft, asks "save this?", waits for explicit yes. No silent writes.
-4. **Auto-activate on save.** Newly created entities are activated in the current workspace by default — the user expects to see what they just made.
-5. **Surface success in chat.** After the tool fires, the agent posts a brief "✅ Created `<slug>`. You can find it at <route>" with a clickable link.
+4. **Auto-activate on save where supported.** Newly created entities are activated in the current workspace by default when the save tool supports it.
+5. **Surface success or handoff in chat.** After the tool fires, the agent posts a brief creation confirmation. If no save tool exists, it gives the exact editor handoff and slug.
 
 ## Why we are NOT giving the agent generic file-write tools for this
 
@@ -43,7 +43,7 @@ The agent **also** gets a generic scoped Write tool for things like saving conve
 
 The Concierge's system prompt should be extended (when these skills land) with one paragraph teaching it when to reach for which:
 
-> When the user's intent is to **create** something — a new agent persona, a new automation that fires on some trigger, a new workspace context doc — reach for the matching creator skill. The skill will guide you through the conversation. Always show a draft and confirm before saving. After saving, give the user a clickable link to where the thing now lives.
+> When the user's intent is to **create** something — a new agent persona, a new automation that fires on some trigger, a reusable workflow, or a new workspace context doc — reach for the matching creator skill. The skill will guide you through the conversation. Always show a draft and confirm before saving or handing the source to an editor. After saving, give the user a clickable link to where the thing now lives.
 
 ## Built-in vs. user-editable
 
@@ -64,4 +64,4 @@ Users can fork them like any skill if they want a custom interview style.
 
 ## Status
 
-**Spec only.** Read [`01-agent-creator.md`](./01-agent-creator.md) and [`02-automation-creator.md`](./02-automation-creator.md), then [`03-implementation-plan.md`](./03-implementation-plan.md) to start building.
+**Partially implemented.** Read [`01-agent-creator.md`](./01-agent-creator.md), [`02-automation-creator.md`](./02-automation-creator.md), [`04-workflow-creator.md`](./04-workflow-creator.md), then [`03-implementation-plan.md`](./03-implementation-plan.md) for implementation history and follow-ups.

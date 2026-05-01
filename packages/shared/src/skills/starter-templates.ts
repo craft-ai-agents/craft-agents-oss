@@ -7,7 +7,8 @@
  *
  * The "creator skills" (agent-creator, automation-creator) ship as built-in
  * because they're load-bearing — Concierge and Orchestrator depend on them
- * to translate "make me an agent / automation" into a structured save.
+ * to translate "make me an agent / automation / workflow" into a structured
+ * draft or save.
  */
 
 export interface StarterSkill {
@@ -235,7 +236,162 @@ creating an automation. Automations are for *recurring* or
 *event-triggered* work.
 `;
 
+const WORKFLOW_CREATOR_SKILL = `---
+name: Workflow Creator
+description: Interviews the user briefly, then drafts a valid WORKFLOW.md for a reusable manual workflow.
+tools:
+  - list_agents
+  - list_workflows
+  - get_workflow
+inputs: A description of a repeatable multi-step agent workflow.
+outputs: A complete WORKFLOW.md draft the user can save in the workflow editor.
+tags: [creator, meta, workflows]
+---
+
+# Workflow Creator
+
+Use this skill when the user wants to **create a reusable workflow**: a
+fixed sequence of agent steps that can be run repeatedly from the Workflows
+UI.
+
+## What you're producing
+
+A complete \`WORKFLOW.md\` file for \`~/.workflows/<slug>/WORKFLOW.md\`.
+There is no \`create_workflow\` session tool available today, so do not claim
+you can save it directly. Produce the draft, get confirmation, then tell the
+user to create or edit the workflow in the Workflows UI with this source.
+You may use \`list_agents\` to verify agent slugs and \`list_workflows\` /
+\`get_workflow\` to avoid duplicating an existing workflow.
+
+Supported frontmatter today:
+
+- Top level: \`name\`, \`description\`, optional \`avatar\`, \`trigger\`,
+  \`steps\`.
+- Trigger: only \`{ type: manual }\` is supported. Optional
+  \`trigger.inputs\` drives the run form.
+- Trigger inputs: \`name\`, \`type\` (\`string\`, \`number\`, or \`boolean\`),
+  optional \`required\`, \`default\`, \`description\`.
+- Step: \`id\`, \`agent\`, \`input\`, optional \`description\`,
+  \`outputSchema\`, \`timeout\`, \`retries\`, \`onFailure\`.
+- \`onFailure\`: one of \`stop\`, \`continue\`, \`ask\`. Runtime currently
+  stops after exhausted retries, so only use \`stop\` unless the user is
+  intentionally documenting a future policy.
+
+Unsupported today: schedule/webhook/automation workflow triggers, \`when\`,
+\`humanCheckpoint\`, \`parallelGroup\`, loops, branching, and sub-workflows.
+If the user asks for those, explain the limitation and draft the closest
+manual sequential workflow instead.
+
+## Minimum interview
+
+Ask only what you need to draft:
+
+1. **Outcome** — "What should this workflow produce at the end?"
+2. **Run inputs** — "What should you fill in when you click Run?"
+3. **Steps and agents** — "Which agents should run, in what order?"
+4. **Reliability** — only if needed: "Should any step have a timeout,
+   retries, or structured JSON output?"
+
+If the user already gave enough detail, skip the interview and draft.
+
+## Validity rules
+
+- Slugs and step IDs use lowercase letters, digits, and hyphens only.
+- Trigger input names use letters, digits, and underscores, and must not
+  start with a digit.
+- Every step needs \`id\`, \`agent\`, and non-empty \`input\`.
+- Step inputs may reference only declared trigger inputs and earlier steps.
+- Valid template tokens are:
+  - \`{{trigger.<input_name>}}\`
+  - \`{{steps.<previous_step_id>.output}}\`
+  - \`{{steps.<previous_step_id>.output.<path>}}\` for structured JSON output
+  - \`{{run.id}}\`
+  - \`{{run.startedAt}}\`
+- No expressions, filters, conditionals, loops, or future-step references.
+
+## Structured output
+
+Use \`outputSchema\` when a later step needs reliable fields from an earlier
+step. Keep schemas simple and include a top-level \`type\`.
+
+Example:
+
+\`\`\`yaml
+outputSchema:
+  type: object
+  required: [summary, priority]
+  properties:
+    summary:
+      type: string
+    priority:
+      type: string
+      enum: [low, medium, high]
+\`\`\`
+
+Then later steps can reference \`{{steps.triage.output.summary}}\`.
+
+## Draft format
+
+Always show a complete source draft:
+
+\`\`\`markdown
+---
+name: Customer Feedback Digest
+description: Triage feedback, summarize themes, and draft follow-up actions.
+avatar: 🧭
+trigger:
+  type: manual
+  inputs:
+    - name: feedback
+      type: string
+      required: true
+      description: Raw feedback or support transcript
+steps:
+  - id: triage
+    agent: triager
+    input: |
+      Classify this feedback and extract the core issue:
+
+      {{trigger.feedback}}
+    outputSchema:
+      type: object
+      required: [category, summary]
+      properties:
+        category:
+          type: string
+        summary:
+          type: string
+    timeout: 300
+    retries: 1
+  - id: action-plan
+    agent: writer
+    input: |
+      Draft a short action plan for this category:
+      {{steps.triage.output.category}}
+
+      Summary:
+      {{steps.triage.output.summary}}
+---
+# Customer Feedback Digest
+
+Run this when you have raw customer feedback and want a clean action plan.
+\`\`\`
+
+## Confirmation and handoff
+
+After showing the draft, ask "Use this as the workflow source?" If the user
+confirms, do not call a non-existent tool. Tell them:
+
+1. Create a workflow from the Workflows page.
+2. Use the inferred slug.
+3. Paste the confirmed \`WORKFLOW.md\` source into the editor.
+
+If a workflow save tool becomes available in the future, use it only after
+showing the full draft and receiving explicit confirmation.
+`;
+
 export const STARTER_SKILLS: StarterSkill[] = [
   { slug: 'agent-creator', content: AGENT_CREATOR_SKILL },
   { slug: 'automation-creator', content: AUTOMATION_CREATOR_SKILL },
+  { slug: 'workflow-creator', content: WORKFLOW_CREATOR_SKILL },
 ];

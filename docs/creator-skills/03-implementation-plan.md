@@ -14,7 +14,7 @@ Build `agent-creator` first, ship it, then `automation-creator`. Two reasons:
 ## Prereqs to verify before starting
 
 - `upsertAgentDefinition` RPC works end-to-end (it does — it's used by `AgentEditDialog.tsx`).
-- `upsertAutomation` RPC exists and supports the trigger types listed in [`02-automation-creator.md`](./02-automation-creator.md). **Confirm by reading `packages/shared/src/automations/` before quoting any field names in the skill body.**
+- The automation creation handler supports the trigger types listed in [`02-automation-creator.md`](./02-automation-creator.md). **Confirm by reading `packages/session-tools-core/src/handlers/create-automation.ts` and `packages/shared/src/automations/` before quoting any field names in the skill body.**
 - Skill bundling into agents already works (`AGENT.md` `skills:` frontmatter list) — yes, this exists.
 - Session-tools registry has a clean place to add new tools — find an existing tool in `@craft-agent/session-tools-core/src/handlers/` and copy its registration.
 
@@ -81,20 +81,20 @@ packages/shared/src/skills/
 
 1. **Audit the existing automations module.** Read `packages/shared/src/automations/` end to end. Inventory:
    - All trigger types and their matcher schemas.
-   - All action types (today: at minimum `RunAgent`).
-   - The exact shape of `upsertAutomation`'s payload.
+   - All action types (today: prompt and webhook).
+   - The exact shape of the `create_automation` `eventName` + `matcher` payload.
    - Where matchers are registered with the runtime (trigger HTTP server, scheduler, etc.) and how they propagate.
    - Existing tests — copy their patterns.
 
    Commit a short audit note as a comment at the top of `create-automation.ts` so the next agent doesn't have to re-do this.
 
 2. **Tool implementation.** Cron validation via `croner`. Schedule trigger should compute and return `nextFireAt`. Pass the trigger config through the existing matcher adapter validators rather than duplicating them.
-3. **Tool tests.** One test per failure mode. Plus a happy-path Schedule automation that actually fires within the test (use a 1-second-from-now cron and confirm the action gets queued).
+3. **Tool tests.** One test per failure mode. Plus a happy-path SchedulerTick automation that actually fires within the test (use a 1-second-from-now cron and confirm the action gets queued).
 4. **Skill body.** Per the spec. The "vague schedules" and "missing prerequisites" handling are critical — those are the dialogues that differentiate this from a form.
 5. **Bundle into Concierge + Orchestrator.** Same pattern as Phase 1.
 6. **Manual E2E.** Try three flows:
-   - Schedule + RunAgent (the HN digest example).
-   - WebhookReceive + RunAgent (paste a curl invocation, verify the agent fires).
+   - SchedulerTick + prompt action (the HN digest example).
+   - WebhookReceive + prompt action (paste a curl invocation, verify the session starts).
    - User asks for an automation targeting a non-existent agent → Concierge offers to create the agent first via `agent-creator` → automation creation resumes after.
 
 ### Success criteria
@@ -106,7 +106,7 @@ packages/shared/src/skills/
 ### What to skip (defer to later)
 
 - Webhook URL discovery / deep-linking to the automation's URL with copy-to-clipboard — UX polish.
-- Action types beyond `RunAgent` — wait until workflows ship; then add `RunWorkflow` as a single follow-up.
+- Action types beyond prompt/webhook — add workflow execution only after the automation tool and workflow runner expose a supported `RunWorkflow` action.
 - Visual cron builder. The dialogue handles it.
 
 ---
@@ -138,7 +138,7 @@ If the most common bail-out is "system prompt too long to write," that's a signa
 ## Hard rules during implementation
 
 - Do NOT freehand file writes for agent/automation creation. Always go through the structured tool → existing RPC.
-- Do NOT add new RPC channels — the existing `upsertAgentDefinition` and `upsertAutomation` channels are the contract. The tool wraps them.
+- Do NOT add new RPC channels unless the runtime lacks the needed capability. Creator tools should wrap existing save paths instead of inventing parallel storage.
 - Do NOT extend AGENT.md or automation matcher schemas as a side effect. If the interview wants to capture something the existing schemas can't hold, that's a separate spec.
 - Do NOT add comments that just restate code. Only "why" comments.
 - One creator skill per PR/commit chunk. Don't ship them as a bundle.
