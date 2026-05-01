@@ -1,6 +1,7 @@
 import { toast } from 'sonner'
 import { navigate, routes } from '@/lib/navigate'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
+import type { MemoryEntry, LoadedMemoryFile } from '@craft-agent/shared/memory'
 import { resolveAgentReferences, hasMissingReferences, describeMissingReferences } from '@/lib/agent-references'
 import { composeAgentSystemPrompt } from '@/lib/compose-agent-prompt'
 import type { AgentDefinitionDTO, ContextDocDTO, CreateSessionOptions, Session, LoadedSkill, LoadedSource } from '../../shared/types'
@@ -30,7 +31,14 @@ export function buildAgentCreateSessionOptions(
    * When omitted (legacy callers), all declared slugs pass through verbatim
    * and no footer is generated.
    */
-  context?: { skills: LoadedSkill[]; sources: LoadedSource[]; contextDocs?: ContextDocDTO[]; agentCatalog?: AgentDefinitionDTO[] },
+  context?: {
+    skills: LoadedSkill[]
+    sources: LoadedSource[]
+    contextDocs?: ContextDocDTO[]
+    agentCatalog?: AgentDefinitionDTO[]
+    userMemoryEntries?: MemoryEntry[]
+    agentMemoryEntries?: MemoryEntry[]
+  },
 ): CreateSessionOptions {
   let skillSlugs = agent.metadata.skills ?? []
   let sourceSlugs = agent.metadata.sources ?? []
@@ -57,6 +65,10 @@ export function buildAgentCreateSessionOptions(
           outputs: a.metadata.outputs,
           tags: a.metadata.tags,
         })),
+        {
+          userMemoryEntries: context.userMemoryEntries,
+          agentMemoryEntries: context.agentMemoryEntries,
+        },
       )
     : agent.systemPrompt
   const isConcierge = agent.slug === CONCIERGE_SLUG
@@ -162,6 +174,10 @@ export async function openAgentSessionComposer(params: {
 }): Promise<Session> {
   const contextDocs = params.contextDocs
     ?? await window.electronAPI.listWorkspaceContextDocsForAgent(params.workspaceId, params.agent.slug)
+  const [userMemoryEntries, agentMemoryEntries] = await Promise.all([
+    loadUserMemoryEntries(),
+    loadAgentMemoryEntries(params.agent.slug),
+  ])
 
   // Surface a one-off toast if the agent declares slugs that don't resolve in
   // this workspace. The session still spawns without them; the warning is so
@@ -180,9 +196,9 @@ export async function openAgentSessionComposer(params: {
   // gets a composed system prompt (persona body + bundle footer) and any
   // missing slugs are dropped from agentSkillSlugs/enabledSourceSlugs.
   const context = params.skills && params.sources
-    ? { skills: params.skills, sources: params.sources, contextDocs, agentCatalog: params.agentCatalog }
-    : contextDocs.length > 0
-      ? { skills: [], sources: [], contextDocs, agentCatalog: params.agentCatalog }
+    ? { skills: params.skills, sources: params.sources, contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries }
+    : contextDocs.length > 0 || userMemoryEntries.length > 0 || agentMemoryEntries.length > 0 || (params.agentCatalog?.length ?? 0) > 0
+      ? { skills: [], sources: [], contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries }
       : undefined
 
   const session = await params.onCreateSession(
@@ -197,4 +213,32 @@ export async function openAgentSessionComposer(params: {
   }
 
   return session
+}
+
+async function loadUserMemoryEntries(): Promise<MemoryEntry[]> {
+  try {
+    const api = window.electronAPI as unknown as {
+      listUserMemory?: () => Promise<MemoryEntry[] | LoadedMemoryFile>
+    }
+    return normalizeMemoryEntries(await api.listUserMemory?.())
+  } catch {
+    return []
+  }
+}
+
+async function loadAgentMemoryEntries(agentSlug: string): Promise<MemoryEntry[]> {
+  try {
+    const api = window.electronAPI as unknown as {
+      listAgentMemory?: (agentSlug: string) => Promise<MemoryEntry[] | LoadedMemoryFile>
+    }
+    return normalizeMemoryEntries(await api.listAgentMemory?.(agentSlug))
+  } catch {
+    return []
+  }
+}
+
+function normalizeMemoryEntries(value: MemoryEntry[] | LoadedMemoryFile | undefined): MemoryEntry[] {
+  if (!value) return []
+  if (Array.isArray(value)) return value
+  return value.entries ?? []
 }

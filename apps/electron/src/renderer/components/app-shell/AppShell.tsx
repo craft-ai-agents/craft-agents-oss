@@ -41,6 +41,7 @@ import {
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
 import { TopBar } from "./TopBar"
+import { UserProfileDialog } from "@/components/agents/UserProfileDialog"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
 import { McpIcon } from "../icons/McpIcon"
 import { cn } from "@/lib/utils"
@@ -578,6 +579,7 @@ function AppShellContent({
   const [showWhatsNew, setShowWhatsNew] = React.useState(false)
   const [releaseNotesContent, setReleaseNotesContent] = React.useState('')
   const [hasUnseenReleaseNotes, setHasUnseenReleaseNotes] = React.useState(false)
+  const [userProfileOpen, setUserProfileOpen] = React.useState(false)
 
   // Check for unseen release notes on mount
   useEffect(() => {
@@ -2378,6 +2380,17 @@ function AppShellContent({
           onAddBrowserPanel={() => { void handleNewBrowserWindow() }}
           isCompact={isAutoCompact}
         />
+        {!isAutoCompact && (
+          <button
+            type="button"
+            onClick={() => setUserProfileOpen(true)}
+            className="titlebar-no-drag fixed top-[11px] right-[102px] z-panel h-[26px] inline-flex items-center gap-1.5 rounded-lg border border-border/40 bg-background/80 px-2.5 text-xs text-foreground/70 shadow-sm backdrop-blur hover:bg-foreground/5"
+          >
+            <DatabaseZap className="h-3.5 w-3.5" />
+            Memory & Profile
+          </button>
+        )}
+        <UserProfileDialog open={userProfileOpen} onOpenChange={setUserProfileOpen} />
 
       {/* === OUTER LAYOUT: Unified Panel Stack | Right Sidebar === */}
       <div

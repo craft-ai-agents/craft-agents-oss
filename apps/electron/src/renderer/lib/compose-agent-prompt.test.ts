@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { buildAgentBundleFooter, buildAgentCatalogSection, buildWorkspaceContextSection, composeAgentSystemPrompt } from './compose-agent-prompt'
+import { buildAgentBundleFooter, buildAgentCatalogSection, buildMemorySection, buildWorkspaceContextSection, composeAgentSystemPrompt } from './compose-agent-prompt'
+import type { MemoryEntry } from '@craft-agent/shared/memory'
 import type { AgentDefinitionDTO, ContextDocDTO, LoadedSkill, LoadedSource } from '../../shared/types'
 
 function makeDoc(slug: string, name: string, body: string, overrides: Partial<ContextDocDTO['metadata']> = {}): ContextDocDTO {
@@ -62,6 +63,15 @@ function makeSource(slug: string, name: string, tagline?: string): LoadedSource 
     workspaceRootPath: '/tmp/ws',
     workspaceId: 'ws-1',
   } as unknown as LoadedSource
+}
+
+function makeMemory(name: string, body: string, type: MemoryEntry['type'] = 'reference'): MemoryEntry {
+  return {
+    name,
+    type,
+    created: '2026-05-01T12:00:00.000Z',
+    body,
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -210,6 +220,36 @@ describe('composeAgentSystemPrompt', () => {
     expect(result).toContain('Output: A cited brief.')
     expect(result).toContain('Tags: research, cite')
   })
+
+  test('renders user and agent memory between workspace context and agent catalog', () => {
+    const agent = makeAgent()
+    const docs = [makeDoc('vision', 'Vision', 'Workspace facts.')]
+    const result = composeAgentSystemPrompt(
+      agent,
+      [],
+      [],
+      docs,
+      [{ slug: 'researcher', name: 'Researcher' }],
+      {
+        userMemoryEntries: [makeMemory('Communication', 'Prefers concise status updates.', 'user')],
+        agentMemoryEntries: [makeMemory('Review rule', 'Always check generated tests.', 'feedback')],
+      },
+    )
+
+    expect(result).toContain('USER.md — durable user memory:')
+    expect(result).toContain('MEMORY.md — durable memory for this agent:')
+    expect(result).toContain('## Communication')
+    expect(result).toContain('Prefers concise status updates.')
+    expect(result).toContain('## Review rule')
+
+    const workspaceIdx = result.indexOf('Workspace context')
+    const userMemoryIdx = result.indexOf('USER.md')
+    const agentMemoryIdx = result.indexOf('MEMORY.md')
+    const catalogIdx = result.indexOf('Available agents')
+    expect(workspaceIdx).toBeLessThan(userMemoryIdx)
+    expect(userMemoryIdx).toBeLessThan(agentMemoryIdx)
+    expect(agentMemoryIdx).toBeLessThan(catalogIdx)
+  })
 })
 
 describe('composeAgentSystemPrompt with context docs', () => {
@@ -320,5 +360,26 @@ describe('buildAgentBundleFooter', () => {
 describe('buildAgentCatalogSection', () => {
   test('returns empty string for no agents', () => {
     expect(buildAgentCatalogSection([])).toBe('')
+  })
+})
+
+describe('buildMemorySection', () => {
+  test('returns empty string when memory has no usable entries', () => {
+    expect(buildMemorySection([], [makeMemory('Blank', '   ')])).toBe('')
+  })
+
+  test('renders memory entry metadata and body', () => {
+    const section = buildMemorySection([
+      {
+        ...makeMemory('Preference', 'Use direct language.', 'user'),
+        expires: '2026-12-31',
+      },
+    ], [])
+
+    expect(section).toContain('USER.md')
+    expect(section).toContain('## Preference')
+    expect(section).toContain('type: user')
+    expect(section).toContain('expires: 2026-12-31')
+    expect(section).toContain('Use direct language.')
   })
 })

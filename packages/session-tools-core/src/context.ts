@@ -363,6 +363,24 @@ export interface SessionToolContext {
    */
   createAutomation?(input: import('./handlers/create-automation.ts').CreateAutomationToolInput): Promise<import('./handlers/create-automation.ts').CreateAutomationResult>;
 
+  /**
+   * Save a durable memory entry to USER.md or the current agent's MEMORY.md.
+   * Backend owns persistence, collision handling, and file path resolution.
+   */
+  saveMemory?(input: import('./handlers/memory.ts').SaveMemoryToolInput): Promise<import('./handlers/memory.ts').MemoryMutationResult>;
+
+  /**
+   * Update the content and/or expiration of an existing memory entry.
+   * Backend owns lookup, updated-date mutation, and persistence.
+   */
+  updateMemory?(input: import('./handlers/memory.ts').UpdateMemoryToolInput): Promise<import('./handlers/memory.ts').MemoryMutationResult>;
+
+  /**
+   * Delete a memory entry and record a tombstone to prevent accidental re-save.
+   * Backend owns tombstone persistence and change broadcasts.
+   */
+  forgetMemory?(input: import('./handlers/memory.ts').ForgetMemoryToolInput): Promise<import('./handlers/memory.ts').MemoryMutationResult>;
+
   // ============================================================
   // Inter-Session Messaging
   // ============================================================

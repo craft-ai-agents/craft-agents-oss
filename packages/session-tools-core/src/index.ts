@@ -180,6 +180,10 @@ export {
   handleStartWorkflow,
   handleGetWorkflowRun,
   handleCancelWorkflowRun,
+  // Memory
+  handleSaveMemory,
+  handleUpdateMemory,
+  handleForgetMemory,
 } from './handlers/index.ts';
 
 export type {
@@ -228,6 +232,12 @@ export type {
   StartWorkflowArgs,
   GetWorkflowRunArgs,
   CancelWorkflowRunArgs,
+  SaveMemoryToolInput,
+  UpdateMemoryToolInput,
+  ForgetMemoryToolInput,
+  MemoryMutationResult,
+  MemoryScope,
+  MemoryType,
 } from './handlers/index.ts';
 
 // Tool definitions — single source of truth
@@ -256,6 +266,9 @@ export {
   // Developer feedback schema
   SendDeveloperFeedbackSchema,
   CreateAgentSchema,
+  SaveMemorySchema,
+  UpdateMemorySchema,
+  ForgetMemorySchema,
   // Descriptions
   TOOL_DESCRIPTIONS,
   // Registry

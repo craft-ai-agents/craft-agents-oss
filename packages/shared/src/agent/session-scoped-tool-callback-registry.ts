@@ -99,6 +99,18 @@ export interface SessionScopedToolCallbacks {
   createAutomationFn?: (
     input: import('@craft-agent/session-tools-core').CreateAutomationToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').CreateAutomationResult>;
+  /** Save a memory entry to USER.md or the current agent's MEMORY.md. */
+  saveMemoryFn?: (
+    input: import('@craft-agent/session-tools-core').SaveMemoryToolInput,
+  ) => Promise<import('@craft-agent/session-tools-core').MemoryMutationResult>;
+  /** Update an existing memory entry. */
+  updateMemoryFn?: (
+    input: import('@craft-agent/session-tools-core').UpdateMemoryToolInput,
+  ) => Promise<import('@craft-agent/session-tools-core').MemoryMutationResult>;
+  /** Forget an existing memory entry and record its tombstone. */
+  forgetMemoryFn?: (
+    input: import('@craft-agent/session-tools-core').ForgetMemoryToolInput,
+  ) => Promise<import('@craft-agent/session-tools-core').MemoryMutationResult>;
 }
 
 // Registry of callbacks keyed by sessionId

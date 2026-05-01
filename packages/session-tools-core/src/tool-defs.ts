@@ -44,6 +44,11 @@ import { handleListMessagingChannels, handleUnbindMessagingChannel } from './han
 import { handleCreateAgent } from './handlers/create-agent.ts';
 import { handleCreateAutomation } from './handlers/create-automation.ts';
 import {
+  handleSaveMemory,
+  handleUpdateMemory,
+  handleForgetMemory,
+} from './handlers/memory.ts';
+import {
   handleListWorkflows,
   handleGetWorkflow,
   handleStartWorkflow,
@@ -318,6 +323,34 @@ export const CreateAutomationSchema = z.object({
     permissionMode: z.enum(['safe', 'ask', 'allow-all']).optional().describe('Permission mode for spawned sessions. Default to "ask".'),
     actions: z.array(CreateAutomationActionSchema).min(1).describe('At least one prompt or webhook action.'),
   }).passthrough().describe('Matcher fields. Trigger-specific fields are passed through and validated server-side.'),
+});
+
+const MemoryScopeSchema = z.enum(['agent', 'user']).describe('Where to save: "agent" for this agent only, or "user" for cross-agent USER.md memory. Defaults to "agent".');
+const MemoryNameSchema = z.string()
+  .regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/)
+  .describe('Slug-shaped memory name, unique within the file: lowercase letters, digits, hyphens, 1-64 chars.');
+const MemoryExpiresSchema = z.string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .describe('Optional ISO date (YYYY-MM-DD) after which this memory is dropped during prompt injection.');
+
+export const SaveMemorySchema = z.object({
+  scope: MemoryScopeSchema.optional(),
+  name: MemoryNameSchema,
+  type: z.enum(['user', 'feedback', 'project', 'reference']).describe('Memory category: user preference/fact, feedback about collaboration, project state, or external reference.'),
+  content: z.string().min(1).describe('Entry body as concise markdown. Usually 1-4 sentences; keep it factual and durable.'),
+  expires: MemoryExpiresSchema.optional(),
+});
+
+export const UpdateMemorySchema = z.object({
+  scope: MemoryScopeSchema.optional(),
+  name: MemoryNameSchema.describe('Existing memory entry name. The name and type are immutable; create a new memory if those need to change.'),
+  content: z.string().min(1).optional().describe('Replacement entry body. Omit to update only expires.'),
+  expires: MemoryExpiresSchema.nullable().optional().describe('New expiration date, or null to clear expiration. Omit to leave unchanged.'),
+});
+
+export const ForgetMemorySchema = z.object({
+  scope: MemoryScopeSchema.optional(),
+  name: MemoryNameSchema.describe('Existing memory entry name to delete and tombstone.'),
 });
 
 // ============================================================
@@ -658,6 +691,37 @@ Use this only after walking the user through the automation-creator interview an
 - \`WebhookReceive\` without a valid slug, or slug that already exists in the workspace.
 
 After success, post a one-line confirmation. For SchedulerTick automations, surface the next-fire time.`,
+
+  save_memory: `Persist a durable fact about the user, your collaboration, or the ongoing project.
+
+Use this only when the information is likely to help future sessions. Every call is visible to the user and may require approval.
+
+Save when:
+- You learn a stable fact about who the user is, their role, or their preferences (\`type: user\`, usually \`scope: user\`)
+- The user corrects your approach, gives reusable feedback, or confirms an unusual approach worked (\`type: feedback\`)
+- Project state changes that will not be captured in code, git, docs, or config (\`type: project\`)
+- The user points to an external system, canonical URL, account, document, dashboard, or other reference future agents need (\`type: reference\`)
+
+Do NOT save:
+- Anything already represented in code, git history, committed docs, config files, or visible project artifacts
+- Ephemeral conversation context, temporary plans, debugging steps, or guesses
+- Negative judgments about the user
+- Generic project debugging recipes where the fix belongs in the commit or docs
+- Sensitive secrets, credentials, access tokens, private keys, or passwords
+
+Choose \`scope: user\` only for facts that should follow the user across agents. Use the default \`scope: agent\` for this agent's working memory. Keep \`content\` concise and factual.`,
+
+  update_memory: `Update an existing durable memory entry's content and/or expiration.
+
+Use this when a remembered fact has changed, needs correction, or needs an expiry. Do not create a duplicate memory for the same fact; update the existing one. \`name\` and \`type\` are immutable identifiers, so only \`content\` and \`expires\` can change.
+
+Do NOT use this for ephemeral conversation updates, information already in code/git/docs/config, negative judgments, or secrets. Pass \`expires: null\` to clear an existing expiration.`,
+
+  forget_memory: `Delete an existing durable memory entry and record a tombstone so it is not automatically re-saved.
+
+Use this when the user asks you to forget something, when a memory is wrong and should not be retained, or when a fact is no longer useful. Prefer \`update_memory\` when the fact is still useful but needs correction.
+
+Do NOT use this for normal short-term context cleanup; only durable memory entries should be forgotten.`,
 } as const;
 
 // ============================================================
@@ -742,6 +806,9 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   // Creator skills — agent-creator structured write tool
   { name: 'create_agent', description: TOOL_DESCRIPTIONS.create_agent, inputSchema: CreateAgentSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateAgent },
   { name: 'create_automation', description: TOOL_DESCRIPTIONS.create_automation, inputSchema: CreateAutomationSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateAutomation },
+  { name: 'save_memory', description: TOOL_DESCRIPTIONS.save_memory, inputSchema: SaveMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleSaveMemory },
+  { name: 'update_memory', description: TOOL_DESCRIPTIONS.update_memory, inputSchema: UpdateMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdateMemory },
+  { name: 'forget_memory', description: TOOL_DESCRIPTIONS.forget_memory, inputSchema: ForgetMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleForgetMemory },
 ];
 
 export interface SessionToolFilterOptions {

@@ -36,6 +36,7 @@ import {
   type WorkspaceInfo,
 } from '@craft-agent/shared/config'
 import type { ActiveSessionInfo, SessionProcessingStatus } from '@craft-agent/core/types'
+import type { MemoryMutationResult } from '@craft-agent/session-tools-core'
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
 import {
   // Session persistence functions
@@ -96,6 +97,19 @@ import {
   readActivatedWorkflows,
   readRun as readWorkflowRun,
 } from '@craft-agent/shared/workflows'
+import {
+  deleteMemoryEntry,
+  listAgentMemoryEntries,
+  listUserMemoryEntries,
+  saveMemoryEntry,
+  updateMemoryEntry,
+  type DeleteMemoryInput,
+  type MemoryEntry as StoredMemoryEntry,
+  type MemoryEntryType,
+  type MemoryScope,
+  type SaveMemoryInput,
+  type UpdateMemoryInput,
+} from '@craft-agent/shared/memory'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
 import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels'
@@ -149,9 +163,17 @@ const defaultSessionRuntimeHooks: SessionRuntimeHooks = {
 
 const SECTION_DELIMITER = '\n\n---\n\n'
 const WORKSPACE_CONTEXT_HEADER = 'Workspace context — read this before starting work:'
+const USER_MEMORY_HEADER = 'What we know about you (USER.md):'
+const AGENT_MEMORY_HEADER = 'My memory of working with you (MEMORY.md):'
 const SKILLS_HEADER = 'You have these skills bundled with you (always available — reach for them when relevant):'
 const SOURCES_HEADER = 'You have these tools bundled with you (MCP servers, APIs, and local connectors):'
 const PLANNING_NUDGE = 'When planning, check your bundled skills and tools before working from scratch.'
+
+type WorkflowMemoryEntry = StoredMemoryEntry
+type WorkflowMemoryInputs = {
+  userEntries?: WorkflowMemoryEntry[]
+  agentEntries?: WorkflowMemoryEntry[]
+}
 
 function isPrerequisiteRetryResult(result: string): boolean {
   return /^\s*You must read the (?:skill instruction files|source guide|browser tools guide) before/i.test(result)
@@ -164,6 +186,79 @@ function buildWorkflowWorkspaceContextSection(docs: Array<{ slug: string; metada
     const heading = doc.metadata.name.trim() || doc.slug
     return `## ${heading}\n\n${doc.body.trim()}`
   }).join('\n\n')}`
+}
+
+async function loadUserMemoryEntries(): Promise<WorkflowMemoryEntry[]> {
+  return listUserMemoryEntries()
+}
+
+async function loadAgentMemoryEntries(agentSlug: string): Promise<WorkflowMemoryEntry[]> {
+  return listAgentMemoryEntries(agentSlug)
+}
+
+async function mutateMemory(
+  operation: 'save' | 'update' | 'delete',
+  scope: MemoryScope,
+  input: Record<string, unknown>,
+  agentSlug?: string,
+): Promise<MemoryMutationResult> {
+  if (scope === 'agent' && !agentSlug) throw new Error('agentSlug is required for agent memory')
+  const name = typeof input.name === 'string' ? input.name.trim() : ''
+  if (!name) throw new Error('name is required')
+  if (operation === 'save') {
+    const type = input.type as MemoryEntryType | undefined
+    if (!type) throw new Error('type is required')
+    const body = typeof input.content === 'string' ? input.content.trim() : ''
+    if (!body) throw new Error('content is required')
+    const saved = await saveMemoryEntry({
+      scope,
+      agentSlug,
+      name,
+      type,
+      body,
+      expires: typeof input.expires === 'string' ? input.expires : undefined,
+    } satisfies SaveMemoryInput)
+    return { ok: true, scope, name: saved.name, file: undefined }
+  }
+  if (operation === 'update') {
+    const updated = await updateMemoryEntry({
+      scope,
+      agentSlug,
+      name,
+      body: typeof input.content === 'string' ? input.content : undefined,
+      expires: input.expires === null || typeof input.expires === 'string' ? input.expires : undefined,
+    } satisfies UpdateMemoryInput)
+    return updated ? { ok: true, scope, name: updated.name } : { ok: false, scope, name, error: `Memory not found: ${name}` }
+  }
+  const deleted = await deleteMemoryEntry({ scope, agentSlug, name } satisfies DeleteMemoryInput)
+  return deleted ? { ok: true, scope, name } : { ok: false, scope, name, error: `Memory not found: ${name}` }
+}
+
+function memoryEntryTitle(entry: WorkflowMemoryEntry): string {
+  return entry.name.trim() || 'Memory'
+}
+
+function memoryEntryBody(entry: WorkflowMemoryEntry): string {
+  return entry.body.trim()
+}
+
+function buildWorkflowMemorySection(header: string, entries: WorkflowMemoryEntry[] | undefined): string {
+  const usable = (entries ?? []).filter((entry) => memoryEntryBody(entry).length > 0)
+  if (usable.length === 0) return ''
+  const bullets = usable.map((entry) => {
+    const type = typeof entry.type === 'string' && entry.type.trim() ? ` [${entry.type.trim()}]` : ''
+    return `- ${memoryEntryTitle(entry)}${type}: ${memoryEntryBody(entry)}`
+  })
+  return `${header}\n\n${bullets.join('\n')}`
+}
+
+function buildWorkflowMemorySections(memory?: WorkflowMemoryInputs): string[] {
+  const sections: string[] = []
+  const userSection = buildWorkflowMemorySection(USER_MEMORY_HEADER, memory?.userEntries)
+  const agentSection = buildWorkflowMemorySection(AGENT_MEMORY_HEADER, memory?.agentEntries)
+  if (userSection) sections.push(userSection)
+  if (agentSection) sections.push(agentSection)
+  return sections
 }
 
 function formatWorkflowBundleBullet(slug: string, name: string | undefined, description: string | undefined): string {
@@ -181,6 +276,7 @@ function buildWorkflowAgentPrompt(
   skills: LoadedSkill[],
   sources: LoadedSource[],
   contextDocs: Array<{ slug: string; metadata: { name: string; enabled?: boolean }; body: string }>,
+  memory?: WorkflowMemoryInputs,
 ): string {
   const body = (agent.systemPrompt ?? '').trimEnd()
   const contextSection = buildWorkflowWorkspaceContextSection(contextDocs)
@@ -204,6 +300,7 @@ function buildWorkflowAgentPrompt(
   if (footerParts.length > 0) footerParts.push(PLANNING_NUDGE)
   const parts = [body]
   if (contextSection) parts.push(contextSection)
+  parts.push(...buildWorkflowMemorySections(memory))
   if (footerParts.length > 0) parts.push(footerParts.join('\n\n'))
   return parts.join(SECTION_DELIMITER)
 }
@@ -1612,6 +1709,12 @@ export class SessionManager implements ISessionManager {
     this.eventSink(RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
   }
 
+  private broadcastMemoryChanged(scope: MemoryScope, agentSlug: string | null): void {
+    if (!this.eventSink) return
+    sessionLog.info(`Broadcasting memory changed scope=${scope} agent=${agentSlug ?? 'user'}`)
+    this.eventSink(RPC_CHANNELS.memory.CHANGED, { to: 'all' }, scope, agentSlug)
+  }
+
   private broadcastWorkflowRunUpdated(event: WorkflowRunEvent): void {
     if (!this.eventSink) return
     const eventType: 'created' | 'updated' | 'completed' =
@@ -1836,7 +1939,14 @@ export class SessionManager implements ISessionManager {
           const sources = getSourcesBySlugs(ws.rootPath, agent.metadata.sources ?? [])
           const resolvedSourceSlugs = sources.map((s) => s.config.slug)
           const contextDocs = loadActiveContextDocsForAgent(ws.rootPath, agent.slug)
-          const customSystemPrompt = buildWorkflowAgentPrompt(agent, skills, sources, contextDocs)
+          const [userMemoryEntries, agentMemoryEntries] = await Promise.all([
+            loadUserMemoryEntries(),
+            loadAgentMemoryEntries(agent.slug),
+          ])
+          const customSystemPrompt = buildWorkflowAgentPrompt(agent, skills, sources, contextDocs, {
+            userEntries: userMemoryEntries,
+            agentEntries: agentMemoryEntries,
+          })
           return {
             customSystemPrompt,
             agentSkillSlugs: resolvedSkillSlugs.length > 0 ? resolvedSkillSlugs : undefined,
@@ -1870,6 +1980,15 @@ export class SessionManager implements ISessionManager {
                   slug: doc.slug,
                   name: doc.metadata.name,
                 })),
+                memory: {
+                  user: userMemoryEntries.map((entry) => ({ name: memoryEntryTitle(entry) })),
+                  agent: agentMemoryEntries.map((entry) => ({ name: memoryEntryTitle(entry) })),
+                },
+              } as SessionLaunchReceipt['injected'] & {
+                memory: {
+                  user: Array<{ name: string }>
+                  agent: Array<{ name: string }>
+                }
               },
             },
           }
@@ -3849,6 +3968,27 @@ export class SessionManager implements ISessionManager {
             isActive: session.agent != null,
           }
         },
+        saveMemoryFn: async (input) => {
+          const scope = input.scope === 'user' ? 'user' : 'agent'
+          const agentSlug = scope === 'agent' ? managed.spawnedFromAgent?.agentSlug : undefined
+          const result = await mutateMemory('save', scope, { ...input }, agentSlug)
+          this.broadcastMemoryChanged(scope, scope === 'agent' ? agentSlug ?? null : null)
+          return result
+        },
+        updateMemoryFn: async (input) => {
+          const scope = input.scope === 'user' ? 'user' : 'agent'
+          const agentSlug = scope === 'agent' ? managed.spawnedFromAgent?.agentSlug : undefined
+          const result = await mutateMemory('update', scope, { ...input }, agentSlug)
+          this.broadcastMemoryChanged(scope, scope === 'agent' ? agentSlug ?? null : null)
+          return result
+        },
+        forgetMemoryFn: async (input) => {
+          const scope = input.scope === 'user' ? 'user' : 'agent'
+          const agentSlug = scope === 'agent' ? managed.spawnedFromAgent?.agentSlug : undefined
+          const result = await mutateMemory('delete', scope, { ...input }, agentSlug)
+          this.broadcastMemoryChanged(scope, scope === 'agent' ? agentSlug ?? null : null)
+          return result
+        },
         listSessionsFn: (options) => {
           const DEFAULT_LIMIT = 20
           const MAX_LIMIT = 100
@@ -4273,7 +4413,7 @@ export class SessionManager implements ISessionManager {
           }
           return { ok: true, availability: 'next-turn' as const }
         },
-      })
+      } as Parameters<typeof mergeSessionScopedToolCallbacks>[1])
 
       // Wire up onSourceActivationRequest to auto-enable sources when agent tries to use them
       managed.agent.onSourceActivationRequest = async (sourceSlug: string): Promise<boolean> => {

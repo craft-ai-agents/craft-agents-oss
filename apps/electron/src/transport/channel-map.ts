@@ -390,6 +390,15 @@ export const CHANNEL_MAP = {
   deleteWorkspaceContextDoc: invoke(RPC_CHANNELS.workspaceContext.DELETE),
   onWorkspaceContextChanged: listener(RPC_CHANNELS.workspaceContext.CHANGED),
 
+  // Memory (global USER.md + per-agent MEMORY.md)
+  listAgentMemory: invoke(RPC_CHANNELS.memory.LIST_AGENT),
+  listUserMemory: invoke(RPC_CHANNELS.memory.LIST_USER),
+  upsertMemory: invoke(RPC_CHANNELS.memory.UPSERT),
+  saveMemory: invoke(RPC_CHANNELS.memory.SAVE),
+  updateMemory: invoke(RPC_CHANNELS.memory.UPDATE),
+  deleteMemory: invoke(RPC_CHANNELS.memory.DELETE),
+  onMemoryChanged: listener(RPC_CHANNELS.memory.CHANGED),
+
   // Workflows (global library + per-workspace activation)
   listAllWorkflows: invoke(RPC_CHANNELS.workflows.LIST_ALL),
   listActiveWorkflowsInWorkspace: invoke(RPC_CHANNELS.workflows.LIST_ACTIVE_IN_WORKSPACE),

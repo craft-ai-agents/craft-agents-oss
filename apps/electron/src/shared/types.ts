@@ -73,6 +73,10 @@ export type { AgentDefinitionMetadataDTO, AgentDefinitionDTO };
 import type { LoadedContextDoc as ContextDocDTO, ContextDocMetadata, ContextDocRouting } from '@craft-agent/shared/workspace-context/types';
 export type { ContextDocDTO, ContextDocMetadata, ContextDocRouting };
 
+// Memory — DTOs are plain JSON entries from @craft-agent/shared/memory.
+import type { MemoryEntry as MemoryEntryDTO, MemoryEntryType, MemoryScope } from '@craft-agent/shared/memory';
+export type { MemoryEntryDTO, MemoryEntryType, MemoryScope };
+
 // Workflows — DTOs match the shared LoadedWorkflow / WorkflowRunSnapshot.
 import type {
   LoadedWorkflow as WorkflowDTO,
@@ -689,6 +693,42 @@ export interface ElectronAPI {
   }): Promise<ContextDocDTO>
   deleteWorkspaceContextDoc(workspaceId: string, slug: string): Promise<boolean>
   onWorkspaceContextChanged(callback: (workspaceId: string, docs: ContextDocDTO[]) => void): () => void
+
+  // Memory (global USER.md + per-agent MEMORY.md)
+  listAgentMemory(agentSlug: string): Promise<MemoryEntryDTO[]>
+  listUserMemory(): Promise<MemoryEntryDTO[]>
+  upsertMemory(payload: {
+    scope: MemoryScope
+    agentSlug?: string | null
+    name: string
+    type?: MemoryEntryType
+    body?: string
+    content?: string
+    expires?: string | null
+  }): Promise<MemoryEntryDTO>
+  saveMemory(payload: {
+    scope: MemoryScope
+    agentSlug?: string | null
+    name: string
+    type: MemoryEntryType
+    body?: string
+    content?: string
+    expires?: string | null
+  }): Promise<MemoryEntryDTO>
+  updateMemory(payload: {
+    scope: MemoryScope
+    agentSlug?: string | null
+    name: string
+    body?: string
+    content?: string
+    expires?: string | null
+  }): Promise<MemoryEntryDTO | null>
+  deleteMemory(payload: {
+    scope: MemoryScope
+    agentSlug?: string | null
+    name: string
+  }): Promise<boolean>
+  onMemoryChanged(callback: (scope: MemoryScope, agentSlug: string | null) => void): () => void
 
   // Workflows (global library + per-workspace activation)
   listAllWorkflows(): Promise<WorkflowDTO[]>

@@ -16,6 +16,7 @@
 import * as React from 'react'
 import { Bot, FileEdit, Play, Trash2, AlertTriangle, Pencil } from 'lucide-react'
 import { AgentEditDialog } from '@/components/app-shell/AgentEditDialog'
+import { AgentMemoryTab } from '@/components/agents/AgentMemoryTab'
 import { useAtomValue } from 'jotai'
 import { toast } from 'sonner'
 import {
@@ -350,6 +351,8 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
             </Info_Table.Row>
           </Info_Table>
         </Info_Section>
+
+        <AgentMemoryTab agentSlug={agent.slug} agentName={agent.metadata.name} />
 
         {/* System prompt */}
         <Info_Section

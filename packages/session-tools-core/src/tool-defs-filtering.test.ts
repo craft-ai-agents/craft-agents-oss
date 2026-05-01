@@ -61,6 +61,9 @@ describe('session tool filtering helpers', () => {
     expect(blocked.has('source_oauth_trigger')).toBe(true);
     expect(blocked.has('source_credential_prompt')).toBe(true);
     expect(blocked.has('spawn_session')).toBe(true);
+    expect(blocked.has('save_memory')).toBe(true);
+    expect(blocked.has('update_memory')).toBe(true);
+    expect(blocked.has('forget_memory')).toBe(true);
   });
 
   it('safe-mode helpers support MCP prefixing', () => {

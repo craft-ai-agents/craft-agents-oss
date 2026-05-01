@@ -384,6 +384,22 @@ export const RPC_CHANNELS = {
     /** Push event when a workspace's context docs changed. */
     CHANGED: 'workspaceContext:changed',
   },
+  memory: {
+    /** List one agent's MEMORY.md entries. */
+    LIST_AGENT: 'memory:listAgent',
+    /** List shared USER.md entries. */
+    LIST_USER: 'memory:listUser',
+    /** Create or replace a memory entry. */
+    UPSERT: 'memory:upsert',
+    /** Create a new memory entry. */
+    SAVE: 'memory:save',
+    /** Update an existing memory entry. */
+    UPDATE: 'memory:update',
+    /** Delete/forget an existing memory entry. */
+    DELETE: 'memory:delete',
+    /** Push event when USER.md or an agent MEMORY.md changed. */
+    CHANGED: 'memory:changed',
+  },
   agentDefinitions: {
     /** List every agent in the global library. */
     LIST_ALL: 'agentDefinitions:listAll',

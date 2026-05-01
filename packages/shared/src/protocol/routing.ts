@@ -405,6 +405,32 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.resources.EXPORT,
   RPC_CHANNELS.resources.IMPORT,
 
+  // workspace context — workspace docs on the owning server
+  RPC_CHANNELS.workspaceContext.LIST,
+  RPC_CHANNELS.workspaceContext.GET,
+  RPC_CHANNELS.workspaceContext.LIST_FOR_AGENT,
+  RPC_CHANNELS.workspaceContext.UPSERT,
+  RPC_CHANNELS.workspaceContext.DELETE,
+  RPC_CHANNELS.workspaceContext.CHANGED,
+
+  // memory — global USER.md + per-agent MEMORY.md on the owning server
+  RPC_CHANNELS.memory.LIST_AGENT,
+  RPC_CHANNELS.memory.LIST_USER,
+  RPC_CHANNELS.memory.UPSERT,
+  RPC_CHANNELS.memory.SAVE,
+  RPC_CHANNELS.memory.UPDATE,
+  RPC_CHANNELS.memory.DELETE,
+  RPC_CHANNELS.memory.CHANGED,
+
+  // agent definitions — global library + per-workspace activation, run on workspace server
+  RPC_CHANNELS.agentDefinitions.LIST_ALL,
+  RPC_CHANNELS.agentDefinitions.LIST_ACTIVE_IN_WORKSPACE,
+  RPC_CHANNELS.agentDefinitions.GET,
+  RPC_CHANNELS.agentDefinitions.UPSERT,
+  RPC_CHANNELS.agentDefinitions.DELETE,
+  RPC_CHANNELS.agentDefinitions.SET_ACTIVE,
+  RPC_CHANNELS.agentDefinitions.CHANGED,
+
   // workflows — global library + per-workspace activation, runs on workspace server
   RPC_CHANNELS.workflows.LIST_ALL,
   RPC_CHANNELS.workflows.LIST_ACTIVE_IN_WORKSPACE,

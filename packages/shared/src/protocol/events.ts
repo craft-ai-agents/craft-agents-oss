@@ -30,6 +30,7 @@ export interface BroadcastEventMap {
   [RPC_CHANNELS.automations.CHANGED]: [workspaceId: string]
   [RPC_CHANNELS.agentDefinitions.CHANGED]: [workspaceId: string | null]
   [RPC_CHANNELS.workspaceContext.CHANGED]: [workspaceId: string, docs: LoadedContextDoc[]]
+  [RPC_CHANNELS.memory.CHANGED]: [scope: 'agent' | 'user', agentSlug: string | null]
   [RPC_CHANNELS.workflows.CHANGED]: [workspaceId: string | null, workflows: LoadedWorkflow[]]
   [RPC_CHANNELS.workflowRuns.UPDATED]: [
     workspaceId: string,

@@ -178,6 +178,30 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'saveMemory', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.saveMemoryFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'updateMemory', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.updateMemoryFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'forgetMemory', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.forgetMemoryFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   // getSessionInfo needs wrapping to default sid → sessionId
   Object.defineProperty(context, 'getSessionInfo', {
     get() {

@@ -20,6 +20,7 @@
  * Pure function — no I/O, no atoms. Easy to test.
  */
 
+import type { MemoryEntry } from '@craft-agent/shared/memory'
 import type { AgentDefinitionDTO, ContextDocDTO, LoadedSkill, LoadedSource } from '../../shared/types'
 
 const SECTION_DELIMITER = '\n\n---\n\n'
@@ -29,6 +30,8 @@ const SOURCES_HEADER = 'You have these tools bundled with you (MCP servers, APIs
 const PLANNING_NUDGE = 'When planning, check your bundled skills and tools before working from scratch.'
 
 const CONTEXT_HEADER = 'Workspace context — read this before starting work:'
+const USER_MEMORY_HEADER = 'USER.md — durable user memory:'
+const AGENT_MEMORY_HEADER = 'MEMORY.md — durable memory for this agent:'
 const AGENT_CATALOG_HEADER = 'Available agents you can route the user to:'
 
 export interface AgentCatalogEntry {
@@ -38,6 +41,11 @@ export interface AgentCatalogEntry {
   inputs?: string
   outputs?: string
   tags?: string[]
+}
+
+export interface AgentPromptMemoryOptions {
+  userMemoryEntries?: MemoryEntry[]
+  agentMemoryEntries?: MemoryEntry[]
 }
 
 /**
@@ -55,14 +63,17 @@ export function composeAgentSystemPrompt(
   sources: LoadedSource[],
   contextDocs: ContextDocDTO[] = [],
   agentCatalog: AgentCatalogEntry[] = [],
+  memory: AgentPromptMemoryOptions = {},
 ): string {
   const body = (agent.systemPrompt ?? '').trimEnd()
   const contextSection = buildWorkspaceContextSection(contextDocs)
+  const memorySection = buildMemorySection(memory.userMemoryEntries ?? [], memory.agentMemoryEntries ?? [])
   const agentCatalogSection = buildAgentCatalogSection(agentCatalog)
   const footer = buildAgentBundleFooter(agent, skills, sources)
 
   const parts: string[] = [body]
   if (contextSection) parts.push(contextSection)
+  if (memorySection) parts.push(memorySection)
   if (agentCatalogSection) parts.push(agentCatalogSection)
   if (footer) parts.push(footer)
   return parts.join(SECTION_DELIMITER)
@@ -131,6 +142,15 @@ export function buildAgentCatalogSection(agents: AgentCatalogEntry[]): string {
   ].join('\n')
 }
 
+export function buildMemorySection(userEntries: MemoryEntry[], agentEntries: MemoryEntry[]): string {
+  const sections: string[] = []
+  const userSection = buildMemoryEntrySection(USER_MEMORY_HEADER, userEntries)
+  const agentSection = buildMemoryEntrySection(AGENT_MEMORY_HEADER, agentEntries)
+  if (userSection) sections.push(userSection)
+  if (agentSection) sections.push(agentSection)
+  return sections.join('\n\n')
+}
+
 // ----------------------------------------------------------------------------
 // Helpers
 // ----------------------------------------------------------------------------
@@ -158,6 +178,19 @@ function collectSourceBullets(declaredSlugs: string[], sources: LoadedSource[]):
     out.push(formatBullet(slug, source.config.name, description))
   }
   return out
+}
+
+function buildMemoryEntrySection(header: string, entries: MemoryEntry[]): string {
+  const usable = entries.filter((entry) => entry.name.trim() && entry.body.trim())
+  if (usable.length === 0) return ''
+  const blocks = usable.map((entry) => {
+    const metadata = [
+      `type: ${entry.type}`,
+      entry.expires ? `expires: ${entry.expires}` : undefined,
+    ].filter(Boolean).join(' | ')
+    return `## ${entry.name.trim()}\n${metadata}\n\n${entry.body.trim()}`
+  })
+  return `${header}\n\n${blocks.join('\n\n')}`
 }
 
 /**

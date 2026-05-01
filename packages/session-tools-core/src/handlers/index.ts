@@ -108,3 +108,18 @@ export type {
   CreateAutomationWebhookAction,
   CreateAutomationEventName,
 } from './create-automation.ts';
+
+// Memory
+export {
+  handleSaveMemory,
+  handleUpdateMemory,
+  handleForgetMemory,
+} from './memory.ts';
+export type {
+  SaveMemoryToolInput,
+  UpdateMemoryToolInput,
+  ForgetMemoryToolInput,
+  MemoryMutationResult,
+  MemoryScope,
+  MemoryType,
+} from './memory.ts';
