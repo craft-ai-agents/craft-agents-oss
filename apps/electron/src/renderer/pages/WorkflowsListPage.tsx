@@ -66,7 +66,7 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
     }
     try {
       const text = NEW_WORKFLOW_TEMPLATE(slug)
-      const { parseWorkflowFile } = await import('@craft-agent/shared/workflows')
+      const { parseWorkflowFile } = await import('@craft-agent/shared/workflows/parser')
       const parsed = parseWorkflowFile(text)
       if (!parsed) {
         toast.error(t('workflows.editor.parseError'))

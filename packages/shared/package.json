@@ -63,6 +63,7 @@
     "./agent-definitions": "./src/agent-definitions/index.ts",
     "./agent-definitions/types": "./src/agent-definitions/types.ts",
     "./workflows": "./src/workflows/index.ts",
+    "./workflows/parser": "./src/workflows/parser.ts",
     "./workflows/types": "./src/workflows/types.ts",
     "./workspace-context": "./src/workspace-context/index.ts",
     "./workspace-context/types": "./src/workspace-context/types.ts",

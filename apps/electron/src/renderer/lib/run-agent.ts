@@ -1,6 +1,6 @@
 import { toast } from 'sonner'
 import { navigate, routes } from '@/lib/navigate'
-import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions'
+import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import { resolveAgentReferences, hasMissingReferences, describeMissingReferences } from '@/lib/agent-references'
 import { composeAgentSystemPrompt } from '@/lib/compose-agent-prompt'
 import type { AgentDefinitionDTO, ContextDocDTO, CreateSessionOptions, Session, LoadedSkill, LoadedSource } from '../../shared/types'

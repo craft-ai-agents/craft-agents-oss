@@ -23,12 +23,15 @@ export type {
 export { WORKFLOW_FILE, WORKFLOW_SLUG_REGEX } from './types.ts';
 
 export {
+  parseWorkflowFile,
+  serializeWorkflow,
+} from './parser.ts';
+
+export {
   GLOBAL_WORKFLOWS_DIR,
   getGlobalWorkflowDir,
   getGlobalWorkflowFile,
   isValidWorkflowSlug,
-  parseWorkflowFile,
-  serializeWorkflow,
   loadAllGlobalWorkflows,
   loadGlobalWorkflow,
   readActivatedWorkflows,

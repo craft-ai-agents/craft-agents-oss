@@ -76,7 +76,7 @@ import { CHAT_LAYOUT } from "@/config/layout"
 import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } from "@/lib/file-changes"
 import { resolveBranchNewPanelOption } from "./branching"
 import { handleErrorMessageAction } from "./error-message-actions"
-import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions"
+import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
 
 // ============================================================================
 // CSS Custom Highlight API helper

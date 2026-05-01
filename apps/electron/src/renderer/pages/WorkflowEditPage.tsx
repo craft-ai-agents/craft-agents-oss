@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../shared/routes'
 import { useWorkflows } from '@/hooks/useWorkflows'
-import { parseWorkflowFile, serializeWorkflow } from '@craft-agent/shared/workflows'
+import { parseWorkflowFile, serializeWorkflow } from '@craft-agent/shared/workflows/parser'
 import type { WorkflowDTO } from '../../shared/types'
 
 interface Props {

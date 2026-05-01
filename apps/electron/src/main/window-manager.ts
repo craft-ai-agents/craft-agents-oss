@@ -196,6 +196,18 @@ export class WindowManager {
 
     // Enable right-click context menu in development
     if (!app.isPackaged) {
+      window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+        if (level < 2) return;
+        if (sourceId.includes('/electron-log_renderer.js')) return;
+        const location = sourceId ? `${sourceId}:${line}` : `line ${line}`
+        const prefix = `[renderer:${webContentsId}] ${location}`
+        windowLog.warn(prefix, message)
+      })
+
+      window.webContents.on('render-process-gone', (_event, details) => {
+        windowLog.error(`[renderer:${webContentsId}] render process gone`, details)
+      })
+
       window.webContents.on('context-menu', (_event, params) => {
         Menu.buildFromTemplate([
           { label: 'Inspect Element', click: () => window.webContents.inspectElement(params.x, params.y) },
