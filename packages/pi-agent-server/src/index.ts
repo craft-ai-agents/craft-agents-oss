@@ -941,6 +941,19 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
     : initConfig.piAuth?.provider;
   const piAuthProvider = initConfig.piAuth?.provider;
 
+  // Dynamically register the model if it's configured via a secondary connection
+  // and not in the SDK's built-in registry (e.g. glm-5.1:cloud under openai,
+  // or a newly-released model that the SDK doesn't know about yet).
+  // This must happen BEFORE the compatibility check so the model can be resolved.
+  if (useCallLlmAuth && initConfig.callLlmPiAuth?.provider) {
+    const bareModel = model.startsWith('pi/') ? model.slice(3) : model;
+    const existing = resolvePiModel(modelRegistry, bareModel, activeProvider, shouldPreferCustomEndpoint());
+    if (!existing) {
+      const overrideBaseUrl = initConfig.callLlmPiAuth?.baseUrl;
+      registerDynamicPiModel(modelRegistry, bareModel, activeProvider, overrideBaseUrl);
+    }
+  }
+
   // If an auth provider is active, ensure the mini model uses the same provider.
   // Pi SDK will fail with "No API key found" if the model requires a different provider.
   // Exception: 'custom-endpoint' provider is always compatible because it has its own
