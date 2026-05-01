@@ -72,6 +72,8 @@ export { handleGetSessionInfo } from './get-session-info.ts';
 export type { GetSessionInfoArgs } from './get-session-info.ts';
 export { handleListSessions } from './list-sessions.ts';
 export type { ListSessionsArgs } from './list-sessions.ts';
+export { handleListAgents } from './list-agents.ts';
+export type { ListAgentsArgs } from './list-agents.ts';
 
 // Create Agent (agent-creator skill)
 export { handleCreateAgent } from './create-agent.ts';

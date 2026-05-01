@@ -16,6 +16,7 @@ import {
   deleteGlobalAgent,
   seedGlobalLibraryIfEmpty,
   ensureRequiredAgents,
+  removeBuiltInAgentSkills,
 } from './storage.ts'
 
 function tmpWorkspace(): string {
@@ -479,5 +480,38 @@ body
 
     writeGlobalAgent(required[0]!, { globalAgentsDir })
     expect(loadGlobalAgent('orchestrator', { globalAgentsDir })!.metadata.name).toBe('Orchestrator')
+  })
+
+  test('removeBuiltInAgentSkills strips creator skills without touching prompt bodies', () => {
+    writeGlobalAgent(
+      {
+        slug: 'concierge',
+        metadata: {
+          name: 'Concierge',
+          description: 'Routes requests.',
+          skills: ['agent-creator', 'custom-skill', 'automation-creator'],
+        },
+        systemPrompt: 'Custom body stays intact.',
+      },
+      { globalAgentsDir },
+    )
+    writeGlobalAgent(
+      {
+        slug: 'writer',
+        metadata: {
+          name: 'Writer',
+          description: 'Writes.',
+          skills: ['agent-creator'],
+        },
+        systemPrompt: 'Writer body.',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(removeBuiltInAgentSkills(['agent-creator', 'automation-creator'], { globalAgentsDir }).updated).toBe(1)
+    const concierge = loadGlobalAgent('concierge', { globalAgentsDir })!
+    expect(concierge.metadata.skills).toEqual(['custom-skill'])
+    expect(concierge.systemPrompt).toBe('Custom body stays intact.')
+    expect(loadGlobalAgent('writer', { globalAgentsDir })!.metadata.skills).toEqual(['agent-creator'])
   })
 })

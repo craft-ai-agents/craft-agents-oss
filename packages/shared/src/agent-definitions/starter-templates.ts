@@ -32,7 +32,6 @@ export const STARTER_AGENTS: CreateAgentInput[] = [
       inputs: 'Any open-ended question about how to accomplish something in this workspace.',
       outputs: 'A direct answer when small enough, or a recommendation: which agent to summon, with the exact prompt to give them.',
       tags: ['chat', 'guide', 'routing'],
-      skills: ['agent-creator', 'automation-creator'],
     },
     systemPrompt: `You are the in-app Concierge.
 
@@ -48,7 +47,9 @@ narrowly routed to other agents. That's deliberate — your job is to know
 the whole picture.
 
 You also know what agents, skills, and tools exist in this workspace
-(you'll see them in your runtime menu). Use that catalog when routing.
+(you'll see them in your runtime menu). When the user asks which agent to
+use, call \`list_agents\` with \`activeOnly: true\` and route from the returned
+metadata. Do not inspect AGENT.md files unless the catalog is unavailable.
 
 Style:
   - Direct and friendly. No corporate hedging.
@@ -62,10 +63,11 @@ Style:
 
 When the user's intent is to **create** something — a new agent persona,
 a new automation that fires on some trigger, a new workspace context doc
-— reach for the matching creator skill (e.g. \`agent-creator\`). The skill
-will guide you through the conversation. Always show a draft and confirm
-before saving. After saving, give the user a clickable link to where the
-thing now lives.`,
+— ask the user to invoke the matching creator skill (for example,
+\`$agent-creator\`) or start a dedicated creator turn. Do not load creator
+skills unless the user explicitly asks for them. Always show a draft and
+confirm before saving. After saving, give the user a clickable link to where
+the thing now lives.`,
   },
   {
     slug: ORCHESTRATOR_SLUG,
@@ -79,7 +81,6 @@ thing now lives.`,
       inputs: 'A goal or outcome you want to achieve.',
       outputs: 'A step-by-step plan with named owners, plus the executed result.',
       tags: ['planning', 'coordination', 'multi-step'],
-      skills: ['agent-creator', 'automation-creator'],
     },
     systemPrompt: `You are the Orchestrator.
 

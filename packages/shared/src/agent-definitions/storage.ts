@@ -598,5 +598,35 @@ export function ensureBuiltInAgentSkills(
   return { updated };
 }
 
+/**
+ * Remove skill slugs from built-in agents without touching their prompt bodies.
+ * Used when a once-bundled skill becomes explicit opt-in instead.
+ */
+export function removeBuiltInAgentSkills(
+  skillsToRemove: ReadonlyArray<string>,
+  options?: AgentStorageOptions,
+): { updated: number } {
+  const builtIns = ['concierge', 'orchestrator'];
+  const remove = new Set(skillsToRemove);
+  let updated = 0;
+  for (const slug of builtIns) {
+    const loaded = loadGlobalAgent(slug, options);
+    if (!loaded?.metadata.skills?.length) continue;
+    const nextSkills = loaded.metadata.skills.filter((skill) => !remove.has(skill));
+    if (nextSkills.length === loaded.metadata.skills.length) continue;
+    const next: AgentMetadata = {
+      ...loaded.metadata,
+      skills: nextSkills.length > 0 ? nextSkills : undefined,
+    };
+    try {
+      writeGlobalAgent({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
+      updated += 1;
+    } catch {
+      // Best-effort migration; loading must not fail because of a malformed write.
+    }
+  }
+  return { updated };
+}
+
 // Re-export for convenience
 export { statSync as _internalStatSync };

@@ -51,6 +51,16 @@ const EXEMPT_SLUGS = new Set(['session', 'craft-agents-docs']);
 /** Global browser tools docs path required before browser tool usage. */
 const BROWSER_TOOLS_DOC_PATH = resolve(join(homedir(), '.craft-agent', 'docs', 'browser-tools.md'));
 
+/** Read-only catalog/introspection tools should not be blocked by skill docs. */
+const SKILL_PREREQUISITE_BYPASS_TOOLS = new Set([
+  'get_session_info',
+  'list_sessions',
+  'list_agents',
+  'list_messaging_channels',
+  'config_validate',
+  'skill_validate',
+]);
+
 // ============================================================
 // Rules
 // ============================================================
@@ -189,6 +199,7 @@ export class PrerequisiteManager {
 
     // Allow Read tool through — trackReadTool will clear the prerequisite
     if (toolName === 'Read') return { allowed: true };
+    if (SKILL_PREREQUISITE_BYPASS_TOOLS.has(toolName)) return { allowed: true };
 
     const pendingList = [...this.pendingSkillPaths].join(', ');
     const key = `skill:${pendingList}`;

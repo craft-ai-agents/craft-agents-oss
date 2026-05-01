@@ -130,6 +130,9 @@ export type {
   SessionListItem,
   ListSessionsOptions,
   ListSessionsResult,
+  AgentListItem,
+  ListAgentsOptions,
+  ListAgentsResult,
   ResolvedLabelsResult,
   ResolvedStatusResult,
 } from './context.ts';
@@ -165,6 +168,8 @@ export {
   handleRenderTemplate,
   // Send Developer Feedback
   handleSendDeveloperFeedback,
+  // Agent catalog
+  handleListAgents,
 } from './handlers/index.ts';
 
 export type {
@@ -207,6 +212,7 @@ export type {
   ScriptSandboxArgs,
   RenderTemplateArgs,
   SendDeveloperFeedbackArgs,
+  ListAgentsArgs,
 } from './handlers/index.ts';
 
 // Tool definitions — single source of truth
@@ -224,6 +230,7 @@ export {
   TransformDataSchema,
   ScriptSandboxSchema,
   RenderTemplateSchema,
+  ListAgentsSchema,
   // Browser tool schema
   BrowserToolSchema,
   // Developer feedback schema

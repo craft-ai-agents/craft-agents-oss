@@ -15,6 +15,10 @@ import {
   generateMessageId
 } from '../helpers'
 
+function isPrerequisiteRetry(result?: string): boolean {
+  return /^\s*You must read the (?:skill instruction files|source guide|browser tools guide) before/i.test(result || '')
+}
+
 /**
  * Handle tool_start - create or update tool message
  *
@@ -80,7 +84,7 @@ export function handleToolResult(
 
   const toolIndex = findToolMessage(session.messages, event.toolUseId)
 
-  const inferredError = event.isError === true || /^\s*(\[ERROR\]|Error:|error:)/.test(event.result || '')
+  const inferredError = (event.isError === true || /^\s*(\[ERROR\]|Error:|error:)/.test(event.result || '')) && !isPrerequisiteRetry(event.result)
 
   if (toolIndex !== -1) {
     // Detect "persisted output" - SDK marks as error but data was actually saved successfully

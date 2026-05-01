@@ -322,6 +322,9 @@ export interface SessionToolContext {
   /** List sessions in the workspace with pagination. Injected by backend. */
   listSessions?(options?: ListSessionsOptions): ListSessionsResult;
 
+  /** List saved agents available to this workspace. Injected by backend. */
+  listAgents?(options?: ListAgentsOptions): ListAgentsResult;
+
   /** Resolve label display names to IDs against configured labels. Injected by backend. */
   resolveLabels?(labels: string[]): ResolvedLabelsResult;
 
@@ -475,6 +478,36 @@ export interface ListSessionsResult {
   total: number;
   returned: number;
   sessions: SessionListItem[];
+}
+
+/** Compact agent summary (returned by list_agents). */
+export interface AgentListItem {
+  slug: string;
+  name: string;
+  description: string;
+  avatar?: string;
+  active: boolean;
+  permissionMode?: string;
+  thinkingLevel?: string;
+  skills: string[];
+  sources: string[];
+  inputs?: string;
+  outputs?: string;
+  tags: string[];
+}
+
+/** Options for list_agents filtering. */
+export interface ListAgentsOptions {
+  activeOnly?: boolean;
+  search?: string;
+  tags?: string[];
+}
+
+/** Result from list_agents. */
+export interface ListAgentsResult {
+  total: number;
+  returned: number;
+  agents: AgentListItem[];
 }
 
 // ============================================================

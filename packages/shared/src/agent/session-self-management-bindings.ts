@@ -61,6 +61,14 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'listAgents', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.listAgentsFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'resolveLabels', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.resolveLabelsFn;

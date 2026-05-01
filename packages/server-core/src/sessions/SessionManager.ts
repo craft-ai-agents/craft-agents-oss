@@ -96,7 +96,7 @@ import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels
 import { ensureLabelsExist } from '@craft-agent/shared/labels/crud'
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
 import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, normalizeStandardFiveFieldCron, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
-import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions'
+import { CONCIERGE_SLUG, loadActivatedAgents, loadAllGlobalAgents } from '@craft-agent/shared/agent-definitions'
 
 // Import from server-core domain utilities
 import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@craft-agent/server-core/domain'
@@ -146,6 +146,10 @@ const WORKSPACE_CONTEXT_HEADER = 'Workspace context — read this before startin
 const SKILLS_HEADER = 'You have these skills bundled with you (always available — reach for them when relevant):'
 const SOURCES_HEADER = 'You have these tools bundled with you (MCP servers, APIs, and local connectors):'
 const PLANNING_NUDGE = 'When planning, check your bundled skills and tools before working from scratch.'
+
+function isPrerequisiteRetryResult(result: string): boolean {
+  return /^\s*You must read the (?:skill instruction files|source guide|browser tools guide) before/i.test(result)
+}
 
 function buildWorkflowWorkspaceContextSection(docs: Array<{ slug: string; metadata: { name: string; enabled?: boolean }; body: string }>): string {
   const usable = docs.filter((d) => d.metadata.enabled !== false && d.body.trim().length > 0)
@@ -1748,9 +1752,9 @@ export class SessionManager implements ISessionManager {
         if (ensured > 0) {
           sessionLog.info(`[agent-definitions] Ensured ${ensured} required agent(s)`)
         }
-        // Seed built-in skills (creator skills) and silently migrate Concierge/Orchestrator
-        // frontmatter so existing installs pick up new load-bearing skills without
-        // overwriting hand-edited AGENT.md bodies.
+        // Seed built-in creator skills, but keep them opt-in. Concierge and
+        // Orchestrator should not pay the skill-read prerequisite cost unless
+        // the user explicitly mentions a creator skill.
         try {
           const { ensureRequiredGlobalSkills, STARTER_SKILLS } = await import('@craft-agent/shared/skills')
           const { ensured: skillsEnsured } = ensureRequiredGlobalSkills(STARTER_SKILLS)
@@ -1761,13 +1765,13 @@ export class SessionManager implements ISessionManager {
           sessionLog.warn('[skills] Built-in skill seed skipped:', err as Error)
         }
         try {
-          const { ensureBuiltInAgentSkills } = await import('@craft-agent/shared/agent-definitions')
-          const { updated } = ensureBuiltInAgentSkills(['agent-creator', 'automation-creator'])
+          const { removeBuiltInAgentSkills } = await import('@craft-agent/shared/agent-definitions')
+          const { updated } = removeBuiltInAgentSkills(['agent-creator', 'automation-creator'])
           if (updated > 0) {
-            sessionLog.info(`[agent-definitions] Migrated ${updated} built-in agent(s) to add creator skills`)
+            sessionLog.info(`[agent-definitions] Migrated ${updated} built-in agent(s) to opt into creator skills only on mention`)
           }
         } catch (err) {
-          sessionLog.warn('[agent-definitions] Built-in skill migration skipped:', err as Error)
+          sessionLog.warn('[agent-definitions] Built-in skill cleanup skipped:', err as Error)
         }
       } catch (err) {
         sessionLog.warn('[agent-definitions] Library seed skipped:', err as Error)
@@ -3875,6 +3879,52 @@ export class SessionManager implements ISessionManager {
               status: s.sessionStatus ?? 'todo',
               createdAt: s.createdAt ?? 0,
             })),
+          }
+        },
+        listAgentsFn: (options) => {
+          const activeSlugs = new Set(loadActivatedAgents(managed.workspace.rootPath).map(agent => agent.slug))
+          let agents = loadAllGlobalAgents().map(agent => ({
+            slug: agent.slug,
+            name: agent.metadata.name,
+            description: agent.metadata.description,
+            avatar: agent.metadata.avatar,
+            active: activeSlugs.has(agent.slug),
+            permissionMode: agent.metadata.permissionMode,
+            thinkingLevel: agent.metadata.thinkingLevel,
+            skills: agent.metadata.skills ?? [],
+            sources: agent.metadata.sources ?? [],
+            inputs: agent.metadata.inputs,
+            outputs: agent.metadata.outputs,
+            tags: agent.metadata.tags ?? [],
+          }))
+
+          if (options?.activeOnly) {
+            agents = agents.filter(agent => agent.active)
+          }
+          if (options?.tags?.length) {
+            const wanted = options.tags.map(tag => tag.toLowerCase())
+            agents = agents.filter(agent => {
+              const tags = new Set(agent.tags.map(tag => tag.toLowerCase()))
+              return wanted.every(tag => tags.has(tag))
+            })
+          }
+          if (options?.search?.trim()) {
+            const needle = options.search.trim().toLowerCase()
+            agents = agents.filter(agent => [
+              agent.slug,
+              agent.name,
+              agent.description,
+              agent.inputs ?? '',
+              agent.outputs ?? '',
+              agent.tags.join(' '),
+            ].join(' ').toLowerCase().includes(needle))
+          }
+
+          agents.sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name))
+          return {
+            total: agents.length,
+            returned: agents.length,
+            agents,
           }
         },
         resolveLabelsFn: (labels: string[]) => {
@@ -6835,7 +6885,7 @@ export class SessionManager implements ISessionManager {
           : rawFormattedResult
 
         // Some backends omit explicit isError but still prefix with [ERROR].
-        const inferredError = event.isError === true || /^\s*(\[ERROR\]|Error:|error:)/.test(formattedResult)
+        const inferredError = (event.isError === true || /^\s*(\[ERROR\]|Error:|error:)/.test(formattedResult)) && !isPrerequisiteRetryResult(formattedResult)
 
         // Update existing tool message (created on tool_start) instead of creating new one
         const existingToolMsg = managed.messages.find(m => m.toolUseId === event.toolUseId)
