@@ -99,6 +99,14 @@ function coerceCompletionContract(
   }
   const r = raw as Record<string, unknown>;
   const out: WorkflowStepCompletionContract = {};
+  const allowedKeys = new Set(['requireNonEmptyOutput', 'minOutputChars', 'requireToolUse']);
+
+  for (const key of Object.keys(r)) {
+    if (!allowedKeys.has(key)) {
+      warnings.push(warning('step', 'invalid-step-completion', `step "${stepId}" completion has unknown field "${key}".`));
+      return null;
+    }
+  }
 
   if (r.requireNonEmptyOutput !== undefined) {
     if (typeof r.requireNonEmptyOutput !== 'boolean') {

@@ -302,6 +302,7 @@ describe('serializeWorkflow', () => {
     expect(parseWorkflowFile([...base, '    completion: []', '---'].join('\n'))).toBeNull();
     expect(parseWorkflowFile([...base, '    completion:', '      requireToolUse: yes', '---'].join('\n'))).toBeNull();
     expect(parseWorkflowFile([...base, '    completion:', '      minOutputChars: -1', '---'].join('\n'))).toBeNull();
+    expect(parseWorkflowFile([...base, '    completion:', '      requireToolsUse: true', '---'].join('\n'))).toBeNull();
   });
 
   test('parses supported step failure policies', () => {

@@ -9,12 +9,11 @@
  * Run state is persisted via `@craft-agent/shared/workflows` after every
  * transition so a server crash leaves a coherent on-disk snapshot.
  *
- * Out of scope for Phase 1 (do NOT add here):
- *   - outputSchema validation                (Phase 2)
- *   - retries / timeout / `when`             (Phase 2)
- *   - humanCheckpoint pause/resume           (Phase 3)
- *   - parallelGroup concurrency              (Phase 3)
- *   - RPC channels / IPC bridge / UI hooks   (separate task)
+ * Still out of scope for this runner:
+ *   - `when` conditional execution
+ *   - humanCheckpoint pause/resume
+ *   - parallelGroup concurrency
+ *   - schedule / webhook workflow triggers
  *
  * The runner mirrors the dependency-injection style of `SessionManager`:
  * the constructor takes a deps bundle, and the runner never imports the
@@ -306,6 +305,10 @@ export class WorkflowRunner {
         if (active.abort.signal.aborted) break;
         stepRecord.attempts = attempt;
         stepRecord.error = undefined;
+        stepRecord.output = undefined;
+        stepRecord.completion = undefined;
+        stepRecord.sessionId = undefined;
+        stepRecord.completedAt = undefined;
         this.touch(active);
 
         try {
@@ -448,10 +451,6 @@ export class WorkflowRunner {
   }
 
   private buildStepPrompt(prompt: string, stepDef: WorkflowStep): string {
-    const base = stepDef.outputSchema
-      ? appendOutputSchemaInstruction(prompt, stepDef.outputSchema)
-      : prompt;
-
     const completion = stepDef.completion ?? {};
     const lines = [
       'Workflow step completion contract:',
@@ -468,10 +467,13 @@ export class WorkflowRunner {
       lines.push('- You must use at least one available tool before the step can complete.');
     }
     if (stepDef.outputSchema) {
-      lines.push('- The final answer must satisfy the JSON schema above.');
+      lines.push('- The final answer must satisfy the JSON schema below.');
     }
 
-    return `${base}\n\n---\n\n${lines.join('\n')}`;
+    const withCompletionContract = `${prompt.trimEnd()}\n\n---\n\n${lines.join('\n')}`;
+    return stepDef.outputSchema
+      ? appendOutputSchemaInstruction(withCompletionContract, stepDef.outputSchema)
+      : withCompletionContract;
   }
 
   private validateCompletion(

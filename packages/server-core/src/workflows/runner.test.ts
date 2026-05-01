@@ -399,6 +399,9 @@ describe('WorkflowRunner', () => {
     expect(completed.steps[0]!.output).toEqual({ title: 'Reliable workflows', count: 2 });
     expect(h.promptsSent[0]!.prompt).toContain('Return only JSON');
     expect(h.promptsSent[0]!.prompt).toContain('"title"');
+    expect(h.promptsSent[0]!.prompt.lastIndexOf('Return only JSON')).toBeGreaterThan(
+      h.promptsSent[0]!.prompt.lastIndexOf('Workflow step completion contract'),
+    );
     expect(h.promptsSent[1]!.prompt).toStartWith('Write about: Reliable workflows');
   });
 
@@ -440,6 +443,42 @@ describe('WorkflowRunner', () => {
       maxAttempts: 2,
       error: { code: 'invalid-structured-output' },
     });
+  });
+
+  test('retry attempt clears stale output and completion evidence while running', async () => {
+    const h = makeHarness({ stepOutputs: ['short', 'long enough'] });
+    let releaseSecondAttempt: (() => void) | undefined;
+    h.setStepBehavior(1, async () => {
+      await new Promise<void>((resolve) => { releaseSecondAttempt = resolve; });
+    });
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [{
+          id: 'first',
+          agent: 'researcher',
+          input: 'Research {{trigger.topic}}',
+          completion: { minOutputChars: 10 },
+          retries: 1,
+        }],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'cats' },
+    });
+
+    await waitFor(() => h.promptsSent.length === 2);
+    const latest = [...h.events].reverse().find((event) => event.type === 'run.updated') as
+      | Extract<WorkflowRunEvent, { type: 'run.updated' }>
+      | undefined;
+    expect(latest?.run.steps[0]!.attempts).toBe(2);
+    expect(latest?.run.steps[0]!.state).toBe('running');
+    expect(latest?.run.steps[0]!.output).toBeUndefined();
+    expect(latest?.run.steps[0]!.completion).toBeUndefined();
+
+    releaseSecondAttempt!();
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+    expect(lastCompleted(h.events)!.state).toBe('succeeded');
   });
 
   test('timeout aborts the attempt and fails when retries are exhausted', async () => {

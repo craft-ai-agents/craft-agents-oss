@@ -4,11 +4,15 @@ import { useTranslation } from 'react-i18next'
 import { Square, RotateCcw, AlertTriangle, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useNavigation } from '@/contexts/NavigationContext'
+import { useAppShellContext } from '@/context/AppShellContext'
+import { StructuredInput } from '@/components/app-shell/input/StructuredInput'
 import { routes } from '../../shared/routes'
 import { useWorkflowRuns } from '@/hooks/useWorkflowRuns'
 import { useAgents } from '@/hooks/useAgents'
 import { WorkflowRunInputDialog } from './WorkflowRunInputDialog'
+import type { AdminApprovalResponse, PermissionResponse, StructuredInputState, StructuredResponse } from '@/components/app-shell/input/structured/types'
 import type {
+  CredentialResponse,
   WorkflowDTO,
   WorkflowMetadataDTO,
   WorkflowRunDTO,
@@ -229,8 +233,67 @@ function StepCard({
   onOpenSession: (sessionId: string) => void
 }) {
   const { t } = useTranslation()
+  const { pendingPermissions, pendingCredentials, onRespondToPermission, onRespondToCredential } = useAppShellContext()
   const preview = formatOutputPreview(step.output)
   const looseStep = step as unknown as LooseRecord
+  const pendingPermission = step.sessionId ? pendingPermissions.get(step.sessionId)?.[0] : undefined
+  const pendingCredential = step.sessionId ? pendingCredentials.get(step.sessionId)?.[0] : undefined
+  const structuredInput = React.useMemo<StructuredInputState | undefined>(() => {
+    if (pendingPermission) {
+      if (pendingPermission.type === 'admin_approval') {
+        return {
+          type: 'admin_approval',
+          data: {
+            appName: pendingPermission.appName || pendingPermission.toolName || 'System action',
+            reason: pendingPermission.reason || pendingPermission.description,
+            impact: pendingPermission.impact,
+            command: pendingPermission.command || '',
+            requiresSystemPrompt: pendingPermission.requiresSystemPrompt ?? true,
+            rememberForMinutes: pendingPermission.rememberForMinutes ?? 10,
+          },
+        }
+      }
+      return { type: 'permission', data: pendingPermission }
+    }
+    if (pendingCredential) {
+      return { type: 'credential', data: pendingCredential }
+    }
+    return undefined
+  }, [pendingPermission, pendingCredential])
+
+  const handleStructuredResponse = React.useCallback((response: StructuredResponse) => {
+    if ((response.type === 'permission' || response.type === 'admin_approval') && pendingPermission && onRespondToPermission) {
+      if (response.type === 'permission') {
+        const permissionResponse = response as PermissionResponse
+        onRespondToPermission(
+          pendingPermission.sessionId,
+          pendingPermission.requestId,
+          permissionResponse.allowed,
+          permissionResponse.alwaysAllow,
+        )
+        return
+      }
+
+      const adminResponse = response as AdminApprovalResponse
+      onRespondToPermission(
+        pendingPermission.sessionId,
+        pendingPermission.requestId,
+        adminResponse.approved,
+        false,
+        { rememberForMinutes: adminResponse.rememberForMinutes },
+      )
+      return
+    }
+
+    if (response.type === 'credential' && pendingCredential && onRespondToCredential) {
+      onRespondToCredential(
+        pendingCredential.sessionId,
+        pendingCredential.requestId,
+        response as CredentialResponse,
+      )
+    }
+  }, [onRespondToCredential, onRespondToPermission, pendingCredential, pendingPermission])
+
   const agentSlug = firstString(
     looseStep.agentSlug,
     looseStep.agent,
@@ -300,6 +363,15 @@ function StepCard({
       {step.state === 'failed' && step.error && (
         <div className="mt-2 ml-7 text-xs text-destructive">
           <span className="font-mono">{step.error.code}</span>: {step.error.message}
+        </div>
+      )}
+      {structuredInput && (
+        <div className="mt-3 ml-7 max-w-2xl min-h-[220px] rounded-md border border-info/30 bg-info/5 p-2">
+          <StructuredInput
+            state={structuredInput}
+            onResponse={handleStructuredResponse}
+            unstyled
+          />
         </div>
       )}
       <div className="mt-2 ml-7 flex flex-col gap-1.5">
