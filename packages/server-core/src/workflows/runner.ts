@@ -25,9 +25,12 @@
 import { randomUUID } from 'node:crypto';
 import type { CreateSessionOptions } from '@craft-agent/shared/protocol';
 import {
+  appendOutputSchemaInstruction,
+  parseStructuredStepOutput,
   resolveTemplate,
   writeRun,
   type LoadedWorkflow,
+  type WorkflowStep,
   type WorkflowRunSnapshot,
   type WorkflowRunStep,
 } from '@craft-agent/shared/workflows';
@@ -88,6 +91,16 @@ interface ActiveRun {
   abort: AbortController;
   /** Set to the active step's session id while a step is in flight. */
   currentSessionId?: string;
+}
+
+class StepAttemptError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'StepAttemptError';
+  }
 }
 
 /**
@@ -239,7 +252,7 @@ export class WorkflowRunner {
       // 1. Mark step `running`.
       stepRecord.state = 'running';
       stepRecord.startedAt = new Date().toISOString();
-      stepRecord.attempts = 1;
+      stepRecord.attempts = 0;
       this.touch(active);
 
       // 2. Build templater context from completed steps.
@@ -266,50 +279,48 @@ export class WorkflowRunner {
         }
       }
 
-      try {
-        // 4. Resolve the step's agent bundle, then spawn the session.
-        const agentOptions = await this.deps.resolveAgentSessionOptions?.(
-          active.snapshot.workspaceId,
-          stepDef.agent,
-        ) ?? {};
-        const session = await this.deps.createSession(active.snapshot.workspaceId, {
-          ...agentOptions,
-          name: `${workflow.metadata.name} · ${stepDef.id}`,
-          spawnedFromAgent: {
-            agentSlug: stepDef.agent,
-            agentName: agentOptions.spawnedFromAgent?.agentName ?? stepDef.agent,
-            timestamp: Date.now(),
-          },
-          hidden: false,
-        });
-        stepRecord.sessionId = session.id;
-        active.currentSessionId = session.id;
+      const maxAttempts = (stepDef.retries ?? 0) + 1;
+      let lastError: unknown;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        if (active.abort.signal.aborted) break;
+        stepRecord.attempts = attempt;
+        stepRecord.error = undefined;
         this.touch(active);
 
-        if (active.abort.signal.aborted) break;
+        try {
+          await this.executeStepAttempt(active, stepDef, resolved.output);
+          if (active.abort.signal.aborted) break;
 
-        // 5. Send and await the turn.
-        await this.deps.sendMessage(session.id, resolved.output);
+          stepRecord.state = 'succeeded';
+          stepRecord.completedAt = new Date().toISOString();
+          active.currentSessionId = undefined;
+          this.touch(active);
+          lastError = undefined;
+          break;
+        } catch (err) {
+          lastError = err;
+          active.currentSessionId = undefined;
+          if (active.abort.signal.aborted) break;
+          if (attempt < maxAttempts) {
+            stepRecord.error = {
+              code: err instanceof StepAttemptError ? err.code : 'step-threw',
+              message: err instanceof Error ? err.message : String(err),
+            };
+            this.touch(active);
+            continue;
+          }
+        }
+      }
 
-        if (active.abort.signal.aborted) break;
-
-        // 6. Pull the naive Phase 1 output.
-        stepRecord.output = this.deps.getLastAssistantText(session.id);
-
-        // 7. Mark step succeeded.
-        stepRecord.state = 'succeeded';
-        stepRecord.completedAt = new Date().toISOString();
-        active.currentSessionId = undefined;
-        this.touch(active);
-      } catch (err) {
-        const aborted = active.abort.signal.aborted;
-        stepRecord.state = aborted ? 'failed' : 'failed';
+      if (active.abort.signal.aborted) break;
+      if (lastError !== undefined) {
+        stepRecord.state = 'failed';
         stepRecord.completedAt = new Date().toISOString();
         stepRecord.error = {
-          code: aborted ? 'cancelled' : 'step-threw',
-          message: err instanceof Error ? err.message : String(err),
+          code: lastError instanceof StepAttemptError ? lastError.code : 'step-threw',
+          message: lastError instanceof Error ? lastError.message : String(lastError),
         };
-        active.currentSessionId = undefined;
         this.touch(active);
         failed = true;
         break;
@@ -336,6 +347,108 @@ export class WorkflowRunner {
   // --------------------------------------------------------------------------
   // Internal — persistence + events
   // --------------------------------------------------------------------------
+
+  private async executeStepAttempt(
+    active: ActiveRun,
+    stepDef: WorkflowStep,
+    prompt: string,
+  ): Promise<void> {
+    const workflow = active.snapshot.workflowSnapshot;
+    const stepRecord = active.snapshot.steps.find((s) => s.id === stepDef.id);
+    if (!stepRecord) throw new StepAttemptError('step-record-missing', `Missing run step record for "${stepDef.id}".`);
+
+    const agentOptions = await this.deps.resolveAgentSessionOptions?.(
+      active.snapshot.workspaceId,
+      stepDef.agent,
+    ) ?? {};
+    const session = await this.deps.createSession(active.snapshot.workspaceId, {
+      ...agentOptions,
+      name: `${workflow.metadata.name} · ${stepDef.id}`,
+      spawnedFromAgent: {
+        agentSlug: stepDef.agent,
+        agentName: agentOptions.spawnedFromAgent?.agentName ?? stepDef.agent,
+        timestamp: Date.now(),
+      },
+      launchReceipt: {
+        ...agentOptions.launchReceipt,
+        createdAt: Date.now(),
+        origin: 'workflow',
+        summary: `Workflow "${workflow.metadata.name}" step "${stepDef.id}".`,
+        workflow: {
+          slug: active.snapshot.workflowSlug,
+          stepId: stepDef.id,
+        },
+        config: agentOptions.launchReceipt?.config ?? {},
+        injected: agentOptions.launchReceipt?.injected ?? {
+          skills: agentOptions.agentSkillSlugs ?? [],
+          sources: agentOptions.enabledSourceSlugs ?? [],
+          contextDocs: [],
+          systemPromptChars: agentOptions.customSystemPrompt?.length,
+        },
+      },
+      hidden: false,
+    });
+    stepRecord.sessionId = session.id;
+    active.currentSessionId = session.id;
+    this.touch(active);
+
+    if (active.abort.signal.aborted) return;
+
+    const stepPrompt = stepDef.outputSchema
+      ? appendOutputSchemaInstruction(prompt, stepDef.outputSchema)
+      : prompt;
+    await this.sendMessageWithOptionalTimeout(active, session.id, stepPrompt, stepDef.timeout);
+
+    if (active.abort.signal.aborted) return;
+
+    const rawOutput = this.deps.getLastAssistantText(session.id);
+    if (!stepDef.outputSchema) {
+      stepRecord.output = rawOutput;
+      return;
+    }
+
+    const parsed = parseStructuredStepOutput(rawOutput, stepDef.outputSchema);
+    if (!parsed.ok) {
+      throw new StepAttemptError('invalid-structured-output', parsed.message);
+    }
+    stepRecord.output = parsed.value;
+  }
+
+  private async sendMessageWithOptionalTimeout(
+    active: ActiveRun,
+    sessionId: string,
+    prompt: string,
+    timeoutSeconds: number | undefined,
+  ): Promise<void> {
+    if (timeoutSeconds === undefined) {
+      await this.deps.sendMessage(sessionId, prompt);
+      return;
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        this.deps.sendMessage(sessionId, prompt),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new StepAttemptError('timeout', `Step timed out after ${timeoutSeconds} seconds.`));
+          }, timeoutSeconds * 1000);
+        }),
+      ]);
+    } catch (err) {
+      if (err instanceof StepAttemptError && err.code === 'timeout') {
+        try {
+          await this.deps.abortSession(sessionId);
+        } catch (abortErr) {
+          // eslint-disable-next-line no-console
+          console.error(`[WorkflowRunner] abortSession failed after step timeout for ${sessionId}:`, abortErr);
+        }
+      }
+      throw err;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  }
 
   private touch(active: ActiveRun): void {
     active.snapshot.updatedAt = new Date().toISOString();

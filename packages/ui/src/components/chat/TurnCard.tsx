@@ -22,6 +22,7 @@ import {
   Pencil,
   FilePenLine,
   GitBranch,
+  Play,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { Markdown } from '../markdown'
@@ -287,6 +288,11 @@ export type OpenAnnotationRequest = {
   nonce: number
 }
 
+export interface ResponseCardAction {
+  label: string
+  onClick: () => void
+}
+
 export interface TurnCardProps {
   /** Session ID for state persistence (optional in shared context) */
   sessionId?: string
@@ -334,6 +340,8 @@ export interface TurnCardProps {
   onAcceptPlan?: () => void
   /** Callback when user accepts the plan with compaction (compact conversation first, then execute) */
   onAcceptPlanWithCompact?: () => void
+  /** Optional primary action for the final response footer. */
+  responseAction?: ResponseCardAction
   /** Whether this is the last response in the session (shows Accept Plan button only for last response) */
   isLastResponse?: boolean
   /** Session folder path for stripping from file paths in tool display */
@@ -1401,6 +1409,8 @@ export interface ResponseCardProps {
   onAccept?: () => void
   /** Callback when user accepts the plan with compaction (compact first, then execute) */
   onAcceptWithCompact?: () => void
+  /** Optional primary action for response content. */
+  responseAction?: ResponseCardAction
   /** Whether this is the last response in the session (shows Accept Plan button only for last response) */
   isLastResponse?: boolean
   /** Whether to show the Accept Plan button (default: true) */
@@ -1653,6 +1663,7 @@ export function ResponseCard({
   annotations,
   onAccept,
   onAcceptWithCompact,
+  responseAction,
   isLastResponse = true,
   showAcceptPlan = true,
   compactMode = false,
@@ -2521,6 +2532,20 @@ export function ResponseCard({
 
               {/* Right side */}
               <div className="flex items-center gap-3">
+                {!isPlan && responseAction && (
+                  <button
+                    type="button"
+                    onClick={responseAction.onClick}
+                    className={cn(
+                      "turn-action-btn flex items-center gap-1.5 transition-colors select-none",
+                      "text-muted-foreground hover:text-foreground",
+                      "focus:outline-none focus-visible:underline"
+                    )}
+                  >
+                    <Play className={SIZE_CONFIG.iconSize} />
+                    <span>{responseAction.label}</span>
+                  </button>
+                )}
                 {/* Accept Plan dropdown (plan variant only, last response) */}
                 {isPlan && showAcceptPlan && onAccept && onAcceptWithCompact && (
                   <div
@@ -2730,6 +2755,7 @@ export const TurnCard = React.memo(function TurnCard({
   renderActionsMenu,
   onAcceptPlan,
   onAcceptPlanWithCompact,
+  responseAction,
   isLastResponse,
   sessionFolderPath,
   displayMode = 'detailed',
@@ -3099,6 +3125,7 @@ export const TurnCard = React.memo(function TurnCard({
             onSaveAndSendFollowUp={onSaveAndSendFollowUp}
             onAccept={onAcceptPlan}
             onAcceptWithCompact={onAcceptPlanWithCompact}
+            responseAction={responseAction}
             isLastResponse={isLastResponse && index === planActivities.length - 1}
             compactMode={compactMode}
             onBranch={onBranch ? (options?: { newPanel?: boolean }) => onBranch(planActivity.messageId ?? planActivity.id, options) : undefined}
@@ -3138,6 +3165,7 @@ export const TurnCard = React.memo(function TurnCard({
                 onSaveAndSendFollowUp={onSaveAndSendFollowUp}
                 onAccept={onAcceptPlan}
                 onAcceptWithCompact={onAcceptPlanWithCompact}
+                responseAction={responseAction}
                 isLastResponse={isLastResponse}
                 compactMode={compactMode}
                 onBranch={onBranch && response.messageId ? (options?: { newPanel?: boolean }) => onBranch(response.messageId!, options) : undefined}
@@ -3170,6 +3198,7 @@ export const TurnCard = React.memo(function TurnCard({
             onSaveAndSendFollowUp={onSaveAndSendFollowUp}
             onAccept={onAcceptPlan}
             onAcceptWithCompact={onAcceptPlanWithCompact}
+            responseAction={responseAction}
             isLastResponse={isLastResponse}
             compactMode={compactMode}
             onBranch={onBranch && response.messageId ? (options?: { newPanel?: boolean }) => onBranch(response.messageId!, options) : undefined}
@@ -3198,6 +3227,7 @@ export const TurnCard = React.memo(function TurnCard({
 
   // Re-render if isLastResponse changed (for Accept Plan button visibility)
   if (prev.isLastResponse !== next.isLastResponse) return false
+  if (prev.responseAction !== next.responseAction) return false
 
   // Re-render if displayMode changed
   if (prev.displayMode !== next.displayMode) return false

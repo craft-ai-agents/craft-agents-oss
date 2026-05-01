@@ -29,6 +29,16 @@ const SOURCES_HEADER = 'You have these tools bundled with you (MCP servers, APIs
 const PLANNING_NUDGE = 'When planning, check your bundled skills and tools before working from scratch.'
 
 const CONTEXT_HEADER = 'Workspace context — read this before starting work:'
+const AGENT_CATALOG_HEADER = 'Available agents you can route the user to:'
+
+export interface AgentCatalogEntry {
+  slug: string
+  name: string
+  description?: string
+  inputs?: string
+  outputs?: string
+  tags?: string[]
+}
 
 /**
  * Compose the final system prompt for a session spawned from this agent.
@@ -44,13 +54,16 @@ export function composeAgentSystemPrompt(
   skills: LoadedSkill[],
   sources: LoadedSource[],
   contextDocs: ContextDocDTO[] = [],
+  agentCatalog: AgentCatalogEntry[] = [],
 ): string {
   const body = (agent.systemPrompt ?? '').trimEnd()
   const contextSection = buildWorkspaceContextSection(contextDocs)
+  const agentCatalogSection = buildAgentCatalogSection(agentCatalog)
   const footer = buildAgentBundleFooter(agent, skills, sources)
 
   const parts: string[] = [body]
   if (contextSection) parts.push(contextSection)
+  if (agentCatalogSection) parts.push(agentCatalogSection)
   if (footer) parts.push(footer)
   return parts.join(SECTION_DELIMITER)
 }
@@ -95,6 +108,27 @@ export function buildWorkspaceContextSection(docs: ContextDocDTO[]): string {
     return `## ${heading}\n\n${doc.body.trim()}`
   })
   return `${CONTEXT_HEADER}\n\n${blocks.join('\n\n')}`
+}
+
+export function buildAgentCatalogSection(agents: AgentCatalogEntry[]): string {
+  const usable = agents.filter((a) => a.slug && a.name)
+  if (usable.length === 0) return ''
+  const lines = usable.map((agent) => {
+    const details = [
+      agent.description?.trim(),
+      agent.inputs?.trim() ? `Input: ${agent.inputs.trim()}` : undefined,
+      agent.outputs?.trim() ? `Output: ${agent.outputs.trim()}` : undefined,
+      agent.tags?.length ? `Tags: ${agent.tags.join(', ')}` : undefined,
+    ].filter(Boolean)
+    return `  • @${agent.slug} (${agent.name})${details.length ? ` — ${details.join(' | ')}` : ''}`
+  })
+  return [
+    AGENT_CATALOG_HEADER,
+    '',
+    ...lines,
+    '',
+    'Use this catalog when deciding whether to answer directly or route the user to a specialist. When routing, name exactly one agent slug and include a "Prompt:" label followed by the exact prompt to run.',
+  ].join('\n')
 }
 
 // ----------------------------------------------------------------------------

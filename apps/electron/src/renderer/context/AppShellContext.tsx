@@ -24,6 +24,7 @@ import type {
   NewChatActionParams,
   LlmConnectionWithStatus,
   TestAutomationResult,
+  AgentDefinitionDTO,
 } from '../../shared/types'
 import type { SessionStatus as SessionStatusConfig } from '@/config/session-status-config'
 import type { SessionOptions, SessionOptionUpdates } from '../hooks/useSessionOptions'
@@ -57,6 +58,8 @@ export interface AppShellContextType {
   enabledSources?: LoadedSource[]
   /** All skills for this workspace - provided by AppShell component (for @mentions) */
   skills?: LoadedSkill[]
+  /** Active agents for this workspace - provided by AppShell component. */
+  activeAgents?: AgentDefinitionDTO[]
   /** Working directory of the active session — needed for project-level skill resolution */
   activeSessionWorkingDirectory?: string
   /** All label configs (tree) for label menu and badge display */

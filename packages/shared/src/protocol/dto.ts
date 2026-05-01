@@ -17,6 +17,7 @@ import type {
 import type { PermissionMode } from '../agent/mode-types'
 import type { ThinkingLevel } from '../agent/thinking-levels'
 import type { CustomEndpointConfig } from '../config/llm-connections'
+import type { SessionLaunchReceipt } from '../sessions/types'
 import type {
   AuthRequest as SharedAuthRequest,
   CredentialInputMode as SharedCredentialInputMode,
@@ -77,6 +78,7 @@ export interface Session {
   customSystemPrompt?: string
   agentSkillSlugs?: string[]
   spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
+  launchReceipt?: SessionLaunchReceipt
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
   lastFinalMessageId?: string
   isAsyncOperationOngoing?: boolean
@@ -137,6 +139,7 @@ export interface CreateSessionOptions {
   agentSkillSlugs?: string[]
   /** Provenance for sessions spawned from a saved Agent. */
   spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
+  launchReceipt?: SessionLaunchReceipt
   /**
    * Message ID to branch from. This is a hard context cutoff:
    * the new session must not include model context from later parent messages.

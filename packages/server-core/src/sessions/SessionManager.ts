@@ -68,6 +68,7 @@ import {
   type SessionMetadata,
   type SessionStatus,
   type SessionHeader,
+  type SessionLaunchReceipt,
   pickSessionFields,
 } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
@@ -95,6 +96,7 @@ import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels
 import { ensureLabelsExist } from '@craft-agent/shared/labels/crud'
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
 import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, normalizeStandardFiveFieldCron, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
+import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions'
 
 // Import from server-core domain utilities
 import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@craft-agent/server-core/domain'
@@ -194,6 +196,58 @@ function buildWorkflowAgentPrompt(
   if (contextSection) parts.push(contextSection)
   if (footerParts.length > 0) parts.push(footerParts.join('\n\n'))
   return parts.join(SECTION_DELIMITER)
+}
+
+function completeLaunchReceipt(
+  receipt: SessionLaunchReceipt | undefined,
+  fallback: {
+    origin: SessionLaunchReceipt['origin']
+    model?: string
+    llmConnection?: string
+    permissionMode?: PermissionMode
+    thinkingLevel?: ThinkingLevel
+    workingDirectory?: string
+    customSystemPrompt?: string
+    agentSkillSlugs?: string[]
+    enabledSourceSlugs?: string[]
+    spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
+  },
+): SessionLaunchReceipt {
+  const injected = receipt?.injected ?? {
+    skills: fallback.agentSkillSlugs ?? [],
+    sources: fallback.enabledSourceSlugs ?? [],
+    contextDocs: [],
+  }
+  return {
+    createdAt: receipt?.createdAt ?? Date.now(),
+    origin: receipt?.origin ?? fallback.origin,
+    summary: receipt?.summary,
+    agent: receipt?.agent ?? (fallback.spawnedFromAgent
+      ? {
+          slug: fallback.spawnedFromAgent.agentSlug,
+          name: fallback.spawnedFromAgent.agentName,
+        }
+      : undefined),
+    workflow: receipt?.workflow,
+    automation: receipt?.automation,
+    config: {
+      ...receipt?.config,
+      model: fallback.model,
+      llmConnection: fallback.llmConnection,
+      permissionMode: fallback.permissionMode,
+      thinkingLevel: fallback.thinkingLevel,
+      workingDirectory: fallback.workingDirectory,
+    },
+    injected: {
+      ...injected,
+      skills: injected.skills ?? [],
+      sources: injected.sources ?? [],
+      contextDocs: injected.contextDocs ?? [],
+      systemPromptChars: receipt?.injected.systemPromptChars
+        ?? (fallback.customSystemPrompt ? fallback.customSystemPrompt.length : undefined),
+    },
+    routing: receipt?.routing,
+  }
 }
 
 const automationConfigMutexes = new Map<string, Promise<void>>()
@@ -942,6 +996,7 @@ interface ManagedSession {
   triggeredBy?: { automationName?: string; event?: string; timestamp?: number }
   // Provenance for sessions spawned by summoning a saved Agent.
   spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
+  launchReceipt?: SessionLaunchReceipt
   // Promise that resolves when the agent instance is ready (for title gen to await)
   agentReady?: Promise<void>
   agentReadyResolve?: () => void
@@ -1771,8 +1826,9 @@ export class SessionManager implements ISessionManager {
           const sources = getSourcesBySlugs(ws.rootPath, agent.metadata.sources ?? [])
           const resolvedSourceSlugs = sources.map((s) => s.config.slug)
           const contextDocs = loadActiveContextDocsForAgent(ws.rootPath, agent.slug)
+          const customSystemPrompt = buildWorkflowAgentPrompt(agent, skills, sources, contextDocs)
           return {
-            customSystemPrompt: buildWorkflowAgentPrompt(agent, skills, sources, contextDocs),
+            customSystemPrompt,
             agentSkillSlugs: resolvedSkillSlugs.length > 0 ? resolvedSkillSlugs : undefined,
             enabledSourceSlugs: resolvedSourceSlugs.length > 0 ? resolvedSourceSlugs : undefined,
             llmConnection: agent.metadata.llmConnection,
@@ -1783,6 +1839,28 @@ export class SessionManager implements ISessionManager {
               agentSlug: agent.slug,
               agentName: agent.metadata.name,
               timestamp: Date.now(),
+            },
+            launchReceipt: {
+              createdAt: Date.now(),
+              origin: agent.slug === CONCIERGE_SLUG ? 'concierge' : 'agent',
+              agent: {
+                slug: agent.slug,
+                name: agent.metadata.name,
+                description: agent.metadata.description,
+                inputs: agent.metadata.inputs,
+                outputs: agent.metadata.outputs,
+                tags: agent.metadata.tags,
+              },
+              config: {},
+              injected: {
+                systemPromptChars: customSystemPrompt.length,
+                skills: resolvedSkillSlugs,
+                sources: resolvedSourceSlugs,
+                contextDocs: contextDocs.map((doc) => ({
+                  slug: doc.slug,
+                  name: doc.metadata.name,
+                })),
+              },
             },
           }
         },
@@ -2632,6 +2710,25 @@ export class SessionManager implements ISessionManager {
       })
     }
 
+    const launchReceipt = completeLaunchReceipt(options?.launchReceipt, {
+      origin: validatedBranch
+        ? 'branch'
+        : options?.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
+          ? 'concierge'
+          : options?.spawnedFromAgent
+            ? 'agent'
+            : 'manual',
+      model: targetBackendContext.resolvedModel,
+      llmConnection: options?.llmConnection,
+      permissionMode: defaultPermissionMode,
+      thinkingLevel: defaultThinkingLevel,
+      workingDirectory: resolvedWorkingDir,
+      customSystemPrompt: options?.customSystemPrompt,
+      agentSkillSlugs: options?.agentSkillSlugs,
+      enabledSourceSlugs: defaultEnabledSourceSlugs,
+      spawnedFromAgent: options?.spawnedFromAgent,
+    })
+
     // Use storage layer to create and persist the session
     const storedSession = await createStoredSession(workspaceRootPath, {
       name: options?.name,
@@ -2647,6 +2744,7 @@ export class SessionManager implements ISessionManager {
       customSystemPrompt: options?.customSystemPrompt,
       agentSkillSlugs: options?.agentSkillSlugs,
       spawnedFromAgent: options?.spawnedFromAgent,
+      launchReceipt,
     })
 
     // Branch: copy messages from source session up to and including the branch point
@@ -2712,6 +2810,7 @@ export class SessionManager implements ISessionManager {
       customSystemPrompt: options?.customSystemPrompt,
       agentSkillSlugs: options?.agentSkillSlugs,
       spawnedFromAgent: options?.spawnedFromAgent,
+      launchReceipt,
       branchFromMessageId: validatedBranch?.sourceMessageId,
       branchContextStrategy: validatedBranch?.branchContextStrategy,
       branchFromSdkSessionId: validatedBranch?.branchFromSdkSessionId,
@@ -3650,6 +3749,17 @@ export class SessionManager implements ISessionManager {
           thinkingLevel: request.thinkingLevel ?? managed.thinkingLevel,
           labels: request.labels ?? managed.labels,
           workingDirectory: request.workingDirectory,
+          launchReceipt: {
+            createdAt: Date.now(),
+            origin: 'spawned-session',
+            summary: `Spawned from session "${managed.name || managed.id}".`,
+            config: {},
+            injected: {
+              skills: [],
+              sources: request.enabledSourceSlugs ?? managed.enabledSourceSlugs ?? [],
+              contextDocs: [],
+            },
+          },
         })
 
         // Build FileAttachment[] from paths (if any)
@@ -7233,6 +7343,20 @@ export class SessionManager implements ISessionManager {
       llmConnection,
       model,
       thinkingLevel,
+      launchReceipt: {
+        createdAt: Date.now(),
+        origin: 'automation',
+        summary: sessionName,
+        automation: {
+          name: automationName,
+        },
+        config: {},
+        injected: {
+          skills: resolved?.skillSlugs ?? [],
+          sources: resolved?.sourceSlugs ?? [],
+          contextDocs: [],
+        },
+      },
     })
 
     // Populate triggeredBy metadata so title generation is explicitly skipped

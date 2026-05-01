@@ -262,6 +262,109 @@ describe('WorkflowRunner', () => {
     expect(h.sessions.size).toBe(1);
   });
 
+  test('structured output: parses JSON and exposes dot-paths to later steps', async () => {
+    const h = makeHarness({
+      stepOutputs: ['{"title":"Reliable workflows","count":2}', 'DONE'],
+    });
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [
+          {
+            id: 'first',
+            agent: 'researcher',
+            input: 'Research {{trigger.topic}}',
+            outputSchema: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                count: { type: 'number' },
+              },
+              required: ['title'],
+            },
+          },
+          { id: 'second', agent: 'writer', input: 'Write about: {{steps.first.output.title}}' },
+        ],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'cats' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const completed = lastCompleted(h.events)!;
+    expect(completed.state).toBe('succeeded');
+    expect(completed.steps[0]!.output).toEqual({ title: 'Reliable workflows', count: 2 });
+    expect(h.promptsSent[0]!.prompt).toContain('Return only JSON');
+    expect(h.promptsSent[0]!.prompt).toContain('"title"');
+    expect(h.promptsSent[1]!.prompt).toBe('Write about: Reliable workflows');
+  });
+
+  test('structured output retries after invalid JSON and records attempt count', async () => {
+    const h = makeHarness({ stepOutputs: ['not json', '{"title":"Recovered"}'] });
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [
+          {
+            id: 'first',
+            agent: 'researcher',
+            input: 'Research {{trigger.topic}}',
+            outputSchema: {
+              type: 'object',
+              properties: { title: { type: 'string' } },
+              required: ['title'],
+            },
+            retries: 1,
+          },
+        ],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'cats' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const completed = lastCompleted(h.events)!;
+    expect(completed.state).toBe('succeeded');
+    expect(completed.steps[0]!.attempts).toBe(2);
+    expect(completed.steps[0]!.output).toEqual({ title: 'Recovered' });
+    expect(h.sessions.size).toBe(2);
+  });
+
+  test('timeout aborts the attempt and fails when retries are exhausted', async () => {
+    const h = makeHarness();
+    const runner = new WorkflowRunner(h.deps);
+    h.setStepBehavior(0, async () => {
+      await new Promise(() => {});
+    });
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [
+          {
+            id: 'first',
+            agent: 'researcher',
+            input: 'Research {{trigger.topic}}',
+            timeout: 0.01,
+          },
+        ],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'cats' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const completed = lastCompleted(h.events)!;
+    expect(completed.state).toBe('failed');
+    expect(completed.steps[0]!.state).toBe('failed');
+    expect(completed.steps[0]!.error?.code).toBe('timeout');
+    expect(h.sessions.get('sess-1')!.aborted).toBe(true);
+  });
+
   test('concurrency: starting a second run for the same workflow+workspace rejects', async () => {
     const h = makeHarness();
     const runner = new WorkflowRunner(h.deps);

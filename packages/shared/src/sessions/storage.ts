@@ -186,6 +186,7 @@ export async function createSession(
     customSystemPrompt?: string;
     agentSkillSlugs?: string[];
     spawnedFromAgent?: SessionConfig['spawnedFromAgent'];
+    launchReceipt?: SessionConfig['launchReceipt'];
     hidden?: boolean;
     sessionStatus?: SessionConfig['sessionStatus'];
     labels?: string[];
@@ -220,6 +221,7 @@ export async function createSession(
     customSystemPrompt: options?.customSystemPrompt,
     agentSkillSlugs: options?.agentSkillSlugs,
     spawnedFromAgent: options?.spawnedFromAgent,
+    launchReceipt: options?.launchReceipt,
     hidden: options?.hidden,
     sessionStatus: options?.sessionStatus,
     labels: options?.labels,

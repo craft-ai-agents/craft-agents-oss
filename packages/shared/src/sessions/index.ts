@@ -18,6 +18,7 @@ export type {
   SessionMetadata,
   SessionHeader,
   SessionPersistentField,
+  SessionLaunchReceipt,
 } from './types.ts';
 
 // Field constants
@@ -123,5 +124,4 @@ export {
   validateBundle,
   MAX_BUNDLE_SIZE_BYTES,
 } from './bundle.ts';
-
 

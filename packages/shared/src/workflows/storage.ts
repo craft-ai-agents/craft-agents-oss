@@ -27,6 +27,7 @@ import { join } from 'node:path';
 import matter from 'gray-matter';
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
 import { getActivatedWorkflowsManifestPath } from '../workspaces/storage.ts';
+import { isValidWorkflowOutputSchema } from './output-schema.ts';
 import { validateTemplateReferences } from './template.ts';
 import {
   WORKFLOW_FILE,
@@ -195,6 +196,9 @@ interface RawStep {
   agent?: unknown;
   input?: unknown;
   description?: unknown;
+  outputSchema?: unknown;
+  timeout?: unknown;
+  retries?: unknown;
 }
 
 /**
@@ -249,6 +253,30 @@ export function parseWorkflowFile(
       warnings.push(warning('step', 'invalid-step-description', `step "${id}" description must be a string.`));
     }
 
+    if (rawStep.outputSchema !== undefined) {
+      if (!isValidWorkflowOutputSchema(rawStep.outputSchema)) {
+        warnings.push(warning('step', 'invalid-step-output-schema', `step "${id}" outputSchema must be a JSON Schema object with a type.`));
+        return null;
+      }
+      step.outputSchema = rawStep.outputSchema;
+    }
+
+    if (rawStep.timeout !== undefined) {
+      if (typeof rawStep.timeout !== 'number' || !Number.isFinite(rawStep.timeout) || rawStep.timeout <= 0) {
+        warnings.push(warning('step', 'invalid-step-timeout', `step "${id}" timeout must be a positive number of seconds.`));
+        return null;
+      }
+      step.timeout = rawStep.timeout;
+    }
+
+    if (rawStep.retries !== undefined) {
+      if (typeof rawStep.retries !== 'number' || !Number.isInteger(rawStep.retries) || rawStep.retries < 0) {
+        warnings.push(warning('step', 'invalid-step-retries', `step "${id}" retries must be a non-negative integer.`));
+        return null;
+      }
+      step.retries = rawStep.retries;
+    }
+
     steps.push(step);
     seenIds.add(id);
     previousIds.push(id);
@@ -300,6 +328,9 @@ export function serializeWorkflow(metadata: WorkflowMetadata, body: string): str
   data.steps = metadata.steps.map((s) => {
     const out: Record<string, unknown> = { id: s.id, agent: s.agent, input: s.input };
     if (s.description) out.description = s.description;
+    if (s.outputSchema) out.outputSchema = s.outputSchema;
+    if (s.timeout !== undefined) out.timeout = s.timeout;
+    if (s.retries !== undefined) out.retries = s.retries;
     return out;
   });
 

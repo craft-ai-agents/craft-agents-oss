@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { buildAgentBundleFooter, buildWorkspaceContextSection, composeAgentSystemPrompt } from './compose-agent-prompt'
+import { buildAgentBundleFooter, buildAgentCatalogSection, buildWorkspaceContextSection, composeAgentSystemPrompt } from './compose-agent-prompt'
 import type { AgentDefinitionDTO, ContextDocDTO, LoadedSkill, LoadedSource } from '../../shared/types'
 
 function makeDoc(slug: string, name: string, body: string, overrides: Partial<ContextDocDTO['metadata']> = {}): ContextDocDTO {
@@ -190,6 +190,26 @@ describe('composeAgentSystemPrompt', () => {
     expect(result).toBe('You are a test agent.')
     expect(result).not.toContain('---')
   })
+
+  test('appends an agent catalog section for Concierge routing', () => {
+    const agent = makeAgent()
+    const result = composeAgentSystemPrompt(agent, [], [], [], [
+      {
+        slug: 'researcher',
+        name: 'Researcher',
+        description: 'Finds cited answers.',
+        inputs: 'A topic.',
+        outputs: 'A cited brief.',
+        tags: ['research', 'cite'],
+      },
+    ])
+
+    expect(result).toContain('Available agents you can route the user to:')
+    expect(result).toContain('@researcher')
+    expect(result).toContain('Input: A topic.')
+    expect(result).toContain('Output: A cited brief.')
+    expect(result).toContain('Tags: research, cite')
+  })
 })
 
 describe('composeAgentSystemPrompt with context docs', () => {
@@ -294,5 +314,11 @@ describe('buildAgentBundleFooter', () => {
     const idxC = footer.indexOf('@c')
     expect(idxB).toBeLessThan(idxA)
     expect(idxA).toBeLessThan(idxC)
+  })
+})
+
+describe('buildAgentCatalogSection', () => {
+  test('returns empty string for no agents', () => {
+    expect(buildAgentCatalogSection([])).toBe('')
   })
 })

@@ -12,6 +12,7 @@ import { atom } from 'jotai'
 import type { Getter, Setter } from 'jotai/vanilla'
 import { atomFamily } from 'jotai-family'
 import type { Session, Message } from '../../shared/types'
+import type { SessionLaunchReceipt } from '@craft-agent/shared/sessions'
 
 /**
  * Session metadata for list display (lightweight, no messages)
@@ -77,6 +78,7 @@ export interface SessionMeta {
   archivedAt?: number
   /** Provenance: the saved Agent this session was spawned from. */
   spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
+  launchReceipt?: SessionLaunchReceipt
 }
 
 /**

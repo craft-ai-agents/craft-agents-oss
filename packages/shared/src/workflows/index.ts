@@ -8,6 +8,7 @@
 
 export type {
   ActivatedWorkflowsManifest,
+  JsonSchema,
   LoadedWorkflow,
   WorkflowDefinitionSource,
   WorkflowMetadata,
@@ -48,6 +49,13 @@ export {
   type TemplateContext,
   type TemplateResolveResult,
 } from './template.ts';
+
+export {
+  appendOutputSchemaInstruction,
+  isValidWorkflowOutputSchema,
+  parseStructuredStepOutput,
+  type StructuredOutputParseResult,
+} from './output-schema.ts';
 
 export type {
   WorkflowRunState,

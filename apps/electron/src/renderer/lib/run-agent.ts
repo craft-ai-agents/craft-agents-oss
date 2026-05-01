@@ -1,5 +1,6 @@
 import { toast } from 'sonner'
 import { navigate, routes } from '@/lib/navigate'
+import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions'
 import { resolveAgentReferences, hasMissingReferences, describeMissingReferences } from '@/lib/agent-references'
 import { composeAgentSystemPrompt } from '@/lib/compose-agent-prompt'
 import type { AgentDefinitionDTO, ContextDocDTO, CreateSessionOptions, Session, LoadedSkill, LoadedSource } from '../../shared/types'
@@ -29,7 +30,7 @@ export function buildAgentCreateSessionOptions(
    * When omitted (legacy callers), all declared slugs pass through verbatim
    * and no footer is generated.
    */
-  context?: { skills: LoadedSkill[]; sources: LoadedSource[]; contextDocs?: ContextDocDTO[] },
+  context?: { skills: LoadedSkill[]; sources: LoadedSource[]; contextDocs?: ContextDocDTO[]; agentCatalog?: AgentDefinitionDTO[] },
 ): CreateSessionOptions {
   let skillSlugs = agent.metadata.skills ?? []
   let sourceSlugs = agent.metadata.sources ?? []
@@ -43,8 +44,23 @@ export function buildAgentCreateSessionOptions(
   // Compose the prompt: persona body + workspace context + bundle footer.
   // Each section is optional; pure absence collapses cleanly.
   const composedPrompt = context
-    ? composeAgentSystemPrompt(agent, context.skills, context.sources, context.contextDocs ?? [])
+    ? composeAgentSystemPrompt(
+        agent,
+        context.skills,
+        context.sources,
+        context.contextDocs ?? [],
+        (context.agentCatalog ?? []).map((a) => ({
+          slug: a.slug,
+          name: a.metadata.name,
+          description: a.metadata.description,
+          inputs: a.metadata.inputs,
+          outputs: a.metadata.outputs,
+          tags: a.metadata.tags,
+        })),
+      )
     : agent.systemPrompt
+  const isConcierge = agent.slug === CONCIERGE_SLUG
+  const agentCatalog = context?.agentCatalog ?? []
 
   const options: CreateSessionOptions = {
     name: agent.metadata.name,
@@ -59,6 +75,55 @@ export function buildAgentCreateSessionOptions(
       agentSlug: agent.slug,
       agentName: agent.metadata.name,
       timestamp: Date.now(),
+    },
+    launchReceipt: {
+      createdAt: Date.now(),
+      origin: isConcierge ? 'concierge' : 'agent',
+      summary: isConcierge ? 'Concierge chat session.' : `Started from @${agent.slug}.`,
+      agent: {
+        slug: agent.slug,
+        name: agent.metadata.name,
+        description: agent.metadata.description,
+        inputs: agent.metadata.inputs,
+        outputs: agent.metadata.outputs,
+        tags: agent.metadata.tags,
+      },
+      config: {
+        llmConnection: agent.metadata.llmConnection,
+        model: agent.metadata.model,
+        permissionMode: agent.metadata.permissionMode,
+        thinkingLevel: agent.metadata.thinkingLevel,
+      },
+      injected: {
+        systemPromptChars: composedPrompt.length,
+        skills: skillSlugs,
+        sources: sourceSlugs,
+        contextDocs: (context?.contextDocs ?? []).map((doc) => ({
+          slug: doc.slug,
+          name: doc.metadata.name,
+        })),
+        ...(agentCatalog.length > 0
+          ? {
+              agentCatalog: agentCatalog.map((a) => ({
+                slug: a.slug,
+                name: a.metadata.name,
+                description: a.metadata.description,
+                inputs: a.metadata.inputs,
+                outputs: a.metadata.outputs,
+                tags: a.metadata.tags,
+              })),
+            }
+          : {}),
+      },
+      ...(isConcierge
+        ? {
+            routing: {
+              mode: 'concierge',
+              activeAgentCount: agentCatalog.length,
+              instruction: 'Use the active agent capability catalog to route the user to a specialist when appropriate.',
+            },
+          }
+        : {}),
     },
   }
 
@@ -86,6 +151,14 @@ export async function openAgentSessionComposer(params: {
    * omitted, the composer asks the server for the source-of-truth filtered set.
    */
   contextDocs?: ContextDocDTO[]
+  /**
+   * Active agents visible to the Concierge as a structured routing catalog.
+   */
+  agentCatalog?: AgentDefinitionDTO[]
+  /**
+   * Optional draft to prefill instead of the agent's saved greeting.
+   */
+  draftInput?: string
 }): Promise<Session> {
   const contextDocs = params.contextDocs
     ?? await window.electronAPI.listWorkspaceContextDocsForAgent(params.workspaceId, params.agent.slug)
@@ -107,9 +180,9 @@ export async function openAgentSessionComposer(params: {
   // gets a composed system prompt (persona body + bundle footer) and any
   // missing slugs are dropped from agentSkillSlugs/enabledSourceSlugs.
   const context = params.skills && params.sources
-    ? { skills: params.skills, sources: params.sources, contextDocs }
+    ? { skills: params.skills, sources: params.sources, contextDocs, agentCatalog: params.agentCatalog }
     : contextDocs.length > 0
-      ? { skills: [], sources: [], contextDocs }
+      ? { skills: [], sources: [], contextDocs, agentCatalog: params.agentCatalog }
       : undefined
 
   const session = await params.onCreateSession(
@@ -118,7 +191,7 @@ export async function openAgentSessionComposer(params: {
   )
   navigate(routes.view.allSessions(session.id))
 
-  const draft = buildAgentDraftInput(params.agent)
+  const draft = params.draftInput?.trim() || buildAgentDraftInput(params.agent)
   if (draft) {
     setTimeout(() => params.onInputChange(session.id, draft), 100)
   }

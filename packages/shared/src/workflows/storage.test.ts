@@ -257,8 +257,20 @@ describe('serializeWorkflow', () => {
         ],
       },
       steps: [
-        { id: 'research', agent: 'researcher', input: 'Research {{trigger.topic}}.', description: 'gather facts' },
-        { id: 'draft', agent: 'writer', input: 'Use this:\n\n{{steps.research.output}}' },
+        {
+          id: 'research',
+          agent: 'researcher',
+          input: 'Research {{trigger.topic}}.',
+          description: 'gather facts',
+          outputSchema: {
+            type: 'object',
+            properties: { title: { type: 'string' } },
+            required: ['title'],
+          },
+          timeout: 30,
+          retries: 1,
+        },
+        { id: 'draft', agent: 'writer', input: 'Use this:\n\n{{steps.research.output.title}}' },
       ],
     };
     const text = serializeWorkflow(meta, 'Body content here.');
@@ -266,6 +278,21 @@ describe('serializeWorkflow', () => {
     expect(parsed).not.toBeNull();
     expect(parsed!.metadata).toEqual(meta);
     expect(parsed!.body).toBe('Body content here.');
+  });
+
+  test('returns null for invalid Phase 2 reliability fields', () => {
+    const base = [
+      '---',
+      'name: A',
+      'description: B',
+      'steps:',
+      '  - id: one',
+      '    agent: r',
+      '    input: hi',
+    ];
+    expect(parseWorkflowFile([...base, '    outputSchema: []', '---'].join('\n'))).toBeNull();
+    expect(parseWorkflowFile([...base, '    timeout: 0', '---'].join('\n'))).toBeNull();
+    expect(parseWorkflowFile([...base, '    retries: 1.5', '---'].join('\n'))).toBeNull();
   });
 });
 

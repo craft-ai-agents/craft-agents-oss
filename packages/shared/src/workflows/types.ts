@@ -10,10 +10,11 @@
  * definitions. A great workflow is reusable everywhere; per-workspace storage
  * would force re-creation.
  *
- * Phase 1 only includes a `manual` trigger and the minimal step shape
- * (`id`, `agent`, `input`). Other fields (`outputSchema`, `timeout`,
- * `retries`, `when`, `humanCheckpoint`, `parallelGroup`) ship in later
- * phases — keep this file in sync with `docs/workflows/01-spec.md`.
+ * Phase 1 includes a `manual` trigger and the minimal step shape
+ * (`id`, `agent`, `input`). Phase 2 adds pragmatic reliability fields:
+ * `outputSchema`, `timeout`, and `retries`. Later fields (`when`,
+ * `humanCheckpoint`, `parallelGroup`) ship in later phases — keep this file in
+ * sync with `docs/workflows/01-spec.md`.
  */
 
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
@@ -50,9 +51,11 @@ export interface WorkflowTrigger {
   inputs?: WorkflowTriggerInput[];
 }
 
+export type JsonSchema = Record<string, unknown>;
+
 /**
- * One step in the pipeline. Phase 1 fields only — see `docs/workflows/01-spec.md`
- * for the full schema including Phase 2/3 fields.
+ * One step in the pipeline. Later phase fields are only added here once the
+ * runner actually honors them.
  */
 export interface WorkflowStep {
   /** Unique slug within this workflow; referenced as `{{steps.<id>.output}}`. */
@@ -63,6 +66,12 @@ export interface WorkflowStep {
   input: string;
   /** Optional human-readable note describing the step. UI hint only. */
   description?: string;
+  /** JSON Schema for the final assistant reply. When set, output is parsed JSON. */
+  outputSchema?: JsonSchema;
+  /** Per-step timeout in seconds. Omitted means no runner-enforced timeout. */
+  timeout?: number;
+  /** Number of retries after a failed attempt. Defaults to 0. */
+  retries?: number;
 }
 
 export interface WorkflowMetadata {
@@ -78,7 +87,10 @@ export type WorkflowParseWarningCode =
   | 'invalid-trigger'
   | 'invalid-trigger-inputs'
   | 'invalid-avatar'
-  | 'invalid-step-description';
+  | 'invalid-step-description'
+  | 'invalid-step-output-schema'
+  | 'invalid-step-timeout'
+  | 'invalid-step-retries';
 
 export interface WorkflowParseWarning {
   field: keyof WorkflowMetadata | 'step';

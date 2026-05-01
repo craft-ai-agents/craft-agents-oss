@@ -56,6 +56,8 @@ export const SESSION_PERSISTENT_FIELDS = [
   'triggeredBy',
   // Saved Agent origin
   'spawnedFromAgent',
+  // Execution receipt
+  'launchReceipt',
 ] as const;
 
 export type SessionPersistentField = typeof SESSION_PERSISTENT_FIELDS[number];
@@ -88,6 +90,54 @@ export interface SessionTokenUsage {
   cacheCreationTokens?: number;
   /** Model's context window size in tokens (from SDK modelUsage) */
   contextWindow?: number;
+}
+
+export interface SessionLaunchReceipt {
+  createdAt: number;
+  origin: 'manual' | 'agent' | 'concierge' | 'workflow' | 'automation' | 'branch' | 'spawned-session';
+  summary?: string;
+  agent?: {
+    slug: string;
+    name: string;
+    description?: string;
+    inputs?: string;
+    outputs?: string;
+    tags?: string[];
+  };
+  workflow?: {
+    slug: string;
+    stepId?: string;
+  };
+  automation?: {
+    name?: string;
+    event?: string;
+  };
+  config: {
+    model?: string;
+    llmConnection?: string;
+    permissionMode?: PermissionMode;
+    thinkingLevel?: ThinkingLevel;
+    workingDirectory?: string;
+  };
+  injected: {
+    systemPromptChars?: number;
+    skills: string[];
+    sources: string[];
+    contextDocs: Array<{ slug: string; name: string }>;
+    agentCatalog?: Array<{
+      slug: string;
+      name: string;
+      description?: string;
+      inputs?: string;
+      outputs?: string;
+      tags?: string[];
+    }>;
+  };
+  routing?: {
+    mode: 'concierge';
+    activeAgentCount: number;
+    instruction: string;
+  };
 }
 
 /**
@@ -211,6 +261,7 @@ export interface SessionConfig {
    * so each agent becomes its own work-stream.
    */
   spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number };
+  launchReceipt?: SessionLaunchReceipt;
 }
 
 /**
@@ -313,6 +364,7 @@ export interface SessionHeader {
    * so each agent becomes its own work-stream.
    */
   spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number };
+  launchReceipt?: SessionLaunchReceipt;
   // Pre-computed fields for fast list loading
   /** Number of messages in session */
   messageCount: number;
@@ -393,4 +445,5 @@ export interface SessionMetadata {
   branchFromMessageId?: string;
   /** Provenance for sessions spawned by summoning a saved Agent. */
   spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number };
+  launchReceipt?: SessionLaunchReceipt;
 }

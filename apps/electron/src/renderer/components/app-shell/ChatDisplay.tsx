@@ -70,10 +70,13 @@ import { useTurnCardExpansion } from "@/hooks/useTurnCardExpansion"
 import { useNavigation } from "@/contexts/NavigationContext"
 import { useAppShellContext } from "@/context/AppShellContext"
 import { navigate, routes } from "@/lib/navigate"
+import { openAgentSessionComposer } from "@/lib/run-agent"
+import { extractConciergeAgentLaunchSuggestion } from "@/lib/concierge-actions"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } from "@/lib/file-changes"
 import { resolveBranchNewPanelOption } from "./branching"
 import { handleErrorMessageAction } from "./error-message-actions"
+import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions"
 
 // ============================================================================
 // CSS Custom Highlight API helper
@@ -483,6 +486,13 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
   // Panel focus state (for multi-panel auto-scroll behavior)
   const appShellContext = useAppShellContext()
+  const conciergeActionAgents = useMemo(
+    () => (appShellContext.activeAgents ?? []).filter((agent) => agent.slug !== CONCIERGE_SLUG),
+    [appShellContext.activeAgents],
+  )
+  const isConciergeSession = session?.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
+    || session?.launchReceipt?.origin === 'concierge'
+    || session?.launchReceipt?.agent?.slug === CONCIERGE_SLUG
   const isFocusedPanel = appShellContext?.isFocusedPanel ?? true
 
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
@@ -1623,6 +1633,32 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
                     // Assistant turns - render with TurnCard (buffered streaming)
                     const assistantUiKey = getAssistantTurnUiKey(turn, index)
+                    const conciergeSuggestion = isConciergeSession && turn.response?.text && !turn.response.isStreaming
+                      ? extractConciergeAgentLaunchSuggestion(turn.response.text, conciergeActionAgents)
+                      : null
+                    const conciergeLaunchWorkspaceId = workspaceId ?? session.workspaceId
+                    const conciergeResponseAction = conciergeSuggestion && conciergeLaunchWorkspaceId
+                      ? {
+                          label: `Start @${conciergeSuggestion.agent.slug}`,
+                          onClick: async () => {
+                            try {
+                              await openAgentSessionComposer({
+                                agent: conciergeSuggestion.agent,
+                                workspaceId: conciergeLaunchWorkspaceId,
+                                onCreateSession: appShellContext.onCreateSession,
+                                onInputChange: appShellContext.onInputChange,
+                                skills,
+                                sources,
+                                draftInput: conciergeSuggestion.prompt,
+                              })
+                            } catch (error) {
+                              toast.error('Failed to start agent', {
+                                description: error instanceof Error ? error.message : String(error),
+                              })
+                            }
+                          },
+                        }
+                      : undefined
                     return (
                       <div
                         key={turnKey}
@@ -1754,6 +1790,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                             },
                           }))
                         }}
+                        responseAction={conciergeResponseAction}
                         onPopOut={(text) => {
                           // Open raw markdown source in code viewer
                           setOverlayState({
