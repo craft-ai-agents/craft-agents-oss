@@ -752,6 +752,8 @@
   "settings.appearance.commandsHeader": "Befehle",
   "settings.appearance.connectionIcons": "Verbindungssymbole",
   "settings.appearance.connectionIconsDesc": "Anbietersymbole in der Sitzungsliste und Modellauswahl anzeigen",
+  "settings.appearance.workspaceIconRail": "Arbeitsbereich-Symbolleiste",
+  "settings.appearance.workspaceIconRailDesc": "Arbeitsbereichsymbole in einer linken Leiste statt im Dropdown-Menü der oberen Leiste anzeigen",
   "settings.appearance.dark": "Dunkel",
   "settings.appearance.defaultTheme": "Standarddesign",
   "settings.appearance.description": "Design, Schrift, Werkzeugsymbole",

@@ -11,6 +11,8 @@ import { generateMessageId } from '../shared/types'
 import { useEventProcessor } from './event-processor'
 import type { AgentEvent, Effect } from './event-processor'
 import { AppShell } from '@/components/app-shell/AppShell'
+import { WorkspaceIconRail } from '@/components/app-shell/WorkspaceIconRail'
+import { getTopBarLeftInset, shouldShowWorkspaceIconRail, WORKSPACE_SELECTOR_RAIL_CHANGED_EVENT } from '@/components/app-shell/workspace-rail'
 import type { AppShellContextType } from '@/context/AppShellContext'
 import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
 import { WorkspacePicker } from '@/components/workspace'
@@ -26,6 +28,7 @@ import { useNotifications } from '@/hooks/useNotifications'
 import { useSession } from '@/hooks/useSession'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { NavigationProvider } from '@/contexts/NavigationContext'
+import * as storage from '@/lib/local-storage'
 import { navigate, routes } from './lib/navigate'
 import { attachmentFromContentRef, toDraftRef } from './lib/drafts'
 import { stripMarkdown } from './utils/text'
@@ -262,6 +265,26 @@ export default function App() {
   }, [updateSessionDirect])
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [workspaceSelectorRail, setWorkspaceSelectorRail] = useState(() =>
+    storage.get(storage.KEYS.workspaceSelectorRail, false)
+  )
+
+  useEffect(() => {
+    const handleWorkspaceSelectorRailChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<boolean>
+      setWorkspaceSelectorRail(
+        typeof customEvent.detail === 'boolean'
+          ? customEvent.detail
+          : storage.get(storage.KEYS.workspaceSelectorRail, false)
+      )
+    }
+
+    window.addEventListener(WORKSPACE_SELECTOR_RAIL_CHANGED_EVENT, handleWorkspaceSelectorRailChanged)
+    return () => {
+      window.removeEventListener(WORKSPACE_SELECTOR_RAIL_CHANGED_EVENT, handleWorkspaceSelectorRailChanged)
+    }
+  }, [])
+
   // Window's workspace ID — shared atom so Root/ThemeProvider stays in sync on switch
   const [windowWorkspaceId, setWindowWorkspaceId] = useAtom(windowWorkspaceIdAtom)
 
@@ -1648,13 +1671,20 @@ export default function App() {
 
   const connectionState = useTransportConnectionState()
   const showTransportConnectionBanner = shouldShowTransportConnectionBanner(connectionState)
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
+  useEffect(() => {
+    const handleResize = () => setViewportWidth(window.innerWidth)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+  const showWorkspaceIconRail = shouldShowWorkspaceIconRail(workspaceSelectorRail, viewportWidth)
 
   const handleReconnectTransport = useCallback(() => {
     void window.electronAPI.reconnectTransport().catch((error) => {
       const message = error instanceof Error ? error.message : 'Unknown error'
       toast.error(t('toast.reconnectFailed'), { description: message })
     })
-  }, [])
+  }, [t])
 
   const handleOpenFile = linkInterceptor.handleOpenFile
   const handleOpenUrl = linkInterceptor.handleOpenUrl
@@ -2005,33 +2035,45 @@ export default function App() {
           )}
 
           {/* Main UI - always rendered, splash fades away to reveal it */}
-          <div className="h-full flex flex-col pt-[48px] text-foreground">
-            {showTransportConnectionBanner && connectionState && (
-              <TransportConnectionBanner
-                state={connectionState}
-                onRetry={handleReconnectTransport}
+          <div className="flex h-full text-foreground">
+            {showWorkspaceIconRail && !sessionLoadError && (
+              <WorkspaceIconRail
+                workspaces={workspaces}
+                activeWorkspaceId={windowWorkspaceId}
+                onSelect={handleSelectWorkspace}
+                onWorkspaceCreated={handleRefreshWorkspaces}
               />
             )}
-            <div className="flex-1 min-h-0">
-              {sessionLoadError ? (
-                <SessionLoadErrorScreen
-                  message={sessionLoadError}
-                  onRetry={() => { void loadSessionsFromServer() }}
-                />
-              ) : (
-                <AppShell
-                  contextValue={appShellContextValue}
-                  defaultLayout={[20, 32, 48]}
-                  menuNewChatTrigger={menuNewChatTrigger}
-                  isFocusedMode={isFocusedMode}
+            <div className="flex min-w-0 flex-1 flex-col pt-[48px]">
+              {showTransportConnectionBanner && connectionState && (
+                <TransportConnectionBanner
+                  state={connectionState}
+                  onRetry={handleReconnectTransport}
                 />
               )}
+              <div className="min-h-0 flex-1">
+                {sessionLoadError ? (
+                  <SessionLoadErrorScreen
+                    message={sessionLoadError}
+                    onRetry={() => { void loadSessionsFromServer() }}
+                  />
+                ) : (
+                  <AppShell
+                    contextValue={appShellContextValue}
+                    defaultLayout={[20, 32, 48]}
+                    menuNewChatTrigger={menuNewChatTrigger}
+                    isFocusedMode={isFocusedMode}
+                    showTopBarWorkspaceSelector={!showWorkspaceIconRail}
+                    topBarLeftInset={getTopBarLeftInset(showWorkspaceIconRail)}
+                  />
+                )}
+              </div>
+              <ResetConfirmationDialog
+                open={showResetDialog}
+                onConfirm={executeReset}
+                onCancel={() => setShowResetDialog(false)}
+              />
             </div>
-            <ResetConfirmationDialog
-              open={showResetDialog}
-              onConfirm={executeReset}
-              onCancel={() => setShowResetDialog(false)}
-            />
           </div>
 
           {/* File preview overlay — rendered by the link interceptor when a previewable file is clicked */}

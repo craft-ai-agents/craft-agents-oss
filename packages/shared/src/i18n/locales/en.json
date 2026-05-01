@@ -752,6 +752,8 @@
   "settings.appearance.commandsHeader": "Commands",
   "settings.appearance.connectionIcons": "Connection icons",
   "settings.appearance.connectionIconsDesc": "Show provider icons in the session list and model selector",
+  "settings.appearance.workspaceIconRail": "Workspace icon rail",
+  "settings.appearance.workspaceIconRailDesc": "Show workspace icons in a left-side rail instead of the top-bar dropdown",
   "settings.appearance.dark": "Dark",
   "settings.appearance.defaultTheme": "Default Theme",
   "settings.appearance.description": "Theme, font, tool icons",

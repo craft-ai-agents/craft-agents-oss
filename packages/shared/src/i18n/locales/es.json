@@ -752,6 +752,8 @@
   "settings.appearance.commandsHeader": "Comandos",
   "settings.appearance.connectionIcons": "Iconos de conexión",
   "settings.appearance.connectionIconsDesc": "Muestra los iconos del proveedor en la lista de sesiones y el selector de modelos",
+  "settings.appearance.workspaceIconRail": "Barra lateral de espacios de trabajo",
+  "settings.appearance.workspaceIconRailDesc": "Muestra los iconos de los espacios de trabajo en una barra lateral izquierda en lugar del menú desplegable de la barra superior",
   "settings.appearance.dark": "Oscuro",
   "settings.appearance.defaultTheme": "Tema predeterminado",
   "settings.appearance.description": "Tema, fuente, iconos de herramientas",

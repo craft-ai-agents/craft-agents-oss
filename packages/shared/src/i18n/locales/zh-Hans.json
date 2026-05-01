@@ -752,6 +752,8 @@
   "settings.appearance.commandsHeader": "命令",
   "settings.appearance.connectionIcons": "连接图标",
   "settings.appearance.connectionIconsDesc": "在会话列表和模型选择器中显示提供商图标",
+  "settings.appearance.workspaceIconRail": "工作区图标栏",
+  "settings.appearance.workspaceIconRailDesc": "在左侧栏中显示工作区图标，而不是使用顶部栏的下拉菜单",
   "settings.appearance.dark": "深色",
   "settings.appearance.defaultTheme": "默认主题",
   "settings.appearance.description": "主题、字体、工具图标",
