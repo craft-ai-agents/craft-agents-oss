@@ -19,11 +19,17 @@ import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
+const WORKFLOW_RUNS_RESUME =
+  (RPC_CHANNELS.workflowRuns as { RESUME?: string; RERUN_FROM_STEP?: string }).RESUME ??
+  (RPC_CHANNELS.workflowRuns as { RESUME?: string; RERUN_FROM_STEP?: string }).RERUN_FROM_STEP ??
+  'workflow-runs:resume'
+
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workflowRuns.START,
   RPC_CHANNELS.workflowRuns.GET,
   RPC_CHANNELS.workflowRuns.LIST,
   RPC_CHANNELS.workflowRuns.CANCEL,
+  WORKFLOW_RUNS_RESUME,
   RPC_CHANNELS.workflowRuns.DELETE,
 ] as const
 
@@ -105,6 +111,19 @@ export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDep
     async (_ctx, workspaceId: string, runId: string): Promise<void> => {
       const runner = requireRunner(deps)
       await runner.cancel(workspaceId, runId)
+    },
+  )
+
+  server.handle(
+    WORKFLOW_RUNS_RESUME,
+    async (
+      _ctx,
+      workspaceId: string,
+      runId: string,
+      stepId?: string,
+    ): Promise<WorkflowRunSnapshot> => {
+      const runner = requireRunner(deps)
+      return runner.rerunFromStep({ workspaceId, runId, stepId })
     },
   )
 

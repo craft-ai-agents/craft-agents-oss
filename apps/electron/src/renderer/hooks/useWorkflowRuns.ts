@@ -9,7 +9,7 @@
 import { useCallback, useEffect } from 'react'
 import { useAtom } from 'jotai'
 import { workflowRunsStateAtomFamily, type WorkflowRunsState } from '@/atoms/workflow-runs'
-import type { WorkflowRunDTO } from '../../shared/types'
+import { RPC_CHANNELS, type WorkflowRunDTO } from '../../shared/types'
 
 export interface UseWorkflowRunsResult {
   runs: WorkflowRunDTO[]
@@ -18,6 +18,8 @@ export interface UseWorkflowRunsResult {
   refresh: () => Promise<void>
   start: (workflowSlug: string, triggerInputs: Record<string, unknown>) => Promise<WorkflowRunDTO>
   cancel: (runId: string) => Promise<void>
+  resume: (runId: string, stepId?: string) => Promise<WorkflowRunDTO>
+  canResume: boolean
   remove: (runId: string) => Promise<boolean>
 }
 
@@ -145,6 +147,13 @@ export function useWorkflowRuns(workspaceId: string | null | undefined): UseWork
     await window.electronAPI.cancelWorkflowRun(workspaceId, runId)
   }, [workspaceId])
 
+  const resume = useCallback(async (runId: string, stepId?: string): Promise<WorkflowRunDTO> => {
+    if (!workspaceId) throw new Error('No active workspace')
+    const recovered = await window.electronAPI.resumeWorkflowRun(workspaceId, runId, stepId)
+    setState((prev) => ({ ...prev, runs: spliceRun(prev.runs, recovered) }))
+    return recovered
+  }, [setState, workspaceId])
+
   const remove = useCallback(async (runId: string) => {
     if (!workspaceId) return false
     const ok = await window.electronAPI.deleteWorkflowRun(workspaceId, runId)
@@ -161,6 +170,8 @@ export function useWorkflowRuns(workspaceId: string | null | undefined): UseWork
     refresh,
     start,
     cancel,
+    resume,
+    canResume: window.electronAPI.isChannelAvailable(RPC_CHANNELS.workflowRuns.RESUME),
     remove,
   }
 }

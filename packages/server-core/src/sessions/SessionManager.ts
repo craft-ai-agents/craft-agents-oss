@@ -2025,6 +2025,13 @@ export class SessionManager implements ISessionManager {
         emit: (event) => this.broadcastWorkflowRunUpdated(event),
       })
 
+      const recoveredWorkflowRuns = this.workflowRunner.recoverInterruptedRuns(
+        workspaces.map((workspace) => ({ id: workspace.id, rootPath: workspace.rootPath })),
+      )
+      if (recoveredWorkflowRuns.length > 0) {
+        sessionLog.info(`Recovered ${recoveredWorkflowRuns.length} interrupted workflow run(s)`)
+      }
+
       // Signal that initialization is complete — IPC handlers waiting on initGate will proceed
       this.initGate.markReady()
     } catch (error) {

@@ -35,12 +35,13 @@ type LooseRecord = Record<string, unknown>
 export default function WorkflowRunPage({ runId, workspaceId }: Props) {
   const { t } = useTranslation()
   const { navigate } = useNavigation()
-  const { runs, cancel } = useWorkflowRuns(workspaceId)
+  const { runs, cancel, resume, canResume } = useWorkflowRuns(workspaceId)
   const { allAgents } = useAgents(workspaceId)
   const [hydratedRun, setHydratedRun] = React.useState<WorkflowRunDTO | null>(null)
   const [hydrateError, setHydrateError] = React.useState<string | null>(null)
   const [workflow, setWorkflow] = React.useState<WorkflowDTO | null>(null)
   const [rerunOpen, setRerunOpen] = React.useState(false)
+  const [recoveryPendingStepId, setRecoveryPendingStepId] = React.useState<string | null>(null)
   const [now, setNow] = React.useState(() => Date.now())
 
   // Hydrate on mount; live updates flow through useWorkflowRuns broadcast.
@@ -101,6 +102,20 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
     }
   }
 
+  const handleResume = async (stepId?: string) => {
+    if (!run) return
+    setRecoveryPendingStepId(stepId ?? '__next__')
+    try {
+      const recovered = await resume(run.id, stepId)
+      toast.success(stepId ? 'Workflow rerun started' : 'Workflow resume started')
+      if (recovered.id !== run.id) navigate(routes.view.workflowRun(recovered.id))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setRecoveryPendingStepId(null)
+    }
+  }
+
   if (hydrateError) {
     return (
       <div className="m-5 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive flex items-center gap-2">
@@ -124,6 +139,8 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
   const snapshotName = snapshotMetadata?.name ?? run.workflowSlug
   const runSteps = run.steps ?? []
   const agentNameBySlug = new Map(allAgents.map((agent) => [agent.slug, agent.metadata.name]))
+  const nextIncompleteStepId = getNextIncompleteStepId(run)
+  const canResumeRun = canResume && isRecoverableRunState(run.state) && !!nextIncompleteStepId
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-background overflow-auto">
@@ -139,7 +156,7 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
             </button>
             <div className="text-xs text-muted-foreground mt-1 flex items-center gap-3 flex-wrap">
               <span>{t('workflows.run.runIdLabel')} <span className="font-mono">{run.id.slice(0, 8)}</span></span>
-              <span>{t('workflows.run.state')}: <span className="capitalize">{run.state}</span></span>
+              <span>{t('workflows.run.state')}: <RunStateLabel state={run.state} /></span>
               <span>{t('workflows.run.elapsed')}: {elapsedLabel}</span>
             </div>
           </div>
@@ -148,6 +165,18 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
               <Button size="sm" variant="outline" onClick={handleCancel}>
                 <Square className="h-3.5 w-3.5 mr-1.5" />
                 {t('workflows.run.cancel')}
+              </Button>
+            )}
+            {isRecoverableRunState(run.state) && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleResume()}
+                disabled={!canResumeRun || recoveryPendingStepId !== null}
+                title={canResume ? undefined : 'Workflow recovery is not available on this server yet'}
+              >
+                <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                Resume from next incomplete step
               </Button>
             )}
             <Button size="sm" onClick={() => setRerunOpen(true)} disabled={!workflow}>
@@ -172,6 +201,9 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
                 ['Created', run.createdAt],
                 ['Updated', run.updatedAt],
                 ['Completed', run.completedAt],
+                ['Interrupted', run.interruptedAt],
+                ['Interruption reason', run.interruptionReason],
+                ['Resume from step', run.resumeFromStepId],
                 ['Snapshot name', snapshotMetadata?.name],
                 ['Snapshot description', snapshotMetadata?.description],
                 ['Snapshot steps', snapshotSteps.length],
@@ -197,6 +229,9 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
               run={run}
               agentNameBySlug={agentNameBySlug}
               onOpenSession={(sid) => navigate(routes.view.allSessions(sid))}
+              onRerunFromStep={(stepId) => handleResume(stepId)}
+              canRerun={canResume && isRecoverableRunState(run.state)}
+              recoveryPendingStepId={recoveryPendingStepId}
             />
           ))}
         </Section>
@@ -223,6 +258,9 @@ function StepCard({
   run,
   agentNameBySlug,
   onOpenSession,
+  onRerunFromStep,
+  canRerun,
+  recoveryPendingStepId,
 }: {
   step: WorkflowRunStep
   index: number
@@ -231,6 +269,9 @@ function StepCard({
   run: WorkflowRunDTO
   agentNameBySlug: Map<string, string>
   onOpenSession: (sessionId: string) => void
+  onRerunFromStep: (stepId: string) => void
+  canRerun: boolean
+  recoveryPendingStepId: string | null
 }) {
   const { t } = useTranslation()
   const { pendingPermissions, pendingCredentials, onRespondToPermission, onRespondToCredential } = useAppShellContext()
@@ -320,6 +361,8 @@ function StepCard({
   const outputKind = stepDef?.outputSchema ? 'Structured output' : 'Raw output'
   const rawOutput = firstValue(looseStep.rawOutput, looseStep.rawAssistantText, looseStep.raw)
   const structuredOutput = firstValue(looseStep.structuredOutput, looseStep.parsedOutput)
+  const canRerunStep = canRerun && isStepRerunnable(step.state)
+  const isRecoveryPending = recoveryPendingStepId === step.id
 
   return (
     <div className={`rounded-md border px-3 py-3 ${stepBorder(step.state)}`}>
@@ -331,6 +374,18 @@ function StepCard({
           @{agentSlug}{agentName && agentName !== agentSlug ? ` - ${agentName}` : ''}
         </span>
         <span className="text-[11px] text-muted-foreground capitalize ml-auto">{step.state}</span>
+        {canRerunStep && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-[11px]"
+            onClick={() => onRerunFromStep(step.id)}
+            disabled={recoveryPendingStepId !== null}
+          >
+            <RotateCcw className="h-3 w-3 mr-1" />
+            {isRecoveryPending ? 'Starting...' : 'Rerun from this step'}
+          </Button>
+        )}
       </div>
 
       <div className="mt-2 ml-7">
@@ -414,6 +469,8 @@ function StepIcon({ state }: { state: WorkflowRunStepState }) {
       return <span className="h-2 w-2 rounded-full bg-emerald-500" />
     case 'failed':
       return <span className="h-2 w-2 rounded-full bg-red-500" />
+    case 'interrupted':
+      return <span className="h-2 w-2 rounded-full bg-orange-500" />
     case 'skipped':
       return <span className="h-2 w-2 rounded-full border border-zinc-400" />
     case 'awaiting-human':
@@ -422,6 +479,13 @@ function StepIcon({ state }: { state: WorkflowRunStepState }) {
     default:
       return <span className="h-2 w-2 rounded-full bg-zinc-300" />
   }
+}
+
+function RunStateLabel({ state }: { state: WorkflowRunDTO['state'] }) {
+  if (state === 'interrupted') {
+    return <span className="font-medium text-orange-600 dark:text-orange-400">Interrupted</span>
+  }
+  return <span className="capitalize">{state}</span>
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -491,9 +555,26 @@ function stepBorder(state: WorkflowRunStepState): string {
     case 'running': return 'border-amber-500/30 bg-amber-500/[0.03]'
     case 'succeeded': return 'border-emerald-500/30 bg-emerald-500/[0.03]'
     case 'failed': return 'border-red-500/30 bg-red-500/[0.03]'
+    case 'interrupted': return 'border-orange-500/30 bg-orange-500/[0.03]'
     case 'skipped': return 'border-border/40 opacity-70'
     default: return 'border-border/40'
   }
+}
+
+function isRecoverableRunState(state: WorkflowRunDTO['state']): boolean {
+  return state === 'interrupted' || state === 'failed'
+}
+
+function isStepRerunnable(state: WorkflowRunStepState): boolean {
+  return state === 'interrupted' || state === 'failed' || state === 'queued'
+}
+
+function getNextIncompleteStepId(run: WorkflowRunDTO): string | undefined {
+  const resumeFromStepId = run.resumeFromStepId
+  if (resumeFromStepId && run.steps.some((step) => step.id === resumeFromStepId && step.state !== 'succeeded' && step.state !== 'skipped')) {
+    return resumeFromStepId
+  }
+  return run.steps.find((step) => step.state !== 'succeeded' && step.state !== 'skipped')?.id
 }
 
 function formatOutputPreview(output: unknown): string | null {

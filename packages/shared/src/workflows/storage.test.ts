@@ -3,6 +3,13 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  listRuns,
+  markRunningRunsInterrupted,
+  readRun,
+  writeRun,
+} from './run-storage.ts';
+import type { WorkflowRunSnapshot, WorkflowRunState } from './run-types.ts';
+import {
   deleteGlobalWorkflow,
   ensureRequiredWorkflows,
   loadActivatedWorkflows,
@@ -38,6 +45,38 @@ const minimalMeta = (overrides?: Partial<WorkflowMetadata>): WorkflowMetadata =>
   description: 'A flow.',
   trigger: { type: 'manual' },
   steps: [{ id: 'one', agent: 'researcher', input: 'do the thing' }],
+  ...overrides,
+});
+
+const runSnapshot = (
+  id: string,
+  state: WorkflowRunState,
+  overrides?: Partial<WorkflowRunSnapshot>,
+): WorkflowRunSnapshot => ({
+  id,
+  workflowSlug: 'my-flow',
+  workspaceId: 'workspace-1',
+  state,
+  trigger: {
+    type: 'manual',
+    inputs: {},
+    firedAt: '2026-01-01T00:00:00.000Z',
+  },
+  workflowSnapshot: {
+    metadata: minimalMeta({
+      steps: [
+        { id: 'one', agent: 'researcher', input: 'do the thing' },
+        { id: 'two', agent: 'writer', input: 'write it' },
+      ],
+    }),
+    body: '',
+  },
+  steps: [
+    { id: 'one', state: 'queued', attempts: 0 },
+    { id: 'two', state: 'queued', attempts: 0 },
+  ],
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
   ...overrides,
 });
 
@@ -325,6 +364,105 @@ describe('serializeWorkflow', () => {
     expect(parsed).not.toBeNull();
     expect(parsed!.metadata.steps[0]!.onFailure).toBe('ask');
     expect(parsed!.metadata.steps[1]!.onFailure).toBe('continue');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Run storage
+// ---------------------------------------------------------------------------
+
+describe('run storage', () => {
+  test('writes, reads, and lists interrupted runs', () => {
+    const run = runSnapshot('run-interrupted', 'interrupted', {
+      completedAt: '2026-01-01T00:05:00.000Z',
+      interruptedAt: '2026-01-01T00:05:00.000Z',
+      interruptionReason: 'server restarted',
+      resumeFromStepId: 'two',
+      steps: [
+        {
+          id: 'one',
+          state: 'succeeded',
+          startedAt: '2026-01-01T00:01:00.000Z',
+          completedAt: '2026-01-01T00:02:00.000Z',
+          attempts: 1,
+        },
+        {
+          id: 'two',
+          state: 'failed',
+          startedAt: '2026-01-01T00:03:00.000Z',
+          completedAt: '2026-01-01T00:05:00.000Z',
+          error: { code: 'run-interrupted', message: 'server restarted' },
+          attempts: 1,
+        },
+      ],
+    });
+
+    writeRun(workspace, run);
+
+    expect(readRun(workspace, 'run-interrupted')).toEqual(run);
+    expect(listRuns(workspace)).toEqual([run]);
+  });
+
+  test('marks running runs interrupted and preserves non-running runs', () => {
+    const running = runSnapshot('running-run', 'running', {
+      steps: [
+        {
+          id: 'one',
+          state: 'succeeded',
+          startedAt: '2026-01-01T00:01:00.000Z',
+          completedAt: '2026-01-01T00:02:00.000Z',
+          attempts: 1,
+        },
+        {
+          id: 'two',
+          state: 'running',
+          startedAt: '2026-01-01T00:03:00.000Z',
+          sessionId: 'session-1',
+          attempts: 1,
+        },
+      ],
+    });
+    const failed = runSnapshot('failed-run', 'failed', {
+      completedAt: '2026-01-01T00:04:00.000Z',
+      steps: [
+        {
+          id: 'one',
+          state: 'failed',
+          completedAt: '2026-01-01T00:04:00.000Z',
+          error: { code: 'step-failed', message: 'nope' },
+          attempts: 1,
+        },
+        { id: 'two', state: 'queued', attempts: 0 },
+      ],
+    });
+
+    writeRun(workspace, running);
+    writeRun(workspace, failed);
+
+    const changed = markRunningRunsInterrupted(workspace, 'server restarted');
+
+    expect(changed).toHaveLength(1);
+    const recovered = changed[0]!;
+    expect(recovered.id).toBe('running-run');
+    expect(recovered.state).toBe('interrupted');
+    expect(typeof recovered.completedAt).toBe('string');
+    expect(recovered.completedAt).toBeDefined();
+    expect(recovered.interruptedAt).toBe(recovered.completedAt);
+    expect(recovered.updatedAt).toBe(recovered.completedAt!);
+    expect(recovered.interruptionReason).toBe('server restarted');
+    expect(recovered.resumeFromStepId).toBe('two');
+    expect(recovered.steps[0]).toEqual(running.steps[0]);
+    expect(recovered.steps[1]).toMatchObject({
+      id: 'two',
+      state: 'failed',
+      sessionId: 'session-1',
+      error: { code: 'run-interrupted', message: 'server restarted' },
+      attempts: 1,
+    });
+    expect(recovered.steps[1]!.completedAt).toBe(recovered.completedAt);
+
+    expect(readRun(workspace, 'running-run')).toEqual(recovered);
+    expect(readRun(workspace, 'failed-run')).toEqual(failed);
   });
 });
 

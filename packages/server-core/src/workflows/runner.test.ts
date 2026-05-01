@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   readRun,
+  writeRun,
   type LoadedWorkflow,
   type WorkflowMetadata,
   type WorkflowRunSnapshot,
@@ -717,5 +718,137 @@ describe('WorkflowRunner', () => {
       toolUseCount: 1,
       satisfied: true,
     });
+  });
+
+  test('recovery marks orphaned running runs interrupted', () => {
+    const h = makeHarness();
+    const runner = new WorkflowRunner(h.deps);
+    const now = new Date().toISOString();
+    const orphaned: WorkflowRunSnapshot = {
+      id: 'orphaned-run',
+      workflowSlug: 'test-flow',
+      workspaceId: WORKSPACE_ID,
+      state: 'running',
+      trigger: { type: 'manual', inputs: { topic: 't' }, firedAt: now },
+      workflowSnapshot: {
+        metadata: makeWorkflow().metadata,
+        body: '',
+      },
+      steps: [
+        { id: 'first', state: 'succeeded', attempts: 1, output: 'DONE' },
+        { id: 'second', state: 'running', attempts: 1, sessionId: 'lost-session' },
+      ],
+      createdAt: now,
+      updatedAt: now,
+    };
+    writeRun(workspaceRoot, orphaned);
+
+    const recovered = runner.recoverInterruptedRuns(
+      [{ id: WORKSPACE_ID, rootPath: workspaceRoot }],
+      'server restarted',
+    );
+
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0]!.state).toBe('interrupted');
+    expect(recovered[0]!.resumeFromStepId).toBe('second');
+    expect(recovered[0]!.steps[1]!.state).toBe('failed');
+    expect(recovered[0]!.steps[1]!.error).toEqual({
+      code: 'run-interrupted',
+      message: 'server restarted',
+    });
+
+    const onDisk = readRun(workspaceRoot, orphaned.id);
+    expect(onDisk?.state).toBe('interrupted');
+    expect(onDisk?.interruptionReason).toBe('server restarted');
+    expect(h.events.map((event) => event.type)).toEqual(['run.updated', 'run.completed']);
+  });
+
+  test('rerun from failed step preserves prior successful outputs for templates', async () => {
+    const h = makeHarness({ stepOutputs: ['RERUN_SECOND'] });
+    const runner = new WorkflowRunner(h.deps);
+    const now = new Date().toISOString();
+    const original: WorkflowRunSnapshot = {
+      id: 'failed-run',
+      workflowSlug: 'test-flow',
+      workspaceId: WORKSPACE_ID,
+      state: 'failed',
+      trigger: { type: 'manual', inputs: { topic: 'rerun' }, firedAt: now },
+      workflowSnapshot: {
+        metadata: makeWorkflow().metadata,
+        body: 'original body',
+      },
+      steps: [
+        {
+          id: 'first',
+          state: 'succeeded',
+          attempts: 1,
+          output: 'ORIGINAL_FIRST',
+          completedAt: now,
+        },
+        {
+          id: 'second',
+          state: 'failed',
+          attempts: 1,
+          error: { code: 'step-threw', message: 'boom' },
+          completedAt: now,
+        },
+      ],
+      createdAt: now,
+      updatedAt: now,
+      completedAt: now,
+    };
+    writeRun(workspaceRoot, original);
+
+    const rerun = await runner.rerunFromStep({ workspaceId: WORKSPACE_ID, runId: original.id });
+
+    expect(rerun.id).not.toBe(original.id);
+    expect(rerun.resumeFromStepId).toBe('second');
+    expect(rerun.steps[0]!.state).toBe('succeeded');
+    expect(rerun.steps[0]!.output).toBe('ORIGINAL_FIRST');
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+    const completed = lastCompleted(h.events)!;
+    expect(completed.state).toBe('succeeded');
+    expect(completed.steps[0]!.output).toBe('ORIGINAL_FIRST');
+    expect(completed.steps[1]!.output).toBe('RERUN_SECOND');
+    expect(h.promptsSent).toHaveLength(1);
+    expect(h.promptsSent[0]!.prompt).toStartWith('Write about: ORIGINAL_FIRST');
+
+    const originalOnDisk = readRun(workspaceRoot, original.id);
+    expect(originalOnDisk?.state).toBe('failed');
+    expect(originalOnDisk?.steps[1]!.error?.message).toBe('boom');
+  });
+
+  test('rerun rejects an invalid step id', async () => {
+    const h = makeHarness();
+    const runner = new WorkflowRunner(h.deps);
+    const now = new Date().toISOString();
+    writeRun(workspaceRoot, {
+      id: 'failed-run',
+      workflowSlug: 'test-flow',
+      workspaceId: WORKSPACE_ID,
+      state: 'failed',
+      trigger: { type: 'manual', inputs: { topic: 'rerun' }, firedAt: now },
+      workflowSnapshot: {
+        metadata: makeWorkflow().metadata,
+        body: '',
+      },
+      steps: [
+        { id: 'first', state: 'succeeded', attempts: 1, output: 'ORIGINAL_FIRST' },
+        { id: 'second', state: 'failed', attempts: 1 },
+      ],
+      createdAt: now,
+      updatedAt: now,
+      completedAt: now,
+    });
+
+    await expect(
+      runner.rerunFromStep({
+        workspaceId: WORKSPACE_ID,
+        runId: 'failed-run',
+        stepId: 'missing',
+      }),
+    ).rejects.toThrow(/Workflow step not found/);
+    expect(h.sessions.size).toBe(0);
   });
 });

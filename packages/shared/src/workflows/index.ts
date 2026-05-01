@@ -76,6 +76,7 @@ export {
   writeRun,
   readRun,
   listRuns,
+  markRunningRunsInterrupted,
   deleteRun,
 } from './run-storage.ts';
 

@@ -18,6 +18,7 @@ export type WorkflowRunState =
   | 'created'
   | 'queued'
   | 'running'
+  | 'interrupted'
   /** Phase 3 — humanCheckpoint pause. Declared for forward compat. */
   | 'paused'
   | 'succeeded'
@@ -30,6 +31,7 @@ export type WorkflowRunStepState =
   | 'running'
   | 'succeeded'
   | 'failed'
+  | 'interrupted'
   /** Phase 2 — `when` skipped this step. Declared for forward compat. */
   | 'skipped'
   /** Phase 3 — `humanCheckpoint`. Declared for forward compat. */
@@ -87,4 +89,7 @@ export interface WorkflowRunSnapshot {
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
+  interruptedAt?: string;
+  interruptionReason?: string;
+  resumeFromStepId?: string;
 }

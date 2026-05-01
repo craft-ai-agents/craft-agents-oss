@@ -749,6 +749,7 @@ export interface ElectronAPI {
   getWorkflowRun(workspaceId: string, runId: string): Promise<WorkflowRunDTO | null>
   listWorkflowRuns(workspaceId: string): Promise<WorkflowRunDTO[]>
   cancelWorkflowRun(workspaceId: string, runId: string): Promise<void>
+  resumeWorkflowRun(workspaceId: string, runId: string, stepId?: string): Promise<WorkflowRunDTO>
   deleteWorkflowRun(workspaceId: string, runId: string): Promise<boolean>
   onWorkflowRunUpdated(
     callback: (workspaceId: string, run: WorkflowRunDTO, eventType: 'created' | 'updated' | 'completed') => void,

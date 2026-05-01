@@ -31,6 +31,7 @@ A WorkflowRunner is ~300–500 LOC of plain TypeScript on top of our existing se
 | [`03-ux.md`](./03-ux.md) | UI spec: list page, editor, **Run page** (the killer view — vertical pipeline of cards with side-pane drill-down). |
 | [`04-implementation-plan.md`](./04-implementation-plan.md) | Phased build plan. Phase 1 is shippable in ~1 week. Each phase has scope + success criteria. |
 | [`05-examples.md`](./05-examples.md) | Concrete sample `WORKFLOW.md` files showing realistic uses. |
+| [`06-recovery-plan.md`](./06-recovery-plan.md) | Recovery contract for interrupted runs and rerun-from-step. |
 
 ## Status
 

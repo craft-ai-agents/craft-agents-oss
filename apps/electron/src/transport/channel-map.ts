@@ -413,6 +413,7 @@ export const CHANNEL_MAP = {
   getWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.GET),
   listWorkflowRuns: invoke(RPC_CHANNELS.workflowRuns.LIST),
   cancelWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.CANCEL),
+  resumeWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.RESUME),
   deleteWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.DELETE),
   onWorkflowRunUpdated: listener(RPC_CHANNELS.workflowRuns.UPDATED),
   getAutomationHistory: invoke(RPC_CHANNELS.automations.GET_HISTORY),

@@ -437,6 +437,7 @@ export const RPC_CHANNELS = {
     GET: 'workflow-runs:get',
     LIST: 'workflow-runs:list',
     CANCEL: 'workflow-runs:cancel',
+    RESUME: 'workflow-runs:resume',
     DELETE: 'workflow-runs:delete',
     /** Single push event covering created / updated / completed transitions. */
     UPDATED: 'workflow-runs:updated',

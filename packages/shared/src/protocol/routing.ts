@@ -445,6 +445,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.workflowRuns.GET,
   RPC_CHANNELS.workflowRuns.LIST,
   RPC_CHANNELS.workflowRuns.CANCEL,
+  RPC_CHANNELS.workflowRuns.RESUME,
   RPC_CHANNELS.workflowRuns.DELETE,
   RPC_CHANNELS.workflowRuns.UPDATED,
 

@@ -25,7 +25,9 @@ import { randomUUID } from 'node:crypto';
 import type { CreateSessionOptions } from '@craft-agent/shared/protocol';
 import {
   appendOutputSchemaInstruction,
+  markRunningRunsInterrupted,
   parseStructuredStepOutput,
+  readRun,
   resolveTemplate,
   writeRun,
   type LoadedWorkflow,
@@ -108,6 +110,7 @@ export interface WorkflowRunnerDeps {
 interface ActiveRun {
   snapshot: WorkflowRunSnapshot;
   abort: AbortController;
+  startIndex: number;
   /** Set to the active step's session id while a step is in flight. */
   currentSessionId?: string;
 }
@@ -180,7 +183,7 @@ export class WorkflowRunner {
       updatedAt: now,
     };
 
-    const active: ActiveRun = { snapshot, abort: new AbortController() };
+    const active: ActiveRun = { snapshot, abort: new AbortController(), startIndex: 0 };
     this.active.set(runId, active);
     this.activeByKey.set(key, runId);
 
@@ -197,6 +200,104 @@ export class WorkflowRunner {
     // Fire-and-forget — caller awaits via emitted events, not this method's
     // resolution. runStepLoop handles its own crash finalization so active
     // concurrency slots cannot leak on an unexpected runner bug.
+    void this.runStepLoop(active);
+
+    return this.cloneSnapshot(active.snapshot);
+  }
+
+  /**
+   * Mark persisted `running` runs as interrupted after process startup.
+   * These runs have no in-memory ActiveRun and cannot safely continue.
+   */
+  recoverInterruptedRuns(
+    workspaces: Array<{ id: string; rootPath?: string }>,
+    reason = 'Workflow runner restarted before the run completed.',
+  ): WorkflowRunSnapshot[] {
+    const recovered: WorkflowRunSnapshot[] = [];
+    for (const workspace of workspaces) {
+      const root = workspace.rootPath ?? this.deps.getWorkspaceRootPath(workspace.id);
+      for (const run of markRunningRunsInterrupted(root, reason)) {
+        recovered.push(this.cloneSnapshot(run));
+        this.emitEvent({ type: 'run.updated', run: this.cloneSnapshot(run) });
+        this.emitEvent({ type: 'run.completed', run: this.cloneSnapshot(run) });
+      }
+    }
+    return recovered;
+  }
+
+  /**
+   * Create a new run from an existing run snapshot, beginning at `stepId`
+   * or the first non-successful step. Successful step outputs before the
+   * start point are copied so later templates resolve against prior work.
+   */
+  async rerunFromStep(input: {
+    workspaceId: string;
+    runId: string;
+    stepId?: string;
+  }): Promise<WorkflowRunSnapshot> {
+    const root = this.deps.getWorkspaceRootPath(input.workspaceId);
+    const original = readRun(root, input.runId);
+    if (!original) throw new Error(`Workflow run not found: ${input.runId}`);
+    if (original.workspaceId !== input.workspaceId) {
+      throw new Error(`Workflow run "${input.runId}" does not belong to workspace "${input.workspaceId}".`);
+    }
+
+    const workflowSnapshot = this.cloneJson(original.workflowSnapshot);
+    const startIndex = this.resolveRerunStartIndex(original, input.stepId);
+    const startStep = workflowSnapshot.metadata.steps[startIndex]!;
+    const key = concurrencyKey(input.workspaceId, original.workflowSlug);
+    if (this.activeByKey.has(key)) {
+      throw new Error(
+        `Workflow "${original.workflowSlug}" already has an active run in workspace "${input.workspaceId}".`,
+      );
+    }
+
+    const now = new Date().toISOString();
+    const steps: WorkflowRunStep[] = workflowSnapshot.metadata.steps.map((step, index) => {
+      const previous = original.steps[index];
+      if (index < startIndex && previous?.state === 'succeeded') {
+        return this.cloneJson(previous);
+      }
+      if (index < startIndex) {
+        return {
+          id: step.id,
+          state: 'skipped',
+          attempts: previous?.attempts ?? 0,
+          error: {
+            code: 'rerun-skipped-prior-step',
+            message: `Step was before rerun start step "${startStep.id}" and had no successful output to copy.`,
+          },
+        };
+      }
+      return { id: step.id, state: 'queued', attempts: 0 };
+    });
+
+    const snapshot: WorkflowRunSnapshot = {
+      id: randomUUID(),
+      workflowSlug: original.workflowSlug,
+      workspaceId: input.workspaceId,
+      state: 'running',
+      trigger: this.cloneJson(original.trigger),
+      workflowSnapshot,
+      steps,
+      createdAt: now,
+      updatedAt: now,
+      resumeFromStepId: startStep.id,
+    };
+
+    const active: ActiveRun = { snapshot, abort: new AbortController(), startIndex };
+    this.active.set(snapshot.id, active);
+    this.activeByKey.set(key, snapshot.id);
+
+    try {
+      this.persist(active);
+    } catch (err) {
+      this.releaseActiveRun(active);
+      throw err;
+    }
+
+    this.emitEvent({ type: 'run.created', run: this.cloneSnapshot(active.snapshot) });
+    this.emitEvent({ type: 'run.updated', run: this.cloneSnapshot(active.snapshot) });
     void this.runStepLoop(active);
 
     return this.cloneSnapshot(active.snapshot);
@@ -262,7 +363,7 @@ export class WorkflowRunner {
     const workflow = active.snapshot.workflowSnapshot;
     let failed = false;
 
-    for (let i = 0; i < workflow.metadata.steps.length; i++) {
+    for (let i = active.startIndex; i < workflow.metadata.steps.length; i++) {
       if (active.abort.signal.aborted) break;
 
       const stepDef = workflow.metadata.steps[i]!;
@@ -634,5 +735,25 @@ export class WorkflowRunner {
 
   private isTerminal(state: WorkflowRunSnapshot['state']): boolean {
     return state === 'succeeded' || state === 'failed' || state === 'cancelled';
+  }
+
+  private resolveRerunStartIndex(original: WorkflowRunSnapshot, stepId: string | undefined): number {
+    if (stepId !== undefined) {
+      const index = original.workflowSnapshot.metadata.steps.findIndex((step) => step.id === stepId);
+      if (index === -1) throw new Error(`Workflow step not found in run snapshot: ${stepId}`);
+      return index;
+    }
+
+    const resumeStepId = original.resumeFromStepId;
+    if (resumeStepId) {
+      const index = original.workflowSnapshot.metadata.steps.findIndex((step) => step.id === resumeStepId);
+      if (index !== -1) return index;
+    }
+
+    const index = original.steps.findIndex((step) => step.state !== 'succeeded');
+    if (index === -1) {
+      throw new Error(`Workflow run "${original.id}" has no incomplete or failed step to rerun.`);
+    }
+    return index;
   }
 }

@@ -87,6 +87,50 @@ export function listRuns(workspaceRootPath: string): WorkflowRunSnapshot[] {
   return out;
 }
 
+/**
+ * Mark persisted running runs as interrupted after runner recovery detects
+ * orphaned execution. Returns the snapshots that were changed and persisted.
+ */
+export function markRunningRunsInterrupted(
+  workspaceRootPath: string,
+  reason: string,
+): WorkflowRunSnapshot[] {
+  const now = new Date().toISOString();
+  const interrupted: WorkflowRunSnapshot[] = [];
+
+  for (const run of listRuns(workspaceRootPath)) {
+    if (run.state !== 'running') continue;
+
+    const runningStep = run.steps.find((step) => step.state === 'running');
+    const next: WorkflowRunSnapshot = {
+      ...run,
+      state: 'interrupted',
+      completedAt: now,
+      interruptedAt: now,
+      interruptionReason: reason,
+      updatedAt: now,
+      resumeFromStepId: runningStep?.id ?? run.resumeFromStepId,
+      steps: run.steps.map((step) => {
+        if (step.state !== 'running') return step;
+        return {
+          ...step,
+          state: 'failed',
+          completedAt: now,
+          error: {
+            code: 'run-interrupted',
+            message: reason,
+          },
+        };
+      }),
+    };
+
+    writeRun(workspaceRootPath, next);
+    interrupted.push(next);
+  }
+
+  return interrupted;
+}
+
 /** Delete a run's directory. Returns true when something was removed. */
 export function deleteRun(workspaceRootPath: string, runId: string): boolean {
   const dir = getRunDir(workspaceRootPath, runId);

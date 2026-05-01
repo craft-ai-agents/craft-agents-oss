@@ -221,6 +221,7 @@ export function RunStateDot({ state }: { state: WorkflowRunState }) {
       case 'running': return 'bg-amber-500 animate-pulse'
       case 'succeeded': return 'bg-emerald-500'
       case 'failed': return 'bg-red-500'
+      case 'interrupted': return 'bg-orange-500'
       case 'cancelled': return 'bg-zinc-400'
       case 'paused': return 'bg-blue-500'
       case 'queued':
