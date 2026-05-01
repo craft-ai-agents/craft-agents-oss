@@ -1,0 +1,20 @@
+{
+  "id": "notebooklm_10742a3a",
+  "name": "NotebookLM",
+  "slug": "notebooklm",
+  "enabled": true,
+  "provider": "notebooklm",
+  "type": "mcp",
+  "icon": "📓",
+  "tagline": "Query and manage Google NotebookLM notebooks through a local MCP browser automation server",
+  "mcp": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "notebooklm-mcp@latest"],
+    "authType": "none"
+  },
+  "connectionStatus": "connected",
+  "isAuthenticated": true,
+  "createdAt": 1777613786000,
+  "updatedAt": 1777613786000
+}

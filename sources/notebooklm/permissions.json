@@ -1,0 +1,28 @@
+{
+  "allowedMcpPatterns": [
+    {
+      "pattern": "get_health",
+      "comment": "Check NotebookLM MCP server health"
+    },
+    {
+      "pattern": "list_notebooks",
+      "comment": "List saved NotebookLM notebook links"
+    },
+    {
+      "pattern": "get_notebook",
+      "comment": "Read details for a saved NotebookLM notebook"
+    },
+    {
+      "pattern": "search_notebooks",
+      "comment": "Search saved NotebookLM notebooks"
+    },
+    {
+      "pattern": "ask_question",
+      "comment": "Ask grounded questions against selected/shared NotebookLM notebooks"
+    },
+    {
+      "pattern": "select_notebook",
+      "comment": "Select the active notebook for follow-up questions"
+    }
+  ]
+}
