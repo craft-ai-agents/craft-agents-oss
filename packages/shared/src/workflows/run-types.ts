@@ -12,6 +12,36 @@
  */
 
 import type { WorkflowMetadata } from './types.ts';
+import type { PermissionMode } from '../agent/mode-types.ts';
+import type { ThinkingLevel } from '../agent/thinking-levels.ts';
+
+/** Compact per-step receipt of the agent bundle used to execute a step. */
+export interface WorkflowStepExecutionReceipt {
+  createdAt: string;
+  agent: {
+    slug: string;
+    name?: string;
+  };
+  config: {
+    model?: string;
+    llmConnection?: string;
+    permissionMode?: PermissionMode;
+    thinkingLevel?: ThinkingLevel;
+  };
+  injected: {
+    skills: string[];
+    sources: string[];
+    contextDocs: {
+      count: number;
+      docs: Array<{ slug: string; name: string }>;
+    };
+    systemPromptChars?: number;
+  };
+  prompt: {
+    chars: number;
+    sha256: string;
+  };
+}
 
 /** Run-level lifecycle. See `02-runtime.md` for the state diagram. */
 export type WorkflowRunState =
@@ -44,6 +74,8 @@ export interface WorkflowRunStep {
   state: WorkflowRunStepState;
   /** Session spawned to execute this step. Set once `running`. */
   sessionId?: string;
+  /** Compact receipt of the resolved agent bundle used for this step. */
+  executionReceipt?: WorkflowStepExecutionReceipt;
   startedAt?: string;
   completedAt?: string;
   /** Phase 1: last assistant text. Phase 2: parsed JSON when outputSchema set. */

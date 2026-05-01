@@ -49,6 +49,12 @@ describe('resolveTemplate', () => {
     expect(got.warnings.length).toBe(1);
   });
 
+  test('trigger references do not accept dot paths', () => {
+    const got = resolveTemplate('hi {{trigger.topic.name}}', { trigger: { topic: 'AI' } });
+    expect(got.output).toBe('hi ');
+    expect(got.warnings).toEqual(['"{{trigger.topic.name}}" must be trigger.<field>']);
+  });
+
   test('unknown step → empty string + warning', () => {
     const got = resolveTemplate('{{steps.nope.output}}', { steps: {} });
     expect(got.output).toBe('');
@@ -87,6 +93,11 @@ describe('validateTemplateReferences', () => {
   test('flags unknown trigger inputs', () => {
     const errs = validateTemplateReferences('{{trigger.unknown}}', [], []);
     expect(errs.length).toBe(1);
+  });
+
+  test('flags trigger dot paths', () => {
+    const errs = validateTemplateReferences('{{trigger.topic.name}}', [], ['topic']);
+    expect(errs).toEqual(['"{{trigger.topic.name}}" must be trigger.<field>']);
   });
 
   test('flags forward / unknown step references', () => {

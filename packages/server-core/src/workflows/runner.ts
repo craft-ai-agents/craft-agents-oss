@@ -21,7 +21,7 @@
  * and lets the wire-up live in the bootstrap layer.
  */
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { CreateSessionOptions } from '@craft-agent/shared/protocol';
 import {
   appendOutputSchemaInstruction,
@@ -34,6 +34,7 @@ import {
   type WorkflowStep,
   type WorkflowRunSnapshot,
   type WorkflowRunStep,
+  type WorkflowStepExecutionReceipt,
 } from '@craft-agent/shared/workflows';
 
 /**
@@ -132,6 +133,8 @@ class StepAttemptError extends Error {
 function concurrencyKey(workspaceId: string, workflowSlug: string): string {
   return `${workspaceId}::${workflowSlug}`;
 }
+
+const MAX_RECEIPT_CONTEXT_DOCS = 20;
 
 export class WorkflowRunner {
   private readonly active = new Map<string /* runId */, ActiveRun>();
@@ -409,6 +412,7 @@ export class WorkflowRunner {
         stepRecord.output = undefined;
         stepRecord.completion = undefined;
         stepRecord.sessionId = undefined;
+        stepRecord.executionReceipt = undefined;
         stepRecord.completedAt = undefined;
         this.touch(active);
 
@@ -499,6 +503,10 @@ export class WorkflowRunner {
       active.snapshot.workspaceId,
       stepDef.agent,
     ) ?? {};
+    const stepPrompt = this.buildStepPrompt(prompt, stepDef);
+    stepRecord.executionReceipt = this.buildExecutionReceipt(stepDef, agentOptions, stepPrompt);
+    this.touch(active);
+
     const session = await this.deps.createSession(active.snapshot.workspaceId, {
       ...agentOptions,
       name: `${workflow.metadata.name} · ${stepDef.id}`,
@@ -532,7 +540,6 @@ export class WorkflowRunner {
 
     if (active.abort.signal.aborted) return;
 
-    const stepPrompt = this.buildStepPrompt(prompt, stepDef);
     await this.sendMessageWithOptionalTimeout(active, session.id, stepPrompt, stepDef.timeout);
 
     if (active.abort.signal.aborted) return;
@@ -549,6 +556,41 @@ export class WorkflowRunner {
       throw new StepAttemptError('invalid-structured-output', parsed.message);
     }
     stepRecord.output = parsed.value;
+  }
+
+  private buildExecutionReceipt(
+    stepDef: WorkflowStep,
+    agentOptions: Partial<CreateSessionOptions>,
+    prompt: string,
+  ): WorkflowStepExecutionReceipt {
+    const receipt = agentOptions.launchReceipt;
+    const contextDocs = receipt?.injected.contextDocs ?? [];
+    return {
+      createdAt: new Date().toISOString(),
+      agent: {
+        slug: agentOptions.spawnedFromAgent?.agentSlug ?? receipt?.agent?.slug ?? stepDef.agent,
+        name: agentOptions.spawnedFromAgent?.agentName ?? receipt?.agent?.name,
+      },
+      config: {
+        model: agentOptions.model ?? receipt?.config.model,
+        llmConnection: agentOptions.llmConnection ?? receipt?.config.llmConnection,
+        permissionMode: agentOptions.permissionMode ?? receipt?.config.permissionMode,
+        thinkingLevel: agentOptions.thinkingLevel ?? receipt?.config.thinkingLevel,
+      },
+      injected: {
+        skills: receipt?.injected.skills ?? agentOptions.agentSkillSlugs ?? [],
+        sources: receipt?.injected.sources ?? agentOptions.enabledSourceSlugs ?? [],
+        contextDocs: {
+          count: contextDocs.length,
+          docs: contextDocs.slice(0, MAX_RECEIPT_CONTEXT_DOCS).map((doc) => ({ slug: doc.slug, name: doc.name })),
+        },
+        systemPromptChars: receipt?.injected.systemPromptChars ?? agentOptions.customSystemPrompt?.length,
+      },
+      prompt: {
+        chars: prompt.length,
+        sha256: createHash('sha256').update(prompt).digest('hex'),
+      },
+    };
   }
 
   private buildStepPrompt(prompt: string, stepDef: WorkflowStep): string {

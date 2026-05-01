@@ -258,6 +258,43 @@ describe('parseWorkflowFile', () => {
     expect(parseWorkflowFile(text)).toBeNull();
   });
 
+  test('returns null on trigger inputs without names', () => {
+    const text = [
+      '---',
+      'name: A',
+      'description: B',
+      'trigger:',
+      '  type: manual',
+      '  inputs:',
+      '    - type: string',
+      'steps:',
+      '  - id: first',
+      '    agent: r',
+      '    input: hi',
+      '---',
+    ].join('\n');
+    expect(parseWorkflowFile(text)).toBeNull();
+  });
+
+  test('returns null on unsupported trigger input types', () => {
+    const text = [
+      '---',
+      'name: A',
+      'description: B',
+      'trigger:',
+      '  type: manual',
+      '  inputs:',
+      '    - name: topic',
+      '      type: object',
+      'steps:',
+      '  - id: first',
+      '    agent: r',
+      '    input: "{{trigger.topic}}"',
+      '---',
+    ].join('\n');
+    expect(parseWorkflowFile(text)).toBeNull();
+  });
+
   test('returns null on trigger input names that cannot be referenced', () => {
     const text = [
       '---',
@@ -267,6 +304,25 @@ describe('parseWorkflowFile', () => {
       '  type: manual',
       '  inputs:',
       '    - name: topic.name',
+      '      type: string',
+      'steps:',
+      '  - id: first',
+      '    agent: r',
+      '    input: "{{trigger.topic.name}}"',
+      '---',
+    ].join('\n');
+    expect(parseWorkflowFile(text)).toBeNull();
+  });
+
+  test('returns null on trigger references with extra path segments', () => {
+    const text = [
+      '---',
+      'name: A',
+      'description: B',
+      'trigger:',
+      '  type: manual',
+      '  inputs:',
+      '    - name: topic',
       '      type: string',
       'steps:',
       '  - id: first',

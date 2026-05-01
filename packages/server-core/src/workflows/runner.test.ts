@@ -8,6 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -100,11 +101,30 @@ function makeHarness(opts: { stepOutputs?: string[] } = {}): MockHarness {
       customSystemPrompt: `persona:${agentSlug}`,
       agentSkillSlugs: [`${agentSlug}-skill`],
       enabledSourceSlugs: [`${agentSlug}-source`],
+      llmConnection: `${agentSlug}-conn`,
+      model: `${agentSlug}-model`,
       permissionMode: 'safe',
+      thinkingLevel: 'high',
       spawnedFromAgent: {
         agentSlug,
         agentName: `Agent ${agentSlug}`,
         timestamp: 1,
+      },
+      launchReceipt: {
+        createdAt: 1,
+        origin: 'agent',
+        agent: {
+          slug: agentSlug,
+          name: `Agent ${agentSlug}`,
+          description: `Agent ${agentSlug} description`,
+        },
+        config: {},
+        injected: {
+          systemPromptChars: `persona:${agentSlug}`.length,
+          skills: [`${agentSlug}-skill`],
+          sources: [`${agentSlug}-source`],
+          contextDocs: [{ slug: `${agentSlug}-doc`, name: `${agentSlug} Doc` }],
+        },
       },
     }),
     sendMessage: async (sessionId, prompt) => {
@@ -213,6 +233,50 @@ describe('WorkflowRunner', () => {
     expect(onDisk).not.toBeNull();
     expect(onDisk!.state).toBe('succeeded');
     expect(onDisk!.steps[1]!.output).toBe('STEP_TWO_OUT');
+  });
+
+  test('workflow step records a compact agent execution receipt', async () => {
+    const h = makeHarness({ stepOutputs: ['RECEIPT_OUT'] });
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [{ id: 'first', agent: 'researcher', input: 'Research {{trigger.topic}}' }],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'observability' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const completed = lastCompleted(h.events)!;
+    const receipt = completed.steps[0]!.executionReceipt;
+    expect(receipt).toMatchObject({
+      agent: { slug: 'researcher', name: 'Agent researcher' },
+      config: {
+        model: 'researcher-model',
+        llmConnection: 'researcher-conn',
+        permissionMode: 'safe',
+        thinkingLevel: 'high',
+      },
+      injected: {
+        skills: ['researcher-skill'],
+        sources: ['researcher-source'],
+        contextDocs: {
+          count: 1,
+          docs: [{ slug: 'researcher-doc', name: 'researcher Doc' }],
+        },
+        systemPromptChars: 'persona:researcher'.length,
+      },
+    });
+    expect(receipt?.prompt.chars).toBe(h.promptsSent[0]!.prompt.length);
+    expect(receipt?.prompt.sha256).toBe(
+      createHash('sha256').update(h.promptsSent[0]!.prompt).digest('hex'),
+    );
+    expect(JSON.stringify(receipt)).not.toContain('persona:researcher');
+
+    const onDisk = readRun(workspaceRoot, completed.id);
+    expect(onDisk?.steps[0]!.executionReceipt).toEqual(receipt);
   });
 
   test('cancel mid-run: run is cancelled and active session is aborted exactly once', async () => {

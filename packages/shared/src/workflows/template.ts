@@ -58,6 +58,7 @@ function resolveToken(expr: string, ctx: TemplateContext): { ok: true; value: st
   if (head === 'trigger') {
     const field = parts[1];
     if (field === undefined) return { ok: false, reason: `"{{${expr}}}" is missing a field name` };
+    if (parts.length !== 2) return { ok: false, reason: `"{{${expr}}}" must be trigger.<field>` };
     if (!ctx.trigger || !(field in ctx.trigger)) {
       return { ok: false, reason: `unknown trigger field "${field}"` };
     }
@@ -133,6 +134,10 @@ export function validateTemplateReferences(
       const field = parts[1];
       if (!field) {
         errors.push(`"{{${expr}}}" is missing a field name`);
+        continue;
+      }
+      if (parts.length !== 2) {
+        errors.push(`"{{${expr}}}" must be trigger.<field>`);
         continue;
       }
       if (!triggerSet.has(field)) {

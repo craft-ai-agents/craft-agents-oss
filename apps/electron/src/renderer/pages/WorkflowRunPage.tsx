@@ -400,6 +400,7 @@ function StepCard({
             ['Timeout', stepDef?.timeout != null ? `${stepDef.timeout}s` : undefined],
             ['Failure', stepDef?.onFailure],
             ['Completion', formatCompletionSummary(step.completion)],
+            ['Agent receipt', formatExecutionReceiptSummary(step.executionReceipt)],
             ['Session', step.sessionId],
           ]}
         />
@@ -430,6 +431,7 @@ function StepCard({
         </div>
       )}
       <div className="mt-2 ml-7 flex flex-col gap-1.5">
+        <DetailBlock title="Agent execution receipt" value={step.executionReceipt} />
         <DetailBlock title="Resolved input / prompt" value={resolvedInput} defaultOpen={!!resolvedInput && step.state !== 'queued'} />
         {stepDef?.input && stepDef.input !== resolvedInput && (
           <DetailBlock title="Input template" value={stepDef.input} />
@@ -612,6 +614,17 @@ function formatCompletionSummary(completion: WorkflowRunStep['completion']): str
   if (completion.toolUseCount !== undefined) {
     parts.push(`${completion.toolUseCount} tools`)
   }
+  return parts.join(' · ')
+}
+
+function formatExecutionReceiptSummary(receipt: WorkflowRunStep['executionReceipt']): string | undefined {
+  if (!receipt) return undefined
+  const parts = [
+    receipt.agent.name || receipt.agent.slug,
+    receipt.config.model,
+    receipt.config.permissionMode,
+    receipt.prompt.sha256 ? `sha256:${receipt.prompt.sha256.slice(0, 12)}` : undefined,
+  ].filter(Boolean)
   return parts.join(' · ')
 }
 

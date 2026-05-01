@@ -65,6 +65,7 @@ export {
 export type {
   WorkflowRunState,
   WorkflowRunStepState,
+  WorkflowStepExecutionReceipt,
   WorkflowRunStep,
   WorkflowRunSnapshot,
 } from './run-types.ts';

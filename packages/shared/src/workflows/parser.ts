@@ -37,17 +37,23 @@ function coerceTriggerInputs(
   const out: WorkflowTriggerInput[] = [];
   const seenNames = new Set<string>();
   for (const entry of raw) {
-    if (!entry || typeof entry !== 'object') continue;
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      return null;
+    }
     const e = entry as Record<string, unknown>;
     const name = typeof e.name === 'string' ? e.name.trim() : '';
-    if (!name) continue;
+    if (!name) {
+      return null;
+    }
     if (!TRIGGER_INPUT_NAME_REGEX.test(name) || seenNames.has(name)) {
       return null;
     }
     seenNames.add(name);
-    const type = typeof e.type === 'string' && (VALID_INPUT_TYPES as ReadonlyArray<string>).includes(e.type)
-      ? (e.type as WorkflowTriggerInput['type'])
-      : 'string';
+    const typeRaw = e.type ?? 'string';
+    if (typeof typeRaw !== 'string' || !(VALID_INPUT_TYPES as ReadonlyArray<string>).includes(typeRaw)) {
+      return null;
+    }
+    const type = typeRaw as WorkflowTriggerInput['type'];
     const input: WorkflowTriggerInput = { name, type };
     if (typeof e.required === 'boolean') input.required = e.required;
     if (e.default !== undefined) input.default = e.default;

@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/button'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../shared/routes'
 import { useWorkflows } from '@/hooks/useWorkflows'
+import { useAgents } from '@/hooks/useAgents'
+import { Info_Badge } from '@/components/info/Info_Badge'
 import { parseWorkflowFile, serializeWorkflow } from '@craft-agent/shared/workflows/parser'
-import type { WorkflowDTO } from '../../shared/types'
+import type { AgentDefinitionDTO, WorkflowDTO } from '../../shared/types'
 
 interface Props {
   workflowSlug: string
@@ -23,6 +25,7 @@ export default function WorkflowEditPage({ workflowSlug, workspaceId }: Props) {
   const { t } = useTranslation()
   const { navigate } = useNavigation()
   const { upsert } = useWorkflows(workspaceId)
+  const { allAgents, activeSlugs, loading: agentsLoading, error: agentsError } = useAgents(workspaceId)
   const [text, setText] = React.useState<string>('')
   const [originalSlug, setOriginalSlug] = React.useState<string>('')
   const [parseError, setParseError] = React.useState<string | null>(null)
@@ -64,6 +67,34 @@ export default function WorkflowEditPage({ workflowSlug, workspaceId }: Props) {
     if (!text) { setParseError(null); return }
     setParseError(parsed ? null : t('workflows.editor.parseError'))
   }, [parsed, text, t])
+
+  const agentBySlug = React.useMemo(() => {
+    return new Map(allAgents.map((agent) => [agent.slug, agent]))
+  }, [allAgents])
+
+  const activeAgentSlugs = React.useMemo(() => new Set(activeSlugs), [activeSlugs])
+  const stepAgentIssues = React.useMemo(() => {
+    if (agentsLoading || agentsError) return []
+    if (!parsed) return []
+    return parsed.metadata.steps.flatMap((step) => {
+      const agent = agentBySlug.get(step.agent)
+      if (!agent) {
+        return [{
+          stepId: step.id,
+          agentSlug: step.agent,
+          message: `Step "${step.id}" references @${step.agent}, which is not in the global agent library.`,
+        }]
+      }
+      if (!activeAgentSlugs.has(step.agent)) {
+        return [{
+          stepId: step.id,
+          agentSlug: step.agent,
+          message: `Step "${step.id}" uses @${step.agent}, but that agent is not active in this workspace.`,
+        }]
+      }
+      return []
+    })
+  }, [activeAgentSlugs, agentBySlug, agentsError, agentsLoading, parsed])
 
   const handleSave = async () => {
     if (!parsed) {
@@ -124,12 +155,31 @@ export default function WorkflowEditPage({ workflowSlug, workspaceId }: Props) {
             <span>{parseError}</span>
           </div>
         )}
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          spellCheck={false}
-          className="w-full flex-1 min-h-[400px] resize-none font-mono text-xs rounded-md border border-border/40 bg-background p-3 outline-none focus:border-primary/40"
-        />
+        {stepAgentIssues.length > 0 && (
+          <div className="rounded-md border border-border/40 bg-foreground/[0.03] p-2 text-xs text-foreground flex flex-col gap-1.5">
+            {stepAgentIssues.map((issue) => (
+              <div key={`${issue.stepId}:${issue.agentSlug}`} className="flex items-center gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                <span>{issue.message}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="grid flex-1 min-h-[400px] gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            spellCheck={false}
+            className="w-full min-h-[400px] resize-none font-mono text-xs rounded-md border border-border/40 bg-background p-3 outline-none focus:border-primary/40"
+          />
+          <WorkflowAgentCapabilitiesPanel
+            parsed={parsed}
+            agentBySlug={agentBySlug}
+            activeAgentSlugs={activeAgentSlugs}
+            loading={agentsLoading}
+            error={agentsError}
+          />
+        </div>
 
         <details className="text-xs text-muted-foreground">
           <summary className="cursor-pointer select-none hover:text-foreground">
@@ -142,6 +192,140 @@ export default function WorkflowEditPage({ workflowSlug, workspaceId }: Props) {
           </div>
         </details>
       </div>
+    </div>
+  )
+}
+
+type ParsedWorkflow = NonNullable<ReturnType<typeof parseWorkflowFile>>
+
+interface WorkflowAgentCapabilitiesPanelProps {
+  parsed: ParsedWorkflow | null
+  agentBySlug: Map<string, AgentDefinitionDTO>
+  activeAgentSlugs: Set<string>
+  loading: boolean
+  error: string | null
+}
+
+function WorkflowAgentCapabilitiesPanel({
+  parsed,
+  agentBySlug,
+  activeAgentSlugs,
+  loading,
+  error,
+}: WorkflowAgentCapabilitiesPanelProps) {
+  const steps = parsed?.metadata.steps ?? []
+
+  return (
+    <aside className="rounded-md border border-border/40 bg-foreground/[0.02] p-3 text-xs">
+      <div className="mb-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Agent capabilities
+        </h2>
+        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+          Read-only hints from saved agents used by this workflow.
+        </p>
+      </div>
+
+      {loading && (
+        <p className="text-muted-foreground">Loading agents...</p>
+      )}
+      {error && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-destructive flex items-center gap-2">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          <span>{error}</span>
+        </div>
+      )}
+      {!loading && !error && !parsed && (
+        <p className="text-muted-foreground">Fix the workflow syntax to preview step agents.</p>
+      )}
+      {!loading && !error && parsed && steps.length === 0 && (
+        <p className="text-muted-foreground">No steps declared.</p>
+      )}
+      {!loading && !error && parsed && steps.length > 0 && (
+        <ol className="flex flex-col gap-2">
+          {steps.map((step, index) => {
+            const agent = agentBySlug.get(step.agent)
+            const isActive = activeAgentSlugs.has(step.agent)
+            return (
+              <li key={step.id} className="rounded-md border border-border/40 bg-background/70 p-2.5">
+                <div className="flex items-start gap-2">
+                  <span className="mt-0.5 w-5 shrink-0 text-muted-foreground">{index + 1}.</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <code className="font-mono text-[11px] text-foreground">{step.id}</code>
+                      <code className="font-mono text-[11px] text-muted-foreground">@{step.agent}</code>
+                      {!agent && <Info_Badge color="destructive">missing</Info_Badge>}
+                      {agent && !isActive && <Info_Badge color="warning">inactive</Info_Badge>}
+                    </div>
+                    {agent ? (
+                      <AgentCapabilitySummary agent={agent} />
+                    ) : (
+                      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                        Add this agent to the global library, or change the step to an existing active agent.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </li>
+            )
+          })}
+        </ol>
+      )}
+    </aside>
+  )
+}
+
+function AgentCapabilitySummary({ agent }: { agent: AgentDefinitionDTO }) {
+  const hasCapabilities = Boolean(
+    agent.metadata.inputs ||
+    agent.metadata.outputs ||
+    (agent.metadata.tags?.length ?? 0) > 0
+  )
+
+  return (
+    <div className="mt-2 flex flex-col gap-2">
+      <div className="min-w-0">
+        <div className="truncate text-sm font-medium">
+          {agent.metadata.avatar?.trim() && <span className="mr-1.5">{agent.metadata.avatar.trim()}</span>}
+          {agent.metadata.name}
+        </div>
+        {agent.metadata.description && (
+          <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+            {agent.metadata.description}
+          </p>
+        )}
+      </div>
+
+      {hasCapabilities ? (
+        <dl className="grid grid-cols-[52px_1fr] gap-x-2 gap-y-1.5 text-[11px] leading-relaxed">
+          {agent.metadata.inputs && (
+            <>
+              <dt className="text-muted-foreground">Takes</dt>
+              <dd>{agent.metadata.inputs}</dd>
+            </>
+          )}
+          {agent.metadata.outputs && (
+            <>
+              <dt className="text-muted-foreground">Makes</dt>
+              <dd>{agent.metadata.outputs}</dd>
+            </>
+          )}
+          {agent.metadata.tags && agent.metadata.tags.length > 0 && (
+            <>
+              <dt className="text-muted-foreground">Tags</dt>
+              <dd className="flex flex-wrap gap-1">
+                {agent.metadata.tags.map((tag) => (
+                  <Info_Badge key={tag} color="muted" className="px-2 py-0.5 text-[11px]">
+                    #{tag}
+                  </Info_Badge>
+                ))}
+              </dd>
+            </>
+          )}
+        </dl>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">No capabilities declared for this agent.</p>
+      )}
     </div>
   )
 }
