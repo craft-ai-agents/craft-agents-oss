@@ -69,6 +69,7 @@ interface SessionRecord {
   output: string;
   aborted: boolean;
   options: unknown;
+  toolUseCount: number;
 }
 
 interface MockHarness {
@@ -91,7 +92,7 @@ function makeHarness(opts: { stepOutputs?: string[] } = {}): MockHarness {
     createSession: async (_workspaceId, _options) => {
       const id = `sess-${sessions.size + 1}`;
       const output = opts.stepOutputs?.[sessions.size] ?? `output-${sessions.size + 1}`;
-      sessions.set(id, { id, prompts: [], output, aborted: false, options: _options });
+      sessions.set(id, { id, prompts: [], output, aborted: false, options: _options, toolUseCount: 0 });
       return { id };
     },
     resolveAgentSessionOptions: async (_workspaceId, agentSlug) => ({
@@ -117,6 +118,9 @@ function makeHarness(opts: { stepOutputs?: string[] } = {}): MockHarness {
     getLastAssistantText: (sessionId) => {
       const rec = sessions.get(sessionId);
       return rec?.output ?? '';
+    },
+    getSessionToolUseCount: (sessionId) => {
+      return sessions.get(sessionId)?.toolUseCount ?? 0;
     },
     abortSession: async (sessionId) => {
       const rec = sessions.get(sessionId);
@@ -200,8 +204,8 @@ describe('WorkflowRunner', () => {
 
     // Templater threading: step 1 received the trigger input, step 2
     // received step 1's output substituted into its prompt.
-    expect(h.promptsSent[0]!.prompt).toBe('Research cats');
-    expect(h.promptsSent[1]!.prompt).toBe('Write about: STEP_ONE_OUT');
+    expect(h.promptsSent[0]!.prompt).toStartWith('Research cats');
+    expect(h.promptsSent[1]!.prompt).toStartWith('Write about: STEP_ONE_OUT');
 
     // Persisted to disk.
     const onDisk = readRun(workspaceRoot, completed.id);
@@ -309,7 +313,7 @@ describe('WorkflowRunner', () => {
     expect(completed.steps[0]!.error).toEqual({ code: 'step-threw', message: 'recoverable' });
     expect(completed.steps[1]!.state).toBe('succeeded');
     expect(completed.steps[1]!.output).toBe('RECOVERED');
-    expect(h.promptsSent.map((p) => p.prompt)).toEqual(['Research t', 'Write fallback']);
+    expect(h.promptsSent.map((p) => p.prompt.split('\n\n---\n\n')[0])).toEqual(['Research t', 'Write fallback']);
 
     expect(findUpdatedDetail(h.events, 'step.failed')).toMatchObject({
       kind: 'step.failed',
@@ -395,7 +399,7 @@ describe('WorkflowRunner', () => {
     expect(completed.steps[0]!.output).toEqual({ title: 'Reliable workflows', count: 2 });
     expect(h.promptsSent[0]!.prompt).toContain('Return only JSON');
     expect(h.promptsSent[0]!.prompt).toContain('"title"');
-    expect(h.promptsSent[1]!.prompt).toBe('Write about: Reliable workflows');
+    expect(h.promptsSent[1]!.prompt).toStartWith('Write about: Reliable workflows');
   });
 
   test('structured output retries after invalid JSON and records attempt count', async () => {
@@ -600,6 +604,79 @@ describe('WorkflowRunner', () => {
     await waitFor(() => lastCompleted(h.events) !== undefined);
     const completed = lastCompleted(h.events)!;
     expect(completed.workflowSnapshot.metadata.name).toBe('Test');
-    expect(h.promptsSent[1]!.prompt).toBe('Write about: ONE');
+    expect(h.promptsSent[1]!.prompt).toStartWith('Write about: ONE');
+  });
+
+  test('workflow step sessions are hidden from the main session list', async () => {
+    const h = makeHarness();
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow({ steps: [{ id: 'first', agent: 'researcher', input: 'Research {{trigger.topic}}' }] }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'hidden' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+    expect((h.sessions.get('sess-1')!.options as { hidden?: boolean }).hidden).toBe(true);
+  });
+
+  test('completion contract fails a step that does not use tools when required', async () => {
+    const h = makeHarness({ stepOutputs: ['Draft text'] });
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [{
+          id: 'first',
+          agent: 'researcher',
+          input: 'Research {{trigger.topic}}',
+          completion: { requireToolUse: true },
+        }],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'tool gate' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+    const completed = lastCompleted(h.events)!;
+    expect(completed.state).toBe('failed');
+    expect(completed.steps[0]!.error?.code).toBe('completion-tool-use-required');
+    expect(completed.steps[0]!.completion).toEqual({
+      outputChars: 'Draft text'.length,
+      toolUseCount: 0,
+      satisfied: false,
+    });
+    expect(h.promptsSent[0]!.prompt).toContain('You must use at least one available tool');
+  });
+
+  test('completion contract accepts a step with required tool use and enough output', async () => {
+    const h = makeHarness({ stepOutputs: ['A sufficiently detailed result'] });
+    h.setStepBehavior(0, async (record) => {
+      record.toolUseCount = 1;
+    });
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [{
+          id: 'first',
+          agent: 'researcher',
+          input: 'Research {{trigger.topic}}',
+          completion: { requireToolUse: true, minOutputChars: 10 },
+        }],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'tool gate' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+    const completed = lastCompleted(h.events)!;
+    expect(completed.state).toBe('succeeded');
+    expect(completed.steps[0]!.completion).toEqual({
+      outputChars: 'A sufficiently detailed result'.length,
+      toolUseCount: 1,
+      satisfied: true,
+    });
   });
 });

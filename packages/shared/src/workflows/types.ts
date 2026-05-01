@@ -55,6 +55,15 @@ export type JsonSchema = Record<string, unknown>;
 
 export type WorkflowStepFailurePolicy = 'stop' | 'continue' | 'ask';
 
+export interface WorkflowStepCompletionContract {
+  /** Defaults to true. Set false only for steps where an empty answer is acceptable. */
+  requireNonEmptyOutput?: boolean;
+  /** Minimum final assistant-output length after trimming. */
+  minOutputChars?: number;
+  /** Require the step session to have used at least one tool before completing. */
+  requireToolUse?: boolean;
+}
+
 /**
  * One step in the pipeline. Later phase fields are only added here once the
  * runner actually honors them.
@@ -76,6 +85,8 @@ export interface WorkflowStep {
   retries?: number;
   /** What to do after all attempts fail. Defaults to `stop`; `ask` is parsed for future checkpoint support. */
   onFailure?: WorkflowStepFailurePolicy;
+  /** Conditions the runner enforces before accepting the step as complete. */
+  completion?: WorkflowStepCompletionContract;
 }
 
 export interface WorkflowMetadata {
@@ -95,7 +106,8 @@ export type WorkflowParseWarningCode =
   | 'invalid-step-output-schema'
   | 'invalid-step-timeout'
   | 'invalid-step-retries'
-  | 'invalid-step-on-failure';
+  | 'invalid-step-on-failure'
+  | 'invalid-step-completion';
 
 export interface WorkflowParseWarning {
   field: keyof WorkflowMetadata | 'step';

@@ -36,6 +36,9 @@ steps:
       Research {{trigger.topic}}. Cite primary sources.
     timeout: 300          # optional, seconds
     retries: 1            # optional, non-negative integer
+    completion:           # optional completion gate
+      requireToolUse: true
+      minOutputChars: 200
   - id: draft
     agent: writer
     input: |
@@ -81,7 +84,18 @@ Notes for humans go in the body — when to run this, what good output looks lik
 | `outputSchema` | JSON Schema | no | If set, the step's session is asked to emit JSON matching this schema. The schema must be an object with a top-level `type`. |
 | `timeout` | number (seconds) | no | Step session is aborted and the attempt fails if it exceeds this positive duration. |
 | `retries` | number | no | Non-negative integer. How many times to retry after a failed attempt. Default 0. |
-| `onFailure` | `stop` \| `continue` \| `ask` | no | Parsed for compatibility, but the current runner stops the workflow after exhausted retries. Prefer omitting or using `stop` until non-stop policies are implemented. |
+| `onFailure` | `stop` \| `continue` \| `ask` | no | What happens after exhausted retries. `stop` fails the run, `continue` records the failed step and runs later steps, `ask` currently stops until human checkpoint support lands. |
+| `completion` | object | no | Completion contract enforced after the agent turn. See below. |
+
+### Completion contract
+
+`completion` prevents workflow steps from succeeding after a mere acknowledgement.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `requireNonEmptyOutput` | boolean | no | Defaults to `true`. Set `false` only for unusual steps where empty output is acceptable. |
+| `minOutputChars` | number | no | Non-negative integer. Final assistant output must be at least this many characters. |
+| `requireToolUse` | boolean | no | If true, the step session must record at least one successful tool result before completion. |
 
 Unsupported step fields today: `when`, `humanCheckpoint`, and `parallelGroup`.
 
@@ -123,6 +137,7 @@ A `WORKFLOW.md` is invalid (and the runner refuses to start) if any of:
 - `timeout` is present but is not a positive number
 - `retries` is present but is not a non-negative integer
 - `onFailure` is present but is not `stop`, `continue`, or `ask`
+- `completion` is present but is not an object, or its fields have invalid types
 
 Validation runs at write time (in the editor) and again at the start of every run. UI surfaces the error inline; the runner refuses to start with a clear message.
 

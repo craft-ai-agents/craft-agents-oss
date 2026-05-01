@@ -57,13 +57,16 @@ Match the parser and runner in `packages/shared/src/workflows/` and
 - Trigger inputs: `name`, `type` (`string`, `number`, `boolean`), optional
   `required`, `default`, `description`.
 - Step fields: `id`, `agent`, `input`, optional `description`, `outputSchema`,
-  `timeout`, `retries`, `onFailure`.
+  `timeout`, `retries`, `onFailure`, `completion`.
 - `outputSchema` must be a JSON Schema object with at least a top-level `type`.
 - `timeout` is positive seconds.
 - `retries` is a non-negative integer.
-- `onFailure` parses as `stop`, `continue`, or `ask`, but the current runner
-  still stops the workflow after exhausted retries. Prefer omitting it or using
-  `stop` until non-stop policies are implemented.
+- `onFailure` parses as `stop`, `continue`, or `ask`. `stop` fails the run,
+  `continue` records the failed step and proceeds, and `ask` stops until human
+  checkpoint support lands.
+- `completion` may include `requireNonEmptyOutput`, `minOutputChars`, and
+  `requireToolUse`. Use it when the step should not succeed after a mere
+  acknowledgement.
 
 Unsupported today: schedule/webhook/automation workflow triggers, `when`,
 `humanCheckpoint`, `parallelGroup`, loops, branches, and sub-workflows.
@@ -75,7 +78,8 @@ Ask only the missing pieces:
 1. **Outcome** — what final artifact should the workflow produce?
 2. **Run inputs** — what fields should the user fill in on the Run page?
 3. **Steps** — which agents run, in what order, and what each receives?
-4. **Reliability** — does any step need structured JSON output, timeout, or retry?
+4. **Reliability** — does any step need tool use, a minimum-length answer,
+   structured JSON output, timeout, or retry?
 
 If the user already supplied enough detail, draft immediately.
 

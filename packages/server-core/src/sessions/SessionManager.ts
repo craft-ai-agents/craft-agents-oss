@@ -1884,6 +1884,11 @@ export class SessionManager implements ISessionManager {
           }
           return ''
         },
+        getSessionToolUseCount: (sessionId) => {
+          const managed = this.sessions.get(sessionId)
+          if (!managed) return 0
+          return managed.messages.filter((m) => m.role === 'tool' && !m.isError).length
+        },
         abortSession: async (sessionId) => {
           const managed = this.sessions.get(sessionId)
           if (!managed) return

@@ -91,6 +91,8 @@ export interface WorkflowRunnerDeps {
    * messages.
    */
   getLastAssistantText: (sessionId: string) => string;
+  /** Count tool results recorded in a step session. Used for explicit completion gates. */
+  getSessionToolUseCount?: (sessionId: string) => number;
   /**
    * Hard-abort a running session. Wraps `SessionManager.forceAbort` /
    * the `UserStop` lifecycle hook (see `packages/shared/CLAUDE.md` for
@@ -418,7 +420,7 @@ export class WorkflowRunner {
           systemPromptChars: agentOptions.customSystemPrompt?.length,
         },
       },
-      hidden: false,
+      hidden: true,
     });
     stepRecord.sessionId = session.id;
     active.currentSessionId = session.id;
@@ -426,14 +428,13 @@ export class WorkflowRunner {
 
     if (active.abort.signal.aborted) return;
 
-    const stepPrompt = stepDef.outputSchema
-      ? appendOutputSchemaInstruction(prompt, stepDef.outputSchema)
-      : prompt;
+    const stepPrompt = this.buildStepPrompt(prompt, stepDef);
     await this.sendMessageWithOptionalTimeout(active, session.id, stepPrompt, stepDef.timeout);
 
     if (active.abort.signal.aborted) return;
 
     const rawOutput = this.deps.getLastAssistantText(session.id);
+    this.validateCompletion(stepRecord, stepDef, session.id, rawOutput);
     if (!stepDef.outputSchema) {
       stepRecord.output = rawOutput;
       return;
@@ -444,6 +445,67 @@ export class WorkflowRunner {
       throw new StepAttemptError('invalid-structured-output', parsed.message);
     }
     stepRecord.output = parsed.value;
+  }
+
+  private buildStepPrompt(prompt: string, stepDef: WorkflowStep): string {
+    const base = stepDef.outputSchema
+      ? appendOutputSchemaInstruction(prompt, stepDef.outputSchema)
+      : prompt;
+
+    const completion = stepDef.completion ?? {};
+    const lines = [
+      'Workflow step completion contract:',
+      '- Complete the requested work in this turn; do not merely acknowledge or say you can help.',
+      '- If blocked, state the blocker clearly in the final answer.',
+    ];
+    if (completion.requireNonEmptyOutput !== false) {
+      lines.push('- Final output must be non-empty.');
+    }
+    if (completion.minOutputChars !== undefined) {
+      lines.push(`- Final output must be at least ${completion.minOutputChars} characters.`);
+    }
+    if (completion.requireToolUse) {
+      lines.push('- You must use at least one available tool before the step can complete.');
+    }
+    if (stepDef.outputSchema) {
+      lines.push('- The final answer must satisfy the JSON schema above.');
+    }
+
+    return `${base}\n\n---\n\n${lines.join('\n')}`;
+  }
+
+  private validateCompletion(
+    stepRecord: WorkflowRunStep,
+    stepDef: WorkflowStep,
+    sessionId: string,
+    rawOutput: string,
+  ): void {
+    const completion = stepDef.completion ?? {};
+    const outputChars = rawOutput.trim().length;
+    const requireNonEmpty = completion.requireNonEmptyOutput !== false;
+    const minOutputChars = completion.minOutputChars ?? (requireNonEmpty ? 1 : 0);
+    const toolUseCount = this.deps.getSessionToolUseCount?.(sessionId);
+
+    stepRecord.completion = {
+      outputChars,
+      ...(toolUseCount !== undefined ? { toolUseCount } : {}),
+      satisfied: false,
+    };
+
+    if (outputChars < minOutputChars) {
+      throw new StepAttemptError(
+        'completion-output-too-short',
+        `Step output was ${outputChars} characters; expected at least ${minOutputChars}.`,
+      );
+    }
+    if (completion.requireToolUse && (toolUseCount ?? 0) < 1) {
+      throw new StepAttemptError(
+        'completion-tool-use-required',
+        'Step completion requires at least one tool use, but none were recorded.',
+      );
+    }
+
+    stepRecord.completion.satisfied = true;
   }
 
   private async sendMessageWithOptionalTimeout(

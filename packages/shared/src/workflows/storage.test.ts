@@ -270,6 +270,10 @@ describe('serializeWorkflow', () => {
           timeout: 30,
           retries: 1,
           onFailure: 'continue',
+          completion: {
+            requireToolUse: true,
+            minOutputChars: 50,
+          },
         },
         { id: 'draft', agent: 'writer', input: 'Use this:\n\n{{steps.research.output.title}}' },
       ],
@@ -295,6 +299,9 @@ describe('serializeWorkflow', () => {
     expect(parseWorkflowFile([...base, '    timeout: 0', '---'].join('\n'))).toBeNull();
     expect(parseWorkflowFile([...base, '    retries: 1.5', '---'].join('\n'))).toBeNull();
     expect(parseWorkflowFile([...base, '    onFailure: skip', '---'].join('\n'))).toBeNull();
+    expect(parseWorkflowFile([...base, '    completion: []', '---'].join('\n'))).toBeNull();
+    expect(parseWorkflowFile([...base, '    completion:', '      requireToolUse: yes', '---'].join('\n'))).toBeNull();
+    expect(parseWorkflowFile([...base, '    completion:', '      minOutputChars: -1', '---'].join('\n'))).toBeNull();
   });
 
   test('parses supported step failure policies', () => {

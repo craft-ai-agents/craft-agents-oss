@@ -272,10 +272,13 @@ Supported frontmatter today:
 - Trigger inputs: \`name\`, \`type\` (\`string\`, \`number\`, or \`boolean\`),
   optional \`required\`, \`default\`, \`description\`.
 - Step: \`id\`, \`agent\`, \`input\`, optional \`description\`,
-  \`outputSchema\`, \`timeout\`, \`retries\`, \`onFailure\`.
-- \`onFailure\`: one of \`stop\`, \`continue\`, \`ask\`. Runtime currently
-  stops after exhausted retries, so only use \`stop\` unless the user is
-  intentionally documenting a future policy.
+  \`outputSchema\`, \`timeout\`, \`retries\`, \`onFailure\`, \`completion\`.
+- \`completion\`: optional object with \`requireNonEmptyOutput\`,
+  \`minOutputChars\`, and \`requireToolUse\`. Use it when a step must produce
+  a substantive answer or actually call tools before it can succeed.
+- \`onFailure\`: one of \`stop\`, \`continue\`, \`ask\`. \`stop\` fails the run,
+  \`continue\` records the failed step and runs later steps, and \`ask\` stops
+  until human checkpoint support lands.
 
 Unsupported today: schedule/webhook/automation workflow triggers, \`when\`,
 \`humanCheckpoint\`, \`parallelGroup\`, loops, branching, and sub-workflows.
@@ -289,8 +292,8 @@ Ask only what you need to draft:
 1. **Outcome** — "What should this workflow produce at the end?"
 2. **Run inputs** — "What should you fill in when you click Run?"
 3. **Steps and agents** — "Which agents should run, in what order?"
-4. **Reliability** — only if needed: "Should any step have a timeout,
-   retries, or structured JSON output?"
+4. **Reliability** — only if needed: "Should any step require tool use,
+   a minimum-length answer, a timeout, retries, or structured JSON output?"
 
 If the user already gave enough detail, skip the interview and draft.
 

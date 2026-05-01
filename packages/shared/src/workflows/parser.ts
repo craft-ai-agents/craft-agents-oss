@@ -7,6 +7,7 @@ import {
   type WorkflowMetadata,
   type WorkflowParseWarning,
   type WorkflowStep,
+  type WorkflowStepCompletionContract,
   type WorkflowStepFailurePolicy,
   type WorkflowTrigger,
   type WorkflowTriggerInput,
@@ -83,6 +84,45 @@ interface RawStep {
   timeout?: unknown;
   retries?: unknown;
   onFailure?: unknown;
+  completion?: unknown;
+}
+
+function coerceCompletionContract(
+  raw: unknown,
+  stepId: string,
+  warnings: WorkflowParseWarning[],
+): WorkflowStepCompletionContract | null {
+  if (raw === undefined) return {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    warnings.push(warning('step', 'invalid-step-completion', `step "${stepId}" completion must be an object.`));
+    return null;
+  }
+  const r = raw as Record<string, unknown>;
+  const out: WorkflowStepCompletionContract = {};
+
+  if (r.requireNonEmptyOutput !== undefined) {
+    if (typeof r.requireNonEmptyOutput !== 'boolean') {
+      warnings.push(warning('step', 'invalid-step-completion', `step "${stepId}" completion.requireNonEmptyOutput must be a boolean.`));
+      return null;
+    }
+    out.requireNonEmptyOutput = r.requireNonEmptyOutput;
+  }
+  if (r.minOutputChars !== undefined) {
+    if (typeof r.minOutputChars !== 'number' || !Number.isInteger(r.minOutputChars) || r.minOutputChars < 0) {
+      warnings.push(warning('step', 'invalid-step-completion', `step "${stepId}" completion.minOutputChars must be a non-negative integer.`));
+      return null;
+    }
+    out.minOutputChars = r.minOutputChars;
+  }
+  if (r.requireToolUse !== undefined) {
+    if (typeof r.requireToolUse !== 'boolean') {
+      warnings.push(warning('step', 'invalid-step-completion', `step "${stepId}" completion.requireToolUse must be a boolean.`));
+      return null;
+    }
+    out.requireToolUse = r.requireToolUse;
+  }
+
+  return out;
 }
 
 export function parseWorkflowFile(
@@ -168,6 +208,10 @@ export function parseWorkflowFile(
       step.onFailure = rawStep.onFailure as WorkflowStepFailurePolicy;
     }
 
+    const completion = coerceCompletionContract(rawStep.completion, id, warnings);
+    if (completion === null) return null;
+    if (Object.keys(completion).length > 0) step.completion = completion;
+
     steps.push(step);
     seenIds.add(id);
     previousIds.push(id);
@@ -217,6 +261,7 @@ export function serializeWorkflow(metadata: WorkflowMetadata, body: string): str
     if (s.timeout !== undefined) out.timeout = s.timeout;
     if (s.retries !== undefined) out.retries = s.retries;
     if (s.onFailure !== undefined) out.onFailure = s.onFailure;
+    if (s.completion !== undefined) out.completion = s.completion;
     return out;
   });
 

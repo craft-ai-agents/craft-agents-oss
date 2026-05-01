@@ -35,9 +35,12 @@ A WorkflowRunner is ~300–500 LOC of plain TypeScript on top of our existing se
 ## Status
 
 Core workflow storage, parsing, starter seeding, manual runs, sequential runner
-execution, structured step output, timeouts, and retries are implemented. The
-implementation plan remains useful for follow-up work, but the current runtime
-surface is defined by [`01-spec.md`](./01-spec.md) and [`02-runtime.md`](./02-runtime.md).
+execution, structured step output, timeouts, retries, failure policies, and
+completion contracts are implemented. Workflow step sessions are hidden from
+the main session list by default and are opened from the Run page inspector
+when needed. The implementation plan remains useful for follow-up work, but
+the current runtime surface is defined by [`01-spec.md`](./01-spec.md) and
+[`02-runtime.md`](./02-runtime.md).
 
 ## Hard non-goals (current runtime)
 

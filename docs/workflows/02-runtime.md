@@ -34,7 +34,14 @@ Mirror the existing patterns in `agent-definitions/` and `workspace-context/` â€
 3. **Rooms share infra.** When Rooms ship, they're "a session that multiple agents take turns participating in." A workflow step is "a session with one agent and a pre-filled prompt." Both fall out of the same primitive.
 4. **Mid-run interjection.** User can type into a running step's session. The runner sees the additional turns and only advances when the session reports complete.
 
-The runner's only special privilege is the **completion signal**: a step is done when the step session's LLM turn completes. If `outputSchema` is set, the last assistant message must parse as JSON and validate against the schema before the step succeeds.
+The runner's special privilege is the **completion gate**: a step only succeeds
+after the step session's LLM turn completes and the configured completion
+contract passes. If `outputSchema` is set, the last assistant message must
+parse as JSON and validate against the schema before the step succeeds.
+If `completion.requireToolUse` is true, the step session must record at least
+one successful tool result. Workflow step sessions are hidden from the main
+session list by default; the Run page is the primary surface, with links into
+the underlying hidden session for drill-down.
 
 ## Output extraction
 
@@ -45,7 +52,7 @@ The runner's only special privilege is the **completion signal**: a step is done
 
 The JSON parser accepts raw JSON or a single fenced JSON block. Schema validation currently covers `type`, `enum`, object `required` / `properties`, and array `items`.
 
-If the step has `timeout`, the active session is aborted when the timeout expires and the attempt fails with `error.code: 'timeout'`. If structured output parsing fails, the attempt fails with `error.code: 'invalid-structured-output'`. `retries` controls how many additional attempts are made.
+If the step has `timeout`, the active session is aborted when the timeout expires and the attempt fails with `error.code: 'timeout'`. If structured output parsing fails, the attempt fails with `error.code: 'invalid-structured-output'`. If the completion contract fails, the attempt fails with `error.code: 'completion-output-too-short'` or `error.code: 'completion-tool-use-required'`. `retries` controls how many additional attempts are made.
 
 ## Run lifecycle
 

@@ -46,6 +46,12 @@ export interface WorkflowRunStep {
   completedAt?: string;
   /** Phase 1: last assistant text. Phase 2: parsed JSON when outputSchema set. */
   output?: unknown;
+  /** Completion contract evidence captured after the final attempt. */
+  completion?: {
+    outputChars: number;
+    toolUseCount?: number;
+    satisfied: boolean;
+  };
   error?: { code: string; message: string };
   /** Phase 1 always 1; declared for forward-compat with `retries`. */
   attempts: number;

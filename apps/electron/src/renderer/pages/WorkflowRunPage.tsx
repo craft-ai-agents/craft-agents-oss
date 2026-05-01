@@ -281,6 +281,7 @@ function StepCard({
             ['Timing', timing],
             ['Timeout', stepDef?.timeout != null ? `${stepDef.timeout}s` : undefined],
             ['Failure', stepDef?.onFailure],
+            ['Completion', formatCompletionSummary(step.completion)],
             ['Session', step.sessionId],
           ]}
         />
@@ -309,9 +310,13 @@ function StepCard({
         {stepDef?.outputSchema && (
           <DetailBlock title="Output schema" value={stepDef.outputSchema} />
         )}
+        {stepDef?.completion && (
+          <DetailBlock title="Completion contract" value={stepDef.completion} />
+        )}
         <DetailBlock title="Raw output" value={rawOutput} defaultOpen={isDetailOpenByDefault(rawOutput)} />
         <DetailBlock title="Structured output" value={structuredOutput} defaultOpen={isDetailOpenByDefault(structuredOutput)} />
         <DetailBlock title={outputKind} value={step.output} defaultOpen={isDetailOpenByDefault(step.output)} />
+        <DetailBlock title="Completion evidence" value={step.completion} defaultOpen={step.state === 'failed' && !!step.completion} />
         <DetailBlock title="Error" value={step.error} defaultOpen={step.state === 'failed'} />
         <DetailBlock title="Step record" value={step} />
       </div>
@@ -443,6 +448,18 @@ function formatTiming(startedAt: string | undefined, completedAt: string | undef
   const completed = completedAt ? Date.parse(completedAt) : Date.now()
   if (!Number.isFinite(started) || !Number.isFinite(completed)) return undefined
   return formatElapsed(Math.max(0, completed - started))
+}
+
+function formatCompletionSummary(completion: WorkflowRunStep['completion']): string | undefined {
+  if (!completion) return undefined
+  const parts = [
+    completion.satisfied ? 'satisfied' : 'not satisfied',
+    `${completion.outputChars} chars`,
+  ]
+  if (completion.toolUseCount !== undefined) {
+    parts.push(`${completion.toolUseCount} tools`)
+  }
+  return parts.join(' · ')
 }
 
 function formatScalar(value: unknown): string | undefined {
