@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react'
 import { useAtom } from 'jotai'
 import { userMemoryStateAtom } from '@/atoms/memory'
-import type { LoadedMemoryFile, MemoryEntry, MemoryScope } from '@craft-agent/shared/memory'
+import type { LoadedMemoryFile, MemoryEntry, MemoryScope } from '@craft-agent/shared/memory/types'
 import type { MemoryMutationInput } from '@/hooks/useAgentMemory'
 
 interface MemoryApi {

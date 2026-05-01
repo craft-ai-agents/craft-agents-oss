@@ -73,19 +73,22 @@ export type { AgentDefinitionMetadataDTO, AgentDefinitionDTO };
 import type { LoadedContextDoc as ContextDocDTO, ContextDocMetadata, ContextDocRouting } from '@craft-agent/shared/workspace-context/types';
 export type { ContextDocDTO, ContextDocMetadata, ContextDocRouting };
 
-// Memory — DTOs are plain JSON entries from @craft-agent/shared/memory.
-import type { MemoryEntry as MemoryEntryDTO, MemoryEntryType, MemoryScope } from '@craft-agent/shared/memory';
+// Memory — DTOs are plain JSON entries. Import from the browser-safe type
+// module, not the memory barrel, because the barrel also exports file storage.
+import type { MemoryEntry as MemoryEntryDTO, MemoryEntryType, MemoryScope } from '@craft-agent/shared/memory/types';
 export type { MemoryEntryDTO, MemoryEntryType, MemoryScope };
 
 // Workflows — DTOs match the shared LoadedWorkflow / WorkflowRunSnapshot.
 import type {
   LoadedWorkflow as WorkflowDTO,
   WorkflowMetadata as WorkflowMetadataDTO,
+} from '@craft-agent/shared/workflows/types';
+import type {
   WorkflowRunSnapshot as WorkflowRunDTO,
   WorkflowRunState,
   WorkflowRunStep,
   WorkflowRunStepState,
-} from '@craft-agent/shared/workflows';
+} from '@craft-agent/shared/workflows/run-types';
 export type { WorkflowDTO, WorkflowMetadataDTO, WorkflowRunDTO, WorkflowRunState, WorkflowRunStep, WorkflowRunStepState };
 
 // Resource bundle types (cross-workspace export/import)

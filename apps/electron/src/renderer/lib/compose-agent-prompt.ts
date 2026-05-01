@@ -20,8 +20,8 @@
  * Pure function — no I/O, no atoms. Easy to test.
  */
 
-import type { MemoryEntry } from '@craft-agent/shared/memory'
-import { buildMemorySectionsText } from '@craft-agent/shared/memory'
+import type { MemoryEntry } from '@craft-agent/shared/memory/types'
+import { buildMemorySectionsText } from '@craft-agent/shared/memory/render'
 import type { AgentDefinitionDTO, ContextDocDTO, LoadedSkill, LoadedSource } from '../../shared/types'
 
 const SECTION_DELIMITER = '\n\n---\n\n'

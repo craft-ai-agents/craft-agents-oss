@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { buildAgentBundleFooter, buildAgentCatalogSection, buildMemorySection, buildWorkspaceContextSection, composeAgentSystemPrompt } from './compose-agent-prompt'
-import type { MemoryEntry } from '@craft-agent/shared/memory'
+import type { MemoryEntry } from '@craft-agent/shared/memory/types'
 import type { AgentDefinitionDTO, ContextDocDTO, LoadedSkill, LoadedSource } from '../../shared/types'
 
 function makeDoc(slug: string, name: string, body: string, overrides: Partial<ContextDocDTO['metadata']> = {}): ContextDocDTO {

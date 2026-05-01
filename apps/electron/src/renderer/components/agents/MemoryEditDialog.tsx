@@ -9,7 +9,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import type { MemoryEntry, MemoryEntryType } from '@craft-agent/shared/memory'
+import type { MemoryEntry, MemoryEntryType } from '@craft-agent/shared/memory/types'
 import type { MemoryMutationInput } from '@/hooks/useAgentMemory'
 
 interface MemoryEditDialogProps {

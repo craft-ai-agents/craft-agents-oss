@@ -1,6 +1,6 @@
 import { atom } from 'jotai'
 import { atomFamily } from 'jotai-family'
-import type { MemoryEntry } from '@craft-agent/shared/memory'
+import type { MemoryEntry } from '@craft-agent/shared/memory/types'
 
 export interface MemoryState {
   entries: MemoryEntry[]

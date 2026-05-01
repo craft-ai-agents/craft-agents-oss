@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Info_Section } from '@/components/info'
 import { useAgentMemory } from '@/hooks/useAgentMemory'
 import { MemoryEditDialog } from './MemoryEditDialog'
-import type { MemoryEntry } from '@craft-agent/shared/memory'
+import type { MemoryEntry } from '@craft-agent/shared/memory/types'
 
 interface AgentMemoryTabProps {
   agentSlug: string
