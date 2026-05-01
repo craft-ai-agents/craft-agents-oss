@@ -63,6 +63,28 @@ export interface SaveMemoryInput {
   type: MemoryEntryType;
   body: string;
   expires?: string;
+  /**
+   * Bypass the tombstone block. Defaults to false. Set true ONLY for
+   * user-initiated saves (UI manual add); agent tool calls must leave it
+   * false so an agent can't immediately re-save what the user just forgot.
+   * On a successful forced save, the matching tombstone is cleared so
+   * subsequent saves of the same name behave normally.
+   */
+  force?: boolean;
+}
+
+/**
+ * Thrown when saveMemoryEntry is called with a name that's currently
+ * tombstoned (via prior `forget_memory`). The caller can recover by
+ * either explicitly passing `force: true` or calling `forgetDeletedMemoryName`
+ * first.
+ */
+export class MemoryTombstonedError extends Error {
+  readonly code = 'memory-tombstoned';
+  constructor(public readonly entryName: string) {
+    super(`"${entryName}" was previously forgotten. Pass force: true to overwrite the tombstone, or call forgetDeletedMemoryName(...) first.`);
+    this.name = 'MemoryTombstonedError';
+  }
 }
 
 export interface UpdateMemoryInput {

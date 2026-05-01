@@ -21,6 +21,7 @@
  */
 
 import type { MemoryEntry } from '@craft-agent/shared/memory'
+import { buildMemorySectionsText } from '@craft-agent/shared/memory'
 import type { AgentDefinitionDTO, ContextDocDTO, LoadedSkill, LoadedSource } from '../../shared/types'
 
 const SECTION_DELIMITER = '\n\n---\n\n'
@@ -30,8 +31,6 @@ const SOURCES_HEADER = 'You have these tools bundled with you (MCP servers, APIs
 const PLANNING_NUDGE = 'When planning, check your bundled skills and tools before working from scratch.'
 
 const CONTEXT_HEADER = 'Workspace context — read this before starting work:'
-const USER_MEMORY_HEADER = 'USER.md — durable user memory:'
-const AGENT_MEMORY_HEADER = 'MEMORY.md — durable memory for this agent:'
 const AGENT_CATALOG_HEADER = 'Available agents you can route the user to:'
 
 export interface AgentCatalogEntry {
@@ -142,13 +141,14 @@ export function buildAgentCatalogSection(agents: AgentCatalogEntry[]): string {
   ].join('\n')
 }
 
+/**
+ * Render the memory section. Filters expired entries and empties internally
+ * via the shared `buildMemorySectionsText` helper — kept in sync with the
+ * server-side workflow path in `packages/server-core/src/sessions/SessionManager.ts`,
+ * which imports the same helper. Do not fork.
+ */
 export function buildMemorySection(userEntries: MemoryEntry[], agentEntries: MemoryEntry[]): string {
-  const sections: string[] = []
-  const userSection = buildMemoryEntrySection(USER_MEMORY_HEADER, userEntries)
-  const agentSection = buildMemoryEntrySection(AGENT_MEMORY_HEADER, agentEntries)
-  if (userSection) sections.push(userSection)
-  if (agentSection) sections.push(agentSection)
-  return sections.join('\n\n')
+  return buildMemorySectionsText(userEntries, agentEntries)
 }
 
 // ----------------------------------------------------------------------------
@@ -178,19 +178,6 @@ function collectSourceBullets(declaredSlugs: string[], sources: LoadedSource[]):
     out.push(formatBullet(slug, source.config.name, description))
   }
   return out
-}
-
-function buildMemoryEntrySection(header: string, entries: MemoryEntry[]): string {
-  const usable = entries.filter((entry) => entry.name.trim() && entry.body.trim())
-  if (usable.length === 0) return ''
-  const blocks = usable.map((entry) => {
-    const metadata = [
-      `type: ${entry.type}`,
-      entry.expires ? `expires: ${entry.expires}` : undefined,
-    ].filter(Boolean).join(' | ')
-    return `## ${entry.name.trim()}\n${metadata}\n\n${entry.body.trim()}`
-  })
-  return `${header}\n\n${blocks.join('\n\n')}`
 }
 
 /**

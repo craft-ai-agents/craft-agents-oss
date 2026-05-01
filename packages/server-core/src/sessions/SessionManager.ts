@@ -103,6 +103,8 @@ import {
   listUserMemoryEntries,
   saveMemoryEntry,
   updateMemoryEntry,
+  buildMemorySectionsText,
+  selectActiveMemoryEntries,
   type DeleteMemoryInput,
   type MemoryEntry as StoredMemoryEntry,
   type MemoryEntryType,
@@ -238,27 +240,17 @@ function memoryEntryTitle(entry: WorkflowMemoryEntry): string {
   return entry.name.trim() || 'Memory'
 }
 
-function memoryEntryBody(entry: WorkflowMemoryEntry): string {
-  return entry.body.trim()
-}
-
-function buildWorkflowMemorySection(header: string, entries: WorkflowMemoryEntry[] | undefined): string {
-  const usable = (entries ?? []).filter((entry) => memoryEntryBody(entry).length > 0)
-  if (usable.length === 0) return ''
-  const bullets = usable.map((entry) => {
-    const type = typeof entry.type === 'string' && entry.type.trim() ? ` [${entry.type.trim()}]` : ''
-    return `- ${memoryEntryTitle(entry)}${type}: ${memoryEntryBody(entry)}`
-  })
-  return `${header}\n\n${bullets.join('\n')}`
-}
-
-function buildWorkflowMemorySections(memory?: WorkflowMemoryInputs): string[] {
-  const sections: string[] = []
-  const userSection = buildWorkflowMemorySection(USER_MEMORY_HEADER, memory?.userEntries)
-  const agentSection = buildWorkflowMemorySection(AGENT_MEMORY_HEADER, memory?.agentEntries)
-  if (userSection) sections.push(userSection)
-  if (agentSection) sections.push(agentSection)
-  return sections
+/**
+ * Build the workflow-step prompt's memory section using the canonical
+ * shared renderer. Kept identical to the renderer-spawned chat path
+ * in `apps/electron/src/renderer/lib/compose-agent-prompt.ts` — both
+ * call into `buildMemorySectionsText` from `@craft-agent/shared/memory`.
+ *
+ * Filters expired entries and empties internally; callers cannot
+ * accidentally skip those filters.
+ */
+function buildWorkflowMemoryText(memory?: WorkflowMemoryInputs): string {
+  return buildMemorySectionsText(memory?.userEntries ?? [], memory?.agentEntries ?? [])
 }
 
 function formatWorkflowBundleBullet(slug: string, name: string | undefined, description: string | undefined): string {
@@ -300,7 +292,8 @@ function buildWorkflowAgentPrompt(
   if (footerParts.length > 0) footerParts.push(PLANNING_NUDGE)
   const parts = [body]
   if (contextSection) parts.push(contextSection)
-  parts.push(...buildWorkflowMemorySections(memory))
+  const memorySection = buildWorkflowMemoryText(memory)
+  if (memorySection) parts.push(memorySection)
   if (footerParts.length > 0) parts.push(footerParts.join('\n\n'))
   return parts.join(SECTION_DELIMITER)
 }
@@ -1980,15 +1973,13 @@ export class SessionManager implements ISessionManager {
                   slug: doc.slug,
                   name: doc.metadata.name,
                 })),
+                // Receipt only records the entries that were actually
+                // injected — i.e. after expiry filtering — so the
+                // user can audit what the agent saw.
                 memory: {
-                  user: userMemoryEntries.map((entry) => ({ name: memoryEntryTitle(entry) })),
-                  agent: agentMemoryEntries.map((entry) => ({ name: memoryEntryTitle(entry) })),
+                  user: selectActiveMemoryEntries(userMemoryEntries).map((entry) => ({ name: memoryEntryTitle(entry) })),
+                  agent: selectActiveMemoryEntries(agentMemoryEntries).map((entry) => ({ name: memoryEntryTitle(entry) })),
                 },
-              } as SessionLaunchReceipt['injected'] & {
-                memory: {
-                  user: Array<{ name: string }>
-                  agent: Array<{ name: string }>
-                }
               },
             },
           }

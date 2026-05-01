@@ -160,8 +160,8 @@ describe('CRUD', () => {
     }, options);
 
     expect(first.name).toBe('identity');
-    expect(second.name).toBe('identity (2)');
-    expect(listUserMemoryEntries(options).map((entry) => entry.name)).toEqual(['identity', 'identity (2)']);
+    expect(second.name).toBe('identity-v2');
+    expect(listUserMemoryEntries(options).map((entry) => entry.name)).toEqual(['identity', 'identity-v2']);
     expect(existsSync(getUserMemoryFile(options))).toBe(true);
   });
 
@@ -237,6 +237,67 @@ describe('CRUD', () => {
     expect(names).toHaveLength(10);
     expect(new Set(names).size).toBe(10);
     expect(names[0]).toBe('same');
-    expect(names).toContain('same (10)');
+    // Suffix is `-vN` to match the agent slug convention.
+    expect(names).toContain('same-v10');
+    // The legacy parenthesized shape must not be produced any more.
+    expect(names.some((n) => /^\bsame \(\d+\)$/.test(n))).toBe(false);
+  });
+
+  test('forget then save without force throws MemoryTombstonedError', async () => {
+    await saveMemoryEntry({ scope: 'user', name: 'pet name', type: 'user', body: 'Charlie.' }, options);
+    await deleteMemoryEntry({ scope: 'user', name: 'pet name' }, options);
+    expect(isMemoryNameDeleted('user', 'pet name', undefined, options)).toBe(true);
+
+    await expect(
+      saveMemoryEntry({ scope: 'user', name: 'pet name', type: 'user', body: 'Charlie again.' }, options),
+    ).rejects.toThrow(/previously forgotten/i);
+
+    // Tombstone is preserved after a blocked save.
+    expect(isMemoryNameDeleted('user', 'pet name', undefined, options)).toBe(true);
+    expect(listUserMemoryEntries(options)).toEqual([]);
+  });
+
+  test('forget then save with force=true clears the tombstone and persists the entry', async () => {
+    await saveMemoryEntry({ scope: 'user', name: 'pet name', type: 'user', body: 'Charlie.' }, options);
+    await deleteMemoryEntry({ scope: 'user', name: 'pet name' }, options);
+
+    const saved = await saveMemoryEntry(
+      { scope: 'user', name: 'pet name', type: 'user', body: 'Buddy.', force: true },
+      options,
+    );
+    expect(saved.name).toBe('pet name');
+    expect(saved.body).toBe('Buddy.');
+    expect(isMemoryNameDeleted('user', 'pet name', undefined, options)).toBe(false);
+  });
+
+  test('save without force succeeds when no tombstone exists for the name', async () => {
+    // A fresh save on a name that was NEVER deleted should NOT touch the
+    // tombstone file at all (no spurious file creation).
+    const tombstoneFile = join(root, '.deleted-memories.json');
+    expect(existsSync(tombstoneFile)).toBe(false);
+
+    await saveMemoryEntry({ scope: 'user', name: 'fresh', type: 'user', body: 'Body.' }, options);
+    expect(existsSync(tombstoneFile)).toBe(false);
+  });
+
+  test('delete on missing file is a clean no-op (no file/tombstone created)', async () => {
+    const memFile = getUserMemoryFile(options);
+    const tombstoneFile = join(root, '.deleted-memories.json');
+    expect(existsSync(memFile)).toBe(false);
+
+    const removed = await deleteMemoryEntry({ scope: 'user', name: 'ghost' }, options);
+    expect(removed).toBe(false);
+    expect(existsSync(memFile)).toBe(false);
+    expect(existsSync(tombstoneFile)).toBe(false);
+  });
+
+  test('delete on existing file but missing entry does not tombstone', async () => {
+    await saveMemoryEntry({ scope: 'user', name: 'real', type: 'user', body: 'present.' }, options);
+    const tombstoneFile = join(root, '.deleted-memories.json');
+
+    const removed = await deleteMemoryEntry({ scope: 'user', name: 'ghost' }, options);
+    expect(removed).toBe(false);
+    expect(existsSync(tombstoneFile)).toBe(false);
+    expect(isMemoryNameDeleted('user', 'ghost', undefined, options)).toBe(false);
   });
 });

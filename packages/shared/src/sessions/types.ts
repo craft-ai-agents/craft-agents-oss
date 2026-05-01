@@ -132,6 +132,14 @@ export interface SessionLaunchReceipt {
       outputs?: string;
       tags?: string[];
     }>;
+    /**
+     * Memory entries injected into the system prompt. Names only — bodies
+     * are not duplicated into the receipt to keep it small.
+     */
+    memory?: {
+      user: Array<{ name: string }>;
+      agent: Array<{ name: string }>;
+    };
   };
   routing?: {
     mode: 'concierge';

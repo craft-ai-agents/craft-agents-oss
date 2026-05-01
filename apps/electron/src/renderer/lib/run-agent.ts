@@ -215,29 +215,35 @@ export async function openAgentSessionComposer(params: {
   return session
 }
 
+/**
+ * Load USER.md entries via the typed electronAPI bridge. The bridge
+ * method is declared on `ElectronAPI` (apps/electron/src/shared/types.ts);
+ * a transport failure surfaces a console warning instead of silently
+ * returning empty so the user has a signal that memory injection failed.
+ */
 async function loadUserMemoryEntries(): Promise<MemoryEntry[]> {
   try {
-    const api = window.electronAPI as unknown as {
-      listUserMemory?: () => Promise<MemoryEntry[] | LoadedMemoryFile>
-    }
-    return normalizeMemoryEntries(await api.listUserMemory?.())
-  } catch {
+    const result = await window.electronAPI.listUserMemory()
+    return normalizeMemoryEntries(result)
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[memory] failed to load USER.md; agent will run without user memory:', err)
     return []
   }
 }
 
 async function loadAgentMemoryEntries(agentSlug: string): Promise<MemoryEntry[]> {
   try {
-    const api = window.electronAPI as unknown as {
-      listAgentMemory?: (agentSlug: string) => Promise<MemoryEntry[] | LoadedMemoryFile>
-    }
-    return normalizeMemoryEntries(await api.listAgentMemory?.(agentSlug))
-  } catch {
+    const result = await window.electronAPI.listAgentMemory(agentSlug)
+    return normalizeMemoryEntries(result)
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`[memory] failed to load MEMORY.md for "${agentSlug}"; agent will run without per-agent memory:`, err)
     return []
   }
 }
 
-function normalizeMemoryEntries(value: MemoryEntry[] | LoadedMemoryFile | undefined): MemoryEntry[] {
+function normalizeMemoryEntries(value: MemoryEntry[] | LoadedMemoryFile | null | undefined): MemoryEntry[] {
   if (!value) return []
   if (Array.isArray(value)) return value
   return value.entries ?? []

@@ -369,17 +369,42 @@ describe('buildMemorySection', () => {
   })
 
   test('renders memory entry metadata and body', () => {
+    // Use an expiry far in the future so the entry survives filtering
+    // regardless of when this test runs.
     const section = buildMemorySection([
       {
         ...makeMemory('Preference', 'Use direct language.', 'user'),
-        expires: '2026-12-31',
+        expires: '2999-12-31',
       },
     ], [])
 
     expect(section).toContain('USER.md')
     expect(section).toContain('## Preference')
     expect(section).toContain('type: user')
-    expect(section).toContain('expires: 2026-12-31')
+    expect(section).toContain('expires: 2999-12-31')
     expect(section).toContain('Use direct language.')
+  })
+
+  test('filters out entries past their expires date', () => {
+    const section = buildMemorySection([
+      // Stale entry — 2000-01-01 is already past at any plausible runtime.
+      { ...makeMemory('Stale', 'Old stuff that should not appear.', 'user'), expires: '2000-01-01' },
+      // Fresh entry — survives.
+      { ...makeMemory('Current', 'Fresh stuff.', 'user'), expires: '2999-12-31' },
+    ], [])
+
+    expect(section).toContain('## Current')
+    expect(section).toContain('Fresh stuff.')
+    expect(section).not.toContain('## Stale')
+    expect(section).not.toContain('Old stuff that should not appear.')
+  })
+
+  test('omits the section entirely when every entry is expired', () => {
+    expect(
+      buildMemorySection(
+        [{ ...makeMemory('Stale', 'Body.', 'user'), expires: '2000-01-01' }],
+        [],
+      ),
+    ).toBe('')
   })
 })

@@ -10,11 +10,13 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import matter from 'gray-matter';
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
 import {
@@ -22,6 +24,7 @@ import {
   MEMORY_ENTRY_TYPES,
   MEMORY_FILE,
   MEMORY_SCHEMA_VERSION,
+  MemoryTombstonedError,
   USER_MEMORY_FILE,
   type DeleteMemoryInput,
   type DeletedMemoryTombstones,
@@ -398,8 +401,7 @@ function writeDeletedMemoryNames(filePath: string, names: Set<string>): DeletedM
     deleted: [...names].sort(),
     updatedAt: new Date().toISOString(),
   };
-  mkdirSync(dirname(filePath), { recursive: true });
-  writeFileSync(getDeletedMemoriesFile(filePath), JSON.stringify(tombstones, null, 2) + '\n', 'utf-8');
+  writeFileAtomic(getDeletedMemoriesFile(filePath), JSON.stringify(tombstones, null, 2) + '\n');
   return tombstones;
 }
 
@@ -479,11 +481,45 @@ export async function forgetDeletedMemoryName(
 
 const memoryFileMutexes = new Map<string, Promise<void>>();
 
+/**
+ * Per-file in-process serialization for read-modify-write blocks.
+ *
+ * IMPORTANT: this is single-process only. Two Electron windows, a CLI
+ * tool, or a test harness mutating the same file concurrently with the
+ * main app will race. Personal-OS scale rarely surfaces this, but if
+ * Phase 2 introduces a separate worker, swap to a filesystem flock.
+ */
 export function withMemoryFileMutex<T>(filePath: string, fn: () => Promise<T>): Promise<T> {
   const prev = memoryFileMutexes.get(filePath) ?? Promise.resolve();
   const next = prev.then(fn, fn);
   memoryFileMutexes.set(filePath, next.then(() => {}, () => {}));
   return next;
+}
+
+// ============================================================================
+// Atomic write
+// ============================================================================
+
+/**
+ * Atomic file write: write to a sibling `.tmp` first, then `rename` into
+ * place. `rename` on the same filesystem is atomic on POSIX and Windows
+ * NTFS — readers either see the old file or the new file, never a
+ * truncated half-write. Same pattern used by `packages/shared/src/workflows/run-storage.ts`.
+ *
+ * Memory files are the user's primary durable record; a crash mid-write
+ * without atomicity would corrupt the file and force manual recovery.
+ */
+function writeFileAtomic(finalPath: string, data: string): void {
+  mkdirSync(dirname(finalPath), { recursive: true });
+  const tmpPath = `${finalPath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(tmpPath, data, 'utf-8');
+    renameSync(tmpPath, finalPath);
+  } catch (err) {
+    // Best-effort cleanup of the orphan tmp; swallow secondary failure.
+    try { rmSync(tmpPath, { force: true }); } catch { /* ignore */ }
+    throw err;
+  }
 }
 
 // ============================================================================
@@ -501,8 +537,7 @@ function ensureLoadableMemoryFile(
 }
 
 function writeMemoryFile(loaded: LoadedMemoryFile): LoadedMemoryFile {
-  mkdirSync(dirname(loaded.filePath), { recursive: true });
-  writeFileSync(loaded.filePath, serializeMemoryFile(loaded.envelope, loaded.entries), 'utf-8');
+  writeFileAtomic(loaded.filePath, serializeMemoryFile(loaded.envelope, loaded.entries));
   return loaded;
 }
 
@@ -511,9 +546,11 @@ function uniqueMemoryName(desiredName: string, entries: readonly MemoryEntry[]):
   const existing = new Set(entries.map((entry) => entry.name));
   if (!existing.has(base)) return base;
 
+  // Match the `-vN` convention used by the agent slug suggester so the
+  // user sees one consistent collision-resolution shape across the app.
   let suffix = 2;
-  while (existing.has(`${base} (${suffix})`)) suffix += 1;
-  return `${base} (${suffix})`;
+  while (existing.has(`${base}-v${suffix}`)) suffix += 1;
+  return `${base}-v${suffix}`;
 }
 
 export async function saveMemoryEntry(
@@ -528,6 +565,18 @@ export async function saveMemoryEntry(
 
   const filePath = getMemoryFilePath(input.scope, input.agentSlug, options);
   return withMemoryFileMutex(filePath, async () => {
+    // Tombstone enforcement: if the user has previously forgotten this
+    // entry name, an agent's `save_memory` call must not silently
+    // resurrect it. Without this gate, the agent fights the user every
+    // time they delete something. The UI's manual-add path passes
+    // `force: true` because that's the user explicitly overriding their
+    // earlier deletion.
+    const requestedName = normalizeName(input.name);
+    const tombstoned = readDeletedMemoryNames(input.scope, input.agentSlug, options);
+    if (tombstoned.has(requestedName) && !input.force) {
+      throw new MemoryTombstonedError(requestedName);
+    }
+
     const loaded = ensureLoadableMemoryFile(input.scope, input.agentSlug, options);
     const entry: MemoryEntry = {
       name: uniqueMemoryName(input.name, loaded.entries),
@@ -538,7 +587,13 @@ export async function saveMemoryEntry(
     };
     loaded.entries.push(entry);
     writeMemoryFile(loaded);
-    forgetDeletedMemoryNameUnlocked(filePath, entry.name);
+
+    // Only clear the tombstone when this was an explicit user-forced
+    // overwrite. A normal save that didn't conflict with a tombstone
+    // shouldn't touch the tombstone file at all.
+    if (input.force && tombstoned.has(requestedName)) {
+      forgetDeletedMemoryNameUnlocked(filePath, requestedName);
+    }
     return entry;
   });
 }
@@ -582,18 +637,24 @@ export async function deleteMemoryEntry(
 
   const filePath = getMemoryFilePath(input.scope, input.agentSlug, options);
   return withMemoryFileMutex(filePath, async () => {
-    const loaded = ensureLoadableMemoryFile(input.scope, input.agentSlug, options);
     const name = normalizeName(input.name);
+
+    // No-op fast path: nothing to delete and no file exists.
+    // Don't create an empty memory file or a tombstone for a name that
+    // never existed — that's surprising filesystem pollution.
+    if (!existsSync(filePath)) return false;
+
+    const loaded = ensureLoadableMemoryFile(input.scope, input.agentSlug, options);
     const nextEntries = loaded.entries.filter((entry) => entry.name !== name);
     const deleted = nextEntries.length !== loaded.entries.length;
     if (deleted) {
       loaded.entries = nextEntries;
       writeMemoryFile(loaded);
-    } else if (!existsSync(filePath)) {
-      mkdirSync(dirname(filePath), { recursive: true });
-      writeFileSync(filePath, serializeMemoryFile(loaded.envelope, []), 'utf-8');
+      // Tombstone the name so a subsequent `save_memory` call from an
+      // agent gets blocked until the user explicitly forces or
+      // un-tombstones. Only tombstone names that were actually present.
+      rememberDeletedMemoryNameUnlocked(filePath, name);
     }
-    rememberDeletedMemoryNameUnlocked(filePath, name);
     return deleted;
   });
 }
