@@ -36,6 +36,7 @@ import { getModelById } from '../config/models.ts';
 // BaseAgent provides common functionality
 import { BaseAgent } from './base-agent.ts';
 import type { Workspace } from '../config/storage.ts';
+import { getLlmConnections } from '../config/storage.ts';
 
 // Event adapter
 import { PiEventAdapter } from './backend/pi/event-adapter.ts';
@@ -384,6 +385,7 @@ export class PiAgent extends BaseAgent {
     // Custom endpoint mode must NOT fall back to global API keys — keyless local endpoints
     // are valid, and non-local endpoints should fail explicitly instead of using unrelated creds.
     const piAuth = await this.getPiAuth();
+    const callLlmPiAuth = await this.getCallLlmPiAuth();
     const isCustomEndpointMode = !!runtime.customEndpoint;
     const legacyApiKey = (!piAuth && !isCustomEndpointMode) ? await this.getApiKey() : undefined;
     if (isCustomEndpointMode && !piAuth) {
@@ -464,6 +466,9 @@ export class PiAgent extends BaseAgent {
       workingDirectory,
       plansFolderPath,
       miniModel: this.config.miniModel,
+      callLlmModelOverride: this.config.callLlmModelOverride,
+      callLlmThinkingLevel: this.config.callLlmThinkingLevel,
+      callLlmPiAuth: callLlmPiAuth ?? undefined,
       providerType: this.config.providerType,
       authType: this.config.authType,
       workspaceId: this.config.workspace.id,
@@ -500,7 +505,8 @@ export class PiAgent extends BaseAgent {
     if (this.config.miniModel) {
       const callLlmDef = sessionToolDefs.find(d => d.name === 'mcp__session__call_llm');
       if (callLlmDef) {
-        callLlmDef.description += `\n\nDefault fast model for this session: ${this.config.miniModel}. Omit the model parameter to use it automatically.`;
+        const effectiveModel = this.config.callLlmModelOverride ?? this.config.miniModel;
+        callLlmDef.description += `\n\nDefault fast model for this session: ${effectiveModel}. Omit the model parameter to use it automatically.`;
       }
     }
 
@@ -616,6 +622,84 @@ export class PiAgent extends BaseAgent {
       return null;
     } catch (error) {
       this.debug(`Failed to retrieve Pi auth: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Resolve Pi auth credentials for the Secondary Model connection (callLlmConnectionSlug).
+   * When a different connection is configured for call_llm, this retrieves its credentials
+   * so the Pi subprocess can use them for the ephemeral queryLlm session.
+   * Returns null if no secondary connection is configured or credentials aren't found.
+   */
+  private async getCallLlmPiAuth(): Promise<{
+    provider: string;
+    credential:
+      | { type: 'api_key'; key: string }
+      | { type: 'oauth'; access: string; refresh: string; expires: number };
+    baseUrl?: string;
+  } | null> {
+    const slug = this.config.callLlmConnectionSlug;
+    if (!slug) return null;
+
+    // Bail out if the secondary connection is the same as the main one
+    if (slug === this.config.connectionSlug) return null;
+
+    try {
+      const connections = getLlmConnections();
+      const conn = connections.find(c => c.slug === slug);
+      if (!conn) {
+        this.debug(`[callLlm] Secondary connection not found: ${slug}`);
+        return null;
+      }
+
+      const piAuthProvider = conn.piAuthProvider;
+      if (!piAuthProvider) {
+        this.debug(`[callLlm] Secondary connection ${slug} has no piAuthProvider`);
+        return null;
+      }
+
+      const credentialManager = getCredentialManager();
+
+      if (conn.authType === 'oauth') {
+        const oauth = await credentialManager.getLlmOAuth(slug);
+        if (oauth?.accessToken) {
+          if (piAuthProvider === 'github-copilot' && oauth.refreshToken) {
+            this.debug(`[callLlm] Retrieved Copilot OAuth for secondary connection: ${slug}`);
+            return {
+              provider: piAuthProvider,
+              credential: {
+                type: 'oauth',
+                access: oauth.accessToken,
+                refresh: oauth.refreshToken,
+                expires: oauth.expiresAt ?? 0,
+              },
+              baseUrl: conn.baseUrl || undefined,
+            };
+          }
+          this.debug(`[callLlm] Retrieved OAuth token for secondary connection: ${slug}`);
+          return {
+            provider: piAuthProvider,
+            credential: { type: 'api_key', key: oauth.accessToken },
+            baseUrl: conn.baseUrl || undefined,
+          };
+        }
+      } else {
+        const apiKey = await credentialManager.getLlmApiKey(slug);
+        if (apiKey) {
+          this.debug(`[callLlm] Retrieved API key for secondary connection: ${slug}`);
+          return {
+            provider: piAuthProvider,
+            credential: { type: 'api_key', key: apiKey },
+            baseUrl: conn.baseUrl || undefined,
+          };
+        }
+      }
+
+      this.debug(`[callLlm] No credentials found for secondary connection: ${slug}`);
+      return null;
+    } catch (error) {
+      this.debug(`[callLlm] Failed to resolve secondary connection credentials: ${error}`);
       return null;
     }
   }
