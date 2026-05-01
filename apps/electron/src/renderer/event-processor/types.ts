@@ -95,6 +95,10 @@ export interface CompleteEvent {
   tokenUsage?: Session['tokenUsage']
   /** Explicit unread flag - set by main process based on viewing state */
   hasUnread?: boolean
+  /** Why processing stopped. Set by SessionManager.onProcessingStopped (#664). */
+  reason?: 'complete' | 'interrupted' | 'error' | 'timeout'
+  /** True iff this turn produced a NEW final assistant message. Used to gate completion notifications (#664). */
+  didReceiveNewFinalMessage?: boolean
 }
 
 /**

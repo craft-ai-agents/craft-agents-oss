@@ -5627,12 +5627,16 @@ export class SessionManager implements ISessionManager {
         this.browserPaneManager.unbindAllForSession(sessionId)
       }
 
-      // No queue - emit complete to UI (include tokenUsage and hasUnread for state updates)
+      // No queue - emit complete to UI (include tokenUsage and hasUnread for state updates).
+      // reason + didReceiveNewFinalMessage let the renderer distinguish a real
+      // completion from an error/interrupt cleanup so it can gate notifications (#664).
       this.sendEvent({
         type: 'complete',
         sessionId,
         tokenUsage: managed.tokenUsage,
         hasUnread: managed.hasUnread,  // Propagate unread state to renderer
+        reason,
+        didReceiveNewFinalMessage,
       }, managed.workspace.id)
     }
 

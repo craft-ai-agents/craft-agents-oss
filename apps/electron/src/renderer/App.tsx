@@ -969,17 +969,28 @@ export default function App() {
           newMetaMap.set(sessionId, extractSessionMeta(updatedSession))
           store.set(sessionMetaMapAtom, newMetaMap)
 
-          // Show notification on complete (when window is not focused)
-          // Skip hidden sessions (mini-agent sessions) - they shouldn't trigger notifications
+          // Show notification on complete (when window is not focused).
+          // Skip hidden sessions (mini-agent sessions) - they shouldn't trigger notifications.
+          // Gate on reason + didReceiveNewFinalMessage so error/interrupt cleanup
+          // events don't fire success-style notifications previewing stale or
+          // never-persisted content (#664). Both fields are optional — when
+          // absent (older backends) treat as success to preserve prior behavior.
           if (event.type === 'complete' && !updatedSession.hidden) {
-            // Get the last assistant/plan message as preview
-            const lastMessage = updatedSession.messages.findLast(
-              m => (m.role === 'assistant' || m.role === 'plan') && !m.isIntermediate
-            )
-            // Strip markdown so OS notifications display clean plain text
-            const rawPreview = lastMessage?.content?.substring(0, 200) || undefined
-            const preview = rawPreview ? stripMarkdown(rawPreview).substring(0, 100) || undefined : undefined
-            showSessionNotification(updatedSession, preview)
+            const completeEvent = event as { reason?: string; didReceiveNewFinalMessage?: boolean }
+            const isSuccessfulCompletion =
+              (completeEvent.reason === undefined || completeEvent.reason === 'complete') &&
+              completeEvent.didReceiveNewFinalMessage !== false
+
+            if (isSuccessfulCompletion) {
+              // Get the last assistant/plan message as preview
+              const lastMessage = updatedSession.messages.findLast(
+                m => (m.role === 'assistant' || m.role === 'plan') && !m.isIntermediate
+              )
+              // Strip markdown so OS notifications display clean plain text
+              const rawPreview = lastMessage?.content?.substring(0, 200) || undefined
+              const preview = rawPreview ? stripMarkdown(rawPreview).substring(0, 100) || undefined : undefined
+              showSessionNotification(updatedSession, preview)
+            }
           }
         }
 
