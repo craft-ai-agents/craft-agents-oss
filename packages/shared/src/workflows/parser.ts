@@ -7,11 +7,13 @@ import {
   type WorkflowMetadata,
   type WorkflowParseWarning,
   type WorkflowStep,
+  type WorkflowStepFailurePolicy,
   type WorkflowTrigger,
   type WorkflowTriggerInput,
 } from './types.ts';
 
 const VALID_INPUT_TYPES: ReadonlyArray<WorkflowTriggerInput['type']> = ['string', 'number', 'boolean'];
+const VALID_STEP_FAILURE_POLICIES: ReadonlyArray<WorkflowStepFailurePolicy> = ['stop', 'continue', 'ask'];
 const TRIGGER_INPUT_NAME_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 function warning(
@@ -80,6 +82,7 @@ interface RawStep {
   outputSchema?: unknown;
   timeout?: unknown;
   retries?: unknown;
+  onFailure?: unknown;
 }
 
 export function parseWorkflowFile(
@@ -154,6 +157,17 @@ export function parseWorkflowFile(
       step.retries = rawStep.retries;
     }
 
+    if (rawStep.onFailure !== undefined) {
+      if (
+        typeof rawStep.onFailure !== 'string' ||
+        !(VALID_STEP_FAILURE_POLICIES as ReadonlyArray<string>).includes(rawStep.onFailure)
+      ) {
+        warnings.push(warning('step', 'invalid-step-on-failure', `step "${id}" onFailure must be one of: stop, continue, ask.`));
+        return null;
+      }
+      step.onFailure = rawStep.onFailure as WorkflowStepFailurePolicy;
+    }
+
     steps.push(step);
     seenIds.add(id);
     previousIds.push(id);
@@ -202,6 +216,7 @@ export function serializeWorkflow(metadata: WorkflowMetadata, body: string): str
     if (s.outputSchema) out.outputSchema = s.outputSchema;
     if (s.timeout !== undefined) out.timeout = s.timeout;
     if (s.retries !== undefined) out.retries = s.retries;
+    if (s.onFailure !== undefined) out.onFailure = s.onFailure;
     return out;
   });
 

@@ -34,18 +34,23 @@ A WorkflowRunner is ~300–500 LOC of plain TypeScript on top of our existing se
 
 ## Status
 
-**Spec only.** Nothing in this directory is implemented yet. A fresh agent picking up Phase 1 should start at `04-implementation-plan.md`.
+Core workflow storage, parsing, starter seeding, manual runs, sequential runner
+execution, structured step output, timeouts, and retries are implemented. The
+implementation plan remains useful for follow-up work, but the current runtime
+surface is defined by [`01-spec.md`](./01-spec.md) and [`02-runtime.md`](./02-runtime.md).
 
-## Hard non-goals (Phase 1)
+## Hard non-goals (current runtime)
 
 - Visual node-graph editor (later — YAML editing covers MVP).
 - Cross-machine durable execution (no need; RunnerOS is local-first).
-- Branching / conditionals beyond a single `when:` on a step (covered in Phase 3).
+- Branching / conditionals (`when:` is not supported yet).
 - Sub-workflows / nesting (compose by reference later).
 - Workflow versioning / migrations (file is the source of truth — git it).
 
 ## North star demo
 
-> Kick off a 5-step "weekly content" workflow at 9am. Walk away. Come back to a Run page where steps 1–4 are green and step 5 is paused at a human-checkpoint. Click **Approve** → step 5 publishes. Click any step card → side pane opens its underlying session, full transcript, fork from here.
+> Kick off a 4-step manual "weekly content" workflow. Walk away. Come back to
+> a Run page where completed steps are green and the active step links to its
+> underlying session transcript.
 
-If the build is on track, this demo works at end of Phase 3.
+Scheduled triggers, human checkpoints, and parallel execution are later work.

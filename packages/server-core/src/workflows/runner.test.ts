@@ -17,7 +17,12 @@ import {
   type WorkflowMetadata,
   type WorkflowRunSnapshot,
 } from '@craft-agent/shared/workflows';
-import { WorkflowRunner, type WorkflowRunEvent, type WorkflowRunnerDeps } from './runner.ts';
+import {
+  WorkflowRunner,
+  type WorkflowRunEvent,
+  type WorkflowRunEventDetail,
+  type WorkflowRunnerDeps,
+} from './runner.ts';
 
 // ----------------------------------------------------------------------------
 // Test fixtures
@@ -149,6 +154,16 @@ function lastCompleted(events: WorkflowRunEvent[]): WorkflowRunSnapshot | undefi
   return undefined;
 }
 
+function findUpdatedDetail(
+  events: WorkflowRunEvent[],
+  kind: WorkflowRunEventDetail['kind'],
+): WorkflowRunEventDetail | undefined {
+  for (const event of events) {
+    if (event.type === 'run.updated' && event.detail?.kind === kind) return event.detail;
+  }
+  return undefined;
+}
+
 // ----------------------------------------------------------------------------
 // Tests
 // ----------------------------------------------------------------------------
@@ -262,6 +277,88 @@ describe('WorkflowRunner', () => {
     expect(h.sessions.size).toBe(1);
   });
 
+  test('onFailure continue records failed step and runs later steps', async () => {
+    const h = makeHarness({ stepOutputs: ['unused', 'RECOVERED'] });
+    const runner = new WorkflowRunner(h.deps);
+
+    h.setStepBehavior(0, async () => {
+      throw new Error('recoverable');
+    });
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [
+          {
+            id: 'first',
+            agent: 'researcher',
+            input: 'Research {{trigger.topic}}',
+            onFailure: 'continue',
+          },
+          { id: 'second', agent: 'writer', input: 'Write fallback' },
+        ],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 't' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const completed = lastCompleted(h.events)!;
+    expect(completed.state).toBe('succeeded');
+    expect(completed.steps[0]!.state).toBe('failed');
+    expect(completed.steps[0]!.error).toEqual({ code: 'step-threw', message: 'recoverable' });
+    expect(completed.steps[1]!.state).toBe('succeeded');
+    expect(completed.steps[1]!.output).toBe('RECOVERED');
+    expect(h.promptsSent.map((p) => p.prompt)).toEqual(['Research t', 'Write fallback']);
+
+    expect(findUpdatedDetail(h.events, 'step.failed')).toMatchObject({
+      kind: 'step.failed',
+      stepId: 'first',
+      attempts: 1,
+      onFailure: 'continue',
+      error: { code: 'step-threw', message: 'recoverable' },
+    });
+
+    const onDisk = readRun(workspaceRoot, completed.id);
+    expect(onDisk?.state).toBe('succeeded');
+    expect(onDisk?.steps[0]!.state).toBe('failed');
+    expect(onDisk?.steps[1]!.state).toBe('succeeded');
+  });
+
+  test('onFailure ask is parsed by the runner but stops without checkpoint support', async () => {
+    const h = makeHarness();
+    const runner = new WorkflowRunner(h.deps);
+
+    h.setStepBehavior(0, async () => {
+      throw new Error('needs human');
+    });
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [
+          {
+            id: 'first',
+            agent: 'researcher',
+            input: 'Research {{trigger.topic}}',
+            onFailure: 'ask',
+          },
+          { id: 'second', agent: 'writer', input: 'Write fallback' },
+        ],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 't' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const completed = lastCompleted(h.events)!;
+    expect(completed.state).toBe('failed');
+    expect(completed.steps[0]!.state).toBe('failed');
+    expect(completed.steps[1]!.state).toBe('queued');
+    expect(h.sessions.size).toBe(1);
+    expect(findUpdatedDetail(h.events, 'step.failed')).toMatchObject({ onFailure: 'ask' });
+  });
+
   test('structured output: parses JSON and exposes dot-paths to later steps', async () => {
     const h = makeHarness({
       stepOutputs: ['{"title":"Reliable workflows","count":2}', 'DONE'],
@@ -332,6 +429,13 @@ describe('WorkflowRunner', () => {
     expect(completed.steps[0]!.attempts).toBe(2);
     expect(completed.steps[0]!.output).toEqual({ title: 'Recovered' });
     expect(h.sessions.size).toBe(2);
+    expect(findUpdatedDetail(h.events, 'step.retrying')).toMatchObject({
+      kind: 'step.retrying',
+      stepId: 'first',
+      attempt: 1,
+      maxAttempts: 2,
+      error: { code: 'invalid-structured-output' },
+    });
   });
 
   test('timeout aborts the attempt and fails when retries are exhausted', async () => {
@@ -363,6 +467,14 @@ describe('WorkflowRunner', () => {
     expect(completed.steps[0]!.state).toBe('failed');
     expect(completed.steps[0]!.error?.code).toBe('timeout');
     expect(h.sessions.get('sess-1')!.aborted).toBe(true);
+    expect(findUpdatedDetail(h.events, 'step.failed')).toMatchObject({
+      kind: 'step.failed',
+      stepId: 'first',
+      attempts: 1,
+      onFailure: 'stop',
+      error: { code: 'timeout' },
+      timeoutSeconds: 0.01,
+    });
   });
 
   test('concurrency: starting a second run for the same workflow+workspace rejects', async () => {

@@ -42,8 +42,26 @@ import {
  */
 export type WorkflowRunEvent =
   | { type: 'run.created'; run: WorkflowRunSnapshot }
-  | { type: 'run.updated'; run: WorkflowRunSnapshot }
+  | { type: 'run.updated'; run: WorkflowRunSnapshot; detail?: WorkflowRunEventDetail }
   | { type: 'run.completed'; run: WorkflowRunSnapshot };
+
+export type WorkflowRunEventDetail =
+  | {
+      kind: 'step.retrying';
+      stepId: string;
+      attempt: number;
+      maxAttempts: number;
+      error: { code: string; message: string };
+      timeoutSeconds?: number;
+    }
+  | {
+      kind: 'step.failed';
+      stepId: string;
+      attempts: number;
+      onFailure: 'stop' | 'continue' | 'ask';
+      error: { code: string; message: string };
+      timeoutSeconds?: number;
+    };
 
 /**
  * Public surface the runner needs from its host. The real implementation
@@ -303,11 +321,16 @@ export class WorkflowRunner {
           active.currentSessionId = undefined;
           if (active.abort.signal.aborted) break;
           if (attempt < maxAttempts) {
-            stepRecord.error = {
-              code: err instanceof StepAttemptError ? err.code : 'step-threw',
-              message: err instanceof Error ? err.message : String(err),
-            };
-            this.touch(active);
+            const error = this.stepError(err);
+            stepRecord.error = error;
+            this.touch(active, {
+              kind: 'step.retrying',
+              stepId: stepDef.id,
+              attempt,
+              maxAttempts,
+              error,
+              timeoutSeconds: error.code === 'timeout' ? stepDef.timeout : undefined,
+            });
             continue;
           }
         }
@@ -315,13 +338,22 @@ export class WorkflowRunner {
 
       if (active.abort.signal.aborted) break;
       if (lastError !== undefined) {
+        const onFailure = stepDef.onFailure ?? 'stop';
+        const error = this.stepError(lastError);
         stepRecord.state = 'failed';
         stepRecord.completedAt = new Date().toISOString();
-        stepRecord.error = {
-          code: lastError instanceof StepAttemptError ? lastError.code : 'step-threw',
-          message: lastError instanceof Error ? lastError.message : String(lastError),
-        };
-        this.touch(active);
+        stepRecord.error = error;
+        this.touch(active, {
+          kind: 'step.failed',
+          stepId: stepDef.id,
+          attempts: stepRecord.attempts,
+          onFailure,
+          error,
+          timeoutSeconds: error.code === 'timeout' ? stepDef.timeout : undefined,
+        });
+        if (onFailure === 'continue') {
+          continue;
+        }
         failed = true;
         break;
       }
@@ -450,10 +482,10 @@ export class WorkflowRunner {
     }
   }
 
-  private touch(active: ActiveRun): void {
+  private touch(active: ActiveRun, detail?: WorkflowRunEventDetail): void {
     active.snapshot.updatedAt = new Date().toISOString();
     this.persist(active);
-    this.emitEvent({ type: 'run.updated', run: this.cloneSnapshot(active.snapshot) });
+    this.emitEvent({ type: 'run.updated', run: this.cloneSnapshot(active.snapshot), detail });
   }
 
   private persist(active: ActiveRun): void {
@@ -527,6 +559,13 @@ export class WorkflowRunner {
 
   private cloneJson<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
+  }
+
+  private stepError(err: unknown): { code: string; message: string } {
+    return {
+      code: err instanceof StepAttemptError ? err.code : 'step-threw',
+      message: err instanceof Error ? err.message : String(err),
+    };
   }
 
   private isTerminal(state: WorkflowRunSnapshot['state']): boolean {

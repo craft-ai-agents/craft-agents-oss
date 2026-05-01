@@ -12,7 +12,7 @@
  *
  * Phase 1 includes a `manual` trigger and the minimal step shape
  * (`id`, `agent`, `input`). Phase 2 adds pragmatic reliability fields:
- * `outputSchema`, `timeout`, and `retries`. Later fields (`when`,
+ * `outputSchema`, `timeout`, `retries`, and `onFailure`. Later fields (`when`,
  * `humanCheckpoint`, `parallelGroup`) ship in later phases — keep this file in
  * sync with `docs/workflows/01-spec.md`.
  */
@@ -53,6 +53,8 @@ export interface WorkflowTrigger {
 
 export type JsonSchema = Record<string, unknown>;
 
+export type WorkflowStepFailurePolicy = 'stop' | 'continue' | 'ask';
+
 /**
  * One step in the pipeline. Later phase fields are only added here once the
  * runner actually honors them.
@@ -72,6 +74,8 @@ export interface WorkflowStep {
   timeout?: number;
   /** Number of retries after a failed attempt. Defaults to 0. */
   retries?: number;
+  /** What to do after all attempts fail. Defaults to `stop`; `ask` is parsed for future checkpoint support. */
+  onFailure?: WorkflowStepFailurePolicy;
 }
 
 export interface WorkflowMetadata {
@@ -90,7 +94,8 @@ export type WorkflowParseWarningCode =
   | 'invalid-step-description'
   | 'invalid-step-output-schema'
   | 'invalid-step-timeout'
-  | 'invalid-step-retries';
+  | 'invalid-step-retries'
+  | 'invalid-step-on-failure';
 
 export interface WorkflowParseWarning {
   field: keyof WorkflowMetadata | 'step';

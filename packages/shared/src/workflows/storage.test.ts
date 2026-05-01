@@ -269,6 +269,7 @@ describe('serializeWorkflow', () => {
           },
           timeout: 30,
           retries: 1,
+          onFailure: 'continue',
         },
         { id: 'draft', agent: 'writer', input: 'Use this:\n\n{{steps.research.output.title}}' },
       ],
@@ -293,6 +294,29 @@ describe('serializeWorkflow', () => {
     expect(parseWorkflowFile([...base, '    outputSchema: []', '---'].join('\n'))).toBeNull();
     expect(parseWorkflowFile([...base, '    timeout: 0', '---'].join('\n'))).toBeNull();
     expect(parseWorkflowFile([...base, '    retries: 1.5', '---'].join('\n'))).toBeNull();
+    expect(parseWorkflowFile([...base, '    onFailure: skip', '---'].join('\n'))).toBeNull();
+  });
+
+  test('parses supported step failure policies', () => {
+    const base = [
+      '---',
+      'name: A',
+      'description: B',
+      'steps:',
+      '  - id: one',
+      '    agent: r',
+      '    input: hi',
+      '    onFailure: ask',
+      '  - id: two',
+      '    agent: r',
+      '    input: bye',
+      '    onFailure: continue',
+      '---',
+    ].join('\n');
+    const parsed = parseWorkflowFile(base);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.metadata.steps[0]!.onFailure).toBe('ask');
+    expect(parsed!.metadata.steps[1]!.onFailure).toBe('continue');
   });
 });
 

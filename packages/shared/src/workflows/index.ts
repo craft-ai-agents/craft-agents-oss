@@ -15,6 +15,7 @@ export type {
   WorkflowParseWarning,
   WorkflowParseWarningCode,
   WorkflowStep,
+  WorkflowStepFailurePolicy,
   WorkflowTrigger,
   WorkflowTriggerInput,
   WorkflowTriggerType,

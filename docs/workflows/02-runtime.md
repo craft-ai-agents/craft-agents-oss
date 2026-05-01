@@ -13,11 +13,11 @@ The runner is *not* magical. It's a state machine with a step loop, persisted be
 
 ## Where the code lives
 
-| Concern | Package | File (proposed) |
+| Concern | Package | File |
 |---------|---------|-----------------|
 | Workflow file format (parser, serializer, types, slug rules, validation) | `@craft-agent/shared` | `src/workflows/{types,storage}.ts` |
 | Runner state machine | `@craft-agent/server-core` | `src/workflows/runner.ts` |
-| Run persistence (read/write/list) | `@craft-agent/server-core` | `src/workflows/runs.ts` |
+| Run persistence (read/write/list) | `@craft-agent/shared` | `src/workflows/run-storage.ts` |
 | Templating resolver (tiny — ~50 LOC) | `@craft-agent/shared` | `src/workflows/template.ts` |
 | RPC channels + handler | `@craft-agent/shared` + `@craft-agent/server-core` | `protocol/channels.ts`, `handlers/rpc/workflows.ts` |
 | Renderer state (atoms, hooks) | `apps/electron` | `renderer/state/workflows.ts` |
@@ -34,38 +34,37 @@ Mirror the existing patterns in `agent-definitions/` and `workspace-context/` �
 3. **Rooms share infra.** When Rooms ship, they're "a session that multiple agents take turns participating in." A workflow step is "a session with one agent and a pre-filled prompt." Both fall out of the same primitive.
 4. **Mid-run interjection.** User can type into a running step's session. The runner sees the additional turns and only advances when the session reports complete.
 
-The runner's only special privilege is the **completion signal**: a step is done when the session emits its terminal assistant message *and* (if `outputSchema` is set) that message validates against the schema. Otherwise the runner waits.
+The runner's only special privilege is the **completion signal**: a step is done when the step session's LLM turn completes. If `outputSchema` is set, the last assistant message must parse as JSON and validate against the schema before the step succeeds.
 
 ## Output extraction
 
 | Step config | Strategy |
 |-------------|----------|
-| No `outputSchema` (Phase 1) | Take the last assistant message's text content as `output`. Plain string. |
-| `outputSchema` set (Phase 2) | Inject the schema into the agent's prompt as "your final reply MUST be a JSON object matching this schema." Validate every assistant message; the first valid one ends the step. The parsed object becomes `output`. |
+| No `outputSchema` | Take the last assistant message's text content as `output`. Plain string. |
+| `outputSchema` set | Append an instruction that the final reply must be JSON matching the schema. Parse and validate the last assistant message. The parsed object becomes `output`. |
 
-The schema-injection strategy is identical to how `buildCallLlmRequest` already handles structured outputs in `packages/shared/src/agent/llm-tool.ts` — reuse that helper.
+The JSON parser accepts raw JSON or a single fenced JSON block. Schema validation currently covers `type`, `enum`, object `required` / `properties`, and array `items`.
 
-If the schema-validated reply never arrives within `timeout`, step fails with `error: 'invalid-structured-output'`. User sees the last (invalid) reply in the side-pane so they can debug.
+If the step has `timeout`, the active session is aborted when the timeout expires and the attempt fails with `error.code: 'timeout'`. If structured output parsing fails, the attempt fails with `error.code: 'invalid-structured-output'`. `retries` controls how many additional attempts are made.
 
 ## Run lifecycle
 
 ```
-created → queued → running → (paused | succeeded | failed | cancelled)
-                              ↑
-                              └── humanCheckpoint
+running → (succeeded | failed | cancelled)
 ```
 
 | State | Trigger | Notes |
 |-------|---------|-------|
-| `created` | User clicks Run, before validation. | UI shows the input form. |
-| `queued` | Validated, waiting for a runner slot. | Phase 1: at most 1 concurrent run per workflow. Configurable later. |
-| `running` | Runner picked it up. | Cards animate in. |
-| `paused` | A step had `humanCheckpoint: true`. | UI shows Approve / Reject buttons. |
+| `running` | Runner accepted the run and persisted the initial snapshot. | At most 1 concurrent run per workflow per workspace. |
 | `succeeded` | All steps completed without failure. | |
 | `failed` | A step exhausted its retries or timed out. | Run is "completed-but-failed." |
 | `cancelled` | User clicked Cancel. | Active step's session is hard-aborted (`UserStop`). |
 
-Per-step states: `queued | running | succeeded | failed | skipped | awaiting-human`.
+Per-step states used by the current runner: `queued | running | succeeded | failed`.
+
+The shared run types still declare `created`, `queued`, `paused`, `skipped`, and
+`awaiting-human` for forward compatibility. The current runner does not emit
+paused, skipped, or awaiting-human states.
 
 ## Persistence layout
 
@@ -88,13 +87,13 @@ interface WorkflowRun {
   workspaceId: string
   state: 'created' | 'queued' | 'running' | 'paused' | 'succeeded' | 'failed' | 'cancelled'
   trigger: {
-    type: 'manual' | 'schedule' | 'automation' | 'webhook'
+    type: 'manual'
     inputs: Record<string, unknown>
     firedAt: string                // ISO
   }
   steps: Array<{
     id: string
-    state: 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'awaiting-human'
+    state: 'queued' | 'running' | 'succeeded' | 'failed'
     sessionId?: string             // present once running
     startedAt?: string
     completedAt?: string
@@ -102,6 +101,7 @@ interface WorkflowRun {
     error?: { code: string; message: string }
     attempts: number
   }>
+  workflowSnapshot: { metadata: WorkflowMetadata; body: string }
   createdAt: string
   updatedAt: string
 }
@@ -109,14 +109,15 @@ interface WorkflowRun {
 
 ## Resume on restart
 
-When the server starts, scan every workspace's `runs/` for runs in `running` or `paused` state.
+When full resume support is implemented, the server should scan every workspace's
+`runs/` for non-terminal runs.
 
-- `paused` runs stay paused — no action.
 - `running` runs are repaired:
   - The currently-active step's `sessionId` is checked. If the session is still running in the SessionManager, the runner reattaches.
   - If the session is gone (server crashed mid-step), mark the step as `failed` with `error: 'orphaned-session'` and either retry (if `retries > 0`) or mark the run failed.
 
-This is best-effort, **not durable execution**. Users who need crash-proof multi-day workflows reach for Inngest in Phase 5+. We document this loudly so expectations are right.
+This is best-effort, **not durable execution**. Users who need crash-proof
+multi-day workflows should not treat the local runner as a durable job system.
 
 ## Cancellation
 
@@ -124,11 +125,10 @@ User clicks Cancel on the Run page → renderer sends `cancelRun(runId)` → run
 
 Already-completed steps are not undone. Output remains visible.
 
-## Concurrency (Phase 3)
+## Concurrency
 
-`parallelGroup` lets a contiguous slice of steps share a group name; they all run concurrently and the runner advances only when *all* have completed. Validation rule: every step in a group must declare the same `parallelGroup` value, and groups can't span non-adjacent steps.
-
-Phase 1 is strictly sequential. Don't add `parallelGroup` plumbing until Phase 3.
+The current runner is strictly sequential. It rejects a second active run for
+the same `(workspaceId, workflowSlug)` pair. `parallelGroup` is not supported.
 
 ## Events
 
