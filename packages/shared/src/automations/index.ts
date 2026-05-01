@@ -111,7 +111,7 @@ export {
 export { resolveAutomationsConfigPath, generateShortId } from './resolve-config-path.ts';
 
 // Cron matching
-export { matchesCron } from './cron-matcher.ts';
+export { matchesCron, normalizeStandardFiveFieldCron } from './cron-matcher.ts';
 
 // Event Bus
 export {

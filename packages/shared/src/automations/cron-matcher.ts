@@ -22,6 +22,27 @@ const log = createLogger('cron-matcher');
  * matchesCron('* * * * *')                    // Matches every minute
  * matchesCron('0 9 * * *', 'Europe/Budapest') // Matches 9:00 AM Budapest time
  */
+/**
+ * Normalize and validate a 5-field standard cron expression.
+ *
+ * Returns the trimmed expression when it's exactly 5 whitespace-separated
+ * fields and does NOT start with `@` (which Croner accepts as alias syntax
+ * like `@hourly`/`@daily`/`@reboot`). Returns `null` otherwise.
+ *
+ * Why this guard exists: our public contract for automation creation
+ * promises 5-field standard cron — Croner's permissive parser accepts
+ * 6-field and `@`-aliases, which would silently expand the surface and
+ * confuse anyone reading the automation file.
+ */
+export function normalizeStandardFiveFieldCron(expr: string | undefined): string | null {
+  const trimmed = expr?.trim();
+  if (!trimmed) return null;
+  const parts = trimmed.split(/\s+/);
+  if (parts.length !== 5) return null;
+  if (trimmed.startsWith('@')) return null;
+  return trimmed;
+}
+
 export function matchesCron(cronExpr: string, timezone?: string): boolean {
   try {
     const options = timezone ? { timezone } : {};

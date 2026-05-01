@@ -94,7 +94,7 @@ import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
 import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels'
 import { ensureLabelsExist } from '@craft-agent/shared/labels/crud'
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
-import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
+import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, normalizeStandardFiveFieldCron, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
 
 // Import from server-core domain utilities
 import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@craft-agent/server-core/domain'
@@ -194,15 +194,6 @@ function buildWorkflowAgentPrompt(
   if (contextSection) parts.push(contextSection)
   if (footerParts.length > 0) parts.push(footerParts.join('\n\n'))
   return parts.join(SECTION_DELIMITER)
-}
-
-function normalizeStandardFiveFieldCron(expr: string | undefined): string | null {
-  const trimmed = expr?.trim()
-  if (!trimmed) return null
-  const parts = trimmed.split(/\s+/)
-  if (parts.length !== 5) return null
-  if (trimmed.startsWith('@')) return null
-  return trimmed
 }
 
 const automationConfigMutexes = new Map<string, Promise<void>>()
@@ -3838,19 +3829,29 @@ export class SessionManager implements ISessionManager {
 
           const existing = loadGlobalAgent(slug)
           if (existing && !input.overwrite) {
-            // Suggest the next free numbered variant. v2..v99 covers ~all realistic cases.
+            // Try `<slug>-v2` through `<slug>-v999`. If every variant in
+            // that range is taken (effectively impossible in real use),
+            // give the user actionable guidance instead of a silent
+            // `suggestedSlug: undefined`.
+            const SUGGEST_MAX = 999
             let suggested: string | undefined
-            for (let n = 2; n < 100; n++) {
+            for (let n = 2; n <= SUGGEST_MAX; n++) {
               const candidate = `${slug}-v${n}`
               if (!loadGlobalAgent(candidate)) {
                 suggested = candidate
                 break
               }
             }
+            if (suggested) {
+              return {
+                ok: false,
+                error: `An agent with slug "${slug}" already exists.`,
+                suggestedSlug: suggested,
+              }
+            }
             return {
               ok: false,
-              error: `An agent with slug "${slug}" already exists.`,
-              suggestedSlug: suggested,
+              error: `An agent with slug "${slug}" already exists, and every "-vN" variant up to v${SUGGEST_MAX} is taken. Pass overwrite: true or pick a different base slug.`,
             }
           }
 

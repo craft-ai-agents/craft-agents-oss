@@ -72,6 +72,13 @@ const SUPPORTED_EVENTS: ReadonlySet<string> = new Set([
 
 const WEBHOOK_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
+/**
+ * Kept in sync with `normalizeStandardFiveFieldCron` in
+ * `@craft-agent/shared/automations/cron-matcher.ts`. This package
+ * deliberately does NOT import `@craft-agent/shared` (it's the cross-
+ * backend "core" used by both Claude in-process and Codex subprocess —
+ * see `update-preferences.ts:5`). Any change here must mirror there.
+ */
 export function normalizeStandardFiveFieldCron(expr: string | undefined): string | null {
   const trimmed = expr?.trim();
   if (!trimmed) return null;
