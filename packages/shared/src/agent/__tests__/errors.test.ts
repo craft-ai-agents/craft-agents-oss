@@ -35,3 +35,42 @@ describe('parseError proxy interception handling', () => {
     expect(parsed.code).toBe('invalid_api_key')
   })
 })
+
+describe('parseError context overflow detection (#666)', () => {
+  it('maps context_length_exceeded error to context_overflow', () => {
+    const parsed = parseError(new Error('Error: context_length_exceeded - this turn would exceed the model context window'))
+    expect(parsed.code).toBe('context_overflow')
+  })
+
+  it('maps "exceeds the context window" message to context_overflow', () => {
+    const parsed = parseError(new Error('The request exceeds the context window of 200000 tokens'))
+    expect(parsed.code).toBe('context_overflow')
+  })
+
+  it('maps "too many tokens" message to context_overflow', () => {
+    const parsed = parseError(new Error('Request rejected: too many tokens for this model'))
+    expect(parsed.code).toBe('context_overflow')
+  })
+
+  it('maps "token limit exceeded" message to context_overflow', () => {
+    const parsed = parseError(new Error('Token limit exceeded'))
+    expect(parsed.code).toBe('context_overflow')
+  })
+
+  it('returns a typed error definition with title and retry action', () => {
+    const parsed = parseError(new Error('context_length_exceeded'))
+    expect(parsed.title).toBeTruthy()
+    expect(parsed.message).toBeTruthy()
+    expect(parsed.canRetry).toBe(true)
+  })
+
+  it('does not misclassify image-too-large errors as context_overflow', () => {
+    const parsed = parseError(new Error('Image dimensions exceed the 8000px limit'))
+    expect(parsed.code).toBe('image_too_large')
+  })
+
+  it('does not misclassify unrelated errors as context_overflow', () => {
+    const parsed = parseError(new Error('500 Internal Server Error'))
+    expect(parsed.code).toBe('service_error')
+  })
+})
