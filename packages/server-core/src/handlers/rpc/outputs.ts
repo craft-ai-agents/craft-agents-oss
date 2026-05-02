@@ -41,7 +41,13 @@ function selectAssetPath(output: OutputManifest, assetIdOrPath?: string): string
     if (!path) throw new Error(`Output "${output.id}" has no file asset to open.`);
     return path;
   }
-  return output.assets.find((asset) => asset.id === assetIdOrPath)?.path ?? assetIdOrPath;
+  // Reject unknown ids outright. Falling back to treating an unmatched
+  // identifier as a literal path lets callers smuggle paths through this
+  // surface — a confused-deputy attack against the downstream
+  // workspace-root validator.
+  const asset = output.assets.find((a) => a.id === assetIdOrPath);
+  if (!asset) throw new Error(`Output "${output.id}" has no asset with id "${assetIdOrPath}".`);
+  return asset.path;
 }
 
 async function resolveSafeOutputAssetPath(

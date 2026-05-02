@@ -123,6 +123,113 @@ describe('output handlers', () => {
     expect((result.content[0] as any).text).toContain('Created output "Research brief"');
   });
 
+  describe('receipt occurredAt validation', () => {
+    const baseInput = (receipt: any): CreateOutputToolInput => ({
+      title: 'x',
+      kind: 'receipt',
+      summary: 'x',
+      receipts: [{ provider: 'p', action: 'a', status: 'succeeded', ...receipt }],
+    });
+
+    it('accepts a valid ISO-8601 occurredAt', async () => {
+      let called = false;
+      const ctx = makeCtx({
+        createOutput: async () => {
+          called = true;
+          return { ok: true };
+        },
+      });
+      const result = await handleCreateOutput(ctx, baseInput({ occurredAt: '2024-01-02T03:04:05.000Z' }));
+      expect(result.isError).toBe(false);
+      expect(called).toBe(true);
+    });
+
+    it('rejects a non-ISO occurredAt string with a clear message', async () => {
+      const ctx = makeCtx({ createOutput: async () => ({ ok: true }) });
+      const result = await handleCreateOutput(ctx, baseInput({ occurredAt: 'not-a-date' }));
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain('occurredAt');
+      expect((result.content[0] as any).text).toContain('ISO-8601');
+    });
+
+    it('passes when occurredAt is omitted', async () => {
+      let called = false;
+      const ctx = makeCtx({
+        createOutput: async () => {
+          called = true;
+          return { ok: true };
+        },
+      });
+      const result = await handleCreateOutput(ctx, baseInput({}));
+      expect(result.isError).toBe(false);
+      expect(called).toBe(true);
+    });
+  });
+
+  describe('receipt metadata gating', () => {
+    const withMetadata = (metadata: any): CreateOutputToolInput => ({
+      title: 'x',
+      kind: 'receipt',
+      summary: 'x',
+      receipts: [{ provider: 'p', action: 'a', status: 'succeeded', metadata }],
+    });
+
+    it('rejects metadata containing forbidden __proto__ key', async () => {
+      const ctx = makeCtx({ createOutput: async () => ({ ok: true }) });
+      const polluted = JSON.parse('{"__proto__":{"polluted":true}}');
+      const result = await handleCreateOutput(ctx, withMetadata(polluted));
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain('__proto__');
+    });
+
+    it('rejects metadata containing forbidden constructor key', async () => {
+      const ctx = makeCtx({ createOutput: async () => ({ ok: true }) });
+      const result = await handleCreateOutput(ctx, withMetadata({ constructor: { x: 1 } }));
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain('constructor');
+    });
+
+    it('accepts deeply nested valid object', async () => {
+      let called = false;
+      const ctx = makeCtx({
+        createOutput: async () => {
+          called = true;
+          return { ok: true };
+        },
+      });
+      const metadata = {
+        a: { b: { c: { d: [1, 'two', true, null, { e: 'ok' }] } } },
+      };
+      const result = await handleCreateOutput(ctx, withMetadata(metadata));
+      expect(result.isError).toBe(false);
+      expect(called).toBe(true);
+    });
+
+    it('rejects class instances (non plain object)', async () => {
+      class Foo { x = 1; }
+      const ctx = makeCtx({ createOutput: async () => ({ ok: true }) });
+      const result = await handleCreateOutput(ctx, withMetadata({ inst: new Foo() }));
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain('metadata');
+    });
+
+    it('rejects when nesting exceeds the depth bound (depth-bound stand-in for circular references)', async () => {
+      // Build a 12-deep chain — exceeds MAX_METADATA_DEPTH (8). A genuine
+      // circular reference would also fail the same depth check before
+      // recursing forever.
+      const root: any = {};
+      let cur = root;
+      for (let i = 0; i < 12; i += 1) {
+        cur.next = {};
+        cur = cur.next;
+      }
+      const ctx = makeCtx({ createOutput: async () => ({ ok: true }) });
+      const result = await handleCreateOutput(ctx, withMetadata(root));
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain('depth');
+    });
+  });
+
   it('create_output surfaces backend errors', async () => {
     const result = await handleCreateOutput(makeCtx({
       createOutput: async () => ({ ok: false, error: 'path escaped workspace' }),

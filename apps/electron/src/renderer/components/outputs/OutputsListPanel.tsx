@@ -1,9 +1,12 @@
 import * as React from 'react'
 import { FileText, Image, Link2, ReceiptText, Search } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { EntityRow } from '@/components/ui/entity-row'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import type { OutputKind, OutputSummaryDTO } from '@/hooks/useOutputs'
+
+type TFn = (key: string, options?: Record<string, unknown>) => string
 
 interface Props {
   outputs: OutputSummaryDTO[]
@@ -20,6 +23,7 @@ export function OutputsListPanel({
   selectedOutputId,
   onOutputClick,
 }: Props) {
+  const { t } = useTranslation()
   const [query, setQuery] = React.useState('')
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -46,19 +50,19 @@ export function OutputsListPanel({
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search outputs"
+            placeholder={t('outputsList.searchPlaceholder')}
             className="h-8 pl-8 text-sm"
           />
         </div>
       </div>
       <div className="flex-1 min-h-0 overflow-auto py-1">
         {loading ? (
-          <div className="h-full flex items-center justify-center text-sm text-muted-foreground">Loading outputs</div>
+          <div className="h-full flex items-center justify-center text-sm text-muted-foreground">{t('outputsList.loading')}</div>
         ) : error ? (
           <div className="m-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">{error}</div>
         ) : filtered.length === 0 ? (
           <div className="h-full flex items-center justify-center px-5 text-center text-sm text-muted-foreground">
-            {query ? 'No outputs match your search' : 'No outputs published yet'}
+            {query ? t('outputsList.emptySearch') : t('outputsList.empty')}
           </div>
         ) : (
           filtered.map((output, index) => (
@@ -66,16 +70,16 @@ export function OutputsListPanel({
               key={output.id}
               icon={<OutputKindIcon kind={output.kind} />}
               title={output.title}
-              subtitle={output.summary || producerLabel(output)}
+              subtitle={output.summary || producerLabel(output, t)}
               badges={
                 <div className="flex min-w-0 items-center gap-1.5">
                   <StatusPill status={output.status} />
                   <span className="truncate text-muted-foreground">
-                    {formatKind(output.kind)} · {producerLabel(output)}
+                    {formatKind(output.kind)} · {producerLabel(output, t)}
                   </span>
                 </div>
               }
-              titleTrailing={<span className="text-[11px] text-muted-foreground">{formatRelativeTime(output.createdAt)}</span>}
+              titleTrailing={<span className="text-[11px] text-muted-foreground">{formatRelativeTime(output.createdAt, t)}</span>}
               isSelected={selectedOutputId === output.id}
               onClick={() => onOutputClick(output.id)}
               showSeparator={index > 0}
@@ -115,9 +119,9 @@ function formatKind(kind: string): string {
   return kind.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
-function producerLabel(output: OutputSummaryDTO): string {
+function producerLabel(output: OutputSummaryDTO, t: TFn): string {
   const origin = output.origin
-  if (!origin) return 'Manual'
+  if (!origin) return t('outputsList.producerManual')
   if (origin.workflowName) return origin.workflowName
   if (origin.agentName) return origin.agentName
   if (origin.workflowSlug) return origin.workflowSlug
@@ -125,17 +129,17 @@ function producerLabel(output: OutputSummaryDTO): string {
   return formatKind(origin.source)
 }
 
-function formatRelativeTime(value?: string): string {
+function formatRelativeTime(value: string | undefined, t: TFn): string {
   if (!value) return ''
   const ms = Date.parse(value)
   if (!Number.isFinite(ms)) return value
   const diff = Date.now() - ms
   const minutes = Math.round(diff / 60000)
-  if (minutes < 1) return 'now'
-  if (minutes < 60) return `${minutes}m`
+  if (minutes < 1) return t('common.justNow')
+  if (minutes < 60) return t('time.compact.minutes', { count: minutes })
   const hours = Math.round(minutes / 60)
-  if (hours < 24) return `${hours}h`
+  if (hours < 24) return t('time.compact.hours', { count: hours })
   const days = Math.round(hours / 24)
-  if (days < 7) return `${days}d`
+  if (days < 7) return t('time.compact.days', { count: days })
   return new Date(ms).toLocaleDateString()
 }

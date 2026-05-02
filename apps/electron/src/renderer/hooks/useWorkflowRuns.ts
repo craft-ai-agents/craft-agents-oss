@@ -144,8 +144,9 @@ export function useWorkflowRuns(workspaceId: string | null | undefined): UseWork
 
   const cancel = useCallback(async (runId: string) => {
     if (!workspaceId) return
-    await window.electronAPI.cancelWorkflowRun(workspaceId, runId)
-  }, [workspaceId])
+    const cancelled = await window.electronAPI.cancelWorkflowRun(workspaceId, runId)
+    setState((prev) => ({ ...prev, runs: spliceRun(prev.runs, cancelled) }))
+  }, [setState, workspaceId])
 
   const resume = useCallback(async (runId: string, stepId?: string): Promise<WorkflowRunDTO> => {
     if (!workspaceId) throw new Error('No active workspace')

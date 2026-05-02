@@ -219,6 +219,78 @@ describe('output storage', () => {
     }
   });
 
+  test('concurrent createOutputBundle calls produce distinct successful manifests', async () => {
+    const [a, b] = await Promise.all([
+      Promise.resolve().then(() =>
+        createOutputBundle(workspace, {
+          id: OUTPUT_OLD_ID,
+          workspaceId: 'workspace-1',
+          title: 'Concurrent A',
+          kind: 'report',
+          origin: { source: 'manual' },
+          content: '# A',
+        }),
+      ),
+      Promise.resolve().then(() =>
+        createOutputBundle(workspace, {
+          id: OUTPUT_NEW_ID,
+          workspaceId: 'workspace-1',
+          title: 'Concurrent B',
+          kind: 'report',
+          origin: { source: 'manual' },
+          content: '# B',
+        }),
+      ),
+    ]);
+
+    expect(readOutputManifest(workspace, OUTPUT_OLD_ID)).toEqual(a);
+    expect(readOutputManifest(workspace, OUTPUT_NEW_ID)).toEqual(b);
+    const ids = listOutputManifests(workspace).map((m) => m.id).sort();
+    expect(ids).toEqual([OUTPUT_OLD_ID, OUTPUT_NEW_ID].sort());
+  });
+
+  test('createOutputBundle leaves no orphaned content.md when manifest validation fails', () => {
+    expect(() =>
+      createOutputBundle(workspace, {
+        id: OUTPUT_OLD_ID,
+        workspaceId: 'workspace-1',
+        title: 'Doomed',
+        kind: 'report',
+        origin: { source: 'manual' },
+        content: '# Doomed',
+        // Traversal path triggers assertSafeManifestAssetPaths to throw
+        // *after* content has been staged but before manifest is written.
+        assets: [{ id: 'bad', label: 'Bad', role: 'attachment', path: '../escape.txt' }],
+      }),
+    ).toThrow(/Invalid output asset path/);
+
+    const dir = getOutputDir(workspace, OUTPUT_OLD_ID);
+    expect(existsSync(join(dir, 'content.md'))).toBe(false);
+    expect(existsSync(getOutputManifestFile(workspace, OUTPUT_OLD_ID))).toBe(false);
+  });
+
+  test('createOutputBundle suffixes duplicate slugs with -vN', () => {
+    const first = createOutputBundle(workspace, {
+      id: OUTPUT_OLD_ID,
+      workspaceId: 'workspace-1',
+      title: 'Weekly Report',
+      kind: 'report',
+      origin: { source: 'manual' },
+      content: '# Week 1',
+    });
+    const second = createOutputBundle(workspace, {
+      id: OUTPUT_NEW_ID,
+      workspaceId: 'workspace-1',
+      title: 'Weekly Report',
+      kind: 'report',
+      origin: { source: 'manual' },
+      content: '# Week 2',
+    });
+
+    expect(first.slug).toBe('weekly-report');
+    expect(second.slug).toBe('weekly-report-v2');
+  });
+
   test('createOutputBundle writes content assets under the UUID output directory', () => {
     const output = createOutputBundle(workspace, {
       id: OUTPUT_OLD_ID,

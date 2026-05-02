@@ -352,7 +352,6 @@ describe('parseWorkflowFile', () => {
       '    input: hi',
       '---',
     ];
-    expect(parseWorkflowFile([...base.slice(0, 3), 'trigger:', '  type: schedule', ...base.slice(3)].join('\n'))).toBeNull();
     expect(parseWorkflowFile([...base.slice(0, 3), 'when: true', ...base.slice(3)].join('\n'))).toBeNull();
     expect(parseWorkflowFile([...base.slice(0, -1), '    humanCheckpoint: true', '---'].join('\n'))).toBeNull();
     expect(parseWorkflowFile([...base.slice(0, -1), '    parallelGroup: group-a', '---'].join('\n'))).toBeNull();
@@ -385,6 +384,74 @@ describe('parseWorkflowFile', () => {
 
     const invalid = valid.replace('default: 2', 'default: two');
     expect(parseWorkflowFile(invalid)).toBeNull();
+  });
+
+  test('warns + downgrades to manual when trigger.type is an unknown string', () => {
+    const text = [
+      '---',
+      'name: A',
+      'description: B',
+      'trigger:',
+      '  type: schedule',
+      'steps:',
+      '  - id: first',
+      '    agent: r',
+      '    input: hi',
+      '---',
+    ].join('\n');
+    const got = parseWorkflowFile(text);
+    expect(got).not.toBeNull();
+    expect(got!.metadata.trigger.type).toBe('manual');
+    expect(got!.warnings.some((w) => w.code === 'invalid-trigger' && /schedule/.test(w.message))).toBe(true);
+  });
+
+  test('rejects outputs.kind with an unsupported value at parse time', () => {
+    const text = [
+      '---',
+      'name: A',
+      'description: B',
+      'outputs:',
+      '  kind: bogus',
+      'steps:',
+      '  - id: first',
+      '    agent: r',
+      '    input: hi',
+      '---',
+    ].join('\n');
+    expect(parseWorkflowFile(text)).toBeNull();
+  });
+
+  test('accepts every valid OutputKind in outputs.kind', () => {
+    const validKinds = [
+      'report',
+      'document',
+      'image',
+      'video',
+      'audio',
+      'dataset',
+      'code',
+      'receipt',
+      'external-action',
+      'collection',
+      'other',
+    ] as const;
+    for (const kind of validKinds) {
+      const text = [
+        '---',
+        'name: A',
+        'description: B',
+        'outputs:',
+        `  kind: ${kind}`,
+        'steps:',
+        '  - id: first',
+        '    agent: r',
+        '    input: hi',
+        '---',
+      ].join('\n');
+      const got = parseWorkflowFile(text);
+      expect(got, `kind=${kind}`).not.toBeNull();
+      expect(got!.metadata.outputs?.kind).toBe(kind);
+    }
   });
 });
 

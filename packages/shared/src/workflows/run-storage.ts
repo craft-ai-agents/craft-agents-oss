@@ -21,6 +21,7 @@ import {
 } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { WorkflowRunSnapshot, WorkflowRunState, WorkflowRunStepState } from './run-types.ts';
+import { isValidOutputId } from '../outputs/validation.ts';
 
 const RUN_FILE = 'run.json';
 const RUNS_DIR = 'runs';
@@ -123,9 +124,10 @@ function isWorkflowRunSnapshot(value: unknown, expectedRunId: string): value is 
 
   if (typeof value.resumedFromRunId === 'string' && !isValidWorkflowRunId(value.resumedFromRunId)) return false;
   if (typeof value.resumedByRunId === 'string' && !isValidWorkflowRunId(value.resumedByRunId)) return false;
+  if (typeof value.finalOutputId === 'string' && !isValidOutputId(value.finalOutputId)) return false;
   if (value.outputIds !== undefined) {
     if (!Array.isArray(value.outputIds)) return false;
-    if (!value.outputIds.every((id) => typeof id === 'string')) return false;
+    if (!value.outputIds.every((id) => typeof id === 'string' && isValidOutputId(id))) return false;
   }
 
   return true;

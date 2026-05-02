@@ -212,36 +212,43 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
 
 function OutputPreview({ manifest, primary }: { manifest: OutputManifestDTO; primary?: OutputAssetDTO }) {
   const mode = manifest.preview?.mode ?? inferPreviewMode(primary)
-  const [content, setContent] = React.useState<string | null>(manifest.preview?.inlineText ?? null)
+  const inlineText = manifest.preview?.inlineText ?? null
+  const [content, setContent] = React.useState<string | null>(inlineText)
   const [dataUrl, setDataUrl] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const assetPath = primary ? resolveAssetPath(manifest, primary) : null
 
+  // Image-mode effect: load the asset as a data URL.
   React.useEffect(() => {
+    if (inlineText || !assetPath || mode !== 'image') return
     let mounted = true
     setError(null)
     setDataUrl(null)
-    if (manifest.preview?.inlineText || !assetPath) {
-      setContent(manifest.preview?.inlineText ?? null)
+    window.electronAPI.readFileDataUrl(assetPath).then((url) => {
+      if (mounted) setDataUrl(url)
+    }).catch((err) => {
+      if (mounted) setError(err instanceof Error ? err.message : String(err))
+    })
+    return () => { mounted = false }
+  }, [assetPath, inlineText, mode])
+
+  // Text-based modes (markdown / text / json / receipt): read the file as text.
+  React.useEffect(() => {
+    if (inlineText) {
+      setContent(inlineText)
       return
     }
-    if (mode === 'image') {
-      window.electronAPI.readFileDataUrl(assetPath).then((url) => {
-        if (mounted) setDataUrl(url)
-      }).catch((err) => {
-        if (mounted) setError(err instanceof Error ? err.message : String(err))
-      })
-      return () => { mounted = false }
-    }
-    if (mode === 'markdown' || mode === 'text' || mode === 'json' || mode === 'receipt') {
-      window.electronAPI.readFile(assetPath).then((text) => {
-        if (mounted) setContent(text)
-      }).catch((err) => {
-        if (mounted) setError(err instanceof Error ? err.message : String(err))
-      })
-    }
+    if (!assetPath) return
+    if (mode !== 'markdown' && mode !== 'text' && mode !== 'json' && mode !== 'receipt') return
+    let mounted = true
+    setError(null)
+    window.electronAPI.readFile(assetPath).then((text) => {
+      if (mounted) setContent(text)
+    }).catch((err) => {
+      if (mounted) setError(err instanceof Error ? err.message : String(err))
+    })
     return () => { mounted = false }
-  }, [assetPath, manifest.preview?.inlineText, mode])
+  }, [assetPath, inlineText, mode])
 
   if (error) return <EmptyLine>Preview unavailable: {error}</EmptyLine>
   if (mode === 'image' && dataUrl) {
@@ -299,32 +306,36 @@ function KeyValueRows({ rows }: { rows: Array<[string, unknown]> }) {
 
 function openAsset(workspaceId: string, manifest: OutputManifestDTO, asset: OutputAssetDTO) {
   const electronAPI = window.electronAPI as OutputsElectronAPI
-  if (typeof electronAPI.openOutputFile === 'function') {
-    electronAPI.openOutputFile(workspaceId, manifest.id, asset.id).catch(reportActionError)
+  if (typeof electronAPI.openOutputFile !== 'function') {
+    reportActionError(new Error('openOutputFile bridge is unavailable; cannot open asset.'))
     return
   }
-  const path = resolveAssetPath(manifest, asset)
-  if (path) window.electronAPI.openFile(path).catch(reportActionError)
+  electronAPI.openOutputFile(workspaceId, manifest.id, asset.id).catch(reportActionError)
 }
 
 function showAsset(workspaceId: string, manifest: OutputManifestDTO, asset: OutputAssetDTO) {
   const electronAPI = window.electronAPI as OutputsElectronAPI
-  if (typeof electronAPI.showOutputInFolder === 'function') {
-    electronAPI.showOutputInFolder(workspaceId, manifest.id, asset.id).catch(reportActionError)
+  if (typeof electronAPI.showOutputInFolder !== 'function') {
+    reportActionError(new Error('showOutputInFolder bridge is unavailable; cannot reveal asset.'))
     return
   }
-  const path = resolveAssetPath(manifest, asset)
-  if (path) window.electronAPI.showInFolder(path).catch(reportActionError)
+  electronAPI.showOutputInFolder(workspaceId, manifest.id, asset.id).catch(reportActionError)
 }
 
 function reportActionError(err: unknown) {
   toast.error(err instanceof Error ? err.message : String(err))
 }
 
+/**
+ * Resolves a bundle-relative asset path for renderer-side reads (preview only).
+ * Returns null when the path is relative and we don't have a manifest base —
+ * in that case the bridge methods (`openOutputFile` / `showOutputInFolder`)
+ * are the only safe path. Absolute paths are returned as-is.
+ */
 function resolveAssetPath(manifest: OutputManifestDTO, asset: OutputAssetDTO): string | null {
   if (!asset.path) return null
   if (asset.path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(asset.path)) return asset.path
-  const base = manifest.bundlePath ?? manifest.directoryPath ?? manifest.path
+  const base = manifest.bundlePath ?? manifest.directoryPath
   if (!base) return null
   return `${base.replace(/[\\/]$/, '')}/${asset.path}`
 }

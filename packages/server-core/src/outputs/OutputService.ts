@@ -24,6 +24,14 @@ export interface OutputServiceDeps {
 }
 
 export class OutputService {
+  // Per-run mutex serializing read-modify-write of run.json from this service.
+  // IMPORTANT: this is intra-service only. The WorkflowRunner writes run.json
+  // from a different code path with no shared lock; coordinated correctness
+  // there would require a process-level (filesystem) lock, which is out of
+  // scope here. The renderer's workflow-run UPDATED broadcast is the
+  // reconciliation backstop when those writers race.
+  private readonly runMutexes = new Map<string, Promise<void>>();
+
   constructor(private readonly deps: OutputServiceDeps) {}
 
   list(workspaceId: string): OutputSummary[] {
@@ -34,22 +42,30 @@ export class OutputService {
     return readOutput(this.deps.getWorkspaceRootPath(workspaceId), outputId);
   }
 
-  delete(workspaceId: string, outputId: string): boolean {
+  async delete(workspaceId: string, outputId: string): Promise<boolean> {
     const root = this.deps.getWorkspaceRootPath(workspaceId);
     const manifest = readOutput(root, outputId);
     const deleted = deleteOutput(root, outputId);
     if (deleted) {
-      this.detachDeletedOutputFromWorkflowRun(workspaceId, outputId, manifest);
+      await this.detachDeletedOutputFromWorkflowRun(workspaceId, outputId, manifest);
       this.emitUpdated(workspaceId);
     }
     return deleted;
+  }
+
+  private withRunMutex<T>(workspaceId: string, runId: string, fn: () => Promise<T>): Promise<T> {
+    const key = `${workspaceId}::${runId}`;
+    const prev = this.runMutexes.get(key) ?? Promise.resolve();
+    const next = prev.then(fn, fn);
+    this.runMutexes.set(key, next.then(() => {}, () => {}));
+    return next;
   }
 
   resolveAssetPath(workspaceId: string, outputId: string, assetPath: string): string {
     return assertOutputAssetPath(this.deps.getWorkspaceRootPath(workspaceId), outputId, assetPath);
   }
 
-  createFromSessionTool(input: {
+  async createFromSessionTool(input: {
     workspaceId: string;
     sessionId: string;
     agentSlug?: string;
@@ -59,7 +75,7 @@ export class OutputService {
     workflowName?: string;
     stepId?: string;
     output: CreateOutputToolInput;
-  }): CreateOutputResult {
+  }): Promise<CreateOutputResult> {
     const now = new Date().toISOString();
     const origin: OutputOrigin = input.workflowRunId
       ? {
@@ -104,7 +120,7 @@ export class OutputService {
         provider: receipt.provider,
         action: receipt.action,
         status: receipt.status,
-        occurredAt: now,
+        occurredAt: receipt.occurredAt ?? now,
         externalId: receipt.externalId,
         url: receipt.url,
         displayText: receipt.displayText,
@@ -115,7 +131,7 @@ export class OutputService {
     });
 
     if (input.workflowRunId) {
-      this.attachOutputToWorkflowRun(input.workspaceId, input.workflowRunId, manifest.id);
+      await this.attachOutputToWorkflowRun(input.workspaceId, input.workflowRunId, manifest.id);
     }
     this.emitUpdated(input.workspaceId);
     return {
@@ -221,41 +237,45 @@ export class OutputService {
     this.deps.emitOutputsUpdated?.(workspaceId);
   }
 
-  private detachDeletedOutputFromWorkflowRun(
+  private async detachDeletedOutputFromWorkflowRun(
     workspaceId: string,
     outputId: string,
     manifest: OutputManifest | null,
-  ): void {
+  ): Promise<void> {
     const runId = manifest?.origin.source === 'workflow' ? manifest.origin.workflowRunId : undefined;
     if (!runId) return;
-    const root = this.deps.getWorkspaceRootPath(workspaceId);
-    const run = readRun(root, runId);
-    if (!run) return;
-    const outputIds = (run.outputIds ?? []).filter((id) => id !== outputId);
-    const next: WorkflowRunSnapshot = {
-      ...run,
-      outputIds: outputIds.length > 0 ? outputIds : undefined,
-      finalOutputId: run.finalOutputId === outputId ? undefined : run.finalOutputId,
-      updatedAt: new Date().toISOString(),
-    };
-    writeRun(root, next);
-    this.deps.emitWorkflowRunUpdated?.(next);
+    await this.withRunMutex(workspaceId, runId, async () => {
+      const root = this.deps.getWorkspaceRootPath(workspaceId);
+      const run = readRun(root, runId);
+      if (!run) return;
+      const outputIds = (run.outputIds ?? []).filter((id) => id !== outputId);
+      const next: WorkflowRunSnapshot = {
+        ...run,
+        outputIds: outputIds.length > 0 ? outputIds : undefined,
+        finalOutputId: run.finalOutputId === outputId ? undefined : run.finalOutputId,
+        updatedAt: new Date().toISOString(),
+      };
+      writeRun(root, next);
+      this.deps.emitWorkflowRunUpdated?.(next);
+    });
   }
 
-  private attachOutputToWorkflowRun(workspaceId: string, runId: string, outputId: string): void {
-    const root = this.deps.getWorkspaceRootPath(workspaceId);
-    const run = readRun(root, runId);
-    if (!run) return;
-    if ((run.outputIds ?? []).includes(outputId)) return;
-    const outputIds = [...(run.outputIds ?? []), outputId];
-    const next: WorkflowRunSnapshot = {
-      ...run,
-      outputIds,
-      finalOutputId: run.finalOutputId ?? outputId,
-      updatedAt: new Date().toISOString(),
-    };
-    writeRun(root, next);
-    this.deps.emitWorkflowRunUpdated?.(next);
+  private async attachOutputToWorkflowRun(workspaceId: string, runId: string, outputId: string): Promise<void> {
+    await this.withRunMutex(workspaceId, runId, async () => {
+      const root = this.deps.getWorkspaceRootPath(workspaceId);
+      const run = readRun(root, runId);
+      if (!run) return;
+      if ((run.outputIds ?? []).includes(outputId)) return;
+      const outputIds = [...(run.outputIds ?? []), outputId];
+      const next: WorkflowRunSnapshot = {
+        ...run,
+        outputIds,
+        finalOutputId: run.finalOutputId ?? outputId,
+        updatedAt: new Date().toISOString(),
+      };
+      writeRun(root, next);
+      this.deps.emitWorkflowRunUpdated?.(next);
+    });
   }
 }
 

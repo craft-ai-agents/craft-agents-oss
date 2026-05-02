@@ -37,6 +37,12 @@ export interface CreateOutputReceiptInput {
   url?: string;
   displayText?: string;
   metadata?: Record<string, unknown>;
+  /**
+   * Set this when the external action's actual occurrence time differs from
+   * when the agent records the receipt. Defaults to the receipt-creation time.
+   * ISO-8601 string.
+   */
+  occurredAt?: string;
 }
 
 export interface CreateOutputToolInput {
@@ -86,6 +92,56 @@ function validateString(value: unknown, field: string): string | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+const FORBIDDEN_METADATA_KEYS: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype']);
+const MAX_METADATA_DEPTH = 8;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
+ * Recursively validates a metadata payload is safe to JSON-serialize and
+ * carries no prototype-pollution keys or class instances. Returns an error
+ * message naming the bad path, or null when valid.
+ */
+function validateJsonSerializableRecord(
+  value: unknown,
+  path: string,
+  depth: number,
+): string | null {
+  if (depth > MAX_METADATA_DEPTH) return `${path} exceeds maximum nesting depth.`;
+  if (!isPlainObject(value)) return `${path} must be a plain object.`;
+  for (const key of Object.keys(value)) {
+    if (FORBIDDEN_METADATA_KEYS.has(key)) return `${path}.${key} is not an allowed key.`;
+    const child = (value as Record<string, unknown>)[key];
+    const childError = validateJsonSerializableValue(child, `${path}.${key}`, depth + 1);
+    if (childError) return childError;
+  }
+  return null;
+}
+
+function validateJsonSerializableValue(
+  value: unknown,
+  path: string,
+  depth: number,
+): string | null {
+  if (depth > MAX_METADATA_DEPTH) return `${path} exceeds maximum nesting depth.`;
+  if (value === null) return null;
+  const t = typeof value;
+  if (t === 'string' || t === 'number' || t === 'boolean') return null;
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i += 1) {
+      const itemError = validateJsonSerializableValue(value[i], `${path}[${i}]`, depth + 1);
+      if (itemError) return itemError;
+    }
+    return null;
+  }
+  if (t === 'object') return validateJsonSerializableRecord(value, path, depth);
+  return `${path} must be a string, number, boolean, null, array, or plain object.`;
 }
 
 function validateUrl(value: string, field: string): string | null {
@@ -149,6 +205,15 @@ function validateOutputInput(args: CreateOutputToolInput): string | null {
       if (receipt.url !== undefined) {
         const urlError = validateUrl(String(receipt.url), `receipts[${index}].url`);
         if (urlError) return urlError;
+      }
+      if (receipt.occurredAt !== undefined) {
+        if (typeof receipt.occurredAt !== 'string' || !Number.isFinite(Date.parse(receipt.occurredAt))) {
+          return `receipts[${index}].occurredAt must be an ISO-8601 date string when provided.`;
+        }
+      }
+      if (receipt.metadata !== undefined) {
+        const metadataError = validateJsonSerializableRecord(receipt.metadata, `receipts[${index}].metadata`, 0);
+        if (metadataError) return metadataError;
       }
     }
   }

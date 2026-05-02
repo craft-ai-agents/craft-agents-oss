@@ -429,7 +429,7 @@ describe('WorkflowRunner', () => {
     expect(h.promptsSent).toHaveLength(1);
   });
 
-  test('cancel reports missing, inactive, and terminal runs accurately', async () => {
+  test('cancel reports missing and inactive runs accurately, returns terminal snapshot', async () => {
     const h = makeHarness();
     const runner = new WorkflowRunner(h.deps);
     const now = new Date().toISOString();
@@ -461,7 +461,67 @@ describe('WorkflowRunner', () => {
       updatedAt: now,
       completedAt: now,
     });
-    await expect(runner.cancel(WORKSPACE_ID, TERMINAL_RUN_ID)).rejects.toThrow(/already failed/);
+    // Terminal-but-known: cancel-after-finish race returns the persisted snapshot.
+    const terminalResult = await runner.cancel(WORKSPACE_ID, TERMINAL_RUN_ID);
+    expect(terminalResult.state).toBe('failed');
+    expect(terminalResult.id).toBe(TERMINAL_RUN_ID);
+  });
+
+  test('cancel returns the persisted snapshot when run is already terminal (succeeded)', async () => {
+    const h = makeHarness({ stepOutputs: ['DONE_ONE', 'DONE_TWO'] });
+    const runner = new WorkflowRunner(h.deps);
+
+    const start = await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 't' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+    expect(lastCompleted(h.events)!.state).toBe('succeeded');
+
+    // After natural completion, cancel must not throw and must return the snapshot.
+    const result = await runner.cancel(WORKSPACE_ID, start.id);
+    expect(result.state).toBe('succeeded');
+    expect(result.id).toBe(start.id);
+  });
+
+  test('output finalization failure marks outputError on the run', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const h = makeHarness({ stepOutputs: ['STEP_ONE_OUT', 'STEP_TWO_OUT'] });
+    h.deps.createDefaultWorkflowOutput = () => {
+      throw new Error('output disk full');
+    };
+    try {
+      const runner = new WorkflowRunner(h.deps);
+
+      const start = await runner.start({
+        workflow: makeWorkflow(),
+        workspaceId: WORKSPACE_ID,
+        triggerInputs: { topic: 'output-error' },
+      });
+
+      await waitFor(() => lastCompleted(h.events) !== undefined);
+
+      // The last emitted snapshot from finalizeDefaultOutput should carry outputError.
+      const updates = h.events.filter(
+        (e): e is Extract<WorkflowRunEvent, { type: 'run.updated' }> => e.type === 'run.updated' && e.run.id === start.id,
+      );
+      const final = updates[updates.length - 1]!;
+      expect(final.run.state).toBe('succeeded');
+      expect(final.run.outputError).toBe('output disk full');
+
+      // The run itself succeeded — output finalization is a side effect.
+      const completed = lastCompleted(h.events)!;
+      expect(completed.state).toBe('succeeded');
+
+      // Persisted via OutputService.markWorkflowOutputError.
+      const onDisk = readRun(workspaceRoot, start.id);
+      expect(onDisk!.state).toBe('succeeded');
+      expect(onDisk!.outputError).toBe('output disk full');
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   test('step throws: run fails, second step is never run, error recorded', async () => {

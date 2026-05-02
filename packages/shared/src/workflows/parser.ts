@@ -14,6 +14,23 @@ import {
   type WorkflowTriggerInput,
 } from './types.ts';
 
+// Mirrors the canonical OutputKind enum from `@craft-agent/shared/outputs/types`.
+// Kept local because the canonical OUTPUT_KINDS set is not exported from the
+// outputs package and adding a new export there is out of scope.
+const VALID_OUTPUT_KINDS = new Set<string>([
+  'report',
+  'document',
+  'image',
+  'video',
+  'audio',
+  'dataset',
+  'code',
+  'receipt',
+  'external-action',
+  'collection',
+  'other',
+]);
+
 const VALID_INPUT_TYPES: ReadonlyArray<WorkflowTriggerInput['type']> = ['string', 'number', 'boolean'];
 const VALID_STEP_FAILURE_POLICIES: ReadonlyArray<WorkflowStepFailurePolicy> = ['stop', 'continue', 'ask'];
 const VALID_OUTPUT_MODES: ReadonlyArray<NonNullable<WorkflowOutputContract['mode']>> = ['final-step', 'explicit-tool', 'none'];
@@ -91,8 +108,14 @@ function coerceTrigger(raw: unknown, warnings: WorkflowParseWarning[]): Workflow
   }
   const typeRaw = typeof r.type === 'string' ? r.type.trim() : 'manual';
   if (typeRaw !== 'manual') {
-    warnings.push(warning('trigger', 'invalid-trigger', `trigger.type "${typeRaw}" is not supported.`));
-    return null;
+    // Forward-looking trigger types (e.g. "schedule") are warned + downgraded
+    // to manual rather than rejected, so users editing draft workflows that
+    // anticipate future trigger types still get a parseable file.
+    warnings.push(warning(
+      'trigger',
+      'invalid-trigger',
+      `trigger.type "${typeRaw}" is not supported yet; defaulting to manual.`,
+    ));
   }
   const inputs = coerceTriggerInputs(r.inputs, warnings);
   if (inputs === null) return null;
@@ -119,7 +142,16 @@ function coerceOutputs(raw: unknown, warnings: WorkflowParseWarning[]): Workflow
       warnings.push(warning('outputs', 'invalid-outputs', 'outputs.kind must be a string.'));
       return null;
     }
-    out.kind = r.kind.trim() as WorkflowOutputContract['kind'];
+    const kind = r.kind.trim();
+    if (!VALID_OUTPUT_KINDS.has(kind)) {
+      warnings.push(warning(
+        'outputs',
+        'invalid-outputs',
+        `outputs.kind "${kind}" is not a supported OutputKind.`,
+      ));
+      return null;
+    }
+    out.kind = kind as WorkflowOutputContract['kind'];
   }
   if (typeof r.title === 'string' && r.title.trim()) out.title = r.title.trim();
   if (typeof r.summary === 'string' && r.summary.trim()) out.summary = r.summary.trim();

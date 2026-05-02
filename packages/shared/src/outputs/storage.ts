@@ -13,6 +13,7 @@ import {
   renameSync,
   rmSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
@@ -101,10 +102,20 @@ export function assertOutputAssetPath(workspaceRootPath: string, outputId: strin
   return resolvedPath;
 }
 
+/**
+ * Atomic JSON write. The pid + UUID suffix on the tmp filename prevents two
+ * concurrent writers from clobbering each other's tmp file before rename.
+ * Same shape as `writeFileAtomic` in `packages/shared/src/memory/storage.ts`.
+ */
 function atomicWriteJson(file: string, value: unknown): void {
-  const tmp = `${file}.tmp`;
-  writeFileSync(tmp, JSON.stringify(value, null, 2) + '\n', 'utf-8');
-  renameSync(tmp, file);
+  const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(tmp, JSON.stringify(value, null, 2) + '\n', 'utf-8');
+    renameSync(tmp, file);
+  } catch (err) {
+    try { rmSync(tmp, { force: true }); } catch { /* ignore */ }
+    throw err;
+  }
 }
 
 function contentFilename(mimeType: string): string {
@@ -195,6 +206,20 @@ export function listOutputManifests(workspaceRootPath: string): OutputManifest[]
   return out;
 }
 
+function uniqueOutputSlug(workspaceRootPath: string, desired: string, ownId: string): string {
+  const existing = new Set(
+    listOutputManifests(workspaceRootPath)
+      .filter((m) => m.id !== ownId)
+      .map((m) => m.slug),
+  );
+  if (!existing.has(desired)) return desired;
+  // Match the `-vN` convention used by the agent slug suggester so users
+  // see one consistent collision shape across the app.
+  let suffix = 2;
+  while (existing.has(`${desired}-v${suffix}`)) suffix += 1;
+  return `${desired}-v${suffix}`;
+}
+
 export function createOutputBundle(workspaceRootPath: string, input: CreateOutputBundleInput): OutputManifest {
   const id = input.id ?? randomUUID();
   assertValidOutputId(id);
@@ -211,12 +236,19 @@ export function createOutputBundle(workspaceRootPath: string, input: CreateOutpu
   let preview = undefined as OutputManifest['preview'];
   let summary = input.summary?.trim() ?? '';
 
+  // Stage content under a tmp name in the same dir; only rename to the
+  // canonical filename after the manifest write succeeds. This avoids
+  // orphaning `content.md` in the output dir if validation throws.
+  let contentTmpPath: string | null = null;
+  let contentFinalPath: string | null = null;
+
   if (input.content !== undefined) {
     const mimeType = input.contentMimeType ?? 'text/markdown';
     const filename = contentFilename(mimeType);
-    const contentPath = join(outputDir, filename);
-    writeFileSync(contentPath, input.content, 'utf-8');
-    const meta = sizeAndHash(contentPath);
+    contentFinalPath = join(outputDir, filename);
+    contentTmpPath = `${contentFinalPath}.${process.pid}.${randomUUID()}.staging`;
+    writeFileSync(contentTmpPath, input.content, 'utf-8');
+    const meta = sizeAndHash(contentTmpPath);
     primary = {
       id: 'primary',
       label: basename(filename, extname(filename)) || 'Content',
@@ -234,12 +266,13 @@ export function createOutputBundle(workspaceRootPath: string, input: CreateOutpu
     if (!summary) summary = summarizeOutputContent(input.content);
   }
 
+  const desiredSlug = slugify(input.title);
   const manifest: OutputManifest = {
     schemaVersion: 1,
     id,
     workspaceId: input.workspaceId,
     title: input.title,
-    slug: slugify(input.title),
+    slug: uniqueOutputSlug(workspaceRootPath, desiredSlug, id),
     kind: input.kind,
     status: input.status ?? 'published',
     summary,
@@ -255,7 +288,24 @@ export function createOutputBundle(workspaceRootPath: string, input: CreateOutpu
     tags: input.tags,
   };
 
-  writeOutputManifest(workspaceRootPath, manifest);
+  try {
+    writeOutputManifest(workspaceRootPath, manifest);
+  } catch (err) {
+    if (contentTmpPath) {
+      try { rmSync(contentTmpPath, { force: true }); } catch { /* ignore */ }
+    }
+    throw err;
+  }
+
+  if (contentTmpPath && contentFinalPath) {
+    try {
+      renameSync(contentTmpPath, contentFinalPath);
+    } catch (err) {
+      try { unlinkSync(contentTmpPath); } catch { /* ignore */ }
+      throw err;
+    }
+  }
+
   return manifest;
 }
 
