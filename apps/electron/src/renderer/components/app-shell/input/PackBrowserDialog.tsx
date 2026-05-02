@@ -15,7 +15,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -138,7 +137,7 @@ export function PackBrowserDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col">
+      <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col overflow-hidden" style={{ display: 'flex' }}>
         <DialogHeader>
           <DialogTitle>
             {t('settings.sound.browsePacks', 'Browse Sound Packs')}
@@ -169,8 +168,8 @@ export function PackBrowserDialog({
           )}
         </div>
 
-        {/* Pack List — scrolls natively via ScrollArea */}
-        <ScrollArea className="flex-1 min-h-0">
+        {/* Pack List — scrollable via native overflow */}
+        <div className="flex-1 min-h-0 max-h-[50vh] overflow-y-auto">
           {loading && (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
               <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full mb-2" />
@@ -266,7 +265,7 @@ export function PackBrowserDialog({
               ))}
             </div>
           )}
-        </ScrollArea>
+        </div>
 
         {/* Footer info */}
         <div className="text-[10px] text-muted-foreground text-center pt-2 border-t border-border/50">
