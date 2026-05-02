@@ -377,6 +377,12 @@ export interface AgentBackend {
   runMiniCompletion(prompt: string): Promise<string | null>;
 
   /**
+   * Clear conversation history so the next chat() starts fresh.
+   * Resets provider-side session state without destroying the agent.
+   */
+  clearHistory(): void;
+
+  /**
    * Clean up resources (MCP connections, watchers, etc.)
    */
   destroy(): void;

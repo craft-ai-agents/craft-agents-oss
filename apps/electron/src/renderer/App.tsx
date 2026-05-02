@@ -919,6 +919,15 @@ export default function App() {
         return
       }
 
+      if (event.type === 'messages_replaced') {
+        window.electronAPI.getSessionMessages(sessionId)
+          .then((updatedSession) => {
+            if (updatedSession) replaceLoadedSession(updatedSession)
+          })
+          .catch((error: unknown) => console.error('Failed to refresh messages after undo:', error))
+        return
+      }
+
       const agentEvent = event as unknown as AgentEvent
 
       // Track activity for stale session watchdog

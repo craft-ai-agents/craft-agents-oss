@@ -916,7 +916,15 @@ export function FreeFormInput({
     else if (commandId === 'ask') onPermissionModeChange?.('ask')
     else if (commandId === 'allow-all') onPermissionModeChange?.('allow-all')
     else if (commandId === 'compact' && !isProcessing) onSubmit('/compact', undefined)
-  }, [onPermissionModeChange, isProcessing, onSubmit])
+    else if (commandId === 'undo' && sessionId) {
+      window.electronAPI.sessionCommand(sessionId, { type: 'undo' }).then((result) => {
+        if (result && typeof result === 'object' && 'success' in result && result.success && 'userMessage' in result) {
+          setInput(result.userMessage as string)
+          richInputRef.current?.focus()
+        }
+      }).catch((err: unknown) => console.error('Undo failed:', err))
+    }
+  }, [onPermissionModeChange, isProcessing, onSubmit, sessionId, setInput, richInputRef])
 
   // Handle folder selection from slash command menu
   const handleSlashFolderSelect = React.useCallback((path: string) => {
