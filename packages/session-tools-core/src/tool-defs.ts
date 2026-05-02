@@ -762,7 +762,24 @@ Do NOT save:
 - Generic project debugging recipes where the fix belongs in the commit or docs
 - Sensitive secrets, credentials, access tokens, private keys, or passwords
 
-Choose \`scope: user\` only for facts that should follow the user across agents. Use the default \`scope: agent\` for this agent's working memory. Keep \`content\` concise and factual.`,
+## Choosing scope
+
+The scope decision is about **audience**, not source. Ask: who else benefits from knowing this fact later?
+
+Use \`scope: user\` (writes to USER.md — broadcast to every agent the user works with) when:
+- The fact is about the user themselves: identity, role, expertise, working hours, durable preferences
+- The fact is something a different specialist agent would also have wanted to know
+- You're acting as a front-door / omniscient role (Concierge, Orchestrator) — your facts are usually about the user, not about you
+- You're collaborating with other agents on a shared task and the fact would help them too
+
+Use the default \`scope: agent\` (writes to your own MEMORY.md — only you see it) when:
+- The fact is about your collaboration with the user *as this specific agent* (e.g., "user wants my critiques harsher than nice")
+- The fact is operational to your role and not generally useful to other agents
+- You're unsure — \`agent\` is the safe default; you can update or migrate the entry later
+
+When in doubt, prefer \`scope: agent\`. Bias toward \`scope: user\` only when the fact obviously generalizes across agents.
+
+Keep \`content\` concise and factual.`,
 
   update_memory: `Update an existing durable memory entry's content and/or expiration.
 

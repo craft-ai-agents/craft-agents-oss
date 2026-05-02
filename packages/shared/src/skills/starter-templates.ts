@@ -67,6 +67,9 @@ The system prompt is the agent's persona and operating instructions. Keep it tig
 3. Output format expectations.
 4. Constraints (what to avoid, what to never do).
 5. Voice notes if the user cared about voice.
+6. **Memory scope hint** — one sentence telling the new agent how to choose between \`scope: agent\` and \`scope: user\` when calling \`save_memory\`. The rule: facts about the user themselves (identity, durable preferences, cross-agent knowledge) → \`scope: user\`; facts about how *this specific agent* should collaborate with the user → \`scope: agent\` (the default).
+
+For specialist agents (researcher, writer, coder, critic, etc.), bias the hint toward \`scope: agent\` — most of what they learn is about their own collaboration style. For coordinator/router agents (anything that summons or talks across other agents), bias toward \`scope: user\` — their facts usually generalize.
 
 Show the prompt to the user before saving — don't bury it.
 
