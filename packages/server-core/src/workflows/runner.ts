@@ -756,7 +756,20 @@ export class WorkflowRunner {
 
   private persist(active: ActiveRun): void {
     const root = this.deps.getWorkspaceRootPath(active.snapshot.workspaceId);
+    active.snapshot = this.adoptPersistedOutputState(root, active.snapshot);
     writeRun(root, active.snapshot);
+  }
+
+  private adoptPersistedOutputState(root: string, snapshot: WorkflowRunSnapshot): WorkflowRunSnapshot {
+    const persisted = readRun(root, snapshot.id);
+    if (!persisted || persisted.workspaceId !== snapshot.workspaceId) return snapshot;
+
+    return {
+      ...snapshot,
+      outputIds: persisted.outputIds,
+      finalOutputId: persisted.finalOutputId,
+      outputError: persisted.outputError,
+    };
   }
 
   private async finalizeDefaultOutput(active: ActiveRun): Promise<void> {

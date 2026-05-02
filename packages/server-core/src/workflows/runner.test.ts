@@ -284,6 +284,50 @@ describe('WorkflowRunner', () => {
     expect(h.events.some((event) => event.type === 'outputs.updated')).toBe(true);
   });
 
+  test('preserves explicit workflow outputs attached while the runner is active', async () => {
+    const explicitOutputId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+    const h = makeHarness({
+      stepOutputs: ['# Explicit report'],
+    });
+    h.setStepBehavior(0, async () => {
+      const current = [...h.events]
+        .reverse()
+        .find((event): event is Extract<WorkflowRunEvent, { type: 'run.updated' }> => event.type === 'run.updated')
+        ?.run;
+      if (!current) throw new Error('run snapshot not emitted');
+      writeRun(workspaceRoot, {
+        ...current,
+        outputIds: [explicitOutputId],
+        finalOutputId: explicitOutputId,
+      });
+    });
+    let defaultOutputCalled = false;
+    h.deps.createDefaultWorkflowOutput = (run) => {
+      defaultOutputCalled = true;
+      return run;
+    };
+
+    const runner = new WorkflowRunner(h.deps);
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [{ id: 'first', agent: 'researcher', input: 'Research {{trigger.topic}}' }],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'explicit outputs' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const completed = lastCompleted(h.events)!;
+    expect(completed.state).toBe('succeeded');
+    expect(completed.outputIds).toEqual([explicitOutputId]);
+    expect(completed.finalOutputId).toBe(explicitOutputId);
+    expect(defaultOutputCalled).toBe(false);
+    const onDisk = readRun(workspaceRoot, completed.id);
+    expect(onDisk!.outputIds).toEqual([explicitOutputId]);
+    expect(onDisk!.finalOutputId).toBe(explicitOutputId);
+  });
+
   test('default output creation failure is recorded without failing the run', async () => {
     const h = makeHarness({ stepOutputs: ['STEP_ONE_OUT', 'STEP_TWO_OUT'] });
     const errorSpy = spyOn(console, 'error').mockImplementation(() => {});

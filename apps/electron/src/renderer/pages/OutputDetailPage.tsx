@@ -218,6 +218,12 @@ function OutputPreview({ manifest, primary }: { manifest: OutputManifestDTO; pri
   const [error, setError] = React.useState<string | null>(null)
   const assetPath = primary ? resolveAssetPath(manifest, primary) : null
 
+  React.useEffect(() => {
+    setContent(inlineText)
+    setDataUrl(null)
+    setError(null)
+  }, [manifest.id, assetPath, inlineText, mode])
+
   // Image-mode effect: load the asset as a data URL.
   React.useEffect(() => {
     if (inlineText || !assetPath || mode !== 'image') return
