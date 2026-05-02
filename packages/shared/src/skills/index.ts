@@ -19,7 +19,10 @@ export {
   skillNeedsIconDownload,
   downloadSkillIcon,
   ensureRequiredGlobalSkills,
+  mirrorSkillToGlobal,
+  backfillWorkspaceSkillsToGlobal,
 } from './storage.ts';
+export type { MirrorSkillResult, BackfillResult } from './storage.ts';
 
 export { STARTER_SKILLS } from './starter-templates.ts';
 export type { StarterSkill } from './starter-templates.ts';

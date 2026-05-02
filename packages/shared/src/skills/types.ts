@@ -5,6 +5,20 @@
  * Skills are specialized instructions that extend Claude's capabilities.
  */
 
+import type { SkillCategoryId } from './categories.ts';
+
+export {
+  isSkillCategoryId,
+  SKILL_CATEGORIES,
+  SKILL_CATEGORY_IDS,
+  SKILL_CATEGORY_LABELS,
+  UNCATEGORIZED_SKILL_CATEGORY_ID,
+  normalizeSkillCategory,
+  normalizeSkillTags,
+  classifySkillCategory,
+} from './categories.ts';
+export type { SkillCategoryId } from './categories.ts';
+
 /**
  * Skill metadata from SKILL.md YAML frontmatter
  */
@@ -13,6 +27,10 @@ export interface SkillMetadata {
   name: string;
   /** Brief description shown in skill list */
   description: string;
+  /** Optional category from frontmatter, or inferred by storage when loaded */
+  category?: SkillCategoryId;
+  /** Optional normalized tags for filtering and classification */
+  tags?: string[];
   /** Optional file patterns that trigger this skill */
   globs?: string[];
   /** Optional tools to always allow when skill is active */

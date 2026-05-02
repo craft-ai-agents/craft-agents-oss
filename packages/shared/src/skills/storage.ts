@@ -6,18 +6,25 @@
  */
 
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { randomUUID } from 'crypto';
 import matter from 'gray-matter';
 import type { LoadedSkill, SkillMetadata, SkillSource } from './types.ts';
+import {
+  classifySkillCategory,
+  normalizeSkillTags,
+} from './categories.ts';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
 import {
   validateIconValue,
@@ -36,6 +43,70 @@ export const GLOBAL_AGENT_SKILLS_DIR = join(homedir(), '.agents', 'skills');
 
 /** Project-level agent skills relative directory name */
 export const PROJECT_AGENT_SKILLS_DIR = '.agents/skills';
+
+/** Workspace manifest that records which global library skills are enabled here. */
+const WORKSPACE_GLOBAL_SKILLS_MANIFEST = '.global-skills.json';
+
+interface WorkspaceGlobalSkillsManifest {
+  enabledGlobalSkills?: unknown;
+}
+
+function getWorkspaceGlobalSkillsManifestPath(workspaceRoot: string): string {
+  return join(getWorkspaceSkillsPath(workspaceRoot), WORKSPACE_GLOBAL_SKILLS_MANIFEST);
+}
+
+function normalizeSkillSlugs(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(
+    value
+      .filter((slug): slug is string => typeof slug === 'string')
+      .map(slug => slug.trim())
+      .filter(Boolean)
+  )).sort();
+}
+
+function readWorkspaceGlobalSkillsManifest(workspaceRoot: string): WorkspaceGlobalSkillsManifest {
+  const manifestPath = getWorkspaceGlobalSkillsManifestPath(workspaceRoot);
+  if (!existsSync(manifestPath)) return {};
+
+  try {
+    const parsed = JSON.parse(readFileSync(manifestPath, 'utf-8')) as WorkspaceGlobalSkillsManifest;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeWorkspaceGlobalSkillsManifest(workspaceRoot: string, enabledGlobalSkills: string[]): void {
+  const manifestPath = getWorkspaceGlobalSkillsManifestPath(workspaceRoot);
+  mkdirSync(getWorkspaceSkillsPath(workspaceRoot), { recursive: true });
+  writeFileSync(
+    manifestPath,
+    `${JSON.stringify({ enabledGlobalSkills: normalizeSkillSlugs(enabledGlobalSkills) }, null, 2)}\n`,
+    'utf-8'
+  );
+}
+
+export function listEnabledGlobalSkillSlugs(workspaceRoot: string): string[] {
+  return normalizeSkillSlugs(readWorkspaceGlobalSkillsManifest(workspaceRoot).enabledGlobalSkills);
+}
+
+export function setGlobalSkillEnabled(workspaceRoot: string, slug: string, enabled: boolean): string[] {
+  const normalizedSlug = slug.trim();
+  if (!normalizedSlug) return listEnabledGlobalSkillSlugs(workspaceRoot);
+
+  const current = new Set(listEnabledGlobalSkillSlugs(workspaceRoot));
+  if (enabled) {
+    current.add(normalizedSlug);
+  } else {
+    current.delete(normalizedSlug);
+  }
+
+  const next = Array.from(current).sort();
+  writeWorkspaceGlobalSkillsManifest(workspaceRoot, next);
+  invalidateSkillsCache();
+  return next;
+}
 
 /**
  * Normalize requiredSources frontmatter to a clean string array.
@@ -67,7 +138,7 @@ function normalizeRequiredSources(value: unknown): string[] | undefined {
 /**
  * Parse SKILL.md content and extract frontmatter + body
  */
-function parseSkillFile(content: string): { metadata: SkillMetadata; body: string } | null {
+function parseSkillFile(content: string, slug: string): { metadata: SkillMetadata; body: string } | null {
   try {
     const parsed = matter(content);
 
@@ -79,11 +150,22 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
     // Validate and extract optional icon field
     // Only accepts emoji or URL - rejects inline SVG and relative paths
     const icon = validateIconValue(parsed.data.icon, 'Skills');
+    const name = parsed.data.name as string;
+    const description = parsed.data.description as string;
+    const tags = normalizeSkillTags(parsed.data.tags);
 
     return {
       metadata: {
-        name: parsed.data.name as string,
-        description: parsed.data.description as string,
+        name,
+        description,
+        category: classifySkillCategory({
+          slug,
+          name,
+          description,
+          tags,
+          category: parsed.data.category,
+        }),
+        tags,
         globs: parsed.data.globs as string[] | undefined,
         alwaysAllow: parsed.data.alwaysAllow as string[] | undefined,
         icon,
@@ -128,7 +210,7 @@ function loadSkillFromDir(skillsDir: string, slug: string, source: SkillSource):
     return null;
   }
 
-  const parsed = parseSkillFile(content);
+  const parsed = parseSkillFile(content, slug);
   if (!parsed) {
     return null;
   }
@@ -191,6 +273,10 @@ export function loadWorkspaceSkills(workspaceRoot: string): LoadedSkill[] {
   return loadSkillsFromDir(skillsDir, 'workspace');
 }
 
+export function loadGlobalSkills(): LoadedSkill[] {
+  return loadSkillsFromDir(GLOBAL_AGENT_SKILLS_DIR, 'global');
+}
+
 // ── Skills cache ────────────────────────────────────────────────────────
 // loadAllSkills reads from up to 3 directories on every call (~100ms).
 // The result rarely changes during a session, so we cache it per
@@ -216,7 +302,8 @@ export function invalidateSkillsCache(): void {
  * @param projectRoot - Optional project root (working directory) for project-level skills
  */
 export function loadAllSkills(workspaceRoot: string, projectRoot?: string): LoadedSkill[] {
-  const cacheKey = `${workspaceRoot}::${projectRoot ?? ''}`;
+  const enabledGlobalSlugs = listEnabledGlobalSkillSlugs(workspaceRoot);
+  const cacheKey = `${workspaceRoot}::${projectRoot ?? ''}::global=${enabledGlobalSlugs.join(',')}`;
   const now = Date.now();
   const cached = skillsCache.get(cacheKey);
   if (cached && now - cached.ts < SKILLS_CACHE_TTL) {
@@ -225,9 +312,10 @@ export function loadAllSkills(workspaceRoot: string, projectRoot?: string): Load
 
   const skillsBySlug = new Map<string, LoadedSkill>();
 
-  // 1. Global skills (lowest priority): ~/.agents/skills/
-  for (const skill of loadSkillsFromDir(GLOBAL_AGENT_SKILLS_DIR, 'global')) {
-    skillsBySlug.set(skill.slug, skill);
+  // 1. Enabled global skills (lowest priority): ~/.agents/skills/
+  for (const slug of enabledGlobalSlugs) {
+    const skill = loadSkillFromDir(GLOBAL_AGENT_SKILLS_DIR, slug, 'global');
+    if (skill) skillsBySlug.set(skill.slug, skill);
   }
 
   // 2. Workspace skills (medium priority)
@@ -268,7 +356,14 @@ export function loadSkillBySlug(workspaceRoot: string, slug: string, projectRoot
   const workspaceSkill = loadSkillFromDir(getWorkspaceSkillsPath(workspaceRoot), slug, 'workspace');
   if (workspaceSkill) return workspaceSkill;
 
-  // Lowest priority: global
+  // Lowest priority: enabled global library skill
+  if (!listEnabledGlobalSkillSlugs(workspaceRoot).includes(slug)) {
+    return null;
+  }
+  return loadSkillFromDir(GLOBAL_AGENT_SKILLS_DIR, slug, 'global');
+}
+
+export function loadGlobalSkillBySlug(slug: string): LoadedSkill | null {
   return loadSkillFromDir(GLOBAL_AGENT_SKILLS_DIR, slug, 'global');
 }
 
@@ -379,6 +474,185 @@ export function skillNeedsIconDownload(skill: LoadedSkill): boolean {
 
 // Re-export icon utilities for convenience
 export { isIconUrl } from '../utils/icon.ts';
+
+// ============================================================
+// Workspace → Global mirror
+// ============================================================
+// Workspaces used to be the only home for user-authored skills. Now skills are
+// promoted to first-class globals so they're visible in the Global Library and
+// can be activated in other workspaces. We mirror by COPY (not move): the
+// workspace copy stays as a same-slug override, and the slug is added to the
+// workspace's `.global-skills.json` so the UI surfaces it as "activated here".
+//
+// Conflict policy: if `~/.agents/skills/<slug>/` already exists, we DO NOT
+// overwrite by default — different workspaces may legitimately have different
+// skills under the same slug, and a user may have hand-edited the global. The
+// workspace copy continues to override at load time via priority order.
+
+export interface MirrorSkillResult {
+  /** True if files were copied to the global library on this call. */
+  mirrored: boolean;
+  /** Reason the copy was skipped, if any (still activates the slug when applicable). */
+  skipReason?: 'already-exists' | 'workspace-missing' | 'invalid-skill';
+}
+
+/**
+ * Copy a workspace skill into the global skills library and activate it in the
+ * workspace's enabled-globals manifest. Idempotent.
+ *
+ * Writes are atomic: the skill is staged in a sibling temp directory and then
+ * `renameSync`d into place, so concurrent mirrors of the same slug from
+ * different workspaces (or a crash mid-copy) cannot leave a partial directory
+ * visible to readers.
+ *
+ * @param workspaceRoot Absolute path to workspace root.
+ * @param slug Skill directory name in `<workspaceRoot>/skills/<slug>/`.
+ * @param options.overwrite If true, replace any existing global skill with the same slug.
+ */
+export function mirrorSkillToGlobal(
+  workspaceRoot: string,
+  slug: string,
+  options: { overwrite?: boolean } = {},
+): MirrorSkillResult {
+  const normalizedSlug = slug.trim();
+
+  if (!normalizedSlug) {
+    return { mirrored: false, skipReason: 'invalid-skill' };
+  }
+
+  const workspaceSkillDir = join(getWorkspaceSkillsPath(workspaceRoot), normalizedSlug);
+  const workspaceSkillFile = join(workspaceSkillDir, 'SKILL.md');
+  if (!existsSync(workspaceSkillFile)) {
+    return { mirrored: false, skipReason: 'workspace-missing' };
+  }
+
+  // Validate parseable before copying so we don't pollute global with garbage.
+  try {
+    const parsed = parseSkillFile(readFileSync(workspaceSkillFile, 'utf-8'), normalizedSlug);
+    if (!parsed) {
+      return { mirrored: false, skipReason: 'invalid-skill' };
+    }
+  } catch {
+    return { mirrored: false, skipReason: 'invalid-skill' };
+  }
+
+  mkdirSync(GLOBAL_AGENT_SKILLS_DIR, { recursive: true });
+  const globalSkillDir = join(GLOBAL_AGENT_SKILLS_DIR, normalizedSlug);
+  const globalExists = existsSync(globalSkillDir);
+
+  let mirrored = false;
+  if (!globalExists || options.overwrite) {
+    // Stage to a sibling temp dir, then rename atomically. This keeps the final
+    // directory either absent or fully populated — never partial — and lets
+    // concurrent mirrors race the rename instead of clobbering each other's
+    // half-written files.
+    const stagingDir = join(
+      GLOBAL_AGENT_SKILLS_DIR,
+      `.tmp-${normalizedSlug}-${process.pid}-${randomUUID().slice(0, 8)}`,
+    );
+
+    try {
+      cpSync(workspaceSkillDir, stagingDir, { recursive: true });
+
+      // Re-validate after staging in case the source changed mid-copy.
+      const stagedSkillFile = join(stagingDir, 'SKILL.md');
+      if (!existsSync(stagedSkillFile)) {
+        rmSync(stagingDir, { recursive: true, force: true });
+        return { mirrored: false, skipReason: 'invalid-skill' };
+      }
+
+      if (globalExists) {
+        // overwrite: true path. Move the existing global aside, rename
+        // staging into place, then drop the displaced copy. This shrinks the
+        // window where readers see no global skill at all.
+        const displacedDir = join(
+          GLOBAL_AGENT_SKILLS_DIR,
+          `.old-${normalizedSlug}-${process.pid}-${randomUUID().slice(0, 8)}`,
+        );
+        try {
+          renameSync(globalSkillDir, displacedDir);
+        } catch {
+          // Existing global vanished between existsSync and rename — fine,
+          // the rename below will land into an empty target.
+        }
+        try {
+          renameSync(stagingDir, globalSkillDir);
+          mirrored = true;
+        } finally {
+          if (existsSync(displacedDir)) {
+            rmSync(displacedDir, { recursive: true, force: true });
+          }
+        }
+      } else {
+        // Non-overwrite path. Race with another concurrent mirror is possible:
+        // if the target appeared between our existsSync and our rename, drop
+        // our staging copy and treat as "they got there first" (skipReason
+        // will reflect already-exists below).
+        try {
+          renameSync(stagingDir, globalSkillDir);
+          mirrored = true;
+        } catch {
+          if (existsSync(stagingDir)) {
+            rmSync(stagingDir, { recursive: true, force: true });
+          }
+          if (!existsSync(join(globalSkillDir, 'SKILL.md'))) {
+            throw new Error(`mirrorSkillToGlobal: failed to rename staging dir for ${normalizedSlug}`);
+          }
+          // Another writer won the race. Fall through to activate below.
+        }
+      }
+    } catch (err) {
+      if (existsSync(stagingDir)) {
+        rmSync(stagingDir, { recursive: true, force: true });
+      }
+      throw err;
+    }
+  }
+
+  // Activate in the workspace manifest regardless of whether the copy ran —
+  // this is what makes the skill show up as "from global" in the UI.
+  setGlobalSkillEnabled(workspaceRoot, normalizedSlug, true);
+
+  // skipReason reflects the post-condition: if we didn't write but a global
+  // exists now (either pre-existing or won by a racing writer), report
+  // already-exists. Otherwise undefined.
+  const skipReason: MirrorSkillResult['skipReason'] = mirrored
+    ? undefined
+    : existsSync(join(globalSkillDir, 'SKILL.md'))
+      ? 'already-exists'
+      : undefined;
+
+  return { mirrored, skipReason };
+}
+
+export interface BackfillResult {
+  mirrored: string[];
+  alreadyInGlobal: string[];
+  failed: Array<{ slug: string; reason: string }>;
+}
+
+/**
+ * Mirror every workspace skill into the global library. Idempotent — safe to
+ * run on every startup. Existing global skills with conflicting slugs are
+ * preserved (the workspace copy still overrides via priority order).
+ */
+export function backfillWorkspaceSkillsToGlobal(workspaceRoot: string): BackfillResult {
+  const result: BackfillResult = { mirrored: [], alreadyInGlobal: [], failed: [] };
+  for (const slug of listSkillSlugs(workspaceRoot)) {
+    const r = mirrorSkillToGlobal(workspaceRoot, slug);
+    if (r.mirrored) {
+      result.mirrored.push(slug);
+    } else if (r.skipReason === 'already-exists') {
+      result.alreadyInGlobal.push(slug);
+    } else if (r.skipReason) {
+      result.failed.push({ slug, reason: r.skipReason });
+    }
+  }
+  if (result.mirrored.length > 0) {
+    invalidateSkillsCache();
+  }
+  return result;
+}
 
 // ============================================================
 // Global skills seeding (built-in load-bearing skills)

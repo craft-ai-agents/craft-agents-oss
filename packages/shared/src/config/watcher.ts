@@ -43,7 +43,7 @@ import {
 import { permissionsConfigCache, getAppPermissionsDir } from '../agent/permissions-config.ts';
 import { getWorkspacePath, getWorkspaceSourcesPath, getWorkspaceSkillsPath } from '../workspaces/storage.ts';
 import type { LoadedSkill } from '../skills/types.ts';
-import { loadSkill, loadAllSkills, invalidateSkillsCache, skillNeedsIconDownload, downloadSkillIcon } from '../skills/storage.ts';
+import { loadSkill, loadAllSkills, invalidateSkillsCache, skillNeedsIconDownload, downloadSkillIcon, mirrorSkillToGlobal } from '../skills/storage.ts';
 import {
   loadStatusConfig,
   statusNeedsIconDownload,
@@ -210,6 +210,11 @@ export class ConfigWatcher {
   private knownSources: Set<string> = new Set();
   private knownSkills: Set<string> = new Set();
   private knownThemes: Set<string> = new Set();
+  // Slugs we have already attempted to mirror to the global library during
+  // this watcher's lifetime. Used to gate auto-mirror so that subsequent
+  // SKILL.md edits don't re-enable a slug the user explicitly deactivated,
+  // without needing to inspect the global filesystem on every edit.
+  private mirroredSlugs: Set<string> = new Set();
 
   // Track LLM connections for change detection (JSON string for deep comparison)
   private lastLlmConnectionsHash: string = '';
@@ -354,6 +359,7 @@ export class ConfigWatcher {
     this.knownSources.clear();
     this.knownSkills.clear();
     this.knownThemes.clear();
+    this.mirroredSlugs.clear();
 
     debug('[ConfigWatcher] Stopped');
   }
@@ -733,6 +739,7 @@ export class ConfigWatcher {
       // Directory was deleted
       const removed = Array.from(this.knownSkills);
       this.knownSkills.clear();
+      this.mirroredSlugs.clear();
 
       for (const slug of removed) {
         this.callbacks.onSkillChange?.(slug, null);
@@ -761,6 +768,7 @@ export class ConfigWatcher {
 
           const skill = loadSkill(this.workspaceDir, folder);
           if (skill) {
+            this.maybeMirrorNewSkillToGlobal(folder);
             this.callbacks.onSkillChange?.(folder, skill);
           }
         }
@@ -771,6 +779,8 @@ export class ConfigWatcher {
         if (!currentFolders.has(folder)) {
           debug('[ConfigWatcher] Removed skill folder:', folder);
           this.knownSkills.delete(folder);
+          // Allow re-mirror if the user later recreates this slug.
+          this.mirroredSlugs.delete(folder);
           this.callbacks.onSkillChange?.(folder, null);
         }
       }
@@ -786,6 +796,37 @@ export class ConfigWatcher {
   }
 
   /**
+   * Mirror a workspace skill to the global library on first appearance.
+   *
+   * Gated by `mirroredSlugs` (per-watcher, not filesystem), which means:
+   *   - First time we see a workspace skill in this watcher's lifetime, we
+   *     call mirrorSkillToGlobal — which copies (if global doesn't have it
+   *     yet) AND activates the slug in this workspace's manifest.
+   *   - Subsequent SKILL.md edits skip entirely, so a user who deactivated
+   *     the slug via UI doesn't get it silently re-enabled on every save.
+   *   - If the workspace skill is deleted and recreated, the entry is cleared
+   *     in handleSkillsDirChange so re-creation is treated as fresh.
+   */
+  private maybeMirrorNewSkillToGlobal(slug: string): void {
+    if (this.mirroredSlugs.has(slug)) return;
+    this.mirroredSlugs.add(slug);
+    try {
+      const result = mirrorSkillToGlobal(this.workspaceDir, slug);
+      if (result.mirrored) {
+        debug('[ConfigWatcher] Mirrored skill to global library:', slug);
+      } else if (result.skipReason === 'already-exists') {
+        debug('[ConfigWatcher] Activated existing global skill in workspace:', slug);
+      } else if (result.skipReason) {
+        debug('[ConfigWatcher] Skipped mirroring skill:', slug, result.skipReason);
+      }
+    } catch (err) {
+      // Don't poison the set on failure — let a follow-up retry attempt.
+      this.mirroredSlugs.delete(slug);
+      debug('[ConfigWatcher] Failed to mirror skill to global:', slug, err);
+    }
+  }
+
+  /**
    * Handle skill SKILL.md or icon change.
    * If the skill has an icon URL in metadata but no local icon file,
    * downloads the icon and emits another change event after completion.
@@ -794,6 +835,14 @@ export class ConfigWatcher {
     debug('[ConfigWatcher] Skill changed:', slug);
 
     const skill = loadSkill(this.workspaceDir, slug);
+
+    // Auto-mirror to the global library on first appearance only. We skip when
+    // a global with this slug already exists so a SKILL.md edit doesn't
+    // re-enable a slug the user explicitly deactivated in this workspace.
+    if (skill) {
+      this.maybeMirrorNewSkillToGlobal(slug);
+    }
+
     this.callbacks.onSkillChange?.(slug, skill);
 
     // Check if we need to download an icon from URL

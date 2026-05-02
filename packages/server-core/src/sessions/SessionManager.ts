@@ -1892,6 +1892,38 @@ export class SessionManager implements ISessionManager {
         } catch (err) {
           sessionLog.warn('[skills] Built-in skill seed skipped:', err as Error)
         }
+        // Mirror any per-workspace skills into the global library so they're
+        // visible everywhere. Pre-existing globals with conflicting slugs are
+        // preserved; the workspace copy keeps overriding via priority order.
+        try {
+          const { backfillWorkspaceSkillsToGlobal } = await import('@craft-agent/shared/skills')
+          const { getWorkspaces } = await import('@craft-agent/shared/config')
+          let totalMirrored = 0
+          let remoteSkipped = 0
+          for (const ws of getWorkspaces()) {
+            if (ws.remoteServer) {
+              remoteSkipped += 1
+              continue
+            }
+            try {
+              const { mirrored } = backfillWorkspaceSkillsToGlobal(ws.rootPath)
+              totalMirrored += mirrored.length
+              if (mirrored.length > 0) {
+                sessionLog.info(`[skills] Mirrored ${mirrored.length} workspace skill(s) → global from ${ws.id}: ${mirrored.join(', ')}`)
+              }
+            } catch (err) {
+              sessionLog.warn(`[skills] Mirror skipped for workspace ${ws.id}:`, err as Error)
+            }
+          }
+          if (totalMirrored > 0) {
+            sessionLog.info(`[skills] Total skills mirrored to global: ${totalMirrored}`)
+          }
+          if (remoteSkipped > 0) {
+            sessionLog.info(`[skills] Skipped ${remoteSkipped} remote workspace(s) — backfill is local-only`)
+          }
+        } catch (err) {
+          sessionLog.warn('[skills] Workspace→global mirror skipped:', err as Error)
+        }
         try {
           const { removeBuiltInAgentSkills } = await import('@craft-agent/shared/agent-definitions')
           const { updated } = removeBuiltInAgentSkills(['agent-creator', 'automation-creator'])
