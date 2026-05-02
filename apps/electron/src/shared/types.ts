@@ -95,6 +95,14 @@ export type { WorkflowDTO, WorkflowMetadataDTO, WorkflowRunDTO, WorkflowRunState
 import type { OutputManifest as OutputManifestDTO, OutputSummary as OutputSummaryDTO } from '@craft-agent/shared/outputs';
 export type { OutputManifestDTO, OutputSummaryDTO };
 
+// Notifications — bell entries persisted per-workspace.
+import type { NotificationEntry } from '@craft-agent/shared/notifications/types';
+export type { NotificationEntry };
+
+// Pulses — type re-exports (renderer-safe, no node:fs).
+import type { PulseTickEntry, PulseAction, PulseDecisionAction } from '@craft-agent/shared/pulses';
+export type { PulseTickEntry, PulseAction, PulseDecisionAction };
+
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
 export type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult };
@@ -504,9 +512,12 @@ export interface ElectronAPI {
   // Default permissions change listener (live updates when default.json changes)
   onDefaultPermissionsChanged(callback: () => void): () => void
 
-  // Skills
-  getSkills(workspaceId: string, workingDirectory?: string): Promise<LoadedSkill[]>
-  getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
+	  // Skills
+	  getSkills(workspaceId: string, workingDirectory?: string): Promise<LoadedSkill[]>
+	  listGlobalSkills(workspaceId: string): Promise<LoadedSkill[]>
+	  getEnabledGlobalSkills(workspaceId: string): Promise<string[]>
+	  setGlobalSkillEnabled(workspaceId: string, skillSlug: string, enabled: boolean): Promise<string[]>
+	  getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
   deleteSkill(workspaceId: string, skillSlug: string): Promise<void>
   openSkillInEditor(workspaceId: string, skillSlug: string): Promise<void>
   openSkillInFinder(workspaceId: string, skillSlug: string): Promise<void>
@@ -771,6 +782,18 @@ export interface ElectronAPI {
   openOutputFile(workspaceId: string, outputId: string, assetIdOrPath?: string): Promise<void>
   showOutputInFolder(workspaceId: string, outputId: string, assetIdOrPath?: string): Promise<void>
   onOutputsUpdated(callback: (workspaceId: string) => void): () => void
+
+  // Notifications (bell entries from pulses + future system sources)
+  listNotifications(workspaceId: string): Promise<NotificationEntry[]>
+  acknowledgeNotification(workspaceId: string, id: string): Promise<NotificationEntry | null>
+  clearNotification(workspaceId: string, id: string): Promise<boolean>
+  clearAllNotifications(workspaceId: string): Promise<number>
+  respondToNotification(workspaceId: string, id: string, response: string): Promise<NotificationEntry | null>
+  onNotificationsUpdated(callback: (workspaceId: string, entries: NotificationEntry[]) => void): () => void
+
+  // Pulses (tick history; broadcasts of ticks)
+  listPulseTicks(workspaceId: string, pulseId: string, limit?: number): Promise<PulseTickEntry[]>
+  onPulseTick(callback: (workspaceId: string, tick: PulseTickEntry) => void): () => void
 
   getAutomationHistory(workspaceId: string, automationId: string, limit?: number): Promise<Array<{ id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string; webhook?: { method: string; url: string; statusCode: number; durationMs: number; attempts?: number; error?: string; responseBody?: string } }>>
   getAutomationLastExecuted(workspaceId: string): Promise<Record<string, number>>

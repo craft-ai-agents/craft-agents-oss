@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { FileText, Plus, Pencil, Trash2 } from 'lucide-react'
 import {
@@ -15,6 +16,11 @@ import { useAgents } from '@/hooks/useAgents'
 import { cn } from '@/lib/utils'
 import type { ContextDocDTO, ContextDocMetadata } from '../../shared/types'
 
+type GoalStatus = 'active' | 'blocked' | 'paused' | 'done'
+type GoalPriority = 'low' | 'normal' | 'high'
+
+type ContextFilter = 'all' | 'goals'
+
 interface WorkspaceContextPageProps {
   workspaceId: string
 }
@@ -27,19 +33,32 @@ interface FormState {
   routingMode: 'broadcast' | 'targeted'
   agents: string[]
   enabled: boolean
+  goalEnabled: boolean
+  status: GoalStatus
+  priority: GoalPriority | ''
+  deadline: string
 }
 
 export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPageProps) {
+  const { t } = useTranslation()
   const { docs, loading, error, upsert, remove } = useWorkspaceContext(workspaceId)
   const { activeAgents } = useAgents(workspaceId)
   const [editingDoc, setEditingDoc] = React.useState<ContextDocDTO | null>(null)
   const [dialogOpen, setDialogOpen] = React.useState(false)
+  const [filter, setFilter] = React.useState<ContextFilter>('all')
 
   const enabledChars = React.useMemo(() => (
     docs.filter((doc) => doc.metadata.enabled).reduce((sum, doc) => sum + doc.body.length, 0)
   ), [docs])
   const approxTokens = Math.ceil(enabledChars / 4)
   const tokenTone = approxTokens > 16000 ? 'red' : approxTokens > 8000 ? 'amber' : 'neutral'
+
+  const visibleDocs = React.useMemo(() => {
+    if (filter === 'goals') {
+      return docs.filter((d) => Boolean((d.metadata as ContextDocMetadata).status))
+    }
+    return docs
+  }, [docs, filter])
 
   const handleNew = () => {
     setEditingDoc(null)
@@ -98,6 +117,25 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
           </div>
         ) : (
           <div className="p-4">
+            <div className="mb-3 flex items-center gap-1.5">
+              {(['all', 'goals'] as const).map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => setFilter(kind)}
+                  className={cn(
+                    'px-2.5 py-1 text-xs rounded-md border',
+                    filter === kind
+                      ? 'border-foreground/30 bg-foreground/5 text-foreground'
+                      : 'border-border/40 text-foreground/60 hover:bg-foreground/5',
+                  )}
+                >
+                  {kind === 'all'
+                    ? t('workspaceContextPage.filterAll')
+                    : t('workspaceContextPage.filterGoalsOnly')}
+                </button>
+              ))}
+            </div>
             <div className="overflow-hidden rounded-md border border-border/40">
               <table className="w-full text-sm">
                 <thead className="bg-foreground/[0.03] text-xs text-muted-foreground">
@@ -109,7 +147,7 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
                   </tr>
                 </thead>
                 <tbody>
-                  {docs.map((doc) => (
+                  {visibleDocs.map((doc) => (
                     <tr key={doc.slug} className="border-t border-border/30">
                       <td className="px-3 py-2 min-w-0">
                         <div className="font-medium truncate">{doc.metadata.name}</div>
@@ -117,6 +155,21 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
                           <span className="font-mono">{doc.slug}</span>
                           {doc.metadata.description ? ` - ${doc.metadata.description}` : ''}
                         </div>
+                        {filter === 'goals' && doc.metadata.status && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+                            <span className="px-1.5 py-0.5 rounded bg-foreground/8 text-foreground/70">
+                              {t(`workspaceContextPage.status${capitalize(doc.metadata.status)}`)}
+                            </span>
+                            {doc.metadata.priority && (
+                              <span className="px-1.5 py-0.5 rounded bg-foreground/8 text-foreground/70">
+                                {t(`workspaceContextPage.priority${capitalize(doc.metadata.priority)}`)}
+                              </span>
+                            )}
+                            {doc.metadata.deadline && (
+                              <span className="text-foreground/50">{doc.metadata.deadline}</span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">{routingSummary(doc)}</td>
                       <td className="px-3 py-2">
@@ -210,16 +263,19 @@ function WorkspaceContextEditDialog({
   activeAgents: Array<{ slug: string; metadata: { name: string; description: string } }>
   onSave: (input: { slug: string; metadata: ContextDocMetadata; body: string }) => Promise<void>
 }) {
+  const { t } = useTranslation()
   const isEditing = !!doc
   const [form, setForm] = React.useState<FormState>(() => buildInitialState(doc))
   const [slugDirty, setSlugDirty] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
+  const [goalSectionOpen, setGoalSectionOpen] = React.useState(() => Boolean(doc?.metadata.status))
 
   React.useEffect(() => {
     if (!open) return
     setForm(buildInitialState(doc))
     setSlugDirty(false)
     setSaving(false)
+    setGoalSectionOpen(Boolean(doc?.metadata.status))
   }, [doc, open])
 
   const handleNameChange = (name: string) => {
@@ -244,6 +300,19 @@ function WorkspaceContextEditDialog({
       routing: form.routingMode === 'broadcast'
         ? { mode: 'broadcast' }
         : { mode: 'targeted', agents: form.agents },
+    }
+    if (form.goalEnabled) {
+      const deadline = form.deadline.trim()
+      if (deadline) {
+        const parsed = Date.parse(deadline)
+        if (Number.isNaN(parsed)) {
+          toast.error(t('workspaceContextPage.invalidDeadline'))
+          return
+        }
+        metadata.deadline = deadline
+      }
+      metadata.status = form.status
+      if (form.priority) metadata.priority = form.priority
     }
     setSaving(true)
     try {
@@ -364,6 +433,67 @@ function WorkspaceContextEditDialog({
             />
             Enabled
           </label>
+
+          <div className="rounded-md border border-border/30">
+            <button
+              type="button"
+              onClick={() => setGoalSectionOpen((v) => !v)}
+              className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium text-foreground/80 hover:bg-foreground/5"
+            >
+              <span>{t('workspaceContextPage.goalSection')}</span>
+              <span className="text-foreground/50">{goalSectionOpen ? '−' : '+'}</span>
+            </button>
+            {goalSectionOpen && (
+              <div className="border-t border-border/20 px-3 py-2 flex flex-col gap-2">
+                <Field label={t('workspaceContextPage.status')}>
+                  <select
+                    value={form.goalEnabled ? form.status : ''}
+                    onChange={(event) => {
+                      const v = event.target.value
+                      if (!v) {
+                        setForm((prev) => ({ ...prev, goalEnabled: false }))
+                      } else {
+                        setForm((prev) => ({ ...prev, goalEnabled: true, status: v as GoalStatus }))
+                      }
+                    }}
+                    className="form-input"
+                  >
+                    <option value="">{t('workspaceContextPage.statusNone')}</option>
+                    <option value="active">{t('workspaceContextPage.statusActive')}</option>
+                    <option value="blocked">{t('workspaceContextPage.statusBlocked')}</option>
+                    <option value="paused">{t('workspaceContextPage.statusPaused')}</option>
+                    <option value="done">{t('workspaceContextPage.statusDone')}</option>
+                  </select>
+                </Field>
+                <Field label={t('workspaceContextPage.priority')}>
+                  <select
+                    value={form.priority}
+                    disabled={!form.goalEnabled}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, priority: event.target.value as GoalPriority | '' }))
+                    }
+                    className="form-input"
+                  >
+                    <option value="">{t('workspaceContextPage.statusNone')}</option>
+                    <option value="low">{t('workspaceContextPage.priorityLow')}</option>
+                    <option value="normal">{t('workspaceContextPage.priorityNormal')}</option>
+                    <option value="high">{t('workspaceContextPage.priorityHigh')}</option>
+                  </select>
+                </Field>
+                <Field label={t('workspaceContextPage.deadline')}>
+                  <input
+                    type="date"
+                    value={form.deadline}
+                    disabled={!form.goalEnabled}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, deadline: event.target.value }))
+                    }
+                    className="form-input"
+                  />
+                </Field>
+              </div>
+            )}
+          </div>
         </div>
 
         <DialogFooter>
@@ -406,6 +536,10 @@ function buildInitialState(doc: ContextDocDTO | null): FormState {
       routingMode: 'broadcast',
       agents: [],
       enabled: true,
+      goalEnabled: false,
+      status: 'active',
+      priority: '',
+      deadline: '',
     }
   }
   return {
@@ -416,7 +550,15 @@ function buildInitialState(doc: ContextDocDTO | null): FormState {
     routingMode: doc.metadata.routing.mode,
     agents: doc.metadata.routing.mode === 'targeted' ? doc.metadata.routing.agents : [],
     enabled: doc.metadata.enabled,
+    goalEnabled: Boolean(doc.metadata.status),
+    status: (doc.metadata.status ?? 'active') as GoalStatus,
+    priority: (doc.metadata.priority ?? '') as GoalPriority | '',
+    deadline: doc.metadata.deadline ?? '',
   }
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
 function slugify(value: string): string {

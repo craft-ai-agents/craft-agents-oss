@@ -27,6 +27,7 @@ import { PhaseBadge } from './PhaseBadge'
 import { getEventDisplayName, getPermissionDisplayName, flattenConditions, type AutomationListItem, type ExecutionEntry, type TestResult } from './types'
 import { describeCron, computeNextRuns } from './utils'
 import { ExternalTriggerSection } from './ExternalTriggerSection'
+import { TickHistoryPanel } from '@/components/pulses/TickHistoryPanel'
 
 // ============================================================================
 // Component
@@ -213,6 +214,17 @@ export function AutomationInfoPage({
             )}
           </Info_Table>
         </Info_Section>
+
+        {/* Section: Tick history (Pulse automations only) */}
+        {workspace?.id &&
+          automation.actions.some((a) => (a as unknown as { type: string }).type === 'pulse') && (
+            <Info_Section title={t('pulses.tickHistory.title')}>
+              <TickHistoryPanel
+                workspaceId={workspace.id}
+                pulseId={automation.id}
+              />
+            </Info_Section>
+          )}
 
         {/* Section: Recent Activity */}
         <Info_Section

@@ -63,10 +63,37 @@ export const WebhookActionSchema = z.object({
   ]).optional(),
 });
 
-/** Accepts prompt and webhook actions strictly; passes through legacy/unknown action types without erroring */
+export const PulseActionSchema = z.object({
+  type: z.literal('pulse'),
+  driverAgentSlug: z
+    .string()
+    .regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/, 'driverAgentSlug must be lowercase letters, digits, hyphens (1-64 chars, no leading/trailing hyphen)')
+    .optional(),
+  goalSlugs: z
+    .array(
+      z.string().regex(
+        /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/,
+        'goalSlug entries must be valid context-doc slugs',
+      ),
+    )
+    .optional(),
+  diffWindowMinutes: z.number().positive().max(1440, 'diffWindowMinutes max is 1440 (one day)').optional(),
+  notify: z
+    .object({
+      bell: z.boolean().optional(),
+      conciergeChat: z.boolean().optional(),
+      messagingChannel: z.string().min(1).optional(),
+      minUrgencyForChannel: z.enum(['low', 'normal', 'high']).optional(),
+    })
+    .passthrough()
+    .optional(),
+});
+
+/** Accepts prompt, webhook, and pulse actions strictly; passes through legacy/unknown action types without erroring */
 export const ActionDefinitionSchema = z.union([
   PromptActionSchema,
   WebhookActionSchema,
+  PulseActionSchema,
   z.object({ type: z.string() }).passthrough(),
 ]);
 

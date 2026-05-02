@@ -252,4 +252,100 @@ describe('handleCreateAutomation', () => {
     expect(result.isError).toBe(false);
     expect((result.content[0] as any).text).toContain('WebhookReceive');
   });
+
+  describe('pulse actions', () => {
+    const VALID_PULSE: CreateAutomationToolInput = {
+      eventName: 'SchedulerTick',
+      matcher: {
+        name: 'morning-pulse',
+        cron: '0 * * * *',
+        actions: [{ type: 'pulse', goalSlugs: ['ship-v1'], diffWindowMinutes: 60 }],
+      },
+    };
+
+    it('accepts a SchedulerTick + pulse action happy path', async () => {
+      const ctx = makeCtx({ createAutomation: async () => ({ ok: true, eventName: 'SchedulerTick' }) });
+      const result = await handleCreateAutomation(ctx, VALID_PULSE);
+      expect(result.isError).toBe(false);
+    });
+
+    it('rejects pulse action on non-SchedulerTick event', async () => {
+      const ctx = makeCtx({ createAutomation: async () => ({ ok: true }) });
+      const result = await handleCreateAutomation(ctx, {
+        eventName: 'WebhookReceive',
+        matcher: {
+          slug: 'pulse-via-webhook',
+          allowUnauthenticated: true,
+          actions: [{ type: 'pulse' }],
+        },
+      });
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain('SchedulerTick');
+    });
+
+    it('rejects pulse SchedulerTick with cadence under 10 minutes', async () => {
+      const ctx = makeCtx({ createAutomation: async () => ({ ok: true }) });
+      const result = await handleCreateAutomation(ctx, {
+        eventName: 'SchedulerTick',
+        matcher: {
+          cron: '*/5 * * * *',
+          actions: [{ type: 'pulse' }],
+        },
+      });
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain('cadence floor');
+    });
+
+    it('rejects pulse with malformed driverAgentSlug', async () => {
+      const ctx = makeCtx({ createAutomation: async () => ({ ok: true }) });
+      const result = await handleCreateAutomation(ctx, {
+        eventName: 'SchedulerTick',
+        matcher: {
+          cron: '0 * * * *',
+          actions: [{ type: 'pulse', driverAgentSlug: 'BadSlug!' }],
+        },
+      });
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain('driverAgentSlug');
+    });
+
+    it('rejects pulse with malformed goalSlug entries', async () => {
+      const ctx = makeCtx({ createAutomation: async () => ({ ok: true }) });
+      const result = await handleCreateAutomation(ctx, {
+        eventName: 'SchedulerTick',
+        matcher: {
+          cron: '0 * * * *',
+          actions: [{ type: 'pulse', goalSlugs: ['Bad_Slug'] }],
+        },
+      });
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain('goalSlug');
+    });
+
+    it('rejects pulse with negative diffWindowMinutes', async () => {
+      const ctx = makeCtx({ createAutomation: async () => ({ ok: true }) });
+      const result = await handleCreateAutomation(ctx, {
+        eventName: 'SchedulerTick',
+        matcher: {
+          cron: '0 * * * *',
+          actions: [{ type: 'pulse', diffWindowMinutes: -5 }],
+        },
+      });
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain('diffWindowMinutes');
+    });
+
+    it('rejects pulse with diffWindowMinutes above the day cap', async () => {
+      const ctx = makeCtx({ createAutomation: async () => ({ ok: true }) });
+      const result = await handleCreateAutomation(ctx, {
+        eventName: 'SchedulerTick',
+        matcher: {
+          cron: '0 * * * *',
+          actions: [{ type: 'pulse', diffWindowMinutes: 5000 }],
+        },
+      });
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain('diffWindowMinutes');
+    });
+  });
 });

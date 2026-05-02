@@ -42,4 +42,11 @@ export interface HandlerDeps<
    * call this once on use and surface a clear error when undefined.
    */
   getWorkflowRunner?: () => import('../workflows/runner').WorkflowRunner
+  /**
+   * Resolve the host's `NotificationService`. Lazy-resolved via a getter so
+   * the dep bag doesn't have to import the service at construction time.
+   * Lane B's PulseExecutor wiring reads this to call `add()` on
+   * `notify_user` / `ask_user` decisions.
+   */
+  getNotificationService?: () => import('../notifications/NotificationService').NotificationService
 }

@@ -282,7 +282,7 @@ export interface AutomationListItem {
 // Filter
 // ============================================================================
 
-export type AutomationFilterKind = 'all' | 'app' | 'agent' | 'scheduled' | 'external'
+export type AutomationFilterKind = 'all' | 'app' | 'agent' | 'scheduled' | 'external' | 'pulses'
 
 export interface AutomationListFilter {
   kind: AutomationFilterKind

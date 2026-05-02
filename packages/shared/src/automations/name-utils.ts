@@ -29,6 +29,10 @@ export function deriveAutomationName(event: string, matcher: AutomationMatcher):
     return label.length > 40 ? label.slice(0, 40) + '...' : label;
   }
 
+  if (firstAction.type === 'pulse') {
+    return `Pulse ${firstAction.driverAgentSlug ?? 'orchestrator'}`;
+  }
+
   // Extract @skill/@source mention
   const mentionMatch = firstAction.prompt.match(/@(\S+)/);
   if (mentionMatch) return `${mentionMatch[1]} prompt`;

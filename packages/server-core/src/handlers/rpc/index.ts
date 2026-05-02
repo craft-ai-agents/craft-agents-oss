@@ -15,6 +15,8 @@ import { registerOAuthHandlers } from './oauth'
 import { registerResourcesHandlers } from './resources'
 import { registerOnboardingHandlers } from './onboarding'
 import { registerOutputsHandlers } from './outputs'
+import { registerNotificationsHandlers } from './notifications'
+import { registerPulsesHandlers } from './pulses'
 import { registerSessionsHandlers } from './sessions'
 export { registerSessionsHandlers, cleanupSessionFileWatchForClient } from './sessions'
 import { registerServerHandlers } from './server'
@@ -48,6 +50,8 @@ export function registerCoreRpcHandlers(
   registerOAuthHandlers(server, deps)
   registerOnboardingHandlers(server, deps)
   registerOutputsHandlers(server, deps)
+  registerNotificationsHandlers(server, deps)
+  registerPulsesHandlers(server, deps)
   registerResourcesHandlers(server, deps)
   registerSessionsHandlers(server, deps)
   if (serverCtx) registerServerHandlers(server, deps, serverCtx)

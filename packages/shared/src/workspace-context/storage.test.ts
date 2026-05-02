@@ -72,6 +72,45 @@ describe('parseContextFile', () => {
     const got = parseContextFile('---\nname: A\nenabled: false\n---\n');
     expect(got!.metadata.enabled).toBe(false);
   });
+
+  test('valid goal fields parse and round-trip', () => {
+    const got = parseContextFile(
+      '---\nname: Launch\nstatus: active\npriority: high\ndeadline: 2026-05-31\n---\nBody.',
+    );
+    expect(got!.metadata.status).toBe('active');
+    expect(got!.metadata.priority).toBe('high');
+    expect(got!.metadata.deadline).toBe('2026-05-31');
+    expect(got!.warnings).toEqual([]);
+  });
+
+  test('invalid status is dropped with a warning, doc still parses', () => {
+    const got = parseContextFile('---\nname: A\nstatus: maybe\n---\n');
+    expect(got).not.toBeNull();
+    expect(got!.metadata.status).toBeUndefined();
+    expect(got!.warnings.find((w) => w.code === 'invalid-status')).toBeDefined();
+  });
+
+  test('invalid priority is dropped with a warning', () => {
+    const got = parseContextFile('---\nname: A\nstatus: active\npriority: urgent\n---\n');
+    expect(got!.metadata.status).toBe('active');
+    expect(got!.metadata.priority).toBeUndefined();
+    expect(got!.warnings.find((w) => w.code === 'invalid-priority')).toBeDefined();
+  });
+
+  test('invalid deadline is dropped with a warning', () => {
+    const got = parseContextFile('---\nname: A\nstatus: active\ndeadline: not-a-date\n---\n');
+    expect(got!.metadata.status).toBe('active');
+    expect(got!.metadata.deadline).toBeUndefined();
+    expect(got!.warnings.find((w) => w.code === 'invalid-deadline')).toBeDefined();
+  });
+
+  test('legacy doc with no goal fields parses cleanly', () => {
+    const got = parseContextFile('---\nname: Vision\n---\nBody.');
+    expect(got!.metadata.status).toBeUndefined();
+    expect(got!.metadata.priority).toBeUndefined();
+    expect(got!.metadata.deadline).toBeUndefined();
+    expect(got!.warnings).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------

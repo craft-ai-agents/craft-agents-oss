@@ -32,6 +32,26 @@ export type ContextDocRouting =
   | { mode: 'broadcast' }
   | { mode: 'targeted'; agents: string[] };
 
+/**
+ * Goal status. When set, the doc is treated as a Goal by the Pulse runtime
+ * (see `docs/pulses/01-spec.md` section 1). When unset, the doc is a regular
+ * context doc and the goal-related fields are ignored.
+ */
+export type ContextDocGoalStatus = 'active' | 'blocked' | 'paused' | 'done';
+export type ContextDocGoalPriority = 'low' | 'normal' | 'high';
+
+export const CONTEXT_DOC_GOAL_STATUSES: readonly ContextDocGoalStatus[] = [
+  'active',
+  'blocked',
+  'paused',
+  'done',
+];
+export const CONTEXT_DOC_GOAL_PRIORITIES: readonly ContextDocGoalPriority[] = [
+  'low',
+  'normal',
+  'high',
+];
+
 export interface ContextDocMetadata {
   /** Human-readable display name (e.g. "Voice & Style"). */
   name: string;
@@ -44,11 +64,20 @@ export interface ContextDocMetadata {
    * Lets users keep drafts without affecting prompts. Defaults to true.
    */
   enabled: boolean;
+  /** Goal status — when set, this doc is a Pulse goal. */
+  status?: ContextDocGoalStatus;
+  /** Goal priority. Only meaningful when `status` is set. */
+  priority?: ContextDocGoalPriority;
+  /** Goal deadline as ISO date (YYYY-MM-DD). Only meaningful when `status` is set. */
+  deadline?: string;
 }
 
 export type ContextDocParseWarningCode =
   | 'invalid-agents'
-  | 'invalid-enabled';
+  | 'invalid-enabled'
+  | 'invalid-status'
+  | 'invalid-priority'
+  | 'invalid-deadline';
 
 export interface ContextDocParseWarning {
   field: keyof ContextDocMetadata;

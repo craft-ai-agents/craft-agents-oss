@@ -6,6 +6,7 @@
 
 import type { PermissionMode } from '../agent/mode-types.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
+import type { PulseAction } from '../pulses/types.ts';
 
 // ============================================================================
 // Event Types
@@ -104,7 +105,9 @@ export interface WebhookAction {
   auth?: WebhookAuth;
 }
 
-export type AutomationAction = PromptAction | WebhookAction;
+export type AutomationAction = PromptAction | WebhookAction | PulseAction;
+
+export type { PulseAction };
 
 // ============================================================================
 // Condition Types

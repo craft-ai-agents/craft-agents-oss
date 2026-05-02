@@ -27,8 +27,12 @@ import { join } from 'node:path';
 import matter from 'gray-matter';
 import { CONCIERGE_SLUG, AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
 import {
+  CONTEXT_DOC_GOAL_PRIORITIES,
+  CONTEXT_DOC_GOAL_STATUSES,
   CONTEXT_DOC_SLUG_REGEX,
   CONTEXT_FILE,
+  type ContextDocGoalPriority,
+  type ContextDocGoalStatus,
   type ContextDocMetadata,
   type ContextDocParseWarning,
   type ContextDocRouting,
@@ -131,6 +135,77 @@ function finalizeAgents(parts: string[], warnings: ContextDocParseWarning[]): Co
   return { mode: 'targeted', agents: cleaned };
 }
 
+function coerceGoalStatus(
+  value: unknown,
+  warnings: ContextDocParseWarning[],
+): ContextDocGoalStatus | undefined {
+  if (value == null) return undefined;
+  if (typeof value === 'string') {
+    const lc = value.trim().toLowerCase();
+    if (!lc) return undefined;
+    if ((CONTEXT_DOC_GOAL_STATUSES as readonly string[]).includes(lc)) {
+      return lc as ContextDocGoalStatus;
+    }
+  }
+  warnings.push(
+    warning(
+      'status',
+      'invalid-status',
+      `status must be one of ${CONTEXT_DOC_GOAL_STATUSES.join(', ')}; field dropped.`,
+    ),
+  );
+  return undefined;
+}
+
+function coerceGoalPriority(
+  value: unknown,
+  warnings: ContextDocParseWarning[],
+): ContextDocGoalPriority | undefined {
+  if (value == null) return undefined;
+  if (typeof value === 'string') {
+    const lc = value.trim().toLowerCase();
+    if (!lc) return undefined;
+    if ((CONTEXT_DOC_GOAL_PRIORITIES as readonly string[]).includes(lc)) {
+      return lc as ContextDocGoalPriority;
+    }
+  }
+  warnings.push(
+    warning(
+      'priority',
+      'invalid-priority',
+      `priority must be one of ${CONTEXT_DOC_GOAL_PRIORITIES.join(', ')}; field dropped.`,
+    ),
+  );
+  return undefined;
+}
+
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+function coerceGoalDeadline(
+  value: unknown,
+  warnings: ContextDocParseWarning[],
+): string | undefined {
+  if (value == null) return undefined;
+  let raw: string | null = null;
+  if (typeof value === 'string') raw = value.trim();
+  else if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    raw = value.toISOString().slice(0, 10);
+  }
+  if (!raw) {
+    warnings.push(
+      warning('deadline', 'invalid-deadline', 'deadline must be an ISO date (YYYY-MM-DD); field dropped.'),
+    );
+    return undefined;
+  }
+  if (!ISO_DATE_REGEX.test(raw) || Number.isNaN(Date.parse(raw))) {
+    warnings.push(
+      warning('deadline', 'invalid-deadline', `deadline "${raw}" is not a valid ISO date; field dropped.`),
+    );
+    return undefined;
+  }
+  return raw;
+}
+
 function coerceEnabled(value: unknown, warnings: ContextDocParseWarning[]): boolean {
   if (value == null) return true;
   if (typeof value === 'boolean') return value;
@@ -163,9 +238,17 @@ export function parseContextFile(
     typeof data.description === 'string' ? data.description.trim() || undefined : undefined;
   const routing = coerceRouting(data.agents, warnings);
   const enabled = coerceEnabled(data.enabled, warnings);
+  const status = coerceGoalStatus(data.status, warnings);
+  const priority = coerceGoalPriority(data.priority, warnings);
+  const deadline = coerceGoalDeadline(data.deadline, warnings);
+
+  const metadata: ContextDocMetadata = { name, description, routing, enabled };
+  if (status) metadata.status = status;
+  if (priority) metadata.priority = priority;
+  if (deadline) metadata.deadline = deadline;
 
   return {
-    metadata: { name, description, routing, enabled },
+    metadata,
     body: parsed.content.trim(),
     warnings,
   };
@@ -178,6 +261,9 @@ export function serializeContextDoc(metadata: ContextDocMetadata, body: string):
   data.agents = metadata.routing.mode === 'broadcast' ? 'all' : metadata.routing.agents;
   // Only serialize enabled when false; default-true stays implicit and clean.
   if (!metadata.enabled) data.enabled = false;
+  if (metadata.status) data.status = metadata.status;
+  if (metadata.priority) data.priority = metadata.priority;
+  if (metadata.deadline) data.deadline = metadata.deadline;
   return matter.stringify(body.trimEnd() + '\n', data);
 }
 

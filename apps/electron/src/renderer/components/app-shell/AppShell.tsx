@@ -947,7 +947,13 @@ function AppShellContent({
   React.useEffect(() => {
     const cleanup = window.electronAPI.onSkillsChanged((workspaceId, updatedSkills) => {
       if (workspaceId !== activeWorkspaceId) return
-      setSkills(updatedSkills || [])
+      setSkills((current) => {
+        const bySlug = new Map((updatedSkills || []).map((skill) => [skill.slug, skill]))
+        for (const skill of current) {
+          if (skill.source === 'project') bySlug.set(skill.slug, skill)
+        }
+        return Array.from(bySlug.values())
+      })
     })
     return cleanup
   }, [activeWorkspaceId])
@@ -1313,7 +1319,7 @@ function AppShellContent({
   const [workspaceUnreadMap, setWorkspaceUnreadMap] = useState<Record<string, boolean>>({})
 
   // Reload skills when active session's workingDirectory changes (for project-level skills)
-  // Skills are loaded from: global (~/.agents/skills/), workspace, and project ({workingDirectory}/.agents/skills/)
+  // Skills are loaded from enabled global library skills, workspace skills, and project ({workingDirectory}/.agents/skills/) skills.
   const activeSessionWorkingDirectory = session.selected
     ? sessionMetaMap.get(session.selected)?.workingDirectory
     : undefined

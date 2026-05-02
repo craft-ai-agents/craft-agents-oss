@@ -258,6 +258,9 @@ export const RPC_CHANNELS = {
   },
   skills: {
     GET: 'skills:get',
+    LIST_GLOBAL: 'skills:listGlobal',
+    GET_ENABLED_GLOBAL: 'skills:getEnabledGlobal',
+    SET_GLOBAL_ENABLED: 'skills:setGlobalEnabled',
     GET_FILES: 'skills:getFiles',
     DELETE: 'skills:delete',
     OPEN_EDITOR: 'skills:openEditor',
@@ -453,6 +456,20 @@ export const RPC_CHANNELS = {
   resources: {
     EXPORT: 'resources:export',
     IMPORT: 'resources:import',
+  },
+  pulses: {
+    /** Read tick history for one pulse. */
+    LIST_TICKS: 'pulses:list-ticks',
+    /** Broadcast event when a tick is recorded. */
+    TICK: 'pulses:tick',
+  },
+  notifications: {
+    LIST: 'notifications:list',
+    ACKNOWLEDGE: 'notifications:acknowledge',
+    CLEAR: 'notifications:clear',
+    CLEAR_ALL: 'notifications:clear-all',
+    RESPOND_TO_ASK: 'notifications:respond',
+    UPDATED: 'notifications:updated',
   },
   messaging: {
     // WhatsApp subprocess → Gateway (subprocess invokes on server)

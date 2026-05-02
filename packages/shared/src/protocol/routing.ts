@@ -360,6 +360,9 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
 
   // skills — skill content per-workspace (not openEditor/openFinder which are local OS)
   RPC_CHANNELS.skills.GET,
+  RPC_CHANNELS.skills.LIST_GLOBAL,
+  RPC_CHANNELS.skills.GET_ENABLED_GLOBAL,
+  RPC_CHANNELS.skills.SET_GLOBAL_ENABLED,
   RPC_CHANNELS.skills.GET_FILES,
   RPC_CHANNELS.skills.DELETE,
   RPC_CHANNELS.skills.CHANGED,
@@ -448,6 +451,18 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.workflowRuns.RESUME,
   RPC_CHANNELS.workflowRuns.DELETE,
   RPC_CHANNELS.workflowRuns.UPDATED,
+
+  // pulses — tick history lives on the workspace server
+  RPC_CHANNELS.pulses.LIST_TICKS,
+  RPC_CHANNELS.pulses.TICK,
+
+  // notifications — bell entries persisted on the workspace server
+  RPC_CHANNELS.notifications.LIST,
+  RPC_CHANNELS.notifications.ACKNOWLEDGE,
+  RPC_CHANNELS.notifications.CLEAR,
+  RPC_CHANNELS.notifications.CLEAR_ALL,
+  RPC_CHANNELS.notifications.RESPOND_TO_ASK,
+  RPC_CHANNELS.notifications.UPDATED,
 
   // outputs — workspace deliverables
   RPC_CHANNELS.outputs.LIST,

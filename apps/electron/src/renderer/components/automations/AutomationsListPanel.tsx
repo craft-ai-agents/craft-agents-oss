@@ -189,6 +189,7 @@ export function AutomationsListPanel({
   const { t } = useTranslation()
   const [searchQuery, setSearchQuery] = useState('')
   const [searchActive, setSearchActive] = useState(false)
+  const [pulsesOnly, setPulsesOnly] = useState(false)
   const { workspaces, activeWorkspaceId } = useAppShellContext()
   const hasOtherWorkspaces = workspaces.length > 1
 
@@ -219,19 +220,30 @@ export function AutomationsListPanel({
       && !(EXTERNAL_INPUT_EVENTS as string[]).includes(a.event)
     )
     if (kind === 'agent') return automations.filter(a => (AGENT_EVENTS as string[]).includes(a.event))
+    if (kind === 'pulses') return automations.filter(a =>
+      // Pulse action type added in Wave 1; cast through unknown for the local UI types until mirrored.
+      a.actions.some((act) => (act as unknown as { type: string }).type === 'pulse'),
+    )
     return automations
   }, [automations, automationFilter?.kind])
 
+  const pulseFiltered = React.useMemo(() => {
+    if (!pulsesOnly) return categoryFiltered
+    return categoryFiltered.filter((a) =>
+      a.actions.some((act) => (act as unknown as { type: string }).type === 'pulse'),
+    )
+  }, [categoryFiltered, pulsesOnly])
+
   // Further filter by search query (name, summary, event display name)
   const searchFiltered = React.useMemo(() => {
-    if (!isSearchMode) return categoryFiltered
+    if (!isSearchMode) return pulseFiltered
     const q = searchQuery.toLowerCase()
-    return categoryFiltered.filter(a =>
+    return pulseFiltered.filter(a =>
       a.name.toLowerCase().includes(q) ||
       a.summary.toLowerCase().includes(q) ||
       getEventDisplayName(a.event).toLowerCase().includes(q)
     )
-  }, [categoryFiltered, isSearchMode, searchQuery])
+  }, [pulseFiltered, isSearchMode, searchQuery])
 
   // Sort: most recently executed first, never-run at the bottom
   const filteredAutomations = React.useMemo(() => {
@@ -311,7 +323,19 @@ export function AutomationsListPanel({
 
       {/* Quick-add bar (hidden during search to keep UX focused) */}
       {!searchActive && (
-        <div className="flex justify-end px-2 pt-1.5 pb-1">
+        <div className="flex items-center justify-between px-2 pt-1.5 pb-1">
+          <button
+            type="button"
+            onClick={() => setPulsesOnly((v) => !v)}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-2 py-1 text-[11px] rounded-md',
+              pulsesOnly
+                ? 'bg-foreground/10 text-foreground'
+                : 'text-foreground/60 hover:text-foreground hover:bg-foreground/5',
+            )}
+          >
+            {t('automationsList.filterPulses')}
+          </button>
           <TemplatesGalleryDialog
             trigger={
               <button

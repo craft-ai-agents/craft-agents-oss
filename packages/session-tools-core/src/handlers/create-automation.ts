@@ -29,9 +29,23 @@ export interface CreateAutomationWebhookAction {
   auth?: { type: 'basic'; username: string; password: string } | { type: 'bearer'; token: string };
 }
 
+export interface CreateAutomationPulseAction {
+  type: 'pulse';
+  driverAgentSlug?: string;
+  goalSlugs?: string[];
+  diffWindowMinutes?: number;
+  notify?: {
+    bell?: boolean;
+    conciergeChat?: boolean;
+    messagingChannel?: string;
+    minUrgencyForChannel?: 'low' | 'normal' | 'high';
+  };
+}
+
 export type CreateAutomationAction =
   | CreateAutomationPromptAction
-  | CreateAutomationWebhookAction;
+  | CreateAutomationWebhookAction
+  | CreateAutomationPulseAction;
 
 export interface CreateAutomationMatcher {
   name?: string;
@@ -78,6 +92,10 @@ const SUPPORTED_EVENTS: ReadonlySet<string> = new Set([
 const WEBHOOK_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 const SECRET_ENV_RE = /^[A-Z_][A-Z0-9_]*$/;
 const THINKING_LEVELS = new Set(['off', 'low', 'medium', 'high', 'xhigh', 'max']);
+const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+const URGENCIES = new Set(['low', 'normal', 'high']);
+/** Minimum gap between consecutive Pulse fires (spec section 7). */
+const PULSE_MIN_INTERVAL_MS = 10 * 60 * 1000;
 
 /**
  * Kept in sync with `normalizeStandardFiveFieldCron` in
@@ -135,8 +153,38 @@ export async function handleCreateAutomation(
       if (!action.url || typeof action.url !== 'string') {
         return errorResponse('Webhook actions require a "url" string.');
       }
+    } else if (action.type === 'pulse') {
+      if (args.eventName !== 'SchedulerTick') {
+        return errorResponse('Pulse actions are only supported on SchedulerTick automations.');
+      }
+      const pulse = action as CreateAutomationPulseAction;
+      if (pulse.driverAgentSlug !== undefined && !SLUG_RE.test(pulse.driverAgentSlug)) {
+        return errorResponse(
+          `Invalid driverAgentSlug "${pulse.driverAgentSlug}". Use lowercase letters, digits, hyphens (1-64 chars, no leading/trailing hyphen).`,
+        );
+      }
+      if (pulse.goalSlugs !== undefined) {
+        if (!Array.isArray(pulse.goalSlugs)) {
+          return errorResponse('Pulse goalSlugs must be an array of context-doc slugs.');
+        }
+        for (const slug of pulse.goalSlugs) {
+          if (typeof slug !== 'string' || !SLUG_RE.test(slug)) {
+            return errorResponse(
+              `Invalid goalSlug "${slug}". Use lowercase letters, digits, hyphens (1-64 chars, no leading/trailing hyphen).`,
+            );
+          }
+        }
+      }
+      if (pulse.diffWindowMinutes !== undefined) {
+        if (typeof pulse.diffWindowMinutes !== 'number' || !Number.isFinite(pulse.diffWindowMinutes) || pulse.diffWindowMinutes <= 0 || pulse.diffWindowMinutes > 1440) {
+          return errorResponse('Pulse diffWindowMinutes must be a positive number ≤ 1440.');
+        }
+      }
+      if (pulse.notify?.minUrgencyForChannel !== undefined && !URGENCIES.has(pulse.notify.minUrgencyForChannel)) {
+        return errorResponse('Pulse notify.minUrgencyForChannel must be "low", "normal", or "high".');
+      }
     } else {
-      return errorResponse(`Unsupported action type: "${(action as { type?: string }).type}". Use "prompt" or "webhook".`);
+      return errorResponse(`Unsupported action type: "${(action as { type?: string }).type}". Use "prompt", "webhook", or "pulse".`);
     }
   }
 
@@ -145,11 +193,35 @@ export async function handleCreateAutomation(
     if (!cron) {
       return errorResponse('SchedulerTick automations require a valid 5-field standard cron expression.');
     }
+    let cronInstance: Cron;
     try {
-      new Cron(cron);
+      cronInstance = new Cron(cron);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return errorResponse(`Invalid cron expression "${args.matcher.cron}": ${msg}`);
+    }
+
+    const hasPulse = actions.some((a) => a && (a as { type?: string }).type === 'pulse');
+    if (hasPulse) {
+      const fires: Date[] = [];
+      let cursor: Date | null = new Date();
+      for (let i = 0; i < 5; i++) {
+        const next = cronInstance.nextRun(cursor ?? undefined);
+        if (!next) break;
+        fires.push(next);
+        cursor = next;
+      }
+      for (let i = 1; i < fires.length; i++) {
+        const a = fires[i];
+        const b = fires[i - 1];
+        if (!a || !b) continue;
+        const gap = a.getTime() - b.getTime();
+        if (gap < PULSE_MIN_INTERVAL_MS) {
+          return errorResponse(
+            `Pulse cadence floor: SchedulerTick must fire no faster than every 10 minutes (got a ${Math.round(gap / 1000)}s gap).`,
+          );
+        }
+      }
     }
   }
 

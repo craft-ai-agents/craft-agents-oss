@@ -7,6 +7,8 @@
  */
 
 export type {
+  ContextDocGoalPriority,
+  ContextDocGoalStatus,
   ContextDocMetadata,
   ContextDocParseWarning,
   ContextDocParseWarningCode,
@@ -14,7 +16,12 @@ export type {
   LoadedContextDoc,
 } from './types.ts';
 
-export { CONTEXT_DOC_SLUG_REGEX, CONTEXT_FILE } from './types.ts';
+export {
+  CONTEXT_DOC_GOAL_PRIORITIES,
+  CONTEXT_DOC_GOAL_STATUSES,
+  CONTEXT_DOC_SLUG_REGEX,
+  CONTEXT_FILE,
+} from './types.ts';
 
 export {
   getWorkspaceContextDir,

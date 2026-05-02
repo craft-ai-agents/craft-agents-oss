@@ -66,7 +66,7 @@ export { buildEnvFromSdkInput } from './sdk-bridge.ts';
 // Utilities
 // ============================================================================
 
-export { parsePromptReferences } from './utils.ts';
+export { parsePromptReferences, matcherMatches } from './utils.ts';
 
 // ============================================================================
 // Re-exports from sub-modules

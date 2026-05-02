@@ -119,7 +119,10 @@ import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
 import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels'
 import { ensureLabelsExist } from '@craft-agent/shared/labels/crud'
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
-import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, normalizeStandardFiveFieldCron, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
+import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, normalizeStandardFiveFieldCron, matcherMatches, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
+import type { PulseAction } from '@craft-agent/shared/pulses'
+import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
+import { PulseExecutor } from '../pulses/PulseExecutor.ts'
 import { CONCIERGE_SLUG, loadActivatedAgents, loadAllGlobalAgents } from '@craft-agent/shared/agent-definitions'
 
 // Import from server-core domain utilities
@@ -1634,6 +1637,228 @@ export class SessionManager implements ISessionManager {
       })
       this.automationSystems.set(workspaceRootPath, automationSystem)
       sessionLog.info(`Initialized AutomationSystem for workspace ${workspaceId}`)
+
+      // Pulse dispatch — listen for SchedulerTick events and run any matchers
+      // whose actions include `type: 'pulse'`. Lives here (not inside
+      // AutomationSystem) so SessionManager owns driver-session spawn + workflow
+      // dispatch wiring without bloating the shared automations package.
+      this.attachPulseDispatch(automationSystem, workspaceId, workspaceRootPath)
+    }
+  }
+
+  /**
+   * Subscribe a PulseExecutor to SchedulerTick events for this workspace.
+   * Each matching matcher fires its own executor.execute() — failures are
+   * logged, never propagated up to the automation bus.
+   */
+  private attachPulseDispatch(automationSystem: AutomationSystem, workspaceId: string, workspaceRootPath: string): void {
+    automationSystem.eventBus.onAny(async (event, payload) => {
+      if (event !== 'SchedulerTick') return
+      const matchers = automationSystem.getMatchersForEvent('SchedulerTick')
+      for (const matcher of matchers) {
+        const pulseAction = matcher.actions.find((a) => (a as { type?: string }).type === 'pulse') as PulseAction | undefined
+        if (!pulseAction) continue
+        if (matcher.enabled === false) continue
+        if (!matcherMatches(matcher, 'SchedulerTick', payload as unknown as Record<string, unknown>)) continue
+        let pulseId: string
+        try {
+          pulseId = pulseIdFromAutomationMatcher({ id: matcher.id, slug: matcher.slug })
+        } catch (err) {
+          sessionLog.warn('[Pulse] Cannot derive pulseId for matcher; skipping:', err)
+          continue
+        }
+
+        const executor = new PulseExecutor({
+          getWorkspaceRootPath: () => workspaceRootPath,
+          runDriverTurn: async (params) => {
+            const startedAt = Date.now()
+            // Resolve the agent's full session options (persona + skills +
+            // sources + activated context docs + memory + receipt). This is
+            // the same path the workflow runner uses for step spawning. Then
+            // APPEND the Pulse instruction footer + outputSchema directive to
+            // the resolved customSystemPrompt — never replace it. Earlier
+            // wiring replaced the system prompt with just the addendum,
+            // running the driver as a blank LLM with no persona or context.
+            const baseOpts = await this.resolveAgentSessionOptions(workspaceId, params.driverAgentSlug)
+            const composedPrompt = baseOpts.customSystemPrompt
+              ? `${baseOpts.customSystemPrompt}\n\n---\n\n${params.systemPromptAddendum}`
+              : params.systemPromptAddendum
+            const session = await this.createSession(workspaceId, {
+              ...baseOpts,
+              customSystemPrompt: composedPrompt,
+              hidden: true,
+              permissionMode: params.permissionMode,
+            } as import('@craft-agent/shared/protocol').CreateSessionOptions)
+            await this.sendMessage(session.id, params.userMessage)
+            return {
+              sessionId: session.id,
+              rawAssistantText: this.getLastAssistantTextForSession(session.id),
+              durationMs: Date.now() - startedAt,
+            }
+          },
+          startWorkflow: async ({ workflowSlug, triggerInputs }) => {
+            try {
+              const wf = loadGlobalWorkflow(workflowSlug)
+              if (!wf) return null
+              const result = await this.workflowRunner.start({
+                workflow: wf,
+                workspaceId,
+                triggerInputs,
+              })
+              return { runId: result.id }
+            } catch (err) {
+              sessionLog.error('[Pulse] Failed to start workflow:', err)
+              return null
+            }
+          },
+          emitNotification: (n) => {
+            sessionLog.info(`[Pulse] notification: pulse=${n.pulseId} urgency=${n.urgency} message=${n.message.slice(0, 100)}`)
+            try {
+              this.getNotificationService().add({
+                workspaceId: n.workspaceId,
+                source: 'pulse',
+                message: n.message,
+                urgency: n.urgency,
+                pulseId: n.pulseId,
+                goalSlug: n.goalSlug,
+                workflowRunId: n.workflowRunId,
+                workflowSlug: n.workflowSlug,
+                awaitingResponse: n.awaitingResponse,
+              })
+            } catch (err) {
+              sessionLog.error('[Pulse] failed to record notification:', err)
+            }
+            this.emitPulseNotification?.(n)
+          },
+          // Live-broadcast tick events so the renderer's TickHistoryPanel
+          // updates without polling. Without this hook, `pulses.TICK` was a
+          // dead channel — wired end-to-end on both ends but never fired.
+          onTick: (entry) => {
+            if (!this.eventSink) return
+            this.eventSink(
+              RPC_CHANNELS.pulses.TICK,
+              { to: 'workspace', workspaceId },
+              workspaceId,
+              entry,
+            )
+          },
+        })
+
+        try {
+          await executor.execute({
+            workspaceId,
+            pulseId,
+            pulseAction,
+            automationFiredAt: new Date().toISOString(),
+          })
+        } catch (err) {
+          sessionLog.error(`[Pulse] Tick execution failed for pulse "${pulseId}":`, err)
+        }
+      }
+    })
+  }
+
+  /**
+   * Optional override for the bell broadcast — kept as a hook so tests can
+   * intercept the notification fan-out without spinning up a real
+   * NotificationService.
+   */
+  emitPulseNotification?: (n: import('../pulses/PulseExecutor.ts').PulseNotificationPayload) => void
+
+  /**
+   * Read the last assistant message text from a managed session.
+   *
+   * Used by both the workflow runner and the Pulse executor wiring; the two
+   * paths MUST agree. This was previously declared as an optional hook
+   * (`getLastAssistantTextForSession?`) that nothing assigned, so every Pulse
+   * tick read `''` and recorded `invalid-driver-output`. Lifted into a real
+   * method so the contract is honored.
+   */
+  getLastAssistantTextForSession(sessionId: string): string {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) return ''
+    for (let i = managed.messages.length - 1; i >= 0; i--) {
+      const m = managed.messages[i]!
+      if (m.role === 'assistant') return m.content ?? ''
+    }
+    return ''
+  }
+
+  /**
+   * Resolve the full session-options shape for an agent slug — persona +
+   * skills + sources + activated context docs + memory + launch receipt.
+   *
+   * Single source of truth for both:
+   *   - The workflow runner step-spawn path
+   *   - The Pulse executor driver-spawn path
+   *
+   * Both must compose prompts identically; this method is what guarantees it.
+   * If the renderer's `composeAgentSystemPrompt` ever ships a server-side
+   * shared module, swap the inline call to `buildWorkflowAgentPrompt` here.
+   */
+  async resolveAgentSessionOptions(
+    workspaceId: string,
+    agentSlug: string,
+  ): Promise<Partial<CreateSessionOptions>> {
+    const ws = getWorkspaceByNameOrId(workspaceId)
+    if (!ws) throw new Error(`Workspace not found: ${workspaceId}`)
+    const { loadGlobalAgent } = await import('@craft-agent/shared/agent-definitions')
+    const { loadActiveContextDocsForAgent } = await import('@craft-agent/shared/workspace-context')
+    const agent = loadGlobalAgent(agentSlug)
+    if (!agent) throw new Error(`Agent not found: ${agentSlug}`)
+    const skills = loadAllSkills(ws.rootPath)
+    const skillBySlug = new Map(skills.map((s) => [s.slug, s]))
+    const resolvedSkillSlugs = (agent.metadata.skills ?? []).filter((slug) => skillBySlug.has(slug))
+    const sources = getSourcesBySlugs(ws.rootPath, agent.metadata.sources ?? [])
+    const resolvedSourceSlugs = sources.map((s) => s.config.slug)
+    const contextDocs = loadActiveContextDocsForAgent(ws.rootPath, agent.slug)
+    const [userMemoryEntries, agentMemoryEntries] = await Promise.all([
+      loadUserMemoryEntries(),
+      loadAgentMemoryEntries(agent.slug),
+    ])
+    const customSystemPrompt = buildWorkflowAgentPrompt(agent, skills, sources, contextDocs, {
+      userEntries: userMemoryEntries,
+      agentEntries: agentMemoryEntries,
+    })
+    return {
+      customSystemPrompt,
+      agentSkillSlugs: resolvedSkillSlugs.length > 0 ? resolvedSkillSlugs : undefined,
+      enabledSourceSlugs: resolvedSourceSlugs.length > 0 ? resolvedSourceSlugs : undefined,
+      llmConnection: agent.metadata.llmConnection,
+      model: agent.metadata.model,
+      permissionMode: agent.metadata.permissionMode,
+      thinkingLevel: agent.metadata.thinkingLevel,
+      spawnedFromAgent: {
+        agentSlug: agent.slug,
+        agentName: agent.metadata.name,
+        timestamp: Date.now(),
+      },
+      launchReceipt: {
+        createdAt: Date.now(),
+        origin: agent.slug === CONCIERGE_SLUG ? 'concierge' : 'agent',
+        agent: {
+          slug: agent.slug,
+          name: agent.metadata.name,
+          description: agent.metadata.description,
+          inputs: agent.metadata.inputs,
+          outputs: agent.metadata.outputs,
+          tags: agent.metadata.tags,
+        },
+        config: {},
+        injected: {
+          systemPromptChars: customSystemPrompt.length,
+          skills: resolvedSkillSlugs,
+          sources: resolvedSourceSlugs,
+          contextDocs: contextDocs.map((doc) => ({
+            slug: doc.slug,
+            name: doc.metadata.name,
+          })),
+          memory: {
+            user: selectActiveMemoryEntries(userMemoryEntries).map((entry) => ({ name: memoryEntryTitle(entry) })),
+            agent: selectActiveMemoryEntries(agentMemoryEntries).map((entry) => ({ name: memoryEntryTitle(entry) })),
+          },
+        },
+      },
     }
   }
 
@@ -1708,7 +1933,7 @@ export class SessionManager implements ISessionManager {
     this.eventSink(RPC_CHANNELS.llmConnections.CHANGED, { to: 'all' })
   }
 
-  private broadcastSkillsChanged(workspaceId: string, skills: import('@craft-agent/shared/skills').LoadedSkill[]): void {
+  broadcastSkillsChanged(workspaceId: string, skills: import('@craft-agent/shared/skills').LoadedSkill[]): void {
     if (!this.eventSink) return
     sessionLog.info(`Broadcasting skills changed (${skills.length} skills)`)
     this.eventSink(RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
@@ -1750,6 +1975,37 @@ export class SessionManager implements ISessionManager {
   /** Expose the workflow runner so RPC handlers can reach it via HandlerDeps. */
   getWorkflowRunner(): WorkflowRunner {
     return this.workflowRunner
+  }
+
+  private notificationServiceInstance?: import('../notifications/NotificationService').NotificationService
+
+  /**
+   * Lane B's PulseExecutor wiring calls `getNotificationService().add(...)`
+   * for `notify_user` / `ask_user` decisions. Persists to
+   * `<workspaceRoot>/notifications.json` and broadcasts via the
+   * `notifications:updated` channel through the registered eventSink.
+   */
+  getNotificationService(): import('../notifications/NotificationService').NotificationService {
+    if (!this.notificationServiceInstance) {
+      const { NotificationService } = require('../notifications/NotificationService') as typeof import('../notifications/NotificationService')
+      this.notificationServiceInstance = new NotificationService({
+        getWorkspaceRootPath: (workspaceId: string) => {
+          const ws = this.getWorkspaces().find((w) => w.id === workspaceId)
+          if (!ws) throw new Error(`Workspace not found: ${workspaceId}`)
+          return ws.rootPath
+        },
+        emitUpdated: (workspaceId, entries) => {
+          if (!this.eventSink) return
+          this.eventSink(
+            RPC_CHANNELS.notifications.UPDATED,
+            { to: 'workspace', workspaceId },
+            workspaceId,
+            entries,
+          )
+        },
+      })
+    }
+    return this.notificationServiceInstance
   }
 
   private broadcastDefaultPermissionsChanged(): void {
@@ -1977,81 +2233,10 @@ export class SessionManager implements ISessionManager {
 
       this.workflowRunner = new WorkflowRunner({
         createSession: (wsId, opts) => this.createSession(wsId, opts).then((s) => ({ id: s.id })),
-        resolveAgentSessionOptions: async (wsId, agentSlug): Promise<Partial<CreateSessionOptions>> => {
-          const ws = getWorkspaceByNameOrId(wsId)
-          if (!ws) throw new Error(`Workspace not found: ${wsId}`)
-          const { loadGlobalAgent } = await import('@craft-agent/shared/agent-definitions')
-          const { loadActiveContextDocsForAgent } = await import('@craft-agent/shared/workspace-context')
-          const agent = loadGlobalAgent(agentSlug)
-          if (!agent) throw new Error(`Workflow step agent not found: ${agentSlug}`)
-          const skills = loadAllSkills(ws.rootPath)
-          const skillBySlug = new Map(skills.map((s) => [s.slug, s]))
-          const resolvedSkillSlugs = (agent.metadata.skills ?? []).filter((slug) => skillBySlug.has(slug))
-          const sources = getSourcesBySlugs(ws.rootPath, agent.metadata.sources ?? [])
-          const resolvedSourceSlugs = sources.map((s) => s.config.slug)
-          const contextDocs = loadActiveContextDocsForAgent(ws.rootPath, agent.slug)
-          const [userMemoryEntries, agentMemoryEntries] = await Promise.all([
-            loadUserMemoryEntries(),
-            loadAgentMemoryEntries(agent.slug),
-          ])
-          const customSystemPrompt = buildWorkflowAgentPrompt(agent, skills, sources, contextDocs, {
-            userEntries: userMemoryEntries,
-            agentEntries: agentMemoryEntries,
-          })
-          return {
-            customSystemPrompt,
-            agentSkillSlugs: resolvedSkillSlugs.length > 0 ? resolvedSkillSlugs : undefined,
-            enabledSourceSlugs: resolvedSourceSlugs.length > 0 ? resolvedSourceSlugs : undefined,
-            llmConnection: agent.metadata.llmConnection,
-            model: agent.metadata.model,
-            permissionMode: agent.metadata.permissionMode,
-            thinkingLevel: agent.metadata.thinkingLevel,
-            spawnedFromAgent: {
-              agentSlug: agent.slug,
-              agentName: agent.metadata.name,
-              timestamp: Date.now(),
-            },
-            launchReceipt: {
-              createdAt: Date.now(),
-              origin: agent.slug === CONCIERGE_SLUG ? 'concierge' : 'agent',
-              agent: {
-                slug: agent.slug,
-                name: agent.metadata.name,
-                description: agent.metadata.description,
-                inputs: agent.metadata.inputs,
-                outputs: agent.metadata.outputs,
-                tags: agent.metadata.tags,
-              },
-              config: {},
-              injected: {
-                systemPromptChars: customSystemPrompt.length,
-                skills: resolvedSkillSlugs,
-                sources: resolvedSourceSlugs,
-                contextDocs: contextDocs.map((doc) => ({
-                  slug: doc.slug,
-                  name: doc.metadata.name,
-                })),
-                // Receipt only records the entries that were actually
-                // injected — i.e. after expiry filtering — so the
-                // user can audit what the agent saw.
-                memory: {
-                  user: selectActiveMemoryEntries(userMemoryEntries).map((entry) => ({ name: memoryEntryTitle(entry) })),
-                  agent: selectActiveMemoryEntries(agentMemoryEntries).map((entry) => ({ name: memoryEntryTitle(entry) })),
-                },
-              },
-            },
-          }
-        },
+        resolveAgentSessionOptions: (wsId, agentSlug) =>
+          this.resolveAgentSessionOptions(wsId, agentSlug),
         sendMessage: (sessionId, prompt) => this.sendMessage(sessionId, prompt),
-        getLastAssistantText: (sessionId) => {
-          const managed = this.sessions.get(sessionId)
-          if (!managed) return ''
-          for (let i = managed.messages.length - 1; i >= 0; i--) {
-            const m = managed.messages[i]!
-            if (m.role === 'assistant') return m.content ?? ''
-          }
-          return ''
-        },
+        getLastAssistantText: (sessionId) => this.getLastAssistantTextForSession(sessionId),
         getSessionToolUseCount: (sessionId) => {
           const managed = this.sessions.get(sessionId)
           if (!managed) return 0

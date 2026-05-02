@@ -225,9 +225,12 @@ export const CHANNEL_MAP = {
   // Sources change listener
   onSourcesChanged: listener(RPC_CHANNELS.sources.CHANGED),
 
-  // Skills
-  getSkills: invoke(RPC_CHANNELS.skills.GET),
-  getSkillFiles: invoke(RPC_CHANNELS.skills.GET_FILES),
+	  // Skills
+	  getSkills: invoke(RPC_CHANNELS.skills.GET),
+	  listGlobalSkills: invoke(RPC_CHANNELS.skills.LIST_GLOBAL),
+	  getEnabledGlobalSkills: invoke(RPC_CHANNELS.skills.GET_ENABLED_GLOBAL),
+	  setGlobalSkillEnabled: invoke(RPC_CHANNELS.skills.SET_GLOBAL_ENABLED),
+	  getSkillFiles: invoke(RPC_CHANNELS.skills.GET_FILES),
   deleteSkill: invoke(RPC_CHANNELS.skills.DELETE),
   openSkillInEditor: invoke(RPC_CHANNELS.skills.OPEN_EDITOR),
   openSkillInFinder: invoke(RPC_CHANNELS.skills.OPEN_FINDER),
@@ -416,6 +419,18 @@ export const CHANNEL_MAP = {
   resumeWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.RESUME),
   deleteWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.DELETE),
   onWorkflowRunUpdated: listener(RPC_CHANNELS.workflowRuns.UPDATED),
+
+  // Notifications (bell entries — pulse + system)
+  listNotifications: invoke(RPC_CHANNELS.notifications.LIST),
+  acknowledgeNotification: invoke(RPC_CHANNELS.notifications.ACKNOWLEDGE),
+  clearNotification: invoke(RPC_CHANNELS.notifications.CLEAR),
+  clearAllNotifications: invoke(RPC_CHANNELS.notifications.CLEAR_ALL),
+  respondToNotification: invoke(RPC_CHANNELS.notifications.RESPOND_TO_ASK),
+  onNotificationsUpdated: listener(RPC_CHANNELS.notifications.UPDATED),
+
+  // Pulses
+  listPulseTicks: invoke(RPC_CHANNELS.pulses.LIST_TICKS),
+  onPulseTick: listener(RPC_CHANNELS.pulses.TICK),
 
   // Outputs
   listOutputs: invoke(RPC_CHANNELS.outputs.LIST),
