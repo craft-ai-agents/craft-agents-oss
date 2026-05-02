@@ -72,7 +72,7 @@ export async function handleCreateAgent(
         : '';
       return errorResponse(`${result.error ?? 'Failed to create agent.'}${suggestion}`);
     }
-    return successResponse(`Created agent @${result.slug}. View at /agents/${result.slug}.`);
+    return successResponse(`Created agent @${result.slug}. View at /agents/agent/${result.slug}.`);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return errorResponse(`Failed to create agent: ${message}`);

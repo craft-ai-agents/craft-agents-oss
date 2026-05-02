@@ -338,7 +338,7 @@ export interface SessionToolContext {
   getWorkflowRun?(runId: string): unknown | null;
 
   /** Cancel a workflow run by run ID. Injected by backend. */
-  cancelWorkflowRun?(runId: string): Promise<void>;
+  cancelWorkflowRun?(runId: string): Promise<unknown>;
 
   /** Resolve label display names to IDs against configured labels. Injected by backend. */
   resolveLabels?(labels: string[]): ResolvedLabelsResult;
@@ -380,6 +380,12 @@ export interface SessionToolContext {
    * Backend owns tombstone persistence and change broadcasts.
    */
   forgetMemory?(input: import('./handlers/memory.ts').ForgetMemoryToolInput): Promise<import('./handlers/memory.ts').MemoryMutationResult>;
+
+  /**
+   * Publish a first-class user-facing output from the current session.
+   * Backend owns output storage, provenance, asset validation, and route creation.
+   */
+  createOutput?(input: import('./handlers/outputs.ts').CreateOutputToolInput): Promise<import('./handlers/outputs.ts').CreateOutputResult>;
 
   // ============================================================
   // Inter-Session Messaging

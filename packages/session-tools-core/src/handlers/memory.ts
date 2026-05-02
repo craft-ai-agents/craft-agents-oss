@@ -33,7 +33,6 @@ export interface MemoryMutationResult {
   error?: string;
 }
 
-const MEMORY_NAME_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MEMORY_TYPES: ReadonlySet<string> = new Set(['user', 'feedback', 'project', 'reference']);
 
@@ -47,8 +46,14 @@ function validateScope(scope: unknown): string | null {
 }
 
 function validateName(name: unknown): string | null {
-  if (typeof name !== 'string' || !MEMORY_NAME_RE.test(name)) {
-    return 'name must be a slug-shaped identifier: lowercase letters, digits, and hyphens (1-64 chars, no leading/trailing hyphen).';
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    return 'name is required and cannot be empty.';
+  }
+  if (name.trim().length > 128) {
+    return 'name must be 128 characters or fewer.';
+  }
+  if (/[\r\n]/.test(name)) {
+    return 'name must be a single line.';
   }
   return null;
 }
@@ -101,7 +106,7 @@ export async function handleSaveMemory(
   const expiresError = validateExpires(args.expires);
   if (expiresError) return errorResponse(expiresError);
 
-  const input = { ...args, scope: normalizeScope(args.scope) };
+  const input = { ...args, name: args.name.trim(), scope: normalizeScope(args.scope) };
 
   try {
     const result = await ctx.saveMemory(input);
@@ -142,7 +147,7 @@ export async function handleUpdateMemory(
   const expiresError = validateExpires(args.expires);
   if (expiresError) return errorResponse(expiresError);
 
-  const input = { ...args, scope: normalizeScope(args.scope) };
+  const input = { ...args, name: args.name.trim(), scope: normalizeScope(args.scope) };
 
   try {
     const result = await ctx.updateMemory(input);
@@ -174,7 +179,7 @@ export async function handleForgetMemory(
   const nameError = validateName(args.name);
   if (nameError) return errorResponse(nameError);
 
-  const input = { ...args, scope: normalizeScope(args.scope) };
+  const input = { ...args, name: args.name.trim(), scope: normalizeScope(args.scope) };
 
   try {
     const result = await ctx.forgetMemory(input);

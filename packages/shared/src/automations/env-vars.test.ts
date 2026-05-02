@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { buildEnvFromPayload, buildPromptEnvFromPayload, buildWebhookEnv } from './utils.ts';
-import type { WebhookReceivePayload, FileWatchPayload, PollUrlPayload } from './event-bus.ts';
+import type { WebhookReceivePayload, FileWatchPayload, PollUrlPayload, MessageReceivePayload } from './event-bus.ts';
 
 describe('env-var expansion for external triggers', () => {
   test('prompt env for external events excludes arbitrary process env and keeps CRAFT_WH allowlist', () => {
@@ -145,6 +145,35 @@ describe('env-var expansion for external triggers', () => {
     expect(env.CRAFT_BODY).toBe(''); // null → empty
     // Headers serialize as JSON, not "[object Object]"
     expect(env.CRAFT_HEADERS).toBe('{"content-type":"application/json"}');
+  });
+
+  test('MessageReceive — exposes sender/channel fields using actual env names', () => {
+    const payload: MessageReceivePayload = {
+      workspaceId: 'ws-1',
+      timestamp: 0,
+      platform: 'telegram',
+      channelId: 'chat-1',
+      messageId: 'msg-1',
+      senderId: 'sender-1',
+      senderName: 'Mikey',
+      text: 'hello',
+      bound: false,
+      wasBound: false,
+      boundAfterRoute: true,
+      attachmentCount: 2,
+      hasAttachment: true,
+      sentAt: 1714560000000,
+    };
+
+    const env = buildPromptEnvFromPayload('MessageReceive', payload);
+
+    expect(env.CRAFT_TEXT).toBe('hello');
+    expect(env.CRAFT_PLATFORM).toBe('telegram');
+    expect(env.CRAFT_CHANNEL_ID).toBe('chat-1');
+    expect(env.CRAFT_MESSAGE_ID).toBe('msg-1');
+    expect(env.CRAFT_SENDER_ID).toBe('sender-1');
+    expect(env.CRAFT_SENDER_NAME).toBe('Mikey');
+    expect(env.CRAFT_FROM).toBeUndefined();
   });
 
   test('regression: object payload fields never become "[object Object]"', () => {

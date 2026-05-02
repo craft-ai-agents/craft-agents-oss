@@ -7,6 +7,7 @@ import {
   getSessionSafeAllowedToolNames,
   getSessionSafeBlockedToolNames,
   getToolDefsAsJsonSchema,
+  CreateAutomationSchema,
 } from './tool-defs.ts';
 
 describe('session tool filtering helpers', () => {
@@ -75,5 +76,32 @@ describe('session tool filtering helpers', () => {
     expect(allowedPrefixed.has('mcp__session__script_sandbox')).toBe(true);
     expect(blockedPrefixed.has('mcp__session__source_oauth_trigger')).toBe(true);
     expect(blockedPrefixed.has('mcp__session__spawn_session')).toBe(true);
+  });
+
+  it('create_automation schema matches runtime thinkingLevel and webhook auth fields', () => {
+    const valid = CreateAutomationSchema.safeParse({
+      eventName: 'WebhookReceive',
+      matcher: {
+        slug: 'incoming-hook',
+        secretEnv: 'CRAFT_WH_INCOMING_HOOK_SECRET',
+        allowUnauthenticated: false,
+        allowedMethods: ['POST'],
+        actions: [{
+          type: 'prompt',
+          prompt: 'Handle $CRAFT_BODY',
+          thinkingLevel: 'xhigh',
+        }],
+      },
+    });
+    expect(valid.success).toBe(true);
+
+    const invalidThinking = CreateAutomationSchema.safeParse({
+      eventName: 'SchedulerTick',
+      matcher: {
+        cron: '* * * * *',
+        actions: [{ type: 'prompt', prompt: 'run', thinkingLevel: 'disabled' }],
+      },
+    });
+    expect(invalidThinking.success).toBe(false);
   });
 });

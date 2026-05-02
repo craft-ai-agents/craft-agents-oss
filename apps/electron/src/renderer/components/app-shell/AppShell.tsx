@@ -36,6 +36,7 @@ import {
   BookOpen,
   History,
   FileText,
+  PackageOpen,
   Workflow as WorkflowIcon,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
@@ -120,6 +121,7 @@ import {
   isAgentsNavigation,
   isAutomationsNavigation,
   isWorkspaceContextNavigation,
+  isOutputsNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
 import { isWorkflowsNavigation, isWorkflowRunNavigation } from "../../../shared/types"
@@ -136,6 +138,7 @@ import { useWorkflows } from "@/hooks/useWorkflows"
 import { ORCHESTRATOR_SLUG, CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
 import { openAgentSessionComposer } from "@/lib/run-agent"
 import { AutomationsListPanel } from "../automations/AutomationsListPanel"
+import { OutputsListPanel } from "../outputs/OutputsListPanel"
 import { APP_EVENTS, AGENT_EVENTS, EXTERNAL_INPUT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
 import { useAutomations } from "@/hooks/useAutomations"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
@@ -157,6 +160,7 @@ import {
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
+import { useOutputs } from "@/hooks/useOutputs"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -1456,8 +1460,21 @@ function AppShellContent({
   // agent activated in this workspace. Last row: a "+ Manage" entry that
   // opens the full library picker. Keeping it lean — users curate their
   // working set, the global library lives behind the modal.
-  const { activeAgents, allAgents: allAgentsForChat, setActive: setAgentActiveForChat } = useAgents(activeWorkspaceId)
+  const {
+    activeAgents,
+    allAgents: allAgentsForChat,
+    loading: agentsLoadingForChat,
+    refresh: refreshAgentsForChat,
+    setActive: setAgentActiveForChat,
+  } = useAgents(activeWorkspaceId)
+  const [openingConcierge, setOpeningConcierge] = useState(false)
+  const openingConciergeRef = useRef(false)
   const { activeWorkflows } = useWorkflows(activeWorkspaceId)
+  const {
+    outputs,
+    loading: outputsLoading,
+    error: outputsError,
+  } = useOutputs(activeWorkspaceId)
   const [agentLibraryOpen, setAgentLibraryOpen] = useState(false)
   const agentSidebarChildren = useMemo(() => {
     const orchestrator = activeAgents.find((a) => a.slug === ORCHESTRATOR_SLUG)
@@ -1834,6 +1851,14 @@ function AppShellContent({
     navigate(routes.view.automations())
   }, [])
 
+  const handleOutputsClick = useCallback(() => {
+    navigate(routes.view.outputs())
+  }, [])
+
+  const handleOutputSelect = useCallback((outputId: string) => {
+    navigate(routes.view.output(outputId))
+  }, [])
+
   const handleAutomationsScheduledClick = useCallback(() => {
     navigate(routes.view.automationsScheduled())
   }, [])
@@ -2016,17 +2041,45 @@ function AppShellContent({
   // Always creates a new session for now; the Concierge agent is auto-activated
   // in this workspace if it isn't already.
   const handleChatClick = useCallback(async () => {
-    if (!activeWorkspace) return
-    let concierge = allAgentsForChat.find((a) => a.slug === CONCIERGE_SLUG)
-      ?? activeAgents.find((a) => a.slug === CONCIERGE_SLUG)
-    if (!concierge) {
-      navigate(routes.action.newSession())
-      return
-    }
-    if (!activeAgents.some((a) => a.slug === CONCIERGE_SLUG)) {
-      try { await setAgentActiveForChat(CONCIERGE_SLUG, true) } catch { /* fall through */ }
-    }
+    if (!activeWorkspace || openingConciergeRef.current) return
+    openingConciergeRef.current = true
+    setOpeningConcierge(true)
     try {
+      let libraryAgents = allAgentsForChat
+      let activeCatalogAgents = activeAgents
+
+      if (agentsLoadingForChat || libraryAgents.length === 0) {
+        const [libraryRaw, activeSlugsRaw] = await Promise.all([
+          window.electronAPI.listAllAgentDefinitions(),
+          window.electronAPI.listActiveAgentDefinitions(activeWorkspace.id).catch(() => [] as string[]),
+        ])
+        libraryAgents = libraryRaw
+        const activeSet = new Set(activeSlugsRaw)
+        activeCatalogAgents = libraryRaw.filter((agent) => activeSet.has(agent.slug))
+      }
+
+      let concierge = libraryAgents.find((a) => a.slug === CONCIERGE_SLUG)
+        ?? activeCatalogAgents.find((a) => a.slug === CONCIERGE_SLUG)
+      if (!concierge) {
+        concierge = await window.electronAPI.getAgentDefinition(CONCIERGE_SLUG) ?? undefined
+      }
+      if (!concierge) {
+        toast.error('Concierge agent is not available yet', {
+          description: 'Agent definitions are still loading or the built-in Concierge is missing.',
+        })
+        await refreshAgentsForChat().catch(() => undefined)
+        return
+      }
+
+      if (!activeCatalogAgents.some((a) => a.slug === CONCIERGE_SLUG)) {
+        try {
+          await setAgentActiveForChat(CONCIERGE_SLUG, true)
+        } catch {
+          // Opening still works with the fetched definition; the broadcast
+          // refresh below repairs stale active-agent state when activation wins.
+        }
+      }
+
       // Concierge always receives every enabled context doc (server-side override).
       const contextDocs = await window.electronAPI
         .listWorkspaceContextDocsForAgent(activeWorkspace.id, CONCIERGE_SLUG)
@@ -2039,14 +2092,17 @@ function AppShellContent({
         skills,
         sources,
         contextDocs,
-        agentCatalog: activeAgents.filter((a) => a.slug !== CONCIERGE_SLUG),
+        agentCatalog: activeCatalogAgents.filter((a) => a.slug !== CONCIERGE_SLUG),
       })
     } catch (err) {
       toast.error('Failed to open Chat', {
         description: err instanceof Error ? err.message : String(err),
       })
+    } finally {
+      openingConciergeRef.current = false
+      setOpeningConcierge(false)
     }
-  }, [activeWorkspace, allAgentsForChat, activeAgents, setAgentActiveForChat, contextValue.onCreateSession, contextValue.onInputChange, skills, sources])
+  }, [activeWorkspace, allAgentsForChat, activeAgents, agentsLoadingForChat, refreshAgentsForChat, setAgentActiveForChat, contextValue.onCreateSession, contextValue.onInputChange, skills, sources])
 
   // Create a brand new dedicated browser window and focus it.
   // Intentionally unbound: this action should always create a NEW window.
@@ -2122,6 +2178,7 @@ function AppShellContent({
     }
     result.push({ id: 'nav:workflows:manage', type: 'nav', action: () => navigate(routes.view.workflows()) })
     result.push({ id: 'nav:workflows:runs', type: 'nav', action: () => navigate(routes.view.recentRuns()) })
+    result.push({ id: 'nav:outputs', type: 'nav', action: handleOutputsClick })
 
     // 4. Library (Tools / Skills / Workspace Context)
     result.push({ id: 'nav:library', type: 'nav' })
@@ -2135,7 +2192,7 @@ function AppShellContent({
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
 
     return result
-  }, [handleChatClick, handleAgentsClick, activeAgents, activeWorkflows, handleAllSessionsClick, handleSourcesClick, handleSkillsClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
+  }, [handleChatClick, handleAgentsClick, activeAgents, activeWorkflows, handleAllSessionsClick, handleSourcesClick, handleSkillsClick, handleOutputsClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -2261,6 +2318,10 @@ function AppShellContent({
 
     if (isWorkspaceContextNavigation(navState)) {
       return t("sidebar.workspaceContext")
+    }
+
+    if (isOutputsNavigation(navState)) {
+      return 'Outputs'
     }
 
     // Automations navigator
@@ -2454,6 +2515,7 @@ function AppShellContent({
                       icon: MessageSquare,
                       variant: "ghost",
                       onClick: handleChatClick,
+                      label: openingConcierge ? '…' : undefined,
                     },
                     // --- Agents (with Past as a chronological "all sessions" view) ---
                     {
@@ -2487,6 +2549,14 @@ function AppShellContent({
                       expanded: isExpanded('nav:workflows'),
                       onToggle: () => toggleExpanded('nav:workflows'),
                       items: workflowSidebarChildren,
+                    },
+                    {
+                      id: "nav:outputs",
+                      title: "Outputs",
+                      label: String(outputs.length),
+                      icon: PackageOpen,
+                      variant: isOutputsNavigation(navState) ? "default" : "ghost",
+                      onClick: handleOutputsClick,
                     },
                     // --- Library (Tools / Skills / Workspace Context) ---
                     {
@@ -3278,6 +3348,7 @@ function AppShellContent({
               <AgentSessionsPanel
                 agentSlug={navState.details.agentSlug}
                 workspaceId={activeWorkspaceId}
+                remoteWorkspaceId={remoteWorkspaceId}
               />
             )}
             {isAutomationsNavigation(navState) && (
@@ -3292,6 +3363,15 @@ function AppShellContent({
                 onDeleteAutomation={handleDeleteAutomation}
                 selectedAutomationId={isAutomationsNavigation(navState) && navState.details ? navState.details.automationId : null}
                 workspaceRootPath={activeWorkspace?.rootPath}
+              />
+            )}
+            {isOutputsNavigation(navState) && (
+              <OutputsListPanel
+                outputs={outputs}
+                loading={outputsLoading}
+                error={outputsError}
+                selectedOutputId={navState.outputId ?? null}
+                onOutputClick={handleOutputSelect}
               />
             )}
             {isSettingsNavigation(navState) && (

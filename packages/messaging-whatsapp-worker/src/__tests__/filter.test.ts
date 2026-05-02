@@ -3,6 +3,7 @@ import {
   bareJid,
   classifyInbound,
   extractText,
+  isHistorySyncMessage,
   rememberSentId,
   MAX_SENT_IDS,
   type ClassifyContext,
@@ -240,6 +241,29 @@ describe('classifyInbound — selfChatMode disabled (back-compat)', () => {
       ctx({ selfChatMode: false }),
     )
     expect(d).toEqual({ action: 'skip', reason: 'empty' })
+  })
+})
+
+describe('isHistorySyncMessage', () => {
+  test('fails closed for append batches before connectedAtSec is initialized', () => {
+    expect(isHistorySyncMessage('append', 1_700_000_100, 0)).toBe(true)
+  })
+
+  test('skips append messages older than the connect cutoff', () => {
+    expect(isHistorySyncMessage('append', 1_700_000_000, 1_700_000_100)).toBe(true)
+  })
+
+  test('allows fresh append messages and notify batches', () => {
+    expect(isHistorySyncMessage('append', 1_700_000_100, 1_700_000_100)).toBe(false)
+    expect(isHistorySyncMessage('notify', 1_600_000_000, 1_700_000_100)).toBe(false)
+  })
+
+  test('fails closed for append batches with invalid timestamps', () => {
+    expect(isHistorySyncMessage('append', undefined, 1_700_000_100)).toBe(true)
+    expect(isHistorySyncMessage('append', null, 1_700_000_100)).toBe(true)
+    expect(isHistorySyncMessage('append', 0, 1_700_000_100)).toBe(true)
+    expect(isHistorySyncMessage('append', Number.NaN, 1_700_000_100)).toBe(true)
+    expect(isHistorySyncMessage('append', {}, 1_700_000_100)).toBe(true)
   })
 })
 

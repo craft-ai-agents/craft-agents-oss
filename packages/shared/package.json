@@ -28,6 +28,7 @@
     "./memory": "./src/memory/index.ts",
     "./memory/render": "./src/memory/render.ts",
     "./memory/types": "./src/memory/types.ts",
+    "./outputs": "./src/outputs/index.ts",
     "./mcp": "./src/mcp/index.ts",
     "./prompts": "./src/prompts/index.ts",
     "./sessions": "./src/sessions/index.ts",

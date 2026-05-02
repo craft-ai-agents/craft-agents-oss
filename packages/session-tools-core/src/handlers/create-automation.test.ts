@@ -45,6 +45,7 @@ const VALID_WEBHOOK: CreateAutomationToolInput = {
   matcher: {
     name: 'inbound-hook',
     slug: 'inbound-hook',
+    allowUnauthenticated: true,
     actions: [{ type: 'prompt', prompt: 'Handle $CRAFT_BODY' }],
   },
 };
@@ -136,6 +137,51 @@ describe('handleCreateAutomation', () => {
     });
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain('Invalid webhook slug');
+  });
+
+  it('rejects WebhookReceive without secretEnv or explicit unauthenticated opt-in', async () => {
+    const ctx = makeCtx({ createAutomation: async () => ({ ok: true }) });
+    const result = await handleCreateAutomation(ctx, {
+      eventName: 'WebhookReceive',
+      matcher: {
+        slug: 'needs-auth',
+        actions: [{ type: 'prompt', prompt: 'handle' }],
+      },
+    });
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain('secretEnv');
+  });
+
+  it('accepts WebhookReceive with secretEnv instead of unauthenticated opt-in', async () => {
+    const ctx = makeCtx({
+      createAutomation: async (input) => ({
+        ok: true,
+        slug: input.matcher.slug,
+        eventName: input.eventName,
+      }),
+    });
+    const result = await handleCreateAutomation(ctx, {
+      eventName: 'WebhookReceive',
+      matcher: {
+        slug: 'signed-hook',
+        secretEnv: 'CRAFT_WH_SIGNED_HOOK_SECRET',
+        actions: [{ type: 'prompt', prompt: 'handle' }],
+      },
+    });
+    expect(result.isError).toBe(false);
+  });
+
+  it('rejects prompt actions with legacy create_automation thinkingLevel values', async () => {
+    const ctx = makeCtx({ createAutomation: async () => ({ ok: true }) });
+    const result = await handleCreateAutomation(ctx, {
+      eventName: 'SchedulerTick',
+      matcher: {
+        cron: '* * * * *',
+        actions: [{ type: 'prompt', prompt: 'do it', thinkingLevel: 'disabled' as never }],
+      },
+    });
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain('Invalid thinkingLevel');
   });
 
   it('rejects empty actions array', async () => {

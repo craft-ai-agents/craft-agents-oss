@@ -176,6 +176,65 @@ describe('AutomationSystem', () => {
       await system.dispose();
     });
 
+    it('fails closed by clearing previously loaded external matchers on invalid reload', async () => {
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: {
+          WebhookReceive: [
+            {
+              id: 'wh-1',
+              slug: 'old-hook',
+              allowUnauthenticated: true,
+              actions: [{ type: 'prompt', prompt: 'handle' }],
+            },
+          ],
+          PollUrl: [
+            {
+              id: 'poll-1',
+              pollUrl: 'https://example.com/status',
+              pollIntervalSec: 300,
+              actions: [{ type: 'prompt', prompt: 'poll' }],
+            },
+          ],
+          FileWatch: [
+            {
+              id: 'fw-1',
+              watchPath: '.',
+              watchGlob: '**/*.md',
+              actions: [{ type: 'prompt', prompt: 'watch' }],
+            },
+          ],
+        },
+      }));
+
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+      expect(system.findWebhookReceiveMatcher('old-hook')?.id).toBe('wh-1');
+      expect((system as unknown as { pollService: { buckets: Map<string, unknown> } }).pollService.buckets.size).toBe(1);
+
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: {
+          WebhookReceive: [
+            {
+              id: 'wh-1',
+              slug: 'old-hook',
+              actions: [{ type: 'prompt', prompt: 'handle' }],
+            },
+          ],
+        },
+      }));
+
+      const result = system.reloadConfig();
+      expect(result.success).toBe(false);
+      expect(system.findWebhookReceiveMatcher('old-hook')).toBeUndefined();
+      expect(system.getMatchersForEvent('PollUrl')).toEqual([]);
+      expect(system.getMatchersForEvent('FileWatch')).toEqual([]);
+      expect((system as unknown as { pollService: { buckets: Map<string, unknown> } }).pollService.buckets.size).toBe(0);
+
+      await system.dispose();
+    });
+
     it('should return errors for semantically invalid conditions', async () => {
       const system = new AutomationSystem({
         workspaceRootPath: tempDir,

@@ -105,6 +105,110 @@ Duplicate.
     expect(parsed!.entries.map((entry) => entry.name)).toEqual(['good']);
     expect(parsed!.warnings.map((w) => w.code)).toEqual(['invalid-type', 'duplicate-name']);
   });
+
+  test('allows horizontal rules in entry bodies without splitting entries', () => {
+    const parsed = parseMemoryFile(`---
+version: 1
+---
+
+---
+name: with hr
+type: reference
+created: 2026-04-15
+---
+
+The body has a thematic break.
+
+---
+
+That line is content, not a new memory entry.
+
+---
+name: after hr
+type: feedback
+created: 2026-04-16
+---
+
+Second body.
+`, 'user');
+
+    expect(parsed).not.toBeNull();
+    expect(parsed!.warnings).toEqual([]);
+    expect(parsed!.entries.map((entry) => entry.name)).toEqual(['with hr', 'after hr']);
+    expect(parsed!.entries[0]!.body).toContain('That line is content');
+  });
+
+  test('does not split on body text that only resembles partial frontmatter', () => {
+    const parsed = parseMemoryFile(`---
+version: 1
+---
+
+---
+name: with partial yaml
+type: reference
+created: 2026-04-15
+---
+
+The body has a thematic break followed by notes.
+
+---
+name: not-an-entry
+because: missing required entry fields
+---
+
+Still the first body.
+
+---
+name: real entry
+type: feedback
+created: 2026-04-16
+---
+
+Second body.
+`, 'user');
+
+    expect(parsed).not.toBeNull();
+    expect(parsed!.warnings).toEqual([]);
+    expect(parsed!.entries.map((entry) => entry.name)).toEqual(['with partial yaml', 'real entry']);
+    expect(parsed!.entries[0]!.body).toContain('not-an-entry');
+    expect(parsed!.entries[0]!.body).toContain('Still the first body');
+  });
+
+  test('allows frontmatter delimiters inside fenced code in entry bodies', () => {
+    const parsed = parseMemoryFile(`---
+version: 1
+---
+
+---
+name: code sample
+type: reference
+created: 2026-04-15
+---
+
+\`\`\`md
+---
+name: not-an-entry
+type: user
+created: 2026-01-01
+---
+\`\`\`
+
+Still the first body.
+
+---
+name: real entry
+type: user
+created: 2026-04-16
+---
+
+Second body.
+`, 'user');
+
+    expect(parsed).not.toBeNull();
+    expect(parsed!.warnings).toEqual([]);
+    expect(parsed!.entries.map((entry) => entry.name)).toEqual(['code sample', 'real entry']);
+    expect(parsed!.entries[0]!.body).toContain('not-an-entry');
+  });
 });
 
 describe('serializeMemoryFile', () => {
@@ -141,6 +245,11 @@ describe('storage paths and load', () => {
   test('load skips malformed files', () => {
     writeFileSync(getUserMemoryFile(options), 'not frontmatter', 'utf-8');
     expect(loadUserMemory(options)).toBeNull();
+  });
+
+  test('list surfaces malformed files as errors instead of empty entries', () => {
+    writeFileSync(getUserMemoryFile(options), 'not frontmatter', 'utf-8');
+    expect(() => listUserMemoryEntries(options)).toThrow(/invalid or unreadable/);
   });
 });
 
@@ -268,6 +377,18 @@ describe('CRUD', () => {
     expect(saved.name).toBe('pet name');
     expect(saved.body).toBe('Buddy.');
     expect(isMemoryNameDeleted('user', 'pet name', undefined, options)).toBe(false);
+  });
+
+  test('force only clears the matching tombstone name', async () => {
+    await saveMemoryEntry({ scope: 'user', name: 'one', type: 'user', body: 'One.' }, options);
+    await saveMemoryEntry({ scope: 'user', name: 'two', type: 'user', body: 'Two.' }, options);
+    await deleteMemoryEntry({ scope: 'user', name: 'one' }, options);
+    await deleteMemoryEntry({ scope: 'user', name: 'two' }, options);
+
+    await saveMemoryEntry({ scope: 'user', name: 'one', type: 'user', body: 'One again.', force: true }, options);
+
+    expect(isMemoryNameDeleted('user', 'one', undefined, options)).toBe(false);
+    expect(isMemoryNameDeleted('user', 'two', undefined, options)).toBe(true);
   });
 
   test('save without force succeeds when no tombstone exists for the name', async () => {

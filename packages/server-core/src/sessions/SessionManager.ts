@@ -1,6 +1,7 @@
 import type { EventSink } from '@craft-agent/server-core/transport'
 import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput } from '@craft-agent/server-core/handlers'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
+import { withAgentDefinitionsLibraryMutex } from '../handlers/rpc/agent-definitions'
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@craft-agent/server-core/runtime'
 import { basename, dirname, join } from 'path'
 import { existsSync } from 'fs'
@@ -91,6 +92,7 @@ import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
+import { OutputService } from '../outputs/OutputService'
 import {
   loadAllGlobalWorkflows,
   loadGlobalWorkflow,
@@ -191,11 +193,21 @@ function buildWorkflowWorkspaceContextSection(docs: Array<{ slug: string; metada
 }
 
 async function loadUserMemoryEntries(): Promise<WorkflowMemoryEntry[]> {
-  return listUserMemoryEntries()
+  try {
+    return listUserMemoryEntries()
+  } catch (error) {
+    sessionLog.warn('[memory] Failed to load user memory for workflow context:', error)
+    return []
+  }
 }
 
 async function loadAgentMemoryEntries(agentSlug: string): Promise<WorkflowMemoryEntry[]> {
-  return listAgentMemoryEntries(agentSlug)
+  try {
+    return listAgentMemoryEntries(agentSlug)
+  } catch (error) {
+    sessionLog.warn(`[memory] Failed to load agent memory for workflow context (${agentSlug}):`, error)
+    return []
+  }
 }
 
 async function mutateMemory(
@@ -1708,8 +1720,22 @@ export class SessionManager implements ISessionManager {
     this.eventSink(RPC_CHANNELS.memory.CHANGED, { to: 'all' }, scope, agentSlug)
   }
 
+  private broadcastAgentDefinitionsChanged(workspaceId: string | null): void {
+    if (!this.eventSink) return
+    sessionLog.info(`Broadcasting agent definitions changed for ${workspaceId ?? 'global'}`)
+    this.eventSink(RPC_CHANNELS.agentDefinitions.CHANGED, { to: 'all' }, workspaceId)
+  }
+
   private broadcastWorkflowRunUpdated(event: WorkflowRunEvent): void {
     if (!this.eventSink) return
+    if (event.type === 'outputs.updated') {
+      this.eventSink(
+        RPC_CHANNELS.outputs.UPDATED,
+        { to: 'workspace', workspaceId: event.workspaceId },
+        event.workspaceId,
+      )
+      return
+    }
     const eventType: 'created' | 'updated' | 'completed' =
       event.type === 'run.created' ? 'created' : event.type === 'run.completed' ? 'completed' : 'updated'
     this.eventSink(
@@ -3987,6 +4013,40 @@ export class SessionManager implements ISessionManager {
           this.broadcastMemoryChanged(scope, scope === 'agent' ? agentSlug ?? null : null)
           return result
         },
+        createOutputFn: async (input) => {
+          const workflow = managed.launchReceipt?.workflow
+          const outputService = new OutputService({
+            getWorkspaceRootPath: (workspaceId) => {
+              if (workspaceId !== managed.workspace.id) {
+                throw new Error(`Workspace not available for this session: ${workspaceId}`)
+              }
+              return managed.workspace.rootPath
+            },
+            emitOutputsUpdated: (workspaceId) => {
+              this.eventSink?.(RPC_CHANNELS.outputs.UPDATED, { to: 'workspace', workspaceId }, workspaceId)
+            },
+            emitWorkflowRunUpdated: (run) => {
+              this.eventSink?.(
+                RPC_CHANNELS.workflowRuns.UPDATED,
+                { to: 'workspace', workspaceId: run.workspaceId },
+                run.workspaceId,
+                run,
+                'updated',
+              )
+            },
+          })
+          return outputService.createFromSessionTool({
+            workspaceId: managed.workspace.id,
+            sessionId: managed.id,
+            agentSlug: managed.spawnedFromAgent?.agentSlug,
+            agentName: managed.spawnedFromAgent?.agentName,
+            workflowRunId: workflow?.runId,
+            workflowSlug: workflow?.slug,
+            workflowName: managed.launchReceipt?.summary,
+            stepId: workflow?.stepId,
+            output: input,
+          })
+        },
         listSessionsFn: (options) => {
           const DEFAULT_LIMIT = 20
           const MAX_LIMIT = 100
@@ -4186,7 +4246,7 @@ export class SessionManager implements ISessionManager {
           return readWorkflowRun(managed.workspace.rootPath, runId)
         },
         cancelWorkflowRunFn: async (runId: string) => {
-          await this.workflowRunner.cancel(managed.workspace.id, runId)
+          return this.workflowRunner.cancel(managed.workspace.id, runId)
         },
         resolveLabelsFn: (labels: string[]) => {
           const labelConfig = loadLabelConfig(managed.workspace.rootPath)
@@ -4248,54 +4308,59 @@ export class SessionManager implements ISessionManager {
             return { ok: false, error: `"${slug}" is a built-in agent and cannot be overwritten.` }
           }
 
-          const existing = loadGlobalAgent(slug)
-          if (existing && !input.overwrite) {
-            // Try `<slug>-v2` through `<slug>-v999`. If every variant in
-            // that range is taken (effectively impossible in real use),
-            // give the user actionable guidance instead of a silent
-            // `suggestedSlug: undefined`.
-            const SUGGEST_MAX = 999
-            let suggested: string | undefined
-            for (let n = 2; n <= SUGGEST_MAX; n++) {
-              const candidate = `${slug}-v${n}`
-              if (!loadGlobalAgent(candidate)) {
-                suggested = candidate
-                break
+          return withAgentDefinitionsLibraryMutex(async () => {
+            const existing = loadGlobalAgent(slug)
+            if (existing && !input.overwrite) {
+              // Try `<slug>-v2` through `<slug>-v999`. If every variant in
+              // that range is taken (effectively impossible in real use),
+              // give the user actionable guidance instead of a silent
+              // `suggestedSlug: undefined`.
+              const SUGGEST_MAX = 999
+              let suggested: string | undefined
+              for (let n = 2; n <= SUGGEST_MAX; n++) {
+                const candidate = `${slug}-v${n}`
+                if (!loadGlobalAgent(candidate)) {
+                  suggested = candidate
+                  break
+                }
               }
-            }
-            if (suggested) {
+              if (suggested) {
+                return {
+                  ok: false,
+                  error: `An agent with slug "${slug}" already exists.`,
+                  suggestedSlug: suggested,
+                }
+              }
               return {
                 ok: false,
-                error: `An agent with slug "${slug}" already exists.`,
-                suggestedSlug: suggested,
+                error: `An agent with slug "${slug}" already exists, and every "-vN" variant up to v${SUGGEST_MAX} is taken. Pass overwrite: true or pick a different base slug.`,
               }
             }
-            return {
-              ok: false,
-              error: `An agent with slug "${slug}" already exists, and every "-vN" variant up to v${SUGGEST_MAX} is taken. Pass overwrite: true or pick a different base slug.`,
-            }
-          }
 
-          try {
-            writeGlobalAgent({
-              slug,
-              metadata: input.metadata,
-              systemPrompt: input.systemPrompt,
-            })
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err)
-            return { ok: false, error: `Failed to write agent: ${msg}` }
-          }
-
-          if (input.activateInWorkspace !== false) {
             try {
-              setAgentActive(managed.workspace.rootPath, slug, true)
+              writeGlobalAgent({
+                slug,
+                metadata: input.metadata,
+                systemPrompt: input.systemPrompt,
+              })
             } catch (err) {
-              sessionLog.warn(`create_agent: failed to activate ${slug} in workspace:`, err as Error)
+              const msg = err instanceof Error ? err.message : String(err)
+              return { ok: false, error: `Failed to write agent: ${msg}` }
             }
-          }
 
-          return { ok: true, slug }
+            if (input.activateInWorkspace !== false) {
+              try {
+                setAgentActive(managed.workspace.rootPath, slug, true)
+              } catch (err) {
+                sessionLog.warn(`create_agent: failed to activate ${slug} in workspace:`, err as Error)
+              }
+            }
+
+            this.broadcastAgentDefinitionsChanged(
+              input.activateInWorkspace === false ? null : managed.workspace.id,
+            )
+            return { ok: true, slug }
+          })
         },
         createAutomationFn: async (input) => {
           const targetWorkspaceId = input.workspaceId ?? managed.workspace.id

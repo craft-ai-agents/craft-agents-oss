@@ -108,9 +108,9 @@ export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDep
 
   server.handle(
     RPC_CHANNELS.workflowRuns.CANCEL,
-    async (_ctx, workspaceId: string, runId: string): Promise<void> => {
+    async (_ctx, workspaceId: string, runId: string): Promise<WorkflowRunSnapshot> => {
       const runner = requireRunner(deps)
-      await runner.cancel(workspaceId, runId)
+      return runner.cancel(workspaceId, runId)
     },
   )
 

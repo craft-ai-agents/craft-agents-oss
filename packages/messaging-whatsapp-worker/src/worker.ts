@@ -22,7 +22,7 @@ import {
   type WorkerCommand,
   type WorkerEvent,
 } from './protocol'
-import { bareJid, classifyInbound, rememberSentId } from './filter'
+import { bareJid, classifyInbound, isHistorySyncMessage, rememberSentId } from './filter'
 
 /**
  * Build-time constants injected by `scripts/build-wa-worker.ts`
@@ -348,14 +348,13 @@ async function startSession(
       // History-sync guard: Baileys re-emits old messages as 'append' on
       // every connect. Only route messages newer than the last open
       // timestamp, with a 5s grace for clock skew.
-      const cutoff = session.connectedAtSec - 5
       const selfJid = bareJid(sock.user?.id)
       const selfLid = bareJid(sock.user?.lid)
 
       for (const msg of upsert.messages as Array<Record<string, unknown>>) {
-        const ts = Number((msg as { messageTimestamp?: unknown }).messageTimestamp)
-        if (Number.isFinite(ts) && ts > 0 && ts < cutoff) {
-          log(`upsert skip: history (ts=${ts} cutoff=${cutoff})`)
+        const messageTimestamp = (msg as { messageTimestamp?: unknown }).messageTimestamp
+        if (isHistorySyncMessage(upsert.type, messageTimestamp, session.connectedAtSec)) {
+          log(`upsert skip: history (ts=${String(messageTimestamp)} connectedAt=${session.connectedAtSec})`)
           continue
         }
 
@@ -406,6 +405,7 @@ async function startSession(
   const effectivePrefix =
     selfChatMode && responsePrefix.trim().length > 0 ? responsePrefix : DEFAULT_RESPONSE_PREFIX
 
+  const initialConnectedAtSec = Math.floor(Date.now() / 1000)
   const sock = bootSock()
   session = {
     baileys,
@@ -419,7 +419,7 @@ async function startSession(
     selfChatMode,
     responsePrefix: effectivePrefix,
     sentIds: new Set<string>(),
-    connectedAtSec: 0,
+    connectedAtSec: initialConnectedAtSec,
   }
 }
 

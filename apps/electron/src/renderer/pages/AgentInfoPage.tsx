@@ -48,6 +48,13 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
   const { onCreateSession, onInputChange } = useAppShellContext()
   const canRevealLocally = !activeWorkspace?.remoteServer
   const { activeSlugs, setActive, remove } = useAgents(workspaceId)
+  const skills = useAtomValue(skillsAtom)
+  const sources = useAtomValue(sourcesAtom)
+  const references = React.useMemo(
+    () => agent ? resolveAgentReferences(agent, skills, sources) : null,
+    [agent, skills, sources],
+  )
+  const missingDescription = references ? describeMissingReferences(references) : ''
 
   // Load + refresh on agentDefinitions:changed
   React.useEffect(() => {
@@ -101,17 +108,6 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
 
   const isActive = activeSlugs.includes(agent.slug)
   const avatar = agent.metadata.avatar?.trim() || '🤖'
-
-  // Cross-check declared skills/sources against the live workspace artifacts.
-  // The user sees "missing" badges in line with the bundle list AND a top-level
-  // banner summarizing the situation, so they can fix it before clicking Run.
-  const skills = useAtomValue(skillsAtom)
-  const sources = useAtomValue(sourcesAtom)
-  const references = React.useMemo(
-    () => resolveAgentReferences(agent, skills, sources),
-    [agent, skills, sources],
-  )
-  const missingDescription = describeMissingReferences(references)
 
   const handleToggleActive = async () => {
     try {
@@ -321,7 +317,7 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
               {agent.metadata.skills && agent.metadata.skills.length > 0 ? (
                 <div className="flex gap-1.5 flex-wrap">
                   {agent.metadata.skills.map((s) => {
-                    const isMissing = references.missingSkills.includes(s)
+                    const isMissing = references?.missingSkills.includes(s) ?? false
                     return (
                       <Info_Badge key={s} color={isMissing ? 'warning' : 'muted'}>
                         @{s}{isMissing ? ' (missing)' : ''}
@@ -337,7 +333,7 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
               {agent.metadata.sources && agent.metadata.sources.length > 0 ? (
                 <div className="flex gap-1.5 flex-wrap">
                   {agent.metadata.sources.map((s) => {
-                    const isMissing = references.missingSources.includes(s)
+                    const isMissing = references?.missingSources.includes(s) ?? false
                     return (
                       <Info_Badge key={s} color={isMissing ? 'warning' : 'muted'}>
                         @{s}{isMissing ? ' (missing)' : ''}

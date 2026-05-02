@@ -19,6 +19,7 @@ import {
   type WorkflowMetadata,
   type WorkflowRunSnapshot,
 } from '@craft-agent/shared/workflows';
+import { readOutput } from '@craft-agent/shared/outputs';
 import {
   WorkflowRunner,
   type WorkflowRunEvent,
@@ -41,6 +42,12 @@ afterEach(() => {
 });
 
 const WORKSPACE_ID = 'ws-test';
+const ORPHANED_RUN_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const FAILED_RUN_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const INVALID_STEP_RUN_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const MISSING_RUN_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const INACTIVE_RUN_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+const TERMINAL_RUN_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 
 function makeWorkflow(metadata: Partial<WorkflowMetadata> = {}): LoadedWorkflow {
   const md: WorkflowMetadata = {
@@ -235,6 +242,79 @@ describe('WorkflowRunner', () => {
     expect(onDisk!.steps[1]!.output).toBe('STEP_TWO_OUT');
   });
 
+  test('creates a default output from the final succeeded workflow step', async () => {
+    const h = makeHarness({ stepOutputs: ['draft notes', '# Final report\n\nReady to ship.'] });
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'outputs' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const completed = lastCompleted(h.events)!;
+    expect(completed.state).toBe('succeeded');
+    expect(completed.finalOutputId).toBeString();
+    const outputId = completed.finalOutputId!;
+    expect(completed.outputIds).toEqual([outputId]);
+    expect(completed.outputError).toBeUndefined();
+
+    const manifest = readOutput(workspaceRoot, outputId);
+    expect(manifest).toMatchObject({
+      id: outputId,
+      workspaceId: WORKSPACE_ID,
+      title: 'Test output',
+      kind: 'report',
+      status: 'published',
+      origin: {
+        source: 'workflow',
+        workflowRunId: completed.id,
+        workflowSlug: 'test-flow',
+        workflowName: 'Test',
+        stepId: 'second',
+        sessionId: 'sess-2',
+      },
+      preview: {
+        mode: 'markdown',
+      },
+    });
+    expect(manifest!.summary).toContain('Final report');
+    expect(h.events.some((event) => event.type === 'outputs.updated')).toBe(true);
+  });
+
+  test('default output creation failure is recorded without failing the run', async () => {
+    const h = makeHarness({ stepOutputs: ['STEP_ONE_OUT', 'STEP_TWO_OUT'] });
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    h.deps.createDefaultWorkflowOutput = () => {
+      throw new Error('output disk full');
+    };
+    try {
+      const runner = new WorkflowRunner(h.deps);
+
+      await runner.start({
+        workflow: makeWorkflow(),
+        workspaceId: WORKSPACE_ID,
+        triggerInputs: { topic: 'outputs' },
+      });
+
+      await waitFor(() => lastCompleted(h.events) !== undefined);
+
+      const completed = lastCompleted(h.events)!;
+      expect(completed.state).toBe('succeeded');
+      expect(completed.finalOutputId).toBeUndefined();
+      expect(completed.outputIds).toBeUndefined();
+      expect(completed.outputError).toBe('output disk full');
+
+      const onDisk = readRun(workspaceRoot, completed.id);
+      expect(onDisk!.state).toBe('succeeded');
+      expect(onDisk!.outputError).toBe('output disk full');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   test('workflow step records a compact agent execution receipt', async () => {
     const h = makeHarness({ stepOutputs: ['RECEIPT_OUT'] });
     const runner = new WorkflowRunner(h.deps);
@@ -330,7 +410,8 @@ describe('WorkflowRunner', () => {
     // Wait until the first session has been spawned + sendMessage entered.
     await waitFor(() => h.promptsSent.length === 1);
 
-    await runner.cancel(WORKSPACE_ID, runId);
+    const cancelled = await runner.cancel(WORKSPACE_ID, runId);
+    expect(cancelled.state).toBe('cancelled');
     const cancelledOnDisk = readRun(workspaceRoot, runId);
     expect(cancelledOnDisk?.state).toBe('cancelled');
     expect(cancelledOnDisk?.steps[0]!.error?.code).toBe('cancelled');
@@ -346,6 +427,41 @@ describe('WorkflowRunner', () => {
     const onlySession = [...h.sessions.values()][0]!;
     expect(onlySession.aborted).toBe(true);
     expect(h.promptsSent).toHaveLength(1);
+  });
+
+  test('cancel reports missing, inactive, and terminal runs accurately', async () => {
+    const h = makeHarness();
+    const runner = new WorkflowRunner(h.deps);
+    const now = new Date().toISOString();
+
+    await expect(runner.cancel(WORKSPACE_ID, MISSING_RUN_ID)).rejects.toThrow(/not found/);
+
+    writeRun(workspaceRoot, {
+      id: INACTIVE_RUN_ID,
+      workflowSlug: 'test-flow',
+      workspaceId: WORKSPACE_ID,
+      state: 'running',
+      trigger: { type: 'manual', inputs: { topic: 't' }, firedAt: now },
+      workflowSnapshot: { metadata: makeWorkflow().metadata, body: '' },
+      steps: [{ id: 'first', state: 'running', attempts: 1 }],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await expect(runner.cancel(WORKSPACE_ID, INACTIVE_RUN_ID)).rejects.toThrow(/not active/);
+
+    writeRun(workspaceRoot, {
+      id: TERMINAL_RUN_ID,
+      workflowSlug: 'test-flow',
+      workspaceId: WORKSPACE_ID,
+      state: 'failed',
+      trigger: { type: 'manual', inputs: { topic: 't' }, firedAt: now },
+      workflowSnapshot: { metadata: makeWorkflow().metadata, body: '' },
+      steps: [{ id: 'first', state: 'failed', attempts: 1 }],
+      createdAt: now,
+      updatedAt: now,
+      completedAt: now,
+    });
+    await expect(runner.cancel(WORKSPACE_ID, TERMINAL_RUN_ID)).rejects.toThrow(/already failed/);
   });
 
   test('step throws: run fails, second step is never run, error recorded', async () => {
@@ -815,7 +931,7 @@ describe('WorkflowRunner', () => {
     const runner = new WorkflowRunner(h.deps);
     const now = new Date().toISOString();
     const orphaned: WorkflowRunSnapshot = {
-      id: 'orphaned-run',
+      id: ORPHANED_RUN_ID,
       workflowSlug: 'test-flow',
       workspaceId: WORKSPACE_ID,
       state: 'running',
@@ -858,7 +974,7 @@ describe('WorkflowRunner', () => {
     const runner = new WorkflowRunner(h.deps);
     const now = new Date().toISOString();
     const original: WorkflowRunSnapshot = {
-      id: 'failed-run',
+      id: FAILED_RUN_ID,
       workflowSlug: 'test-flow',
       workspaceId: WORKSPACE_ID,
       state: 'failed',
@@ -892,6 +1008,7 @@ describe('WorkflowRunner', () => {
     const rerun = await runner.rerunFromStep({ workspaceId: WORKSPACE_ID, runId: original.id });
 
     expect(rerun.id).not.toBe(original.id);
+    expect(rerun.resumedFromRunId).toBe(original.id);
     expect(rerun.resumeFromStepId).toBe('second');
     expect(rerun.steps[0]!.state).toBe('succeeded');
     expect(rerun.steps[0]!.output).toBe('ORIGINAL_FIRST');
@@ -907,6 +1024,7 @@ describe('WorkflowRunner', () => {
     const originalOnDisk = readRun(workspaceRoot, original.id);
     expect(originalOnDisk?.state).toBe('failed');
     expect(originalOnDisk?.steps[1]!.error?.message).toBe('boom');
+    expect(originalOnDisk?.resumedByRunId).toBe(rerun.id);
   });
 
   test('rerun rejects an invalid step id', async () => {
@@ -914,7 +1032,7 @@ describe('WorkflowRunner', () => {
     const runner = new WorkflowRunner(h.deps);
     const now = new Date().toISOString();
     writeRun(workspaceRoot, {
-      id: 'failed-run',
+      id: INVALID_STEP_RUN_ID,
       workflowSlug: 'test-flow',
       workspaceId: WORKSPACE_ID,
       state: 'failed',
@@ -935,7 +1053,7 @@ describe('WorkflowRunner', () => {
     await expect(
       runner.rerunFromStep({
         workspaceId: WORKSPACE_ID,
-        runId: 'failed-run',
+        runId: INVALID_STEP_RUN_ID,
         stepId: 'missing',
       }),
     ).rejects.toThrow(/Workflow step not found/);

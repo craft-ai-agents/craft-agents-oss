@@ -75,8 +75,8 @@ export type { ContextDocDTO, ContextDocMetadata, ContextDocRouting };
 
 // Memory — DTOs are plain JSON entries. Import from the browser-safe type
 // module, not the memory barrel, because the barrel also exports file storage.
-import type { MemoryEntry as MemoryEntryDTO, MemoryEntryType, MemoryScope } from '@craft-agent/shared/memory/types';
-export type { MemoryEntryDTO, MemoryEntryType, MemoryScope };
+import type { LoadedMemoryFile as LoadedMemoryFileDTO, MemoryEntry as MemoryEntryDTO, MemoryEntryType, MemoryScope } from '@craft-agent/shared/memory/types';
+export type { LoadedMemoryFileDTO, MemoryEntryDTO, MemoryEntryType, MemoryScope };
 
 // Workflows — DTOs match the shared LoadedWorkflow / WorkflowRunSnapshot.
 import type {
@@ -90,6 +90,10 @@ import type {
   WorkflowRunStepState,
 } from '@craft-agent/shared/workflows/run-types';
 export type { WorkflowDTO, WorkflowMetadataDTO, WorkflowRunDTO, WorkflowRunState, WorkflowRunStep, WorkflowRunStepState };
+
+// Outputs — DTOs match shared output manifests/summaries.
+import type { OutputManifest as OutputManifestDTO, OutputSummary as OutputSummaryDTO } from '@craft-agent/shared/outputs';
+export type { OutputManifestDTO, OutputSummaryDTO };
 
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
@@ -698,8 +702,8 @@ export interface ElectronAPI {
   onWorkspaceContextChanged(callback: (workspaceId: string, docs: ContextDocDTO[]) => void): () => void
 
   // Memory (global USER.md + per-agent MEMORY.md)
-  listAgentMemory(agentSlug: string): Promise<MemoryEntryDTO[]>
-  listUserMemory(): Promise<MemoryEntryDTO[]>
+  listAgentMemory(agentSlug: string): Promise<LoadedMemoryFileDTO>
+  listUserMemory(): Promise<LoadedMemoryFileDTO>
   upsertMemory(payload: {
     scope: MemoryScope
     agentSlug?: string | null
@@ -708,6 +712,7 @@ export interface ElectronAPI {
     body?: string
     content?: string
     expires?: string | null
+    force?: boolean
   }): Promise<MemoryEntryDTO>
   saveMemory(payload: {
     scope: MemoryScope
@@ -717,6 +722,7 @@ export interface ElectronAPI {
     body?: string
     content?: string
     expires?: string | null
+    force?: boolean
   }): Promise<MemoryEntryDTO>
   updateMemory(payload: {
     scope: MemoryScope
@@ -751,12 +757,21 @@ export interface ElectronAPI {
   startWorkflowRun(workspaceId: string, workflowSlug: string, triggerInputs: Record<string, unknown>): Promise<WorkflowRunDTO>
   getWorkflowRun(workspaceId: string, runId: string): Promise<WorkflowRunDTO | null>
   listWorkflowRuns(workspaceId: string): Promise<WorkflowRunDTO[]>
-  cancelWorkflowRun(workspaceId: string, runId: string): Promise<void>
+  cancelWorkflowRun(workspaceId: string, runId: string): Promise<WorkflowRunDTO>
   resumeWorkflowRun(workspaceId: string, runId: string, stepId?: string): Promise<WorkflowRunDTO>
   deleteWorkflowRun(workspaceId: string, runId: string): Promise<boolean>
   onWorkflowRunUpdated(
     callback: (workspaceId: string, run: WorkflowRunDTO, eventType: 'created' | 'updated' | 'completed') => void,
   ): () => void
+
+  // Outputs
+  listOutputs(workspaceId: string): Promise<OutputSummaryDTO[]>
+  getOutput(workspaceId: string, outputId: string): Promise<OutputManifestDTO | null>
+  deleteOutput(workspaceId: string, outputId: string): Promise<boolean>
+  openOutputFile(workspaceId: string, outputId: string, assetIdOrPath?: string): Promise<void>
+  showOutputInFolder(workspaceId: string, outputId: string, assetIdOrPath?: string): Promise<void>
+  onOutputsUpdated(callback: (workspaceId: string) => void): () => void
+
   getAutomationHistory(workspaceId: string, automationId: string, limit?: number): Promise<Array<{ id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string; webhook?: { method: string; url: string; statusCode: number; durationMs: number; attempts?: number; error?: string; responseBody?: string } }>>
   getAutomationLastExecuted(workspaceId: string): Promise<Record<string, number>>
   replayAutomation(workspaceId: string, automationId: string, eventName: string): Promise<{ results: Array<{ type: string; url: string; statusCode: number; success: boolean; error?: string; duration: number }> }>
@@ -948,6 +963,12 @@ export interface WorkflowRunNavigationState {
   rightSidebar?: RightSidebarPanel
 }
 
+export interface OutputsNavigationState {
+  navigator: 'outputs'
+  outputId?: string
+  rightSidebar?: RightSidebarPanel
+}
+
 /**
  * Unified navigation state
  */
@@ -961,6 +982,7 @@ export type NavigationState =
   | WorkspaceContextNavigationState
   | WorkflowsNavigationState
   | WorkflowRunNavigationState
+  | OutputsNavigationState
 
 export const isSessionsNavigation = (
   state: NavigationState
@@ -997,6 +1019,10 @@ export const isWorkflowsNavigation = (
 export const isWorkflowRunNavigation = (
   state: NavigationState
 ): state is WorkflowRunNavigationState => state.navigator === 'workflowRun'
+
+export const isOutputsNavigation = (
+  state: NavigationState
+): state is OutputsNavigationState => state.navigator === 'outputs'
 
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
   navigator: 'sessions',
@@ -1042,6 +1068,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'workflowRun') {
     return `runs/${state.runId}`
+  }
+  if (state.navigator === 'outputs') {
+    return state.outputId ? `outputs/${state.outputId}` : 'outputs'
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
@@ -1118,6 +1147,13 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   if (key.startsWith('runs/')) {
     const runId = key.slice('runs/'.length)
     if (runId) return { navigator: 'workflowRun', runId }
+  }
+
+  // Handle outputs
+  if (key === 'outputs') return { navigator: 'outputs' }
+  if (key.startsWith('outputs/')) {
+    const outputId = key.slice('outputs/'.length)
+    if (outputId) return { navigator: 'outputs', outputId }
   }
 
   // Handle settings

@@ -438,8 +438,35 @@ export class MessagingGateway {
       return
     }
 
-    // Disable the buttons so the user can't tap twice. Non-fatal if it fails.
+    const binding = this.bindingStore.findByChannel(platform, press.channelId)
     const record = this.planMessages.get(token)
+    if (
+      !binding ||
+      binding.id !== entry.bindingId ||
+      binding.sessionId !== entry.sessionId ||
+      record?.bindingId !== entry.bindingId ||
+      record?.platform !== platform ||
+      record?.channelId !== press.channelId
+    ) {
+      this.log.warn('ignored plan interaction from non-original binding', {
+        event: 'plan_binding_mismatch',
+        sessionId: entry.sessionId,
+        tokenBindingId: entry.bindingId,
+        pressPlatform: platform,
+        pressChannelId: press.channelId,
+        currentBindingId: binding?.id,
+        recordBindingId: record?.bindingId,
+        recordPlatform: record?.platform,
+        recordChannelId: record?.channelId,
+      })
+      await adapter.sendText(
+        press.channelId,
+        '⚠️ This plan approval belongs to a different chat binding. Retry from the desktop app.',
+      )
+      return
+    }
+
+    // Disable the buttons so the user can't tap twice. Non-fatal if it fails.
     if (record && adapter.clearButtons) {
       await adapter.clearButtons(record.channelId, record.messageId).catch(() => {})
     }
@@ -468,9 +495,6 @@ export class MessagingGateway {
     // action === 'compact': persist the "waiting for compaction" intent, send
     // /compact, and let onSessionEvent → finishPendingCompactAccept dispatch
     // the approval once compaction finishes.
-    const binding = this.bindingStore.findByChannel(platform, press.channelId)
-    if (!binding) return
-
     this.pendingCompactAccepts.set(entry.sessionId, {
       token,
       sessionId: entry.sessionId,
@@ -482,8 +506,10 @@ export class MessagingGateway {
       createdAt: Date.now(),
     })
 
+    let pendingExecutionSet = false
     try {
       await this.sessionManager.setPendingPlanExecution(entry.sessionId, entry.planPath)
+      pendingExecutionSet = true
       await this.sessionManager.sendMessage(entry.sessionId, '/compact')
       await adapter.sendText(
         press.channelId,
@@ -500,6 +526,16 @@ export class MessagingGateway {
         press.channelId,
         '❌ Couldn\'t start compaction. Check the desktop app.',
       )
+    } finally {
+      if (pendingExecutionSet && !this.pendingCompactAccepts.has(entry.sessionId)) {
+        await this.sessionManager.clearPendingPlanExecution(entry.sessionId).catch((clearErr) => {
+          this.log.error('failed to clear pending plan execution after compact dispatch failure', {
+            event: 'plan_compact_clear_failed',
+            sessionId: entry.sessionId,
+            error: clearErr,
+          })
+        })
+      }
     }
   }
 
@@ -513,13 +549,41 @@ export class MessagingGateway {
         event: 'plan_compact_stale',
         sessionId,
       })
+      await this.sessionManager.clearPendingPlanExecution(sessionId).catch((err) => {
+        this.log.error('failed to clear stale pending plan execution', {
+          event: 'plan_compact_stale_clear_failed',
+          sessionId,
+          error: err,
+        })
+      })
       return
     }
 
     const adapter = this.adapters.get(entry.platform)
     try {
+      const binding = this.bindingStore.findByChannel(entry.platform, entry.channelId)
+      if (
+        !binding ||
+        binding.id !== entry.bindingId ||
+        binding.sessionId !== entry.sessionId
+      ) {
+        this.log.warn('dropping compact-accept for non-original binding', {
+          event: 'plan_compact_binding_mismatch',
+          sessionId,
+          bindingId: entry.bindingId,
+          platform: entry.platform,
+          channelId: entry.channelId,
+          currentBindingId: binding?.id,
+        })
+        if (adapter?.isConnected()) {
+          await adapter.sendText(
+            entry.channelId,
+            '❌ Compaction finished, but the original chat binding changed. Retry from the desktop app.',
+          )
+        }
+        return
+      }
       await this.sessionManager.acceptPlan(sessionId, entry.planPath)
-      await this.sessionManager.clearPendingPlanExecution(sessionId)
       if (adapter?.isConnected()) {
         await adapter.sendText(entry.channelId, '✅ Plan executing after compaction.')
       }
@@ -535,6 +599,14 @@ export class MessagingGateway {
           '❌ Compaction finished but the plan couldn\'t execute. Check the desktop app.',
         )
       }
+    } finally {
+      await this.sessionManager.clearPendingPlanExecution(sessionId).catch((err) => {
+        this.log.error('failed to clear pending plan execution after compact accept terminal state', {
+          event: 'plan_post_compact_clear_failed',
+          sessionId,
+          error: err,
+        })
+      })
     }
   }
 

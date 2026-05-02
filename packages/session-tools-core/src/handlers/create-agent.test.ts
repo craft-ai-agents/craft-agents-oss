@@ -83,6 +83,6 @@ describe('handleCreateAgent', () => {
     const result = await handleCreateAgent(ctx, VALID_INPUT);
     expect(result.isError).toBe(false);
     expect(captured?.slug).toBe('sales-call-prep');
-    expect((result.content[0] as any).text).toContain('/agents/sales-call-prep');
+    expect((result.content[0] as any).text).toContain('/agents/agent/sales-call-prep');
   });
 });

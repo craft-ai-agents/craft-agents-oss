@@ -18,13 +18,20 @@ export function useUserProfile() {
     setState((prev) => ({ ...prev, loading: true }))
     try {
       const api = window.electronAPI as unknown as MemoryApi
-      const entries = normalizeMemoryEntries(await api.listUserMemory?.())
-      setState({ entries: sortMemoryEntries(entries), loading: false, error: null })
+      const result = await api.listUserMemory?.()
+      const entries = normalizeMemoryEntries(result)
+      setState({
+        entries: sortMemoryEntries(entries),
+        loading: false,
+        error: null,
+        warning: formatMemoryWarnings(result),
+      })
     } catch (err) {
       setState((prev) => ({
         ...prev,
         loading: false,
         error: err instanceof Error ? err.message : String(err),
+        warning: null,
       }))
     }
   }, [setState])
@@ -44,7 +51,7 @@ export function useUserProfile() {
 
   const upsert = useCallback(async (input: MemoryMutationInput) => {
     const api = window.electronAPI as unknown as MemoryApi
-    await api.upsertMemory?.({ ...input, scope: 'user' })
+    await api.upsertMemory?.({ ...input, scope: 'user', force: true })
     await refresh()
   }, [refresh])
 
@@ -59,6 +66,7 @@ export function useUserProfile() {
     entries: state.entries,
     loading: state.loading,
     error: state.error,
+    warning: state.warning,
     refresh,
     upsert,
     remove,
@@ -72,5 +80,13 @@ function normalizeMemoryEntries(value: MemoryEntry[] | LoadedMemoryFile | undefi
 }
 
 function sortMemoryEntries(entries: MemoryEntry[]): MemoryEntry[] {
-  return [...entries].sort((a, b) => a.name.localeCompare(b.name))
+  return [...entries].sort((a, b) => {
+    const byDate = Date.parse(b.updated ?? b.created) - Date.parse(a.updated ?? a.created)
+    return byDate || a.name.localeCompare(b.name)
+  })
+}
+
+function formatMemoryWarnings(value: MemoryEntry[] | LoadedMemoryFile | undefined | void): string | null {
+  if (!value || Array.isArray(value) || !value.parseWarnings?.length) return null
+  return value.parseWarnings.map((warning) => warning.message).join(' ')
 }

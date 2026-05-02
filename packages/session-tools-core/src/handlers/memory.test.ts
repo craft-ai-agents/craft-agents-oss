@@ -60,7 +60,7 @@ describe('memory handlers', () => {
     });
 
     const badName = await handleSaveMemory(ctx, {
-      name: 'Bad Name',
+      name: '   ',
       type: 'user',
       content: 'x',
     });
@@ -114,6 +114,32 @@ describe('memory handlers', () => {
     expect((result.content[0] as any).text).toContain('Saved agent memory');
   });
 
+  it('save_memory accepts UI-created free-form names without adding force', async () => {
+    let captured: SaveMemoryToolInput | undefined;
+    const ctx = makeCtx({
+      saveMemory: async (input) => {
+        captured = input;
+        return { ok: true, scope: input.scope, name: input.name };
+      },
+    });
+
+    const result = await handleSaveMemory(ctx, {
+      scope: 'user',
+      name: 'Preferred writing style',
+      type: 'user',
+      content: 'Use direct language.',
+    });
+
+    expect(result.isError).toBe(false);
+    expect(captured).toEqual({
+      scope: 'user',
+      name: 'Preferred writing style',
+      type: 'user',
+      content: 'Use direct language.',
+    });
+    expect(captured).not.toHaveProperty('force');
+  });
+
   it('update_memory requires at least content or expires', async () => {
     let called = false;
     const ctx = makeCtx({
@@ -152,6 +178,35 @@ describe('memory handlers', () => {
       scope: 'user',
       name: 'timezone',
     });
+  });
+
+  it('update_memory and forget_memory accept exact UI-created free-form names', async () => {
+    const calls: Array<UpdateMemoryToolInput | ForgetMemoryToolInput> = [];
+    const ctx = makeCtx({
+      updateMemory: async (input) => {
+        calls.push(input);
+        return { ok: true, scope: input.scope, name: input.name };
+      },
+      forgetMemory: async (input) => {
+        calls.push(input);
+        return { ok: true, scope: input.scope, name: input.name };
+      },
+    });
+
+    const updated = await handleUpdateMemory(ctx, {
+      name: 'Preferred writing style',
+      content: 'Use terse implementation notes.',
+    });
+    const forgotten = await handleForgetMemory(ctx, {
+      name: 'Preferred writing style',
+    });
+
+    expect(updated.isError).toBe(false);
+    expect(forgotten.isError).toBe(false);
+    expect(calls).toEqual([
+      { scope: 'agent', name: 'Preferred writing style', content: 'Use terse implementation notes.' },
+      { scope: 'agent', name: 'Preferred writing style' },
+    ]);
   });
 
   it('forget_memory calls capability and surfaces backend errors', async () => {

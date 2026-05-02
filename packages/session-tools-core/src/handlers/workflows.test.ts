@@ -35,6 +35,8 @@ function text(result: { content: Array<{ text?: string }> }): string {
 }
 
 describe('workflow session tools', () => {
+  const RUN_ID = '11111111-1111-4111-8111-111111111111';
+
   it('list_workflows errors when context capability is missing', async () => {
     const result = await handleListWorkflows(makeCtx(), {});
     expect(result.isError).toBe(true);
@@ -69,10 +71,10 @@ describe('workflow session tools', () => {
 
   it('start_workflow returns the run snapshot', async () => {
     const result = await handleStartWorkflow(makeCtx({
-      startWorkflow: async (slug, triggerInputs) => ({ id: 'run-1', workflowSlug: slug, triggerInputs }),
+      startWorkflow: async (slug, triggerInputs) => ({ id: RUN_ID, workflowSlug: slug, triggerInputs }),
     }), { slug: 'pitch', triggerInputs: { company: 'Acme' } });
     expect(result.isError).toBe(false);
-    expect(JSON.parse(text(result)).id).toBe('run-1');
+    expect(JSON.parse(text(result)).id).toBe(RUN_ID);
   });
 
   it('get_workflow_run returns not found cleanly', async () => {
@@ -85,9 +87,17 @@ describe('workflow session tools', () => {
     let cancelled = '';
     const result = await handleCancelWorkflowRun(makeCtx({
       cancelWorkflowRun: async (runId) => { cancelled = runId; },
-    }), { runId: 'run-1' });
+    }), { runId: RUN_ID });
     expect(result.isError).toBe(false);
-    expect(cancelled).toBe('run-1');
-    expect(text(result)).toContain('Cancelled workflow run run-1');
+    expect(cancelled).toBe(RUN_ID);
+    expect(text(result)).toContain(`Cancelled workflow run ${RUN_ID}`);
+  });
+
+  it('cancel_workflow_run returns structured cancel details when available', async () => {
+    const result = await handleCancelWorkflowRun(makeCtx({
+      cancelWorkflowRun: (async () => ({ id: RUN_ID, state: 'cancelled' })) as unknown as SessionToolContext['cancelWorkflowRun'],
+    }), { runId: RUN_ID });
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(text(result))).toEqual({ id: RUN_ID, state: 'cancelled' });
   });
 });

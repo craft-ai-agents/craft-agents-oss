@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  deleteRun,
   listRuns,
   markRunningRunsInterrupted,
   readRun,
@@ -39,6 +40,13 @@ afterEach(() => {
 });
 
 const opts = () => ({ globalWorkflowsDir: libDir });
+const RUN_INTERRUPTED_ID = '11111111-1111-4111-8111-111111111111';
+const RUN_RUNNING_ID = '22222222-2222-4222-8222-222222222222';
+const RUN_FAILED_ID = '33333333-3333-4333-8333-333333333333';
+const RUN_MALFORMED_ID = '44444444-4444-4444-8444-444444444444';
+const RUN_MISMATCHED_ID = '55555555-5555-4555-8555-555555555555';
+const RUN_OTHER_ID = '66666666-6666-4666-8666-666666666666';
+const RUN_OUTSIDE_ID = '77777777-7777-4777-8777-777777777777';
 
 const minimalMeta = (overrides?: Partial<WorkflowMetadata>): WorkflowMetadata => ({
   name: 'My Flow',
@@ -332,6 +340,52 @@ describe('parseWorkflowFile', () => {
     ].join('\n');
     expect(parseWorkflowFile(text)).toBeNull();
   });
+
+  test('rejects unsupported workflow execution syntax', () => {
+    const base = [
+      '---',
+      'name: A',
+      'description: B',
+      'steps:',
+      '  - id: first',
+      '    agent: r',
+      '    input: hi',
+      '---',
+    ];
+    expect(parseWorkflowFile([...base.slice(0, 3), 'trigger:', '  type: schedule', ...base.slice(3)].join('\n'))).toBeNull();
+    expect(parseWorkflowFile([...base.slice(0, 3), 'when: true', ...base.slice(3)].join('\n'))).toBeNull();
+    expect(parseWorkflowFile([...base.slice(0, -1), '    humanCheckpoint: true', '---'].join('\n'))).toBeNull();
+    expect(parseWorkflowFile([...base.slice(0, -1), '    parallelGroup: group-a', '---'].join('\n'))).toBeNull();
+  });
+
+  test('validates trigger input defaults against declared type', () => {
+    const valid = [
+      '---',
+      'name: A',
+      'description: B',
+      'trigger:',
+      '  type: manual',
+      '  inputs:',
+      '    - name: count',
+      '      type: number',
+      '      default: 2',
+      '    - name: enabled',
+      '      type: boolean',
+      '      default: true',
+      'steps:',
+      '  - id: first',
+      '    agent: r',
+      '    input: "{{trigger.count}} {{trigger.enabled}}"',
+      '---',
+    ].join('\n');
+    expect(parseWorkflowFile(valid)?.metadata.trigger.inputs).toEqual([
+      { name: 'count', type: 'number', default: 2 },
+      { name: 'enabled', type: 'boolean', default: true },
+    ]);
+
+    const invalid = valid.replace('default: 2', 'default: two');
+    expect(parseWorkflowFile(invalid)).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -378,6 +432,17 @@ describe('serializeWorkflow', () => {
     expect(parsed).not.toBeNull();
     expect(parsed!.metadata).toEqual(meta);
     expect(parsed!.body).toBe('Body content here.');
+  });
+
+  test('throws on invalid trigger input defaults at save serialization time', () => {
+    const meta = minimalMeta({
+      trigger: {
+        type: 'manual',
+        inputs: [{ name: 'count', type: 'number', default: 'two' }],
+      },
+      steps: [{ id: 'one', agent: 'researcher', input: '{{trigger.count}}' }],
+    });
+    expect(() => serializeWorkflow(meta, '')).toThrow(/count/);
   });
 
   test('returns null for invalid Phase 2 reliability fields', () => {
@@ -429,7 +494,7 @@ describe('serializeWorkflow', () => {
 
 describe('run storage', () => {
   test('writes, reads, and lists interrupted runs', () => {
-    const run = runSnapshot('run-interrupted', 'interrupted', {
+    const run = runSnapshot(RUN_INTERRUPTED_ID, 'interrupted', {
       completedAt: '2026-01-01T00:05:00.000Z',
       interruptedAt: '2026-01-01T00:05:00.000Z',
       interruptionReason: 'server restarted',
@@ -455,12 +520,12 @@ describe('run storage', () => {
 
     writeRun(workspace, run);
 
-    expect(readRun(workspace, 'run-interrupted')).toEqual(run);
+    expect(readRun(workspace, RUN_INTERRUPTED_ID)).toEqual(run);
     expect(listRuns(workspace)).toEqual([run]);
   });
 
   test('marks running runs interrupted and preserves non-running runs', () => {
-    const running = runSnapshot('running-run', 'running', {
+    const running = runSnapshot(RUN_RUNNING_ID, 'running', {
       steps: [
         {
           id: 'one',
@@ -478,7 +543,7 @@ describe('run storage', () => {
         },
       ],
     });
-    const failed = runSnapshot('failed-run', 'failed', {
+    const failed = runSnapshot(RUN_FAILED_ID, 'failed', {
       completedAt: '2026-01-01T00:04:00.000Z',
       steps: [
         {
@@ -499,7 +564,7 @@ describe('run storage', () => {
 
     expect(changed).toHaveLength(1);
     const recovered = changed[0]!;
-    expect(recovered.id).toBe('running-run');
+    expect(recovered.id).toBe(RUN_RUNNING_ID);
     expect(recovered.state).toBe('interrupted');
     expect(typeof recovered.completedAt).toBe('string');
     expect(recovered.completedAt).toBeDefined();
@@ -517,8 +582,39 @@ describe('run storage', () => {
     });
     expect(recovered.steps[1]!.completedAt).toBe(recovered.completedAt);
 
-    expect(readRun(workspace, 'running-run')).toEqual(recovered);
-    expect(readRun(workspace, 'failed-run')).toEqual(failed);
+    expect(readRun(workspace, RUN_RUNNING_ID)).toEqual(recovered);
+    expect(readRun(workspace, RUN_FAILED_ID)).toEqual(failed);
+  });
+
+  test('rejects traversal run ids before reading or deleting', () => {
+    const outsideDir = join(workspace, '..', RUN_OUTSIDE_ID);
+    mkdirSync(outsideDir, { recursive: true });
+    writeFileSync(join(outsideDir, 'run.json'), 'outside');
+
+    expect(readRun(workspace, `../${RUN_OUTSIDE_ID}`)).toBeNull();
+    expect(readRun(workspace, `${RUN_OUTSIDE_ID}/..`)).toBeNull();
+    expect(readRun(workspace, 'not-a-run-id')).toBeNull();
+
+    expect(deleteRun(workspace, `../${RUN_OUTSIDE_ID}`)).toBe(false);
+    expect(existsSync(join(outsideDir, 'run.json'))).toBe(true);
+  });
+
+  test('skips malformed and mismatched run snapshots safely', () => {
+    const malformedDir = join(workspace, 'runs', RUN_MALFORMED_ID);
+    mkdirSync(malformedDir, { recursive: true });
+    writeFileSync(join(malformedDir, 'run.json'), JSON.stringify({ id: RUN_MALFORMED_ID, state: 'running' }));
+
+    const mismatched = runSnapshot(RUN_OTHER_ID, 'failed');
+    const mismatchedDir = join(workspace, 'runs', RUN_MISMATCHED_ID);
+    mkdirSync(mismatchedDir, { recursive: true });
+    writeFileSync(join(mismatchedDir, 'run.json'), JSON.stringify(mismatched));
+
+    const good = runSnapshot(RUN_OTHER_ID, 'succeeded');
+    writeRun(workspace, good);
+
+    expect(readRun(workspace, RUN_MALFORMED_ID)).toBeNull();
+    expect(readRun(workspace, RUN_MISMATCHED_ID)).toBeNull();
+    expect(listRuns(workspace)).toEqual([good]);
   });
 });
 
@@ -539,6 +635,23 @@ describe('write / load / delete', () => {
     expect(() =>
       writeGlobalWorkflow({ slug: 'Bad Slug!', metadata: minimalMeta(), body: '' }, opts()),
     ).toThrow();
+  });
+
+  test('write rejects invalid trigger input defaults before saving', () => {
+    expect(() =>
+      writeGlobalWorkflow({
+        slug: 'bad-default',
+        metadata: minimalMeta({
+          trigger: {
+            type: 'manual',
+            inputs: [{ name: 'flag', type: 'boolean', default: 'yes' }],
+          },
+          steps: [{ id: 'one', agent: 'researcher', input: '{{trigger.flag}}' }],
+        }),
+        body: '',
+      }, opts()),
+    ).toThrow(/flag/);
+    expect(existsSync(join(libDir, 'bad-default', 'WORKFLOW.md'))).toBe(false);
   });
 
   test('loadAll returns all parseable workflows sorted by slug', () => {

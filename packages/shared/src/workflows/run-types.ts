@@ -124,4 +124,14 @@ export interface WorkflowRunSnapshot {
   interruptedAt?: string;
   interruptionReason?: string;
   resumeFromStepId?: string;
+  /** Run id this run was resumed/rerun from, when applicable. */
+  resumedFromRunId?: string;
+  /** Most recent run id created by resuming/rerunning this run, when applicable. */
+  resumedByRunId?: string;
+  /** Output bundles produced by this run. */
+  outputIds?: string[];
+  /** Primary user-facing deliverable for this run. */
+  finalOutputId?: string;
+  /** Non-fatal output finalization error, when publishing could not complete. */
+  outputError?: string;
 }

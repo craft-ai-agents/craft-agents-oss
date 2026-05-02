@@ -105,6 +105,7 @@ export interface SessionLaunchReceipt {
     tags?: string[];
   };
   workflow?: {
+    runId?: string;
     slug: string;
     stepId?: string;
   };

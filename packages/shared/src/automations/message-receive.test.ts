@@ -131,3 +131,49 @@ describe('MessageReceive — matcher behavior', () => {
     expect(matcherMatches(matcher, 'MessageReceive', buildPayload('telegram'))).toBe(false)
   })
 })
+
+describe('FileWatch/PollUrl direct emit matcher routing', () => {
+  test('FileWatch requires an exact payload matcherId', () => {
+    const matcher: AutomationMatcher = {
+      id: 'fw-1',
+      actions: [{ type: 'prompt', prompt: 'noop' }],
+    }
+    const basePayload = {
+      workspaceId: 'w',
+      timestamp: 0,
+      path: '/tmp/a.md',
+      relativePath: 'a.md',
+      changeType: 'add',
+      size: 1,
+      isDirectory: false,
+    }
+
+    expect(matcherMatches(matcher, 'FileWatch', { ...basePayload, matcherId: 'fw-1' })).toBe(true)
+    expect(matcherMatches(matcher, 'FileWatch', { ...basePayload, matcherId: 'fw-2' })).toBe(false)
+    expect(matcherMatches(matcher, 'FileWatch', basePayload)).toBe(false)
+    expect(matcherMatches(matcher, 'FileWatch', { ...basePayload, matcherId: 42 })).toBe(false)
+  })
+
+  test('PollUrl requires an exact payload matcherId', () => {
+    const matcher: AutomationMatcher = {
+      id: 'poll-1',
+      actions: [{ type: 'prompt', prompt: 'noop' }],
+    }
+    const basePayload = {
+      workspaceId: 'w',
+      timestamp: 0,
+      url: 'https://example.com',
+      status: 200,
+      fingerprintKind: 'status',
+      fingerprint: '200',
+      previousFingerprint: null,
+      body: null,
+      headers: {},
+    }
+
+    expect(matcherMatches(matcher, 'PollUrl', { ...basePayload, matcherId: 'poll-1' })).toBe(true)
+    expect(matcherMatches(matcher, 'PollUrl', { ...basePayload, matcherId: 'poll-2' })).toBe(false)
+    expect(matcherMatches(matcher, 'PollUrl', basePayload)).toBe(false)
+    expect(matcherMatches(matcher, 'PollUrl', { ...basePayload, matcherId: '' })).toBe(false)
+  })
+})

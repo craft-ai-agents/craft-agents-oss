@@ -214,9 +214,8 @@ export function matcherMatchesWithContext(
   // of the same event type so they don't cross-fire on shared payloads.
   if (event === 'FileWatch' || event === 'PollUrl') {
     const payloadMatcherId = context.payload.matcherId;
-    if (typeof payloadMatcherId === 'string' && matcher.id !== payloadMatcherId) {
-      return false;
-    }
+    if (typeof payloadMatcherId !== 'string' || payloadMatcherId.length === 0) return false;
+    if (matcher.id !== payloadMatcherId) return false;
   }
 
   if (!matchesBasePredicate(matcher, event, context.matchValue)) return false;

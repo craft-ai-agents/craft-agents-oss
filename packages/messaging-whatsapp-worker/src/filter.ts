@@ -70,6 +70,20 @@ export type InboundDecision =
         | 'empty'
     }
 
+export function isHistorySyncMessage(
+  upsertType: string,
+  messageTimestamp: unknown,
+  connectedAtSec: number,
+  graceSec = 5,
+): boolean {
+  if (upsertType !== 'append') return false
+  if (!Number.isFinite(connectedAtSec) || connectedAtSec <= 0) return true
+
+  const ts = Number(messageTimestamp)
+  if (!Number.isFinite(ts) || ts <= 0) return true
+  return ts < connectedAtSec - graceSec
+}
+
 /**
  * True when `remoteJid` is the account's self-chat (compared against the
  * phone-number JID and the LID form, both stripped of device suffix).

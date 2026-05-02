@@ -6,12 +6,14 @@ export interface MemoryState {
   entries: MemoryEntry[]
   loading: boolean
   error: string | null
+  warning: string | null
 }
 
 export const initialMemoryState: MemoryState = {
   entries: [],
   loading: true,
   error: null,
+  warning: null,
 }
 
 export const userMemoryStateAtom = atom<MemoryState>(initialMemoryState)

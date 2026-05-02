@@ -123,3 +123,15 @@ export type {
   MemoryScope,
   MemoryType,
 } from './memory.ts';
+
+// Outputs
+export { handleCreateOutput } from './outputs.ts';
+export type {
+  CreateOutputToolInput,
+  CreateOutputResult,
+  OutputKind,
+  OutputAssetRole,
+  CreateOutputFileInput,
+  CreateOutputLinkInput,
+  CreateOutputReceiptInput,
+} from './outputs.ts';

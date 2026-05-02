@@ -135,7 +135,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
 
       if (!validation.valid) {
         console.warn('[AutomationSystem] Invalid automations config:', validation.errors);
-        this.config = { automations: {} };
+        this.failClosedExternalInputs();
         return;
       }
 
@@ -147,7 +147,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
     } catch (e) {
       const error = e instanceof Error ? e.message : 'Unknown error';
       console.warn('[AutomationSystem] Failed to load automations config:', error);
-      this.config = { automations: {} };
+      this.failClosedExternalInputs();
     }
   }
 
@@ -159,7 +159,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
     const configPath = resolveAutomationsConfigPath(this.options.workspaceRootPath);
 
     if (!existsSync(configPath)) {
-      this.config = { automations: {} };
+      this.failClosedExternalInputs();
       return { success: true, automationCount: 0, errors: [] };
     }
 
@@ -167,6 +167,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
       const { raw, validation } = this.readAndValidateConfig(configPath);
 
       if (!validation.valid) {
+        this.failClosedExternalInputs();
         return { success: false, automationCount: 0, errors: validation.errors };
       }
 
@@ -180,8 +181,20 @@ export class AutomationSystem implements AutomationsConfigProvider {
       return { success: true, automationCount: actionCount, errors: [] };
     } catch (e) {
       const error = e instanceof Error ? e.message : 'Unknown error';
+      this.failClosedExternalInputs();
       return { success: false, automationCount: 0, errors: [`Failed to parse JSON: ${error}`] };
     }
+  }
+
+  /**
+   * External inputs must fail closed on invalid/missing config. Leaving the
+   * previous config live would let old webhooks/watchers/polls keep firing
+   * after the user saved an invalid automations.json.
+   */
+  private failClosedExternalInputs(): void {
+    this.config = { automations: {} };
+    this.fileWatchService?.applyMatchers([]);
+    this.pollService?.applyMatchers([]);
   }
 
   /**

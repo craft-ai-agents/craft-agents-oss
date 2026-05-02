@@ -37,7 +37,7 @@ import type { HandlerDeps } from '../handler-deps'
  * anyway).
  */
 let libraryMutex: Promise<void> = Promise.resolve()
-function withLibraryMutex<T>(fn: () => Promise<T>): Promise<T> {
+export function withAgentDefinitionsLibraryMutex<T>(fn: () => Promise<T>): Promise<T> {
   const next = libraryMutex.then(fn, fn)
   libraryMutex = next.then(() => {}, () => {})
   return next
@@ -60,7 +60,7 @@ export interface UpsertAgentPayload {
   activateInWorkspaceId?: string
 }
 
-function broadcastChanged(deps: HandlerDeps, workspaceId: string | null): void {
+export function broadcastAgentDefinitionsChanged(deps: HandlerDeps, workspaceId: string | null): void {
   // Use the standard push channel — the renderer's useAgents hook listens
   // on it and re-fetches both the library and per-workspace active list.
   // We push without a narrowing target so every connected client refreshes.
@@ -95,7 +95,7 @@ export function registerAgentDefinitionsHandlers(server: RpcServer, deps: Handle
   // -------------------------------------------------------------------------
 
   server.handle(RPC_CHANNELS.agentDefinitions.UPSERT, async (_ctx, payload: UpsertAgentPayload): Promise<LoadedAgent> => {
-    return withLibraryMutex(async () => {
+    return withAgentDefinitionsLibraryMutex(async () => {
       const loaded = writeGlobalAgent({
         slug: payload.slug,
         metadata: payload.metadata,
@@ -114,28 +114,28 @@ export function registerAgentDefinitionsHandlers(server: RpcServer, deps: Handle
         }
       }
 
-      broadcastChanged(deps, payload.activateInWorkspaceId ?? null)
+      broadcastAgentDefinitionsChanged(deps, payload.activateInWorkspaceId ?? null)
       return loaded
     })
   })
 
   server.handle(RPC_CHANNELS.agentDefinitions.DELETE, async (_ctx, slug: string): Promise<boolean> => {
-    return withLibraryMutex(async () => {
+    return withAgentDefinitionsLibraryMutex(async () => {
       // Build the workspace list once — deleteGlobalAgent updates each one's
       // activation manifest in place.
       const workspaces = getWorkspaces()
       const ok = deleteGlobalAgent(slug, workspaces.map((w) => w.rootPath))
-      if (ok) broadcastChanged(deps, null)
+      if (ok) broadcastAgentDefinitionsChanged(deps, null)
       return ok
     })
   })
 
   server.handle(RPC_CHANNELS.agentDefinitions.SET_ACTIVE, async (_ctx, workspaceId: string, slug: string, active: boolean): Promise<{ active: string[] }> => {
-    return withLibraryMutex(async () => {
+    return withAgentDefinitionsLibraryMutex(async () => {
       const workspace = getWorkspaceByNameOrId(workspaceId)
       if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
       const manifest = setAgentActive(workspace.rootPath, slug, active)
-      broadcastChanged(deps, workspaceId)
+      broadcastAgentDefinitionsChanged(deps, workspaceId)
       return { active: manifest.active }
     })
   })
@@ -143,7 +143,7 @@ export function registerAgentDefinitionsHandlers(server: RpcServer, deps: Handle
 
 // Convenience: idempotent activate-many used by seed-on-first-run.
 export async function bulkSetActive(workspaceId: string, slugs: string[]): Promise<void> {
-  await withLibraryMutex(async () => {
+  await withAgentDefinitionsLibraryMutex(async () => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) return
     const current = new Set(readActivatedAgents(workspace.rootPath).active)

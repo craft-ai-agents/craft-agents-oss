@@ -449,6 +449,14 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.workflowRuns.DELETE,
   RPC_CHANNELS.workflowRuns.UPDATED,
 
+  // outputs — workspace deliverables
+  RPC_CHANNELS.outputs.LIST,
+  RPC_CHANNELS.outputs.GET,
+  RPC_CHANNELS.outputs.DELETE,
+  RPC_CHANNELS.outputs.OPEN_FILE,
+  RPC_CHANNELS.outputs.SHOW_IN_FOLDER,
+  RPC_CHANNELS.outputs.UPDATED,
+
   // messaging — gateway channels run on workspace server
   RPC_CHANNELS.messaging.WA_REGISTER,
   RPC_CHANNELS.messaging.WA_INCOMING,

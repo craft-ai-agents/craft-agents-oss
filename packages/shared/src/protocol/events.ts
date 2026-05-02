@@ -4,6 +4,7 @@
  */
 
 import type { ThemeOverrides } from '../config/index'
+import type { OutputSummary } from '../outputs'
 import type { LoadedSource } from '../sources/types'
 import type { LoadedSkill } from '../skills/types'
 import type { LoadedContextDoc } from '../workspace-context/types'
@@ -37,6 +38,7 @@ export interface BroadcastEventMap {
     run: WorkflowRunSnapshot,
     eventType: 'created' | 'updated' | 'completed',
   ]
+  [RPC_CHANNELS.outputs.UPDATED]: [workspaceId: string, outputs?: OutputSummary[]]
   [RPC_CHANNELS.skills.CHANGED]: [workspaceId: string, skills: LoadedSkill[]]
   [RPC_CHANNELS.llmConnections.CHANGED]: []
   [RPC_CHANNELS.permissions.DEFAULTS_CHANGED]: [value: null]

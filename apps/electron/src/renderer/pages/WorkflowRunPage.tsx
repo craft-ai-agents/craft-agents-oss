@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
-import { Square, RotateCcw, AlertTriangle, ExternalLink } from 'lucide-react'
+import { Square, RotateCcw, AlertTriangle, ExternalLink, PackageOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { useAppShellContext } from '@/context/AppShellContext'
@@ -16,6 +16,7 @@ import type {
   WorkflowDTO,
   WorkflowMetadataDTO,
   WorkflowRunDTO,
+  WorkflowRunState,
   WorkflowRunStep,
   WorkflowRunStepState,
 } from '../../shared/types'
@@ -141,6 +142,7 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
   const agentNameBySlug = new Map(allAgents.map((agent) => [agent.slug, agent.metadata.name]))
   const nextIncompleteStepId = getNextIncompleteStepId(run)
   const canResumeRun = canResume && isRecoverableRunState(run.state) && !!nextIncompleteStepId
+  const outputRefs = getRunOutputRefs(run)
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-background overflow-auto">
@@ -188,6 +190,13 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
       </div>
 
       <div className="p-5 flex flex-col gap-5 max-w-5xl">
+        <RunOutputCard
+          runState={run.state}
+          outputIds={outputRefs.outputIds}
+          finalOutputId={outputRefs.finalOutputId}
+          onOpenOutput={(outputId) => navigate(routes.view.output(outputId))}
+        />
+
         <Section title="Run snapshot">
           <div className="rounded-md border border-border/40 bg-foreground/[0.02] px-3 py-3">
             <KeyValueGrid
@@ -463,6 +472,53 @@ function StepCard({
   )
 }
 
+function RunOutputCard({
+  runState,
+  outputIds,
+  finalOutputId,
+  onOpenOutput,
+}: {
+  runState: WorkflowRunState
+  outputIds: string[]
+  finalOutputId?: string
+  onOpenOutput: (outputId: string) => void
+}) {
+  const primaryOutputId = finalOutputId ?? outputIds[0]
+  const hasOutputs = outputIds.length > 0
+
+  return (
+    <Section title="Output">
+      <div className="rounded-md border border-border/40 bg-foreground/[0.02] px-3 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 flex items-center gap-2">
+            <PackageOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0">
+              <div className="text-sm font-medium">
+                {hasOutputs
+                  ? `${outputIds.length} output${outputIds.length === 1 ? '' : 's'} published`
+                  : runState === 'running'
+                    ? 'Output will appear here when the workflow publishes one.'
+                    : 'No output published'}
+              </div>
+              {primaryOutputId && (
+                <div className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+                  {primaryOutputId}
+                </div>
+              )}
+            </div>
+          </div>
+          {primaryOutputId && (
+            <Button size="sm" variant="outline" onClick={() => onOpenOutput(primaryOutputId)}>
+              <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+              Open Output
+            </Button>
+          )}
+        </div>
+      </div>
+    </Section>
+  )
+}
+
 function StepIcon({ state }: { state: WorkflowRunStepState }) {
   switch (state) {
     case 'running':
@@ -652,6 +708,18 @@ function isDetailOpenByDefault(value: unknown): boolean {
 
 function hasCompactObject(value: unknown): boolean {
   return !!value && typeof value === 'object' && Object.keys(value as LooseRecord).length > 0
+}
+
+function getRunOutputRefs(run: WorkflowRunDTO): { finalOutputId?: string; outputIds: string[] } {
+  const loose = run as unknown as LooseRecord
+  const finalOutputId = typeof loose.finalOutputId === 'string' ? loose.finalOutputId : undefined
+  const outputIds = Array.isArray(loose.outputIds)
+    ? loose.outputIds.filter((id): id is string => typeof id === 'string')
+    : []
+  if (finalOutputId && !outputIds.includes(finalOutputId)) {
+    return { finalOutputId, outputIds: [finalOutputId, ...outputIds] }
+  }
+  return { finalOutputId, outputIds }
 }
 
 function firstString(...values: unknown[]): string | undefined {

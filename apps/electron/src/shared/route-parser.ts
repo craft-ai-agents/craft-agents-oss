@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'workflows' | 'workflowRun' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'workflows' | 'workflowRun' | 'outputs' | 'settings'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -50,6 +50,8 @@ export interface ParsedCompoundRoute {
   workflowsKind?: 'list' | 'workflow' | 'workflow-edit' | 'recent-runs'
   /** Run id for workflowRun navigator. */
   runId?: string
+  /** Output id for outputs navigator. */
+  outputId?: string
   /** Details page info (null for empty state) */
   details: {
     type: string
@@ -65,7 +67,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'workflows', 'runs', 'settings'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'workflows', 'runs', 'outputs', 'settings'
 ]
 
 /**
@@ -252,6 +254,17 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     return { navigator: 'workflowRun', runId, details: null }
   }
 
+  // Outputs navigator
+  if (first === 'outputs') {
+    const outputId = segments[1]
+    if (!outputId) return { navigator: 'outputs', details: null }
+    return {
+      navigator: 'outputs',
+      outputId,
+      details: { type: 'output', id: outputId },
+    }
+  }
+
   // Sessions navigator (allSessions, flagged, state)
   let sessionFilter: SessionFilter
   let detailsStartIndex: number
@@ -370,6 +383,10 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
 
   if (parsed.navigator === 'workflowRun') {
     return parsed.runId ? `runs/${parsed.runId}` : 'workflows/runs'
+  }
+
+  if (parsed.navigator === 'outputs') {
+    return parsed.outputId ? `outputs/${parsed.outputId}` : 'outputs'
   }
 
   // Sessions navigator
@@ -522,6 +539,13 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
 
   if (compound.navigator === 'workflowRun') {
     return { type: 'view', name: 'workflow-run', id: compound.runId, params: {} }
+  }
+
+  if (compound.navigator === 'outputs') {
+    if (compound.outputId) {
+      return { type: 'view', name: 'output-info', id: compound.outputId, params: {} }
+    }
+    return { type: 'view', name: 'outputs', params: {} }
   }
 
   // Sessions
@@ -689,6 +713,12 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     return { navigator: 'workflowRun', runId: compound.runId ?? '' }
   }
 
+  if (compound.navigator === 'outputs') {
+    return compound.outputId
+      ? { navigator: 'outputs', outputId: compound.outputId }
+      : { navigator: 'outputs' }
+  }
+
   // Sessions
   const filter = compound.sessionFilter || { kind: 'allSessions' as const }
   if (compound.details) {
@@ -794,6 +824,11 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
     case 'workflow-run':
       if (parsed.id) return { navigator: 'workflowRun', runId: parsed.id }
       return { navigator: 'workflows', details: { type: 'recent-runs' } }
+    case 'outputs':
+      return { navigator: 'outputs' }
+    case 'output-info':
+      if (parsed.id) return { navigator: 'outputs', outputId: parsed.id }
+      return { navigator: 'outputs' }
     case 'session':
       if (parsed.id) {
         // Reconstruct filter from params
@@ -928,6 +963,14 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
 
   if (state.navigator === 'workflowRun') {
     return { navigator: 'workflowRun', runId: state.runId, details: null }
+  }
+
+  if (state.navigator === 'outputs') {
+    return {
+      navigator: 'outputs',
+      outputId: state.outputId,
+      details: state.outputId ? { type: 'output', id: state.outputId } : null,
+    }
   }
 
   // Sessions

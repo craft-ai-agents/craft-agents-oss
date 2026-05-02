@@ -184,6 +184,8 @@ export {
   handleSaveMemory,
   handleUpdateMemory,
   handleForgetMemory,
+  // Outputs
+  handleCreateOutput,
 } from './handlers/index.ts';
 
 export type {
@@ -238,6 +240,13 @@ export type {
   MemoryMutationResult,
   MemoryScope,
   MemoryType,
+  CreateOutputToolInput,
+  CreateOutputResult,
+  OutputKind,
+  OutputAssetRole,
+  CreateOutputFileInput,
+  CreateOutputLinkInput,
+  CreateOutputReceiptInput,
 } from './handlers/index.ts';
 
 // Tool definitions — single source of truth
@@ -269,6 +278,7 @@ export {
   SaveMemorySchema,
   UpdateMemorySchema,
   ForgetMemorySchema,
+  CreateOutputSchema,
   // Descriptions
   TOOL_DESCRIPTIONS,
   // Registry

@@ -31,9 +31,10 @@ import { ORCHESTRATOR_SLUG } from '@craft-agent/shared/agent-definitions/types'
 interface AgentSessionsPanelProps {
   agentSlug: string
   workspaceId: string | null | undefined
+  remoteWorkspaceId?: string | null
 }
 
-export function AgentSessionsPanel({ agentSlug, workspaceId }: AgentSessionsPanelProps) {
+export function AgentSessionsPanel({ agentSlug, workspaceId, remoteWorkspaceId }: AgentSessionsPanelProps) {
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
   const skills = useAtomValue(skillsAtom)
   const sources = useAtomValue(sourcesAtom)
@@ -51,13 +52,13 @@ export function AgentSessionsPanel({ agentSlug, workspaceId }: AgentSessionsPane
     const out: SessionMeta[] = []
     for (const s of sessionMetaMap.values()) {
       if (s.spawnedFromAgent?.agentSlug !== agentSlug) continue
-      if (workspaceId && s.workspaceId !== workspaceId) continue
+      if (workspaceId && s.workspaceId !== workspaceId && s.workspaceId !== remoteWorkspaceId) continue
       if (s.isArchived) continue
       out.push(s)
     }
     out.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0))
     return out
-  }, [sessionMetaMap, agentSlug, workspaceId])
+  }, [sessionMetaMap, agentSlug, workspaceId, remoteWorkspaceId])
 
   const handleRun = React.useCallback(async () => {
     if (!workspaceId || !agent) {

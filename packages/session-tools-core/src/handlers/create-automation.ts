@@ -15,15 +15,18 @@ export interface CreateAutomationPromptAction {
   prompt: string;
   llmConnection?: string;
   model?: string;
-  thinkingLevel?: 'high' | 'medium' | 'low' | 'disabled';
+  thinkingLevel?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 }
 
 export interface CreateAutomationWebhookAction {
   type: 'webhook';
   url: string;
-  method?: string;
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   headers?: Record<string, string>;
+  bodyFormat?: 'json' | 'form' | 'raw';
   body?: unknown;
+  captureResponse?: boolean;
+  auth?: { type: 'basic'; username: string; password: string } | { type: 'bearer'; token: string };
 }
 
 export type CreateAutomationAction =
@@ -34,6 +37,8 @@ export interface CreateAutomationMatcher {
   name?: string;
   slug?: string;
   secretEnv?: string;
+  allowUnauthenticated?: boolean;
+  allowedMethods?: ('GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE')[];
   cron?: string;
   timezone?: string;
   watchPath?: string;
@@ -71,6 +76,8 @@ const SUPPORTED_EVENTS: ReadonlySet<string> = new Set([
 ]);
 
 const WEBHOOK_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+const SECRET_ENV_RE = /^[A-Z_][A-Z0-9_]*$/;
+const THINKING_LEVELS = new Set(['off', 'low', 'medium', 'high', 'xhigh', 'max']);
 
 /**
  * Kept in sync with `normalizeStandardFiveFieldCron` in
@@ -119,6 +126,11 @@ export async function handleCreateAutomation(
       if (!action.prompt || action.prompt.trim().length === 0) {
         return errorResponse('Prompt actions require a non-empty "prompt" string.');
       }
+      if (action.thinkingLevel !== undefined && !THINKING_LEVELS.has(action.thinkingLevel)) {
+        return errorResponse(
+          `Invalid thinkingLevel "${action.thinkingLevel}". Use one of: off, low, medium, high, xhigh, max.`,
+        );
+      }
     } else if (action.type === 'webhook') {
       if (!action.url || typeof action.url !== 'string') {
         return errorResponse('Webhook actions require a "url" string.');
@@ -148,6 +160,16 @@ export async function handleCreateAutomation(
     if (!WEBHOOK_SLUG_RE.test(args.matcher.slug)) {
       return errorResponse(
         `Invalid webhook slug "${args.matcher.slug}". Use lowercase letters, digits, and hyphens (1-64 chars, no leading/trailing hyphen).`,
+      );
+    }
+    if (args.matcher.secretEnv && !SECRET_ENV_RE.test(args.matcher.secretEnv)) {
+      return errorResponse(
+        'Invalid secretEnv. Use an uppercase env var name containing only letters, digits, and underscores, not starting with a digit.',
+      );
+    }
+    if (!args.matcher.secretEnv && args.matcher.allowUnauthenticated !== true) {
+      return errorResponse(
+        'WebhookReceive automations require secretEnv unless allowUnauthenticated is explicitly true.',
       );
     }
   }

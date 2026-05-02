@@ -1376,6 +1376,16 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const startIndex = Math.max(0, allTurns.length - visibleTurnCount)
   const turns = allTurns.slice(startIndex)
   const hasMoreAbove = startIndex > 0
+  const latestCompletedAssistantTurnKey = useMemo(() => {
+    if (!isConciergeSession) return null
+    for (let i = allTurns.length - 1; i >= 0; i--) {
+      const turn = allTurns[i]
+      if (turn?.type === 'assistant' && turn.response?.text && !turn.response.isStreaming) {
+        return getTurnKey(turn)
+      }
+    }
+    return null
+  }, [allTurns, isConciergeSession])
 
   const assistantTurnIndexByMessageId = useMemo(() => {
     const map = new Map<string, number>()
@@ -1633,7 +1643,10 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
                     // Assistant turns - render with TurnCard (buffered streaming)
                     const assistantUiKey = getAssistantTurnUiKey(turn, index)
-                    const conciergeSuggestion = isConciergeSession && turn.response?.text && !turn.response.isStreaming
+                    const conciergeSuggestion = isConciergeSession
+                      && turnKey === latestCompletedAssistantTurnKey
+                      && turn.response?.text
+                      && !turn.response.isStreaming
                       ? extractConciergeAgentLaunchSuggestion(turn.response.text, conciergeActionAgents)
                       : null
                     const conciergeLaunchWorkspaceId = workspaceId ?? session.workspaceId

@@ -238,10 +238,35 @@ interface RateWindow {
 
 const DEFAULT_RATE_LIMIT = 10;
 const SCHEDULER_RATE_LIMIT = 60;
+const MESSAGE_RECEIVE_SENDER_RATE_LIMIT = 60;
+const MESSAGE_RECEIVE_CHANNEL_RATE_LIMIT = 300;
 const RATE_WINDOW_MS = 60_000; // 1 minute
 
-function getRateLimit(event: AutomationEvent): number {
-  return event === 'SchedulerTick' ? SCHEDULER_RATE_LIMIT : DEFAULT_RATE_LIMIT;
+interface RateBucket {
+  key: string;
+  limit: number;
+}
+
+function getRateBuckets(event: AutomationEvent, payload: BaseEventPayload): RateBucket[] {
+  if (event !== 'MessageReceive') {
+    return [{
+      key: event,
+      limit: event === 'SchedulerTick' ? SCHEDULER_RATE_LIMIT : DEFAULT_RATE_LIMIT,
+    }];
+  }
+  const msg = payload as BaseEventPayload & {
+    platform?: unknown;
+    channelId?: unknown;
+    senderId?: unknown;
+  };
+  const platform = typeof msg.platform === 'string' && msg.platform ? msg.platform : 'unknown';
+  const channelId = typeof msg.channelId === 'string' && msg.channelId ? msg.channelId : 'unknown';
+  const senderId = typeof msg.senderId === 'string' && msg.senderId ? msg.senderId : 'unknown';
+  const channelKey = `${event}:${platform}:${channelId}`;
+  return [
+    { key: channelKey, limit: MESSAGE_RECEIVE_CHANNEL_RATE_LIMIT },
+    { key: `${channelKey}:${senderId}`, limit: MESSAGE_RECEIVE_SENDER_RATE_LIMIT },
+  ];
 }
 
 // ============================================================================
@@ -282,7 +307,7 @@ export class WorkspaceEventBus implements EventBus {
   private readonly workspaceId: string;
   private readonly handlers: Map<AutomationEvent, Set<EventHandler<AutomationEvent>>> = new Map();
   private readonly anyHandlers: Set<AnyEventHandler> = new Set();
-  private readonly rateCounts: Map<AutomationEvent, RateWindow> = new Map();
+  private readonly rateCounts: Map<string, RateWindow> = new Map();
   private disposed = false;
 
   constructor(workspaceId: string) {
@@ -313,25 +338,33 @@ export class WorkspaceEventBus implements EventBus {
 
     // Rate limiting: prevent runaway event loops (sync and async)
     const now = Date.now();
-    const rateWindow = this.rateCounts.get(event) ?? { count: 0, windowStart: now };
-    if (now - rateWindow.windowStart >= RATE_WINDOW_MS) {
-      rateWindow.count = 0;
-      rateWindow.windowStart = now;
+    for (const [key, window] of this.rateCounts) {
+      if (now - window.windowStart >= RATE_WINDOW_MS) {
+        this.rateCounts.delete(key);
+      }
     }
-    const limit = getRateLimit(event);
-    if (rateWindow.count >= limit) {
-      log.warn(
-        `[EventBus] Rate limit: ${event} fired ${rateWindow.count} times in ${Math.round((now - rateWindow.windowStart) / 1000)}s (limit: ${limit}/min), dropping`
-      );
-      return {
-        status: 'rate_limited',
-        limit,
-        count: rateWindow.count,
-        windowStart: rateWindow.windowStart,
-      };
+    const rateBuckets = getRateBuckets(event, payload);
+    const windows = rateBuckets.map((bucket) => ({
+      bucket,
+      window: this.rateCounts.get(bucket.key) ?? { count: 0, windowStart: now },
+    }));
+    for (const { bucket, window } of windows) {
+      if (window.count >= bucket.limit) {
+        log.warn(
+          `[EventBus] Rate limit: ${event} fired ${window.count} times in ${Math.round((now - window.windowStart) / 1000)}s (limit: ${bucket.limit}/min), dropping`
+        );
+        return {
+          status: 'rate_limited',
+          limit: bucket.limit,
+          count: window.count,
+          windowStart: window.windowStart,
+        };
+      }
     }
-    rateWindow.count++;
-    this.rateCounts.set(event, rateWindow);
+    for (const { bucket, window } of windows) {
+      window.count++;
+      this.rateCounts.set(bucket.key, window);
+    }
 
     log.debug(`[EventBus] Emitting: ${event}`);
 

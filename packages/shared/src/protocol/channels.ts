@@ -442,6 +442,14 @@ export const RPC_CHANNELS = {
     /** Single push event covering created / updated / completed transitions. */
     UPDATED: 'workflow-runs:updated',
   },
+  outputs: {
+    LIST: 'outputs:list',
+    GET: 'outputs:get',
+    DELETE: 'outputs:delete',
+    OPEN_FILE: 'outputs:openFile',
+    SHOW_IN_FOLDER: 'outputs:showInFolder',
+    UPDATED: 'outputs:updated',
+  },
   resources: {
     EXPORT: 'resources:export',
     IMPORT: 'resources:import',

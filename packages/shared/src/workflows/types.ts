@@ -18,6 +18,7 @@
  */
 
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
+import type { OutputKind } from '../outputs/types.ts';
 
 /** Where a workflow definition was loaded from. Phase 1: only `global`. */
 export type WorkflowDefinitionSource = 'global';
@@ -52,6 +53,18 @@ export interface WorkflowTrigger {
 }
 
 export type JsonSchema = Record<string, unknown>;
+
+export interface WorkflowOutputContract {
+  mode?: 'final-step' | 'explicit-tool' | 'none';
+  kind?: OutputKind;
+  title?: string;
+  summary?: string;
+  primary?: {
+    from?: 'step-output' | 'file' | 'external-link';
+    step?: string;
+    path?: string;
+  };
+}
 
 export type WorkflowStepFailurePolicy = 'stop' | 'continue' | 'ask';
 
@@ -95,6 +108,7 @@ export interface WorkflowMetadata {
   /** Single emoji shown in pickers. */
   avatar?: string;
   trigger: WorkflowTrigger;
+  outputs?: WorkflowOutputContract;
   steps: WorkflowStep[];
 }
 
@@ -107,7 +121,8 @@ export type WorkflowParseWarningCode =
   | 'invalid-step-timeout'
   | 'invalid-step-retries'
   | 'invalid-step-on-failure'
-  | 'invalid-step-completion';
+  | 'invalid-step-completion'
+  | 'invalid-outputs';
 
 export interface WorkflowParseWarning {
   field: keyof WorkflowMetadata | 'step';

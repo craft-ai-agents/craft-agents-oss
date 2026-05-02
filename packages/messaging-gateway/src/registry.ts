@@ -253,6 +253,58 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         })
       }
     }
+
+    await state.gateway.start()
+
+    if (isPlatformConfigured(cfg, 'telegram') && !state.gateway.hasConnectedAdapter('telegram')) {
+      this.setPlatformRuntime(workspaceId, state, 'telegram', {
+        configured: true,
+        connected: false,
+        state: 'connecting',
+        lastError: undefined,
+      })
+      await this.tryConnectTelegram(workspaceId, state).catch((err) => {
+        this.log.error('Telegram connect after config enable failed', {
+          event: 'telegram_enable_connect_failed',
+          workspaceId,
+          error: err,
+        })
+      })
+    }
+
+    if (isPlatformConfigured(cfg, 'whatsapp') && !state.gateway.hasConnectedAdapter('whatsapp')) {
+      if (this.hasWhatsAppAuthState(workspaceId)) {
+        this.setPlatformRuntime(workspaceId, state, 'whatsapp', {
+          configured: true,
+          connected: false,
+          state: 'connecting',
+          lastError: undefined,
+        })
+        await this.startWhatsAppAdapter(workspaceId, state, {
+          persistConfig: false,
+          reason: 'restore',
+        }).catch((err) => {
+          this.log.error('WhatsApp restore after config enable failed', {
+            event: 'whatsapp_enable_restore_failed',
+            workspaceId,
+            error: err,
+          })
+          this.setPlatformRuntime(workspaceId, state, 'whatsapp', {
+            configured: true,
+            connected: false,
+            state: 'error',
+            lastError: err instanceof Error ? err.message : String(err),
+          })
+        })
+      } else {
+        this.setPlatformRuntime(workspaceId, state, 'whatsapp', {
+          configured: true,
+          connected: false,
+          state: 'reconnect_required',
+          lastError: 'WhatsApp needs to be linked again.',
+        })
+      }
+    }
   }
 
   // -------------------------------------------------------------------------

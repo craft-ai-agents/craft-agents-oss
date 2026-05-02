@@ -68,7 +68,11 @@ export async function handleGetWorkflowRun(ctx: SessionToolContext, args: GetWor
 export async function handleCancelWorkflowRun(ctx: SessionToolContext, args: CancelWorkflowRunArgs): Promise<ToolResult> {
   if (!ctx.cancelWorkflowRun) return errorResponse('cancel_workflow_run is not available in this context.');
   try {
-    await ctx.cancelWorkflowRun(args.runId);
+    const cancelWorkflowRun = ctx.cancelWorkflowRun as (runId: string) => Promise<unknown>;
+    const result = await cancelWorkflowRun(args.runId);
+    if (result && typeof result === 'object') {
+      return successResponse(JSON.stringify(result, null, 2));
+    }
     return successResponse(`Cancelled workflow run ${args.runId}.`);
   } catch (error) {
     return errorResponse(`Failed to cancel workflow run: ${error instanceof Error ? error.message : 'Unknown error'}`);

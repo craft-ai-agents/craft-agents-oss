@@ -5,6 +5,7 @@ import { validateTemplateReferences } from './template.ts';
 import {
   WORKFLOW_SLUG_REGEX,
   type WorkflowMetadata,
+  type WorkflowOutputContract,
   type WorkflowParseWarning,
   type WorkflowStep,
   type WorkflowStepCompletionContract,
@@ -15,7 +16,10 @@ import {
 
 const VALID_INPUT_TYPES: ReadonlyArray<WorkflowTriggerInput['type']> = ['string', 'number', 'boolean'];
 const VALID_STEP_FAILURE_POLICIES: ReadonlyArray<WorkflowStepFailurePolicy> = ['stop', 'continue', 'ask'];
+const VALID_OUTPUT_MODES: ReadonlyArray<NonNullable<WorkflowOutputContract['mode']>> = ['final-step', 'explicit-tool', 'none'];
+const VALID_OUTPUT_PRIMARY_FROM: ReadonlyArray<NonNullable<NonNullable<WorkflowOutputContract['primary']>['from']>> = ['step-output', 'file', 'external-link'];
 const TRIGGER_INPUT_NAME_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const UNSUPPORTED_EXECUTION_FIELDS = new Set(['when', 'humanCheckpoint', 'parallelGroup']);
 
 function warning(
   field: WorkflowParseWarning['field'],
@@ -56,13 +60,22 @@ function coerceTriggerInputs(
     const type = typeRaw as WorkflowTriggerInput['type'];
     const input: WorkflowTriggerInput = { name, type };
     if (typeof e.required === 'boolean') input.required = e.required;
-    if (e.default !== undefined) input.default = e.default;
+    if (e.default !== undefined) {
+      if (!defaultMatchesTriggerInputType(type, e.default)) return null;
+      input.default = e.default;
+    }
     if (typeof e.description === 'string' && e.description.trim()) {
       input.description = e.description.trim();
     }
     out.push(input);
   }
   return out.length > 0 ? out : undefined;
+}
+
+function defaultMatchesTriggerInputType(type: WorkflowTriggerInput['type'], value: unknown): boolean {
+  if (type === 'string') return typeof value === 'string';
+  if (type === 'number') return typeof value === 'number' && Number.isFinite(value);
+  return typeof value === 'boolean';
 }
 
 function coerceTrigger(raw: unknown, warnings: WorkflowParseWarning[]): WorkflowTrigger | null {
@@ -72,13 +85,63 @@ function coerceTrigger(raw: unknown, warnings: WorkflowParseWarning[]): Workflow
     return { type: 'manual' };
   }
   const r = raw as Record<string, unknown>;
+  if (r.type !== undefined && typeof r.type !== 'string') {
+    warnings.push(warning('trigger', 'invalid-trigger', 'trigger.type must be "manual".'));
+    return null;
+  }
   const typeRaw = typeof r.type === 'string' ? r.type.trim() : 'manual';
   if (typeRaw !== 'manual') {
-    warnings.push(warning('trigger', 'invalid-trigger', `trigger.type "${typeRaw}" is not supported in Phase 1; defaulting to manual.`));
+    warnings.push(warning('trigger', 'invalid-trigger', `trigger.type "${typeRaw}" is not supported.`));
+    return null;
   }
   const inputs = coerceTriggerInputs(r.inputs, warnings);
   if (inputs === null) return null;
   return inputs ? { type: 'manual', inputs } : { type: 'manual' };
+}
+
+function coerceOutputs(raw: unknown, warnings: WorkflowParseWarning[]): WorkflowOutputContract | undefined | null {
+  if (raw == null) return undefined;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    warnings.push(warning('outputs', 'invalid-outputs', 'outputs must be an object.'));
+    return null;
+  }
+  const r = raw as Record<string, unknown>;
+  const out: WorkflowOutputContract = {};
+  if (r.mode !== undefined) {
+    if (typeof r.mode !== 'string' || !(VALID_OUTPUT_MODES as ReadonlyArray<string>).includes(r.mode)) {
+      warnings.push(warning('outputs', 'invalid-outputs', 'outputs.mode must be final-step, explicit-tool, or none.'));
+      return null;
+    }
+    out.mode = r.mode as WorkflowOutputContract['mode'];
+  }
+  if (r.kind !== undefined) {
+    if (typeof r.kind !== 'string' || !r.kind.trim()) {
+      warnings.push(warning('outputs', 'invalid-outputs', 'outputs.kind must be a string.'));
+      return null;
+    }
+    out.kind = r.kind.trim() as WorkflowOutputContract['kind'];
+  }
+  if (typeof r.title === 'string' && r.title.trim()) out.title = r.title.trim();
+  if (typeof r.summary === 'string' && r.summary.trim()) out.summary = r.summary.trim();
+  if (r.primary !== undefined) {
+    if (!r.primary || typeof r.primary !== 'object' || Array.isArray(r.primary)) {
+      warnings.push(warning('outputs', 'invalid-outputs', 'outputs.primary must be an object.'));
+      return null;
+    }
+    const p = r.primary as Record<string, unknown>;
+    const primary: NonNullable<WorkflowOutputContract['primary']> = {};
+    if (p.from !== undefined) {
+      if (typeof p.from !== 'string' || !(VALID_OUTPUT_PRIMARY_FROM as ReadonlyArray<string>).includes(p.from)) {
+        warnings.push(warning('outputs', 'invalid-outputs', 'outputs.primary.from must be step-output, file, or external-link.'));
+        return null;
+      }
+      primary.from = p.from as NonNullable<WorkflowOutputContract['primary']>['from'];
+    }
+    if (typeof p.step === 'string' && p.step.trim()) primary.step = p.step.trim();
+    if (typeof p.path === 'string' && p.path.trim()) primary.path = p.path.trim();
+    out.primary = primary;
+  }
+  return out;
 }
 
 interface RawStep {
@@ -150,6 +213,7 @@ export function parseWorkflowFile(
   }
 
   const data = parsed.data as Record<string, unknown>;
+  if (hasUnsupportedExecutionField(data)) return null;
 
   const name = typeof data.name === 'string' ? data.name.trim() : '';
   const description = typeof data.description === 'string' ? data.description.trim() : '';
@@ -160,6 +224,8 @@ export function parseWorkflowFile(
   const warnings: WorkflowParseWarning[] = [];
   const trigger = coerceTrigger(data.trigger, warnings);
   if (!trigger) return null;
+  const outputs = coerceOutputs(data.outputs, warnings);
+  if (outputs === null) return null;
   const triggerInputNames = (trigger.inputs ?? []).map((i) => i.name);
 
   const steps: WorkflowStep[] = [];
@@ -168,6 +234,7 @@ export function parseWorkflowFile(
 
   for (const rawStep of data.steps as RawStep[]) {
     if (!rawStep || typeof rawStep !== 'object') return null;
+    if (hasUnsupportedExecutionField(rawStep as Record<string, unknown>)) return null;
     const id = typeof rawStep.id === 'string' ? rawStep.id.trim() : '';
     const agent = typeof rawStep.agent === 'string' ? rawStep.agent.trim() : '';
     const input = typeof rawStep.input === 'string' ? rawStep.input : '';
@@ -242,6 +309,7 @@ export function parseWorkflowFile(
       description,
       avatar,
       trigger,
+      outputs,
       steps,
     },
     body: parsed.content.trim(),
@@ -250,6 +318,7 @@ export function parseWorkflowFile(
 }
 
 export function serializeWorkflow(metadata: WorkflowMetadata, body: string): string {
+  validateSerializableWorkflowMetadata(metadata);
   const data: Record<string, unknown> = {
     name: metadata.name,
     description: metadata.description,
@@ -267,6 +336,7 @@ export function serializeWorkflow(metadata: WorkflowMetadata, body: string): str
     });
   }
   data.trigger = trigger;
+  if (metadata.outputs) data.outputs = metadata.outputs;
 
   data.steps = metadata.steps.map((s) => {
     const out: Record<string, unknown> = { id: s.id, agent: s.agent, input: s.input };
@@ -280,4 +350,27 @@ export function serializeWorkflow(metadata: WorkflowMetadata, body: string): str
   });
 
   return matter.stringify(body.trimEnd() + '\n', data);
+}
+
+function hasUnsupportedExecutionField(data: Record<string, unknown>): boolean {
+  return Object.keys(data).some((key) => UNSUPPORTED_EXECUTION_FIELDS.has(key));
+}
+
+function validateSerializableWorkflowMetadata(metadata: WorkflowMetadata): void {
+  if (hasUnsupportedExecutionField(metadata as unknown as Record<string, unknown>)) {
+    throw new Error('Unsupported workflow execution fields are not implemented.');
+  }
+  if (metadata.trigger.type !== 'manual') {
+    throw new Error(`Unsupported workflow trigger type: ${metadata.trigger.type}`);
+  }
+  for (const input of metadata.trigger.inputs ?? []) {
+    if (input.default !== undefined && !defaultMatchesTriggerInputType(input.type, input.default)) {
+      throw new Error(`Default value for workflow input "${input.name}" must be a ${input.type}.`);
+    }
+  }
+  for (const step of metadata.steps) {
+    if (hasUnsupportedExecutionField(step as unknown as Record<string, unknown>)) {
+      throw new Error(`Unsupported execution field on workflow step "${step.id}".`);
+    }
+  }
 }

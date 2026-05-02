@@ -7,9 +7,12 @@ import {
   deleteMemoryEntry,
   listAgentMemoryEntries,
   listUserMemoryEntries,
+  loadAgentMemory,
+  loadUserMemory,
   saveMemoryEntry,
   updateMemoryEntry,
   type DeleteMemoryInput,
+  type LoadedMemoryFile,
   type MemoryEntry,
   type MemoryEntryType,
   type MemoryScope,
@@ -37,11 +40,11 @@ export interface MemoryMutationPayload {
   content?: string
   metadata?: Record<string, unknown>
   expires?: string | null
+  force?: boolean
 }
 
-function broadcastChanged(deps: HandlerDeps, scope: MemoryScope, agentSlug: string | null): void {
-  const wsServerLike = deps as unknown as { wsServer?: { push?: (...args: unknown[]) => void } }
-  wsServerLike.wsServer?.push?.(RPC_CHANNELS.memory.CHANGED, { to: 'all' }, scope, agentSlug)
+function broadcastChanged(server: RpcServer, scope: MemoryScope, agentSlug: string | null): void {
+  server.push(RPC_CHANNELS.memory.CHANGED, { to: 'all' }, scope, agentSlug)
 }
 
 function requireAgentSlug(scope: MemoryScope, agentSlug: string | null | undefined): string | undefined {
@@ -77,6 +80,7 @@ async function saveMemory(payload: MemoryMutationPayload): Promise<MemoryEntry> 
     type: requireType(payload),
     body: requireBody(payload),
     expires: typeof payload.expires === 'string' ? payload.expires : undefined,
+    force: payload.force === true,
   }
   return saveMemoryEntry(input)
 }
@@ -122,35 +126,41 @@ async function deleteMemory(payload: MemoryMutationPayload): Promise<boolean> {
 }
 
 export function registerMemoryHandlers(server: RpcServer, deps: HandlerDeps): void {
-  server.handle(RPC_CHANNELS.memory.LIST_AGENT, async (_ctx, agentSlug: string): Promise<MemoryEntry[]> => {
-    return listAgentMemoryEntries(agentSlug)
+  void deps
+
+  server.handle(RPC_CHANNELS.memory.LIST_AGENT, async (_ctx, agentSlug: string): Promise<LoadedMemoryFile> => {
+    const loaded = loadAgentMemory(agentSlug)
+    if (!loaded) throw new Error(`Memory file is invalid or unreadable for agent: ${agentSlug}`)
+    return loaded
   })
 
-  server.handle(RPC_CHANNELS.memory.LIST_USER, async (): Promise<MemoryEntry[]> => {
-    return listUserMemoryEntries()
+  server.handle(RPC_CHANNELS.memory.LIST_USER, async (): Promise<LoadedMemoryFile> => {
+    const loaded = loadUserMemory()
+    if (!loaded) throw new Error('USER.md is invalid or unreadable')
+    return loaded
   })
 
   server.handle(RPC_CHANNELS.memory.UPSERT, async (_ctx, payload: MemoryMutationPayload): Promise<unknown> => {
     const result = await upsertMemory(payload)
-    broadcastChanged(deps, payload.scope, payload.scope === 'agent' ? payload.agentSlug ?? null : null)
+    broadcastChanged(server, payload.scope, payload.scope === 'agent' ? payload.agentSlug ?? null : null)
     return result
   })
 
   server.handle(RPC_CHANNELS.memory.SAVE, async (_ctx, payload: MemoryMutationPayload): Promise<unknown> => {
     const result = await saveMemory(payload)
-    broadcastChanged(deps, payload.scope, payload.scope === 'agent' ? payload.agentSlug ?? null : null)
+    broadcastChanged(server, payload.scope, payload.scope === 'agent' ? payload.agentSlug ?? null : null)
     return result
   })
 
   server.handle(RPC_CHANNELS.memory.UPDATE, async (_ctx, payload: MemoryMutationPayload): Promise<unknown> => {
     const result = await updateMemory(payload)
-    broadcastChanged(deps, payload.scope, payload.scope === 'agent' ? payload.agentSlug ?? null : null)
+    broadcastChanged(server, payload.scope, payload.scope === 'agent' ? payload.agentSlug ?? null : null)
     return result
   })
 
   server.handle(RPC_CHANNELS.memory.DELETE, async (_ctx, payload: MemoryMutationPayload): Promise<unknown> => {
     const result = await deleteMemory(payload)
-    broadcastChanged(deps, payload.scope, payload.scope === 'agent' ? payload.agentSlug ?? null : null)
+    broadcastChanged(server, payload.scope, payload.scope === 'agent' ? payload.agentSlug ?? null : null)
     return result
   })
 }

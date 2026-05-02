@@ -2,8 +2,8 @@
  * Memory storage.
  *
  * CRUD over USER.md and per-agent MEMORY.md. Markdown is canonical; callers
- * should treat invalid files as empty/missing and surface parse warnings where
- * useful for hand-edited files.
+ * should surface invalid files and parse warnings where useful for hand-edited
+ * files instead of silently treating malformed content as empty.
  */
 
 import {
@@ -110,7 +110,10 @@ function normalizeName(name: string): string {
 }
 
 function assertValidEntryName(name: string): void {
-  if (!normalizeName(name)) throw new Error('Memory entry name is required');
+  const normalized = normalizeName(name);
+  if (!normalized) throw new Error('Memory entry name is required');
+  if (normalized.length > 128) throw new Error('Memory entry name must be 128 characters or fewer');
+  if (/[\r\n]/.test(normalized)) throw new Error('Memory entry name must be a single line');
 }
 
 function assertValidEntryType(type: string): asserts type is MemoryEntryType {
@@ -219,36 +222,101 @@ function coerceYamlDate(value: unknown): string | undefined {
   return undefined;
 }
 
+interface DelimiterLine {
+  start: number;
+  end: number;
+}
+
+function collectEntryDelimiterLines(content: string): DelimiterLine[] {
+  const delimiters: DelimiterLine[] = [];
+  let offset = 0;
+  let fence: string | null = null;
+
+  for (const line of content.match(/[^\n]*(?:\n|$)/g) ?? []) {
+    if (line.length === 0) break;
+    const lineBody = line.endsWith('\n') ? line.slice(0, -1) : line;
+    const trimmed = lineBody.trim();
+    const fenceMatch = trimmed.match(/^(```+|~~~+)/);
+
+    if (fence) {
+      if (trimmed.startsWith(fence)) fence = null;
+    } else if (fenceMatch) {
+      fence = fenceMatch[1]!.startsWith('`') ? '```' : '~~~';
+    } else if (trimmed === '---') {
+      delimiters.push({ start: offset, end: offset + line.length });
+    }
+
+    offset += line.length;
+  }
+
+  return delimiters;
+}
+
+function looksLikeEntryFrontmatter(rawFrontmatter: string): boolean {
+  let parsed: matter.GrayMatterFile<string>;
+  try {
+    parsed = matter(`---\n${rawFrontmatter.trim()}\n---\n`);
+  } catch {
+    return false;
+  }
+  const data = parsed.data as Record<string, unknown>;
+  return (
+    typeof data.name === 'string' &&
+    typeof data.type === 'string' &&
+    data.created !== undefined
+  );
+}
+
+function findNextEntryOpen(content: string, delimiters: DelimiterLine[], startIndex: number): number {
+  for (let i = startIndex; i < delimiters.length - 1; i += 1) {
+    const rawFrontmatter = content.slice(delimiters[i]!.end, delimiters[i + 1]!.start);
+    if (looksLikeEntryFrontmatter(rawFrontmatter)) return i;
+  }
+  return -1;
+}
+
 function parseEntryBlocks(content: string): { entries: MemoryEntry[]; warnings: MemoryParseWarning[] } {
   const trimmed = content.trim();
   if (!trimmed) return { entries: [], warnings: [] };
 
-  const parts = trimmed.split(/^---\s*$/m);
+  const delimiters = collectEntryDelimiterLines(content);
   const entries: MemoryEntry[] = [];
   const warnings: MemoryParseWarning[] = [];
   const seen = new Set<string>();
+  let openIndex = findNextEntryOpen(content, delimiters, 0);
 
-  if (parts[0]?.trim()) {
+  if (openIndex === -1) {
+    warnings.push(warning('missing-entry-frontmatter', 'Memory file body must start each entry with mini-frontmatter.', 'entry'));
+    return { entries, warnings };
+  }
+
+  if (content.slice(0, delimiters[openIndex]!.start).trim()) {
     warnings.push(warning('missing-entry-frontmatter', 'Memory file body must start each entry with mini-frontmatter.', 'entry'));
   }
 
-  for (let i = 1; i < parts.length; i += 2) {
-    const rawFrontmatter = parts[i];
-    const rawBody = parts[i + 1];
-    if (rawFrontmatter == null || rawBody == null) {
+  while (openIndex !== -1) {
+    const closeIndex = openIndex + 1;
+    const open = delimiters[openIndex]!;
+    const close = delimiters[closeIndex];
+    if (!close) {
       warnings.push(warning('missing-entry-frontmatter', 'Memory entry is missing a closing frontmatter delimiter.', 'entry'));
-      continue;
+      break;
     }
 
+    const nextOpenIndex = findNextEntryOpen(content, delimiters, closeIndex + 1);
+    const rawFrontmatter = content.slice(open.end, close.start);
+    const rawBody = content.slice(close.end, nextOpenIndex === -1 ? content.length : delimiters[nextOpenIndex]!.start);
     const parsed = parseEntry(rawFrontmatter, rawBody);
     warnings.push(...parsed.warnings);
-    if (!parsed.entry) continue;
-    if (seen.has(parsed.entry.name)) {
-      warnings.push(warning('duplicate-name', `Duplicate memory entry name "${parsed.entry.name}" skipped.`, 'name', parsed.entry.name));
-      continue;
+    if (parsed.entry) {
+      if (seen.has(parsed.entry.name)) {
+        warnings.push(warning('duplicate-name', `Duplicate memory entry name "${parsed.entry.name}" skipped.`, 'name', parsed.entry.name));
+      } else {
+        seen.add(parsed.entry.name);
+        entries.push(parsed.entry);
+      }
     }
-    seen.add(parsed.entry.name);
-    entries.push(parsed.entry);
+    openIndex = nextOpenIndex;
   }
 
   return { entries, warnings };
@@ -362,7 +430,9 @@ export function listMemoryEntries(
   agentSlug?: string,
   options?: MemoryStorageOptions,
 ): MemoryEntry[] {
-  return loadMemoryFile(scope, agentSlug, options)?.entries ?? [];
+  const loaded = loadMemoryFile(scope, agentSlug, options);
+  if (!loaded) throw new Error(`Memory file is invalid or unreadable: ${getMemoryFilePath(scope, agentSlug, options)}`);
+  return loaded.entries;
 }
 
 export function listUserMemoryEntries(options?: MemoryStorageOptions): MemoryEntry[] {

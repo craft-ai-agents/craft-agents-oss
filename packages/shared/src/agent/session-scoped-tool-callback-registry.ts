@@ -70,7 +70,7 @@ export interface SessionScopedToolCallbacks {
   /** Get workflow run snapshot. */
   getWorkflowRunFn?: (runId: string) => unknown | null;
   /** Cancel workflow run. */
-  cancelWorkflowRunFn?: (runId: string) => Promise<void>;
+  cancelWorkflowRunFn?: (runId: string) => Promise<unknown>;
   /** Resolve label display names to IDs. */
   resolveLabelsFn?: (labels: string[]) => import('@craft-agent/session-tools-core').ResolvedLabelsResult;
   /** Resolve a status display name to its ID. */
@@ -111,6 +111,10 @@ export interface SessionScopedToolCallbacks {
   forgetMemoryFn?: (
     input: import('@craft-agent/session-tools-core').ForgetMemoryToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').MemoryMutationResult>;
+  /** Publish a first-class output from the current session. */
+  createOutputFn?: (
+    input: import('@craft-agent/session-tools-core').CreateOutputToolInput,
+  ) => Promise<import('@craft-agent/session-tools-core').CreateOutputResult>;
 }
 
 // Registry of callbacks keyed by sessionId

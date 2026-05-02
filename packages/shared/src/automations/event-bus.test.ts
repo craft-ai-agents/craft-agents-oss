@@ -318,6 +318,104 @@ describe('WorkspaceEventBus', () => {
       expect(flagHandler).toHaveBeenCalledTimes(1);
     });
 
+    it('scopes MessageReceive rate limits by platform/channel/sender', async () => {
+      const handler = jest.fn();
+      bus.on('MessageReceive', handler);
+
+      const msgPayload = (senderId: string) => ({
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        platform: 'telegram',
+        channelId: 'chat-1',
+        messageId: `m-${senderId}-${Date.now()}`,
+        senderId,
+        senderName: null,
+        text: 'hello',
+        bound: false,
+        wasBound: false,
+        boundAfterRoute: false,
+        attachmentCount: 0,
+        hasAttachment: false,
+        sentAt: Date.now(),
+      });
+
+      for (let i = 0; i < 65; i++) {
+        await bus.emit('MessageReceive', msgPayload('sender-a'));
+      }
+      expect(handler).toHaveBeenCalledTimes(60);
+
+      await bus.emit('MessageReceive', msgPayload('sender-b'));
+      expect(handler).toHaveBeenCalledTimes(61);
+    });
+
+    it('caps MessageReceive bursts per platform/channel', async () => {
+      const handler = jest.fn();
+      bus.on('MessageReceive', handler);
+
+      const msgPayload = (index: number) => ({
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        platform: 'telegram',
+        channelId: 'chat-1',
+        messageId: `m-${index}`,
+        senderId: `sender-${index}`,
+        senderName: null,
+        text: 'hello',
+        bound: false,
+        wasBound: false,
+        boundAfterRoute: false,
+        attachmentCount: 0,
+        hasAttachment: false,
+        sentAt: Date.now(),
+      });
+
+      for (let i = 0; i < 300; i++) {
+        await bus.emit('MessageReceive', msgPayload(i));
+      }
+      const result = await bus.emitWithResult('MessageReceive', msgPayload(300));
+
+      expect(result).toEqual(expect.objectContaining({ status: 'rate_limited', limit: 300, count: 300 }));
+      expect(handler).toHaveBeenCalledTimes(300);
+    });
+
+    it('prunes expired MessageReceive buckets after the rate window', async () => {
+      jest.useFakeTimers();
+      try {
+        const handler = jest.fn();
+        bus.on('MessageReceive', handler);
+
+        const msgPayload = (index: number) => ({
+          workspaceId: 'test-workspace',
+          timestamp: Date.now(),
+          platform: 'telegram',
+          channelId: 'chat-1',
+          messageId: `m-${index}`,
+          senderId: `sender-${index}`,
+          senderName: null,
+          text: 'hello',
+          bound: false,
+          wasBound: false,
+          boundAfterRoute: false,
+          attachmentCount: 0,
+          hasAttachment: false,
+          sentAt: Date.now(),
+        });
+
+        for (let i = 0; i < 300; i++) {
+          await bus.emit('MessageReceive', msgPayload(i));
+        }
+        await bus.emit('MessageReceive', msgPayload(300));
+        expect(handler).toHaveBeenCalledTimes(300);
+
+        jest.advanceTimersByTime(61_000);
+        await bus.emit('MessageReceive', msgPayload(301));
+
+        expect(handler).toHaveBeenCalledTimes(301);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('should log warning when rate limited', async () => {
       const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
       const handler = jest.fn();

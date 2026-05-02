@@ -25,6 +25,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { CreateSessionOptions } from '@craft-agent/shared/protocol';
 import {
   appendOutputSchemaInstruction,
+  assertValidWorkflowRunId,
   markRunningRunsInterrupted,
   parseStructuredStepOutput,
   readRun,
@@ -36,6 +37,7 @@ import {
   type WorkflowRunStep,
   type WorkflowStepExecutionReceipt,
 } from '@craft-agent/shared/workflows';
+import { OutputService } from '../outputs/OutputService';
 
 /**
  * Runner-event wire format. The bootstrap layer fans these out to the
@@ -45,7 +47,8 @@ import {
 export type WorkflowRunEvent =
   | { type: 'run.created'; run: WorkflowRunSnapshot }
   | { type: 'run.updated'; run: WorkflowRunSnapshot; detail?: WorkflowRunEventDetail }
-  | { type: 'run.completed'; run: WorkflowRunSnapshot };
+  | { type: 'run.completed'; run: WorkflowRunSnapshot }
+  | { type: 'outputs.updated'; workspaceId: string };
 
 export type WorkflowRunEventDetail =
   | {
@@ -103,6 +106,8 @@ export interface WorkflowRunnerDeps {
   abortSession: (sessionId: string) => Promise<void>;
   /** Resolve a workspace ID to its root path on disk. */
   getWorkspaceRootPath: (workspaceId: string) => string;
+  /** Optional override for tests/hosts; default uses OutputService. */
+  createDefaultWorkflowOutput?: (run: WorkflowRunSnapshot) => Promise<WorkflowRunSnapshot> | WorkflowRunSnapshot;
   /** Emit a runner event for renderer subscribers. No-op safe. */
   emit?: (event: WorkflowRunEvent) => void;
 }
@@ -256,6 +261,7 @@ export class WorkflowRunner {
     stepId?: string;
   }): Promise<WorkflowRunSnapshot> {
     const root = this.deps.getWorkspaceRootPath(input.workspaceId);
+    assertValidWorkflowRunId(input.runId);
     const original = readRun(root, input.runId);
     if (!original) throw new Error(`Workflow run not found: ${input.runId}`);
     if (original.workspaceId !== input.workspaceId) {
@@ -292,8 +298,9 @@ export class WorkflowRunner {
       return { id: step.id, state: 'queued', attempts: 0 };
     });
 
+    const runId = randomUUID();
     const snapshot: WorkflowRunSnapshot = {
-      id: randomUUID(),
+      id: runId,
       workflowSlug: original.workflowSlug,
       workspaceId: input.workspaceId,
       state: 'running',
@@ -303,6 +310,7 @@ export class WorkflowRunner {
       createdAt: now,
       updatedAt: now,
       resumeFromStepId: startStep.id,
+      resumedFromRunId: original.id,
     };
 
     const active: ActiveRun = { snapshot, abort: new AbortController(), startIndex };
@@ -316,6 +324,12 @@ export class WorkflowRunner {
       throw err;
     }
 
+    writeRun(root, {
+      ...original,
+      resumedByRunId: runId,
+      updatedAt: now,
+    });
+
     this.emitEvent({ type: 'run.created', run: this.cloneSnapshot(active.snapshot) });
     this.emitEvent({ type: 'run.updated', run: this.cloneSnapshot(active.snapshot) });
     void this.runStepLoop(active);
@@ -325,13 +339,27 @@ export class WorkflowRunner {
 
   /**
    * Cancel a running workflow. Hard-aborts the active step's session if
-   * one is in flight. Idempotent for already-terminal runs.
+   * one is in flight. Throws when the run is missing, not active, or already
+   * terminal so callers can report the actual result.
    */
-  async cancel(workspaceId: string, runId: string): Promise<void> {
+  async cancel(workspaceId: string, runId: string): Promise<WorkflowRunSnapshot> {
+    assertValidWorkflowRunId(runId);
     const active = this.active.get(runId);
-    if (!active) return;
-    if (active.snapshot.workspaceId !== workspaceId) return;
-    if (this.isTerminal(active.snapshot.state)) return;
+    if (!active) {
+      const root = this.deps.getWorkspaceRootPath(workspaceId);
+      const persisted = readRun(root, runId);
+      if (!persisted) throw new Error(`Workflow run not found: ${runId}`);
+      if (this.isTerminal(persisted.state)) {
+        throw new Error(`Workflow run "${runId}" is already ${persisted.state}.`);
+      }
+      throw new Error(`Workflow run "${runId}" is not active and cannot be cancelled.`);
+    }
+    if (active.snapshot.workspaceId !== workspaceId) {
+      throw new Error(`Workflow run "${runId}" does not belong to workspace "${workspaceId}".`);
+    }
+    if (this.isTerminal(active.snapshot.state)) {
+      throw new Error(`Workflow run "${runId}" is already ${active.snapshot.state}.`);
+    }
 
     active.abort.abort();
     active.snapshot.state = 'cancelled';
@@ -355,6 +383,8 @@ export class WorkflowRunner {
         console.error(`[WorkflowRunner] abortSession failed for ${sessionId}:`, err);
       }
     }
+
+    return this.cloneSnapshot(active.snapshot);
   }
 
   /** Active in-memory runs for a workspace. Disk reads use run-storage helpers. */
@@ -497,6 +527,10 @@ export class WorkflowRunner {
     active.snapshot.completedAt = new Date().toISOString();
     this.touch(active);
 
+    if (active.snapshot.state === 'succeeded') {
+      await this.finalizeDefaultOutput(active);
+    }
+
     // Release concurrency slot + active map entry.
     this.releaseActiveRun(active);
 
@@ -539,6 +573,7 @@ export class WorkflowRunner {
         origin: 'workflow',
         summary: `Workflow "${workflow.metadata.name}" step "${stepDef.id}".`,
         workflow: {
+          runId: active.snapshot.id,
           slug: active.snapshot.workflowSlug,
           stepId: stepDef.id,
         },
@@ -716,6 +751,29 @@ export class WorkflowRunner {
   private persist(active: ActiveRun): void {
     const root = this.deps.getWorkspaceRootPath(active.snapshot.workspaceId);
     writeRun(root, active.snapshot);
+  }
+
+  private async finalizeDefaultOutput(active: ActiveRun): Promise<void> {
+    if (active.snapshot.finalOutputId || (active.snapshot.outputIds?.length ?? 0) > 0) return;
+    try {
+      const next = await this.createDefaultWorkflowOutput(active.snapshot);
+      active.snapshot = this.cloneSnapshot(next);
+      this.emitEvent({ type: 'run.updated', run: this.cloneSnapshot(active.snapshot) });
+    } catch (err) {
+      active.snapshot.outputError = err instanceof Error ? err.message : String(err);
+      this.touch(active);
+      // eslint-disable-next-line no-console
+      console.error(`[WorkflowRunner] default output creation failed for run ${active.snapshot.id}:`, err);
+    }
+  }
+
+  private createDefaultWorkflowOutput(run: WorkflowRunSnapshot): Promise<WorkflowRunSnapshot> | WorkflowRunSnapshot {
+    if (this.deps.createDefaultWorkflowOutput) return this.deps.createDefaultWorkflowOutput(run);
+    const service = new OutputService({
+      getWorkspaceRootPath: this.deps.getWorkspaceRootPath,
+      emitOutputsUpdated: (workspaceId) => this.emitEvent({ type: 'outputs.updated', workspaceId }),
+    });
+    return service.createDefaultWorkflowOutput(run);
   }
 
   private failCrashedRun(active: ActiveRun, err: unknown): void {

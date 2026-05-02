@@ -48,6 +48,7 @@ import {
   handleUpdateMemory,
   handleForgetMemory,
 } from './handlers/memory.ts';
+import { handleCreateOutput } from './handlers/outputs.ts';
 import {
   handleListWorkflows,
   handleGetWorkflow,
@@ -292,14 +293,20 @@ const CreateAutomationActionSchema = z.union([
     prompt: z.string().describe('Prompt the spawned session receives. May reference $CRAFT_* env vars (e.g. $CRAFT_BODY, $CRAFT_TEXT).'),
     llmConnection: z.string().optional().describe('LLM connection slug to use for this run.'),
     model: z.string().optional().describe('Model ID override.'),
-    thinkingLevel: z.enum(['high', 'medium', 'low', 'disabled']).optional().describe('Reasoning depth for the run.'),
+    thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional().describe('Reasoning depth for the run.'),
   }).passthrough(),
   z.object({
     type: z.literal('webhook'),
     url: z.string().describe('Outbound URL to POST. May reference $CRAFT_* env vars.'),
-    method: z.string().optional(),
+    method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).optional(),
     headers: z.record(z.string(), z.string()).optional(),
+    bodyFormat: z.enum(['json', 'form', 'raw']).optional(),
     body: z.unknown().optional(),
+    captureResponse: z.boolean().optional(),
+    auth: z.union([
+      z.object({ type: z.literal('basic'), username: z.string(), password: z.string() }),
+      z.object({ type: z.literal('bearer'), token: z.string() }),
+    ]).optional(),
   }).passthrough(),
 ]);
 
@@ -310,7 +317,9 @@ export const CreateAutomationSchema = z.object({
   matcher: z.object({
     name: z.string().optional().describe('Display name for the automation.'),
     slug: z.string().optional().describe('Webhook slug (required for WebhookReceive). 1-64 chars: lowercase letters, digits, hyphens.'),
-    secretEnv: z.string().optional().describe('Env var name holding the webhook shared secret (WebhookReceive).'),
+    secretEnv: z.string().optional().describe('Env var name holding the webhook HMAC shared secret (WebhookReceive). Required unless allowUnauthenticated is true.'),
+    allowUnauthenticated: z.boolean().optional().describe('Explicitly allow unsigned WebhookReceive requests. Only safe for local/dev or trusted networks.'),
+    allowedMethods: z.array(z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])).optional().describe('Allowed HTTP methods for WebhookReceive. Defaults to POST.'),
     cron: z.string().optional().describe('Cron expression in 5-field format (required for SchedulerTick).'),
     timezone: z.string().optional().describe('IANA timezone for cron evaluation (e.g. "America/New_York").'),
     watchPath: z.string().optional().describe('Path to watch (FileWatch).'),
@@ -351,6 +360,50 @@ export const UpdateMemorySchema = z.object({
 export const ForgetMemorySchema = z.object({
   scope: MemoryScopeSchema.optional(),
   name: MemoryNameSchema.describe('Existing memory entry name to delete and tombstone.'),
+});
+
+const OutputKindSchema = z.enum([
+  'report',
+  'document',
+  'image',
+  'video',
+  'audio',
+  'dataset',
+  'code',
+  'receipt',
+  'external-action',
+  'collection',
+  'other',
+]).describe('The type of deliverable being published.');
+
+const OutputAssetRoleSchema = z.enum(['primary', 'supporting', 'source', 'thumbnail', 'attachment']);
+
+export const CreateOutputSchema = z.object({
+  title: z.string().min(1).describe('Human-readable output title.'),
+  kind: OutputKindSchema,
+  summary: z.string().min(1).describe('Short summary shown in output lists and cards.'),
+  content: z.string().optional().describe('Inline output content to persist as the primary asset.'),
+  contentMimeType: z.enum(['text/markdown', 'text/plain', 'application/json']).optional().describe('MIME type for inline content. Defaults backend-side when omitted.'),
+  files: z.array(z.object({
+    path: z.string().min(1).describe('Path to a file that should be attached to this output.'),
+    label: z.string().optional(),
+    role: OutputAssetRoleSchema.optional(),
+  })).optional(),
+  links: z.array(z.object({
+    label: z.string().min(1),
+    url: z.string().url(),
+    role: z.enum(['primary', 'source', 'related', 'external']).optional(),
+  })).optional(),
+  receipts: z.array(z.object({
+    provider: z.string().min(1),
+    action: z.string().min(1),
+    status: z.enum(['succeeded', 'failed', 'pending']),
+    externalId: z.string().optional(),
+    url: z.string().url().optional(),
+    displayText: z.string().optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })).optional(),
+  tags: z.array(z.string()).optional(),
 });
 
 // ============================================================
@@ -666,14 +719,14 @@ Use this only after walking the user through the automation-creator interview an
 
 **Trigger types:**
 - \`SchedulerTick\` — cron-based. Required: \`matcher.cron\` (5-field). Optional: \`matcher.timezone\`.
-- \`WebhookReceive\` — inbound HTTP. Required: \`matcher.slug\` (kebab-case). Optional: \`matcher.secretEnv\`, \`matcher.allowedMethods\`.
+- \`WebhookReceive\` — inbound HTTP. Required: \`matcher.slug\` (kebab-case), plus \`matcher.secretEnv\` unless \`matcher.allowUnauthenticated: true\` is explicitly set. Optional: \`matcher.allowedMethods\`.
 - \`FileWatch\` — filesystem changes. Required: \`matcher.watchPath\`. Optional: \`matcher.watchGlob\`, \`matcher.watchChangeTypes\`.
 - \`PollUrl\` — periodic URL polling. Required: \`matcher.pollUrl\`, \`matcher.pollIntervalSec\` (min 30).
 - \`MessageReceive\` — inbound chat from a messaging gateway (Telegram/WhatsApp).
 
 **Actions** (at least one required in \`matcher.actions\`):
-- \`{ type: 'prompt', prompt, llmConnection?, model?, thinkingLevel? }\` — spawns a session with the rendered prompt.
-- \`{ type: 'webhook', url, method?, headers?, body? }\` — sends an outbound HTTP request.
+- \`{ type: 'prompt', prompt, llmConnection?, model?, thinkingLevel? }\` — spawns a session with the rendered prompt. \`thinkingLevel\`: \`off\`, \`low\`, \`medium\`, \`high\`, \`xhigh\`, or \`max\`.
+- \`{ type: 'webhook', url, method?, headers?, bodyFormat?, body?, captureResponse?, auth? }\` — sends an outbound HTTP request.
 
 **Templating:** Action prompts and URLs use **shell-style \`$VAR\` / \`\${VAR}\` env-var expansion** (NOT mustache/handlebars). The trigger payload is exposed as \`CRAFT_*\` env vars:
 - Always available: \`$CRAFT_EVENT\`, \`$CRAFT_EVENT_DATA\` (full JSON), \`$CRAFT_SESSION_ID\`, \`$CRAFT_WORKSPACE_ID\`.
@@ -682,7 +735,7 @@ Use this only after walking the user through the automation-creator interview an
   - \`WebhookReceive\` → \`$CRAFT_BODY\`, \`$CRAFT_HEADER_<KEY>\`, \`$CRAFT_QUERY_<KEY>\`
   - \`FileWatch\` → \`$CRAFT_RELATIVE_PATH\`, \`$CRAFT_CHANGE_TYPE\`
   - \`PollUrl\` → response fields exposed as \`$CRAFT_*\` (check \`$CRAFT_EVENT_DATA\` for the full payload)
-  - \`MessageReceive\` → \`$CRAFT_FROM\`, \`$CRAFT_TEXT\`, \`$CRAFT_PLATFORM\`
+  - \`MessageReceive\` → \`$CRAFT_TEXT\`, \`$CRAFT_PLATFORM\`, \`$CRAFT_CHANNEL_ID\`, \`$CRAFT_MESSAGE_ID\`, \`$CRAFT_SENDER_ID\`, \`$CRAFT_SENDER_NAME\`, \`$CRAFT_BOUND\`, \`$CRAFT_WAS_BOUND\`, \`$CRAFT_BOUND_AFTER_ROUTE\`, \`$CRAFT_ATTACHMENT_COUNT\`, \`$CRAFT_HAS_ATTACHMENT\`
 
 **Refusals:**
 - Unsupported \`eventName\`.
@@ -722,6 +775,14 @@ Do NOT use this for ephemeral conversation updates, information already in code/
 Use this when the user asks you to forget something, when a memory is wrong and should not be retained, or when a fact is no longer useful. Prefer \`update_memory\` when the fact is still useful but needs correction.
 
 Do NOT use this for normal short-term context cleanup; only durable memory entries should be forgotten.`,
+
+  create_output: `Publish a first-class user-facing output from this session.
+
+Use this when you have produced a durable deliverable or external-action receipt that the user should find later from the Outputs area instead of hunting through chat.
+
+Good outputs include research reports, generated media, exported datasets, code review reports, deployment receipts, published-post receipts, sent-message receipts, and final workflow deliverables.
+
+Do NOT use this for ordinary chat replies, scratch notes, temporary plans, or files that are not intended as final deliverables. Prefer one concise primary output over dumping every intermediate artifact.`,
 } as const;
 
 // ============================================================
@@ -809,6 +870,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'save_memory', description: TOOL_DESCRIPTIONS.save_memory, inputSchema: SaveMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleSaveMemory },
   { name: 'update_memory', description: TOOL_DESCRIPTIONS.update_memory, inputSchema: UpdateMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdateMemory },
   { name: 'forget_memory', description: TOOL_DESCRIPTIONS.forget_memory, inputSchema: ForgetMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleForgetMemory },
+  { name: 'create_output', description: TOOL_DESCRIPTIONS.create_output, inputSchema: CreateOutputSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateOutput },
 ];
 
 export interface SessionToolFilterOptions {

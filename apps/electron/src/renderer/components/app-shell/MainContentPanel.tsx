@@ -33,6 +33,7 @@ import {
   isAgentsNavigation,
   isAutomationsNavigation,
   isWorkspaceContextNavigation,
+  isOutputsNavigation,
 } from '@/contexts/NavigationContext'
 import { isWorkflowsNavigation, isWorkflowRunNavigation } from '../../../shared/types'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
@@ -48,6 +49,7 @@ import WorkflowInfoPage from '@/pages/WorkflowInfoPage'
 import WorkflowEditPage from '@/pages/WorkflowEditPage'
 import WorkflowRunPage from '@/pages/WorkflowRunPage'
 import RecentRunsPage from '@/pages/RecentRunsPage'
+import OutputDetailPage from '@/pages/OutputDetailPage'
 import { AgentsLaunchpad } from './AgentsLaunchpad'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { AutomationInfoPage } from '../automations/AutomationInfoPage'
@@ -385,6 +387,14 @@ export function MainContentPanel({
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <WorkflowRunPage runId={navState.runId} workspaceId={activeWorkspaceId || ''} />
+      </Panel>
+    )
+  }
+
+  if (isOutputsNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <OutputDetailPage outputId={navState.outputId} workspaceId={activeWorkspaceId || ''} />
       </Panel>
     )
   }
