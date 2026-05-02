@@ -39,6 +39,7 @@ import { handleSetSessionStatus } from './handlers/set-session-status.ts';
 import { handleGetSessionInfo } from './handlers/get-session-info.ts';
 import { handleListSessions } from './handlers/list-sessions.ts';
 import { handleListAgents } from './handlers/list-agents.ts';
+import { handleListSkills } from './handlers/list-skills.ts';
 import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
 import { handleListMessagingChannels, handleUnbindMessagingChannel } from './handlers/messaging.ts';
 import { handleCreateAgent } from './handlers/create-agent.ts';
@@ -223,6 +224,12 @@ export const ListAgentsSchema = z.object({
   activeOnly: z.boolean().optional().describe('If true, return only agents active in the current workspace. Defaults to false.'),
   search: z.string().optional().describe('Optional case-insensitive search across slug, name, description, tags, inputs, and outputs.'),
   tags: z.array(z.string()).optional().describe('Optional capability tags to require. Matching is case-insensitive.'),
+});
+
+export const ListSkillsSchema = z.object({
+  activeOnly: z.boolean().optional().describe('If true, return only skills currently active in this workspace (workspace + activated globals + project). Defaults to false, which also includes dormant skills from the global library.'),
+  search: z.string().optional().describe('Optional case-insensitive search across slug, name, description, and tags.'),
+  tags: z.array(z.string()).optional().describe('Optional tags to require (intersection — skill must have all). Case-insensitive.'),
 });
 
 export const ListWorkflowsSchema = z.object({
@@ -662,6 +669,18 @@ Use this before recommending which agent should handle a task. It returns each a
 
 Prefer this over filesystem searches for AGENT.md files. For normal routing questions, call with activeOnly=true so recommendations come from the user's active workspace agents.`,
 
+  list_skills: `List skills available in this workspace.
+
+Use this before bundling skills into a new agent (via agent-creator) or recommending skills for the user to activate.
+
+Each result includes slug, name, description, tags, and a 'source' field:
+  - 'workspace'      → workspace-defined skill (overrides any global with same slug)
+  - 'global'         → global library skill that is currently activated in this workspace
+  - 'project'        → project-level skill from the current working directory
+  - 'global-dormant' → global library skill NOT activated in this workspace; can be suggested for activation but cannot be referenced as a bundled slug yet
+
+For agent creation, prefer activeOnly=true (workspace + activated globals + project). When the user wants help discovering skills they don't yet have, call without activeOnly to also see global-dormant entries.`,
+
   list_workflows: `List workflows available to this workspace. Returns active status, trigger inputs, and step summaries.
 
 Use this before recommending or starting a workflow. For normal user-facing suggestions, call with activeOnly=true.`,
@@ -871,6 +890,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'get_session_info', description: TOOL_DESCRIPTIONS.get_session_info, inputSchema: GetSessionInfoSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetSessionInfo },
   { name: 'list_sessions', description: TOOL_DESCRIPTIONS.list_sessions, inputSchema: ListSessionsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSessions },
   { name: 'list_agents', description: TOOL_DESCRIPTIONS.list_agents, inputSchema: ListAgentsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListAgents },
+  { name: 'list_skills', description: TOOL_DESCRIPTIONS.list_skills, inputSchema: ListSkillsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSkills },
   { name: 'list_workflows', description: TOOL_DESCRIPTIONS.list_workflows, inputSchema: ListWorkflowsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListWorkflows },
   { name: 'get_workflow', description: TOOL_DESCRIPTIONS.get_workflow, inputSchema: GetWorkflowSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetWorkflow },
   { name: 'start_workflow', description: TOOL_DESCRIPTIONS.start_workflow, inputSchema: StartWorkflowSchema, executionMode: 'registry', safeMode: 'block', handler: handleStartWorkflow },

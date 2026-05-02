@@ -69,6 +69,14 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'listSkills', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.listSkillsFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'listWorkflows', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.listWorkflowsFn;

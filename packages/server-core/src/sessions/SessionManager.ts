@@ -85,7 +85,7 @@ import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/share
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, type CreateSessionOptions, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
 import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
-import { loadAllSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
+import { loadAllSkills, loadGlobalSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
@@ -4355,6 +4355,65 @@ export class SessionManager implements ISessionManager {
             total: agents.length,
             returned: agents.length,
             agents,
+          }
+        },
+        listSkillsFn: (options) => {
+          // Active set = workspace skills + activated globals + project skills
+          // (everything loadAllSkills returns). Dormant globals are sourced
+          // from loadGlobalSkills() and only included when activeOnly !== true.
+          const activeSkills = loadAllSkills(managed.workspace.rootPath, managed.workingDirectory)
+          const activeBySlug = new Map(activeSkills.map((s) => [s.slug, s]))
+
+          let items: Array<import('@craft-agent/session-tools-core').SkillListItem> = activeSkills.map((s) => ({
+            slug: s.slug,
+            name: s.metadata.name,
+            description: s.metadata.description,
+            source: s.source,
+            active: true,
+            category: s.metadata.category,
+            tags: s.metadata.tags ?? [],
+            requiredSources: s.metadata.requiredSources,
+          }))
+
+          if (!options?.activeOnly) {
+            for (const g of loadGlobalSkills()) {
+              if (activeBySlug.has(g.slug)) continue
+              items.push({
+                slug: g.slug,
+                name: g.metadata.name,
+                description: g.metadata.description,
+                source: 'global-dormant',
+                active: false,
+                category: g.metadata.category,
+                tags: g.metadata.tags ?? [],
+                requiredSources: g.metadata.requiredSources,
+              })
+            }
+          }
+
+          if (options?.tags?.length) {
+            const wanted = options.tags.map((tag) => tag.toLowerCase())
+            items = items.filter((item) => {
+              const tags = new Set(item.tags.map((tag) => tag.toLowerCase()))
+              return wanted.every((tag) => tags.has(tag))
+            })
+          }
+          if (options?.search?.trim()) {
+            const needle = options.search.trim().toLowerCase()
+            items = items.filter((item) => [
+              item.slug,
+              item.name,
+              item.description,
+              item.tags.join(' '),
+            ].join(' ').toLowerCase().includes(needle))
+          }
+
+          // Active first, then alphabetical by name within each group.
+          items.sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name))
+          return {
+            total: items.length,
+            returned: items.length,
+            skills: items,
           }
         },
         listWorkflowsFn: (options) => {

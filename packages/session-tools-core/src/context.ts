@@ -325,6 +325,9 @@ export interface SessionToolContext {
   /** List saved agents available to this workspace. Injected by backend. */
   listAgents?(options?: ListAgentsOptions): ListAgentsResult;
 
+  /** List skills (workspace-activated and dormant in global library). Injected by backend. */
+  listSkills?(options?: ListSkillsOptions): ListSkillsResult;
+
   /** List workflows available to this workspace. Injected by backend. */
   listWorkflows?(options?: ListWorkflowsOptions): ListWorkflowsResult;
 
@@ -547,6 +550,37 @@ export interface ListAgentsResult {
   total: number;
   returned: number;
   agents: AgentListItem[];
+}
+
+/** Compact skill summary (returned by list_skills). */
+export interface SkillListItem {
+  slug: string;
+  name: string;
+  description: string;
+  /** Where the skill currently lives: 'workspace' (workspace-overridden), 'global' (activated from library), 'project' (project-level), or 'global-dormant' (in library but not activated in this workspace). */
+  source: 'workspace' | 'global' | 'project' | 'global-dormant';
+  /** True iff the skill is loaded for this workspace (workspace, project, or activated global). False only for global-dormant. */
+  active: boolean;
+  category?: string;
+  tags: string[];
+  requiredSources?: string[];
+}
+
+/** Options for list_skills filtering. */
+export interface ListSkillsOptions {
+  /** Only return skills currently active in this workspace (workspace + activated globals + project). */
+  activeOnly?: boolean;
+  /** Substring match across slug/name/description/tags. */
+  search?: string;
+  /** Filter by tag (intersection — skill must have all). */
+  tags?: string[];
+}
+
+/** Result from list_skills. */
+export interface ListSkillsResult {
+  total: number;
+  returned: number;
+  skills: SkillListItem[];
 }
 
 /** Compact workflow summary (returned by list_workflows). */
