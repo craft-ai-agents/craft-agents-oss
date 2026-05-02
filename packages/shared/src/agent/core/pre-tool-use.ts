@@ -664,6 +664,21 @@ const BUILT_IN_MCP_SERVERS = new Set(['session', 'craft-agents-docs']);
 const FILE_WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 
 /**
+ * Session self-management tools that only mutate the current session's
+ * own metadata (status, labels). They have no external side effects and
+ * must never prompt in ask mode — otherwise headless / webhook-dispatched
+ * sessions hang indefinitely waiting for a UI approval that will never
+ * arrive.
+ *
+ * Keep this list narrow: tools with any external side effect (terminal_exec,
+ * inter-session messaging, source activation, file writes) belong elsewhere.
+ */
+const SESSION_METADATA_MUTATION_TOOLS = new Set([
+  'mcp__session__set_session_status',
+  'mcp__session__set_session_labels',
+]);
+
+/**
  * Centralized PreToolUse pipeline.
  *
  * Synchronous except for the final result — all async work (source activation,
@@ -1067,6 +1082,13 @@ export function shouldPromptInAskMode(
       toolName, input, 'safe', { plansFolderPath }
     );
     if (!safeModeResult.allowed) {
+      // Session self-management mutations only touch this session's own
+      // metadata; auto-allow so headless / webhook-dispatched sessions don't
+      // deadlock waiting on a UI prompt.
+      if (SESSION_METADATA_MUTATION_TOOLS.has(toolName)) {
+        onDebug?.(`Auto-allowing session self-management mutation "${toolName}"`);
+        return null;
+      }
       // It's a mutation — check whitelist
       if (permissionManager.isCommandWhitelisted(toolName)) {
         onDebug?.(`Auto-allowing "${toolName}" (previously approved)`);

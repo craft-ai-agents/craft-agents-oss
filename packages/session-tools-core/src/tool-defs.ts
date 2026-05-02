@@ -456,7 +456,7 @@ Use this to share anything that would help improve the product — issues you hi
 Use this to tag sessions for filtering or to trigger label-based automations (LabelAdd/LabelRemove events).
 Pass an empty array to clear all labels. Omit sessionId to target the current session.`,
 
-  set_session_status: `Set the status of the current session or a specific session by ID (e.g., "todo", "in_progress", "done").
+  set_session_status: `Set the status of the current session or a specific session by ID. Statuses are workspace-configured — call get_session_info to see the current session's status (which is always a valid ID), or use list_sessions to spot status IDs in use. If you pass an unknown value, the tool returns the available IDs so you can retry.
 
 Use this to signal completion or trigger status-based automations (SessionStatusChange events).
 Omit sessionId to target the current session.`,
