@@ -686,6 +686,7 @@ app.whenReady().then(async () => {
                   // When sessionId is not in the automation payload (e.g. UserPromptSubmit),
                   // try to find the active session for the workspace from the session manager.
                   // This ensures sounds play from the correct session pack instead of default.
+                  // try to find the active session from the session manager.
                   const sid = sessionId ?? (() => {
                     try {
                       const sessions = sessionManager?.getSessions() ?? []

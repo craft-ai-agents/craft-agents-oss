@@ -73,8 +73,11 @@ const PLAYER_HTML = `<!DOCTYPE html>
 (function() {
   const { ipcRenderer } = require('electron');
 
-  let currentAudio = null;
-  let currentUrl = null;
+  // Web Audio API — pre-decodes audio for zero-startup-latency playback.
+  // AudioContext is created eagerly so the OS audio endpoint is warmed up.
+  let audioCtx = null;
+  let currentSource = null;
+  let masterGain = null;
   let masterVolume = 0.8;
   const status = document.getElementById('status');
 
@@ -83,67 +86,98 @@ const PLAYER_HTML = `<!DOCTYPE html>
     console.log('[SoundPlayer]', msg);
   }
 
-  function getMimeType(ext) {
-    switch (ext) {
-      case '.mp3': return 'audio/mpeg';
-      case '.ogg': return 'audio/ogg';
-      case '.oga': return 'audio/ogg';
-      case '.wav': return 'audio/wav';
-      default: return 'audio/mpeg';
+  // Ensure AudioContext is created and resumed (required after user gesture
+  // policies in some Chromium versions, though Electron is usually lenient).
+  function ensureAudioContext() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = audioCtx.createGain();
+      masterGain.connect(audioCtx.destination);
+      masterGain.gain.value = masterVolume;
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    return audioCtx;
+  }
+
+  // Sound queue — when a sound is requested while another is playing,
+  // it gets queued and played after the current sound finishes + 1s gap.
+  var soundQueue = [];
+  var isPlaying = false;
+
+  function playNextInQueue() {
+    if (soundQueue.length === 0) {
+      isPlaying = false;
+      setStatus('Queue empty');
+      return;
+    }
+    var next = soundQueue.shift();
+    isPlaying = true;
+    startPlayback(next.data, next.volume, next.ext);
+  }
+
+  function startPlayback(data, volume, ext) {
+    try {
+      var ctx = ensureAudioContext();
+
+      ctx.decodeAudioData(data.buffer.slice(0), function(audioBuffer) {
+        setStatus('Decoded ' + audioBuffer.duration.toFixed(2) + 's, playing');
+
+        var source = ctx.createBufferSource();
+        source.buffer = audioBuffer;
+
+        var gainNode = ctx.createGain();
+        gainNode.gain.value = volume;
+        source.connect(gainNode);
+        gainNode.connect(masterGain);
+
+        source.onended = function() {
+          if (currentSource === source) currentSource = null;
+          setStatus('Playback ended' + (soundQueue.length > 0 ? ', waiting 1s before next...' : ''));
+          // Wait 1 second before playing the next queued sound
+          if (soundQueue.length > 0) {
+            setTimeout(playNextInQueue, 1000);
+          } else {
+            isPlaying = false;
+          }
+        };
+
+        source.start(0);
+        currentSource = source;
+        setStatus('Playback started');
+      }, function(err) {
+        setStatus('Decode error: ' + (err && err.message ? err.message : String(err)));
+        // Still try next in queue on error
+        if (soundQueue.length > 0) {
+          setTimeout(playNextInQueue, 1000);
+        } else {
+          isPlaying = false;
+        }
+      });
+    } catch (err) {
+      setStatus('startPlayback() error: ' + (err.message || String(err)));
+      if (soundQueue.length > 0) {
+        setTimeout(playNextInQueue, 1000);
+      } else {
+        isPlaying = false;
+      }
     }
   }
 
   function playSound(data, volume, ext) {
     try {
-      setStatus('Received ' + data.length + ' bytes, ext=' + ext);
+      setStatus('Received ' + data.length + ' bytes, ext=' + ext + ' playing=' + isPlaying + ' queue=' + soundQueue.length);
 
-      // Stop previous audio
-      if (currentAudio) {
-        currentAudio.pause();
-        currentAudio = null;
-      }
-      if (currentUrl) {
-        URL.revokeObjectURL(currentUrl);
-        currentUrl = null;
+      if (isPlaying) {
+        // Already playing — queue this sound for after current finishes + 1s gap
+        soundQueue.push({ data: data, volume: volume, ext: ext });
+        setStatus('Queued sound #' + soundQueue.length);
+        return;
       }
 
-      const mimeType = getMimeType(ext || '');
-      const blob = new Blob([data], { type: mimeType });
-      currentUrl = URL.createObjectURL(blob);
-      const audio = new Audio(currentUrl);
-      audio.volume = volume * masterVolume;
-      setStatus('Created Audio(' + mimeType + ') vol=' + audio.volume);
-
-      audio.onended = function() {
-        URL.revokeObjectURL(currentUrl);
-        currentAudio = null; currentUrl = null;
-        setStatus('Playback ended');
-      };
-
-      audio.onerror = function() {
-        URL.revokeObjectURL(currentUrl);
-        currentAudio = null; currentUrl = null;
-        setStatus('Playback error: ' + (audio.error ? audio.error.message : 'unknown'));
-      };
-
-      audio.oncanplay = function() {
-        setStatus('Can play — starting playback');
-      };
-
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.then(function() {
-          setStatus('Playback started successfully');
-        }).catch(function(err) {
-          setStatus('PLAY PROMISE REJECTED: ' + (err.message || String(err)));
-          URL.revokeObjectURL(currentUrl);
-          currentAudio = null; currentUrl = null;
-        });
-      } else {
-        setStatus('play() returned undefined (old API?)');
-      }
-
-      currentAudio = audio;
+      isPlaying = true;
+      startPlayback(data, volume, ext);
     } catch (err) {
       setStatus('playSound() JS error: ' + (err.message || String(err)));
     }
@@ -151,7 +185,7 @@ const PLAYER_HTML = `<!DOCTYPE html>
 
   function setVolume(v) {
     masterVolume = Math.max(0, Math.min(1, v));
-    if (currentAudio) currentAudio.volume = masterVolume;
+    if (masterGain) masterGain.gain.value = masterVolume;
     setStatus('Volume set to ' + masterVolume);
   }
 
@@ -165,8 +199,11 @@ const PLAYER_HTML = `<!DOCTYPE html>
     setVolume(v);
   });
 
+  // Eagerly create AudioContext so the OS audio pipeline is warm
+  ensureAudioContext();
+
   // Signal ready
-  setStatus('Ready');
+  setStatus('Ready (Web Audio)');
   ipcRenderer.send('sound:ready');
 })();
 </script>
@@ -193,11 +230,6 @@ export class SoundEngine {
   // Per-session active pack
   private sessionPacks = new Map<string, string>()
 
-  // Tracks whether init() has completed (packs discovered, player window created)
-  private initialized = false
-  // Queue of play requests made before init() completed
-  private pendingInitPlays: Array<{ category: CespCategory; sessionId?: string }> = []
-
   constructor() {}
 
   // -----------------------------------------------------------------------
@@ -223,17 +255,7 @@ export class SoundEngine {
 
     await this.createPlayerWindow()
 
-    this.initialized = true
     console.info(`[sound] === Initialized with ${this.packs.size} packs: ${[...this.packs.keys()].join(', ')} ===`)
-
-    // Drain any play requests that were queued before init completed
-    if (this.pendingInitPlays.length > 0) {
-      console.info(`[sound] Draining ${this.pendingInitPlays.length} queued play requests`)
-      for (const { category, sessionId } of this.pendingInitPlays) {
-        this.play(category, sessionId).catch(() => {})
-      }
-      this.pendingInitPlays = []
-    }
   }
 
   private async createPlayerWindow(): Promise<void> {
@@ -420,14 +442,6 @@ export class SoundEngine {
   async play(category: CespCategory, sessionId?: string): Promise<void> {
     console.info(`[sound] === play() called: category=${category} sessionId=${sessionId} ===`)
 
-    // If init() hasn't completed yet (packs not discovered), queue the request
-    // instead of silently dropping it.
-    if (!this.initialized) {
-      console.info(`[sound] Not yet initialized, queuing ${category} for later`)
-      this.pendingInitPlays.push({ category, sessionId })
-      return
-    }
-
     if (!this.settings.enabled) {
       console.info('[sound] Skipped: sound notifications disabled globally')
       return
@@ -469,7 +483,6 @@ export class SoundEngine {
     const categoryDef = resolveCategory(pack.manifest, category)
     if (!categoryDef || categoryDef.sounds.length === 0) {
       // If the active pack doesn't have this category, try falling back to the default pack
-      // This handles cases where custom packs don't include extended categories like session.end
       if (pack.name !== 'default') {
         const defaultPack = this.packs.get('default')
         if (defaultPack) {
