@@ -104,7 +104,7 @@ export function SessionMenu({
   const isArchived = item.isArchived ?? false
   const sharedUrl = item.sharedUrl
   const currentSessionStatus = getSessionStatus(item)
-  const sessionLabels = item.labels ?? []
+  const sessionLabels = React.useMemo(() => item.labels ?? [], [item.labels])
   const _hasMessages = hasMessagesMeta(item)
   const _hasUnread = hasUnreadMeta(item)
   // Share handlers

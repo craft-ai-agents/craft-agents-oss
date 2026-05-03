@@ -101,7 +101,7 @@ function CrossfadeAvatar({
       // Image is already cached/loaded
       setIsLoaded(true)
     }
-  }, [src])
+  }, [])
 
   return (
     <div

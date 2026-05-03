@@ -10,7 +10,7 @@
  */
 
 import * as React from 'react'
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Cloud, CloudOff, Monitor, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -71,7 +71,10 @@ export function SendResourceToWorkspaceDialog({
   const healthCheckAbort = useRef<AbortController | null>(null)
 
   // All workspaces except current (both local and remote)
-  const targetWorkspaces = workspaces.filter(w => w.id !== activeWorkspaceId)
+  const targetWorkspaces = useMemo(
+    () => workspaces.filter(w => w.id !== activeWorkspaceId),
+    [workspaces, activeWorkspaceId],
+  )
 
   // Health-check remote workspaces when dialog opens
   useEffect(() => {
@@ -108,7 +111,7 @@ export function SendResourceToWorkspaceDialog({
     }
 
     return () => abort.abort()
-  }, [open, targetWorkspaces.map(w => w.id).join(',')])
+  }, [open, targetWorkspaces])
 
   const handleSend = useCallback(async () => {
     if (!selectedWorkspaceId || !activeWorkspaceId || resourceIds.length === 0) return

@@ -222,7 +222,6 @@ export function getSessionScopedTools(
   const cacheKey = `${sessionId}::${workspaceRootPath}`;
 
   // Return cached tools if available, but always create a fresh MCP server wrapper
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let tools: any[] | undefined = sessionToolsCache.get(cacheKey);
   if (!tools) {
     // Create Claude context with full capabilities
@@ -247,7 +246,6 @@ export function getSessionScopedTools(
     // Helper to create a tool from the canonical registry.
     // The `as any` on schema bridges a Zod generic-variance issue when .shape
     // types (ZodType<string>) flow into Record<string, ZodType<unknown>>.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     function registryTool(name: string, schema: any) {
       const def = SESSION_TOOL_REGISTRY.get(name)!;
       return tool(name, TOOL_DESCRIPTIONS[name] || def.description, schema, async (args: any) => {

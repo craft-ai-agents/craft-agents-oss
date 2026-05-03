@@ -51,7 +51,7 @@ export function useDirectoryPicker(
         description: message,
       })
     }
-  }, [isRemote, onSelect])
+  }, [isRemote, onSelect, t])
 
   const cancelServerBrowser = useCallback(() => {
     setShowServerBrowser(false)

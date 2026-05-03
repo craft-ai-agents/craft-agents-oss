@@ -20,7 +20,6 @@ let initialized = false;
  * (e.g. initReactI18next for React apps, LanguageDetector for browser apps).
  */
 export function setupI18n(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   plugins: any[] = [],
 ): I18nInstance {
   if (initialized) return i18n;

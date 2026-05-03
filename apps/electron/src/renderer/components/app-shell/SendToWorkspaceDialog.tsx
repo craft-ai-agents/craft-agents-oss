@@ -12,7 +12,7 @@
 
 import * as React from 'react'
 import { useTranslation } from "react-i18next"
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Cloud, CloudOff, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -78,7 +78,10 @@ export function SendToWorkspaceDialog({
   const healthCheckAbort = useRef<AbortController | null>(null)
 
   // Only show remote workspaces (local-to-local is pointless)
-  const remoteWorkspaces = workspaces.filter(w => w.id !== activeWorkspaceId && w.remoteServer)
+  const remoteWorkspaces = useMemo(
+    () => workspaces.filter(w => w.id !== activeWorkspaceId && w.remoteServer),
+    [workspaces, activeWorkspaceId],
+  )
 
   // Check connectivity for all remote workspaces when dialog opens
   useEffect(() => {
@@ -115,7 +118,7 @@ export function SendToWorkspaceDialog({
     }
 
     return () => abort.abort()
-  }, [open, remoteWorkspaces.map(w => w.id).join(',')])
+  }, [open, remoteWorkspaces])
 
   const handleTransfer = useCallback(async () => {
     if (!selectedWorkspaceId || sessionIds.length === 0) return
@@ -158,7 +161,7 @@ export function SendToWorkspaceDialog({
     } finally {
       setIsTransferring(false)
     }
-  }, [selectedWorkspaceId, sessionIds, workspaces, onOpenChange, onTransferComplete])
+  }, [selectedWorkspaceId, sessionIds, workspaces, onOpenChange, onTransferComplete, t])
 
   const count = sessionIds.length
 

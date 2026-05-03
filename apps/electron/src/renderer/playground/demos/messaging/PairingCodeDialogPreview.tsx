@@ -40,7 +40,6 @@ export function PairingCodeDialogPreview({
   const expiresAt = React.useMemo(() => {
     if (expiresInSeconds < 0) return null
     return Date.now() + expiresInSeconds * 1000
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expiresInSeconds])
 
   return (

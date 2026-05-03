@@ -197,7 +197,7 @@ export function useOutputs(workspaceId: string | null | undefined): UseOutputsRe
 
     inFlightRefreshes.set(workspaceKey, run)
     return run
-  }, [available, setState, workspaceId, workspaceKey])
+  }, [electronAPI, setState, workspaceId, workspaceKey])
 
   useEffect(() => {
     setStateByWorkspaceKey.set(workspaceKey, setState)
@@ -236,7 +236,7 @@ export function useOutputs(workspaceId: string | null | undefined): UseOutputsRe
         globalOutputsCleanup = null
       }
     }
-  }, [workspaceKey])
+  }, [electronAPI, workspaceKey])
 
   const getOutput = useCallback(async (outputId: string): Promise<OutputManifestDTO | null> => {
     if (!workspaceId || typeof electronAPI.getOutput !== 'function') return null

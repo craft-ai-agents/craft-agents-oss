@@ -34,7 +34,6 @@ async function resolveUniqueSlug(baseName: string): Promise<{ slug: string; path
   let slug = baseSlug
   let attempt = 0
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const result = await window.electronAPI.checkWorkspaceSlug(slug)
     if (!result.exists) {

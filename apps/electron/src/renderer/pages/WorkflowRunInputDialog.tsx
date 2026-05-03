@@ -28,7 +28,7 @@ export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspace
   const { t } = useTranslation()
   const { navigate } = useNavigation()
   const { start } = useWorkflowRuns(workspaceId)
-  const inputs = workflow.metadata.trigger.inputs ?? []
+  const inputs = React.useMemo(() => workflow.metadata.trigger.inputs ?? [], [workflow.metadata.trigger.inputs])
 
   const buildInitialFormValues = React.useCallback(() => {
     const values: Record<string, string | number | boolean> = {}

@@ -133,14 +133,14 @@ export function useAutomations(
     ).catch(() => {
       toast.error(t('toast.failedToToggleAutomation'))
     })
-  }, [findAutomation, activeWorkspaceId])
+  }, [findAutomation, activeWorkspaceId, t])
 
   const handleDuplicateAutomation = useCallback((automationId: string) => {
     const automation = findAutomation(automationId)
     if (!automation || !activeWorkspaceId) return
     window.electronAPI.duplicateAutomation(activeWorkspaceId, automation.event, automation.matcherIndex)
       .catch(() => toast.error(t('toast.failedToDuplicateAutomation')))
-  }, [findAutomation, activeWorkspaceId])
+  }, [findAutomation, activeWorkspaceId, t])
 
   // Delete: show confirmation dialog
   const handleDeleteAutomation = useCallback((automationId: string) => {
@@ -154,7 +154,7 @@ export function useAutomations(
     window.electronAPI.deleteAutomation(activeWorkspaceId, pendingDeleteAutomation.event, pendingDeleteAutomation.matcherIndex)
       .catch(() => toast.error(t('toast.failedToDeleteAutomation')))
     setAutomationPendingDelete(null)
-  }, [pendingDeleteAutomation, activeWorkspaceId])
+  }, [pendingDeleteAutomation, activeWorkspaceId, t])
 
   // Fetch execution history for a specific automation
   const getAutomationHistory = useCallback(async (automationId: string): Promise<ExecutionEntry[]> => {
@@ -199,7 +199,7 @@ export function useAutomations(
       .catch((err: Error) => {
         toast.error(t("toast.replayFailed", { error: err.message }))
       })
-  }, [activeWorkspaceId])
+  }, [activeWorkspaceId, t])
 
   return {
     automations,

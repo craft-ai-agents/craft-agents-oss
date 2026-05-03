@@ -8,7 +8,7 @@
  * Used by settings pages that display workspace icons.
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import type { Workspace } from '../../shared/types'
 
 // Module-level cache to avoid redundant fetches across component instances
@@ -26,83 +26,86 @@ const iconCache = new Map<string, { dataUrl: string; sourceUrl: string }>()
  * @returns Data URL or remote URL for the icon, or undefined
  */
 export function useWorkspaceIcon(workspace: Workspace | undefined): string | undefined {
+  const workspaceId = workspace?.id
+  const workspaceIconUrl = workspace?.iconUrl
+
   const [iconUrl, setIconUrl] = useState<string | undefined>(() => {
-    if (!workspace?.iconUrl) return undefined
+    if (!workspaceId || !workspaceIconUrl) return undefined
 
     // Remote URLs can be used directly
-    if (workspace.iconUrl.startsWith('http://') || workspace.iconUrl.startsWith('https://')) {
-      return workspace.iconUrl
+    if (workspaceIconUrl.startsWith('http://') || workspaceIconUrl.startsWith('https://')) {
+      return workspaceIconUrl
     }
 
     // Check cache for file:// URLs
-    const cached = iconCache.get(workspace.id)
-    if (cached && cached.sourceUrl === workspace.iconUrl) {
+    const cached = iconCache.get(workspaceId)
+    if (cached && cached.sourceUrl === workspaceIconUrl) {
       return cached.dataUrl
     }
 
     return undefined
   })
 
-  // Track the workspace to detect changes
-  const workspaceRef = useRef(workspace)
-
   useEffect(() => {
-    if (!workspace?.iconUrl) {
+    if (!workspaceId || !workspaceIconUrl) {
       setIconUrl(undefined)
       return
     }
+    const resolvedWorkspaceId = workspaceId
+    const resolvedWorkspaceIconUrl = workspaceIconUrl
 
     // Remote URLs - use directly
-    if (workspace.iconUrl.startsWith('http://') || workspace.iconUrl.startsWith('https://')) {
-      setIconUrl(workspace.iconUrl)
+    if (resolvedWorkspaceIconUrl.startsWith('http://') || resolvedWorkspaceIconUrl.startsWith('https://')) {
+      setIconUrl(resolvedWorkspaceIconUrl)
       return
     }
 
     // Not a file:// URL - skip
-    if (!workspace.iconUrl.startsWith('file://')) {
+    if (!resolvedWorkspaceIconUrl.startsWith('file://')) {
       setIconUrl(undefined)
       return
     }
 
     // Check if already cached with same source URL
-    const cached = iconCache.get(workspace.id)
-    if (cached && cached.sourceUrl === workspace.iconUrl) {
+    const cached = iconCache.get(resolvedWorkspaceId)
+    if (cached && cached.sourceUrl === resolvedWorkspaceIconUrl) {
       setIconUrl(cached.dataUrl)
       return
     }
 
     // Extract icon filename from file:// URL
     // e.g., "file:///path/to/icon.png?t=123" -> "icon.png"
-    const urlWithoutQuery = workspace.iconUrl.split('?')[0]
+    const urlWithoutQuery = resolvedWorkspaceIconUrl.split('?')[0]
     const iconFilename = urlWithoutQuery.split('/').pop()
     if (!iconFilename) {
       setIconUrl(undefined)
       return
     }
+    const resolvedIconFilename = iconFilename
 
     // Fetch via IPC and convert to data URL
     let cancelled = false
 
     async function fetchIcon() {
       try {
-        const result = await window.electronAPI.readWorkspaceImage(workspace!.id, iconFilename!)
+        const result = await window.electronAPI.readWorkspaceImage(resolvedWorkspaceId, resolvedIconFilename)
         if (cancelled) return
 
         if (result) {
           // readWorkspaceImage returns raw SVG for .svg files, data URL for others
           let dataUrl = result
-          if (iconFilename!.endsWith('.svg')) {
+          if (resolvedIconFilename.endsWith('.svg')) {
             dataUrl = `data:image/svg+xml;base64,${btoa(result)}`
           }
 
           // Cache the result
-          iconCache.set(workspace!.id, { dataUrl, sourceUrl: workspace!.iconUrl! })
+          iconCache.set(resolvedWorkspaceId, { dataUrl, sourceUrl: resolvedWorkspaceIconUrl })
           setIconUrl(dataUrl)
         } else {
           setIconUrl(undefined)
         }
       } catch (error) {
-        console.error(`Failed to load icon for workspace ${workspace!.id}:`, error)
+        console.error(`Failed to load icon for workspace ${resolvedWorkspaceId}:`, error)
         if (!cancelled) {
           setIconUrl(undefined)
         }
@@ -114,7 +117,7 @@ export function useWorkspaceIcon(workspace: Workspace | undefined): string | und
     return () => {
       cancelled = true
     }
-  }, [workspace?.id, workspace?.iconUrl])
+  }, [workspaceId, workspaceIconUrl])
 
   return iconUrl
 }

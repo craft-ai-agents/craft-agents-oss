@@ -393,7 +393,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
         description: message,
       })
     }
-  }, [workspace.id, onSettingsChange, settings])
+  }, [workspace.id, onSettingsChange, settings, t])
 
   const handleConnectionChange = useCallback((slug: string) => {
     // 'global' means use app default (clear workspace override)

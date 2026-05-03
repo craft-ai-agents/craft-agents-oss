@@ -147,7 +147,7 @@ export function WorkspaceSwitcher({
       toast.success(t('toast.removedWorkspace', { name: workspace.name }))
       onWorkspaceRemoved?.()
     }
-  }, [activeWorkspaceId, onWorkspaceRemoved])
+  }, [activeWorkspaceId, onWorkspaceRemoved, t])
 
   const handleCloseCreationScreen = useCallback(() => {
     setShowCreationScreen(false)
@@ -168,7 +168,7 @@ export function WorkspaceSwitcher({
 
     handleCloseCreationScreen()
     toast.success(t('toast.workspaceReconnected'))
-  }, [activeWorkspaceId, handleCloseCreationScreen, onSelect])
+  }, [activeWorkspaceId, handleCloseCreationScreen, onSelect, t])
 
   return (
     <>

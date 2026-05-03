@@ -231,7 +231,6 @@ async function loadUserMemoryEntries(): Promise<MemoryEntry[]> {
     const result = await window.electronAPI.listUserMemory()
     return normalizeMemoryEntries(result)
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn('[memory] failed to load USER.md; agent will run without user memory:', err)
     return []
   }
@@ -242,7 +241,6 @@ async function loadAgentMemoryEntries(agentSlug: string): Promise<MemoryEntry[]>
     const result = await window.electronAPI.listAgentMemory(agentSlug)
     return normalizeMemoryEntries(result)
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn(`[memory] failed to load MEMORY.md for "${agentSlug}"; agent will run without per-agent memory:`, err)
     return []
   }
