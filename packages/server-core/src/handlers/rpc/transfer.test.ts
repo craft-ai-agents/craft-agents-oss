@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'bun:test'
+import { afterEach, describe, expect, it, jest } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { HandlerFn, RequestContext, RpcServer } from '../../transport/types'
@@ -62,6 +62,7 @@ function encodeParts(value: unknown, splitAt?: number) {
 afterEach(() => {
   delete process.env.CRAFT_TRANSFER_TTL_MS
   __resetTransferStateForTests()
+  jest.useRealTimers()
 })
 
 describe('chunked transfer handlers', () => {
@@ -159,6 +160,7 @@ describe('chunked transfer handlers', () => {
   })
 
   it('refreshes TTL as chunks arrive so slow healthy uploads survive', async () => {
+    jest.useFakeTimers()
     process.env.CRAFT_TRANSFER_TTL_MS = '40'
 
     const { start, chunk, commit } = createHarness()
@@ -175,14 +177,14 @@ describe('chunked transfer handlers', () => {
       checksum: payload.checksum,
     }) as { transferId: string }
 
-    await new Promise(resolve => setTimeout(resolve, 25))
+    jest.advanceTimersByTime(25)
     await chunk(ctx('client-1'), {
       transferId,
       index: 0,
       data: payload.chunks[0],
     })
 
-    await new Promise(resolve => setTimeout(resolve, 25))
+    jest.advanceTimersByTime(25)
     await chunk(ctx('client-1'), {
       transferId,
       index: 1,
