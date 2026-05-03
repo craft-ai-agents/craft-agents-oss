@@ -2,12 +2,13 @@
 
 ## Status
 
-Foundation shipped (6 commits, ~4,000 LOC, +55 tests). Renderer UI, i18n, and post-launch
-polish remain. Before painting the UI on top, the foundation needs a structured review since
-it was built by three parallel agents working in isolated worktrees from a spec.
+Foundation shipped (6 commits, ~4,000 LOC, +55 tests). Renderer v1 is now wired:
+the Sources list shows workspace/global/dormant tiers, can activate/deactivate shared
+sources, can promote workspace sources to global, and Source Info shows tier plus
+credential scope.
 
 This doc captures both:
-1. **What's left to ship v1** (Lane D + Phase 5 + Phase 6).
+1. **What's left after renderer v1** (Phase 5 deeper CRUD + Phase 6 polish).
 2. **A review/audit procedure** for what's already landed, gating Lane D's start.
 
 The full design is at [docs/global-sources/](../global-sources/) — 6 docs, 1,353 lines.
@@ -41,33 +42,31 @@ is at [04-ux.md](../global-sources/04-ux.md); this section enumerates the concre
 
 ## What's left
 
-### Lane D — Renderer UI (medium)
+### Lane D — Renderer UI (v1 shipped)
 
-Owns the renderer atoms, list-row rendering with tier badges, all the dialog flows, the
-status indicator extension, and the new Settings → Global Sources Library page.
+Owns the renderer atoms, list-row rendering with tier badges, activate/deactivate/promote
+flows, and source details tier/credential visibility.
 
-**Files to create or modify:**
+**Shipped files:**
 
-- `apps/electron/src/renderer/atoms/sources.ts` — add `globalSourcesAtom`, `activatedGlobalSlugsAtom`, `effectiveSourcesAtom`. Wire to the new RPC channels (`sources:listGlobal`, `sources:getEnabledGlobal`, `sources:setGlobalEnabled`, `sources:promoteToGlobal`). Subscribe to `sources:changedGlobal` events.
-- `apps/electron/src/renderer/components/sources/SourcesListPanel.tsx` (or equivalent) — render `effectiveSources`. Tier badges per [04-ux.md § Per-row actions](../global-sources/04-ux.md#per-row-actions). Action visibility matrix as documented.
-- `apps/electron/src/renderer/components/sources/dialogs/` (new dir or add to existing) — 4 modals:
-  - Activate dialog
-  - Deactivate dialog (probably trivial confirm; possibly inline)
-  - Override credentials dialog (kicks off OAuth flow into workspace key)
-  - Revert-to-global-credentials dialog
-  - Promote-to-global dialog (with the `includeCredentials` checkbox)
-- `apps/electron/src/renderer/components/ui/source-status-indicator.tsx` — add `global-dormant` state ("Available" gray dot).
-- `apps/electron/src/renderer/pages/SourceInfoPage.tsx` — show tier + creds-scope (global / workspace override).
-- `apps/electron/src/renderer/pages/GlobalSourcesLibraryPage.tsx` (NEW) — Settings page with full CRUD on global definitions. Reuse the existing source-editor components; just point them at the new RPC channels for global tier. Mirrors the existing skills-library page (if any) — find it with `grep -r 'GlobalSkillsLibrary\|skills.*library' apps/electron/src/renderer/pages/`.
-- `apps/electron/src/renderer/components/app-shell/SettingsNav.tsx` (or equivalent) — add a nav entry for Global Sources Library.
+- `apps/electron/src/renderer/atoms/sources.ts` — global/effective source atoms.
+- `apps/electron/src/renderer/components/app-shell/SourcesListPanel.tsx` — effective list, tier badges, Browse Global dialog, activate/deactivate/promote actions.
+- `apps/electron/src/renderer/components/app-shell/SourceMenu.tsx` — global source actions and managed-source delete guard.
+- `apps/electron/src/renderer/pages/SourceInfoPage.tsx` — dormant global fallback load plus tier/credential scope rows.
+- `apps/electron/src/shared/types.ts` — renderer export for `SourceTier`.
+- `packages/shared/src/i18n/locales/*.json` — v1 labels in every locale.
 
-**i18n** — 7 locale files, ~24 keys per [04-ux.md § i18n keys](../global-sources/04-ux.md#i18n-keys).
-English placeholders are acceptable for the v1 ship; full translation pass can follow.
+**Deferred from the original Lane D wishlist:**
+- Full CRUD page for editing global definitions directly. Existing backend only exposes list/activate/promote, so v1 uses a read-only Browse Global dialog plus promote-from-workspace.
+- Dedicated credential override/revert dialogs. The credential manager supports it, but no renderer RPC exists yet.
+- `includeCredentials` checkbox for promote. V1 deliberately promotes definitions only (`includeCredentials: false`).
+- Dedicated `global-dormant` dot state. V1 shows a Dormant tier badge and suppresses connection status for dormant rows.
 
 **Tests:**
-- Smoke test for `effectiveSourcesAtom` selector — renders union correctly given mocked atoms.
-- Tier badge rendering test — given a `LoadedSource` with each `tier` value, verify badge text.
-- Dialog tests are optional for v1; visual smoke is enough.
+- `bun run typecheck:all`
+- `bun run lint`
+- `bun test packages/shared/src/sources/__tests__/storage.test.ts packages/shared/src/sources/__tests__/credential-manager-effective.test.ts packages/shared/src/i18n/__tests__/locale-parity.test.ts`
+- `git diff --check`
 
 ### Phase 5 — Settings → Global Sources Library page (subset of Lane D)
 
@@ -93,15 +92,9 @@ for it.
   product wants signal here.
 - **Translation pass** — non-en locales currently get English placeholders.
 
-### Pre-existing typecheck noise to clean up (not blocking)
+### Typecheck floor
 
-Three errors in `packages/session-tools-core` that pre-existed before this feature:
-- `src/handlers/source-test.ts:301` — regex flag requiring ES6 target
-- `src/tool-defs-filtering.test.ts:35` — Set iteration without `--downlevelIteration`
-- `src/validation.ts:128` — result type narrowing
-
-None caused by global-sources work. Worth a one-commit cleanup pass before Lane D so the
-floor is fully green.
+`bun run typecheck:all` is green as of renderer v1.
 
 ### Phase 1 follow-up — `tier` field becomes required
 

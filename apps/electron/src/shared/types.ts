@@ -56,8 +56,8 @@ import type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIss
 export type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType };
 
 // Source types for session source selection
-import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@craft-agent/shared/sources/types';
-export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
+import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, SourceTier } from '@craft-agent/shared/sources/types';
+export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, SourceTier };
 
 // Skill types
 import type { LoadedSkill, SkillMetadata } from '@craft-agent/shared/skills/types';

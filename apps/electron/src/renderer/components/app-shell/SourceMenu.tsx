@@ -21,6 +21,9 @@ import {
   FolderOpen,
   AppWindow,
   Send,
+  Cloud,
+  CloudOff,
+  UploadCloud,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getFileManagerName } from '@/lib/platform'
@@ -36,6 +39,11 @@ export interface SourceMenuProps {
   onDelete: () => void
   /** Send to another workspace (omit to hide the option) */
   onSendToWorkspace?: () => void
+  onActivateGlobal?: () => void
+  onDeactivateGlobal?: () => void
+  onPromoteToGlobal?: () => void
+  canDelete?: boolean
+  deleteLabel?: string
 }
 
 /**
@@ -49,6 +57,11 @@ export function SourceMenu({
   onShowInFinder,
   onDelete,
   onSendToWorkspace,
+  onActivateGlobal,
+  onDeactivateGlobal,
+  onPromoteToGlobal,
+  canDelete = true,
+  deleteLabel,
 }: SourceMenuProps) {
   const { t } = useTranslation()
 
@@ -77,12 +90,33 @@ export function SourceMenu({
         </MenuItem>
       )}
 
+      {onActivateGlobal && (
+        <MenuItem onClick={onActivateGlobal}>
+          <Cloud className="h-3.5 w-3.5" />
+          <span className="flex-1">{t("sourcesList.activate")}</span>
+        </MenuItem>
+      )}
+
+      {onDeactivateGlobal && (
+        <MenuItem onClick={onDeactivateGlobal}>
+          <CloudOff className="h-3.5 w-3.5" />
+          <span className="flex-1">{t("sourcesList.deactivate")}</span>
+        </MenuItem>
+      )}
+
+      {onPromoteToGlobal && (
+        <MenuItem onClick={onPromoteToGlobal}>
+          <UploadCloud className="h-3.5 w-3.5" />
+          <span className="flex-1">{t("sourcesList.promote")}</span>
+        </MenuItem>
+      )}
+
       <Separator />
 
       {/* Delete */}
-      <MenuItem onClick={onDelete} variant="destructive">
+      <MenuItem onClick={onDelete} variant={canDelete ? "destructive" : undefined} disabled={!canDelete}>
         <Trash2 className="h-3.5 w-3.5" />
-        <span className="flex-1">{t("sidebarMenu.deleteSource")}</span>
+        <span className="flex-1">{deleteLabel ?? t("sidebarMenu.deleteSource")}</span>
       </MenuItem>
     </>
   )

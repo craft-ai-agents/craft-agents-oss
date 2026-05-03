@@ -14,3 +14,15 @@ import type { LoadedSource } from '../../shared/types'
  * NavigationContext reads from it for auto-selection.
  */
 export const sourcesAtom = atom<LoadedSource[]>([])
+
+export const globalSourcesAtom = atom<LoadedSource[]>([])
+
+export const effectiveSourcesAtom = atom((get) => {
+  const workspaceSources = get(sourcesAtom)
+  const workspaceSlugs = new Set(workspaceSources.map((source) => source.config.slug))
+  const dormantGlobals = get(globalSourcesAtom)
+    .filter((source) => !workspaceSlugs.has(source.config.slug))
+    .map((source) => ({ ...source, tier: 'global-dormant' as const }))
+
+  return [...workspaceSources, ...dormantGlobals]
+})

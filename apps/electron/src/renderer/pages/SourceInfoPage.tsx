@@ -168,6 +168,26 @@ function getPermissionsDescription(source: LoadedSource, t: (key: string) => str
   return t('sourceInfo.accessRules')
 }
 
+function getSourceTierLabel(source: LoadedSource, t: (key: string) => string): string {
+  switch (source.tier) {
+    case 'global':
+      return t('sourcesList.tier.global')
+    case 'global-dormant':
+      return t('sourcesList.tier.dormant')
+    case 'project':
+      return t('sourcesList.tier.project')
+    case 'workspace':
+    default:
+      return t('sourcesList.tier.workspace')
+  }
+}
+
+function getCredentialScopeLabel(source: LoadedSource, t: (key: string) => string): string {
+  if (source.tier === 'global') return t('sourceInfo.credsScope.globalFallback')
+  if (source.tier === 'global-dormant') return t('sourceInfo.credsScope.inactive')
+  return t('sourceInfo.credsScope.workspace')
+}
+
 export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: SourceInfoPageProps) {
   const { t } = useTranslation()
   const { navigateToSource } = useNavigation()
@@ -189,17 +209,31 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
 
     const loadSource = async () => {
       try {
-        const sources = await window.electronAPI.getSources(workspaceId)
+        const [sources, globalSources, enabledGlobalSlugs] = await Promise.all([
+          window.electronAPI.getSources(workspaceId),
+          window.electronAPI.listGlobalSources(),
+          window.electronAPI.getEnabledGlobalSources(workspaceId),
+        ])
 
         if (!isMounted) return
 
-        const found = sources.find((s) => s.config.slug === sourceSlug)
+        const activeSlugs = new Set((sources || []).map((s) => s.config.slug))
+        const enabledSlugs = new Set(enabledGlobalSlugs || [])
+        const found = (sources || []).find((s) => s.config.slug === sourceSlug)
+          ?? (globalSources || [])
+            .filter((s) => !activeSlugs.has(s.config.slug))
+            .map((s) => ({ ...s, tier: enabledSlugs.has(s.config.slug) ? 'global' as const : 'global-dormant' as const }))
+            .find((s) => s.config.slug === sourceSlug)
         if (found) {
           setSource(found)
 
-          const config = await window.electronAPI.getSourcePermissionsConfig(workspaceId, sourceSlug)
-          if (isMounted) {
-            setPermissionsConfig(config)
+          if (found.tier !== 'global-dormant') {
+            const config = await window.electronAPI.getSourcePermissionsConfig(workspaceId, sourceSlug)
+            if (isMounted) {
+              setPermissionsConfig(config)
+            }
+          } else if (isMounted) {
+            setPermissionsConfig(null)
           }
         } else {
           setError(t('sourceInfo.notFound'))
@@ -221,7 +255,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
 
   // Load MCP tools when source is loaded and is MCP type
   useEffect(() => {
-    if (!source || source.config.type !== 'mcp') {
+    if (!source || source.config.type !== 'mcp' || source.tier === 'global-dormant') {
       setMcpTools(null)
       setMcpToolsError(null)
       return
@@ -372,6 +406,8 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
             onOpenInNewWindow={handleOpenInNewWindow}
             onShowInFinder={handleOpenSourceFolder}
             onDelete={handleDelete}
+            canDelete={(source?.tier ?? 'workspace') === 'workspace'}
+            deleteLabel={(source?.tier ?? 'workspace') === 'workspace' ? undefined : t('sourcesList.managedSource')}
           />
         }
       />
@@ -422,6 +458,8 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
               )}
             >
               <Info_Table.Row label={t('common.type')} value={source.config.type.toUpperCase()} />
+              <Info_Table.Row label={t('sourceInfo.tier')} value={getSourceTierLabel(source, t)} />
+              <Info_Table.Row label={t('sourceInfo.credsScope')} value={getCredentialScopeLabel(source, t)} />
               {sourceUrl && (
                 <Info_Table.Row label={t('common.url')}>
                   <button

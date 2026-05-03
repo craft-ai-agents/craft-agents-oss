@@ -3328,6 +3328,7 @@ function AppShellContent({
               /* Sources List - filtered by type if sourceFilter is active */
               <SourcesListPanel
                 sources={sources}
+                workspaceId={activeWorkspaceId ?? undefined}
                 sourceFilter={sourceFilter}
                 workspaceRootPath={activeWorkspace?.rootPath}
                 onDeleteSource={handleDeleteSource}
