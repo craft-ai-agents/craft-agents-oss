@@ -18,8 +18,18 @@
  * - All other fields return the raw registry callback directly (signatures match)
  */
 
-import type { SessionToolContext } from '@craft-agent/session-tools-core';
+import type {
+  SessionToolContext,
+  ListSourcesOptions,
+  ListSourcesResult,
+  SourceListItem,
+  SourceListItemAuthStatus,
+  SourceListItemType,
+  SourceTier,
+} from '@craft-agent/session-tools-core';
 import { getSessionScopedToolCallbacks } from './session-scoped-tool-callback-registry.ts';
+import { loadAllSources } from '../sources/storage.ts';
+import type { LoadedSource } from '../sources/types.ts';
 
 /**
  * Attach session self-management bindings to a SessionToolContext.
@@ -218,6 +228,39 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  // listSources is implemented inline (not via the callback registry):
+  // it reads the workspace + global tiers via loadAllSources and projects
+  // each LoadedSource into the SourceListItem shape declared in
+  // @craft-agent/session-tools-core. This is a pure read with no
+  // session-scoped state, so it lives here rather than in SessionManager.
+  Object.defineProperty(context, 'listSources', {
+    get() {
+      return (options?: ListSourcesOptions): ListSourcesResult => {
+        const workspaceRoot = context.workspacePath;
+        const includeDormant = options?.activeOnly !== true;
+
+        // Pass the includeDormant option to loadAllSources. Older builds of
+        // loadAllSources accept only (workspaceRoot); calling with the extra
+        // arg is harmless because TS structurally widens unused params and
+        // the runtime ignores the second arg until Lane A's Phase 1 lands.
+        const sources = (loadAllSources as (
+          ws: string,
+          opts?: { includeDormant?: boolean },
+        ) => LoadedSource[])(workspaceRoot, { includeDormant });
+
+        const items: SourceListItem[] = sources.map(toSourceListItem);
+        const filtered = filterSourceListItems(items, options);
+        return {
+          total: filtered.length,
+          returned: filtered.length,
+          sources: filtered,
+        };
+      };
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   // getSessionInfo needs wrapping to default sid → sessionId
   Object.defineProperty(context, 'getSessionInfo', {
     get() {
@@ -228,4 +271,110 @@ export function attachSessionSelfManagementBindings(
     configurable: true,
     enumerable: true,
   });
+}
+
+// ============================================================
+// list_sources helpers
+// ============================================================
+
+function toSourceListItem(source: LoadedSource): SourceListItem {
+  const config = source.config;
+  // Tier: prefer the field added by Lane A (Phase 1 storage). When absent
+  // (older builds), fall back to 'workspace' which is the existing behavior.
+  const tier: SourceTier =
+    ((source as unknown as { tier?: SourceTier }).tier ?? 'workspace');
+
+  const type = (config.type as SourceListItemType) ?? 'mcp';
+  const enabled = computeEnabled(source);
+  const authStatus = computeAuthStatus(source);
+
+  // FolderSourceConfig doesn't carry a description/tags pair today; the
+  // human-readable summary lives in `tagline` (with guide.md as fallback).
+  // We project tagline → description and read tags off a forward-compatible
+  // optional field so this code keeps working as the schema evolves.
+  const cfgExt = config as unknown as { tagline?: string; tags?: unknown };
+  const description = typeof cfgExt.tagline === 'string' ? cfgExt.tagline : '';
+  const tags = Array.isArray(cfgExt.tags)
+    ? cfgExt.tags.filter((t): t is string => typeof t === 'string')
+    : [];
+
+  return {
+    slug: config.slug,
+    name: config.name,
+    description,
+    tags,
+    type,
+    tier,
+    enabled,
+    authStatus,
+    iconUrl: source.iconPath ?? undefined,
+  };
+}
+
+function computeEnabled(source: LoadedSource): boolean {
+  const enabled = source.config.enabled !== false;
+  if (!enabled) return false;
+  // auth: 'none' short-circuits — already enabled per config flag.
+  // For auth-bearing sources we still report enabled=true here; the agent
+  // reads authStatus separately to decide whether the source is functional.
+  return true;
+}
+
+function sourceAuthIsNone(source: LoadedSource): boolean {
+  const cfg = source.config as {
+    type?: string;
+    mcp?: { authType?: string };
+    api?: { authType?: string };
+  };
+  if (cfg.type === 'mcp') {
+    return !cfg.mcp?.authType || cfg.mcp.authType === 'none';
+  }
+  if (cfg.type === 'api') {
+    return cfg.api?.authType === 'none';
+  }
+  // Local sources have no remote auth.
+  return cfg.type === 'local';
+}
+
+function computeAuthStatus(source: LoadedSource): SourceListItemAuthStatus {
+  if (sourceAuthIsNone(source)) return 'none';
+  const cs = (source.config as { connectionStatus?: SourceListItemAuthStatus })
+    .connectionStatus;
+  if (cs === 'connected' || cs === 'needs_auth' || cs === 'failed' ||
+      cs === 'untested' || cs === 'local_disabled') {
+    return cs;
+  }
+  return 'untested';
+}
+
+function filterSourceListItems(
+  items: SourceListItem[],
+  options?: ListSourcesOptions,
+): SourceListItem[] {
+  if (!options) return items;
+  let out = items;
+
+  if (options.activeOnly) {
+    out = out.filter(s => s.tier !== 'global-dormant');
+  }
+  if (options.type) {
+    out = out.filter(s => s.type === options.type);
+  }
+  if (options.tags && options.tags.length > 0) {
+    const required: string[] = options.tags.map((t: string) => t.toLowerCase());
+    out = out.filter((s: SourceListItem) => {
+      const haystack: string[] = s.tags.map((t: string) => t.toLowerCase());
+      return required.every((t: string) => haystack.includes(t));
+    });
+  }
+  if (options.search && options.search.trim().length > 0) {
+    const q = options.search.toLowerCase();
+    out = out.filter((s: SourceListItem) =>
+      s.slug.toLowerCase().includes(q) ||
+      s.name.toLowerCase().includes(q) ||
+      s.description.toLowerCase().includes(q) ||
+      s.tags.some((t: string) => t.toLowerCase().includes(q)),
+    );
+  }
+  return out;
 }

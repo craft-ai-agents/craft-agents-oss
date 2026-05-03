@@ -396,8 +396,104 @@ If a workflow save tool becomes available in the future, use it only after
 showing the full draft and receiving explicit confirmation.
 `;
 
+const SOURCE_RECIPE_SKILL = `---
+name: Source Recipe
+description: "When the user (or another agent) is choosing which sources/tools (MCP servers, APIs, connectors) to bundle into a new agent, asking 'what sources should this agent have,' 'which tools to give it,' 'what's the right tool set for this job,' or generally curating a focused source bundle. Also triggered during agent creation when the source-bundle step is reached. Reads the live source catalog via list_sources and applies curation rules: cap at 3, match to actual job, anti-pairing detection, dormant-source activation suggestions."
+tags: [creator, meta, agents, curation, sources]
+metadata:
+  version: 1.0.0
+---
+
+# Source Recipe
+
+Use this skill whenever you are deciding which sources (MCP servers, APIs, local connectors)
+to bundle into an agent. The cap is tighter than skills — **3 sources per agent maximum** —
+because each source spawns a process and adds tool surface area to every prompt.
+
+## Process
+
+1. **Call \\\`list_sources\\\` with \\\`activeOnly: true\\\`** to see what's actually spawnable in this
+   workspace. Sources with \\\`tier: 'global-dormant'\\\` are not returned (you can ask for them
+   separately if the user explicitly wants to discover what else is available).
+2. **Read the user's intent.** What concrete actions will the agent take? A research agent
+   reads sources; a writer agent might not need any; a project-specific agent likely wants
+   the project's MCP only.
+3. **Match sources to job.** Don't bundle Notion if the agent doesn't read or write
+   knowledge. Don't bundle a search source if the agent never searches.
+4. **Apply the rules below.** Converge on a final bundle.
+5. **Present with reasoning** — for each chosen source, one line on why. For tempting-
+   but-rejected sources, one line on why not. The "why not" matters.
+
+## Rules
+
+### Cap: max 3 sources per agent
+
+Each source means a spawned process, more tools in the prompt, more places auth can fail.
+Three is enough for most specialists. If you find yourself adding a fourth, ask whether
+this is really one role.
+
+### One concrete job, one source set
+
+A research agent gets research sources. A writer gets context sources (or none). A code
+agent gets the project MCP. Don't mix tool sets across roles.
+
+### Prefer specific over general
+
+A project's MCP server beats a generic web-fetch source for project work. A scoped API
+beats a kitchen-sink one when you only need 10% of the surface.
+
+### Don't bundle dormant globals
+
+If a relevant source is at \\\`tier: 'global-dormant'\\\`, suggest the user activate it first.
+Don't include the slug in the bundle until they confirm. The slug won't resolve in the
+agent's prompt until it's activated.
+
+### Don't bundle redundant sources
+
+Two web-search sources, two issue trackers, two doc systems — pick one. If the user really
+needs both, that's two agents, not one.
+
+### Watch for auth status
+
+A source with \\\`auth: 'none'\\\` or \\\`isAuthenticated: true\\\` is usable. A source needing
+auth that isn't authenticated will be in the bundle list but won't actually work. Surface
+this — don't silently bundle a non-functional source.
+
+## Illustrative patterns
+
+- **A research agent in a workspace with web-search activated** → just web-search. Maybe
+  Notion if the user said they research from notes. That's it.
+- **A code-review agent on a project with the project MCP activated** → project MCP. Maybe
+  GitHub if reviews require pulling PR context. Cap at 2.
+- **A writing agent** → usually 0 sources. Writers don't need tool calls; they need a voice
+  prompt and a workspace context doc.
+- **A meta/builder agent** → 0 sources. The agents it creates get their own bundles; the
+  meta-agent itself doesn't need any.
+
+## Output format
+
+\\\`\\\`\\\`
+**Proposed sources (N of max 3):**
+- source-slug-1 — <one line on why>
+- source-slug-2 — <one line>
+
+**Considered but excluded:**
+- source-slug-3 — <one line on why it doesn't fit>
+
+**Suggest activating (currently global-dormant):**
+- source-slug-4 — <if relevant; user activates then re-bundle>
+\\\`\\\`\\\`
+
+## When you don't know
+
+If the catalog has sources you've never reasoned about and their descriptions don't make
+their fit obvious, look up their guide.md content via the existing source-info workflows
+before recommending. A wrong source bundle is worse than asking.
+`;
+
 export const STARTER_SKILLS: StarterSkill[] = [
   { slug: 'agent-creator', content: AGENT_CREATOR_SKILL },
   { slug: 'automation-creator', content: AUTOMATION_CREATOR_SKILL },
   { slug: 'workflow-creator', content: WORKFLOW_CREATOR_SKILL },
+  { slug: 'source-recipe', content: SOURCE_RECIPE_SKILL },
 ];

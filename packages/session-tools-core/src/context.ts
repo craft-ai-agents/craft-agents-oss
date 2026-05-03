@@ -331,6 +331,9 @@ export interface SessionToolContext {
   /** List workflows available to this workspace. Injected by backend. */
   listWorkflows?(options?: ListWorkflowsOptions): ListWorkflowsResult;
 
+  /** List sources available to this workspace, including activated globals and (optionally) dormant globals. Injected by backend. */
+  listSources?(options?: ListSourcesOptions): ListSourcesResult;
+
   /** Get a workflow definition by slug. Injected by backend. */
   getWorkflow?(slug: string): WorkflowToolDetail | null;
 
@@ -624,6 +627,66 @@ export interface ListWorkflowsResult {
   total: number;
   returned: number;
   workflows: WorkflowListItem[];
+}
+
+// ============================================================
+// list_sources types
+// ============================================================
+
+/** Tier of a source, mirroring the LoadedSource.tier field added in the global-sources Phase 1 storage layer. */
+export type SourceTier = 'workspace' | 'global' | 'global-dormant' | 'project';
+
+/** Underlying transport / connector kind for a source. */
+export type SourceListItemType = 'mcp' | 'api' | 'local';
+
+/**
+ * Auth status for a source as surfaced to agents.
+ * Mirrors the existing renderer connection-status set; `none` is the
+ * short-circuit value for sources whose config declares no auth requirement.
+ */
+export type SourceListItemAuthStatus =
+  | 'connected'
+  | 'needs_auth'
+  | 'failed'
+  | 'untested'
+  | 'local_disabled'
+  | 'none';
+
+/** Compact source summary returned by list_sources. */
+export interface SourceListItem {
+  slug: string;
+  name: string;
+  description: string;
+  tags: string[];
+  type: SourceListItemType;
+  tier: SourceTier;
+  /**
+   * Whether the source is enabled and would actually spawn in this workspace.
+   * Sources with `auth: 'none'` short-circuit to `enabled = (config.enabled !== false)`
+   * regardless of credential state.
+   */
+  enabled: boolean;
+  authStatus: SourceListItemAuthStatus;
+  iconUrl?: string;
+}
+
+/** Options for list_sources filtering. */
+export interface ListSourcesOptions {
+  /** When true, omit `tier === 'global-dormant'` entries (the default for agents reasoning about what's currently spawnable). */
+  activeOnly?: boolean;
+  /** Case-insensitive substring match across name, description, slug, and tags. */
+  search?: string;
+  /** Optional tag filter (case-insensitive). All listed tags must be present on the source. */
+  tags?: string[];
+  /** Optional transport filter. */
+  type?: SourceListItemType;
+}
+
+/** Result from list_sources. */
+export interface ListSourcesResult {
+  total: number;
+  returned: number;
+  sources: SourceListItem[];
 }
 
 // ============================================================

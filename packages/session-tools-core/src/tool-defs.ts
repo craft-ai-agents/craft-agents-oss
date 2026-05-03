@@ -40,6 +40,7 @@ import { handleGetSessionInfo } from './handlers/get-session-info.ts';
 import { handleListSessions } from './handlers/list-sessions.ts';
 import { handleListAgents } from './handlers/list-agents.ts';
 import { handleListSkills } from './handlers/list-skills.ts';
+import { handleListSources } from './handlers/list-sources.ts';
 import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
 import { handleListMessagingChannels, handleUnbindMessagingChannel } from './handlers/messaging.ts';
 import { handleCreateAgent } from './handlers/create-agent.ts';
@@ -230,6 +231,13 @@ export const ListSkillsSchema = z.object({
   activeOnly: z.boolean().optional().describe('If true, return only skills currently active in this workspace (workspace + activated globals + project). Defaults to false, which also includes dormant skills from the global library.'),
   search: z.string().optional().describe('Optional case-insensitive search across slug, name, description, and tags.'),
   tags: z.array(z.string()).optional().describe('Optional tags to require (intersection — skill must have all). Case-insensitive.'),
+});
+
+export const ListSourcesSchema = z.object({
+  activeOnly: z.boolean().optional().describe('If true, exclude global-dormant sources (those defined in the global library but not activated in this workspace). Defaults to false.'),
+  search: z.string().optional().describe('Optional case-insensitive substring search across slug, name, description, and tags.'),
+  tags: z.array(z.string()).optional().describe('Optional tags filter — every listed tag must be present on the source (case-insensitive).'),
+  type: z.enum(['mcp', 'api', 'local']).optional().describe('Optional transport filter: mcp (Model Context Protocol server), api (HTTP API connector), or local (local-only connector).'),
 });
 
 export const ListWorkflowsSchema = z.object({
@@ -681,6 +689,14 @@ Each result includes slug, name, description, tags, and a 'source' field:
 
 For agent creation, prefer activeOnly=true (workspace + activated globals + project). When the user wants help discovering skills they don't yet have, call without activeOnly to also see global-dormant entries.`,
 
+  list_sources: `When the user (or another agent) is choosing which sources/tools (MCP servers, API connectors, local connectors) to bundle into an agent, asking "what sources should this agent have", "which tools does it need", or curating a focused source bundle. Also use during agent-creator's source-bundle step.
+
+Returns each source's slug, display name, description, tags, type (mcp/api/local), tier, enabled flag, authStatus, and optional iconUrl. Tier is one of: workspace (defined in <workspace>/sources/<slug>/), global (defined in ~/.agents/sources/<slug>/ and activated in this workspace), global-dormant (defined globally but not activated here), or project (project-tier source).
+
+For agents reasoning about what is currently spawnable, call with activeOnly=true to exclude global-dormant entries. Use search/tags/type to narrow further. Sources whose config declares auth:'none' short-circuit to enabled=true regardless of credential state; for auth-requiring sources, enabled reflects whether credentials and config gates pass.
+
+Prefer this over filesystem searches for source configs.`,
+
   list_workflows: `List workflows available to this workspace. Returns active status, trigger inputs, and step summaries.
 
 Use this before recommending or starting a workflow. For normal user-facing suggestions, call with activeOnly=true.`,
@@ -891,6 +907,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'list_sessions', description: TOOL_DESCRIPTIONS.list_sessions, inputSchema: ListSessionsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSessions },
   { name: 'list_agents', description: TOOL_DESCRIPTIONS.list_agents, inputSchema: ListAgentsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListAgents },
   { name: 'list_skills', description: TOOL_DESCRIPTIONS.list_skills, inputSchema: ListSkillsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSkills },
+  { name: 'list_sources', description: TOOL_DESCRIPTIONS.list_sources, inputSchema: ListSourcesSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSources },
   { name: 'list_workflows', description: TOOL_DESCRIPTIONS.list_workflows, inputSchema: ListWorkflowsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListWorkflows },
   { name: 'get_workflow', description: TOOL_DESCRIPTIONS.get_workflow, inputSchema: GetWorkflowSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetWorkflow },
   { name: 'start_workflow', description: TOOL_DESCRIPTIONS.start_workflow, inputSchema: StartWorkflowSchema, executionMode: 'registry', safeMode: 'block', handler: handleStartWorkflow },

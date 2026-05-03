@@ -140,6 +140,13 @@ export type {
   WorkflowToolDetail,
   ListWorkflowsOptions,
   ListWorkflowsResult,
+  // list_sources types
+  SourceTier,
+  SourceListItemType,
+  SourceListItemAuthStatus,
+  SourceListItem,
+  ListSourcesOptions,
+  ListSourcesResult,
   ResolvedLabelsResult,
   ResolvedStatusResult,
 } from './context.ts';
@@ -177,6 +184,7 @@ export {
   handleSendDeveloperFeedback,
   // Agent catalog
   handleListAgents,
+  handleListSources,
   // Workflows
   handleListWorkflows,
   handleGetWorkflow,
