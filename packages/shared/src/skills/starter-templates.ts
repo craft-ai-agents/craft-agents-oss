@@ -11,10 +11,17 @@
  * draft or save.
  */
 
+export interface StarterSkillFile {
+  /** Path relative to the skill directory, e.g. `'SKILL.md'` or `'references/foo.md'`. */
+  path: string;
+  /** UTF-8 file content. */
+  content: string;
+}
+
 export interface StarterSkill {
   slug: string;
-  /** Full SKILL.md content (frontmatter + body). */
-  content: string;
+  /** All files belonging to the skill, keyed by relative path. */
+  files: StarterSkillFile[];
 }
 
 const AGENT_CREATOR_SKILL = `---
@@ -492,8 +499,8 @@ before recommending. A wrong source bundle is worse than asking.
 `;
 
 export const STARTER_SKILLS: StarterSkill[] = [
-  { slug: 'agent-creator', content: AGENT_CREATOR_SKILL },
-  { slug: 'automation-creator', content: AUTOMATION_CREATOR_SKILL },
-  { slug: 'workflow-creator', content: WORKFLOW_CREATOR_SKILL },
-  { slug: 'source-recipe', content: SOURCE_RECIPE_SKILL },
+  { slug: 'agent-creator', files: [{ path: 'SKILL.md', content: AGENT_CREATOR_SKILL }] },
+  { slug: 'automation-creator', files: [{ path: 'SKILL.md', content: AUTOMATION_CREATOR_SKILL }] },
+  { slug: 'workflow-creator', files: [{ path: 'SKILL.md', content: WORKFLOW_CREATOR_SKILL }] },
+  { slug: 'source-recipe', files: [{ path: 'SKILL.md', content: SOURCE_RECIPE_SKILL }] },
 ];

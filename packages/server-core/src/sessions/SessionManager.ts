@@ -2140,8 +2140,8 @@ export class SessionManager implements ISessionManager {
         // Orchestrator should not pay the skill-read prerequisite cost unless
         // the user explicitly mentions a creator skill.
         try {
-          const { ensureRequiredGlobalSkills, STARTER_SKILLS } = await import('@craft-agent/shared/skills')
-          const { ensured: skillsEnsured } = ensureRequiredGlobalSkills(STARTER_SKILLS)
+          const { ensureRequiredGlobalSkills, STARTER_SKILLS, BUNDLED_STARTER_SKILLS } = await import('@craft-agent/shared/skills')
+          const { ensured: skillsEnsured } = ensureRequiredGlobalSkills([...STARTER_SKILLS, ...BUNDLED_STARTER_SKILLS])
           if (skillsEnsured > 0) {
             sessionLog.info(`[skills] Seeded ${skillsEnsured} built-in skill(s) into global library`)
           }

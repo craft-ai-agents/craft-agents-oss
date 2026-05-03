@@ -13,9 +13,15 @@ describe('STARTER_SKILLS', () => {
     }
   });
 
+  function getSkillMd(skill: { files: { path: string; content: string }[] }): string {
+    const f = skill.files.find(f => f.path === 'SKILL.md');
+    if (!f) throw new Error('Missing SKILL.md');
+    return f.content;
+  }
+
   it('every entry parses to valid SKILL.md frontmatter (name + description)', () => {
     for (const skill of STARTER_SKILLS) {
-      const parsed = matter(skill.content);
+      const parsed = matter(getSkillMd(skill));
       expect(typeof parsed.data.name).toBe('string');
       expect((parsed.data.name as string).trim().length).toBeGreaterThan(0);
       expect(typeof parsed.data.description).toBe('string');
@@ -25,7 +31,7 @@ describe('STARTER_SKILLS', () => {
 
   it('every entry has a non-empty markdown body', () => {
     for (const skill of STARTER_SKILLS) {
-      const parsed = matter(skill.content);
+      const parsed = matter(getSkillMd(skill));
       expect(parsed.content.trim().length).toBeGreaterThan(0);
     }
   });
@@ -33,7 +39,7 @@ describe('STARTER_SKILLS', () => {
   it('includes the source-recipe starter skill', () => {
     const recipe = STARTER_SKILLS.find(s => s.slug === 'source-recipe');
     expect(recipe).toBeDefined();
-    const parsed = matter(recipe!.content);
+    const parsed = matter(getSkillMd(recipe!));
     expect(parsed.data.name).toBe('Source Recipe');
     // Description must mention list_sources so the trigger matcher can fire.
     expect((parsed.data.description as string).toLowerCase()).toContain('source');

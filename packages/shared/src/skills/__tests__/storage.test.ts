@@ -29,8 +29,10 @@ import {
   deleteSkill,
   mirrorSkillToGlobal,
   backfillWorkspaceSkillsToGlobal,
+  ensureRequiredGlobalSkills,
   GLOBAL_AGENT_SKILLS_DIR,
 } from '../storage.ts';
+import { statSync, unlinkSync } from 'fs';
 
 // ============================================================
 // Temp Directory Setup
@@ -943,5 +945,92 @@ describe('backfillWorkspaceSkillsToGlobal', () => {
 
     expect(result.mirrored).toContain(goodSlug);
     expect(result.failed.find(f => f.slug === badSlug)?.reason).toBe('invalid-skill');
+  });
+});
+
+describe('ensureRequiredGlobalSkills (multi-file)', () => {
+  // Use a unique slug per test so we don't collide with the real global library
+  // (which can't be mocked — see file header).
+  const seededSlugs: string[] = [];
+
+  function makeMultiFileSkill(slug: string) {
+    seededSlugs.push(slug);
+    return {
+      slug,
+      files: [
+        { path: 'SKILL.md', content: `---\nname: "${slug}"\ndescription: "test"\n---\nbody` },
+        { path: 'references/foo.md', content: `# foo for ${slug}` },
+        { path: 'references/research/bar.md', content: `# bar for ${slug}` },
+      ],
+    };
+  }
+
+  afterEach(() => {
+    for (const slug of seededSlugs) {
+      const dir = join(GLOBAL_AGENT_SKILLS_DIR, slug);
+      if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+    }
+    seededSlugs.length = 0;
+  });
+
+  it('seeds all files (including nested subdirectories) for a multi-file skill', () => {
+    const slug = `${TEST_PREFIX}multifile-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const skill = makeMultiFileSkill(slug);
+
+    const { ensured } = ensureRequiredGlobalSkills([skill]);
+
+    expect(ensured).toBe(3);
+    const root = join(GLOBAL_AGENT_SKILLS_DIR, slug);
+    expect(existsSync(join(root, 'SKILL.md'))).toBe(true);
+    expect(existsSync(join(root, 'references', 'foo.md'))).toBe(true);
+    expect(existsSync(join(root, 'references', 'research', 'bar.md'))).toBe(true);
+    expect(readFileSync(join(root, 'references', 'foo.md'), 'utf-8')).toContain('foo for');
+  });
+
+  it('is idempotent — second seed writes nothing and does not overwrite existing files', () => {
+    const slug = `${TEST_PREFIX}idempotent-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const skill = makeMultiFileSkill(slug);
+
+    const first = ensureRequiredGlobalSkills([skill]);
+    expect(first.ensured).toBe(3);
+
+    // Mutate one file to verify we don't overwrite.
+    const skillMd = join(GLOBAL_AGENT_SKILLS_DIR, slug, 'SKILL.md');
+    const userEdit = '---\nname: "user edited"\ndescription: "edited"\n---\nuser body';
+    writeFileSync(skillMd, userEdit, 'utf-8');
+    const fooMd = join(GLOBAL_AGENT_SKILLS_DIR, slug, 'references', 'foo.md');
+    const beforeMtime = statSync(fooMd).mtimeMs;
+
+    const second = ensureRequiredGlobalSkills([skill]);
+    expect(second.ensured).toBe(0);
+    expect(readFileSync(skillMd, 'utf-8')).toBe(userEdit);
+    expect(statSync(fooMd).mtimeMs).toBe(beforeMtime);
+  });
+
+  it('partial recovery — restores a missing reference file without disturbing siblings', () => {
+    const slug = `${TEST_PREFIX}partial-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const skill = makeMultiFileSkill(slug);
+
+    ensureRequiredGlobalSkills([skill]);
+
+    const skillMd = join(GLOBAL_AGENT_SKILLS_DIR, slug, 'SKILL.md');
+    const userEdit = '---\nname: "user edited"\ndescription: "edited"\n---\nuser body';
+    writeFileSync(skillMd, userEdit, 'utf-8');
+    const barMd = join(GLOBAL_AGENT_SKILLS_DIR, slug, 'references', 'research', 'bar.md');
+    const barBeforeMtime = statSync(barMd).mtimeMs;
+
+    // Delete one reference file.
+    const fooMd = join(GLOBAL_AGENT_SKILLS_DIR, slug, 'references', 'foo.md');
+    unlinkSync(fooMd);
+    expect(existsSync(fooMd)).toBe(false);
+
+    const result = ensureRequiredGlobalSkills([skill]);
+
+    expect(result.ensured).toBe(1);
+    expect(existsSync(fooMd)).toBe(true);
+    expect(readFileSync(fooMd, 'utf-8')).toContain('foo for');
+    // User edit on SKILL.md and untouched bar.md must survive.
+    expect(readFileSync(skillMd, 'utf-8')).toBe(userEdit);
+    expect(statSync(barMd).mtimeMs).toBe(barBeforeMtime);
   });
 });

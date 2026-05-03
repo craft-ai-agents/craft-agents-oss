@@ -17,7 +17,7 @@ import {
   writeFileSync,
 } from 'fs';
 import { homedir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { randomUUID } from 'crypto';
 import matter from 'gray-matter';
 import type { LoadedSkill, SkillMetadata, SkillSource } from './types.ts';
@@ -659,24 +659,28 @@ export function backfillWorkspaceSkillsToGlobal(workspaceRoot: string): Backfill
 // ============================================================
 
 /**
- * Ensure built-in SKILL.md files exist in the global skills library.
+ * Ensure built-in skill files exist in the global skills library.
  *
- * Idempotent: existing SKILL.md files are NEVER overwritten so user edits
- * survive across upgrades. Used by SessionManager.initialize for skills like
- * `agent-creator` that Concierge/Orchestrator's frontmatter references.
+ * Idempotent: existing files are NEVER overwritten so user edits survive
+ * across upgrades. Per-file (not per-skill) idempotence — a user who has
+ * SKILL.md but is missing `references/foo.md` will get the missing file
+ * seeded without disturbing their SKILL.md.
+ *
+ * Returns the count of FILES written.
  */
 export function ensureRequiredGlobalSkills(
-  required: ReadonlyArray<{ slug: string; content: string }>,
+  required: ReadonlyArray<{ slug: string; files: { path: string; content: string }[] }>,
 ): { ensured: number } {
   mkdirSync(GLOBAL_AGENT_SKILLS_DIR, { recursive: true });
   let ensured = 0;
   for (const s of required) {
-    const dir = join(GLOBAL_AGENT_SKILLS_DIR, s.slug);
-    const file = join(dir, 'SKILL.md');
-    if (existsSync(file)) continue;
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(file, s.content, 'utf-8');
-    ensured += 1;
+    for (const file of s.files) {
+      const target = join(GLOBAL_AGENT_SKILLS_DIR, s.slug, file.path);
+      if (existsSync(target)) continue;
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, file.content, 'utf-8');
+      ensured += 1;
+    }
   }
   return { ensured };
 }

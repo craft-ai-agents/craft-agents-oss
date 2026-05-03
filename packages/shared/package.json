@@ -9,7 +9,8 @@
   "scripts": {
     "test": "bun test",
     "test:watch": "bun test --watch",
-    "sync:craft-agent-bash-patterns": "bun run src/config/sync-craft-agent-bash-patterns.ts"
+    "sync:craft-agent-bash-patterns": "bun run src/config/sync-craft-agent-bash-patterns.ts",
+    "generate:bundled-skills": "bun scripts/generate-bundled-skills.ts"
   },
   "exports": {
     ".": "./src/index.ts",
