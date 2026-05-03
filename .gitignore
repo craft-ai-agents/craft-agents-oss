@@ -94,3 +94,6 @@ scratch.md
 /automations.json
 /automations-history.jsonl
 /activated-agents.json
+
+# Auto-generated bundle of bundled-skills markdown — regenerated on every dev/build
+packages/shared/src/skills/bundled.generated.ts
