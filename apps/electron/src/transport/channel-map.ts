@@ -225,6 +225,13 @@ export const CHANNEL_MAP = {
   // Sources change listener
   onSourcesChanged: listener(RPC_CHANNELS.sources.CHANGED),
 
+  // Global sources (Phase 2)
+  listGlobalSources: invoke(RPC_CHANNELS.sources.LIST_GLOBAL),
+  getEnabledGlobalSources: invoke(RPC_CHANNELS.sources.GET_ENABLED_GLOBAL),
+  setGlobalSourceEnabled: invoke(RPC_CHANNELS.sources.SET_GLOBAL_ENABLED),
+  promoteSourceToGlobal: invoke(RPC_CHANNELS.sources.PROMOTE_TO_GLOBAL),
+  onGlobalSourcesChanged: listener(RPC_CHANNELS.sources.CHANGED_GLOBAL),
+
 	  // Skills
 	  getSkills: invoke(RPC_CHANNELS.skills.GET),
 	  listGlobalSkills: invoke(RPC_CHANNELS.skills.LIST_GLOBAL),

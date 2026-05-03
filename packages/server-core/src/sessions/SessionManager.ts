@@ -73,7 +73,7 @@ import {
   type SessionLaunchReceipt,
   pickSessionFields,
 } from '@craft-agent/shared/sessions'
-import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
+import { loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
 import { getValidClaudeOAuthToken } from '@craft-agent/shared/auth'
 import { resolveAuthEnvVars } from '@craft-agent/shared/config'
@@ -1459,7 +1459,7 @@ export class SessionManager implements ISessionManager {
       },
       onSourceChange: async (slug: string, source: LoadedSource | null) => {
         sessionLog.info(`Source '${slug}' changed:`, source ? 'updated' : 'deleted')
-        const sources = loadWorkspaceSources(workspaceRootPath)
+        const sources = loadAllSources(workspaceRootPath)
         this.broadcastSourcesChanged(workspaceId, sources)
         await this.reloadSourcesForWorkspace(workspaceRootPath)
       },
@@ -1467,7 +1467,7 @@ export class SessionManager implements ISessionManager {
         sessionLog.info(`Source guide changed: ${sourceSlug}`)
         // Broadcast the updated sources list so sidebar picks up guide changes
         // Note: Guide changes don't require session source reload (no server changes)
-        const sources = loadWorkspaceSources(workspaceRootPath)
+        const sources = loadAllSources(workspaceRootPath)
         this.broadcastSourcesChanged(workspaceId, sources)
       },
       onStatusConfigChange: () => {
@@ -8036,7 +8036,7 @@ export class SessionManager implements ISessionManager {
    * Resolve @mentions in automation prompts to source and skill slugs
    */
   private resolveAutomationMentions(workspaceRootPath: string, mentions: string[]): { sourceSlugs: string[]; skillSlugs: string[] } | undefined {
-    const sources = loadWorkspaceSources(workspaceRootPath)
+    const sources = loadAllSources(workspaceRootPath)
     const skills = loadAllSkills(workspaceRootPath)
     const sourceSlugs: string[] = []
     const skillSlugs: string[] = []
@@ -8345,7 +8345,7 @@ export class SessionManager implements ISessionManager {
 
     // Check source compatibility (before writing JSONL so fixes are persisted)
     if (storedSession.enabledSourceSlugs?.length) {
-      const availableSources = loadWorkspaceSources(workspaceRootPath)
+      const availableSources = loadAllSources(workspaceRootPath)
       const availableSlugs = new Set(availableSources.map(s => s.config.slug))
       const missingSources = storedSession.enabledSourceSlugs.filter(s => !availableSlugs.has(s))
       if (missingSources.length > 0) {

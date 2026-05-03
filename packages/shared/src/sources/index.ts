@@ -37,6 +37,8 @@ export {
 export type {
   GlobalSourcesManifest,
   LoadAllSourcesOptions,
+  MirrorSourceOptions,
+  MirrorSourceResult,
 } from './storage.ts';
 
 // Storage functions
@@ -74,6 +76,11 @@ export {
   loadGlobalSource,
   loadGlobalSources,
   listGlobalSourceSlugs,
+  // Write-path (Phase 2)
+  writeGlobalSourcesManifest,
+  activateGlobalSourceInWorkspace,
+  deactivateGlobalSourceInWorkspace,
+  mirrorSourceToGlobal,
   // Create/Delete operations
   generateSourceSlug,
   createSource,

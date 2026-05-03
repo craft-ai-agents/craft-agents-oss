@@ -8,7 +8,7 @@
  * NOT a workspace slug. The `LoadedSource.workspaceId` is derived via basename().
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, renameSync, rmSync } from 'fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, renameSync, rmSync } from 'fs';
 import { homedir } from 'os';
 import { join, basename } from 'path';
 import { randomUUID } from 'crypto';
@@ -560,9 +560,241 @@ export function isGlobalSourceActivatedInWorkspace(workspaceRootPath: string, sl
   return readGlobalSourcesManifest(workspaceRootPath).activatedSlugs.includes(slug);
 }
 
-// NOTE: write-path helpers (`activateGlobalSourceInWorkspace`,
-// `deactivateGlobalSourceInWorkspace`, `writeGlobalSourcesManifest`,
-// `mirrorSourceToGlobal`) ship in Phase 2 alongside the RPC handlers.
+// ============================================================
+// Write Path — Phase 2 (Lane B)
+// ============================================================
+//
+// Atomic write pattern matches mirrorSkillToGlobal: stage to a temp file or
+// directory, then renameSync into place. This keeps readers from observing
+// torn writes and lets concurrent writers race the rename.
+
+/**
+ * Atomically write the activation manifest for a workspace.
+ *
+ * Slugs are deduped, trimmed, and sorted. The manifest is written via
+ * temp-file + renameSync so concurrent writes from different RPC calls or
+ * file watchers cannot corrupt the file.
+ */
+export function writeGlobalSourcesManifest(
+  workspaceRootPath: string,
+  slugs: string[]
+): void {
+  const sourcesDir = getWorkspaceSourcesPath(workspaceRootPath);
+  mkdirSync(sourcesDir, { recursive: true });
+
+  const normalized = Array.from(new Set(
+    slugs
+      .filter((s): s is string => typeof s === 'string')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  )).sort();
+
+  const manifest: GlobalSourcesManifest = {
+    version: GLOBAL_SOURCES_MANIFEST_VERSION,
+    activatedSlugs: normalized,
+    lastModified: new Date().toISOString(),
+  };
+
+  const finalPath = getWorkspaceGlobalSourcesManifestPath(workspaceRootPath);
+  const tmpPath = `${finalPath}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync(tmpPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf-8');
+  try {
+    renameSync(tmpPath, finalPath);
+  } catch (err) {
+    // Best-effort cleanup of the staging file on failure.
+    if (existsSync(tmpPath)) {
+      try { rmSync(tmpPath, { force: true }); } catch { /* ignore */ }
+    }
+    throw err;
+  }
+}
+
+/**
+ * Add `slug` to the workspace's activation manifest. Idempotent — re-activating
+ * an already-active slug is a no-op (still rewrites the file with the latest
+ * `lastModified`, which is harmless).
+ */
+export function activateGlobalSourceInWorkspace(
+  workspaceRootPath: string,
+  slug: string
+): string[] {
+  const normalized = slug.trim();
+  if (!normalized) return readGlobalSourcesManifest(workspaceRootPath).activatedSlugs;
+
+  const current = new Set(readGlobalSourcesManifest(workspaceRootPath).activatedSlugs);
+  current.add(normalized);
+  const next = Array.from(current);
+  writeGlobalSourcesManifest(workspaceRootPath, next);
+  return Array.from(new Set(next)).sort();
+}
+
+/**
+ * Remove `slug` from the workspace's activation manifest. Idempotent — removing
+ * a slug that wasn't active is a no-op rewrite.
+ */
+export function deactivateGlobalSourceInWorkspace(
+  workspaceRootPath: string,
+  slug: string
+): string[] {
+  const normalized = slug.trim();
+  if (!normalized) return readGlobalSourcesManifest(workspaceRootPath).activatedSlugs;
+
+  const current = new Set(readGlobalSourcesManifest(workspaceRootPath).activatedSlugs);
+  current.delete(normalized);
+  const next = Array.from(current);
+  writeGlobalSourcesManifest(workspaceRootPath, next);
+  return Array.from(new Set(next)).sort();
+}
+
+/**
+ * Options for `mirrorSourceToGlobal`.
+ */
+export interface MirrorSourceOptions {
+  /**
+   * If true, replace any existing global source with the same slug. The
+   * displaced copy is moved to a `.old-<slug>-<pid>-<rand>/` sibling and
+   * removed after the rename succeeds. Default: false.
+   */
+  overwrite?: boolean;
+  /**
+   * If true, signal to the caller that workspace credentials should be
+   * promoted to the global tier. Phase 2 does NOT actually copy creds —
+   * that work lives in Lane C's `credential-manager` extensions and ships
+   * in Phase 3. We propagate the flag through the result so the RPC layer
+   * (and downstream UI) can react. Default: false.
+   *
+   * TODO: Phase 3 wires credential copy via Lane C's credential-manager
+   * extensions (see docs/global-sources/03-credentials.md).
+   */
+  includeCredentials?: boolean;
+}
+
+/**
+ * Result of `mirrorSourceToGlobal`.
+ */
+export interface MirrorSourceResult {
+  /** True when files were copied to the global library on this call. */
+  mirrored: boolean;
+  /** Absolute path to the global source directory after the operation. */
+  path: string;
+  /**
+   * Echoes back `includeCredentials`. Phase 2 does nothing with creds; this
+   * is the contract Phase 3 (Lane C) will act on.
+   */
+  credentialsRequested: boolean;
+}
+
+/**
+ * Promote a workspace source to the global library.
+ *
+ * Steps (mirrors `mirrorSkillToGlobal`):
+ *   1. Validate the workspace source has a parseable config.json.
+ *   2. Stage a copy under `~/.agents/sources/.tmp-<slug>-<pid>-<rand>/`.
+ *   3. If a global source with the same slug exists:
+ *        - without `overwrite`: throw (caller surfaces a clear error)
+ *        - with `overwrite: true`: move the existing aside to `.old-...`,
+ *          renameSync the staging dir into place, drop the displaced copy.
+ *      Otherwise renameSync the staging dir directly.
+ *   4. Activate the slug in the source workspace's manifest (per
+ *      docs/global-sources/02-runtime.md § Mirror flow step 5) so the
+ *      workspace continues to see the source after promotion.
+ *   5. Return a result; credential copy (if requested) is Phase 3 (Lane C).
+ *
+ * @throws Error if the workspace source is missing or invalid, or if a global
+ *   source with the same slug exists and `overwrite` is not set.
+ */
+export function mirrorSourceToGlobal(
+  workspaceRootPath: string,
+  slug: string,
+  opts: MirrorSourceOptions = {}
+): MirrorSourceResult {
+  const normalized = slug.trim();
+  if (!normalized) {
+    throw new Error('mirrorSourceToGlobal: slug is required');
+  }
+
+  const workspaceSourceDir = getSourcePath(workspaceRootPath, normalized);
+  const workspaceConfigFile = join(workspaceSourceDir, 'config.json');
+  if (!existsSync(workspaceConfigFile)) {
+    throw new Error(`mirrorSourceToGlobal: workspace source not found: ${normalized}`);
+  }
+
+  // Validate the config parses before we copy anything global-side.
+  try {
+    const parsed = readJsonFileSync<FolderSourceConfig>(workspaceConfigFile);
+    if (!parsed || typeof parsed !== 'object' || !parsed.slug) {
+      throw new Error('config.json is missing required fields');
+    }
+  } catch (err) {
+    throw new Error(`mirrorSourceToGlobal: invalid workspace source config for ${normalized}: ${(err as Error).message}`);
+  }
+
+  mkdirSync(GLOBAL_AGENT_SOURCES_DIR, { recursive: true });
+  const globalSourceDir = getGlobalSourcePath(normalized);
+  const globalExists = existsSync(join(globalSourceDir, 'config.json'));
+
+  if (globalExists && !opts.overwrite) {
+    throw new Error(
+      `mirrorSourceToGlobal: a global source with slug '${normalized}' already exists. ` +
+      `Pass { overwrite: true } to replace it.`
+    );
+  }
+
+  const stagingDir = join(
+    GLOBAL_AGENT_SOURCES_DIR,
+    `.tmp-${normalized}-${process.pid}-${randomUUID().slice(0, 8)}`
+  );
+
+  let mirrored = false;
+  try {
+    cpSync(workspaceSourceDir, stagingDir, { recursive: true });
+
+    if (!existsSync(join(stagingDir, 'config.json'))) {
+      // Source vanished mid-copy; abort cleanly.
+      rmSync(stagingDir, { recursive: true, force: true });
+      throw new Error(`mirrorSourceToGlobal: workspace source '${normalized}' became invalid mid-copy`);
+    }
+
+    if (globalExists) {
+      const displacedDir = join(
+        GLOBAL_AGENT_SOURCES_DIR,
+        `.old-${normalized}-${process.pid}-${randomUUID().slice(0, 8)}`
+      );
+      try {
+        renameSync(globalSourceDir, displacedDir);
+      } catch {
+        // Existing global vanished between existsSync and rename. Fine —
+        // rename below will land into an empty target.
+      }
+      try {
+        renameSync(stagingDir, globalSourceDir);
+        mirrored = true;
+      } finally {
+        if (existsSync(displacedDir)) {
+          rmSync(displacedDir, { recursive: true, force: true });
+        }
+      }
+    } else {
+      renameSync(stagingDir, globalSourceDir);
+      mirrored = true;
+    }
+  } catch (err) {
+    if (existsSync(stagingDir)) {
+      try { rmSync(stagingDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+    throw err;
+  }
+
+  // Activate in the source workspace so it keeps seeing the source after
+  // promotion (docs/global-sources/02-runtime.md § Mirror flow step 5).
+  activateGlobalSourceInWorkspace(workspaceRootPath, normalized);
+
+  return {
+    mirrored,
+    path: globalSourceDir,
+    credentialsRequested: opts.includeCredentials === true,
+  };
+}
 
 /**
  * Load a single global source by slug from `~/.agents/sources/<slug>/`.

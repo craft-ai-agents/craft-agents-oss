@@ -509,6 +509,17 @@ export interface ElectronAPI {
   // Sources change listener (live updates when sources are added/removed)
   onSourcesChanged(callback: (workspaceId: string, sources: LoadedSource[]) => void): () => void
 
+  // Global sources (Phase 2 — define-once, activate-per-workspace)
+  listGlobalSources(): Promise<LoadedSource[]>
+  getEnabledGlobalSources(workspaceId: string): Promise<string[]>
+  setGlobalSourceEnabled(workspaceId: string, sourceSlug: string, enabled: boolean): Promise<string[]>
+  promoteSourceToGlobal(
+    workspaceId: string,
+    sourceSlug: string,
+    opts?: { overwrite?: boolean; includeCredentials?: boolean },
+  ): Promise<{ mirrored: boolean; path: string; credentialsRequested: boolean }>
+  onGlobalSourcesChanged(callback: (workspaceId: string | null) => void): () => void
+
   // Default permissions change listener (live updates when default.json changes)
   onDefaultPermissionsChanged(callback: () => void): () => void
 

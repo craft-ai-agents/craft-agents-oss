@@ -238,6 +238,16 @@ export const RPC_CHANNELS = {
     CHANGED: 'sources:changed',
     GET_PERMISSIONS: 'sources:getPermissions',
     GET_MCP_TOOLS: 'sources:getMcpTools',
+    /** Every source defined globally at ~/.agents/sources/. */
+    LIST_GLOBAL: 'sources:listGlobal',
+    /** Slugs activated in a workspace's `.global-sources.json`. */
+    GET_ENABLED_GLOBAL: 'sources:getEnabledGlobal',
+    /** Toggle a global source's activation in a workspace. */
+    SET_GLOBAL_ENABLED: 'sources:setGlobalEnabled',
+    /** Promote a workspace source into the global library. */
+    PROMOTE_TO_GLOBAL: 'sources:promoteToGlobal',
+    /** Push event when global library or activation manifest changed. */
+    CHANGED_GLOBAL: 'sources:changedGlobal',
   },
   oauth: {
     START: 'oauth:start',

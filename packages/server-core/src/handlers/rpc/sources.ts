@@ -1,6 +1,15 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import { loadWorkspaceSources } from '@craft-agent/shared/sources'
+import {
+  loadWorkspaceSources,
+  loadGlobalSources,
+  readGlobalSourcesManifest,
+  activateGlobalSourceInWorkspace,
+  deactivateGlobalSourceInWorkspace,
+  mirrorSourceToGlobal,
+  loadAllSources,
+  type MirrorSourceOptions,
+} from '@craft-agent/shared/sources'
 import { safeJsonParse } from '@craft-agent/shared/utils/files'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import type { RpcServer } from '@craft-agent/server-core/transport'
@@ -16,7 +25,36 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workspace.GET_PERMISSIONS,
   RPC_CHANNELS.permissions.GET_DEFAULTS,
   RPC_CHANNELS.sources.GET_MCP_TOOLS,
+  RPC_CHANNELS.sources.LIST_GLOBAL,
+  RPC_CHANNELS.sources.GET_ENABLED_GLOBAL,
+  RPC_CHANNELS.sources.SET_GLOBAL_ENABLED,
+  RPC_CHANNELS.sources.PROMOTE_TO_GLOBAL,
 ] as const
+
+/**
+ * Push the global-sources changed event. Mirrors `broadcastAgentDefinitionsChanged` —
+ * we go through the wsServer push surface when available and fall back to
+ * silent no-op for hosts (e.g. tests) without one.
+ */
+export function broadcastSourcesChangedGlobal(
+  deps: HandlerDeps,
+  workspaceId: string | null
+): void {
+  const wsServerLike = (deps as unknown as { wsServer?: { push?: (...args: unknown[]) => void } })
+  wsServerLike.wsServer?.push?.(RPC_CHANNELS.sources.CHANGED_GLOBAL, { to: 'all' }, workspaceId)
+}
+
+function broadcastSourcesChanged(
+  deps: HandlerDeps,
+  workspaceId: string,
+  workspaceRootPath: string,
+): void {
+  const wsServerLike = (deps as unknown as { wsServer?: { push?: (...args: unknown[]) => void } })
+  // Mirror SessionManager.broadcastSourcesChanged — sends the workspace's
+  // current source list so renderer atoms refresh without a refetch round-trip.
+  const sources = loadAllSources(workspaceRootPath)
+  wsServerLike.wsServer?.push?.(RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, sources)
+}
 
 export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): void {
   const log = deps.platform.logger
@@ -240,4 +278,68 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       return { success: false, error: errorMessage }
     }
   })
+
+  // ------------------------------------------------------------------------
+  // Global sources (Phase 2 — Lane B)
+  // ------------------------------------------------------------------------
+
+  // List every source defined globally at ~/.agents/sources/.
+  server.handle(RPC_CHANNELS.sources.LIST_GLOBAL, async () => {
+    return loadGlobalSources()
+  })
+
+  // Return the activatedSlugs array for a workspace's manifest.
+  server.handle(RPC_CHANNELS.sources.GET_ENABLED_GLOBAL, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return [] as string[]
+    return readGlobalSourcesManifest(workspace.rootPath).activatedSlugs
+  })
+
+  // Toggle a global source's activation in a workspace.
+  server.handle(
+    RPC_CHANNELS.sources.SET_GLOBAL_ENABLED,
+    async (_ctx, workspaceId: string, slug: string, enabled: boolean) => {
+      const workspace = getWorkspaceByNameOrId(workspaceId)
+      if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+
+      const next = enabled
+        ? activateGlobalSourceInWorkspace(workspace.rootPath, slug)
+        : deactivateGlobalSourceInWorkspace(workspace.rootPath, slug)
+
+      // Active sessions in this workspace need to re-resolve their source
+      // list — go through SessionManager so the existing reload pipeline
+      // (setSourceServers) reconciles MCP / API server processes.
+      try {
+        const reload = (deps.sessionManager as unknown as {
+          reloadSourcesForWorkspace?: (rootPath: string) => Promise<void>
+        }).reloadSourcesForWorkspace
+        if (typeof reload === 'function') {
+          await reload.call(deps.sessionManager, workspace.rootPath)
+        }
+      } catch (err) {
+        log.error('SET_GLOBAL_ENABLED: reloadSourcesForWorkspace failed:', err)
+      }
+
+      broadcastSourcesChangedGlobal(deps, workspaceId)
+      broadcastSourcesChanged(deps, workspaceId, workspace.rootPath)
+      log.info(`Global source '${slug}' ${enabled ? 'activated' : 'deactivated'} in ${workspaceId}`)
+      return next
+    }
+  )
+
+  // Promote a workspace source into the global library.
+  server.handle(
+    RPC_CHANNELS.sources.PROMOTE_TO_GLOBAL,
+    async (_ctx, workspaceId: string, slug: string, opts?: MirrorSourceOptions) => {
+      const workspace = getWorkspaceByNameOrId(workspaceId)
+      if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+
+      const result = mirrorSourceToGlobal(workspace.rootPath, slug, opts ?? {})
+
+      broadcastSourcesChangedGlobal(deps, workspaceId)
+      broadcastSourcesChanged(deps, workspaceId, workspace.rootPath)
+      log.info(`Promoted source '${slug}' to global from ${workspaceId} (mirrored=${result.mirrored})`)
+      return result
+    }
+  )
 }

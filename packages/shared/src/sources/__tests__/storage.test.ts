@@ -31,6 +31,10 @@ const {
   loadGlobalSources,
   listGlobalSourceSlugs,
   loadAllSources,
+  writeGlobalSourcesManifest,
+  activateGlobalSourceInWorkspace,
+  deactivateGlobalSourceInWorkspace,
+  mirrorSourceToGlobal,
 } = storage;
 
 afterAll(() => {
@@ -242,5 +246,168 @@ describe('loadGlobalSources / listGlobalSourceSlugs', () => {
     writeGlobalSource(slug);
     const all = loadGlobalSources();
     expect(all.find((s) => s.config.slug === slug)).toBeDefined();
+  });
+});
+
+// ============================================================
+// Phase 2 — write path
+// ============================================================
+
+describe('writeGlobalSourcesManifest', () => {
+  test('writes valid JSON with version, activatedSlugs, lastModified', () => {
+    const ws = makeWorkspace();
+    writeGlobalSourcesManifest(ws, ['notion', 'linear']);
+
+    const m = readGlobalSourcesManifest(ws);
+    expect(m.version).toBe(1);
+    expect(m.activatedSlugs).toEqual(['linear', 'notion']); // sorted
+    expect(typeof m.lastModified).toBe('string');
+    // ISO-ish timestamp
+    expect(Number.isFinite(Date.parse(m.lastModified))).toBe(true);
+  });
+
+  test('dedupes and trims slugs on write', () => {
+    const ws = makeWorkspace();
+    writeGlobalSourcesManifest(ws, ['notion', '  notion  ', '', 'github']);
+    const m = readGlobalSourcesManifest(ws);
+    expect(m.activatedSlugs).toEqual(['github', 'notion']);
+  });
+
+  test('concurrent writes do not corrupt the file (atomic rename)', async () => {
+    const ws = makeWorkspace();
+    // Race many writers. The final file must be valid JSON and contain a
+    // subset of the inputs — we don't assert which writer wins, just that
+    // we never observe a torn file.
+    const inputs = Array.from({ length: 16 }, (_, i) => [`slug-${i}`]);
+    await Promise.all(inputs.map((slugs) =>
+      Promise.resolve().then(() => writeGlobalSourcesManifest(ws, slugs))
+    ));
+
+    const m = readGlobalSourcesManifest(ws);
+    expect(m.version).toBe(1);
+    expect(Array.isArray(m.activatedSlugs)).toBe(true);
+    // Exactly one slug should win, and it should be one of the inputs.
+    expect(m.activatedSlugs.length).toBe(1);
+    expect(/^slug-\d+$/.test(m.activatedSlugs[0]!)).toBe(true);
+  });
+});
+
+describe('activate / deactivate', () => {
+  test('activate adds the slug to the manifest', () => {
+    const ws = makeWorkspace();
+    activateGlobalSourceInWorkspace(ws, 'notion');
+    expect(readGlobalSourcesManifest(ws).activatedSlugs).toContain('notion');
+  });
+
+  test('double-activate is a no-op (idempotent)', () => {
+    const ws = makeWorkspace();
+    activateGlobalSourceInWorkspace(ws, 'notion');
+    activateGlobalSourceInWorkspace(ws, 'notion');
+    const slugs = readGlobalSourcesManifest(ws).activatedSlugs;
+    expect(slugs.filter((s) => s === 'notion').length).toBe(1);
+  });
+
+  test('deactivate removes the slug', () => {
+    const ws = makeWorkspace();
+    activateGlobalSourceInWorkspace(ws, 'notion');
+    activateGlobalSourceInWorkspace(ws, 'github');
+    deactivateGlobalSourceInWorkspace(ws, 'notion');
+
+    const slugs = readGlobalSourcesManifest(ws).activatedSlugs;
+    expect(slugs).toContain('github');
+    expect(slugs).not.toContain('notion');
+  });
+
+  test('deactivate is idempotent for an unknown slug', () => {
+    const ws = makeWorkspace();
+    deactivateGlobalSourceInWorkspace(ws, 'never-activated');
+    expect(readGlobalSourcesManifest(ws).activatedSlugs).toEqual([]);
+  });
+
+  test('empty / whitespace slug is ignored', () => {
+    const ws = makeWorkspace();
+    activateGlobalSourceInWorkspace(ws, '  ');
+    expect(readGlobalSourcesManifest(ws).activatedSlugs).toEqual([]);
+  });
+});
+
+describe('mirrorSourceToGlobal', () => {
+  test('with no existing global, creates the global and activates it', () => {
+    const slug = 'promo-fresh-' + Date.now();
+    const ws = makeWorkspace();
+    writeWorkspaceSource(ws, slug);
+
+    const result = mirrorSourceToGlobal(ws, slug);
+    expect(result.mirrored).toBe(true);
+    expect(result.path).toBe(getGlobalSourcePath(slug));
+    expect(result.credentialsRequested).toBe(false);
+
+    // Global exists.
+    const g = loadGlobalSource(slug);
+    expect(g).not.toBeNull();
+    expect(g!.config.slug).toBe(slug);
+
+    // Source workspace's manifest now lists the slug.
+    expect(readGlobalSourcesManifest(ws).activatedSlugs).toContain(slug);
+  });
+
+  test('throws clearly on collision without overwrite', () => {
+    const slug = 'promo-collide-' + Date.now();
+    const ws = makeWorkspace();
+    writeWorkspaceSource(ws, slug);
+    writeGlobalSource(slug, { name: 'pre-existing' });
+
+    expect(() => mirrorSourceToGlobal(ws, slug)).toThrow(/already exists/i);
+  });
+
+  test('with overwrite: true, replaces existing and moves displaced copy aside', () => {
+    const slug = 'promo-overwrite-' + Date.now();
+    const ws = makeWorkspace();
+    writeWorkspaceSource(ws, slug);
+    writeGlobalSource(slug, { name: 'old-global' });
+
+    const result = mirrorSourceToGlobal(ws, slug, { overwrite: true });
+    expect(result.mirrored).toBe(true);
+
+    // The displaced .old-... directory should have been cleaned up.
+    const stagingArtifacts = readdirSync(GLOBAL_AGENT_SOURCES_DIR)
+      .filter((e) => e.startsWith(`.old-${slug}-`) || e.startsWith(`.tmp-${slug}-`));
+    expect(stagingArtifacts.length).toBe(0);
+
+    // New content is the workspace source's MCP url.
+    const g = loadGlobalSource(slug);
+    expect(g!.config.mcp?.url).toBe('https://workspace.test/mcp');
+  });
+
+  test('includeCredentials: false (default) does not touch credentials', () => {
+    const slug = 'promo-nocreds-' + Date.now();
+    const ws = makeWorkspace();
+    writeWorkspaceSource(ws, slug);
+
+    const result = mirrorSourceToGlobal(ws, slug);
+    expect(result.credentialsRequested).toBe(false);
+
+    // No credentials.json should appear in the global source dir.
+    const globalEntries = readdirSync(getGlobalSourcePath(slug));
+    expect(globalEntries.some((e) => e === 'credentials.json')).toBe(false);
+  });
+
+  test('includeCredentials: true propagates the flag without copying creds (Phase 3 work)', () => {
+    const slug = 'promo-creds-flag-' + Date.now();
+    const ws = makeWorkspace();
+    writeWorkspaceSource(ws, slug);
+
+    const result = mirrorSourceToGlobal(ws, slug, { includeCredentials: true });
+    expect(result.credentialsRequested).toBe(true);
+
+    // Phase 2 still does NOT copy creds — that's Lane C / Phase 3.
+    const globalEntries = readdirSync(getGlobalSourcePath(slug));
+    expect(globalEntries.some((e) => e === 'credentials.json')).toBe(false);
+  });
+
+  test('throws when workspace source is missing', () => {
+    const ws = makeWorkspace();
+    expect(() => mirrorSourceToGlobal(ws, 'does-not-exist-' + Date.now()))
+      .toThrow(/workspace source not found/i);
   });
 });
