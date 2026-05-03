@@ -15,7 +15,7 @@
 import { homedir } from 'os';
 import { existsSync, realpathSync } from 'fs';
 import { debug } from '../utils/debug.ts';
-import { dirname, isAbsolute, relative, resolve } from 'path';
+import { dirname, isAbsolute, relative, resolve, win32 } from 'path';
 import { getSessionSafeAllowedToolNames } from '@craft-agent/session-tools-core';
 import { isBrowserToolNameOrAlias } from './browser-tool-names.ts';
 import type { PermissionsContext, MergedPermissionsConfig } from './permissions-config.ts';
@@ -179,6 +179,21 @@ function isWithin(base: string, target: string): boolean {
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }
 
+function looksLikeWindowsAbsolutePath(path: string): boolean {
+  return /^[a-zA-Z]:[\\/]/.test(path);
+}
+
+function normalizeWindowsAbsolutePathForComparison(path: string): string {
+  return win32.resolve(path).replace(/\\/g, '/').toLowerCase();
+}
+
+function isWindowsPathWithinDirectory(targetPath: string, baseDir: string): boolean {
+  const normalizedBase = normalizeWindowsAbsolutePathForComparison(baseDir);
+  const normalizedTarget = normalizeWindowsAbsolutePathForComparison(targetPath);
+  const rel = win32.relative(normalizedBase, normalizedTarget);
+  return rel === '' || (!rel.startsWith('..') && !win32.isAbsolute(rel));
+}
+
 /**
  * Check whether targetPath is inside baseDir (or exactly equal to it).
  *
@@ -188,6 +203,13 @@ function isWithin(base: string, target: string): boolean {
 function isPathWithinDirectory(targetPath: string, baseDir: string): boolean {
   const expandedTarget = expandHome(targetPath);
   const expandedBase = expandHome(baseDir);
+
+  if (
+    looksLikeWindowsAbsolutePath(expandedTarget) &&
+    looksLikeWindowsAbsolutePath(expandedBase)
+  ) {
+    return isWindowsPathWithinDirectory(expandedTarget, expandedBase);
+  }
 
   const resolvedTarget = resolve(expandedTarget);
   const resolvedBase = resolve(expandedBase);

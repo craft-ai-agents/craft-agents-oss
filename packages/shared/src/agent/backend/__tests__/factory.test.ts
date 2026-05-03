@@ -9,10 +9,13 @@
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { join } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import {
   detectProvider,
   createBackend,
   createAgent,
+  createBackendFromResolvedContext,
   fetchBackendModels,
   getAvailableProviders,
   initializeBackendHostRuntime,
@@ -250,15 +253,40 @@ describe('phase4 backend abstraction APIs', () => {
     })).not.toThrow();
   });
 
-  // Skip: resolveClaudeCliPath finds the CLI via node_modules traversal even from dist/, so this
-  // only fails in a truly isolated packaged environment, not in the dev monorepo.
-  it.skip('initializeBackendHostRuntime throws for dist-style host root in dev', () => {
-    expect(() => initializeBackendHostRuntime({
-      hostRuntime: {
-        appRootPath: join(process.cwd(), 'apps', 'electron', 'dist'),
-        isPackaged: false,
-      },
-    })).toThrow('Claude Code SDK not found');
+  it('createBackendFromResolvedContext throws when Anthropic runtime tooling is missing', () => {
+    const appRootPath = mkdtempSync(join(tmpdir(), 'runneros-missing-runtime-'));
+    try {
+      expect(() => createBackendFromResolvedContext({
+        context: {
+          connection: null,
+          provider: 'anthropic',
+          authType: undefined,
+          resolvedModel: 'claude-sonnet-4-6',
+          capabilities: { needsHttpPoolServer: false },
+        },
+        coreConfig: createTestConfig(),
+        hostRuntime: {
+          appRootPath,
+          isPackaged: false,
+        },
+      })).toThrow('Claude Code SDK not found');
+    } finally {
+      rmSync(appRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it('initializeBackendHostRuntime does not throw when Anthropic runtime tooling is missing', () => {
+    const appRootPath = mkdtempSync(join(tmpdir(), 'runneros-missing-runtime-init-'));
+    try {
+      expect(() => initializeBackendHostRuntime({
+        hostRuntime: {
+          appRootPath,
+          isPackaged: false,
+        },
+      })).not.toThrow();
+    } finally {
+      rmSync(appRootPath, { recursive: true, force: true });
+    }
   });
 
   it('resolveSetupTestConnectionHint maps provider/baseUrl/piAuthProvider correctly', () => {
