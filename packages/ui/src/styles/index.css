@@ -547,3 +547,11 @@ html[data-font="inter"] {
   pointer-events: none;
   border-radius: inherit;
 }
+
+[data-ca-block-annotated='true'] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--info) 22%, transparent);
+}
+
+[data-ca-annotation-inline-code='true'] {
+  box-shadow: none;
+}

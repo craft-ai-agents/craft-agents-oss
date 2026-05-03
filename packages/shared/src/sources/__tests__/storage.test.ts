@@ -34,6 +34,7 @@ const {
   listGlobalSourceSlugs,
   loadAllSources,
   getSourcesBySlugs,
+  isSourceUsable,
   markLoadedSourceAuthenticated,
   markLoadedSourceNeedsReauth,
   writeGlobalSourcesManifest,
@@ -213,6 +214,7 @@ describe('global source auth state updates', () => {
     const ws = makeWorkspace();
     writeGlobalSource(slug, {
       name: 'Auth Global',
+      mcp: { transport: 'http', url: 'https://example.test/mcp', authType: 'bearer' },
       isAuthenticated: false,
       connectionStatus: 'needs_auth',
       connectionError: 'missing token',
@@ -223,7 +225,7 @@ describe('global source auth state updates', () => {
     expect(markLoadedSourceAuthenticated(source!)).toBe(true);
 
     const reloaded = loadGlobalSource(slug, ws);
-    expect(reloaded!.config.isAuthenticated).toBe(true);
+    expect(isSourceUsable(reloaded!)).toBe(true);
     expect(reloaded!.config.connectionStatus).toBe('connected');
     expect(reloaded!.config.connectionError).toBeUndefined();
     expect(readdirSync(join(ws, 'sources'))).toEqual([]);
@@ -234,6 +236,7 @@ describe('global source auth state updates', () => {
     const ws = makeWorkspace();
     writeGlobalSource(slug, {
       name: 'Reauth Global',
+      mcp: { transport: 'http', url: 'https://example.test/mcp', authType: 'bearer' },
       isAuthenticated: true,
       connectionStatus: 'connected',
     });
@@ -243,7 +246,7 @@ describe('global source auth state updates', () => {
     expect(markLoadedSourceNeedsReauth(source!, 'signed out')).toBe(true);
 
     const reloaded = loadGlobalSource(slug, ws);
-    expect(reloaded!.config.isAuthenticated).toBe(false);
+    expect(isSourceUsable(reloaded!)).toBe(false);
     expect(reloaded!.config.connectionStatus).toBe('needs_auth');
     expect(reloaded!.config.connectionError).toBe('signed out');
     expect(readdirSync(join(ws, 'sources'))).toEqual([]);

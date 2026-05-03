@@ -2451,7 +2451,7 @@ function AppShellContent({
           <button
             type="button"
             onClick={() => setUserProfileOpen(true)}
-            className="titlebar-no-drag fixed top-[11px] right-[102px] z-panel h-[26px] inline-flex items-center gap-1.5 rounded-lg border border-border/40 bg-background/80 px-2.5 text-xs text-foreground/70 shadow-sm backdrop-blur hover:bg-foreground/5"
+            className="titlebar-no-drag fixed top-[11px] right-[102px] z-panel h-[26px] inline-flex items-center gap-1.5 rounded-lg border border-border/40 bg-background/80 px-2.5 text-xs text-foreground/70 shadow-xs backdrop-blur hover:bg-foreground/5"
           >
             <DatabaseZap className="h-3.5 w-3.5" />
             Memory & Profile

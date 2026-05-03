@@ -68,6 +68,7 @@ mock.module('@craft-agent/shared/config', () => ({
   getLlmConnection: () => null,
   getDefaultLlmConnection: () => null,
   resolveAuthEnvVars: () => ({}),
+  resetManagedAnthropicAuthEnvVars: () => {},
   getToolIconsDir: () => '/tmp/tool-icons',
   getMiniModel: () => 'claude-haiku-4-5-20251001',
   getDefaultThinkingLevel: () => 'medium',
