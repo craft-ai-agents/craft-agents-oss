@@ -33,7 +33,7 @@ describe('handleListSkills', () => {
   it('returns an error when listSkills is not wired into the context', async () => {
     const result = await handleListSkills(makeCtx(), {});
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('not available');
+    expect(result.content[0]?.text).toContain('not available');
   });
 
   it('passes options through to the injected callback verbatim', async () => {
@@ -74,7 +74,7 @@ describe('handleListSkills', () => {
 
     const result = await handleListSkills(ctx, {});
     expect(result.isError).toBeFalsy();
-    const parsed = JSON.parse(result.content[0].text);
+    const parsed = JSON.parse(result.content[0]?.text ?? '');
     expect(parsed.total).toBe(2);
     expect(parsed.skills).toHaveLength(2);
     expect(parsed.skills[1].source).toBe('global-dormant');
@@ -88,6 +88,6 @@ describe('handleListSkills', () => {
 
     const result = await handleListSkills(ctx, {});
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('listSkills exploded');
+    expect(result.content[0]?.text).toContain('listSkills exploded');
   });
 });

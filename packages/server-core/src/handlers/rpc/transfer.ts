@@ -39,6 +39,13 @@ const DEFAULT_TRANSFER_TTL_MS = 5 * 60 * 1000
 const activeTransfers = new Map<string, TransferState>()
 const transferableHandlers = new Map<string, HandlerFn>()
 
+export const HANDLED_CHANNELS = [
+  RPC_CHANNELS.transfer.START,
+  RPC_CHANNELS.transfer.CHUNK,
+  RPC_CHANNELS.transfer.COMMIT,
+  RPC_CHANNELS.transfer.ABORT,
+] as const
+
 function getTransferTtlMs(): number {
   const raw = Number(process.env.CRAFT_TRANSFER_TTL_MS)
   return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_TRANSFER_TTL_MS

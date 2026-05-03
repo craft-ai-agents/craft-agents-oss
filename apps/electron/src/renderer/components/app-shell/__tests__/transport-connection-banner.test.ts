@@ -1,9 +1,15 @@
-import { describe, expect, it } from 'bun:test'
+import { beforeAll, describe, expect, it } from 'bun:test'
+import { setupI18n, i18n } from '@craft-agent/shared/i18n'
 import {
   getTransportBannerCopy,
   shouldShowTransportConnectionBanner,
 } from '../TransportConnectionBanner'
 import type { TransportConnectionState } from '../../../../shared/types'
+
+beforeAll(() => {
+  setupI18n()
+  i18n.changeLanguage('en')
+})
 
 function state(overrides: Partial<TransportConnectionState>): TransportConnectionState {
   return {

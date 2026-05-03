@@ -324,6 +324,7 @@
       "version": "0.8.13",
       "dependencies": {
         "beautiful-mermaid": "*",
+        "croner": "^10.0.1",
         "gray-matter": "^4.0.3",
         "zod": "^3.23.0",
         "zod-to-json-schema": "^3.25.0",

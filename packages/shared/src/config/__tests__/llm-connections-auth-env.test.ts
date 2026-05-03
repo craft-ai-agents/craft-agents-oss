@@ -32,13 +32,14 @@ afterEach(() => {
   restoreEnv()
 })
 
-function createBedrockConnection(
+function createPiBedrockConnection(
   overrides: Partial<LlmConnection> = {},
 ): LlmConnection {
   return {
     slug: 'bedrock-test',
     name: 'Bedrock Test',
-    providerType: 'bedrock',
+    providerType: 'pi',
+    piAuthProvider: 'amazon-bedrock',
     authType: 'bearer_token',
     awsRegion: 'us-east-1',
     createdAt: Date.now(),
@@ -47,8 +48,8 @@ function createBedrockConnection(
 }
 
 describe('Bedrock auth env handling', () => {
-  it('resolveAuthEnvVars does not enable Claude Bedrock routing for bedrock connections', async () => {
-    const connection = createBedrockConnection()
+  it('resolveAuthEnvVars does not enable Claude Bedrock routing for Pi Bedrock connections', async () => {
+    const connection = createPiBedrockConnection()
     const credentialManager = {
       getLlmApiKey: async () => 'bedrock-bearer-token',
       getLlmIamCredentials: async () => null,
@@ -63,8 +64,8 @@ describe('Bedrock auth env handling', () => {
 
     expect(result.success).toBe(true)
     expect(result.envVars.CLAUDE_CODE_USE_BEDROCK).toBeUndefined()
-    expect(result.envVars.AWS_BEARER_TOKEN_BEDROCK).toBe('bedrock-bearer-token')
-    expect(result.envVars.AWS_REGION).toBe('us-east-1')
+    expect(result.envVars.AWS_BEARER_TOKEN_BEDROCK).toBeUndefined()
+    expect(result.envVars.AWS_REGION).toBeUndefined()
   })
 
   it('clearClaudeBedrockRoutingEnvVars removes only Claude-specific Bedrock routing vars', () => {

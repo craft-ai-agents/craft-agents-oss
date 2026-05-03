@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import { loadSource, loadWorkspaceSources, getSourceCredentialManager } from '@craft-agent/shared/sources'
+import { loadAllSources, getSourceCredentialManager, getSourcesBySlugs } from '@craft-agent/shared/sources'
 import { createPendingFlow } from '@craft-agent/shared/auth'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -99,7 +99,7 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
       throw new Error(`Workspace not found: ${ctx.workspaceId}`)
     }
 
-    const source = loadSource(workspace.rootPath, sourceSlug)
+    const [source] = getSourcesBySlugs(workspace.rootPath, [sourceSlug])
     if (!source) {
       throw new Error(`Source not found: ${sourceSlug}`)
     }
@@ -149,7 +149,7 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
       sessionManager: deps.sessionManager,
       pushSourcesChanged: (workspaceId) => {
         const ws = getWorkspaceByNameOrId(workspaceId)
-        const sources = ws ? loadWorkspaceSources(ws.rootPath) : []
+        const sources = ws ? loadAllSources(ws.rootPath) : []
         pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, sources)
       },
       logger: log,
@@ -186,7 +186,7 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
       throw new Error(`Workspace not found: ${ctx.workspaceId}`)
     }
 
-    const source = loadSource(workspace.rootPath, sourceSlug)
+    const [source] = getSourcesBySlugs(workspace.rootPath, [sourceSlug])
     if (!source) {
       throw new Error(`Source not found: ${sourceSlug}`)
     }
@@ -195,7 +195,7 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
     credManager.markSourceNeedsReauth(source, 'Signed out by user')
 
     // Push source status update
-    const revokeSources = loadWorkspaceSources(workspace.rootPath)
+    const revokeSources = loadAllSources(workspace.rootPath)
     pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId: ctx.workspaceId }, ctx.workspaceId, revokeSources)
 
     log.info(`[OAuth] Revoked credentials for ${sourceSlug}`)

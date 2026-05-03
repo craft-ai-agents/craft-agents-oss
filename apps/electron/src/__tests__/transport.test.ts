@@ -705,9 +705,9 @@ describe('edge cases', () => {
       await client.invoke('anything')
       throw new Error('Should have thrown')
     } catch (err: any) {
-      expect(
-        err.message.includes('Connection') || err.message.includes('WebSocket error during connection setup'),
-      ).toBe(true)
+      expect(err.kind).toBe('network')
+      expect(err.code).toBe('WS_ERROR')
+      expect(err.message).toContain('WebSocket error')
     }
   })
 

@@ -7,18 +7,20 @@ import { describe, test, expect, beforeAll, afterAll, mock } from 'bun:test';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readdirSync } from 'fs';
 import * as os from 'os';
 import { tmpdir } from 'os';
-import { join } from 'path';
-import type { FolderSourceConfig } from '../types.ts';
+import { join, resolve, sep } from 'path';
+import type { FolderSourceConfig, LoadedSource } from '../types.ts';
 
 // Redirect ~/ to a temp directory before importing storage.ts so that
 // GLOBAL_AGENT_SOURCES_DIR resolves into the sandbox.
 const sandboxHome = mkdtempSync(join(tmpdir(), 'global-sources-home-'));
+const sandboxHomeResolved = resolve(sandboxHome);
+const realHomeSourcesDir = resolve(join(os.homedir(), '.agents', 'sources'));
 mock.module('os', () => ({
   ...os,
   homedir: () => sandboxHome,
 }));
 
-const storage = await import('../storage.ts');
+const storage = await import(`../storage.ts?global-sources-storage-test=${process.pid}-${Date.now()}`);
 const {
   GLOBAL_AGENT_SOURCES_DIR,
   GLOBAL_WORKSPACE_ID,
@@ -31,6 +33,9 @@ const {
   loadGlobalSources,
   listGlobalSourceSlugs,
   loadAllSources,
+  getSourcesBySlugs,
+  markLoadedSourceAuthenticated,
+  markLoadedSourceNeedsReauth,
   writeGlobalSourcesManifest,
   activateGlobalSourceInWorkspace,
   deactivateGlobalSourceInWorkspace,
@@ -45,6 +50,20 @@ afterAll(() => {
   }
 });
 
+function assertSandboxedGlobalSourcesDir(path = GLOBAL_AGENT_SOURCES_DIR): void {
+  const resolvedPath = resolve(path);
+  const isInsideSandboxHome = resolvedPath === sandboxHomeResolved
+    || resolvedPath.startsWith(`${sandboxHomeResolved}${sep}`);
+
+  if (
+    !isInsideSandboxHome
+    || resolvedPath === realHomeSourcesDir
+    || !resolvedPath.endsWith(join('.agents', 'sources'))
+  ) {
+    throw new Error(`Refusing to touch non-sandboxed global sources dir: ${resolvedPath}`);
+  }
+}
+
 function makeWorkspace(): string {
   const ws = mkdtempSync(join(tmpdir(), 'global-sources-ws-'));
   mkdirSync(join(ws, 'sources'), { recursive: true });
@@ -58,6 +77,7 @@ function writeManifest(ws: string, body: string | object): void {
 }
 
 function writeGlobalSource(slug: string, partial: Partial<FolderSourceConfig> = {}): void {
+  assertSandboxedGlobalSourcesDir();
   const dir = getGlobalSourcePath(slug);
   mkdirSync(dir, { recursive: true });
   const config: FolderSourceConfig = {
@@ -89,6 +109,7 @@ function writeWorkspaceSource(ws: string, slug: string): void {
 }
 
 beforeAll(() => {
+  assertSandboxedGlobalSourcesDir();
   // Ensure the global sources dir is empty at the start.
   try {
     rmSync(GLOBAL_AGENT_SOURCES_DIR, { recursive: true, force: true });
@@ -102,6 +123,13 @@ describe('global tier paths', () => {
   test('GLOBAL_AGENT_SOURCES_DIR resolves under the sandboxed home', () => {
     expect(GLOBAL_AGENT_SOURCES_DIR.startsWith(sandboxHome)).toBe(true);
     expect(GLOBAL_AGENT_SOURCES_DIR.endsWith(join('.agents', 'sources'))).toBe(true);
+  });
+
+  test('destructive global test paths cannot target the real home sources dir', () => {
+    const resolvedGlobalDir = resolve(GLOBAL_AGENT_SOURCES_DIR);
+    expect(resolvedGlobalDir.startsWith(`${sandboxHomeResolved}${sep}`)).toBe(true);
+    expect(resolvedGlobalDir).not.toBe(realHomeSourcesDir);
+    expect(() => assertSandboxedGlobalSourcesDir(realHomeSourcesDir)).toThrow(/Refusing to touch/);
   });
 
   test('GLOBAL_WORKSPACE_ID is the documented sentinel', () => {
@@ -154,7 +182,7 @@ describe('loadGlobalSource', () => {
     expect(loadGlobalSource('does-not-exist-' + Date.now())).toBeNull();
   });
 
-  test('loads an existing global config with tier=global', () => {
+  test('loads an existing global config with tier=global for global library listings', () => {
     const slug = 'notion-' + Date.now();
     writeGlobalSource(slug, { name: 'Notion' });
     const s = loadGlobalSource(slug);
@@ -163,6 +191,62 @@ describe('loadGlobalSource', () => {
     expect(s!.config.name).toBe('Notion');
     expect(s!.tier).toBe('global');
     expect(s!.workspaceId).toBe(GLOBAL_WORKSPACE_ID);
+  });
+
+  test('loads activated global with active workspace runtime context', () => {
+    const slug = 'runtime-global-' + Date.now();
+    const ws = makeWorkspace();
+    writeGlobalSource(slug, { name: 'Runtime Global' });
+
+    const s = loadGlobalSource(slug, ws);
+    expect(s).not.toBeNull();
+    expect(s!.tier).toBe('global');
+    expect(s!.workspaceRootPath).toBe(ws);
+    expect(s!.workspaceId).toBe(ws.split('/').pop());
+    expect(s!.folderPath).toBe(getGlobalSourcePath(slug));
+  });
+});
+
+describe('global source auth state updates', () => {
+  test('markLoadedSourceAuthenticated updates the global config, not a workspace ghost copy', () => {
+    const slug = 'auth-global-' + Date.now();
+    const ws = makeWorkspace();
+    writeGlobalSource(slug, {
+      name: 'Auth Global',
+      isAuthenticated: false,
+      connectionStatus: 'needs_auth',
+      connectionError: 'missing token',
+    });
+
+    const source = loadGlobalSource(slug, ws);
+    expect(source).not.toBeNull();
+    expect(markLoadedSourceAuthenticated(source!)).toBe(true);
+
+    const reloaded = loadGlobalSource(slug, ws);
+    expect(reloaded!.config.isAuthenticated).toBe(true);
+    expect(reloaded!.config.connectionStatus).toBe('connected');
+    expect(reloaded!.config.connectionError).toBeUndefined();
+    expect(readdirSync(join(ws, 'sources'))).toEqual([]);
+  });
+
+  test('markLoadedSourceNeedsReauth updates the global config for activated globals', () => {
+    const slug = 'reauth-global-' + Date.now();
+    const ws = makeWorkspace();
+    writeGlobalSource(slug, {
+      name: 'Reauth Global',
+      isAuthenticated: true,
+      connectionStatus: 'connected',
+    });
+
+    const source = loadGlobalSource(slug, ws);
+    expect(source).not.toBeNull();
+    expect(markLoadedSourceNeedsReauth(source!, 'signed out')).toBe(true);
+
+    const reloaded = loadGlobalSource(slug, ws);
+    expect(reloaded!.config.isAuthenticated).toBe(false);
+    expect(reloaded!.config.connectionStatus).toBe('needs_auth');
+    expect(reloaded!.config.connectionError).toBe('signed out');
+    expect(readdirSync(join(ws, 'sources'))).toEqual([]);
   });
 });
 
@@ -174,9 +258,11 @@ describe('loadAllSources', () => {
     writeManifest(ws, { version: 1, activatedSlugs: [slug], lastModified: 'x' });
 
     const all = loadAllSources(ws);
-    const found = all.find((s) => s.config.slug === slug);
+    const found = all.find((s: LoadedSource) => s.config.slug === slug);
     expect(found).toBeDefined();
     expect(found!.tier).toBe('global');
+    expect(found!.workspaceRootPath).toBe(ws);
+    expect(found!.workspaceId).toBe(ws.split('/').pop());
   });
 
   test('excludes globals not listed in the manifest', () => {
@@ -185,7 +271,7 @@ describe('loadAllSources', () => {
     const ws = makeWorkspace(); // no manifest
 
     const all = loadAllSources(ws);
-    expect(all.find((s) => s.config.slug === slug)).toBeUndefined();
+    expect(all.find((s: LoadedSource) => s.config.slug === slug)).toBeUndefined();
   });
 
   test('includeDormant: true surfaces unactivated globals as global-dormant', () => {
@@ -194,7 +280,7 @@ describe('loadAllSources', () => {
     const ws = makeWorkspace();
 
     const dormant = loadAllSources(ws, { includeDormant: true });
-    const found = dormant.find((s) => s.config.slug === slug);
+    const found = dormant.find((s: LoadedSource) => s.config.slug === slug);
     expect(found).toBeDefined();
     expect(found!.tier).toBe('global-dormant');
   });
@@ -207,7 +293,7 @@ describe('loadAllSources', () => {
     writeManifest(ws, { version: 1, activatedSlugs: [slug], lastModified: 'x' });
 
     const all = loadAllSources(ws);
-    const matches = all.filter((s) => s.config.slug === slug);
+    const matches = all.filter((s: LoadedSource) => s.config.slug === slug);
     expect(matches.length).toBe(1);
     expect(matches[0]!.tier).toBe('workspace');
     // Workspace MCP url, not the global one.
@@ -218,7 +304,7 @@ describe('loadAllSources', () => {
     const ws = makeWorkspace();
     writeManifest(ws, { version: 1, activatedSlugs: ['ghost-slug-xyz'], lastModified: 'x' });
     const all = loadAllSources(ws);
-    expect(all.find((s) => s.config.slug === 'ghost-slug-xyz')).toBeUndefined();
+    expect(all.find((s: LoadedSource) => s.config.slug === 'ghost-slug-xyz')).toBeUndefined();
   });
 
   test('includeDormant skips globals already activated', () => {
@@ -228,9 +314,38 @@ describe('loadAllSources', () => {
     writeManifest(ws, { version: 1, activatedSlugs: [slug], lastModified: 'x' });
 
     const all = loadAllSources(ws, { includeDormant: true });
-    const matches = all.filter((s) => s.config.slug === slug);
+    const matches = all.filter((s: LoadedSource) => s.config.slug === slug);
     expect(matches.length).toBe(1);
     expect(matches[0]!.tier).toBe('global');
+  });
+});
+
+describe('getSourcesBySlugs', () => {
+  test('resolves activated globals by slug with workspace runtime context', () => {
+    const slug = 'by-slug-global-' + Date.now();
+    writeGlobalSource(slug);
+    const ws = makeWorkspace();
+    writeManifest(ws, { version: 1, activatedSlugs: [slug], lastModified: 'x' });
+
+    const sources = getSourcesBySlugs(ws, [slug]);
+    expect(sources.length).toBe(1);
+    expect(sources[0]!.config.slug).toBe(slug);
+    expect(sources[0]!.tier).toBe('global');
+    expect(sources[0]!.workspaceRootPath).toBe(ws);
+    expect(sources[0]!.workspaceId).toBe(ws.split('/').pop());
+  });
+
+  test('uses workspace source over same-slug activated global', () => {
+    const slug = 'by-slug-priority-' + Date.now();
+    writeGlobalSource(slug);
+    const ws = makeWorkspace();
+    writeWorkspaceSource(ws, slug);
+    writeManifest(ws, { version: 1, activatedSlugs: [slug], lastModified: 'x' });
+
+    const sources = getSourcesBySlugs(ws, [slug]);
+    expect(sources.length).toBe(1);
+    expect(sources[0]!.tier).toBe('workspace');
+    expect(sources[0]!.config.mcp?.url).toBe('https://workspace.test/mcp');
   });
 });
 
@@ -245,7 +360,7 @@ describe('loadGlobalSources / listGlobalSourceSlugs', () => {
     const slug = 'parsed-' + Date.now();
     writeGlobalSource(slug);
     const all = loadGlobalSources();
-    expect(all.find((s) => s.config.slug === slug)).toBeDefined();
+    expect(all.find((s: LoadedSource) => s.config.slug === slug)).toBeDefined();
   });
 });
 
@@ -304,7 +419,7 @@ describe('activate / deactivate', () => {
     activateGlobalSourceInWorkspace(ws, 'notion');
     activateGlobalSourceInWorkspace(ws, 'notion');
     const slugs = readGlobalSourcesManifest(ws).activatedSlugs;
-    expect(slugs.filter((s) => s === 'notion').length).toBe(1);
+    expect(slugs.filter((s: string) => s === 'notion').length).toBe(1);
   });
 
   test('deactivate removes the slug', () => {

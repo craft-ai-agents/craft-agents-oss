@@ -36,6 +36,7 @@ function stubClient(overrides?: Partial<WsRpcClient>): WsRpcClient {
       return () => {}
     }),
     reconnectNow: mock(() => {}),
+    emitReconnected: mock(() => {}),
     // expose internals for assertions
     _listeners: listeners,
     _capabilities: capabilities,

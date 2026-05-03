@@ -50,6 +50,8 @@ export {
   loadSourceConfig,
   saveSourceConfig,
   markSourceAuthenticated,
+  markLoadedSourceAuthenticated,
+  markLoadedSourceNeedsReauth,
   // Guide operations
   loadSourceGuide,
   saveSourceGuide,

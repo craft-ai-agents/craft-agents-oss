@@ -44,20 +44,33 @@ function makeSource(overrides: {
   workspaceId: string;
   tier: SourceTier;
   slug?: string;
+  type?: 'mcp' | 'api';
+  authType?: 'oauth' | 'bearer' | 'header';
 }): LoadedSource {
   const slug = overrides.slug ?? 'notion';
+  const type = overrides.type ?? 'mcp';
   return {
     config: {
       id: 'test-id',
       slug,
       name: 'Notion',
-      type: 'mcp',
+      type,
       enabled: true,
-      mcp: {
-        url: 'https://mcp.notion.com/',
-        authType: 'oauth',
-        transport: 'sse',
-      },
+      ...(type === 'mcp'
+        ? {
+            mcp: {
+              url: 'https://mcp.notion.com/',
+              authType: overrides.authType === 'bearer' ? 'bearer' : 'oauth',
+              transport: 'sse',
+            },
+          }
+        : {
+            api: {
+              baseUrl: 'https://api.example.test/',
+              authType: overrides.authType === 'header' ? 'header' : 'bearer',
+              headerName: 'X-API-Key',
+            },
+          }),
     } as FolderSourceConfig,
     guide: null,
     folderPath: `/tmp/sources/${slug}`,
@@ -124,6 +137,17 @@ describe('SourceCredentialManager.loadEffective', () => {
     expect(result?.value).toBe('global-token');
   });
 
+  test('global-tier MCP source preserves bearer fallback inside global fallback', async () => {
+    const source = makeSource({ workspaceId: 'ws-A', tier: 'global' });
+    await fakeCredentialManager.set(
+      { type: 'source_bearer', workspaceId: GLOBAL_WORKSPACE_ID, sourceId: 'notion' },
+      { value: 'global-bearer-token' },
+    );
+
+    const result = await credManager.loadEffective(source);
+    expect(result?.value).toBe('global-bearer-token');
+  });
+
   test('global-tier source with override marker returns null (suppresses global fallback)', async () => {
     const source = makeSource({ workspaceId: 'ws-A', tier: 'global' });
     await fakeCredentialManager.set(
@@ -153,6 +177,69 @@ describe('SourceCredentialManager.loadEffective', () => {
     const result = await credManager.loadEffective(source);
     expect(result?.value).toBe('real-token');
     expect(result?.override).toBe(true);
+  });
+});
+
+describe('SourceCredentialManager runtime credential helpers', () => {
+  let credManager: InstanceType<typeof SourceCredentialManager>;
+
+  beforeEach(() => {
+    fakeStore.clear();
+    credManager = new SourceCredentialManager();
+  });
+
+  test('getToken uses workspace override before global fallback for activated globals', async () => {
+    const source = makeSource({ workspaceId: 'ws-A', tier: 'global' });
+    await fakeCredentialManager.set(
+      { type: 'source_oauth', workspaceId: 'ws-A', sourceId: 'notion' },
+      { value: 'workspace-token' },
+    );
+    await fakeCredentialManager.set(
+      { type: 'source_oauth', workspaceId: GLOBAL_WORKSPACE_ID, sourceId: 'notion' },
+      { value: 'global-token' },
+    );
+
+    await expect(credManager.getToken(source)).resolves.toBe('workspace-token');
+  });
+
+  test('getToken falls back to global credential for activated globals', async () => {
+    const source = makeSource({ workspaceId: 'ws-A', tier: 'global' });
+    await fakeCredentialManager.set(
+      { type: 'source_oauth', workspaceId: GLOBAL_WORKSPACE_ID, sourceId: 'notion' },
+      { value: 'global-token' },
+    );
+
+    await expect(credManager.getToken(source)).resolves.toBe('global-token');
+  });
+
+  test('getApiCredential falls back to global credential for activated global API sources', async () => {
+    const source = makeSource({
+      workspaceId: 'ws-A',
+      tier: 'global',
+      slug: 'custom-api',
+      type: 'api',
+      authType: 'header',
+    });
+    await fakeCredentialManager.set(
+      { type: 'source_apikey', workspaceId: GLOBAL_WORKSPACE_ID, sourceId: 'custom-api' },
+      { value: 'global-api-key' },
+    );
+
+    await expect(credManager.getApiCredential(source)).resolves.toBe('global-api-key');
+  });
+
+  test('getToken honors workspace override marker and suppresses global fallback', async () => {
+    const source = makeSource({ workspaceId: 'ws-A', tier: 'global' });
+    await fakeCredentialManager.set(
+      { type: 'source_oauth', workspaceId: 'ws-A', sourceId: 'notion' },
+      { value: null as unknown as string, override: true },
+    );
+    await fakeCredentialManager.set(
+      { type: 'source_oauth', workspaceId: GLOBAL_WORKSPACE_ID, sourceId: 'notion' },
+      { value: 'global-token' },
+    );
+
+    await expect(credManager.getToken(source)).resolves.toBeNull();
   });
 });
 

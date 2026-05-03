@@ -8,16 +8,24 @@
  *
  * Uses real temp directories to test actual filesystem operations.
  *
- * Note: The global skills directory (~/.agents/skills/) is a module-level constant
- * that cannot be mocked reliably when tests run in parallel with other test files.
- * The loadAllSkills tests account for any pre-existing global skills by capturing a
- * baseline count and validating relative to it.
+ * The global skills directory is sandboxed via a dynamic import so the tests do
+ * not touch the user's real ~/.agents/skills library.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, afterAll, mock } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readdirSync, readFileSync } from 'fs';
-import { homedir, tmpdir } from 'os';
+import * as os from 'os';
 import { join } from 'path';
-import {
+import { statSync, unlinkSync } from 'fs';
+
+const sandboxHome = mkdtempSync(join(os.tmpdir(), 'skills-storage-home-'));
+mock.module('os', () => ({
+  ...os,
+  homedir: () => sandboxHome,
+}));
+
+const storageModule: typeof import('../storage.ts') = await import(`../storage.ts?skills-storage-test=${process.pid}-${Date.now()}`);
+
+const {
   loadAllSkills,
   loadGlobalSkills,
   loadWorkspaceSkills,
@@ -31,8 +39,7 @@ import {
   backfillWorkspaceSkillsToGlobal,
   ensureRequiredGlobalSkills,
   GLOBAL_AGENT_SKILLS_DIR,
-} from '../storage.ts';
-import { statSync, unlinkSync } from 'fs';
+} = storageModule;
 
 // ============================================================
 // Temp Directory Setup
@@ -42,8 +49,7 @@ let tempDir: string;
 let workspaceRoot: string;
 let projectRoot: string;
 
-// The real global skills directory — we cannot mock this reliably.
-const REAL_GLOBAL_SKILLS_DIR = join(homedir(), '.agents', 'skills');
+const REAL_GLOBAL_SKILLS_DIR = GLOBAL_AGENT_SKILLS_DIR;
 const TEST_PREFIX = '_test_storage_';
 
 // ============================================================
@@ -111,7 +117,7 @@ function createEmptySkillDir(skillsDir: string, slug: string): string {
 
 /** Get the set of slugs currently in the real global skills directory */
 function getExistingGlobalSlugs(): Set<string> {
-  const emptyWs = mkdtempSync(join(tmpdir(), 'skills-baseline-'));
+  const emptyWs = mkdtempSync(join(os.tmpdir(), 'skills-baseline-'));
   mkdirSync(join(emptyWs, 'skills'), { recursive: true });
   try {
     const skills = loadAllSkills(emptyWs);
@@ -127,7 +133,7 @@ function getExistingGlobalSlugs(): Set<string> {
 // ============================================================
 
 beforeEach(() => {
-  tempDir = mkdtempSync(join(tmpdir(), 'skills-test-'));
+  tempDir = mkdtempSync(join(os.tmpdir(), 'skills-test-'));
   workspaceRoot = join(tempDir, 'workspace');
   projectRoot = join(tempDir, 'project');
 
@@ -155,12 +161,16 @@ afterEach(() => {
   }
 });
 
+afterAll(() => {
+  rmSync(sandboxHome, { recursive: true, force: true });
+});
+
 // ============================================================
 // Tests: loadSkill (single workspace skill)
 // ============================================================
 
-describe('loadSkill', () => {
-  it('should load a valid skill from workspace', () => {
+describe.serial('loadSkill', () => {
+  it.serial('should load a valid skill from workspace', () => {
     const skillsDir = join(workspaceRoot, 'skills');
     createSkill(skillsDir, 'commit', {
       name: 'Git Commit',
@@ -179,26 +189,26 @@ describe('loadSkill', () => {
     expect(skill!.path).toBe(join(skillsDir, 'commit'));
   });
 
-  it('should return null for non-existent skill slug', () => {
+  it.serial('should return null for non-existent skill slug', () => {
     const skill = loadSkill(workspaceRoot, 'nonexistent');
     expect(skill).toBeNull();
   });
 
-  it('should return null for directory without SKILL.md', () => {
+  it.serial('should return null for directory without SKILL.md', () => {
     createEmptySkillDir(join(workspaceRoot, 'skills'), 'empty-skill');
 
     const skill = loadSkill(workspaceRoot, 'empty-skill');
     expect(skill).toBeNull();
   });
 
-  it('should return null for invalid SKILL.md (missing required fields)', () => {
+  it.serial('should return null for invalid SKILL.md (missing required fields)', () => {
     createInvalidSkill(join(workspaceRoot, 'skills'), 'bad-skill');
 
     const skill = loadSkill(workspaceRoot, 'bad-skill');
     expect(skill).toBeNull();
   });
 
-  it('should load skill with optional globs', () => {
+  it.serial('should load skill with optional globs', () => {
     createSkill(join(workspaceRoot, 'skills'), 'frontend', {
       globs: ['*.tsx', '*.css'],
     });
@@ -209,7 +219,7 @@ describe('loadSkill', () => {
     expect(skill!.metadata.globs).toEqual(['*.tsx', '*.css']);
   });
 
-  it('should load explicit skill category from frontmatter', () => {
+  it.serial('should load explicit skill category from frontmatter', () => {
     createSkill(join(workspaceRoot, 'skills'), 'launch-copy', {
       name: 'Launch Copy',
       description: 'Writes launch campaign copy',
@@ -222,7 +232,7 @@ describe('loadSkill', () => {
     expect(skill!.metadata.category).toBe('marketing');
   });
 
-  it('should infer category when frontmatter category is invalid', () => {
+  it.serial('should infer category when frontmatter category is invalid', () => {
     createSkill(join(workspaceRoot, 'skills'), 'git-review', {
       name: 'Git Review',
       description: 'Reviews code, pull requests, and TypeScript tests',
@@ -235,7 +245,7 @@ describe('loadSkill', () => {
     expect(skill!.metadata.category).toBe('developer');
   });
 
-  it('should fall back to uncategorized when invalid category has no keyword match', () => {
+  it.serial('should fall back to uncategorized when invalid category has no keyword match', () => {
     createSkill(join(workspaceRoot, 'skills'), 'misc-helper', {
       name: 'Misc Helper',
       description: 'General reusable guidance',
@@ -248,7 +258,7 @@ describe('loadSkill', () => {
     expect(skill!.metadata.category).toBe('uncategorized');
   });
 
-  it('should parse and normalize skill tags', () => {
+  it.serial('should parse and normalize skill tags', () => {
     createSkill(join(workspaceRoot, 'skills'), 'tagged', {
       tags: ['Research', ' analysis ', 'Research', 'Design Systems'],
     });
@@ -259,7 +269,7 @@ describe('loadSkill', () => {
     expect(skill!.metadata.tags).toEqual(['research', 'analysis', 'design-systems']);
   });
 
-  it('should parse comma-separated skill tags', () => {
+  it.serial('should parse comma-separated skill tags', () => {
     createSkill(join(workspaceRoot, 'skills'), 'comma-tags', {
       tags: 'Video, Publish, social media, video',
     });
@@ -270,7 +280,7 @@ describe('loadSkill', () => {
     expect(skill!.metadata.tags).toEqual(['video', 'publish', 'social-media']);
   });
 
-  it('should infer category from slug, description, and tags when category is missing', () => {
+  it.serial('should infer category from slug, description, and tags when category is missing', () => {
     createSkill(join(workspaceRoot, 'skills'), 'canva-presentation', {
       name: 'Presentation Builder',
       description: 'Creates slide deck visuals and design assets',
@@ -283,7 +293,7 @@ describe('loadSkill', () => {
     expect(skill!.metadata.category).toBe('media-design');
   });
 
-  it('should load skill with normalized requiredSources', () => {
+  it.serial('should load skill with normalized requiredSources', () => {
     createSkill(join(workspaceRoot, 'skills'), 'with-sources', {
       requiredSources: ['linear', ' github ', 'linear'],
     });
@@ -294,7 +304,7 @@ describe('loadSkill', () => {
     expect(skill!.metadata.requiredSources).toEqual(['linear', 'github']);
   });
 
-  it('should normalize single-string requiredSources into an array', () => {
+  it.serial('should normalize single-string requiredSources into an array', () => {
     const skillDir = join(workspaceRoot, 'skills', 'single-source');
     mkdirSync(skillDir, { recursive: true });
     writeFileSync(join(skillDir, 'SKILL.md'), `---
@@ -312,7 +322,7 @@ Use linear tools.
     expect(skill!.metadata.requiredSources).toEqual(['linear']);
   });
 
-  it('should ignore invalid requiredSources entries', () => {
+  it.serial('should ignore invalid requiredSources entries', () => {
     const skillDir = join(workspaceRoot, 'skills', 'invalid-sources');
     mkdirSync(skillDir, { recursive: true });
     writeFileSync(join(skillDir, 'SKILL.md'), `---
@@ -334,7 +344,7 @@ Use linear tools.
     expect(skill!.metadata.requiredSources).toEqual(['linear']);
   });
 
-  it('should set iconPath when icon file exists', () => {
+  it.serial('should set iconPath when icon file exists', () => {
     const skillDir = createSkill(join(workspaceRoot, 'skills'), 'with-icon');
     writeFileSync(join(skillDir, 'icon.svg'), '<svg></svg>');
 
@@ -344,7 +354,7 @@ Use linear tools.
     expect(skill!.iconPath).toBe(join(skillDir, 'icon.svg'));
   });
 
-  it('should not set iconPath when no icon file exists', () => {
+  it.serial('should not set iconPath when no icon file exists', () => {
     createSkill(join(workspaceRoot, 'skills'), 'no-icon');
 
     const skill = loadSkill(workspaceRoot, 'no-icon');
@@ -358,8 +368,8 @@ Use linear tools.
 // Tests: loadWorkspaceSkills (all skills from workspace)
 // ============================================================
 
-describe('loadWorkspaceSkills', () => {
-  it('should load multiple skills from workspace', () => {
+describe.serial('loadWorkspaceSkills', () => {
+  it.serial('should load multiple skills from workspace', () => {
     const skillsDir = join(workspaceRoot, 'skills');
     createSkill(skillsDir, 'commit');
     createSkill(skillsDir, 'review');
@@ -376,18 +386,18 @@ describe('loadWorkspaceSkills', () => {
     }
   });
 
-  it('should return empty array for empty skills directory', () => {
+  it.serial('should return empty array for empty skills directory', () => {
     // workspaceRoot/skills/ exists but has no subdirectories
     const skills = loadWorkspaceSkills(workspaceRoot);
     expect(skills).toEqual([]);
   });
 
-  it('should return empty array for non-existent workspace root', () => {
+  it.serial('should return empty array for non-existent workspace root', () => {
     const skills = loadWorkspaceSkills(join(tempDir, 'nonexistent'));
     expect(skills).toEqual([]);
   });
 
-  it('should skip directories without SKILL.md', () => {
+  it.serial('should skip directories without SKILL.md', () => {
     const skillsDir = join(workspaceRoot, 'skills');
     createSkill(skillsDir, 'valid-skill');
     createEmptySkillDir(skillsDir, 'no-skill-md');
@@ -398,7 +408,7 @@ describe('loadWorkspaceSkills', () => {
     expect(skills[0]!.slug).toBe('valid-skill');
   });
 
-  it('should skip invalid SKILL.md files', () => {
+  it.serial('should skip invalid SKILL.md files', () => {
     const skillsDir = join(workspaceRoot, 'skills');
     createSkill(skillsDir, 'valid');
     createInvalidSkill(skillsDir, 'invalid');
@@ -409,7 +419,7 @@ describe('loadWorkspaceSkills', () => {
     expect(skills[0]!.slug).toBe('valid');
   });
 
-  it('should skip non-directory entries', () => {
+  it.serial('should skip non-directory entries', () => {
     const skillsDir = join(workspaceRoot, 'skills');
     createSkill(skillsDir, 'real-skill');
     // Create a plain file in the skills directory (not a subdirectory)
@@ -429,11 +439,11 @@ describe('loadWorkspaceSkills', () => {
 // We capture a baseline and verify our test skills appear with correct sources.
 // ============================================================
 
-describe('loadAllSkills', () => {
+describe.serial('loadAllSkills', () => {
   const getWorkspaceSkillsDir = () => join(workspaceRoot, 'skills');
   const getProjectSkillsDir = () => join(projectRoot, '.agents', 'skills');
 
-  it('should load workspace and project skills alongside any existing global skills', () => {
+  it.serial('should load workspace and project skills alongside any existing global skills', () => {
     const baselineGlobal = getExistingGlobalSlugs();
     const wsDir = getWorkspaceSkillsDir();
     const projDir = getProjectSkillsDir();
@@ -464,7 +474,7 @@ describe('loadAllSkills', () => {
     }
   });
 
-  it('should override global skills with workspace skills when slug matches', () => {
+  it.serial('should override global skills with workspace skills when slug matches', () => {
     const baselineGlobal = getExistingGlobalSlugs();
 
     // Only test override if there are actually global skills to override
@@ -496,7 +506,7 @@ describe('loadAllSkills', () => {
     expect(skills.length).toBe(baselineGlobal.size);
   });
 
-  it('should override workspace skills with project skills (same slug)', () => {
+  it.serial('should override workspace skills with project skills (same slug)', () => {
     const baselineGlobal = getExistingGlobalSlugs();
     const wsDir = getWorkspaceSkillsDir();
     const projDir = getProjectSkillsDir();
@@ -516,7 +526,7 @@ describe('loadAllSkills', () => {
     expect(deploy!.metadata.description).toBe('Project version');
   });
 
-  it('should handle full three-tier override: project > workspace > global', () => {
+  it.serial('should handle full three-tier override: project > workspace > global', () => {
     const baselineGlobal = getExistingGlobalSlugs();
     const wsDir = getWorkspaceSkillsDir();
     const projDir = getProjectSkillsDir();
@@ -546,7 +556,7 @@ describe('loadAllSkills', () => {
     expect(skills.length).toBe(baselineGlobal.size + 3);
   });
 
-  it('should handle missing project directory gracefully', () => {
+  it.serial('should handle missing project directory gracefully', () => {
     const baselineGlobal = getExistingGlobalSlugs();
     const wsDir = getWorkspaceSkillsDir();
     createSkill(wsDir, `${TEST_PREFIX}ws_skill`);
@@ -560,7 +570,7 @@ describe('loadAllSkills', () => {
     expect(wsSkill!.source).toBe('workspace');
   });
 
-  it('should skip project tier when projectRoot is undefined', () => {
+  it.serial('should skip project tier when projectRoot is undefined', () => {
     const baselineGlobal = getExistingGlobalSlugs();
     const projDir = getProjectSkillsDir();
     mkdirSync(projDir, { recursive: true });
@@ -579,7 +589,7 @@ describe('loadAllSkills', () => {
     expect(skills.length).toBe(baselineGlobal.size + 1);
   });
 
-  it('should return only global skills when workspace and project are empty', () => {
+  it.serial('should return only global skills when workspace and project are empty', () => {
     const baselineGlobal = getExistingGlobalSlugs();
 
     const skills = loadAllSkills(workspaceRoot);
@@ -591,7 +601,7 @@ describe('loadAllSkills', () => {
     }
   });
 
-  it('should correctly assign source for workspace and project tiers', () => {
+  it.serial('should correctly assign source for workspace and project tiers', () => {
     const baselineGlobal = getExistingGlobalSlugs();
     const wsDir = getWorkspaceSkillsDir();
     const projDir = getProjectSkillsDir();
@@ -614,7 +624,7 @@ describe('loadAllSkills', () => {
     }
   });
 
-  it('should deduplicate by slug across workspace and project tiers', () => {
+  it.serial('should deduplicate by slug across workspace and project tiers', () => {
     const baselineGlobal = getExistingGlobalSlugs();
     const wsDir = getWorkspaceSkillsDir();
     const projDir = getProjectSkillsDir();
@@ -638,7 +648,7 @@ describe('loadAllSkills', () => {
     expect(dup!.metadata.name).toBe('Proj Dup');
   });
 
-  it('should only load global library skills enabled for the workspace', () => {
+  it.serial('should only load global library skills enabled for the workspace', () => {
     mkdirSync(REAL_GLOBAL_SKILLS_DIR, { recursive: true });
     createSkill(REAL_GLOBAL_SKILLS_DIR, `${TEST_PREFIX}global_on`, {
       name: 'Enabled Global',
@@ -649,19 +659,27 @@ describe('loadAllSkills', () => {
       description: 'Not enabled for this workspace',
     });
 
-    expect(loadGlobalSkills().some(s => s.slug === `${TEST_PREFIX}global_on`)).toBe(true);
     expect(loadAllSkills(workspaceRoot).some(s => s.slug === `${TEST_PREFIX}global_on`)).toBe(false);
 
     const enabled = setGlobalSkillEnabled(workspaceRoot, `${TEST_PREFIX}global_on`, true);
     expect(enabled).toEqual([`${TEST_PREFIX}global_on`]);
     expect(listEnabledGlobalSkillSlugs(workspaceRoot)).toEqual([`${TEST_PREFIX}global_on`]);
 
+    createSkill(REAL_GLOBAL_SKILLS_DIR, `${TEST_PREFIX}global_on`, {
+      name: 'Enabled Global',
+      description: 'Enabled for this workspace',
+    });
+    createSkill(REAL_GLOBAL_SKILLS_DIR, `${TEST_PREFIX}global_off`, {
+      name: 'Disabled Global',
+      description: 'Not enabled for this workspace',
+    });
+
     const skills = loadAllSkills(workspaceRoot);
     expect(skills.find(s => s.slug === `${TEST_PREFIX}global_on`)?.source).toBe('global');
     expect(skills.find(s => s.slug === `${TEST_PREFIX}global_off`)).toBeUndefined();
   });
 
-  it('should let workspace skills override enabled global skills', () => {
+  it.serial('should let workspace skills override enabled global skills', () => {
     mkdirSync(REAL_GLOBAL_SKILLS_DIR, { recursive: true });
     createSkill(REAL_GLOBAL_SKILLS_DIR, `${TEST_PREFIX}override`, {
       name: 'Global Version',
@@ -685,17 +703,17 @@ describe('loadAllSkills', () => {
 // Tests: skillExists
 // ============================================================
 
-describe('skillExists', () => {
-  it('should return true for existing skill with SKILL.md', () => {
+describe.serial('skillExists', () => {
+  it.serial('should return true for existing skill with SKILL.md', () => {
     createSkill(join(workspaceRoot, 'skills'), 'exists-skill');
     expect(skillExists(workspaceRoot, 'exists-skill')).toBe(true);
   });
 
-  it('should return false for non-existent skill', () => {
+  it.serial('should return false for non-existent skill', () => {
     expect(skillExists(workspaceRoot, 'ghost-skill')).toBe(false);
   });
 
-  it('should return false for directory without SKILL.md', () => {
+  it.serial('should return false for directory without SKILL.md', () => {
     createEmptySkillDir(join(workspaceRoot, 'skills'), 'empty');
     expect(skillExists(workspaceRoot, 'empty')).toBe(false);
   });
@@ -705,8 +723,8 @@ describe('skillExists', () => {
 // Tests: listSkillSlugs
 // ============================================================
 
-describe('listSkillSlugs', () => {
-  it('should list all valid skill slugs', () => {
+describe.serial('listSkillSlugs', () => {
+  it.serial('should list all valid skill slugs', () => {
     const skillsDir = join(workspaceRoot, 'skills');
     createSkill(skillsDir, 'alpha');
     createSkill(skillsDir, 'beta');
@@ -716,12 +734,12 @@ describe('listSkillSlugs', () => {
     expect(slugs.sort()).toEqual(['alpha', 'beta']);
   });
 
-  it('should return empty array for empty skills directory', () => {
+  it.serial('should return empty array for empty skills directory', () => {
     const slugs = listSkillSlugs(workspaceRoot);
     expect(slugs).toEqual([]);
   });
 
-  it('should return empty array for non-existent workspace', () => {
+  it.serial('should return empty array for non-existent workspace', () => {
     const slugs = listSkillSlugs(join(tempDir, 'nonexistent'));
     expect(slugs).toEqual([]);
   });
@@ -731,8 +749,8 @@ describe('listSkillSlugs', () => {
 // Tests: deleteSkill
 // ============================================================
 
-describe('deleteSkill', () => {
-  it('should delete an existing skill', () => {
+describe.serial('deleteSkill', () => {
+  it.serial('should delete an existing skill', () => {
     const skillsDir = join(workspaceRoot, 'skills');
     createSkill(skillsDir, 'to-delete');
     expect(skillExists(workspaceRoot, 'to-delete')).toBe(true);
@@ -743,7 +761,7 @@ describe('deleteSkill', () => {
     expect(skillExists(workspaceRoot, 'to-delete')).toBe(false);
   });
 
-  it('should return false for non-existent skill', () => {
+  it.serial('should return false for non-existent skill', () => {
     const result = deleteSkill(workspaceRoot, 'nonexistent');
     expect(result).toBe(false);
   });
@@ -753,8 +771,8 @@ describe('deleteSkill', () => {
 // Tests: mirrorSkillToGlobal / backfillWorkspaceSkillsToGlobal
 // ============================================================
 
-describe('mirrorSkillToGlobal', () => {
-  it('copies a workspace skill to the global library and activates it', () => {
+describe.serial('mirrorSkillToGlobal', () => {
+  it.serial('copies a workspace skill to the global library and activates it', () => {
     const slug = `${TEST_PREFIX}mirror-new`;
     createSkill(join(workspaceRoot, 'skills'), slug, {
       name: 'Mirror New',
@@ -770,7 +788,7 @@ describe('mirrorSkillToGlobal', () => {
     expect(listEnabledGlobalSkillSlugs(workspaceRoot)).toContain(slug);
   });
 
-  it('preserves an existing global skill on slug conflict (no overwrite by default)', () => {
+  it.serial('preserves an existing global skill on slug conflict (no overwrite by default)', () => {
     const slug = `${TEST_PREFIX}mirror-conflict`;
 
     // Pre-existing global with content A
@@ -801,7 +819,7 @@ describe('mirrorSkillToGlobal', () => {
     expect(listEnabledGlobalSkillSlugs(workspaceRoot)).toContain(slug);
   });
 
-  it('replaces global content when overwrite: true', () => {
+  it.serial('replaces global content when overwrite: true', () => {
     const slug = `${TEST_PREFIX}mirror-overwrite`;
 
     mkdirSync(join(GLOBAL_AGENT_SKILLS_DIR, slug), { recursive: true });
@@ -821,13 +839,13 @@ describe('mirrorSkillToGlobal', () => {
     expect(globalContent).toContain('NEW_BODY_FROM_WORKSPACE');
   });
 
-  it('returns workspace-missing when the workspace has no skill at that slug', () => {
+  it.serial('returns workspace-missing when the workspace has no skill at that slug', () => {
     const result = mirrorSkillToGlobal(workspaceRoot, `${TEST_PREFIX}does-not-exist`);
     expect(result.mirrored).toBe(false);
     expect(result.skipReason).toBe('workspace-missing');
   });
 
-  it('returns invalid-skill for unparseable workspace SKILL.md', () => {
+  it.serial('returns invalid-skill for unparseable workspace SKILL.md', () => {
     const slug = `${TEST_PREFIX}mirror-invalid`;
     const dir = join(workspaceRoot, 'skills', slug);
     mkdirSync(dir, { recursive: true });
@@ -840,7 +858,7 @@ describe('mirrorSkillToGlobal', () => {
     expect(existsSync(join(GLOBAL_AGENT_SKILLS_DIR, slug))).toBe(false);
   });
 
-  it('leaves no .tmp- staging directories behind in the global skills dir after success', () => {
+  it.serial('leaves no .tmp- staging directories behind in the global skills dir after success', () => {
     const slug = `${TEST_PREFIX}mirror-staging-cleanup`;
     createSkill(join(workspaceRoot, 'skills'), slug);
 
@@ -858,7 +876,7 @@ describe('mirrorSkillToGlobal', () => {
     }
   });
 
-  it('overwrite: true atomically replaces existing global content', () => {
+  it.serial('overwrite: true atomically replaces existing global content', () => {
     const slug = `${TEST_PREFIX}mirror-atomic-overwrite`;
 
     // Existing global has multiple files including an asset that should be
@@ -891,7 +909,7 @@ describe('mirrorSkillToGlobal', () => {
     expect(leftover).toEqual([]);
   });
 
-  it('copies non-SKILL.md asset files (e.g. icon) along with the skill', () => {
+  it.serial('copies non-SKILL.md asset files (e.g. icon) along with the skill', () => {
     const slug = `${TEST_PREFIX}mirror-with-icon`;
     const skillDir = createSkill(join(workspaceRoot, 'skills'), slug);
     writeFileSync(join(skillDir, 'icon.svg'), '<svg>WORKSPACE_ICON</svg>');
@@ -904,8 +922,8 @@ describe('mirrorSkillToGlobal', () => {
   });
 });
 
-describe('backfillWorkspaceSkillsToGlobal', () => {
-  it('mirrors every parseable workspace skill into the global library', () => {
+describe.serial('backfillWorkspaceSkillsToGlobal', () => {
+  it.serial('mirrors every parseable workspace skill into the global library', () => {
     const slugA = `${TEST_PREFIX}backfill-a`;
     const slugB = `${TEST_PREFIX}backfill-b`;
     createSkill(join(workspaceRoot, 'skills'), slugA);
@@ -921,7 +939,7 @@ describe('backfillWorkspaceSkillsToGlobal', () => {
     expect(enabled).toContain(slugB);
   });
 
-  it('is idempotent — second run reports already-in-global instead of mirroring again', () => {
+  it.serial('is idempotent — second run reports already-in-global instead of mirroring again', () => {
     const slug = `${TEST_PREFIX}backfill-idempotent`;
     createSkill(join(workspaceRoot, 'skills'), slug);
 
@@ -933,7 +951,7 @@ describe('backfillWorkspaceSkillsToGlobal', () => {
     expect(second.alreadyInGlobal).toContain(slug);
   });
 
-  it('reports invalid skills under failed and skips them', () => {
+  it.serial('reports invalid skills under failed and skips them', () => {
     const goodSlug = `${TEST_PREFIX}backfill-good`;
     const badSlug = `${TEST_PREFIX}backfill-bad`;
     createSkill(join(workspaceRoot, 'skills'), goodSlug);
@@ -948,7 +966,7 @@ describe('backfillWorkspaceSkillsToGlobal', () => {
   });
 });
 
-describe('ensureRequiredGlobalSkills (multi-file)', () => {
+describe.serial('ensureRequiredGlobalSkills (multi-file)', () => {
   // Use a unique slug per test so we don't collide with the real global library
   // (which can't be mocked — see file header).
   const seededSlugs: string[] = [];
@@ -973,7 +991,7 @@ describe('ensureRequiredGlobalSkills (multi-file)', () => {
     seededSlugs.length = 0;
   });
 
-  it('seeds all files (including nested subdirectories) for a multi-file skill', () => {
+  it.serial('seeds all files (including nested subdirectories) for a multi-file skill', () => {
     const slug = `${TEST_PREFIX}multifile-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const skill = makeMultiFileSkill(slug);
 
@@ -987,7 +1005,7 @@ describe('ensureRequiredGlobalSkills (multi-file)', () => {
     expect(readFileSync(join(root, 'references', 'foo.md'), 'utf-8')).toContain('foo for');
   });
 
-  it('is idempotent — second seed writes nothing and does not overwrite existing files', () => {
+  it.serial('is idempotent — second seed writes nothing and does not overwrite existing files', () => {
     const slug = `${TEST_PREFIX}idempotent-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const skill = makeMultiFileSkill(slug);
 
@@ -1007,7 +1025,7 @@ describe('ensureRequiredGlobalSkills (multi-file)', () => {
     expect(statSync(fooMd).mtimeMs).toBe(beforeMtime);
   });
 
-  it('partial recovery — restores a missing reference file without disturbing siblings', () => {
+  it.serial('partial recovery — restores a missing reference file without disturbing siblings', () => {
     const slug = `${TEST_PREFIX}partial-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const skill = makeMultiFileSkill(slug);
 

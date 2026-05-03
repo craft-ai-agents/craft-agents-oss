@@ -8,10 +8,10 @@ import {
   deactivateGlobalSourceInWorkspace,
   mirrorSourceToGlobal,
   loadAllSources,
+  getSourcesBySlugs,
   type MirrorSourceOptions,
 } from '@craft-agent/shared/sources'
 import { safeJsonParse } from '@craft-agent/shared/utils/files'
-import { getCredentialManager } from '@craft-agent/shared/credentials'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
@@ -66,7 +66,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       log.error(`SOURCES_GET: Workspace not found: ${workspaceId}`)
       return []
     }
-    return loadWorkspaceSources(workspace.rootPath)
+    return loadAllSources(workspace.rootPath)
   })
 
   // Create a new source
@@ -114,9 +114,9 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
   server.handle(RPC_CHANNELS.sources.SAVE_CREDENTIALS, async (_ctx, workspaceId: string, sourceSlug: string, credential: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { loadSource, getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+    const { getSourceCredentialManager } = await import('@craft-agent/shared/sources')
 
-    const source = loadSource(workspace.rootPath, sourceSlug)
+    const [source] = getSourcesBySlugs(workspace.rootPath, [sourceSlug])
     if (!source) {
       throw new Error(`Source not found: ${sourceSlug}`)
     }
@@ -192,8 +192,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     if (!workspace) return { success: false, error: 'Workspace not found' }
 
     try {
-      const sources = await loadWorkspaceSources(workspace.rootPath)
-      const source = sources.find(s => s.config.slug === sourceSlug)
+      const [source] = getSourcesBySlugs(workspace.rootPath, [sourceSlug])
       if (!source) return { success: false, error: 'Source not found' }
       if (source.config.type !== 'mcp') return { success: false, error: 'Source is not an MCP server' }
       if (!source.config.mcp) return { success: false, error: 'MCP config not found' }
@@ -229,12 +228,8 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
 
         let accessToken: string | undefined
         if (source.config.mcp.authType === 'oauth' || source.config.mcp.authType === 'bearer') {
-          const credentialManager = getCredentialManager()
-          const credentialId = source.config.mcp.authType === 'oauth'
-            ? { type: 'source_oauth' as const, workspaceId: source.workspaceId, sourceId: sourceSlug }
-            : { type: 'source_bearer' as const, workspaceId: source.workspaceId, sourceId: sourceSlug }
-          const credential = await credentialManager.get(credentialId)
-          accessToken = credential?.value
+          const { getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+          accessToken = await getSourceCredentialManager().getToken(source) ?? undefined
         }
 
         log.info(`Fetching MCP tools from ${source.config.mcp.url}`)

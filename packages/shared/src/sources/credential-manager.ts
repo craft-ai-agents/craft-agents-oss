@@ -60,7 +60,7 @@ import {
   refreshGenericOAuthToken,
 } from '../auth/generic-oauth.ts';
 import { debug } from '../utils/debug.ts';
-import { markSourceAuthenticated, loadSourceConfig, saveSourceConfig, GLOBAL_WORKSPACE_ID } from './storage.ts';
+import { markLoadedSourceAuthenticated, markLoadedSourceNeedsReauth, GLOBAL_WORKSPACE_ID } from './storage.ts';
 
 /**
  * True when a credential ID points at the global tier (workspaceId === '__global__').
@@ -217,21 +217,30 @@ export class SourceCredentialManager {
    * the workspace record alone.
    */
   async loadEffective(source: LoadedSource): Promise<StoredCredential | null> {
-    const manager = getCredentialManager();
-    const wsId = this.getCredentialId(source);
-    const ws = await manager.get(wsId);
-
-    if (ws?.override === true) {
-      // Explicit suppression: return the workspace record only when it has a real value.
-      return ws.value ? ws : null;
+    if (source.tier !== 'global') {
+      return this.load(source);
     }
 
-    if (ws) return ws;
+    const manager = getCredentialManager();
+    const ids = this.getCredentialIdsForLoad(source);
+
+    for (const wsId of ids) {
+      const ws = await manager.get(wsId);
+
+      if (ws?.override === true) {
+        // Explicit suppression: return the workspace record only when it has a real value.
+        return ws.value ? ws : null;
+      }
+
+      if (ws) return ws;
+    }
 
     if (source.tier === 'global') {
-      const globalId: CredentialId = { ...wsId, workspaceId: GLOBAL_WORKSPACE_ID };
-      const g = await manager.get(globalId);
-      if (g) return g;
+      for (const wsId of ids) {
+        const globalId: CredentialId = { ...wsId, workspaceId: GLOBAL_WORKSPACE_ID };
+        const g = await manager.get(globalId);
+        if (g) return g;
+      }
     }
 
     return null;
@@ -287,7 +296,7 @@ export class SourceCredentialManager {
    * Returns null if no credential exists or if expired
    */
   async getToken(source: LoadedSource): Promise<string | null> {
-    const cred = await this.load(source);
+    const cred = await this.loadEffective(source);
     if (!cred?.value) return null;
 
     // Check expiry
@@ -303,7 +312,7 @@ export class SourceCredentialManager {
    * Get API credential for a source (handles basic auth and multi-header JSON parsing)
    */
   async getApiCredential(source: LoadedSource): Promise<ApiCredential | null> {
-    const cred = await this.load(source);
+    const cred = await this.loadEffective(source);
     // Check both API and MCP headerNames (same credential store pattern)
     const headerNames = source.config.api?.headerNames || source.config.mcp?.headerNames;
     debug(`[SourceCredentialManager] getApiCredential for ${source.config.slug}: cred.value exists=${!!cred?.value}, headerNames=${JSON.stringify(headerNames)}`);
@@ -388,6 +397,31 @@ export class SourceCredentialManager {
     };
   }
 
+  /**
+   * Credential lookup IDs in within-tier priority order.
+   * Remote MCP sources historically accepted OAuth or bearer credentials, so
+   * effective runtime lookup preserves that fallback before moving tiers.
+   */
+  private getCredentialIdsForLoad(source: LoadedSource): CredentialId[] {
+    const primary = this.getCredentialId(source);
+
+    if (
+      source.config.type !== 'mcp' ||
+      source.config.mcp?.transport === 'stdio' ||
+      source.config.mcp?.authType === 'none'
+    ) {
+      return [primary];
+    }
+
+    const fallbackType: CredentialId['type'] =
+      primary.type === 'source_oauth' ? 'source_bearer' : 'source_oauth';
+
+    return [
+      primary,
+      { ...primary, type: fallbackType },
+    ];
+  }
+
   // ============================================================
   // Expiry Checking
   // ============================================================
@@ -416,14 +450,7 @@ export class SourceCredentialManager {
    */
   markSourceNeedsReauth(source: LoadedSource, errorMessage: string): void {
     try {
-      const config = loadSourceConfig(source.workspaceRootPath, source.config.slug);
-      if (config) {
-        config.isAuthenticated = false;
-        config.connectionStatus = 'needs_auth';
-        config.connectionError = errorMessage;
-        saveSourceConfig(source.workspaceRootPath, config);
-        debug(`[SourceCredentialManager] Marked ${source.config.slug} as needing re-auth: ${errorMessage}`);
-      }
+      markLoadedSourceNeedsReauth(source, errorMessage);
     } catch (error) {
       debug(`[SourceCredentialManager] Failed to mark ${source.config.slug} as needing re-auth:`, error);
     }
@@ -630,7 +657,7 @@ export class SourceCredentialManager {
       ...(existing?.override === true ? { override: true } : {}),
     });
 
-    markSourceAuthenticated(source.workspaceRootPath, source.config.slug);
+    markLoadedSourceAuthenticated(source);
 
     debug(`[SourceCredentialManager] OAuth exchange+store complete for ${source.config.slug}`);
     return { success: true, email: result.email };
@@ -719,7 +746,7 @@ export class SourceCredentialManager {
       });
 
       // Mark source as authenticated in config.json
-      markSourceAuthenticated(source.workspaceRootPath, source.config.slug);
+      markLoadedSourceAuthenticated(source);
 
       return { success: true };
     } catch (error) {
@@ -794,7 +821,7 @@ export class SourceCredentialManager {
       });
 
       // Mark source as authenticated in config.json
-      markSourceAuthenticated(source.workspaceRootPath, source.config.slug);
+      markLoadedSourceAuthenticated(source);
 
       callbacks.onStatus(`${serviceName} authentication successful`);
       return { success: true, email: result.email };
@@ -859,7 +886,7 @@ export class SourceCredentialManager {
       });
 
       // Mark source as authenticated in config.json
-      markSourceAuthenticated(source.workspaceRootPath, source.config.slug);
+      markLoadedSourceAuthenticated(source);
 
       callbacks.onStatus(`${serviceName} authentication successful`);
       // Use teamName as the identifier (similar to email for Google)
@@ -931,7 +958,7 @@ export class SourceCredentialManager {
       });
 
       // Mark source as authenticated in config.json
-      markSourceAuthenticated(source.workspaceRootPath, source.config.slug);
+      markLoadedSourceAuthenticated(source);
 
       callbacks.onStatus(`${serviceName} authentication successful`);
       return { success: true, email: result.email };

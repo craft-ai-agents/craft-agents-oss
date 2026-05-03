@@ -121,7 +121,7 @@ describe('registerSystemCoreHandlers OPEN_URL', () => {
     const { openUrl, ctx } = createTestHarness()
 
     await expect(openUrl(ctx, 'file:///tmp/test.txt')).rejects.toThrow(
-      'Failed to open URL: Only http, https, mailto, craftdocs, craftagents URLs are allowed'
+      'Failed to open URL: Refused to open URL with blocked scheme: file:'
     )
   })
 })

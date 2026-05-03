@@ -81,6 +81,23 @@ export function loadSourceConfig(
   }
 }
 
+function loadGlobalSourceConfig(sourceSlug: string): FolderSourceConfig | null {
+  const configPath = join(getGlobalSourcePath(sourceSlug), 'config.json');
+  if (!existsSync(configPath)) return null;
+
+  try {
+    const config = readJsonFileSync<FolderSourceConfig>(configPath);
+
+    if (config.type === 'local' && config.local?.path) {
+      config.local.path = expandPath(config.local.path);
+    }
+
+    return config;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Mark a source as authenticated and connected.
  * Updates isAuthenticated, connectionStatus, and clears any connection error.
@@ -103,6 +120,85 @@ export function markSourceAuthenticated(
 
   saveSourceConfig(workspaceRootPath, config);
   debug(`[markSourceAuthenticated] Marked ${sourceSlug} as authenticated`);
+  return true;
+}
+
+function saveGlobalSourceConfig(config: FolderSourceConfig): void {
+  const validation = validateSourceConfig(config);
+  if (!validation.valid) {
+    const errorMessages = validation.errors.map((e) => `${e.path}: ${e.message}`).join(', ');
+    debug('[saveGlobalSourceConfig] Validation failed:', errorMessages);
+    throw new Error(`Invalid source config: ${errorMessages}`);
+  }
+
+  const dir = getGlobalSourcePath(config.slug);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  const storageConfig: FolderSourceConfig = { ...config, updatedAt: Date.now() };
+  if (storageConfig.type === 'local' && storageConfig.local?.path) {
+    storageConfig.local = {
+      ...storageConfig.local,
+      path: toPortablePath(storageConfig.local.path),
+    };
+  }
+
+  writeFileSync(join(dir, 'config.json'), JSON.stringify(storageConfig, null, 2));
+}
+
+function loadMutableSourceConfig(source: LoadedSource): FolderSourceConfig | null {
+  if (source.tier === 'global' || source.tier === 'global-dormant') {
+    return loadGlobalSourceConfig(source.config.slug);
+  }
+
+  return loadSourceConfig(source.workspaceRootPath, source.config.slug);
+}
+
+function saveMutableSourceConfig(source: LoadedSource, config: FolderSourceConfig): void {
+  if (source.tier === 'global' || source.tier === 'global-dormant') {
+    saveGlobalSourceConfig(config);
+    return;
+  }
+
+  saveSourceConfig(source.workspaceRootPath, config);
+}
+
+export function markLoadedSourceAuthenticated(source: LoadedSource): boolean {
+  const config = loadMutableSourceConfig(source);
+  if (!config) {
+    debug(`[markLoadedSourceAuthenticated] Source ${source.config.slug} not found`);
+    return false;
+  }
+
+  config.isAuthenticated = true;
+  config.connectionStatus = 'connected';
+  config.connectionError = undefined;
+
+  saveMutableSourceConfig(source, config);
+  source.config.isAuthenticated = true;
+  source.config.connectionStatus = 'connected';
+  source.config.connectionError = undefined;
+  debug(`[markLoadedSourceAuthenticated] Marked ${source.config.slug} as authenticated`);
+  return true;
+}
+
+export function markLoadedSourceNeedsReauth(source: LoadedSource, errorMessage: string): boolean {
+  const config = loadMutableSourceConfig(source);
+  if (!config) {
+    debug(`[markLoadedSourceNeedsReauth] Source ${source.config.slug} not found`);
+    return false;
+  }
+
+  config.isAuthenticated = false;
+  config.connectionStatus = 'needs_auth';
+  config.connectionError = errorMessage;
+
+  saveMutableSourceConfig(source, config);
+  source.config.isAuthenticated = false;
+  source.config.connectionStatus = 'needs_auth';
+  source.config.connectionError = errorMessage;
+  debug(`[markLoadedSourceNeedsReauth] Marked ${source.config.slug} as needing re-auth: ${errorMessage}`);
   return true;
 }
 
@@ -383,19 +479,30 @@ export function isSourceUsable(source: LoadedSource): boolean {
 export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): LoadedSource[] {
   const workspaceId = basename(workspaceRootPath);
   const sources: LoadedSource[] = [];
+  const activatedGlobals = new Set(readGlobalSourcesManifest(workspaceRootPath).activatedSlugs);
+
   for (const slug of slugs) {
-    // Check builtin sources first (they don't exist on disk)
+    // Priority: workspace > activated global > built-in/project.
+    const source = loadSource(workspaceRootPath, slug);
+    if (source) {
+      sources.push(source);
+      continue;
+    }
+
+    if (activatedGlobals.has(slug)) {
+      const globalSource = loadGlobalSource(slug, workspaceRootPath);
+      if (globalSource) {
+        sources.push(globalSource);
+        continue;
+      }
+      debug(`[getSourcesBySlugs] activated global '${slug}' not found in ${GLOBAL_AGENT_SOURCES_DIR}`);
+    }
+
     if (isBuiltinSource(slug)) {
       // Currently only craft-agents-docs is a builtin source
       if (slug === 'craft-agents-docs') {
         sources.push({ ...getDocsSource(workspaceId, workspaceRootPath), tier: 'project' });
       }
-      continue;
-    }
-    // Load user-configured source from disk
-    const source = loadSource(workspaceRootPath, slug);
-    if (source) {
-      sources.push(source);
     }
   }
   return sources;
@@ -438,7 +545,7 @@ export function loadAllSources(
   const manifest = readGlobalSourcesManifest(workspaceRootPath);
   for (const slug of manifest.activatedSlugs) {
     if (seen.has(slug)) continue;
-    const g = loadGlobalSource(slug);
+    const g = loadGlobalSource(slug, workspaceRootPath);
     if (!g) {
       debug(`[loadAllSources] activated global '${slug}' not found in ${GLOBAL_AGENT_SOURCES_DIR}`);
       continue;
@@ -456,7 +563,7 @@ export function loadAllSources(
   if (opts.includeDormant) {
     for (const slug of listGlobalSourceSlugs()) {
       if (seen.has(slug)) continue;
-      const g = loadGlobalSource(slug);
+      const g = loadGlobalSource(slug, workspaceRootPath);
       if (!g) continue;
       seen.add(slug);
       result.push({ ...g, tier: 'global-dormant' });
@@ -798,11 +905,13 @@ export function mirrorSourceToGlobal(
 
 /**
  * Load a single global source by slug from `~/.agents/sources/<slug>/`.
- * Returns null when the slug doesn't resolve. The returned source has
- * `tier: 'global'` and `workspaceId: GLOBAL_WORKSPACE_ID`; callers
- * (`loadAllSources`) may re-tag as `'global-dormant'` based on workspace context.
+ * Returns null when the slug doesn't resolve.
+ *
+ * When `workspaceRootPath` is supplied, the LoadedSource keeps `tier: 'global'`
+ * but carries the active workspace id/root for runtime credential overrides.
+ * Without workspace context, it uses the global sentinel for library listings.
  */
-export function loadGlobalSource(slug: string): LoadedSource | null {
+export function loadGlobalSource(slug: string, workspaceRootPath?: string): LoadedSource | null {
   const folderPath = getGlobalSourcePath(slug);
   const configPath = join(folderPath, 'config.json');
   if (!existsSync(configPath)) return null;
@@ -829,12 +938,15 @@ export function loadGlobalSource(slug: string): LoadedSource | null {
     }
   }
 
+  const runtimeWorkspaceRootPath = workspaceRootPath ?? '';
+  const runtimeWorkspaceId = workspaceRootPath ? basename(workspaceRootPath) : GLOBAL_WORKSPACE_ID;
+
   return {
     config,
     guide,
     folderPath,
-    workspaceRootPath: '',
-    workspaceId: GLOBAL_WORKSPACE_ID,
+    workspaceRootPath: runtimeWorkspaceRootPath,
+    workspaceId: runtimeWorkspaceId,
     iconPath: findIconFile(folderPath),
     tier: 'global',
   };
@@ -1038,4 +1150,3 @@ export function sourceExists(workspaceRootPath: string, sourceSlug: string): boo
 // ============================================================
 
 export { parseGuideMarkdown };
-
