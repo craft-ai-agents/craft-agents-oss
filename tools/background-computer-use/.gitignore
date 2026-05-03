@@ -1,0 +1,6 @@
+.build/
+.swiftpm/
+dist/
+.DS_Store
+*.log
+runtime-manifest.json

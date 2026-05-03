@@ -97,3 +97,11 @@ scratch.md
 
 # Auto-generated bundle of bundled-skills markdown — regenerated on every dev/build
 packages/shared/src/skills/bundled.generated.ts
+
+# Vendored Swift tools — keep source, exclude build artifacts
+tools/**/.build/
+tools/**/.swiftpm/
+tools/**/dist/
+tools/**/*.log
+tools/**/runtime-manifest.json
+tools/**/.DS_Store
