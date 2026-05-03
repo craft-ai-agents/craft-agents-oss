@@ -764,7 +764,7 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
     const placeholderArray = React.useMemo(() => {
       if (!placeholder) return [t("chatInput.placeholder.typeMessage")]
       return Array.isArray(placeholder) ? placeholder : [placeholder]
-    }, [placeholder])
+    }, [placeholder, t])
 
     // Check if value contains any mentions (badges) to adjust line height
     const hasMentions = React.useMemo(() => {

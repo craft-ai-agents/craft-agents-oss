@@ -142,19 +142,19 @@ export function useEntityListInteractions<T>({
 
   const toggle = useCallback((id: string, index: number) => {
     setSelectionState(prev => MultiSelect.toggleSelect(prev, id, index))
-  }, [])
+  }, [setSelectionState])
 
   const range = useCallback((toIndex: number) => {
     setSelectionState(prev => MultiSelect.rangeSelect(prev, toIndex, allIds))
-  }, [allIds])
+  }, [allIds, setSelectionState])
 
   const selectAllItems = useCallback(() => {
     setSelectionState(MultiSelect.selectAll(allIds))
-  }, [allIds])
+  }, [allIds, setSelectionState])
 
   const clearSelection = useCallback(() => {
     setSelectionState(prev => MultiSelect.clearMultiSelect(prev))
-  }, [])
+  }, [setSelectionState])
 
   const isMultiSelectActive = MultiSelect.isMultiSelectActive(selectionState)
 
@@ -176,7 +176,7 @@ export function useEntityListInteractions<T>({
     setSelectionState(MultiSelect.singleSelect(id, index))
 
     keyboardOpts?.onNavigate?.(item, index)
-  }, [getId, multiSelectEnabled, isMultiSelectActive, clearSelection, keyboardOpts?.onNavigate]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [getId, multiSelectEnabled, isMultiSelectActive, clearSelection, keyboardOpts?.onNavigate, setSelectionState]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleActivate = useCallback((item: T, index: number) => {
     if (multiSelectEnabled && !isMultiSelectActive) {
@@ -184,7 +184,7 @@ export function useEntityListInteractions<T>({
       setSelectionState(MultiSelect.singleSelect(getId(item), index))
     }
     keyboardOpts?.onActivate?.(item, index)
-  }, [multiSelectEnabled, isMultiSelectActive, getId, keyboardOpts?.onActivate]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [multiSelectEnabled, isMultiSelectActive, getId, keyboardOpts?.onActivate, setSelectionState]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleExtendSelection = useCallback((toIndex: number) => {
     if (multiSelectEnabled) {
@@ -250,7 +250,7 @@ export function useEntityListInteractions<T>({
       lastClickIndexRef.current = index
       setActiveIndex(index)
     }
-  }, [getId, multiSelectEnabled, isMultiSelectActive, selectionState.selectedIds, toggle, range, setActiveIndex])
+  }, [getId, multiSelectEnabled, isMultiSelectActive, selectionState.selectedIds, toggle, range, setActiveIndex, setSelectionState])
 
   // ---- Search input keyboard forwarding ----
   // Forwards ArrowDown/ArrowUp from a search input to the roving tabindex handler.
@@ -277,14 +277,16 @@ export function useEntityListInteractions<T>({
 
   // ---- Build return values ----
   const containerProps = getContainerProps()
+  const containerRole = containerProps.role
+  const containerActiveDescendant = containerProps['aria-activedescendant'] ?? ''
 
   const listProps = useMemo(() => ({
     containerRef: undefined as React.Ref<HTMLDivElement> | undefined,
     containerProps: {
-      role: containerProps.role,
-      'aria-activedescendant': containerProps['aria-activedescendant'] ?? '',
+      role: containerRole,
+      'aria-activedescendant': containerActiveDescendant,
     },
-  }), [containerProps.role, containerProps['aria-activedescendant']])
+  }), [containerRole, containerActiveDescendant])
 
   const getRowProps = useCallback((item: T, index: number) => {
     const id = getId(item)
