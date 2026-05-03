@@ -78,6 +78,7 @@ export function SourcesListPanel({
   const hasOtherWorkspaces = workspaces.length > 1
   const [globalSources, setGlobalSources] = React.useState<LoadedSource[]>([])
   const [enabledGlobalSlugs, setEnabledGlobalSlugs] = React.useState<Set<string>>(new Set())
+  const [globalSourcesReady, setGlobalSourcesReady] = React.useState(false)
   const [libraryOpen, setLibraryOpen] = React.useState(false)
   const [updatingSlug, setUpdatingSlug] = React.useState<string | null>(null)
 
@@ -87,7 +88,13 @@ export function SourcesListPanel({
   const [sendResourceLabel, setSendResourceLabel] = React.useState('')
 
   const reloadGlobalSources = React.useCallback(async () => {
-    if (!workspaceId) return
+    if (!workspaceId) {
+      setGlobalSources([])
+      setEnabledGlobalSlugs(new Set())
+      setGlobalSourcesReady(false)
+      return
+    }
+    setGlobalSourcesReady(false)
     try {
       const [loadedGlobalSources, loadedEnabledSlugs] = await Promise.all([
         window.electronAPI.listGlobalSources(),
@@ -95,10 +102,12 @@ export function SourcesListPanel({
       ])
       setGlobalSources(loadedGlobalSources || [])
       setEnabledGlobalSlugs(new Set(loadedEnabledSlugs || []))
+      setGlobalSourcesReady(true)
     } catch (error) {
       console.error('[Sources] Failed to load global sources:', error)
       setGlobalSources([])
       setEnabledGlobalSlugs(new Set())
+      setGlobalSourcesReady(false)
     }
   }, [workspaceId])
 
@@ -228,7 +237,7 @@ export function SourcesListPanel({
         const isWorkspaceSource = (source.tier ?? 'workspace') === 'workspace'
         const isGlobalSource = source.tier === 'global'
         const isDormantGlobal = source.tier === 'global-dormant'
-        const canPromote = isWorkspaceSource && !globalSlugSet.has(source.config.slug)
+        const canPromote = globalSourcesReady && isWorkspaceSource && !globalSlugSet.has(source.config.slug)
         return {
           icon: <SourceAvatar source={source} size="sm" />,
           title: source.config.name,

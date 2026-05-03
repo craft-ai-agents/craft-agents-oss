@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
@@ -199,59 +199,64 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
   const [mcpToolsLoading, setMcpToolsLoading] = useState(false)
   const [mcpToolsError, setMcpToolsError] = useState<string | null>(null)
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
+  const isMountedRef = useRef(false)
 
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  const loadSource = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true)
+    setError(null)
+
+    try {
+      const [sources, globalSources, enabledGlobalSlugs] = await Promise.all([
+        window.electronAPI.getSources(workspaceId),
+        window.electronAPI.listGlobalSources(),
+        window.electronAPI.getEnabledGlobalSources(workspaceId),
+      ])
+
+      if (!isMountedRef.current) return
+
+      const activeSlugs = new Set((sources || []).map((s) => s.config.slug))
+      const enabledSlugs = new Set(enabledGlobalSlugs || [])
+      const found = (sources || []).find((s) => s.config.slug === sourceSlug)
+        ?? (globalSources || [])
+          .filter((s) => !activeSlugs.has(s.config.slug))
+          .map((s) => ({ ...s, tier: enabledSlugs.has(s.config.slug) ? 'global' as const : 'global-dormant' as const }))
+          .find((s) => s.config.slug === sourceSlug)
+
+      if (found) {
+        setSource(found)
+
+        if (found.tier !== 'global-dormant') {
+          const config = await window.electronAPI.getSourcePermissionsConfig(workspaceId, sourceSlug)
+          if (isMountedRef.current) {
+            setPermissionsConfig(config)
+          }
+        } else if (isMountedRef.current) {
+          setPermissionsConfig(null)
+        }
+      } else {
+        setSource(null)
+        setPermissionsConfig(null)
+        setError(t('sourceInfo.notFound'))
+      }
+    } catch (err) {
+      if (!isMountedRef.current) return
+      setError(err instanceof Error ? err.message : t('sourceInfo.failedToLoad'))
+    } finally {
+      if (isMountedRef.current && showLoading) setLoading(false)
+    }
+  }, [workspaceId, sourceSlug, t])
 
   // Load source data
   useEffect(() => {
-    let isMounted = true
-    setLoading(true)
-    setError(null)
-
-    const loadSource = async () => {
-      try {
-        const [sources, globalSources, enabledGlobalSlugs] = await Promise.all([
-          window.electronAPI.getSources(workspaceId),
-          window.electronAPI.listGlobalSources(),
-          window.electronAPI.getEnabledGlobalSources(workspaceId),
-        ])
-
-        if (!isMounted) return
-
-        const activeSlugs = new Set((sources || []).map((s) => s.config.slug))
-        const enabledSlugs = new Set(enabledGlobalSlugs || [])
-        const found = (sources || []).find((s) => s.config.slug === sourceSlug)
-          ?? (globalSources || [])
-            .filter((s) => !activeSlugs.has(s.config.slug))
-            .map((s) => ({ ...s, tier: enabledSlugs.has(s.config.slug) ? 'global' as const : 'global-dormant' as const }))
-            .find((s) => s.config.slug === sourceSlug)
-        if (found) {
-          setSource(found)
-
-          if (found.tier !== 'global-dormant') {
-            const config = await window.electronAPI.getSourcePermissionsConfig(workspaceId, sourceSlug)
-            if (isMounted) {
-              setPermissionsConfig(config)
-            }
-          } else if (isMounted) {
-            setPermissionsConfig(null)
-          }
-        } else {
-          setError(t('sourceInfo.notFound'))
-        }
-      } catch (err) {
-        if (!isMounted) return
-        setError(err instanceof Error ? err.message : t('sourceInfo.failedToLoad'))
-      } finally {
-        if (isMounted) setLoading(false)
-      }
-    }
-
-    loadSource()
-
-    return () => {
-      isMounted = false
-    }
-  }, [workspaceId, sourceSlug, t])
+    void loadSource(true)
+  }, [loadSource])
 
   // Load MCP tools when source is loaded and is MCP type
   useEffect(() => {
@@ -306,27 +311,25 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
   useEffect(() => {
     if (!window.electronAPI?.onSourcesChanged) return
 
-    const cleanup = window.electronAPI.onSourcesChanged((changedWorkspaceId, sources) => {
+    const cleanup = window.electronAPI.onSourcesChanged((changedWorkspaceId) => {
       if (changedWorkspaceId !== workspaceId) return
-      const updated = sources.find((s) => s.config.slug === sourceSlug)
-
-      if (updated) {
-        setSource(updated)
-
-        const loadPermissionsConfig = async () => {
-          try {
-            const config = await window.electronAPI.getSourcePermissionsConfig(workspaceId, sourceSlug)
-            setPermissionsConfig(config)
-          } catch (err) {
-            console.error('[SourceInfoPage] Failed to reload permissions config:', err)
-          }
-        }
-        loadPermissionsConfig()
-      }
+      void loadSource(false)
     })
 
     return cleanup
-  }, [sourceSlug, workspaceId])
+  }, [loadSource, workspaceId])
+
+  // Listen for global source activation/library changes
+  useEffect(() => {
+    if (!window.electronAPI?.onGlobalSourcesChanged) return
+
+    const cleanup = window.electronAPI.onGlobalSourcesChanged((changedWorkspaceId) => {
+      if (changedWorkspaceId && changedWorkspaceId !== workspaceId) return
+      void loadSource(false)
+    })
+
+    return cleanup
+  }, [loadSource, workspaceId])
 
   // Compute source URL
   const sourceUrl = useMemo(() => source ? getSourceUrl(source) : null, [source])
