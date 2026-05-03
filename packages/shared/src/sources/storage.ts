@@ -8,7 +8,8 @@
  * NOT a workspace slug. The `LoadedSource.workspaceId` is derived via basename().
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, renameSync, rmSync } from 'fs';
+import { homedir } from 'os';
 import { join, basename } from 'path';
 import { randomUUID } from 'crypto';
 import type {
@@ -318,6 +319,7 @@ export function loadSource(workspaceRootPath: string, sourceSlug: string): Loade
     workspaceRootPath,
     workspaceId,
     iconPath,
+    tier: 'workspace',
   };
 }
 
@@ -386,7 +388,7 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
     if (isBuiltinSource(slug)) {
       // Currently only craft-agents-docs is a builtin source
       if (slug === 'craft-agents-docs') {
-        sources.push(getDocsSource(workspaceId, workspaceRootPath));
+        sources.push({ ...getDocsSource(workspaceId, workspaceRootPath), tier: 'project' });
       }
       continue;
     }
@@ -400,18 +402,239 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
 }
 
 /**
- * Load all sources for a workspace INCLUDING built-in sources.
- * Built-in sources (like craft-agents-docs) are always available and merged
- * with user-configured sources from the workspace.
- *
- * Use this when the agent needs visibility into all available sources,
- * including system-provided ones that don't live on disk.
+ * Options for loadAllSources.
  */
-export function loadAllSources(workspaceRootPath: string): LoadedSource[] {
+export interface LoadAllSourcesOptions {
+  /**
+   * When true, include globals not activated in this workspace as
+   * `tier: 'global-dormant'`. UI listings only — never spawned.
+   */
+  includeDormant?: boolean;
+}
+
+/**
+ * Load all sources visible to a workspace. Unions, in priority order:
+ *   1. workspace-tier sources (`tier: 'workspace'`)
+ *   2. activated globals from `<workspace>/sources/.global-sources.json` (`tier: 'global'`)
+ *   3. project/built-in sources (`tier: 'project'`)
+ *   4. dormant globals (only when `opts.includeDormant === true`; `tier: 'global-dormant'`)
+ *
+ * Dedup by slug — first match wins.
+ */
+export function loadAllSources(
+  workspaceRootPath: string,
+  opts: LoadAllSourcesOptions = {}
+): LoadedSource[] {
   const workspaceId = basename(workspaceRootPath);
-  const userSources = loadWorkspaceSources(workspaceRootPath);
-  const builtinSources = getBuiltinSources(workspaceId, workspaceRootPath);
-  return [...userSources, ...builtinSources];
+  const seen = new Set<string>();
+  const result: LoadedSource[] = [];
+
+  for (const s of loadWorkspaceSources(workspaceRootPath)) {
+    if (seen.has(s.config.slug)) continue;
+    seen.add(s.config.slug);
+    result.push(s);
+  }
+
+  const manifest = readGlobalSourcesManifest(workspaceRootPath);
+  for (const slug of manifest.activatedSlugs) {
+    if (seen.has(slug)) continue;
+    const g = loadGlobalSource(slug);
+    if (!g) {
+      debug(`[loadAllSources] activated global '${slug}' not found in ${GLOBAL_AGENT_SOURCES_DIR}`);
+      continue;
+    }
+    seen.add(slug);
+    result.push(g);
+  }
+
+  for (const b of getBuiltinSources(workspaceId, workspaceRootPath)) {
+    if (seen.has(b.config.slug)) continue;
+    seen.add(b.config.slug);
+    result.push({ ...b, tier: 'project' });
+  }
+
+  if (opts.includeDormant) {
+    for (const slug of listGlobalSourceSlugs()) {
+      if (seen.has(slug)) continue;
+      const g = loadGlobalSource(slug);
+      if (!g) continue;
+      seen.add(slug);
+      result.push({ ...g, tier: 'global-dormant' });
+    }
+  }
+
+  return result;
+}
+
+// ============================================================
+// Global Tier
+// ============================================================
+
+/** Sentinel workspace id for global-tier sources. Used by credential keying in Phase 3. */
+export const GLOBAL_WORKSPACE_ID = '__global__';
+
+/** Global agent sources directory: ~/.agents/sources/ */
+export const GLOBAL_AGENT_SOURCES_DIR = join(homedir(), '.agents', 'sources');
+
+/** Filename of the per-workspace activation manifest. */
+export const WORKSPACE_GLOBAL_SOURCES_MANIFEST = '.global-sources.json';
+
+/** Current schema version for the activation manifest. */
+const GLOBAL_SOURCES_MANIFEST_VERSION = 1;
+
+/**
+ * Activation manifest schema — see docs/global-sources/01-spec.md.
+ */
+export interface GlobalSourcesManifest {
+  version: number;
+  activatedSlugs: string[];
+  lastModified: string;
+}
+
+/** Path to a global source's directory. */
+export function getGlobalSourcePath(slug: string): string {
+  return join(GLOBAL_AGENT_SOURCES_DIR, slug);
+}
+
+/** Path to the activation manifest for a workspace. */
+export function getWorkspaceGlobalSourcesManifestPath(workspaceRootPath: string): string {
+  return join(getWorkspaceSourcesPath(workspaceRootPath), WORKSPACE_GLOBAL_SOURCES_MANIFEST);
+}
+
+function emptyManifest(): GlobalSourcesManifest {
+  return {
+    version: GLOBAL_SOURCES_MANIFEST_VERSION,
+    activatedSlugs: [],
+    lastModified: new Date().toISOString(),
+  };
+}
+
+/**
+ * Read the activation manifest for a workspace.
+ * - Missing file → empty manifest, no error.
+ * - Malformed JSON → log error, back up to .global-sources.json.broken-<ts>, return empty.
+ * - Unknown slug entries are tolerated; duplicates deduped.
+ */
+export function readGlobalSourcesManifest(workspaceRootPath: string): GlobalSourcesManifest {
+  const path = getWorkspaceGlobalSourcesManifestPath(workspaceRootPath);
+  if (!existsSync(path)) return emptyManifest();
+
+  let raw: string;
+  try {
+    raw = readFileSync(path, 'utf-8');
+  } catch (err) {
+    debug(`[readGlobalSourcesManifest] read failed: ${(err as Error).message}`);
+    return emptyManifest();
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    debug(`[readGlobalSourcesManifest] malformed JSON at ${path}: ${(err as Error).message}`);
+    try {
+      const backup = `${path}.broken-${Date.now()}`;
+      renameSync(path, backup);
+      debug(`[readGlobalSourcesManifest] backed up to ${backup}`);
+    } catch {
+      // best-effort
+    }
+    return emptyManifest();
+  }
+
+  const obj = (parsed && typeof parsed === 'object') ? parsed as Record<string, unknown> : {};
+  const rawSlugs = Array.isArray(obj.activatedSlugs) ? obj.activatedSlugs : [];
+  const activatedSlugs = Array.from(new Set(
+    rawSlugs.filter((s): s is string => typeof s === 'string' && s.length > 0)
+  ));
+  const version = typeof obj.version === 'number' ? obj.version : GLOBAL_SOURCES_MANIFEST_VERSION;
+  const lastModified = typeof obj.lastModified === 'string'
+    ? obj.lastModified
+    : new Date().toISOString();
+
+  return { version, activatedSlugs, lastModified };
+}
+
+/** Whether `slug` is listed in the workspace's activation manifest. */
+export function isGlobalSourceActivatedInWorkspace(workspaceRootPath: string, slug: string): boolean {
+  return readGlobalSourcesManifest(workspaceRootPath).activatedSlugs.includes(slug);
+}
+
+// NOTE: write-path helpers (`activateGlobalSourceInWorkspace`,
+// `deactivateGlobalSourceInWorkspace`, `writeGlobalSourcesManifest`,
+// `mirrorSourceToGlobal`) ship in Phase 2 alongside the RPC handlers.
+
+/**
+ * Load a single global source by slug from `~/.agents/sources/<slug>/`.
+ * Returns null when the slug doesn't resolve. The returned source has
+ * `tier: 'global'` and `workspaceId: GLOBAL_WORKSPACE_ID`; callers
+ * (`loadAllSources`) may re-tag as `'global-dormant'` based on workspace context.
+ */
+export function loadGlobalSource(slug: string): LoadedSource | null {
+  const folderPath = getGlobalSourcePath(slug);
+  const configPath = join(folderPath, 'config.json');
+  if (!existsSync(configPath)) return null;
+
+  let config: FolderSourceConfig;
+  try {
+    config = readJsonFileSync<FolderSourceConfig>(configPath);
+  } catch (err) {
+    debug(`[loadGlobalSource] failed to parse ${configPath}: ${(err as Error).message}`);
+    return null;
+  }
+
+  if (config.type === 'local' && config.local?.path) {
+    config.local.path = expandPath(config.local.path);
+  }
+
+  let guide: SourceGuide | null = null;
+  const guidePath = join(folderPath, 'guide.md');
+  if (existsSync(guidePath)) {
+    try {
+      guide = parseGuideMarkdown(readFileSync(guidePath, 'utf-8'));
+    } catch {
+      guide = null;
+    }
+  }
+
+  return {
+    config,
+    guide,
+    folderPath,
+    workspaceRootPath: '',
+    workspaceId: GLOBAL_WORKSPACE_ID,
+    iconPath: findIconFile(folderPath),
+    tier: 'global',
+  };
+}
+
+/** Load every source defined globally. */
+export function loadGlobalSources(): LoadedSource[] {
+  if (!existsSync(GLOBAL_AGENT_SOURCES_DIR)) return [];
+  const out: LoadedSource[] = [];
+  try {
+    const entries = readdirSync(GLOBAL_AGENT_SOURCES_DIR, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const s = loadGlobalSource(entry.name);
+      if (s) out.push(s);
+    }
+  } catch (err) {
+    debug(`[loadGlobalSources] readdir failed: ${(err as Error).message}`);
+  }
+  return out;
+}
+
+/** List slugs of global source directories (cheap; no config parse). */
+export function listGlobalSourceSlugs(): string[] {
+  if (!existsSync(GLOBAL_AGENT_SOURCES_DIR)) return [];
+  try {
+    return readdirSync(GLOBAL_AGENT_SOURCES_DIR, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && existsSync(join(GLOBAL_AGENT_SOURCES_DIR, e.name, 'config.json')))
+      .map((e) => e.name);
+  } catch {
+    return [];
+  }
 }
 
 // ============================================================

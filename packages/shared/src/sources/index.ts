@@ -7,6 +7,7 @@
 // Types
 export type {
   SourceType,
+  SourceTier,
   SourceMcpAuthType,
   ApiAuthType,
   KnownProvider,
@@ -32,6 +33,12 @@ export {
   isRefreshableSource,
 } from './types.ts';
 
+// Storage types
+export type {
+  GlobalSourcesManifest,
+  LoadAllSourcesOptions,
+} from './storage.ts';
+
 // Storage functions
 export {
   // Directory utilities
@@ -56,6 +63,17 @@ export {
   getEnabledSources,
   isSourceUsable,
   getSourcesBySlugs,
+  // Global tier
+  GLOBAL_WORKSPACE_ID,
+  GLOBAL_AGENT_SOURCES_DIR,
+  WORKSPACE_GLOBAL_SOURCES_MANIFEST,
+  getGlobalSourcePath,
+  getWorkspaceGlobalSourcesManifestPath,
+  readGlobalSourcesManifest,
+  isGlobalSourceActivatedInWorkspace,
+  loadGlobalSource,
+  loadGlobalSources,
+  listGlobalSourceSlugs,
   // Create/Delete operations
   generateSourceSlug,
   createSource,

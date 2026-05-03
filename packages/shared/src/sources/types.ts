@@ -16,6 +16,15 @@
 export type SourceType = 'mcp' | 'api' | 'local';
 
 /**
+ * Tier a source was loaded from. Determines priority and credential keying.
+ * - workspace: defined in <workspace>/sources/<slug>/
+ * - global: defined in ~/.agents/sources/<slug>/ AND activated in this workspace
+ * - global-dormant: defined globally but not activated; UI-only, never spawned
+ * - project: built-in/project-tier source
+ */
+export type SourceTier = 'workspace' | 'global' | 'global-dormant' | 'project';
+
+/**
  * MCP source authentication types (for individual source connections)
  * Note: Different from workspace McpAuthType which uses 'workspace_oauth' | 'workspace_bearer' | 'public'
  */
@@ -525,6 +534,13 @@ export interface LoadedSource {
    * Computed during source loading so renderer doesn't need filesystem access.
    */
   iconPath?: string;
+
+  /**
+   * Where this source was loaded from. Always set by loaders in
+   * `packages/shared/src/sources/storage.ts`. Optional for backward compatibility
+   * with external constructors (Lane B/D will migrate in subsequent phases).
+   */
+  tier?: SourceTier;
 }
 
 /**
