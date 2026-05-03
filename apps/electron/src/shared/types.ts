@@ -238,6 +238,7 @@ import type {
   SessionFile,
   OAuthResult,
   McpToolsResult,
+  SourceCredentialScopeResult,
   GitBashStatus,
   ClaudeOAuthResult,
   UpdateInfo,
@@ -494,13 +495,18 @@ export interface ElectronAPI {
   deleteSource(workspaceId: string, sourceSlug: string): Promise<void>
   startSourceOAuth(workspaceId: string, sourceSlug: string): Promise<{ success: boolean; error?: string }>
   saveSourceCredentials(workspaceId: string, sourceSlug: string, credential: string): Promise<void>
+  getSourceCredentialScope(workspaceId: string, sourceSlug: string): Promise<SourceCredentialScopeResult>
+  saveSourceCredentialOverride(workspaceId: string, sourceSlug: string, credential: string): Promise<void>
+  saveSourceGlobalCredentials(workspaceId: string, sourceSlug: string, credential: string): Promise<void>
+  writeSourceCredentialOverride(workspaceId: string, sourceSlug: string): Promise<void>
+  clearSourceCredentialOverride(workspaceId: string, sourceSlug: string): Promise<void>
   getSourcePermissionsConfig(workspaceId: string, sourceSlug: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
   getWorkspacePermissionsConfig(workspaceId: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
   getDefaultPermissionsConfig(): Promise<{ config: import('@craft-agent/shared/agent').PermissionsConfigFile | null; path: string }>
   getMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
 
   // OAuth (server-owned credentials, client-orchestrated flow)
-  performOAuth(args: { sourceSlug: string; sessionId?: string; authRequestId?: string }): Promise<{ success: boolean; error?: string; email?: string }>
+  performOAuth(args: { sourceSlug: string; sessionId?: string; authRequestId?: string; credentialScope?: 'workspace' | 'global' | 'workspace-override' }): Promise<{ success: boolean; error?: string; email?: string }>
   oauthRevoke(sourceSlug: string): Promise<{ success: boolean }>
 
   // Session content search (full-text search via ripgrep)

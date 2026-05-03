@@ -427,6 +427,27 @@ export interface McpToolsResult {
   tools?: McpToolWithPermission[]
 }
 
+export type SourceCredentialScopeKind =
+  | 'no-auth'
+  | 'none'
+  | 'workspace'
+  | 'global'
+  | 'workspace-override'
+  | 'workspace-override-empty'
+  | 'inactive'
+
+export interface SourceCredentialScopeResult {
+  scope: SourceCredentialScopeKind
+  authType: string | null
+  hasWorkspaceCredential: boolean
+  hasGlobalCredential: boolean
+  hasEffectiveCredential: boolean
+  canOverride: boolean
+  canRevert: boolean
+  canAuthenticate: boolean
+  usesOAuth: boolean
+}
+
 // ---------------------------------------------------------------------------
 // Search types
 // ---------------------------------------------------------------------------

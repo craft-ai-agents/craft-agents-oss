@@ -28,6 +28,7 @@ export type {
 export {
   API_OAUTH_PROVIDERS,
   isApiOAuthProvider,
+  isOAuthSource,
   isGenericOAuthSource,
   hasRenewEndpoint,
   isRefreshableSource,

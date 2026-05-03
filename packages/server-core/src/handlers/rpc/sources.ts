@@ -1,7 +1,7 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
+import type { SourceCredentialScopeResult } from '@craft-agent/shared/protocol'
+import { getWorkspaceByNameOrId, getWorkspaces } from '@craft-agent/shared/config'
 import {
-  loadWorkspaceSources,
   loadGlobalSources,
   readGlobalSourcesManifest,
   activateGlobalSourceInWorkspace,
@@ -9,6 +9,10 @@ import {
   mirrorSourceToGlobal,
   loadAllSources,
   getSourcesBySlugs,
+  loadGlobalSource,
+  GLOBAL_WORKSPACE_ID,
+  isOAuthSource,
+  type LoadedSource,
   type MirrorSourceOptions,
 } from '@craft-agent/shared/sources'
 import { safeJsonParse } from '@craft-agent/shared/utils/files'
@@ -21,6 +25,11 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sources.DELETE,
   RPC_CHANNELS.sources.START_OAUTH,
   RPC_CHANNELS.sources.SAVE_CREDENTIALS,
+  RPC_CHANNELS.sources.GET_CREDENTIAL_SCOPE,
+  RPC_CHANNELS.sources.SAVE_CREDENTIAL_OVERRIDE,
+  RPC_CHANNELS.sources.SAVE_GLOBAL_CREDENTIALS,
+  RPC_CHANNELS.sources.WRITE_CREDENTIAL_OVERRIDE,
+  RPC_CHANNELS.sources.CLEAR_CREDENTIAL_OVERRIDE,
   RPC_CHANNELS.sources.GET_PERMISSIONS,
   RPC_CHANNELS.workspace.GET_PERMISSIONS,
   RPC_CHANNELS.permissions.GET_DEFAULTS,
@@ -54,6 +63,148 @@ function broadcastSourcesChanged(
   // current source list so renderer atoms refresh without a refetch round-trip.
   const sources = loadAllSources(workspaceRootPath)
   wsServerLike.wsServer?.push?.(RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, sources)
+}
+
+async function reloadAndBroadcastGlobalCredentialChange(
+  deps: HandlerDeps,
+  sourceSlug: string,
+  originWorkspaceId: string,
+  log: HandlerDeps['platform']['logger'],
+): Promise<void> {
+  broadcastSourcesChangedGlobal(deps, null)
+
+  for (const workspace of getWorkspaces()) {
+    const activatedSlugs = readGlobalSourcesManifest(workspace.rootPath).activatedSlugs
+    if (!activatedSlugs.includes(sourceSlug)) continue
+
+    await reloadSourcesForWorkspace(deps, workspace.rootPath, log, 'GLOBAL_CREDENTIALS_CHANGED')
+    broadcastSourcesChanged(deps, workspace.id, workspace.rootPath)
+  }
+
+  const originWorkspace = getWorkspaceByNameOrId(originWorkspaceId)
+  if (originWorkspace) {
+    const activatedSlugs = readGlobalSourcesManifest(originWorkspace.rootPath).activatedSlugs
+    if (!activatedSlugs.includes(sourceSlug)) {
+      broadcastSourcesChanged(deps, originWorkspaceId, originWorkspace.rootPath)
+    }
+  }
+}
+
+async function reloadSourcesForWorkspace(deps: HandlerDeps, workspaceRootPath: string, log: HandlerDeps['platform']['logger'], label: string): Promise<void> {
+  try {
+    const reload = (deps.sessionManager as unknown as {
+      reloadSourcesForWorkspace?: (rootPath: string) => Promise<void>
+    }).reloadSourcesForWorkspace
+    if (typeof reload === 'function') {
+      await reload.call(deps.sessionManager, workspaceRootPath)
+    }
+  } catch (err) {
+    log.error(`${label}: reloadSourcesForWorkspace failed:`, err)
+  }
+}
+
+function resolveWorkspaceSource(workspaceId: string, sourceSlug: string): { workspace: NonNullable<ReturnType<typeof getWorkspaceByNameOrId>>; source: LoadedSource } {
+  const workspace = getWorkspaceByNameOrId(workspaceId)
+  if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+
+  const [source] = getSourcesBySlugs(workspace.rootPath, [sourceSlug])
+  if (!source) {
+    throw new Error(`Source not found: ${sourceSlug}`)
+  }
+
+  return { workspace, source }
+}
+
+function sourceNeedsCredentials(source: LoadedSource): boolean {
+  const { type, mcp, api } = source.config
+
+  if (type === 'local') return false
+  if (type === 'mcp') {
+    if (mcp?.transport === 'stdio') return false
+    return mcp?.authType === 'oauth'
+      || mcp?.authType === 'bearer'
+      || Boolean(mcp?.headerNames?.length)
+  }
+  if (type === 'api') {
+    return Boolean(api?.authType && api.authType !== 'none')
+  }
+
+  return false
+}
+
+function getSourceAuthType(source: LoadedSource): string | null {
+  if (source.config.type === 'mcp') {
+    if (source.config.mcp?.headerNames?.length) return 'headers'
+    return source.config.mcp?.authType ?? null
+  }
+  if (source.config.type === 'api') return source.config.api?.authType ?? null
+  return null
+}
+
+async function buildCredentialScopeResult(source: LoadedSource): Promise<SourceCredentialScopeResult> {
+  const { getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+  const credManager = getSourceCredentialManager()
+  const needsCredentials = sourceNeedsCredentials(source)
+
+  if (source.tier === 'global-dormant') {
+    return {
+      scope: 'inactive',
+      authType: getSourceAuthType(source),
+      hasWorkspaceCredential: false,
+      hasGlobalCredential: false,
+      hasEffectiveCredential: false,
+      canOverride: false,
+      canRevert: false,
+      canAuthenticate: false,
+      usesOAuth: isOAuthSource(source),
+    }
+  }
+
+  if (!needsCredentials) {
+    return {
+      scope: 'no-auth',
+      authType: getSourceAuthType(source),
+      hasWorkspaceCredential: false,
+      hasGlobalCredential: false,
+      hasEffectiveCredential: true,
+      canOverride: false,
+      canRevert: false,
+      canAuthenticate: false,
+      usesOAuth: false,
+    }
+  }
+
+  const workspaceCredential = await credManager.load(source)
+  const globalCredential = source.tier === 'global'
+    ? await credManager.load({ ...source, workspaceId: GLOBAL_WORKSPACE_ID })
+    : null
+  const effectiveCredential = await credManager.loadEffective(source)
+  const hasWorkspaceCredential = Boolean(workspaceCredential?.value)
+  const hasGlobalCredential = Boolean(globalCredential?.value)
+  const hasEffectiveCredential = Boolean(effectiveCredential?.value)
+
+  let scope: SourceCredentialScopeResult['scope'] = 'none'
+  if (source.tier === 'global' && workspaceCredential?.override === true && !workspaceCredential.value) {
+    scope = 'workspace-override-empty'
+  } else if (source.tier === 'global' && workspaceCredential) {
+    scope = 'workspace-override'
+  } else if (source.tier === 'global' && hasGlobalCredential) {
+    scope = 'global'
+  } else if (hasWorkspaceCredential) {
+    scope = 'workspace'
+  }
+
+  return {
+    scope,
+    authType: getSourceAuthType(source),
+    hasWorkspaceCredential,
+    hasGlobalCredential,
+    hasEffectiveCredential,
+    canOverride: source.tier === 'global',
+    canRevert: source.tier === 'global' && Boolean(workspaceCredential),
+    canAuthenticate: true,
+    usesOAuth: isOAuthSource(source),
+  }
 }
 
 export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -112,20 +263,77 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
 
   // Save credentials for a source (bearer token or API key)
   server.handle(RPC_CHANNELS.sources.SAVE_CREDENTIALS, async (_ctx, workspaceId: string, sourceSlug: string, credential: string) => {
-    const workspace = getWorkspaceByNameOrId(workspaceId)
-    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
     const { getSourceCredentialManager } = await import('@craft-agent/shared/sources')
-
-    const [source] = getSourcesBySlugs(workspace.rootPath, [sourceSlug])
-    if (!source) {
-      throw new Error(`Source not found: ${sourceSlug}`)
-    }
+    const { workspace, source } = resolveWorkspaceSource(workspaceId, sourceSlug)
 
     // SourceCredentialManager handles credential type resolution
     const credManager = getSourceCredentialManager()
     await credManager.save(source, { value: credential })
+    await reloadSourcesForWorkspace(deps, workspace.rootPath, log, 'SAVE_CREDENTIALS')
+    broadcastSourcesChanged(deps, workspaceId, workspace.rootPath)
 
     log.info(`Saved credentials for source: ${sourceSlug}`)
+  })
+
+  server.handle(RPC_CHANNELS.sources.GET_CREDENTIAL_SCOPE, async (_ctx, workspaceId: string, sourceSlug: string) => {
+    const { source } = resolveWorkspaceSource(workspaceId, sourceSlug)
+    return buildCredentialScopeResult(source)
+  })
+
+  server.handle(RPC_CHANNELS.sources.SAVE_CREDENTIAL_OVERRIDE, async (_ctx, workspaceId: string, sourceSlug: string, credential: string) => {
+    const { getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+    const { workspace, source } = resolveWorkspaceSource(workspaceId, sourceSlug)
+    if (source.tier !== 'global') {
+      throw new Error('Credential override only applies to active global sources.')
+    }
+
+    const credManager = getSourceCredentialManager()
+    await credManager.save(source, { value: credential, override: true })
+    await reloadSourcesForWorkspace(deps, workspace.rootPath, log, 'SAVE_CREDENTIAL_OVERRIDE')
+    broadcastSourcesChanged(deps, workspaceId, workspace.rootPath)
+    log.info(`Saved workspace credential override for global source: ${sourceSlug}`)
+  })
+
+  server.handle(RPC_CHANNELS.sources.SAVE_GLOBAL_CREDENTIALS, async (_ctx, workspaceId: string, sourceSlug: string, credential: string) => {
+    const { getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+
+    const source = loadGlobalSource(sourceSlug)
+    if (!source) {
+      throw new Error(`Global source not found: ${sourceSlug}`)
+    }
+
+    await getSourceCredentialManager().save(source, { value: credential })
+    await reloadAndBroadcastGlobalCredentialChange(deps, sourceSlug, workspaceId, log)
+    log.info(`Saved global credentials for source: ${sourceSlug}`)
+  })
+
+  server.handle(RPC_CHANNELS.sources.WRITE_CREDENTIAL_OVERRIDE, async (_ctx, workspaceId: string, sourceSlug: string) => {
+    const { getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+    const { source } = resolveWorkspaceSource(workspaceId, sourceSlug)
+    if (source.tier !== 'global') {
+      throw new Error('Credential override only applies to active global sources.')
+    }
+
+    await getSourceCredentialManager().writeOverrideMarker(source)
+    // Do not reload sessions here. OAuth/manual save will install the real
+    // credential next; reloading on the empty marker can temporarily suppress
+    // an otherwise working global credential.
+    log.info(`Started workspace credential override for global source: ${sourceSlug}`)
+  })
+
+  server.handle(RPC_CHANNELS.sources.CLEAR_CREDENTIAL_OVERRIDE, async (_ctx, workspaceId: string, sourceSlug: string) => {
+    const { getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+    const { workspace, source } = resolveWorkspaceSource(workspaceId, sourceSlug)
+    if (source.tier !== 'global') {
+      throw new Error('Credential override only applies to active global sources.')
+    }
+
+    await getSourceCredentialManager().clearOverride(source)
+    await reloadSourcesForWorkspace(deps, workspace.rootPath, log, 'CLEAR_CREDENTIAL_OVERRIDE')
+    broadcastSourcesChanged(deps, workspaceId, workspace.rootPath)
+    log.info(`Cleared workspace credential override for global source: ${sourceSlug}`)
   })
 
   // Get permissions config for a source (raw format for UI display)
@@ -301,19 +509,8 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
         ? activateGlobalSourceInWorkspace(workspace.rootPath, slug)
         : deactivateGlobalSourceInWorkspace(workspace.rootPath, slug)
 
-      // Active sessions in this workspace need to re-resolve their source
-      // list — go through SessionManager so the existing reload pipeline
-      // (setSourceServers) reconciles MCP / API server processes.
-      try {
-        const reload = (deps.sessionManager as unknown as {
-          reloadSourcesForWorkspace?: (rootPath: string) => Promise<void>
-        }).reloadSourcesForWorkspace
-        if (typeof reload === 'function') {
-          await reload.call(deps.sessionManager, workspace.rootPath)
-        }
-      } catch (err) {
-        log.error('SET_GLOBAL_ENABLED: reloadSourcesForWorkspace failed:', err)
-      }
+      // Active sessions in this workspace need to re-resolve their source list.
+      await reloadSourcesForWorkspace(deps, workspace.rootPath, log, 'SET_GLOBAL_ENABLED')
 
       broadcastSourcesChangedGlobal(deps, workspaceId)
       broadcastSourcesChanged(deps, workspaceId, workspace.rootPath)

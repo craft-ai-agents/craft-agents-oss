@@ -1,10 +1,23 @@
 import { randomUUID } from 'node:crypto'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import { loadAllSources, getSourceCredentialManager, getSourcesBySlugs } from '@craft-agent/shared/sources'
+import { getWorkspaceByNameOrId, getWorkspaces } from '@craft-agent/shared/config'
+import { loadAllSources, loadGlobalSource, getSourceCredentialManager, getSourcesBySlugs, readGlobalSourcesManifest } from '@craft-agent/shared/sources'
 import { createPendingFlow } from '@craft-agent/shared/auth'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+
+async function reloadSourcesForWorkspace(deps: HandlerDeps, workspaceRootPath: string, log: HandlerDeps['platform']['logger'], label: string): Promise<void> {
+  try {
+    const reload = (deps.sessionManager as unknown as {
+      reloadSourcesForWorkspace?: (rootPath: string) => Promise<void>
+    }).reloadSourcesForWorkspace
+    if (typeof reload === 'function') {
+      await reload.call(deps.sessionManager, workspaceRootPath)
+    }
+  } catch (err) {
+    log.error(`${label}: reloadSourcesForWorkspace failed:`, err)
+  }
+}
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.oauth.START,
@@ -29,6 +42,7 @@ export async function completeOAuthFlow(opts: {
   credManager: { exchangeAndStore(...args: any[]): Promise<any> }
   sessionManager: { completeAuthRequest(...args: any[]): Promise<void> }
   pushSourcesChanged: (workspaceId: string) => void
+  onSourceCredentialsChanged?: (flow: { workspaceId: string; sourceSlug: string; credentialScope?: 'global' | 'workspace-override' }) => Promise<void>
   logger: { info(msg: string): void; }
   clientId?: string
   workspaceId?: string | null
@@ -46,14 +60,19 @@ export async function completeOAuthFlow(opts: {
     if (flow.workspaceId !== opts.workspaceId) throw new Error('Workspace mismatch')
   }
 
-  const result = await credManager.exchangeAndStore(flow.source, flow.provider, {
-    code,
-    codeVerifier: flow.codeVerifier,
-    tokenEndpoint: flow.tokenEndpoint,
-    clientId: flow.clientId,
-    clientSecret: flow.clientSecret,
-    redirectUri: flow.redirectUri,
-  })
+  const result = await credManager.exchangeAndStore(
+    flow.source,
+    flow.provider,
+    {
+      code,
+      codeVerifier: flow.codeVerifier,
+      tokenEndpoint: flow.tokenEndpoint,
+      clientId: flow.clientId,
+      clientSecret: flow.clientSecret,
+      redirectUri: flow.redirectUri,
+    },
+    { override: flow.credentialScope === 'workspace-override' },
+  )
 
   flowStore.remove(state)
 
@@ -70,6 +89,13 @@ export async function completeOAuthFlow(opts: {
 
   // Push source status update to all clients in this workspace
   pushSourcesChanged(flow.workspaceId)
+  if (result.success) {
+    await opts.onSourceCredentialsChanged?.({
+      workspaceId: flow.workspaceId,
+      sourceSlug: flow.sourceSlug,
+      credentialScope: flow.credentialScope,
+    })
+  }
 
   logger.info(`[OAuth] Flow complete for ${flow.sourceSlug} (success=${result.success})`)
   return result
@@ -87,8 +113,9 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
     callbackUrl?: string
     sessionId?: string
     authRequestId?: string
+    credentialScope?: 'workspace' | 'global' | 'workspace-override'
   }) => {
-    const { sourceSlug, callbackPort, callbackUrl, sessionId, authRequestId } = args
+    const { sourceSlug, callbackPort, callbackUrl, sessionId, authRequestId, credentialScope } = args
 
     if (!ctx.workspaceId) {
       throw new Error('No workspace bound to this client')
@@ -99,7 +126,10 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
       throw new Error(`Workspace not found: ${ctx.workspaceId}`)
     }
 
-    const [source] = getSourcesBySlugs(workspace.rootPath, [sourceSlug])
+    const [workspaceSource] = getSourcesBySlugs(workspace.rootPath, [sourceSlug])
+    const source = credentialScope === 'global'
+      ? loadGlobalSource(sourceSlug)
+      : workspaceSource
     if (!source) {
       throw new Error(`Source not found: ${sourceSlug}`)
     }
@@ -122,6 +152,9 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
       sourceSlug,
       sessionId,
       authRequestId,
+      credentialScope: credentialScope === 'global' || credentialScope === 'workspace-override'
+        ? credentialScope
+        : undefined,
     }))
 
     log.info(`[OAuth] Flow started for ${sourceSlug} (flow=${flowId})`)
@@ -151,6 +184,23 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
         const ws = getWorkspaceByNameOrId(workspaceId)
         const sources = ws ? loadAllSources(ws.rootPath) : []
         pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, sources)
+      },
+      onSourceCredentialsChanged: async (flow) => {
+        if (flow.credentialScope === 'global') {
+          pushTyped(server, RPC_CHANNELS.sources.CHANGED_GLOBAL, { to: 'all' }, null)
+          for (const workspace of getWorkspaces()) {
+            const activatedSlugs = readGlobalSourcesManifest(workspace.rootPath).activatedSlugs
+            if (!activatedSlugs.includes(flow.sourceSlug)) continue
+            await reloadSourcesForWorkspace(deps, workspace.rootPath, log, 'OAUTH_GLOBAL_CREDENTIALS_CHANGED')
+            pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId: workspace.id }, workspace.id, loadAllSources(workspace.rootPath))
+          }
+          return
+        }
+
+        const workspace = getWorkspaceByNameOrId(flow.workspaceId)
+        if (!workspace) return
+        await reloadSourcesForWorkspace(deps, workspace.rootPath, log, 'OAUTH_SOURCE_CREDENTIALS_CHANGED')
+        pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId: flow.workspaceId }, flow.workspaceId, loadAllSources(workspace.rootPath))
       },
       logger: log,
       clientId: ctx.clientId,

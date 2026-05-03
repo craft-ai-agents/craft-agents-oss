@@ -32,6 +32,13 @@ export interface PendingOAuthFlow {
   sessionId?: string;
   authRequestId?: string;
 
+  /**
+   * Credential write target for UI-driven source auth.
+   * - global: store at the global source credential key
+   * - workspace-override: store at the active workspace key and force override
+   */
+  credentialScope?: 'global' | 'workspace-override';
+
   createdAt: number;
   expiresAt: number;
 }

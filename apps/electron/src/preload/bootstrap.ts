@@ -263,6 +263,7 @@ client.onConnectionStateChanged((state) => {
   sourceSlug: string
   sessionId?: string
   authRequestId?: string
+  credentialScope?: 'workspace' | 'global' | 'workspace-override'
 }): Promise<{ success: boolean; error?: string; email?: string }> => {
   let callbackServer: Awaited<ReturnType<typeof createCallbackServer>> | null = null
   let flowId: string | undefined
@@ -279,6 +280,7 @@ client.onConnectionStateChanged((state) => {
       callbackUrl,
       sessionId: args.sessionId,
       authRequestId: args.authRequestId,
+      credentialScope: args.credentialScope,
     })
     flowId = startResult.flowId
     state = startResult.state

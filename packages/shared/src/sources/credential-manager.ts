@@ -621,7 +621,8 @@ export class SourceCredentialManager {
   async exchangeAndStore(
     source: LoadedSource,
     provider: OAuthProvider,
-    params: OAuthExchangeParams
+    params: OAuthExchangeParams,
+    opts?: { override?: boolean }
   ): Promise<AuthResult> {
     let result: OAuthExchangeResult;
 
@@ -654,7 +655,7 @@ export class SourceCredentialManager {
       expiresAt: result.expiresAt,
       clientId: result.oauthClientId,
       clientSecret: result.oauthClientSecret,
-      ...(existing?.override === true ? { override: true } : {}),
+      ...(opts?.override === true || existing?.override === true ? { override: true } : {}),
     });
 
     markLoadedSourceAuthenticated(source);

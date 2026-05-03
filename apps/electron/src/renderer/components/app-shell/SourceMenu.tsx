@@ -24,6 +24,8 @@ import {
   Cloud,
   CloudOff,
   UploadCloud,
+  KeyRound,
+  RotateCcwKey,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getFileManagerName } from '@/lib/platform'
@@ -42,6 +44,9 @@ export interface SourceMenuProps {
   onActivateGlobal?: () => void
   onDeactivateGlobal?: () => void
   onPromoteToGlobal?: () => void
+  onSetGlobalCredentials?: () => void
+  onUseWorkspaceCredentials?: () => void
+  onRevertGlobalCredentials?: () => void
   canDelete?: boolean
   deleteLabel?: string
 }
@@ -60,6 +65,9 @@ export function SourceMenu({
   onActivateGlobal,
   onDeactivateGlobal,
   onPromoteToGlobal,
+  onSetGlobalCredentials,
+  onUseWorkspaceCredentials,
+  onRevertGlobalCredentials,
   canDelete = true,
   deleteLabel,
 }: SourceMenuProps) {
@@ -108,6 +116,27 @@ export function SourceMenu({
         <MenuItem onClick={onPromoteToGlobal}>
           <UploadCloud className="h-3.5 w-3.5" />
           <span className="flex-1">{t("sourcesList.promote")}</span>
+        </MenuItem>
+      )}
+
+      {onSetGlobalCredentials && (
+        <MenuItem onClick={onSetGlobalCredentials}>
+          <KeyRound className="h-3.5 w-3.5" />
+          <span className="flex-1">{t("sourceInfo.setGlobalCredentials")}</span>
+        </MenuItem>
+      )}
+
+      {onUseWorkspaceCredentials && (
+        <MenuItem onClick={onUseWorkspaceCredentials}>
+          <KeyRound className="h-3.5 w-3.5" />
+          <span className="flex-1">{t("sourceInfo.useWorkspaceCredentials")}</span>
+        </MenuItem>
+      )}
+
+      {onRevertGlobalCredentials && (
+        <MenuItem onClick={onRevertGlobalCredentials}>
+          <RotateCcwKey className="h-3.5 w-3.5" />
+          <span className="flex-1">{t("sourceInfo.revertGlobalCredentials")}</span>
         </MenuItem>
       )}
 

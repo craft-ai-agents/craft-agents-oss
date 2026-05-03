@@ -12,6 +12,17 @@ import { AlertCircle } from 'lucide-react'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { SourceMenu } from '@/components/app-shell/SourceMenu'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { routes, navigate } from '@/lib/navigate'
 import { useNavigation } from '@/contexts/NavigationContext'
@@ -27,7 +38,7 @@ import {
   type PermissionRow,
   type ToolRow,
 } from '@/components/info'
-import type { LoadedSource, McpToolWithPermission } from '../../shared/types'
+import type { LoadedSource, McpToolWithPermission, SourceCredentialScopeResult } from '../../shared/types'
 import type { PermissionsConfigFile } from '@craft-agent/shared/agent/modes'
 
 interface SourceInfoPageProps {
@@ -182,10 +193,174 @@ function getSourceTierLabel(source: LoadedSource, t: (key: string) => string): s
   }
 }
 
-function getCredentialScopeLabel(source: LoadedSource, t: (key: string) => string): string {
-  if (source.tier === 'global') return t('sourceInfo.credsScope.globalFallback')
+function getCredentialScopeLabel(
+  source: LoadedSource,
+  credentialScope: SourceCredentialScopeResult | null,
+  t: (key: string) => string,
+): string {
   if (source.tier === 'global-dormant') return t('sourceInfo.credsScope.inactive')
-  return t('sourceInfo.credsScope.workspace')
+
+  switch (credentialScope?.scope) {
+    case 'no-auth':
+      return t('sourceInfo.credsScope.noAuth')
+    case 'global':
+      return t('sourceInfo.credsScope.global')
+    case 'workspace-override':
+      return t('sourceInfo.credsScope.workspaceOverride')
+    case 'workspace-override-empty':
+      return t('sourceInfo.credsScope.workspaceOverrideEmpty')
+    case 'workspace':
+      return t('sourceInfo.credsScope.workspace')
+    case 'none':
+      return t('sourceInfo.credsScope.none')
+    case 'inactive':
+      return t('sourceInfo.credsScope.inactive')
+    default:
+      if (source.tier === 'global') return t('sourceInfo.credsScope.globalFallback')
+      return t('sourceInfo.credsScope.workspace')
+  }
+}
+
+type CredentialDialogMode = 'global' | 'override' | 'revert'
+
+interface SourceCredentialDialogProps {
+  open: boolean
+  mode: CredentialDialogMode
+  source: LoadedSource
+  workspaceId: string
+  sourceSlug: string
+  credentialScope: SourceCredentialScopeResult | null
+  onOpenChange: (open: boolean) => void
+  onComplete: () => void
+}
+
+function SourceCredentialDialog({
+  open,
+  mode,
+  source,
+  workspaceId,
+  sourceSlug,
+  credentialScope,
+  onOpenChange,
+  onComplete,
+}: SourceCredentialDialogProps) {
+  const { t } = useTranslation()
+  const [credential, setCredential] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const usesOAuth = Boolean(credentialScope?.usesOAuth)
+
+  useEffect(() => {
+    if (!open) setCredential('')
+  }, [open])
+
+  const close = useCallback(() => onOpenChange(false), [onOpenChange])
+
+  const handleOverride = useCallback(async () => {
+    if (!usesOAuth && !credential.trim()) return
+    setSubmitting(true)
+    try {
+      if (mode === 'global') {
+        if (usesOAuth) {
+          const result = await window.electronAPI.performOAuth({ sourceSlug, credentialScope: 'global' })
+          if (!result.success) {
+            throw new Error(result.error || t('sourceInfo.credentialDialog.oauthFailed'))
+          }
+        } else {
+          await window.electronAPI.saveSourceGlobalCredentials(workspaceId, sourceSlug, credential.trim())
+        }
+      } else if (usesOAuth) {
+        const result = await window.electronAPI.performOAuth({ sourceSlug, credentialScope: 'workspace-override' })
+        if (!result.success) {
+          throw new Error(result.error || t('sourceInfo.credentialDialog.oauthFailed'))
+        }
+      } else {
+        await window.electronAPI.saveSourceCredentialOverride(workspaceId, sourceSlug, credential.trim())
+      }
+      toast.success(t('sourceInfo.credentialDialog.saved'))
+      onComplete()
+      close()
+    } catch (err) {
+      toast.error(t('sourceInfo.credentialDialog.failedToSave'), {
+        description: err instanceof Error ? err.message : undefined,
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }, [close, credential, mode, onComplete, sourceSlug, t, usesOAuth, workspaceId])
+
+  const handleRevert = useCallback(async () => {
+    setSubmitting(true)
+    try {
+      await window.electronAPI.clearSourceCredentialOverride(workspaceId, sourceSlug)
+      toast.success(t('sourceInfo.credentialDialog.reverted'))
+      onComplete()
+      close()
+    } catch (err) {
+      toast.error(t('sourceInfo.credentialDialog.failedToRevert'), {
+        description: err instanceof Error ? err.message : undefined,
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }, [close, onComplete, sourceSlug, t, workspaceId])
+
+  const isGlobal = mode === 'global'
+  const isRevert = mode === 'revert'
+  const title = isRevert
+    ? t('sourceInfo.credentialDialog.revertTitle')
+    : isGlobal
+      ? t('sourceInfo.credentialDialog.globalTitle', { name: source.config.name })
+      : t('sourceInfo.credentialDialog.overrideTitle', { name: source.config.name })
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>
+            {isRevert
+              ? t('sourceInfo.credentialDialog.revertDescription')
+              : usesOAuth
+                ? isGlobal
+                  ? t('sourceInfo.credentialDialog.globalOAuthDescription')
+                  : t('sourceInfo.credentialDialog.oauthDescription')
+                : isGlobal
+                  ? t('sourceInfo.credentialDialog.globalManualDescription')
+                  : t('sourceInfo.credentialDialog.manualDescription')}
+          </DialogDescription>
+        </DialogHeader>
+
+        {!isRevert && !usesOAuth && (
+          <div className="grid gap-2">
+            <Label htmlFor="source-credential">{t('sourceInfo.credentialDialog.credentialLabel')}</Label>
+            <Input
+              id="source-credential"
+              type="password"
+              value={credential}
+              onChange={(event) => setCredential(event.target.value)}
+              placeholder={t('sourceInfo.credentialDialog.credentialPlaceholder')}
+              autoFocus
+            />
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={close} disabled={submitting}>
+            {t('common.cancel')}
+          </Button>
+          {isRevert ? (
+            <Button type="button" onClick={handleRevert} disabled={submitting}>
+              {t('sourceInfo.credentialDialog.revertConfirm')}
+            </Button>
+          ) : (
+            <Button type="button" onClick={handleOverride} disabled={submitting || (!usesOAuth && !credential.trim())}>
+              {usesOAuth ? t('sourceInfo.credentialDialog.continueOAuth') : t('common.save')}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: SourceInfoPageProps) {
@@ -199,6 +374,8 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
   const [mcpToolsLoading, setMcpToolsLoading] = useState(false)
   const [mcpToolsError, setMcpToolsError] = useState<string | null>(null)
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
+  const [credentialScope, setCredentialScope] = useState<SourceCredentialScopeResult | null>(null)
+  const [credentialDialogMode, setCredentialDialogMode] = useState<CredentialDialogMode | null>(null)
   const isMountedRef = useRef(false)
 
   useEffect(() => {
@@ -233,16 +410,22 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
         setSource(found)
 
         if (found.tier !== 'global-dormant') {
-          const config = await window.electronAPI.getSourcePermissionsConfig(workspaceId, sourceSlug)
+          const [config, nextCredentialScope] = await Promise.all([
+            window.electronAPI.getSourcePermissionsConfig(workspaceId, sourceSlug),
+            window.electronAPI.getSourceCredentialScope(workspaceId, sourceSlug),
+          ])
           if (isMountedRef.current) {
             setPermissionsConfig(config)
+            setCredentialScope(nextCredentialScope)
           }
         } else if (isMountedRef.current) {
           setPermissionsConfig(null)
+          setCredentialScope(null)
         }
       } else {
         setSource(null)
         setPermissionsConfig(null)
+        setCredentialScope(null)
         setError(t('sourceInfo.notFound'))
       }
     } catch (err) {
@@ -391,6 +574,10 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
     window.electronAPI.openUrl(`craftagents://sources/source/${sourceSlug}?window=focused`)
   }, [sourceSlug])
 
+  const handleCredentialDialogComplete = useCallback(() => {
+    void loadSource(false)
+  }, [loadSource])
+
   // Get source name for header
   const sourceName = source?.config.name || sourceSlug
 
@@ -409,6 +596,9 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
             onOpenInNewWindow={handleOpenInNewWindow}
             onShowInFinder={handleOpenSourceFolder}
             onDelete={handleDelete}
+            onSetGlobalCredentials={credentialScope?.canAuthenticate && source?.tier === 'global' ? () => setCredentialDialogMode('global') : undefined}
+            onUseWorkspaceCredentials={credentialScope?.canOverride ? () => setCredentialDialogMode('override') : undefined}
+            onRevertGlobalCredentials={credentialScope?.canRevert ? () => setCredentialDialogMode('revert') : undefined}
             canDelete={(source?.tier ?? 'workspace') === 'workspace'}
             deleteLabel={(source?.tier ?? 'workspace') === 'workspace' ? undefined : t('sourcesList.managedSource')}
           />
@@ -462,7 +652,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
             >
               <Info_Table.Row label={t('common.type')} value={source.config.type.toUpperCase()} />
               <Info_Table.Row label={t('sourceInfo.tier')} value={getSourceTierLabel(source, t)} />
-              <Info_Table.Row label={t('sourceInfo.credsScope')} value={getCredentialScopeLabel(source, t)} />
+              <Info_Table.Row label={t('sourceInfo.credsScope')} value={getCredentialScopeLabel(source, credentialScope, t)} />
               {sourceUrl && (
                 <Info_Table.Row label={t('common.url')}>
                   <button
@@ -565,6 +755,21 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
                 {source.guide.raw}
               </Info_Markdown>
             </Info_Section>
+          )}
+
+          {credentialDialogMode && (
+            <SourceCredentialDialog
+              open={Boolean(credentialDialogMode)}
+              mode={credentialDialogMode}
+              source={source}
+              workspaceId={workspaceId}
+              sourceSlug={sourceSlug}
+              credentialScope={credentialScope}
+              onOpenChange={(open) => {
+                if (!open) setCredentialDialogMode(null)
+              }}
+              onComplete={handleCredentialDialogComplete}
+            />
           )}
         </Info_Page.Content>
       )}
