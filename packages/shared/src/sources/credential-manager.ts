@@ -620,16 +620,16 @@ export class SourceCredentialManager {
       return { success: false, error: result.error };
     }
 
-    // Save credentials
+    const existing = await this.load(source);
     await this.save(source, {
       value: result.accessToken!,
       refreshToken: result.refreshToken,
       expiresAt: result.expiresAt,
       clientId: result.oauthClientId,
       clientSecret: result.oauthClientSecret,
+      ...(existing?.override === true ? { override: true } : {}),
     });
 
-    // Mark source as authenticated in config.json
     markSourceAuthenticated(source.workspaceRootPath, source.config.slug);
 
     debug(`[SourceCredentialManager] OAuth exchange+store complete for ${source.config.slug}`);
