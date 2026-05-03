@@ -25,6 +25,7 @@ import type {
 } from '@craft-agent/shared/protocol'
 import type { SessionBundle, DispatchMode } from '@craft-agent/shared/sessions'
 import type { EventSink } from '../transport/types.ts'
+import type { LoadedSkill } from '@craft-agent/shared/skills'
 
 export interface ISessionManager {
   // ---------------------------------------------------------------------------
@@ -33,9 +34,10 @@ export interface ISessionManager {
 
   waitForInit(): Promise<void>
   initialize(): Promise<void>
-  cleanup(): void
-  setEventSink(sink: EventSink): void
-  flushAllSessions(): Promise<void>
+	  cleanup(): void
+	  setEventSink(sink: EventSink): void
+	  broadcastSkillsChanged(workspaceId: string, skills: LoadedSkill[]): void
+	  flushAllSessions(): Promise<void>
 
   // ---------------------------------------------------------------------------
   // Session CRUD

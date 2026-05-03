@@ -7,6 +7,9 @@ import type { HandlerDeps } from '../handler-deps'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.GET,
+  RPC_CHANNELS.skills.LIST_GLOBAL,
+  RPC_CHANNELS.skills.GET_ENABLED_GLOBAL,
+  RPC_CHANNELS.skills.SET_GLOBAL_ENABLED,
   RPC_CHANNELS.skills.GET_FILES,
   RPC_CHANNELS.skills.DELETE,
   RPC_CHANNELS.skills.OPEN_EDITOR,
@@ -33,6 +36,51 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     return skills
   })
 
+  server.handle(RPC_CHANNELS.skills.LIST_GLOBAL, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) {
+      deps.platform.logger?.error(`SKILLS_LIST_GLOBAL: Workspace not found: ${workspaceId}`)
+      return []
+    }
+
+    const { loadGlobalSkills } = await import('@craft-agent/shared/skills')
+    return loadGlobalSkills()
+  })
+
+  server.handle(RPC_CHANNELS.skills.GET_ENABLED_GLOBAL, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) {
+      deps.platform.logger?.error(`SKILLS_GET_ENABLED_GLOBAL: Workspace not found: ${workspaceId}`)
+      return []
+    }
+
+    const { listEnabledGlobalSkillSlugs } = await import('@craft-agent/shared/skills')
+    return listEnabledGlobalSkillSlugs(workspace.rootPath)
+  })
+
+  server.handle(RPC_CHANNELS.skills.SET_GLOBAL_ENABLED, async (_ctx, workspaceId: string, skillSlug: string, enabled: boolean) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const {
+      listEnabledGlobalSkillSlugs,
+      loadAllSkills,
+      loadGlobalSkillBySlug,
+      setGlobalSkillEnabled,
+    } = await import('@craft-agent/shared/skills')
+    if (enabled && !loadGlobalSkillBySlug(skillSlug)) {
+      throw new Error(`Global skill not found: ${skillSlug}`)
+    }
+
+    const enabledGlobalSkills = setGlobalSkillEnabled(workspace.rootPath, skillSlug, enabled)
+    const skills = loadAllSkills(workspace.rootPath)
+    deps.sessionManager.broadcastSkillsChanged(workspaceId, skills)
+    deps.platform.logger?.info(
+      `SKILLS_SET_GLOBAL_ENABLED: ${enabled ? 'Enabled' : 'Disabled'} global skill ${skillSlug} for ${workspaceId}`
+    )
+    return enabledGlobalSkills.length > 0 ? enabledGlobalSkills : listEnabledGlobalSkillSlugs(workspace.rootPath)
+  })
+
   // Get files in a skill directory
   server.handle(RPC_CHANNELS.skills.GET_FILES, async (_ctx, workspaceId: string, skillSlug: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
@@ -41,10 +89,9 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
       return []
     }
 
-    const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
-
-    const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
-    const skillDir = join(skillsDir, skillSlug)
+    const { loadSkillBySlug } = await import('@craft-agent/shared/skills')
+    const skill = loadSkillBySlug(workspace.rootPath, skillSlug)
+    if (!skill) return []
 
     function scanDirectory(dirPath: string): SkillFile[] {
       try {
@@ -79,7 +126,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
       }
     }
 
-    return scanDirectory(skillDir)
+    return scanDirectory(skill.path)
   })
 
   // Delete a skill from a workspace
@@ -98,10 +145,10 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     if (!workspace) throw new Error('Workspace not found')
     if (workspace.remoteServer) throw new Error('Open in editor is not available for remote workspaces')
 
-    const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
-
-    const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
-    const skillFile = join(skillsDir, skillSlug, 'SKILL.md')
+    const { loadSkillBySlug } = await import('@craft-agent/shared/skills')
+    const skill = loadSkillBySlug(workspace.rootPath, skillSlug)
+    if (!skill) throw new Error('Skill not found')
+    const skillFile = join(skill.path, 'SKILL.md')
     await deps.platform.openPath?.(skillFile)
   })
 
@@ -111,10 +158,9 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     if (!workspace) throw new Error('Workspace not found')
     if (workspace.remoteServer) throw new Error('Show in Finder is not available for remote workspaces')
 
-    const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
-
-    const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
-    const skillDir = join(skillsDir, skillSlug)
-    await deps.platform.showItemInFolder?.(skillDir)
+    const { loadSkillBySlug } = await import('@craft-agent/shared/skills')
+    const skill = loadSkillBySlug(workspace.rootPath, skillSlug)
+    if (!skill) throw new Error('Skill not found')
+    await deps.platform.showItemInFolder?.(skill.path)
   })
 }

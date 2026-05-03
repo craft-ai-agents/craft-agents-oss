@@ -125,6 +125,9 @@ export interface StoredCredential {
   /** Service account email (for identification) */
   serviceAccountEmail?: string;
   // Full service account JSON is stored in the `value` field
+
+  /** When true at workspace tier, suppress fallback to the global tier on load. */
+  override?: boolean;
 }
 
 // Using "::" as delimiter instead of "/" because server names and API names

@@ -60,7 +60,14 @@ import {
   refreshGenericOAuthToken,
 } from '../auth/generic-oauth.ts';
 import { debug } from '../utils/debug.ts';
-import { markSourceAuthenticated, loadSourceConfig, saveSourceConfig } from './storage.ts';
+import { markSourceAuthenticated, loadSourceConfig, saveSourceConfig, GLOBAL_WORKSPACE_ID } from './storage.ts';
+
+/**
+ * True when a credential ID points at the global tier (workspaceId === '__global__').
+ */
+export function isGlobalSourceCredentialId(id: CredentialId): boolean {
+  return id.workspaceId === GLOBAL_WORKSPACE_ID;
+}
 
 /**
  * Result of authentication attempt
@@ -191,6 +198,75 @@ export class SourceCredentialManager {
 
     debug(`[SourceCredentialManager] No credential found for MCP source ${source.config.slug}`);
     return null;
+  }
+
+  /**
+   * Load the effective credential for a source, honoring the global-tier
+   * fallback and the workspace-level override flag.
+   *
+   * Resolution order (per docs/global-sources/03-credentials.md):
+   *   1. Workspace key with `override: true` → return its value, or null when
+   *      no value is set (explicit suppression of the global cred).
+   *   2. Workspace key with a value → return it.
+   *   3. Global-tier source with no workspace record → fall back to the
+   *      global key.
+   *   4. Otherwise → null.
+   *
+   * The plain `load(source)` method intentionally does NOT do this fallback;
+   * workspace-edit flows ("Revert to global", "show my override") need to see
+   * the workspace record alone.
+   */
+  async loadEffective(source: LoadedSource): Promise<StoredCredential | null> {
+    const manager = getCredentialManager();
+    const wsId = this.getCredentialId(source);
+    const ws = await manager.get(wsId);
+
+    if (ws?.override === true) {
+      // Explicit suppression: return the workspace record only when it has a real value.
+      return ws.value ? ws : null;
+    }
+
+    if (ws) return ws;
+
+    if (source.tier === 'global') {
+      const globalId: CredentialId = { ...wsId, workspaceId: GLOBAL_WORKSPACE_ID };
+      const g = await manager.get(globalId);
+      if (g) return g;
+    }
+
+    return null;
+  }
+
+  /**
+   * Write an override marker (`{ override: true, value: null }`) at the
+   * workspace tier for a global source. Subsequent `loadEffective` calls
+   * will return null instead of falling back to the global cred until the
+   * workspace OAuth/manual-save flow updates this record with a real value.
+   *
+   * Only applies to global-tier sources — overriding is meaningless for a
+   * source that already lives at the workspace tier.
+   */
+  async writeOverrideMarker(source: LoadedSource): Promise<void> {
+    if (source.tier !== 'global') {
+      throw new Error('Override marker only applies to sources resolved from the global tier.');
+    }
+    const wsId = this.getCredentialId(source);
+    // `value` is typed as string; null is the documented sentinel for "suppressed but not yet set".
+    await getCredentialManager().set(wsId, { value: null as unknown as string, override: true });
+    debug(`[SourceCredentialManager] Wrote override marker for ${source.config.slug} in workspace ${source.workspaceId}`);
+  }
+
+  /**
+   * Delete the workspace credential record entirely so `loadEffective`
+   * resumes falling back to the global tier on the next load.
+   */
+  async clearOverride(source: LoadedSource): Promise<boolean> {
+    const wsId = this.getCredentialId(source);
+    const deleted = await getCredentialManager().delete(wsId);
+    if (deleted) {
+      debug(`[SourceCredentialManager] Cleared override for ${source.config.slug} in workspace ${source.workspaceId}`);
+    }
+    return deleted;
   }
 
   /**
