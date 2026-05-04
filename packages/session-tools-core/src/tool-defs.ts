@@ -45,6 +45,7 @@ import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
 import { handleListMessagingChannels, handleUnbindMessagingChannel } from './handlers/messaging.ts';
 import { handleCreateAgent } from './handlers/create-agent.ts';
 import { handleCreateAutomation } from './handlers/create-automation.ts';
+import { handleCreateWorkflow } from './handlers/create-workflow.ts';
 import {
   handleSaveMemory,
   handleUpdateMemory,
@@ -260,6 +261,50 @@ export const GetWorkflowRunSchema = z.object({
 
 export const CancelWorkflowRunSchema = z.object({
   runId: z.string().describe('Workflow run ID to cancel.'),
+});
+
+const WorkflowTriggerInputSchema = z.object({
+  name: z.string().describe('Trigger input name. Use letters, digits, and underscores; do not start with a digit.'),
+  type: z.enum(['string', 'number', 'boolean']).describe('Input value type.'),
+  required: z.boolean().optional().describe('Whether the run form must provide this input.'),
+  default: z.unknown().optional().describe('Optional default value matching the declared type.'),
+  description: z.string().optional().describe('Short help text shown in the run form.'),
+});
+
+const WorkflowStepCompletionSchema = z.object({
+  requireNonEmptyOutput: z.boolean().optional(),
+  minOutputChars: z.number().optional(),
+  requireToolUse: z.boolean().optional(),
+});
+
+const WorkflowStepSchema = z.object({
+  id: z.string().describe('Lowercase step id, unique within the workflow.'),
+  agent: z.string().describe('Agent slug to run for this step.'),
+  input: z.string().describe('Prompt template. May reference trigger inputs and previous step outputs with {{...}}.'),
+  description: z.string().optional(),
+  outputSchema: z.record(z.string(), z.unknown()).optional(),
+  timeout: z.number().optional(),
+  retries: z.number().optional(),
+  onFailure: z.enum(['stop', 'continue', 'ask']).optional(),
+  completion: WorkflowStepCompletionSchema.optional(),
+});
+
+export const CreateWorkflowSchema = z.object({
+  slug: z.string().describe('Workflow slug, kebab-case, 1-64 chars.'),
+  metadata: z.object({
+    name: z.string(),
+    description: z.string(),
+    avatar: z.string().optional(),
+    trigger: z.object({
+      type: z.literal('manual'),
+      inputs: z.array(WorkflowTriggerInputSchema).optional(),
+    }),
+    outputs: z.record(z.string(), z.unknown()).optional(),
+    steps: z.array(WorkflowStepSchema).min(1),
+  }),
+  body: z.string().optional().describe('Markdown notes below the WORKFLOW.md frontmatter.'),
+  activateInWorkspace: z.boolean().optional().describe('Default true. Activate in the current workspace after writing.'),
+  overwrite: z.boolean().optional().describe('Default false. Only true after explicit user confirmation to replace an existing workflow.'),
 });
 
 // Inter-session messaging
@@ -780,6 +825,30 @@ Use this only after walking the user through the automation-creator interview an
 
 After success, post a one-line confirmation. For SchedulerTick automations, surface the next-fire time.`,
 
+  create_workflow: `Create a new reusable workflow in the global workflow library and activate it in the current workspace.
+
+Use this only after walking the user through the workflow-creator interview and getting explicit confirmation. Always show a complete WORKFLOW.md draft BEFORE calling this tool.
+
+**Supported today:**
+- Manual trigger only: \`metadata.trigger.type: "manual"\`.
+- Sequential agent steps only. No branching, loops, parallel groups, schedule/webhook triggers, human checkpoints, or sub-workflows.
+- Step templates may reference \`{{trigger.<input_name>}}\`, \`{{steps.<previous_step_id>.output}}\`, \`{{steps.<previous_step_id>.output.<path>}}\`, \`{{run.id}}\`, and \`{{run.startedAt}}\`.
+
+**Inputs:**
+- \`slug\`: kebab-case workflow slug.
+- \`metadata\`: name, description, trigger, and steps. Avatar, outputs, retries, timeout, onFailure, completion, and outputSchema are optional but useful for reliability.
+- \`body\`: markdown notes below the frontmatter.
+- \`activateInWorkspace\` (default true): make it visible/runnable in this workspace immediately.
+- \`overwrite\` (default false): only set true if the user explicitly asked to replace an existing workflow.
+
+**Reliability defaults:**
+- Use \`outputSchema\` when later steps need fields from earlier steps.
+- Use \`completion.requireToolUse\` when the step must inspect files, sources, browser, etc.
+- Use \`completion.minOutputChars\` for substantive report/draft steps.
+- Use \`retries: 1\` for flaky research/tool-heavy steps and \`onFailure: stop\` unless the later steps can still succeed.
+
+After success, post a one-line confirmation with /workflows/<slug>.`,
+
   save_memory: `Persist a durable fact about the user, your collaboration, or the ongoing project.
 
 Use this only when the information is likely to help future sessions. Every call is visible to the user and may require approval.
@@ -921,6 +990,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   // Creator skills — agent-creator structured write tool
   { name: 'create_agent', description: TOOL_DESCRIPTIONS.create_agent, inputSchema: CreateAgentSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateAgent },
   { name: 'create_automation', description: TOOL_DESCRIPTIONS.create_automation, inputSchema: CreateAutomationSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateAutomation },
+  { name: 'create_workflow', description: TOOL_DESCRIPTIONS.create_workflow, inputSchema: CreateWorkflowSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateWorkflow },
   { name: 'save_memory', description: TOOL_DESCRIPTIONS.save_memory, inputSchema: SaveMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleSaveMemory },
   { name: 'update_memory', description: TOOL_DESCRIPTIONS.update_memory, inputSchema: UpdateMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdateMemory },
   { name: 'forget_memory', description: TOOL_DESCRIPTIONS.forget_memory, inputSchema: ForgetMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleForgetMemory },

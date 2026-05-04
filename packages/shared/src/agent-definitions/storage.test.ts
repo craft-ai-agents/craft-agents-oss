@@ -16,6 +16,10 @@ import {
   deleteGlobalAgent,
   seedGlobalLibraryIfEmpty,
   ensureRequiredAgents,
+  ensureBuiltInAgentSkills,
+  ensureBuiltInAgentSkillsForSlug,
+  replaceBuiltInAgentPromptPattern,
+  replaceBuiltInAgentPromptText,
   removeBuiltInAgentSkills,
 } from './storage.ts'
 
@@ -513,5 +517,94 @@ body
     expect(concierge.metadata.skills).toEqual(['custom-skill'])
     expect(concierge.systemPrompt).toBe('Custom body stays intact.')
     expect(loadGlobalAgent('writer', { globalAgentsDir })!.metadata.skills).toEqual(['agent-creator'])
+  })
+
+  test('can add built-in skills to one built-in agent without touching the other', () => {
+    writeGlobalAgent(
+      {
+        slug: 'concierge',
+        metadata: { name: 'Concierge', description: 'Routes requests.', skills: ['agent-creator'] },
+        systemPrompt: 'Concierge body.',
+      },
+      { globalAgentsDir },
+    )
+    writeGlobalAgent(
+      {
+        slug: 'orchestrator',
+        metadata: { name: 'Orchestrator', description: 'Plans work.', skills: ['agent-creator'] },
+        systemPrompt: 'Orchestrator body.',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(ensureBuiltInAgentSkillsForSlug('concierge', ['runneros-self-edit'], { globalAgentsDir }).updated).toBe(true)
+    expect(loadGlobalAgent('concierge', { globalAgentsDir })!.metadata.skills).toEqual(['agent-creator', 'runneros-self-edit'])
+    expect(loadGlobalAgent('orchestrator', { globalAgentsDir })!.metadata.skills).toEqual(['agent-creator'])
+  })
+
+  test('ensureBuiltInAgentSkills still applies shared skills to both built-ins', () => {
+    writeGlobalAgent(
+      {
+        slug: 'concierge',
+        metadata: { name: 'Concierge', description: 'Routes requests.', skills: [] },
+        systemPrompt: 'Concierge body.',
+      },
+      { globalAgentsDir },
+    )
+    writeGlobalAgent(
+      {
+        slug: 'orchestrator',
+        metadata: { name: 'Orchestrator', description: 'Plans work.', skills: [] },
+        systemPrompt: 'Orchestrator body.',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(ensureBuiltInAgentSkills(['agent-creator'], { globalAgentsDir }).updated).toBe(2)
+    expect(loadGlobalAgent('concierge', { globalAgentsDir })!.metadata.skills).toEqual(['agent-creator'])
+    expect(loadGlobalAgent('orchestrator', { globalAgentsDir })!.metadata.skills).toEqual(['agent-creator'])
+  })
+
+  test('replaceBuiltInAgentPromptText only patches built-in prompt bodies on exact match', () => {
+    writeGlobalAgent(
+      {
+        slug: 'concierge',
+        metadata: {
+          name: 'Concierge',
+          description: 'Routes requests.',
+          skills: ['agent-creator'],
+        },
+        systemPrompt: 'Before\nold shipped paragraph\nAfter',
+      },
+      { globalAgentsDir },
+    )
+    writeGlobalAgent(
+      {
+        slug: 'writer',
+        metadata: { name: 'Writer', description: 'Writes.' },
+        systemPrompt: 'old shipped paragraph',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(replaceBuiltInAgentPromptText('concierge', 'old shipped paragraph', 'new shipped paragraph', { globalAgentsDir }).updated).toBe(true)
+    expect(loadGlobalAgent('concierge', { globalAgentsDir })!.systemPrompt).toBe('Before\nnew shipped paragraph\nAfter')
+    expect(replaceBuiltInAgentPromptText('writer', 'old shipped paragraph', 'new shipped paragraph', { globalAgentsDir }).updated).toBe(false)
+    expect(loadGlobalAgent('writer', { globalAgentsDir })!.systemPrompt).toBe('old shipped paragraph')
+  })
+
+  test('replaceBuiltInAgentPromptPattern patches wrapped stale built-in guidance', () => {
+    writeGlobalAgent(
+      {
+        slug: 'concierge',
+        metadata: { name: 'Concierge', description: 'Routes requests.' },
+        systemPrompt: 'Intro\nWhen the user wants creator help,\nDo not load creator\nskills unless the user explicitly asks for them.\nOutro',
+      },
+      { globalAgentsDir },
+    )
+
+    const pattern = /When the user wants creator help,[\s\S]*?Do not load creator\s+skills unless the user explicitly asks for them\./
+    expect(replaceBuiltInAgentPromptPattern('concierge', pattern, 'Use baked-in creator skills.', { globalAgentsDir }).updated).toBe(true)
+    expect(loadGlobalAgent('concierge', { globalAgentsDir })!.systemPrompt).toBe('Intro\nUse baked-in creator skills.\nOutro')
   })
 })

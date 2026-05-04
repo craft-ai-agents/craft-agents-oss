@@ -370,6 +370,13 @@ export interface SessionToolContext {
   createAutomation?(input: import('./handlers/create-automation.ts').CreateAutomationToolInput): Promise<import('./handlers/create-automation.ts').CreateAutomationResult>;
 
   /**
+   * Create a workflow in the global workflow library and optionally activate it
+   * in the current workspace. Backend owns parse/write validation, slug
+   * conflict handling, and activation.
+   */
+  createWorkflow?(input: import('./handlers/create-workflow.ts').CreateWorkflowToolInput): Promise<import('./handlers/create-workflow.ts').CreateWorkflowResult>;
+
+  /**
    * Save a durable memory entry to USER.md or the current agent's MEMORY.md.
    * Backend owns persistence, collision handling, and file path resolution.
    */

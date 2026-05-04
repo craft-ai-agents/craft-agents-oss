@@ -17,6 +17,8 @@
  *     listing what got dropped)
  */
 
+import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG } from '@craft-agent/shared/agent-definitions/types'
+import { isSystemGlobalSkillSlug } from '@craft-agent/shared/skills/system'
 import type { LoadedSkill, LoadedSource } from '../../shared/types'
 import type { AgentDefinitionDTO } from '../../shared/types'
 
@@ -40,11 +42,13 @@ export function resolveAgentReferences(
 
   const declaredSkills = agent.metadata.skills ?? []
   const declaredSources = agent.metadata.sources ?? []
+  const canUseSystemSkills = agent.slug === CONCIERGE_SLUG || agent.slug === ORCHESTRATOR_SLUG
 
   const resolvedSkills: string[] = []
   const missingSkills: string[] = []
   for (const slug of declaredSkills) {
     if (skillSlugs.has(slug)) resolvedSkills.push(slug)
+    else if (canUseSystemSkills && isSystemGlobalSkillSlug(slug)) resolvedSkills.push(slug)
     else missingSkills.push(slug)
   }
 

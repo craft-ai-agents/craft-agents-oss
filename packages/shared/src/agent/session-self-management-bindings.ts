@@ -196,6 +196,14 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'createWorkflow', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.createWorkflowFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'saveMemory', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.saveMemoryFn;

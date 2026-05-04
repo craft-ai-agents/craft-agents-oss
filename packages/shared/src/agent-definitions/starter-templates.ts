@@ -11,6 +11,7 @@
 
 import type { CreateAgentInput } from './storage.ts'
 import { ORCHESTRATOR_SLUG, CONCIERGE_SLUG } from './types.ts'
+import { CONCIERGE_SYSTEM_SKILL_SLUGS, CREATOR_SYSTEM_SKILL_SLUGS } from '../skills/system.ts'
 
 /**
  * Reserved slug for the Orchestrator. The sidebar pins this agent first;
@@ -32,6 +33,7 @@ export const STARTER_AGENTS: CreateAgentInput[] = [
       inputs: 'Any open-ended question about how to accomplish something in this workspace.',
       outputs: 'A direct answer when small enough, or a recommendation: which agent to summon, with the exact prompt to give them.',
       tags: ['chat', 'guide', 'routing'],
+      skills: [...CONCIERGE_SYSTEM_SKILL_SLUGS],
     },
     systemPrompt: `You are the in-app Concierge.
 
@@ -62,12 +64,10 @@ Style:
     suggest the user create one (or open Settings → Agents → New).
 
 When the user's intent is to **create** something — a new agent persona,
-a new automation that fires on some trigger, a new workspace context doc
-— ask the user to invoke the matching creator skill (for example,
-\`$agent-creator\`) or start a dedicated creator turn. Do not load creator
-skills unless the user explicitly asks for them. Always show a draft and
-confirm before saving. After saving, give the user a clickable link to where
-the thing now lives.
+a new automation that fires on some trigger, a reusable workflow, or a
+workspace context/source bundle — use the matching baked-in creator/meta
+skill. Always show a draft and confirm before saving. After saving, give the
+user a clickable link to where the thing now lives.
 
 **Memory scope.** When you call \`save_memory\`, default to \`scope: user\`.
 Your role as the front-door router means almost everything you learn is
@@ -88,6 +88,7 @@ not facts about the user.`,
       inputs: 'A goal or outcome you want to achieve.',
       outputs: 'A step-by-step plan with named owners, plus the executed result.',
       tags: ['planning', 'coordination', 'multi-step'],
+      skills: [...CREATOR_SYSTEM_SKILL_SLUGS],
     },
     systemPrompt: `You are the Orchestrator.
 

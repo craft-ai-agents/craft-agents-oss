@@ -25,8 +25,10 @@ import { DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from './thinking-level
 import type { PermissionMode } from './mode-manager.ts';
 import type { LoadedSource } from '../sources/types.ts';
 import { buildCallLlmRequest, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
-import { getLlmConnections, getDefaultLlmConnection } from '../config/storage.ts';
+import { getLlmConnections, getDefaultLlmConnection, loadStoredConfig } from '../config/storage.ts';
+import { resolveSelfEditTarget, validateSelfEditRepo } from '../config/self-edit.ts';
 import { loadAllSources } from '../sources/storage.ts';
+import { loadWorkspaceConfig } from '../workspaces/storage.ts';
 import type { ApiServerConfig } from '../mcp/mcp-pool.ts';
 
 import type {
@@ -65,7 +67,46 @@ import { buildTitlePrompt, buildRegenerateTitlePrompt, validateTitle } from '../
 
 // Skill extraction for Codex/Copilot backends (Claude uses native SDK Skill tool)
 import { parseMentions, resolveSkillMentions, resolveSourceMentions, resolveFileMentions } from '../mentions/index.ts';
-import { loadAllSkills } from '../skills/storage.ts';
+import { loadAllSkills, loadSystemGlobalSkillBySlug } from '../skills/storage.ts';
+
+const RUNNEROS_SELF_EDIT_SKILL_SLUG = 'runneros-self-edit';
+const AGENT_CREATOR_SKILL_SLUG = 'agent-creator';
+const AUTOMATION_CREATOR_SKILL_SLUG = 'automation-creator';
+const WORKFLOW_CREATOR_SKILL_SLUG = 'workflow-creator';
+const SOURCE_RECIPE_SKILL_SLUG = 'source-recipe';
+
+export function isRunnerOsSelfEditIntent(message: string): boolean {
+  const text = message.toLowerCase();
+  const hasRunnerOsTarget = /\b(runneros|runner os|craft agents?|concierge|orchestrator)\b/.test(text);
+  const hasEditIntent = /\b(edit|change|modify|fix|debug|inspect|review|update|add|remove|implement|wire|test|typecheck|lint|theme|ui|setting|settings)\b/.test(text);
+  const hasSelfEditPhrase = /\b(self-edit|self edit|edit itself|change itself|fix itself|this app itself|the app itself)\b/.test(text);
+  return hasSelfEditPhrase || (hasRunnerOsTarget && hasEditIntent);
+}
+
+export function shouldActivateImplicitSkill(slug: string, message: string, parsedSkillSlugs: readonly string[]): boolean {
+  if (parsedSkillSlugs.includes(slug)) return true;
+  const text = message.toLowerCase();
+
+  if (slug === AGENT_CREATOR_SKILL_SLUG) {
+    return /\b(create|make|build|add|draft|generate|set up|setup)\b[\s\S]{0,80}\b(agent|persona|specialist)\b/.test(text) ||
+      /\b(agent|persona|specialist)\b[\s\S]{0,80}\b(create|make|build|add|draft|generate|set up|setup)\b/.test(text);
+  }
+  if (slug === AUTOMATION_CREATOR_SKILL_SLUG) {
+    return /\b(create|make|build|add|draft|generate|set up|setup)\b[\s\S]{0,80}\b(automation|automated|reminder|recurring|scheduled?|monitor|heartbeat|cron)\b/.test(text) ||
+      /\b(automation|automated|reminder|recurring|scheduled?|monitor|heartbeat|cron)\b[\s\S]{0,80}\b(create|make|build|add|draft|generate|set up|setup)\b/.test(text);
+  }
+  if (slug === WORKFLOW_CREATOR_SKILL_SLUG) {
+    return /\b(create|make|build|add|draft|generate|set up|setup)\b[\s\S]{0,100}\b(workflow|pipeline|multi-step|multistep|chain|chained|sequence)\b/.test(text) ||
+      /\b(workflow|pipeline|multi-step|multistep|chain|chained|sequence)\b[\s\S]{0,100}\b(create|make|build|add|draft|generate|set up|setup)\b/.test(text);
+  }
+  if (slug === SOURCE_RECIPE_SKILL_SLUG) {
+    return /\b(source recipe|source bundle|tool bundle|tool set|which sources|what sources|which tools|what tools|mcp bundle)\b/.test(text);
+  }
+  if (slug === RUNNEROS_SELF_EDIT_SKILL_SLUG) {
+    return isRunnerOsSelfEditIntent(message);
+  }
+  return true;
+}
 
 // ============================================================
 // Mini Agent Configuration
@@ -924,7 +965,11 @@ ${formattedMessages}
     const workspaceRoot = this.config.workspace?.rootPath ?? this.workingDirectory;
     const projectRoot = this.config.session?.workingDirectory;
     const skills = loadAllSkills(workspaceRoot, projectRoot);
-    const skillSlugs = skills.map(s => s.slug);
+    const implicitSystemSkills = implicitSkillSlugs
+      .map(slug => loadSystemGlobalSkillBySlug(slug))
+      .filter((skill): skill is NonNullable<typeof skill> => !!skill && !skills.some(s => s.slug === skill.slug));
+    const availableSkills = [...skills, ...implicitSystemSkills];
+    const skillSlugs = availableSkills.map(s => s.slug);
 
     this.debug(`[extractSkillPaths] Available skills: ${skillSlugs.join(', ')}`);
 
@@ -934,8 +979,9 @@ ${formattedMessages}
       this.debug(`[extractSkillPaths] Invalid skills: ${JSON.stringify(parsed.invalidSkills)}`);
     }
 
-    const requestedSkillSlugs = [...new Set([...parsed.skills, ...implicitSkillSlugs])]
-    const missingImplicitSkills = implicitSkillSlugs.filter(slug => !skillSlugs.includes(slug))
+    const activeImplicitSkillSlugs = implicitSkillSlugs.filter(slug => shouldActivateImplicitSkill(slug, message, parsed.skills));
+    const requestedSkillSlugs = [...new Set([...parsed.skills, ...activeImplicitSkillSlugs])];
+    const missingImplicitSkills = activeImplicitSkillSlugs.filter(slug => !skillSlugs.includes(slug));
     if (missingImplicitSkills.length > 0) {
       this.debug(`[extractSkillPaths] Missing implicit agent skills: ${JSON.stringify(missingImplicitSkills)}`);
     }
@@ -943,7 +989,7 @@ ${formattedMessages}
     // Resolve SKILL.md paths for matched and implicit saved-agent skills
     const skillPaths = new Map<string, string>();
     for (const slug of requestedSkillSlugs) {
-      const skill = skills.find(s => s.slug === slug);
+      const skill = availableSkills.find(s => s.slug === slug);
       if (skill) {
         const skillMdPath = join(skill.path, 'SKILL.md');
         if (existsSync(skillMdPath)) {
@@ -958,7 +1004,7 @@ ${formattedMessages}
     // Resolve mentions to semantic markers (like file mentions) instead of stripping them.
     // This preserves sentence structure: "find the bug in [skill:datadog-api]"
     // becomes "find the bug in [Mentioned skill: Datadog API (slug: datadog-api)]"
-    const skillNames = new Map(skills.map(s => [s.slug, s.metadata.name]));
+    const skillNames = new Map(availableSkills.map(s => [s.slug, s.metadata.name]));
     const withSkills = resolveSkillMentions(message, skillNames);
     const withSources = resolveSourceMentions(withSkills);
     const workDir = this.config.session?.workingDirectory ?? this.workingDirectory;
@@ -988,6 +1034,44 @@ ${formattedMessages}
       .map(([slug, path]) => `- ${path} (skill: ${slug})`)
       .join('\n');
     return `Before proceeding with the user's request, you MUST read the following skill instruction files using the Read tool or \`cat\` via Bash:\n${pathList}\n\nDo not take any other action until you have read these files.`;
+  }
+
+  protected buildSelfEditTargetContext(skillPaths: Map<string, string>): string {
+    if (!skillPaths.has(RUNNEROS_SELF_EDIT_SKILL_SLUG)) return '';
+
+    const storedConfig = loadStoredConfig();
+    const workspaceConfig = this.config.workspace?.rootPath
+      ? loadWorkspaceConfig(this.config.workspace.rootPath)
+      : null;
+    const target = resolveSelfEditTarget(storedConfig, workspaceConfig);
+    if (!target.enabled) {
+      return [
+        'RunnerOS self-edit target:',
+        '- enabled: false',
+        '- status: disabled or not configured',
+        '- next step: ask the user to enable developer.selfEdit.repoPath before attempting RunnerOS edits.',
+      ].join('\n');
+    }
+
+    const validation = validateSelfEditRepo(target.repoPath);
+    const commands = [
+      target.devCommand ? `dev: ${target.devCommand}` : null,
+      target.typecheckCommand ? `typecheck: ${target.typecheckCommand}` : null,
+      target.lintCommand ? `lint: ${target.lintCommand}` : null,
+      target.testCommand ? `test: ${target.testCommand}` : null,
+    ].filter(Boolean);
+
+    return [
+      'RunnerOS self-edit target:',
+      `- enabled: ${target.enabled}`,
+      `- source: ${target.source}`,
+      `- repoPath: ${target.repoPath ?? '(not configured)'}`,
+      commands.length > 0 ? `- commands: ${commands.join('; ')}` : '- commands: use package.json defaults',
+      `- validation: ${validation.valid ? 'valid' : 'invalid'}`,
+      validation.packageName ? `- package: ${validation.packageName}` : null,
+      validation.errors.length > 0 ? `- errors: ${validation.errors.join('; ')}` : null,
+      validation.warnings.length > 0 ? `- warnings: ${validation.warnings.join('; ')}` : null,
+    ].filter(Boolean).join('\n');
   }
 
   // ============================================================
@@ -1036,7 +1120,8 @@ ${formattedMessages}
 
     // Prepend read directive to the message so the model reads SKILL.md first.
     const directive = this.formatSkillDirective(skillPaths);
-    const messageParts = [branchSeedContext, transferredSessionContext, directive, cleanMessage].filter(Boolean);
+    const selfEditTargetContext = this.buildSelfEditTargetContext(skillPaths);
+    const messageParts = [branchSeedContext, transferredSessionContext, directive, selfEditTargetContext, cleanMessage].filter(Boolean);
     const effectiveMessage = messageParts.join('\n\n');
 
     // Capture the raw user message for source-activation auto-retry. `cleanMessage`

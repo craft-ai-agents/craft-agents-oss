@@ -101,6 +101,10 @@ export interface SessionScopedToolCallbacks {
   createAutomationFn?: (
     input: import('@craft-agent/session-tools-core').CreateAutomationToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').CreateAutomationResult>;
+  /** Create a workflow in the global library (used by the workflow-creator skill's create_workflow tool). */
+  createWorkflowFn?: (
+    input: import('@craft-agent/session-tools-core').CreateWorkflowToolInput,
+  ) => Promise<import('@craft-agent/session-tools-core').CreateWorkflowResult>;
   /** Save a memory entry to USER.md or the current agent's MEMORY.md. */
   saveMemoryFn?: (
     input: import('@craft-agent/session-tools-core').SaveMemoryToolInput,

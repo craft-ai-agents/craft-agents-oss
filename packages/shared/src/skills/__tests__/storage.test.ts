@@ -28,6 +28,7 @@ const storageModule: typeof import('../storage.ts') = await import(`../storage.t
 const {
   loadAllSkills,
   loadGlobalSkills,
+  loadSystemGlobalSkillBySlug,
   loadWorkspaceSkills,
   loadSkill,
   listEnabledGlobalSkillSlugs,
@@ -38,6 +39,7 @@ const {
   mirrorSkillToGlobal,
   backfillWorkspaceSkillsToGlobal,
   ensureRequiredGlobalSkills,
+  replaceRequiredGlobalSkillFileIfContains,
   GLOBAL_AGENT_SKILLS_DIR,
 } = storageModule;
 
@@ -679,6 +681,19 @@ describe.serial('loadAllSkills', () => {
     expect(skills.find(s => s.slug === `${TEST_PREFIX}global_off`)).toBeUndefined();
   });
 
+  it.serial('should keep system global skills out of generic workspace loading', () => {
+    mkdirSync(REAL_GLOBAL_SKILLS_DIR, { recursive: true });
+    createSkill(REAL_GLOBAL_SKILLS_DIR, 'agent-creator', {
+      name: 'Agent Creator',
+      description: 'System creator skill',
+    });
+
+    expect(loadAllSkills(workspaceRoot).find(s => s.slug === 'agent-creator')).toBeUndefined();
+    expect(loadSystemGlobalSkillBySlug('agent-creator')?.metadata.name).toBe('Agent Creator');
+    expect(loadSystemGlobalSkillBySlug('runneros-self-edit')).toBeNull();
+    expect(loadSystemGlobalSkillBySlug(`${TEST_PREFIX}not_system`)).toBeNull();
+  });
+
   it.serial('should let workspace skills override enabled global skills', () => {
     mkdirSync(REAL_GLOBAL_SKILLS_DIR, { recursive: true });
     createSkill(REAL_GLOBAL_SKILLS_DIR, `${TEST_PREFIX}override`, {
@@ -1050,5 +1065,39 @@ describe.serial('ensureRequiredGlobalSkills (multi-file)', () => {
     // User edit on SKILL.md and untouched bar.md must survive.
     expect(readFileSync(skillMd, 'utf-8')).toBe(userEdit);
     expect(statSync(barMd).mtimeMs).toBe(barBeforeMtime);
+  });
+});
+
+describe.serial('replaceRequiredGlobalSkillFileIfContains', () => {
+  it.serial('replaces a stale required global skill file when the marker is present', () => {
+    const slug = `${TEST_PREFIX}required-replace`;
+    mkdirSync(join(GLOBAL_AGENT_SKILLS_DIR, slug), { recursive: true });
+    writeFileSync(join(GLOBAL_AGENT_SKILLS_DIR, slug, 'SKILL.md'), 'OLD\nSTALE_MARKER\nBODY', 'utf-8');
+
+    const result = replaceRequiredGlobalSkillFileIfContains(
+      slug,
+      'SKILL.md',
+      'STALE_MARKER',
+      'NEW_BODY',
+    );
+
+    expect(result.updated).toBe(true);
+    expect(readFileSync(join(GLOBAL_AGENT_SKILLS_DIR, slug, 'SKILL.md'), 'utf-8')).toBe('NEW_BODY');
+  });
+
+  it.serial('preserves a required global skill file when the marker is absent', () => {
+    const slug = `${TEST_PREFIX}required-preserve`;
+    mkdirSync(join(GLOBAL_AGENT_SKILLS_DIR, slug), { recursive: true });
+    writeFileSync(join(GLOBAL_AGENT_SKILLS_DIR, slug, 'SKILL.md'), 'CUSTOM_BODY', 'utf-8');
+
+    const result = replaceRequiredGlobalSkillFileIfContains(
+      slug,
+      'SKILL.md',
+      'STALE_MARKER',
+      'NEW_BODY',
+    );
+
+    expect(result.updated).toBe(false);
+    expect(readFileSync(join(GLOBAL_AGENT_SKILLS_DIR, slug, 'SKILL.md'), 'utf-8')).toBe('CUSTOM_BODY');
   });
 });

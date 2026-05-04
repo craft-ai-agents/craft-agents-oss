@@ -11,6 +11,7 @@ export {
   loadSkill,
   loadAllSkills,
   loadGlobalSkills,
+  loadSystemGlobalSkillBySlug,
   invalidateSkillsCache,
   loadSkillBySlug,
   loadGlobalSkillBySlug,
@@ -23,6 +24,7 @@ export {
   skillNeedsIconDownload,
   downloadSkillIcon,
   ensureRequiredGlobalSkills,
+  replaceRequiredGlobalSkillFileIfContains,
   mirrorSkillToGlobal,
   backfillWorkspaceSkillsToGlobal,
 } from './storage.ts';
@@ -31,3 +33,9 @@ export type { MirrorSkillResult, BackfillResult } from './storage.ts';
 export { STARTER_SKILLS } from './starter-templates.ts';
 export type { StarterSkill, StarterSkillFile } from './starter-templates.ts';
 export { BUNDLED_STARTER_SKILLS } from './bundled.generated.ts';
+export {
+  CONCIERGE_SYSTEM_SKILL_SLUGS,
+  CREATOR_SYSTEM_SKILL_SLUGS,
+  isSystemGlobalSkillSlug,
+  SYSTEM_GLOBAL_SKILL_SLUGS,
+} from './system.ts';

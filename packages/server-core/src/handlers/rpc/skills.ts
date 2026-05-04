@@ -43,8 +43,8 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
       return []
     }
 
-    const { loadGlobalSkills } = await import('@craft-agent/shared/skills')
-    return loadGlobalSkills()
+    const { isSystemGlobalSkillSlug, loadGlobalSkills } = await import('@craft-agent/shared/skills')
+    return loadGlobalSkills().filter((skill) => !isSystemGlobalSkillSlug(skill.slug))
   })
 
   server.handle(RPC_CHANNELS.skills.GET_ENABLED_GLOBAL, async (_ctx, workspaceId: string) => {

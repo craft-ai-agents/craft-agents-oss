@@ -721,6 +721,23 @@ describe('write / load / delete', () => {
     expect(existsSync(join(libDir, 'bad-default', 'WORKFLOW.md'))).toBe(false);
   });
 
+  test('write rejects parser-invalid metadata before saving', () => {
+    expect(() =>
+      writeGlobalWorkflow({
+        slug: 'bad-steps',
+        metadata: minimalMeta({
+          steps: [
+            { id: 'one', agent: 'researcher', input: 'first' },
+            { id: 'one', agent: 'writer', input: '{{steps.one.output}}' },
+          ],
+        }),
+        body: '',
+      }, opts()),
+    ).toThrow(/Invalid workflow metadata/);
+
+    expect(existsSync(join(libDir, 'bad-steps', 'WORKFLOW.md'))).toBe(false);
+  });
+
   test('loadAll returns all parseable workflows sorted by slug', () => {
     writeGlobalWorkflow({ slug: 'b-flow', metadata: minimalMeta({ name: 'B' }), body: '' }, opts());
     writeGlobalWorkflow({ slug: 'a-flow', metadata: minimalMeta({ name: 'A' }), body: '' }, opts());

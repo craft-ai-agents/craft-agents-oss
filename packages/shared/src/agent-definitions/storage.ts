@@ -579,23 +579,98 @@ export function ensureBuiltInAgentSkills(
   const builtIns = ['concierge', 'orchestrator'];
   let updated = 0;
   for (const slug of builtIns) {
-    const loaded = loadGlobalAgent(slug, options);
-    if (!loaded) continue;
-    const current = new Set(loaded.metadata.skills ?? []);
-    const missing = requiredSkills.filter((s) => !current.has(s));
-    if (missing.length === 0) continue;
-    const next: AgentMetadata = {
-      ...loaded.metadata,
-      skills: [...(loaded.metadata.skills ?? []), ...missing],
-    };
-    try {
-      writeGlobalAgent({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
-      updated += 1;
-    } catch {
-      // Best-effort migration; loading must not fail because of a malformed write.
-    }
+    updated += ensureBuiltInAgentSkillsForSlug(slug, requiredSkills, options).updated ? 1 : 0;
   }
   return { updated };
+}
+
+export function ensureBuiltInAgentSkillsForSlug(
+  slug: string,
+  requiredSkills: ReadonlyArray<string>,
+  options?: AgentStorageOptions,
+): { updated: boolean } {
+  const builtIns = new Set(['concierge', 'orchestrator']);
+  if (!builtIns.has(slug)) return { updated: false };
+
+  const loaded = loadGlobalAgent(slug, options);
+  if (!loaded) return { updated: false };
+
+  const current = new Set(loaded.metadata.skills ?? []);
+  const missing = requiredSkills.filter((s) => !current.has(s));
+  if (missing.length === 0) return { updated: false };
+
+  const next: AgentMetadata = {
+    ...loaded.metadata,
+    skills: [...(loaded.metadata.skills ?? []), ...missing],
+  };
+
+  try {
+    writeGlobalAgent({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
+    return { updated: true };
+  } catch {
+    // Best-effort migration; loading must not fail because of a malformed write.
+    return { updated: false };
+  }
+}
+
+/**
+ * Apply an exact text migration to built-in agent prompt bodies. This preserves
+ * user edits unless the old shipped paragraph is still present verbatim.
+ */
+export function replaceBuiltInAgentPromptText(
+  slug: string,
+  oldText: string,
+  newText: string,
+  options?: AgentStorageOptions,
+): { updated: boolean } {
+  const builtIns = new Set(['concierge', 'orchestrator']);
+  if (!builtIns.has(slug)) return { updated: false };
+  const loaded = loadGlobalAgent(slug, options);
+  if (!loaded || !loaded.systemPrompt.includes(oldText)) return { updated: false };
+
+  try {
+    writeGlobalAgent(
+      {
+        slug,
+        metadata: loaded.metadata,
+        systemPrompt: loaded.systemPrompt.replace(oldText, newText),
+      },
+      options,
+    );
+    return { updated: true };
+  } catch {
+    return { updated: false };
+  }
+}
+
+/**
+ * Regex variant for shipped prompt migrations where older installs may have
+ * slightly different wrapping or punctuation around the same stale guidance.
+ */
+export function replaceBuiltInAgentPromptPattern(
+  slug: string,
+  pattern: RegExp,
+  newText: string,
+  options?: AgentStorageOptions,
+): { updated: boolean } {
+  const builtIns = new Set(['concierge', 'orchestrator']);
+  if (!builtIns.has(slug)) return { updated: false };
+  const loaded = loadGlobalAgent(slug, options);
+  if (!loaded || !pattern.test(loaded.systemPrompt)) return { updated: false };
+
+  try {
+    writeGlobalAgent(
+      {
+        slug,
+        metadata: loaded.metadata,
+        systemPrompt: loaded.systemPrompt.replace(pattern, newText),
+      },
+      options,
+    );
+    return { updated: true };
+  } catch {
+    return { updated: false };
+  }
 }
 
 /**

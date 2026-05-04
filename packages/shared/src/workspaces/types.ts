@@ -13,6 +13,7 @@
 
 import type { PermissionMode } from '../agent/mode-manager.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
+import type { DeveloperConfig } from '../config/self-edit.ts';
 
 /**
  * Local MCP server configuration
@@ -56,6 +57,12 @@ export interface WorkspaceConfig {
    * Resolution order: ENV (CRAFT_LOCAL_MCP_ENABLED) > workspace config > default (true)
    */
   localMcpServers?: LocalMcpConfig;
+
+  /**
+   * Workspace-specific developer capabilities. These override app-level
+   * developer settings when present.
+   */
+  developer?: DeveloperConfig;
 
   createdAt: number;
   updatedAt: number;

@@ -22,6 +22,7 @@ import { SendResourceToWorkspaceDialog } from './SendResourceToWorkspaceDialog'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { useActiveWorkspace, useAppShellContext } from '@/context/AppShellContext'
 import type { LoadedSkill } from '../../../shared/types'
+import { isSystemGlobalSkillSlug } from '@craft-agent/shared/skills/system'
 import {
   isSkillCategoryId,
   SKILL_CATEGORIES,
@@ -229,6 +230,10 @@ export function SkillsListPanel({
   const { workspaces, activeWorkspaceId } = useAppShellContext()
   const hasOtherWorkspaces = workspaces.length > 1
   const [libraryOpen, setLibraryOpen] = React.useState(false)
+  const visibleSkills = React.useMemo(
+    () => skills.filter(skill => skill.source !== 'global' || !isSystemGlobalSkillSlug(skill.slug)),
+    [skills],
+  )
 
   // Send to Workspace dialog state
   const [sendDialogOpen, setSendDialogOpen] = React.useState(false)
@@ -252,7 +257,7 @@ export function SkillsListPanel({
           </div>
         )}
         <GroupedSkillsPanel
-          skills={skills}
+          skills={visibleSkills}
           selectedSkillSlug={selectedSkillSlug}
           onSkillClick={onSkillClick}
           className="min-h-0 flex-1"
@@ -434,16 +439,16 @@ function GlobalSkillsLibraryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl p-0">
-        <DialogHeader className="border-b border-foreground/10 px-5 py-4">
+      <DialogContent className="max-h-[85vh] min-w-0 max-w-2xl overflow-hidden p-0">
+        <DialogHeader className="min-w-0 border-b border-foreground/10 px-5 py-4">
           <DialogTitle className="text-base">Global skills library</DialogTitle>
           <DialogDescription>
             Enable only the shared skills this workspace should see.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-5 pb-5">
-          <div className="mb-3 flex h-9 items-center gap-2 rounded-md border border-foreground/10 bg-background px-3">
+        <div className="min-w-0 overflow-hidden px-5 pb-5">
+          <div className="mb-3 flex h-9 min-w-0 items-center gap-2 rounded-md border border-foreground/10 bg-background px-3">
             <Search className="size-4 text-muted-foreground" />
             <input
               value={query}
@@ -453,7 +458,7 @@ function GlobalSkillsLibraryDialog({
             />
           </div>
 
-          <div className="mb-3 flex items-center gap-1.5 overflow-x-auto pb-1">
+          <div className="mb-3 flex min-w-0 items-center gap-1.5 overflow-x-auto pb-1">
             <button
               type="button"
               onClick={() => setCategoryFilter('all')}
@@ -483,7 +488,7 @@ function GlobalSkillsLibraryDialog({
             ))}
           </div>
 
-          <div className="max-h-[420px] overflow-y-auto rounded-md border border-foreground/10">
+          <div className="max-h-[min(420px,55vh)] min-w-0 overflow-y-auto rounded-md border border-foreground/10">
             {loading ? (
               <div className="px-4 py-8 text-center text-sm text-muted-foreground">Loading skills...</div>
             ) : filteredSkills.length === 0 ? (
@@ -505,7 +510,7 @@ function GlobalSkillsLibraryDialog({
                     return (
                       <div
                         key={skill.slug}
-                        className={`flex items-center gap-3 px-4 py-3 ${index > 0 ? 'border-t border-foreground/10' : ''}`}
+                        className={`flex min-w-0 items-center gap-3 px-4 py-3 ${index > 0 ? 'border-t border-foreground/10' : ''}`}
                       >
                         <SkillAvatar skill={skill} size="sm" workspaceId={workspaceId} />
                         <div className="min-w-0 flex-1">
@@ -537,6 +542,7 @@ function GlobalSkillsLibraryDialog({
                           </div>
                         </div>
                         <Switch
+                          className="shrink-0"
                           checked={isEnabled}
                           disabled={isUpdating}
                           onCheckedChange={(checked) => {

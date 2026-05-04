@@ -5,10 +5,9 @@
  * SKILL.md written under `~/.agents/skills/<slug>/`. Idempotent: existing
  * SKILL.md files are never overwritten.
  *
- * The "creator skills" (agent-creator, automation-creator) ship as built-in
- * because they're load-bearing — Concierge and Orchestrator depend on them
- * to translate "make me an agent / automation / workflow" into a structured
- * draft or save.
+ * The creator/meta skills ship as built-ins because they're load-bearing:
+ * Concierge and Orchestrator depend on them to translate "make me an agent /
+ * automation / workflow" into a structured draft or save.
  */
 
 export interface StarterSkillFile {
@@ -253,8 +252,9 @@ tools:
   - list_agents
   - list_workflows
   - get_workflow
+  - create_workflow
 inputs: A description of a repeatable multi-step agent workflow.
-outputs: A complete WORKFLOW.md draft the user can save in the workflow editor.
+outputs: A confirmed, saved workflow activated in the current workspace, plus a link.
 tags: [creator, meta, workflows]
 ---
 
@@ -267,16 +267,15 @@ UI.
 ## What you're producing
 
 A complete \`WORKFLOW.md\` file for \`~/.workflows/<slug>/WORKFLOW.md\`.
-There is no \`create_workflow\` session tool available today, so do not claim
-you can save it directly. Produce the draft, get confirmation, then tell the
-user to create or edit the workflow in the Workflows UI with this source.
-You may use \`list_agents\` to verify agent slugs and \`list_workflows\` /
-\`get_workflow\` to avoid duplicating an existing workflow.
+Use \`create_workflow\` to save it only after showing the complete source draft
+and receiving explicit user confirmation. Use \`list_agents\` to verify agent
+slugs and \`list_workflows\` / \`get_workflow\` to avoid duplicating an existing
+workflow.
 
 Supported frontmatter today:
 
 - Top level: \`name\`, \`description\`, optional \`avatar\`, \`trigger\`,
-  \`steps\`.
+  \`steps\`, and optional \`outputs\`.
 - Trigger: only \`{ type: manual }\` is supported. Optional
   \`trigger.inputs\` drives the run form.
 - Trigger inputs: \`name\`, \`type\` (\`string\`, \`number\`, or \`boolean\`),
@@ -289,6 +288,11 @@ Supported frontmatter today:
 - \`onFailure\`: one of \`stop\`, \`continue\`, \`ask\`. \`stop\` fails the run,
   \`continue\` records the failed step and runs later steps, and \`ask\` stops
   until human checkpoint support lands.
+- \`outputs\`: optional object that controls the durable output created from a
+  run. Use \`mode: final-step\` for normal workflows, choose a \`kind\` such as
+  \`document\`, \`report\`, \`code\`, \`image\`, \`video\`, \`audio\`,
+  \`dataset\`, \`receipt\`, or \`other\`, and set \`primary.step\` when the final
+  deliverable is not the last step.
 
 Unsupported today: schedule/webhook/automation workflow triggers, \`when\`,
 \`humanCheckpoint\`, \`parallelGroup\`, loops, branching, and sub-workflows.
@@ -304,6 +308,8 @@ Ask only what you need to draft:
 3. **Steps and agents** — "Which agents should run, in what order?"
 4. **Reliability** — only if needed: "Should any step require tool use,
    a minimum-length answer, a timeout, retries, or structured JSON output?"
+5. **Save behavior** — infer a slug, whether to activate in this workspace
+   (default yes), and whether this replaces an existing workflow.
 
 If the user already gave enough detail, skip the interview and draft.
 
@@ -313,6 +319,9 @@ If the user already gave enough detail, skip the interview and draft.
 - Trigger input names use letters, digits, and underscores, and must not
   start with a digit.
 - Every step needs \`id\`, \`agent\`, and non-empty \`input\`.
+- Every referenced \`agent\` should exist. Call \`list_agents({ activeOnly: true })\`
+  before finalizing. If an agent is missing, either choose an existing agent or
+  offer to create it with \`agent-creator\` first.
 - Step inputs may reference only declared trigger inputs and earlier steps.
 - Valid template tokens are:
   - \`{{trigger.<input_name>}}\`
@@ -342,6 +351,38 @@ outputSchema:
 \`\`\`
 
 Then later steps can reference \`{{steps.triage.output.summary}}\`.
+
+## Chaining pattern
+
+Design each step as a contract:
+
+- **Producer steps** extract, classify, research, inspect, or generate a
+  structured intermediate result. Prefer \`outputSchema\` when another step must
+  consume specific fields.
+- **Transformer steps** turn earlier outputs into a clearer artifact. Reference
+  only earlier steps with \`{{steps.<id>.output}}\`.
+- **Finalizer steps** produce the user-facing deliverable. Use
+  \`outputs.mode: final-step\` unless the workflow intentionally produces no
+  durable output.
+
+Good workflow step prompts include: the exact task, relevant trigger inputs,
+previous-step context, output expectations, and failure boundaries. Do not ask
+one step to both deeply research, critique, rewrite, and publish unless those
+are truly inseparable; split those into chained agents.
+
+## Reliability defaults
+
+- Use \`completion.requireNonEmptyOutput: true\` for every meaningful step
+  unless empty output is acceptable.
+- Use \`completion.requireToolUse: true\` when the step must inspect files,
+  sources, browser state, or external systems.
+- Use \`completion.minOutputChars\` for reports, drafts, reviews, and plans
+  where a one-line answer would be invalid.
+- Use \`retries: 1\` for research/tool-heavy steps that may hit transient
+  failures.
+- Use \`onFailure: stop\` by default. Use \`continue\` only when later steps can
+  still produce value without that step's output. Treat \`ask\` as future-facing
+  and avoid it unless the user wants a paused checkpoint.
 
 ## Draft format
 
@@ -376,6 +417,10 @@ steps:
           type: string
     timeout: 300
     retries: 1
+    onFailure: stop
+    completion:
+      requireNonEmptyOutput: true
+      minOutputChars: 80
   - id: action-plan
     agent: writer
     input: |
@@ -384,6 +429,19 @@ steps:
 
       Summary:
       {{steps.triage.output.summary}}
+    timeout: 300
+    retries: 1
+    onFailure: stop
+    completion:
+      requireNonEmptyOutput: true
+      minOutputChars: 120
+outputs:
+  mode: final-step
+  kind: report
+  title: Customer Feedback Digest
+  primary:
+    from: step-output
+    step: action-plan
 ---
 # Customer Feedback Digest
 
@@ -393,14 +451,16 @@ Run this when you have raw customer feedback and want a clean action plan.
 ## Confirmation and handoff
 
 After showing the draft, ask "Use this as the workflow source?" If the user
-confirms, do not call a non-existent tool. Tell them:
+confirms, call \`create_workflow\` with:
 
-1. Create a workflow from the Workflows page.
-2. Use the inferred slug.
-3. Paste the confirmed \`WORKFLOW.md\` source into the editor.
+- \`slug\`: inferred kebab-case slug.
+- \`metadata\`: the frontmatter object from the confirmed draft.
+- \`body\`: markdown body below the frontmatter.
+- \`activateInWorkspace: true\` unless the user says otherwise.
+- \`overwrite: true\` only if the tool reports a slug conflict and the user
+  explicitly confirms replacing the existing workflow.
 
-If a workflow save tool becomes available in the future, use it only after
-showing the full draft and receiving explicit confirmation.
+After success, post a one-line confirmation with \`/workflows/<slug>\`.
 `;
 
 const SOURCE_RECIPE_SKILL = `---
@@ -498,9 +558,57 @@ their fit obvious, look up their guide.md content via the existing source-info w
 before recommending. A wrong source bundle is worse than asking.
 `;
 
+const RUNNEROS_SELF_EDIT_SKILL = `---
+name: RunnerOS Self Edit
+description: Guides Concierge when the user wants RunnerOS to inspect, edit, verify, and hot-reload its own app code through a configured local repo path.
+tags: [system, developer, code, runneros]
+metadata:
+  version: 0.1.0
+---
+
+# RunnerOS Self Edit
+
+Use this skill only when the user asks to change RunnerOS itself: UI fixes,
+feature wiring, app behavior, tests, docs, themes, or local developer
+workflow.
+
+## Ground rule
+
+Do not guess the repo path. Use the configured self-edit target:
+\`developer.selfEdit.repoPath\`, first from the workspace config, then from
+the app config. If it is missing or disabled, ask the user to point RunnerOS
+at the local repo before attempting edits.
+
+## Before changing code
+
+1. Validate that the repo exists and looks like RunnerOS: \`.git\`,
+   \`package.json\`, \`apps/electron\`, and \`packages/shared\`.
+2. Check git status and preserve unrelated user changes.
+3. Identify the smallest file set that owns the behavior.
+4. Prefer existing commands from config:
+   \`devCommand\`, \`typecheckCommand\`, \`lintCommand\`, and \`testCommand\`.
+
+## Edit loop
+
+- Make scoped code changes only after reading nearby files.
+- Let hot reload handle UI changes when it can.
+- If hot reload leaves Electron stale or frozen, restart the app cleanly.
+- Run focused tests first, then broader checks when the touched surface is shared.
+- Report the result in plain language: what changed, what was verified, and what risk remains.
+
+## Safety line
+
+Never run destructive git commands, delete user files, or push remote changes
+without explicit user intent. If the working tree has unrelated edits, work
+around them and call out any conflict that blocks the fix.
+`;
+
 export const STARTER_SKILLS: StarterSkill[] = [
   { slug: 'agent-creator', files: [{ path: 'SKILL.md', content: AGENT_CREATOR_SKILL }] },
   { slug: 'automation-creator', files: [{ path: 'SKILL.md', content: AUTOMATION_CREATOR_SKILL }] },
   { slug: 'workflow-creator', files: [{ path: 'SKILL.md', content: WORKFLOW_CREATOR_SKILL }] },
   { slug: 'source-recipe', files: [{ path: 'SKILL.md', content: SOURCE_RECIPE_SKILL }] },
+  { slug: 'runneros-self-edit', files: [{ path: 'SKILL.md', content: RUNNEROS_SELF_EDIT_SKILL }] },
 ];
+
+export { SYSTEM_GLOBAL_SKILL_SLUGS } from './system.ts';

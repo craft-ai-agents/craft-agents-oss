@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { AbortReason } from '../backend/types.ts';
+import { isRunnerOsSelfEditIntent, shouldActivateImplicitSkill } from '../base-agent.ts';
 import {
   TestAgent,
   createMockBackendConfig,
@@ -257,6 +258,38 @@ describe('BaseAgent', () => {
       }));
       expect(headlessAgent.getConfigWatcherManager()).toBeNull();
       headlessAgent.destroy();
+    });
+  });
+
+  describe('RunnerOS self-edit intent detection', () => {
+    it('activates for explicit RunnerOS edit requests', () => {
+      expect(isRunnerOsSelfEditIntent('Fix the RunnerOS settings UI')).toBe(true);
+      expect(isRunnerOsSelfEditIntent('Use self-edit to update this app itself')).toBe(true);
+    });
+
+    it('does not activate for unrelated Concierge chats', () => {
+      expect(isRunnerOsSelfEditIntent('Which agent should I use for a marketing plan?')).toBe(false);
+      expect(isRunnerOsSelfEditIntent('How do I write a better prompt?')).toBe(false);
+    });
+  });
+
+  describe('implicit skill activation', () => {
+    it('does not activate creator skills for unrelated Concierge chats', () => {
+      expect(shouldActivateImplicitSkill('agent-creator', 'Which agent should I use for marketing?', [])).toBe(false);
+      expect(shouldActivateImplicitSkill('automation-creator', 'What should I work on today?', [])).toBe(false);
+      expect(shouldActivateImplicitSkill('workflow-creator', 'How do I write a better prompt?', [])).toBe(false);
+      expect(shouldActivateImplicitSkill('source-recipe', 'Summarize this workspace.', [])).toBe(false);
+    });
+
+    it('activates only the relevant creator skill for matching intent', () => {
+      expect(shouldActivateImplicitSkill('agent-creator', 'Create a research agent', [])).toBe(true);
+      expect(shouldActivateImplicitSkill('automation-creator', 'Set up a recurring reminder', [])).toBe(true);
+      expect(shouldActivateImplicitSkill('workflow-creator', 'Build a multi-step workflow that chains agents', [])).toBe(true);
+      expect(shouldActivateImplicitSkill('source-recipe', 'Which tools should this agent have?', [])).toBe(true);
+    });
+
+    it('activates any implicit skill when explicitly mentioned', () => {
+      expect(shouldActivateImplicitSkill('workflow-creator', 'hello', ['workflow-creator'])).toBe(true);
     });
   });
 });

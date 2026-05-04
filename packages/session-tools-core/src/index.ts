@@ -191,6 +191,7 @@ export {
   handleStartWorkflow,
   handleGetWorkflowRun,
   handleCancelWorkflowRun,
+  handleCreateWorkflow,
   // Memory
   handleSaveMemory,
   handleUpdateMemory,
@@ -221,6 +222,15 @@ export type {
 
 export {
   handleCreateAutomation,
+} from './handlers/index.ts';
+
+export type {
+  CreateWorkflowToolInput,
+  CreateWorkflowResult,
+  CreateWorkflowMetadata,
+  CreateWorkflowStep,
+  CreateWorkflowTrigger,
+  CreateWorkflowTriggerInput,
 } from './handlers/index.ts';
 
 export type {

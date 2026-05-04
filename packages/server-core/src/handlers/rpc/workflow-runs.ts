@@ -9,6 +9,7 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import {
   loadGlobalWorkflow,
+  readActivatedWorkflows,
   readRun,
   listRuns,
   deleteRun,
@@ -85,6 +86,10 @@ export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDep
       workflowSlug: string,
       triggerInputs: Record<string, unknown>,
     ): Promise<WorkflowRunSnapshot> => {
+      const workspaceRoot = resolveRootPath(workspaceId)
+      if (!readActivatedWorkflows(workspaceRoot).active.includes(workflowSlug)) {
+        throw new Error(`Workflow "${workflowSlug}" is not active in this workspace.`)
+      }
       const workflow = loadGlobalWorkflow(workflowSlug)
       if (!workflow) throw new Error(`Workflow not found: ${workflowSlug}`)
       const runner = requireRunner(deps)

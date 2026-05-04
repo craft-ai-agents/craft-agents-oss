@@ -55,4 +55,25 @@ describe('STARTER_SKILLS', () => {
     expect(slugs).toContain('automation-creator');
     expect(slugs).toContain('workflow-creator');
   });
+
+  it('includes the hidden RunnerOS self-edit starter skill', () => {
+    const skill = STARTER_SKILLS.find(s => s.slug === 'runneros-self-edit');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('RunnerOS Self Edit');
+    expect(parsed.content).toContain('developer.selfEdit.repoPath');
+    expect(parsed.content).toContain('apps/electron');
+  });
+
+  it('workflow-creator can save confirmed workflow drafts', () => {
+    const skill = STARTER_SKILLS.find(s => s.slug === 'workflow-creator');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.tools).toContain('create_workflow');
+    expect(parsed.content).toContain('Use `create_workflow` to save');
+    expect(parsed.content).toContain('## Chaining pattern');
+    expect(parsed.content).toContain('## Reliability defaults');
+    expect(parsed.content).toContain('`image`, `video`, `audio`');
+    expect(parsed.content).not.toContain('`media`');
+  });
 });

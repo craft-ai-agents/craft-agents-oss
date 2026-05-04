@@ -111,6 +111,17 @@ export type {
   CreateAutomationEventName,
 } from './create-automation.ts';
 
+// Create Workflow (workflow-creator skill)
+export { handleCreateWorkflow } from './create-workflow.ts';
+export type {
+  CreateWorkflowToolInput,
+  CreateWorkflowResult,
+  CreateWorkflowMetadata,
+  CreateWorkflowStep,
+  CreateWorkflowTrigger,
+  CreateWorkflowTriggerInput,
+} from './create-workflow.ts';
+
 // Memory
 export {
   handleSaveMemory,

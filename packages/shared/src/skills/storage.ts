@@ -25,6 +25,7 @@ import {
   classifySkillCategory,
   normalizeSkillTags,
 } from './categories.ts';
+import { isSystemGlobalSkillSlug } from './system.ts';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
 import {
   validateIconValue,
@@ -275,6 +276,11 @@ export function loadWorkspaceSkills(workspaceRoot: string): LoadedSkill[] {
 
 export function loadGlobalSkills(): LoadedSkill[] {
   return loadSkillsFromDir(GLOBAL_AGENT_SKILLS_DIR, 'global');
+}
+
+export function loadSystemGlobalSkillBySlug(slug: string): LoadedSkill | null {
+  if (!isSystemGlobalSkillSlug(slug)) return null;
+  return loadSkillFromDir(GLOBAL_AGENT_SKILLS_DIR, slug, 'global');
 }
 
 // ── Skills cache ────────────────────────────────────────────────────────
@@ -683,4 +689,22 @@ export function ensureRequiredGlobalSkills(
     }
   }
   return { ensured };
+}
+
+export function replaceRequiredGlobalSkillFileIfContains(
+  slug: string,
+  filePath: string,
+  marker: string,
+  replacementContent: string,
+): { updated: boolean } {
+  const target = join(GLOBAL_AGENT_SKILLS_DIR, slug, filePath);
+  if (!existsSync(target)) return { updated: false };
+
+  const current = readFileSync(target, 'utf-8');
+  if (!current.includes(marker)) return { updated: false };
+
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, replacementContent, 'utf-8');
+  invalidateSkillsCache();
+  return { updated: true };
 }

@@ -1,11 +1,12 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
-import { Pencil, Play, AlertTriangle, Workflow as WorkflowIcon } from 'lucide-react'
+import { Pencil, Play, AlertTriangle, Workflow as WorkflowIcon, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../shared/routes'
 import { useWorkflowRuns } from '@/hooks/useWorkflowRuns'
+import { useWorkflows } from '@/hooks/useWorkflows'
 import { WorkflowRunInputDialog } from './WorkflowRunInputDialog'
 import { RunStateDot } from './WorkflowsListPage'
 import type { WorkflowDTO } from '../../shared/types'
@@ -22,6 +23,7 @@ export default function WorkflowInfoPage({ workflowSlug, workspaceId }: Props) {
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [runDialogOpen, setRunDialogOpen] = React.useState(false)
   const { runs } = useWorkflowRuns(workspaceId)
+  const { activeSlugs, loading: workflowsLoading, setActive } = useWorkflows(workspaceId)
 
   React.useEffect(() => {
     let mounted = true
@@ -47,6 +49,17 @@ export default function WorkflowInfoPage({ workflowSlug, workspaceId }: Props) {
   }, [workflowSlug, t])
 
   const recentRuns = React.useMemo(() => runs.filter((r) => r.workflowSlug === workflowSlug).slice(0, 5), [runs, workflowSlug])
+  const isActive = workflow ? activeSlugs.includes(workflow.slug) : false
+
+  const handleActivate = async () => {
+    if (!workflow) return
+    try {
+      await setActive(workflow.slug, true)
+      toast.success(`Activated ${workflow.metadata.name}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
 
   if (loadError) {
     return (
@@ -71,7 +84,7 @@ export default function WorkflowInfoPage({ workflowSlug, workspaceId }: Props) {
               <span className="text-base">{workflow.metadata.avatar?.trim() || '🪄'}</span>
               <h1 className="text-base font-semibold truncate">{workflow.metadata.name}</h1>
               <span className="inline-flex items-center rounded-full bg-foreground/5 px-2 py-0.5 text-[11px] font-medium">
-                {workflow.metadata.trigger.type}
+                {isActive ? workflow.metadata.trigger.type : 'inactive'}
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">{workflow.metadata.description}</p>
@@ -81,10 +94,17 @@ export default function WorkflowInfoPage({ workflowSlug, workspaceId }: Props) {
               <Pencil className="h-3.5 w-3.5 mr-1.5" />
               {t('common.edit')}
             </Button>
-            <Button size="sm" onClick={() => setRunDialogOpen(true)}>
-              <Play className="h-3.5 w-3.5 mr-1.5" />
-              {t('workflows.list.run')}
-            </Button>
+            {isActive ? (
+              <Button size="sm" onClick={() => setRunDialogOpen(true)}>
+                <Play className="h-3.5 w-3.5 mr-1.5" />
+                {t('workflows.list.run')}
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => void handleActivate()} disabled={workflowsLoading}>
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                Activate
+              </Button>
+            )}
           </div>
         </div>
       </div>

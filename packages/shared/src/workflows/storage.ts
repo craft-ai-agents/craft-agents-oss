@@ -270,11 +270,15 @@ export function writeGlobalWorkflow(
       `Invalid workflow slug: "${input.slug}" (lowercase letters, digits, hyphens; 1-64 chars)`,
     );
   }
+  const serialized = serializeWorkflow(input.metadata, input.body);
+  if (!parseWorkflowFile(serialized)) {
+    throw new Error(`Invalid workflow metadata for "${input.slug}"`);
+  }
   const dir = getGlobalWorkflowDir(input.slug, options);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, WORKFLOW_FILE),
-    serializeWorkflow(input.metadata, input.body),
+    serialized,
     'utf-8',
   );
   forgetDeletedWorkflow(input.slug, options);

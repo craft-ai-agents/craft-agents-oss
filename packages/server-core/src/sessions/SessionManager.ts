@@ -98,6 +98,8 @@ import {
   loadGlobalWorkflow,
   readActivatedWorkflows,
   readRun as readWorkflowRun,
+  setWorkflowActive,
+  writeGlobalWorkflow,
 } from '@craft-agent/shared/workflows'
 import {
   deleteMemoryEntry,
@@ -123,7 +125,7 @@ import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntr
 import type { PulseAction } from '@craft-agent/shared/pulses'
 import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
-import { CONCIERGE_SLUG, loadActivatedAgents, loadAllGlobalAgents } from '@craft-agent/shared/agent-definitions'
+import { CONCIERGE_SLUG, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
 
 // Import from server-core domain utilities
 import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@craft-agent/server-core/domain'
@@ -370,6 +372,13 @@ function withAutomationConfigMutex<T>(configPath: string, fn: () => Promise<T>):
   const prev = automationConfigMutexes.get(configPath) ?? Promise.resolve()
   const next = prev.then(fn, fn)
   automationConfigMutexes.set(configPath, next.then(() => {}, () => {}))
+  return next
+}
+
+let workflowDefinitionsLibraryMutex: Promise<void> = Promise.resolve()
+function withWorkflowDefinitionsLibraryMutex<T>(fn: () => Promise<T>): Promise<T> {
+  const next = workflowDefinitionsLibraryMutex.then(fn, fn)
+  workflowDefinitionsLibraryMutex = next.then(() => {}, () => {})
   return next
 }
 
@@ -1698,6 +1707,10 @@ export class SessionManager implements ISessionManager {
           },
           startWorkflow: async ({ workflowSlug, triggerInputs }) => {
             try {
+              if (!readActivatedWorkflows(workspaceRootPath).active.includes(workflowSlug)) {
+                sessionLog.warn(`[Pulse] Workflow "${workflowSlug}" is not active in workspace ${workspaceId}; skipping`)
+                return null
+              }
               const wf = loadGlobalWorkflow(workflowSlug)
               if (!wf) return null
               const result = await this.workflowRunner.start({
@@ -1951,6 +1964,12 @@ export class SessionManager implements ISessionManager {
     this.eventSink(RPC_CHANNELS.agentDefinitions.CHANGED, { to: 'all' }, workspaceId)
   }
 
+  private broadcastWorkflowsChanged(workspaceId: string | null): void {
+    if (!this.eventSink) return
+    sessionLog.info(`Broadcasting workflows changed for ${workspaceId ?? 'global'}`)
+    this.eventSink(RPC_CHANNELS.workflows.CHANGED, { to: 'all' }, workspaceId, loadAllGlobalWorkflows())
+  }
+
   private broadcastWorkflowRunUpdated(event: WorkflowRunEvent): void {
     if (!this.eventSink) return
     if (event.type === 'outputs.updated') {
@@ -2136,14 +2155,40 @@ export class SessionManager implements ISessionManager {
         if (ensured > 0) {
           sessionLog.info(`[agent-definitions] Ensured ${ensured} required agent(s)`)
         }
-        // Seed built-in creator skills, but keep them opt-in. Concierge and
-        // Orchestrator should not pay the skill-read prerequisite cost unless
-        // the user explicitly mentions a creator skill.
+        // Seed built-in creator/meta skills. They are implicit system skills:
+        // Concierge and Orchestrator depend on them, so users should not have
+        // to activate them per workspace.
         try {
-          const { ensureRequiredGlobalSkills, STARTER_SKILLS, BUNDLED_STARTER_SKILLS } = await import('@craft-agent/shared/skills')
+          const {
+            ensureRequiredGlobalSkills,
+            replaceRequiredGlobalSkillFileIfContains,
+            STARTER_SKILLS,
+            BUNDLED_STARTER_SKILLS,
+          } = await import('@craft-agent/shared/skills')
           const { ensured: skillsEnsured } = ensureRequiredGlobalSkills([...STARTER_SKILLS, ...BUNDLED_STARTER_SKILLS])
           if (skillsEnsured > 0) {
             sessionLog.info(`[skills] Seeded ${skillsEnsured} built-in skill(s) into global library`)
+          }
+          const workflowCreatorSkillMd = STARTER_SKILLS
+            .find(skill => skill.slug === 'workflow-creator')
+            ?.files.find(file => file.path === 'SKILL.md')
+            ?.content
+          if (workflowCreatorSkillMd) {
+            const workflowCreatorUpdateMarkers = [
+              'There is no `create_workflow` session tool available today',
+              '`document`, `report`, `code`, `media`, `dataset`, `receipt`, or',
+            ]
+            const updated = workflowCreatorUpdateMarkers.some((marker) =>
+              replaceRequiredGlobalSkillFileIfContains(
+                'workflow-creator',
+                'SKILL.md',
+                marker,
+                workflowCreatorSkillMd,
+              ).updated
+            )
+            if (updated) {
+              sessionLog.info('[skills] Updated built-in workflow-creator skill')
+            }
           }
         } catch (err) {
           sessionLog.warn('[skills] Built-in skill seed skipped:', err as Error)
@@ -2181,13 +2226,37 @@ export class SessionManager implements ISessionManager {
           sessionLog.warn('[skills] Workspace→global mirror skipped:', err as Error)
         }
         try {
-          const { removeBuiltInAgentSkills } = await import('@craft-agent/shared/agent-definitions')
-          const { updated } = removeBuiltInAgentSkills(['agent-creator', 'automation-creator'])
+          const { CONCIERGE_SLUG, ensureBuiltInAgentSkills, ensureBuiltInAgentSkillsForSlug, replaceBuiltInAgentPromptPattern, replaceBuiltInAgentPromptText } = await import('@craft-agent/shared/agent-definitions')
+          const { CONCIERGE_SYSTEM_SKILL_SLUGS, CREATOR_SYSTEM_SKILL_SLUGS } = await import('@craft-agent/shared/skills/system')
+          const { updated } = ensureBuiltInAgentSkills(CREATOR_SYSTEM_SKILL_SLUGS)
           if (updated > 0) {
-            sessionLog.info(`[agent-definitions] Migrated ${updated} built-in agent(s) to opt into creator skills only on mention`)
+            sessionLog.info(`[agent-definitions] Ensured ${updated} built-in agent(s) have system skills`)
+          }
+          if (ensureBuiltInAgentSkillsForSlug(CONCIERGE_SLUG, CONCIERGE_SYSTEM_SKILL_SLUGS).updated) {
+            sessionLog.info('[agent-definitions] Ensured Concierge has self-edit system skill')
+          }
+          const oldConciergeCreatorText = `When the user's intent is to **create** something — a new agent persona,
+a new automation that fires on some trigger, a new workspace context doc
+— ask the user to invoke the matching creator skill (for example,
+\`$agent-creator\`) or start a dedicated creator turn. Do not load creator
+skills unless the user explicitly asks for them. Always show a draft and
+confirm before saving. After saving, give the user a clickable link to where
+the thing now lives.`
+          const newConciergeCreatorText = `When the user's intent is to **create** something — a new agent persona,
+a new automation that fires on some trigger, a reusable workflow, or a
+workspace context/source bundle — use the matching baked-in creator/meta
+skill. Always show a draft and confirm before saving. After saving, give the
+user a clickable link to where the thing now lives.`
+          const exactPromptUpdated = replaceBuiltInAgentPromptText(CONCIERGE_SLUG, oldConciergeCreatorText, newConciergeCreatorText).updated
+          const staleCreatorGuidancePattern = /When the user's intent is to \*\*create\*\* something[\s\S]*?Do not load creator\s+skills unless the user explicitly asks for them\.[\s\S]*?the thing now lives\./
+          const fuzzyPromptUpdated = exactPromptUpdated
+            ? false
+            : replaceBuiltInAgentPromptPattern(CONCIERGE_SLUG, staleCreatorGuidancePattern, newConciergeCreatorText).updated
+          if (exactPromptUpdated || fuzzyPromptUpdated) {
+            sessionLog.info('[agent-definitions] Updated Concierge creator-skill guidance')
           }
         } catch (err) {
-          sessionLog.warn('[agent-definitions] Built-in skill cleanup skipped:', err as Error)
+          sessionLog.warn('[agent-definitions] Built-in skill bundle skipped:', err as Error)
         }
       } catch (err) {
         sessionLog.warn('[agent-definitions] Library seed skipped:', err as Error)
@@ -4491,6 +4560,9 @@ export class SessionManager implements ISessionManager {
           }
         },
         startWorkflowFn: async (slug: string, triggerInputs: Record<string, unknown>) => {
+          if (!readActivatedWorkflows(managed.workspace.rootPath).active.includes(slug)) {
+            throw new Error(`Workflow "${slug}" is not active in this workspace.`)
+          }
           const workflow = loadGlobalWorkflow(slug)
           if (!workflow) throw new Error(`Workflow not found: ${slug}`)
           const normalizedInputs: Record<string, unknown> = {}
@@ -4724,6 +4796,77 @@ export class SessionManager implements ISessionManager {
 
             const slug = (typeof cloned.slug === 'string' && cloned.slug) || (cloned.id as string)
             return { ok: true, slug, eventName, nextFireAt }
+          })
+        },
+        createWorkflowFn: async (input) => {
+          const slug = input.slug
+          if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(slug)) {
+            return { ok: false, error: `Invalid workflow slug: "${slug}".` }
+          }
+
+          return withWorkflowDefinitionsLibraryMutex(async () => {
+            const existing = loadGlobalWorkflow(slug)
+            if (existing && !input.overwrite) {
+              const SUGGEST_MAX = 999
+              let suggested: string | undefined
+              for (let n = 2; n <= SUGGEST_MAX; n++) {
+                const candidate = `${slug}-v${n}`
+                if (!loadGlobalWorkflow(candidate)) {
+                  suggested = candidate
+                  break
+                }
+              }
+              if (suggested) {
+                return {
+                  ok: false,
+                  error: `A workflow with slug "${slug}" already exists.`,
+                  suggestedSlug: suggested,
+                }
+              }
+              return {
+                ok: false,
+                error: `A workflow with slug "${slug}" already exists, and every "-vN" variant up to v${SUGGEST_MAX} is taken. Pass overwrite: true or pick a different base slug.`,
+              }
+            }
+
+            const missingAgentSlugs = Array.from(new Set(
+              input.metadata.steps.map((step) => step.agent),
+            )).filter((agentSlug) => !loadGlobalAgent(agentSlug))
+            if (missingAgentSlugs.length > 0) {
+              return {
+                ok: false,
+                error: `Cannot create workflow "${slug}": unknown agent slug(s): ${missingAgentSlugs.join(', ')}.`,
+              }
+            }
+
+            try {
+              writeGlobalWorkflow({
+                slug,
+                metadata: input.metadata as import('@craft-agent/shared/workflows').WorkflowMetadata,
+                body: input.body ?? '',
+              })
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
+              return { ok: false, error: `Failed to write workflow: ${msg}` }
+            }
+
+            if (input.activateInWorkspace !== false) {
+              try {
+                setWorkflowActive(managed.workspace.rootPath, slug, true)
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err)
+                sessionLog.warn(`create_workflow: failed to activate ${slug} in workspace:`, err as Error)
+                this.broadcastWorkflowsChanged(null)
+                return {
+                  ok: false,
+                  slug,
+                  error: `Created workflow "${slug}" but failed to activate it in this workspace: ${msg}`,
+                }
+              }
+            }
+
+            this.broadcastWorkflowsChanged(input.activateInWorkspace === false ? null : managed.workspace.id)
+            return { ok: true, slug }
           })
         },
         activateSourceInSessionFn: async (sourceSlug: string) => {
