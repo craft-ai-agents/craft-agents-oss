@@ -52,6 +52,7 @@ import { TelegramConnectDialog } from '@/components/messaging/TelegramConnectDia
 import { LarkConnectDialog } from '@/components/messaging/LarkConnectDialog'
 import { TelegramSupergroupPairingDialog } from '@/components/messaging/TelegramSupergroupPairingDialog'
 import { WhatsAppConnectDialog } from '@/components/messaging/WhatsAppConnectDialog'
+import { WeChatConnectDialog } from '@/components/messaging/WeChatConnectDialog'
 import { useActiveWorkspace } from '@/context/AppShellContext'
 import { useNavigation } from '@/contexts/NavigationContext'
 import {
@@ -115,6 +116,9 @@ export default function MessagingSettingsPage() {
             <SettingsCard>
               <PlatformRow platform="lark" workspaceId={activeWorkspace.id} />
             </SettingsCard>
+            <SettingsCard>
+              <PlatformRow platform="wechat" workspaceId={activeWorkspace.id} />
+            </SettingsCard>
           </SettingsSection>
         </div>
       </ScrollArea>
@@ -126,18 +130,20 @@ export default function MessagingSettingsPage() {
 // Platform row
 // ---------------------------------------------------------------------------
 
-type Platform = 'telegram' | 'whatsapp' | 'lark'
+type Platform = 'telegram' | 'whatsapp' | 'lark' | 'wechat'
 
 const PLATFORM_LABEL_KEYS: Record<Platform, string> = {
   telegram: 'settings.messaging.telegram.title',
   whatsapp: 'settings.messaging.whatsapp.title',
   lark: 'settings.messaging.lark.title',
+  wechat: 'settings.messaging.wechat.title',
 }
 
 const PLATFORM_API_DESCRIPTION: Record<Platform, string> = {
   telegram: 'Bot API',
   whatsapp: 'Unofficial Web API',
   lark: 'Open Platform API',
+  wechat: 'Unofficial Bot API',
 }
 
 // Row column geometry shared across the bot header and all child rows.
@@ -383,6 +389,26 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
             onOpenSession={(b) => navigateToSession(b.sessionId)}
             onUnbind={handleUnbind}
           />
+        ) : platform === 'wechat' && platformBindings.length > 0 ? (
+          // WeChat is also a 1:1 DM bot — render with the same icon + subtitle
+          // treatment as Telegram DMs so the two sections look uniform.
+          <>
+            <CardSeparator />
+            <div className="divide-y divide-border/50">
+              {platformBindings.map((binding) => (
+                <DirectSessionRow
+                  key={binding.id}
+                  binding={binding}
+                  sessionMetaMap={sessionMetaMap}
+                  subtitle={t('settings.messaging.wechat.directSessionSubtitle', {
+                    defaultValue: 'Direct message session',
+                  })}
+                  onOpen={() => navigateToSession(binding.sessionId)}
+                  onUnbind={() => handleUnbind(binding)}
+                />
+              ))}
+            </div>
+          </>
         ) : platformBindings.length > 0 ? (
           <>
             <CardSeparator />
@@ -422,6 +448,9 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
       {platform === 'lark' && (
         <LarkConnectDialog open={connectOpen} onOpenChange={setConnectOpen} reconfigure={reconfigure} />
       )}
+      {platform === 'wechat' && (
+        <WeChatConnectDialog open={connectOpen} onOpenChange={setConnectOpen} />
+      )}
     </>
   )
 }
@@ -449,11 +478,15 @@ function TelegramBindingsBody({
   onOpenSession,
   onUnbind,
 }: TelegramBindingsBodyProps) {
+  const { t } = useTranslation()
   // Telegram bindings split cleanly on `threadId`:
   //   - undefined: DM ("direct session") — at most one per workspace
   //   - number:    topic in the paired supergroup
   const directBindings = React.useMemo(() => bindings.filter((b) => b.threadId === undefined), [bindings])
   const topicBindings = React.useMemo(() => bindings.filter((b) => b.threadId !== undefined), [bindings])
+  const directSubtitle = t('settings.messaging.telegram.directSessionSubtitle', {
+    defaultValue: 'Direct message session',
+  })
 
   return (
     <>
@@ -466,6 +499,7 @@ function TelegramBindingsBody({
                 key={binding.id}
                 binding={binding}
                 sessionMetaMap={sessionMetaMap}
+                subtitle={directSubtitle}
                 onOpen={() => onOpenSession(binding)}
                 onUnbind={() => onUnbind(binding)}
               />
@@ -494,15 +528,18 @@ function TelegramBindingsBody({
 function DirectSessionRow({
   binding,
   sessionMetaMap,
+  subtitle,
   onOpen,
   onUnbind,
 }: {
   binding: MessagingBinding
   sessionMetaMap: TelegramBindingsBodyProps['sessionMetaMap']
+  /** Pre-translated row subtitle. Decoupled from any specific i18n key so the
+   *  same row component can serve Telegram DMs, WeChat DMs, etc. */
+  subtitle: string
   onOpen: () => void
   onUnbind: () => void
 }) {
-  const { t } = useTranslation()
   const meta = sessionMetaMap.get(binding.sessionId)
   const sessionLabel = meta ? getSessionTitle(meta) : binding.channelName || binding.channelId
   return (
@@ -510,11 +547,7 @@ function DirectSessionRow({
       <SubRowIcon icon={MessageSquare} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm">{sessionLabel}</div>
-        <div className="mt-0.5 truncate text-xs text-foreground/50">
-          {t('settings.messaging.telegram.directSessionSubtitle', {
-            defaultValue: 'Direct message session',
-          })}
-        </div>
+        <div className="mt-0.5 truncate text-xs text-foreground/50">{subtitle}</div>
       </div>
       <RowActions onOpen={onOpen} onUnbind={onUnbind} />
     </div>

@@ -13,19 +13,22 @@
 import telegramIcon from '@/assets/messaging-icons/telegram.svg'
 import whatsappIcon from '@/assets/messaging-icons/whatsapp.svg'
 import larkIcon from '@/assets/messaging-icons/lark.svg'
+import wechatIcon from '@/assets/messaging-icons/wechat.svg'
 
-type MessagingPlatform = 'telegram' | 'whatsapp' | 'lark'
+type MessagingPlatform = 'telegram' | 'whatsapp' | 'lark' | 'wechat'
 
 const platformIcons: Record<MessagingPlatform, string> = {
   telegram: telegramIcon,
   whatsapp: whatsappIcon,
   lark: larkIcon,
+  wechat: wechatIcon,
 }
 
 const platformFallback: Record<MessagingPlatform, { bg: string; initial: string }> = {
   telegram: { bg: '#229ED9', initial: 'T' },
   whatsapp: { bg: '#25D366', initial: 'W' },
   lark: { bg: '#00D6B9', initial: 'L' },
+  wechat: { bg: '#07C160', initial: 'W' },
 }
 
 interface MessagingPlatformIconProps {

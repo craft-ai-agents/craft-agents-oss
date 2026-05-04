@@ -681,6 +681,11 @@ export interface ElectronAPI {
   startWhatsAppConnect(): Promise<{ success: boolean }>
   submitWhatsAppPhone(phoneNumber: string): Promise<{ success: boolean }>
   onWhatsAppEvent(callback: (payload: { workspaceId: string; event: WhatsAppUiEvent }) => void): () => void
+
+  // WeChat (in-process iLink QR-login flow)
+  startWeChatConnect(): Promise<{ success: boolean }>
+  cancelWeChatConnect(): Promise<{ success: boolean }>
+  onWeChatEvent(callback: (payload: { workspaceId: string; event: WeChatUiEvent }) => void): () => void
 }
 
 export interface MessagingPlatformRuntimeInfo {
@@ -701,6 +706,26 @@ export type WhatsAppUiEvent =
   | { type: 'disconnected'; loggedOut: boolean; reason?: string }
   | { type: 'unavailable'; reason: string; message: string }
   | { type: 'error'; message: string }
+
+/**
+ * Event payloads broadcast from the WeChat QR-login state machine. Mirrors
+ * `WeChatLoginEvent` in `@craft-agent/messaging-gateway` — UI consumes only
+ * the fields it needs (`imageUrl` for the QR image, `message` for terminal
+ * errors). The dialog state machine maps these to its phase transitions.
+ */
+export type WeChatUiEvent =
+  | { type: 'qr'; qr: string; refreshCount: number }
+  | { type: 'scaned' }
+  | {
+      type: 'confirmed'
+      botToken: string
+      ilinkBotId: string
+      ilinkUserId?: string
+      baseUrl?: string
+    }
+  | { type: 'expired'; message: string }
+  | { type: 'error'; message: string }
+  | { type: 'cancelled' }
 
 // =============================================================================
 // Navigation types (renderer-only)
