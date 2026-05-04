@@ -127,7 +127,11 @@ export async function handleSourceTest(
   } else if (connectionResult.success) {
     connectionStatus = 'connected';
   } else {
+    // Soft failure (4xx ≠ 401/403, 5xx, etc): the probe reached the endpoint but
+    // got a status we can't interpret as healthy. Demote validation to warnings
+    // and refuse auto-activation — see #683 for what happens otherwise.
     connectionStatus = 'disconnected';
+    hasWarnings = true;
   }
 
   // 7. Auth status
@@ -138,8 +142,11 @@ export async function handleSourceTest(
 
   // 8. Auto-enable + metadata update
   // Defaults to true; pass autoEnable: false to keep pure validation behavior.
+  // Gate on connectionStatus so a probe that returned 5xx/404 cannot push a
+  // broken source into the live tool list. 401/403 still pass: the probe maps
+  // those to connectionStatus=connected, and checkAuthStatus refreshes tokens.
   const autoEnable = args.autoEnable !== false;
-  const shouldAutoEnable = autoEnable && !hasErrors;
+  const shouldAutoEnable = autoEnable && !hasErrors && connectionStatus === 'connected';
   const willFlipEnabled = shouldAutoEnable && source.enabled === false;
 
   if (ctx.saveSourceConfig) {
@@ -186,6 +193,10 @@ export async function handleSourceTest(
       // Only nag about restart if we actually flipped the flag.
       lines.push('ℹ Config updated. Restart session to load tools (mid-session activation not available in this backend).');
     }
+  } else if (autoEnable && !hasErrors && connectionStatus !== 'connected') {
+    // The user asked to auto-enable but the connection probe didn't pass.
+    // Tell them why activation is being skipped so they can act on it.
+    lines.push(`ℹ Skipping activation because connection test did not succeed (status: ${connectionStatus}). Re-run source_test once the endpoint is reachable.`);
   }
 
   // Summary
@@ -557,11 +568,26 @@ async function testApiConnectionWithAuth(
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     const method = source.api!.testEndpoint?.method || 'GET';
-    const response = await fetch(urlWithAuth, {
-      method,
-      headers,
-      signal: controller.signal,
-    });
+    const body = source.api!.testEndpoint?.body;
+    const extraHeaders = source.api!.testEndpoint?.headers;
+
+    // Merge any per-endpoint headers; auth headers win on conflict so a stale
+    // testEndpoint header can't shadow the live token.
+    if (extraHeaders) {
+      for (const [k, v] of Object.entries(extraHeaders)) {
+        if (!(k in headers)) headers[k] = v;
+      }
+    }
+
+    const init: RequestInit = { method, headers, signal: controller.signal };
+    if (body !== undefined && method !== 'GET') {
+      init.body = typeof body === 'string' ? body : JSON.stringify(body);
+      // Default to JSON only if no Content-Type was provided by testEndpoint.headers.
+      const hasContentType = Object.keys(headers).some((k) => k.toLowerCase() === 'content-type');
+      if (!hasContentType) headers['Content-Type'] = 'application/json';
+    }
+
+    const response = await fetch(urlWithAuth, init);
 
     clearTimeout(timeoutId);
 
@@ -610,18 +636,33 @@ async function testApiConnectionBasic(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    // Try HEAD first
-    let response = await fetch(testUrl, {
-      method: 'HEAD',
-      signal: controller.signal,
-    }).catch(() => null);
-
-    // If HEAD returns 405, try GET
-    if (response && response.status === 405) {
+    // If a testEndpoint.method was configured, honor it directly. The HEAD→GET
+    // probe can't validate POST-only endpoints (it 405s, falls back to GET, and
+    // typically gets another 405 the basic probe silently treats as soft pass).
+    // We deliberately don't carry testEndpoint.body in the basic probe — this
+    // path runs without credentials, so anything sensitive in the body would
+    // leak; better to let the authed probe carry the body once auth is set up.
+    const configuredMethod = source.api?.testEndpoint?.method;
+    let response: Response | null;
+    if (configuredMethod) {
       response = await fetch(testUrl, {
-        method: 'GET',
+        method: configuredMethod,
         signal: controller.signal,
       }).catch(() => null);
+    } else {
+      // Try HEAD first
+      response = await fetch(testUrl, {
+        method: 'HEAD',
+        signal: controller.signal,
+      }).catch(() => null);
+
+      // If HEAD returns 405, try GET
+      if (response && response.status === 405) {
+        response = await fetch(testUrl, {
+          method: 'GET',
+          signal: controller.signal,
+        }).catch(() => null);
+      }
     }
 
     clearTimeout(timeoutId);
