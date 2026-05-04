@@ -84,6 +84,7 @@
 :root {
   /* === 6 BASE COLORS === */
   --background: oklch(0.98 0.003 265);
+  --dialog-background: var(--background);
   --background-elevated: color-mix(in srgb, var(--foreground) 1.5%, var(--background));
   --foreground: oklch(0.185 0.01 270);
   --foreground-dimmed: color-mix(in srgb, var(--foreground) 80%, var(--background)); /* unfocused panel text */
@@ -368,6 +369,7 @@ html[data-scenic][data-theme-override]::before {
    Panels with bg-background will become translucent glass */
 html[data-scenic] {
   --background: oklch(0.2 0.005 270 / 0.55);
+  --dialog-background: oklch(0.96 0.003 265 / 0.98);
   background-image: var(--background-image);
   background-size: cover;
   background-position: center;
@@ -376,6 +378,7 @@ html[data-scenic] {
 }
 
 html.dark[data-scenic] {
+  --dialog-background: oklch(0.15 0.006 270 / 0.98);
   background-image:
     linear-gradient(to right, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)),
     var(--background-image);
@@ -736,6 +739,22 @@ html[data-font="inter"] {
       rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 12px 12px 0px,
       rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 24px 24px 0px;
   }
+
+  .dialog-styled {
+    background: var(--dialog-background);
+    color: var(--foreground);
+    border-radius: 8px;
+    border: none;
+    box-shadow:
+      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+      rgba(var(--foreground-rgb), 0.08) 0px 0px 0px 1px,
+      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.9)) 0px 1px 1px -0.5px,
+      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.9)) 0px 3px 3px 0px,
+      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.45)) 0px 6px 6px 0px,
+      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.45)) 0px 12px 12px 0px,
+      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.45)) 0px 24px 24px 0px;
+  }
 }
 
 /* Draggable title bar region for transparent window */
@@ -813,6 +832,11 @@ html[data-scenic] .shadow-strong > * {
 html[data-scenic] .popover-styled {
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
+}
+
+html[data-scenic] .dialog-styled {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 /* Scenic mode: Fullscreen overlay background gets glass effect

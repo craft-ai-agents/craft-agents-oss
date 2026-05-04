@@ -594,7 +594,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
             sourceSlug={sourceSlug}
             sourceName={sourceName}
             onOpenInNewWindow={handleOpenInNewWindow}
-            onShowInFinder={handleOpenSourceFolder}
+            onShowInFinder={source?.folderPath ? handleOpenSourceFolder : undefined}
             onDelete={handleDelete}
             onSetGlobalCredentials={credentialScope?.canAuthenticate && source?.tier === 'global' ? () => setCredentialDialogMode('global') : undefined}
             onUseWorkspaceCredentials={credentialScope?.canOverride ? () => setCredentialDialogMode('override') : undefined}

@@ -21,7 +21,7 @@ import type {
 import { validateSourceConfig } from '../config/validators.ts';
 import { debug } from '../utils/debug.ts';
 import { readJsonFileSync } from '../utils/files.ts';
-import { getBuiltinSources, isBuiltinSource, getDocsSource } from './builtin-sources.ts';
+import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource } from './builtin-sources.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
 import {
@@ -499,8 +499,9 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
     }
 
     if (isBuiltinSource(slug)) {
-      // Currently only craft-agents-docs is a builtin source
-      if (slug === 'craft-agents-docs') {
+      if (slug === 'computer-use') {
+        sources.push({ ...getComputerUseSource(workspaceId, workspaceRootPath), tier: 'project' });
+      } else if (slug === 'craft-agents-docs') {
         sources.push({ ...getDocsSource(workspaceId, workspaceRootPath), tier: 'project' });
       }
     }

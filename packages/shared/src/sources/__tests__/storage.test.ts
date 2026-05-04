@@ -321,6 +321,18 @@ describe('loadAllSources', () => {
     expect(matches.length).toBe(1);
     expect(matches[0]!.tier).toBe('global');
   });
+
+  test('includes computer-use as a project source', () => {
+    const ws = makeWorkspace();
+    const all = loadAllSources(ws);
+    const found = all.find((s: LoadedSource) => s.config.slug === 'computer-use');
+
+    expect(found).toBeDefined();
+    expect(found!.tier).toBe('project');
+    expect(found!.config.type).toBe('mcp');
+    expect(found!.config.mcp?.transport).toBe('stdio');
+    expect(found!.config.mcp?.authType).toBe('none');
+  });
 });
 
 describe('getSourcesBySlugs', () => {
@@ -349,6 +361,17 @@ describe('getSourcesBySlugs', () => {
     expect(sources.length).toBe(1);
     expect(sources[0]!.tier).toBe('workspace');
     expect(sources[0]!.config.mcp?.url).toBe('https://workspace.test/mcp');
+  });
+
+  test('resolves computer-use by slug without workspace activation', () => {
+    const ws = makeWorkspace();
+    const sources = getSourcesBySlugs(ws, ['computer-use']);
+
+    expect(sources.length).toBe(1);
+    expect(sources[0]!.tier).toBe('project');
+    expect(sources[0]!.config.slug).toBe('computer-use');
+    expect(sources[0]!.config.enabled).toBe(true);
+    expect(sources[0]!.config.mcp?.transport).toBe('stdio');
   });
 });
 

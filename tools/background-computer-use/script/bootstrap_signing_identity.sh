@@ -78,6 +78,7 @@ openssl pkcs12 -export \
   -in "$TMP_DIR/leaf.crt" \
   -certfile "$TMP_DIR/root.crt" \
   -out "$TMP_DIR/leaf.p12" \
+  -legacy \
   -passout pass:codexdev \
   >/dev/null 2>&1
 

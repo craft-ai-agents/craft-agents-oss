@@ -8,6 +8,14 @@ import type { SavedWindow } from './window-state'
 
 // Vite dev server URL for hot reload
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
+const MAX_RENDERER_CONSOLE_LOG_CHARS = 2000
+const RENDERER_CONSOLE_LOG_PREFIX = /\[renderer:\d+\]/
+
+function truncateRendererConsoleLog(message: string): string {
+  if (message.length <= MAX_RENDERER_CONSOLE_LOG_CHARS) return message
+  const omitted = message.length - MAX_RENDERER_CONSOLE_LOG_CHARS
+  return `${message.slice(0, MAX_RENDERER_CONSOLE_LOG_CHARS)}... [truncated ${omitted} chars]`
+}
 
 /**
  * Get the appropriate background material for Windows transparency effects
@@ -197,11 +205,12 @@ export class WindowManager {
     // Enable right-click context menu in development
     if (!app.isPackaged) {
       window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-        if (level < 2) return;
-        if (sourceId.includes('/electron-log_renderer.js')) return;
+        if (level < 2) return
+        if (sourceId?.includes('/electron-log_renderer.js')) return
+        if (RENDERER_CONSOLE_LOG_PREFIX.test(message)) return
         const location = sourceId ? `${sourceId}:${line}` : `line ${line}`
         const prefix = `[renderer:${webContentsId}] ${location}`
-        windowLog.warn(prefix, message)
+        windowLog.warn(prefix, truncateRendererConsoleLog(message))
       })
 
       window.webContents.on('render-process-gone', (_event, details) => {

@@ -37,7 +37,7 @@ export interface SourceMenuProps {
   sourceName: string
   /** Callbacks */
   onOpenInNewWindow: () => void
-  onShowInFinder: () => void
+  onShowInFinder?: () => void
   onDelete: () => void
   /** Send to another workspace (omit to hide the option) */
   onSendToWorkspace?: () => void
@@ -85,10 +85,12 @@ export function SourceMenu({
       </MenuItem>
 
       {/* Show in file manager */}
-      <MenuItem onClick={onShowInFinder}>
-        <FolderOpen className="h-3.5 w-3.5" />
-        <span className="flex-1">{t("sessionMenu.showInFileManager", { fileManager: getFileManagerName() })}</span>
-      </MenuItem>
+      {onShowInFinder && (
+        <MenuItem onClick={onShowInFinder}>
+          <FolderOpen className="h-3.5 w-3.5" />
+          <span className="flex-1">{t("sessionMenu.showInFileManager", { fileManager: getFileManagerName() })}</span>
+        </MenuItem>
+      )}
 
       {/* Send to another workspace */}
       {onSendToWorkspace && (

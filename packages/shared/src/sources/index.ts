@@ -118,8 +118,9 @@ export type {
   BuiltServers,
 } from './server-builder.ts';
 
-// Built-in Sources (always available in every workspace)
+// Built-in/project Sources
 export {
+  getComputerUseSource,
   getDocsSource,
   getBuiltinSources,
   isBuiltinSource,

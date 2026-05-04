@@ -258,7 +258,7 @@ export function SourcesListPanel({
               sourceSlug={source.config.slug}
               sourceName={source.config.name}
               onOpenInNewWindow={() => window.electronAPI.openUrl(`craftagents://sources/source/${source.config.slug}?window=focused`)}
-              onShowInFinder={() => window.electronAPI.showInFolder(source.folderPath)}
+              onShowInFinder={source.folderPath ? () => window.electronAPI.showInFolder(source.folderPath) : undefined}
               onDelete={() => onDeleteSource(source.config.slug)}
               canDelete={isWorkspaceSource}
               deleteLabel={isWorkspaceSource ? undefined : t('sourcesList.managedSource')}
