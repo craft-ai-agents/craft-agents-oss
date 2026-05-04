@@ -226,6 +226,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         telegram: cloneRuntime(state.runtime.telegram),
         whatsapp: cloneRuntime(state.runtime.whatsapp),
         lark: cloneRuntime(state.runtime.lark),
+        wechat: cloneRuntime(state.runtime.wechat),
       },
     }
   }
@@ -269,9 +270,19 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         identity: undefined,
         lastError: undefined,
       })
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
+        configured: false,
+        connected: false,
+        state: 'disconnected',
+        identity: undefined,
+        lastError: undefined,
+      })
       return
     }
 
+    // WeChat is excluded from this platform loop until the adapter lands —
+    // protocol-only skeleton at this stage. The runtime entry stays at its
+    // bootstrap default ('disconnected', configured = false from cfg).
     for (const platform of ['telegram', 'whatsapp', 'lark'] as const) {
       const configured = isPlatformConfigured(cfg, platform)
       if (!configured && state.gateway.getAdapter(platform)) {
@@ -1013,6 +1024,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         telegram: createRuntime('telegram', isPlatformConfigured(cfg, 'telegram')),
         whatsapp: createRuntime('whatsapp', isPlatformConfigured(cfg, 'whatsapp')),
         lark: createRuntime('lark', isPlatformConfigured(cfg, 'lark')),
+        wechat: createRuntime('wechat', isPlatformConfigured(cfg, 'wechat')),
       },
     }
     this.workspaces.set(workspaceId, state)
@@ -1237,7 +1249,7 @@ function toBindingInfo(b: ChannelBinding): MessagingBindingInfo {
 }
 
 function isKnownPlatform(p: string): p is PlatformType {
-  return p === 'telegram' || p === 'whatsapp' || p === 'lark'
+  return p === 'telegram' || p === 'whatsapp' || p === 'lark' || p === 'wechat'
 }
 
 function capitalize(value: string): string {

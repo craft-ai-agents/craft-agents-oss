@@ -115,6 +115,9 @@ export default function MessagingSettingsPage() {
             <SettingsCard>
               <PlatformRow platform="lark" workspaceId={activeWorkspace.id} />
             </SettingsCard>
+            <SettingsCard>
+              <ComingSoonRow platform="wechat" />
+            </SettingsCard>
           </SettingsSection>
         </div>
       </ScrollArea>
@@ -699,6 +702,32 @@ function FlatBindingRow({
     <div className="flex items-center justify-between gap-4 px-4 py-2.5 pl-[52px]">
       <div className="min-w-0 truncate text-sm">{sessionLabel}</div>
       <RowActions onOpen={onOpen} onUnbind={onUnbind} />
+    </div>
+  )
+}
+
+/**
+ * Card row for platforms whose adapter hasn't landed yet. Renders the same
+ * 22px icon + label geometry as `PlatformRow` so the panel stays visually
+ * uniform, but disables the connect affordance and surfaces a "Coming soon"
+ * label in place of runtime status.
+ */
+function ComingSoonRow({ platform }: { platform: 'wechat' }) {
+  const { t } = useTranslation()
+  const labelKey = `settings.messaging.${platform}.title`
+  const apiDescription = 'iLink Bot API'
+  return (
+    <div className="flex items-center gap-3 px-4 py-3.5">
+      <MessagingPlatformIcon platform={platform} size={22} />
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium">{t(labelKey)}</div>
+        <div className="mt-0.5 truncate text-xs text-muted-foreground">
+          {apiDescription} · {t('settings.messaging.comingSoon', { defaultValue: 'Coming soon' })}
+        </div>
+      </div>
+      <Button variant="outline" size="sm" disabled>
+        {t('settings.messaging.comingSoon', { defaultValue: 'Coming soon' })}
+      </Button>
     </div>
   )
 }
