@@ -54,6 +54,7 @@ export function AgentSessionsPanel({ agentSlug, workspaceId, remoteWorkspaceId }
       if (s.spawnedFromAgent?.agentSlug !== agentSlug) continue
       if (workspaceId && s.workspaceId !== workspaceId && s.workspaceId !== remoteWorkspaceId) continue
       if (s.isArchived) continue
+      if ((s.messageCount ?? 0) === 0 && !s.isProcessing) continue
       out.push(s)
     }
     out.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0))

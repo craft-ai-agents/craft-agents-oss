@@ -76,7 +76,6 @@ export function buildAgentCreateSessionOptions(
   const agentCatalog = context?.agentCatalog ?? []
 
   const options: CreateSessionOptions = {
-    name: agent.metadata.name,
     customSystemPrompt: composedPrompt || undefined,
     agentSkillSlugs: skillSlugs.length ? skillSlugs : undefined,
     enabledSourceSlugs: sourceSlugs.length ? sourceSlugs : undefined,

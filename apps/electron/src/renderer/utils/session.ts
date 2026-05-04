@@ -5,7 +5,11 @@ import type { SessionMeta } from "../atoms/sessions"
 import type { SessionStatusId } from "../config/session-status-config"
 
 /** Common session fields used by getSessionTitle */
-type SessionLike = Pick<Session, 'name' | 'preview'> & { messages?: Session['messages'] }
+type SessionLike = Pick<Session, 'name' | 'preview'> & {
+  messages?: Session['messages']
+  messageCount?: number
+  spawnedFromAgent?: { agentName: string }
+}
 
 /**
  * Sanitize content for display as session title.
@@ -48,6 +52,11 @@ export function getSessionTitle(session: SessionLike | SessionMeta): string {
       const trimmed = sanitized.slice(0, 50)
       return trimmed.length < sanitized.length ? trimmed + '…' : trimmed
     }
+  }
+
+  const loadedMessageCount = 'messages' in session ? session.messages?.length : undefined
+  if ((session.messageCount ?? loadedMessageCount ?? 0) === 0 && session.spawnedFromAgent?.agentName) {
+    return session.spawnedFromAgent.agentName
   }
 
   return i18next.t('session.defaultTitle', 'New chat')
