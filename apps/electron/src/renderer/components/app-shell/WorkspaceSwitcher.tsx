@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useTranslation } from "react-i18next"
 import { useState, useCallback, useRef } from "react"
-import { Check, FolderPlus, ExternalLink, ChevronDown, Cloud, CloudOff, Trash2 } from "lucide-react"
+import { Check, FolderPlus, ExternalLink, ChevronDown, Cloud, CloudOff, X } from "lucide-react"
 import { AnimatePresence } from "motion/react"
 import { useSetAtom } from "jotai"
 import { toast } from "sonner"
@@ -55,8 +55,13 @@ export function WorkspaceSwitcher({
   const { t } = useTranslation()
   const [showCreationScreen, setShowCreationScreen] = useState(false)
   const [reconnectTarget, setReconnectTarget] = useState<Workspace | null>(null)
+  const [closedWorkspaceIds, setClosedWorkspaceIds] = useState<Set<string>>(() => new Set())
   const setFullscreenOverlayOpen = useSetAtom(fullscreenOverlayOpenAtom)
   const selectedWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
+  const visibleTabWorkspaces = React.useMemo(
+    () => workspaces.filter((workspace) => !closedWorkspaceIds.has(workspace.id) || workspace.id === activeWorkspaceId),
+    [closedWorkspaceIds, activeWorkspaceId, workspaces],
+  )
   const workspaceIconMap = useWorkspaceIcons(workspaces)
   const connectionState = useTransportConnectionState()
   const isRemote = connectionState?.mode === 'remote'
@@ -108,7 +113,7 @@ export function WorkspaceSwitcher({
   }
 
   /** True when we know a remote workspace is unreachable. */
-  const isRemoteDisconnected = (workspaceId: string) => {
+  const isRemoteDisconnected = useCallback((workspaceId: string) => {
     // Active workspace: use live transport state
     if (workspaceId === activeWorkspaceId) {
       if (!isRemote || !connectionState) return false
@@ -117,12 +122,7 @@ export function WorkspaceSwitcher({
     }
     // Non-active: use health check result
     return remoteHealthMap.get(workspaceId) === 'error'
-  }
-
-  const hasUnreadInOtherWorkspaces = React.useMemo(() => {
-    if (!activeWorkspaceId || !workspaceUnreadMap) return false
-    return workspaces.some((workspace) => workspace.id !== activeWorkspaceId && workspaceUnreadMap[workspace.id])
-  }, [workspaces, activeWorkspaceId, workspaceUnreadMap])
+  }, [activeWorkspaceId, connectionState, isRemote, remoteHealthMap])
 
   const handleNewWorkspace = () => {
     setShowCreationScreen(true)
@@ -132,22 +132,30 @@ export function WorkspaceSwitcher({
   const handleWorkspaceCreated = (workspace: Workspace) => {
     setShowCreationScreen(false)
     setFullscreenOverlayOpen(false)
+    setClosedWorkspaceIds((prev) => {
+      const next = new Set(prev)
+      next.delete(workspace.id)
+      return next
+    })
     toast.success(t('toast.createdWorkspace', { name: workspace.name }))
     onWorkspaceCreated?.(workspace)
     onSelect(workspace.id)
   }
 
-  const handleRemoveWorkspace = useCallback(async (workspace: Workspace) => {
-    if (workspace.id === activeWorkspaceId) {
-      toast.error(t('toast.cannotRemoveActiveWorkspace'))
+  const handleCloseWorkspaceTab = useCallback(async (workspace: Workspace) => {
+    if (visibleTabWorkspaces.length <= 1) {
       return
     }
-    const removed = await window.electronAPI.removeWorkspace(workspace.id)
-    if (removed) {
-      toast.success(t('toast.removedWorkspace', { name: workspace.name }))
-      onWorkspaceRemoved?.()
+
+    if (workspace.id === activeWorkspaceId) {
+      const currentIndex = visibleTabWorkspaces.findIndex((w) => w.id === workspace.id)
+      const nextWorkspace = visibleTabWorkspaces[currentIndex + 1] ?? visibleTabWorkspaces[currentIndex - 1]
+      if (!nextWorkspace) return
+      await Promise.resolve(onSelect(nextWorkspace.id))
     }
-  }, [activeWorkspaceId, onWorkspaceRemoved, t])
+
+    setClosedWorkspaceIds((prev) => new Set(prev).add(workspace.id))
+  }, [activeWorkspaceId, onSelect, visibleTabWorkspaces])
 
   const handleCloseCreationScreen = useCallback(() => {
     setShowCreationScreen(false)
@@ -170,6 +178,175 @@ export function WorkspaceSwitcher({
     toast.success(t('toast.workspaceReconnected'))
   }, [activeWorkspaceId, handleCloseCreationScreen, onSelect, t])
 
+  const handleWorkspaceSelect = useCallback((workspace: Workspace, openInNewWindow = false) => {
+    const disconnected = isRemoteDisconnected(workspace.id)
+    if (disconnected && workspace.remoteServer) {
+      setReconnectTarget(workspace)
+      setShowCreationScreen(true)
+      setFullscreenOverlayOpen(true)
+      return
+    }
+    if (disconnected) return
+    if (!openInNewWindow) {
+      setClosedWorkspaceIds((prev) => {
+        if (!prev.has(workspace.id)) return prev
+        const next = new Set(prev)
+        next.delete(workspace.id)
+        return next
+      })
+    }
+    onSelect(workspace.id, openInNewWindow)
+  }, [isRemoteDisconnected, onSelect, setFullscreenOverlayOpen])
+
+  const renderWorkspaceMenuItems = () => workspaces.map((workspace) => {
+    const disconnected = isRemoteDisconnected(workspace.id)
+    return (
+      <StyledDropdownMenuItem
+        key={workspace.id}
+        onClick={(e) => {
+          const openInNewWindow = e.metaKey || e.ctrlKey
+          handleWorkspaceSelect(workspace, openInNewWindow)
+        }}
+        className={cn(
+          "justify-between group",
+          activeWorkspaceId === workspace.id && "bg-foreground/10",
+          disconnected && "opacity-60",
+        )}
+      >
+        <div className="flex items-center gap-3 font-sans min-w-0 flex-1">
+          <CrossfadeAvatar
+            src={workspaceIconMap.get(workspace.id)}
+            alt={workspace.name}
+            className="h-5 w-5 rounded-full ring-1 ring-border/50"
+            fallbackClassName="bg-muted text-xs rounded-full"
+            fallback={workspace.name.charAt(0)}
+          />
+          <span className="truncate">{workspace.name}</span>
+          {workspace.remoteServer && (
+            disconnected
+              ? <span title={getDisconnectTooltip(workspace.id)} className="shrink-0"><CloudOff className="h-3.5 w-3.5 text-destructive" /></span>
+              : <Cloud className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          )}
+          {workspaceUnreadMap?.[workspace.id] && <span className="h-2 w-2 rounded-full bg-accent shrink-0" />}
+        </div>
+        <div className="flex items-center gap-1">
+          {activeWorkspaceId !== workspace.id && !disconnected && (
+            <button
+              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-foreground/10 transition-opacity"
+              onClick={(e) => {
+                e.stopPropagation()
+                onSelect(workspace.id, true)
+              }}
+              title={t("sidebarMenu.openInNewWindow")}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {activeWorkspaceId === workspace.id && (
+            <Check className="h-3.5 w-3.5" />
+          )}
+        </div>
+      </StyledDropdownMenuItem>
+    )
+  })
+
+  if (variant === 'topbar') {
+    return (
+      <>
+        {/* Full-screen workspace creation overlay */}
+        <AnimatePresence>
+          {showCreationScreen && (
+            <WorkspaceCreationScreen
+              onWorkspaceCreated={handleWorkspaceCreated}
+              onClose={handleCloseCreationScreen}
+              reconnectWorkspace={reconnectTarget ?? undefined}
+              onReconnectWorkspace={handleReconnectWorkspace}
+            />
+          )}
+        </AnimatePresence>
+
+        <div className="titlebar-no-drag flex min-w-0 items-center gap-1">
+          <div className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {visibleTabWorkspaces.map((workspace) => {
+              const active = workspace.id === activeWorkspaceId
+              const disconnected = isRemoteDisconnected(workspace.id)
+              return (
+                <div
+                  key={workspace.id}
+                  className={cn(
+                    "group relative flex h-[30px] max-w-[180px] shrink-0 items-center rounded-t-[8px] border text-[13px] transition-colors",
+                    active
+                      ? "border-foreground/12 bg-background/70 text-foreground shadow-xs"
+                      : "border-transparent bg-foreground/[0.035] text-foreground/55 hover:bg-foreground/7 hover:text-foreground/85",
+                    disconnected && "opacity-60"
+                  )}
+                  title={workspace.name}
+                >
+                  <button
+                    type="button"
+                    onClick={(e) => handleWorkspaceSelect(workspace, e.metaKey || e.ctrlKey)}
+                    className="flex h-full min-w-0 items-center gap-1.5 px-2.5"
+                    aria-current={active ? "page" : undefined}
+                    aria-label={`Switch to ${workspace.name}`}
+                  >
+                    <CrossfadeAvatar
+                      src={workspaceIconMap.get(workspace.id)}
+                      alt={workspace.name}
+                      className="h-4 w-4 shrink-0 rounded-full ring-1 ring-border/50"
+                      fallbackClassName="bg-muted text-[10px] rounded-full"
+                      fallback={workspace.name.charAt(0)}
+                    />
+                    <span className="min-w-0 truncate">{workspace.name}</span>
+                    {workspace.remoteServer && (
+                      disconnected
+                        ? <CloudOff className="h-3 w-3 shrink-0 text-destructive" />
+                        : <Cloud className="h-3 w-3 shrink-0 opacity-60" />
+                    )}
+                    {workspaceUnreadMap?.[workspace.id] && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
+                  </button>
+                  {visibleTabWorkspaces.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleCloseWorkspaceTab(workspace)
+                      }}
+                      className="mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-foreground/35 opacity-0 transition-opacity hover:bg-foreground/10 hover:text-foreground/80 group-hover:opacity-100"
+                      aria-label={`Close ${workspace.name}`}
+                      title="Close workspace"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          <DropdownMenu onOpenChange={(open) => { if (open) checkRemoteHealth() }}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] border border-transparent bg-foreground/[0.035] text-foreground/55 transition-colors hover:bg-foreground/7 hover:text-foreground data-[state=open]:bg-foreground/7"
+                aria-label="Workspace menu"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <StyledDropdownMenuContent align="center" sideOffset={6} minWidth="min-w-64">
+              {renderWorkspaceMenuItems()}
+              <StyledDropdownMenuSeparator />
+              <StyledDropdownMenuItem onClick={handleNewWorkspace} className="font-sans">
+                <FolderPlus className="h-4 w-4" />
+                {t("workspace.addWorkspace")}
+              </StyledDropdownMenuItem>
+            </StyledDropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </>
+    )
+  }
+
   return (
     <>
       {/* Full-screen workspace creation overlay */}
@@ -186,29 +363,6 @@ export function WorkspaceSwitcher({
 
       <DropdownMenu onOpenChange={(open) => { if (open) checkRemoteHealth() }}>
         <DropdownMenuTrigger asChild>
-          {variant === 'topbar' ? (
-            <button
-              type="button"
-              className="header-icon-btn titlebar-no-drag ml-1 flex-1 min-w-0 flex items-center justify-start gap-0.5 h-[30px] px-3 rounded-[8px] border border-foreground/6 text-[13px] text-foreground/50 hover:bg-foreground/5 hover:text-foreground transition-colors cursor-pointer data-[state=open]:bg-foreground/5 data-[state=open]:text-foreground"
-              aria-label="Select workspace"
-            >
-              <CrossfadeAvatar
-                src={selectedWorkspace ? workspaceIconMap.get(selectedWorkspace.id) : undefined}
-                alt={selectedWorkspace?.name}
-                className="h-4 w-4 mr-1.5 rounded-full ring-1 ring-border/50"
-                fallbackClassName="bg-muted text-[10px] rounded-full"
-                fallback={selectedWorkspace?.name?.charAt(0) || 'W'}
-              />
-              <span className="truncate min-w-0 flex-1 text-left">{selectedWorkspace?.name || 'Workspace'}</span>
-              {selectedWorkspace?.remoteServer && (
-                isRemoteDisconnected(selectedWorkspace.id)
-                  ? <CloudOff className="h-3 w-3 text-destructive shrink-0" />
-                  : <Cloud className="h-3 w-3 opacity-60 shrink-0" />
-              )}
-              <ChevronDown className="h-3 w-3 opacity-60 shrink-0" />
-              {hasUnreadInOtherWorkspaces && <span className="h-2 w-2 rounded-full bg-accent shrink-0" />}
-            </button>
-          ) : (
             <button
               className={cn(
                 "flex items-center gap-1 w-full min-w-0 justify-start px-2 py-1.5 rounded-md",
@@ -239,85 +393,10 @@ export function WorkspaceSwitcher({
                 </>
               )}
             </button>
-          )}
         </DropdownMenuTrigger>
 
-        <StyledDropdownMenuContent
-          align={variant === 'topbar' ? 'center' : 'start'}
-          sideOffset={variant === 'topbar' ? 6 : 4}
-          minWidth={variant === 'topbar' ? 'min-w-64' : undefined}
-        >
-          {workspaces.map((workspace) => {
-            const disconnected = isRemoteDisconnected(workspace.id)
-            return (
-              <StyledDropdownMenuItem
-                key={workspace.id}
-                onClick={(e) => {
-                  if (disconnected && workspace.remoteServer) {
-                    setReconnectTarget(workspace)
-                    setShowCreationScreen(true)
-                    setFullscreenOverlayOpen(true)
-                    return
-                  }
-                  if (disconnected) return
-                  const openInNewWindow = e.metaKey || e.ctrlKey
-                  onSelect(workspace.id, openInNewWindow)
-                }}
-                className={cn(
-                  "justify-between group",
-                  activeWorkspaceId === workspace.id && "bg-foreground/10",
-                  disconnected && "opacity-60",
-                )}
-              >
-                <div className="flex items-center gap-3 font-sans min-w-0 flex-1">
-                  <CrossfadeAvatar
-                    src={workspaceIconMap.get(workspace.id)}
-                    alt={workspace.name}
-                    className="h-5 w-5 rounded-full ring-1 ring-border/50"
-                    fallbackClassName="bg-muted text-xs rounded-full"
-                    fallback={workspace.name.charAt(0)}
-                  />
-                  <span className="truncate">{workspace.name}</span>
-                  {workspace.remoteServer && (
-                    disconnected
-                      ? <span title={getDisconnectTooltip(workspace.id)} className="shrink-0"><CloudOff className="h-3.5 w-3.5 text-destructive" /></span>
-                      : <Cloud className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  )}
-                  {workspaceUnreadMap?.[workspace.id] && <span className="h-2 w-2 rounded-full bg-accent shrink-0" />}
-                </div>
-                <div className="flex items-center gap-1">
-                  {/* Action buttons - only visible on hover for non-active workspaces */}
-                  {activeWorkspaceId !== workspace.id && (
-                    <button
-                      className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive/20 hover:text-destructive transition-opacity"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleRemoveWorkspace(workspace)
-                      }}
-                      title={t("workspace.removeWorkspace")}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                  {activeWorkspaceId !== workspace.id && !disconnected && (
-                    <button
-                      className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-foreground/10 transition-opacity"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onSelect(workspace.id, true)
-                      }}
-                      title={t("sidebarMenu.openInNewWindow")}
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                  {activeWorkspaceId === workspace.id && (
-                    <Check className="h-3.5 w-3.5" />
-                  )}
-                </div>
-              </StyledDropdownMenuItem>
-            )
-          })}
+        <StyledDropdownMenuContent align="start" sideOffset={4}>
+          {renderWorkspaceMenuItems()}
 
           {/* Separator and New Workspace option */}
           <StyledDropdownMenuSeparator />
