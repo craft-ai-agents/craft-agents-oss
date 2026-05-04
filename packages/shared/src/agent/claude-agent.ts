@@ -1500,6 +1500,7 @@ This is a branched conversation. All prior messages in this conversation are par
                 toolName: event.toolName || 'unknown',
                 input: event.input,
                 summarize: summarizeCallback,
+                contextWindow: this.usageTracker.getContextWindow(),
               });
               if (guarded) {
                 yield { ...event, result: guarded };
