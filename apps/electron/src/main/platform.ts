@@ -22,7 +22,7 @@ export function createElectronPlatform(opts: ElectronPlatformOptions): PlatformS
   const { app, nativeImage, shell, nativeTheme, logger } = opts
 
   return {
-    appRootPath: app.isPackaged ? app.getAppPath() : process.cwd(),
+    appRootPath: app.getAppPath(),
     resourcesPath: process.resourcesPath,
     isPackaged: app.isPackaged,
     appVersion: app.getVersion(),

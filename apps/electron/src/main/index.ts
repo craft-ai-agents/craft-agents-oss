@@ -373,7 +373,7 @@ app.whenReady().then(async () => {
   // Initialize backend runtime bootstrapping (Codex vendor root, Claude SDK runtime paths).
   initializeBackendHostRuntime({
     hostRuntime: {
-      appRootPath: app.isPackaged ? app.getAppPath() : process.cwd(),
+      appRootPath: app.getAppPath(),
       resourcesPath: process.resourcesPath,
       isPackaged: app.isPackaged,
     },
