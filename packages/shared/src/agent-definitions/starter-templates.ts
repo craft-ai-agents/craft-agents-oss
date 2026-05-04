@@ -29,7 +29,6 @@ export const STARTER_AGENTS: CreateAgentInput[] = [
       avatar: '💬',
       permissionMode: 'safe',
       thinkingLevel: 'medium',
-      greeting: 'Tell me what you\'re trying to do. I\'ll point you at the right agent or answer directly if it\'s simple.',
       inputs: 'Any open-ended question about how to accomplish something in this workspace.',
       outputs: 'A direct answer when small enough, or a recommendation: which agent to summon, with the exact prompt to give them.',
       tags: ['chat', 'guide', 'routing'],

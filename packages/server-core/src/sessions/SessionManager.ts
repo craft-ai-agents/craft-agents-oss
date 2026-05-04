@@ -2241,6 +2241,10 @@ export class SessionManager implements ISessionManager {
               from: 'In-app guide. Knows every agent, skill, and tool — points you at the right one.',
               to: 'Head Nerd in Charge. Knows every agent, skill, and tool — points you at the right one.',
             },
+            greeting: {
+              from: 'Tell me what you\'re trying to do. I\'ll point you at the right agent or answer directly if it\'s simple.',
+              to: undefined,
+            },
           }).updated) {
             sessionLog.info('[agent-definitions] Renamed Concierge to HNIC')
           }

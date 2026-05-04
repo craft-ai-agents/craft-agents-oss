@@ -4,7 +4,7 @@
   "author": "Craft Agent",
   "license": "MIT",
   "mode": "scenic",
-  "backgroundImage": "./haze-bg.jpeg",
+  "backgroundImage": "./haze-bg.webp",
   "supportedModes": [
     "dark"
   ],

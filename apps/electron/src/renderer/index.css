@@ -383,7 +383,7 @@ html.dark[data-scenic] {
 
 html[data-theme="haze"] {
   --background: oklch(0.2 0.005 270 / 0.55);
-  --background-image: url("../../resources/themes/haze-bg.jpeg");
+  --background-image: url("../../resources/themes/haze-bg.webp");
   background-image: var(--background-image);
   background-size: cover;
   background-position: center;

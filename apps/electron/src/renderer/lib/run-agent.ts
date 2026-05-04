@@ -7,19 +7,6 @@ import { resolveAgentReferences, hasMissingReferences, describeMissingReferences
 import { composeAgentSystemPrompt } from '@/lib/compose-agent-prompt'
 import type { AgentDefinitionDTO, ContextDocDTO, CreateSessionOptions, Session, LoadedSkill, LoadedSource } from '../../shared/types'
 
-export function buildAgentDraftInput(agent: AgentDefinitionDTO): string {
-  const parts: string[] = []
-  const greeting = agent.metadata.greeting?.trim()
-  if (greeting) parts.push(greeting)
-
-  const skills = agent.metadata.skills?.filter(Boolean) ?? []
-  if (skills.length > 0) {
-    parts.push(`Use ${skills.map((slug) => `@${slug}`).join(' ')}.`)
-  }
-
-  return parts.join('\n\n')
-}
-
 export function buildAgentCreateSessionOptions(
   agent: AgentDefinitionDTO,
   /**
@@ -211,8 +198,8 @@ export async function openAgentSessionComposer(params: {
   )
   navigate(routes.view.allSessions(session.id))
 
-  const draft = params.draftInput?.trim() || buildAgentDraftInput(params.agent)
-  if (draft && params.agent.slug !== CONCIERGE_SLUG) {
+  const draft = params.draftInput?.trim()
+  if (draft) {
     setTimeout(() => params.onInputChange(session.id, draft), 100)
   }
 
