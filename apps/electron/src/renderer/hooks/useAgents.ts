@@ -40,7 +40,6 @@ export interface UseAgentsResult {
 }
 
 const NULL_WORKSPACE_KEY = '__no_workspace__'
-const loadedWorkspaceKeys = new Set<string>()
 const inFlightRefreshes = new Map<string, Promise<void>>()
 const mountedWorkspaceKeys = new Map<string, number>()
 let globalDefinitionsCleanup: (() => void) | null = null
@@ -78,7 +77,6 @@ export function useAgents(activeWorkspaceId: string | null | undefined): UseAgen
           error: null,
         }
         setState(next)
-        loadedWorkspaceKeys.add(workspaceKey)
       } catch (err) {
         setState((prev) => ({
           ...prev,
@@ -104,9 +102,7 @@ export function useAgents(activeWorkspaceId: string | null | undefined): UseAgen
   }, [refresh, workspaceKey])
 
   useEffect(() => {
-    if (!loadedWorkspaceKeys.has(workspaceKey)) {
-      refresh()
-    }
+    refresh()
   }, [refresh, workspaceKey])
 
   useEffect(() => {
