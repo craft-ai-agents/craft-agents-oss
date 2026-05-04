@@ -79,11 +79,23 @@ const bundledThemeModules = import.meta.glob('../../../resources/themes/*.json',
   import: 'default',
 }) as Record<string, ThemeFile>
 
+const bundledThemeAssetModules = import.meta.glob('../../../resources/themes/*.{png,jpg,jpeg,gif,webp,svg}', {
+  eager: true,
+  import: 'default',
+  query: '?url',
+}) as Record<string, string>
+
 const BUNDLED_THEMES = new Map<string, ThemeFile>(
   Object.entries(bundledThemeModules).map(([path, theme]) => {
     const fileName = path.split('/').pop() ?? ''
     const id = fileName.replace('.json', '')
-    return [id, theme]
+    const backgroundImage = theme.backgroundImage
+    const resolvedBackgroundImage =
+      backgroundImage && !/^[a-z][a-z0-9+.-]*:/i.test(backgroundImage)
+        ? bundledThemeAssetModules[path.replace(fileName, backgroundImage.replace(/^\.\//, ''))] ?? backgroundImage
+        : backgroundImage
+
+    return [id, { ...theme, backgroundImage: resolvedBackgroundImage }]
   })
 )
 

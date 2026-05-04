@@ -368,6 +368,33 @@ html[data-scenic][data-theme-override]::before {
    Panels with bg-background will become translucent glass */
 html[data-scenic] {
   --background: oklch(0.2 0.005 270 / 0.55);
+  background-image: var(--background-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+html.dark[data-scenic] {
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)),
+    var(--background-image);
+}
+
+html[data-theme="haze"] {
+  --background: oklch(0.2 0.005 270 / 0.55);
+  --background-image: url("../../resources/themes/haze-bg.jpeg");
+  background-image: var(--background-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+html.dark[data-theme="haze"] {
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)),
+    var(--background-image);
 }
 
 /* Inter Font - Opt-in via data-font="inter" attribute

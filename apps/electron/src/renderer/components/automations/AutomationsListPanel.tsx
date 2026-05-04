@@ -279,12 +279,12 @@ export function AutomationsListPanel({
           description={t('automations.emptyDescription')}
           docKey="automations"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center justify-center gap-2">
             <TemplatesGalleryDialog
               trigger={
-                <button className="inline-flex items-center gap-1.5 h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Start from template
+                <button className="inline-flex min-h-7 max-w-[88px] items-center justify-center gap-1.5 rounded-[8px] bg-background px-2.5 py-1 text-center text-xs font-medium leading-tight shadow-minimal transition-colors hover:bg-foreground/[0.03]">
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                  <span>Start from template</span>
                 </button>
               }
             />
