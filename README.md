@@ -126,6 +126,21 @@ Connect external data sources to your workspace:
 | **REST APIs** | Google (Gmail, Calendar, Drive, YouTube, Search Console), Slack, Microsoft |
 | **Local Files** | Filesystem, Obsidian vaults, Git repos |
 
+### Computer Use MCP
+
+Computer Use lets agents observe and control desktop apps through a local MCP source. It is built into the app as the **Computer Use** tool, but users still need to install/enable the local runtime and grant macOS permissions.
+
+On macOS:
+
+1. Install and launch Craft Agents.
+2. Open **System Settings → Privacy & Security → Accessibility** and enable Craft Agents/Electron.
+3. Open **System Settings → Privacy & Security → Screen & System Audio Recording** and enable Craft Agents/Electron.
+4. Restart Craft Agents after changing permissions.
+5. In Craft Agents, open **Library → Tools** and confirm **Computer Use** is available.
+6. When creating or editing an agent, attach **Computer Use** under **Sources**.
+
+If the tool does not appear, verify local MCP servers are enabled in Settings and restart the app. Browser automation is separate: use Browser Use or a browser/CDP MCP source when the task only needs web browsing, not full desktop control.
+
 ### Permission Modes
 
 | Mode | Display | Behavior |
