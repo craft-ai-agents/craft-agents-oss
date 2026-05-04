@@ -52,6 +52,36 @@ The agent can read and process most common file types:
 | **Data** | .json, .csv, .xml, .yaml | Parse, analyse, transform |
 | **Notebooks** | .ipynb | Read cells, outputs, visualisations |
 
+## Sending While the Agent Is Responding
+
+You can send a follow-up message at any time — even while the agent is still streaming a response or running a tool. How that message lands is controlled per **AI connection** with two modes:
+
+| Mode | What happens | When to use |
+|------|--------------|-------------|
+| **Steer** | Your message is delivered into the in-flight turn so the agent picks it up before finishing. | Course-correcting an ongoing task ("actually, use Python instead"). |
+| **Queue** | The current turn finishes naturally; your message is replayed as a new turn afterwards. | Adding a follow-up without disturbing the current work. |
+
+### Visual cue
+
+When you send a message that gets queued, the user bubble shows a small **Queued** chip until it's picked up. Steered messages are delivered immediately and don't show the chip.
+
+### Defaults
+
+The default depends on the backend:
+
+- **Anthropic (Claude Agent SDK)** → `queue`. Claude's emulated steer relies on the model invoking a tool before the turn ends; if it doesn't, the steer falls back to a re-queue and you've paid for the original turn's tokens for nothing. Defaulting to queue is more predictable.
+- **Pi-backed providers** (OpenAI, Gemini, OpenRouter, Ollama, custom endpoints) → `steer`. Pi's native steer is non-destructive — your message is delivered after the current tool call finishes, full context preserved.
+
+### Changing the mode
+
+Right-click the connection in **Settings → AI**, open the **Mid-stream behavior** submenu, and pick `Steer immediately` or `Queue until ready`. The choice is saved on the connection and applies to every session that uses it. The setting can be flipped at any time and takes effect on the next mid-stream send.
+
+<Tip>
+If you're unsure, leave the default. The two modes deliver the same end result for a calm follow-up — the difference only matters when you're actively redirecting an in-flight task.
+</Tip>
+
+For the schema-level field, see [LLM Connections → midStreamBehavior](/reference/config/llm-connections#mid-stream-behavior).
+
 ## Session Management
 
 Every conversation in Craft Agent is a **session**. You can manage sessions from the sidebar:

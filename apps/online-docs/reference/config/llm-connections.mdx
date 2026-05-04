@@ -51,6 +51,7 @@ Each session locks to a connection after the first message. To change connection
 | `baseUrl` | No | Custom base URL for compatible providers |
 | `models` | No | Explicit model list. Accepts strings (`"gpt-5.4"`) or objects with optional `contextWindow` and `supportsImages` overrides (see [Custom Endpoint Capabilities](#custom-endpoint-capabilities)). |
 | `customEndpoint` | No | Custom endpoint protocol config. Use `api` to select the wire format and optional `supportsImages` to opt an entire endpoint into image input. |
+| `midStreamBehavior` | No | How mid-stream user sends are handled (`"steer"` or `"queue"`). Defaults to `"queue"` for `anthropic`, `"steer"` for Pi-backed providers. See [Mid-stream behavior](#mid-stream-behavior). |
 | `defaultModel` | No | Default model for this connection |
 | `codexPath` | No | Path to Codex binary (OpenAI/Codex only) |
 | `awsRegion` | No | AWS region for Bedrock |
@@ -247,6 +248,42 @@ Craft Agents does **not** auto-detect image support for arbitrary endpoints. Cus
 <Tip>
 For models like **Gemma 4** served through Ollama, vLLM, or another OpenAI-compatible proxy, prefer the per-model form so only the vision-capable model opts into image input.
 </Tip>
+
+## Mid-stream Behavior
+
+When you send a message while the agent is still streaming a previous turn, Craft Agents needs to decide whether to deliver it into the in-flight turn or hold it for the next one. The `midStreamBehavior` field on the connection controls this.
+
+| Value | Behavior |
+|-------|----------|
+| `"steer"` | Deliver the message into the in-flight turn (Pi's native `.steer()` or Claude's `PreToolUse` hook injection). |
+| `"queue"` | Hold the message; let the current turn finish naturally; replay as a new turn afterwards. |
+
+```json
+{
+  "slug": "anthropic-api",
+  "providerType": "anthropic",
+  "authType": "api_key",
+  "midStreamBehavior": "queue",
+  "createdAt": 1737451800000
+}
+```
+
+### Defaults by backend
+
+If `midStreamBehavior` is omitted (legacy connections, fresh setups), the default depends on the backend:
+
+- **`anthropic`** → `"queue"`. Claude's emulated steer relies on the model invoking a tool before the turn ends. If no tool fires, the steer becomes undelivered and Craft Agents falls back to a re-queue anyway — with the original turn's tokens already paid. Defaulting to queue avoids the wasted round-trip.
+- **`pi` / `pi_compat`** → `"steer"`. Pi's native steer is non-destructive: your message is delivered after the current tool finishes, full conversation context preserved.
+
+### Changing it from the UI
+
+Open **Settings → AI**, right-click (or open the `…` menu on) the connection, and choose **Mid-stream behavior → Steer immediately** or **Queue until ready**. The selection is saved on the connection and takes effect immediately for the next mid-stream send.
+
+<Note>
+This is a per-connection setting, not per-session. Two sessions sharing the same connection will both use the same mode.
+</Note>
+
+For the user-facing concept and UI walkthrough, see [Interactions → Sending while the agent is responding](/core-concepts/interactions#sending-while-the-agent-is-responding).
 
 ## Managing Connections
 
