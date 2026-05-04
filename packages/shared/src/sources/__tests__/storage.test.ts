@@ -333,6 +333,18 @@ describe('loadAllSources', () => {
     expect(found!.config.mcp?.transport).toBe('stdio');
     expect(found!.config.mcp?.authType).toBe('none');
   });
+
+  test('includes field-theory as a project source', () => {
+    const ws = makeWorkspace();
+    const all = loadAllSources(ws);
+    const found = all.find((s: LoadedSource) => s.config.slug === 'field-theory');
+
+    expect(found).toBeDefined();
+    expect(found!.tier).toBe('project');
+    expect(found!.config.type).toBe('mcp');
+    expect(found!.config.mcp?.transport).toBe('stdio');
+    expect(found!.config.mcp?.authType).toBe('none');
+  });
 });
 
 describe('getSourcesBySlugs', () => {
@@ -370,6 +382,17 @@ describe('getSourcesBySlugs', () => {
     expect(sources.length).toBe(1);
     expect(sources[0]!.tier).toBe('project');
     expect(sources[0]!.config.slug).toBe('computer-use');
+    expect(sources[0]!.config.enabled).toBe(true);
+    expect(sources[0]!.config.mcp?.transport).toBe('stdio');
+  });
+
+  test('resolves field-theory by slug without workspace activation', () => {
+    const ws = makeWorkspace();
+    const sources = getSourcesBySlugs(ws, ['field-theory']);
+
+    expect(sources.length).toBe(1);
+    expect(sources[0]!.tier).toBe('project');
+    expect(sources[0]!.config.slug).toBe('field-theory');
     expect(sources[0]!.config.enabled).toBe(true);
     expect(sources[0]!.config.mcp?.transport).toBe('stdio');
   });

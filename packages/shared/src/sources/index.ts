@@ -121,6 +121,7 @@ export type {
 // Built-in/project Sources
 export {
   getComputerUseSource,
+  getFieldTheorySource,
   getDocsSource,
   getBuiltinSources,
   isBuiltinSource,
