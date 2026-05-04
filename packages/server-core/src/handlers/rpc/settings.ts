@@ -1,7 +1,8 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel } from '@craft-agent/shared/config'
+import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel, resolveSelfEditTarget, validateSelfEditRepo } from '@craft-agent/shared/config'
+import { loadStoredConfig } from '@craft-agent/shared/config/storage'
 import { isValidThinkingLevel, normalizeThinkingLevel, THINKING_LEVEL_IDS } from '@craft-agent/shared/agent/thinking-levels'
 
 const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(', ')
@@ -14,6 +15,7 @@ import { isValidWorkingDirectory } from '../../utils/path-validation'
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workspace.SETTINGS_GET,
   RPC_CHANNELS.workspace.SETTINGS_UPDATE,
+  RPC_CHANNELS.workspace.SELF_EDIT_TARGET_GET,
   RPC_CHANNELS.preferences.READ,
   RPC_CHANNELS.preferences.WRITE,
   RPC_CHANNELS.drafts.GET,
@@ -167,6 +169,18 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     // Save the config
     saveWorkspaceConfig(workspace.rootPath, config)
     deps.platform.logger.info(`Workspace setting updated: ${key} = ${JSON.stringify(normalizedValue)}`)
+  })
+
+  server.handle(RPC_CHANNELS.workspace.SELF_EDIT_TARGET_GET, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { loadWorkspaceConfig } = await import('@craft-agent/shared/workspaces')
+    const globalConfig = loadStoredConfig()
+    const workspaceConfig = loadWorkspaceConfig(workspace.rootPath)
+    const target = resolveSelfEditTarget(globalConfig, workspaceConfig)
+    return {
+      ...target,
+      validation: validateSelfEditRepo(target.repoPath),
+    }
   })
 
   // ============================================================

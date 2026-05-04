@@ -91,7 +91,7 @@ export function buildAgentCreateSessionOptions(
     launchReceipt: {
       createdAt: Date.now(),
       origin: isConcierge ? 'concierge' : 'agent',
-      summary: isConcierge ? 'Concierge chat session.' : `Started from @${agent.slug}.`,
+      summary: isConcierge ? 'HNIC chat session.' : `Started from @${agent.slug}.`,
       agent: {
         slug: agent.slug,
         name: agent.metadata.name,
@@ -212,7 +212,7 @@ export async function openAgentSessionComposer(params: {
   navigate(routes.view.allSessions(session.id))
 
   const draft = params.draftInput?.trim() || buildAgentDraftInput(params.agent)
-  if (draft) {
+  if (draft && params.agent.slug !== CONCIERGE_SLUG) {
     setTimeout(() => params.onInputChange(session.id, draft), 100)
   }
 

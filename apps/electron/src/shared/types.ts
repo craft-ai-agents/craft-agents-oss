@@ -243,6 +243,7 @@ import type {
   ClaudeOAuthResult,
   UpdateInfo,
   WorkspaceSettings,
+  SelfEditTargetInfo,
   PermissionModeState,
   BrowserInstanceInfo,
   DeepLinkNavigation,
@@ -467,6 +468,7 @@ export interface ElectronAPI {
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>
   updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>
+  getSelfEditTarget(workspaceId: string): Promise<SelfEditTargetInfo>
 
   // Folder dialog
   openFolderDialog(): Promise<string | null>

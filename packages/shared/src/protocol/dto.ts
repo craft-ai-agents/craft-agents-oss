@@ -543,6 +543,23 @@ export interface WorkspaceSettings {
   enabledSourceSlugs?: string[]
 }
 
+export interface SelfEditTargetInfo {
+  enabled: boolean
+  source: 'workspace' | 'global' | 'none'
+  repoPath?: string
+  devCommand?: string
+  typecheckCommand?: string
+  lintCommand?: string
+  testCommand?: string
+  validation: {
+    valid: boolean
+    repoPath: string
+    packageName?: string
+    errors: string[]
+    warnings: string[]
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Auth result types
 // ---------------------------------------------------------------------------

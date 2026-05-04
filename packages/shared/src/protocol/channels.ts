@@ -266,6 +266,7 @@ export const RPC_CHANNELS = {
     WRITE_IMAGE: 'workspace:writeImage',
     SETTINGS_GET: 'workspaceSettings:get',
     SETTINGS_UPDATE: 'workspaceSettings:update',
+    SELF_EDIT_TARGET_GET: 'workspace:selfEditTarget:get',
   },
   permissions: {
     GET_DEFAULTS: 'permissions:getDefaults',

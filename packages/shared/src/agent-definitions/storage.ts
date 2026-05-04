@@ -614,6 +614,40 @@ export function ensureBuiltInAgentSkillsForSlug(
 }
 
 /**
+ * Apply a narrow metadata migration to a built-in agent. This is intentionally
+ * conservative: it only patches fields that still match old shipped values, so
+ * user-customized built-ins are preserved.
+ */
+export function replaceBuiltInAgentMetadata(
+  slug: string,
+  replacements: Partial<Record<keyof AgentMetadata, { from: unknown; to: unknown }>>,
+  options?: AgentStorageOptions,
+): { updated: boolean } {
+  const builtIns = new Set(['concierge', 'orchestrator']);
+  if (!builtIns.has(slug)) return { updated: false };
+
+  const loaded = loadGlobalAgent(slug, options);
+  if (!loaded) return { updated: false };
+
+  let changed = false;
+  const next: AgentMetadata = { ...loaded.metadata };
+  for (const [key, replacement] of Object.entries(replacements) as Array<[keyof AgentMetadata, { from: unknown; to: unknown }]>) {
+    if (next[key] === replacement.from) {
+      (next as unknown as Record<string, unknown>)[key] = replacement.to;
+      changed = true;
+    }
+  }
+  if (!changed) return { updated: false };
+
+  try {
+    writeGlobalAgent({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
+    return { updated: true };
+  } catch {
+    return { updated: false };
+  }
+}
+
+/**
  * Apply an exact text migration to built-in agent prompt bodies. This preserves
  * user edits unless the old shipped paragraph is still present verbatim.
  */

@@ -355,6 +355,7 @@ const EXPECTED_CHANNELS: string[] = [
   "workflows:upsert",
   "workspace:getPermissions",
   "workspace:readImage",
+  "workspace:selfEditTarget:get",
   "workspace:writeImage",
   "workspaceContext:changed",
   "workspaceContext:delete",

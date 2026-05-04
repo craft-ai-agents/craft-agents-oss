@@ -2226,7 +2226,7 @@ export class SessionManager implements ISessionManager {
           sessionLog.warn('[skills] Workspace→global mirror skipped:', err as Error)
         }
         try {
-          const { CONCIERGE_SLUG, ensureBuiltInAgentSkills, ensureBuiltInAgentSkillsForSlug, replaceBuiltInAgentPromptPattern, replaceBuiltInAgentPromptText } = await import('@craft-agent/shared/agent-definitions')
+          const { CONCIERGE_SLUG, ensureBuiltInAgentSkills, ensureBuiltInAgentSkillsForSlug, replaceBuiltInAgentMetadata, replaceBuiltInAgentPromptPattern, replaceBuiltInAgentPromptText } = await import('@craft-agent/shared/agent-definitions')
           const { CONCIERGE_SYSTEM_SKILL_SLUGS, CREATOR_SYSTEM_SKILL_SLUGS } = await import('@craft-agent/shared/skills/system')
           const { updated } = ensureBuiltInAgentSkills(CREATOR_SYSTEM_SKILL_SLUGS)
           if (updated > 0) {
@@ -2234,6 +2234,15 @@ export class SessionManager implements ISessionManager {
           }
           if (ensureBuiltInAgentSkillsForSlug(CONCIERGE_SLUG, CONCIERGE_SYSTEM_SKILL_SLUGS).updated) {
             sessionLog.info('[agent-definitions] Ensured Concierge has self-edit system skill')
+          }
+          if (replaceBuiltInAgentMetadata(CONCIERGE_SLUG, {
+            name: { from: 'Concierge', to: 'HNIC' },
+            description: {
+              from: 'In-app guide. Knows every agent, skill, and tool — points you at the right one.',
+              to: 'Head Nerd in Charge. Knows every agent, skill, and tool — points you at the right one.',
+            },
+          }).updated) {
+            sessionLog.info('[agent-definitions] Renamed Concierge to HNIC')
           }
           const oldConciergeCreatorText = `When the user's intent is to **create** something — a new agent persona,
 a new automation that fires on some trigger, a new workspace context doc

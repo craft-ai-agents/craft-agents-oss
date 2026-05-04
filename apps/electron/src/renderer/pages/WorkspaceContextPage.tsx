@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { FileText, Plus, Pencil, Trash2 } from 'lucide-react'
+import { DatabaseZap, FileText, GitBranch, Plus, Pencil, Trash2, Upload } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -13,8 +13,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import { useAgents } from '@/hooks/useAgents'
+import { useDirectoryPicker } from '@/hooks/useDirectoryPicker'
+import { UserProfileDialog } from '@/components/agents/UserProfileDialog'
+import { ServerDirectoryBrowser } from '@/components/ServerDirectoryBrowser'
 import { cn } from '@/lib/utils'
-import type { ContextDocDTO, ContextDocMetadata } from '../../shared/types'
+import type { ContextDocDTO, ContextDocMetadata, SelfEditTargetInfo, WorkspaceSettings } from '../../shared/types'
 
 type GoalStatus = 'active' | 'blocked' | 'paused' | 'done'
 type GoalPriority = 'low' | 'normal' | 'high'
@@ -39,13 +42,113 @@ interface FormState {
   deadline: string
 }
 
+interface ImportDraft {
+  slug: string
+  name: string
+  description: string
+  body: string
+}
+
 export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPageProps) {
   const { t } = useTranslation()
   const { docs, loading, error, upsert, remove } = useWorkspaceContext(workspaceId)
   const { activeAgents } = useAgents(workspaceId)
   const [editingDoc, setEditingDoc] = React.useState<ContextDocDTO | null>(null)
+  const [importDraft, setImportDraft] = React.useState<ImportDraft | null>(null)
   const [dialogOpen, setDialogOpen] = React.useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null)
+  const [profileOpen, setProfileOpen] = React.useState(false)
   const [filter, setFilter] = React.useState<ContextFilter>('all')
+  const [workingDirectory, setWorkingDirectory] = React.useState('')
+  const [gitBranch, setGitBranch] = React.useState<string | null>(null)
+  const [selfEditTarget, setSelfEditTarget] = React.useState<SelfEditTargetInfo | null>(null)
+
+  React.useEffect(() => {
+    let cancelled = false
+    if (!workspaceId) return
+    window.electronAPI.getWorkspaceSettings(workspaceId).then((settings) => {
+      if (cancelled) return
+      setWorkingDirectory(settings?.workingDirectory || '')
+    }).catch(() => {
+      if (!cancelled) setWorkingDirectory('')
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [workspaceId])
+
+  React.useEffect(() => {
+    let cancelled = false
+    if (!workspaceId) return
+    if (typeof window.electronAPI.getSelfEditTarget !== 'function') {
+      setSelfEditTarget(null)
+      return
+    }
+    window.electronAPI.getSelfEditTarget(workspaceId).then((target) => {
+      if (!cancelled) setSelfEditTarget(target)
+    }).catch(() => {
+      if (!cancelled) setSelfEditTarget(null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [workspaceId])
+
+  React.useEffect(() => {
+    let cancelled = false
+    if (!workingDirectory) {
+      setGitBranch(null)
+      return
+    }
+    window.electronAPI.getGitBranch(workingDirectory).then((branch) => {
+      if (!cancelled) setGitBranch(branch)
+    }).catch(() => {
+      if (!cancelled) setGitBranch(null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [workingDirectory])
+
+  const updateWorkspaceSetting = React.useCallback(
+    async <K extends keyof WorkspaceSettings>(key: K, value: WorkspaceSettings[K]) => {
+      if (!workspaceId) return false
+      try {
+        await window.electronAPI.updateWorkspaceSetting(workspaceId, key, value)
+        return true
+      } catch (err) {
+        toast.error('Failed to update workspace setting', {
+          description: err instanceof Error ? err.message : String(err),
+        })
+        return false
+      }
+    },
+    [workspaceId],
+  )
+
+  const handleWorkingDirectorySelected = React.useCallback(async (path: string) => {
+    const saved = await updateWorkspaceSetting('workingDirectory', path)
+    if (saved) {
+      setWorkingDirectory(path)
+      toast.success('Connected workspace repo')
+    }
+  }, [updateWorkspaceSetting])
+
+  const {
+    pickDirectory: pickWorkingDirectory,
+    showServerBrowser,
+    serverBrowserMode,
+    cancelServerBrowser,
+    confirmServerBrowser,
+  } = useDirectoryPicker(handleWorkingDirectorySelected)
+
+  const clearWorkingDirectory = React.useCallback(async () => {
+    const saved = await updateWorkspaceSetting('workingDirectory', undefined)
+    if (saved) {
+      setWorkingDirectory('')
+      setGitBranch(null)
+    }
+  }, [updateWorkspaceSetting])
 
   const enabledChars = React.useMemo(() => (
     docs.filter((doc) => doc.metadata.enabled).reduce((sum, doc) => sum + doc.body.length, 0)
@@ -62,12 +165,55 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
 
   const handleNew = () => {
     setEditingDoc(null)
+    setImportDraft(null)
     setDialogOpen(true)
   }
 
   const handleEdit = (doc: ContextDocDTO) => {
     setEditingDoc(doc)
+    setImportDraft(null)
     setDialogOpen(true)
+  }
+
+  const handleImportFile = async (file: File | undefined) => {
+    if (!file) return
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    if (!ext || !['md', 'markdown', 'txt'].includes(ext)) {
+      toast.error('Use a markdown or text file')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Context file is too large', {
+        description: 'Keep context imports under 2 MB so prompts stay usable.',
+      })
+      return
+    }
+    try {
+      const body = await file.text()
+      const baseName = file.name.replace(/\.[^/.]+$/, '').trim() || 'Imported context'
+      const baseSlug = slugify(baseName) || 'imported-context'
+      const existingSlugs = new Set(docs.map((doc) => doc.slug))
+      let slug = baseSlug
+      let index = 2
+      while (existingSlugs.has(slug)) {
+        slug = `${baseSlug}-${index}`
+        index += 1
+      }
+      setEditingDoc(null)
+      setImportDraft({
+        slug,
+        name: baseName,
+        description: `Imported from ${file.name}`,
+        body,
+      })
+      setDialogOpen(true)
+    } catch (err) {
+      toast.error('Failed to import context file', {
+        description: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
   }
 
   const handleDelete = async (doc: ContextDocDTO) => {
@@ -95,10 +241,27 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
             Markdown notes injected into agent prompts by routing rules.
           </p>
         </div>
-        <Button size="sm" onClick={handleNew}>
-          <Plus className="h-3.5 w-3.5 mr-1.5" />
-          New
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button size="sm" variant="outline" onClick={() => setProfileOpen(true)}>
+            <DatabaseZap className="h-3.5 w-3.5 mr-1.5" />
+            Memory & Profile
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
+            <Upload className="h-3.5 w-3.5 mr-1.5" />
+            Import
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".md,.markdown,.txt,text/markdown,text/plain"
+            className="hidden"
+            onChange={(event) => void handleImportFile(event.target.files?.[0])}
+          />
+          <Button size="sm" onClick={handleNew}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            New
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto">
@@ -107,16 +270,25 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
         ) : error ? (
           <div className="m-5 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>
         ) : docs.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center gap-3 text-center text-muted-foreground">
-            <FileText className="h-8 w-8 opacity-50" />
-            <div>
-              <p className="text-sm font-medium text-foreground">No workspace context yet</p>
-              <p className="text-xs mt-1">Add project facts, preferences, or operating rules agents should know.</p>
+          <div className="p-4 flex min-h-full flex-col">
+            <div className="min-h-[360px] flex flex-col items-center justify-center gap-3 text-center text-muted-foreground">
+              <FileText className="h-8 w-8 opacity-50" />
+              <div>
+                <p className="text-sm font-medium text-foreground">No workspace context yet</p>
+                <p className="text-xs mt-1">Add project facts, preferences, or operating rules agents should know.</p>
+              </div>
+              <Button size="sm" onClick={handleNew}>Create context doc</Button>
             </div>
-            <Button size="sm" onClick={handleNew}>Create context doc</Button>
+            <ConnectedRepoCard
+              workingDirectory={workingDirectory}
+              gitBranch={gitBranch}
+              selfEditTarget={selfEditTarget}
+              onConnect={pickWorkingDirectory}
+              onClear={clearWorkingDirectory}
+            />
           </div>
         ) : (
-          <div className="p-4">
+          <div className="p-4 flex min-h-full flex-col">
             <div className="mb-3 flex items-center gap-1.5">
               {(['all', 'goals'] as const).map((kind) => (
                 <button
@@ -212,22 +384,118 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
                 </tbody>
               </table>
             </div>
+            <ConnectedRepoCard
+              workingDirectory={workingDirectory}
+              gitBranch={gitBranch}
+              selfEditTarget={selfEditTarget}
+              onConnect={pickWorkingDirectory}
+              onClear={clearWorkingDirectory}
+            />
           </div>
         )}
       </div>
 
       <WorkspaceContextEditDialog
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open)
+          if (!open) setImportDraft(null)
+        }}
         doc={editingDoc}
+        importDraft={importDraft}
         activeAgents={activeAgents}
         onSave={async (input) => {
           await upsert(input)
+          setImportDraft(null)
           setDialogOpen(false)
         }}
       />
+      <UserProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
+      <ServerDirectoryBrowser
+        open={showServerBrowser}
+        mode={serverBrowserMode}
+        onSelect={confirmServerBrowser}
+        onCancel={cancelServerBrowser}
+        initialPath={workingDirectory || undefined}
+      />
     </div>
   )
+}
+
+function ConnectedRepoCard({
+  workingDirectory,
+  gitBranch,
+  selfEditTarget,
+  onConnect,
+  onClear,
+}: {
+  workingDirectory: string
+  gitBranch: string | null
+  selfEditTarget: SelfEditTargetInfo | null
+  onConnect: () => void
+  onClear: () => void
+}) {
+  const selfEditStatus = getSelfEditStatus(selfEditTarget)
+  return (
+    <div className="mt-auto flex items-stretch justify-between gap-3 rounded-md border border-border/40 bg-foreground/[0.02] px-3 py-2.5">
+      <div className="grid min-w-0 flex-1 gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
+            Workspace folder
+            {gitBranch ? (
+              <span className="rounded bg-foreground/8 px-1.5 py-0.5 text-[11px] font-normal text-muted-foreground">
+                {gitBranch}
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-1 truncate text-xs text-muted-foreground">
+            {workingDirectory || 'No default working folder connected for this workspace.'}
+          </div>
+        </div>
+        <div className="min-w-0 border-t border-border/30 pt-2">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <DatabaseZap className="h-3.5 w-3.5 text-muted-foreground" />
+            Self-edit target
+            <span className={cn(
+              'rounded px-1.5 py-0.5 text-[11px] font-normal',
+              selfEditStatus.good ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600',
+            )}>
+              {selfEditStatus.label}
+            </span>
+          </div>
+          <div className="mt-1 truncate text-xs text-muted-foreground">
+            {selfEditTarget?.repoPath || 'No RunnerOS self-edit repo configured.'}
+          </div>
+          {selfEditStatus.detail ? (
+            <div className="mt-0.5 truncate text-[11px] text-muted-foreground/80">{selfEditStatus.detail}</div>
+          ) : null}
+        </div>
+      </div>
+      <div className="flex shrink-0 items-start gap-2">
+        {workingDirectory ? (
+          <Button size="sm" variant="ghost" onClick={onClear}>Clear</Button>
+        ) : null}
+        <Button size="sm" variant="outline" onClick={onConnect}>
+          {workingDirectory ? 'Change' : 'Connect'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function getSelfEditStatus(target: SelfEditTargetInfo | null): { label: string; detail: string; good: boolean } {
+  if (!target) return { label: 'Unknown', detail: '', good: false }
+  if (target.source === 'none') return { label: 'Not set', detail: 'HNIC cannot safely edit RunnerOS until this is configured.', good: false }
+  if (!target.enabled) return { label: 'Disabled', detail: `${target.source} config found, but self-edit is off.`, good: false }
+  if (!target.validation.valid) {
+    return {
+      label: 'Invalid',
+      detail: target.validation.errors[0] || 'Configured path does not validate as RunnerOS.',
+      good: false,
+    }
+  }
+  return { label: target.source === 'workspace' ? 'Workspace' : 'Global', detail: 'This is where RunnerOS self-edit changes will be made.', good: true }
 }
 
 function TokenBadge({ tokens, tone }: { tokens: number; tone: 'neutral' | 'amber' | 'red' }) {
@@ -254,29 +522,31 @@ function WorkspaceContextEditDialog({
   open,
   onOpenChange,
   doc,
+  importDraft,
   activeAgents,
   onSave,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   doc: ContextDocDTO | null
+  importDraft: ImportDraft | null
   activeAgents: Array<{ slug: string; metadata: { name: string; description: string } }>
   onSave: (input: { slug: string; metadata: ContextDocMetadata; body: string }) => Promise<void>
 }) {
   const { t } = useTranslation()
   const isEditing = !!doc
-  const [form, setForm] = React.useState<FormState>(() => buildInitialState(doc))
+  const [form, setForm] = React.useState<FormState>(() => buildInitialState(doc, importDraft))
   const [slugDirty, setSlugDirty] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [goalSectionOpen, setGoalSectionOpen] = React.useState(() => Boolean(doc?.metadata.status))
 
   React.useEffect(() => {
     if (!open) return
-    setForm(buildInitialState(doc))
+    setForm(buildInitialState(doc, importDraft))
     setSlugDirty(false)
     setSaving(false)
     setGoalSectionOpen(Boolean(doc?.metadata.status))
-  }, [doc, open])
+  }, [doc, importDraft, open])
 
   const handleNameChange = (name: string) => {
     setForm((prev) => ({
@@ -526,7 +796,22 @@ function WorkspaceContextEditDialog({
   )
 }
 
-function buildInitialState(doc: ContextDocDTO | null): FormState {
+function buildInitialState(doc: ContextDocDTO | null, importDraft?: ImportDraft | null): FormState {
+  if (importDraft) {
+    return {
+      slug: importDraft.slug,
+      name: importDraft.name,
+      description: importDraft.description,
+      body: importDraft.body,
+      routingMode: 'broadcast',
+      agents: [],
+      enabled: true,
+      goalEnabled: false,
+      status: 'active',
+      priority: '',
+      deadline: '',
+    }
+  }
   if (!doc) {
     return {
       slug: '',

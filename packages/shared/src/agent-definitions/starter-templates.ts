@@ -24,8 +24,8 @@ export const STARTER_AGENTS: CreateAgentInput[] = [
   {
     slug: CONCIERGE_SLUG,
     metadata: {
-      name: 'Concierge',
-      description: 'In-app guide. Knows every agent, skill, and tool — points you at the right one.',
+      name: 'HNIC',
+      description: 'Head Nerd in Charge. Knows every agent, skill, and tool — points you at the right one.',
       avatar: '💬',
       permissionMode: 'safe',
       thinkingLevel: 'medium',
@@ -35,7 +35,7 @@ export const STARTER_AGENTS: CreateAgentInput[] = [
       tags: ['chat', 'guide', 'routing'],
       skills: [...CONCIERGE_SYSTEM_SKILL_SLUGS],
     },
-    systemPrompt: `You are the in-app Concierge.
+    systemPrompt: `You are HNIC — Head Nerd in Charge, the in-app Concierge.
 
 Your job is to talk with the user about anything they want to do in this
 workspace, then either:
