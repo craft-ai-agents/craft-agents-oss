@@ -2493,38 +2493,37 @@ export function ResponseCard({
               SIZE_CONFIG.fontSize
             )}>
               {/* Left side - Copy, View as Markdown, Annotation hint */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1">
                 <button
+                  type="button"
                   onClick={handleCopy}
+                  aria-label={copied ? t("common.copied") : t("common.copy")}
+                  title={copied ? t("common.copied") : t("common.copy")}
                   className={cn(
-                    "turn-action-btn flex items-center gap-1.5 transition-colors select-none",
+                    "inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors select-none",
                     copied ? "text-success" : "text-muted-foreground hover:text-foreground",
-                    "focus:outline-none focus-visible:underline"
+                    "hover:bg-foreground/5 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   )}
                 >
                   {copied ? (
-                    <>
-                      <Check className={SIZE_CONFIG.iconSize} />
-                      <span>{t("common.copied")}</span>
-                    </>
+                    <Check className={SIZE_CONFIG.iconSize} />
                   ) : (
-                    <>
-                      <Copy className={SIZE_CONFIG.iconSize} />
-                      <span>{t("common.copy")}</span>
-                    </>
+                    <Copy className={SIZE_CONFIG.iconSize} />
                   )}
                 </button>
                 {onPopOut && (
                   <button
+                    type="button"
                     onClick={onPopOut}
+                    aria-label="View as Markdown"
+                    title="View as Markdown"
                     className={cn(
-                      "turn-action-btn flex items-center gap-1.5 transition-colors select-none",
+                      "inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors select-none",
                       "text-muted-foreground hover:text-foreground",
-                      "focus:outline-none focus-visible:underline"
+                      "hover:bg-foreground/5 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     )}
                   >
                     <FileText className={SIZE_CONFIG.iconSize} />
-                    <span>Markdown</span>
                   </button>
                 )}
               </div>
