@@ -400,4 +400,7 @@ export const CHANNEL_MAP = {
   startWhatsAppConnect: invoke(RPC_CHANNELS.messaging.WA_START_CONNECT),
   submitWhatsAppPhone: invoke(RPC_CHANNELS.messaging.WA_SUBMIT_PHONE),
   onWhatsAppEvent: listener(RPC_CHANNELS.messaging.WA_UI_EVENT),
+  startWeChatConnect: invoke(RPC_CHANNELS.messaging.WC_START_CONNECT),
+  cancelWeChatConnect: invoke(RPC_CHANNELS.messaging.WC_CANCEL_CONNECT),
+  onWeChatEvent: listener(RPC_CHANNELS.messaging.WC_UI_EVENT),
 } satisfies ChannelMap

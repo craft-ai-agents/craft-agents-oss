@@ -411,6 +411,11 @@ export const RPC_CHANNELS = {
     WA_SUBMIT_PHONE: 'messaging:wa:submitPhone',
     /** Broadcast to UI clients: QR string, pairing code, status, unavailable, error. */
     WA_UI_EVENT: 'messaging:wa:uiEvent',
+    // UI ↔ Server — WeChat QR-login flow (in-process, iLink long-poll)
+    WC_START_CONNECT: 'messaging:wc:startConnect',
+    WC_CANCEL_CONNECT: 'messaging:wc:cancelConnect',
+    /** Broadcast to UI clients: QR image url, scaned, confirmed, expired, error. */
+    WC_UI_EVENT: 'messaging:wc:uiEvent',
   },
 } as const
 
