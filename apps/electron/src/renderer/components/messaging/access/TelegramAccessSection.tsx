@@ -13,10 +13,12 @@
  */
 
 import * as React from 'react'
+import { useAtomValue } from 'jotai'
 import { useTranslation } from 'react-i18next'
 import { motion, AnimatePresence } from 'motion/react'
 import { toast } from 'sonner'
 import { ChevronDown, ChevronRight, MessageSquare, Users } from 'lucide-react'
+import { messagingBindingsAtom } from '@/atoms/messaging'
 import {
   AccessModeBanner,
   OwnersListEditor,
@@ -30,15 +32,41 @@ const ROW_ICON_SIZE = 22
 const SUB_ROW_ICON_SIZE = 16
 const SUB_ROW_ICON_STROKE = 1.5
 
+/**
+ * Two pending entries reference the same row when they share platform,
+ * userId, reason, AND bindingId (one binding row vs. another binding row
+ * for the same sender stay separate).
+ */
+function sameRow(a: PendingSender, b: PendingSender): boolean {
+  return (
+    a.platform === b.platform &&
+    a.userId === b.userId &&
+    (a.reason ?? 'not-owner') === (b.reason ?? 'not-owner') &&
+    (a.bindingId ?? null) === (b.bindingId ?? null)
+  )
+}
+
 interface Props {
   workspaceId: string
 }
 
 export function TelegramAccessSection({ workspaceId }: Props) {
   const { t } = useTranslation()
+  const allBindings = useAtomValue(messagingBindingsAtom)
   const [accessMode, setAccessMode] = React.useState<PlatformAccessMode>('open')
   const [owners, setOwners] = React.useState<PlatformOwner[]>([])
   const [pending, setPending] = React.useState<PendingSender[]>([])
+
+  // The banner stays visible whenever the bot is publicly addressable —
+  // either at the workspace level (`accessMode === 'open'`) OR via any
+  // legacy binding still in `'open'` mode. Without the second check, the
+  // operator would see the banner disappear after clicking "Lock down"
+  // even though concrete bindings are still letting strangers in.
+  const hasOpenBinding = React.useMemo(
+    () => allBindings.some((b) => b.platform === 'telegram' && b.accessMode === 'open'),
+    [allBindings],
+  )
+  const showBanner = accessMode === 'open' || hasOpenBinding
 
   const loadAll = React.useCallback(async () => {
     const [m, o, p] = await Promise.all([
@@ -87,22 +115,39 @@ export function TelegramAccessSection({ workspaceId }: Props) {
 
   const handleAllow = async (sender: PendingSender) => {
     try {
-      const updated = await window.electronAPI.allowMessagingPendingSender(
+      const entryKey = {
+        ...(sender.reason ? { reason: sender.reason } : {}),
+        ...(sender.bindingId ? { bindingId: sender.bindingId } : {}),
+      }
+      const result = await window.electronAPI.allowMessagingPendingSender(
         'telegram',
         sender.userId,
+        entryKey,
       )
-      setOwners(updated)
-      setPending((prev) => prev.filter((p) => p.userId !== sender.userId))
+      setOwners(result.owners)
+      // Drop only the row we just acted on. Other pending rows for the
+      // same sender (different reason / binding) stay visible until the
+      // operator decides on each.
+      setPending((prev) =>
+        prev.filter((p) => !sameRow(p, sender)),
+      )
       toast.success(`Allowed ${sender.displayName || sender.username || sender.userId}`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to allow sender')
     }
   }
 
-  const handleIgnore = async (userId: string) => {
+  const handleIgnore = async (sender: PendingSender) => {
     try {
-      await window.electronAPI.dismissMessagingPendingSender('telegram', userId)
-      setPending((prev) => prev.filter((p) => p.userId !== userId))
+      await window.electronAPI.dismissMessagingPendingSender(
+        'telegram',
+        sender.userId,
+        {
+          ...(sender.reason ? { reason: sender.reason } : {}),
+          ...(sender.bindingId ? { bindingId: sender.bindingId } : {}),
+        },
+      )
+      setPending((prev) => prev.filter((p) => !sameRow(p, sender)))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to dismiss sender')
     }
@@ -110,7 +155,21 @@ export function TelegramAccessSection({ workspaceId }: Props) {
 
   return (
     <>
-      {accessMode === 'open' && <AccessModeBanner onLockDown={handleLockDown} />}
+      {showBanner && (
+        <AccessModeBanner
+          onLockDown={handleLockDown}
+          // When the workspace is already locked but a binding is still
+          // in 'open' mode, swap the copy so the operator knows what to
+          // act on (the binding row, not the workspace toggle).
+          {...(accessMode === 'owner-only' && hasOpenBinding
+            ? {
+                description: t(
+                  'settings.messaging.telegram.access.banner.descriptionLegacyBinding',
+                ),
+              }
+            : {})}
+        />
+      )}
 
       <SectionDivider />
       <AllowedUsersCollapsible

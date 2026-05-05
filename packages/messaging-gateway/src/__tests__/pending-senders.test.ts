@@ -160,4 +160,95 @@ describe('PendingSendersStore', () => {
     store.dismiss('telegram', '1')
     expect(calls).toBeGreaterThanOrEqual(3)
   })
+
+  // ---------------------------------------------------------------------------
+  // Composite-key behaviour — same sender hitting different reasons / bindings
+  // produces separate rows so the operator can decide on each. Regression for
+  // PR #348 review item "Block #5: pending requests conflate workspace-owner
+  // rejects and binding allow-list rejects".
+  // ---------------------------------------------------------------------------
+
+  it('keeps separate rows for same userId with different reasons', () => {
+    const store = new PendingSendersStore(dir)
+    store.recordRejection({
+      platform: 'telegram',
+      senderId: 'bob',
+      reason: 'not-owner',
+    })
+    store.recordRejection({
+      platform: 'telegram',
+      senderId: 'bob',
+      reason: 'not-on-binding-allowlist',
+      bindingId: 'binding-A',
+    })
+    expect(store.list()).toHaveLength(2)
+  })
+
+  it('keeps separate rows for same userId on different bindings', () => {
+    const store = new PendingSendersStore(dir)
+    store.recordRejection({
+      platform: 'telegram',
+      senderId: 'bob',
+      reason: 'not-on-binding-allowlist',
+      bindingId: 'binding-A',
+    })
+    store.recordRejection({
+      platform: 'telegram',
+      senderId: 'bob',
+      reason: 'not-on-binding-allowlist',
+      bindingId: 'binding-B',
+    })
+    expect(store.list()).toHaveLength(2)
+  })
+
+  it('merges repeats with matching (reason, bindingId)', () => {
+    const store = new PendingSendersStore(dir)
+    store.recordRejection({
+      platform: 'telegram',
+      senderId: 'bob',
+      reason: 'not-on-binding-allowlist',
+      bindingId: 'binding-A',
+    })
+    const second = store.recordRejection({
+      platform: 'telegram',
+      senderId: 'bob',
+      reason: 'not-on-binding-allowlist',
+      bindingId: 'binding-A',
+    })
+    expect(second.attemptCount).toBe(2)
+    expect(store.list()).toHaveLength(1)
+  })
+
+  it('dismiss with composite key drops only the matching row', () => {
+    const store = new PendingSendersStore(dir)
+    store.recordRejection({
+      platform: 'telegram',
+      senderId: 'bob',
+      reason: 'not-owner',
+    })
+    store.recordRejection({
+      platform: 'telegram',
+      senderId: 'bob',
+      reason: 'not-on-binding-allowlist',
+      bindingId: 'binding-A',
+    })
+
+    expect(store.dismiss('telegram', 'bob', { reason: 'not-owner' })).toBe(true)
+    const remaining = store.list()
+    expect(remaining).toHaveLength(1)
+    expect(remaining[0]!.reason).toBe('not-on-binding-allowlist')
+  })
+
+  it('dismiss without composite key drops every row for the sender (used after promotion)', () => {
+    const store = new PendingSendersStore(dir)
+    store.recordRejection({ platform: 'telegram', senderId: 'bob', reason: 'not-owner' })
+    store.recordRejection({
+      platform: 'telegram',
+      senderId: 'bob',
+      reason: 'not-on-binding-allowlist',
+      bindingId: 'binding-A',
+    })
+    expect(store.dismiss('telegram', 'bob')).toBe(true)
+    expect(store.list().filter((e) => e.userId === 'bob')).toHaveLength(0)
+  })
 })

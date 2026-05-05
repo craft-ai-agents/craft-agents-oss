@@ -15,7 +15,12 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { MessagingLogger, PendingSender, PlatformType } from './types'
+import type {
+  MessagingLogger,
+  PendingRejectReason,
+  PendingSender,
+  PlatformType,
+} from './types'
 
 const NOOP_LOGGER: MessagingLogger = {
   info: () => {},
@@ -32,6 +37,16 @@ export interface RecordRejectionInput {
   senderId: string
   senderName?: string
   senderUsername?: string
+  /**
+   * Why the sender was rejected. Defaults to `'not-owner'` for callers
+   * that don't supply it (back-compat with the original signature).
+   */
+  reason?: PendingRejectReason
+  /** Binding context for `'not-on-binding-allowlist'` rejects. */
+  bindingId?: string
+  sessionId?: string
+  channelId?: string
+  threadId?: number
 }
 
 export class PendingSendersStore {
@@ -70,19 +85,29 @@ export class PendingSendersStore {
   // -------------------------------------------------------------------------
 
   /**
-   * Record a rejected attempt. Merges with any existing entry for the same
-   * `(platform, senderId)` (incrementing `attemptCount` + bumping the
-   * timestamp); evicts the least-recent entry on overflow.
+   * Record a rejected attempt. Entries are keyed by
+   * `(platform, senderId, reason, bindingId)` — same sender hitting
+   * different bindings stays on separate rows so the operator can
+   * decide each one independently. A repeat attempt against the same
+   * key bumps `attemptCount` + `lastAttemptAt` and refreshes display
+   * metadata.
    *
-   * Returns the merged entry so callers can log the current attemptCount
-   * without re-querying.
+   * LRU eviction kicks in on insert overflow. Returns the merged entry
+   * so callers can log the current attemptCount without re-querying.
    */
   recordRejection(input: RecordRejectionInput): PendingSender {
     const now = Date.now()
     this.evictExpired(now)
 
+    const reason: PendingRejectReason = input.reason ?? 'not-owner'
+    const bindingId = input.bindingId
+
     const idx = this.entries.findIndex(
-      (e) => e.platform === input.platform && e.userId === input.senderId,
+      (e) =>
+        e.platform === input.platform &&
+        e.userId === input.senderId &&
+        (e.reason ?? 'not-owner') === reason &&
+        (e.bindingId ?? null) === (bindingId ?? null),
     )
     let merged: PendingSender
     if (idx >= 0) {
@@ -94,6 +119,11 @@ export class PendingSendersStore {
         username: input.senderUsername ?? existing.username,
         lastAttemptAt: now,
         attemptCount: existing.attemptCount + 1,
+        reason,
+        ...(input.bindingId ? { bindingId: input.bindingId } : {}),
+        ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+        ...(input.channelId ? { channelId: input.channelId } : {}),
+        ...(input.threadId !== undefined ? { threadId: input.threadId } : {}),
       }
       this.entries.splice(idx, 1)
       this.entries.unshift(merged)
@@ -105,6 +135,11 @@ export class PendingSendersStore {
         username: input.senderUsername,
         lastAttemptAt: now,
         attemptCount: 1,
+        reason,
+        ...(input.bindingId ? { bindingId: input.bindingId } : {}),
+        ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+        ...(input.channelId ? { channelId: input.channelId } : {}),
+        ...(input.threadId !== undefined ? { threadId: input.threadId } : {}),
       }
       this.entries.unshift(merged)
       if (this.entries.length > MAX_ENTRIES) {
@@ -116,12 +151,28 @@ export class PendingSendersStore {
     return merged
   }
 
-  /** Drop a single entry. Returns true if anything was removed. */
-  dismiss(platform: PlatformType, userId: string): boolean {
+  /**
+   * Drop one or more entries matching the supplied key. With only
+   * `(platform, userId)` provided, every reason/binding row for that
+   * sender is dropped — used when the sender becomes a workspace owner
+   * via "Allow as workspace owner" so we don't leave stale rows behind.
+   * Specifying `reason` (and optionally `bindingId`) narrows the dismiss
+   * to a single row.
+   *
+   * Returns true if anything was removed.
+   */
+  dismiss(
+    platform: PlatformType,
+    userId: string,
+    opts?: { reason?: PendingRejectReason; bindingId?: string },
+  ): boolean {
     const before = this.entries.length
-    this.entries = this.entries.filter(
-      (e) => !(e.platform === platform && e.userId === userId),
-    )
+    this.entries = this.entries.filter((e) => {
+      if (e.platform !== platform || e.userId !== userId) return true
+      if (opts?.reason !== undefined && (e.reason ?? 'not-owner') !== opts.reason) return true
+      if (opts?.bindingId !== undefined && e.bindingId !== opts.bindingId) return true
+      return false
+    })
     if (this.entries.length === before) return false
     this.save()
     return true

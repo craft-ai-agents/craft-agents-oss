@@ -144,6 +144,12 @@ export interface ButtonPress {
   threadId?: number
   messageId: string
   senderId: string
+  /** Optional sender display name (Telegram first name). For UI / pending list. */
+  senderName?: string
+  /** Optional sender username (Telegram @username, no `@`). For UI / pending list. */
+  senderUsername?: string
+  /** True when the platform marks the sender as a bot. Access control silent-drops these. */
+  senderIsBot?: boolean
   buttonId: string
   data?: string
 }
@@ -400,17 +406,35 @@ export interface PlatformOwner {
 }
 
 /**
- * A sender the gateway recently rejected because they weren't on the owners
- * list. Surfaces in the Settings UI so the operator can promote them with
- * one click instead of typing numeric ids by hand.
+ * Why a sender ended up in the pending list. Drives the UI's "Allow"
+ * button: promoting a workspace-level reject is different from promoting
+ * a binding-allow-list reject, and conflating them silently was a real
+ * privilege-escalation footgun.
+ *
+ * - `not-owner` — workspace-level pre-binding reject. Allowing means
+ *   adding the sender to `platforms.{platform}.owners`.
+ * - `not-on-binding-allowlist` — binding-level reject. Allowing means
+ *   appending the sender to that binding's `allowedSenderIds`, NOT
+ *   touching workspace owners.
+ */
+export type PendingRejectReason = 'not-owner' | 'not-on-binding-allowlist'
+
+/**
+ * A sender the gateway recently rejected. Surfaces in the Settings UI so
+ * the operator can promote them with one click instead of typing numeric
+ * ids by hand.
  *
  * The store is bounded (LRU + TTL) — see `pending-senders.ts`. Persistence
  * is best-effort: losing the file just means the operator has to wait for
  * the user to attempt access again.
+ *
+ * Same `(platform, userId)` is allowed to appear multiple times when the
+ * sender hits *different* bindings — the operator needs to see (and
+ * decide on) each binding-level reject separately rather than having
+ * the second silently overwrite the first.
  */
 export interface PendingSender {
-  /** Platform identity. Always present so the same sender across DM and
-   *  supergroup attempts collapses to one row. */
+  /** Platform identity. */
   platform: PlatformType
   userId: string
   displayName?: string
@@ -419,6 +443,21 @@ export interface PendingSender {
   lastAttemptAt: number
   /** Total attempts since this sender first appeared in the pending list. */
   attemptCount: number
+  /**
+   * Why the sender was rejected. Optional for back-compat with persisted
+   * entries written by an earlier build that lacked the field; missing
+   * `reason` is treated as `'not-owner'` (the safer default).
+   */
+  reason?: PendingRejectReason
+  /**
+   * Binding the reject was scoped to. Only present when
+   * `reason === 'not-on-binding-allowlist'`. Lets the operator's "Allow"
+   * action target the right binding's `allowedSenderIds`.
+   */
+  bindingId?: string
+  sessionId?: string
+  channelId?: string
+  threadId?: number
 }
 
 export interface MessagingConfig {

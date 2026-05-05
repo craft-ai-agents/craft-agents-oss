@@ -320,4 +320,71 @@ describe('Commands /pair bootstrap', () => {
     expect(harness.seeded.length).toBe(1)
     expect(harness.seeded[0]!.userId).toBe('first-pair')
   })
+
+  it('accepts /pair@BotName <code> (Telegram group disambiguation form)', async () => {
+    const { commands, harness } = buildCommands({ ownerOnly: false, owners: [] })
+    const adapter = makeAdapter()
+    await commands.handleCommand(
+      adapter,
+      buildMsg({ text: '/pair@MyBot 123456', senderId: 'first-pair' }),
+    )
+    expect(adapter.sent.some((s) => s.includes('Paired with'))).toBe(true)
+    expect(harness.seeded[0]!.userId).toBe('first-pair')
+  })
+
+  it('accepts /PAIR@MyBot 123456 (case-insensitive)', async () => {
+    const { commands, harness } = buildCommands({ ownerOnly: false, owners: [] })
+    const adapter = makeAdapter()
+    await commands.handleCommand(
+      adapter,
+      buildMsg({ text: '/PAIR@MyBot 123456', senderId: 'first-pair' }),
+    )
+    expect(adapter.sent.some((s) => s.includes('Paired with'))).toBe(true)
+    expect(harness.seeded[0]!.userId).toBe('first-pair')
+  })
+})
+
+describe('Commands.handle (unbound text path) — free-form gate', () => {
+  it('rejects non-command text from non-owner with friendly reply + pending entry', async () => {
+    const { commands, store } = buildCommands({
+      ownerOnly: true,
+      owners: [{ userId: 'owner-1', addedAt: 0 }],
+    })
+    void store
+    const adapter = makeAdapter()
+    await commands.handle(adapter, buildMsg({ text: 'hi', senderId: 'stranger' }))
+    expect(adapter.sent.length).toBe(1)
+    expect(adapter.sent[0]).toContain('private')
+  })
+
+  it('lets owner free-form text through to the help prompt', async () => {
+    const { commands } = buildCommands({
+      ownerOnly: true,
+      owners: [{ userId: 'owner-1', addedAt: 0 }],
+    })
+    const adapter = makeAdapter()
+    await commands.handle(adapter, buildMsg({ text: 'hi', senderId: 'owner-1' }))
+    expect(adapter.sent.some((s) => s.includes('No session bound'))).toBe(true)
+    expect(adapter.sent.some((s) => s.includes('private'))).toBe(false)
+  })
+
+  it('silent-drops bot senders from the unbound free-form path', async () => {
+    const { commands } = buildCommands({
+      ownerOnly: true,
+      owners: [{ userId: 'owner-1', addedAt: 0 }],
+    })
+    const adapter = makeAdapter()
+    await commands.handle(
+      adapter,
+      buildMsg({ text: 'hi', senderId: 'bot-id', senderIsBot: true }),
+    )
+    expect(adapter.sent.length).toBe(0)
+  })
+
+  it('open workspace lets free-form non-owner text through (legacy / migration)', async () => {
+    const { commands } = buildCommands({ ownerOnly: false, owners: [] })
+    const adapter = makeAdapter()
+    await commands.handle(adapter, buildMsg({ text: 'hi', senderId: 'stranger' }))
+    expect(adapter.sent.some((s) => s.includes('No session bound'))).toBe(true)
+  })
 })

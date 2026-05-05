@@ -58,8 +58,14 @@ export interface MessagingPlatformOwnerInfo {
 }
 
 /**
- * A sender the gateway recently rejected because they weren't on the owners
- * list. Surfaces in Settings → Messaging as "Pending requests".
+ * Why a sender ended up in the pending list. Drives the UI's "Allow" button
+ * label and the gateway's promotion semantics.
+ */
+export type MessagingPendingRejectReason = 'not-owner' | 'not-on-binding-allowlist'
+
+/**
+ * A sender the gateway recently rejected. Surfaces in Settings → Messaging
+ * as "Pending requests".
  */
 export interface MessagingPendingSenderInfo {
   platform: string
@@ -68,6 +74,14 @@ export interface MessagingPendingSenderInfo {
   username?: string
   lastAttemptAt: number
   attemptCount: number
+  /** Why the sender was rejected. Optional for back-compat with persisted
+   *  entries written by an earlier build that lacked the field. */
+  reason?: MessagingPendingRejectReason
+  /** Binding context (only for 'not-on-binding-allowlist' rejects). */
+  bindingId?: string
+  sessionId?: string
+  channelId?: string
+  threadId?: number
 }
 
 export type MessagingPlatformAccessMode = 'open' | 'owner-only'
@@ -229,14 +243,22 @@ export interface IMessagingGatewayRegistry {
   dismissPendingSender(workspaceId: string, platform: string, userId: string): boolean
 
   /**
-   * Promote a pending sender to the owners list. Returns the new owners
-   * list. Throws if the pending entry has expired.
+   * Allow a pending sender. Branches on the entry's `reason`:
+   * - `'not-owner'` → adds to platform owners.
+   * - `'not-on-binding-allowlist'` → appends to that binding's allow-list
+   *   (does NOT touch workspace owners).
+   *
+   * `entryKey` lets the UI target a specific row when a sender has
+   * multiple pending rows (e.g. workspace + binding-level rejects).
+   * Throws when the entry can't be found or the targeted binding has
+   * been unbound between reject and Allow.
    */
   allowPendingSender(
     workspaceId: string,
     platform: string,
     userId: string,
-  ): MessagingPlatformOwnerInfo[]
+    entryKey?: { reason?: MessagingPendingRejectReason; bindingId?: string },
+  ): { owners: MessagingPlatformOwnerInfo[]; bindingId?: string }
 
   /** Update the access policy on a single binding. */
   setBindingAccess(

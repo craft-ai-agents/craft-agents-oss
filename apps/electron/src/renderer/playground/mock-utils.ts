@@ -508,11 +508,18 @@ export const mockElectronAPI = {
     return [...messagingMockState.allowList[platform].pending]
   },
 
-  dismissMessagingPendingSender: async (platform: AllowListPlatform, userId: string) => {
-    console.log('[Playground] dismissMessagingPendingSender called:', platform, userId)
-    const next = messagingMockState.allowList[platform].pending.filter(
-      (s) => s.userId !== userId,
-    )
+  dismissMessagingPendingSender: async (
+    platform: AllowListPlatform,
+    userId: string,
+    opts?: { reason?: string; bindingId?: string },
+  ) => {
+    console.log('[Playground] dismissMessagingPendingSender called:', platform, userId, opts)
+    const next = messagingMockState.allowList[platform].pending.filter((s) => {
+      if (s.userId !== userId) return true
+      if (opts?.reason !== undefined && (s.reason ?? 'not-owner') !== opts.reason) return true
+      if (opts?.bindingId !== undefined && s.bindingId !== opts.bindingId) return true
+      return false
+    })
     playgroundAllowListHandle.setPending(platform, next)
     return { success: true }
   },
@@ -520,11 +527,39 @@ export const mockElectronAPI = {
   allowMessagingPendingSender: async (
     platform: AllowListPlatform,
     userId: string,
-  ): Promise<PlatformOwner[]> => {
-    console.log('[Playground] allowMessagingPendingSender called:', platform, userId)
+    entryKey?: { reason?: string; bindingId?: string },
+  ): Promise<{ owners: PlatformOwner[]; bindingId?: string }> => {
+    console.log('[Playground] allowMessagingPendingSender called:', platform, userId, entryKey)
     const state = messagingMockState.allowList[platform]
-    const match = state.pending.find((p) => p.userId === userId)
+    const match = state.pending.find((p) =>
+      p.userId === userId &&
+      (entryKey?.reason === undefined || (p.reason ?? 'not-owner') === entryKey.reason) &&
+      (entryKey?.bindingId === undefined || p.bindingId === entryKey.bindingId),
+    )
     if (!match) throw new Error('Pending sender not found')
+
+    const reason = match.reason ?? 'not-owner'
+    if (reason === 'not-on-binding-allowlist' && match.bindingId) {
+      // Binding-scoped allow — don't promote to workspace owner.
+      const access = state.bindings[match.bindingId] ?? {
+        mode: 'allow-list' as const,
+        allowedSenderIds: [],
+      }
+      const next = {
+        mode: 'allow-list' as const,
+        allowedSenderIds: Array.from(new Set([...access.allowedSenderIds, userId])),
+      }
+      playgroundAllowListHandle.setBindingAccess(platform, match.bindingId, next)
+      playgroundAllowListHandle.setPending(
+        platform,
+        state.pending.filter(
+          (p) => !(p.userId === userId && p.bindingId === match.bindingId),
+        ),
+      )
+      return { owners: [...state.owners], bindingId: match.bindingId }
+    }
+
+    // 'not-owner' branch: promote to workspace owner.
     const owner: PlatformOwner = {
       userId: match.userId,
       ...(match.displayName ? { displayName: match.displayName } : {}),
@@ -537,7 +572,7 @@ export const mockElectronAPI = {
       platform,
       state.pending.filter((p) => p.userId !== userId),
     )
-    return nextOwners
+    return { owners: nextOwners }
   },
 
   setMessagingBindingAccess: async (

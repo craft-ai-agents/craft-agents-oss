@@ -7,6 +7,7 @@ import type { RpcServer } from '../../transport/types'
 import type { HandlerDeps } from '../handler-deps'
 import type {
   MessagingBindingAccessMode,
+  MessagingPendingRejectReason,
   MessagingPlatformAccessMode,
   MessagingPlatformOwnerInfo,
 } from '../messaging-registry-interface'
@@ -169,9 +170,14 @@ export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps):
 
   server.handle(
     RPC_CHANNELS.messaging.ALLOW_PENDING_SENDER,
-    async (ctx, platform: string, userId: string) => {
+    async (
+      ctx,
+      platform: string,
+      userId: string,
+      entryKey?: { reason?: MessagingPendingRejectReason; bindingId?: string },
+    ) => {
       if (!ctx.workspaceId) throw new Error('Missing workspaceId')
-      return registry.allowPendingSender(ctx.workspaceId, platform, userId)
+      return registry.allowPendingSender(ctx.workspaceId, platform, userId, entryKey)
     },
   )
 

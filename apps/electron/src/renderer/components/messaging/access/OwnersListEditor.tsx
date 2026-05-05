@@ -16,6 +16,7 @@
  */
 
 import * as React from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { PlatformOwner } from './types'
@@ -45,8 +46,12 @@ export function OwnersListEditor({ owners, enforced, onRemove, currentUserId }: 
       <div className="flex items-start gap-3 px-4 py-3 text-xs text-foreground/50">
         <IconSpacer />
         <span>
-          No allowed users yet. Send <code className="rounded bg-foreground/[0.06] px-1 py-0.5">/pair</code>{' '}
-          from your Telegram account to add yourself, or wait for a pending request below.
+          <Trans
+            i18nKey="settings.messaging.telegram.access.owners.empty"
+            components={{
+              code: <code className="rounded bg-foreground/[0.06] px-1 py-0.5" />,
+            }}
+          />
         </span>
       </div>
     )
@@ -78,6 +83,7 @@ function OwnerRow({
   isCurrentUser: boolean
   onRemove: () => void
 }) {
+  const { t } = useTranslation()
   const primary = owner.displayName || owner.username || owner.userId
   const secondary = [
     owner.username ? `@${owner.username}` : null,
@@ -94,12 +100,12 @@ function OwnerRow({
           <span className="truncate text-sm">{primary}</span>
           {isCurrentUser && (
             <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
-              You
+              {t('settings.messaging.telegram.access.owners.youBadge')}
             </span>
           )}
           {!enforced && (
             <span className="shrink-0 text-[10px] uppercase tracking-wide text-foreground/40">
-              not enforced
+              {t('settings.messaging.telegram.access.owners.notEnforced')}
             </span>
           )}
         </div>
@@ -110,10 +116,10 @@ function OwnerRow({
         size="sm"
         onClick={onRemove}
         className="text-foreground/60 hover:text-destructive"
-        aria-label={`Remove ${primary}`}
+        aria-label={t('settings.messaging.telegram.access.owners.removeAria', { name: primary })}
       >
         <X className="h-3.5 w-3.5" />
-        Remove
+        {t('settings.messaging.telegram.access.owners.remove')}
       </Button>
     </div>
   )

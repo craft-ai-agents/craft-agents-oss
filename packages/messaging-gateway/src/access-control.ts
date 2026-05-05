@@ -8,14 +8,25 @@
  * uses to decide between routing, replying, and recording a pending sender.
  */
 
+import type { PendingSendersStore } from './pending-senders'
 import type {
   BindingConfig,
   IncomingMessage,
   MessagingConfig,
+  MessagingLogger,
   PlatformAccessMode,
+  PlatformAdapter,
   PlatformOwner,
   PlatformType,
 } from './types'
+
+/**
+ * Cooldown window for friendly rejection replies. A non-owner who pings
+ * the bot every second shouldn't get a reply every second — the reply
+ * itself becomes spam, and a malicious sender can use it to wedge the
+ * bot's own outgoing pipeline.
+ */
+export const REJECT_REPLY_COOLDOWN_MS = 60 * 60 * 1000
 
 export type AccessDecision =
   | { allow: true }
@@ -121,6 +132,95 @@ export function readPlatformOwners(
 ): PlatformOwner[] {
   if (platform !== 'telegram') return []
   return config.platforms.telegram?.owners ?? []
+}
+
+/**
+ * Inbound stimulus identity. Subset of `IncomingMessage` / `ButtonPress`
+ * that the rejection helper needs — extracting the common shape avoids a
+ * "fake an IncomingMessage" pattern at the button callsite.
+ */
+export interface RejectableSender {
+  platform: PlatformType
+  channelId: string
+  threadId?: number
+  senderId: string
+  senderName?: string
+  senderUsername?: string
+}
+
+export interface RejectionExecutionContext {
+  /** Per-(platform, senderId) cooldown map. Mutated. */
+  recentRejectReplies: Map<string, number>
+  /** Optional pending-senders store. Records non-bot rejections. */
+  pendingStore?: PendingSendersStore
+}
+
+/**
+ * Shared rejection path: log, record in pending store, send the friendly
+ * reply with cooldown. Used by `Router.handleReject` (text path),
+ * `Commands.sendRejection` (pre-binding text path), and
+ * `MessagingGateway.handleButtonPress` (callback button path) so all
+ * three entry points behave identically.
+ */
+export async function executeRejection(
+  adapter: PlatformAdapter,
+  sender: RejectableSender,
+  reason: AccessRejectReason,
+  ctx: RejectionExecutionContext,
+  log: MessagingLogger,
+  extra: { bindingId?: string; sessionId?: string } = {},
+): Promise<void> {
+  log.info('access-control rejected stimulus', {
+    event: 'access_rejected',
+    reason,
+    platform: sender.platform,
+    channelId: sender.channelId,
+    threadId: sender.threadId,
+    senderId: sender.senderId,
+    senderUsername: sender.senderUsername,
+    bindingId: extra.bindingId,
+    sessionId: extra.sessionId,
+  })
+
+  if (reason !== 'bot-sender') {
+    // Map the access verdict reason into the pending-store reason. The
+    // store only cares about the two "user-facing" reasons (workspace vs.
+    // binding) — bot-sender is silent-dropped before reaching here.
+    const pendingReason =
+      reason === 'not-on-binding-allowlist' ? 'not-on-binding-allowlist' : 'not-owner'
+    ctx.pendingStore?.recordRejection({
+      platform: sender.platform,
+      senderId: sender.senderId,
+      senderName: sender.senderName,
+      senderUsername: sender.senderUsername,
+      reason: pendingReason,
+      ...(extra.bindingId ? { bindingId: extra.bindingId } : {}),
+      ...(extra.sessionId ? { sessionId: extra.sessionId } : {}),
+      ...(sender.channelId ? { channelId: sender.channelId } : {}),
+      ...(sender.threadId !== undefined ? { threadId: sender.threadId } : {}),
+    })
+  }
+
+  const replyText = buildRejectionReply(reason)
+  if (!replyText) return
+
+  const key = `${sender.platform}:${sender.senderId}`
+  const last = ctx.recentRejectReplies.get(key) ?? 0
+  if (Date.now() - last < REJECT_REPLY_COOLDOWN_MS) return
+  ctx.recentRejectReplies.set(key, Date.now())
+
+  try {
+    await adapter.sendText(sender.channelId, replyText, {
+      ...(sender.threadId !== undefined ? { threadId: sender.threadId } : {}),
+    })
+  } catch (err) {
+    log.warn('failed to send rejection reply (non-fatal)', {
+      event: 'reject_reply_failed',
+      platform: sender.platform,
+      channelId: sender.channelId,
+      error: err,
+    })
+  }
 }
 
 /**

@@ -12,8 +12,8 @@
 
 import type { ISessionManager } from '@craft-agent/server-core/handlers'
 import {
-  buildRejectionReply,
   evaluatePreBindingAccess,
+  executeRejection,
   readPlatformAccessMode,
   readPlatformOwners,
   type AccessRejectReason,
@@ -101,6 +101,22 @@ export interface AccessControlDeps {
  */
 const ALWAYS_ALLOWED_COMMANDS = new Set(['/pair', '/help'])
 
+/**
+ * Telegram (and other Bot-API platforms) lets users address commands to
+ * specific bots in shared chats: `/pair@MyBot 123456`. Without stripping
+ * the `@BotName` suffix, the cmd token doesn't match our switch cases and
+ * supergroup pairing breaks for users typing the canonical group form.
+ *
+ * Returns `{ cmd: '', args: '' }` for non-command text. Lower-cases the
+ * cmd so callsites can do exact-string comparisons.
+ */
+export function parseCommand(text: string): { cmd: string; args: string } {
+  const trimmed = text.trim()
+  const m = trimmed.match(/^\/([a-z0-9_]+)(?:@[a-z0-9_]+)?(?:\s+([\s\S]*))?$/i)
+  if (!m) return { cmd: '', args: '' }
+  return { cmd: '/' + m[1]!.toLowerCase(), args: (m[2] ?? '').trim() }
+}
+
 export class Commands {
   private readonly log: MessagingLogger
   private readonly access: AccessControlDeps
@@ -125,11 +141,14 @@ export class Commands {
     const text = msg.text.trim()
     const replyOpts = msg.threadId !== undefined ? { threadId: msg.threadId } : {}
 
-    // Pre-binding gate: anyone can run /pair (bootstrap) or /help.
-    // Everything else requires the sender to be on the owners list when
-    // workspace mode is `'owner-only'`.
-    const cmd = text.startsWith('/') ? (text.split(/\s+/)[0]!.toLowerCase()) : ''
-    if (cmd && !ALWAYS_ALLOWED_COMMANDS.has(cmd)) {
+    // Pre-binding gate: every inbound stimulus runs through the access
+    // evaluator, including non-command free-form text. Without this,
+    // a stranger DMing "hi" would receive the help message (revealing
+    // commands) and bypass the pending-senders flow. Only `/pair`
+    // (bootstrap) and `/help` (informational) skip the gate.
+    const cmd = parseCommand(text).cmd
+    const skipsGate = cmd && ALWAYS_ALLOWED_COMMANDS.has(cmd)
+    if (!skipsGate) {
       const verdict = evaluatePreBindingAccess({
         msg,
         workspaceConfig: this.access.getWorkspaceConfig(),
@@ -140,20 +159,22 @@ export class Commands {
       }
     }
 
-    if (text.startsWith('/new')) {
+    // Exact-cmd dispatch (parsed; supports `/cmd@BotName`). Avoids the old
+    // `text.startsWith('/new')` bug where `/newuser` would also dispatch
+    // to handleNew.
+    if (cmd === '/new') {
       await this.handleNew(adapter, msg)
-    } else if (text.startsWith('/bind')) {
+    } else if (cmd === '/bind') {
       await this.handleBind(adapter, msg)
-    } else if (text.startsWith('/pair')) {
+    } else if (cmd === '/pair') {
       await this.handlePair(adapter, msg)
-    } else if (text === '/unbind') {
+    } else if (cmd === '/unbind') {
       await this.handleUnbind(adapter, msg)
-    } else if (text === '/help') {
+    } else if (cmd === '/help') {
       await this.handleHelp(adapter, msg)
     } else {
-      // The sender is an owner (or the workspace is open) and typed
+      // Sender passed the access gate (owner or open workspace) and typed
       // free-form text into a chat with no binding. Show the help prompt.
-      // Non-owners on a locked-down workspace are intercepted above.
       await adapter.sendText(
         msg.channelId,
         'No session bound to this chat.\n\n' +
@@ -170,7 +191,11 @@ export class Commands {
     const text = msg.text.trim()
     if (!text.startsWith('/')) return false
 
-    const cmd = text.split(/\s+/)[0]!.toLowerCase()
+    // Strip the optional `@BotName` suffix Telegram uses to disambiguate
+    // commands in shared chats. Without this, `/pair@MyBot 123456` would
+    // never match the switch case below.
+    const { cmd } = parseCommand(text)
+    if (!cmd) return false
 
     this.log.info('handling chat command', {
       event: 'command_received',
@@ -223,46 +248,24 @@ export class Commands {
   }
 
   /**
-   * Reject reply for pre-binding gating. Mirrors `Router.handleReject` but
-   * lives here to avoid an import cycle (Commands is constructed before
-   * Router and Commands is what Router *holds*, not the other way around).
+   * Reject reply for pre-binding gating. Delegates to the shared
+   * `executeRejection` so text and button paths emit identical output.
    */
   private async sendRejection(
     adapter: PlatformAdapter,
     msg: IncomingMessage,
     reason: AccessRejectReason,
   ): Promise<void> {
-    this.log.info('access-control rejected pre-binding command', {
-      event: 'command_rejected',
+    await executeRejection(
+      adapter,
+      msg,
       reason,
-      workspaceId: this.workspaceId,
-      platform: adapter.platform,
-      channelId: msg.channelId,
-      threadId: msg.threadId,
-      senderId: msg.senderId,
-    })
-
-    if (reason !== 'bot-sender') {
-      this.access.pendingStore?.recordRejection({
-        platform: msg.platform,
-        senderId: msg.senderId,
-        senderName: msg.senderName,
-        senderUsername: msg.senderUsername,
-      })
-    }
-
-    const replyText = buildRejectionReply(reason)
-    if (!replyText) return
-
-    const key = `${msg.platform}:${msg.senderId}`
-    const last = this.recentRejectReplies.get(key) ?? 0
-    if (Date.now() - last < 60 * 60 * 1000) return
-    this.recentRejectReplies.set(key, Date.now())
-
-    const replyOpts = msg.threadId !== undefined ? { threadId: msg.threadId } : {}
-    await adapter
-      .sendText(msg.channelId, replyText, replyOpts)
-      .catch(() => {/* non-fatal */})
+      {
+        recentRejectReplies: this.recentRejectReplies,
+        ...(this.access.pendingStore ? { pendingStore: this.access.pendingStore } : {}),
+      },
+      this.log,
+    )
   }
 
   // -------------------------------------------------------------------------
@@ -270,7 +273,7 @@ export class Commands {
   // -------------------------------------------------------------------------
 
   private async handleNew(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
-    const name = msg.text.replace(/^\/new\s*/, '').trim() || undefined
+    const name = parseCommand(msg.text).args || undefined
     const replyOpts = msg.threadId !== undefined ? { threadId: msg.threadId } : {}
 
     try {
@@ -314,7 +317,7 @@ export class Commands {
   }
 
   private async handleBind(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
-    const bindArg = msg.text.replace(/^\/bind\s*/, '').trim()
+    const bindArg = parseCommand(msg.text).args
     const recent = this.getRecentSessions()
     const replyOpts = msg.threadId !== undefined ? { threadId: msg.threadId } : {}
 
@@ -413,8 +416,11 @@ export class Commands {
       return
     }
 
-    const arg = msg.text.replace(/^\/pair\s*/i, '').trim()
-    const code = arg.replace(/\s+/g, '')
+    // Use the centralized parser so `/pair@MyBot 123456` works the same
+    // as `/pair 123456` — Telegram routes commands by bot suffix in
+    // group chats and many users will type the canonical form.
+    const { args } = parseCommand(msg.text)
+    const code = args.replace(/\s+/g, '')
 
     if (!/^\d{6}$/.test(code)) {
       await adapter.sendText(

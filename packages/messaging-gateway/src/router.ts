@@ -13,8 +13,8 @@ import type { ISessionManager } from '@craft-agent/server-core/handlers'
 import { readFileAttachment } from '@craft-agent/shared/utils'
 import type { FileAttachment } from '@craft-agent/shared/protocol'
 import {
-  buildRejectionReply,
   evaluateBindingAccess,
+  executeRejection,
   type AccessRejectReason,
 } from './access-control'
 import type { BindingStore } from './binding-store'
@@ -42,13 +42,6 @@ export interface RouterDeps {
    *  the Settings UI can surface them with one-click "Allow" buttons. */
   pendingStore?: PendingSendersStore
 }
-
-/**
- * Per-(platform, sender) rate limit on rejection replies. Without this, a
- * non-owner spamming the bot would receive a reply on every message which
- * looks like a self-inflicted DoS.
- */
-const REJECT_REPLY_COOLDOWN_MS = 60 * 60 * 1000
 
 export class Router {
   private readonly deps: RouterDeps
@@ -134,12 +127,8 @@ export class Router {
 
   /**
    * Common reject path for both bound (this file) and pre-binding (Commands)
-   * gating. Records the rejection in the pending store and replies with a
-   * friendly message — but only once per sender per cooldown window so a
-   * spammer doesn't wedge the bot into a tight reply loop.
-   *
-   * Public so `Commands.handle` can reuse the exact same logic from the
-   * unbound path.
+   * gating. Delegates to the shared `executeRejection` so text and button
+   * paths behave identically.
    */
   async handleReject(
     adapter: PlatformAdapter,
@@ -147,47 +136,17 @@ export class Router {
     reason: AccessRejectReason,
     extra?: { bindingId?: string; sessionId?: string },
   ): Promise<void> {
-    this.log.info('access-control rejected message', {
-      event: 'message_rejected',
+    await executeRejection(
+      adapter,
+      msg,
       reason,
-      platform: msg.platform,
-      channelId: msg.channelId,
-      threadId: msg.threadId,
-      senderId: msg.senderId,
-      senderUsername: msg.senderUsername,
-      bindingId: extra?.bindingId,
-      sessionId: extra?.sessionId,
-    })
-
-    if (reason !== 'bot-sender') {
-      this.deps.pendingStore?.recordRejection({
-        platform: msg.platform,
-        senderId: msg.senderId,
-        senderName: msg.senderName,
-        senderUsername: msg.senderUsername,
-      })
-    }
-
-    const replyText = buildRejectionReply(reason)
-    if (!replyText) return
-
-    const key = `${msg.platform}:${msg.senderId}`
-    const last = this.recentRejectReplies.get(key) ?? 0
-    if (Date.now() - last < REJECT_REPLY_COOLDOWN_MS) return
-    this.recentRejectReplies.set(key, Date.now())
-
-    try {
-      await adapter.sendText(msg.channelId, replyText, {
-        ...(msg.threadId !== undefined ? { threadId: msg.threadId } : {}),
-      })
-    } catch (err) {
-      this.log.warn('failed to send rejection reply (non-fatal)', {
-        event: 'reject_reply_failed',
-        platform: msg.platform,
-        channelId: msg.channelId,
-        error: err,
-      })
-    }
+      {
+        recentRejectReplies: this.recentRejectReplies,
+        ...(this.deps.pendingStore ? { pendingStore: this.deps.pendingStore } : {}),
+      },
+      this.log,
+      extra,
+    )
   }
 
   /**

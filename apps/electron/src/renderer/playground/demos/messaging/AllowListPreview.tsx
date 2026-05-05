@@ -193,8 +193,17 @@ export function AllowListPreview({
     toast.success(`Allowed ${sender.displayName || sender.username || sender.userId}`)
   }
 
-  const handleIgnore = (userId: string) => {
-    setPendingList((prev) => prev.filter((s) => s.userId !== userId))
+  const handleIgnore = (sender: PendingSender) => {
+    setPendingList((prev) =>
+      prev.filter(
+        (s) =>
+          !(
+            s.userId === sender.userId &&
+            (s.reason ?? 'not-owner') === (sender.reason ?? 'not-owner') &&
+            (s.bindingId ?? null) === (sender.bindingId ?? null)
+          ),
+      ),
+    )
   }
 
   return (

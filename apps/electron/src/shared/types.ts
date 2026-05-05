@@ -687,8 +687,12 @@ export interface ElectronAPI {
   getMessagingPlatformAccessMode(platform: string): Promise<MessagingPlatformAccessMode>
   setMessagingPlatformAccessMode(platform: string, mode: MessagingPlatformAccessMode): Promise<{ success: boolean }>
   getMessagingPendingSenders(platform?: string): Promise<MessagingPendingSenderInfo[]>
-  dismissMessagingPendingSender(platform: string, userId: string): Promise<{ success: boolean }>
-  allowMessagingPendingSender(platform: string, userId: string): Promise<MessagingPlatformOwnerInfo[]>
+  dismissMessagingPendingSender(platform: string, userId: string, opts?: { reason?: MessagingPendingRejectReason; bindingId?: string }): Promise<{ success: boolean }>
+  allowMessagingPendingSender(
+    platform: string,
+    userId: string,
+    entryKey?: { reason?: MessagingPendingRejectReason; bindingId?: string },
+  ): Promise<{ owners: MessagingPlatformOwnerInfo[]; bindingId?: string }>
   setMessagingBindingAccess(bindingId: string, access: { mode: MessagingBindingAccessMode; allowedSenderIds?: string[] }): Promise<{ success: boolean }>
   onMessagingPendingChanged(callback: (workspaceId: string) => void): () => void
 }
@@ -719,6 +723,8 @@ export interface MessagingPlatformOwnerInfo {
   addedAt: number
 }
 
+export type MessagingPendingRejectReason = 'not-owner' | 'not-on-binding-allowlist'
+
 export interface MessagingPendingSenderInfo {
   platform: string
   userId: string
@@ -726,6 +732,11 @@ export interface MessagingPendingSenderInfo {
   username?: string
   lastAttemptAt: number
   attemptCount: number
+  reason?: MessagingPendingRejectReason
+  bindingId?: string
+  sessionId?: string
+  channelId?: string
+  threadId?: number
 }
 
 /** Event payloads broadcast from the WhatsApp subprocess to the UI. */

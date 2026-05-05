@@ -131,6 +131,34 @@ export class BindingStore {
     return binding
   }
 
+  /**
+   * Update a binding's `BindingConfig` in place — preserves `id`,
+   * `createdAt`, `channelId`, etc. Returns the updated binding (or null
+   * if the id wasn't found).
+   *
+   * Use this instead of `bind()` when you only need to change config
+   * fields like `accessMode` or `allowedSenderIds`. `bind()` evicts and
+   * re-creates with a fresh UUID, which silently rotates the binding id
+   * and breaks anything keyed on it (audit logs, deep links, stale UI
+   * closures).
+   */
+  updateBindingConfig(bindingId: string, patch: Partial<ChannelBinding['config']>): ChannelBinding | null {
+    const binding = this.bindings.find((b) => b.id === bindingId)
+    if (!binding) return null
+    binding.config = normalizeBindingConfig(binding.platform, {
+      ...binding.config,
+      ...patch,
+    })
+    this.save()
+    this.log.info('binding config updated', {
+      event: 'binding_config_updated',
+      bindingId,
+      platform: binding.platform,
+      patchedKeys: Object.keys(patch),
+    })
+    return binding
+  }
+
   unbind(platform: PlatformType, channelId: string, threadId?: number): boolean {
     const before = this.bindings.length
     this.bindings = this.bindings.filter(

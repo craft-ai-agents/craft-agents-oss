@@ -27,17 +27,16 @@ interface Props {
   onChange: (next: BindingAccess) => void
 }
 
-const MODE_LABELS: Record<BindingAccessMode, string> = {
-  inherit: 'Inherits workspace',
-  'allow-list': 'Custom allow-list',
-  open: 'Open to anyone',
+const MODE_LABEL_KEYS: Record<BindingAccessMode, string> = {
+  inherit: 'settings.messaging.telegram.access.bindingPopover.mode.inherit.label',
+  'allow-list': 'settings.messaging.telegram.access.bindingPopover.mode.allowList.label',
+  open: 'settings.messaging.telegram.access.bindingPopover.mode.open.label',
 }
 
-const MODE_DESCRIPTIONS: Record<BindingAccessMode, string> = {
-  inherit: 'All workspace owners can use this binding.',
-  'allow-list': 'Only the explicitly checked users can use this binding.',
-  open:
-    'Anyone in an accepted chat can use this binding. Use only for public-facing bots.',
+const MODE_DESCRIPTION_KEYS: Record<BindingAccessMode, string> = {
+  inherit: 'settings.messaging.telegram.access.bindingPopover.mode.inherit.description',
+  'allow-list': 'settings.messaging.telegram.access.bindingPopover.mode.allowList.description',
+  open: 'settings.messaging.telegram.access.bindingPopover.mode.open.description',
 }
 
 const MODE_ICONS: Record<BindingAccessMode, typeof ShieldCheck> = {
@@ -50,7 +49,7 @@ export function BindingAllowListPopover({ access, workspaceOwners, onChange }: P
   const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
 
-  const triggerLabel = buildTriggerLabel(access, workspaceOwners.length)
+  const triggerLabel = buildTriggerLabel(access, workspaceOwners.length, t)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -101,7 +100,7 @@ export function BindingAllowListPopover({ access, workspaceOwners, onChange }: P
             <div className="mt-2 flex flex-col gap-1">
               {workspaceOwners.length === 0 ? (
                 <div className="text-xs text-foreground/50">
-                  No known users. Add owners from the workspace allow-list above first.
+                  {t('settings.messaging.telegram.access.bindingPopover.noKnownUsers')}
                 </div>
               ) : (
                 workspaceOwners.map((owner) => {
@@ -149,6 +148,7 @@ function ModeRow({
   selected: boolean
   onSelect: () => void
 }) {
+  const { t } = useTranslation()
   const Icon = MODE_ICONS[mode]
   return (
     <button
@@ -162,22 +162,33 @@ function ModeRow({
       />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 text-xs font-medium">
-          {MODE_LABELS[mode]}
+          {t(MODE_LABEL_KEYS[mode])}
           {selected && <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />}
         </div>
-        <div className="mt-0.5 text-xs text-foreground/50">{MODE_DESCRIPTIONS[mode]}</div>
+        <div className="mt-0.5 text-xs text-foreground/50">
+          {t(MODE_DESCRIPTION_KEYS[mode])}
+        </div>
       </div>
     </button>
   )
 }
 
-function buildTriggerLabel(access: BindingAccess, workspaceOwnersCount: number): string {
+function buildTriggerLabel(
+  access: BindingAccess,
+  workspaceOwnersCount: number,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
   if (access.mode === 'inherit') {
     return workspaceOwnersCount === 0
-      ? 'Inherits · no owners'
-      : `Inherits · ${workspaceOwnersCount} ${workspaceOwnersCount === 1 ? 'user' : 'users'}`
+      ? t('settings.messaging.telegram.access.bindingPopover.trigger.inheritEmpty')
+      : t('settings.messaging.telegram.access.bindingPopover.trigger.inherit', {
+          count: workspaceOwnersCount,
+        })
   }
-  if (access.mode === 'open') return 'Open'
-  const n = access.allowedSenderIds.length
-  return `Custom · ${n} ${n === 1 ? 'user' : 'users'}`
+  if (access.mode === 'open') {
+    return t('settings.messaging.telegram.access.bindingPopover.trigger.open')
+  }
+  return t('settings.messaging.telegram.access.bindingPopover.trigger.allowList', {
+    count: access.allowedSenderIds.length,
+  })
 }

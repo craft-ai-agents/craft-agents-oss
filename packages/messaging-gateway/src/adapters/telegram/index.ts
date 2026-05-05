@@ -400,6 +400,9 @@ export class TelegramAdapter implements PlatformAdapter {
         ...(threadId !== undefined ? { threadId } : {}),
         messageId: String(ctx.callbackQuery.message?.message_id ?? ''),
         senderId: String(ctx.from?.id ?? ''),
+        ...(ctx.from?.first_name ? { senderName: ctx.from.first_name } : {}),
+        ...(ctx.from?.username ? { senderUsername: ctx.from.username } : {}),
+        ...(ctx.from?.is_bot ? { senderIsBot: true } : {}),
         buttonId: ctx.callbackQuery.data ?? '',
         data: ctx.callbackQuery.data ?? undefined,
       }
