@@ -22,11 +22,15 @@
   "overrides": {
     "@hono/node-server": "^2.0.1",
     "@isaacs/brace-expansion": "^5.0.1",
+    "@anthropic-ai/sdk": "0.91.1",
     "@xmldom/xmldom": "^0.9.10",
+    "ajv": "^6.15.0",
     "axios": "^1.16.0",
     "basic-ftp": "^6.0.1",
+    "diff": "^8.0.4",
     "exiftool-vendored": "^35.19.0",
     "fast-xml-parser": "^5.7.3",
+    "file-type": "^21.3.4",
     "flatted": "^3.4.2",
     "hono": "^4.12.17",
     "lodash": "^4.18.1",
@@ -35,9 +39,12 @@
     "path-to-regexp": "^8.4.2",
     "picomatch": "^4.0.4",
     "protobufjs": "^8.0.3",
+    "qs": "^6.15.1",
     "rollup": "^4.60.3",
     "underscore": "^1.13.8",
-    "undici": "^8.2.0"
+    "undici": "^8.2.0",
+    "uuid": "^13.0.2",
+    "yaml": "^2.8.4"
   },
   "scripts": {
     "test": "bun test && for f in $(find . -name '*.isolated.ts' -not -path './node_modules/*'); do bun test \"$f\" || exit 1; done",
