@@ -221,6 +221,12 @@ export interface ISessionManager {
   // ---------------------------------------------------------------------------
 
   reinitializeAuth(connectionSlug?: string): Promise<void>
+  /**
+   * Push runtime updates (e.g. capability toggles) to every active session
+   * that uses the given connection. Backstopped by the lazy refresh path in
+   * `getOrCreateAgent`.
+   */
+  refreshConnectionRuntime(connectionSlug: string): Promise<void>
   completeAuthRequest(sessionId: string, result: AuthResult): Promise<void>
   executePromptAutomation(input: ExecutePromptAutomationInput): Promise<{ sessionId: string }>
 

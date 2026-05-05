@@ -94,7 +94,7 @@ import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels
 import { ensureLabelsExist } from '@craft-agent/shared/labels/crud'
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
 import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
-import { buildBackendRuntimeSignature, filterAttachmentsForModelInput } from './runtime-config'
+import { buildBackendRuntimeSignature, buildRestartRequiredSignature, filterAttachmentsForModelInput } from './runtime-config'
 
 // Import from server-core domain utilities
 import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@craft-agent/server-core/domain'
@@ -878,6 +878,12 @@ interface ManagedSession {
   envOverrides?: Record<string, string>
   // Runtime-affecting backend config signature captured when the live agent was created/refreshed.
   backendRuntimeSignature?: string
+  /**
+   * Signature over fields that cannot be propagated via `update_runtime_config`
+   * (see `runtime-config.ts:buildRestartRequiredSignature`). When this drifts,
+   * the agent must be disposed + recreated rather than refreshed in place.
+   */
+  backendRestartSignature?: string
   // Whether the previous turn was interrupted (for context injection on next message).
   // Ephemeral — not persisted to disk. Cleared after one-shot injection.
   wasInterrupted?: boolean
@@ -1034,6 +1040,15 @@ export class SessionManager implements ISessionManager {
   private initGate = new InitGate()
   // O(1) index: taskId → sessionId for background task output lookup (avoids O(n) session scan)
   private taskOutputIndex: Map<string, string> = new Map()
+  /**
+   * Per-session in-flight runtime-refresh promise. Ensures `updateRuntimeConfig`
+   * (or a dispose) cannot overlap with another refresh OR with a send-path
+   * `getOrCreateAgent` on the same session. Without this serialization, a
+   * `SAVE`-triggered refresh and a `sendMessage`-triggered refresh can both
+   * see `agent.isProcessing()=false`, both fire `updateRuntimeConfig`, and the
+   * subprocess can race the resulting `chat` against the still-pending update.
+   */
+  private agentRefreshLocks: Map<string, Promise<void>> = new Map()
   /** Monotonic clock to ensure strictly increasing message timestamps */
   private lastTimestamp = 0
 
@@ -2690,7 +2705,171 @@ export class SessionManager implements ISessionManager {
     managed.agentReady = undefined
     managed.agentReadyResolve = undefined
     managed.backendRuntimeSignature = undefined
+    managed.backendRestartSignature = undefined
     unregisterSessionScopedToolCallbacks(sessionId)
+  }
+
+  /**
+   * Refresh an existing agent's runtime config in place when the session's
+   * resolved connection signature has drifted from what the agent was created
+   * with. No-ops when the agent doesn't exist, when the signature still
+   * matches, or when the agent is mid-stream (the gate is `agent.isProcessing()`
+   * — `managed.isProcessing` is not used because `sendMessage` flips it before
+   * calling `getOrCreateAgent`, which would make every send-path refresh dead
+   * code).
+   *
+   * Concurrency: per-session serialization via `agentRefreshLocks`. A second
+   * caller (e.g. `sendMessage` arriving mid-`SAVE`-refresh) awaits the
+   * in-flight refresh, then re-evaluates from the post-refresh state — so the
+   * subsequent `agent.chat()` is sent only after the subprocess has applied
+   * the runtime update (or the agent has been disposed for recreation).
+   *
+   * The helper distinguishes two kinds of drift:
+   *   - Restart-required (provider/auth/slug/piAuthProvider): goes straight
+   *     to dispose + recreate because `update_runtime_config` cannot fully
+   *     re-route credential/provider state in a live subprocess.
+   *   - In-place safe (model/baseUrl/customEndpoint/customModels): attempts
+   *     `agent.updateRuntimeConfig` and falls back to dispose if the backend
+   *     can't apply the update.
+   */
+  private async tryRefreshAgentRuntime(managed: ManagedSession, reason: string): Promise<void> {
+    // Serialize against any in-flight refresh on this session. The waiter
+    // doesn't propagate the prior call's errors — those are logged at the
+    // origin call site.
+    const inflight = this.agentRefreshLocks.get(managed.id)
+    if (inflight) {
+      await inflight.catch(() => undefined)
+    }
+
+    if (!managed.agent) return
+
+    const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
+    const backendContext = resolveBackendContext({
+      sessionConnectionSlug: managed.llmConnection,
+      workspaceDefaultConnectionSlug: workspaceConfig?.defaults?.defaultLlmConnection,
+      managedModel: managed.model,
+    })
+    const connection = backendContext.connection
+    const sigInput = {
+      connection,
+      provider: backendContext.provider,
+      authType: backendContext.authType,
+      resolvedModel: backendContext.resolvedModel,
+    }
+    const runtimeSignature = buildBackendRuntimeSignature(sigInput)
+    const restartSignature = buildRestartRequiredSignature(sigInput)
+
+    if (!managed.backendRuntimeSignature || !managed.backendRestartSignature) {
+      managed.backendRuntimeSignature = runtimeSignature
+      managed.backendRestartSignature = restartSignature
+      return
+    }
+
+    const restartRequired = managed.backendRestartSignature !== restartSignature
+    const runtimeChanged = managed.backendRuntimeSignature !== runtimeSignature
+
+    if (!restartRequired && !runtimeChanged) return
+
+    if (managed.agent.isProcessing()) {
+      sessionLog.info(`Runtime config changed for ${managed.id}; deferring refresh until session is idle (${reason})`)
+      return
+    }
+
+    const work = this.runAgentRuntimeRefresh(
+      managed,
+      backendContext,
+      runtimeSignature,
+      restartSignature,
+      restartRequired,
+      reason,
+    )
+    // Track the work so concurrent callers serialize. Swallow errors on the
+    // tracked promise — the awaiter shouldn't get someone else's exception;
+    // errors are logged inside `runAgentRuntimeRefresh`.
+    const tracked = work.then(() => undefined, () => undefined)
+    this.agentRefreshLocks.set(managed.id, tracked)
+    try {
+      await work
+    } finally {
+      // Concurrent callers awaited `tracked` before reaching this point and
+      // each registered their own work serially, so the slot is always ours
+      // to clear when our own work resolves.
+      if (this.agentRefreshLocks.get(managed.id) === tracked) {
+        this.agentRefreshLocks.delete(managed.id)
+      }
+    }
+  }
+
+  private async runAgentRuntimeRefresh(
+    managed: ManagedSession,
+    backendContext: ReturnType<typeof resolveBackendContext>,
+    runtimeSignature: string,
+    restartSignature: string,
+    restartRequired: boolean,
+    reason: string,
+  ): Promise<void> {
+    if (restartRequired) {
+      sessionLog.info(`Restart-required field changed for session ${managed.id}; recreating backend runtime (${reason})`)
+      await this.disposeManagedAgentRuntime(managed, 'restart-required runtime change')
+      return
+    }
+
+    const connection = backendContext.connection
+    let refreshed = false
+    if (managed.agent?.updateRuntimeConfig) {
+      try {
+        refreshed = await managed.agent.updateRuntimeConfig({
+          model: backendContext.resolvedModel,
+          providerType: connection?.providerType,
+          authType: backendContext.authType,
+          runtime: connection ? {
+            baseUrl: connection.baseUrl,
+            piAuthProvider: connection.piAuthProvider,
+            customEndpoint: connection.customEndpoint,
+            customModels: connection.models?.map(model => {
+              if (typeof model === 'string') return model
+              const supportsImages = typeof model.supportsImages === 'boolean' ? model.supportsImages : undefined
+              if (model.contextWindow || supportsImages !== undefined) {
+                return {
+                  id: model.id,
+                  ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
+                  ...(supportsImages !== undefined ? { supportsImages } : {}),
+                }
+              }
+              return model.id
+            }),
+          } : undefined,
+        })
+      } catch (error) {
+        sessionLog.warn(`Runtime config in-place refresh failed for ${managed.id}: ${error instanceof Error ? error.message : error}`)
+      }
+    }
+
+    if (refreshed) {
+      managed.backendRuntimeSignature = runtimeSignature
+      managed.backendRestartSignature = restartSignature
+      sessionLog.info(`Refreshed runtime config for session ${managed.id} (${reason})`)
+    } else {
+      sessionLog.info(`Recreating backend runtime for session ${managed.id} after config change (${reason})`)
+      await this.disposeManagedAgentRuntime(managed, 'runtime config refresh')
+    }
+  }
+
+  /**
+   * Push a connection's runtime updates (e.g. `supportsImages` toggle) to every
+   * active session that uses it. Called from the `llmConnections.SAVE` handler
+   * so capability changes reach live Pi subprocesses immediately instead of
+   * waiting for the next send to lazily notice the signature drift.
+   */
+  async refreshConnectionRuntime(connectionSlug: string): Promise<void> {
+    for (const managed of this.sessions.values()) {
+      if (managed.llmConnection !== connectionSlug) continue
+      try {
+        await this.tryRefreshAgentRuntime(managed, 'connection update')
+      } catch (error) {
+        sessionLog.warn(`refreshConnectionRuntime failed for ${managed.id}: ${error instanceof Error ? error.message : error}`)
+      }
+    }
   }
 
   /**
@@ -2704,6 +2883,11 @@ export class SessionManager implements ISessionManager {
    * 4. fallback: no connection configured
    */
   private async getOrCreateAgent(managed: ManagedSession): Promise<AgentInstance> {
+    // Refresh runtime config in-place when the connection has drifted since
+    // the agent was created. May null out `managed.agent` if the in-place
+    // refresh fails, in which case the create branch below rebuilds it.
+    await this.tryRefreshAgentRuntime(managed, 'send-path refresh')
+
     const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
     const backendContext = resolveBackendContext({
       sessionConnectionSlug: managed.llmConnection,
@@ -2711,60 +2895,14 @@ export class SessionManager implements ISessionManager {
       managedModel: managed.model,
     })
     const connection = backendContext.connection
-    const runtimeSignature = buildBackendRuntimeSignature({
+    const sigInput = {
       connection,
       provider: backendContext.provider,
       authType: backendContext.authType,
       resolvedModel: backendContext.resolvedModel,
-    })
-
-    if (managed.agent && !managed.backendRuntimeSignature) {
-      managed.backendRuntimeSignature = runtimeSignature
     }
-
-    if (managed.agent && managed.backendRuntimeSignature !== runtimeSignature) {
-      if (managed.isProcessing || managed.agent.isProcessing()) {
-        sessionLog.info(`Runtime config changed for ${managed.id}; deferring refresh until session is idle`)
-      } else {
-        let refreshed = false
-        if (managed.agent.updateRuntimeConfig) {
-          try {
-            refreshed = await managed.agent.updateRuntimeConfig({
-              model: backendContext.resolvedModel,
-              providerType: connection?.providerType,
-              authType: backendContext.authType,
-              runtime: connection ? {
-                baseUrl: connection.baseUrl,
-                piAuthProvider: connection.piAuthProvider,
-                customEndpoint: connection.customEndpoint,
-                customModels: connection.models?.map(model => {
-                  if (typeof model === 'string') return model
-                  const supportsImages = typeof model.supportsImages === 'boolean' ? model.supportsImages : undefined
-                  if (model.contextWindow || supportsImages !== undefined) {
-                    return {
-                      id: model.id,
-                      ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
-                      ...(supportsImages !== undefined ? { supportsImages } : {}),
-                    }
-                  }
-                  return model.id
-                }),
-              } : undefined,
-            })
-          } catch (error) {
-            sessionLog.warn(`Runtime config in-place refresh failed for ${managed.id}: ${error instanceof Error ? error.message : error}`)
-          }
-        }
-
-        if (refreshed) {
-          managed.backendRuntimeSignature = runtimeSignature
-          sessionLog.info(`Refreshed runtime config for session ${managed.id}`)
-        } else {
-          sessionLog.info(`Recreating backend runtime for session ${managed.id} after config change`)
-          await this.disposeManagedAgentRuntime(managed, 'runtime config refresh')
-        }
-      }
-    }
+    const runtimeSignature = buildBackendRuntimeSignature(sigInput)
+    const restartSignature = buildRestartRequiredSignature(sigInput)
 
     if (!managed.agent) {
       const end = perf.start('agent.create', { sessionId: managed.id })
@@ -3903,6 +4041,7 @@ export class SessionManager implements ISessionManager {
         })
       }
       managed.backendRuntimeSignature = runtimeSignature
+      managed.backendRestartSignature = restartSignature
       end()
     }
     return managed.agent

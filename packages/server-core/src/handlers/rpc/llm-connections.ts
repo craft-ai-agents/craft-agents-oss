@@ -438,6 +438,17 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         }
       }
       deps.platform.logger?.info(`LLM connection saved: ${connection.slug}`)
+      // Push runtime updates (e.g. supportsImages toggle) to live sessions on
+      // this connection. Detached so SAVE doesn't block on the per-session
+      // 15s `update_runtime_config` timeout when subprocesses are slow or
+      // wedged. SessionManager serializes the refresh with the next send via
+      // its per-session mutex, and the lazy `getOrCreateAgent` refresh remains
+      // the correctness backstop if the detached push fails.
+      sessionManager.refreshConnectionRuntime(connection.slug).catch(error => {
+        deps.platform.logger?.warn(
+          `Detached runtime push failed for ${connection.slug}: ${error instanceof Error ? error.message : error}`,
+        )
+      })
       // Reinitialize auth if the saved connection is the current default
       // (updates env vars and summarization model override)
       const defaultSlug = getDefaultLlmConnection()

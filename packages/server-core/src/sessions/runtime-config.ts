@@ -34,6 +34,31 @@ function normalizeCustomModels(connection: LlmConnection): Array<Record<string, 
 }
 
 /**
+ * Build a stable signature over the fields that the `update_runtime_config`
+ * IPC envelope cannot safely propagate to a live subprocess. When this
+ * signature drifts, the in-place refresh path must be skipped in favour of
+ * a clean dispose + recreate so the new auth/provider routing actually takes
+ * effect.
+ *
+ * Concretely, `update_runtime_config` (see `pi-agent.ts:requestRuntimeConfigUpdate`
+ * and the matching handler at `pi-agent-server/src/index.ts:handleUpdateRuntimeConfig`)
+ * carries `model, providerType, authType, baseUrl, customEndpoint, customModels` —
+ * but NOT `piAuthProvider`, and switching `slug`/`providerType`/`authType` mid-life
+ * pulls in credential routing and provider-registry state the subprocess doesn't
+ * fully reset on a runtime update.
+ */
+export function buildRestartRequiredSignature(input: BackendRuntimeSignatureInput): string {
+  const { connection, provider, authType } = input
+  return JSON.stringify(definedObject({
+    provider,
+    authType,
+    slug: connection?.slug,
+    providerType: connection?.providerType,
+    piAuthProvider: connection?.piAuthProvider,
+  }))
+}
+
+/**
  * Build a stable signature for config fields that affect an already-created
  * backend runtime. Metadata such as `lastUsedAt` is intentionally omitted.
  */
