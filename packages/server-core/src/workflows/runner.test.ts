@@ -90,7 +90,11 @@ interface MockHarness {
   setStepBehavior: (index: number, fn: (record: SessionRecord) => Promise<void>) => void;
 }
 
-function makeHarness(opts: { stepOutputs?: string[]; permissionMode?: 'safe' | 'ask' | 'allow-all' } = {}): MockHarness {
+function makeHarness(opts: {
+  stepOutputs?: string[];
+  permissionMode?: 'safe' | 'ask' | 'allow-all';
+  unavailableAgentSlugs?: string[];
+} = {}): MockHarness {
   const sessions = new Map<string, SessionRecord>();
   const promptsSent: Array<{ sessionId: string; prompt: string }> = [];
   const events: WorkflowRunEvent[] = [];
@@ -134,6 +138,11 @@ function makeHarness(opts: { stepOutputs?: string[]; permissionMode?: 'safe' | '
         },
       },
     }),
+    preflightStepAgent: async (_workspaceId, agentSlug) => {
+      if (opts.unavailableAgentSlugs?.includes(agentSlug)) {
+        throw new Error(`Agent not found: ${agentSlug}`);
+      }
+    },
     sendMessage: async (sessionId, prompt) => {
       const rec = sessions.get(sessionId);
       if (!rec) throw new Error(`unknown session ${sessionId}`);
@@ -1129,6 +1138,55 @@ describe('WorkflowRunner', () => {
     expect(originalOnDisk?.state).toBe('failed');
     expect(originalOnDisk?.steps[1]!.error?.message).toBe('boom');
     expect(originalOnDisk?.resumedByRunId).toBe(rerun.id);
+  });
+
+  test('start rejects missing step agents before persisting a running run', async () => {
+    const h = makeHarness({ unavailableAgentSlugs: ['writer'] });
+    const runner = new WorkflowRunner(h.deps);
+
+    await expect(
+      runner.start({
+        workflow: makeWorkflow(),
+        workspaceId: WORKSPACE_ID,
+        triggerInputs: { topic: 'x' },
+      }),
+    ).rejects.toThrow(/Workflow step "second" references unavailable agent "writer"/);
+
+    expect(h.sessions.size).toBe(0);
+    expect(h.events).toHaveLength(0);
+  });
+
+  test('rerun rejects missing rerun step agents before persisting a running run', async () => {
+    const h = makeHarness({ unavailableAgentSlugs: ['writer'] });
+    const runner = new WorkflowRunner(h.deps);
+    const now = new Date().toISOString();
+    const original: WorkflowRunSnapshot = {
+      id: FAILED_RUN_ID,
+      workflowSlug: 'test-flow',
+      workspaceId: WORKSPACE_ID,
+      state: 'failed',
+      trigger: { type: 'manual', inputs: { topic: 'rerun' }, firedAt: now },
+      workflowSnapshot: {
+        metadata: makeWorkflow().metadata,
+        body: 'original body',
+      },
+      steps: [
+        { id: 'first', state: 'succeeded', attempts: 1, output: 'ORIGINAL_FIRST' },
+        { id: 'second', state: 'failed', attempts: 1 },
+      ],
+      createdAt: now,
+      updatedAt: now,
+      completedAt: now,
+    };
+    writeRun(workspaceRoot, original);
+
+    await expect(
+      runner.rerunFromStep({ workspaceId: WORKSPACE_ID, runId: original.id }),
+    ).rejects.toThrow(/Workflow step "second" references unavailable agent "writer"/);
+
+    expect(h.sessions.size).toBe(0);
+    const originalOnDisk = readRun(workspaceRoot, original.id);
+    expect(originalOnDisk?.resumedByRunId).toBeUndefined();
   });
 
   test('rerun rejects an invalid step id', async () => {

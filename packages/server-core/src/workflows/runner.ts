@@ -84,6 +84,11 @@ export interface WorkflowRunnerDeps {
     workspaceId: string,
     agentSlug: string,
   ) => Promise<Partial<CreateSessionOptions>>;
+  /** Cheap preflight for step agent availability before a run is persisted. */
+  preflightStepAgent?: (
+    workspaceId: string,
+    agentSlug: string,
+  ) => Promise<void> | void;
   /**
    * Send a message and wait for the LLM turn to complete. Mirrors
    * `SessionManager.sendMessage` — that method already returns when the
@@ -186,6 +191,7 @@ export class WorkflowRunner {
         `Workflow "${workflow.slug}" already has an active run in workspace "${workspaceId}".`,
       );
     }
+    await this.preflightStepAgents(workspaceId, workflow.metadata.steps);
 
     const now = new Date().toISOString();
     const runId = randomUUID();
@@ -279,6 +285,7 @@ export class WorkflowRunner {
         `Workflow "${original.workflowSlug}" already has an active run in workspace "${input.workspaceId}".`,
       );
     }
+    await this.preflightStepAgents(input.workspaceId, workflowSnapshot.metadata.steps.slice(startIndex));
 
     const now = new Date().toISOString();
     const steps: WorkflowRunStep[] = workflowSnapshot.metadata.steps.map((step, index) => {
@@ -337,6 +344,21 @@ export class WorkflowRunner {
     void this.runStepLoop(active);
 
     return this.cloneSnapshot(active.snapshot);
+  }
+
+  private async preflightStepAgents(workspaceId: string, steps: WorkflowStep[]): Promise<void> {
+    if (!this.deps.preflightStepAgent) return;
+    const seen = new Set<string>();
+    for (const step of steps) {
+      if (seen.has(step.agent)) continue;
+      seen.add(step.agent);
+      try {
+        await this.deps.preflightStepAgent(workspaceId, step.agent);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(`Workflow step "${step.id}" references unavailable agent "${step.agent}": ${message}`);
+      }
+    }
   }
 
   /**

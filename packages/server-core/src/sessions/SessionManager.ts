@@ -1709,11 +1709,10 @@ export class SessionManager implements ISessionManager {
           startWorkflow: async ({ workflowSlug, triggerInputs }) => {
             try {
               if (!readActivatedWorkflows(workspaceRootPath).active.includes(workflowSlug)) {
-                sessionLog.warn(`[Pulse] Workflow "${workflowSlug}" is not active in workspace ${workspaceId}; skipping`)
-                return null
+                return { error: `Workflow "${workflowSlug}" is not active in this workspace.` }
               }
               const wf = loadGlobalWorkflow(workflowSlug)
-              if (!wf) return null
+              if (!wf) return { error: `Workflow not found: ${workflowSlug}` }
               const result = await this.workflowRunner.start({
                 workflow: wf,
                 workspaceId,
@@ -1722,7 +1721,7 @@ export class SessionManager implements ISessionManager {
               return { runId: result.id }
             } catch (err) {
               sessionLog.error('[Pulse] Failed to start workflow:', err)
-              return null
+              return { error: err instanceof Error ? err.message : String(err) }
             }
           },
           emitNotification: (n) => {
@@ -1816,21 +1815,40 @@ export class SessionManager implements ISessionManager {
   ): Promise<Partial<CreateSessionOptions>> {
     const ws = getWorkspaceByNameOrId(workspaceId)
     if (!ws) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { loadGlobalAgent } = await import('@craft-agent/shared/agent-definitions')
     const { loadActiveContextDocsForAgent } = await import('@craft-agent/shared/workspace-context')
     const agent = loadGlobalAgent(agentSlug)
     if (!agent) throw new Error(`Agent not found: ${agentSlug}`)
     const skills = loadAllSkills(ws.rootPath)
     const skillBySlug = new Map(skills.map((s) => [s.slug, s]))
-    const resolvedSkillSlugs = (agent.metadata.skills ?? []).filter((slug) => skillBySlug.has(slug))
+    const declaredSkillSlugs = agent.metadata.skills ?? []
+    const resolvedSkillSlugs = declaredSkillSlugs.filter((slug) => skillBySlug.has(slug))
+    const missingSkillSlugs = declaredSkillSlugs.filter((slug) => !skillBySlug.has(slug))
+    if (missingSkillSlugs.length > 0) {
+      throw new Error(`Agent "${agentSlug}" references unavailable skills in this workspace: ${missingSkillSlugs.join(', ')}`)
+    }
     const sources = getSourcesBySlugs(ws.rootPath, agent.metadata.sources ?? [])
-    const resolvedSourceSlugs = sources.map((s) => s.config.slug)
+    const declaredSourceSlugs = agent.metadata.sources ?? []
+    const sourceBySlug = new Map(sources.map((s) => [s.config.slug, s]))
+    const missingSourceSlugs = declaredSourceSlugs.filter((slug) => !sourceBySlug.has(slug))
+    const unusableSourceSlugs = declaredSourceSlugs.filter((slug) => {
+      const source = sourceBySlug.get(slug)
+      return source ? !isSourceUsable(source) : false
+    })
+    const sourceProblems = [
+      ...missingSourceSlugs.map((slug) => `${slug} (not active in this workspace)`),
+      ...unusableSourceSlugs.map((slug) => `${slug} (disabled or unauthenticated)`),
+    ]
+    if (sourceProblems.length > 0) {
+      throw new Error(`Agent "${agentSlug}" references unavailable sources in this workspace: ${sourceProblems.join(', ')}`)
+    }
+    const usableSources = sources.filter(isSourceUsable)
+    const resolvedSourceSlugs = usableSources.map((s) => s.config.slug)
     const contextDocs = loadActiveContextDocsForAgent(ws.rootPath, agent.slug)
     const [userMemoryEntries, agentMemoryEntries] = await Promise.all([
       loadUserMemoryEntries(),
       loadAgentMemoryEntries(agent.slug),
     ])
-    const customSystemPrompt = buildWorkflowAgentPrompt(agent, skills, sources, contextDocs, {
+    const customSystemPrompt = buildWorkflowAgentPrompt(agent, skills, usableSources, contextDocs, {
       userEntries: userMemoryEntries,
       agentEntries: agentMemoryEntries,
     })
@@ -2318,6 +2336,9 @@ user a clickable link to where the thing now lives.`
         createSession: (wsId, opts) => this.createSession(wsId, opts).then((s) => ({ id: s.id })),
         resolveAgentSessionOptions: (wsId, agentSlug) =>
           this.resolveAgentSessionOptions(wsId, agentSlug),
+        preflightStepAgent: async (wsId, agentSlug) => {
+          await this.resolveAgentSessionOptions(wsId, agentSlug)
+        },
         sendMessage: (sessionId, prompt) => this.sendMessage(sessionId, prompt),
         getLastAssistantText: (sessionId) => this.getLastAssistantTextForSession(sessionId),
         getSessionToolUseCount: (sessionId) => {

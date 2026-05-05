@@ -19,17 +19,24 @@ Concierge: Here's the WORKFLOW.md draft:
 
 User: Yes.
 
-Concierge: Use slug `bug-fix-plan`. Create a workflow from Workflows, then
-            paste this source into the editor.
+Concierge: I can save this as `bug-fix-plan`. Confirm create?
+
+User: Yes.
+
+Concierge: Created workflow `bug-fix-plan`. It is now in the global workflow
+            library and active in this workspace.
 ```
 
-## Current limitation
+## Save behavior
 
-There is no `create_workflow` session tool today. Unlike `agent-creator` and
-`automation-creator`, this skill does not claim it can save directly. It drafts
-valid `WORKFLOW.md` source that the user can paste into the workflow editor.
-It can use `list_agents` to verify agent slugs and `list_workflows` /
-`get_workflow` to avoid duplicating an existing workflow.
+The skill drafts valid `WORKFLOW.md` source first, asks for explicit
+confirmation, then saves through the `create_workflow` session tool. The save
+path writes the workflow to the global library and activates it in the current
+workspace unless activation fails and is reported separately.
+
+It can use `list_agents` to verify agent slugs, `list_workflows` / `get_workflow`
+to avoid duplicating an existing workflow, and `create_workflow` to save the
+confirmed source.
 
 ## Skill frontmatter
 
@@ -41,8 +48,9 @@ tools:
   - list_agents
   - list_workflows
   - get_workflow
+  - create_workflow
 inputs: A description of a repeatable multi-step agent workflow.
-outputs: A complete WORKFLOW.md draft the user can save in the workflow editor.
+outputs: A confirmed workflow saved to the library, or a complete WORKFLOW.md draft when the user declines saving.
 tags: [creator, meta, workflows]
 ---
 ```
@@ -96,15 +104,9 @@ If the user already supplied enough detail, draft immediately.
   `outputSchema`.
 - Do not use expressions, filters, conditionals, loops, or future-step references.
 
-## Draft and handoff
+## Draft and save
 
 Always show a complete `WORKFLOW.md` source draft and ask for explicit
-confirmation. After confirmation, provide:
-
-- the suggested slug;
-- the confirmed source;
-- the exact handoff: create a workflow from Workflows and paste the source into
-  the editor.
-
-If a structured workflow save tool is added later, keep the same draft-first
-confirmation flow before invoking it.
+confirmation before invoking `create_workflow`. After confirmation, provide the
+chosen slug and the create result. If the tool reports activation failure,
+clearly say the workflow was saved but is not active in the current workspace.

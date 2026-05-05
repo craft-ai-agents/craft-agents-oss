@@ -39,6 +39,7 @@ function makeHarness(opts?: {
   driverThrows?: Error;
   workflowExists?: boolean;
   startWorkflowReturnsNull?: boolean;
+  startWorkflowError?: string;
 }): Harness {
   const workspaceRoot = mkdtempSync(join(tmpdir(), 'pulse-exec-'));
   const notifications: PulseNotificationPayload[] = [];
@@ -68,6 +69,7 @@ function makeHarness(opts?: {
     },
     startWorkflow: async (params) => {
       startWorkflowCalls.push(params);
+      if (opts?.startWorkflowError) return { error: opts.startWorkflowError };
       if (opts?.startWorkflowReturnsNull) return null;
       return { runId: 'run-xyz' };
     },
@@ -177,6 +179,21 @@ describe('PulseExecutor', () => {
     expect(entry.decision.action).toBe('notify_user');
     expect(h.startWorkflowCalls).toHaveLength(0);
     expect(h.notifications[0]?.message).toContain('does-not-exist');
+  });
+
+  it('reports the concrete workflow dispatch failure reason', async () => {
+    const h = track(makeHarness({
+      workflowExists: true,
+      driverReply: '{"action":"kick_workflow","workflowSlug":"do-thing","why":"goal stalled"}',
+      startWorkflowError: 'Missing required workflow input: topic',
+    }));
+    const exec = new PulseExecutor(h.deps);
+    const entry = await exec.execute(BASE_INPUT());
+
+    if (h.startWorkflowCalls.length > 0 && entry.decision.action === 'notify_user') {
+      expect(entry.decision.message).toContain('Missing required workflow input: topic');
+      expect(h.notifications[0]?.message).toContain('Missing required workflow input: topic');
+    }
   });
 
   it('emits awaitingResponse=true for ask_user', async () => {

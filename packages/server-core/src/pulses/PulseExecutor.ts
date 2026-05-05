@@ -65,12 +65,12 @@ export interface PulseExecutorDeps {
     rawAssistantText: string;
     durationMs: number;
   }>;
-  /** Kick a workflow when decision === kick_workflow. Returns null if workflow gone. */
+  /** Kick a workflow when decision === kick_workflow. Returns null if workflow gone before dispatch. */
   startWorkflow: (params: {
     workspaceId: string;
     workflowSlug: string;
     triggerInputs: Record<string, unknown>;
-  }) => Promise<{ runId: string } | null>;
+  }) => Promise<{ runId: string } | { error: string } | null>;
   /** Emit a notification (bell / concierge / messaging). */
   emitNotification: (n: PulseNotificationPayload) => void;
   /** Optional list of recent session metadata for the diff. */
@@ -377,10 +377,13 @@ export class PulseExecutor {
           workflowSlug: decision.workflowSlug,
           triggerInputs: decision.inputs ?? {},
         });
-        if (!started) {
+        if (!started || 'error' in started) {
+          const reason = started && 'error' in started
+            ? started.error
+            : 'workflow was no longer available at dispatch time';
           dispatched = {
             action: 'notify_user',
-            message: `Pulse failed to start workflow "${decision.workflowSlug}" (vanished between validation and dispatch). Original reason: ${decision.why}`,
+            message: `Pulse failed to start workflow "${decision.workflowSlug}": ${reason}. Original reason: ${decision.why}`,
             urgency: 'normal',
             goalSlug: decision.goalSlug,
           };
@@ -446,4 +449,3 @@ export class PulseExecutor {
     return entry;
   }
 }
-

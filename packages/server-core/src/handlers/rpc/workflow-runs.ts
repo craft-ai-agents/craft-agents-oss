@@ -95,6 +95,18 @@ export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDep
       runId: string,
       stepId?: string,
     ): Promise<WorkflowRunSnapshot> => {
+      const workspaceRoot = resolveRootPath(workspaceId)
+      const original = readRun(workspaceRoot, runId)
+      if (!original) throw new Error(`Workflow run not found: ${runId}`)
+      if (original.workspaceId !== workspaceId) {
+        throw new Error(`Workflow run "${runId}" does not belong to workspace "${workspaceId}".`)
+      }
+      if (!readActivatedWorkflows(workspaceRoot).active.includes(original.workflowSlug)) {
+        throw new Error(`Workflow "${original.workflowSlug}" is not active in this workspace.`)
+      }
+      const workflow = loadGlobalWorkflow(original.workflowSlug)
+      if (!workflow) throw new Error(`Workflow not found: ${original.workflowSlug}`)
+      normalizeWorkflowTriggerInputs(workflow, original.trigger.inputs)
       const runner = requireRunner(deps)
       return runner.rerunFromStep({ workspaceId, runId, stepId })
     },
