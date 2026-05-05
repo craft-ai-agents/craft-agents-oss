@@ -14,7 +14,7 @@ import {
   listRuns,
   deleteRun,
   type WorkflowRunSnapshot,
-  type LoadedWorkflow,
+  normalizeWorkflowTriggerInputs,
 } from '@craft-agent/shared/workflows'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import type { RpcServer } from '@craft-agent/server-core/transport'
@@ -45,38 +45,6 @@ function requireRunner(deps: HandlerDeps) {
   return deps.getWorkflowRunner()
 }
 
-function normalizeTriggerInputs(
-  workflow: LoadedWorkflow,
-  raw: Record<string, unknown>,
-): Record<string, unknown> {
-  const inputDefs = workflow.metadata.trigger.inputs ?? []
-  if (inputDefs.length === 0) return {}
-  const out: Record<string, unknown> = {}
-  for (const def of inputDefs) {
-    let value = raw?.[def.name]
-    if (value === undefined) value = def.default
-    if (def.required && (value === undefined || value === null || value === '')) {
-      throw new Error(`Missing required workflow input: ${def.name}`)
-    }
-    if (value === undefined || value === null || value === '') {
-      continue
-    }
-    if (def.type === 'string') {
-      if (typeof value !== 'string') throw new Error(`Workflow input "${def.name}" must be a string.`)
-      out[def.name] = value
-    } else if (def.type === 'number') {
-      if (typeof value !== 'number' || Number.isNaN(value)) {
-        throw new Error(`Workflow input "${def.name}" must be a number.`)
-      }
-      out[def.name] = value
-    } else if (def.type === 'boolean') {
-      if (typeof value !== 'boolean') throw new Error(`Workflow input "${def.name}" must be a boolean.`)
-      out[def.name] = value
-    }
-  }
-  return out
-}
-
 export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDeps): void {
   server.handle(
     RPC_CHANNELS.workflowRuns.START,
@@ -93,7 +61,7 @@ export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDep
       const workflow = loadGlobalWorkflow(workflowSlug)
       if (!workflow) throw new Error(`Workflow not found: ${workflowSlug}`)
       const runner = requireRunner(deps)
-      return runner.start({ workflow, workspaceId, triggerInputs: normalizeTriggerInputs(workflow, triggerInputs) })
+      return runner.start({ workflow, workspaceId, triggerInputs: normalizeWorkflowTriggerInputs(workflow, triggerInputs) })
     },
   )
 

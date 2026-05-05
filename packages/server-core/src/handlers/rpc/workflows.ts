@@ -68,21 +68,21 @@ export function registerWorkflowsHandlers(server: RpcServer, deps: HandlerDeps):
 
   server.handle(RPC_CHANNELS.workflows.UPSERT, async (_ctx, payload: UpsertWorkflowPayload): Promise<LoadedWorkflow> => {
     return withLibraryMutex(async () => {
+      const activationWorkspace = payload.activateInWorkspaceId
+        ? getWorkspaceByNameOrId(payload.activateInWorkspaceId)
+        : null
+      if (payload.activateInWorkspaceId && !activationWorkspace) {
+        throw new Error(`Workspace not found: ${payload.activateInWorkspaceId}`)
+      }
+
       const loaded = writeGlobalWorkflow({
         slug: payload.slug,
         metadata: payload.metadata,
         body: payload.body,
       })
 
-      if (payload.activateInWorkspaceId) {
-        const workspace = getWorkspaceByNameOrId(payload.activateInWorkspaceId)
-        if (workspace) {
-          try {
-            setWorkflowActive(workspace.rootPath, payload.slug, true)
-          } catch (err) {
-            log.warn(`[workflows] Failed to auto-activate "${payload.slug}" in workspace ${payload.activateInWorkspaceId}:`, err as Error)
-          }
-        }
+      if (activationWorkspace) {
+        setWorkflowActive(activationWorkspace.rootPath, payload.slug, true)
       }
 
       broadcastChanged(deps, payload.activateInWorkspaceId ?? null, loadAllGlobalWorkflows())

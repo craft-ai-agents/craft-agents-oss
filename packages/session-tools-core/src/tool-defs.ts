@@ -842,6 +842,7 @@ Use this only after walking the user through the workflow-creator interview and 
 - \`overwrite\` (default false): only set true if the user explicitly asked to replace an existing workflow.
 
 **Reliability defaults:**
+- Prefer fewer, richer steps. Split only at real agent/tool/artifact/retry boundaries; do not model tiny routing or conversational nodes as workflow steps.
 - Use \`outputSchema\` when later steps need fields from earlier steps.
 - Use \`completion.requireToolUse\` when the step must inspect files, sources, browser, etc.
 - Use \`completion.minOutputChars\` for substantive report/draft steps.

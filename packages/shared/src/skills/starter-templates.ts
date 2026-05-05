@@ -331,6 +331,20 @@ If the user already gave enough detail, skip the interview and draft.
   - \`{{run.startedAt}}\`
 - No expressions, filters, conditionals, loops, or future-step references.
 
+## Step sizing principle
+
+Prefer **fewer, richer steps**. A workflow step should represent a real handoff
+boundary: a different specialist agent, a required tool/source boundary, a
+durable intermediate artifact, or a retryable external operation. Do not split
+normal reasoning into micro-steps such as "decide next action", "summarize so
+far", "choose route", or single-question conversational nodes. If one capable
+agent can hold the full procedure in context and produce the result cleanly,
+keep that work inside one step.
+
+Most useful workflows have 2-5 substantive steps. Use more only when the user
+explicitly needs a longer production line or the artifact/tool boundaries are
+real.
+
 ## Structured output
 
 Use \`outputSchema\` when a later step needs reliable fields from an earlier
@@ -367,8 +381,9 @@ Design each step as a contract:
 
 Good workflow step prompts include: the exact task, relevant trigger inputs,
 previous-step context, output expectations, and failure boundaries. Do not ask
-one step to both deeply research, critique, rewrite, and publish unless those
-are truly inseparable; split those into chained agents.
+the runner to act like a LangGraph-style router. Split only when a later step
+needs a different agent, tool boundary, durable structured output, retry policy,
+or separately inspectable artifact.
 
 ## Reliability defaults
 

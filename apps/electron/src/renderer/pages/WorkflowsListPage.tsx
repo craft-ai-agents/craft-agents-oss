@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
-import { Workflow as WorkflowIcon, Plus, Pencil, Trash2, Play, MoreHorizontal } from 'lucide-react'
+import { Workflow as WorkflowIcon, Plus, Pencil, Trash2, Play, CircleMinus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../shared/routes'
@@ -102,7 +102,16 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
   const handleActivate = async (workflow: WorkflowDTO) => {
     try {
       await setActive(workflow.slug, true)
-      toast.success(`Activated ${workflow.metadata.name}`)
+      toast.success(t('workflows.list.activated', { name: workflow.metadata.name }))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const handleDeactivate = async (workflow: WorkflowDTO) => {
+    try {
+      await setActive(workflow.slug, false)
+      toast.success(t('workflows.list.deactivated', { name: workflow.metadata.name }))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     }
@@ -139,24 +148,35 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
             <td className="px-3 py-2">
               <div className="flex items-center justify-end gap-1">
                 {opts.active ? (
-                  <button
-                    type="button"
-                    onClick={() => setRunDialogWorkflow(wf)}
-                    className="h-7 px-2 inline-flex items-center gap-1 rounded-md hover:bg-foreground/5 text-xs"
-                    aria-label={`Run ${wf.metadata.name}`}
-                  >
-                    <Play className="h-3 w-3" />
-                    {t('workflows.list.run')}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setRunDialogWorkflow(wf)}
+                      className="h-7 px-2 inline-flex items-center gap-1 rounded-md hover:bg-foreground/5 text-xs"
+                      aria-label={`Run ${wf.metadata.name}`}
+                    >
+                      <Play className="h-3 w-3" />
+                      {t('workflows.list.run')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeactivate(wf)}
+                      className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-foreground/5"
+                      aria-label={`${t('workflows.list.deactivate')} ${wf.metadata.name}`}
+                      title={t('workflows.list.deactivate')}
+                    >
+                      <CircleMinus className="h-3.5 w-3.5" />
+                    </button>
+                  </>
                 ) : (
                   <button
                     type="button"
                     onClick={() => void handleActivate(wf)}
                     className="h-7 px-2 inline-flex items-center gap-1 rounded-md hover:bg-foreground/5 text-xs"
-                    aria-label={`Activate ${wf.metadata.name}`}
+                    aria-label={`${t('workflows.list.activate')} ${wf.metadata.name}`}
                   >
                     <Plus className="h-3 w-3" />
-                    Activate
+                    {t('workflows.list.activate')}
                   </button>
                 )}
                 <button
@@ -301,7 +321,3 @@ export function RunStateDot({ state }: { state: WorkflowRunState }) {
     </span>
   )
 }
-
-// Avoid a "MoreHorizontal not used" lint warning if we ever drop the menu
-// but keep the import grouped for parity with other tables.
-void MoreHorizontal

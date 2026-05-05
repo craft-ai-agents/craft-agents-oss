@@ -96,6 +96,7 @@ import { OutputService } from '../outputs/OutputService'
 import {
   loadAllGlobalWorkflows,
   loadGlobalWorkflow,
+  normalizeWorkflowTriggerInputs,
   readActivatedWorkflows,
   readRun as readWorkflowRun,
   setWorkflowActive,
@@ -1716,7 +1717,7 @@ export class SessionManager implements ISessionManager {
               const result = await this.workflowRunner.start({
                 workflow: wf,
                 workspaceId,
-                triggerInputs,
+                triggerInputs: normalizeWorkflowTriggerInputs(wf, triggerInputs),
               })
               return { runId: result.id }
             } catch (err) {
@@ -4578,29 +4579,10 @@ user a clickable link to where the thing now lives.`
           }
           const workflow = loadGlobalWorkflow(slug)
           if (!workflow) throw new Error(`Workflow not found: ${slug}`)
-          const normalizedInputs: Record<string, unknown> = {}
-          for (const def of workflow.metadata.trigger.inputs ?? []) {
-            let value = triggerInputs[def.name]
-            if (value === undefined) value = def.default
-            if (def.required && (value === undefined || value === null || value === '')) {
-              throw new Error(`Missing required workflow input: ${def.name}`)
-            }
-            if (value === undefined || value === null || value === '') continue
-            if (def.type === 'string') {
-              if (typeof value !== 'string') throw new Error(`Workflow input "${def.name}" must be a string.`)
-              normalizedInputs[def.name] = value
-            } else if (def.type === 'number') {
-              if (typeof value !== 'number' || Number.isNaN(value)) throw new Error(`Workflow input "${def.name}" must be a number.`)
-              normalizedInputs[def.name] = value
-            } else if (def.type === 'boolean') {
-              if (typeof value !== 'boolean') throw new Error(`Workflow input "${def.name}" must be a boolean.`)
-              normalizedInputs[def.name] = value
-            }
-          }
           return this.workflowRunner.start({
             workflow,
             workspaceId: managed.workspace.id,
-            triggerInputs: normalizedInputs,
+            triggerInputs: normalizeWorkflowTriggerInputs(workflow, triggerInputs),
           })
         },
         getWorkflowRunFn: (runId: string) => {

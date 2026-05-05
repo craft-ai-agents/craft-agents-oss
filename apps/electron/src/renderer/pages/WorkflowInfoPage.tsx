@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
-import { Pencil, Play, AlertTriangle, Workflow as WorkflowIcon, Plus } from 'lucide-react'
+import { Pencil, Play, AlertTriangle, Workflow as WorkflowIcon, Plus, CircleMinus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../shared/routes'
@@ -55,7 +55,17 @@ export default function WorkflowInfoPage({ workflowSlug, workspaceId }: Props) {
     if (!workflow) return
     try {
       await setActive(workflow.slug, true)
-      toast.success(`Activated ${workflow.metadata.name}`)
+      toast.success(t('workflows.list.activated', { name: workflow.metadata.name }))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const handleDeactivate = async () => {
+    if (!workflow) return
+    try {
+      await setActive(workflow.slug, false)
+      toast.success(t('workflows.list.deactivated', { name: workflow.metadata.name }))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     }
@@ -95,14 +105,20 @@ export default function WorkflowInfoPage({ workflowSlug, workspaceId }: Props) {
               {t('common.edit')}
             </Button>
             {isActive ? (
-              <Button size="sm" onClick={() => setRunDialogOpen(true)}>
-                <Play className="h-3.5 w-3.5 mr-1.5" />
-                {t('workflows.list.run')}
-              </Button>
+              <>
+                <Button size="sm" variant="outline" onClick={() => void handleDeactivate()} disabled={workflowsLoading}>
+                  <CircleMinus className="h-3.5 w-3.5 mr-1.5" />
+                  {t('workflows.list.deactivate')}
+                </Button>
+                <Button size="sm" onClick={() => setRunDialogOpen(true)}>
+                  <Play className="h-3.5 w-3.5 mr-1.5" />
+                  {t('workflows.list.run')}
+                </Button>
+              </>
             ) : (
               <Button size="sm" onClick={() => void handleActivate()} disabled={workflowsLoading}>
                 <Plus className="h-3.5 w-3.5 mr-1.5" />
-                Activate
+                {t('workflows.list.activate')}
               </Button>
             )}
           </div>

@@ -71,6 +71,8 @@ describe('STARTER_SKILLS', () => {
     const parsed = matter(getSkillMd(skill!));
     expect(parsed.data.tools).toContain('create_workflow');
     expect(parsed.content).toContain('Use `create_workflow` to save');
+    expect(parsed.content).toContain('## Step sizing principle');
+    expect(parsed.content).toContain('Prefer **fewer, richer steps**');
     expect(parsed.content).toContain('## Chaining pattern');
     expect(parsed.content).toContain('## Reliability defaults');
     expect(parsed.content).toContain('`image`, `video`, `audio`');
