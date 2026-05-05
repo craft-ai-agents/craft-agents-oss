@@ -48,12 +48,16 @@ function sameRow(a: PendingSender, b: PendingSender): boolean {
 
 interface Props {
   workspaceId: string
+  /** Workspace-level Telegram access mode. Controlled by the parent so the
+   *  same source of truth drives the banner, the collapsible subtitle, and
+   *  the platform-row dropdown's Lock-down / Unlock affordances. */
+  accessMode: PlatformAccessMode
+  onAccessModeChange: (mode: PlatformAccessMode) => void
 }
 
-export function TelegramAccessSection({ workspaceId }: Props) {
+export function TelegramAccessSection({ workspaceId, accessMode, onAccessModeChange }: Props) {
   const { t } = useTranslation()
   const allBindings = useAtomValue(messagingBindingsAtom)
-  const [accessMode, setAccessMode] = React.useState<PlatformAccessMode>('open')
   const [owners, setOwners] = React.useState<PlatformOwner[]>([])
   const [pending, setPending] = React.useState<PendingSender[]>([])
 
@@ -69,12 +73,10 @@ export function TelegramAccessSection({ workspaceId }: Props) {
   const showBanner = accessMode === 'open' || hasOpenBinding
 
   const loadAll = React.useCallback(async () => {
-    const [m, o, p] = await Promise.all([
-      window.electronAPI.getMessagingPlatformAccessMode('telegram').catch(() => 'open'),
+    const [o, p] = await Promise.all([
       window.electronAPI.getMessagingPlatformOwners('telegram').catch(() => []),
       window.electronAPI.getMessagingPendingSenders('telegram').catch(() => []),
     ])
-    setAccessMode(m as PlatformAccessMode)
     setOwners(o)
     setPending(p)
   }, [])
@@ -97,6 +99,7 @@ export function TelegramAccessSection({ workspaceId }: Props) {
     try {
       await window.electronAPI.setMessagingPlatformAccessMode('telegram', 'owner-only')
       toast.success(t('toast.messagingTelegramLockedDown'))
+      onAccessModeChange('owner-only')
       await loadAll()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('common.error'))

@@ -25,6 +25,7 @@ import {
   ChevronDown,
   ChevronRight,
   Hash,
+  LockOpen,
   MessageSquare,
   MessagesSquare,
   MoreHorizontal,
@@ -57,6 +58,7 @@ import {
   TelegramAccessSection,
   type BindingAccess,
   type BindingAccessMode,
+  type PlatformAccessMode,
   type PlatformOwner,
 } from '@/components/messaging/access'
 import { useActiveWorkspace } from '@/context/AppShellContext'
@@ -208,6 +210,12 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
   const [supergroup, setSupergroup] = React.useState<{ chatId: string; title: string } | null>(null)
   const [supergroupDialogOpen, setSupergroupDialogOpen] = React.useState(false)
 
+  // Telegram workspace access mode — telegram only. Lifted up so the
+  // dropdown can decide whether to show "Unlock", and TelegramAccessSection
+  // receives it as a controlled prop. Symmetric with `supergroup` state.
+  const [telegramAccessMode, setTelegramAccessMode] =
+    React.useState<PlatformAccessMode>('open')
+
   const refreshSupergroup = React.useCallback(async () => {
     if (platform !== 'telegram') return
     try {
@@ -218,9 +226,32 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
     }
   }, [platform])
 
+  const refreshTelegramAccessMode = React.useCallback(async () => {
+    if (platform !== 'telegram') return
+    try {
+      const mode = await window.electronAPI.getMessagingPlatformAccessMode('telegram')
+      setTelegramAccessMode(mode as PlatformAccessMode)
+    } catch {
+      // silent — default 'open' covers fresh / disconnected state
+    }
+  }, [platform])
+
   React.useEffect(() => {
     refreshSupergroup()
   }, [refreshSupergroup, workspaceId])
+
+  React.useEffect(() => {
+    if (platform !== 'telegram') return
+    void refreshTelegramAccessMode()
+    // Lock-down migrates open bindings → inherit, which fires
+    // onMessagingBindingChanged. Unlock doesn't migrate, but PlatformRow
+    // and TelegramAccessSection both call setTelegramAccessMode after the
+    // API write, so the prop stays in sync without an extra event.
+    const off = window.electronAPI.onMessagingBindingChanged((wsId) => {
+      if (wsId === workspaceId) void refreshTelegramAccessMode()
+    })
+    return () => off()
+  }, [platform, workspaceId, refreshTelegramAccessMode])
 
   const platformBindings = React.useMemo(
     () =>
@@ -262,6 +293,16 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
   const handleReconfigure = () => {
     setReconfigure(true)
     setConnectOpen(true)
+  }
+
+  const handleUnlock = async () => {
+    try {
+      await window.electronAPI.setMessagingPlatformAccessMode('telegram', 'open')
+      toast.success(t('toast.messagingTelegramUnlocked'))
+      setTelegramAccessMode('open')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('common.error'))
+    }
   }
 
   const handleDisconnect = async () => {
@@ -335,6 +376,12 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
                         })}
                       </span>
                     </StyledDropdownMenuItem>
+                    {telegramAccessMode === 'owner-only' && (
+                      <StyledDropdownMenuItem onClick={() => runAfterMenuClose(handleUnlock)}>
+                        <LockOpen className="h-3.5 w-3.5" />
+                        <span>{t('settings.messaging.telegram.unlock')}</span>
+                      </StyledDropdownMenuItem>
+                    )}
                     <StyledDropdownMenuSeparator />
                     <StyledDropdownMenuItem onClick={handleDisconnect} variant="destructive">
                       <PowerOff className="h-3.5 w-3.5" />
@@ -370,7 +417,11 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
 
         {platform === 'telegram' && runtime.connected ? (
           <>
-            <TelegramAccessSection workspaceId={workspaceId} />
+            <TelegramAccessSection
+              workspaceId={workspaceId}
+              accessMode={telegramAccessMode}
+              onAccessModeChange={setTelegramAccessMode}
+            />
             <TelegramBindingsBody
               bindings={platformBindings}
               sessionMetaMap={sessionMetaMap}

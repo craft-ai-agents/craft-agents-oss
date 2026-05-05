@@ -128,6 +128,20 @@ fi
 # If en.json is staged, verify all other locale files have the same keys.
 # This catches forgotten translations before they reach the repo.
 
+staged_locales="$(git diff --cached --name-only --diff-filter=ACMR | grep 'i18n/locales/.*\.json' || true)"
+if [ -n "$staged_locales" ]; then
+  if ! sort_result="$(bun run scripts/check-locales-sorted.ts $staged_locales 2>&1)"; then
+    echo ""
+    echo "🌐 i18n: Locale keys are not sorted alphabetically"
+    echo "$sort_result" | sed 's/^/   /'
+    echo ""
+    echo "   Fix: bun run sort:locales"
+    echo "   Skip: git commit --no-verify (not recommended)"
+    echo ""
+    exit 1
+  fi
+fi
+
 staged_en="$(git diff --cached --name-only --diff-filter=ACMR | grep 'i18n/locales/en.json' || true)"
 if [ -n "$staged_en" ]; then
   parity_result="$(python3 <<'PY'
