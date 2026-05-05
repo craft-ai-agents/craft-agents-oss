@@ -10,7 +10,6 @@
 import { useTranslation } from "react-i18next"
 import * as Icons from "lucide-react"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@craft-agent/ui"
-import { CraftAgentsSymbol } from "../icons/CraftAgentsSymbol"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
 import { TopBarButton } from "../ui/TopBarButton"
 import { cn } from "@/lib/utils"
@@ -269,7 +268,7 @@ export function TopBar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <TopBarButton aria-label={t("menu.craftMenu")}>
-              <CraftAgentsSymbol className="h-4 text-accent" />
+              <Icons.Plus className="h-4 w-4 text-accent" strokeWidth={1.75} />
             </TopBarButton>
           </DropdownMenuTrigger>
           <StyledDropdownMenuContent align="start" minWidth="min-w-48">

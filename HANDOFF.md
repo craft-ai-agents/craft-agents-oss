@@ -1,105 +1,89 @@
-# Handoff: RunnerOS Concierge Self-Edit Capability Vet
+# Handoff: RunnerOS General Continuation
 
 ## Mission
-RunnerOS is the local Electron/Bun/TypeScript fork of Craft Agents. The current goal is to make Concierge able to guide safe edits to RunnerOS itself through a configured local repo path, without assuming every user has the repo in the same place. The next agent's first job is not to extend the feature; it is to thoroughly vet the self-edit implementation for correctness, blast radius, UX gaps, and security/safety issues.
+RunnerOS is a local Electron/Bun/TypeScript agent workspace app forked from Craft Agents. The current product direction is an operator-style desktop app where HNIC/Concierge can create agents, workflows, automations, sources/tools, and run multi-step workflows across multiple workspaces. The immediate goal is to keep workflow/runtime reliability tight, avoid breaking workspace/global-library semantics, and continue with small verified product improvements.
 
 ## Current State
-- Repo path: `/Users/michaelb.williams/RunnerOS`
+- Repo: `/Users/michaelb.williams/RunnerOS`
 - Branch: `main`
-- Working tree is dirty from several recent feature/UI waves. Do not assume every changed file belongs to the self-edit feature.
-- Self-edit V1 is backend/shared only. There is no Settings UI yet.
-- The feature currently provides:
-  - Config shape for `developer.selfEdit`.
-  - Pure resolver for global vs workspace self-edit config.
-  - Repo validator that checks whether a path looks like RunnerOS.
-  - Hidden baked-in `runneros-self-edit` skill.
-  - Concierge-only starter metadata for the self-edit skill.
-  - Runtime prompt injection with resolved target path, enabled flag, command hints, and validation status when `runneros-self-edit` is active.
-- Focused tests and full typecheck passed after this work, but there has not been a fresh adversarial review.
+- Working tree should be clean after the latest handoff/UI commit. Verify with `git status --short`.
+- App was relaunched successfully with `bun run electron:start` after a top-bar icon change. Build completed; Electron is running.
+- User’s product rule: workflow steps may use global agents, but those agents must not silently lose declared skills/sources/tools in a workspace. If a global agent depends on a source/tool that is not active/authenticated/usable in the current workspace, fail clearly before the workflow starts.
 
 ## Tech Stack
-- Runtime: Bun, TypeScript, Electron, Vite, React.
-- Monorepo workspaces under `packages/*` and `apps/*`.
-- Core app areas touched here:
-  - `packages/shared` for config, skill, agent runtime, tests.
-  - `packages/server-core` for startup seeding/migration.
-  - `apps/electron` has unrelated UI/theme work in the dirty tree.
-- Build/test tools:
-  - `bun test`
-  - `bun run typecheck:all`
-  - `bun run electron:dev`
+- Monorepo: Bun workspaces, TypeScript, React, Electron, Vite.
+- Backend/runtime: `packages/server-core`, `packages/session-tools-core`, `packages/shared`.
+- UI: `apps/electron/src/renderer`.
+- Agent/workflow/source storage is mostly filesystem-backed under user config dirs.
+- Main verification commands: `bun test ...`, `bun run typecheck:all`, `bun run typecheck:electron`, `bun run electron:start`.
 
 ## Key Files To Read First
-- `/Users/michaelb.williams/RunnerOS/packages/shared/src/config/self-edit.ts` — new resolver and repo validator.
-- `/Users/michaelb.williams/RunnerOS/packages/shared/src/agent/base-agent.ts` — injects self-edit target context into the model turn.
-- `/Users/michaelb.williams/RunnerOS/packages/shared/src/skills/system.ts` — defines creator/system skill groups and marks `runneros-self-edit` as system-hidden.
-- `/Users/michaelb.williams/RunnerOS/packages/shared/src/skills/starter-templates.ts` — embeds the new `RunnerOS Self Edit` SKILL.md.
-- `/Users/michaelb.williams/RunnerOS/packages/shared/src/agent-definitions/starter-templates.ts` — gives Concierge the full system skill set; Orchestrator only creator/meta skills.
-- `/Users/michaelb.williams/RunnerOS/packages/shared/src/agent-definitions/storage.ts` — adds targeted built-in-agent skill migration helper.
-- `/Users/michaelb.williams/RunnerOS/packages/server-core/src/sessions/SessionManager.ts` — startup seeding and migration for built-in skills.
-- `/Users/michaelb.williams/RunnerOS/packages/shared/src/config/__tests__/self-edit.test.ts` — current test coverage for resolver/validator.
+- `/Users/michaelb.williams/RunnerOS/packages/server-core/src/workflows/runner.ts` — workflow run lifecycle, preflight hook, rerun path.
+- `/Users/michaelb.williams/RunnerOS/packages/server-core/src/sessions/SessionManager.ts` — workflow runner wiring, agent option resolution, Pulse dispatch.
+- `/Users/michaelb.williams/RunnerOS/packages/server-core/src/handlers/rpc/workflow-runs.ts` — manual start/resume RPC guards.
+- `/Users/michaelb.williams/RunnerOS/packages/server-core/src/pulses/PulseExecutor.ts` — Pulse kick_workflow failure reporting.
+- `/Users/michaelb.williams/RunnerOS/packages/server-core/src/workflows/runner.test.ts` — focused workflow tests.
+- `/Users/michaelb.williams/RunnerOS/packages/server-core/src/pulses/PulseExecutor.test.ts` — focused Pulse tests.
+- `/Users/michaelb.williams/RunnerOS/docs/creator-skills/04-workflow-creator.md` — updated docs for live `create_workflow` behavior.
+- `/Users/michaelb.williams/RunnerOS/apps/electron/src/renderer/components/app-shell/TopBar.tsx` — recent UI tweak: Craft menu icon changed from Craft symbol to plus.
 
 ## Recent Accomplishments
-- Added `SelfEditTargetConfig` and `DeveloperConfig` types.
-- Added `resolveSelfEditTarget(globalConfig, workspaceConfig)`:
-  - Workspace config overrides global config.
-  - `enabled` is only true when explicitly `true`.
-  - Path is expanded/resolved with existing path utilities.
-- Added `validateSelfEditRepo(repoPath)`:
-  - Fails on missing path, non-directory, invalid/missing `package.json`, missing `.git`, missing `apps/electron`, or missing `packages/shared`.
-  - Warns if no obvious dev/typecheck scripts are present.
-- Added `developer?: DeveloperConfig` to stored app config and workspace config types.
-- Added Zod validation for `developer.selfEdit` in config validation.
-- Added hidden starter skill `runneros-self-edit` with instructions for safe self-edit behavior.
-- Split system skill groups:
-  - `CREATOR_SYSTEM_SKILL_SLUGS`
-  - `CONCIERGE_SYSTEM_SKILL_SLUGS`
-  - `SYSTEM_GLOBAL_SKILL_SLUGS`
-- Updated starter agents:
-  - Concierge gets `CONCIERGE_SYSTEM_SKILL_SLUGS`.
-  - Orchestrator gets only `CREATOR_SYSTEM_SKILL_SLUGS`.
-- Added `ensureBuiltInAgentSkillsForSlug()` so startup can migrate Concierge without forcing self-edit onto Orchestrator.
-- Runtime now appends a “RunnerOS self-edit target” block to the turn when `runneros-self-edit` is one of the loaded skill paths.
+- Committed and pushed before this handoff:
+  - `30052d7 Harden workflow creation and activation`
+  - `74d50c9 Fix global source enabled state`
+  - `502d3aa Add Field Theory source`
+  - `a9bdd29 Use icon-only response actions`
+  - `6f4db1c Fix dev app root resolution`
+- Current session workflow reliability work committed as `40317eb Harden workflow run preflight`:
+  - Workflow start now preflights step agents before persisting a `running` run.
+  - Rerun/resume now preflights rerun step agents before persisting.
+  - RPC resume now re-checks workspace activation and current trigger input validity before rerun.
+  - Pulse `kick_workflow` now reports concrete dispatch failure reasons instead of always saying the workflow vanished.
+  - `SessionManager.resolveAgentSessionOptions()` now fails loudly if a global agent’s declared skills or sources cannot resolve/use in the current workspace.
+  - `preflightStepAgent` now uses the full agent session resolution path, so missing skills/sources are caught before workflow start.
+- Current session doc/UI work:
+  - Workflow creator doc now reflects the real draft-confirm-save `create_workflow` flow. This is included in `40317eb`.
+  - Top nav Craft `C` icon was replaced with a plus icon.
 
 ## Next Best Actions
-1. Do a cold, adversarial vet of the self-edit feature. Confirm whether the runtime actually loads the skill for existing Concierge sessions, whether disabled config is respected strongly enough, and whether prompt injection is scoped tightly enough.
-2. Verify startup migration behavior on existing `~/.agents/agents/concierge/AGENT.md` and `orchestrator/AGENT.md` without overwriting user-customized prompts.
-3. Check if `developer.selfEdit` needs persistence helpers or a Settings UI before it can be considered usable by non-dev users.
-4. Add any missing tests only after identifying real gaps. Avoid broad refactors.
+1. Review `SessionManager.resolveAgentSessionOptions()` in the latest committed workflow preflight work. Confirm fail-loud behavior is acceptable for all agent launches or only workflow-spawned launches. If too broad, split strict workflow preflight from normal chat session resolution.
+2. Add/adjust tests for missing/unusable skill/source preflight. Current runner tests cover missing agent via injected preflight, but not the real `SessionManager` resolver path.
+3. Run full verification again after any changes: focused workflow/Pulse tests, `bun run typecheck:all`, and optionally `bun run electron:build`.
+4. Commit only new coherent work; the workflow reliability batch is already committed.
 
 ## Major Risks / Watchouts
-- Current implementation tells the model when `enabled: false`, but does not enforce a hard runtime block beyond instructions. Decide whether that is acceptable for V1 or needs stricter gating.
-- `runneros-self-edit` is hidden from generic skills because it is in `SYSTEM_GLOBAL_SKILL_SLUGS`. Confirm this does not create missing-reference weirdness in UI/session creation.
-- Existing user-customized Concierge files may not receive updated prompt wording if migration pattern misses them. Migration should preserve user edits, but stale contradictory guidance is possible.
-- Validator checks repo shape, not git remote identity. A different monorepo with `apps/electron` and `packages/shared` could pass.
-- No UI exists yet to set `developer.selfEdit.repoPath`; manual config is still required.
-- Dirty worktree contains unrelated global-source, baked-in system skill, automation UI, and Haze theme changes. Do not revert or stage unrelated files blindly.
-- Untracked theme assets exist:
-  - `/Users/michaelb.williams/RunnerOS/apps/electron/resources/themes/haze-bg.jpeg`
-  - `/Users/michaelb.williams/RunnerOS/apps/electron/resources/themes/haze-bg.png`
+- Do not require workflow step agents to be workspace-active. User explicitly said global agents are fine.
+- Do require declared skills/sources/tools to be available in the current workspace. Silent degradation is the bug to prevent.
+- The strict missing skill/source check currently lives inside `resolveAgentSessionOptions()`, which is shared by workflow runner step spawning and Pulse driver spawning. Verify it does not accidentally break normal agent chat creation or agents with optional dormant sources.
+- Preserve unrelated user/agent changes if new dirty files appear. Do not revert or overwrite unrelated changes.
+- `bun run electron:start` is currently a long-running process. Do not leave duplicate Electron instances around if relaunching.
+- Root `AGENTS.md` does not exist in the repo, but the user supplied in-thread rules: ultra direct, verify current state, preserve unrelated changes, use `apply_patch`, and keep context tight.
 
 ## Commands / Verification
-- Already run successfully after self-edit work:
-  - `bun test packages/shared/src/config/__tests__/self-edit.test.ts packages/shared/src/skills/__tests__/starter-templates.test.ts packages/shared/src/agent-definitions/storage.test.ts packages/shared/src/skills/__tests__/storage.test.ts`
+- Already run successfully after the committed workflow backend changes:
+  - `bun test packages/server-core/src/workflows/runner.test.ts`
+  - `bun test packages/server-core/src/pulses/PulseExecutor.test.ts`
   - `bun run typecheck:all`
-  - `bun -e "import { validateSelfEditRepo } from './packages/shared/src/config/self-edit.ts'; console.log(JSON.stringify(validateSelfEditRepo(process.cwd()), null, 2))"` returned valid for `/Users/michaelb.williams/RunnerOS`.
-- First vet commands to rerun:
+- Already run successfully after top-bar UI tweak:
+  - `bun run typecheck:electron`
+  - `bun run electron:start` rebuilt and relaunched the app.
+- First commands for next agent:
   - `git status --short`
-  - `git diff -- packages/shared/src/config/self-edit.ts packages/shared/src/agent/base-agent.ts packages/shared/src/skills/system.ts packages/shared/src/skills/starter-templates.ts packages/shared/src/agent-definitions/starter-templates.ts packages/shared/src/agent-definitions/storage.ts packages/server-core/src/sessions/SessionManager.ts`
-  - Same focused `bun test ...` command above.
+  - `git diff --stat`
+  - `git diff -- packages/server-core/src/workflows/runner.ts packages/server-core/src/sessions/SessionManager.ts packages/server-core/src/handlers/rpc/workflow-runs.ts packages/server-core/src/pulses/PulseExecutor.ts`
+  - `bun test packages/server-core/src/workflows/runner.test.ts packages/server-core/src/pulses/PulseExecutor.test.ts`
   - `bun run typecheck:all`
 
 ## Working Rules For The Next Agent
-- Follow the user's preference: ultra-direct, practical, no giant status dumps.
-- First job is review/vetting. Do not immediately add UI or broaden scope unless the audit proves the base is sound.
-- Preserve unrelated working tree changes. Do not run destructive git commands.
-- Use `apply_patch` for manual file edits.
-- Treat existing indexes/source-of-truth rules from the prompt as active; this repo has no `AGENTS.md` file at root, but the user supplied those instructions in-thread.
-- If fixing issues, keep changes scoped to self-edit config/runtime/skill wiring unless a directly related test needs adjustment.
+- Be concise and factual. User wants direct execution, not a long advisory essay.
+- Read current files before assuming prior chat context is still true.
+- Preserve user/agent dirty work unless explicitly asked to revert it.
+- Use `rg` for search and `apply_patch` for manual edits.
+- Do not make workflow semantics stricter than the user chose: global library agents are valid; missing workspace tool/source readiness is not.
+- Prefer small reliability patches over broad architecture rewrites.
 
 ## Unknowns
-- Whether existing local Concierge already has stale/customized frontmatter that will affect migration.
-- Whether the current app config has any `developer.selfEdit` value set.
-- Whether the self-edit target should eventually be a real tool/RPC with hard permissions rather than prompt context.
-- Whether Settings UI should live under global app settings, workspace settings, or both.
-- Whether the feature should support multiple app repos/forks or exactly one RunnerOS repo path.
+- Whether strict skill/source resolution should apply only to workflow-spawned agents or all hidden agent sessions.
+- Whether there are agents with intentionally optional sources that should warn instead of fail.
+- Whether strict skill/source resolution should become a workflow-only preflight rather than shared agent-session resolution.
+- Whether starter workflow additions should be done next.
