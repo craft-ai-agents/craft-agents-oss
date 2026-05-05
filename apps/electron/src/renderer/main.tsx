@@ -14,7 +14,11 @@ import LanguageDetector from 'i18next-browser-languagedetector'
 import './index.css'
 
 // Initialize i18n before any React rendering
-setupI18n([LanguageDetector, initReactI18next])
+const i18n = setupI18n([LanguageDetector, initReactI18next])
+const initialLanguageSync = window.electronAPI?.changeLanguage?.(i18n.resolvedLanguage ?? i18n.language)
+void initialLanguageSync?.catch((error) => {
+  console.error('Failed to sync initial language to main process:', error)
+})
 
 // Known-harmless console messages that should NOT be sent to Sentry.
 // These are dev-mode noise or expected warnings that aren't actionable.
