@@ -17,7 +17,7 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
-const TYPES_PATH = join(import.meta.dir, '..', 'apps', 'electron', 'src', 'shared', 'types.ts')
+const TYPES_PATH = join(import.meta.dir, '..', 'packages', 'shared', 'src', 'protocol', 'channels.ts')
 
 // ── Extract RPC_CHANNELS from source ──
 
@@ -28,7 +28,7 @@ const channelBlockMatch = source.match(
   /export const RPC_CHANNELS = \{([\s\S]*?)\} as const/
 )
 if (!channelBlockMatch) {
-  console.error('ERROR: Could not find RPC_CHANNELS definition in types.ts')
+  console.error(`ERROR: Could not find RPC_CHANNELS definition in ${TYPES_PATH}`)
   process.exit(1)
 }
 
