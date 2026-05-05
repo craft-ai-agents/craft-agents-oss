@@ -130,12 +130,15 @@ export function SourcesListPanel({
 
   const effectiveSources = React.useMemo(() => {
     const activeSlugs = new Set(sources.map((source) => source.config.slug))
-    const dormantGlobals = globalSources
+    const visibleGlobals = globalSources
       .filter((source) => !activeSlugs.has(source.config.slug))
-      .map((source) => ({ ...source, tier: 'global-dormant' as const }))
+      .map((source) => ({
+        ...source,
+        tier: enabledGlobalSlugs.has(source.config.slug) ? 'global' as const : 'global-dormant' as const,
+      }))
 
-    return [...sources, ...dormantGlobals]
-  }, [globalSources, sources])
+    return [...sources, ...visibleGlobals]
+  }, [enabledGlobalSlugs, globalSources, sources])
 
   const filteredSources = React.useMemo(() => {
     if (!sourceFilter) return effectiveSources
