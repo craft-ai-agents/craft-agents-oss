@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getActivatedWorkflowsManifestPath } from '../workspaces/storage.ts';
 import {
   deleteRun,
   listRuns,
@@ -788,6 +789,21 @@ describe('activation manifest', () => {
   test('write + read round-trips', () => {
     writeActivatedWorkflows(workspace, ['a', 'b']);
     expect(readActivatedWorkflows(workspace).active.sort()).toEqual(['a', 'b']);
+  });
+
+  test('read backs up malformed manifest before returning empty manifest', () => {
+    const path = getActivatedWorkflowsManifestPath(workspace);
+    writeFileSync(path, '{not-json', 'utf-8');
+
+    const m = readActivatedWorkflows(workspace);
+    expect(m.active).toEqual([]);
+    expect(existsSync(path)).toBe(false);
+
+    const backups = readdirSync(workspace).filter((name) => name.startsWith('activated-workflows.json.broken-'));
+    expect(backups).toHaveLength(1);
+    const backupName = backups[0];
+    expect(backupName).toBeDefined();
+    expect(readFileSync(join(workspace, backupName!), 'utf-8')).toBe('{not-json');
   });
 
   test('setWorkflowActive toggles a single slug', () => {

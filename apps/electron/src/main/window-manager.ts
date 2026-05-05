@@ -5,6 +5,7 @@ import { existsSync } from 'fs'
 import { release } from 'os'
 import { RPC_CHANNELS, type WindowCloseRequestSource } from '../shared/types'
 import type { SavedWindow } from './window-state'
+import { isSafeExternalUrl } from '@craft-agent/shared/utils/url-safety'
 
 // Vite dev server URL for hot reload
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
@@ -15,6 +16,18 @@ function truncateRendererConsoleLog(message: string): string {
   if (message.length <= MAX_RENDERER_CONSOLE_LOG_CHARS) return message
   const omitted = message.length - MAX_RENDERER_CONSOLE_LOG_CHARS
   return `${message.slice(0, MAX_RENDERER_CONSOLE_LOG_CHARS)}... [truncated ${omitted} chars]`
+}
+
+function openExternalSafely(url: string, source: string): boolean {
+  if (!isSafeExternalUrl(url)) {
+    windowLog.warn(`[window-manager] blocked unsafe external URL source=${source} url=${url}`)
+    return false
+  }
+
+  void shell.openExternal(url).catch((error) => {
+    windowLog.warn(`[window-manager] failed to open external URL source=${source}: ${error instanceof Error ? error.message : String(error)}`)
+  })
+  return true
 }
 
 /**
@@ -186,7 +199,7 @@ export class WindowManager {
 
     // Open external links in default browser
     window.webContents.setWindowOpenHandler((details) => {
-      shell.openExternal(details.url)
+      openExternalSafely(details.url, 'window-open')
       return { action: 'deny' }
     })
 
@@ -198,7 +211,7 @@ export class WindowManager {
 
       if (!isInternalUrl) {
         event.preventDefault()
-        shell.openExternal(url)
+        openExternalSafely(url, 'will-navigate')
       }
     })
 

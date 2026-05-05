@@ -23,6 +23,17 @@ interface PendingPrivilegedRequest extends PrivilegedExecutionRequest {
 
 const DEFAULT_APPROVAL_TTL_SECONDS = 120
 const AUDIT_LOG_PATH = join(homedir(), '.craft-agent', 'logs', 'privileged-actions.jsonl')
+const COMMAND_AUDIT_PREVIEW_MAX_CHARS = 160
+
+function buildCommandAuditPreview(command: string): string {
+  const normalized = command.replace(/\s+/g, ' ').trim()
+  const redacted = normalized
+    .replace(/(\bBearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1[redacted]')
+    .replace(/(--?(?:api[-_]?key|authorization|password|passwd|secret|token)(?:=|\s+))("[^"]*"|'[^']*'|\S+)/gi, '$1[redacted]')
+
+  if (redacted.length <= COMMAND_AUDIT_PREVIEW_MAX_CHARS) return redacted
+  return `${redacted.slice(0, COMMAND_AUDIT_PREVIEW_MAX_CHARS)}... [truncated ${redacted.length - COMMAND_AUDIT_PREVIEW_MAX_CHARS} chars]`
+}
 
 /**
  * PrivilegedExecutionBroker
@@ -67,7 +78,8 @@ export class PrivilegedExecutionBroker {
       requestId: request.requestId,
       sessionId: request.sessionId,
       commandHash: request.commandHash,
-      command: request.command,
+      commandPreview: buildCommandAuditPreview(request.command),
+      commandLength: request.command.length,
       policyAllowed: request.policyAllowed,
       policyReason: request.policyReason,
       createdAt: request.createdAt,

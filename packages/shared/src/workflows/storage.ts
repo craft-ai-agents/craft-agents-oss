@@ -19,6 +19,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -33,6 +34,7 @@ import {
   type LoadedWorkflow,
   type WorkflowMetadata,
 } from './types.ts';
+import { debug } from '../utils/debug.ts';
 
 export { parseWorkflowFile, serializeWorkflow } from './parser.ts';
 
@@ -187,7 +189,15 @@ export function readActivatedWorkflows(workspaceRootPath: string): ActivatedWork
       active,
       updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
     };
-  } catch {
+  } catch (error) {
+    debug(`[readActivatedWorkflows] malformed activation manifest at ${path}: ${error instanceof Error ? error.message : String(error)}`);
+    try {
+      const backup = `${path}.broken-${Date.now()}`;
+      renameSync(path, backup);
+      debug(`[readActivatedWorkflows] backed up to ${backup}`);
+    } catch {
+      // best-effort recovery; callers still get an empty manifest
+    }
     return { version: 1, active: [], updatedAt: new Date(0).toISOString() };
   }
 }
