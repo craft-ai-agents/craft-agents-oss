@@ -33,6 +33,7 @@
     "file-type": "^21.3.4",
     "flatted": "^3.4.2",
     "hono": "^4.12.17",
+    "ip-address": "^10.2.0",
     "lodash": "^4.18.1",
     "minimatch": "^10.2.5",
     "music-metadata": "^11.12.3",
