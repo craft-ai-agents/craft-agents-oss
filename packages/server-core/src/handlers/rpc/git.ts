@@ -2,7 +2,14 @@ import { execFile } from 'node:child_process'
 import { access } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { RPC_CHANNELS, type GitCommit, type GitFileChange, type GitFileChangeStatus, type GitStatusEntry, type GitStatusEntryStatus } from '@craft-agent/shared/protocol'
+import {
+  RPC_CHANNELS,
+  type GitCommit,
+  type GitFileChange,
+  type GitFileChangeStatus,
+  type GitStatusEntry,
+  type GitStatusEntryStatus,
+} from '@craft-agent/shared/protocol'
 import type { RpcServer } from '../../transport/types'
 
 const execFileAsync = promisify(execFile)
@@ -188,6 +195,12 @@ async function getGitCommitDetail(workspacePath: string, commitHash: string): Pr
 export function registerGitHandlers(server: RpcServer): void {
   server.handle(RPC_CHANNELS.git.GET_LOG, async (_ctx, workspacePath: string) => getGitLog(workspacePath))
   server.handle(RPC_CHANNELS.git.GET_STATUS, async (_ctx, workspacePath: string) => getGitStatus(workspacePath))
-  server.handle(RPC_CHANNELS.git.GET_FILE_DIFF, async (_ctx, workspacePath: string, filePath: string) => getGitFileDiff(workspacePath, filePath))
-  server.handle(RPC_CHANNELS.git.GET_COMMIT_DETAIL, async (_ctx, workspacePath: string, commitHash: string) => getGitCommitDetail(workspacePath, commitHash))
+  server.handle(
+    RPC_CHANNELS.git.GET_FILE_DIFF,
+    async (_ctx, workspacePath: string, filePath: string) => getGitFileDiff(workspacePath, filePath),
+  )
+  server.handle(
+    RPC_CHANNELS.git.GET_COMMIT_DETAIL,
+    async (_ctx, workspacePath: string, commitHash: string) => getGitCommitDetail(workspacePath, commitHash),
+  )
 }

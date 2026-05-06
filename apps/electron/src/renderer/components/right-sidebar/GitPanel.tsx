@@ -62,6 +62,26 @@ function EmptyState({ children }: { children: string }) {
   )
 }
 
+function renderStatusEntries(entries: GitStatusEntry[]) {
+  return entries.map(entry => (
+    <div
+      key={`${entry.status}:${entry.path}`}
+      className="h-7 px-3 flex items-center gap-2 text-xs hover:bg-sidebar-hover"
+      title={entry.path}
+    >
+      <FileDiff className={cn('h-3.5 w-3.5 shrink-0', statusClassName(entry.status))} />
+      <span className="min-w-0 flex-1 truncate">{entry.path}</span>
+      <span className="shrink-0 text-[10px] text-muted-foreground">{statusLabel(entry.status)}</span>
+    </div>
+  ))
+}
+
+function renderStatusBody(entries: GitStatusEntry[], noRepository: boolean) {
+  if (noRepository) return <EmptyState>No git repository found</EmptyState>
+  if (entries.length === 0) return <EmptyState>No working tree changes</EmptyState>
+  return renderStatusEntries(entries)
+}
+
 function GitStatusSection({
   entries,
   noRepository,
@@ -73,26 +93,36 @@ function GitStatusSection({
     <div className="h-full min-h-0 flex flex-col">
       <SectionHeader title="Working Tree" count={noRepository ? undefined : entries.length} />
       <div className="min-h-0 flex-1 overflow-auto py-1">
-        {noRepository ? (
-          <EmptyState>No git repository found</EmptyState>
-        ) : entries.length === 0 ? (
-          <EmptyState>No working tree changes</EmptyState>
-        ) : (
-          entries.map(entry => (
-            <div
-              key={`${entry.status}:${entry.path}`}
-              className="h-7 px-3 flex items-center gap-2 text-xs hover:bg-sidebar-hover"
-              title={entry.path}
-            >
-              <FileDiff className={cn('h-3.5 w-3.5 shrink-0', statusClassName(entry.status))} />
-              <span className="min-w-0 flex-1 truncate">{entry.path}</span>
-              <span className="shrink-0 text-[10px] text-muted-foreground">{statusLabel(entry.status)}</span>
-            </div>
-          ))
-        )}
+        {renderStatusBody(entries, noRepository)}
       </div>
     </div>
   )
+}
+
+function renderCommits(commits: GitCommit[]) {
+  return commits.map(commit => (
+    <div
+      key={commit.hash}
+      className="px-3 py-2 hover:bg-sidebar-hover"
+      title={`${commit.shortHash} ${commit.message}`}
+    >
+      <div className="flex items-center gap-2 text-xs">
+        <GitCommitHorizontal className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate text-foreground">{commit.message}</span>
+      </div>
+      <div className="mt-1 pl-5 flex items-center gap-2 text-[10px] text-muted-foreground">
+        <span className="font-mono">{commit.shortHash}</span>
+        <span className="truncate">{commit.author}</span>
+        <span className="shrink-0">{shortRelativeDate(commit.date)}</span>
+      </div>
+    </div>
+  ))
+}
+
+function renderHistoryBody(commits: GitCommit[], noRepository: boolean) {
+  if (noRepository) return <EmptyState>No git repository found</EmptyState>
+  if (commits.length === 0) return <EmptyState>No commits yet</EmptyState>
+  return renderCommits(commits)
 }
 
 function GitHistorySection({
@@ -106,29 +136,7 @@ function GitHistorySection({
     <div className="h-full min-h-0 flex flex-col">
       <SectionHeader title="History" count={noRepository ? undefined : commits.length} />
       <div className="min-h-0 flex-1 overflow-auto py-1">
-        {noRepository ? (
-          <EmptyState>No git repository found</EmptyState>
-        ) : commits.length === 0 ? (
-          <EmptyState>No commits yet</EmptyState>
-        ) : (
-          commits.map(commit => (
-            <div
-              key={commit.hash}
-              className="px-3 py-2 hover:bg-sidebar-hover"
-              title={`${commit.shortHash} ${commit.message}`}
-            >
-              <div className="flex items-center gap-2 text-xs">
-                <GitCommitHorizontal className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate text-foreground">{commit.message}</span>
-              </div>
-              <div className="mt-1 pl-5 flex items-center gap-2 text-[10px] text-muted-foreground">
-                <span className="font-mono">{commit.shortHash}</span>
-                <span className="truncate">{commit.author}</span>
-                <span className="shrink-0">{shortRelativeDate(commit.date)}</span>
-              </div>
-            </div>
-          ))
-        )}
+        {renderHistoryBody(commits, noRepository)}
       </div>
     </div>
   )
