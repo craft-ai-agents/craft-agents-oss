@@ -9,7 +9,12 @@ import {
   activeTabIdAtom,
   hasOpenTabsAtom,
   closeTabAtom,
+  openFileTabAtom,
+  refreshAllTabsAtom,
+  detectTurnEnd,
 } from '@/atoms/editor-tabs'
+import { sessionAtomFamily } from '@/atoms/sessions'
+import type { SessionFile } from '../../../shared/types'
 import { ShikiCodeViewer } from '@/components/shiki/ShikiCodeViewer'
 import {
   PANEL_SASH_HIT_WIDTH,
@@ -29,16 +34,63 @@ function getFileName(filePath: string): string {
   return filePath.split('/').pop() ?? filePath
 }
 
-export interface EditorDetailPanelProps {
-  workspaceId?: string
+function flattenFilePaths(files: SessionFile[]): string[] {
+  const paths: string[] = []
+  for (const file of files) {
+    if (file.type === 'file') paths.push(file.path)
+    if (file.children) paths.push(...flattenFilePaths(file.children))
+  }
+  return paths
 }
 
-export function EditorDetailPanel({ workspaceId }: EditorDetailPanelProps) {
+export interface EditorDetailPanelProps {
+  workspaceId?: string
+  sessionId?: string
+}
+
+export function EditorDetailPanel({ workspaceId, sessionId }: EditorDetailPanelProps) {
   const tabs = useAtomValue(editorTabsAtom)
   const activeTabId = useAtomValue(activeTabIdAtom)
   const hasOpenTabs = useAtomValue(hasOpenTabsAtom)
   const setActiveTabId = useSetAtom(activeTabIdAtom)
   const closeTab = useSetAtom(closeTabAtom)
+  const openFileTab = useSetAtom(openFileTabAtom)
+  const refreshAllTabs = useSetAtom(refreshAllTabsAtom)
+
+  const session = useAtomValue(sessionAtomFamily(sessionId ?? ''))
+  const isProcessing = session?.isProcessing ?? false
+  const prevIsProcessingRef = useRef(false)
+  const isProcessingRef = useRef(false)
+  const knownFilePathsRef = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    isProcessingRef.current = isProcessing
+  }, [isProcessing])
+
+  useEffect(() => {
+    if (detectTurnEnd(prevIsProcessingRef.current, isProcessing)) {
+      void refreshAllTabs()
+    }
+    prevIsProcessingRef.current = isProcessing
+  }, [isProcessing, refreshAllTabs])
+
+  useEffect(() => {
+    if (!sessionId) return
+    const unsubscribe = window.electronAPI.onSessionFilesChanged((changedSessionId) => {
+      if (changedSessionId !== sessionId || !isProcessingRef.current) return
+      void (async () => {
+        const files = await window.electronAPI.getSessionFiles(sessionId)
+        const paths = flattenFilePaths(files)
+        for (const path of paths) {
+          if (!knownFilePathsRef.current.has(path)) {
+            void openFileTab(path)
+          }
+        }
+        knownFilePathsRef.current = new Set(paths)
+      })()
+    })
+    return () => unsubscribe()
+  }, [sessionId, openFileTab])
 
   const [width, setWidth] = useState<number>(() =>
     storage.get(storage.KEYS.editorPanelWidth, DEFAULT_WIDTH, workspaceId)

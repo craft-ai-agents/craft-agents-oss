@@ -27,6 +27,24 @@ export const openFileTabAtom = atom(null, async (get, set, filePath: string) => 
   set(activeTabIdAtom, id)
 })
 
+/** Returns true only when prev is true and next is false (agent turn just ended). */
+export function detectTurnEnd(prev: boolean, next: boolean): boolean {
+  return prev && !next
+}
+
+/** Re-reads the content of all open file tabs from disk and updates the atom. */
+export const refreshAllTabsAtom = atom(null, async (get, set) => {
+  const tabs = get(editorTabsAtom)
+  if (tabs.length === 0) return
+  const refreshed = await Promise.all(
+    tabs.map(async (tab) => {
+      const content = await window.electronAPI.readFile(tab.filePath)
+      return { ...tab, content }
+    })
+  )
+  set(editorTabsAtom, refreshed)
+})
+
 /** Close a tab by ID. If it was active, focus the nearest remaining tab. */
 export const closeTabAtom = atom(null, (get, set, tabId: string) => {
   const tabs = get(editorTabsAtom)
