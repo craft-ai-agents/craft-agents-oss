@@ -247,6 +247,8 @@
   "chat.viewOutput": "出力を表示",
   "chat.viewTurnDetails": "ターンの詳細を表示",
   "chat.workingDirectory": "作業ディレクトリ",
+  "chatInput.lineComments.pill": "{{count}} 件の行コメント",
+  "chatInput.lineComments.placeholder": "フォローアップの変更をリクエスト",
   "chatInput.placeholder.focusMode": "{{key}} + . でフォーカスモード",
   "chatInput.placeholder.labels": "# を入力してこの会話にラベルを適用",
   "chatInput.placeholder.mention": "@ を入力してファイル、フォルダー、またはスキルをメンション",

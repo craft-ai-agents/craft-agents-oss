@@ -10,7 +10,8 @@ import {
   hasOpenTabsAtom,
   closeTabAtom,
 } from '@/atoms/editor-tabs'
-import { ShikiCodeViewer } from '@/components/shiki/ShikiCodeViewer'
+import { addLineCommentAtom } from '@/atoms/line-comments'
+import { LineAnnotatableViewer } from '@/components/editor/LineAnnotatableViewer'
 import {
   PANEL_SASH_HIT_WIDTH,
   PANEL_SASH_LINE_WIDTH,
@@ -39,6 +40,7 @@ export function EditorDetailPanel({ workspaceId }: EditorDetailPanelProps) {
   const hasOpenTabs = useAtomValue(hasOpenTabsAtom)
   const setActiveTabId = useSetAtom(activeTabIdAtom)
   const closeTab = useSetAtom(closeTabAtom)
+  const addLineComment = useSetAtom(addLineCommentAtom)
 
   const [width, setWidth] = useState<number>(() =>
     storage.get(storage.KEYS.editorPanelWidth, DEFAULT_WIDTH, workspaceId)
@@ -188,10 +190,11 @@ export function EditorDetailPanel({ workspaceId }: EditorDetailPanelProps) {
 
               <div className="flex-1 overflow-auto min-h-0">
                 {activeTab && (
-                  <ShikiCodeViewer
+                  <LineAnnotatableViewer
                     code={activeTab.content}
                     filePath={activeTab.filePath}
                     className="h-full text-xs"
+                    onComment={addLineComment}
                   />
                 )}
               </div>

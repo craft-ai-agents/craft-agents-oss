@@ -247,6 +247,8 @@
   "chat.viewOutput": "Ausgabe anzeigen",
   "chat.viewTurnDetails": "Details zum Schritt anzeigen",
   "chat.workingDirectory": "Arbeitsverzeichnis",
+  "chatInput.lineComments.pill": "{{count}} Zeilenkommentare",
+  "chatInput.lineComments.placeholder": "Folgeänderungen anfragen",
   "chatInput.placeholder.focusMode": "{{key}} + . für Fokusmodus drücken",
   "chatInput.placeholder.labels": "# eingeben, um Labels auf diese Unterhaltung anzuwenden",
   "chatInput.placeholder.mention": "@ eingeben, um Dateien, Ordner oder Skills zu erwähnen",
