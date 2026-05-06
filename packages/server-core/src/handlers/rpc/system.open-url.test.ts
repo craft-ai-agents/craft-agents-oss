@@ -120,8 +120,11 @@ describe('registerSystemCoreHandlers OPEN_URL', () => {
   it('rejects unsupported protocols', async () => {
     const { openUrl, ctx } = createTestHarness()
 
+    // OPEN_URL uses a blocklist (url-safety.ts) and rejects known-dangerous
+    // schemes by name. file: is one of them — and the most important on
+    // Windows where it's an RCE vector.
     await expect(openUrl(ctx, 'file:///tmp/test.txt')).rejects.toThrow(
-      'Failed to open URL: Only http, https, mailto, craftdocs, craftagents URLs are allowed'
+      'Failed to open URL: Refused to open URL with blocked scheme: file:'
     )
   })
 })

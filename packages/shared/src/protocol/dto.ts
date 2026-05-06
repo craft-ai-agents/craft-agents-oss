@@ -535,6 +535,8 @@ export interface TestAutomationPayload {
   actions: TestAutomationAction[]
   permissionMode?: PermissionMode
   labels?: string[]
+  /** Forwarded from the matcher; routes test-run sessions into a Telegram topic when paired. */
+  telegramTopic?: string
 }
 
 export type TestAutomationActionResult =

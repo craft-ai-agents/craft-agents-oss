@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/webui",
-  "version": "0.8.13",
+  "version": "0.9.1",
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@craft-agent/shared": "workspace:*",
+    "@craft-agent/ui": "workspace:*",
+    "i18next": "^26.0.3",
     "i18next-browser-languagedetector": "^8.2.1",
-    "react-i18next": "^17.0.2"
+    "jotai": "^2.16.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-i18next": "^17.0.2",
+    "sonner": "^2.0.7"
   }
 }

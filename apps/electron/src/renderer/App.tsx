@@ -40,6 +40,7 @@ import {
   addSessionAtom,
   removeSessionAtom,
   updateSessionAtom,
+  replaceLoadedSessionAtom,
   refreshSessionsMetadataAtom,
   sessionAtomFamily,
   sessionMetaMapAtom,
@@ -69,6 +70,7 @@ import { useTransportConnectionState } from '@/hooks/useTransportConnectionState
 import { useStaleSessionRecovery } from '@/hooks/useStaleSessionRecovery'
 import { TransportConnectionBanner, shouldShowTransportConnectionBanner } from '@/components/app-shell/TransportConnectionBanner'
 import { getFileManagerName } from '@/lib/platform'
+import { rendererLog } from '@/lib/logger'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
 
@@ -76,6 +78,32 @@ type AppState = 'loading' | 'onboarding' | 'reauth' | 'workspace-picker' | 'read
 
 /** Type for the Jotai store returned by useStore() */
 type JotaiStore = ReturnType<typeof getDefaultStore>
+
+type SessionListRefreshOptions = {
+  removeMissing?: boolean
+  reason?: string
+  selectedSessionId?: string | null
+}
+
+const SESSION_REFRESH_LOG_ID_LIMIT = 25
+
+function summarizeIds(ids: Iterable<string>, limit = SESSION_REFRESH_LOG_ID_LIMIT) {
+  const all = Array.from(ids)
+  return {
+    count: all.length,
+    ids: all.slice(0, limit),
+    truncated: all.length > limit,
+  }
+}
+
+function workspaceDistribution(sessions: Iterable<{ workspaceId?: string }>): Record<string, number> {
+  const distribution: Record<string, number> = {}
+  for (const session of sessions) {
+    const key = session.workspaceId || '(missing)'
+    distribution[key] = (distribution[key] ?? 0) + 1
+  }
+  return distribution
+}
 
 /**
  * Helper to handle background task events from the agent.
@@ -217,6 +245,7 @@ export default function App() {
   const addSession = useSetAtom(addSessionAtom)
   const removeSession = useSetAtom(removeSessionAtom)
   const updateSessionDirect = useSetAtom(updateSessionAtom)
+  const replaceLoadedSession = useSetAtom(replaceLoadedSessionAtom)
   const store = useStore()
 
   // Helper to update a session by ID with partial fields
@@ -423,7 +452,7 @@ export default function App() {
         : fresh
 
       clearStreamingState(sessionId)
-      updateSessionDirect(sessionId, () => nextSession)
+      replaceLoadedSession(nextSession)
       syncSessionOptionsFromSession(nextSession)
       void reconcilePermissionModeState(sessionId)
       return preservedStaleMessages ? 'preserved_stale_messages' : 'refreshed'
@@ -431,7 +460,7 @@ export default function App() {
       console.error(`[App] Failed to refresh session ${sessionId}:`, err)
       return 'failed'
     }
-  }, [clearStreamingState, updateSessionDirect, syncSessionOptionsFromSession, reconcilePermissionModeState, store])
+  }, [clearStreamingState, replaceLoadedSession, syncSessionOptionsFromSession, reconcilePermissionModeState, store])
 
   const loadSessionsFromServer = useCallback(async () => {
     setSessionLoadError(null)
@@ -485,16 +514,49 @@ export default function App() {
     }
   }, [initializeSessions, initialSessionId, reconcilePermissionModeState, windowWorkspaceId])
 
-  const refreshSessionListMetadataFromServer = useCallback(async (): Promise<Map<string, SessionMeta> | null> => {
+  const refreshSessionListMetadataFromServer = useCallback(async (options: SessionListRefreshOptions = {}): Promise<Map<string, SessionMeta> | null> => {
+    const {
+      removeMissing = true,
+      reason = 'manual-or-authoritative',
+      selectedSessionId = null,
+    } = options
+    const beforeMetaMap = store.get(sessionMetaMapAtom)
+    const beforeIds = new Set(beforeMetaMap.keys())
+    const transportState = await window.electronAPI.getTransportConnectionState().catch(() => null)
+
     try {
       const sessions = await window.electronAPI.getSessions()
-      console.info(`[App] getSessions returned ${sessions.length} session(s) for reconnect refresh`)
+      const returnedIds = new Set(sessions.map(s => s.id))
+      const missingIds = Array.from(beforeIds).filter(id => !returnedIds.has(id))
+      const addedIds = sessions.map(s => s.id).filter(id => !beforeIds.has(id))
+      const logPayload = {
+        reason,
+        removeMissing,
+        windowWorkspaceId,
+        windowRemoteWorkspaceId,
+        selectedSessionId,
+        beforeCount: beforeIds.size,
+        returnedCount: sessions.length,
+        beforeIds: summarizeIds(beforeIds),
+        returnedIds: summarizeIds(returnedIds),
+        missingIds: summarizeIds(missingIds),
+        addedIds: summarizeIds(addedIds),
+        beforeWorkspaceIds: workspaceDistribution(beforeMetaMap.values()),
+        returnedWorkspaceIds: workspaceDistribution(sessions),
+        transportState,
+      }
+
+      rendererLog.info('[App] Session list metadata refresh result', logPayload)
+      if (!removeMissing && missingIds.length > 0) {
+        rendererLog.warn('[App] Non-destructive refresh preserved sessions omitted by getSessions(); this indicates a partial backend response or workspace-context mismatch', logPayload)
+      }
+
       const loadedSessionIds = store.get(loadedSessionsAtom)
 
       // Single transactional atom write — all cross-atom mutations happen
       // inside one Jotai write function so React subscribers see one
       // consistent update instead of intermediate states.
-      const nextMetaMap = store.set(refreshSessionsMetadataAtom, { sessions, loadedSessionIds })
+      const nextMetaMap = store.set(refreshSessionsMetadataAtom, { sessions, loadedSessionIds, removeMissing })
 
       // Sync app-level state (React hooks / non-atom concerns) after the atom transaction
       for (const session of sessions) {
@@ -504,10 +566,21 @@ export default function App() {
 
       return nextMetaMap
     } catch (err) {
-      console.error('[App] Failed to refresh session list metadata after reconnect:', err)
+      rendererLog.error('[App] Failed to refresh session list metadata after reconnect:', {
+        reason,
+        removeMissing,
+        windowWorkspaceId,
+        windowRemoteWorkspaceId,
+        selectedSessionId,
+        beforeCount: beforeIds.size,
+        beforeIds: summarizeIds(beforeIds),
+        beforeWorkspaceIds: workspaceDistribution(beforeMetaMap.values()),
+        transportState,
+        error: err,
+      })
       return null
     }
-  }, [store, syncSessionOptionsFromSession, reconcilePermissionModeState])
+  }, [store, syncSessionOptionsFromSession, reconcilePermissionModeState, windowWorkspaceId, windowRemoteWorkspaceId])
 
   // Stale session watchdog — catches stuck sessions that the reconnect protocol misses
   const { trackSessionActivity } = useStaleSessionRecovery({
@@ -828,11 +901,7 @@ export default function App() {
             if (createdSession) {
               const existingMeta = store.get(sessionMetaMapAtom).has(sessionId)
               if (existingMeta) {
-                updateSessionDirect(sessionId, () => createdSession)
-                const metaMap = store.get(sessionMetaMapAtom)
-                const nextMetaMap = new Map(metaMap)
-                nextMetaMap.set(sessionId, extractSessionMeta(createdSession))
-                store.set(sessionMetaMapAtom, nextMetaMap)
+                replaceLoadedSession(createdSession)
               } else {
                 addSession(createdSession)
               }
@@ -949,6 +1018,7 @@ export default function App() {
     windowWorkspaceId,
     store,
     updateSessionDirect,
+    replaceLoadedSession,
     showSessionNotification,
     initializeSessions,
     addSession,
@@ -970,7 +1040,11 @@ export default function App() {
 
       console.warn('[App] Stale reconnect — refreshing session metadata and active/processing sessions')
 
-      const refreshedMetaMap = await refreshSessionListMetadataFromServer()
+      const refreshedMetaMap = await refreshSessionListMetadataFromServer({
+        removeMissing: false,
+        reason: 'stale-reconnect',
+        selectedSessionId: sessionSelection.selected,
+      })
       const metaMap = refreshedMetaMap ?? store.get(sessionMetaMapAtom)
       const refreshIds = getSessionsToRefreshAfterStaleReconnect(metaMap, sessionSelection.selected)
 

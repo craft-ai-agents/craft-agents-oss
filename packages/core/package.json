@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/core",
-  "version": "0.8.13",
+  "version": "0.9.1",
   "license": "Apache-2.0",
   "description": "Core types, storage, and agent logic for Craft Agents",
   "type": "module",
@@ -12,7 +12,7 @@
     "./utils": "./src/utils/index.ts"
   },
   "peerDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.2.111",
+    "@anthropic-ai/claude-agent-sdk": "0.2.123",
     "@modelcontextprotocol/sdk": ">=1.0.0"
   },
   "devDependencies": {

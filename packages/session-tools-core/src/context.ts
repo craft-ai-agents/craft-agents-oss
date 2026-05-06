@@ -363,6 +363,8 @@ export interface SessionToolContext {
   getMessagingBindings?(sessionId: string): Array<{
     platform: string;
     channelId: string;
+    /** Telegram supergroup forum topic id; undefined for DMs / non-Telegram. */
+    threadId?: number;
     channelName?: string;
     enabled: boolean;
   }>;

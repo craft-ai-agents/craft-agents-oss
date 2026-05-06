@@ -66,15 +66,10 @@ describe('resolveRipgrepPath', () => {
     try { rmSync(tmpBase, { recursive: true, force: true }); } catch {}
   });
 
-  it('finds vendored ripgrep binary', () => {
+  it('finds vendored ripgrep binary (@vscode/ripgrep)', () => {
     const appRoot = join(tmpBase, 'vendored');
-    const platform = process.platform === 'win32'
-      ? 'x64-win32'
-      : process.platform === 'darwin'
-        ? (process.arch === 'arm64' ? 'arm64-darwin' : 'x64-darwin')
-        : (process.arch === 'arm64' ? 'arm64-linux' : 'x64-linux');
     const binaryName = process.platform === 'win32' ? 'rg.exe' : 'rg';
-    const rgDir = join(appRoot, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', platform);
+    const rgDir = join(appRoot, 'node_modules', '@vscode', 'ripgrep', 'bin');
     mkdirSync(rgDir, { recursive: true });
     const rgPath = join(rgDir, binaryName);
     writeFileSync(rgPath, '#!/bin/sh\n');
@@ -126,6 +121,53 @@ describe('resolveRipgrepPath', () => {
       // Must be a vendored path, not a system PATH resolution
       expect(result.ripgrepPath).toContain('node_modules');
     }
+  });
+});
+
+describe('resolveClaudeBinaryPath (native binary, SDK ≥ 0.2.113)', () => {
+  const tmpBase = join(tmpdir(), `claude-bin-resolver-test-${Date.now()}`);
+
+  afterEach(() => {
+    try { rmSync(tmpBase, { recursive: true, force: true }); } catch {}
+  });
+
+  it('finds the per-platform native binary in the optional-dep package', () => {
+    const appRoot = join(tmpBase, 'app');
+    const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+    const platformPkg = process.platform === 'win32'
+      ? `claude-agent-sdk-win32-${arch}`
+      : process.platform === 'darwin'
+        ? `claude-agent-sdk-darwin-${arch}`
+        : `claude-agent-sdk-linux-${arch}`;
+    const binaryName = process.platform === 'win32' ? 'claude.exe' : 'claude';
+    const binDir = join(appRoot, 'node_modules', '@anthropic-ai', platformPkg);
+    mkdirSync(binDir, { recursive: true });
+    const binPath = join(binDir, binaryName);
+    writeFileSync(binPath, '#!/bin/sh\n');
+    chmodSync(binPath, 0o755);
+
+    const hostRuntime: BackendHostRuntimeContext = {
+      appRootPath: appRoot,
+      resourcesPath: appRoot,
+      isPackaged: true,
+    };
+
+    const paths = resolveBackendRuntimePaths(hostRuntime);
+    expect(paths.claudeCliPath).toBe(binPath);
+  });
+
+  it('returns undefined when the platform package is missing', () => {
+    const appRoot = join(tmpBase, 'no-binary');
+    mkdirSync(appRoot, { recursive: true });
+
+    const hostRuntime: BackendHostRuntimeContext = {
+      appRootPath: appRoot,
+      resourcesPath: appRoot,
+      isPackaged: true,
+    };
+
+    const paths = resolveBackendRuntimePaths(hostRuntime);
+    expect(paths.claudeCliPath).toBeUndefined();
   });
 });
 

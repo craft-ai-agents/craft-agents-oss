@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/shared",
-  "version": "0.8.13",
+  "version": "0.9.1",
   "license": "Apache-2.0",
   "description": "Shared business logic for Craft Agents - agent, auth, config, credentials, MCP integration",
   "type": "module",
@@ -77,12 +77,12 @@
     "i18next": "^26.0.3",
     "incr-regex-package": "^1.0.4",
     "shell-quote": "^1.8.3",
-    "@mariozechner/pi-agent-core": "0.70.2",
-    "@mariozechner/pi-ai": "0.70.2",
-    "@mariozechner/pi-coding-agent": "0.70.2"
+    "@mariozechner/pi-agent-core": "0.72.1",
+    "@mariozechner/pi-ai": "0.72.1",
+    "@mariozechner/pi-coding-agent": "0.72.1"
   },
   "peerDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.2.111",
+    "@anthropic-ai/claude-agent-sdk": "0.2.123",
     "@modelcontextprotocol/sdk": ">=1.0.0",
     "zod": ">=3.0.0"
   },

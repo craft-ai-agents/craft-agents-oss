@@ -207,6 +207,12 @@ interface ChatDisplayProps {
   // Lazy loading
   /** When true, messages are still loading - show spinner in messages area */
   messagesLoading?: boolean
+  /** Message load failure shown instead of an infinite spinner */
+  messagesLoadError?: string | null
+  /** Whether a retry is currently in flight */
+  messagesRetrying?: boolean
+  /** Retry lazy-loading the session transcript */
+  onRetryMessagesLoad?: () => void
   // Tutorial
   /** Disable send action (for tutorial guidance) */
   disableSend?: boolean
@@ -466,6 +472,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   sessionFolderPath,
   // Lazy loading
   messagesLoading = false,
+  messagesLoadError,
+  messagesRetrying = false,
+  onRetryMessagesLoad,
   // Tutorial
   disableSend = false,
   // Search highlighting
@@ -1453,6 +1462,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // At render time, prevSessionIdForScrollRef still has the OLD session ID, so we can detect the switch
   const isSessionSwitchForScroll = prevSessionIdForScrollRef.current !== null && prevSessionIdForScrollRef.current !== session?.id
   const skipScrollToBottom = isSessionSwitchForScroll && isSearchActive
+  const hasUnrenderedLoadedMessages = !messagesLoading
+    && turns.length === 0
+    && ((session?.messages?.length ?? 0) > 0 || (session?.messageCount ?? 0) > 0)
 
   return (
     <div ref={zoneRef} className="flex h-full flex-col min-w-0" data-focus-zone="chat">
@@ -1485,8 +1497,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                     exit={{ opacity: 0 }}
                     transition={compactMode ? { duration: 0 } : { duration: 0.1, ease: 'easeOut' }}
                   >
-                    {/* Loading/Content AnimatePresence: Handles spinner ↔ content transition */}
-                    <AnimatePresence mode={compactMode ? "sync" : "wait"} initial={false}>
+                    {/* Loading/Content AnimatePresence: sync mode avoids stale loading exits masking ready content */}
+                    <AnimatePresence mode="sync" initial={false}>
                     {messagesLoading ? (
                       /* Loading State: Show spinner while messages are being lazy loaded */
                       <motion.div
@@ -1498,6 +1510,37 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         className="flex items-center justify-center h-64"
                       >
                         <Spinner className="text-foreground/30" />
+                      </motion.div>
+                    ) : messagesLoadError ? (
+                      <motion.div
+                        key="load-error"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={compactMode ? { duration: 0 } : { duration: 0.1 }}
+                        className="flex items-center justify-center h-64 px-4"
+                      >
+                        <div
+                          className="max-w-sm rounded-[8px] border border-destructive/20 px-4 py-3 text-center shadow-tinted"
+                          style={{
+                            backgroundColor: 'oklch(from var(--destructive) l c h / 0.03)',
+                            '--shadow-color': 'var(--destructive-rgb)',
+                          } as React.CSSProperties}
+                        >
+                          <AlertTriangle className="mx-auto mb-2 h-4 w-4 text-destructive/70" />
+                          <div className="text-sm font-medium text-destructive">Failed to load conversation</div>
+                          <p className="mt-1 break-words text-xs text-destructive/70">{messagesLoadError}</p>
+                          {onRetryMessagesLoad && (
+                            <button
+                              type="button"
+                              onClick={onRetryMessagesLoad}
+                              disabled={messagesRetrying}
+                              className="mt-3 rounded border border-destructive/20 px-2 py-0.5 text-xs text-destructive/70 transition-colors hover:border-destructive/40 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {messagesRetrying ? 'Retrying…' : 'Retry'}
+                            </button>
+                          )}
+                        </div>
                       </motion.div>
                     ) : (
                     /* Turn-based Message Display - memoized to avoid re-grouping on every render */
@@ -1523,6 +1566,15 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                     <div className="absolute inset-0 flex flex-col items-center justify-center select-none gap-1 pointer-events-none">
                       <span className="text-sm text-muted-foreground">{t("editPopover.whatToChange")}</span>
                       <span className="text-xs text-muted-foreground/50">{t("editPopover.justDescribe")}</span>
+                    </div>
+                  )}
+                  {!compactMode && hasUnrenderedLoadedMessages && (
+                    <div className="flex h-64 items-center justify-center px-4 text-center">
+                      <div className="max-w-sm rounded-[8px] border border-border/50 bg-foreground/[0.03] px-4 py-3">
+                        <CircleAlert className="mx-auto mb-2 h-4 w-4 text-foreground/50" />
+                        <div className="text-sm font-medium text-foreground/70">Conversation loaded, but no renderable messages were found.</div>
+                        <p className="mt-1 text-xs text-foreground/50">Try reloading the session. If this persists, the message history may contain an unsupported format.</p>
+                      </div>
                     </div>
                   )}
                   {/* Load more indicator - shown when there are older messages */}

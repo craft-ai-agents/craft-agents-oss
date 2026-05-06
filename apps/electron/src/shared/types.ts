@@ -655,16 +655,24 @@ export interface ElectronAPI {
   // Messaging gateway — workspaceId is taken from the client handshake (ctx.workspaceId)
   getMessagingConfig(): Promise<{
     enabled: boolean
-    platforms: Record<string, { enabled: boolean } | undefined>
+    platforms: Record<string, { enabled: boolean; accessMode?: MessagingPlatformAccessMode; owners?: MessagingPlatformOwnerInfo[] } | undefined>
     runtime: Record<string, MessagingPlatformRuntimeInfo | undefined>
   } | null>
   updateMessagingConfig(config: Record<string, unknown>): Promise<void>
   testTelegramToken(token: string): Promise<{ success: boolean; botName?: string; botUsername?: string; error?: string }>
   saveTelegramToken(token: string): Promise<void>
+  testLarkCredentials(creds: { appId: string; appSecret: string; domain: 'lark' | 'feishu' }): Promise<{ success: boolean; botName?: string; error?: string }>
+  saveLarkCredentials(creds: { appId: string; appSecret: string; domain: 'lark' | 'feishu' }): Promise<void>
   disconnectMessagingPlatform(platform: string): Promise<void>
   forgetMessagingPlatform(platform: string): Promise<void>
-  getMessagingBindings(): Promise<Array<{ id: string; workspaceId: string; sessionId: string; platform: string; channelId: string; channelName?: string; enabled: boolean; createdAt: number }>>
+  getMessagingBindings(): Promise<Array<{ id: string; workspaceId: string; sessionId: string; platform: string; channelId: string; threadId?: number; channelName?: string; enabled: boolean; createdAt: number; accessMode?: MessagingBindingAccessMode; allowedSenderIds?: string[] }>>
   generateMessagingPairingCode(sessionId: string, platform: string): Promise<{ code: string; expiresAt: number; botUsername?: string }>
+  /** Telegram supergroup pairing — returns a code typed in the supergroup to capture its chatId. */
+  generateMessagingSupergroupCode(platform: string): Promise<{ code: string; expiresAt: number; botUsername?: string }>
+  /** Read the workspace's currently paired Telegram supergroup, if any. */
+  getMessagingSupergroup(): Promise<{ chatId: string; title: string; capturedAt: number } | null>
+  /** Forget the paired Telegram supergroup (existing topic bindings stay on disk but stop matching). */
+  unbindMessagingSupergroup(): Promise<{ success: boolean }>
   unbindMessagingSession(sessionId: string, platform?: string): Promise<void>
   unbindMessagingBinding(bindingId: string): Promise<{ success: boolean }>
   onMessagingBindingChanged(callback: (workspaceId: string) => void): () => void
@@ -673,6 +681,20 @@ export interface ElectronAPI {
   startWhatsAppConnect(): Promise<{ success: boolean }>
   submitWhatsAppPhone(phoneNumber: string): Promise<{ success: boolean }>
   onWhatsAppEvent(callback: (payload: { workspaceId: string; event: WhatsAppUiEvent }) => void): () => void
+  // Messaging access control (Phase 3)
+  getMessagingPlatformOwners(platform: string): Promise<MessagingPlatformOwnerInfo[]>
+  setMessagingPlatformOwners(platform: string, owners: MessagingPlatformOwnerInfo[]): Promise<MessagingPlatformOwnerInfo[]>
+  getMessagingPlatformAccessMode(platform: string): Promise<MessagingPlatformAccessMode>
+  setMessagingPlatformAccessMode(platform: string, mode: MessagingPlatformAccessMode): Promise<{ success: boolean }>
+  getMessagingPendingSenders(platform?: string): Promise<MessagingPendingSenderInfo[]>
+  dismissMessagingPendingSender(platform: string, userId: string, opts?: { reason?: MessagingPendingRejectReason; bindingId?: string }): Promise<{ success: boolean }>
+  allowMessagingPendingSender(
+    platform: string,
+    userId: string,
+    entryKey?: { reason?: MessagingPendingRejectReason; bindingId?: string },
+  ): Promise<{ owners: MessagingPlatformOwnerInfo[]; bindingId?: string }>
+  setMessagingBindingAccess(bindingId: string, access: { mode: MessagingBindingAccessMode; allowedSenderIds?: string[] }): Promise<{ success: boolean }>
+  onMessagingPendingChanged(callback: (workspaceId: string) => void): () => void
 }
 
 export interface MessagingPlatformRuntimeInfo {
@@ -683,6 +705,38 @@ export interface MessagingPlatformRuntimeInfo {
   identity?: string
   lastError?: string
   updatedAt: number
+}
+
+/**
+ * Workspace-level access policy for a messaging platform.
+ * Mirrors the canonical type in `@craft-agent/messaging-gateway`.
+ */
+export type MessagingPlatformAccessMode = 'open' | 'owner-only'
+
+/** Per-binding access policy. */
+export type MessagingBindingAccessMode = 'inherit' | 'allow-list' | 'open'
+
+export interface MessagingPlatformOwnerInfo {
+  userId: string
+  displayName?: string
+  username?: string
+  addedAt: number
+}
+
+export type MessagingPendingRejectReason = 'not-owner' | 'not-on-binding-allowlist'
+
+export interface MessagingPendingSenderInfo {
+  platform: string
+  userId: string
+  displayName?: string
+  username?: string
+  lastAttemptAt: number
+  attemptCount: number
+  reason?: MessagingPendingRejectReason
+  bindingId?: string
+  sessionId?: string
+  channelId?: string
+  threadId?: number
 }
 
 /** Event payloads broadcast from the WhatsApp subprocess to the UI. */

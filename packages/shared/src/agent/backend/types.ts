@@ -32,6 +32,19 @@ import type { ModelProvider } from '../../config/models.ts';
 // Import LLM connection types for auth
 import type { LlmAuthType, LlmProviderType } from '../../config/llm-connections.ts';
 export type { LlmAuthType, LlmProviderType } from '../../config/llm-connections.ts';
+
+export interface BackendRuntimeUpdate {
+  model: string;
+  providerType?: LlmProviderType;
+  authType?: LlmAuthType;
+  runtime?: {
+    baseUrl?: string;
+    piAuthProvider?: string;
+    customEndpoint?: { api: string; supportsImages?: boolean };
+    customModels?: Array<string | { id: string; contextWindow?: number; supportsImages?: boolean }>;
+    [key: string]: unknown;
+  };
+}
 import type { AutomationSystem } from '../../automations/index.ts';
 
 /**
@@ -426,6 +439,19 @@ export interface AgentBackend {
 
   /** Set model (should validate against capabilities) */
   setModel(model: string): void;
+
+  /**
+   * Update runtime-affecting provider config without recreating the backend.
+   * Backends return false when the update cannot be applied in-place and the
+   * session manager should fall back to an idle restart.
+   */
+  updateRuntimeConfig?(update: BackendRuntimeUpdate): Promise<boolean>;
+
+  /**
+   * Dispose resources before an idle backend restart. Backends with subprocesses
+   * can wait for child process exit here to avoid transient process leaks.
+   */
+  disposeForRestart?(): Promise<void>;
 
   /** Get current thinking level */
   getThinkingLevel(): ThinkingLevel;

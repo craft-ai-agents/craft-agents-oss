@@ -249,7 +249,9 @@ export class SourceServerBuilder {
     const config: ApiConfig = {
       name: source.config.slug,
       baseUrl: api.baseUrl,
-      documentation: source.guide?.raw || '',
+      // documentation is no longer inlined into the tool description (see #683
+      // and api-tools.ts:buildToolDescription). The model reads guide.md via
+      // the prerequisite-manager-enforced Read instead.
       defaultHeaders: api.defaultHeaders,
     };
 

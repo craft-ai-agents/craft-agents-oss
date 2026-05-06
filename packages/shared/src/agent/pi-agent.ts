@@ -21,6 +21,7 @@ import { getProxyEnvVars } from '../config/proxy-env.ts';
 
 import type {
   BackendConfig,
+  BackendRuntimeUpdate,
   ChatOptions,
   SdkMcpServerConfig,
 } from './backend/types.ts';
@@ -230,6 +231,12 @@ export class PiAgent extends BaseAgent {
     reject: (error: Error) => void;
   }> = new Map();
 
+  // Pending runtime config updates (custom endpoint model capability refresh)
+  private pendingRuntimeConfigUpdates: Map<string, {
+    resolve: (updated: boolean) => void;
+    reject: (error: Error) => void;
+  }> = new Map();
+
   // Metadata captured before PreToolUse stripping, keyed by toolCallId.
   // This provides a deterministic bridge when side-channel metadata store misses.
   private preToolMetadataByCallId: Map<string, {
@@ -291,6 +298,17 @@ export class PiAgent extends BaseAgent {
     if (config.session?.id && config.workspace.rootPath) {
       this.adapter.setSessionDir(join(config.workspace.rootPath, 'sessions', config.session.id));
     }
+
+    // Wire the adapter's async overflow fallback into the event queue. The
+    // fallback fires when the SDK doesn't emit a compaction_start after a
+    // held overflow agent_end (e.g. _overflowRecoveryAttempted was already
+    // true). It runs outside adaptEvent() so it can't yield through the
+    // generator — instead, it calls these callbacks to enqueue the buffered
+    // error and terminate the iterator.
+    this.adapter.setOverflowFallbackHandlers(
+      (event) => this.eventQueue.enqueue(event),
+      () => this.eventQueue.complete(),
+    );
 
     if (!config.isHeadless) {
       this.startConfigWatcher();
@@ -887,6 +905,11 @@ export class PiAgent extends BaseAgent {
         this.handleSetAutoCompactionResult(msg);
         break;
 
+      case 'update_runtime_config_result':
+        // Response to a runtime config refresh request
+        this.handleRuntimeConfigUpdateResult(msg);
+        break;
+
       case 'session_id_update':
         // Pi session ID changed
         if (msg.sessionId) {
@@ -954,6 +977,10 @@ export class PiAgent extends BaseAgent {
         for (const [id, pending] of this.pendingAutoCompactionToggles) {
           pending.reject(new Error(rawMessage));
           this.pendingAutoCompactionToggles.delete(id);
+        }
+        for (const [id, pending] of this.pendingRuntimeConfigUpdates) {
+          pending.reject(new Error(rawMessage));
+          this.pendingRuntimeConfigUpdates.delete(id);
         }
 
         // Suppress repeated identical errors to prevent a broken subprocess
@@ -1064,8 +1091,13 @@ export class PiAgent extends BaseAgent {
       this.eventQueue.enqueue(agentEvent);
     }
 
-    // Check for agent end (turn complete)
-    if (eventType === 'agent_end') {
+    // Turn-completion is now adapter-driven so overflow recovery can hold the
+    // queue open across the SDK's compaction → agent.continue() sequence
+    // (see PiEventAdapter overflow state machine). The adapter returns true
+    // when the queue should terminate — either on a normal agent_end with no
+    // recovery in flight, or on a compaction_end failure that drains a held
+    // overflow.
+    if (this.adapter.shouldCompleteQueue(eventType === 'agent_end')) {
       this.eventQueue.complete();
     }
   }
@@ -1579,6 +1611,24 @@ export class PiAgent extends BaseAgent {
   }
 
   /**
+   * Handle update_runtime_config_result from subprocess.
+   */
+  private handleRuntimeConfigUpdateResult(msg: Record<string, unknown>): void {
+    const id = msg.id as string;
+    const success = Boolean(msg.success);
+    const pending = this.pendingRuntimeConfigUpdates.get(id);
+    if (!pending) return;
+
+    this.pendingRuntimeConfigUpdates.delete(id);
+    if (!success) {
+      pending.reject(new Error(String(msg.errorMessage || 'Runtime config update failed')));
+      return;
+    }
+
+    pending.resolve(Boolean(msg.updated ?? true));
+  }
+
+  /**
    * Handle subprocess exit.
    */
   private handleSubprocessExit(code: number | null, signal: string | null): void {
@@ -1630,6 +1680,11 @@ export class PiAgent extends BaseAgent {
       pending.reject(new Error(`Pi subprocess exited unexpectedly (${exitReason})`));
     }
     this.pendingAutoCompactionToggles.clear();
+
+    for (const [, pending] of this.pendingRuntimeConfigUpdates) {
+      pending.reject(new Error(`Pi subprocess exited unexpectedly (${exitReason})`));
+    }
+    this.pendingRuntimeConfigUpdates.clear();
 
     // Reject all pending tool executions
     for (const [, pending] of this.pendingToolExecutions) {
@@ -1732,6 +1787,46 @@ export class PiAgent extends BaseAgent {
       });
 
       this.send({ type: 'set_auto_compaction', id, enabled });
+    });
+  }
+
+  /**
+   * Ask subprocess to refresh runtime-affecting custom endpoint config in-place.
+   */
+  private async requestRuntimeConfigUpdate(update: BackendRuntimeUpdate): Promise<boolean> {
+    if (!this.subprocess) return true;
+
+    const id = `runtime-config-${++this.rpcIdCounter}`;
+    const timeoutMs = 15_000;
+    const runtime = update.runtime ?? {};
+
+    return new Promise<boolean>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingRuntimeConfigUpdates.delete(id);
+        reject(new Error(`update_runtime_config timed out after ${Math.floor(timeoutMs / 1000)}s`));
+      }, timeoutMs);
+
+      this.pendingRuntimeConfigUpdates.set(id, {
+        resolve: (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+
+      this.send({
+        type: 'update_runtime_config',
+        id,
+        model: update.model,
+        providerType: update.providerType,
+        authType: update.authType,
+        baseUrl: runtime.baseUrl,
+        customEndpoint: runtime.customEndpoint,
+        customModels: runtime.customModels,
+      });
     });
   }
 
@@ -1981,6 +2076,37 @@ export class PiAgent extends BaseAgent {
   // Model Forwarding
   // ============================================================
 
+  async updateRuntimeConfig(update: BackendRuntimeUpdate): Promise<boolean> {
+    const previousModel = this.getModel();
+    const previousRuntime = getBackendRuntime(this.config);
+
+    this.config = {
+      ...this.config,
+      providerType: update.providerType ?? this.config.providerType,
+      authType: update.authType ?? this.config.authType,
+      model: update.model,
+      runtime: {
+        ...previousRuntime,
+        ...(update.runtime ?? {}),
+      },
+    };
+    this._model = update.model;
+
+    if (!this.subprocess) {
+      this.debug(`Runtime config updated locally (no subprocess): ${previousModel} → ${update.model}`);
+      return true;
+    }
+
+    const updated = await this.requestRuntimeConfigUpdate({
+      ...update,
+      providerType: this.config.providerType,
+      authType: this.config.authType,
+      runtime: getBackendRuntime(this.config),
+    });
+    this.debug(`Runtime config refreshed in subprocess: ${previousModel} → ${update.model}`);
+    return updated;
+  }
+
   override setModel(model: string): void {
     const previousModel = this.getModel();
     super.setModel(model);
@@ -2140,12 +2266,85 @@ export class PiAgent extends BaseAgent {
     this.debug('PiAgent destroyed');
   }
 
+  async disposeForRestart(): Promise<void> {
+    this.stopConfigWatcher();
+
+    if (this.config.session?.id) {
+      unregisterSessionScopedToolCallbacks(this.config.session.id);
+    }
+
+    this._sessionToolContext = null;
+    await this.killSubprocessGracefully();
+    this.debug('PiAgent disposed for restart');
+  }
+
   /**
    * Reconnect by killing subprocess -- next chat() will spawn fresh.
    */
   async reconnect(): Promise<void> {
     this.killSubprocess();
     this.debug('PiAgent reconnected (subprocess will be respawned on next chat)');
+  }
+
+  /**
+   * Gracefully stop the subprocess and wait briefly for the child to exit.
+   * Used before an idle runtime restart so we don't leave transient children behind.
+   */
+  private async killSubprocessGracefully(timeoutMs = 2_000): Promise<void> {
+    const child = this.subprocess;
+    if (!child) {
+      this.killSubprocess();
+      return;
+    }
+
+    const pid = child.pid;
+    const waitForExit = new Promise<{ code: number | null; signal: string | null }>((resolve) => {
+      if (child.exitCode !== null || child.signalCode) {
+        resolve({ code: child.exitCode, signal: child.signalCode });
+        return;
+      }
+      child.once('exit', (code, signal) => resolve({ code, signal }));
+    });
+
+    try {
+      this.send({ type: 'shutdown' });
+    } catch {
+      // stdin may already be closed
+    }
+
+    child.kill('SIGTERM');
+    let result = await Promise.race([
+      waitForExit,
+      new Promise<null>(resolve => setTimeout(() => resolve(null), timeoutMs)),
+    ]);
+
+    if (!result && this.subprocess === child) {
+      this.debug(`Pi subprocess ${pid ?? '(unknown pid)'} did not exit after ${timeoutMs}ms; sending SIGKILL`);
+      child.kill('SIGKILL');
+      result = await Promise.race([
+        waitForExit,
+        new Promise<null>(resolve => setTimeout(() => resolve(null), 1_000)),
+      ]);
+    }
+
+    if (this.readline) {
+      this.readline.close();
+      this.readline = null;
+    }
+    if (this.subprocess === child) {
+      this.subprocess = null;
+    }
+    this.subprocessReady = null;
+    this.subprocessReadyResolve = null;
+    this.callbackPort = 0;
+    this.preToolMetadataByCallId.clear();
+    this.adapter.resetOverflowState();
+
+    if (result) {
+      this.debug(`Pi subprocess ${pid ?? '(unknown pid)'} stopped for restart: code=${result.code}, signal=${result.signal}`);
+    } else {
+      this.debug(`Pi subprocess ${pid ?? '(unknown pid)'} stop timed out after SIGKILL`);
+    }
   }
 
   /**
@@ -2172,6 +2371,10 @@ export class PiAgent extends BaseAgent {
     this.subprocessReadyResolve = null;
     this.callbackPort = 0;
     this.preToolMetadataByCallId.clear();
+
+    // Clear any in-flight overflow-recovery state so a stale fallback timer
+    // doesn't fire on a torn-down adapter.
+    this.adapter.resetOverflowState();
   }
 
   // ============================================================

@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/server-core",
-  "version": "0.8.13",
+  "version": "0.9.1",
   "license": "Apache-2.0",
   "description": "Reusable headless server infrastructure for Craft Agent",
   "type": "module",
@@ -29,7 +29,7 @@
     "jose": "^6.0.0",
     "ws": "^8.19.0",
     "sharp": "0.34.5",
-    "@mariozechner/pi-ai": "0.70.2"
+    "@mariozechner/pi-ai": "0.72.1"
   },
   "devDependencies": {
     "typescript": "^5.8.2",

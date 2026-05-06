@@ -31,8 +31,8 @@ export interface MessagingSessionMenuItemProps {
   /** Session to bind the pairing code to. */
   sessionId: string
   /**
-   * Called when the user clicks Telegram but Telegram isn't connected yet.
-   * Default: navigate to messaging settings + toast.
+   * Called when the user clicks Telegram or Lark but the platform isn't
+   * connected yet. Default: navigate to messaging settings + toast.
    * Playground overrides this to toast only (it has no router).
    */
   onTelegramNotConfigured?: () => void
@@ -53,7 +53,7 @@ export function MessagingSessionMenuItem({
   const setMessagingDialog = useSetAtom(messagingDialogAtom)
   const { MenuItem, Sub, SubTrigger, SubContent } = useMenuComponents()
 
-  const handleConnectMessaging = async (platform: 'telegram' | 'whatsapp') => {
+  const handleConnectMessaging = async (platform: 'telegram' | 'whatsapp' | 'lark') => {
     // First-run check — avoid hitting the server if the platform is not
     // connected. Failure to read config is treated as "unknown" and falls
     // through to attempting pairing so the server surfaces a real error.
@@ -67,6 +67,8 @@ export function MessagingSessionMenuItem({
         } else if (onTelegramNotConfigured) {
           onTelegramNotConfigured()
         } else {
+          // Telegram + Lark share the "open Settings" path — both use
+          // a Settings dialog rather than an inline connect flow.
           navigate(routes.view.settings('messaging'))
           toast.info(t('toast.telegramNotConfiguredOpenSettings'))
         }
@@ -117,6 +119,9 @@ export function MessagingSessionMenuItem({
         </MenuItem>
         <MenuItem onClick={() => handleConnectMessaging('whatsapp')}>
           <span>WhatsApp</span>
+        </MenuItem>
+        <MenuItem onClick={() => handleConnectMessaging('lark')}>
+          <span>Lark / Feishu</span>
         </MenuItem>
       </SubContent>
     </Sub>
