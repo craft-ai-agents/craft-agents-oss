@@ -89,6 +89,8 @@ import {
   removeRecentWorkingDir,
 } from './working-directory-history'
 import { CompactPermissionModeSelector } from './CompactPermissionModeSelector'
+import { useAtomValue, useSetAtom } from 'jotai'
+import { lineCommentQueueAtom, clearLineCommentsAtom, formatLineCommentsMessage } from '@/atoms/line-comments'
 
 /**
  * Format token count for display (e.g., 1500 -> "1.5k", 200000 -> "200k")
@@ -300,6 +302,10 @@ export function FreeFormInput({
 }: FreeFormInputProps) {
   const { t } = useTranslation()
 
+  const lineCommentQueue = useAtomValue(lineCommentQueueAtom)
+  const clearLineComments = useSetAtom(clearLineCommentsAtom)
+  const hasLineComments = lineCommentQueue.length > 0
+
   // Default rotating placeholders for onboarding/empty state (i18n-aware)
   const defaultPlaceholders = React.useMemo(() => [
     t("chatInput.placeholder.workOn"),
@@ -311,7 +317,9 @@ export function FreeFormInput({
     t("chatInput.placeholder.focusMode", { key: cmdKey }),
   ], [t])
 
-  const effectivePlaceholderProp = placeholder ?? defaultPlaceholders
+  const effectivePlaceholderProp = hasLineComments
+    ? t('chatInput.lineComments.placeholder')
+    : (placeholder ?? defaultPlaceholders)
 
   // Read connection default model, connections, and workspace info from context.
   // Uses optional variant so playground (no provider) doesn't crash.
@@ -1269,7 +1277,7 @@ export function FreeFormInput({
 
   // Submit message - backend handles queueing and interruption
   const submitMessage = React.useCallback(() => {
-    const hasContent = input.trim() || attachments.length > 0 || followUpItems.length > 0
+    const hasContent = input.trim() || attachments.length > 0 || followUpItems.length > 0 || lineCommentQueue.length > 0
     if (!hasContent || disabled) return false
 
     // Tutorial may disable sending to guide user through specific steps
@@ -1291,11 +1299,16 @@ export function FreeFormInput({
 
     const attachmentSnapshot = attachments
 
+    const commentPrefix = formatLineCommentsMessage(lineCommentQueue)
+    const userText = input.trim()
+    const finalText = [commentPrefix, userText].filter(Boolean).join('\n\n')
+
     onSubmit(
-      input.trim(),
+      finalText,
       attachmentSnapshot.length > 0 ? attachmentSnapshot : undefined,
       mentions.skills.length > 0 ? mentions.skills : undefined
     )
+    clearLineComments()
     setInput('')
     setAttachments([])
     // Clear draft immediately (cancel any pending debounced sync)
@@ -1310,7 +1323,7 @@ export function FreeFormInput({
     })
 
     return true
-  }, [input, attachments, followUpItems, disabled, disableSend, onInputChange, onAttachmentsChange, onSubmit, skills, sources, optimisticSourceSlugs, onSourcesChange, onWorkingDirectoryChange, homeDir])
+  }, [input, attachments, followUpItems, lineCommentQueue, clearLineComments, disabled, disableSend, onInputChange, onAttachmentsChange, onSubmit, skills, sources, optimisticSourceSlugs, onSourcesChange, onWorkingDirectoryChange, homeDir])
 
   // Listen for craft:submit-input events (simulate pressing the Send button)
   React.useEffect(() => {
@@ -1553,7 +1566,7 @@ export function FreeFormInput({
     return () => window.clearTimeout(timer)
   }, [followUpLayoutKey])
 
-  const hasContent = input.trim() || attachments.length > 0 || followUpItems.length > 0
+  const hasContent = input.trim() || attachments.length > 0 || followUpItems.length > 0 || lineCommentQueue.length > 0
 
   // Pre-flight image-support check: warn when staged images would be silently
   // stripped by Pi SDK because the active custom-endpoint model is text-only.
@@ -1662,6 +1675,26 @@ export function FreeFormInput({
           disabled={disabled}
           loadingCount={loadingCount}
         />
+
+        {/* Line comment queue pill */}
+        <AnimatePresence initial={false}>
+          {hasLineComments && (
+            <motion.div
+              key="line-comment-pill"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.18, ease: [0.2, 0, 0.2, 1] }}
+              className="overflow-hidden"
+            >
+              <div className="px-3 pt-3.5 pb-0">
+                <span className="inline-flex items-center gap-1 rounded-[6px] bg-foreground/5 px-2 py-1 text-[12px] text-foreground/80 select-none">
+                  {t('chatInput.lineComments.pill', { count: lineCommentQueue.length })}
+                </span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Follow-up context chips */}
         <AnimatePresence initial={false}>

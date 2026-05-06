@@ -247,6 +247,8 @@
   "chat.viewOutput": "Kimenet megtekintése",
   "chat.viewTurnDetails": "Forduló részleteinek megtekintése",
   "chat.workingDirectory": "Munkakönyvtár",
+  "chatInput.lineComments.pill": "{{count}} soros megjegyzés",
+  "chatInput.lineComments.placeholder": "Követő módosítások kérése",
   "chatInput.placeholder.focusMode": "Nyomd meg: {{key}} + . a fókusz módhoz",
   "chatInput.placeholder.labels": "Írj # karaktert, hogy címkéket adj ehhez a beszélgetéshez",
   "chatInput.placeholder.mention": "Írj @ karaktert fájlok, mappák vagy skillek megemlítéséhez",

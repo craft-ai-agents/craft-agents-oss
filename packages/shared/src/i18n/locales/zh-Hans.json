@@ -247,6 +247,8 @@
   "chat.viewOutput": "查看输出",
   "chat.viewTurnDetails": "查看轮次详情",
   "chat.workingDirectory": "工作目录",
+  "chatInput.lineComments.pill": "{{count}} 个评论",
+  "chatInput.lineComments.placeholder": "要求后续变更",
   "chatInput.placeholder.focusMode": "按 {{key}} + . 进入专注模式",
   "chatInput.placeholder.labels": "输入 # 为此对话添加标签",
   "chatInput.placeholder.mention": "输入 @ 提及文件、文件夹或技能",

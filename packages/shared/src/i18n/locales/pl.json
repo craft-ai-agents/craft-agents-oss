@@ -247,6 +247,8 @@
   "chat.viewOutput": "Zobacz wyniki",
   "chat.viewTurnDetails": "Zobacz szczegóły tury",
   "chat.workingDirectory": "Katalog roboczy",
+  "chatInput.lineComments.pill": "{{count}} komentarzy do linii",
+  "chatInput.lineComments.placeholder": "Poproś o zmiany następcze",
   "chatInput.placeholder.focusMode": "Naciśnij {{key}} + . aby włączyć tryb skupienia",
   "chatInput.placeholder.labels": "Wpisz #, aby dodać etykiety do tej rozmowy",
   "chatInput.placeholder.mention": "Wpisz @, aby wskazać pliki, foldery lub umiejętności",

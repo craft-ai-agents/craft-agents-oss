@@ -15,9 +15,10 @@ import {
   type EditorTab,
 } from '@/atoms/editor-tabs'
 import { sessionAtomFamily } from '@/atoms/sessions'
+import { addLineCommentAtom, type LineComment } from '@/atoms/line-comments'
 import type { SessionFile } from '../../../shared/types'
-import { ShikiCodeViewer } from '@/components/shiki/ShikiCodeViewer'
 import { UnifiedDiffViewer } from '@/components/shiki/UnifiedDiffViewer'
+import { LineAnnotatableViewer } from '@/components/editor/LineAnnotatableViewer'
 import {
   PANEL_SASH_HIT_WIDTH,
   PANEL_SASH_LINE_WIDTH,
@@ -101,14 +102,15 @@ function CommitDetailContent({ tab }: { tab: Extract<EditorTab, { type: 'git-com
   )
 }
 
-function renderTabContent(tab: EditorTab) {
+function renderTabContent(tab: EditorTab, onLineComment: (comment: LineComment) => void) {
   switch (tab.type) {
     case 'file':
       return (
-        <ShikiCodeViewer
+        <LineAnnotatableViewer
           code={tab.content}
           filePath={tab.filePath}
           className="h-full text-xs"
+          onComment={onLineComment}
         />
       )
     case 'git-diff':
@@ -131,6 +133,7 @@ export function EditorDetailPanel({ workspaceId, sessionId }: EditorDetailPanelP
   const closeTab = useSetAtom(closeTabAtom)
   const openFileTab = useSetAtom(openFileTabAtom)
   const refreshAllTabs = useSetAtom(refreshAllTabsAtom)
+  const addLineComment = useSetAtom(addLineCommentAtom)
 
   const session = useAtomValue(sessionAtomFamily(sessionId ?? ''))
   const isProcessing = session?.isProcessing ?? false
@@ -314,7 +317,7 @@ export function EditorDetailPanel({ workspaceId, sessionId }: EditorDetailPanelP
               </div>
 
               <div className="flex-1 overflow-auto min-h-0">
-                {activeTab && renderTabContent(activeTab)}
+                {activeTab && renderTabContent(activeTab, addLineComment)}
               </div>
             </div>
           </div>

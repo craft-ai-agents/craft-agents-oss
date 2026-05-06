@@ -247,6 +247,8 @@
   "chat.viewOutput": "View Output",
   "chat.viewTurnDetails": "View turn details",
   "chat.workingDirectory": "Working directory",
+  "chatInput.lineComments.pill": "{{count}} line comments",
+  "chatInput.lineComments.placeholder": "Request follow-up changes",
   "chatInput.placeholder.focusMode": "Press {{key}} + . for focus mode",
   "chatInput.placeholder.labels": "Type # to apply labels to this conversation",
   "chatInput.placeholder.mention": "Type @ to mention files, folders, or skills",
