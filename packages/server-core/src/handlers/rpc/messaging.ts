@@ -5,6 +5,12 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '../../transport/types'
 import type { HandlerDeps } from '../handler-deps'
+import type {
+  MessagingBindingAccessMode,
+  MessagingPendingRejectReason,
+  MessagingPlatformAccessMode,
+  MessagingPlatformOwnerInfo,
+} from '../messaging-registry-interface'
 
 export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps): void {
   const registry = deps.messagingRegistry
@@ -108,4 +114,83 @@ export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps):
     await registry.submitWhatsAppPhone(ctx.workspaceId, phoneNumber)
     return { success: true }
   })
+
+  // -------------------------------------------------------------------------
+  // Access control
+  // -------------------------------------------------------------------------
+
+  server.handle(
+    RPC_CHANNELS.messaging.GET_PLATFORM_OWNERS,
+    async (ctx, platform: string) => {
+      if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+      return registry.getPlatformOwners(ctx.workspaceId, platform)
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.messaging.SET_PLATFORM_OWNERS,
+    async (ctx, platform: string, owners: MessagingPlatformOwnerInfo[]) => {
+      if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+      return registry.setPlatformOwners(ctx.workspaceId, platform, owners)
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.messaging.GET_PLATFORM_ACCESS_MODE,
+    async (ctx, platform: string) => {
+      if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+      return registry.getPlatformAccessMode(ctx.workspaceId, platform)
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.messaging.SET_PLATFORM_ACCESS_MODE,
+    async (ctx, platform: string, mode: MessagingPlatformAccessMode) => {
+      if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+      registry.setPlatformAccessMode(ctx.workspaceId, platform, mode)
+      return { success: true }
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.messaging.GET_PENDING_SENDERS,
+    async (ctx, platform?: string) => {
+      if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+      return registry.getPendingSenders(ctx.workspaceId, platform)
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.messaging.DISMISS_PENDING_SENDER,
+    async (ctx, platform: string, userId: string) => {
+      if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+      return { success: registry.dismissPendingSender(ctx.workspaceId, platform, userId) }
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.messaging.ALLOW_PENDING_SENDER,
+    async (
+      ctx,
+      platform: string,
+      userId: string,
+      entryKey?: { reason?: MessagingPendingRejectReason; bindingId?: string },
+    ) => {
+      if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+      return registry.allowPendingSender(ctx.workspaceId, platform, userId, entryKey)
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.messaging.SET_BINDING_ACCESS,
+    async (
+      ctx,
+      bindingId: string,
+      access: { mode: MessagingBindingAccessMode; allowedSenderIds?: string[] },
+    ) => {
+      if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+      registry.setBindingAccess(ctx.workspaceId, bindingId, access)
+      return { success: true }
+    },
+  )
 }

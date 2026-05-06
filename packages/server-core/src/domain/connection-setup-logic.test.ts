@@ -4,6 +4,7 @@ import {
   isLoopbackBaseUrl,
   setupTestRequiresApiKey,
   resolveCustomEndpointSetup,
+  createBuiltInConnection,
 } from './connection-setup-logic'
 
 describe('validateSetupTestInput', () => {
@@ -107,5 +108,40 @@ describe('resolveCustomEndpointSetup', () => {
       credential: 'sk-anything',
       customEndpointApi: 'openai-completions',
     })).toEqual({ authType: 'api_key_with_endpoint', piAuthProvider: 'openai' })
+  })
+})
+
+// New connections must persist a per-provider midStreamBehavior default so the
+// per-connection submenu in Settings → AI shows a checkmark on the right item
+// out of the box (no read-time fallback needed for fresh connections).
+describe('createBuiltInConnection seeds midStreamBehavior', () => {
+  it("Anthropic API key → 'queue' (Claude's emulated steer is fragile)", () => {
+    const conn = createBuiltInConnection('anthropic-api')
+    expect(conn.providerType).toBe('anthropic')
+    expect(conn.midStreamBehavior).toBe('queue')
+  })
+
+  it("Claude Max OAuth → 'queue' (still uses Claude SDK)", () => {
+    const conn = createBuiltInConnection('claude-max')
+    expect(conn.providerType).toBe('anthropic')
+    expect(conn.midStreamBehavior).toBe('queue')
+  })
+
+  it("ChatGPT Plus → 'steer' (Pi backend, native polite steer)", () => {
+    const conn = createBuiltInConnection('chatgpt-plus')
+    expect(conn.providerType).toBe('pi')
+    expect(conn.midStreamBehavior).toBe('steer')
+  })
+
+  it("Pi API key (Craft Agents Backend) → 'steer'", () => {
+    const conn = createBuiltInConnection('pi-api-key')
+    expect(conn.providerType).toBe('pi')
+    expect(conn.midStreamBehavior).toBe('steer')
+  })
+
+  it("anthropic-api with custom endpoint becomes pi_compat → 'steer'", () => {
+    const conn = createBuiltInConnection('anthropic-api', 'http://localhost:11434/v1')
+    expect(conn.providerType).toBe('pi_compat')
+    expect(conn.midStreamBehavior).toBe('steer')
   })
 })

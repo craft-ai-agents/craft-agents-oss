@@ -165,28 +165,30 @@ function buildUrl(
 }
 
 /**
- * Build tool description from API config
+ * Build tool description from API config.
+ *
+ * The description is sent to the LLM with every request, so we keep it small
+ * and point to `sources/{slug}/guide.md` for endpoint-specific detail. The
+ * agent's PrerequisiteManager already blocks calls to this tool until the
+ * guide has been Read in the current context window, so the guide always
+ * lands in conversation history before the model can call anything — making
+ * a duplicate copy here pure waste (and the cause of #683-style provider
+ * rejections when guide.md is large).
+ *
+ * Exported only for unit testing; treat as internal.
  */
-function buildToolDescription(config: ApiConfig): string {
-  let desc = `Make authenticated requests to ${config.name} API (${config.baseUrl})\n\n`;
-  desc += `Authentication is handled automatically - just specify path, method, and params.\n`;
+export function buildToolDescription(config: ApiConfig): string {
+  // config.name is the source slug (set by SourceServerBuilder.buildApiConfig).
+  let desc = `Make authenticated requests to the ${config.name} API (${config.baseUrl}).\n\n`;
+  desc += `Authentication is handled automatically — pass path, method, and params.\n`;
   desc += `For non-JSON request bodies, use params: { _rawBody: "raw content", _contentType: "text/plain" }. The _rawBody value is sent as-is without JSON encoding.\n\n`;
-
-  // Check for old cache format (no documentation field)
-  if (!config.documentation) {
-    desc += `⚠️ This API was cached with an older format. You can still make requests but you'll need to figure out the endpoints yourself.`;
-    return desc;
-  }
-
-  // Include the rich documentation extracted from the agent definition
-  desc += config.documentation;
+  desc += `**Before the first call, Read the source guide at sources/${config.name}/guide.md** — `;
+  desc += `it documents available endpoints, required params, and any quirks. The Read is required before the first call (enforced) and again after compaction.\n\n`;
+  desc += `**Binary responses** (PDFs, images, archives) are auto-saved to the session downloads folder; reference the returned path when telling the user about downloaded files.`;
 
   if (config.docsUrl) {
     desc += `\n\nOfficial docs: ${config.docsUrl}`;
   }
-
-  // Inform agent about binary file handling
-  desc += `\n\n**Binary Files:** Binary responses (PDFs, images, archives, etc.) are automatically detected and saved to the session downloads folder. You'll receive a message with the file path and size. Reference the path when telling users about downloaded files.`;
 
   return desc;
 }

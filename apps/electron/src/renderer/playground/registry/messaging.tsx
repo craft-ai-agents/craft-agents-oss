@@ -1,4 +1,5 @@
 import type { ComponentEntry } from './types'
+import { AllowListPreview } from '../demos/messaging/AllowListPreview'
 import { MessagingSettingsPagePreview } from '../demos/messaging/MessagingSettingsPagePreview'
 import { MessagingTelegramReworkedPreview } from '../demos/messaging/MessagingTelegramReworkedPreview'
 import { PairingCodeDialogPreview } from '../demos/messaging/PairingCodeDialogPreview'
@@ -6,6 +7,116 @@ import { WhatsAppConnectDialogPreview } from '../demos/messaging/WhatsAppConnect
 import { MessagingSubmenuPreview } from '../demos/messaging/MessagingSubmenuPreview'
 
 export const messagingComponents: ComponentEntry[] = [
+  {
+    id: 'messaging-allow-list',
+    name: 'Telegram Allow-list (access control)',
+    category: 'Messaging',
+    description:
+      'Workspace owners list, pending requests, per-binding allow-list. Drives the Phase 1 design for restricting bot access.',
+    component: AllowListPreview,
+    layout: 'full',
+    props: [
+      {
+        name: 'accessMode',
+        description:
+          'Workspace-level access policy. "open" shows the migration banner; "owner-only" enforces the allow-list.',
+        control: {
+          type: 'select',
+          options: [
+            { label: 'Open (legacy / migration banner)', value: 'open' },
+            { label: 'Owner-only · empty list', value: 'owner-only-empty' },
+            { label: 'Owner-only · with owner', value: 'owner-only-with-owner' },
+          ],
+        },
+        defaultValue: 'owner-only-with-owner',
+      },
+      {
+        name: 'pending',
+        description: 'How many recently rejected senders to show.',
+        control: {
+          type: 'select',
+          options: [
+            { label: 'None', value: 'none' },
+            { label: 'One', value: 'one' },
+            { label: 'Three', value: 'three' },
+          ],
+        },
+        defaultValue: 'one',
+      },
+      {
+        name: 'dmBindingAccess',
+        description: 'Per-binding access mode for the sample DM binding.',
+        control: {
+          type: 'select',
+          options: [
+            { label: 'Inherit workspace', value: 'inherit' },
+            { label: 'Custom allow-list', value: 'allow-list' },
+            { label: 'Open to anyone', value: 'open' },
+          ],
+        },
+        defaultValue: 'inherit',
+      },
+      {
+        name: 'topicBindingAccess',
+        description: 'Per-binding access mode for the sample supergroup topic.',
+        control: {
+          type: 'select',
+          options: [
+            { label: 'Inherit workspace', value: 'inherit' },
+            { label: 'Custom allow-list', value: 'allow-list' },
+            { label: 'Open to anyone', value: 'open' },
+          ],
+        },
+        defaultValue: 'inherit',
+      },
+    ],
+    variants: [
+      {
+        name: 'Migration: open mode + pending requests',
+        description:
+          'Existing workspace, accessMode=open. Banner prompts owner to lock down; pending list grows as random senders try the bot.',
+        props: {
+          accessMode: 'open',
+          pending: 'three',
+          dmBindingAccess: 'open',
+          topicBindingAccess: 'open',
+        },
+      },
+      {
+        name: 'Locked-down · with owner · 1 pending',
+        description:
+          'Default state for a freshly-paired bot: one owner, one pending request to consider.',
+        props: {
+          accessMode: 'owner-only-with-owner',
+          pending: 'one',
+          dmBindingAccess: 'inherit',
+          topicBindingAccess: 'inherit',
+        },
+      },
+      {
+        name: 'Locked-down · empty list',
+        description:
+          'Bot is locked down but no owners are recorded yet (rare — typically right after a manual lock-down with empty seed).',
+        props: {
+          accessMode: 'owner-only-empty',
+          pending: 'none',
+          dmBindingAccess: 'inherit',
+          topicBindingAccess: 'inherit',
+        },
+      },
+      {
+        name: 'Per-binding: custom allow-list',
+        description:
+          'Owner narrowed the DM binding to a custom allow-list, while the supergroup topic still inherits.',
+        props: {
+          accessMode: 'owner-only-with-owner',
+          pending: 'none',
+          dmBindingAccess: 'allow-list',
+          topicBindingAccess: 'inherit',
+        },
+      },
+    ],
+  },
   {
     id: 'messaging-telegram-reworked',
     name: 'Telegram Settings (rework draft)',

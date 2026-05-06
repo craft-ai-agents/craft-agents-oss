@@ -432,4 +432,15 @@ export const CHANNEL_MAP = {
   playSoundTest: invoke(RPC_CHANNELS.sound.PLAY_TEST),
   importSoundFolder: invoke(RPC_CHANNELS.sound.IMPORT_FOLDER),
   importPeonPingPacks: invoke(RPC_CHANNELS.sound.IMPORT_PEON_PING),
+  // Messaging access control (Phase 3)
+  getMessagingPlatformOwners: invoke(RPC_CHANNELS.messaging.GET_PLATFORM_OWNERS),
+  setMessagingPlatformOwners: invoke(RPC_CHANNELS.messaging.SET_PLATFORM_OWNERS),
+  getMessagingPlatformAccessMode: invoke(RPC_CHANNELS.messaging.GET_PLATFORM_ACCESS_MODE),
+  setMessagingPlatformAccessMode: invoke(RPC_CHANNELS.messaging.SET_PLATFORM_ACCESS_MODE),
+  getMessagingPendingSenders: invoke(RPC_CHANNELS.messaging.GET_PENDING_SENDERS),
+  dismissMessagingPendingSender: invoke(RPC_CHANNELS.messaging.DISMISS_PENDING_SENDER),
+  allowMessagingPendingSender: invoke(RPC_CHANNELS.messaging.ALLOW_PENDING_SENDER),
+  setMessagingBindingAccess: invoke(RPC_CHANNELS.messaging.SET_BINDING_ACCESS),
+  onMessagingPendingChanged: listener(RPC_CHANNELS.messaging.PENDING_CHANGED),
+
 } satisfies ChannelMap

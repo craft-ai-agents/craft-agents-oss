@@ -8,17 +8,25 @@
 import type { ISessionManager } from '@craft-agent/server-core/handlers'
 import type { PushTarget } from '@craft-agent/shared/protocol'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import {
+  evaluateBindingAccess,
+  evaluatePreBindingAccess,
+  executeRejection,
+} from './access-control'
 import { BindingStore } from './binding-store'
 import { Router } from './router'
-import { Commands, type PairingCodeConsumer } from './commands'
+import { Commands, type AccessControlDeps, type PairingCodeConsumer } from './commands'
 import { Renderer, type SessionEvent } from './renderer'
+import { PendingSendersStore } from './pending-senders'
 import { PlanTokenRegistry } from './plan-tokens'
 import type {
   PlatformAdapter,
   PlatformType,
   IncomingMessage,
   ButtonPress,
+  MessagingConfig,
   MessagingLogger,
+  PlatformOwner,
 } from './types'
 
 const consoleLogger: MessagingLogger = {
@@ -46,6 +54,27 @@ export interface GatewayOptions {
   pairingConsumer?: PairingCodeConsumer
   /** Fired after any binding mutation (bind/unbind). */
   onBindingChanged?: () => void
+  /**
+   * Reads the workspace's MessagingConfig. Called per-message so config
+   * edits (toggling accessMode, adding owners) take effect without restart.
+   * Optional — when omitted, the gateway falls back to a permissive
+   * "everything is open" config (useful for legacy callers and unit tests).
+   */
+  getWorkspaceConfig?: () => MessagingConfig
+  /**
+   * Append `candidate` to the platform's owners list iff the list is
+   * currently empty. No-op otherwise. Used by Commands.handlePair to
+   * bootstrap ownership the first time anyone redeems a code.
+   */
+  seedOwnerOnFirstPair?: (
+    platform: PlatformType,
+    candidate: PlatformOwner,
+  ) => Promise<PlatformOwner[]>
+  /**
+   * Fires after the pending-senders store mutates, so the registry can push
+   * an event to the renderer. Mirrors `onBindingChanged`.
+   */
+  onPendingChanged?: () => void
   /** Optional logger — defaults to console. Pass a structured host logger in Electron. */
   logger?: MessagingLogger
 }
@@ -80,6 +109,7 @@ export class MessagingGateway {
   private readonly sessionManager: ISessionManager
   private readonly workspaceId: string
   private readonly bindingStore: BindingStore
+  private readonly pendingStore: PendingSendersStore
   private readonly router: Router
   private readonly commands: Commands
   private readonly renderer: Renderer
@@ -89,6 +119,16 @@ export class MessagingGateway {
   private readonly adapters = new Map<PlatformType, PlatformAdapter>()
   private readonly log: MessagingLogger
   private started = false
+  /**
+   * Access-control surface — `getWorkspaceConfig` is called per-button so
+   * config edits take effect without restart, mirroring the text path.
+   * `recentRejectReplies` is a separate cooldown map from Router/Commands
+   * so callback-button rejection rate-limiting is independent of text
+   * rejection rate-limiting (a stranger spamming buttons doesn't lock
+   * out their text-channel reply, and vice versa).
+   */
+  private readonly accessDeps: AccessControlDeps
+  private readonly buttonRecentRejectReplies = new Map<string, number>()
 
   constructor(opts: GatewayOptions) {
     this.sessionManager = opts.sessionManager
@@ -105,18 +145,40 @@ export class MessagingGateway {
     if (opts.onBindingChanged) {
       this.bindingStore.onChange(opts.onBindingChanged)
     }
+
+    this.pendingStore = new PendingSendersStore(
+      opts.storageDir,
+      this.log.child({ component: 'pending-senders' }),
+    )
+    if (opts.onPendingChanged) {
+      this.pendingStore.onChange(opts.onPendingChanged)
+    }
+
+    this.accessDeps = {
+      getWorkspaceConfig:
+        opts.getWorkspaceConfig ?? (() => ({ enabled: false, platforms: {} })),
+      seedOwnerOnFirstPair:
+        opts.seedOwnerOnFirstPair ?? (async () => []),
+      pendingStore: this.pendingStore,
+    }
+
     this.commands = new Commands(
       opts.sessionManager,
       this.bindingStore,
       opts.workspaceId,
       opts.pairingConsumer,
       this.log.child({ component: 'commands' }),
+      this.accessDeps,
     )
     this.router = new Router(
       opts.sessionManager,
       this.bindingStore,
       this.commands,
       this.log.child({ component: 'router' }),
+      {
+        getWorkspaceConfig: this.accessDeps.getWorkspaceConfig,
+        pendingStore: this.pendingStore,
+      },
     )
     this.planTokens = new PlanTokenRegistry()
     this.renderer = new Renderer({
@@ -291,6 +353,15 @@ export class MessagingGateway {
     // the same topic (Telegram supergroup) the button was tapped from.
     const pressOpts = press.threadId !== undefined ? { threadId: press.threadId } : {}
 
+    // Access gate. Inline buttons in supergroup topics are visible to
+    // every member of the chat, so without this gate any non-owner could
+    // tap `bind:`/`perm:`/`plan:` and bypass the text-side filter. The
+    // text path is locked but callbacks would not be — that's exactly
+    // the "looks locked but isn't" UX the access control is meant to
+    // prevent.
+    const allowed = await this.gateButtonPress(adapter, press)
+    if (!allowed) return
+
     if (press.buttonId.startsWith('bind:')) {
       const sessionId = press.buttonId.slice('bind:'.length)
       const session = await this.sessionManager.getSession(sessionId)
@@ -449,6 +520,105 @@ export class MessagingGateway {
     }
   }
 
+  /**
+   * Decide whether a button press may proceed. `bind:` is workspace-owner
+   * only (matches the `/bind` text command); `perm:` and `plan:` are gated
+   * by the binding's access policy (matches the routing-time check in
+   * Router.route). Bot senders are silent-dropped before any other logic.
+   *
+   * Returns true to proceed, false on reject (caller must return early).
+   * The reject path emits the friendly reply and records the sender in
+   * the pending-senders store via the shared `executeRejection` helper.
+   */
+  private async gateButtonPress(
+    adapter: PlatformAdapter,
+    press: ButtonPress,
+  ): Promise<boolean> {
+    const senderShape: import('./access-control').RejectableSender = {
+      platform: press.platform,
+      channelId: press.channelId,
+      ...(press.threadId !== undefined ? { threadId: press.threadId } : {}),
+      senderId: press.senderId,
+      ...(press.senderName ? { senderName: press.senderName } : {}),
+      ...(press.senderUsername ? { senderUsername: press.senderUsername } : {}),
+    }
+
+    let verdict: import('./access-control').AccessDecision
+    let extra: { bindingId?: string; sessionId?: string } = {}
+
+    if (press.buttonId.startsWith('bind:')) {
+      // `bind:` runs the same gate as the `/bind` text command — the
+      // operator who emitted the keyboard is offering session-binding
+      // privileges, but only owners may take them.
+      verdict = evaluatePreBindingAccess({
+        msg: this.synthesizeMsgForGate(press),
+        workspaceConfig: this.accessDeps.getWorkspaceConfig(),
+      })
+    } else if (
+      press.buttonId.startsWith('perm:') ||
+      press.buttonId.startsWith('plan:')
+    ) {
+      // `perm:`/`plan:` are session-level approvals; the sender must have
+      // routing access to the binding the button was attached to.
+      const binding = this.bindingStore.findByChannel(
+        press.platform,
+        press.channelId,
+        press.threadId,
+      )
+      if (!binding) {
+        // No binding to evaluate against — fall through to the existing
+        // "not bound" handling in the caller (which will silently no-op
+        // for perm/plan since they require a binding lookup anyway).
+        return true
+      }
+      extra = { bindingId: binding.id, sessionId: binding.sessionId }
+      verdict = evaluateBindingAccess({
+        msg: this.synthesizeMsgForGate(press),
+        workspaceConfig: this.accessDeps.getWorkspaceConfig(),
+        binding,
+      })
+    } else {
+      // Unknown button prefix — let the caller handle it.
+      return true
+    }
+
+    if (verdict.allow) return true
+
+    await executeRejection(
+      adapter,
+      senderShape,
+      verdict.reason,
+      {
+        recentRejectReplies: this.buttonRecentRejectReplies,
+        pendingStore: this.pendingStore,
+      },
+      this.log,
+      extra,
+    )
+    return false
+  }
+
+  /**
+   * Build the minimum `IncomingMessage` shape the access evaluators read.
+   * The evaluators only consult `platform`, `senderId`, `senderIsBot` —
+   * everything else is dummy/empty for the button-press path.
+   */
+  private synthesizeMsgForGate(press: ButtonPress): IncomingMessage {
+    return {
+      platform: press.platform,
+      channelId: press.channelId,
+      ...(press.threadId !== undefined ? { threadId: press.threadId } : {}),
+      messageId: press.messageId,
+      senderId: press.senderId,
+      ...(press.senderName ? { senderName: press.senderName } : {}),
+      ...(press.senderUsername ? { senderUsername: press.senderUsername } : {}),
+      ...(press.senderIsBot ? { senderIsBot: true } : {}),
+      text: '',
+      timestamp: Date.now(),
+      raw: press,
+    }
+  }
+
   private async finishPendingCompactAccept(sessionId: string): Promise<void> {
     const entry = this.pendingCompactAccepts.get(sessionId)
     if (!entry) return
@@ -492,6 +662,10 @@ export class MessagingGateway {
 
   getBindingStore(): BindingStore {
     return this.bindingStore
+  }
+
+  getPendingStore(): PendingSendersStore {
+    return this.pendingStore
   }
 
   isStarted(): boolean {

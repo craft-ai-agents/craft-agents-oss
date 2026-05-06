@@ -408,6 +408,8 @@ export const RPC_CHANNELS = {
     // Gateway → UI clients (broadcast)
     BINDING_CHANGED: 'messaging:bindingChanged',
     PLATFORM_STATUS: 'messaging:platformStatus',
+    /** Broadcast when the workspace's pending-senders list mutates. */
+    PENDING_CHANGED: 'messaging:pendingChanged',
     // UI ↔ Server (config/binding CRUD)
     GET_CONFIG: 'messaging:getConfig',
     UPDATE_CONFIG: 'messaging:updateConfig',
@@ -430,6 +432,15 @@ export const RPC_CHANNELS = {
     WA_SUBMIT_PHONE: 'messaging:wa:submitPhone',
     /** Broadcast to UI clients: QR string, pairing code, status, unavailable, error. */
     WA_UI_EVENT: 'messaging:wa:uiEvent',
+    // UI ↔ Server — Access control (per-platform owners + per-binding allow-list)
+    GET_PLATFORM_OWNERS: 'messaging:access:getOwners',
+    SET_PLATFORM_OWNERS: 'messaging:access:setOwners',
+    GET_PLATFORM_ACCESS_MODE: 'messaging:access:getMode',
+    SET_PLATFORM_ACCESS_MODE: 'messaging:access:setMode',
+    GET_PENDING_SENDERS: 'messaging:access:getPending',
+    DISMISS_PENDING_SENDER: 'messaging:access:dismissPending',
+    ALLOW_PENDING_SENDER: 'messaging:access:allowPending',
+    SET_BINDING_ACCESS: 'messaging:access:setBindingAccess',
   },
 } as const
 

@@ -18,6 +18,13 @@ export interface MessagingBinding {
   channelName?: string
   enabled: boolean
   createdAt: number
+  /**
+   * Per-binding access policy. Optional in the wire shape so legacy bindings
+   * (created before access control existed) don't break atom updates. The
+   * UI treats missing values as `'open'`.
+   */
+  accessMode?: 'inherit' | 'allow-list' | 'open'
+  allowedSenderIds?: string[]
 }
 
 export const messagingBindingsAtom = atom<MessagingBinding[]>([])

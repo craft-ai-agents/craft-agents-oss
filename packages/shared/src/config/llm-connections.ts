@@ -112,6 +112,22 @@ export interface CustomEndpointConfig {
 }
 
 /**
+ * Per-connection behavior when the user sends a message while the agent is
+ * still streaming/processing a previous turn.
+ *
+ * - 'steer': Try to deliver the message into the in-flight turn (Pi's native
+ *   `.steer()` or Claude's PreToolUse `additionalContext` hook). Falls back to
+ *   abort+queue when the backend can't steer.
+ * - 'queue': Hold the message; let the current turn finish naturally; replay
+ *   as a new turn afterwards. No abort, no destructive interruption.
+ *
+ * Default is per-`providerType` via {@link defaultMidStreamBehavior}; reads
+ * everywhere should go through {@link resolveMidStreamBehavior} so connections
+ * created before this field existed still pick up the right default.
+ */
+export type MidStreamBehavior = 'steer' | 'queue';
+
+/**
  * LLM Connection configuration.
  * Stored in config.llmConnections array.
  */
@@ -163,6 +179,14 @@ export interface LlmConnection {
    * Determines which streaming adapter the Pi SDK uses for requests.
    */
   customEndpoint?: CustomEndpointConfig;
+
+  /**
+   * Behavior when the user sends a message while the agent is still streaming.
+   * Optional for backward compat with config.json from before this field existed —
+   * read via {@link resolveMidStreamBehavior} which falls back to a per-provider
+   * default ({@link defaultMidStreamBehavior}).
+   */
+  midStreamBehavior?: MidStreamBehavior;
 
   // --- Timestamps ---
 
@@ -424,6 +448,106 @@ export function isLocalConnection(conn: Pick<LlmConnection, 'baseUrl'>): boolean
  */
 export function isPiProvider(providerType: LlmProviderType): boolean {
   return providerType === 'pi' || providerType === 'pi_compat';
+}
+
+/**
+ * Default mid-stream send behavior for a given provider type.
+ *
+ * - 'anthropic' → 'queue': Claude's emulated steer (PreToolUse hook injection)
+ *   has a real failure mode — if no tool fires before the turn ends, the steer
+ *   becomes `steer_undelivered` and gets re-queued anyway, paying for the
+ *   original turn's tokens for nothing. Default to queue for predictability.
+ * - 'pi' / 'pi_compat' → 'steer': Pi's native `.steer()` is non-destructive
+ *   (delivers after the current tool finishes, keeps full context). No
+ *   downside to defaulting to immediate steering.
+ */
+export function defaultMidStreamBehavior(providerType: LlmProviderType): MidStreamBehavior {
+  return providerType === 'anthropic' ? 'queue' : 'steer';
+}
+
+/**
+ * Read the effective mid-stream behavior for a connection.
+ *
+ * Single source of truth — every call site that needs to decide steer-vs-queue
+ * should go through here so legacy connections (created before the field
+ * existed) and connections with corrupt/unexpected values fall through to the
+ * provider-appropriate default.
+ */
+export function resolveMidStreamBehavior(
+  connection: Pick<LlmConnection, 'midStreamBehavior' | 'providerType'>,
+): MidStreamBehavior {
+  if (connection.midStreamBehavior === 'steer' || connection.midStreamBehavior === 'queue') {
+    return connection.midStreamBehavior;
+  }
+  return defaultMidStreamBehavior(connection.providerType);
+}
+
+/**
+ * Return a new LlmConnection with the given model's `supportsImages` override set.
+ *
+ * Centralizes the string-vs-object normalization for `connection.models[]`:
+ *   - string entry → promoted to `{ id, name, shortName, supportsImages: enabled }`
+ *   - object entry → only `supportsImages` is updated
+ *   - model not in array → connection returned unchanged (defensive)
+ *
+ * Pure function — does not mutate the input. Storage round-trip is handled
+ * upstream via `saveLlmConnection`. The stored object form for custom-endpoint
+ * models is `{ id, name?, shortName?, contextWindow?, supportsImages? }`
+ * (passthrough-validated by the storage schema). `name` and `shortName` default
+ * to the model's `id` when promoting so that downstream renderer surfaces that
+ * read `m.name` (the trigger button display, picker row labels) keep showing a
+ * label after the toggle promotes a string entry. The `ModelDefinition` cast
+ * matches the existing shape produced by `ApiKeyInput.tsx` and the Pi driver.
+ */
+export function setModelSupportsImages(
+  connection: LlmConnection,
+  modelId: string,
+  enabled: boolean,
+): LlmConnection {
+  if (!connection.models) return connection;
+  const idOf = (m: ModelDefinition | string) => (typeof m === 'string' ? m : m.id);
+  const idx = connection.models.findIndex(m => idOf(m) === modelId);
+  if (idx === -1) return connection;
+
+  const entry = connection.models[idx]!;
+  const nextEntry =
+    typeof entry === 'string'
+      ? { id: entry, name: entry, shortName: entry, supportsImages: enabled }
+      : { ...entry, supportsImages: enabled };
+
+  const nextModels = connection.models.slice();
+  nextModels[idx] = nextEntry as ModelDefinition;
+  return { ...connection, models: nextModels };
+}
+
+/**
+ * Resolve whether a given model on a connection accepts image input.
+ *
+ * For `pi_compat` (custom-endpoint) connections this mirrors the precedence used
+ * by Pi's `buildCustomEndpointModelDef`:
+ *   per-model `supportsImages` override
+ *   ?? connection-level `customEndpoint.supportsImages` default
+ *   ?? false
+ *
+ * For non-`pi_compat` connections the renderer doesn't own the catalog — Pi SDK's
+ * bundled provider definitions and Anthropic's API do. This helper conservatively
+ * returns `true` there (we don't know better; the upstream decides). The
+ * pre-flight banner gates on `pi_compat` separately, so this just reports what
+ * the renderer can know with confidence.
+ */
+export function modelSupportsImages(
+  connection: Pick<LlmConnection, 'providerType' | 'models' | 'customEndpoint'>,
+  modelId: string,
+): boolean {
+  if (!isCompatProvider(connection.providerType)) return true;
+
+  const entry = connection.models?.find(m =>
+    (typeof m === 'string' ? m : m.id) === modelId,
+  );
+  if (entry && typeof entry !== 'string' && typeof entry.supportsImages === 'boolean') {
+    return entry.supportsImages;
+  }
+  return connection.customEndpoint?.supportsImages ?? false;
 }
 
 /**

@@ -2,18 +2,30 @@
  * Router — routes inbound messages from platform adapters to sessions.
  *
  * Looks up the ChannelBinding for (platform, channelId).
- * If found → resolves any `IncomingAttachment.localPath` entries to
- * `FileAttachment`s via `readFileAttachment()`, then forwards to
+ * If found → access-control gate, then resolves any `IncomingAttachment.localPath`
+ * entries to `FileAttachment`s via `readFileAttachment()` and forwards to
  * SessionManager.
- * If not found → delegates to Commands for /bind, /new, etc.
+ * If not found → delegates to Commands for /bind, /new, etc. (Commands
+ * applies its own pre-binding access gate.)
  */
 
 import type { ISessionManager } from '@craft-agent/server-core/handlers'
 import { readFileAttachment } from '@craft-agent/shared/utils'
 import type { FileAttachment } from '@craft-agent/shared/protocol'
+import {
+  evaluateBindingAccess,
+  executeRejection,
+  type AccessRejectReason,
+} from './access-control'
 import type { BindingStore } from './binding-store'
 import type { Commands } from './commands'
-import type { IncomingMessage, MessagingLogger, PlatformAdapter } from './types'
+import type { PendingSendersStore } from './pending-senders'
+import type {
+  IncomingMessage,
+  MessagingConfig,
+  MessagingLogger,
+  PlatformAdapter,
+} from './types'
 
 const NOOP_LOGGER: MessagingLogger = {
   info: () => {},
@@ -22,13 +34,28 @@ const NOOP_LOGGER: MessagingLogger = {
   child: () => NOOP_LOGGER,
 }
 
+export interface RouterDeps {
+  /** Reads the workspace's current MessagingConfig. Called per-message
+   *  so config edits take effect without restart. */
+  getWorkspaceConfig: () => MessagingConfig
+  /** Optional pending-senders store; rejected attempts are recorded here so
+   *  the Settings UI can surface them with one-click "Allow" buttons. */
+  pendingStore?: PendingSendersStore
+}
+
 export class Router {
+  private readonly deps: RouterDeps
+  private readonly recentRejectReplies = new Map<string, number>()
+
   constructor(
     private readonly sessionManager: ISessionManager,
     private readonly bindingStore: BindingStore,
     private readonly commands: Commands,
     private readonly log: MessagingLogger = NOOP_LOGGER,
-  ) {}
+    deps: RouterDeps = { getWorkspaceConfig: () => ({ enabled: false, platforms: {} }) },
+  ) {
+    this.deps = deps
+  }
 
   async route(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
     // Threads (Telegram supergroup forum topics) participate in the binding
@@ -37,6 +64,19 @@ export class Router {
     const binding = this.bindingStore.findByChannel(msg.platform, msg.channelId, msg.threadId)
 
     if (binding) {
+      const verdict = evaluateBindingAccess({
+        msg,
+        workspaceConfig: this.deps.getWorkspaceConfig(),
+        binding,
+      })
+      if (!verdict.allow) {
+        await this.handleReject(adapter, msg, verdict.reason, {
+          bindingId: binding.id,
+          sessionId: binding.sessionId,
+        })
+        return
+      }
+
       try {
         const fileAttachments = this.resolveAttachments(msg)
         this.log.info('routing inbound chat message to session', {
@@ -83,6 +123,30 @@ export class Router {
       messageId: msg.messageId,
     })
     await this.commands.handle(adapter, msg)
+  }
+
+  /**
+   * Common reject path for both bound (this file) and pre-binding (Commands)
+   * gating. Delegates to the shared `executeRejection` so text and button
+   * paths behave identically.
+   */
+  async handleReject(
+    adapter: PlatformAdapter,
+    msg: IncomingMessage,
+    reason: AccessRejectReason,
+    extra?: { bindingId?: string; sessionId?: string },
+  ): Promise<void> {
+    await executeRejection(
+      adapter,
+      msg,
+      reason,
+      {
+        recentRejectReplies: this.recentRejectReplies,
+        ...(this.deps.pendingStore ? { pendingStore: this.deps.pendingStore } : {}),
+      },
+      this.log,
+      extra,
+    )
   }
 
   /**

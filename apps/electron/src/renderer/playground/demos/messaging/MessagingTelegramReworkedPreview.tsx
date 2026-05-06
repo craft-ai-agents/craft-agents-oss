@@ -28,9 +28,9 @@ import {
   ChevronRight,
   Hash,
   MessageSquare,
+  MessagesSquare,
   MoreHorizontal,
   Plus,
-  Users,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SettingsCard, SettingsSection } from '@/components/settings'
@@ -222,12 +222,15 @@ function DirectSessionsSection({ sessions }: { sessions: DirectSession[] }) {
 }
 
 function DirectSessionRow({ title }: { title: string }) {
+  // Layout convention matches the production MessagingSettingsPage: type
+  // becomes the primary line, the session name drops to the subtitle so
+  // Direct and Supergroup rows read in parallel.
   return (
     <div className="flex items-center gap-3 px-4 py-2.5">
       <SubRowIcon icon={MessageSquare} />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm">{title}</div>
-        <div className="mt-0.5 truncate text-xs text-foreground/50">Direct message session</div>
+        <div className="truncate text-sm">Direct message session</div>
+        <div className="mt-0.5 truncate text-xs text-foreground/50">{title}</div>
       </div>
       <RowActions />
     </div>
@@ -255,7 +258,7 @@ function RowActions() {
 function UnpairedSupergroupRow() {
   return (
     <div className="flex items-center gap-3 px-4 py-2.5">
-      <SubRowIcon icon={Users} />
+      <SubRowIcon icon={MessagesSquare} />
       <div className="min-w-0 flex-1">
         <div className="text-sm">Supergroup</div>
         <div className="mt-0.5 truncate text-xs text-foreground/50">
@@ -282,7 +285,7 @@ function PairedSupergroupSection({ topics }: { topics: TopicBinding[] }) {
         onClick={() => setIsExpanded((v) => !v)}
         className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-foreground/[0.02]"
       >
-        <SubRowIcon icon={Users} />
+        <SubRowIcon icon={MessagesSquare} />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
             <div className="truncate text-sm font-medium">Craft Agents</div>

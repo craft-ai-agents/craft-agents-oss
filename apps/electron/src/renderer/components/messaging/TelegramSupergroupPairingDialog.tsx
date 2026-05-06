@@ -177,7 +177,6 @@ export function TelegramSupergroupPairingDialog({ open, onOpenChange, botUsernam
               {secondsLeft > 0 && (
                 <p className="text-center text-xs text-muted-foreground">
                   {t('dialog.pairingCode.expiresIn', {
-                    defaultValue: 'Code expires in {{minutes}}:{{seconds}}',
                     minutes,
                     seconds: String(seconds).padStart(2, '0'),
                   })}
