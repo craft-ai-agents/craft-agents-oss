@@ -5,6 +5,8 @@ import {
   activeTabIdAtom,
   hasOpenTabsAtom,
   openFileTabAtom,
+  openWorkingTreeDiffTabAtom,
+  openCommitTabAtom,
   closeTabAtom,
   type EditorTab,
 } from '../editor-tabs'
@@ -20,13 +22,40 @@ function seedTabs(store: ReturnType<typeof createStore>, tabs: EditorTab[]) {
 
 describe('editor-tabs atoms', () => {
   const originalWindow = globalThis.window
+  let gitFileDiffCalls = 0
+  let gitCommitDetailCalls = 0
 
   beforeEach(() => {
+    gitFileDiffCalls = 0
+    gitCommitDetailCalls = 0
     // Minimal window.electronAPI shim for openFileTabAtom
     Object.defineProperty(globalThis, 'window', {
       value: {
         electronAPI: {
           readFile: async (path: string) => `content of ${path}`,
+          getGitFileDiff: async (_workspacePath: string, filePath: string) => {
+            gitFileDiffCalls += 1
+            return `diff for ${filePath}`
+          },
+          getGitCommitDetail: async (_workspacePath: string, hash: string) => {
+            gitCommitDetailCalls += 1
+            return {
+              hash,
+              shortHash: hash.slice(0, 7),
+              message: 'Add editor diff tabs',
+              author: 'Sherlock',
+              date: '2026-05-06T00:00:00.000Z',
+              filesChanged: [
+                {
+                  path: 'src/index.ts',
+                  additions: 3,
+                  deletions: 1,
+                  status: 'modified',
+                  diff: 'diff --git a/src/index.ts b/src/index.ts',
+                },
+              ],
+            }
+          },
         },
       },
       writable: true,
@@ -63,9 +92,11 @@ describe('editor-tabs atoms', () => {
     await store.set(openFileTabAtom, '/src/index.ts')
     const tabs = store.get(editorTabsAtom)
     expect(tabs).toHaveLength(1)
-    expect(tabs[0].filePath).toBe('/src/index.ts')
-    expect(tabs[0].content).toBe('content of /src/index.ts')
-    expect(tabs[0].type).toBe('file')
+    expect(tabs[0]).toEqual(expect.objectContaining({
+      type: 'file',
+      filePath: '/src/index.ts',
+      content: 'content of /src/index.ts',
+    }))
   })
 
   it('opening a new path sets it as active', async () => {
@@ -73,6 +104,91 @@ describe('editor-tabs atoms', () => {
     await store.set(openFileTabAtom, '/src/index.ts')
     const tabs = store.get(editorTabsAtom)
     expect(store.get(activeTabIdAtom)).toBe(tabs[0].id)
+  })
+
+  it('opening a working-tree diff fetches the patch and focuses the tab', async () => {
+    const store = makeStore()
+    await store.set(openWorkingTreeDiffTabAtom, {
+      workspacePath: '/repo',
+      filePath: 'src/index.ts',
+    })
+
+    const tabs = store.get(editorTabsAtom)
+    expect(tabs).toEqual([
+      expect.objectContaining({
+        type: 'git-diff',
+        filePath: 'src/index.ts',
+        patch: 'diff for src/index.ts',
+      }),
+    ])
+    expect(store.get(activeTabIdAtom)).toBe(tabs[0].id)
+  })
+
+  it('opening a duplicate working-tree diff focuses the existing tab without refetching', async () => {
+    const store = makeStore()
+    await store.set(openWorkingTreeDiffTabAtom, {
+      workspacePath: '/repo',
+      filePath: 'src/index.ts',
+    })
+    const firstId = store.get(activeTabIdAtom)
+    await store.set(openFileTabAtom, '/src/other.ts')
+
+    await store.set(openWorkingTreeDiffTabAtom, {
+      workspacePath: '/repo',
+      filePath: 'src/index.ts',
+    })
+
+    expect(store.get(editorTabsAtom)).toHaveLength(2)
+    expect(store.get(activeTabIdAtom)).toBe(firstId)
+    expect(gitFileDiffCalls).toBe(1)
+  })
+
+  it('opening a commit tab fetches commit detail and focuses the tab', async () => {
+    const store = makeStore()
+    await store.set(openCommitTabAtom, {
+      workspacePath: '/repo',
+      hash: 'abcdef1234567890',
+    })
+
+    const tabs = store.get(editorTabsAtom)
+    expect(tabs).toEqual([
+      expect.objectContaining({
+        type: 'git-commit',
+        hash: 'abcdef1234567890',
+        commit: expect.objectContaining({
+          message: 'Add editor diff tabs',
+          filesChanged: [
+            expect.objectContaining({
+              path: 'src/index.ts',
+              additions: 3,
+              deletions: 1,
+              diff: 'diff --git a/src/index.ts b/src/index.ts',
+            }),
+          ],
+        }),
+      }),
+    ])
+    expect(store.get(activeTabIdAtom)).toBe(tabs[0].id)
+    expect(gitCommitDetailCalls).toBe(1)
+  })
+
+  it('opening a duplicate commit tab focuses the existing tab without refetching', async () => {
+    const store = makeStore()
+    await store.set(openCommitTabAtom, {
+      workspacePath: '/repo',
+      hash: 'abcdef1234567890',
+    })
+    const firstId = store.get(activeTabIdAtom)
+    await store.set(openFileTabAtom, '/src/other.ts')
+
+    await store.set(openCommitTabAtom, {
+      workspacePath: '/repo',
+      hash: 'abcdef1234567890',
+    })
+
+    expect(store.get(editorTabsAtom)).toHaveLength(2)
+    expect(store.get(activeTabIdAtom)).toBe(firstId)
+    expect(gitCommitDetailCalls).toBe(1)
   })
 
   it('opening a duplicate path focuses the existing tab without duplicating', async () => {

@@ -9,8 +9,10 @@ import {
   activeTabIdAtom,
   hasOpenTabsAtom,
   closeTabAtom,
+  type EditorTab,
 } from '@/atoms/editor-tabs'
 import { ShikiCodeViewer } from '@/components/shiki/ShikiCodeViewer'
+import { UnifiedDiffViewer } from '@/components/shiki/UnifiedDiffViewer'
 import {
   PANEL_SASH_HIT_WIDTH,
   PANEL_SASH_LINE_WIDTH,
@@ -27,6 +29,72 @@ const SPRING = { type: 'spring' as const, stiffness: 600, damping: 49 }
 
 function getFileName(filePath: string): string {
   return filePath.split('/').pop() ?? filePath
+}
+
+function getTabTitle(tab: EditorTab): string {
+  if (tab.type === 'git-commit') return tab.commit.shortHash
+  return getFileName(tab.filePath)
+}
+
+function getTabTooltip(tab: EditorTab): string {
+  if (tab.type === 'git-commit') return `${tab.commit.shortHash} ${tab.commit.message}`
+  return tab.filePath
+}
+
+function renderTabContent(tab: EditorTab) {
+  if (tab.type === 'file') {
+    return (
+      <ShikiCodeViewer
+        code={tab.content}
+        filePath={tab.filePath}
+        className="h-full text-xs"
+      />
+    )
+  }
+
+  if (tab.type === 'git-diff') {
+    return (
+      <div className="h-full min-h-0 overflow-auto">
+        <UnifiedDiffViewer
+          unifiedDiff={tab.patch}
+          filePath={tab.filePath}
+          className="min-h-full text-xs"
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-full min-h-0 overflow-auto">
+      <div className="border-b border-border/50 px-4 py-3">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="font-mono">{tab.commit.shortHash}</span>
+          <span>{tab.commit.author}</span>
+        </div>
+        <div className="mt-1 text-sm font-medium text-foreground">{tab.commit.message}</div>
+      </div>
+      <div className="divide-y divide-border/50">
+        {tab.commit.filesChanged.map((file) => (
+          <details key={`${tab.commit.hash}:${file.path}`} open className="group">
+            <summary className="sticky top-0 z-10 flex cursor-pointer select-none items-center gap-2 bg-background px-4 py-2 text-xs">
+              <span className="min-w-0 flex-1 truncate" title={file.path}>{file.path}</span>
+              <span className="font-mono text-emerald-500">+{file.additions}</span>
+              <span className="font-mono text-rose-500">-{file.deletions}</span>
+            </summary>
+            {file.diff ? (
+              <UnifiedDiffViewer
+                unifiedDiff={file.diff}
+                filePath={file.path}
+                className="text-xs"
+              />
+            ) : (
+              <div className="px-4 py-3 text-xs text-muted-foreground">No diff available</div>
+            )}
+          </details>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export interface EditorDetailPanelProps {
@@ -163,8 +231,8 @@ export function EditorDetailPanel({ workspaceId }: EditorDetailPanelProps) {
                     )}
                     onClick={() => setActiveTabId(tab.id)}
                   >
-                    <span className="max-w-[140px] truncate" title={tab.filePath}>
-                      {getFileName(tab.filePath)}
+                    <span className="max-w-[140px] truncate" title={getTabTooltip(tab)}>
+                      {getTabTitle(tab)}
                     </span>
                     <button
                       type="button"
@@ -178,7 +246,7 @@ export function EditorDetailPanel({ workspaceId }: EditorDetailPanelProps) {
                         'hover:bg-foreground/15 transition-opacity',
                         'focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-ring outline-none'
                       )}
-                      title={`Close ${getFileName(tab.filePath)}`}
+                      title={`Close ${getTabTitle(tab)}`}
                     >
                       <X className="h-2.5 w-2.5" />
                     </button>
@@ -187,13 +255,7 @@ export function EditorDetailPanel({ workspaceId }: EditorDetailPanelProps) {
               </div>
 
               <div className="flex-1 overflow-auto min-h-0">
-                {activeTab && (
-                  <ShikiCodeViewer
-                    code={activeTab.content}
-                    filePath={activeTab.filePath}
-                    className="h-full text-xs"
-                  />
-                )}
+                {activeTab && renderTabContent(activeTab)}
               </div>
             </div>
           </div>
