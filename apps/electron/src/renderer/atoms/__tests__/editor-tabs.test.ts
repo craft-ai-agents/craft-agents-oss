@@ -291,8 +291,14 @@ describe('refreshAllTabsAtom', () => {
     ])
     await store.set(refreshAllTabsAtom)
     const tabs = store.get(editorTabsAtom)
-    expect(tabs[0].content).toBe('content of /foo.ts')
-    expect(tabs[1].content).toBe('content of /bar.ts')
+    expect(tabs[0]).toEqual(expect.objectContaining({
+      type: 'file',
+      content: 'content of /foo.ts',
+    }))
+    expect(tabs[1]).toEqual(expect.objectContaining({
+      type: 'file',
+      content: 'content of /bar.ts',
+    }))
   })
 
   it('leaves git tabs unchanged when refreshing file tabs', async () => {
