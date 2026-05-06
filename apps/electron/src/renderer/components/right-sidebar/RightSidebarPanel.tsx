@@ -5,7 +5,9 @@ import { useAtomValue } from 'jotai'
 import { cn } from '@/lib/utils'
 import * as storage from '@/lib/local-storage'
 import { sessionAtomFamily } from '@/atoms/sessions'
+import { useActiveWorkspace } from '@/context/AppShellContext'
 import { SessionFilesSection } from './SessionFilesSection'
+import { GitPanel } from './GitPanel'
 import {
   PANEL_EDGE_INSET,
   PANEL_SASH_HIT_WIDTH,
@@ -37,7 +39,9 @@ export function RightSidebarPanel({
   sessionId,
 }: RightSidebarPanelProps) {
   const focusedSession = useAtomValue(sessionAtomFamily(sessionId ?? ''))
+  const activeWorkspace = useActiveWorkspace()
   const sessionFolderPath = focusedSession?.sessionFolderPath
+  const workspacePath = activeWorkspace?.rootPath
   const [isOpen, setIsOpen] = useState<boolean>(() =>
     storage.get(storage.KEYS.rightSidebarVisible, true, workspaceId)
   )
@@ -177,9 +181,7 @@ export function RightSidebarPanel({
                 />
               )}
               {activeTab === 'git' && (
-                <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm select-none">
-                  Git — coming soon
-                </div>
+                <GitPanel workspacePath={workspacePath} className="h-full" />
               )}
             </motion.div>
           )}

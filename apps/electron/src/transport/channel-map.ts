@@ -318,6 +318,10 @@ export const CHANNEL_MAP = {
 
   // Git
   getGitBranch: invoke(RPC_CHANNELS.git.GET_BRANCH),
+  getGitLog: invoke(RPC_CHANNELS.git.GET_LOG),
+  getGitStatus: invoke(RPC_CHANNELS.git.GET_STATUS),
+  getGitFileDiff: invoke(RPC_CHANNELS.git.GET_FILE_DIFF),
+  getGitCommitDetail: invoke(RPC_CHANNELS.git.GET_COMMIT_DETAIL),
   checkGitBash: invoke(RPC_CHANNELS.gitbash.CHECK),
   browseForGitBash: invoke(RPC_CHANNELS.gitbash.BROWSE),
   setGitBashPath: invoke(RPC_CHANNELS.gitbash.SET_PATH),

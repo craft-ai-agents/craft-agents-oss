@@ -5,6 +5,7 @@ import { registerAuthHandlers } from './auth'
 import { registerAutomationsHandlers } from './automations'
 import { registerFilesHandlers } from './files'
 import { registerLabelsHandlers } from './labels'
+import { registerGitHandlers } from './git'
 import { registerLlmConnectionsHandlers } from './llm-connections'
 import { registerOAuthHandlers } from './oauth'
 import { registerResourcesHandlers } from './resources'
@@ -32,6 +33,7 @@ export function registerCoreRpcHandlers(
   registerAuthHandlers(server, deps)
   registerAutomationsHandlers(server, deps)
   registerFilesHandlers(server, deps)
+  registerGitHandlers(server)
   registerLabelsHandlers(server, deps)
   registerLlmConnectionsHandlers(server, deps)
   registerOAuthHandlers(server, deps)

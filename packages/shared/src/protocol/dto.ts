@@ -485,6 +485,32 @@ export interface GitBashStatus {
   platform: 'win32' | 'darwin' | 'linux'
 }
 
+export type GitFileChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed'
+
+export interface GitFileChange {
+  path: string
+  additions: number
+  deletions: number
+  status: GitFileChangeStatus
+  diff?: string
+}
+
+export type GitStatusEntryStatus = 'modified' | 'staged' | 'untracked' | 'deleted'
+
+export interface GitStatusEntry {
+  path: string
+  status: GitStatusEntryStatus
+}
+
+export interface GitCommit {
+  hash: string
+  shortHash: string
+  message: string
+  author: string
+  date: string
+  filesChanged: GitFileChange[]
+}
+
 export interface UpdateInfo {
   available: boolean
   currentVersion: string

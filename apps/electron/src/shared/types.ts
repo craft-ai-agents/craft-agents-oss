@@ -199,6 +199,8 @@ import type {
   OAuthResult,
   McpToolsResult,
   GitBashStatus,
+  GitCommit,
+  GitStatusEntry,
   ClaudeOAuthResult,
   UpdateInfo,
   WorkspaceSettings,
@@ -576,6 +578,10 @@ export interface ElectronAPI {
 
   // Git operations
   getGitBranch(dirPath: string): Promise<string | null>
+  getGitLog(workspacePath: string): Promise<GitCommit[]>
+  getGitStatus(workspacePath: string): Promise<GitStatusEntry[]>
+  getGitFileDiff(workspacePath: string, filePath: string): Promise<string>
+  getGitCommitDetail(workspacePath: string, commitHash: string): Promise<GitCommit | null>
 
   // Git Bash (Windows)
   checkGitBash(): Promise<GitBashStatus>
