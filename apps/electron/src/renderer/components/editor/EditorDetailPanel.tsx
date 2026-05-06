@@ -114,12 +114,9 @@ export function EditorDetailPanel({ workspaceId }: EditorDetailPanelProps) {
               borderRadius: RADIUS_INNER,
             }}
           >
-            {/* Left resize sash */}
             <motion.div
-              key="sash"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
               className="shrink-0 relative cursor-col-resize z-10 flex justify-center"
               style={{
                 width: PANEL_SASH_HIT_WIDTH,
@@ -152,9 +149,7 @@ export function EditorDetailPanel({ workspaceId }: EditorDetailPanelProps) {
               />
             </motion.div>
 
-            {/* Panel content */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-              {/* Tab bar */}
               <div className="flex items-center border-b border-border/50 shrink-0 overflow-x-auto scrollbar-none">
                 {tabs.map((tab) => (
                   <div
@@ -191,7 +186,6 @@ export function EditorDetailPanel({ workspaceId }: EditorDetailPanelProps) {
                 ))}
               </div>
 
-              {/* Editor area */}
               <div className="flex-1 overflow-auto min-h-0">
                 {activeTab && (
                   <ShikiCodeViewer
