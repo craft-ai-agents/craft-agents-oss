@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { FileDiff, GitCommitHorizontal, GitPullRequestClosed, Loader2 } from 'lucide-react'
 import { formatDistanceToNowStrict } from 'date-fns'
+import { useSetAtom } from 'jotai'
 import type { GitCommit, GitStatusEntry } from '../../../shared/types'
+import { openCommitTabAtom, openWorkingTreeDiffTabAtom } from '@/atoms/editor-tabs'
 import { cn } from '@/lib/utils'
 
 const DEFAULT_STATUS_HEIGHT = 42
@@ -62,49 +64,83 @@ function EmptyState({ children }: { children: string }) {
   )
 }
 
-function renderStatusEntries(entries: GitStatusEntry[]) {
-  return entries.map(entry => (
-    <div
-      key={`${entry.status}:${entry.path}`}
-      className="h-7 px-3 flex items-center gap-2 text-xs hover:bg-sidebar-hover"
-      title={entry.path}
-    >
-      <FileDiff className={cn('h-3.5 w-3.5 shrink-0', statusClassName(entry.status))} />
-      <span className="min-w-0 flex-1 truncate">{entry.path}</span>
-      <span className="shrink-0 text-[10px] text-muted-foreground">{statusLabel(entry.status)}</span>
-    </div>
-  ))
+function renderStatusEntries(
+  entries: GitStatusEntry[],
+  onOpenDiff: (filePath: string) => void
+) {
+  return entries.map(entry => {
+    const canOpenDiff = entry.status !== 'untracked'
+    const content = (
+      <>
+        <FileDiff className={cn('h-3.5 w-3.5 shrink-0', statusClassName(entry.status))} />
+        <span className="min-w-0 flex-1 truncate">{entry.path}</span>
+        <span className="shrink-0 text-[10px] text-muted-foreground">{statusLabel(entry.status)}</span>
+      </>
+    )
+
+    if (!canOpenDiff) {
+      return (
+        <div
+          key={`${entry.status}:${entry.path}`}
+          className="h-7 px-3 flex items-center gap-2 text-xs"
+          title={entry.path}
+        >
+          {content}
+        </div>
+      )
+    }
+
+    return (
+      <button
+        key={`${entry.status}:${entry.path}`}
+        type="button"
+        className="h-7 w-full px-3 flex items-center gap-2 text-left text-xs hover:bg-sidebar-hover focus-visible:bg-sidebar-hover focus-visible:outline-none"
+        title={entry.path}
+        onClick={() => onOpenDiff(entry.path)}
+      >
+        {content}
+      </button>
+    )
+  })
 }
 
-function renderStatusBody(entries: GitStatusEntry[], noRepository: boolean) {
+function renderStatusBody(
+  entries: GitStatusEntry[],
+  noRepository: boolean,
+  onOpenDiff: (filePath: string) => void
+) {
   if (noRepository) return <EmptyState>No git repository found</EmptyState>
   if (entries.length === 0) return <EmptyState>No working tree changes</EmptyState>
-  return renderStatusEntries(entries)
+  return renderStatusEntries(entries, onOpenDiff)
 }
 
 function GitStatusSection({
   entries,
   noRepository,
+  onOpenDiff,
 }: {
   entries: GitStatusEntry[]
   noRepository: boolean
+  onOpenDiff: (filePath: string) => void
 }) {
   return (
     <div className="h-full min-h-0 flex flex-col">
       <SectionHeader title="Working Tree" count={noRepository ? undefined : entries.length} />
       <div className="min-h-0 flex-1 overflow-auto py-1">
-        {renderStatusBody(entries, noRepository)}
+        {renderStatusBody(entries, noRepository, onOpenDiff)}
       </div>
     </div>
   )
 }
 
-function renderCommits(commits: GitCommit[]) {
+function renderCommits(commits: GitCommit[], onOpenCommit: (hash: string) => void) {
   return commits.map(commit => (
-    <div
+    <button
       key={commit.hash}
-      className="px-3 py-2 hover:bg-sidebar-hover"
+      type="button"
+      className="w-full px-3 py-2 text-left hover:bg-sidebar-hover focus-visible:bg-sidebar-hover focus-visible:outline-none"
       title={`${commit.shortHash} ${commit.message}`}
+      onClick={() => onOpenCommit(commit.hash)}
     >
       <div className="flex items-center gap-2 text-xs">
         <GitCommitHorizontal className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -115,34 +151,42 @@ function renderCommits(commits: GitCommit[]) {
         <span className="truncate">{commit.author}</span>
         <span className="shrink-0">{shortRelativeDate(commit.date)}</span>
       </div>
-    </div>
+    </button>
   ))
 }
 
-function renderHistoryBody(commits: GitCommit[], noRepository: boolean) {
+function renderHistoryBody(
+  commits: GitCommit[],
+  noRepository: boolean,
+  onOpenCommit: (hash: string) => void
+) {
   if (noRepository) return <EmptyState>No git repository found</EmptyState>
   if (commits.length === 0) return <EmptyState>No commits yet</EmptyState>
-  return renderCommits(commits)
+  return renderCommits(commits, onOpenCommit)
 }
 
 function GitHistorySection({
   commits,
   noRepository,
+  onOpenCommit,
 }: {
   commits: GitCommit[]
   noRepository: boolean
+  onOpenCommit: (hash: string) => void
 }) {
   return (
     <div className="h-full min-h-0 flex flex-col">
       <SectionHeader title="History" count={noRepository ? undefined : commits.length} />
       <div className="min-h-0 flex-1 overflow-auto py-1">
-        {renderHistoryBody(commits, noRepository)}
+        {renderHistoryBody(commits, noRepository, onOpenCommit)}
       </div>
     </div>
   )
 }
 
 export function GitPanel({ workspacePath, className }: GitPanelProps) {
+  const openWorkingTreeDiffTab = useSetAtom(openWorkingTreeDiffTabAtom)
+  const openCommitTab = useSetAtom(openCommitTabAtom)
   const [statusEntries, setStatusEntries] = useState<GitStatusEntry[]>([])
   const [commits, setCommits] = useState<GitCommit[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -211,6 +255,16 @@ export function GitPanel({ workspacePath, className }: GitPanelProps) {
 
   const noRepository = !!workspacePath && !isLoading && !error && statusEntries.length === 0 && commits.length === 0
 
+  const handleOpenDiff = useCallback((filePath: string) => {
+    if (!workspacePath) return
+    void openWorkingTreeDiffTab({ workspacePath, filePath })
+  }, [openWorkingTreeDiffTab, workspacePath])
+
+  const handleOpenCommit = useCallback((hash: string) => {
+    if (!workspacePath) return
+    void openCommitTab({ workspacePath, hash })
+  }, [openCommitTab, workspacePath])
+
   if (!workspacePath) {
     return (
       <div className={cn('h-full bg-background', className)}>
@@ -241,7 +295,11 @@ export function GitPanel({ workspacePath, className }: GitPanelProps) {
   return (
     <div className={cn('h-full min-h-0 bg-background flex flex-col', className)}>
       <div className="min-h-0" style={{ height: `${statusHeight}%` }}>
-        <GitStatusSection entries={statusEntries} noRepository={noRepository} />
+        <GitStatusSection
+          entries={statusEntries}
+          noRepository={noRepository}
+          onOpenDiff={handleOpenDiff}
+        />
       </div>
       <div
         role="separator"
@@ -252,7 +310,11 @@ export function GitPanel({ workspacePath, className }: GitPanelProps) {
         <div className="h-px w-full bg-border/50 group-hover:bg-ring transition-colors" />
       </div>
       <div className="min-h-0 flex-1">
-        <GitHistorySection commits={commits} noRepository={noRepository} />
+        <GitHistorySection
+          commits={commits}
+          noRepository={noRepository}
+          onOpenCommit={handleOpenCommit}
+        />
       </div>
     </div>
   )
