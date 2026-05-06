@@ -20,29 +20,29 @@ function seedTabs(store: ReturnType<typeof createStore>, tabs: EditorTab[]) {
   if (tabs.length > 0) store.set(activeTabIdAtom, tabs[0].id)
 }
 
-describe('editor-tabs atoms', () => {
-  const originalWindow = globalThis.window
+const originalWindow = globalThis.window
 
-  beforeEach(() => {
-    // Minimal window.electronAPI shim for openFileTabAtom
-    Object.defineProperty(globalThis, 'window', {
-      value: {
-        electronAPI: {
-          readFile: async (path: string) => `content of ${path}`,
-        },
+beforeEach(() => {
+  Object.defineProperty(globalThis, 'window', {
+    value: {
+      electronAPI: {
+        readFile: async (path: string) => `content of ${path}`,
       },
-      writable: true,
-      configurable: true,
-    })
+    },
+    writable: true,
+    configurable: true,
   })
+})
 
-  afterEach(() => {
-    Object.defineProperty(globalThis, 'window', {
-      value: originalWindow,
-      writable: true,
-      configurable: true,
-    })
+afterEach(() => {
+  Object.defineProperty(globalThis, 'window', {
+    value: originalWindow,
+    writable: true,
+    configurable: true,
   })
+})
+
+describe('editor-tabs atoms', () => {
 
   it('starts with empty tabs list', () => {
     const store = makeStore()
@@ -169,28 +169,6 @@ describe('detectTurnEnd', () => {
 })
 
 describe('refreshAllTabsAtom', () => {
-  const originalWindow = globalThis.window
-
-  beforeEach(() => {
-    Object.defineProperty(globalThis, 'window', {
-      value: {
-        electronAPI: {
-          readFile: async (path: string) => `content of ${path}`,
-        },
-      },
-      writable: true,
-      configurable: true,
-    })
-  })
-
-  afterEach(() => {
-    Object.defineProperty(globalThis, 'window', {
-      value: originalWindow,
-      writable: true,
-      configurable: true,
-    })
-  })
-
   it('updates all tab contents from disk', async () => {
     const store = makeStore()
     seedTabs(store, [

@@ -67,7 +67,6 @@ export function EditorDetailPanel({ workspaceId, sessionId }: EditorDetailPanelP
     isProcessingRef.current = isProcessing
   }, [isProcessing])
 
-  // Refresh all open tabs when the agent's turn ends
   useEffect(() => {
     if (detectTurnEnd(prevIsProcessingRef.current, isProcessing)) {
       void refreshAllTabs()
@@ -75,7 +74,6 @@ export function EditorDetailPanel({ workspaceId, sessionId }: EditorDetailPanelP
     prevIsProcessingRef.current = isProcessing
   }, [isProcessing, refreshAllTabs])
 
-  // Auto-open file tabs when the agent writes files during a turn
   useEffect(() => {
     if (!sessionId) return
     const unsubscribe = window.electronAPI.onSessionFilesChanged((changedSessionId) => {
