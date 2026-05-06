@@ -73,6 +73,7 @@ import { SessionList, type ChatGroupingMode } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
 import { PanelStackContainer } from "./PanelStackContainer"
 import { RightSidebarPanel } from "@/components/right-sidebar/RightSidebarPanel"
+import { EditorDetailPanel } from "@/components/editor/EditorDetailPanel"
 import type { ChatDisplayHandle } from "./ChatDisplay"
 import { LeftSidebar } from "./LeftSidebar"
 import { useSession } from "@/hooks/useSession"
@@ -91,6 +92,7 @@ import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/ato
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
 import { panelStackAtom, panelCountAtom, focusedPanelIdAtom, focusedSessionIdAtom, focusNextPanelAtom, focusPrevPanelAtom, parseSessionIdFromRoute } from "@/atoms/panel-stack"
+import { openFileTabAtom } from "@/atoms/editor-tabs"
 import { type SessionStatusId, type SessionStatus, statusConfigsToSessionStatuses } from "@/config/session-status-config"
 import { useStatuses } from "@/hooks/useStatuses"
 import { useLabels } from "@/hooks/useLabels"
@@ -596,6 +598,7 @@ function AppShellContent({
   // Navigate the focused panel to a session.
   // If the session is already open in another panel, focus that panel instead.
   const setFocusedPanel = useSetAtom(focusedPanelIdAtom)
+  const openFileTab = useSetAtom(openFileTabAtom)
   const navigateToSessionInPanel = useCallback((sessionId: string) => {
     // Check if the session is already open in any panel — focus it instead of navigating
     const stack = store.get(panelStackAtom)
@@ -1573,6 +1576,7 @@ function AppShellContent({
   const appShellContextValue = React.useMemo<AppShellContextType>(() => ({
     ...contextValue,
     onDeleteSession: handleDeleteSession,
+    onOpenFile: openFileTab,
     enabledSources: sources,
     skills,
     activeSessionWorkingDirectory,
@@ -1595,7 +1599,7 @@ function AppShellContent({
     automationTestResults,
     getAutomationHistory,
     onReplayAutomation: handleReplayAutomation,
-  }), [contextValue, handleDeleteSession, sources, skills, activeSessionWorkingDirectory, displayLabelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, isAutoCompact, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory, handleReplayAutomation])
+  }), [contextValue, handleDeleteSession, openFileTab, sources, skills, activeSessionWorkingDirectory, displayLabelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, isAutoCompact, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory, handleReplayAutomation])
 
   // Persist expanded folders to localStorage (workspace-scoped)
   React.useEffect(() => {
@@ -3236,6 +3240,10 @@ function AppShellContent({
           isRightSidebarVisible={true}
           isCompact={isAutoCompact}
           isResizing={!!isResizing}
+        />
+
+        <EditorDetailPanel
+          workspaceId={activeWorkspaceId ?? undefined}
         />
 
         <RightSidebarPanel
