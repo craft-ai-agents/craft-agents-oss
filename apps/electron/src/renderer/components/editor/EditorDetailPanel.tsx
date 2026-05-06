@@ -41,29 +41,19 @@ function getTabTooltip(tab: EditorTab): string {
   return tab.filePath
 }
 
-function renderTabContent(tab: EditorTab) {
-  if (tab.type === 'file') {
-    return (
-      <ShikiCodeViewer
-        code={tab.content}
+function WorkingTreeDiffContent({ tab }: { tab: Extract<EditorTab, { type: 'git-diff' }> }) {
+  return (
+    <div className="h-full min-h-0 overflow-auto">
+      <UnifiedDiffViewer
+        unifiedDiff={tab.patch}
         filePath={tab.filePath}
-        className="h-full text-xs"
+        className="min-h-full text-xs"
       />
-    )
-  }
+    </div>
+  )
+}
 
-  if (tab.type === 'git-diff') {
-    return (
-      <div className="h-full min-h-0 overflow-auto">
-        <UnifiedDiffViewer
-          unifiedDiff={tab.patch}
-          filePath={tab.filePath}
-          className="min-h-full text-xs"
-        />
-      </div>
-    )
-  }
-
+function CommitDetailContent({ tab }: { tab: Extract<EditorTab, { type: 'git-commit' }> }) {
   return (
     <div className="h-full min-h-0 overflow-auto">
       <div className="border-b border-border/50 px-4 py-3">
@@ -95,6 +85,23 @@ function renderTabContent(tab: EditorTab) {
       </div>
     </div>
   )
+}
+
+function renderTabContent(tab: EditorTab) {
+  switch (tab.type) {
+    case 'file':
+      return (
+        <ShikiCodeViewer
+          code={tab.content}
+          filePath={tab.filePath}
+          className="h-full text-xs"
+        />
+      )
+    case 'git-diff':
+      return <WorkingTreeDiffContent tab={tab} />
+    case 'git-commit':
+      return <CommitDetailContent tab={tab} />
+  }
 }
 
 export interface EditorDetailPanelProps {

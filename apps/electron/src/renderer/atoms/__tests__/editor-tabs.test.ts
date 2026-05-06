@@ -28,7 +28,6 @@ describe('editor-tabs atoms', () => {
   beforeEach(() => {
     gitFileDiffCalls = 0
     gitCommitDetailCalls = 0
-    // Minimal window.electronAPI shim for openFileTabAtom
     Object.defineProperty(globalThis, 'window', {
       value: {
         electronAPI: {
@@ -195,10 +194,8 @@ describe('editor-tabs atoms', () => {
     const store = makeStore()
     await store.set(openFileTabAtom, '/src/index.ts')
     const firstId = store.get(activeTabIdAtom)
-    // Open a second different file so active changes
     await store.set(openFileTabAtom, '/src/other.ts')
     expect(store.get(editorTabsAtom)).toHaveLength(2)
-    // Re-open the first path
     await store.set(openFileTabAtom, '/src/index.ts')
     expect(store.get(editorTabsAtom)).toHaveLength(2)
     expect(store.get(activeTabIdAtom)).toBe(firstId)
