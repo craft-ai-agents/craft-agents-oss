@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { ShikiCodeViewer } from '@/components/shiki/ShikiCodeViewer'
 import type { LineComment } from '@/atoms/line-comments'
@@ -74,17 +74,12 @@ export function LineAnnotatableViewer({
     const lineContent = (lines[widget.lineIndex] ?? '').trim()
     onComment({
       filePath,
-      lineNumber: (startLine - 1) + widget.lineIndex + 1,
+      lineNumber: startLine + widget.lineIndex,
       lineContent,
       text,
     })
     closeWidget()
   }, [widget, lines, filePath, startLine, onComment, closeWidget])
-
-  // Focus textarea when widget opens
-  useEffect(() => {
-    if (widget) requestAnimationFrame(() => textareaRef.current?.focus())
-  }, [widget])
 
   const plusBtnTop =
     hoveredLine !== null
@@ -106,7 +101,6 @@ export function LineAnnotatableViewer({
         className="h-full text-xs"
       />
 
-      {/* Floating + button shown on line hover */}
       {hoveredLine !== null && !widget && (
         <button
           type="button"
@@ -127,7 +121,6 @@ export function LineAnnotatableViewer({
         </button>
       )}
 
-      {/* Inline annotation widget */}
       {widget && (
         <div
           className={cn(

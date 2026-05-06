@@ -1301,9 +1301,7 @@ export function FreeFormInput({
 
     const commentPrefix = formatLineCommentsMessage(lineCommentQueue)
     const userText = input.trim()
-    const finalText = commentPrefix
-      ? userText ? `${commentPrefix}\n\n${userText}` : commentPrefix
-      : userText
+    const finalText = [commentPrefix, userText].filter(Boolean).join('\n\n')
 
     onSubmit(
       finalText,
