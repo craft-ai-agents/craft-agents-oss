@@ -3244,6 +3244,7 @@ function AppShellContent({
 
         <EditorDetailPanel
           workspaceId={activeWorkspaceId ?? undefined}
+          sessionId={focusedSessionId ?? undefined}
         />
 
         <RightSidebarPanel
