@@ -51,6 +51,22 @@ const EXEMPT_SLUGS = new Set(['session', 'craft-agents-docs']);
 /** Global browser tools docs path required before browser tool usage. */
 const BROWSER_TOOLS_DOC_PATH = resolve(join(homedir(), '.craft-agent', 'docs', 'browser-tools.md'));
 
+function isBrowserPrerequisiteTool(toolName: string): boolean {
+  return (
+    toolName.startsWith('browser_') ||
+    toolName === 'browser_tool' ||
+    toolName === 'mcp__session__browser_tool'
+  );
+}
+
+function isBrowserPrerequisiteEnabled(): boolean {
+  try {
+    return getBrowserToolEnabled();
+  } catch {
+    return true;
+  }
+}
+
 // ============================================================
 // Rules
 // ============================================================
@@ -100,8 +116,7 @@ const RULES: PrerequisiteRule[] = [
   // and skipped entirely when the built-in browser tool is disabled.
   {
     toolMatcher: (toolName: string) =>
-      getBrowserToolEnabled() &&
-      (toolName === 'browser_tool' || toolName === 'mcp__session__browser_tool'),
+      isBrowserPrerequisiteTool(toolName) && isBrowserPrerequisiteEnabled(),
     resolveRequiredPath: () => {
       return existsSync(BROWSER_TOOLS_DOC_PATH) ? BROWSER_TOOLS_DOC_PATH : null;
     },
