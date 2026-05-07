@@ -1042,6 +1042,8 @@
   "settings.workspace.modeCyclingDesc": "Wählen Sie, welche Modi mit Shift+Tab durchgeschaltet werden",
   "settings.workspace.noSourcesConfigured": "Keine Quellen in diesem Workspace konfiguriert.",
   "settings.workspace.noWorkspaceSelected": "Kein Workspace ausgewählt",
+  "settings.workspace.notesStoragePath": "Notes-Speicherpfad",
+  "settings.workspace.notesStoragePathDesc": "Standard (~/.craft-agent/workspaces/{id}/notes)",
   "settings.workspace.permissionsSection": "Berechtigungen",
   "settings.workspace.renameWorkspace": "Workspace umbenennen",
   "settings.workspace.title": "Workspace",

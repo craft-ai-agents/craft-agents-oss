@@ -522,6 +522,37 @@
   border-radius: 3px;
 }
 
+/* ── Wiki links ── */
+/* Display chip — rendered as a widget before the hidden raw text */
+.tiptap-editor .tiptap-prose .tiptap-wiki-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background-color 0.1s;
+}
+
+.tiptap-editor .tiptap-prose .tiptap-wiki-link:hover {
+  background: color-mix(in oklch, var(--accent) 10%, transparent);
+}
+
+/* The raw [[...]] text — invisible but in the document for editing/selection */
+.tiptap-editor .tiptap-prose .tiptap-wiki-link-raw {
+  font-size: 0 !important;
+  letter-spacing: 0 !important;
+  color: transparent !important;
+  opacity: 0;
+  user-select: none;
+}
+
+/* Editing mode — cursor is inside, raw text is visible again */
+.tiptap-editor .tiptap-prose .tiptap-wiki-link--editing {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* ── Slash command menu ── */
 .tiptap-slash-menu {
   /* Keep compact by default, but allow some growth for longer labels. */

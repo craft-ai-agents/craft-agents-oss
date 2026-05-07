@@ -11,4 +11,4 @@ export { MarkdownDatatableBlock, type MarkdownDatatableBlockProps } from './Mark
 export { MarkdownSpreadsheetBlock, type MarkdownSpreadsheetBlockProps } from './MarkdownSpreadsheetBlock'
 export { MarkdownImageBlock, type MarkdownImageBlockProps } from './MarkdownImageBlock'
 export { ImageCardStack, type ImageCardStackProps, type ImageCardStackItem } from './ImageCardStack'
-export { TiptapMarkdownEditor, type TiptapMarkdownEditorProps, type MarkdownEngine } from './TiptapMarkdownEditor'
+export { TiptapMarkdownEditor, type TiptapEditorHandle, type TiptapMarkdownEditorProps, type MarkdownEngine } from './TiptapMarkdownEditor'

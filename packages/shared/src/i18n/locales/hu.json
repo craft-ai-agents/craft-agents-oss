@@ -1042,6 +1042,8 @@
   "settings.workspace.modeCyclingDesc": "Válaszd ki, mely módok között válts a Shift+Tab billentyűvel",
   "settings.workspace.noSourcesConfigured": "Nincsenek beállított források ebben a munkaterületen.",
   "settings.workspace.noWorkspaceSelected": "Nincs kiválasztott munkaterület",
+  "settings.workspace.notesStoragePath": "Jegyzetek tárolási útvonala",
+  "settings.workspace.notesStoragePathDesc": "Alapértelmezett (~/.craft-agent/workspaces/{id}/notes)",
   "settings.workspace.permissionsSection": "Engedélyek",
   "settings.workspace.renameWorkspace": "Munkaterület átnevezése",
   "settings.workspace.title": "Munkaterület",

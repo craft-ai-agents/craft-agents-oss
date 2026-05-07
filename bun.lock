@@ -350,6 +350,8 @@
         "@craft-agent/core": "workspace:*",
         "@craft-agent/shared": "workspace:*",
         "@mariozechner/pi-ai": "0.72.1",
+        "gray-matter": "^4.0.3",
+        "js-yaml": "^4.1.1",
         "jose": "^6.0.0",
         "sharp": "0.34.5",
         "ws": "^8.19.0",

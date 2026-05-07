@@ -12,6 +12,7 @@ import {
   ChevronDown,
   AlertCircle,
   Image as ImageIcon,
+  BookOpen,
   X,
 } from 'lucide-react'
 import { Icon_Home, Icon_Folder, Spinner } from '@craft-agent/ui'
@@ -2485,6 +2486,7 @@ function WorkingDirectoryBadge({
   const [recentDirs, setRecentDirs] = React.useState<string[]>([])
   const [popoverOpen, setPopoverOpen] = React.useState(false)
   const [homeDir, setHomeDir] = React.useState<string>('')
+  const [notesVaultPath, setNotesVaultPath] = React.useState<string | null>(null)
   const [gitBranch, setGitBranch] = React.useState<string | null>(null)
   const [filter, setFilter] = React.useState('')
   const inputRef = React.useRef<HTMLInputElement>(null)
@@ -2495,6 +2497,14 @@ function WorkingDirectoryBadge({
     window.electronAPI?.getHomeDir?.().then((dir: string) => {
       if (dir) setHomeDir(dir)
     })
+    if (workspaceId) {
+      window.electronAPI?.getWorkspaces?.().then((workspaces) => {
+        const workspace = workspaces.find((item) => item.id === workspaceId)
+        setNotesVaultPath(workspace ? `${workspace.rootPath.replace(/[\\/]+$/, '')}/notes` : null)
+      }).catch(() => setNotesVaultPath(null))
+    } else {
+      setNotesVaultPath(null)
+    }
   }, [workspaceId])
 
   // Fetch git branch when working directory changes
@@ -2545,6 +2555,14 @@ function WorkingDirectoryBadge({
     setPopoverOpen(false)
   }
 
+  const handleSelectNotesVault = async () => {
+    if (!workspaceId || !notesVaultPath) return
+    await window.electronAPI.listNotes(workspaceId).catch(() => null)
+    setRecentDirs(addRecentWorkingDir(notesVaultPath, workspaceId))
+    onWorkingDirectoryChange(notesVaultPath)
+    setPopoverOpen(false)
+  }
+
   const handleReset = () => {
     if (sessionFolderPath) {
       onWorkingDirectoryChange(sessionFolderPath)
@@ -2560,6 +2578,7 @@ function WorkingDirectoryBadge({
   // Filter out current directory from recent list and sort alphabetically by folder name
   const filteredRecent = recentDirs
     .filter(p => p !== workingDirectory)
+    .filter(p => p !== notesVaultPath)
     .sort((a, b) => {
       const nameA = getPathBasename(a).toLowerCase()
       const nameB = getPathBasename(b).toLowerCase()
@@ -2570,7 +2589,8 @@ function WorkingDirectoryBadge({
 
   // Determine label - "Work in Folder" if not set or at session root, otherwise folder name
   const hasFolder = !!workingDirectory && workingDirectory !== sessionFolderPath
-  const folderName = hasFolder ? (getPathBasename(workingDirectory) || 'Folder') : 'Work in Folder'
+  const isNotesVaultSelected = !!notesVaultPath && workingDirectory === notesVaultPath
+  const folderName = isNotesVaultSelected ? 'Notes vault' : hasFolder ? (getPathBasename(workingDirectory) || 'Folder') : 'Work in Folder'
 
   // Show reset option when a folder is selected and it differs from session folder
   const showReset = hasFolder && sessionFolderPath && sessionFolderPath !== workingDirectory
@@ -2638,6 +2658,24 @@ function WorkingDirectoryBadge({
 
             {/* Separator after current folder */}
             {hasFolder && filteredRecent.length > 0 && (
+              <div className="h-px bg-border my-1 mx-1" />
+            )}
+
+            {notesVaultPath && workingDirectory !== notesVaultPath && (
+              <CommandPrimitive.Item
+                value={`notes-vault ${notesVaultPath}`}
+                onSelect={handleSelectNotesVault}
+                className={cn(MENU_ITEM_STYLE, 'group/item data-[selected=true]:bg-foreground/5')}
+              >
+                <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="flex-1 min-w-0 truncate">
+                  <span>Notes vault</span>
+                  <span className="text-muted-foreground ml-1.5">{formatPathForDisplay(notesVaultPath, homeDir)}</span>
+                </span>
+              </CommandPrimitive.Item>
+            )}
+
+            {notesVaultPath && workingDirectory !== notesVaultPath && filteredRecent.length > 0 && (
               <div className="h-px bg-border my-1 mx-1" />
             )}
 

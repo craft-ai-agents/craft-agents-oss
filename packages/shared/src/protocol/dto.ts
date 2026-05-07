@@ -339,6 +339,81 @@ export interface FileSearchResult {
 }
 
 // ---------------------------------------------------------------------------
+// Notes types
+// ---------------------------------------------------------------------------
+
+export interface NoteLink {
+  target: string
+  alias?: string
+  line: number
+}
+
+export interface NoteBacklink {
+  noteId: string
+  title: string
+  path: string
+  line: number
+  preview: string
+}
+
+export interface NoteAsset {
+  name: string
+  path: string
+  relativePath: string
+  size: number
+  mimeType: string
+  referencedBy?: Array<{ noteId: string; title: string }>
+}
+
+export interface NoteSummary {
+  id: string
+  title: string
+  path: string
+  relativePath: string
+  tags: string[]
+  properties: Record<string, unknown>
+  links: NoteLink[]
+  assetRefs: string[]
+  updatedAt: number
+  createdAt: number
+  size: number
+}
+
+export interface NoteDocument extends NoteSummary {
+  content: string
+  backlinks: NoteBacklink[]
+}
+
+export interface NoteRenameImpact {
+  noteId: string
+  nextNoteId: string
+  nextTitle: string
+  updatedNotes: Array<{ noteId: string; title: string; path: string; replacements: number }>
+  totalReplacements: number
+}
+
+export interface NoteRenameResult {
+  note: NoteDocument
+  updatedNotes: Array<{ noteId: string; path: string; replacements: number }>
+}
+
+export interface NoteAssetImportResult {
+  asset: NoteAsset
+  markdown: string
+}
+
+export interface NoteAssetRenameResult {
+  asset: NoteAsset
+  updatedNotes: Array<{ noteId: string; path: string; replacements: number }>
+}
+
+export interface NoteChangedPayload {
+  workspaceId: string
+  reason?: 'external' | 'save' | 'create' | 'rename' | 'delete' | 'asset' | 'properties'
+  noteId?: string
+}
+
+// ---------------------------------------------------------------------------
 // LLM connection types
 // ---------------------------------------------------------------------------
 
@@ -505,6 +580,7 @@ export interface WorkspaceSettings {
   cyclablePermissionModes?: PermissionMode[]
   thinkingLevel?: ThinkingLevel
   workingDirectory?: string
+  notesPath?: string
   localMcpEnabled?: boolean
   defaultLlmConnection?: string
   enabledSourceSlugs?: string[]

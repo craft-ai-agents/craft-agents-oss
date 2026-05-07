@@ -51,6 +51,13 @@ export interface WorkspaceConfig {
   };
 
   /**
+   * Custom notes storage path. When set, notes are stored here instead of the
+   * default ~/.craft-agent/workspaces/{id}/notes/. Points at an Obsidian vault
+   * or any existing markdown directory.
+   */
+  notesPath?: string;
+
+  /**
    * Local MCP server configuration.
    * Controls whether stdio-based MCP servers can be spawned in this workspace.
    * Resolution order: ENV (CRAFT_LOCAL_MCP_ENABLED) > workspace config > default (true)

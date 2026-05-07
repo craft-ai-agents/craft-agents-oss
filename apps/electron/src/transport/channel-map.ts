@@ -183,6 +183,28 @@ export const CHANNEL_MAP = {
   // Server filesystem browsing (remote mode)
   listServerDirectory: invoke(RPC_CHANNELS.fs.LIST_DIRECTORY),
 
+  // Notes
+  listNotes: invoke(RPC_CHANNELS.notes.LIST),
+  readNote: invoke(RPC_CHANNELS.notes.READ),
+  saveNote: invoke(RPC_CHANNELS.notes.SAVE),
+  createNote: invoke(RPC_CHANNELS.notes.CREATE),
+  renameNote: invoke(RPC_CHANNELS.notes.RENAME),
+  deleteNote: invoke(RPC_CHANNELS.notes.DELETE),
+  renameFolderNote: invoke(RPC_CHANNELS.notes.RENAME_FOLDER),
+  deleteFolderNote: invoke(RPC_CHANNELS.notes.DELETE_FOLDER),
+  searchNotes: invoke(RPC_CHANNELS.notes.SEARCH),
+  getNoteBacklinks: invoke(RPC_CHANNELS.notes.GET_BACKLINKS),
+  getNoteRenameImpact: invoke(RPC_CHANNELS.notes.GET_RENAME_IMPACT),
+  getDailyNote: invoke(RPC_CHANNELS.notes.GET_DAILY_NOTE),
+  importNoteAsset: invoke(RPC_CHANNELS.notes.IMPORT_ASSET),
+  listNoteAssets: invoke(RPC_CHANNELS.notes.LIST_ASSETS),
+  deleteNoteAsset: invoke(RPC_CHANNELS.notes.DELETE_ASSET),
+  renameNoteAsset: invoke(RPC_CHANNELS.notes.RENAME_ASSET),
+  updateNoteProperties: invoke(RPC_CHANNELS.notes.UPDATE_PROPERTIES),
+  watchNotes: invoke(RPC_CHANNELS.notes.WATCH),
+  unwatchNotes: invoke(RPC_CHANNELS.notes.UNWATCH),
+  onNotesChanged: listener(RPC_CHANNELS.notes.CHANGED),
+
   // Debug logging
   debugLog: invoke(RPC_CHANNELS.debug.LOG),
 
