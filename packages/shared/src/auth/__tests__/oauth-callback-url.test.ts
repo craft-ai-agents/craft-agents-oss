@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test'
+import { afterAll, describe, it, expect, mock, beforeEach } from 'bun:test'
 
 /**
  * Tests that all OAuth prepare functions correctly support callbackUrl
@@ -6,8 +6,13 @@ import { describe, it, expect, mock, beforeEach } from 'bun:test'
  */
 
 // Mock fetch globally to prevent real HTTP requests during metadata discovery
+const originalFetch = globalThis.fetch
 const mockFetch = mock(() => Promise.resolve(new Response('Not Found', { status: 404 })))
 globalThis.fetch = mockFetch as any
+
+afterAll(() => {
+  globalThis.fetch = originalFetch
+})
 
 import { prepareGoogleOAuth } from '../google-oauth'
 

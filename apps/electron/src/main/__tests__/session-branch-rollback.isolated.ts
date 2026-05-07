@@ -68,6 +68,7 @@ mock.module('@craft-agent/shared/config', () => ({
   getLlmConnection: () => null,
   getDefaultLlmConnection: () => null,
   resolveAuthEnvVars: () => ({}),
+  resetManagedAnthropicAuthEnvVars: () => {},
   getToolIconsDir: () => '/tmp/tool-icons',
   getMiniModel: () => 'claude-haiku-4-5-20251001',
   getDefaultThinkingLevel: () => 'medium',
@@ -89,6 +90,12 @@ mock.module('@craft-agent/shared/config', () => ({
   clearGitBashPath: () => {},
   setActiveWorkspace: () => {},
   getSummarizationModel: () => 'claude-haiku-4-5-20251001',
+  defaultMidStreamBehavior: (providerType: string) => providerType === 'anthropic' ? 'queue' : 'steer',
+  resolveMidStreamBehavior: (connection: { midStreamBehavior?: string; providerType: string }) => (
+    connection.midStreamBehavior === 'queue' || connection.midStreamBehavior === 'steer'
+      ? connection.midStreamBehavior
+      : connection.providerType === 'anthropic' ? 'queue' : 'steer'
+  ),
   ensureConfigDir: () => {},
   ensureConfigDefaults: () => {},
   addWorkspace: async () => null,
@@ -107,6 +114,7 @@ mock.module('@craft-agent/shared/config', () => ({
   touchLlmConnection: async () => {},
   isCompatProvider: () => false,
   isAnthropicProvider: () => true,
+  modelSupportsImages: () => false,
 }))
 
 mock.module('@craft-agent/shared/workspaces', () => ({
