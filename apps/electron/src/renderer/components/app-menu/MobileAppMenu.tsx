@@ -17,7 +17,6 @@ import {
   type MobileMenuPageId,
   type MobileMenuRow,
 } from './mobile-menu-pages'
-import { useMobileMenuHistory } from './useMobileMenuHistory'
 import type { AppMenuProps } from './types'
 
 const SNAPPY_SPRING = { type: 'spring' as const, stiffness: 400, damping: 36, mass: 0.8 }
@@ -114,13 +113,12 @@ export function MobileAppMenu(props: AppMenuProps) {
   const close = React.useCallback(() => dispatch({ type: 'close' }), [])
   const pop = React.useCallback(() => dispatch({ type: 'pop' }), [])
 
-  // History bridge — handles iOS Safari edge-swipe-back without losing tab state.
-  useMobileMenuHistory({
-    isOpen: state.isOpen,
-    subPageDepth: state.stack.length - 1,
-    pop,
-    close,
-  })
+  // NOTE: We deliberately do NOT bridge to `window.history` here. NavigationContext
+  // owns `history.pushState` for the app's routing, and any `history.back()` call
+  // on close races with route changes fired from menu actions (e.g. Settings → AI),
+  // rolling them back. iOS Safari edge-swipe-back will navigate the whole tab away
+  // instead of popping a sub-page — accept that as a known UX gap; the close X
+  // and back chevron are the supported dismissal paths.
 
   // Register with the dismissible layer registry so Escape/back behavior nests cleanly.
   // Priority 0 keeps us under permission/credential prompts (which register higher).
