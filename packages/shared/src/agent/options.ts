@@ -164,6 +164,17 @@ export function setPathToClaudeCodeExecutable(path: string) {
 }
 
 /**
+ * Read the currently-configured custom path (set via setPathToClaudeCodeExecutable).
+ *
+ * Returns `undefined` (not `null`) so callers can pass it directly into SDK option
+ * fields typed `string | undefined`. The CLI/dev-runtime path that doesn't go
+ * through the custom setter is captured at SDK options-build time in claude-agent.ts.
+ */
+export function getPathToClaudeCodeExecutable(): string | undefined {
+    return customPathToClaudeCodeExecutable ?? undefined;
+}
+
+/**
  * Get default SDK options for spawning the Claude Code subprocess.
  *
  * @param envOverrides - Per-session environment variable overrides.

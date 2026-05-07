@@ -80,7 +80,13 @@ import type {
   SourceChangeCallback,
   SourceActivationCallback,
 } from './backend/types.ts';
+import { existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
+import {
+  isExistingDirectory,
+  extractSdkReportedBinaryPath,
+  isSpawnEnoent as detectSpawnEnoent,
+} from './spawn-helpers.ts';
 import { IMAGE_LIMITS } from '../utils/files.ts';
 
 /** Image extensions that may need size-guard in PreToolUse (matches Read tool's image detection) */
@@ -164,6 +170,12 @@ export interface ClaudeAgentConfig {
   thinkingLevel?: ThinkingLevel; // Initial thinking level (defaults to 'medium')
   onSdkSessionIdUpdate?: (sdkSessionId: string) => void;  // Callback when SDK session ID is captured
   onSdkSessionIdCleared?: () => void;  // Callback when SDK session ID is cleared (e.g., after failed resume)
+  /**
+   * Callback when branch-fork metadata is invalidated (parent cwd missing on this machine,
+   * or SDK fork spawn failed). Clears branchFromSdk* + sdkSessionId atomically.
+   * See BackendConfig.onBranchForkInvalidated for details.
+   */
+  onBranchForkInvalidated?: () => void;
   /**
    * Callback to get recent messages for recovery context.
    * Called when SDK resume fails and we need to inject previous conversation context into retry.
@@ -554,6 +566,7 @@ export class ClaudeAgent extends BaseAgent {
       systemPromptPreset: config.systemPromptPreset,
       onSdkSessionIdUpdate: config.onSdkSessionIdUpdate,
       onSdkSessionIdCleared: config.onSdkSessionIdCleared,
+      onBranchForkInvalidated: config.onBranchForkInvalidated,
       getRecoveryMessages: config.getRecoveryMessages,
       getBranchFallbackMessages: config.getBranchFallbackMessages,
       getBranchSeedMessages: config.getBranchSeedMessages,
@@ -820,6 +833,22 @@ export class ClaudeAgent extends BaseAgent {
         return;
       }
 
+      // Pre-spawn detection: a stale `branchFromSdkCwd` carried across machines
+      // (via "Send to Workspace") points at a directory that doesn't exist
+      // locally. Feeding that into spawn() returns ENOENT, which the SDK
+      // wraps as "Claude Code native binary not found at …" — sending users
+      // hunting for a bundling bug. Catch it here and route through the same
+      // branch fallback recovery the post-failure path uses.
+      if (
+        !_isRetry &&
+        this.branchFromSdkCwd &&
+        this.branchFromSdkSessionId &&
+        !isExistingDirectory(this.branchFromSdkCwd)
+      ) {
+        yield* this.recoverFromStaleBranchFork(userMessage, attachments, /* isPreSpawn */ true);
+        return;
+      }
+
       // Get centralized mini agent configuration (from BaseAgent)
       // This ensures Claude and Codex agents use the same detection and constants
       const miniConfig = this.getMiniAgentConfig();
@@ -919,6 +948,11 @@ export class ClaudeAgent extends BaseAgent {
         ? `${model}[1m]`
         : model;
 
+      // Capture the resolved spawn cwd here (rather than via an instance
+      // field) so the catch handler reads the value passed to *this*
+      // chatImpl invocation, not state left over from an earlier call.
+      const resolvedCwd = this.resolveSpawnCwd({ isRetry: _isRetry, sessionId });
+
       const options: Options = {
         ...getDefaultOptions(this.config.envOverrides),
         model: effectiveModel,
@@ -964,10 +998,7 @@ export class ClaudeAgent extends BaseAgent {
         // For fork attempts: use the parent's sdkCwd so the SDK subprocess can find the parent's
         // session file (stored under ~/.claude/projects/{cwd-hash}/). Without this, cross-CWD
         // branches (e.g., worktree ↔ main repo) fail with "No conversation found".
-        cwd: (!_isRetry && this.branchFromSdkCwd && this.branchFromSdkSessionId)
-          ? this.branchFromSdkCwd
-          : (this.config.session?.sdkCwd ??
-            (sessionId ? getSessionPath(this.workspaceRootPath, sessionId) : this.workspaceRootPath)),
+        cwd: resolvedCwd,
         includePartialMessages: true,
         // Tools configuration:
         // - Mini agents: minimal set for quick config edits (reduces token count ~70%)
@@ -1302,6 +1333,12 @@ export class ClaudeAgent extends BaseAgent {
         plugins: [],
       };
 
+      // Capture the binary path the SDK will actually use (Electron-bundled custom
+      // path, CLI/dev-runtime path from getDefaultOptions, or undefined for SDK
+      // auto-discovery via node_modules). Used by the ENOENT classifier to tell
+      // "binary missing" apart from "cwd missing" — both surface as ENOENT from spawn().
+      const resolvedBinaryPath = options.pathToClaudeCodeExecutable;
+
       // Track whether we're trying to resume a session (for error handling)
       // Also covers branch fork attempts where sessionId is null but branchFromSdkSessionId is set
       const wasResuming = !_isRetry && (!!this.sessionId || !!this.branchFromSdkSessionId);
@@ -1584,38 +1621,26 @@ This is a branched conversation. All prior messages in this conversation are par
           debug('[SESSION_DEBUG] >>> DETECTED EMPTY RESPONSE - triggering recovery');
           const wasBranchFork = !!this.branchFromSdkSessionId;
           if (wasBranchFork) {
-            debug(`[ClaudeAgent] Branch fork failed (empty response) before child session establishment (parent=${this.branchFromSdkSessionId}), recovering as fresh session`);
+            // Branch-fork failure: route through the shared helper so all four
+            // fork fields are persisted atomically (sdkSessionId + branchFromSdk*),
+            // and the parent conversation summary is injected into the retry.
+            yield* this.recoverFromStaleBranchFork(userMessage, attachments, /* isPreSpawn */ false);
+            return;
           }
-          // SDK resume failed silently - clear session and retry with context
+          // Regular resume failure (no branch fork): clear the session and retry
+          // with raw recovery context. onSdkSessionIdCleared persists the
+          // cleared sdkSessionId; there are no branch fields to clear here.
           this.sessionId = null;
-          this.branchFromSdkSessionId = null; // prevent retry from re-attempting fork with dead parent
-          this.branchFromSdkCwd = null;
-          this.branchFromSdkTurnId = null;
-          // Notify that we're clearing the session ID (for persistence)
           this.config.onSdkSessionIdCleared?.();
-          // Clear pinned state for fresh start
           this.pinnedPreferencesPrompt = null;
           this.pinnedIncludeCoAuthoredBy = null;
           this.preferencesDriftNotified = false;
 
-          // Build fallback context: for branch failures, summarize parent conversation
-          // via mini completion; for regular resume failures, use last 6 raw messages.
           let retryMessage = userMessage;
-          if (wasBranchFork) {
-            const summary = await this.generateBranchFallbackContext();
-            if (summary) {
-              retryMessage = `<branch_context_summary>\nThis is a branched conversation. The SDK-level fork failed, but here is a summary of the parent conversation:\n\n${summary}\n</branch_context_summary>\n\n${userMessage}`;
-            } else {
-              const recoveryContext = this.buildRecoveryContext();
-              if (recoveryContext) retryMessage = recoveryContext + userMessage;
-            }
-          } else {
-            const recoveryContext = this.buildRecoveryContext();
-            if (recoveryContext) retryMessage = recoveryContext + userMessage;
-          }
+          const recoveryContext = this.buildRecoveryContext();
+          if (recoveryContext) retryMessage = recoveryContext + userMessage;
 
-          yield { type: 'info', message: wasBranchFork ? 'Branch fork failed, restoring context from history...' : 'Restoring conversation context...' };
-          // Retry with fresh session, injecting conversation history into the message
+          yield { type: 'info', message: 'Restoring conversation context...' };
           yield* this.chat(retryMessage, attachments, { isRetry: true });
           return;
         }
@@ -1795,38 +1820,127 @@ This is a branched conversation. All prior messages in this conversation are par
         if (isSessionExpired && wasResuming && !_isRetry) {
           debug('[SESSION_DEBUG] >>> TAKING PATH: Session expired recovery');
           const wasBranchFork = !!this.branchFromSdkSessionId;
-          if (wasBranchFork) {
-            debug(`[ClaudeAgent] Branch fork failed (session expired) before child session establishment (parent=${this.branchFromSdkSessionId}), recovering as fresh session`);
-          }
           console.error('[ClaudeAgent] SDK session expired server-side, clearing and retrying fresh');
           debug('[ClaudeAgent] SDK session expired server-side, clearing and retrying fresh');
+
+          if (wasBranchFork) {
+            // Branch-fork failure: route through the shared helper so the
+            // four fork fields are persisted atomically (avoids next launch
+            // reloading the dead parent and re-failing).
+            yield* this.recoverFromStaleBranchFork(userMessage, attachments, /* isPreSpawn */ false);
+            return;
+          }
+
+          // Regular resume failure: clear sessionId and retry with raw recovery context.
           this.sessionId = null;
-          this.branchFromSdkSessionId = null; // prevent retry from re-attempting fork with dead parent
-          this.branchFromSdkCwd = null;
-          this.branchFromSdkTurnId = null;
-          this.config.onSdkSessionIdCleared?.(); // persist cleared ID to JSONL header
-          // Clear pinned state so retry captures fresh values
+          this.config.onSdkSessionIdCleared?.();
           this.pinnedPreferencesPrompt = null;
           this.pinnedIncludeCoAuthoredBy = null;
           this.preferencesDriftNotified = false;
 
-          // Inject fallback context for branch failures, recovery context for regular resume
           let retryMessage = userMessage;
-          if (wasBranchFork) {
-            const summary = await this.generateBranchFallbackContext();
-            if (summary) {
-              retryMessage = `<branch_context_summary>\nThis is a branched conversation. The SDK-level fork failed, but here is a summary of the parent conversation:\n\n${summary}\n</branch_context_summary>\n\n${userMessage}`;
-            } else {
-              const recoveryContext = this.buildRecoveryContext();
-              if (recoveryContext) retryMessage = recoveryContext + userMessage;
-            }
-          } else {
-            const recoveryContext = this.buildRecoveryContext();
-            if (recoveryContext) retryMessage = recoveryContext + userMessage;
+          const recoveryContext = this.buildRecoveryContext();
+          if (recoveryContext) retryMessage = recoveryContext + userMessage;
+
+          yield { type: 'info', message: 'Session expired, restoring context...' };
+          yield* this.chat(retryMessage, attachments, { isRetry: true });
+          return;
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        // ENOENT handling — runs BEFORE the `if (isProcessError)` gate
+        // because the SDK throws spawn ENOENT as a `ReferenceError` with
+        // message "Claude Code native binary not found at …", which does
+        // not contain "process exited with code". Pre-uplift, the
+        // detection lived inside `isProcessError` and never fired for the
+        // case we actually care about.
+        // ─────────────────────────────────────────────────────────────────
+        const spawnError = sdkError as NodeJS.ErrnoException;
+        const isSpawnEnoent = detectSpawnEnoent({
+          errorCode: spawnError.code,
+          errorSyscall: spawnError.syscall,
+          rawErrorMsg,
+          stderr: stderrContext,
+        });
+
+        if (isSpawnEnoent) {
+          const reportedBinaryPath = extractSdkReportedBinaryPath(rawErrorMsg || '');
+          const { getPathToClaudeCodeExecutable } = await import('./options.ts');
+          const probedBinary = reportedBinaryPath || resolvedBinaryPath || getPathToClaudeCodeExecutable();
+          const probedCwd = resolvedCwd || undefined;
+          const binaryExists = probedBinary ? existsSync(probedBinary) : false;
+          const cwdExists = probedCwd ? isExistingDirectory(probedCwd) : false;
+
+          debug('[ClaudeAgent] ENOENT detected', {
+            probedBinary, probedCwd, binaryExists, cwdExists,
+            reportedBinaryPath,
+            errorCode: spawnError.code, errorSyscall: spawnError.syscall,
+          });
+
+          // Stale cwd plus a branch parent → route to recovery (covers the
+          // rare race where the pre-spawn guard didn't catch a cwd that
+          // vanished between check and spawn).
+          if (!cwdExists && !_isRetry && this.branchFromSdkSessionId) {
+            yield* this.recoverFromStaleBranchFork(userMessage, attachments, /* isPreSpawn */ false);
+            return;
           }
 
-          yield { type: 'info', message: wasBranchFork ? 'Branch fork failed, restoring context from history...' : 'Session expired, restoring context...' };
-          yield* this.chat(retryMessage, attachments, { isRetry: true });
+          // First attempt: retry once after 2s. Covers transient causes
+          // (auto-update bundle-swap window, sandbox/quarantine, race)
+          // regardless of which path looks missing.
+          if (!_isRetry) {
+            console.error('[ClaudeAgent] spawn ENOENT, retrying in 2s', {
+              sessionId: this.config.session?.id,
+              probedBinary, probedCwd,
+              errorCode: spawnError.code, errorSyscall: spawnError.syscall,
+              stderr: (stderrContext || '').slice(0, 200),
+            });
+            yield { type: 'info', message: 'Reconnecting after update...' };
+            await new Promise(r => setTimeout(r, 2000));
+            yield* this.chat(userMessage, attachments, { isRetry: true });
+            return;
+          }
+
+          // Retry exhausted: surface a typed error pointed at the more-likely
+          // cause. Cwd missing is more actionable when the binary is fine
+          // (we can recover from a parent summary); otherwise blame the
+          // binary (reinstall is the user's fix).
+          const isCwdCause = !cwdExists && binaryExists;
+          yield {
+            type: 'typed_error',
+            error: isCwdCause ? {
+              code: 'sdk_cwd_missing',
+              title: 'Branch source unavailable on this machine',
+              message:
+                "The folder this branched session was forked from doesn't exist on this machine. " +
+                'This typically happens after importing a session from another workspace. ' +
+                'Retrying will start a fresh fork from a summary of the parent conversation.',
+              details: [
+                probedCwd ? `Subprocess cwd: ${probedCwd}` : '',
+                probedBinary ? `Binary: ${probedBinary} (${binaryExists ? 'exists' : 'missing'})` : '',
+              ].filter(Boolean) as string[],
+              actions: [{ key: 'r', label: 'Retry', action: 'retry' as const }],
+              canRetry: true,
+              retryDelayMs: 1000,
+              originalError: rawErrorMsg,
+            } : {
+              code: 'sdk_binary_missing',
+              title: 'Claude Code binary missing from app bundle',
+              message:
+                'The Claude Agent SDK binary expected on disk is not present. ' +
+                'This usually means the app bundle is incomplete (interrupted download, partial update, ' +
+                'or a security tool removed it). Reinstalling Craft Agents typically fixes this.',
+              details: [
+                probedBinary ? `Expected binary: ${probedBinary}` : 'Binary path: unknown',
+                probedCwd ? `Subprocess cwd: ${probedCwd} (${cwdExists ? 'exists' : 'missing'})` : '',
+              ].filter(Boolean) as string[],
+              actions: [{ key: 'r', label: 'Retry', action: 'retry' as const }],
+              canRetry: true,
+              retryDelayMs: 1000,
+              originalError: rawErrorMsg,
+            },
+          };
+          yield { type: 'complete' };
           return;
         }
 
@@ -1840,28 +1954,6 @@ This is a branched conversation. All prior messages in this conversation are par
           if (windowsSkillsError) {
             yield windowsSkillsError;
             yield { type: 'complete' };
-            return;
-          }
-
-          // Detect spawn ENOENT — Node.js error when the SDK subprocess binary has
-          // been moved/deleted (e.g., during app bundle swap on auto-update).
-          // Structured fields first (precise), regex fallback for stringified stderr.
-          const spawnError = sdkError as NodeJS.ErrnoException;
-          const isSpawnEnoent =
-            (spawnError.code === 'ENOENT' && spawnError.syscall?.startsWith('spawn')) ||
-            /\bspawn\b[\s\S]*\bENOENT\b/.test(stderrContext || '') ||
-            /\bspawn\b[\s\S]*\bENOENT\b/.test(rawErrorMsg || '');
-
-          if (isSpawnEnoent && !_isRetry) {
-            console.error('[ClaudeAgent] spawn ENOENT detected, retrying in 2s', {
-              sessionId: this.config.session?.id,
-              errorCode: spawnError.code,
-              errorSyscall: spawnError.syscall,
-              stderr: (stderrContext || '').slice(0, 200),
-            });
-            yield { type: 'info', message: 'Reconnecting after update...' };
-            await new Promise(r => setTimeout(r, 2000));
-            yield* this.chat(userMessage, attachments, { isRetry: true });
             return;
           }
 
@@ -1933,40 +2025,29 @@ This is a branched conversation. All prior messages in this conversation are par
         if (wasResuming && !_isRetry) {
           debug('[SESSION_DEBUG] >>> TAKING PATH: wasResuming fallback retry');
           const wasBranchFork = !!this.branchFromSdkSessionId;
+
           if (wasBranchFork) {
-            debug(`[ClaudeAgent] Branch fork failed (generic error) before child session establishment (parent=${this.branchFromSdkSessionId}), recovering as fresh session`);
+            // Generic error during a fork attempt: route through the shared
+            // helper so all four fork fields are persisted atomically and
+            // the parent summary is injected into the retry.
+            yield* this.recoverFromStaleBranchFork(userMessage, attachments, /* isPreSpawn */ false);
+            return;
           }
+
+          // Regular resume failure (no branch fork): clear sessionId only.
           this.sessionId = null;
-          this.branchFromSdkSessionId = null; // prevent retry from re-attempting fork with dead parent
-          this.branchFromSdkCwd = null;
-          this.branchFromSdkTurnId = null;
-          this.config.onSdkSessionIdCleared?.(); // persist cleared ID to JSONL header
-          // Clear pinned state so retry captures fresh values
+          this.config.onSdkSessionIdCleared?.();
           this.pinnedPreferencesPrompt = null;
           this.pinnedIncludeCoAuthoredBy = null;
           this.preferencesDriftNotified = false;
 
-          // Inject fallback context for branch failures, recovery context for regular resume
           let retryMessage = userMessage;
-          if (wasBranchFork) {
-            const summary = await this.generateBranchFallbackContext();
-            if (summary) {
-              retryMessage = `<branch_context_summary>\nThis is a branched conversation. The SDK-level fork failed, but here is a summary of the parent conversation:\n\n${summary}\n</branch_context_summary>\n\n${userMessage}`;
-            } else {
-              const recoveryContext = this.buildRecoveryContext();
-              if (recoveryContext) retryMessage = recoveryContext + userMessage;
-            }
-          } else {
-            const recoveryContext = this.buildRecoveryContext();
-            if (recoveryContext) retryMessage = recoveryContext + userMessage;
-          }
+          const recoveryContext = this.buildRecoveryContext();
+          if (recoveryContext) retryMessage = recoveryContext + userMessage;
 
-          // Provide context-aware message
-          const statusMessage = wasBranchFork
-            ? 'Branch fork failed, restoring context from history...'
-            : errorMsg.includes('session') || errorMsg.includes('resume')
-              ? 'Conversation sync failed, restoring context...'
-              : 'Request failed, retrying with context...';
+          const statusMessage = errorMsg.includes('session') || errorMsg.includes('resume')
+            ? 'Conversation sync failed, restoring context...'
+            : 'Request failed, retrying with context...';
 
           yield { type: 'info', message: statusMessage };
           yield* this.chat(retryMessage, attachments, { isRetry: true });
@@ -2628,6 +2709,89 @@ This is a branched conversation. All prior messages in this conversation are par
     }
 
     return result.trim() || null;
+  }
+
+  /**
+   * Pick the first existing directory among the cwd candidates.
+   *
+   * `branchFromSdkCwd` is consulted only on the first attempt of a branched
+   * session — pre-spawn detection (in `chat()`) routes stale-branch cases
+   * through `recoverFromStaleBranchFork` before this method runs, so the
+   * branch candidate here is only relevant in the rare race where the cwd
+   * vanishes between the pre-spawn check and the actual spawn.
+   */
+  private resolveSpawnCwd({
+    isRetry,
+    sessionId,
+  }: {
+    isRetry: boolean;
+    sessionId: string | null;
+  }): string {
+    const candidates: Array<string | null | undefined> = [
+      !isRetry && this.branchFromSdkSessionId ? this.branchFromSdkCwd : null,
+      this.config.session?.sdkCwd,
+      sessionId ? getSessionPath(this.workspaceRootPath, sessionId) : null,
+      this.workspaceRootPath,
+    ];
+    for (const c of candidates) {
+      if (isExistingDirectory(c)) return c!;
+    }
+    // workspaceRootPath itself is missing — pathological, but we have nothing
+    // better to fall back to. Let the SDK surface the spawn failure.
+    debug('[ClaudeAgent] No cwd candidate exists; falling back to workspaceRootPath anyway', {
+      candidates,
+    });
+    return this.workspaceRootPath;
+  }
+
+  /**
+   * Recover from a branch-fork session whose parent cwd is no longer
+   * reachable on this machine, or whose SDK fork spawn failed before
+   * establishing a child session.
+   *
+   * `isPreSpawn` selects the user-facing status text only — the recovery
+   * mechanics are identical for pre-spawn (cwd missing on disk before the
+   * SDK runs) and post-failure (anything that broke the fork attempt
+   * after spawn).
+   */
+  private async *recoverFromStaleBranchFork(
+    userMessage: string,
+    attachments: FileAttachment[] | undefined,
+    isPreSpawn: boolean,
+  ): AsyncGenerator<AgentEvent> {
+    debug('[ClaudeAgent] Recovering from stale branch fork', {
+      isPreSpawn,
+      sessionId: this.config.session?.id,
+      parent: this.branchFromSdkSessionId,
+      parentCwd: this.branchFromSdkCwd,
+    });
+
+    this.sessionId = null;
+    this.branchFromSdkSessionId = null;
+    this.branchFromSdkCwd = null;
+    this.branchFromSdkTurnId = null;
+    this.pinnedPreferencesPrompt = null;
+    this.pinnedIncludeCoAuthoredBy = null;
+    this.preferencesDriftNotified = false;
+    // Atomic on-disk persistence: clears all four fork fields at once. This
+    // supersedes onSdkSessionIdCleared, which only persists sdkSessionId and
+    // would leave the branchFromSdk* fields on disk to reload next launch.
+    this.config.onBranchForkInvalidated?.();
+
+    let retryMessage = userMessage;
+    const summary = await this.generateBranchFallbackContext();
+    if (summary) {
+      retryMessage = `<branch_context_summary>\nThis is a branched conversation. The SDK-level fork is unavailable on this machine; here is a summary of the parent conversation:\n\n${summary}\n</branch_context_summary>\n\n${userMessage}`;
+    } else {
+      const recoveryContext = this.buildRecoveryContext();
+      if (recoveryContext) retryMessage = recoveryContext + userMessage;
+    }
+
+    const statusMessage = isPreSpawn
+      ? 'Branch source unavailable on this machine, restoring context from history...'
+      : 'Branch fork failed, restoring context from history...';
+    yield { type: 'info', message: statusMessage };
+    yield* this.chat(retryMessage, attachments, { isRetry: true });
   }
 
   /**

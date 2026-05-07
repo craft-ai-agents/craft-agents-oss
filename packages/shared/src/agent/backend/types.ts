@@ -224,6 +224,20 @@ export interface CoreBackendConfig {
   /** Callback when SDK session ID is cleared (e.g., after failed resume) */
   onSdkSessionIdCleared?: () => void;
 
+  /**
+   * Called when the agent decides the persisted branch-fork metadata
+   * (branchFromSdkSessionId / branchFromSdkCwd / branchFromSdkTurnId) is
+   * unrecoverable on this machine — typically because the parent's sdk cwd
+   * doesn't exist locally (cross-machine session import) or the SDK fork
+   * spawn failed before establishing a child session.
+   *
+   * Implementations MUST clear all four fields (including sdkSessionId)
+   * atomically and persist. `onSdkSessionIdCleared` is insufficient because
+   * it only clears sdkSessionId — branch fields would reload from disk
+   * on next launch and re-trigger the failure.
+   */
+  onBranchForkInvalidated?: () => void;
+
   /** Callback to get recent messages for recovery context */
   getRecoveryMessages?: () => RecoveryMessage[];
 

@@ -374,15 +374,29 @@ async function buildServersFromSources(
   span.setMetadata('mcpCount', Object.keys(result.mcpServers).length)
   span.setMetadata('apiCount', Object.keys(result.apiServers).length)
 
-  // Update source configs for auth errors so UI reflects actual state
+  // Update source configs for auth errors so UI reflects actual state.
+  // Re-classify AUTH_REQUIRED → TOKEN_EXPIRED when the credential is merely
+  // expired-but-refreshable; in that case the refresh cycle handles recovery
+  // and we must NOT prematurely mark the source as needing re-auth (#710).
   for (const error of result.errors) {
-    if (error.error === SERVER_BUILD_ERRORS.AUTH_REQUIRED) {
-      const source = sources.find(s => s.config.slug === error.sourceSlug)
-      if (source) {
-        credManager.markSourceNeedsReauth(source, 'Token missing or expired')
-        sessionLog.info(`Marked source ${error.sourceSlug} as needing re-auth`)
-      }
+    if (error.error !== SERVER_BUILD_ERRORS.AUTH_REQUIRED) continue
+    const source = sources.find(s => s.config.slug === error.sourceSlug)
+    if (!source) continue
+
+    const cred = await credManager.load(source)
+    const isExpiredRefreshable =
+      cred &&
+      (credManager.isExpired(cred) || credManager.needsRefresh(cred)) &&
+      (cred.refreshToken || hasRenewEndpoint(source))
+
+    if (isExpiredRefreshable) {
+      error.error = SERVER_BUILD_ERRORS.TOKEN_EXPIRED
+      sessionLog.debug(`Source ${error.sourceSlug}: TOKEN_EXPIRED — refresh cycle will handle`)
+      continue
     }
+
+    credManager.markSourceNeedsReauth(source, 'Token missing or expired')
+    sessionLog.info(`Marked source ${error.sourceSlug} as needing re-auth`)
   }
 
   span.end()
@@ -390,80 +404,49 @@ async function buildServersFromSources(
 }
 
 /**
- * Result of OAuth token refresh operation.
+ * Result of expired-credential refresh.
  */
-interface OAuthTokenRefreshResult {
-  /** Whether any tokens were refreshed (configs were updated) */
-  tokensRefreshed: boolean
+interface RefreshExpiredCredentialsResult {
+  /** Number of sources whose tokens were successfully refreshed */
+  refreshedCount: number
   /** Sources that failed to refresh (for warning display) */
   failedSources: Array<{ slug: string; reason: string }>
 }
 
 /**
- * Refresh expired OAuth tokens and rebuild server configs.
- * Uses TokenRefreshManager for unified refresh logic (DRY/SOLID principles).
+ * Refresh expired OAuth / renew-endpoint tokens for the given sources.
  *
- * This implements "proactive refresh at query time" - tokens are refreshed before
- * each agent.chat() call, then server configs are rebuilt with fresh headers.
+ * Side effects (carried by `TokenRefreshManager.ensureFreshToken`):
+ * - Success: source.config.isAuthenticated = true (in-memory + on disk).
+ * - Failure: source.config.isAuthenticated = false + connectionStatus = 'needs_auth'
+ *   (in-memory + on disk), so isSourceUsable() returns false and the source is
+ *   excluded from intendedSlugs by callers.
  *
- * Handles both:
- * - MCP OAuth sources (e.g., Linear, Notion)
- * - API OAuth sources (Google, Slack, Microsoft)
- *
- * @param agent - The agent to update server configs on
- * @param sources - All loaded sources for the session
- * @param sessionPath - Path to session folder for API response storage
- * @param tokenRefreshManager - TokenRefreshManager instance for this session
+ * The caller is responsible for building servers AFTER this returns — that way
+ * a single fresh build sees the correct credentials and the correct usable set.
+ * Issue #710.
  */
-async function refreshOAuthTokensIfNeeded(
-  agent: AgentInstance,
+async function refreshExpiredCredentials(
   sources: LoadedSource[],
-  sessionPath: string,
-  tokenRefreshManager: TokenRefreshManager,
-  options?: { sessionId?: string; workspaceRootPath?: string; poolServerUrl?: string }
-): Promise<OAuthTokenRefreshResult> {
-  sessionLog.debug('[OAuth] Checking if any OAuth tokens need refresh')
+  tokenRefreshManager: TokenRefreshManager
+): Promise<RefreshExpiredCredentialsResult> {
+  sessionLog.debug('[OAuth] Checking if any tokens need refresh')
 
-  // Use TokenRefreshManager to find sources needing refresh (handles rate limiting)
   const needRefresh = await tokenRefreshManager.getSourcesNeedingRefresh(sources)
-
   if (needRefresh.length === 0) {
-    return { tokensRefreshed: false, failedSources: [] }
+    return { refreshedCount: 0, failedSources: [] }
   }
 
-  sessionLog.debug(`[OAuth] Found ${needRefresh.length} source(s) needing token refresh: ${needRefresh.map(s => s.config.slug).join(', ')}`)
+  sessionLog.debug(`[OAuth] Refreshing ${needRefresh.length} source(s): ${needRefresh.map(s => s.config.slug).join(', ')}`)
 
-  // Use TokenRefreshManager to refresh all tokens (handles rate limiting and error tracking)
   const { refreshed, failed } = await tokenRefreshManager.refreshSources(needRefresh)
 
-  // Convert failed results to the expected format
   const failedSources = failed.map(({ source, reason }) => ({
     slug: source.config.slug,
     reason,
   }))
 
-  if (refreshed.length > 0) {
-    // Rebuild server configs with fresh tokens
-    sessionLog.debug(`[OAuth] Rebuilding servers after ${refreshed.length} token refresh(es)`)
-    const enabledSources = sources.filter(isSourceUsable)
-    const { mcpServers, apiServers } = await buildServersFromSources(
-      enabledSources,
-      sessionPath,
-      tokenRefreshManager,
-      agent.getSummarizeCallback()
-    )
-    const intendedSlugs = enabledSources.map(s => s.config.slug)
-    await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
-
-    // Update bridge-mcp-server config/credentials for backends that need it
-    if (options?.sessionId && options?.workspaceRootPath) {
-      await applyBridgeUpdates(agent, sessionPath, enabledSources, mcpServers, options.sessionId, options.workspaceRootPath, 'token refresh', options.poolServerUrl)
-    }
-
-    return { tokensRefreshed: true, failedSources }
-  }
-
-  return { tokensRefreshed: false, failedSources }
+  return { refreshedCount: refreshed.length, failedSources }
 }
 
 /**
@@ -3022,6 +3005,16 @@ export class SessionManager implements ISessionManager {
         sessionPersistenceQueue.flush(managed.id)
       }
 
+      const onBranchForkInvalidated = () => {
+        managed.sdkSessionId = undefined
+        managed.branchFromSdkSessionId = undefined
+        managed.branchFromSdkCwd = undefined
+        managed.branchFromSdkTurnId = undefined
+        sessionLog.info(`Branch fork invalidated for ${managed.id}: cleared all fork metadata`)
+        this.persistSession(managed)
+        sessionPersistenceQueue.flush(managed.id)
+      }
+
       const getRecoveryMessages = () => {
         const relevantMessages = managed.messages
           .filter(m => m.role === 'user' || m.role === 'assistant')
@@ -3097,6 +3090,7 @@ export class SessionManager implements ISessionManager {
         session: sessionConfig,
         onSdkSessionIdUpdate,
         onSdkSessionIdCleared,
+        onBranchForkInvalidated,
         getRecoveryMessages,
         getBranchFallbackMessages,
         getBranchSeedMessages,
@@ -5426,63 +5420,56 @@ export class SessionManager implements ISessionManager {
     // Start perf span for entire sendMessage flow
     const sendSpan = perf.span('session.sendMessage', { sessionId })
 
-    // Get or create the agent (lazy loading)
+    const workspaceRootPath = managed.workspace.rootPath
+    const enabledSlugs = managed.enabledSourceSlugs ?? []
+    const hasSources = enabledSlugs.length > 0
+
+    // Load enabled sources up-front so we can refresh tokens BEFORE getOrCreateAgent
+    // runs its internal cold-session build. Otherwise that build sees stale tokens
+    // and emits AUTH_REQUIRED, causing a brief "needs_auth" UI flicker before the
+    // post-build refresh restores state (#710).
+    const sources: LoadedSource[] = hasSources
+      ? getSourcesBySlugs(workspaceRootPath, enabledSlugs)
+      : []
+
+    if (hasSources && managed.tokenRefreshManager) {
+      const refreshResult = await refreshExpiredCredentials(sources, managed.tokenRefreshManager)
+      if (refreshResult.failedSources.length > 0) {
+        sessionLog.warn('[OAuth] Some sources failed token refresh:', refreshResult.failedSources.map(f => f.slug))
+      }
+      if (refreshResult.refreshedCount > 0) {
+        sendSpan.mark('oauth.refreshed')
+      }
+    }
+
+    // Get or create the agent (lazy loading). Its internal cold-session build at
+    // ~L2956 now sees fresh tokens (or correctly-needs_auth failed sources, since
+    // ensureFreshToken mirrors the disk write to source.config in-memory).
     const agent = await this.getOrCreateAgent(managed)
     sendSpan.mark('agent.ready')
 
     // Always set all sources for context (even if none are enabled), including built-ins
-    const workspaceRootPath = managed.workspace.rootPath
     const allSources = loadAllSources(workspaceRootPath)
     agent.setAllSources(allSources)
     sendSpan.mark('sources.loaded')
 
     // Apply source servers if any are enabled
-    if (managed.enabledSourceSlugs?.length) {
-      // Always build server configs fresh (no caching - single source of truth)
-      const sources = getSourcesBySlugs(workspaceRootPath, managed.enabledSourceSlugs)
-      // Pass session path so large API responses can be saved to session folder
+    if (hasSources) {
       const sessionPath = getSessionStoragePath(workspaceRootPath, sessionId)
+      // Single fresh build — tokens already refreshed above.
       const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager, agent.getSummarizeCallback())
       if (errors.length > 0) {
         sessionLog.warn(`Source build errors:`, errors)
       }
 
-      // Proactive OAuth token refresh before applying servers to agent.
-      // This ensures tokens are fresh BEFORE the agent sees source state, avoiding a race
-      // where the agent receives a stale "needs_auth" status and triggers unnecessary re-auth
-      // even though the refresh succeeds moments later.
-      let tokensRefreshed = false
-      if (managed.tokenRefreshManager) {
-        const refreshResult = await refreshOAuthTokensIfNeeded(
-          agent,
-          sources,
-          sessionPath,
-          managed.tokenRefreshManager,
-          { sessionId, workspaceRootPath, poolServerUrl: managed.poolServer?.url }
-        )
-        if (refreshResult.failedSources.length > 0) {
-          sessionLog.warn('[OAuth] Some sources failed token refresh:', refreshResult.failedSources.map(f => f.slug))
-        }
-        if (refreshResult.tokensRefreshed) {
-          tokensRefreshed = true
-          sendSpan.mark('oauth.refreshed')
-        }
-      }
-
-      // Apply source servers to the agent.
-      // If tokens were refreshed, refreshOAuthTokensIfNeeded already rebuilt servers and
-      // called setSourceServers with fresh credentials — skip the duplicate call to avoid
-      // overwriting the post-refresh state with stale build results.
-      if (!tokensRefreshed) {
-        const mcpCount = Object.keys(mcpServers).length
-        const apiCount = Object.keys(apiServers).length
-        if (mcpCount > 0 || apiCount > 0 || managed.enabledSourceSlugs.length > 0) {
-          const intendedSlugs = sources.filter(isSourceUsable).map(s => s.config.slug)
-          const usableSources = sources.filter(isSourceUsable)
-          await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
-          await applyBridgeUpdates(agent, sessionPath, usableSources, mcpServers, sessionId, workspaceRootPath, 'send message', managed.poolServer?.url)
-          sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
-        }
+      const mcpCount = Object.keys(mcpServers).length
+      const apiCount = Object.keys(apiServers).length
+      if (mcpCount > 0 || apiCount > 0 || enabledSlugs.length > 0) {
+        const usableSources = sources.filter(isSourceUsable)
+        const intendedSlugs = usableSources.map(s => s.config.slug)
+        await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
+        await applyBridgeUpdates(agent, sessionPath, usableSources, mcpServers, sessionId, workspaceRootPath, 'send message', managed.poolServer?.url)
+        sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
       }
       sendSpan.mark('servers.applied')
     }
