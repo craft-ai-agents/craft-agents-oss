@@ -1303,15 +1303,18 @@ html.dark[data-scenic] .fullscreen-overlay-background {
   }
 }
 
-/* Settings rows: stack vertically in narrow panels */
+/* Settings rows: stack vertically in narrow panels.
+   Toggle rows (anything containing a Switch) stay horizontal — iOS-style:
+   label on the left, switch on the right. Stretching the switch to 100% width
+   produced a long black pill bar that looked broken. */
 @container panel (max-width: 448px) {
-  [data-layout="settings-row"] {
+  [data-layout="settings-row"]:not(:has([data-slot="switch"])) {
     flex-direction: column;
     align-items: stretch;
     gap: 10px;
   }
 
-  [data-layout="settings-row"] > [data-layout="settings-control"] {
+  [data-layout="settings-row"]:not(:has([data-slot="switch"])) > [data-layout="settings-control"] {
     width: 100%;
     min-width: 0;
     margin-left: 0;
@@ -1320,9 +1323,9 @@ html.dark[data-scenic] .fullscreen-overlay-background {
   }
 
   /* Full-width form controls (selects, inputs) in stacked layout */
-  [data-layout="settings-row"] [data-slot="select-trigger"],
-  [data-layout="settings-control"] > .w-\[180px\],
-  [data-layout="settings-control"] > .w-\[200px\] {
+  [data-layout="settings-row"]:not(:has([data-slot="switch"])) [data-slot="select-trigger"],
+  [data-layout="settings-row"]:not(:has([data-slot="switch"])) [data-layout="settings-control"] > .w-\[180px\],
+  [data-layout="settings-row"]:not(:has([data-slot="switch"])) [data-layout="settings-control"] > .w-\[200px\] {
     width: 100%;
     max-width: 100%;
     min-width: 0;
@@ -1362,6 +1365,27 @@ html.dark[data-scenic] .fullscreen-overlay-background {
   .send-btn {
     width: 36px;
     height: 36px;
+  }
+}
+
+/* ==========================================================================
+   TopBar height — bumps to 56px on narrow viewports so it matches the larger
+   touch targets and feels less cramped on mobile. The TopBar uses position:
+   fixed so the App content area reads the same variable for its padding-top.
+   ========================================================================== */
+:root {
+  --topbar-height: 48px;
+}
+@media (max-width: 768px) {
+  :root {
+    --topbar-height: 56px;
+  }
+
+  /* Bump TopBar icons from 18px → 20px in compact mode. Kept tight inside the
+     36×36 button so it doesn't dominate the bar. */
+  .header-icon-btn svg {
+    width: 20px;
+    height: 20px;
   }
 }
 
