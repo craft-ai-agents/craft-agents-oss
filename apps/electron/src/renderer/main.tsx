@@ -8,13 +8,27 @@ import App from './App'
 import { ThemeProvider } from './context/ThemeContext'
 import { windowWorkspaceIdAtom } from './atoms/sessions'
 import { Toaster } from '@/components/ui/sonner'
-import { setupI18n } from '@craft-agent/shared/i18n'
+import { setupI18n, i18n } from '@craft-agent/shared/i18n'
 import { initReactI18next } from 'react-i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import './index.css'
 
 // Initialize i18n before any React rendering
 setupI18n([LanguageDetector, initReactI18next])
+
+// Sync the detected language to the main process so that
+// server-side features (title generation, preferences, etc.)
+// use the correct locale. The main process has no LanguageDetector
+// so it defaults to 'en' unless explicitly synced.
+const detectedLang = i18n.resolvedLanguage || i18n.language
+if (detectedLang) {
+  window.electronAPI?.changeLanguage?.(detectedLang)
+}
+
+// Keep the main process i18n in sync on subsequent language changes.
+i18n.on('languageChanged', (lng: string) => {
+  window.electronAPI?.changeLanguage?.(lng)
+})
 
 // Known-harmless console messages that should NOT be sent to Sentry.
 // These are dev-mode noise or expected warnings that aren't actionable.

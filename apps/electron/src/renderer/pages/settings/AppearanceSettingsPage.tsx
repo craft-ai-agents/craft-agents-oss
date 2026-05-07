@@ -285,7 +285,8 @@ export default function AppearanceSettingsPage() {
                       value={(i18n.resolvedLanguage ?? i18n.language) as LanguageCode}
                       onValueChange={(value) => {
                         i18n.changeLanguage(value)
-                        window.electronAPI?.changeLanguage?.(value)
+                        // Syncing to main process is handled by the i18n.on('languageChanged')
+                        // listener in renderer/main.tsx, so no need to call changeLanguage here.
                       }}
                       options={Object.entries(LANGUAGES).map(([code, config]) => ({
                         value: code,
