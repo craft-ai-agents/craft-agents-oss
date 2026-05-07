@@ -14,6 +14,7 @@ import { getFileManagerName } from '@/lib/platform'
 import { getFileIcon, FileThumbnail } from './file-tree-shared'
 
 type GetWorkspaceFiles = (workspaceId: string, dirPath?: string) => Promise<SessionFile[]>
+type WorkspaceFilesChangedApi = Pick<typeof window.electronAPI, 'onWorkspaceFilesChanged'>
 
 /** Tracks the fetched and currently expanded folders in the workspace file tree. */
 export interface WorkspaceFilesTreeState {
@@ -132,6 +133,19 @@ export async function refreshWorkspaceVisibleFiles(
       expandedPaths,
     },
   }
+}
+
+/** Subscribes to workspace change events for one active workspace. */
+export function subscribeToWorkspaceFileChanges(
+  workspaceId: string,
+  refreshVisibleFiles: () => void,
+  api: WorkspaceFilesChangedApi = window.electronAPI,
+): () => void {
+  return api.onWorkspaceFilesChanged((changedWorkspaceId) => {
+    if (changedWorkspaceId === workspaceId) {
+      refreshVisibleFiles()
+    }
+  })
 }
 
 /** Actions used when opening workspace tree entries. */
@@ -352,8 +366,8 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, className }:
     }
 
     void window.electronAPI.watchWorkspaceFiles(workspaceId)
-    const unsubscribe = window.electronAPI.onWorkspaceFilesChanged((changedWorkspaceId) => {
-      if (changedWorkspaceId === workspaceId && mountedRef.current) {
+    const unsubscribe = subscribeToWorkspaceFileChanges(workspaceId, () => {
+      if (mountedRef.current) {
         void refreshVisibleFiles()
       }
     })

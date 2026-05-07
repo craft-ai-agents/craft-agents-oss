@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { afterEach, describe, expect, it } from 'bun:test'
 import type { SessionFile } from '../../../../shared/types'
 import {
   activateWorkspaceEntry,
@@ -9,91 +9,152 @@ import {
   loadWorkspaceRootFiles,
   openWorkspaceEntry,
   refreshWorkspaceVisibleFiles,
+  subscribeToWorkspaceFileChanges,
   type WorkspaceFilesTreeState,
 } from '../WorkspaceFilesSection'
 
+const originalWindow = globalThis.window
+
+afterEach(() => {
+  Object.defineProperty(globalThis, 'window', {
+    value: originalWindow,
+    writable: true,
+    configurable: true,
+  })
+})
+
+function mockWorkspaceElectronApi(filesByDirPath: Map<string | undefined, SessionFile[]>) {
+  const calls: Array<[string, string | undefined]> = []
+  let filesChangedListener: ((workspaceId: string) => void) | undefined
+  const api = {
+    getWorkspaceFiles: async (workspaceId: string, dirPath?: string) => {
+      calls.push([workspaceId, dirPath])
+      return filesByDirPath.get(dirPath) ?? []
+    },
+    onWorkspaceFilesChanged: (callback: (workspaceId: string) => void) => {
+      filesChangedListener = callback
+      return () => {}
+    },
+  }
+
+  Object.defineProperty(globalThis, 'window', {
+    value: { electronAPI: api },
+    writable: true,
+    configurable: true,
+  })
+
+  return {
+    api,
+    calls,
+    emitFilesChanged: (workspaceId: string) => filesChangedListener?.(workspaceId),
+  }
+}
+
 describe('WorkspaceFilesSection data loading', () => {
-  it('loads the workspace root without a dirPath', async () => {
-    const files: SessionFile[] = [
+  it('on mount loads the workspace root without a dirPath', async () => {
+    const rootFiles: SessionFile[] = [
       { name: 'src', path: '/workspace/src', type: 'directory' },
       { name: 'README.md', path: '/workspace/README.md', type: 'file', size: 42 },
     ]
-    const calls: Array<[string, string | undefined]> = []
+    const { calls } = mockWorkspaceElectronApi(new Map([[undefined, rootFiles]]))
 
-    const result = await loadWorkspaceRootFiles('ws-1', async (workspaceId, dirPath) => {
-      calls.push([workspaceId, dirPath])
-      return files
-    })
+    const result = await loadWorkspaceRootFiles('ws-1')
 
-    expect(result).toEqual(files)
+    expect(result.map((file) => file.path)).toEqual(['/workspace/src', '/workspace/README.md'])
     expect(calls).toEqual([['ws-1', undefined]])
   })
 
-  it('expanding an unfetched directory loads its children and caches them', async () => {
+  it('expanding an unfetched directory loads that directory and renders its children', async () => {
     const state: WorkspaceFilesTreeState = {
       childrenByDirPath: new Map(),
       expandedPaths: new Set(),
     }
+    const rootFiles: SessionFile[] = [
+      { name: 'src', path: '/workspace/src', type: 'directory' },
+    ]
     const children: SessionFile[] = [
       { name: 'index.ts', path: '/workspace/src/index.ts', type: 'file', size: 10 },
     ]
-    const calls: Array<[string, string | undefined]> = []
+    const { calls } = mockWorkspaceElectronApi(new Map([['/workspace/src', children]]))
 
-    const next = await expandWorkspaceDirectory(state, 'ws-1', '/workspace/src', async (workspaceId, dirPath) => {
-      calls.push([workspaceId, dirPath])
-      return children
-    })
+    const next = await expandWorkspaceDirectory(state, 'ws-1', '/workspace/src')
 
     expect(calls).toEqual([['ws-1', '/workspace/src']])
-    expect(next.childrenByDirPath.get('/workspace/src')).toEqual(children)
-    expect(next.expandedPaths.has('/workspace/src')).toBe(true)
-  })
-
-  it('collapsing a directory hides it without clearing cached children', () => {
-    const cachedChildren: SessionFile[] = [
-      { name: 'index.ts', path: '/workspace/src/index.ts', type: 'file', size: 10 },
-    ]
-    const state: WorkspaceFilesTreeState = {
-      childrenByDirPath: new Map([['/workspace/src', cachedChildren]]),
-      expandedPaths: new Set(['/workspace/src']),
-    }
-
-    const next = collapseWorkspaceDirectory(state, '/workspace/src')
-
-    expect(next.expandedPaths.has('/workspace/src')).toBe(false)
-    expect(next.childrenByDirPath.get('/workspace/src')).toEqual(cachedChildren)
+    expect(getWorkspaceVisibleTree(rootFiles, next).map(({ file, depth }) => [file.path, depth])).toEqual([
+      ['/workspace/src', 0],
+      ['/workspace/src/index.ts', 1],
+    ])
   })
 
   it('re-expanding a cached directory does not fetch it again', async () => {
     const cachedChildren: SessionFile[] = [
       { name: 'index.ts', path: '/workspace/src/index.ts', type: 'file', size: 10 },
     ]
+    const rootFiles: SessionFile[] = [
+      { name: 'src', path: '/workspace/src', type: 'directory' },
+    ]
     const state: WorkspaceFilesTreeState = {
       childrenByDirPath: new Map([['/workspace/src', cachedChildren]]),
       expandedPaths: new Set(),
     }
-    const calls: Array<[string, string | undefined]> = []
+    const { calls } = mockWorkspaceElectronApi(new Map([['/workspace/src', []]]))
 
-    const next = await expandWorkspaceDirectory(state, 'ws-1', '/workspace/src', async (workspaceId, dirPath) => {
-      calls.push([workspaceId, dirPath])
-      return []
-    })
+    const next = await expandWorkspaceDirectory(state, 'ws-1', '/workspace/src')
 
     expect(calls).toEqual([])
-    expect(next.childrenByDirPath.get('/workspace/src')).toEqual(cachedChildren)
-    expect(next.expandedPaths.has('/workspace/src')).toBe(true)
+    expect(getWorkspaceVisibleTree(rootFiles, next).map(({ file, depth }) => [file.path, depth])).toEqual([
+      ['/workspace/src', 0],
+      ['/workspace/src/index.ts', 1],
+    ])
+  })
+
+  it('collapsing then re-expanding a directory hides and restores cached children without another fetch', async () => {
+    const cachedChildren: SessionFile[] = [
+      { name: 'index.ts', path: '/workspace/src/index.ts', type: 'file', size: 10 },
+    ]
+    const rootFiles: SessionFile[] = [
+      { name: 'src', path: '/workspace/src', type: 'directory' },
+    ]
+    const state: WorkspaceFilesTreeState = {
+      childrenByDirPath: new Map([['/workspace/src', cachedChildren]]),
+      expandedPaths: new Set(['/workspace/src']),
+    }
+    const { calls } = mockWorkspaceElectronApi(new Map([['/workspace/src', []]]))
+
+    const collapsed = collapseWorkspaceDirectory(state, '/workspace/src')
+    const reExpanded = await expandWorkspaceDirectory(collapsed, 'ws-1', '/workspace/src')
+
+    expect(calls).toEqual([])
+    expect(getWorkspaceVisibleTree(rootFiles, collapsed).map(({ file }) => file.path)).toEqual(['/workspace/src'])
+    expect(getWorkspaceVisibleTree(rootFiles, reExpanded).map(({ file, depth }) => [file.path, depth])).toEqual([
+      ['/workspace/src', 0],
+      ['/workspace/src/index.ts', 1],
+    ])
   })
 
   it('supports multiple expanded directories at the same time', async () => {
+    const rootFiles: SessionFile[] = [
+      { name: 'src', path: '/workspace/src', type: 'directory' },
+      { name: 'tests', path: '/workspace/tests', type: 'directory' },
+    ]
     const state: WorkspaceFilesTreeState = {
-      childrenByDirPath: new Map([['/workspace/src', []]]),
+      childrenByDirPath: new Map([['/workspace/src', [
+        { name: 'index.ts', path: '/workspace/src/index.ts', type: 'file', size: 10 },
+      ]]]),
       expandedPaths: new Set(['/workspace/src']),
     }
+    mockWorkspaceElectronApi(new Map([['/workspace/tests', [
+      { name: 'index.test.ts', path: '/workspace/tests/index.test.ts', type: 'file', size: 12 },
+    ]]]))
 
-    const next = await expandWorkspaceDirectory(state, 'ws-1', '/workspace/tests', async () => [])
+    const next = await expandWorkspaceDirectory(state, 'ws-1', '/workspace/tests')
 
-    expect(next.expandedPaths.has('/workspace/src')).toBe(true)
-    expect(next.expandedPaths.has('/workspace/tests')).toBe(true)
+    expect(getWorkspaceVisibleTree(rootFiles, next).map(({ file, depth }) => [file.path, depth])).toEqual([
+      ['/workspace/src', 0],
+      ['/workspace/src/index.ts', 1],
+      ['/workspace/tests', 0],
+      ['/workspace/tests/index.test.ts', 1],
+    ])
   })
 
   it('builds visible rows for expanded cached directories recursively', () => {
@@ -131,7 +192,6 @@ describe('WorkspaceFilesSection data loading', () => {
       ]),
       expandedPaths: new Set(['/workspace/src']),
     }
-    const calls: Array<[string, string | undefined]> = []
     const refreshedRoot: SessionFile[] = [
       { name: 'src', path: '/workspace/src', type: 'directory' },
       { name: 'README.md', path: '/workspace/README.md', type: 'file', size: 12 },
@@ -139,24 +199,48 @@ describe('WorkspaceFilesSection data loading', () => {
     const refreshedSrc: SessionFile[] = [
       { name: 'new.ts', path: '/workspace/src/new.ts', type: 'file', size: 3 },
     ]
+    const { calls } = mockWorkspaceElectronApi(new Map([
+      [undefined, refreshedRoot],
+      ['/workspace/src', refreshedSrc],
+    ]))
 
-    const refreshed = await refreshWorkspaceVisibleFiles(
-      state,
-      'ws-1',
-      async (workspaceId, dirPath) => {
-        calls.push([workspaceId, dirPath])
-        return dirPath === '/workspace/src' ? refreshedSrc : refreshedRoot
-      },
-    )
+    const refreshed = await refreshWorkspaceVisibleFiles(state, 'ws-1')
 
     expect(calls).toEqual([
       ['ws-1', undefined],
       ['ws-1', '/workspace/src'],
     ])
-    expect(refreshed.rootFiles).toEqual(refreshedRoot)
-    expect(refreshed.treeState.childrenByDirPath.get('/workspace/src')).toEqual(refreshedSrc)
-    expect(refreshed.treeState.childrenByDirPath.get('/workspace/docs')).toEqual(state.childrenByDirPath.get('/workspace/docs'))
-    expect(refreshed.treeState.expandedPaths).toEqual(new Set(['/workspace/src']))
+    expect(refreshed.rootFiles.map((file) => file.path)).toEqual(['/workspace/src', '/workspace/README.md'])
+    expect(getWorkspaceVisibleTree(refreshed.rootFiles, refreshed.treeState).map(({ file, depth }) => [file.path, depth])).toEqual([
+      ['/workspace/src', 0],
+      ['/workspace/src/new.ts', 1],
+      ['/workspace/README.md', 0],
+    ])
+  })
+
+  it('refreshes visible files when workspace file changes fire for the active workspace', () => {
+    const refreshed: string[] = []
+    let listener: ((workspaceId: string) => void) | undefined
+    let unsubscribed = false
+    const api = {
+      onWorkspaceFilesChanged: (callback: (workspaceId: string) => void) => {
+        listener = callback
+        return () => {
+          unsubscribed = true
+        }
+      },
+    }
+
+    const unsubscribe = subscribeToWorkspaceFileChanges('ws-1', () => {
+      refreshed.push('ws-1')
+    }, api)
+
+    listener?.('ws-2')
+    listener?.('ws-1')
+    unsubscribe()
+
+    expect(refreshed).toEqual(['ws-1'])
+    expect(unsubscribed).toBe(true)
   })
 })
 
