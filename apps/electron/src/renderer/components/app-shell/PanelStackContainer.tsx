@@ -99,6 +99,7 @@ export function PanelStackContainer({
   return (
     <div
       ref={scrollRef}
+      data-mobile-menu-root="true"
       className="flex-1 min-w-0 flex relative z-panel panel-scroll @container/shell"
       style={{
         overflowX: 'auto',
