@@ -26,6 +26,8 @@
   "dependencies": {
     "@craft-agent/core": "workspace:*",
     "@craft-agent/shared": "workspace:*",
+    "gray-matter": "^4.0.3",
+    "js-yaml": "^4.1.1",
     "jose": "^6.0.0",
     "ws": "^8.19.0",
     "sharp": "0.34.5",
