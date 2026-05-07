@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { Files, GitBranch, ChevronRight } from 'lucide-react'
+import { Files, GitBranch, ChevronRight, FolderTree } from 'lucide-react'
 import { useAtomValue } from 'jotai'
 import { cn } from '@/lib/utils'
 import * as storage from '@/lib/local-storage'
@@ -8,6 +8,7 @@ import { sessionAtomFamily } from '@/atoms/sessions'
 import { useActiveWorkspace } from '@/context/AppShellContext'
 import { SessionFilesSection } from './SessionFilesSection'
 import { GitPanel } from './GitPanel'
+import { WorkspaceFilesSection } from './WorkspaceFilesSection'
 import {
   PANEL_EDGE_INSET,
   PANEL_SASH_HIT_WIDTH,
@@ -25,7 +26,7 @@ const MIN_WIDTH = 180
 const MAX_WIDTH = 520
 const SPRING = { type: 'spring' as const, stiffness: 600, damping: 49 }
 
-type Tab = 'files' | 'git'
+type Tab = 'files' | 'git' | 'workspace'
 
 export interface RightSidebarPanelProps {
   /** Active workspace ID — scopes localStorage persistence */
@@ -183,6 +184,13 @@ export function RightSidebarPanel({
               {activeTab === 'git' && (
                 <GitPanel workspacePath={workspacePath} className="h-full" />
               )}
+              {activeTab === 'workspace' && (
+                <WorkspaceFilesSection
+                  workspaceId={workspaceId}
+                  workspacePath={workspacePath}
+                  className="h-full"
+                />
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -247,6 +255,22 @@ export function RightSidebarPanel({
             title="Git"
           >
             <GitBranch className="h-3.5 w-3.5" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setActiveTab('workspace'); if (!isOpen) setIsOpen(true) }}
+            className={cn(
+              'flex items-center justify-center rounded-[6px]',
+              'h-7 w-7 transition-colors',
+              'focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring outline-none',
+              activeTab === 'workspace' && isOpen
+                ? 'text-foreground bg-sidebar-hover'
+                : 'text-foreground/50 hover:text-foreground hover:bg-sidebar-hover',
+            )}
+            title="Workspace"
+          >
+            <FolderTree className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
