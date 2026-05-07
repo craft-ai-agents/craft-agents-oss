@@ -77,6 +77,7 @@ import { createWebFetchTool } from './tools/web-fetch.ts';
 import { resolveSearchProvider } from './tools/search/resolve-provider.ts';
 import { createSearchTool } from './tools/search/create-search-tool.ts';
 import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
+import { applySystemPromptOverride } from './system-prompt-override.ts';
 
 // ============================================================
 // Types — JSONL Protocol
@@ -958,12 +959,11 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
 
     debugLog(`[queryLlm] Created ephemeral session: ${ephemeralSession.sessionId}`);
 
-    // Set system prompt
-    if (request.systemPrompt) {
-      ephemeralSession.agent.state.systemPrompt = request.systemPrompt;
-    } else {
-      ephemeralSession.agent.state.systemPrompt = 'Reply with ONLY the requested text. No explanation.';
-    }
+    // Force the system prompt — see system-prompt-override.ts for why direct
+    // assignment to `state.systemPrompt` doesn't survive `session.prompt()`.
+    const promptForSession =
+      request.systemPrompt ?? 'Reply with ONLY the requested text. No explanation.';
+    applySystemPromptOverride(ephemeralSession, promptForSession);
 
     // Collect response text and errors from events
     let result = '';
@@ -1281,9 +1281,11 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
 
     const session = await ensureSession();
 
-    // Set system prompt
+    // Force the Craft-built system prompt onto the Pi session. Direct assignment
+    // to `state.systemPrompt` is wiped on every `session.prompt()` call by the Pi
+    // SDK (see system-prompt-override.ts).
     if (msg.systemPrompt) {
-      session.agent.state.systemPrompt = msg.systemPrompt;
+      applySystemPromptOverride(session, msg.systemPrompt);
     }
 
     // Wire up event handler

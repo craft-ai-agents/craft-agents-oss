@@ -469,6 +469,71 @@ describe('TokenRefreshManager', () => {
       expect(isSourceUsable(source)).toBe(false);
       expect(mockMarkSourceAuthenticated).not.toHaveBeenCalled();
     });
+
+    test('failed refresh (returns null) mutates in-memory source.config — #710', async () => {
+      // Source starts as authenticated (cred just expired in-memory copy not yet updated).
+      // Failed refresh must mirror the markSourceNeedsReauth disk write to in-memory state
+      // so isSourceUsable returns false and callers exclude it from intendedSlugs.
+      const credManager = createMockCredManager({
+        load: mock(() => Promise.resolve({
+          value: 'expired-token',
+          refreshToken: 'refresh-123',
+          expiresAt: Date.now() - 60_000,
+        })),
+        isExpired: mock(() => true),
+        refresh: mock(() => Promise.resolve(null)),
+      });
+
+      const manager = new TokenRefreshManager(credManager);
+      const source = createMockSource({
+        slug: 'craft-mcp',
+        type: 'mcp',
+        provider: 'craft',
+        mcp: { url: 'https://mcp.craft.do/my/mcp', authType: 'oauth' },
+        isAuthenticated: true,
+        connectionStatus: 'connected',
+      });
+
+      expect(isSourceUsable(source)).toBe(true); // precondition
+
+      await manager.ensureFreshToken(source);
+
+      expect(source.config.isAuthenticated).toBe(false);
+      expect(source.config.connectionStatus).toBe('needs_auth');
+      expect(source.config.connectionError).toBe('Token refresh failed');
+      expect(isSourceUsable(source)).toBe(false);
+    });
+
+    test('failed refresh (throws) mutates in-memory source.config — #710', async () => {
+      const credManager = createMockCredManager({
+        load: mock(() => Promise.resolve({
+          value: 'expired-token',
+          refreshToken: 'refresh-123',
+          expiresAt: Date.now() - 60_000,
+        })),
+        isExpired: mock(() => true),
+        refresh: mock(() => Promise.reject(new Error('network down'))),
+      });
+
+      const manager = new TokenRefreshManager(credManager);
+      const source = createMockSource({
+        slug: 'craft-mcp',
+        type: 'mcp',
+        provider: 'craft',
+        mcp: { url: 'https://mcp.craft.do/my/mcp', authType: 'oauth' },
+        isAuthenticated: true,
+        connectionStatus: 'connected',
+      });
+
+      expect(isSourceUsable(source)).toBe(true);
+
+      await manager.ensureFreshToken(source);
+
+      expect(source.config.isAuthenticated).toBe(false);
+      expect(source.config.connectionStatus).toBe('needs_auth');
+      expect(source.config.connectionError).toBe('Refresh error: network down');
+      expect(isSourceUsable(source)).toBe(false);
+    });
   });
 
   describe('end-to-end', () => {
