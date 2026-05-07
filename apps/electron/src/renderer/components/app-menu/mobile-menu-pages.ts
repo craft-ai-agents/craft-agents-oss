@@ -17,7 +17,7 @@ export type MobileMenuPageId = 'root' | 'settings' | 'help' | 'debug'
  */
 export type MobileMenuAction =
   | { kind: 'navigate'; to: MobileMenuPageId }
-  | { kind: 'callback'; key: 'newChat' | 'newWindow' | 'openSettings' | 'openKeyboardShortcuts' }
+  | { kind: 'callback'; key: 'newChat' | 'newWindow' | 'openSettings' }
   | { kind: 'settingsSubpage'; subpage: SettingsMenuItem['id'] }
   | { kind: 'url'; url: string }
   | { kind: 'electronApi'; method: 'checkForUpdates' | 'installUpdate' | 'menuToggleDevTools' }
@@ -71,6 +71,8 @@ export function buildMobileMenuPages({ hasNewWindow, isDebugMode }: BuildOptions
       action: { kind: 'callback', key: 'newWindow' },
     })
   }
+  // Touch users have no keyboard, so the Keyboard Shortcuts leaf is omitted
+  // on mobile — the page would render but be useless.
   rootRows.push(
     {
       id: 'settings',
@@ -83,12 +85,6 @@ export function buildMobileMenuPages({ hasNewWindow, isDebugMode }: BuildOptions
       iconName: 'HelpCircle',
       labelKey: 'menu.help',
       action: { kind: 'navigate', to: 'help' },
-    },
-    {
-      id: ROOT_MENU.keyboardShortcuts.id,
-      iconName: ROOT_MENU.keyboardShortcuts.icon,
-      labelKey: ROOT_MENU.keyboardShortcuts.labelKey,
-      action: { kind: 'callback', key: 'openKeyboardShortcuts' },
     },
   )
   if (isDebugMode) {

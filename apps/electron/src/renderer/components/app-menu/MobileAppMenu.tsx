@@ -154,7 +154,6 @@ export function MobileAppMenu(props: AppMenuProps) {
           case 'newChat': props.onNewChat(); break
           case 'newWindow': props.onNewWindow?.(); break
           case 'openSettings': props.onOpenSettings(); break
-          case 'openKeyboardShortcuts': props.onOpenKeyboardShortcuts(); break
         }
         close()
         return
