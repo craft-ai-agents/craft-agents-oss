@@ -6,6 +6,12 @@ import type {
   WhatsAppUiEvent,
 } from '../../shared/types'
 import type { MessagingBinding } from '../atoms/messaging'
+import type {
+  BindingAccess,
+  PendingSender,
+  PlatformAccessMode,
+  PlatformOwner,
+} from '../components/messaging/access/types'
 
 // ============================================================================
 // Messaging mock state + control handle
@@ -28,12 +34,24 @@ type WhatsAppEventListener = (payload: { workspaceId: string; event: WhatsAppUiE
 
 const PLAYGROUND_WORKSPACE_ID = 'playground-workspace'
 
+type AllowListPlatform = 'telegram' | 'whatsapp' | 'lark'
+
+interface AllowListState {
+  accessMode: PlatformAccessMode
+  owners: PlatformOwner[]
+  pending: PendingSender[]
+  /** Per-binding access. Keyed by bindingId. */
+  bindings: Record<string, BindingAccess>
+}
+
 interface MessagingMockState {
   runtime: {
     telegram: MessagingPlatformRuntimeInfo
     whatsapp: MessagingPlatformRuntimeInfo
   }
   bindings: MessagingBinding[]
+  /** Workspace-level allow-list state per platform (Phase 1 mock surface). */
+  allowList: Record<AllowListPlatform, AllowListState>
   platformStatusListeners: Set<PlatformStatusListener>
   bindingListeners: Set<BindingListener>
   waEventListeners: Set<WhatsAppEventListener>
@@ -49,12 +67,21 @@ function defaultRuntime(platform: 'telegram' | 'whatsapp'): MessagingPlatformRun
   }
 }
 
+function defaultAllowList(): AllowListState {
+  return { accessMode: 'open', owners: [], pending: [], bindings: {} }
+}
+
 const messagingMockState: MessagingMockState = {
   runtime: {
     telegram: defaultRuntime('telegram'),
     whatsapp: defaultRuntime('whatsapp'),
   },
   bindings: [],
+  allowList: {
+    telegram: defaultAllowList(),
+    whatsapp: defaultAllowList(),
+    lark: defaultAllowList(),
+  },
   platformStatusListeners: new Set(),
   bindingListeners: new Set(),
   waEventListeners: new Set(),
@@ -86,6 +113,23 @@ export interface PlaygroundMessagingHandle {
   setWhatsAppConnected: (connected: boolean, identity?: string) => void
   setBindings: (bindings: MessagingBinding[]) => void
   fireWAEvent: (event: WhatsAppUiEvent) => void
+  reset: () => void
+}
+
+/**
+ * Allow-list mock control. Lets AllowListPreview drive the workspace-level
+ * owners / pending / per-binding-access mock state without going through the
+ * IPC mocks. Phase 3 wiring will read the same state via electronAPI.
+ */
+export interface PlaygroundAllowListHandle {
+  setAccessMode: (platform: AllowListPlatform, mode: PlatformAccessMode) => void
+  setOwners: (platform: AllowListPlatform, owners: PlatformOwner[]) => void
+  setPending: (platform: AllowListPlatform, pending: PendingSender[]) => void
+  setBindingAccess: (
+    platform: AllowListPlatform,
+    bindingId: string,
+    access: BindingAccess,
+  ) => void
   reset: () => void
 }
 
@@ -124,9 +168,32 @@ export const playgroundMessagingHandle: PlaygroundMessagingHandle = {
     messagingMockState.runtime.telegram = defaultRuntime('telegram')
     messagingMockState.runtime.whatsapp = defaultRuntime('whatsapp')
     messagingMockState.bindings = []
+    messagingMockState.allowList.telegram = defaultAllowList()
+    messagingMockState.allowList.whatsapp = defaultAllowList()
+    messagingMockState.allowList.lark = defaultAllowList()
     emitPlatformStatus('telegram')
     emitPlatformStatus('whatsapp')
     emitBindingChanged()
+  },
+}
+
+export const playgroundAllowListHandle: PlaygroundAllowListHandle = {
+  setAccessMode(platform, mode) {
+    messagingMockState.allowList[platform].accessMode = mode
+  },
+  setOwners(platform, owners) {
+    messagingMockState.allowList[platform].owners = owners
+  },
+  setPending(platform, pending) {
+    messagingMockState.allowList[platform].pending = pending
+  },
+  setBindingAccess(platform, bindingId, access) {
+    messagingMockState.allowList[platform].bindings[bindingId] = access
+  },
+  reset() {
+    messagingMockState.allowList.telegram = defaultAllowList()
+    messagingMockState.allowList.whatsapp = defaultAllowList()
+    messagingMockState.allowList.lark = defaultAllowList()
   },
 }
 
@@ -397,6 +464,134 @@ export const mockElectronAPI = {
     return { success: true }
   },
 
+  // ------------------------------------------------------------------
+  // Messaging access control (mirrors the production ElectronAPI surface)
+  // ------------------------------------------------------------------
+
+  getMessagingPlatformOwners: async (platform: AllowListPlatform): Promise<PlatformOwner[]> => {
+    console.log('[Playground] getMessagingPlatformOwners called:', platform)
+    return [...messagingMockState.allowList[platform].owners]
+  },
+
+  setMessagingPlatformOwners: async (
+    platform: AllowListPlatform,
+    owners: PlatformOwner[],
+  ): Promise<PlatformOwner[]> => {
+    console.log('[Playground] setMessagingPlatformOwners called:', platform, owners.length)
+    playgroundAllowListHandle.setOwners(platform, owners)
+    return [...owners]
+  },
+
+  getMessagingPlatformAccessMode: async (platform: AllowListPlatform): Promise<PlatformAccessMode> => {
+    console.log('[Playground] getMessagingPlatformAccessMode called:', platform)
+    return messagingMockState.allowList[platform].accessMode
+  },
+
+  setMessagingPlatformAccessMode: async (
+    platform: AllowListPlatform,
+    mode: PlatformAccessMode,
+  ) => {
+    console.log('[Playground] setMessagingPlatformAccessMode called:', platform, mode)
+    playgroundAllowListHandle.setAccessMode(platform, mode)
+    return { success: true }
+  },
+
+  getMessagingPendingSenders: async (platform?: AllowListPlatform): Promise<PendingSender[]> => {
+    console.log('[Playground] getMessagingPendingSenders called:', platform)
+    if (!platform) {
+      return [
+        ...messagingMockState.allowList.telegram.pending,
+        ...messagingMockState.allowList.whatsapp.pending,
+        ...messagingMockState.allowList.lark.pending,
+      ]
+    }
+    return [...messagingMockState.allowList[platform].pending]
+  },
+
+  dismissMessagingPendingSender: async (
+    platform: AllowListPlatform,
+    userId: string,
+    opts?: { reason?: string; bindingId?: string },
+  ) => {
+    console.log('[Playground] dismissMessagingPendingSender called:', platform, userId, opts)
+    const next = messagingMockState.allowList[platform].pending.filter((s) => {
+      if (s.userId !== userId) return true
+      if (opts?.reason !== undefined && (s.reason ?? 'not-owner') !== opts.reason) return true
+      if (opts?.bindingId !== undefined && s.bindingId !== opts.bindingId) return true
+      return false
+    })
+    playgroundAllowListHandle.setPending(platform, next)
+    return { success: true }
+  },
+
+  allowMessagingPendingSender: async (
+    platform: AllowListPlatform,
+    userId: string,
+    entryKey?: { reason?: string; bindingId?: string },
+  ): Promise<{ owners: PlatformOwner[]; bindingId?: string }> => {
+    console.log('[Playground] allowMessagingPendingSender called:', platform, userId, entryKey)
+    const state = messagingMockState.allowList[platform]
+    const match = state.pending.find((p) =>
+      p.userId === userId &&
+      (entryKey?.reason === undefined || (p.reason ?? 'not-owner') === entryKey.reason) &&
+      (entryKey?.bindingId === undefined || p.bindingId === entryKey.bindingId),
+    )
+    if (!match) throw new Error('Pending sender not found')
+
+    const reason = match.reason ?? 'not-owner'
+    if (reason === 'not-on-binding-allowlist' && match.bindingId) {
+      // Binding-scoped allow — don't promote to workspace owner.
+      const access = state.bindings[match.bindingId] ?? {
+        mode: 'allow-list' as const,
+        allowedSenderIds: [],
+      }
+      const next = {
+        mode: 'allow-list' as const,
+        allowedSenderIds: Array.from(new Set([...access.allowedSenderIds, userId])),
+      }
+      playgroundAllowListHandle.setBindingAccess(platform, match.bindingId, next)
+      playgroundAllowListHandle.setPending(
+        platform,
+        state.pending.filter(
+          (p) => !(p.userId === userId && p.bindingId === match.bindingId),
+        ),
+      )
+      return { owners: [...state.owners], bindingId: match.bindingId }
+    }
+
+    // 'not-owner' branch: promote to workspace owner.
+    const owner: PlatformOwner = {
+      userId: match.userId,
+      ...(match.displayName ? { displayName: match.displayName } : {}),
+      ...(match.username ? { username: match.username } : {}),
+      addedAt: Date.now(),
+    }
+    const nextOwners = [...state.owners.filter((o) => o.userId !== userId), owner]
+    playgroundAllowListHandle.setOwners(platform, nextOwners)
+    playgroundAllowListHandle.setPending(
+      platform,
+      state.pending.filter((p) => p.userId !== userId),
+    )
+    return { owners: nextOwners }
+  },
+
+  setMessagingBindingAccess: async (
+    bindingId: string,
+    access: BindingAccess,
+  ) => {
+    console.log('[Playground] setMessagingBindingAccess called:', bindingId)
+    // Playground stores binding access keyed under telegram by default —
+    // production records the binding's platform server-side, so the mock
+    // doesn't need to be platform-aware to exercise the UI.
+    playgroundAllowListHandle.setBindingAccess('telegram', bindingId, access)
+    return { success: true }
+  },
+
+  onMessagingPendingChanged: (_callback: (workspaceId: string) => void) => {
+    // No-op listener; Phase 3 binding-changed events refresh state already.
+    return () => {}
+  },
+
   onMessagingBindingChanged: (callback: (workspaceId: string) => void) => {
     messagingMockState.bindingListeners.add(callback)
     return () => {
@@ -467,6 +662,10 @@ export function ensureMockElectronAPI() {
   if (!(window as any).__playgroundMessaging) {
     ;(window as any).__playgroundMessaging = playgroundMessagingHandle
     console.log('[Playground] Exposed __playgroundMessaging handle')
+  }
+  if (!(window as any).__playgroundAllowList) {
+    ;(window as any).__playgroundAllowList = playgroundAllowListHandle
+    console.log('[Playground] Exposed __playgroundAllowList handle')
   }
 }
 

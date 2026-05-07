@@ -24,7 +24,14 @@ import {
 // Constants (re-exported from summarize.ts for convenience)
 // ============================================================
 
-/** Token limit for summarization trigger (roughly ~60KB of text) */
+/**
+ * Default per-result summarization threshold (roughly ~60KB of text).
+ *
+ * Prefer {@link tokenLimitFor} at call sites that have the active model's
+ * `contextWindow` available — model-aware sizing keeps moderate-context
+ * models (e.g. 64k) from filling their window with a few sub-15k tool
+ * results that each pass this fixed threshold individually.
+ */
 export const TOKEN_LIMIT = 15000;
 
 /** Max tokens to send for summarization (~400KB). Beyond this, save to file + preview only. */
@@ -32,6 +39,17 @@ export const MAX_SUMMARIZATION_INPUT = 100000;
 
 /** Canonical subfolder under session dir for full tool results */
 export const LONG_RESPONSES_DIR = 'long_responses';
+
+/**
+ * Floor for the model-aware per-result threshold. Below this size the
+ * file-reference + summary message is roughly the same size as the original
+ * content, so summarization stops paying off.
+ */
+const TOKEN_LIMIT_FLOOR = 2_000;
+
+/** Fraction of the model's context window allocated to a single tool result
+ *  before we summarize. 10% lets ~4 results fit before tightening. */
+const PER_RESULT_CONTEXT_FRACTION = 0.10;
 
 // ============================================================
 // Token Estimation
@@ -42,6 +60,23 @@ export const LONG_RESPONSES_DIR = 'long_responses';
  */
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
+}
+
+/**
+ * Per-result summarization threshold scaled to the active model's context
+ * window. A 200k-window model returns the existing {@link TOKEN_LIMIT}
+ * (15k); a 64k-window model returns 6_400; below ~20k window the floor
+ * (2_000) kicks in.
+ *
+ * Pass `undefined` when the call site has no model context — returns the
+ * fixed default for backward compatibility.
+ */
+export function tokenLimitFor(contextWindow: number | undefined): number {
+  if (!contextWindow || contextWindow <= 0) return TOKEN_LIMIT;
+  return Math.max(
+    TOKEN_LIMIT_FLOOR,
+    Math.min(TOKEN_LIMIT, Math.floor(contextWindow * PER_RESULT_CONTEXT_FRACTION)),
+  );
 }
 
 // ============================================================
@@ -420,6 +455,8 @@ export interface HandleLargeResponseOptions {
   context: SummarizationContext;
   /** Optional summarize callback — typically agent.runMiniCompletion.bind(agent) */
   summarize?: (prompt: string) => Promise<string | null>;
+  /** Active model's context window — see {@link guardLargeResult}. */
+  contextWindow?: number;
 }
 
 export interface HandleLargeResponseResult {
@@ -453,6 +490,10 @@ export async function guardLargeResult(
     input?: Record<string, unknown>;
     intent?: string;
     summarize?: (prompt: string) => Promise<string | null>;
+    /** Active model's context window — when provided, the per-result
+     *  summarization threshold scales via {@link tokenLimitFor}. Omit at
+     *  call sites without model knowledge to retain the fixed default. */
+    contextWindow?: number;
   }
 ): Promise<string | null> {
   // 1. Binary detection — check before any text processing
@@ -495,13 +536,14 @@ export async function guardLargeResult(
     return `[Base64-encoded binary detected but save failed: ${result.error}]`;
   }
 
-  // 3. Existing size check + summarize flow
-  if (estimateTokens(text) <= TOKEN_LIMIT) return null;
+  // 3. Existing size check + summarize flow (model-aware when contextWindow provided)
+  if (estimateTokens(text) <= tokenLimitFor(opts.contextWindow)) return null;
   const result = await handleLargeResponse({
     text,
     sessionPath: opts.sessionPath,
     context: { toolName: opts.toolName, input: opts.input, intent: opts.intent },
     summarize: opts.summarize,
+    contextWindow: opts.contextWindow,
   });
   return result?.message ?? null;
 }
@@ -518,10 +560,10 @@ export async function guardLargeResult(
 export async function handleLargeResponse(
   opts: HandleLargeResponseOptions
 ): Promise<HandleLargeResponseResult | null> {
-  const { text, sessionPath, context, summarize } = opts;
+  const { text, sessionPath, context, summarize, contextWindow } = opts;
   const estimatedTokens = estimateTokens(text);
 
-  if (estimatedTokens <= TOKEN_LIMIT) {
+  if (estimatedTokens <= tokenLimitFor(contextWindow)) {
     return null; // Not large enough — caller should return as-is
   }
 

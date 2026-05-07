@@ -85,6 +85,8 @@ export interface ISessionManager {
     storedAttachments?: StoredAttachment[],
     options?: SendMessageOptions,
     existingMessageId?: string,
+    _isAuthRetry?: boolean,
+    onAck?: (messageId: string) => void,
   ): Promise<void>
   cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
   killShell(sessionId: string, shellId: string): Promise<{ success: boolean; error?: string }>
@@ -219,16 +221,50 @@ export interface ISessionManager {
   // ---------------------------------------------------------------------------
 
   reinitializeAuth(connectionSlug?: string): Promise<void>
+  /**
+   * Push runtime updates (e.g. capability toggles) to every active session
+   * that uses the given connection. Backstopped by the lazy refresh path in
+   * `getOrCreateAgent`.
+   */
+  refreshConnectionRuntime(connectionSlug: string): Promise<void>
   completeAuthRequest(sessionId: string, result: AuthResult): Promise<void>
-  executePromptAutomation(
-    workspaceId: string,
-    workspaceRootPath: string,
-    prompt: string,
-    labels?: string[],
-    permissionMode?: PermissionMode,
-    mentions?: string[],
-    llmConnection?: string,
-    model?: string,
-    automationName?: string,
-  ): Promise<{ sessionId: string }>
+  executePromptAutomation(input: ExecutePromptAutomationInput): Promise<{ sessionId: string }>
+
+  /**
+   * Install a callback invoked from `executePromptAutomation` after a session
+   * is created when the matcher declared `telegramTopic`. Wired by the
+   * messaging-gateway bootstrap so the SessionManager doesn't need to import
+   * the messaging package (avoids a circular package-level import).
+   *
+   * The callback should be best-effort: failures must not block the session.
+   */
+  setAutomationBinder?(
+    fn: (input: { workspaceId: string; sessionId: string; topicName: string }) => Promise<void>,
+  ): void
+}
+
+/**
+ * Input for executePromptAutomation. Options-object form replaces the
+ * previous positional-args signature once the param list grew past
+ * readability — new optional fields (thinkingLevel, future cwd/permissions
+ * overrides) can be added without churn at every call site.
+ */
+export interface ExecutePromptAutomationInput {
+  workspaceId: string
+  workspaceRootPath: string
+  prompt: string
+  labels?: string[]
+  permissionMode?: PermissionMode
+  mentions?: string[]
+  llmConnection?: string
+  model?: string
+  /** Override the workspace default thinking level for the spawned session. */
+  thinkingLevel?: ThinkingLevel
+  automationName?: string
+  /**
+   * Optional Telegram forum-topic name. When set and the workspace has a
+   * paired supergroup, the new session is bound to a topic of this name
+   * (created on first use). Silently ignored when prerequisites aren't met.
+   */
+  telegramTopic?: string
 }

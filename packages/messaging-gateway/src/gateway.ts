@@ -8,17 +8,25 @@
 import type { ISessionManager } from '@craft-agent/server-core/handlers'
 import type { PushTarget } from '@craft-agent/shared/protocol'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import {
+  evaluateBindingAccess,
+  evaluatePreBindingAccess,
+  executeRejection,
+} from './access-control'
 import { BindingStore } from './binding-store'
 import { Router } from './router'
-import { Commands, type PairingCodeConsumer } from './commands'
+import { Commands, type AccessControlDeps, type PairingCodeConsumer } from './commands'
 import { Renderer, type SessionEvent } from './renderer'
+import { PendingSendersStore } from './pending-senders'
 import { PlanTokenRegistry } from './plan-tokens'
 import type {
   PlatformAdapter,
   PlatformType,
   IncomingMessage,
   ButtonPress,
+  MessagingConfig,
   MessagingLogger,
+  PlatformOwner,
 } from './types'
 
 const consoleLogger: MessagingLogger = {
@@ -46,6 +54,27 @@ export interface GatewayOptions {
   pairingConsumer?: PairingCodeConsumer
   /** Fired after any binding mutation (bind/unbind). */
   onBindingChanged?: () => void
+  /**
+   * Reads the workspace's MessagingConfig. Called per-message so config
+   * edits (toggling accessMode, adding owners) take effect without restart.
+   * Optional — when omitted, the gateway falls back to a permissive
+   * "everything is open" config (useful for legacy callers and unit tests).
+   */
+  getWorkspaceConfig?: () => MessagingConfig
+  /**
+   * Append `candidate` to the platform's owners list iff the list is
+   * currently empty. No-op otherwise. Used by Commands.handlePair to
+   * bootstrap ownership the first time anyone redeems a code.
+   */
+  seedOwnerOnFirstPair?: (
+    platform: PlatformType,
+    candidate: PlatformOwner,
+  ) => Promise<PlatformOwner[]>
+  /**
+   * Fires after the pending-senders store mutates, so the registry can push
+   * an event to the renderer. Mirrors `onBindingChanged`.
+   */
+  onPendingChanged?: () => void
   /** Optional logger — defaults to console. Pass a structured host logger in Electron. */
   logger?: MessagingLogger
 }
@@ -67,6 +96,8 @@ interface PendingCompactAccept {
   bindingId: string
   platform: PlatformType
   channelId: string
+  /** Forum topic id where the press came from (Telegram supergroup), if any. */
+  threadId?: number
   messageId: string
   planPath: string
   createdAt: number
@@ -78,6 +109,7 @@ export class MessagingGateway {
   private readonly sessionManager: ISessionManager
   private readonly workspaceId: string
   private readonly bindingStore: BindingStore
+  private readonly pendingStore: PendingSendersStore
   private readonly router: Router
   private readonly commands: Commands
   private readonly renderer: Renderer
@@ -87,6 +119,16 @@ export class MessagingGateway {
   private readonly adapters = new Map<PlatformType, PlatformAdapter>()
   private readonly log: MessagingLogger
   private started = false
+  /**
+   * Access-control surface — `getWorkspaceConfig` is called per-button so
+   * config edits take effect without restart, mirroring the text path.
+   * `recentRejectReplies` is a separate cooldown map from Router/Commands
+   * so callback-button rejection rate-limiting is independent of text
+   * rejection rate-limiting (a stranger spamming buttons doesn't lock
+   * out their text-channel reply, and vice versa).
+   */
+  private readonly accessDeps: AccessControlDeps
+  private readonly buttonRecentRejectReplies = new Map<string, number>()
 
   constructor(opts: GatewayOptions) {
     this.sessionManager = opts.sessionManager
@@ -103,18 +145,40 @@ export class MessagingGateway {
     if (opts.onBindingChanged) {
       this.bindingStore.onChange(opts.onBindingChanged)
     }
+
+    this.pendingStore = new PendingSendersStore(
+      opts.storageDir,
+      this.log.child({ component: 'pending-senders' }),
+    )
+    if (opts.onPendingChanged) {
+      this.pendingStore.onChange(opts.onPendingChanged)
+    }
+
+    this.accessDeps = {
+      getWorkspaceConfig:
+        opts.getWorkspaceConfig ?? (() => ({ enabled: false, platforms: {} })),
+      seedOwnerOnFirstPair:
+        opts.seedOwnerOnFirstPair ?? (async () => []),
+      pendingStore: this.pendingStore,
+    }
+
     this.commands = new Commands(
       opts.sessionManager,
       this.bindingStore,
       opts.workspaceId,
       opts.pairingConsumer,
       this.log.child({ component: 'commands' }),
+      this.accessDeps,
     )
     this.router = new Router(
       opts.sessionManager,
       this.bindingStore,
       this.commands,
       this.log.child({ component: 'router' }),
+      {
+        getWorkspaceConfig: this.accessDeps.getWorkspaceConfig,
+        pendingStore: this.pendingStore,
+      },
     )
     this.planTokens = new PlanTokenRegistry()
     this.renderer = new Renderer({
@@ -285,11 +349,24 @@ export class MessagingGateway {
     const adapter = this.adapters.get(platform)
     if (!adapter) return
 
+    // Press metadata reused across all branches so responses post back into
+    // the same topic (Telegram supergroup) the button was tapped from.
+    const pressOpts = press.threadId !== undefined ? { threadId: press.threadId } : {}
+
+    // Access gate. Inline buttons in supergroup topics are visible to
+    // every member of the chat, so without this gate any non-owner could
+    // tap `bind:`/`perm:`/`plan:` and bypass the text-side filter. The
+    // text path is locked but callbacks would not be — that's exactly
+    // the "looks locked but isn't" UX the access control is meant to
+    // prevent.
+    const allowed = await this.gateButtonPress(adapter, press)
+    if (!allowed) return
+
     if (press.buttonId.startsWith('bind:')) {
       const sessionId = press.buttonId.slice('bind:'.length)
       const session = await this.sessionManager.getSession(sessionId)
       if (!session) {
-        await adapter.sendText(press.channelId, 'Session not found.')
+        await adapter.sendText(press.channelId, 'Session not found.', pressOpts)
         return
       }
 
@@ -299,11 +376,14 @@ export class MessagingGateway {
         platform,
         press.channelId,
         undefined,
+        undefined,
+        press.threadId,
       )
 
       await adapter.sendText(
         press.channelId,
         `Bound to "${session.name || session.id}"`,
+        pressOpts,
       )
       return
     }
@@ -318,6 +398,7 @@ export class MessagingGateway {
         await adapter.sendText(
           press.channelId,
           '⏸ Permission required. Approve it in the desktop app to continue.',
+          pressOpts,
         )
         return
       }
@@ -327,7 +408,7 @@ export class MessagingGateway {
       const requestId = parts[2]
       if (!requestId) return
 
-      const binding = this.bindingStore.findByChannel(platform, press.channelId)
+      const binding = this.bindingStore.findByChannel(platform, press.channelId, press.threadId)
       if (!binding) return
 
       const allowed = action === 'allow'
@@ -338,7 +419,7 @@ export class MessagingGateway {
         false,
       )
 
-      await adapter.sendText(press.channelId, allowed ? '✅ Allowed' : '❌ Denied')
+      await adapter.sendText(press.channelId, allowed ? '✅ Allowed' : '❌ Denied', pressOpts)
       return
     }
 
@@ -358,11 +439,14 @@ export class MessagingGateway {
     const token = parts[2]
     if (!token || (action !== 'accept' && action !== 'compact')) return
 
+    const pressOpts = press.threadId !== undefined ? { threadId: press.threadId } : {}
+
     const entry = this.planTokens.resolve(token)
     if (!entry) {
       await adapter.sendText(
         press.channelId,
         '⚠️ This plan has expired. Retry from the desktop app.',
+        pressOpts,
       )
       return
     }
@@ -379,7 +463,7 @@ export class MessagingGateway {
     if (action === 'accept') {
       try {
         await this.sessionManager.acceptPlan(entry.sessionId, entry.planPath)
-        await adapter.sendText(press.channelId, '✅ Plan accepted. Agent resuming.')
+        await adapter.sendText(press.channelId, '✅ Plan accepted. Agent resuming.', pressOpts)
       } catch (err) {
         this.log.error('acceptPlan failed', {
           event: 'plan_accept_failed',
@@ -389,6 +473,7 @@ export class MessagingGateway {
         await adapter.sendText(
           press.channelId,
           '❌ Couldn\'t accept the plan. Check the desktop app.',
+          pressOpts,
         )
       }
       return
@@ -397,7 +482,7 @@ export class MessagingGateway {
     // action === 'compact': persist the "waiting for compaction" intent, send
     // /compact, and let onSessionEvent → finishPendingCompactAccept dispatch
     // the approval once compaction finishes.
-    const binding = this.bindingStore.findByChannel(platform, press.channelId)
+    const binding = this.bindingStore.findByChannel(platform, press.channelId, press.threadId)
     if (!binding) return
 
     this.pendingCompactAccepts.set(entry.sessionId, {
@@ -406,6 +491,7 @@ export class MessagingGateway {
       bindingId: binding.id,
       platform,
       channelId: press.channelId,
+      ...(press.threadId !== undefined ? { threadId: press.threadId } : {}),
       messageId: record?.messageId ?? '',
       planPath: entry.planPath,
       createdAt: Date.now(),
@@ -417,6 +503,7 @@ export class MessagingGateway {
       await adapter.sendText(
         press.channelId,
         '♻️ Compacting conversation, then executing the plan…',
+        pressOpts,
       )
     } catch (err) {
       this.pendingCompactAccepts.delete(entry.sessionId)
@@ -428,7 +515,107 @@ export class MessagingGateway {
       await adapter.sendText(
         press.channelId,
         '❌ Couldn\'t start compaction. Check the desktop app.',
+        pressOpts,
       )
+    }
+  }
+
+  /**
+   * Decide whether a button press may proceed. `bind:` is workspace-owner
+   * only (matches the `/bind` text command); `perm:` and `plan:` are gated
+   * by the binding's access policy (matches the routing-time check in
+   * Router.route). Bot senders are silent-dropped before any other logic.
+   *
+   * Returns true to proceed, false on reject (caller must return early).
+   * The reject path emits the friendly reply and records the sender in
+   * the pending-senders store via the shared `executeRejection` helper.
+   */
+  private async gateButtonPress(
+    adapter: PlatformAdapter,
+    press: ButtonPress,
+  ): Promise<boolean> {
+    const senderShape: import('./access-control').RejectableSender = {
+      platform: press.platform,
+      channelId: press.channelId,
+      ...(press.threadId !== undefined ? { threadId: press.threadId } : {}),
+      senderId: press.senderId,
+      ...(press.senderName ? { senderName: press.senderName } : {}),
+      ...(press.senderUsername ? { senderUsername: press.senderUsername } : {}),
+    }
+
+    let verdict: import('./access-control').AccessDecision
+    let extra: { bindingId?: string; sessionId?: string } = {}
+
+    if (press.buttonId.startsWith('bind:')) {
+      // `bind:` runs the same gate as the `/bind` text command — the
+      // operator who emitted the keyboard is offering session-binding
+      // privileges, but only owners may take them.
+      verdict = evaluatePreBindingAccess({
+        msg: this.synthesizeMsgForGate(press),
+        workspaceConfig: this.accessDeps.getWorkspaceConfig(),
+      })
+    } else if (
+      press.buttonId.startsWith('perm:') ||
+      press.buttonId.startsWith('plan:')
+    ) {
+      // `perm:`/`plan:` are session-level approvals; the sender must have
+      // routing access to the binding the button was attached to.
+      const binding = this.bindingStore.findByChannel(
+        press.platform,
+        press.channelId,
+        press.threadId,
+      )
+      if (!binding) {
+        // No binding to evaluate against — fall through to the existing
+        // "not bound" handling in the caller (which will silently no-op
+        // for perm/plan since they require a binding lookup anyway).
+        return true
+      }
+      extra = { bindingId: binding.id, sessionId: binding.sessionId }
+      verdict = evaluateBindingAccess({
+        msg: this.synthesizeMsgForGate(press),
+        workspaceConfig: this.accessDeps.getWorkspaceConfig(),
+        binding,
+      })
+    } else {
+      // Unknown button prefix — let the caller handle it.
+      return true
+    }
+
+    if (verdict.allow) return true
+
+    await executeRejection(
+      adapter,
+      senderShape,
+      verdict.reason,
+      {
+        recentRejectReplies: this.buttonRecentRejectReplies,
+        pendingStore: this.pendingStore,
+      },
+      this.log,
+      extra,
+    )
+    return false
+  }
+
+  /**
+   * Build the minimum `IncomingMessage` shape the access evaluators read.
+   * The evaluators only consult `platform`, `senderId`, `senderIsBot` —
+   * everything else is dummy/empty for the button-press path.
+   */
+  private synthesizeMsgForGate(press: ButtonPress): IncomingMessage {
+    return {
+      platform: press.platform,
+      channelId: press.channelId,
+      ...(press.threadId !== undefined ? { threadId: press.threadId } : {}),
+      messageId: press.messageId,
+      senderId: press.senderId,
+      ...(press.senderName ? { senderName: press.senderName } : {}),
+      ...(press.senderUsername ? { senderUsername: press.senderUsername } : {}),
+      ...(press.senderIsBot ? { senderIsBot: true } : {}),
+      text: '',
+      timestamp: Date.now(),
+      raw: press,
     }
   }
 
@@ -446,11 +633,12 @@ export class MessagingGateway {
     }
 
     const adapter = this.adapters.get(entry.platform)
+    const opts = entry.threadId !== undefined ? { threadId: entry.threadId } : {}
     try {
       await this.sessionManager.acceptPlan(sessionId, entry.planPath)
       await this.sessionManager.clearPendingPlanExecution(sessionId)
       if (adapter?.isConnected()) {
-        await adapter.sendText(entry.channelId, '✅ Plan executing after compaction.')
+        await adapter.sendText(entry.channelId, '✅ Plan executing after compaction.', opts)
       }
     } catch (err) {
       this.log.error('post-compaction acceptPlan failed', {
@@ -462,6 +650,7 @@ export class MessagingGateway {
         await adapter.sendText(
           entry.channelId,
           '❌ Compaction finished but the plan couldn\'t execute. Check the desktop app.',
+          opts,
         )
       }
     }
@@ -473,6 +662,10 @@ export class MessagingGateway {
 
   getBindingStore(): BindingStore {
     return this.bindingStore
+  }
+
+  getPendingStore(): PendingSendersStore {
+    return this.pendingStore
   }
 
   isStarted(): boolean {

@@ -276,3 +276,219 @@ describe('source_test auto-enable', () => {
     expect(text).not.toContain('available on your next message');
   });
 });
+
+// ============================================================
+// API connection-branch coverage (regression for #683)
+// ============================================================
+//
+// These tests exercise the built-in fetch-based connection probe and the
+// auto-enable gate that depends on its result. They drive global fetch via
+// a swap-in stub so no network IO happens.
+
+interface FetchCall {
+  url: string;
+  init?: RequestInit;
+}
+
+function installFetchStub(
+  responder: (call: FetchCall) => Response | Promise<Response>
+): { calls: FetchCall[]; restore: () => void } {
+  const calls: FetchCall[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+    const url =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : String(input);
+    const call: FetchCall = { url, init };
+    calls.push(call);
+    return responder(call);
+  }) as typeof fetch;
+  return {
+    calls,
+    restore: () => {
+      globalThis.fetch = original;
+    },
+  };
+}
+
+function writeApiSource(
+  workspacePath: string,
+  slug: string,
+  overrides: Partial<SourceConfig> = {}
+): void {
+  const sourcePath = join(workspacePath, 'sources', slug);
+  mkdirSync(sourcePath, { recursive: true });
+  const config: SourceConfig = {
+    id: slug,
+    slug,
+    name: slug,
+    enabled: false,
+    provider: 'test',
+    type: 'api',
+    tagline: 'A test API source',
+    icon: '🧪',
+    api: {
+      baseUrl: 'https://api.example.test',
+      authType: 'none',
+    },
+    ...overrides,
+  } as SourceConfig;
+  writeFileSync(join(sourcePath, 'config.json'), JSON.stringify(config, null, 2));
+  writeFileSync(
+    join(sourcePath, 'guide.md'),
+    '# Guide\n\nThis is a longer guide with more than fifty words so the validator does not warn about the guide being too short for the readability criteria the tool enforces when evaluating source completeness for this test suite which is only here to exercise the connection-branch behavior.'
+  );
+}
+
+describe('source_test API connection branches', () => {
+  let tempDir: string;
+  let restoreFetch: () => void = () => {};
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'source-test-api-conn-'));
+  });
+
+  afterEach(() => {
+    restoreFetch();
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('200 → connected, source auto-enabled, activation called', async () => {
+    writeApiSource(tempDir, 'good-api');
+    ({ restore: restoreFetch } = installFetchStub(() => new Response(null, { status: 200 })));
+
+    let activated: string | null = null as string | null;
+    const ctx = createCtx(tempDir, {
+      activateSourceInSession: async (slug) => {
+        activated = slug;
+        return { ok: true, availability: 'next-turn' };
+      },
+    });
+
+    const result = await handleSourceTest(ctx, { sourceSlug: 'good-api' });
+    const text = result.content[0]?.text ?? '';
+
+    expect(text).toContain('Validation passed');
+    expect(text).not.toContain('Skipping activation');
+    expect(activated).toBe('good-api');
+
+    const persisted = JSON.parse(
+      readFileSync(join(tempDir, 'sources', 'good-api', 'config.json'), 'utf-8')
+    ) as SourceConfig;
+    expect(persisted.enabled).toBe(true);
+    expect(persisted.connectionStatus).toBe('connected');
+  });
+
+  it('500 → disconnected, NOT auto-enabled, activation NOT called', async () => {
+    writeApiSource(tempDir, 'flaky-api');
+    ({ restore: restoreFetch } = installFetchStub(() => new Response(null, { status: 500 })));
+
+    let activated = false;
+    const ctx = createCtx(tempDir, {
+      activateSourceInSession: async () => {
+        activated = true;
+        return { ok: true };
+      },
+    });
+
+    const result = await handleSourceTest(ctx, { sourceSlug: 'flaky-api' });
+    const text = result.content[0]?.text ?? '';
+
+    // The summary line must not be "✓ Validation passed" alone — it must be
+    // the warnings variant, because the probe got a non-2xx the probe couldn't
+    // classify as healthy.
+    expect(text).toContain('Validation passed with warnings');
+    expect(text).toContain('API returned 500');
+    expect(text).toContain('Skipping activation');
+
+    expect(activated).toBe(false);
+
+    const persisted = JSON.parse(
+      readFileSync(join(tempDir, 'sources', 'flaky-api', 'config.json'), 'utf-8')
+    ) as SourceConfig;
+    // The enabled flag must not be flipped on a failed probe.
+    expect(persisted.enabled).toBe(false);
+    expect(persisted.connectionStatus).toBe('disconnected');
+  });
+
+  it('404 → disconnected, NOT auto-enabled, activation NOT called', async () => {
+    writeApiSource(tempDir, 'wrong-path-api');
+    ({ restore: restoreFetch } = installFetchStub(() => new Response(null, { status: 404 })));
+
+    let activated = false;
+    const ctx = createCtx(tempDir, {
+      activateSourceInSession: async () => {
+        activated = true;
+        return { ok: true };
+      },
+    });
+
+    const result = await handleSourceTest(ctx, { sourceSlug: 'wrong-path-api' });
+    const text = result.content[0]?.text ?? '';
+
+    expect(text).toContain('Validation passed with warnings');
+    expect(text).toContain('API returned 404');
+    expect(text).toContain('Skipping activation');
+    expect(activated).toBe(false);
+  });
+
+  it('401 → connected (auth-required), auto-enabled (refresh path runs)', async () => {
+    // 401 from an unauthenticated probe is mapped to "reachable, needs auth".
+    // The token-refresh case in checkAuthStatus relies on this — gating on
+    // connectionStatus must not break it.
+    writeApiSource(tempDir, 'auth-needed-api');
+    ({ restore: restoreFetch } = installFetchStub(() => new Response(null, { status: 401 })));
+
+    let activated: string | null = null as string | null;
+    const ctx = createCtx(tempDir, {
+      activateSourceInSession: async (slug) => {
+        activated = slug;
+        return { ok: true, availability: 'next-turn' };
+      },
+    });
+
+    const result = await handleSourceTest(ctx, { sourceSlug: 'auth-needed-api' });
+    const text = result.content[0]?.text ?? '';
+
+    expect(text).not.toContain('Skipping activation');
+    expect(activated).toBe('auth-needed-api');
+
+    const persisted = JSON.parse(
+      readFileSync(join(tempDir, 'sources', 'auth-needed-api', 'config.json'), 'utf-8')
+    ) as SourceConfig;
+    expect(persisted.enabled).toBe(true);
+    expect(persisted.connectionStatus).toBe('connected');
+  });
+
+  it('basic probe honors testEndpoint.method (no HEAD→GET fallback dance)', async () => {
+    // Regression for the HEAD→GET-on-405 fallback that silently passed POST-only
+    // endpoints. With a configured method, the basic probe must call it directly.
+    writeApiSource(tempDir, 'post-only-api', {
+      api: {
+        baseUrl: 'https://api.example.test',
+        authType: 'none',
+        testEndpoint: { method: 'POST', path: '/v1/things' },
+      },
+    } as Partial<SourceConfig>);
+
+    let stub: ReturnType<typeof installFetchStub>;
+    stub = installFetchStub(() => new Response(null, { status: 200 }));
+    restoreFetch = stub.restore;
+
+    await handleSourceTest(ctx_for(tempDir), { sourceSlug: 'post-only-api' });
+
+    expect(stub.calls.length).toBe(1);
+    expect(stub.calls[0]?.init?.method).toBe('POST');
+    expect(stub.calls[0]?.url).toBe('https://api.example.test/v1/things');
+  });
+});
+
+// Tiny helper to build a no-callback ctx for tests that don't care about activation.
+function ctx_for(workspacePath: string) {
+  return createCtx(workspacePath, {
+    activateSourceInSession: async () => ({ ok: true }),
+  });
+}

@@ -45,11 +45,6 @@ import {
   validateStdioMcpConnection as validateStdioMcpConnectionImpl,
 } from '../mcp/validation.ts';
 import {
-  getDefaultLlmConnection,
-  getLlmConnection,
-} from '../config/storage.ts';
-import { getCredentialManager } from '../credentials/index.ts';
-import {
   loadSourceConfig as loadSourceConfigImpl,
   saveSourceConfig as saveSourceConfigImpl,
   getSourcePath,
@@ -196,33 +191,10 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
 
   const validateMcpConnection = async (config: HttpMcpConfig): Promise<McpValidationResult> => {
     try {
-      // Resolve credentials from the default LLM connection
-      const defaultSlug = getDefaultLlmConnection();
-      const connection = defaultSlug ? getLlmConnection(defaultSlug) : null;
-      const credManager = getCredentialManager();
-
-      let apiKey: string | null = null;
-      let oauthToken: string | null = null;
-
-      if (connection && defaultSlug) {
-        if (connection.authType === 'api_key' || connection.authType === 'api_key_with_endpoint') {
-          apiKey = await credManager.getLlmApiKey(defaultSlug);
-        } else if (connection.authType === 'oauth') {
-          const oauth = await credManager.getLlmOAuth(defaultSlug);
-          oauthToken = oauth?.accessToken || null;
-        }
-      }
-
-      if (!apiKey && !oauthToken) {
-        return { success: false, error: 'No Claude API key or OAuth token configured' };
-      }
-
       const result = await validateMcpConnectionImpl({
         mcpUrl: config.url,
         mcpTransport: config.transport,
         mcpHeaders: config.headers,
-        claudeApiKey: apiKey || undefined,
-        claudeOAuthToken: oauthToken || undefined,
       });
       return {
         success: result.success,

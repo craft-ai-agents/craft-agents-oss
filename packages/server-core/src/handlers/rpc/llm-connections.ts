@@ -8,7 +8,7 @@ import {
   validateStoredBackendConnection,
 } from '@craft-agent/shared/agent/backend'
 import { getModelRefreshService } from '@craft-agent/server-core/model-fetchers'
-import { parseTestConnectionError, createBuiltInConnection, validateModelList, piAuthProviderDisplayName, validateSetupTestInput, setupTestRequiresApiKey, isLoopbackBaseUrl } from '@craft-agent/server-core/domain'
+import { parseTestConnectionError, createBuiltInConnection, validateModelList, piAuthProviderDisplayName, validateSetupTestInput, setupTestRequiresApiKey, resolveCustomEndpointSetup } from '@craft-agent/server-core/domain'
 import { getWorkspaceOrThrow, buildBackendHostRuntimeContext } from '@craft-agent/server-core/handlers'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -107,20 +107,15 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       const isCustomEndpointCompat = !!customEndpoint
       if (customEndpoint) {
         updates.customEndpoint = customEndpoint
-        // Route custom OpenAI/Anthropic-compatible endpoints through PiAgent.
         updates.providerType = 'pi_compat'
-        // Local loopback endpoints (Ollama, LM Studio) don't need API keys.
-        updates.authType = (isLoopbackBaseUrl(setup.baseUrl ?? undefined) && !setup.credential)
-          ? 'none'
-          : 'api_key_with_endpoint'
-        if (isLoopbackBaseUrl(setup.baseUrl ?? undefined)) {
-          // Local models use the OpenAI protocol but aren't "OpenAI".
-          // Leave piAuthProvider unset → generic icon in the selector.
-          updates.name = 'Local Model'
-        } else {
-          // Remote custom endpoints: keep provider hint for correct icon.
-          updates.piAuthProvider = customEndpoint.api === 'anthropic-messages' ? 'anthropic' : 'openai'
-        }
+        const branch = resolveCustomEndpointSetup({
+          baseUrl: setup.baseUrl ?? undefined,
+          credential: setup.credential ?? undefined,
+          customEndpointApi: customEndpoint.api,
+        })
+        updates.authType = branch.authType
+        if (branch.name !== undefined) updates.name = branch.name
+        if (branch.piAuthProvider !== undefined) updates.piAuthProvider = branch.piAuthProvider
       } else if (setup.baseUrl !== undefined) {
         // Base URL was explicitly updated without custom protocol config.
         // Treat this as non-custom mode and clear stale custom endpoint metadata.
@@ -443,6 +438,17 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         }
       }
       deps.platform.logger?.info(`LLM connection saved: ${connection.slug}`)
+      // Push runtime updates (e.g. supportsImages toggle) to live sessions on
+      // this connection. Detached so SAVE doesn't block on the per-session
+      // 15s `update_runtime_config` timeout when subprocesses are slow or
+      // wedged. SessionManager serializes the refresh with the next send via
+      // its per-session mutex, and the lazy `getOrCreateAgent` refresh remains
+      // the correctness backstop if the detached push fails.
+      sessionManager.refreshConnectionRuntime(connection.slug).catch(error => {
+        deps.platform.logger?.warn(
+          `Detached runtime push failed for ${connection.slug}: ${error instanceof Error ? error.message : error}`,
+        )
+      })
       // Reinitialize auth if the saved connection is the current default
       // (updates env vars and summarization model override)
       const defaultSlug = getDefaultLlmConnection()

@@ -21,6 +21,7 @@ import { transportBannerComponents } from './transport-banner'
 import { containerTransitionsComponents } from './container-transitions'
 import { apiKeyInputComponents } from './api-key-input'
 import { messagingComponents } from './messaging'
+import { imageSupportComponents } from './image-support'
 
 export * from './types'
 
@@ -48,6 +49,7 @@ export const componentRegistry: ComponentEntry[] = [
   ...transportBannerComponents,
   ...containerTransitionsComponents,
   ...messagingComponents,
+  ...imageSupportComponents,
 ]
 
 export function getCategories(): CategoryGroup[] {

@@ -13,9 +13,18 @@ export interface MessagingBinding {
   sessionId: string
   platform: string
   channelId: string
+  /** Telegram supergroup forum topic id; undefined for DMs / non-Telegram. */
+  threadId?: number
   channelName?: string
   enabled: boolean
   createdAt: number
+  /**
+   * Per-binding access policy. Optional in the wire shape so legacy bindings
+   * (created before access control existed) don't break atom updates. The
+   * UI treats missing values as `'open'`.
+   */
+  accessMode?: 'inherit' | 'allow-list' | 'open'
+  allowedSenderIds?: string[]
 }
 
 export const messagingBindingsAtom = atom<MessagingBinding[]>([])
@@ -51,7 +60,7 @@ export type MessagingDialogState =
   | { kind: 'closed' }
   | {
       kind: 'pairing'
-      platform: 'telegram' | 'whatsapp'
+      platform: 'telegram' | 'whatsapp' | 'lark'
       sessionId: string
       code: string | null
       expiresAt: number | null

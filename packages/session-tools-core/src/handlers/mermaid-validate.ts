@@ -1,24 +1,28 @@
 /**
  * Mermaid Validate Handler
  *
- * Validates Mermaid diagram syntax using beautiful-mermaid parser.
+ * Validates Mermaid diagram syntax using beautiful-mermaid renderer.
  * No DOM required - works identically in Claude and Codex.
  */
 
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
-import { parseMermaid } from 'beautiful-mermaid';
+import { renderMermaidSVG } from 'beautiful-mermaid';
+import { normalizeMermaidSource } from '../validation.ts';
 
 export interface MermaidValidateArgs {
   code: string;
+  render?: boolean;
 }
 
 /**
  * Handle the mermaid_validate tool call.
  *
- * Uses parseMermaid from beautiful-mermaid to validate syntax.
- * If parsing succeeds, the diagram is valid.
- * If parsing throws, returns the error message.
+ * Uses renderMermaidSVG from beautiful-mermaid to validate the same diagram
+ * families the renderer accepts, including xychart-beta. YAML frontmatter is
+ * stripped before validation because it is metadata rather than diagram syntax.
+ * If rendering succeeds, the diagram is valid. If rendering throws, returns the
+ * error message.
  */
 export async function handleMermaidValidate(
   _ctx: SessionToolContext,
@@ -27,8 +31,9 @@ export async function handleMermaidValidate(
   const { code } = args;
 
   try {
-    // parseMermaid throws if syntax is invalid
-    parseMermaid(code);
+    // renderMermaidSVG throws if syntax/layout is invalid. Use the renderer path
+    // rather than parseMermaid(), which only understands flowchart/state syntax.
+    renderMermaidSVG(normalizeMermaidSource(code));
 
     return {
       content: [{

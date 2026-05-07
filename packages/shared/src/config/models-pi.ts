@@ -156,8 +156,6 @@ const PI_EXCLUDED_PROVIDERS: Set<string> = new Set([
   'github-copilot',
   'openai-codex',
   'google-vertex',
-  'google-gemini-cli',
-  'google-antigravity',
 ]);
 
 /** Info for a Pi provider available in the API key flow. */

@@ -5,9 +5,12 @@ import { describe, it, expect } from 'bun:test';
 import { shouldAllowToolInMode } from '../../agent/mode-manager.ts';
 
 describe('session tool safe-mode classification', () => {
+  // send_developer_feedback intentionally omitted — it is feature-flagged via
+  // FEATURE_FLAGS.developerFeedback (off by default outside dev runtimes), so
+  // its safe-mode visibility depends on env state. The dedicated suite at
+  // send-developer-feedback-permissions.test.ts owns that flag-aware behavior.
   it('allows read-only session tools in safe mode', () => {
     const allowedTools = [
-      'mcp__session__send_developer_feedback',
       'mcp__session__call_llm',
       'mcp__session__browser_tool',
       'mcp__session__script_sandbox',

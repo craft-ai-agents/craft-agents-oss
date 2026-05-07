@@ -195,4 +195,42 @@ describe('Router', () => {
     expect(sessionManager.sendMessage).not.toHaveBeenCalled()
     expect(commands.handle).toHaveBeenCalledTimes(1)
   })
+
+  // -------------------------------------------------------------------------
+  // Telegram supergroup forum topics — Phase A
+  // -------------------------------------------------------------------------
+
+  it('routes the same chatId + different threadIds to the per-topic session', async () => {
+    // Two topics in the same supergroup → two distinct sessions
+    const store = new BindingStore(storeDir)
+    store.bind('ws1', 'sess-Topic5', 'telegram', '-1001', undefined, undefined, 5)
+    store.bind('ws1', 'sess-Topic7', 'telegram', '-1001', undefined, undefined, 7)
+
+    const sessionManager = makeFakeSessionManager()
+    const commands = makeFakeCommands()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const router = new Router(sessionManager as any, store, commands as unknown as Commands)
+    const adapter = makeFakeAdapter()
+
+    await router.route(adapter, baseMsg({ channelId: '-1001', threadId: 5, text: 'hi from t5' }))
+    await router.route(adapter, baseMsg({ channelId: '-1001', threadId: 7, text: 'hi from t7' }))
+
+    expect(sessionManager.sendMessage).toHaveBeenCalledTimes(2)
+    expect(sessionManager.sendMessage.mock.calls[0]?.[0]).toBe('sess-Topic5')
+    expect(sessionManager.sendMessage.mock.calls[1]?.[0]).toBe('sess-Topic7')
+  })
+
+  it('falls through to Commands when message lands in an unbound topic', async () => {
+    const store = new BindingStore(storeDir)
+    // Only topic 5 is bound; topic 7 inbound has no binding
+    store.bind('ws1', 'sess-A', 'telegram', '-1001', undefined, undefined, 5)
+    const sessionManager = makeFakeSessionManager()
+    const commands = makeFakeCommands()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const router = new Router(sessionManager as any, store, commands as unknown as Commands)
+
+    await router.route(makeFakeAdapter(), baseMsg({ channelId: '-1001', threadId: 7, text: '/help' }))
+    expect(sessionManager.sendMessage).not.toHaveBeenCalled()
+    expect(commands.handle).toHaveBeenCalledTimes(1)
+  })
 })

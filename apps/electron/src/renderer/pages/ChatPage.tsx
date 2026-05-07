@@ -22,7 +22,8 @@ import { useAppShellContext, usePendingPermission, usePendingCredential, useSess
 import { rendererPerf } from '@/lib/perf'
 import { routes } from '@/lib/navigate'
 import { coerceInputText } from '@/lib/input-text'
-import { ensureSessionMessagesLoadedAtom, loadedSessionsAtom, sessionMetaMapAtom } from '@/atoms/sessions'
+import { deriveSessionMessagesLoadState, formatSessionLoadFailure } from '@/lib/session-load'
+import { ensureSessionMessagesLoadedAtom, forceSessionMessagesReloadAtom, loadedSessionsAtom, sessionMetaMapAtom } from '@/atoms/sessions'
 import { getSessionTitle } from '@/utils/session'
 // Model resolution: connection.defaultModel (no hardcoded defaults)
 import { resolveEffectiveConnectionSlug, isSessionConnectionUnavailable } from '@config/llm-connections'
@@ -99,9 +100,78 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
 
   // Fallback: ensure messages are loaded when session is viewed
   const ensureMessagesLoaded = useSetAtom(ensureSessionMessagesLoadedAtom)
+  const forceMessagesReload = useSetAtom(forceSessionMessagesReloadAtom)
+  const [messagesLoadError, setMessagesLoadError] = React.useState<string | null>(null)
+  const [messagesRetrying, setMessagesRetrying] = React.useState(false)
+  const autoForcedReloadSessionRef = React.useRef<string | null>(null)
+  const shouldForceInitialMessagesReload = React.useMemo(() => {
+    const expectedMessageCount = session?.messageCount ?? sessionMeta?.messageCount ?? 0
+    return messagesLoaded
+      && !!session
+      && (session.messages?.length ?? 0) === 0
+      && (expectedMessageCount > 0 || !!session.lastFinalMessageId || !!sessionMeta?.lastFinalMessageId)
+  }, [messagesLoaded, session, sessionMeta])
+
   React.useEffect(() => {
-    ensureMessagesLoaded(sessionId)
-  }, [sessionId, ensureMessagesLoaded])
+    let cancelled = false
+    setMessagesLoadError(null)
+    setMessagesRetrying(false)
+
+    if (shouldForceInitialMessagesReload && autoForcedReloadSessionRef.current === sessionId) {
+      setMessagesLoadError('Session messages are not available')
+      return () => {
+        cancelled = true
+      }
+    }
+
+    const useForceReload = shouldForceInitialMessagesReload
+    if (useForceReload) {
+      autoForcedReloadSessionRef.current = sessionId
+    }
+
+    const loadPromise = useForceReload
+      ? forceMessagesReload(sessionId)
+      : ensureMessagesLoaded(sessionId)
+
+    loadPromise
+      .then((loadedSession) => {
+        if (!cancelled && !loadedSession) {
+          setMessagesLoadError('Session messages are not available')
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setMessagesLoadError(formatSessionLoadFailure(error))
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [sessionId, ensureMessagesLoaded, forceMessagesReload, shouldForceInitialMessagesReload])
+
+  const handleRetryMessagesLoad = React.useCallback(async () => {
+    setMessagesLoadError(null)
+    setMessagesRetrying(true)
+
+    try {
+      const loadedSession = await forceMessagesReload(sessionId)
+      if (!loadedSession) {
+        setMessagesLoadError('Session messages are not available')
+      }
+    } catch (error) {
+      setMessagesLoadError(formatSessionLoadFailure(error))
+    } finally {
+      setMessagesRetrying(false)
+    }
+  }, [forceMessagesReload, sessionId])
+
+  const messageLoadState = React.useMemo(() => deriveSessionMessagesLoadState({
+    session,
+    sessionMeta,
+    messagesLoaded,
+    loadError: messagesLoadError,
+  }), [session, sessionMeta, messagesLoaded, messagesLoadError])
 
   // Perf: Mark when session data is available
   const sessionLoadedMarkedRef = React.useRef<string | null>(null)
@@ -316,11 +386,11 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   // Perf: Mark when data is ready
   const dataReadyMarkedRef = React.useRef<string | null>(null)
   React.useLayoutEffect(() => {
-    if (messagesLoaded && session && dataReadyMarkedRef.current !== sessionId) {
+    if (messageLoadState.messagesReady && session && dataReadyMarkedRef.current !== sessionId) {
       dataReadyMarkedRef.current = sessionId
       rendererPerf.markSessionSwitch(sessionId, 'data.ready')
     }
-  }, [sessionId, messagesLoaded, session])
+  }, [sessionId, messageLoadState.messagesReady, session])
 
   // Perf: Mark render complete after paint
   React.useEffect(() => {
@@ -617,7 +687,10 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 onSourcesChange={(slugs) => onSessionSourcesChange?.(sessionId, slugs)}
                 workingDirectory={sessionMeta.workingDirectory}
                 onWorkingDirectoryChange={handleWorkingDirectoryChange}
-                messagesLoading={true}
+                messagesLoading={messageLoadState.messagesLoading || (messagesRetrying && !messageLoadState.messagesReady)}
+                messagesLoadError={messageLoadState.error}
+                messagesRetrying={messagesRetrying}
+                onRetryMessagesLoad={handleRetryMessagesLoad}
                 searchQuery={sessionListSearchQuery}
                 isSearchModeActive={isSearchModeActive}
                 onMatchInfoChange={onChatMatchInfoChange}
@@ -693,7 +766,10 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             workingDirectory={workingDirectory}
             onWorkingDirectoryChange={handleWorkingDirectoryChange}
             sessionFolderPath={session?.sessionFolderPath}
-            messagesLoading={!messagesLoaded}
+            messagesLoading={messageLoadState.messagesLoading || (messagesRetrying && !messageLoadState.messagesReady)}
+            messagesLoadError={messageLoadState.error}
+            messagesRetrying={messagesRetrying}
+            onRetryMessagesLoad={handleRetryMessagesLoad}
             searchQuery={sessionListSearchQuery}
             isSearchModeActive={isSearchModeActive}
             onMatchInfoChange={onChatMatchInfoChange}

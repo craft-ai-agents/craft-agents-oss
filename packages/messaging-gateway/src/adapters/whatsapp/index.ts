@@ -29,6 +29,7 @@ import type {
   PlatformConfig,
   AdapterCapabilities,
   IncomingMessage,
+  SendOptions,
   SentMessage,
   InlineButton,
   ButtonPress,
@@ -274,7 +275,8 @@ export class WhatsAppAdapter implements PlatformAdapter {
     this.sendCommand({ type: 'submit_pairing_phone', phoneNumber })
   }
 
-  async sendText(channelId: string, text: string): Promise<SentMessage> {
+  async sendText(channelId: string, text: string, _opts?: SendOptions): Promise<SentMessage> {
+    // _opts (threadId) is Telegram-specific; ignored on WhatsApp.
     const id = String(this.nextCmdId++)
     const result = await this.sendWithResult({ id, type: 'send_text', channelId, text })
     if (!result.ok) throw new Error(result.error ?? 'Send failed')
@@ -285,7 +287,12 @@ export class WhatsAppAdapter implements PlatformAdapter {
     }
   }
 
-  async editMessage(_channelId: string, _messageId: string, _text: string): Promise<void> {
+  async editMessage(
+    _channelId: string,
+    _messageId: string,
+    _text: string,
+    _opts?: SendOptions,
+  ): Promise<void> {
     throw new Error('WhatsApp edit not supported in this adapter')
   }
 
@@ -293,6 +300,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
     channelId: string,
     text: string,
     buttons: InlineButton[],
+    _opts?: SendOptions,
   ): Promise<SentMessage> {
     const numbered = buttons
       .map((b, i) => `${i + 1}. ${b.label}`)
@@ -301,7 +309,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
     return this.sendText(channelId, combined)
   }
 
-  async sendTyping(_channelId: string): Promise<void> {
+  async sendTyping(_channelId: string, _opts?: SendOptions): Promise<void> {
     // No-op — omitting "typing" presence updates avoids an extra round-trip
     // through the worker; UX remains acceptable without it.
   }
@@ -311,6 +319,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
     file: Buffer,
     filename: string,
     caption?: string,
+    _opts?: SendOptions,
   ): Promise<SentMessage> {
     const id = String(this.nextCmdId++)
     const result = await this.sendWithResult({
