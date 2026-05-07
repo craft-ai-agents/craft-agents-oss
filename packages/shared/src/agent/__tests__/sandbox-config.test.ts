@@ -10,6 +10,7 @@ import type { SessionConfig } from '../../sessions/types.ts';
 const WORKSPACE = '/tmp/craft-test-workspace';
 const SESSION_ID = 'test-session';
 const EXPECTED_SESSION_DIR = join(WORKSPACE, 'sessions', SESSION_ID);
+const EXPECTED_WORKSPACE_DATA_DIR = join(WORKSPACE, 'data');
 
 function makeSession(overrides: Partial<SessionConfig> = {}): SessionConfig {
   return {
@@ -61,6 +62,20 @@ describe('buildClaudeSandboxOptions', () => {
     expect(result?.autoAllowBashIfSandboxed).toBe(true);
   });
 
+  it('closes the dangerouslyDisableSandbox escape hatch', () => {
+    const result = buildClaudeSandboxOptions({
+      session: makeSession({ sandboxed: true }),
+      workspaceRootPath: WORKSPACE,
+      sdkCwd: EXPECTED_SESSION_DIR,
+    });
+    // Craft already exposes user-controlled escape hatches (toggle sandbox
+    // off entirely, or unset it on the session). The SDK's per-tool
+    // `dangerouslyDisableSandbox` parameter would let the LLM silently
+    // bypass under allow-all permission mode, undermining the property
+    // the user opted in for.
+    expect(result?.allowUnsandboxedCommands).toBe(false);
+  });
+
   it('defaults failIfUnavailable to true when sandboxFailHard is unset', () => {
     const result = buildClaudeSandboxOptions({
       session: makeSession({ sandboxed: true }),
@@ -79,7 +94,7 @@ describe('buildClaudeSandboxOptions', () => {
     expect(result?.failIfUnavailable).toBe(false);
   });
 
-  it('includes workingDirectory, sdkCwd, and session dir in allowWrite', () => {
+  it('includes workingDirectory, sdkCwd, session dir, and workspace data dir in allowWrite', () => {
     const result = buildClaudeSandboxOptions({
       session: makeSession({
         sandboxed: true,
@@ -92,6 +107,21 @@ describe('buildClaudeSandboxOptions', () => {
     const allowWrite = result?.filesystem?.allowWrite ?? [];
     expect(allowWrite).toContain('/Users/me/project');
     expect(allowWrite).toContain(EXPECTED_SESSION_DIR);
+    // Workspace `data/` is the documented home for cross-run state
+    // (caches, seen-sets, etc.) that automations need to update.
+    expect(allowWrite).toContain(EXPECTED_WORKSPACE_DATA_DIR);
+  });
+
+  it('does NOT add the whole workspace root to allowWrite', () => {
+    // automations.json, config.json, sources/, and other sessions' transcripts
+    // must remain write-protected even from the sandboxed agent itself.
+    const result = buildClaudeSandboxOptions({
+      session: makeSession({ sandboxed: true }),
+      workspaceRootPath: WORKSPACE,
+      sdkCwd: EXPECTED_SESSION_DIR,
+    });
+    const allowWrite = result?.filesystem?.allowWrite ?? [];
+    expect(allowWrite).not.toContain(WORKSPACE);
   });
 
   it('deduplicates allowWrite when workingDirectory equals sdkCwd', () => {
@@ -109,9 +139,10 @@ describe('buildClaudeSandboxOptions', () => {
     expect(occurrences).toBe(1);
   });
 
-  it('falls back to session dir for sessions without a working folder', () => {
+  it('falls back to session dir + workspace data for sessions without a working folder', () => {
     // When no workingDirectory is set, sdkCwd defaults to the session storage
-    // dir at session creation, so the only writable root is the session dir.
+    // dir at session creation. Writable roots are then the session dir and
+    // the workspace `data/` dir (workspace-shared scratch for automations).
     const result = buildClaudeSandboxOptions({
       session: makeSession({ sandboxed: true }),
       workspaceRootPath: WORKSPACE,
@@ -119,7 +150,9 @@ describe('buildClaudeSandboxOptions', () => {
     });
 
     const allowWrite = result?.filesystem?.allowWrite ?? [];
-    expect(allowWrite).toEqual([EXPECTED_SESSION_DIR]);
+    expect(allowWrite).toContain(EXPECTED_SESSION_DIR);
+    expect(allowWrite).toContain(EXPECTED_WORKSPACE_DATA_DIR);
+    expect(allowWrite).toHaveLength(2);
   });
 
   it('does not preset network.allowedDomains (defers to SDK prompt UX)', () => {
