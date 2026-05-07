@@ -7,22 +7,35 @@ import { getFileIcon, FileThumbnail } from './file-tree-shared'
 
 type GetWorkspaceFiles = (workspaceId: string, dirPath?: string) => Promise<SessionFile[]>
 
+/** Tracks the fetched and currently expanded folders in the workspace file tree. */
 export interface WorkspaceFilesTreeState {
+  /** Cached children for every directory that has already been fetched. */
   childrenByDirPath: Map<string, SessionFile[]>
+  /** Directory paths that should render their cached children. */
   expandedPaths: Set<string>
 }
 
+/** A flattened tree row with the depth needed for indentation. */
 export interface WorkspaceVisibleTreeRow {
   file: SessionFile
   depth: number
 }
 
+/** Props for the workspace-backed file browser section. */
 export interface WorkspaceFilesSectionProps {
   workspaceId?: string
   workspacePath?: string
   className?: string
 }
 
+function createEmptyWorkspaceFilesTreeState(): WorkspaceFilesTreeState {
+  return {
+    childrenByDirPath: new Map(),
+    expandedPaths: new Set(),
+  }
+}
+
+/** Loads the top-level files for a workspace. */
 export function loadWorkspaceRootFiles(
   workspaceId: string,
   getWorkspaceFiles: GetWorkspaceFiles = window.electronAPI.getWorkspaceFiles,
@@ -30,6 +43,7 @@ export function loadWorkspaceRootFiles(
   return getWorkspaceFiles(workspaceId, undefined)
 }
 
+/** Expands a directory, fetching its children only when they are not cached yet. */
 export async function expandWorkspaceDirectory(
   state: WorkspaceFilesTreeState,
   workspaceId: string,
@@ -47,6 +61,7 @@ export async function expandWorkspaceDirectory(
   return { childrenByDirPath, expandedPaths }
 }
 
+/** Collapses a directory while preserving its cached children. */
 export function collapseWorkspaceDirectory(
   state: WorkspaceFilesTreeState,
   dirPath: string,
@@ -59,6 +74,7 @@ export function collapseWorkspaceDirectory(
   }
 }
 
+/** Flattens the cached workspace tree into the visible row order. */
 export function getWorkspaceVisibleTree(
   rootFiles: SessionFile[],
   state: WorkspaceFilesTreeState,
@@ -79,6 +95,40 @@ export function getWorkspaceVisibleTree(
 
   visit(rootFiles, 0)
   return rows
+}
+
+function WorkspaceFileIcon({
+  file,
+  isExpanded,
+  isLoading,
+}: {
+  file: SessionFile
+  isExpanded: boolean
+  isLoading: boolean
+}) {
+  if (isLoading) {
+    return <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+  }
+
+  if (file.type !== 'directory') {
+    return <FileThumbnail file={file} />
+  }
+
+  return (
+    <>
+      <span className="absolute inset-0 flex items-center justify-center group-hover:opacity-0 transition-opacity duration-150">
+        {getFileIcon(file, isExpanded)}
+      </span>
+      <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+        <ChevronRight
+          className={cn(
+            "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+            isExpanded && "rotate-90"
+          )}
+        />
+      </span>
+    </>
+  )
 }
 
 function WorkspaceFileRow({
@@ -122,25 +172,7 @@ function WorkspaceFileRow({
       title={file.path}
     >
       <span className="relative h-3.5 w-3.5 shrink-0 flex items-center justify-center">
-        {isLoading ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-        ) : isDirectory ? (
-          <>
-            <span className="absolute inset-0 flex items-center justify-center group-hover:opacity-0 transition-opacity duration-150">
-              {getFileIcon(file, isExpanded)}
-            </span>
-            <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-              <ChevronRight
-                className={cn(
-                  "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
-                  isExpanded && "rotate-90"
-                )}
-              />
-            </span>
-          </>
-        ) : (
-          <FileThumbnail file={file} />
-        )}
+        <WorkspaceFileIcon file={file} isExpanded={isExpanded} isLoading={isLoading} />
       </span>
       <span className="flex-1 min-w-0 truncate">{file.name}</span>
     </button>
@@ -150,10 +182,7 @@ function WorkspaceFileRow({
 export function WorkspaceFilesSection({ workspaceId, workspacePath, className }: WorkspaceFilesSectionProps) {
   const { onOpenFile } = useAppShellContext()
   const [files, setFiles] = useState<SessionFile[]>([])
-  const [treeState, setTreeState] = useState<WorkspaceFilesTreeState>({
-    childrenByDirPath: new Map(),
-    expandedPaths: new Set(),
-  })
+  const [treeState, setTreeState] = useState<WorkspaceFilesTreeState>(createEmptyWorkspaceFilesTreeState)
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
   const mountedRef = useRef(true)
@@ -169,10 +198,7 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, className }:
       const workspaceFiles = await loadWorkspaceRootFiles(workspaceId)
       if (mountedRef.current) {
         setFiles(workspaceFiles)
-        setTreeState({
-          childrenByDirPath: new Map(),
-          expandedPaths: new Set(),
-        })
+        setTreeState(createEmptyWorkspaceFilesTreeState())
         setLoadingPaths(new Set())
       }
     } catch (error) {
