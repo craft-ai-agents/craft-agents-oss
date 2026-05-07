@@ -347,7 +347,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.oauth.CANCEL,
   RPC_CHANNELS.oauth.REVOKE,
 
-  // workspace — workspace config + images (sharp on headless)
+  // workspace — workspace config + files/images (sharp on headless)
+  RPC_CHANNELS.workspace.GET_FILES,
   RPC_CHANNELS.workspace.GET_PERMISSIONS,
   RPC_CHANNELS.workspace.READ_IMAGE,
   RPC_CHANNELS.workspace.WRITE_IMAGE,

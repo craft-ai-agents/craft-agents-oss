@@ -314,6 +314,7 @@ const EXPECTED_CHANNELS: string[] = [
   'window:openWorkspace',
   'window:setTrafficLights',
   'window:switchWorkspace',
+  'workspace:getFiles',
   'workspace:getPermissions',
   'workspace:readImage',
   'workspace:writeImage',

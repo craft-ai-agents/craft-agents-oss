@@ -174,6 +174,9 @@ export const CHANNEL_MAP = {
   getWorkspaceSettings: invoke(RPC_CHANNELS.workspace.SETTINGS_GET),
   updateWorkspaceSetting: invoke(RPC_CHANNELS.workspace.SETTINGS_UPDATE),
 
+  // Workspace files
+  getWorkspaceFiles: invoke(RPC_CHANNELS.workspace.GET_FILES),
+
   // Folder dialog
   openFolderDialog: invoke(RPC_CHANNELS.dialog.OPEN_FOLDER),
 

@@ -246,6 +246,7 @@ export const RPC_CHANNELS = {
     REVOKE: 'oauth:revoke',
   },
   workspace: {
+    GET_FILES: 'workspace:getFiles',
     GET_PERMISSIONS: 'workspace:getPermissions',
     READ_IMAGE: 'workspace:readImage',
     WRITE_IMAGE: 'workspace:writeImage',

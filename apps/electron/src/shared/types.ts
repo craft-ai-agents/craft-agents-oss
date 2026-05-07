@@ -429,6 +429,9 @@ export interface ElectronAPI {
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>
   updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>
 
+  // Workspace files
+  getWorkspaceFiles(workspaceId: string, dirPath?: string): Promise<SessionFile[]>
+
   // Folder dialog
   openFolderDialog(): Promise<string | null>
 

@@ -23,6 +23,7 @@ import { registerStatusesHandlers } from './statuses'
 import { registerSystemCoreHandlers } from './system'
 import { registerTransferHandlers } from './transfer'
 import { registerWorkspaceCoreHandlers } from './workspace'
+import { registerWorkspaceFilesHandlers } from './workspace-files'
 import { registerMessagingHandlers } from './messaging'
 
 export function registerCoreRpcHandlers(
@@ -48,5 +49,6 @@ export function registerCoreRpcHandlers(
   registerSystemCoreHandlers(server, deps)
   registerTransferHandlers(server)
   registerWorkspaceCoreHandlers(server, deps)
+  registerWorkspaceFilesHandlers(server, deps)
   registerMessagingHandlers(server, deps)
 }
