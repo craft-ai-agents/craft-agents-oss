@@ -483,6 +483,9 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     this.layoutAllViews(instance)
 
     this.setupWindowListeners(instance)
+    window.once('ready-to-show', () => {
+      this.markToolbarReady(instance, 'ready-to-show')
+    })
     this.instances.set(instanceId, instance)
     this.emitStateChange(instance)
     mainLog.info(`[browser-pane] toolbar version: v4-react-chromeless`)
@@ -2014,10 +2017,18 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     }
 
     this.destroyingIds.delete(instance.id)
-    this.closePopupsForParent(instance.id, 'parent_destroy')
-    this.applyAgentControlLock(instance, false)
-    this.updateNativeOverlayState(instance)
-    instance.cdp.detach()
+    const runCleanup = (label: string, action: () => void): void => {
+      try {
+        action()
+      } catch (error) {
+        mainLog.warn(`[browser-pane] finalize cleanup failed id=${instance.id} step=${label} error=${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+
+    runCleanup('closePopupsForParent', () => this.closePopupsForParent(instance.id, 'parent_destroy'))
+    runCleanup('applyAgentControlLock', () => this.applyAgentControlLock(instance, false))
+    runCleanup('updateNativeOverlayState', () => this.updateNativeOverlayState(instance))
+    runCleanup('cdp.detach', () => instance.cdp.detach())
     this.instances.delete(instance.id)
     this.removedCallback?.(instance.id)
     mainLog.info(`[browser-pane] Destroyed instance: ${instance.id} (${source})`)
@@ -3049,7 +3060,13 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       }
     })
 
-    pageWc.on('did-create-window', (popupWindow, details) => {
+    pageWc.on('did-create-window', (firstArg, secondArg, thirdArg) => {
+      const popupWindow = firstArg?.webContents ? firstArg : secondArg
+      const details = firstArg?.webContents ? secondArg : thirdArg
+      if (!popupWindow?.webContents) {
+        mainLog.warn(`[browser-pane] did-create-window ignored id=${instance.id}: missing popup webContents`)
+        return
+      }
       const popupUrl = details?.url || popupWindow.webContents.getURL?.() || 'about:blank'
       this.registerPopupWindow(instance, popupWindow, popupUrl)
     })

@@ -11,6 +11,11 @@ import { describe, it, expect, mock, beforeAll } from 'bun:test';
 // Vite's ?url suffix isn't supported by bun — mock before dynamic import.
 mock.module('pdfjs-dist/build/pdf.worker.min.mjs?url', () => ({ default: '' }));
 mock.module('pdfjs-dist', () => ({ GlobalWorkerOptions: { workerSrc: '' }, getDocument: () => ({}) }));
+mock.module('react-pdf', () => ({
+  Document: () => null,
+  Page: () => null,
+  pdfjs: { GlobalWorkerOptions: { workerSrc: '' } },
+}));
 
 let isValidMentionTrigger: (text: string, position: number) => boolean;
 
