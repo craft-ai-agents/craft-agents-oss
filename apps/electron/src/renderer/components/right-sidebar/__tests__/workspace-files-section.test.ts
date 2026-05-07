@@ -8,6 +8,7 @@ import {
   getWorkspaceVisibleTree,
   loadWorkspaceRootFiles,
   openWorkspaceEntry,
+  refreshWorkspaceVisibleFiles,
   type WorkspaceFilesTreeState,
 } from '../WorkspaceFilesSection'
 
@@ -116,6 +117,50 @@ describe('WorkspaceFilesSection data loading', () => {
       ['/workspace/src/components', 1],
       ['/workspace/src/components/Button.tsx', 2],
     ])
+  })
+
+  it('refreshes the root and expanded directories while preserving expanded state', async () => {
+    const rootFiles: SessionFile[] = [
+      { name: 'src', path: '/workspace/src', type: 'directory' },
+    ]
+    const state: WorkspaceFilesTreeState = {
+      childrenByDirPath: new Map([
+        ['/workspace/src', [
+          { name: 'old.ts', path: '/workspace/src/old.ts', type: 'file', size: 3 },
+        ]],
+        ['/workspace/docs', [
+          { name: 'cached.md', path: '/workspace/docs/cached.md', type: 'file', size: 6 },
+        ]],
+      ]),
+      expandedPaths: new Set(['/workspace/src']),
+    }
+    const calls: Array<[string, string | undefined]> = []
+    const refreshedRoot: SessionFile[] = [
+      { name: 'src', path: '/workspace/src', type: 'directory' },
+      { name: 'README.md', path: '/workspace/README.md', type: 'file', size: 12 },
+    ]
+    const refreshedSrc: SessionFile[] = [
+      { name: 'new.ts', path: '/workspace/src/new.ts', type: 'file', size: 3 },
+    ]
+
+    const refreshed = await refreshWorkspaceVisibleFiles(
+      rootFiles,
+      state,
+      'ws-1',
+      async (workspaceId, dirPath) => {
+        calls.push([workspaceId, dirPath])
+        return dirPath === '/workspace/src' ? refreshedSrc : refreshedRoot
+      },
+    )
+
+    expect(calls).toEqual([
+      ['ws-1', undefined],
+      ['ws-1', '/workspace/src'],
+    ])
+    expect(refreshed.rootFiles).toEqual(refreshedRoot)
+    expect(refreshed.treeState.childrenByDirPath.get('/workspace/src')).toEqual(refreshedSrc)
+    expect(refreshed.treeState.childrenByDirPath.get('/workspace/docs')).toEqual(state.childrenByDirPath.get('/workspace/docs'))
+    expect(refreshed.treeState.expandedPaths).toEqual(new Set(['/workspace/src']))
   })
 })
 

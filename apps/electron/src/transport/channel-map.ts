@@ -176,6 +176,9 @@ export const CHANNEL_MAP = {
 
   // Workspace files
   getWorkspaceFiles: invoke(RPC_CHANNELS.workspace.GET_FILES),
+  watchWorkspaceFiles: invoke(RPC_CHANNELS.workspace.WATCH_FILES),
+  unwatchWorkspaceFiles: invoke(RPC_CHANNELS.workspace.UNWATCH_FILES),
+  onWorkspaceFilesChanged: listener(RPC_CHANNELS.workspace.FILES_CHANGED),
 
   // Folder dialog
   openFolderDialog: invoke(RPC_CHANNELS.dialog.OPEN_FOLDER),

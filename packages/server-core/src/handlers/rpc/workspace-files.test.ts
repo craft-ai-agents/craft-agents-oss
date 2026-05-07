@@ -5,17 +5,20 @@ import { tmpdir } from 'node:os'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { HandlerDeps } from '../handler-deps'
 import type { HandlerFn, RequestContext, RpcServer } from '../../transport/types'
-import { registerWorkspaceFilesHandlers } from './workspace-files'
+import { cleanupWorkspaceFileWatchForClient, registerWorkspaceFilesHandlers } from './workspace-files'
 
 let tempRoot: string | null = null
 
 function createHarness(workspaceRoot: string) {
   const handlers = new Map<string, HandlerFn>()
+  const pushes: Array<{ channel: string, target: unknown, args: unknown[] }> = []
   const server: RpcServer = {
     handle(channel, handler) {
       handlers.set(channel, handler)
     },
-    push() {},
+    push(channel, target, ...args) {
+      pushes.push({ channel, target, args })
+    },
     async invokeClient() {
       return undefined
     },
@@ -39,7 +42,7 @@ function createHarness(workspaceRoot: string) {
     throw new Error('workspace files handler not registered')
   }
 
-  return { getFiles }
+  return { getFiles, handlers, pushes }
 }
 
 function ctx(): RequestContext {
@@ -52,6 +55,7 @@ function createWorkspaceRoot(): string {
 }
 
 afterEach(() => {
+  cleanupWorkspaceFileWatchForClient('client-1')
   if (tempRoot) rmSync(tempRoot, { recursive: true, force: true })
   tempRoot = null
 })
@@ -134,5 +138,45 @@ describe('workspace files RPC handlers', () => {
     const files = await getFiles(ctx(), 'ws-1')
 
     expect(files[0]).not.toHaveProperty('children')
+  })
+
+  it('watchWorkspaceFiles pushes a debounced change event to the calling client', async () => {
+    const root = createWorkspaceRoot()
+    const { handlers, pushes } = createHarness(root)
+    const watchFiles = handlers.get(RPC_CHANNELS.workspace.WATCH_FILES)
+    const unwatchFiles = handlers.get(RPC_CHANNELS.workspace.UNWATCH_FILES)
+
+    if (!watchFiles || !unwatchFiles) {
+      throw new Error('workspace file watcher handlers not registered')
+    }
+
+    await watchFiles(ctx(), 'ws-1')
+    writeFileSync(join(root, 'created.txt'), 'created\n')
+    await new Promise(resolve => setTimeout(resolve, 450))
+
+    expect(pushes).toContainEqual({
+      channel: RPC_CHANNELS.workspace.FILES_CHANGED,
+      target: { to: 'client', clientId: 'client-1' },
+      args: ['ws-1'],
+    })
+
+    await unwatchFiles(ctx())
+  })
+
+  it('cleanupWorkspaceFileWatchForClient stops further change notifications', async () => {
+    const root = createWorkspaceRoot()
+    const { handlers, pushes } = createHarness(root)
+    const watchFiles = handlers.get(RPC_CHANNELS.workspace.WATCH_FILES)
+
+    if (!watchFiles) {
+      throw new Error('workspace file watcher handler not registered')
+    }
+
+    await watchFiles(ctx(), 'ws-1')
+    cleanupWorkspaceFileWatchForClient('client-1')
+    writeFileSync(join(root, 'after-cleanup.txt'), 'ignored\n')
+    await new Promise(resolve => setTimeout(resolve, 450))
+
+    expect(pushes).toEqual([])
   })
 })

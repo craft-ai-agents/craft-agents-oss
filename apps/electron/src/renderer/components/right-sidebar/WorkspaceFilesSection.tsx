@@ -105,6 +105,36 @@ export function getWorkspaceVisibleTree(
   return rows
 }
 
+/** Result of refreshing the visible workspace tree after a filesystem change. */
+export interface RefreshedWorkspaceFiles {
+  rootFiles: SessionFile[]
+  treeState: WorkspaceFilesTreeState
+}
+
+/** Re-fetches root plus currently expanded folders and merges those results into the cache. */
+export async function refreshWorkspaceVisibleFiles(
+  _rootFiles: SessionFile[],
+  state: WorkspaceFilesTreeState,
+  workspaceId: string,
+  getWorkspaceFiles: GetWorkspaceFiles = window.electronAPI.getWorkspaceFiles,
+): Promise<RefreshedWorkspaceFiles> {
+  const expandedPaths = new Set(state.expandedPaths)
+  const childrenByDirPath = new Map(state.childrenByDirPath)
+  const rootFiles = await getWorkspaceFiles(workspaceId, undefined)
+
+  await Promise.all(Array.from(expandedPaths).map(async (dirPath) => {
+    childrenByDirPath.set(dirPath, await getWorkspaceFiles(workspaceId, dirPath))
+  }))
+
+  return {
+    rootFiles,
+    treeState: {
+      childrenByDirPath,
+      expandedPaths,
+    },
+  }
+}
+
 /** Actions used when opening workspace tree entries. */
 export interface WorkspaceEntryOpenActions {
   onOpenFile: (path: string) => void
@@ -262,6 +292,16 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, className }:
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
   const mountedRef = useRef(true)
+  const filesRef = useRef(files)
+  const treeStateRef = useRef(treeState)
+
+  useEffect(() => {
+    filesRef.current = files
+  }, [files])
+
+  useEffect(() => {
+    treeStateRef.current = treeState
+  }, [treeState])
 
   const loadFiles = useCallback(async () => {
     if (!workspaceId) {
@@ -289,13 +329,48 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, className }:
     }
   }, [workspaceId])
 
+  const refreshVisibleFiles = useCallback(async () => {
+    if (!workspaceId) return
+
+    try {
+      const refreshed = await refreshWorkspaceVisibleFiles(
+        filesRef.current,
+        treeStateRef.current,
+        workspaceId,
+      )
+
+      if (mountedRef.current) {
+        setFiles(refreshed.rootFiles)
+        setTreeState(refreshed.treeState)
+      }
+    } catch (error) {
+      console.error('Failed to refresh workspace files:', error)
+    }
+  }, [workspaceId])
+
   useEffect(() => {
     mountedRef.current = true
     void loadFiles()
+
+    if (!workspaceId) {
+      return () => {
+        mountedRef.current = false
+      }
+    }
+
+    void window.electronAPI.watchWorkspaceFiles(workspaceId)
+    const unsubscribe = window.electronAPI.onWorkspaceFilesChanged((changedWorkspaceId) => {
+      if (changedWorkspaceId === workspaceId && mountedRef.current) {
+        void refreshVisibleFiles()
+      }
+    })
+
     return () => {
       mountedRef.current = false
+      unsubscribe()
+      void window.electronAPI.unwatchWorkspaceFiles()
     }
-  }, [loadFiles])
+  }, [loadFiles, refreshVisibleFiles, workspaceId])
 
   const handleToggleDirectory = useCallback((file: SessionFile) => {
     if (!workspaceId || file.type !== 'directory') return

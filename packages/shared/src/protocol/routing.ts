@@ -349,6 +349,9 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
 
   // workspace — workspace config + files/images (sharp on headless)
   RPC_CHANNELS.workspace.GET_FILES,
+  RPC_CHANNELS.workspace.WATCH_FILES,
+  RPC_CHANNELS.workspace.UNWATCH_FILES,
+  RPC_CHANNELS.workspace.FILES_CHANGED,
   RPC_CHANNELS.workspace.GET_PERMISSIONS,
   RPC_CHANNELS.workspace.READ_IMAGE,
   RPC_CHANNELS.workspace.WRITE_IMAGE,

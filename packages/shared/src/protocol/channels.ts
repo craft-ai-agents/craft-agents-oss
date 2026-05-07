@@ -247,6 +247,9 @@ export const RPC_CHANNELS = {
   },
   workspace: {
     GET_FILES: 'workspace:getFiles',
+    WATCH_FILES: 'workspace:watchFiles',
+    UNWATCH_FILES: 'workspace:unwatchFiles',
+    FILES_CHANGED: 'workspace:filesChanged',
     GET_PERMISSIONS: 'workspace:getPermissions',
     READ_IMAGE: 'workspace:readImage',
     WRITE_IMAGE: 'workspace:writeImage',

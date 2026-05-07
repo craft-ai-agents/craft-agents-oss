@@ -431,6 +431,9 @@ export interface ElectronAPI {
 
   // Workspace files
   getWorkspaceFiles(workspaceId: string, dirPath?: string): Promise<SessionFile[]>
+  watchWorkspaceFiles(workspaceId: string): Promise<void>
+  unwatchWorkspaceFiles(): Promise<void>
+  onWorkspaceFilesChanged(callback: (workspaceId: string) => void): () => void
 
   // Folder dialog
   openFolderDialog(): Promise<string | null>

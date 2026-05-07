@@ -239,6 +239,27 @@ export const mockElectronAPI = {
     return []
   },
 
+  getWorkspaceFiles: async (workspaceId: string, dirPath?: string) => {
+    console.log('[Playground] getWorkspaceFiles called:', workspaceId, dirPath)
+    return []
+  },
+
+  watchWorkspaceFiles: async (workspaceId: string) => {
+    console.log('[Playground] watchWorkspaceFiles called:', workspaceId)
+  },
+
+  unwatchWorkspaceFiles: async () => {
+    console.log('[Playground] unwatchWorkspaceFiles called')
+  },
+
+  onWorkspaceFilesChanged: (callback: (workspaceId: string) => void) => {
+    console.log('[Playground] onWorkspaceFilesChanged subscribed')
+    void callback
+    return () => {
+      console.log('[Playground] onWorkspaceFilesChanged unsubscribed')
+    }
+  },
+
   watchSessionFiles: (sessionId: string) => {
     console.log('[Playground] watchSessionFiles called:', sessionId)
   },

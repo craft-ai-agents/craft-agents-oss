@@ -1,5 +1,5 @@
 import { readdir, stat } from 'node:fs/promises'
-import type { Dirent } from 'node:fs'
+import { watch, type Dirent, type FSWatcher } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { RPC_CHANNELS, type SessionFile } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '../../transport/types'
@@ -20,7 +20,30 @@ const EXCLUDED_NAMES = new Set([
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workspace.GET_FILES,
+  RPC_CHANNELS.workspace.WATCH_FILES,
+  RPC_CHANNELS.workspace.UNWATCH_FILES,
 ] as const
+
+interface ClientWorkspaceWatchState {
+  watcher: FSWatcher
+  workspaceId: string
+  debounceTimer: ReturnType<typeof setTimeout> | null
+}
+
+const clientWorkspaceWatches = new Map<string, ClientWorkspaceWatchState>()
+
+export function cleanupWorkspaceFileWatchForClient(clientId: string): void {
+  const state = clientWorkspaceWatches.get(clientId)
+  if (!state) return
+
+  if (state.debounceTimer) {
+    clearTimeout(state.debounceTimer)
+    state.debounceTimer = null
+  }
+
+  state.watcher.close()
+  clientWorkspaceWatches.delete(clientId)
+}
 
 function isExcluded(name: string): boolean {
   return name.startsWith('.') || EXCLUDED_NAMES.has(name)
@@ -77,5 +100,39 @@ export function registerWorkspaceFilesHandlers(server: RpcServer, deps: HandlerD
     const workspace = deps.sessionManager.getWorkspaces().find(w => w.id === workspaceId)
     if (!workspace) return []
     return listWorkspaceFiles(workspace.rootPath, dirPath)
+  })
+
+  server.handle(RPC_CHANNELS.workspace.WATCH_FILES, async (ctx, workspaceId: string) => {
+    const clientId = ctx.clientId
+    cleanupWorkspaceFileWatchForClient(clientId)
+
+    const workspace = deps.sessionManager.getWorkspaces().find(w => w.id === workspaceId)
+    if (!workspace) return
+
+    try {
+      const state: ClientWorkspaceWatchState = {
+        watcher: null as unknown as FSWatcher,
+        workspaceId,
+        debounceTimer: null,
+      }
+
+      state.watcher = watch(workspace.rootPath, { recursive: true }, () => {
+        if (state.debounceTimer) {
+          clearTimeout(state.debounceTimer)
+        }
+
+        state.debounceTimer = setTimeout(() => {
+          server.push(RPC_CHANNELS.workspace.FILES_CHANGED, { to: 'client', clientId }, state.workspaceId)
+        }, 300)
+      })
+
+      clientWorkspaceWatches.set(clientId, state)
+    } catch (error) {
+      deps.platform.logger.error('Failed to start workspace file watcher:', error)
+    }
+  })
+
+  server.handle(RPC_CHANNELS.workspace.UNWATCH_FILES, async (ctx) => {
+    cleanupWorkspaceFileWatchForClient(ctx.clientId)
   })
 }
