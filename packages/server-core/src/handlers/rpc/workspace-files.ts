@@ -1,4 +1,5 @@
 import { readdir, stat } from 'node:fs/promises'
+import type { Dirent } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { RPC_CHANNELS, type SessionFile } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '../../transport/types'
@@ -25,9 +26,33 @@ function isExcluded(name: string): boolean {
   return name.startsWith('.') || EXCLUDED_NAMES.has(name)
 }
 
-function isInsideWorkspace(workspaceRoot: string, dirPath: string): boolean {
-  const rel = relative(workspaceRoot, dirPath)
+function isInsideWorkspace(workspaceRoot: string, targetPath: string): boolean {
+  const rel = relative(workspaceRoot, targetPath)
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
+}
+
+async function toSessionFile(parentPath: string, entry: Dirent): Promise<SessionFile> {
+  const fullPath = join(parentPath, entry.name)
+  if (entry.isDirectory()) {
+    return {
+      name: entry.name,
+      path: fullPath,
+      type: 'directory',
+    }
+  }
+
+  const stats = await stat(fullPath)
+  return {
+    name: entry.name,
+    path: fullPath,
+    type: 'file',
+    size: stats.size,
+  }
+}
+
+function compareSessionFiles(a: SessionFile, b: SessionFile): number {
+  if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
+  return a.name.localeCompare(b.name)
 }
 
 async function listWorkspaceFiles(workspaceRoot: string, dirPath?: string): Promise<SessionFile[]> {
@@ -39,29 +64,9 @@ async function listWorkspaceFiles(workspaceRoot: string, dirPath?: string): Prom
     const entries = await readdir(target, { withFileTypes: true })
     const files = await Promise.all(entries
       .filter(entry => !isExcluded(entry.name))
-      .map(async (entry): Promise<SessionFile> => {
-        const fullPath = join(target, entry.name)
-        if (entry.isDirectory()) {
-          return {
-            name: entry.name,
-            path: fullPath,
-            type: 'directory',
-          }
-        }
+      .map(entry => toSessionFile(target, entry)))
 
-        const stats = await stat(fullPath)
-        return {
-          name: entry.name,
-          path: fullPath,
-          type: 'file',
-          size: stats.size,
-        }
-      }))
-
-    return files.sort((a, b) => {
-      if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
-      return a.name.localeCompare(b.name)
-    })
+    return files.sort(compareSessionFiles)
   } catch {
     return []
   }
