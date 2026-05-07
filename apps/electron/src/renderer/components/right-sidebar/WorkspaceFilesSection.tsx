@@ -1,10 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ChevronRight, Loader2 } from 'lucide-react'
 import type { SessionFile } from '../../../shared/types'
 import { cn } from '@/lib/utils'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { getFileIcon, FileThumbnail } from './file-tree-shared'
 
 type GetWorkspaceFiles = (workspaceId: string, dirPath?: string) => Promise<SessionFile[]>
+
+export interface WorkspaceFilesTreeState {
+  childrenByDirPath: Map<string, SessionFile[]>
+  expandedPaths: Set<string>
+}
+
+export interface WorkspaceVisibleTreeRow {
+  file: SessionFile
+  depth: number
+}
 
 export interface WorkspaceFilesSectionProps {
   workspaceId?: string
@@ -19,21 +30,86 @@ export function loadWorkspaceRootFiles(
   return getWorkspaceFiles(workspaceId, undefined)
 }
 
+export async function expandWorkspaceDirectory(
+  state: WorkspaceFilesTreeState,
+  workspaceId: string,
+  dirPath: string,
+  getWorkspaceFiles: GetWorkspaceFiles = window.electronAPI.getWorkspaceFiles,
+): Promise<WorkspaceFilesTreeState> {
+  const childrenByDirPath = new Map(state.childrenByDirPath)
+  const expandedPaths = new Set(state.expandedPaths)
+
+  if (!childrenByDirPath.has(dirPath)) {
+    childrenByDirPath.set(dirPath, await getWorkspaceFiles(workspaceId, dirPath))
+  }
+  expandedPaths.add(dirPath)
+
+  return { childrenByDirPath, expandedPaths }
+}
+
+export function collapseWorkspaceDirectory(
+  state: WorkspaceFilesTreeState,
+  dirPath: string,
+): WorkspaceFilesTreeState {
+  const expandedPaths = new Set(state.expandedPaths)
+  expandedPaths.delete(dirPath)
+  return {
+    childrenByDirPath: new Map(state.childrenByDirPath),
+    expandedPaths,
+  }
+}
+
+export function getWorkspaceVisibleTree(
+  rootFiles: SessionFile[],
+  state: WorkspaceFilesTreeState,
+): WorkspaceVisibleTreeRow[] {
+  const rows: WorkspaceVisibleTreeRow[] = []
+
+  const visit = (files: SessionFile[], depth: number) => {
+    for (const file of files) {
+      rows.push({ file, depth })
+      if (file.type !== 'directory' || !state.expandedPaths.has(file.path)) continue
+
+      const children = state.childrenByDirPath.get(file.path)
+      if (children) {
+        visit(children, depth + 1)
+      }
+    }
+  }
+
+  visit(rootFiles, 0)
+  return rows
+}
+
 function WorkspaceFileRow({
   file,
+  depth,
+  isExpanded,
+  isLoading,
   onOpenFile,
+  onToggleDirectory,
 }: {
   file: SessionFile
+  depth: number
+  isExpanded: boolean
+  isLoading: boolean
   onOpenFile: (path: string) => void
+  onToggleDirectory: (file: SessionFile) => void
 }) {
   const isDirectory = file.type === 'directory'
+
+  const handleClick = () => {
+    if (isDirectory) {
+      onToggleDirectory(file)
+    } else {
+      onOpenFile(file.path)
+    }
+  }
 
   return (
     <button
       type="button"
-      onClick={() => {
-        if (!isDirectory) onOpenFile(file.path)
-      }}
+      onClick={handleClick}
       onDoubleClick={() => {
         if (!isDirectory) onOpenFile(file.path)
       }}
@@ -42,10 +118,29 @@ function WorkspaceFileRow({
         "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
         "hover:bg-sidebar-hover transition-colors px-2"
       )}
+      style={{ paddingLeft: `${8 + depth * 20}px` }}
       title={file.path}
     >
       <span className="relative h-3.5 w-3.5 shrink-0 flex items-center justify-center">
-        {isDirectory ? getFileIcon(file) : <FileThumbnail file={file} />}
+        {isLoading ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+        ) : isDirectory ? (
+          <>
+            <span className="absolute inset-0 flex items-center justify-center group-hover:opacity-0 transition-opacity duration-150">
+              {getFileIcon(file, isExpanded)}
+            </span>
+            <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+              <ChevronRight
+                className={cn(
+                  "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+                  isExpanded && "rotate-90"
+                )}
+              />
+            </span>
+          </>
+        ) : (
+          <FileThumbnail file={file} />
+        )}
       </span>
       <span className="flex-1 min-w-0 truncate">{file.name}</span>
     </button>
@@ -55,6 +150,11 @@ function WorkspaceFileRow({
 export function WorkspaceFilesSection({ workspaceId, workspacePath, className }: WorkspaceFilesSectionProps) {
   const { onOpenFile } = useAppShellContext()
   const [files, setFiles] = useState<SessionFile[]>([])
+  const [treeState, setTreeState] = useState<WorkspaceFilesTreeState>({
+    childrenByDirPath: new Map(),
+    expandedPaths: new Set(),
+  })
+  const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
   const mountedRef = useRef(true)
 
@@ -69,6 +169,11 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, className }:
       const workspaceFiles = await loadWorkspaceRootFiles(workspaceId)
       if (mountedRef.current) {
         setFiles(workspaceFiles)
+        setTreeState({
+          childrenByDirPath: new Map(),
+          expandedPaths: new Set(),
+        })
+        setLoadingPaths(new Set())
       }
     } catch (error) {
       console.error('Failed to load workspace files:', error)
@@ -89,6 +194,49 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, className }:
       mountedRef.current = false
     }
   }, [loadFiles])
+
+  const handleToggleDirectory = useCallback((file: SessionFile) => {
+    if (!workspaceId || file.type !== 'directory') return
+
+    if (treeState.expandedPaths.has(file.path)) {
+      setTreeState((prev) => collapseWorkspaceDirectory(prev, file.path))
+      return
+    }
+
+    if (treeState.childrenByDirPath.has(file.path)) {
+      setTreeState((prev) => ({
+        childrenByDirPath: new Map(prev.childrenByDirPath),
+        expandedPaths: new Set(prev.expandedPaths).add(file.path),
+      }))
+      return
+    }
+
+    setLoadingPaths((prev) => new Set(prev).add(file.path))
+    void window.electronAPI.getWorkspaceFiles(workspaceId, file.path)
+      .then((children) => {
+        if (mountedRef.current) {
+          setTreeState((prev) => {
+            const childrenByDirPath = new Map(prev.childrenByDirPath)
+            const expandedPaths = new Set(prev.expandedPaths)
+            childrenByDirPath.set(file.path, children)
+            expandedPaths.add(file.path)
+            return { childrenByDirPath, expandedPaths }
+          })
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to load workspace directory:', error)
+      })
+      .finally(() => {
+        if (mountedRef.current) {
+          setLoadingPaths((prev) => {
+            const next = new Set(prev)
+            next.delete(file.path)
+            return next
+          })
+        }
+      })
+  }, [treeState, workspaceId])
 
   if (!workspaceId) {
     return null
@@ -118,11 +266,15 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, className }:
           </div>
         ) : (
           <nav className="grid gap-0.5 px-2">
-            {files.map((file) => (
+            {getWorkspaceVisibleTree(files, treeState).map(({ file, depth }) => (
               <WorkspaceFileRow
                 key={file.path}
                 file={file}
+                depth={depth}
+                isExpanded={treeState.expandedPaths.has(file.path)}
+                isLoading={loadingPaths.has(file.path)}
                 onOpenFile={onOpenFile}
+                onToggleDirectory={handleToggleDirectory}
               />
             ))}
           </nav>
