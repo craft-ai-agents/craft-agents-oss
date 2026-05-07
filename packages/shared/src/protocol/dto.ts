@@ -128,6 +128,10 @@ export interface CreateSessionOptions {
   labels?: string[]
   isFlagged?: boolean
   enabledSourceSlugs?: string[]
+  /** Run the session under the SDK's OS-level sandbox (Claude only currently). */
+  sandboxed?: boolean
+  /** When sandboxed is true, fail loudly if the sandbox runtime cannot start (default true). */
+  sandboxFailHard?: boolean
   /**
    * Message ID to branch from. This is a hard context cutoff:
    * the new session must not include model context from later parent messages.

@@ -1,5 +1,6 @@
 import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions, resetClaudeConfigCheck } from './options.ts';
+import { buildClaudeSandboxOptions } from './sandbox-config.ts';
 // Local type for SDK user message content blocks (text, image, document)
 // Replaces import from @anthropic-ai/sdk/resources — keeps SDK as agent-only dependency
 type ContentBlockParam =
@@ -957,6 +958,15 @@ export class ClaudeAgent extends BaseAgent {
       // field) so the catch handler reads the value passed to *this*
       // chatImpl invocation, not state left over from an earlier call.
       const resolvedCwd = this.resolveSpawnCwd({ isRetry: _isRetry, sessionId });
+      // Alias: the sandbox helpers expect `sdkCwd`; same value, different name
+      // to keep the surrounding sandbox-related code self-documenting.
+      const resolvedSdkCwd = resolvedCwd;
+
+      const sandboxOptions = buildClaudeSandboxOptions({
+        session: this.config.session,
+        workspaceRootPath: this.workspaceRootPath,
+        sdkCwd: resolvedSdkCwd,
+      });
 
       const options: Options = {
         ...getDefaultOptions(this.config.envOverrides),
@@ -1004,6 +1014,9 @@ export class ClaudeAgent extends BaseAgent {
         // session file (stored under ~/.claude/projects/{cwd-hash}/). Without this, cross-CWD
         // branches (e.g., worktree ↔ main repo) fail with "No conversation found".
         cwd: resolvedCwd,
+        // Optional OS-level sandbox (Seatbelt / bubblewrap). Only set when the
+        // session opted in; otherwise we let the SDK use its unsandboxed default.
+        ...(sandboxOptions ? { sandbox: sandboxOptions } : {}),
         includePartialMessages: true,
         // Tools configuration:
         // - Mini agents: minimal set for quick config edits (reduces token count ~70%)

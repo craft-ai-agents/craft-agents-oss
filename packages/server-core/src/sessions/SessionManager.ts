@@ -763,6 +763,10 @@ interface ManagedSession {
   // SDK cwd for session storage - set once at creation, never changes.
   // Ensures SDK can find session transcripts regardless of workingDirectory changes.
   sdkCwd?: string
+  // Whether this session runs under the SDK's OS-level sandbox (Claude only).
+  sandboxed?: boolean
+  // Whether sandbox failures should hard-error vs degrade gracefully (default true).
+  sandboxFailHard?: boolean
   // Shared viewer URL (if shared via viewer)
   sharedUrl?: string
   // Shared session ID in viewer (for revoke)
@@ -1386,6 +1390,9 @@ export class SessionManager implements ISessionManager {
                 thinkingLevel: pending.thinkingLevel,
                 automationName: pending.automationName,
                 telegramTopic: pending.telegramTopic,
+                workingDirectory: pending.workingDirectory,
+                sandboxed: pending.sandboxed,
+                sandboxFailHard: pending.sandboxFailHard,
               })
             )
           )
@@ -2514,6 +2521,8 @@ export class SessionManager implements ISessionManager {
       sessionStatus: options?.sessionStatus,
       labels: options?.labels,
       isFlagged: options?.isFlagged,
+      sandboxed: options?.sandboxed,
+      sandboxFailHard: options?.sandboxFailHard,
     })
 
     // Branch: copy messages from source session up to and including the branch point
@@ -2981,6 +2990,8 @@ export class SessionManager implements ISessionManager {
         llmConnection: managed.llmConnection,
         permissionMode: managed.permissionMode,
         previousPermissionMode: managed.previousPermissionMode,
+        sandboxed: managed.sandboxed,
+        sandboxFailHard: managed.sandboxFailHard,
       }
 
       const onSdkSessionIdUpdate = (sdkSessionId: string) => {
@@ -7176,6 +7187,9 @@ export class SessionManager implements ISessionManager {
       thinkingLevel,
       automationName,
       telegramTopic,
+      workingDirectory,
+      sandboxed,
+      sandboxFailHard,
     } = input
 
     // Warn if llmConnection was specified but doesn't resolve
@@ -7207,6 +7221,9 @@ export class SessionManager implements ISessionManager {
       llmConnection,
       model,
       thinkingLevel,
+      workingDirectory,
+      sandboxed,
+      sandboxFailHard,
     })
 
     // Populate triggeredBy metadata so title generation is explicitly skipped
