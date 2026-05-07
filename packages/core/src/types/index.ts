@@ -43,6 +43,7 @@ export type {
   TokenUsage,
   AgentEventUsage,
   RecoveryAction,
+  ErrorCode,
   TypedError,
   PermissionRequest,
   AgentEvent,
