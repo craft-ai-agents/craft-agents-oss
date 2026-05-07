@@ -120,9 +120,6 @@ describe('WorkspaceFilesSection data loading', () => {
   })
 
   it('refreshes the root and expanded directories while preserving expanded state', async () => {
-    const rootFiles: SessionFile[] = [
-      { name: 'src', path: '/workspace/src', type: 'directory' },
-    ]
     const state: WorkspaceFilesTreeState = {
       childrenByDirPath: new Map([
         ['/workspace/src', [
@@ -144,7 +141,6 @@ describe('WorkspaceFilesSection data loading', () => {
     ]
 
     const refreshed = await refreshWorkspaceVisibleFiles(
-      rootFiles,
       state,
       'ws-1',
       async (workspaceId, dirPath) => {

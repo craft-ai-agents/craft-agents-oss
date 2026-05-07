@@ -113,7 +113,6 @@ export interface RefreshedWorkspaceFiles {
 
 /** Re-fetches root plus currently expanded folders and merges those results into the cache. */
 export async function refreshWorkspaceVisibleFiles(
-  _rootFiles: SessionFile[],
   state: WorkspaceFilesTreeState,
   workspaceId: string,
   getWorkspaceFiles: GetWorkspaceFiles = window.electronAPI.getWorkspaceFiles,
@@ -292,12 +291,7 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, className }:
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
   const mountedRef = useRef(true)
-  const filesRef = useRef(files)
   const treeStateRef = useRef(treeState)
-
-  useEffect(() => {
-    filesRef.current = files
-  }, [files])
 
   useEffect(() => {
     treeStateRef.current = treeState
@@ -334,7 +328,6 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, className }:
 
     try {
       const refreshed = await refreshWorkspaceVisibleFiles(
-        filesRef.current,
         treeStateRef.current,
         workspaceId,
       )

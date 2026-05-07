@@ -2,6 +2,7 @@ import { readdir, stat } from 'node:fs/promises'
 import { watch, type Dirent, type FSWatcher } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { RPC_CHANNELS, type SessionFile } from '@craft-agent/shared/protocol'
+import { pushTyped } from '../../transport'
 import type { RpcServer } from '../../transport/types'
 import type { HandlerDeps } from '../handler-deps'
 
@@ -26,23 +27,51 @@ export const HANDLED_CHANNELS = [
 
 interface ClientWorkspaceWatchState {
   watcher: FSWatcher
-  workspaceId: string
-  debounceTimer: ReturnType<typeof setTimeout> | null
+  clearDebounce: () => void
 }
 
 const clientWorkspaceWatches = new Map<string, ClientWorkspaceWatchState>()
+const WORKSPACE_FILE_CHANGE_DEBOUNCE_MS = 300
 
+/**
+ * Clean up workspace file watcher for a client.
+ * Called from disconnect hooks to prevent watcher leaks.
+ */
 export function cleanupWorkspaceFileWatchForClient(clientId: string): void {
   const state = clientWorkspaceWatches.get(clientId)
   if (!state) return
 
-  if (state.debounceTimer) {
-    clearTimeout(state.debounceTimer)
-    state.debounceTimer = null
-  }
-
+  state.clearDebounce()
   state.watcher.close()
   clientWorkspaceWatches.delete(clientId)
+}
+
+function createWorkspaceFileWatchState(
+  server: RpcServer,
+  clientId: string,
+  workspaceId: string,
+  workspaceRootPath: string,
+): ClientWorkspaceWatchState {
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+  const clearDebounce = () => {
+    if (!debounceTimer) return
+    clearTimeout(debounceTimer)
+    debounceTimer = null
+  }
+
+  const watcher = watch(workspaceRootPath, { recursive: true }, () => {
+    clearDebounce()
+
+    debounceTimer = setTimeout(() => {
+      pushTyped(server, RPC_CHANNELS.workspace.FILES_CHANGED, { to: 'client', clientId }, workspaceId)
+    }, WORKSPACE_FILE_CHANGE_DEBOUNCE_MS)
+  })
+
+  return {
+    watcher,
+    clearDebounce,
+  }
 }
 
 function isExcluded(name: string): boolean {
@@ -110,23 +139,10 @@ export function registerWorkspaceFilesHandlers(server: RpcServer, deps: HandlerD
     if (!workspace) return
 
     try {
-      const state: ClientWorkspaceWatchState = {
-        watcher: null as unknown as FSWatcher,
-        workspaceId,
-        debounceTimer: null,
-      }
-
-      state.watcher = watch(workspace.rootPath, { recursive: true }, () => {
-        if (state.debounceTimer) {
-          clearTimeout(state.debounceTimer)
-        }
-
-        state.debounceTimer = setTimeout(() => {
-          server.push(RPC_CHANNELS.workspace.FILES_CHANGED, { to: 'client', clientId }, state.workspaceId)
-        }, 300)
-      })
-
-      clientWorkspaceWatches.set(clientId, state)
+      clientWorkspaceWatches.set(
+        clientId,
+        createWorkspaceFileWatchState(server, clientId, workspaceId, workspace.rootPath),
+      )
     } catch (error) {
       deps.platform.logger.error('Failed to start workspace file watcher:', error)
     }
