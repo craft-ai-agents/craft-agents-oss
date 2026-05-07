@@ -26,6 +26,7 @@ afterEach(() => {
 function mockWorkspaceElectronApi(filesByDirPath: Map<string | undefined, SessionFile[]>) {
   const calls: Array<[string, string | undefined]> = []
   let filesChangedListener: ((workspaceId: string) => void) | undefined
+  let unsubscribed = false
   const api = {
     getWorkspaceFiles: async (workspaceId: string, dirPath?: string) => {
       calls.push([workspaceId, dirPath])
@@ -33,7 +34,9 @@ function mockWorkspaceElectronApi(filesByDirPath: Map<string | undefined, Sessio
     },
     onWorkspaceFilesChanged: (callback: (workspaceId: string) => void) => {
       filesChangedListener = callback
-      return () => {}
+      return () => {
+        unsubscribed = true
+      }
     },
   }
 
@@ -44,10 +47,18 @@ function mockWorkspaceElectronApi(filesByDirPath: Map<string | undefined, Sessio
   })
 
   return {
-    api,
     calls,
     emitFilesChanged: (workspaceId: string) => filesChangedListener?.(workspaceId),
+    wasUnsubscribed: () => unsubscribed,
   }
+}
+
+function visibleRows(rootFiles: SessionFile[], state: WorkspaceFilesTreeState) {
+  return getWorkspaceVisibleTree(rootFiles, state).map(({ file, depth }) => [file.path, depth])
+}
+
+function visiblePaths(rootFiles: SessionFile[], state: WorkspaceFilesTreeState) {
+  return getWorkspaceVisibleTree(rootFiles, state).map(({ file }) => file.path)
 }
 
 describe('WorkspaceFilesSection data loading', () => {
@@ -80,7 +91,7 @@ describe('WorkspaceFilesSection data loading', () => {
     const next = await expandWorkspaceDirectory(state, 'ws-1', '/workspace/src')
 
     expect(calls).toEqual([['ws-1', '/workspace/src']])
-    expect(getWorkspaceVisibleTree(rootFiles, next).map(({ file, depth }) => [file.path, depth])).toEqual([
+    expect(visibleRows(rootFiles, next)).toEqual([
       ['/workspace/src', 0],
       ['/workspace/src/index.ts', 1],
     ])
@@ -102,7 +113,7 @@ describe('WorkspaceFilesSection data loading', () => {
     const next = await expandWorkspaceDirectory(state, 'ws-1', '/workspace/src')
 
     expect(calls).toEqual([])
-    expect(getWorkspaceVisibleTree(rootFiles, next).map(({ file, depth }) => [file.path, depth])).toEqual([
+    expect(visibleRows(rootFiles, next)).toEqual([
       ['/workspace/src', 0],
       ['/workspace/src/index.ts', 1],
     ])
@@ -125,8 +136,8 @@ describe('WorkspaceFilesSection data loading', () => {
     const reExpanded = await expandWorkspaceDirectory(collapsed, 'ws-1', '/workspace/src')
 
     expect(calls).toEqual([])
-    expect(getWorkspaceVisibleTree(rootFiles, collapsed).map(({ file }) => file.path)).toEqual(['/workspace/src'])
-    expect(getWorkspaceVisibleTree(rootFiles, reExpanded).map(({ file, depth }) => [file.path, depth])).toEqual([
+    expect(visiblePaths(rootFiles, collapsed)).toEqual(['/workspace/src'])
+    expect(visibleRows(rootFiles, reExpanded)).toEqual([
       ['/workspace/src', 0],
       ['/workspace/src/index.ts', 1],
     ])
@@ -149,7 +160,7 @@ describe('WorkspaceFilesSection data loading', () => {
 
     const next = await expandWorkspaceDirectory(state, 'ws-1', '/workspace/tests')
 
-    expect(getWorkspaceVisibleTree(rootFiles, next).map(({ file, depth }) => [file.path, depth])).toEqual([
+    expect(visibleRows(rootFiles, next)).toEqual([
       ['/workspace/src', 0],
       ['/workspace/src/index.ts', 1],
       ['/workspace/tests', 0],
@@ -173,7 +184,7 @@ describe('WorkspaceFilesSection data loading', () => {
       expandedPaths: new Set(['/workspace/src', '/workspace/src/components']),
     }
 
-    expect(getWorkspaceVisibleTree(rootFiles, state).map(({ file, depth }) => [file.path, depth])).toEqual([
+    expect(visibleRows(rootFiles, state)).toEqual([
       ['/workspace/src', 0],
       ['/workspace/src/components', 1],
       ['/workspace/src/components/Button.tsx', 2],
@@ -211,7 +222,7 @@ describe('WorkspaceFilesSection data loading', () => {
       ['ws-1', '/workspace/src'],
     ])
     expect(refreshed.rootFiles.map((file) => file.path)).toEqual(['/workspace/src', '/workspace/README.md'])
-    expect(getWorkspaceVisibleTree(refreshed.rootFiles, refreshed.treeState).map(({ file, depth }) => [file.path, depth])).toEqual([
+    expect(visibleRows(refreshed.rootFiles, refreshed.treeState)).toEqual([
       ['/workspace/src', 0],
       ['/workspace/src/new.ts', 1],
       ['/workspace/README.md', 0],
@@ -220,27 +231,18 @@ describe('WorkspaceFilesSection data loading', () => {
 
   it('refreshes visible files when workspace file changes fire for the active workspace', () => {
     const refreshed: string[] = []
-    let listener: ((workspaceId: string) => void) | undefined
-    let unsubscribed = false
-    const api = {
-      onWorkspaceFilesChanged: (callback: (workspaceId: string) => void) => {
-        listener = callback
-        return () => {
-          unsubscribed = true
-        }
-      },
-    }
+    const filesChanged = mockWorkspaceElectronApi(new Map())
 
     const unsubscribe = subscribeToWorkspaceFileChanges('ws-1', () => {
       refreshed.push('ws-1')
-    }, api)
+    })
 
-    listener?.('ws-2')
-    listener?.('ws-1')
+    filesChanged.emitFilesChanged('ws-2')
+    filesChanged.emitFilesChanged('ws-1')
     unsubscribe()
 
     expect(refreshed).toEqual(['ws-1'])
-    expect(unsubscribed).toBe(true)
+    expect(filesChanged.wasUnsubscribed()).toBe(true)
   })
 })
 
