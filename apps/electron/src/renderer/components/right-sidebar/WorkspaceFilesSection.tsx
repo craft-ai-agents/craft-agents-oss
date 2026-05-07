@@ -105,25 +105,19 @@ export function getWorkspaceVisibleTree(
   return rows
 }
 
+/** Actions used when opening workspace tree entries. */
 export interface WorkspaceEntryOpenActions {
   onOpenFile: (path: string) => void
   openFile: (path: string) => void
 }
 
-export interface WorkspaceEntryContextMenuActions extends WorkspaceEntryOpenActions {
-  showInFolder: (path: string) => void
-}
-
-export interface WorkspaceEntryContextMenuAction {
-  label: string
-  select: () => void
-}
-
+/** Actions used when a workspace tree entry is clicked. */
 export interface WorkspaceEntryActivationActions {
   onOpenFile: (path: string) => void
   onToggleDirectory: (file: SessionFile) => void
 }
 
+/** Handles a single-click activation for files and directories. */
 export function activateWorkspaceEntry(file: SessionFile, actions: WorkspaceEntryActivationActions): void {
   if (file.type === 'directory') {
     actions.onToggleDirectory(file)
@@ -133,6 +127,7 @@ export function activateWorkspaceEntry(file: SessionFile, actions: WorkspaceEntr
   actions.onOpenFile(file.path)
 }
 
+/** Handles a double-click activation without toggling directories. */
 export function doubleActivateWorkspaceEntry(
   file: SessionFile,
   actions: Pick<WorkspaceEntryActivationActions, 'onOpenFile'>,
@@ -142,6 +137,7 @@ export function doubleActivateWorkspaceEntry(
   }
 }
 
+/** Opens files through the app shell and directories through the platform file manager. */
 export function openWorkspaceEntry(file: SessionFile, actions: WorkspaceEntryOpenActions): void {
   if (file.type === 'directory') {
     actions.openFile(file.path)
@@ -149,23 +145,6 @@ export function openWorkspaceEntry(file: SessionFile, actions: WorkspaceEntryOpe
   }
 
   actions.onOpenFile(file.path)
-}
-
-export function getWorkspaceEntryContextMenuActions(
-  file: SessionFile,
-  fileManagerName: string,
-  actions: WorkspaceEntryContextMenuActions,
-): WorkspaceEntryContextMenuAction[] {
-  return [
-    {
-      label: 'Open',
-      select: () => openWorkspaceEntry(file, actions),
-    },
-    {
-      label: `Show in ${fileManagerName}`,
-      select: () => actions.showInFolder(file.path),
-    },
-  ]
 }
 
 function WorkspaceFileIcon({
@@ -219,14 +198,20 @@ function WorkspaceFileRow({
 }) {
   const { t } = useTranslation()
   const fileManagerName = getFileManagerName()
-  const contextMenuActions = getWorkspaceEntryContextMenuActions(file, fileManagerName, {
-    onOpenFile,
-    openFile: (path) => window.electronAPI.openFile(path),
-    showInFolder: (path) => window.electronAPI.showInFolder(path),
-  })
 
   const handleClick = () => {
     activateWorkspaceEntry(file, { onOpenFile, onToggleDirectory })
+  }
+
+  const handleContextOpen = () => {
+    openWorkspaceEntry(file, {
+      onOpenFile,
+      openFile: (path) => window.electronAPI.openFile(path),
+    })
+  }
+
+  const handleShowInFolder = () => {
+    window.electronAPI.showInFolder(file.path)
   }
 
   const buttonElement = (
@@ -257,11 +242,11 @@ function WorkspaceFileRow({
         {buttonElement}
       </ContextMenuTrigger>
       <StyledContextMenuContent>
-        <StyledContextMenuItem onSelect={contextMenuActions[0].select}>
+        <StyledContextMenuItem onSelect={handleContextOpen}>
           <ExternalLink className="h-3.5 w-3.5" />
           {t("chat.openFile")}
         </StyledContextMenuItem>
-        <StyledContextMenuItem onSelect={contextMenuActions[1].select}>
+        <StyledContextMenuItem onSelect={handleShowInFolder}>
           <FolderOpen className="h-3.5 w-3.5" />
           {t("chat.showInFileManager", { fileManager: fileManagerName })}
         </StyledContextMenuItem>

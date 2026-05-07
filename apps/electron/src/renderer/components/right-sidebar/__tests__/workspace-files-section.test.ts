@@ -5,7 +5,6 @@ import {
   collapseWorkspaceDirectory,
   doubleActivateWorkspaceEntry,
   expandWorkspaceDirectory,
-  getWorkspaceEntryContextMenuActions,
   getWorkspaceVisibleTree,
   loadWorkspaceRootFiles,
   openWorkspaceEntry,
@@ -174,43 +173,21 @@ describe('WorkspaceFilesSection file interactions', () => {
     expect(externallyOpened).toEqual([])
   })
 
-  it('builds context menu actions for opening and revealing entries', () => {
+  it('opens directories through the platform file manager', () => {
     const opened: string[] = []
     const externallyOpened: string[] = []
-    const revealed: string[] = []
-    const file: SessionFile = {
-      name: 'README.md',
-      path: '/workspace/README.md',
-      type: 'file',
-      size: 42,
-    }
     const directory: SessionFile = {
       name: 'src',
       path: '/workspace/src',
       type: 'directory',
     }
 
-    const fileActions = getWorkspaceEntryContextMenuActions(file, 'Finder', {
+    openWorkspaceEntry(directory, {
       onOpenFile: (path) => opened.push(path),
       openFile: (path) => externallyOpened.push(path),
-      showInFolder: (path) => revealed.push(path),
-    })
-    const directoryActions = getWorkspaceEntryContextMenuActions(directory, 'Finder', {
-      onOpenFile: (path) => opened.push(path),
-      openFile: (path) => externallyOpened.push(path),
-      showInFolder: (path) => revealed.push(path),
     })
 
-    expect(fileActions.map((action) => action.label)).toEqual(['Open', 'Show in Finder'])
-    expect(directoryActions.map((action) => action.label)).toEqual(['Open', 'Show in Finder'])
-
-    fileActions[0].select()
-    directoryActions[0].select()
-    fileActions[1].select()
-    directoryActions[1].select()
-
-    expect(opened).toEqual(['/workspace/README.md'])
+    expect(opened).toEqual([])
     expect(externallyOpened).toEqual(['/workspace/src'])
-    expect(revealed).toEqual(['/workspace/README.md', '/workspace/src'])
   })
 })
