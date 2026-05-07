@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronRight, Loader2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { ChevronRight, ExternalLink, FolderOpen, Loader2 } from 'lucide-react'
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  StyledContextMenuContent,
+  StyledContextMenuItem,
+} from '@/components/ui/styled-context-menu'
 import type { SessionFile } from '../../../shared/types'
 import { cn } from '@/lib/utils'
 import { useAppShellContext } from '@/context/AppShellContext'
+import { getFileManagerName } from '@/lib/platform'
 import { getFileIcon, FileThumbnail } from './file-tree-shared'
 
 type GetWorkspaceFiles = (workspaceId: string, dirPath?: string) => Promise<SessionFile[]>
@@ -97,6 +105,69 @@ export function getWorkspaceVisibleTree(
   return rows
 }
 
+export interface WorkspaceEntryOpenActions {
+  onOpenFile: (path: string) => void
+  openFile: (path: string) => void
+}
+
+export interface WorkspaceEntryContextMenuActions extends WorkspaceEntryOpenActions {
+  showInFolder: (path: string) => void
+}
+
+export interface WorkspaceEntryContextMenuAction {
+  label: string
+  select: () => void
+}
+
+export interface WorkspaceEntryActivationActions {
+  onOpenFile: (path: string) => void
+  onToggleDirectory: (file: SessionFile) => void
+}
+
+export function activateWorkspaceEntry(file: SessionFile, actions: WorkspaceEntryActivationActions): void {
+  if (file.type === 'directory') {
+    actions.onToggleDirectory(file)
+    return
+  }
+
+  actions.onOpenFile(file.path)
+}
+
+export function doubleActivateWorkspaceEntry(
+  file: SessionFile,
+  actions: Pick<WorkspaceEntryActivationActions, 'onOpenFile'>,
+): void {
+  if (file.type !== 'directory') {
+    actions.onOpenFile(file.path)
+  }
+}
+
+export function openWorkspaceEntry(file: SessionFile, actions: WorkspaceEntryOpenActions): void {
+  if (file.type === 'directory') {
+    actions.openFile(file.path)
+    return
+  }
+
+  actions.onOpenFile(file.path)
+}
+
+export function getWorkspaceEntryContextMenuActions(
+  file: SessionFile,
+  fileManagerName: string,
+  actions: WorkspaceEntryContextMenuActions,
+): WorkspaceEntryContextMenuAction[] {
+  return [
+    {
+      label: 'Open',
+      select: () => openWorkspaceEntry(file, actions),
+    },
+    {
+      label: `Show in ${fileManagerName}`,
+      select: () => actions.showInFolder(file.path),
+    },
+  ]
+}
+
 function WorkspaceFileIcon({
   file,
   isExpanded,
@@ -146,22 +217,24 @@ function WorkspaceFileRow({
   onOpenFile: (path: string) => void
   onToggleDirectory: (file: SessionFile) => void
 }) {
-  const isDirectory = file.type === 'directory'
+  const { t } = useTranslation()
+  const fileManagerName = getFileManagerName()
+  const contextMenuActions = getWorkspaceEntryContextMenuActions(file, fileManagerName, {
+    onOpenFile,
+    openFile: (path) => window.electronAPI.openFile(path),
+    showInFolder: (path) => window.electronAPI.showInFolder(path),
+  })
 
   const handleClick = () => {
-    if (isDirectory) {
-      onToggleDirectory(file)
-    } else {
-      onOpenFile(file.path)
-    }
+    activateWorkspaceEntry(file, { onOpenFile, onToggleDirectory })
   }
 
-  return (
+  const buttonElement = (
     <button
       type="button"
       onClick={handleClick}
       onDoubleClick={() => {
-        if (!isDirectory) onOpenFile(file.path)
+        doubleActivateWorkspaceEntry(file, { onOpenFile })
       }}
       className={cn(
         "group flex w-full min-w-0 overflow-hidden items-center gap-2 rounded-[6px] py-[5px] text-[13px] select-none outline-none text-left",
@@ -176,6 +249,24 @@ function WorkspaceFileRow({
       </span>
       <span className="flex-1 min-w-0 truncate">{file.name}</span>
     </button>
+  )
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        {buttonElement}
+      </ContextMenuTrigger>
+      <StyledContextMenuContent>
+        <StyledContextMenuItem onSelect={contextMenuActions[0].select}>
+          <ExternalLink className="h-3.5 w-3.5" />
+          {t("chat.openFile")}
+        </StyledContextMenuItem>
+        <StyledContextMenuItem onSelect={contextMenuActions[1].select}>
+          <FolderOpen className="h-3.5 w-3.5" />
+          {t("chat.showInFileManager", { fileManager: fileManagerName })}
+        </StyledContextMenuItem>
+      </StyledContextMenuContent>
+    </ContextMenu>
   )
 }
 

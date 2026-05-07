@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'bun:test'
 import type { SessionFile } from '../../../../shared/types'
 import {
+  activateWorkspaceEntry,
   collapseWorkspaceDirectory,
+  doubleActivateWorkspaceEntry,
   expandWorkspaceDirectory,
+  getWorkspaceEntryContextMenuActions,
   getWorkspaceVisibleTree,
   loadWorkspaceRootFiles,
+  openWorkspaceEntry,
   type WorkspaceFilesTreeState,
 } from '../WorkspaceFilesSection'
 
@@ -113,5 +117,100 @@ describe('WorkspaceFilesSection data loading', () => {
       ['/workspace/src/components', 1],
       ['/workspace/src/components/Button.tsx', 2],
     ])
+  })
+})
+
+describe('WorkspaceFilesSection file interactions', () => {
+  it('activates file rows and directory rows with the expected click behavior', () => {
+    const opened: string[] = []
+    const toggled: string[] = []
+    const file: SessionFile = {
+      name: 'README.md',
+      path: '/workspace/README.md',
+      type: 'file',
+      size: 42,
+    }
+    const directory: SessionFile = {
+      name: 'src',
+      path: '/workspace/src',
+      type: 'directory',
+    }
+
+    activateWorkspaceEntry(file, {
+      onOpenFile: (path) => opened.push(path),
+      onToggleDirectory: (entry) => toggled.push(entry.path),
+    })
+    doubleActivateWorkspaceEntry(file, {
+      onOpenFile: (path) => opened.push(path),
+    })
+    activateWorkspaceEntry(directory, {
+      onOpenFile: (path) => opened.push(path),
+      onToggleDirectory: (entry) => toggled.push(entry.path),
+    })
+    doubleActivateWorkspaceEntry(directory, {
+      onOpenFile: (path) => opened.push(path),
+    })
+
+    expect(opened).toEqual(['/workspace/README.md', '/workspace/README.md'])
+    expect(toggled).toEqual(['/workspace/src'])
+  })
+
+  it('opens files through the app shell interceptor', () => {
+    const opened: string[] = []
+    const externallyOpened: string[] = []
+    const file: SessionFile = {
+      name: 'README.md',
+      path: '/workspace/README.md',
+      type: 'file',
+      size: 42,
+    }
+
+    openWorkspaceEntry(file, {
+      onOpenFile: (path) => opened.push(path),
+      openFile: (path) => externallyOpened.push(path),
+    })
+
+    expect(opened).toEqual(['/workspace/README.md'])
+    expect(externallyOpened).toEqual([])
+  })
+
+  it('builds context menu actions for opening and revealing entries', () => {
+    const opened: string[] = []
+    const externallyOpened: string[] = []
+    const revealed: string[] = []
+    const file: SessionFile = {
+      name: 'README.md',
+      path: '/workspace/README.md',
+      type: 'file',
+      size: 42,
+    }
+    const directory: SessionFile = {
+      name: 'src',
+      path: '/workspace/src',
+      type: 'directory',
+    }
+
+    const fileActions = getWorkspaceEntryContextMenuActions(file, 'Finder', {
+      onOpenFile: (path) => opened.push(path),
+      openFile: (path) => externallyOpened.push(path),
+      showInFolder: (path) => revealed.push(path),
+    })
+    const directoryActions = getWorkspaceEntryContextMenuActions(directory, 'Finder', {
+      onOpenFile: (path) => opened.push(path),
+      openFile: (path) => externallyOpened.push(path),
+      showInFolder: (path) => revealed.push(path),
+    })
+
+    expect(fileActions.map((action) => action.label)).toEqual(['Open', 'Show in Finder'])
+    expect(directoryActions.map((action) => action.label)).toEqual(['Open', 'Show in Finder'])
+
+    fileActions[0].select()
+    directoryActions[0].select()
+    fileActions[1].select()
+    directoryActions[1].select()
+
+    expect(opened).toEqual(['/workspace/README.md'])
+    expect(externallyOpened).toEqual(['/workspace/src'])
+    expect(revealed).toEqual(['/workspace/README.md', '/workspace/src'])
   })
 })
