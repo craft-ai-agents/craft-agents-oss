@@ -867,6 +867,9 @@ export const isSessionsNavigation = (
   state: NavigationState
 ): state is SessionsNavigationState => state.navigator === 'sessions'
 
+export const isSidebarDrilldownMode = (state: NavigationState): boolean =>
+  isSessionsNavigation(state)
+
 export const isSourcesNavigation = (
   state: NavigationState
 ): state is SourcesNavigationState => state.navigator === 'sources'
