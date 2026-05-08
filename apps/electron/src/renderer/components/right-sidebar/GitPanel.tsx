@@ -268,7 +268,7 @@ export function GitPanel({ workspacePath, className }: GitPanelProps) {
   if (!workspacePath) {
     return (
       <div className={cn('h-full bg-background', className)}>
-        <EmptyState>No session folder selected</EmptyState>
+        <EmptyState>No working directory set</EmptyState>
       </div>
     )
   }
