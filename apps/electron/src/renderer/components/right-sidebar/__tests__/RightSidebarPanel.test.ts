@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import * as storage from '@/lib/local-storage'
-import { resolveGitPanelWorkspacePath } from '../RightSidebarPanel'
 
 // Minimal localStorage shim for tests
 function makeLocalStorage() {
@@ -70,17 +69,5 @@ describe('RightSidebarPanel persistence', () => {
     storage.set(storage.KEYS.rightSidebarVisible, true, 'ws-z')
     const raw = globalThis.localStorage.getItem('craft-right-sidebar-visible:ws-z')
     expect(raw).toBe('true')
-  })
-})
-
-describe('RightSidebarPanel git path resolution', () => {
-  it('uses the focused session working directory instead of the workspace root', () => {
-    expect(resolveGitPanelWorkspacePath('/repo/src', '/metadata/workspace')).toBe('/repo/src')
-  })
-
-  it('returns undefined for sentinel working directories', () => {
-    expect(resolveGitPanelWorkspacePath(undefined, '/metadata/workspace')).toBeUndefined()
-    expect(resolveGitPanelWorkspacePath('none', '/metadata/workspace')).toBeUndefined()
-    expect(resolveGitPanelWorkspacePath('user_default', '/metadata/workspace')).toBeUndefined()
   })
 })

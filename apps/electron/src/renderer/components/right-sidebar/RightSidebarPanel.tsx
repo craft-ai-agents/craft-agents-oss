@@ -35,13 +35,6 @@ export interface RightSidebarPanelProps {
   sessionId?: string
 }
 
-export function resolveGitPanelWorkspacePath(
-  workingDirectory: string | undefined,
-  workspacePath: string | undefined,
-): string | undefined {
-  return resolveCwdRoot(workingDirectory, workspacePath)
-}
-
 export function RightSidebarPanel({
   workspaceId,
   sessionId,
@@ -50,8 +43,7 @@ export function RightSidebarPanel({
   const activeWorkspace = useActiveWorkspace()
   const sessionFolderPath = focusedSession?.sessionFolderPath
   const workspacePath = activeWorkspace?.rootPath
-  const workspaceFilesCwdPath = resolveCwdRoot(focusedSession?.workingDirectory, workspacePath)
-  const gitPanelWorkspacePath = resolveGitPanelWorkspacePath(focusedSession?.workingDirectory, workspacePath)
+  const cwdRoot = resolveCwdRoot(focusedSession?.workingDirectory, workspacePath)
   const [isOpen, setIsOpen] = useState<boolean>(() =>
     storage.get(storage.KEYS.rightSidebarVisible, true, workspaceId)
   )
@@ -191,13 +183,13 @@ export function RightSidebarPanel({
                 />
               )}
               {activeTab === 'git' && (
-                <GitPanel workspacePath={gitPanelWorkspacePath} className="h-full" />
+                <GitPanel workspacePath={cwdRoot} className="h-full" />
               )}
               {activeTab === 'workspace' && (
                 <WorkspaceFilesSection
                   workspaceId={workspaceId}
                   workspacePath={workspacePath}
-                  cwdPath={workspaceFilesCwdPath}
+                  cwdPath={cwdRoot}
                   className="h-full"
                 />
               )}
