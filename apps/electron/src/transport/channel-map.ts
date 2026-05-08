@@ -294,6 +294,8 @@ export const CHANNEL_MAP = {
   // Appearance settings
   getRichToolDescriptions: invoke(RPC_CHANNELS.appearance.GET_RICH_TOOL_DESCRIPTIONS),
   setRichToolDescriptions: invoke(RPC_CHANNELS.appearance.SET_RICH_TOOL_DESCRIPTIONS),
+  getDefaultZoomLevel: invoke(RPC_CHANNELS.appearance.GET_DEFAULT_ZOOM_LEVEL),
+  setDefaultZoomLevel: invoke(RPC_CHANNELS.appearance.SET_DEFAULT_ZOOM_LEVEL),
 
   // Tools settings
   getBrowserToolEnabled: invoke(RPC_CHANNELS.tools.GET_BROWSER_TOOL_ENABLED),

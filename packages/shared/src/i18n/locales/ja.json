@@ -771,6 +771,8 @@
   "settings.appearance.commandsHeader": "コマンド",
   "settings.appearance.connectionIcons": "接続アイコン",
   "settings.appearance.connectionIconsDesc": "セッションリストとモデルセレクターにプロバイダーアイコンを表示します",
+  "settings.appearance.defaultZoomLevel": "Default zoom level",
+  "settings.appearance.defaultZoomLevelDesc": "Set the permanent app zoom level for all windows",
   "settings.appearance.dark": "ダーク",
   "settings.appearance.defaultTheme": "デフォルトテーマ",
   "settings.appearance.description": "テーマ、フォント、ツールアイコン",

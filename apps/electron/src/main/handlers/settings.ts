@@ -1,3 +1,4 @@
+import { BrowserWindow } from 'electron'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
@@ -5,6 +6,7 @@ import type { HandlerDeps } from './handler-deps'
 export const GUI_HANDLED_CHANNELS = [
   RPC_CHANNELS.power.SET_KEEP_AWAKE,
   RPC_CHANNELS.settings.SET_NETWORK_PROXY,
+  RPC_CHANNELS.appearance.SET_DEFAULT_ZOOM_LEVEL,
 ] as const
 
 // ============================================================
@@ -26,5 +28,17 @@ export function registerSettingsGuiHandlers(server: RpcServer, _deps: HandlerDep
   server.handle(RPC_CHANNELS.settings.SET_NETWORK_PROXY, async (_ctx, settings: import('@craft-agent/shared/config/types').NetworkProxySettings) => {
     const { updateConfiguredProxySettings } = await import('../network-proxy')
     await updateConfiguredProxySettings(settings)
+  })
+
+  // Set default zoom level and apply immediately to all open Electron windows
+  server.handle(RPC_CHANNELS.appearance.SET_DEFAULT_ZOOM_LEVEL, async (_ctx, level: number) => {
+    const { setDefaultZoomLevel, getDefaultZoomLevel } = await import('@craft-agent/shared/config/storage')
+    setDefaultZoomLevel(level)
+    const zoomFactor = getDefaultZoomLevel() / 100
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+        win.webContents.setZoomFactor(zoomFactor)
+      }
+    }
   })
 }

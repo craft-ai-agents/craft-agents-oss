@@ -771,6 +771,8 @@
   "settings.appearance.commandsHeader": "Befehle",
   "settings.appearance.connectionIcons": "Verbindungssymbole",
   "settings.appearance.connectionIconsDesc": "Anbietersymbole in der Sitzungsliste und Modellauswahl anzeigen",
+  "settings.appearance.defaultZoomLevel": "Default zoom level",
+  "settings.appearance.defaultZoomLevelDesc": "Set the permanent app zoom level for all windows",
   "settings.appearance.dark": "Dunkel",
   "settings.appearance.defaultTheme": "Standarddesign",
   "settings.appearance.description": "Design, Schrift, Werkzeugsymbole",

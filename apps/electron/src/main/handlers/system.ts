@@ -346,8 +346,9 @@ export function registerSystemGuiHandlers(server: RpcServer, deps: HandlerDeps):
 
   server.handle(RPC_CHANNELS.menu.ZOOM_RESET, async (ctx) => {
     if (!windowManager) return
+    const { getDefaultZoomLevel } = await import('@craft-agent/shared/config/storage')
     const win = windowManager.getWindowByWebContentsId(ctx.webContentsId!)
-    win?.webContents.setZoomFactor(1.0)
+    win?.webContents.setZoomFactor(getDefaultZoomLevel() / 100)
   })
 
   server.handle(RPC_CHANNELS.menu.TOGGLE_DEV_TOOLS, async (ctx) => {
