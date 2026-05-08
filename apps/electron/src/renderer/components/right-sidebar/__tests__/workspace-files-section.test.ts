@@ -9,6 +9,7 @@ import {
   loadWorkspaceRootFiles,
   openWorkspaceEntry,
   resolveCwdRoot,
+  resolveWorkspaceFilesEmptyMessage,
   resolveWorkspaceFilesViewPath,
   refreshWorkspaceVisibleFiles,
   subscribeToWorkspaceFileChanges,
@@ -352,6 +353,14 @@ describe('resolveWorkspaceFilesViewPath', () => {
 
   it('returns undefined when no CWD root exists', () => {
     expect(resolveWorkspaceFilesViewPath(undefined, '/workspace')).toBeUndefined()
+  })
+})
+
+describe('resolveWorkspaceFilesEmptyMessage', () => {
+  it('describes loading, missing CWD, and empty CWD states', () => {
+    expect(resolveWorkspaceFilesEmptyMessage(true, '/workspace/src')).toBe('Loading...')
+    expect(resolveWorkspaceFilesEmptyMessage(false, undefined)).toBe('No working directory set')
+    expect(resolveWorkspaceFilesEmptyMessage(false, '/workspace/src')).toBe('No workspace files')
   })
 })
 

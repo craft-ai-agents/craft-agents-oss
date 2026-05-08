@@ -65,6 +65,13 @@ export function resolveWorkspaceFilesViewPath(
   return cwdPath
 }
 
+/** Resolves the empty-state label shown by the workspace file tree. */
+export function resolveWorkspaceFilesEmptyMessage(isLoading: boolean, cwdPath: string | undefined): string {
+  if (isLoading) return 'Loading...'
+  if (!cwdPath) return 'No working directory set'
+  return 'No workspace files'
+}
+
 /** Loads the top-level files for a workspace. */
 export function loadWorkspaceRootFiles(
   workspaceId: string,
@@ -480,7 +487,7 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, cwdPath, cla
         {files.length === 0 ? (
           <div className="px-4 text-muted-foreground select-none">
             <p className="text-xs">
-              {isLoading ? 'Loading...' : cwdPath ? 'No workspace files' : 'No working directory set'}
+              {resolveWorkspaceFilesEmptyMessage(isLoading, cwdPath)}
             </p>
           </div>
         ) : (
