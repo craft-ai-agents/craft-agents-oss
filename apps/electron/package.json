@@ -20,7 +20,6 @@
     "build:preload": "esbuild src/preload/bootstrap.ts --bundle --platform=node --format=cjs --outfile=dist/bootstrap-preload.cjs --external:electron",
     "build:preload-toolbar": "esbuild src/preload/browser-toolbar.ts --bundle --platform=node --format=cjs --outfile=dist/browser-toolbar-preload.cjs --external:electron",
     "build:interceptor": "esbuild ../../packages/shared/src/unified-network-interceptor.ts --bundle --platform=node --format=cjs --outfile=dist/interceptor.cjs",
-    
     "build:renderer": "vite build",
     "build:copy": "bun scripts/copy-assets.ts",
     "build:validate": "bun scripts/validate-assets.ts",
@@ -56,8 +55,10 @@
     "@tanstack/react-table": "^8.21.3",
     "chrono-node": "^2.9.0",
     "cmdk": "^1.1.1",
+    "croner": "^10.0.1",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.8.0",
+    "i18next": "^26.0.4",
     "i18next-browser-languagedetector": "^8.2.1",
     "jotai-family": "^1.0.1",
     "motion": "^12.23.26",

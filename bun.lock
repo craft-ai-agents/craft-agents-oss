@@ -115,7 +115,7 @@
     },
     "apps/cli": {
       "name": "@craft-agent/cli",
-      "version": "0.9.1",
+      "version": "0.9.2",
       "bin": {
         "craft-cli": "src/index.ts",
       },
@@ -131,7 +131,7 @@
     },
     "apps/electron": {
       "name": "@craft-agent/electron",
-      "version": "0.9.1",
+      "version": "0.9.2",
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@craft-agent/messaging-gateway": "workspace:*",
@@ -152,8 +152,10 @@
         "@tanstack/react-table": "^8.21.3",
         "chrono-node": "^2.9.0",
         "cmdk": "^1.1.1",
+        "croner": "^10.0.1",
         "electron-log": "^5.4.3",
         "electron-updater": "^6.8.0",
+        "i18next": "^26.0.4",
         "i18next-browser-languagedetector": "^8.2.1",
         "jotai-family": "^1.0.1",
         "motion": "^12.23.26",
@@ -180,7 +182,7 @@
     },
     "apps/viewer": {
       "name": "@craft-agent/viewer",
-      "version": "0.9.1",
+      "version": "0.9.2",
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@craft-agent/ui": "workspace:*",
@@ -208,7 +210,7 @@
     },
     "apps/webui": {
       "name": "@craft-agent/webui",
-      "version": "0.9.1",
+      "version": "0.9.2",
       "dependencies": {
         "@craft-agent/shared": "workspace:*",
         "@craft-agent/ui": "workspace:*",
@@ -223,7 +225,7 @@
     },
     "packages/core": {
       "name": "@craft-agent/core",
-      "version": "0.9.1",
+      "version": "0.9.2",
       "devDependencies": {
         "@types/uuid": "^11.0.0",
       },
@@ -234,7 +236,7 @@
     },
     "packages/messaging-gateway": {
       "name": "@craft-agent/messaging-gateway",
-      "version": "0.9.1",
+      "version": "0.9.2",
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@craft-agent/messaging-whatsapp-worker": "workspace:*",
@@ -250,7 +252,7 @@
     },
     "packages/messaging-whatsapp-worker": {
       "name": "@craft-agent/messaging-whatsapp-worker",
-      "version": "0.9.1",
+      "version": "0.9.2",
       "dependencies": {
         "@whiskeysockets/baileys": "^6.7.0",
       },
@@ -261,7 +263,7 @@
     },
     "packages/pi-agent-server": {
       "name": "@craft-agent/pi-agent-server",
-      "version": "0.9.1",
+      "version": "0.9.2",
       "bin": {
         "pi-agent-server": "./dist/index.js",
       },
@@ -281,7 +283,7 @@
     },
     "packages/server": {
       "name": "@craft-agent/server",
-      "version": "0.9.1",
+      "version": "0.9.2",
       "bin": {
         "craft-server": "src/index.ts",
       },
@@ -299,7 +301,7 @@
     },
     "packages/server-core": {
       "name": "@craft-agent/server-core",
-      "version": "0.9.1",
+      "version": "0.9.2",
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@craft-agent/shared": "workspace:*",
@@ -315,7 +317,7 @@
     },
     "packages/session-mcp-server": {
       "name": "@craft-agent/session-mcp-server",
-      "version": "0.9.1",
+      "version": "0.9.2",
       "bin": {
         "session-mcp-server": "./dist/index.js",
       },
@@ -331,7 +333,7 @@
     },
     "packages/session-tools-core": {
       "name": "@craft-agent/session-tools-core",
-      "version": "0.9.1",
+      "version": "0.9.2",
       "dependencies": {
         "beautiful-mermaid": "*",
         "gray-matter": "^4.0.3",
@@ -344,7 +346,7 @@
     },
     "packages/shared": {
       "name": "@craft-agent/shared",
-      "version": "0.9.1",
+      "version": "0.9.2",
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@craft-agent/session-tools-core": "workspace:*",
@@ -374,7 +376,7 @@
     },
     "packages/ui": {
       "name": "@craft-agent/ui",
-      "version": "0.9.1",
+      "version": "0.9.2",
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@craft-agent/shared": "workspace:*",
