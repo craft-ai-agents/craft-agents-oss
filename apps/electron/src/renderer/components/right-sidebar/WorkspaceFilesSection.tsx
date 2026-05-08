@@ -44,6 +44,25 @@ function createEmptyWorkspaceFilesTreeState(): WorkspaceFilesTreeState {
   }
 }
 
+const CWD_SENTINELS = new Set(['none', 'user_default'])
+
+function isPathAtOrInside(rootPath: string, targetPath: string): boolean {
+  return (
+    targetPath === rootPath
+    || targetPath.startsWith(`${rootPath}/`)
+    || targetPath.startsWith(`${rootPath}\\`)
+  )
+}
+
+export function resolveCwdRoot(
+  workingDirectory: string | undefined,
+  workspacePath: string | undefined,
+): string | undefined {
+  if (!workingDirectory || !workspacePath) return undefined
+  if (CWD_SENTINELS.has(workingDirectory)) return undefined
+  return isPathAtOrInside(workspacePath, workingDirectory) ? workingDirectory : undefined
+}
+
 /** Loads the top-level files for a workspace. */
 export function loadWorkspaceRootFiles(
   workspaceId: string,

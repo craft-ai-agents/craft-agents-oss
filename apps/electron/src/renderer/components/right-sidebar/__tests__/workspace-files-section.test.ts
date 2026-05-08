@@ -8,6 +8,7 @@ import {
   getWorkspaceVisibleTree,
   loadWorkspaceRootFiles,
   openWorkspaceEntry,
+  resolveCwdRoot,
   refreshWorkspaceVisibleFiles,
   subscribeToWorkspaceFileChanges,
   type WorkspaceFilesTreeState,
@@ -243,6 +244,35 @@ describe('WorkspaceFilesSection data loading', () => {
 
     expect(refreshed).toEqual(['ws-1'])
     expect(filesChanged.wasUnsubscribed()).toBe(true)
+  })
+})
+
+describe('resolveCwdRoot', () => {
+  it('returns a real working directory inside the workspace', () => {
+    expect(resolveCwdRoot('/workspace/src', '/workspace')).toBe('/workspace/src')
+  })
+
+  it('returns a Windows-style working directory inside the workspace', () => {
+    expect(resolveCwdRoot('C:\\workspace\\src', 'C:\\workspace')).toBe('C:\\workspace\\src')
+  })
+
+  it('returns the workspace path when the working directory equals the workspace path', () => {
+    expect(resolveCwdRoot('/workspace', '/workspace')).toBe('/workspace')
+  })
+
+  it('returns undefined for absent or sentinel working directories', () => {
+    expect(resolveCwdRoot(undefined, '/workspace')).toBeUndefined()
+    expect(resolveCwdRoot('none', '/workspace')).toBeUndefined()
+    expect(resolveCwdRoot('user_default', '/workspace')).toBeUndefined()
+  })
+
+  it('returns undefined when the workspace path is absent', () => {
+    expect(resolveCwdRoot('/workspace/src', undefined)).toBeUndefined()
+  })
+
+  it('returns undefined for a working directory outside the workspace', () => {
+    expect(resolveCwdRoot('/other-project/src', '/workspace')).toBeUndefined()
+    expect(resolveCwdRoot('/workspace-sibling/src', '/workspace')).toBeUndefined()
   })
 })
 
