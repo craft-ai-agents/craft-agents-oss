@@ -7,7 +7,7 @@ import type { HandlerDeps } from '../handler-deps'
 import type { HandlerFn, RequestContext, RpcServer } from '../../transport/types'
 import { cleanupWorkspaceFileWatchForClient, registerWorkspaceFilesHandlers } from './workspace-files'
 
-let tempRoot: string | null = null
+const tempRoots: string[] = []
 
 function createHarness(workspaceRoot: string) {
   const handlers = new Map<string, HandlerFn>()
@@ -50,14 +50,22 @@ function ctx(): RequestContext {
 }
 
 function createWorkspaceRoot(): string {
-  tempRoot = mkdtempSync(join(tmpdir(), 'craft-workspace-files-rpc-'))
-  return tempRoot
+  const root = mkdtempSync(join(tmpdir(), 'craft-workspace-files-rpc-'))
+  tempRoots.push(root)
+  return root
+}
+
+function createExternalRoot(): string {
+  const root = mkdtempSync(join(tmpdir(), 'craft-workspace-files-external-rpc-'))
+  tempRoots.push(root)
+  return root
 }
 
 afterEach(() => {
   cleanupWorkspaceFileWatchForClient('client-1')
-  if (tempRoot) rmSync(tempRoot, { recursive: true, force: true })
-  tempRoot = null
+  for (const root of tempRoots.splice(0)) {
+    rmSync(root, { recursive: true, force: true })
+  }
 })
 
 describe('workspace files RPC handlers', () => {
@@ -122,6 +130,34 @@ describe('workspace files RPC handlers', () => {
     ])
   })
 
+  it('getWorkspaceFiles uses rootPath when provided outside the workspace root', async () => {
+    const root = createWorkspaceRoot()
+    const cwdRoot = createExternalRoot()
+    writeFileSync(join(root, 'metadata.json'), '{}\n')
+    writeFileSync(join(cwdRoot, 'package.json'), '{}\n')
+    const { getFiles } = createHarness(root)
+
+    const files = await getFiles(ctx(), 'ws-1', undefined, cwdRoot)
+
+    expect(files).toEqual([
+      { name: 'package.json', path: join(cwdRoot, 'package.json'), type: 'file', size: 3 },
+    ])
+  })
+
+  it('getWorkspaceFiles constrains requested directories to the provided rootPath', async () => {
+    const root = createWorkspaceRoot()
+    const cwdRoot = createExternalRoot()
+    mkdirSync(join(cwdRoot, 'src'))
+    writeFileSync(join(cwdRoot, 'src', 'index.ts'), 'export {}\n')
+    writeFileSync(join(root, 'metadata.json'), '{}\n')
+    const { getFiles } = createHarness(root)
+
+    await expect(getFiles(ctx(), 'ws-1', join(cwdRoot, 'src'), cwdRoot)).resolves.toEqual([
+      { name: 'index.ts', path: join(cwdRoot, 'src', 'index.ts'), type: 'file', size: 10 },
+    ])
+    await expect(getFiles(ctx(), 'ws-1', root, cwdRoot)).resolves.toEqual([])
+  })
+
   it('getWorkspaceFiles returns [] for unreadable or outside paths', async () => {
     const root = createWorkspaceRoot()
     const { getFiles } = createHarness(root)
@@ -152,6 +188,30 @@ describe('workspace files RPC handlers', () => {
 
     await watchFiles(ctx(), 'ws-1')
     writeFileSync(join(root, 'created.txt'), 'created\n')
+    await new Promise(resolve => setTimeout(resolve, 450))
+
+    expect(pushes).toContainEqual({
+      channel: RPC_CHANNELS.workspace.FILES_CHANGED,
+      target: { to: 'client', clientId: 'client-1' },
+      args: ['ws-1'],
+    })
+
+    await unwatchFiles(ctx())
+  })
+
+  it('watchWorkspaceFiles watches rootPath when provided outside the workspace root', async () => {
+    const root = createWorkspaceRoot()
+    const cwdRoot = createExternalRoot()
+    const { handlers, pushes } = createHarness(root)
+    const watchFiles = handlers.get(RPC_CHANNELS.workspace.WATCH_FILES)
+    const unwatchFiles = handlers.get(RPC_CHANNELS.workspace.UNWATCH_FILES)
+
+    if (!watchFiles || !unwatchFiles) {
+      throw new Error('workspace file watcher handlers not registered')
+    }
+
+    await watchFiles(ctx(), 'ws-1', cwdRoot)
+    writeFileSync(join(cwdRoot, 'created.txt'), 'created\n')
     await new Promise(resolve => setTimeout(resolve, 450))
 
     expect(pushes).toContainEqual({

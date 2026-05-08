@@ -125,13 +125,18 @@ async function listWorkspaceFiles(workspaceRoot: string, dirPath?: string): Prom
 }
 
 export function registerWorkspaceFilesHandlers(server: RpcServer, deps: HandlerDeps): void {
-  server.handle(RPC_CHANNELS.workspace.GET_FILES, async (_ctx, workspaceId: string, dirPath?: string) => {
+  server.handle(RPC_CHANNELS.workspace.GET_FILES, async (
+    _ctx,
+    workspaceId: string,
+    dirPath?: string,
+    rootPath?: string,
+  ) => {
     const workspace = deps.sessionManager.getWorkspaces().find(w => w.id === workspaceId)
     if (!workspace) return []
-    return listWorkspaceFiles(workspace.rootPath, dirPath)
+    return listWorkspaceFiles(rootPath ?? workspace.rootPath, dirPath)
   })
 
-  server.handle(RPC_CHANNELS.workspace.WATCH_FILES, async (ctx, workspaceId: string) => {
+  server.handle(RPC_CHANNELS.workspace.WATCH_FILES, async (ctx, workspaceId: string, rootPath?: string) => {
     const clientId = ctx.clientId
     cleanupWorkspaceFileWatchForClient(clientId)
 
@@ -141,7 +146,7 @@ export function registerWorkspaceFilesHandlers(server: RpcServer, deps: HandlerD
     try {
       clientWorkspaceWatches.set(
         clientId,
-        createWorkspaceFileWatchState(server, clientId, workspaceId, workspace.rootPath),
+        createWorkspaceFileWatchState(server, clientId, workspaceId, rootPath ?? workspace.rootPath),
       )
     } catch (error) {
       deps.platform.logger.error('Failed to start workspace file watcher:', error)
