@@ -17,6 +17,9 @@ interface SidebarDrilldownLayout {
   showSessionListResizeHandle: boolean
 }
 
+/**
+ * Resolves the left-panel widths and resize handles for sidebar drill-down mode.
+ */
 export function resolveSidebarDrilldownLayout({
   navState,
   isAutoCompact,

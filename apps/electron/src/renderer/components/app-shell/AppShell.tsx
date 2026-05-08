@@ -1748,6 +1748,17 @@ function AppShellContent({
     navigate(routes.view.sources())
   }, [])
 
+  const handleSessionListNavigateToView = useCallback((view: 'allSessions' | 'flagged') => {
+    switch (view) {
+      case 'allSessions':
+        navigate(routes.view.allSessions())
+        return
+      case 'flagged':
+        navigate(routes.view.flagged())
+        return
+    }
+  }, [])
+
   // Handler for What's New overlay
   const handleWhatsNewClick = useCallback(async () => {
     const content = await window.electronAPI.getReleaseNotes()
@@ -2199,6 +2210,15 @@ function AppShellContent({
     })
   }, [sessionFilter, labelCounts, activeWorkspace?.id, handleLabelClick, isExpanded, toggleExpanded, openConfigureLabels, handleAddLabel, handleDeleteLabel])
 
+  let sessionListFocusedSessionId: string | null | undefined
+  if (panelCount === 0) {
+    sessionListFocusedSessionId = null
+  } else if (panelCount > 1) {
+    sessionListFocusedSessionId = focusedSessionId
+  }
+
+  const sessionListNavigateToSession = panelCount > 1 ? navigateToSessionInPanel : undefined
+
   const sessionListContent = isSessionsNavigation(navState) ? (
     <SessionList
       key={sessionFilter?.kind}
@@ -2222,13 +2242,7 @@ function AppShellContent({
           window.electronAPI.openSessionInNewWindow(activeWorkspaceId, selectedMeta.id)
         }
       }}
-      onNavigateToView={(view) => {
-        if (view === 'allSessions') {
-          navigate(routes.view.allSessions())
-        } else if (view === 'flagged') {
-          navigate(routes.view.flagged())
-        }
-      }}
+      onNavigateToView={handleSessionListNavigateToView}
       sessionOptions={sessionOptions}
       searchActive={searchActive}
       searchQuery={searchQuery}
@@ -2245,8 +2259,8 @@ function AppShellContent({
       workspaceId={activeWorkspaceId ?? undefined}
       statusFilter={listFilter}
       labelFilterMap={labelFilter}
-      focusedSessionId={panelCount === 0 ? null : panelCount > 1 ? focusedSessionId : undefined}
-      onNavigateToSession={panelCount > 1 ? navigateToSessionInPanel : undefined}
+      focusedSessionId={sessionListFocusedSessionId}
+      onNavigateToSession={sessionListNavigateToSession}
       hasPendingPrompt={hasPendingPrompt}
       activeChatMatchInfo={chatMatchInfo}
     />
