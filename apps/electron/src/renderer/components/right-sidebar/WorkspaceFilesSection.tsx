@@ -54,6 +54,7 @@ function isPathAtOrInside(rootPath: string, targetPath: string): boolean {
   )
 }
 
+/** Resolves a session working directory to the workspace file browser root when it is inside the workspace. */
 export function resolveCwdRoot(
   workingDirectory: string | undefined,
   workspacePath: string | undefined,
