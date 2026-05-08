@@ -29,7 +29,7 @@ Auto-adapt to light/dark theme via CSS variables. No hex values needed.
 
 | Name | Appearance | Example |
 |------|-----------|---------|
-| `"accent"` | Purple (brand) | `"accent"` |
+| `"accent"` | Oxblood (brand) | `"accent"` |
 | `"info"` | Amber | `"info"` |
 | `"success"` | Green | `"success"` |
 | `"destructive"` | Red | `"destructive"` |

@@ -38,7 +38,7 @@ export function getDefaultStatusConfig(): WorkspaceStatusConfig {
   // - backlog: foreground/50 (muted, not yet planned)
   // - todo: foreground/50 (muted, ready to work on)
   // - needs-review: info (amber, attention needed)
-  // - done: accent (purple, completed)
+  // - done: accent (completed)
   // - cancelled: foreground/50 (muted, inactive)
   //
   // Note: icon is omitted - auto-discovered from statuses/icons/{id}.svg

@@ -24,7 +24,7 @@ const LABEL_CONFIG_FILE = 'labels/config.json';
  * Get default label configuration.
  * Provides a starter set of labels organized into two complementary color families:
  * - Development (blue family): Code, Bug, Automation
- * - Content (purple family): Writing, Research, Design
+ * - Content (accent family): Writing, Research, Design
  * Plus flat valued labels: Priority (number), Project (string)
  *
  * Children use hue-shifted shades of their parent color to show visual hierarchy.

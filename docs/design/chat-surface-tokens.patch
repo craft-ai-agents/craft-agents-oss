@@ -1,0 +1,261 @@
+# Chat Surface — Theme Token Migration
+
+> Prepared by `/design-consultation` 2026-05-08. **Not applied.** Review before staging.
+>
+> Source of truth: [`DESIGN.md`](../../DESIGN.md). Approved variant: A (Editorial-Industrial).
+
+This patch documents the token swap needed to bring the renderer theme in line with `DESIGN.md`. It is intentionally split into three commits' worth of change so the team can stage each step independently.
+
+---
+
+## Step 1 — Load Google Fonts
+
+**Recommended path: HTML `<link>` (non-render-blocking, matches how the app loads assets).**
+
+**File:** `apps/electron/src/renderer/index.html` (and the webui equivalent if any)
+
+In the `<head>`, before the existing stylesheet links:
+
+```html
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="font" type="font/woff2" crossorigin
+      href="https://fonts.gstatic.com/s/newsreader/v20/...">  <!-- preload body -->
+<link rel="preload" as="font" type="font/woff2" crossorigin
+      href="https://fonts.gstatic.com/s/jetbrainsmono/v18/...">  <!-- preload mono -->
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..700,30..100,0..1&family=JetBrains+Mono:wght@300..700&display=swap" rel="stylesheet">
+```
+
+Resolve the actual `gstatic.com/s/newsreader/v20/...` URLs from the Google Fonts CSS once before staging the preload lines.
+
+**Alternative (CSS-only path):** if HTML edits aren't acceptable for any reason, you can use `@import url(...)` instead — but it MUST be the very first rule in the file, **before** `@import "tailwindcss"`. Per CSS spec, `@import` rules must precede all other rules; placing it after `@plugin` will silently no-op.
+
+```css
+/* If using CSS-only path: this MUST be line 1, before @import "tailwindcss" */
+@import url("https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..700,30..100,0..1&family=JetBrains+Mono:wght@300..700&display=swap");
+@import "tailwindcss" source(none);
+@plugin "@tailwindcss/typography";
+```
+
+Whichever path you pick, apply it consistently to both `apps/electron/src/renderer/index.html` and `apps/webui/src/index.html` (or their CSS counterparts).
+
+---
+
+## Step 2 — Replace `:root` light-mode tokens
+
+**File:** `apps/electron/src/renderer/index.css` (the `:root { ... }` block, currently around lines 84–235)
+
+```diff
+ :root {
+   /* === 6 BASE COLORS === */
+-  --background: oklch(0.98 0.003 265);
++  --background: #FBF9F2;                    /* warm paper white */
++  --background-warm: #F4F0E5;               /* code strip, elevated cards */
+   --background-elevated: color-mix(in srgb, var(--foreground) 1.5%, var(--background));
+-  --foreground: oklch(0.185 0.01 270);
++  --foreground: #1F1A14;                    /* warm near-black */
++  --foreground-soft: #4A413A;               /* sepia gray for de-emphasized prose */
++  --foreground-mute: #8C8175;               /* faded for metadata */
+   --foreground-dimmed: color-mix(in srgb, var(--foreground) 80%, var(--background));
+-  --foreground-rgb: 38, 36, 42;
++  --foreground-rgb: 31, 26, 20;             /* warm walnut RGB for shadow borders */
+   --user-message-bubble: oklch(from var(--foreground) l c h / 0.05);
+   --user-message-bubble-dimmed: oklch(from var(--foreground) l c h / 0.03);
+
+-  --accent: oklch(0.62 0.13 293);           /* purple - brand, Auto mode */
+-  --accent-rgb: 104, 78, 133;
++  /* Accent — user-selectable: oxblood (default) / indigo / moss.
++     Set via [data-accent="..."] on <html>. Default below = oxblood.
++     See DESIGN.md → Color → Accents. */
++  --accent: #6B1818;                         /* oxblood */
++  --accent-rgb: 107, 24, 24;
++  --accent-on: #FBF9F2;                      /* foreground when on accent bg */
+
+-  --info: oklch(0.75 0.16 70);              /* amber - warnings */
+-  --info-rgb: 180, 120, 40;
++  --info: #B5832A;                           /* desaturated amber for serif legibility */
++  --info-rgb: 181, 131, 42;
+
+-  --success: oklch(0.55 0.17 145);
+-  --success-rgb: 34, 120, 60;
++  --success: #2D6A3E;
++  --success-rgb: 45, 106, 62;
+
+-  --destructive: oklch(0.58 0.24 28);
+-  --destructive-rgb: 180, 60, 50;
++  --destructive: oklch(0.58 0.24 28);        /* kept; minor desaturation in dark mode below */
++  --destructive-rgb: 180, 60, 50;
+```
+
+### Add the named-accent variants
+
+Append after the base `:root` block:
+
+```css
+/* Named-accent variants — light. Activate via <html data-accent="indigo|moss"> */
+:root[data-accent="indigo"] {
+  --accent: #1F2A55;
+  --accent-rgb: 31, 42, 85;
+}
+:root[data-accent="moss"] {
+  --accent: #2D4A2B;
+  --accent-rgb: 45, 74, 43;
+}
+```
+
+### Replace the font tokens (currently lines ~183–187)
+
+```diff
+-  /* Fonts - System fonts as default, Inter via data-font="inter" */
+-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+-  --font-serif: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+-  --font-default: var(--font-sans);
++  /* Fonts — Editorial-Industrial system. See DESIGN.md → Typography. */
++  --font-prose: "Newsreader", Georgia, "Times New Roman", serif;
++  --font-display: "Fraunces", Georgia, serif;
++  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
++
++  /* Migration aliases.
++     - --font-sans now resolves to the prose serif: any `font-sans` Tailwind
++       class lands on Newsreader (the new default).
++     - --font-serif is INTENTIONALLY kept on mono. The legacy token never meant
++       "serif"; it was a mono fallback name. Empirically `font-serif` has zero
++       consumers in apps/ and packages/ outside the declaring files, so this
++       preserves intent without behavior change. Verify with:
++         rg "font-serif" apps packages
++       Prefer migrating to `font-prose` / `font-meta` in new code. */
++  --font-sans: var(--font-prose);
++  --font-serif: var(--font-mono);
++  --font-meta: var(--font-mono);
++  --font-default: var(--font-prose);
++
++  /* Variable-axis defaults for prose. Per-component overrides may set opsz. */
++  font-variation-settings: "opsz" 18;
+
+   --font-size-base: 15px;
++  --font-size-prose: 17px;                   /* default agent prose */
++  --font-size-meta: 11px;                    /* uppercase metadata */
+   --radius: 0rem;
+   --spacing: 0.25rem;
+```
+
+---
+
+## Step 3 — Replace `.dark` dark-mode tokens
+
+**File:** `apps/electron/src/renderer/index.css` (the `.dark { ... }` block, currently around lines 237–298)
+
+```diff
+ .dark {
+-  --background: oklch(0.145 0.015 270);
++  --background: #181410;                    /* warm walnut */
++  --background-warm: #221C16;
+   --background-elevated: color-mix(in srgb, var(--foreground) 1.5%, var(--background));
+-  --foreground: oklch(0.95 0.01 270);
++  --foreground: #ECE6D6;                    /* cream */
++  --foreground-soft: #B8AE9C;
++  --foreground-mute: #7A7166;
+   --foreground-dimmed: color-mix(in srgb, var(--foreground) 80%, var(--background));
+-  --foreground-rgb: 237, 236, 240;
++  --foreground-rgb: 236, 230, 214;          /* warm cream RGB */
+   --user-message-bubble: oklch(from var(--foreground) l c h / 0.05);
+   --user-message-bubble-dimmed: oklch(from var(--foreground) l c h / 0.03);
+
+-  --accent: oklch(0.65 0.22 293);           /* brighter purple in dark */
+-  --accent-rgb: 130, 75, 185;
++  /* Dark accents are deliberately lifted into reading range —
++     a darker oxblood disappears on warm walnut. */
++  --accent: #C77258;                         /* oxblood, lifted */
++  --accent-rgb: 199, 114, 88;
++  --accent-on: #181410;
+
+-  --info: oklch(0.78 0.14 70);
+-  --info-rgb: 210, 155, 55;
++  --info: #D7A858;
++  --info-rgb: 215, 168, 88;
+
+-  --success: oklch(0.60 0.17 145);
+-  --success-rgb: 50, 140, 80;
++  --success: #7FAE7A;
++  --success-rgb: 127, 174, 122;
+
+-  --destructive: oklch(0.65 0.22 28);
+-  --destructive-rgb: 200, 70, 60;
++  --destructive: oklch(0.62 0.20 28);        /* slight desaturation for dark */
++  --destructive-rgb: 199, 89, 76;
+ }
+
++/* Dark named-accent variants */
++.dark[data-accent="indigo"] {
++  --accent: #8190CE;
++  --accent-rgb: 129, 144, 206;
++}
++.dark[data-accent="moss"] {
++  --accent: #8FB58A;
++  --accent-rgb: 143, 181, 138;
++}
+```
+
+---
+
+## Step 4 — Density utility (new file)
+
+**Path:** `packages/ui/src/styles/density.css`
+
+```css
+/* Vertical-density tokens for the chat surface.
+   Driven by [data-density] on <html>; default = "reading".
+   Density auto-detects on turn-count (≤ 10 = reading, > 10 = working);
+   user can override via the top-bar toggle. */
+
+:root[data-density="reading"], :root:not([data-density]) {
+  --turn-gap: 38px;
+  --prose-line-height: 1.62;
+}
+:root[data-density="working"] {
+  --turn-gap: 22px;
+  --prose-line-height: 1.50;
+}
+```
+
+Import in `apps/electron/src/renderer/index.css` after the renderer's `@source` block.
+
+---
+
+## Verification (run after applying)
+
+```bash
+# 1. Tailwind v4 resolution check (most likely failure mode).
+#    With `@import "tailwindcss" source(none)`, Tailwind reads tokens from
+#    @theme — bare :root vars are NOT automatically picked up by utilities.
+#    Spot-check the actual computed font-family on <body> after step 1:
+bun run webui:dev   # http://localhost:5175
+# In DevTools console:
+#   getComputedStyle(document.body).fontFamily
+# Expected: starts with "Newsreader". If it shows system-ui, you need to
+# expose --font-prose via a @theme block or override the Tailwind --font-sans
+# theme variable directly.
+
+# 2. Visual: chat should render with warm-paper bg + Newsreader serif body
+#   send a message; agent reply should render at 17px / 1.62 line-height
+
+# 3. Type-check unchanged
+bun run typecheck:all
+
+# 4. Spot-check that no purple remains in shipped CSS
+rg "0\.62 0\.13 293|oklch.*293|--accent.*293" apps/electron apps/webui packages
+#   expected: no hits
+
+# 5. Spot-check no system-ui as a primary body font
+rg "system-ui" apps/electron/src/renderer/index.css apps/webui/src/index.css
+#   expected: only inside fallback stacks after Newsreader, never as primary
+
+# 6. font-serif consumer audit (must remain zero new hits after migration)
+rg "font-serif" apps packages
+#   expected: only the two declaring files (renderer/index.css + ui/styles/index.css)
+```
+
+## Out of scope for this patch
+
+The component-level changes (UserMessageBubble strip, TurnCard turn-head, density toggle, accent picker in settings) are listed in `DESIGN.md → Implementation Map`. They should ship as separate, scoped commits after the token migration above is in place.

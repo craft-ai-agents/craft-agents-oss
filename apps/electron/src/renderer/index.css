@@ -1,4 +1,5 @@
 @import "tailwindcss" source(none);
+@import "../../../../packages/ui/src/styles/density.css";
 @plugin "@tailwindcss/typography";
 
 /* Tell Tailwind where to scan for utility classes */
@@ -29,25 +30,25 @@
 @property --background {
   syntax: "<color>";
   inherits: true;
-  initial-value: oklch(0.98 0.003 265);
+  initial-value: #FBF9F2;
 }
 
 @property --foreground {
   syntax: "<color>";
   inherits: true;
-  initial-value: oklch(0.185 0.01 270);
+  initial-value: #1F1A14;
 }
 
 @property --accent {
   syntax: "<color>";
   inherits: true;
-  initial-value: oklch(0.62 0.13 293);
+  initial-value: #6B1818;
 }
 
 @property --info {
   syntax: "<color>";
   inherits: true;
-  initial-value: oklch(0.65 0.16 70);
+  initial-value: #B5832A;
 }
 
 @property --success {
@@ -68,7 +69,7 @@
    Base colors:
    - background: Light/dark surface
    - foreground: Text and icons
-   - accent: Brand purple (highlights, Auto mode)
+   - accent: Brand oxblood (highlights, Auto mode)
    - info: Amber (warnings, Ask mode)
    - success: Green (connected, checkmarks)
    - destructive: Red (errors, failed)
@@ -83,20 +84,27 @@
 /* Light Mode */
 :root {
   /* === 6 BASE COLORS === */
-  --background: oklch(0.98 0.003 265);
+  --background: #FBF9F2;                    /* warm paper white */
+  --background-warm: #F4F0E5;              /* code strip, elevated cards */
   --background-elevated: color-mix(in srgb, var(--foreground) 1.5%, var(--background));
-  --foreground: oklch(0.185 0.01 270);
+  --foreground: #1F1A14;                    /* warm near-black */
+  --foreground-soft: #4A413A;              /* sepia gray for de-emphasized prose */
+  --foreground-mute: #8C8175;              /* faded for metadata */
   --foreground-dimmed: color-mix(in srgb, var(--foreground) 80%, var(--background)); /* unfocused panel text */
-  --foreground-rgb: 38, 36, 42;             /* RGB for shadow borders */
+  --foreground-rgb: 31, 26, 20;            /* warm walnut RGB for shadow borders */
   --user-message-bubble: oklch(from var(--foreground) l c h / 0.05);
   --user-message-bubble-dimmed: oklch(from var(--foreground) l c h / 0.03);
-  --accent: oklch(0.62 0.13 293);           /* purple - brand, Auto mode */
-  --accent-rgb: 104, 78, 133;               /* darkened RGB for shadow-tinted (70% of accent) */
-  --info: oklch(0.75 0.16 70);              /* amber - warnings, Ask mode */
-  --info-rgb: 180, 120, 40;                 /* RGB for shadow-tinted */
-  --success: oklch(0.55 0.17 145);          /* green - connected, checkmarks */
-  --success-rgb: 34, 120, 60;               /* RGB for shadow-tinted */
-  --destructive: oklch(0.58 0.24 28);       /* red - errors, failed */
+  /* Accent — user-selectable: oxblood (default) / indigo / moss.
+     Set via [data-accent="..."] on <html>. Default below = oxblood.
+     See DESIGN.md → Color → Accents. */
+  --accent: #6B1818;                        /* oxblood */
+  --accent-rgb: 107, 24, 24;
+  --accent-on: #FBF9F2;                    /* foreground when on accent bg */
+  --info: #B5832A;                          /* desaturated amber for serif legibility */
+  --info-rgb: 181, 131, 42;
+  --success: #2D6A3E;
+  --success-rgb: 45, 106, 62;
+  --destructive: oklch(0.58 0.24 28);       /* kept; minor desaturation in dark mode below */
   --destructive-rgb: 180, 60, 50;           /* RGB for shadow-tinted */
 
   /* === SHADOW OPACITY (light mode = subtle, dark mode = stronger) === */
@@ -180,14 +188,32 @@
   --step-content-gap: 1.5rem;
   --step-actions-margin: 2rem;
 
-  /* Fonts - System fonts as default, Inter via data-font="inter" */
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-serif: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  /* Fonts — Editorial-Industrial system. See DESIGN.md → Typography. */
+  --font-prose: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-display: "Fraunces", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --font-default: var(--font-sans);
+
+  /* Migration aliases.
+     - --font-sans now resolves to the prose serif: any `font-sans` Tailwind
+       class lands on Newsreader (the new default).
+     - --font-serif is INTENTIONALLY kept on mono. The legacy token never meant
+       "serif"; it was a mono fallback name. Empirically `font-serif` has zero
+       consumers in apps/ and packages/ outside the declaring files, so this
+       preserves intent without behavior change. Verify with:
+         rg "font-serif" apps packages
+       Prefer migrating to `font-prose` / `font-meta` in new code. */
+  --font-sans: var(--font-prose);    /* Newsreader serif */
+  --font-serif: var(--font-mono);    /* legacy alias preserved on mono */
+  --font-meta: var(--font-mono);     /* new explicit name */
+  --font-default: var(--font-prose);
+
+  /* Variable-axis defaults for prose. Per-component overrides may set opsz. */
+  font-variation-settings: "opsz" 18;
 
   /* Layout */
   --font-size-base: 15px;
+  --font-size-prose: 17px;                  /* default agent prose */
+  --font-size-meta: 11px;                   /* uppercase metadata */
   --radius: 0rem;
   --spacing: 0.25rem;
   --tracking-normal: 0em;
@@ -234,24 +260,40 @@
 
 }
 
+/* Named-accent variants — light. Activate via <html data-accent="indigo|moss"> */
+:root[data-accent="indigo"] {
+  --accent: #1F2A55;
+  --accent-rgb: 31, 42, 85;
+}
+:root[data-accent="moss"] {
+  --accent: #2D4A2B;
+  --accent-rgb: 45, 74, 43;
+}
+
 /* Dark Mode */
 .dark {
   /* === 6 BASE COLORS (must match DEFAULT_THEME.dark in theme.ts) === */
-  --background: oklch(0.145 0.015 270);
+  --background: #181410;                    /* warm walnut */
+  --background-warm: #221C16;
   --background-elevated: color-mix(in srgb, var(--foreground) 1.5%, var(--background));
-  --foreground: oklch(0.95 0.01 270);
+  --foreground: #ECE6D6;                    /* cream */
+  --foreground-soft: #B8AE9C;
+  --foreground-mute: #7A7166;
   --foreground-dimmed: color-mix(in srgb, var(--foreground) 80%, var(--background)); /* unfocused panel text */
-  --foreground-rgb: 237, 236, 240;           /* RGB for shadow borders */
+  --foreground-rgb: 236, 230, 214;          /* warm cream RGB */
   --user-message-bubble: oklch(from var(--foreground) l c h / 0.05);
   --user-message-bubble-dimmed: oklch(from var(--foreground) l c h / 0.03);
-  --accent: oklch(0.65 0.22 293);            /* brighter purple in dark */
-  --accent-rgb: 130, 75, 185;               /* darkened RGB for shadow-tinted (70% of accent) */
-  --info: oklch(0.78 0.14 70);               /* amber */
-  --info-rgb: 210, 155, 55;                  /* RGB for shadow-tinted */
-  --success: oklch(0.60 0.17 145);           /* green */
-  --success-rgb: 50, 140, 80;               /* RGB for shadow-tinted */
-  --destructive: oklch(0.65 0.22 28);        /* brighter red in dark */
-  --destructive-rgb: 200, 70, 60;            /* RGB for shadow-tinted */
+  /* Dark accents are deliberately lifted into reading range —
+     a darker oxblood disappears on warm walnut. */
+  --accent: #C77258;                         /* oxblood, lifted */
+  --accent-rgb: 199, 114, 88;
+  --accent-on: #181410;
+  --info: #D7A858;
+  --info-rgb: 215, 168, 88;
+  --success: #7FAE7A;
+  --success-rgb: 127, 174, 122;
+  --destructive: oklch(0.62 0.20 28);        /* slight desaturation for dark */
+  --destructive-rgb: 199, 89, 76;            /* RGB for shadow-tinted */
 
   /* === SHADOW OPACITY (stronger in dark mode for visibility) === */
   --shadow-border-opacity: 0.15;
@@ -295,6 +337,16 @@
   /* Markdown list markers */
   --md-bullets: var(--foreground-50);
   --md-counters: var(--foreground-50);
+}
+
+/* Dark named-accent variants */
+.dark[data-accent="indigo"] {
+  --accent: #8190CE;
+  --accent-rgb: 129, 144, 206;
+}
+.dark[data-accent="moss"] {
+  --accent: #8FB58A;
+  --accent-rgb: 143, 181, 138;
 }
 
 /* Theme Override - Semi-transparent background to allow vibrancy through */
@@ -368,15 +420,6 @@ html[data-scenic][data-theme-override]::before {
    Panels with bg-background will become translucent glass */
 html[data-scenic] {
   --background: oklch(0.2 0.005 270 / 0.55);
-}
-
-/* Inter Font - Opt-in via data-font="inter" attribute
-   Loaded from Google Fonts in index.html with optical sizing (opsz) axis */
-html[data-font="inter"] {
-  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-default: var(--font-sans);
-  font-optical-sizing: auto;
-  font-feature-settings: "cv01", "cv02", "cv03", "cv04", "case";
 }
 
 /* Theme integration for Tailwind v4 */

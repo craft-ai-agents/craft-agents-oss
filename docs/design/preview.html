@@ -1,0 +1,1264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Craft Agents · chat surface · three directions</title>
+
+<!-- Google Fonts (variable axes) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..700,30..100,0..1&family=JetBrains+Mono:wght@300..700&family=Geist:wght@300..700&family=Geist+Mono:wght@300..700&family=Plus+Jakarta+Sans:wght@300..700&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   Top-level chrome (tab switcher) — neutral, not part of any direction
+============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+body {
+  background: #ECECEE;
+  color: #1A1A1F;
+  font-family: "Geist", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+.shell {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+}
+
+.tabbar {
+  display: flex;
+  align-items: stretch;
+  background: #1A1A1F;
+  color: #E8E8EC;
+  border-bottom: 1px solid #000;
+  user-select: none;
+}
+.tabbar .brand {
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #9C9CA1;
+  border-right: 1px solid rgba(255,255,255,0.08);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+.tabbar .brand strong { color: #E8E8EC; font-weight: 500; margin-right: 8px; }
+.tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #9C9CA1;
+  padding: 14px 22px 13px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 2px solid transparent;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tab .num {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10.5px;
+  color: #6B6B70;
+  letter-spacing: 0.08em;
+}
+.tab[aria-selected="true"] {
+  color: #FBF9F2;
+  background: rgba(255,255,255,0.04);
+  border-bottom-color: currentColor;
+}
+.tab[data-id="a"][aria-selected="true"] { color: #D89580; border-bottom-color: #D89580; }
+.tab[data-id="b"][aria-selected="true"] { color: #E8C66E; border-bottom-color: #E8C66E; }
+.tab[data-id="c"][aria-selected="true"] { color: #B5C291; border-bottom-color: #B5C291; }
+.tab:hover:not([aria-selected="true"]) { color: #DADADD; }
+.tabbar .spacer { flex: 1; }
+.tabbar .meta {
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10.5px;
+  color: #6B6B70;
+  letter-spacing: 0.08em;
+}
+
+.canvas {
+  position: relative;
+  overflow: hidden;
+}
+.direction {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.direction[data-active="true"] {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* ============================================================
+   Shared scene structure (each direction restyles via vars)
+============================================================ */
+.scene {
+  --gutter: clamp(24px, 5vw, 96px);
+  --col: 720px;
+  min-height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-prose);
+  font-size: var(--prose-size, 16.5px);
+  line-height: var(--prose-lh, 1.6);
+  font-feature-settings: var(--prose-features, "kern", "liga");
+}
+
+.scene .top-rail {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px var(--gutter);
+  border-bottom: 1px solid var(--rule);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  backdrop-filter: blur(12px);
+}
+.scene .crumb {
+  font-family: var(--font-meta);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-mute);
+  text-transform: uppercase;
+}
+.scene .crumb strong { color: var(--ink-soft); font-weight: 500; }
+.scene .crumb .sep { margin: 0 10px; opacity: 0.4; }
+.scene .top-rail .right {
+  margin-left: auto;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.scene .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 4px;
+  font-family: var(--font-meta);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  background: var(--bg-elev);
+  border: 1px solid var(--rule);
+  border-radius: var(--pill-radius, 4px);
+}
+.scene .pill .dot {
+  width: 6px; height: 6px; border-radius: 999px;
+  background: var(--success, #2D7A3E);
+}
+.scene .pill[data-mode="warn"] .dot { background: var(--warn, #B58A2A); }
+.scene .pill[data-mode="off"] .dot { background: var(--ink-mute); }
+
+/* Conversation column */
+.scene main {
+  padding: 56px var(--gutter) 120px;
+  max-width: calc(var(--col) + var(--gutter) * 2);
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Turn = a unit of conversation. Direction-specific styling overrides this. */
+.turn {
+  margin-bottom: var(--turn-gap, 36px);
+  padding-bottom: var(--turn-gap, 36px);
+  border-bottom: 1px solid var(--rule);
+}
+.turn:last-of-type {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.turn .turn-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 14px;
+  font-family: var(--font-meta);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+  text-transform: uppercase;
+}
+.turn .turn-head .id {
+  color: var(--ink-soft);
+}
+.turn .turn-head .timestamp {
+  font-variant-numeric: tabular-nums;
+}
+.turn .turn-head .role {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* User prompt — overridden per direction */
+.turn[data-role="user"] .body {
+  /* default = direction A: serif italic, right-leaning, no bubble */
+  font-family: var(--font-prose);
+  font-style: italic;
+  color: var(--ink);
+  font-size: var(--prose-size, 16.5px);
+  line-height: var(--prose-lh, 1.6);
+}
+
+/* Agent prose */
+.turn[data-role="assistant"] .body p {
+  margin-bottom: 14px;
+}
+.turn[data-role="assistant"] .body p:last-child {
+  margin-bottom: 0;
+}
+.turn[data-role="assistant"] .body .stream-cursor {
+  display: inline-block;
+  width: 0.55em;
+  height: 1.05em;
+  background: var(--accent);
+  vertical-align: -2px;
+  margin-left: 2px;
+  animation: blink 1.1s infinite steps(2, start);
+}
+@keyframes blink { 0% { opacity: 1 } 50% { opacity: 0 } 100% { opacity: 1 } }
+
+/* Tool call row */
+.tool-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  margin: 22px 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--rule);
+  border-radius: var(--pill-radius, 4px);
+  font-family: var(--font-meta);
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.tool-row .glyph {
+  width: 22px; height: 22px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  border: 1px solid var(--rule);
+  border-radius: var(--pill-radius, 4px);
+  font-size: 11px;
+}
+.tool-row .label { color: var(--ink); font-weight: 500; }
+.tool-row .label .path { color: var(--ink-soft); font-weight: 400; margin-left: 6px; }
+.tool-row .stat { color: var(--ink-mute); font-variant-numeric: tabular-nums; }
+.tool-row .check { color: var(--success); font-weight: 600; font-size: 13px; }
+
+/* Code block (diff) */
+.codeblock {
+  margin: 22px 0;
+  background: var(--code-bg, var(--bg-elev));
+  border: 1px solid var(--rule);
+  border-radius: var(--pill-radius, 4px);
+  font-family: var(--font-meta);
+  font-size: 12.5px;
+  line-height: 1.55;
+  overflow: hidden;
+}
+.codeblock .head {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.codeblock pre {
+  padding: 14px 18px;
+  overflow-x: auto;
+  font-family: inherit;
+}
+.codeblock .line { display: block; }
+.codeblock .line.add { background: var(--diff-add, rgba(46, 122, 62, 0.10)); color: var(--diff-add-fg, #2D6A3E); }
+.codeblock .line.del { background: var(--diff-del, rgba(180, 60, 50, 0.08)); color: var(--diff-del-fg, #8B2A20); text-decoration: line-through; text-decoration-color: rgba(180,60,50,0.4); }
+.codeblock .line.ctx { color: var(--ink-soft); }
+.codeblock .line .gutter { display: inline-block; width: 22px; color: var(--ink-mute); user-select: none; }
+
+/* Plan-accept row */
+.plan-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 18px;
+  margin: 22px 0;
+  background: var(--surface, var(--bg-elev));
+  border: 1px solid var(--rule);
+  border-radius: var(--pill-radius, 4px);
+}
+.plan-row .summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.plan-row .summary .label {
+  font-family: var(--font-meta);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+.plan-row .summary .detail {
+  font-family: var(--font-prose);
+  font-size: 14px;
+  color: var(--ink);
+}
+.plan-row .actions {
+  display: flex;
+  gap: 8px;
+}
+.plan-row button {
+  appearance: none;
+  border: 1px solid var(--rule);
+  background: var(--bg);
+  color: var(--ink);
+  padding: 7px 14px 6px;
+  font: inherit;
+  font-family: var(--font-meta);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: var(--pill-radius, 4px);
+}
+.plan-row button.primary {
+  background: var(--accent);
+  color: var(--accent-on);
+  border-color: transparent;
+}
+
+/* Composer */
+.composer {
+  position: sticky;
+  bottom: 0;
+  margin: 0 calc(var(--gutter) * -1) 0;
+  padding: 18px var(--gutter) 22px;
+  background: var(--bg);
+  border-top: 1px solid var(--rule);
+}
+.composer .field {
+  background: var(--surface, var(--bg-elev));
+  border: 1px solid var(--rule);
+  border-radius: var(--pill-radius, 4px);
+  padding: 14px 18px 12px;
+  display: grid;
+  grid-template-rows: auto auto;
+  gap: 8px;
+  max-width: calc(var(--col) + 0px);
+  margin: 0 auto;
+}
+.composer .input {
+  font-family: var(--font-prose);
+  font-size: 15px;
+  font-style: italic;
+  color: var(--ink-mute);
+  min-height: 28px;
+}
+.composer .input::after { content: "▌"; color: var(--accent); margin-left: 2px; opacity: 0.5; }
+.composer .controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-meta);
+  font-size: 11px;
+  color: var(--ink-mute);
+}
+.composer .controls .grow { flex: 1; }
+.composer .controls .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 2px;
+  border: 1px solid var(--rule);
+  border-radius: var(--pill-radius, 4px);
+  color: var(--ink-soft);
+}
+.composer .controls .send {
+  appearance: none;
+  border: 0;
+  background: var(--accent);
+  color: var(--accent-on);
+  padding: 7px 18px 6px;
+  font-family: var(--font-meta);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: var(--pill-radius, 4px);
+}
+
+/* Token-spec footer (each direction lists its own values) */
+.spec-rail {
+  border-top: 1px dashed var(--rule);
+  padding: 30px var(--gutter) 60px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+  font-family: var(--font-meta);
+  font-size: 11px;
+  color: var(--ink-mute);
+  background: var(--bg-elev);
+}
+.spec-rail h4 {
+  font-family: var(--font-display, var(--font-prose));
+  font-size: 12px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+.spec-rail dl { display: grid; gap: 6px; }
+.spec-rail dt { color: var(--ink-soft); }
+.spec-rail dd { color: var(--ink-mute); margin-bottom: 6px; }
+.spec-rail .swatch-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.spec-rail .swatch {
+  width: 30px; height: 22px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  position: relative;
+}
+.spec-rail .swatch::after {
+  content: attr(data-hex);
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  font-size: 9.5px;
+  color: var(--ink-mute);
+  white-space: nowrap;
+}
+
+/* ============================================================
+   DIRECTION A — Editorial-Industrial
+   Reads-like-a-document. Newsreader serif body, Fraunces display,
+   JetBrains Mono metadata. Warm paper or warm walnut.
+   Three live toggles: light/dark · accent · density.
+============================================================ */
+
+/* shared structural tokens */
+[data-direction="a"] .scene {
+  --font-prose: "Newsreader", Georgia, serif;
+  --font-display: "Fraunces", Georgia, serif;
+  --font-meta: "JetBrains Mono", ui-monospace, monospace;
+  --prose-size: 17px;
+  --prose-features: "kern", "liga", "ss01";
+  --pill-radius: 0px;
+  font-variation-settings: "opsz" 18;
+}
+
+/* === LIGHT MODE (warm paper) === */
+[data-direction="a"][data-mode="light"] .scene {
+  --bg: #FBF9F2;
+  --bg-elev: #F4F0E5;
+  --ink: #1F1A14;
+  --ink-soft: #4A413A;
+  --ink-mute: #8C8175;
+  --rule: rgba(31, 26, 20, 0.10);
+  --surface: #FFFEFA;
+  --warn: #B5832A;
+  --success: #2D6A3E;
+  --diff-add: rgba(45, 106, 62, 0.10);
+  --diff-add-fg: #2D5C36;
+  --diff-del: rgba(107, 24, 24, 0.08);
+  --diff-del-fg: #8B2A20;
+  --code-bg: #F2EDE0;
+}
+
+/* === DARK MODE (warm walnut) === */
+[data-direction="a"][data-mode="dark"] .scene {
+  --bg: #181410;
+  --bg-elev: #221C16;
+  --ink: #ECE6D6;
+  --ink-soft: #B8AE9C;
+  --ink-mute: #7A7166;
+  --rule: rgba(236, 230, 214, 0.10);
+  --surface: #231D17;
+  --warn: #D7A858;
+  --success: #7FAE7A;
+  --diff-add: rgba(127, 174, 122, 0.12);
+  --diff-add-fg: #9CC698;
+  --diff-del: rgba(199, 114, 88, 0.12);
+  --diff-del-fg: #D69582;
+  --code-bg: #110D09;
+}
+
+/* === ACCENT VARIANTS — light === */
+[data-direction="a"][data-mode="light"][data-accent="oxblood"] .scene { --accent: #6B1818; --accent-on: #FBF9F2; }
+[data-direction="a"][data-mode="light"][data-accent="indigo"]  .scene { --accent: #1F2A55; --accent-on: #FBF9F2; }
+[data-direction="a"][data-mode="light"][data-accent="moss"]    .scene { --accent: #2D4A2B; --accent-on: #FBF9F2; }
+
+/* === ACCENT VARIANTS — dark (lifted into reading range) === */
+[data-direction="a"][data-mode="dark"][data-accent="oxblood"]  .scene { --accent: #C77258; --accent-on: #181410; }
+[data-direction="a"][data-mode="dark"][data-accent="indigo"]   .scene { --accent: #8190CE; --accent-on: #181410; }
+[data-direction="a"][data-mode="dark"][data-accent="moss"]     .scene { --accent: #8FB58A; --accent-on: #181410; }
+
+/* === DENSITY VARIANTS === */
+[data-direction="a"][data-density="reading"] .scene {
+  --turn-gap: 38px;
+  --prose-lh: 1.62;
+}
+[data-direction="a"][data-density="working"] .scene {
+  --turn-gap: 22px;
+  --prose-lh: 1.50;
+}
+
+/* User prompt — roman serif (no italic), no heavy left rule.
+   Uses → glyph + role label in the turn-head for the editorial signal. */
+[data-direction="a"] .turn[data-role="user"] .body {
+  font-family: var(--font-prose);
+  font-style: normal;
+  font-size: 18px;
+  color: var(--ink);
+  font-variation-settings: "opsz" 22;
+  padding-left: 0;
+  border-left: 0;
+}
+[data-direction="a"] .turn[data-role="user"] .turn-head .role::before {
+  content: "→ ";
+  color: var(--accent);
+  font-family: var(--font-prose);
+  font-size: 13px;
+  margin-right: 2px;
+}
+[data-direction="a"] .turn[data-role="assistant"] .body {
+  font-variation-settings: "opsz" 18;
+}
+/* Composer placeholder: roman, not italic — feels like writing, not posing. */
+[data-direction="a"] .composer .input {
+  font-family: var(--font-prose);
+  font-style: normal;
+  font-size: 16px;
+  font-variation-settings: "opsz" 18;
+}
+[data-direction="a"] h1.display {
+  font-family: var(--font-display);
+  font-variation-settings: "opsz" 96, "SOFT" 30, "WONK" 1;
+  font-weight: 400;
+}
+
+/* Toggle group styling (sits in A's top-rail) */
+.toggle-group {
+  display: inline-flex;
+  background: var(--bg-elev);
+  border: 1px solid var(--rule);
+  font-family: var(--font-meta);
+}
+.toggle-group button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-mute);
+  font: inherit;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 10px 5px;
+  cursor: pointer;
+  border-right: 1px solid var(--rule);
+  transition: color 160ms ease, background 160ms ease;
+}
+.toggle-group button:last-child { border-right: 0; }
+.toggle-group button[aria-pressed="true"] {
+  color: var(--accent);
+  background: var(--surface);
+}
+.toggle-group button:hover:not([aria-pressed="true"]) { color: var(--ink-soft); }
+.toggle-group .swatch {
+  display: inline-block;
+  width: 9px; height: 9px;
+  margin-right: 6px;
+  vertical-align: -1px;
+  border: 1px solid var(--rule);
+}
+
+/* ============================================================
+   DIRECTION B — Industrial control surface
+   Mono-everywhere. Dark-by-default. Sodium yellow accent.
+   Feels like reading instrument logs in a quiet room.
+============================================================ */
+[data-direction="b"] .scene {
+  --font-prose: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+  --font-display: "Geist Mono", ui-monospace, monospace;
+  --font-meta: "JetBrains Mono", ui-monospace, monospace;
+  --prose-size: 13.5px;
+  --prose-lh: 1.65;
+
+  --bg: #0E0F12;
+  --bg-elev: #14161A;
+  --ink: #DCDCD8;
+  --ink-soft: #9C9C97;
+  --ink-mute: #5C5C5F;
+  --accent: #E8C66E;
+  --accent-on: #0E0F12;
+  --rule: rgba(220, 220, 216, 0.08);
+  --surface: #181A1F;
+  --warn: #C44131;
+  --success: #6BA86B;
+  --pill-radius: 2px;
+  --turn-gap: 28px;
+
+  --diff-add: rgba(107, 168, 107, 0.10);
+  --diff-add-fg: #97C497;
+  --diff-del: rgba(196, 65, 49, 0.10);
+  --diff-del-fg: #D9756B;
+  --code-bg: #0A0B0E;
+}
+[data-direction="b"] .turn[data-role="user"] .body {
+  font-family: var(--font-prose);
+  font-style: normal;
+  font-size: 13.5px;
+  color: var(--ink);
+  background: var(--bg-elev);
+  padding: 12px 16px;
+  border-left: 2px solid var(--accent);
+  white-space: pre-wrap;
+}
+[data-direction="b"] .turn[data-role="user"] .body::before {
+  content: "$ ";
+  color: var(--accent);
+  font-weight: 500;
+}
+[data-direction="b"] .turn[data-role="assistant"] .body {
+  white-space: pre-wrap;
+  font-family: var(--font-prose);
+}
+[data-direction="b"] .turn[data-role="assistant"] .body::before {
+  content: "▸ ";
+  color: var(--accent);
+}
+[data-direction="b"] .composer .input {
+  font-family: var(--font-prose);
+  font-style: normal;
+  font-size: 13.5px;
+  color: var(--ink-mute);
+}
+[data-direction="b"] .composer .input::before {
+  content: "$ ";
+  color: var(--accent);
+  margin-right: 2px;
+}
+[data-direction="b"] .turn .turn-head .role { color: var(--accent); }
+
+/* ============================================================
+   DIRECTION C — Brutally minimal
+   Single humanist sans (Plus Jakarta), warm white, olive accent,
+   no rules, no shadows. Calmest possible.
+============================================================ */
+[data-direction="c"] .scene {
+  --font-prose: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: "Plus Jakarta Sans", sans-serif;
+  --font-meta: "JetBrains Mono", ui-monospace, monospace;
+  --prose-size: 16px;
+  --prose-lh: 1.7;
+
+  --bg: #FCFAF5;
+  --bg-elev: #F5F2EC;
+  --ink: #1A1A1F;
+  --ink-soft: #4A4A52;
+  --ink-mute: #9C9CA1;
+  --accent: #5A6B33;
+  --accent-on: #FCFAF5;
+  --rule: transparent;
+  --surface: #FFFFFF;
+  --warn: #A77F2A;
+  --success: #5A6B33;
+  --pill-radius: 999px;
+  --turn-gap: 64px;
+
+  --diff-add: rgba(90, 107, 51, 0.08);
+  --diff-add-fg: #4A5A2A;
+  --diff-del: rgba(160, 60, 50, 0.06);
+  --diff-del-fg: #A04338;
+  --code-bg: #F5F2EC;
+}
+[data-direction="c"] .turn {
+  border-bottom: 0;
+}
+[data-direction="c"] .turn[data-role="user"] .body {
+  font-family: var(--font-prose);
+  font-style: normal;
+  font-size: 17px;
+  color: var(--ink);
+  font-weight: 500;
+}
+[data-direction="c"] .turn[data-role="user"] .body::before {
+  content: "You said";
+  display: block;
+  font-family: var(--font-meta);
+  font-size: 10.5px;
+  letter-spacing: 0.10em;
+  color: var(--ink-mute);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  font-weight: 400;
+}
+[data-direction="c"] .turn[data-role="assistant"] .body::before {
+  content: "Agent reply";
+  display: block;
+  font-family: var(--font-meta);
+  font-size: 10.5px;
+  letter-spacing: 0.10em;
+  color: var(--ink-mute);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+[data-direction="c"] .turn .turn-head { display: none; }
+[data-direction="c"] .tool-row {
+  background: transparent;
+  border-color: var(--ink-mute);
+  border: 0;
+  border-top: 1px solid rgba(26, 26, 31, 0.08);
+  border-bottom: 1px solid rgba(26, 26, 31, 0.08);
+  border-radius: 0;
+}
+[data-direction="c"] .composer .input {
+  font-family: var(--font-prose);
+  font-style: normal;
+  font-size: 16px;
+}
+
+/* ============================================================
+   Tighten responsiveness
+============================================================ */
+@media (max-width: 720px) {
+  .scene { --gutter: 18px; }
+  .spec-rail { grid-template-columns: 1fr 1fr; }
+  .tab { padding: 12px 14px; }
+  .tabbar .meta { display: none; }
+}
+
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- Tab bar (persistent, neutral) -->
+  <header class="tabbar">
+    <div class="brand"><strong>CRAFT.AGENTS</strong>chat-surface · proposal v1</div>
+    <button class="tab" data-id="a" aria-selected="true">
+      <span class="num">A</span><span>Reads-like-a-document</span>
+    </button>
+    <button class="tab" data-id="b" aria-selected="false">
+      <span class="num">B</span><span>Control surface</span>
+    </button>
+    <button class="tab" data-id="c" aria-selected="false">
+      <span class="num">C</span><span>Calmest agent UI</span>
+    </button>
+    <div class="spacer"></div>
+    <div class="meta">~/.gstack/projects/lukilabs-craft-agents-oss</div>
+  </header>
+
+  <!-- Canvas: three direction layers, only one visible at a time -->
+  <div class="canvas">
+
+    <!-- ────────────────────────────────────────────────────────
+         DIRECTION A — Editorial-Industrial (RECOMMENDED)
+    ───────────────────────────────────────────────────────── -->
+    <section class="direction" data-id="a" data-direction="a" data-active="true"
+             data-mode="light" data-accent="oxblood" data-density="reading">
+      <div class="scene">
+
+        <!-- top rail with three live toggles -->
+        <div class="top-rail">
+          <div class="crumb">
+            Workspace
+            <span class="sep">·</span>
+            <strong>Untitled session</strong>
+            <span class="sep">·</span>
+            session_2026-05-08_8d3f
+          </div>
+          <div class="right">
+            <div class="toggle-group" data-axis="mode" role="group" aria-label="Light or dark">
+              <button data-value="light" aria-pressed="true">Light</button>
+              <button data-value="dark"  aria-pressed="false">Dark</button>
+            </div>
+            <div class="toggle-group" data-axis="accent" role="group" aria-label="Accent color">
+              <button data-value="oxblood" aria-pressed="true"><span class="swatch" style="background:#6B1818"></span>Oxblood</button>
+              <button data-value="indigo"  aria-pressed="false"><span class="swatch" style="background:#1F2A55"></span>Indigo</button>
+              <button data-value="moss"    aria-pressed="false"><span class="swatch" style="background:#2D4A2B"></span>Moss</button>
+            </div>
+            <div class="toggle-group" data-axis="density" role="group" aria-label="Vertical density">
+              <button data-value="reading" aria-pressed="true">Reading</button>
+              <button data-value="working" aria-pressed="false">Working</button>
+            </div>
+          </div>
+        </div>
+
+        <main>
+
+          <!-- TURN 03 USER -->
+          <article class="turn" data-role="user">
+            <header class="turn-head">
+              <span class="id">§ 03</span>
+              <span class="role">you</span>
+              <span class="timestamp">14:32:08 EDT</span>
+            </header>
+            <div class="body">
+              Refactor the auth middleware to remove the global token registry leak —
+              and add a regression test that fails on the leaked path.
+            </div>
+          </article>
+
+          <!-- TURN 03 ASSISTANT -->
+          <article class="turn" data-role="assistant">
+            <header class="turn-head">
+              <span class="id">§ 03</span>
+              <span class="role">agent · craft</span>
+              <span class="timestamp">14:32:09 EDT</span>
+              <span class="timestamp">— streaming</span>
+            </header>
+            <div class="body">
+              <p>The leak lives in <code>packages/server/src/auth/middleware.ts</code> at line&nbsp;47, where <code>tokenRegistry</code> is declared at module scope. Every request reads and writes the same Map, so a token issued for tenant&nbsp;A briefly becomes visible to tenant&nbsp;B during the gap between issuance and revocation. Calling it a leak is generous &mdash; it's a cross-tenant data path that the type system happily endorses.</p>
+              <p>The right fix is to scope the registry to the request, not the module, and to add a regression test that proves cross-tenant tokens cannot leak even when the same process handles both. I'll keep the public surface of <code>requireAuth</code> identical so the route handlers don't have to change. The Map moves inside a factory keyed by <code>tenantId</code>, and the cleanup on <code>response.end</code> stays where it is.</p>
+              <p>The test is the load-bearing piece. Without it, this fix can silently regress &mdash; the symptom only appears under concurrent traffic from two tenants, which doesn't happen in unit tests. I'll spin up two requests in parallel against the patched middleware and assert the registries are separate object identities, then assert neither token is visible to the other.</p>
+              <p>One thing worth flagging: the existing <code>cleanupOnResponseEnd</code> hook (line&nbsp;112) assumes a single global Map and calls <code>tokenRegistry.delete(token)</code>. After the change, that delete is a no-op because the per-request Map is already garbage-collected when the response closes. The hook can be removed, but I want to keep it for one release as a safety net &mdash; in case any caller is mutating registry state directly through the export. We can drop it in the next minor version once telemetry confirms zero hits.</p>
+              <p>Three edits in total: the middleware itself, a new isolation test, and an updated changelog entry that names the CVE-class for downstream auditors. ETA on apply is about eighteen seconds<span class="stream-cursor"></span></p>
+            </div>
+
+            <!-- inline tool call -->
+            <div class="tool-row">
+              <span class="glyph">✎</span>
+              <span class="label">Edit<span class="path">· packages/server/src/auth/middleware.ts</span></span>
+              <span class="stat">23 lines · 1.2s</span>
+              <span class="check">✓</span>
+            </div>
+
+            <!-- code diff -->
+            <div class="codeblock">
+              <div class="head">
+                <span>packages/server/src/auth/middleware.ts</span>
+                <span>−4&nbsp;&nbsp;+19</span>
+              </div>
+              <pre><span class="line del"><span class="gutter">47</span>const tokenRegistry = new Map&lt;string, AuthToken&gt;();</span>
+<span class="line ctx"><span class="gutter">  </span></span>
+<span class="line add"><span class="gutter">47</span>function createScopedRegistry(tenantId: string) {</span>
+<span class="line add"><span class="gutter">48</span>  return new Map&lt;string, AuthToken&gt;();</span>
+<span class="line add"><span class="gutter">49</span>}</span>
+<span class="line ctx"><span class="gutter">50</span></span>
+<span class="line ctx"><span class="gutter">51</span>export function requireAuth(req, res, next) {</span>
+<span class="line del"><span class="gutter">52</span>  const token = tokenRegistry.get(req.headers.authorization);</span>
+<span class="line add"><span class="gutter">52</span>  const registry = createScopedRegistry(req.tenantId);</span>
+<span class="line add"><span class="gutter">53</span>  const token = registry.get(req.headers.authorization);</span></pre>
+            </div>
+
+            <!-- plan-acceptance row -->
+            <div class="plan-row">
+              <div class="summary">
+                <span class="label">Plan ready · 4 edits · ETA 18s</span>
+                <span class="detail"><em>Apply</em> to apply all four files in one transaction. <em>Modify</em> opens the diff in inline view; <em>Reject</em> keeps the working tree untouched.</span>
+              </div>
+              <div class="actions">
+                <button class="primary">Apply</button>
+                <button>Modify</button>
+                <button>Reject</button>
+              </div>
+            </div>
+
+          </article>
+
+        </main>
+
+        <!-- composer -->
+        <div class="composer">
+          <div class="field">
+            <div class="input">Reply, or <em>annotate the diff</em> for finer control&hellip;</div>
+            <div class="controls">
+              <span class="badge">@ skills · 3</span>
+              <span class="badge">@ sources · 2</span>
+              <span class="grow"></span>
+              <span>1,247 / 200,000 tokens · ⌘ + ↵ to send</span>
+              <button class="send">Send</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- spec rail -->
+        <div class="spec-rail">
+          <div>
+            <h4>Aesthetic</h4>
+            <dl>
+              <dt>Direction</dt><dd>Editorial-industrial hybrid</dd>
+              <dt>Mood</dt><dd>Document, not chat. Reading-grade.</dd>
+              <dt>Pairs with</dt><dd>Cursor's own preview, iA Writer, Substack</dd>
+            </dl>
+          </div>
+          <div>
+            <h4>Typography</h4>
+            <dl>
+              <dt>Body</dt><dd>Newsreader · opsz 18 · 17px / 1.62</dd>
+              <dt>Display</dt><dd>Fraunces · opsz 96, SOFT 30, WONK 1</dd>
+              <dt>Meta &amp; code</dt><dd>JetBrains Mono · variable wght</dd>
+            </dl>
+          </div>
+          <div>
+            <h4>Color</h4>
+            <div class="swatch-row">
+              <span class="swatch" data-hex="#FBF9F2" style="background:#FBF9F2"></span>
+              <span class="swatch" data-hex="#1F1A14" style="background:#1F1A14"></span>
+              <span class="swatch" data-hex="#6B1818" style="background:#6B1818"></span>
+              <span class="swatch" data-hex="#F2EDE0" style="background:#F2EDE0"></span>
+            </div>
+          </div>
+          <div style="grid-column: span 1">
+            <h4>Risks vs current</h4>
+            <dl>
+              <dt>Drop</dt><dd>system-ui body, purple accent, soft shadows</dd>
+              <dt>Add</dt><dd>Newsreader, Fraunces, hairline rules, oxblood</dd>
+              <dt>Keep</dt><dd>JetBrains Mono, --foreground/-rgb scale</dd>
+            </dl>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ────────────────────────────────────────────────────────
+         DIRECTION B — Control surface
+    ───────────────────────────────────────────────────────── -->
+    <section class="direction" data-id="b" data-direction="b" data-active="false">
+      <div class="scene">
+
+        <div class="top-rail">
+          <div class="crumb">
+            workspace
+            <span class="sep">/</span>
+            <strong>untitled-session</strong>
+            <span class="sep">/</span>
+            session_2026-05-08_8d3f
+          </div>
+          <div class="right">
+            <span class="pill"><span class="dot"></span> claude-opus-4-7</span>
+            <span class="pill" data-mode="off"><span class="dot"></span> auto · 3 skills</span>
+          </div>
+        </div>
+
+        <main>
+
+          <article class="turn" data-role="user">
+            <header class="turn-head">
+              <span class="id">[03]</span>
+              <span class="role">you</span>
+              <span class="timestamp">14:32:08.221</span>
+            </header>
+            <div class="body">refactor auth middleware to remove global token registry leak; add regression test that fails on leaked path.</div>
+          </article>
+
+          <article class="turn" data-role="assistant">
+            <header class="turn-head">
+              <span class="id">[03]</span>
+              <span class="role">agent</span>
+              <span class="timestamp">14:32:09.044</span>
+              <span class="timestamp">streaming</span>
+            </header>
+            <div class="body">leak: packages/server/src/auth/middleware.ts:47
+module-scoped Map shared across all requests.
+fix: per-request registry keyed by tenantId.
+keep public surface of requireAuth() identical.
+test: two concurrent requests in different tenants, assert neither sees the other's bearer.
+
+three edits. test is the load-bearing one. without it the fix can regress silently<span class="stream-cursor"></span></div>
+
+            <div class="tool-row">
+              <span class="glyph">›</span>
+              <span class="label">edit<span class="path">packages/server/src/auth/middleware.ts</span></span>
+              <span class="stat">23L · 1.2s</span>
+              <span class="check">ok</span>
+            </div>
+
+            <div class="codeblock">
+              <div class="head">
+                <span>packages/server/src/auth/middleware.ts</span>
+                <span>-4 +19</span>
+              </div>
+              <pre><span class="line del"><span class="gutter">47</span>const tokenRegistry = new Map&lt;string, AuthToken&gt;();</span>
+<span class="line ctx"><span class="gutter">  </span></span>
+<span class="line add"><span class="gutter">47</span>function createScopedRegistry(tenantId: string) {</span>
+<span class="line add"><span class="gutter">48</span>  return new Map&lt;string, AuthToken&gt;();</span>
+<span class="line add"><span class="gutter">49</span>}</span>
+<span class="line ctx"><span class="gutter">50</span></span>
+<span class="line ctx"><span class="gutter">51</span>export function requireAuth(req, res, next) {</span>
+<span class="line del"><span class="gutter">52</span>  const token = tokenRegistry.get(req.headers.authorization);</span>
+<span class="line add"><span class="gutter">52</span>  const registry = createScopedRegistry(req.tenantId);</span>
+<span class="line add"><span class="gutter">53</span>  const token = registry.get(req.headers.authorization);</span></pre>
+            </div>
+
+            <div class="plan-row">
+              <div class="summary">
+                <span class="label">plan · 4 edits · eta 18s</span>
+                <span class="detail">apply: all four files atomically. modify: open inline diff. reject: no-op.</span>
+              </div>
+              <div class="actions">
+                <button class="primary">apply</button>
+                <button>modify</button>
+                <button>reject</button>
+              </div>
+            </div>
+
+          </article>
+
+        </main>
+
+        <div class="composer">
+          <div class="field">
+            <div class="input">reply, or annotate the diff inline...</div>
+            <div class="controls">
+              <span class="badge">@skills:3</span>
+              <span class="badge">@sources:2</span>
+              <span class="grow"></span>
+              <span>1247/200000 tok · ⌘+↵</span>
+              <button class="send">send</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="spec-rail">
+          <div>
+            <h4>Aesthetic</h4>
+            <dl>
+              <dt>Direction</dt><dd>Industrial / control surface</dd>
+              <dt>Mood</dt><dd>Reading instrument logs in a quiet room.</dd>
+              <dt>Pairs with</dt><dd>Raycast, Linear dark, Bloomberg terminal</dd>
+            </dl>
+          </div>
+          <div>
+            <h4>Typography</h4>
+            <dl>
+              <dt>Body</dt><dd>Geist Mono · 13.5px / 1.65</dd>
+              <dt>Display</dt><dd>Geist Mono uppercased</dd>
+              <dt>Meta &amp; code</dt><dd>JetBrains Mono</dd>
+            </dl>
+          </div>
+          <div>
+            <h4>Color</h4>
+            <div class="swatch-row">
+              <span class="swatch" data-hex="#0E0F12" style="background:#0E0F12"></span>
+              <span class="swatch" data-hex="#DCDCD8" style="background:#DCDCD8"></span>
+              <span class="swatch" data-hex="#E8C66E" style="background:#E8C66E"></span>
+              <span class="swatch" data-hex="#181A1F" style="background:#181A1F"></span>
+            </div>
+          </div>
+          <div>
+            <h4>Risks vs current</h4>
+            <dl>
+              <dt>Drop</dt><dd>system-ui everywhere, purple, light-by-default</dd>
+              <dt>Add</dt><dd>Geist Mono body, sodium accent, dark default</dd>
+              <dt>Keep</dt><dd>JetBrains Mono, --foreground scale</dd>
+            </dl>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ────────────────────────────────────────────────────────
+         DIRECTION C — Brutally minimal
+    ───────────────────────────────────────────────────────── -->
+    <section class="direction" data-id="c" data-direction="c" data-active="false">
+      <div class="scene">
+
+        <div class="top-rail">
+          <div class="crumb">
+            Workspace
+            <span class="sep">·</span>
+            <strong>Untitled session</strong>
+          </div>
+          <div class="right">
+            <span class="pill"><span class="dot"></span> claude-opus-4-7</span>
+          </div>
+        </div>
+
+        <main>
+
+          <article class="turn" data-role="user">
+            <div class="body">Refactor the auth middleware to remove the global token registry leak — and add a regression test that fails on the leaked path.</div>
+          </article>
+
+          <article class="turn" data-role="assistant">
+            <div class="body">
+              <p>The leak is in <code>packages/server/src/auth/middleware.ts</code> at line 47. The token registry is module-scoped, so every request shares the same Map, and a token issued for tenant A briefly becomes visible to tenant B.</p>
+              <p>Fix: scope the registry per-request, keyed by tenant. Public surface of <code>requireAuth</code> stays identical. Test: two concurrent requests in different tenants assert neither sees the other's bearer.</p>
+              <p>Three edits. The test is the load-bearing one<span class="stream-cursor"></span></p>
+            </div>
+
+            <div class="tool-row">
+              <span class="glyph">✎</span>
+              <span class="label">Edit<span class="path">· packages/server/src/auth/middleware.ts</span></span>
+              <span class="stat">23 lines · 1.2s</span>
+              <span class="check">✓</span>
+            </div>
+
+            <div class="codeblock">
+              <div class="head">
+                <span>packages/server/src/auth/middleware.ts</span>
+                <span>−4&nbsp;&nbsp;+19</span>
+              </div>
+              <pre><span class="line del"><span class="gutter">47</span>const tokenRegistry = new Map&lt;string, AuthToken&gt;();</span>
+<span class="line ctx"><span class="gutter">  </span></span>
+<span class="line add"><span class="gutter">47</span>function createScopedRegistry(tenantId: string) {</span>
+<span class="line add"><span class="gutter">48</span>  return new Map&lt;string, AuthToken&gt;();</span>
+<span class="line add"><span class="gutter">49</span>}</span>
+<span class="line ctx"><span class="gutter">50</span></span>
+<span class="line ctx"><span class="gutter">51</span>export function requireAuth(req, res, next) {</span>
+<span class="line del"><span class="gutter">52</span>  const token = tokenRegistry.get(req.headers.authorization);</span>
+<span class="line add"><span class="gutter">52</span>  const registry = createScopedRegistry(req.tenantId);</span>
+<span class="line add"><span class="gutter">53</span>  const token = registry.get(req.headers.authorization);</span></pre>
+            </div>
+
+            <div class="plan-row">
+              <div class="summary">
+                <span class="label">Plan ready · 4 edits</span>
+                <span class="detail">Apply all four files in one transaction.</span>
+              </div>
+              <div class="actions">
+                <button class="primary">Apply</button>
+                <button>Modify</button>
+                <button>Reject</button>
+              </div>
+            </div>
+          </article>
+
+        </main>
+
+        <div class="composer">
+          <div class="field">
+            <div class="input">Reply&hellip;</div>
+            <div class="controls">
+              <span class="badge">3 skills</span>
+              <span class="badge">2 sources</span>
+              <span class="grow"></span>
+              <span>1,247 tokens · ⌘ + ↵</span>
+              <button class="send">Send</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="spec-rail">
+          <div>
+            <h4>Aesthetic</h4>
+            <dl>
+              <dt>Direction</dt><dd>Brutally minimal</dd>
+              <dt>Mood</dt><dd>Calmest possible. Whitespace as design.</dd>
+              <dt>Pairs with</dt><dd>Things 3, Stripe docs, Notion sans</dd>
+            </dl>
+          </div>
+          <div>
+            <h4>Typography</h4>
+            <dl>
+              <dt>Body</dt><dd>Plus Jakarta Sans · 16px / 1.7</dd>
+              <dt>Display</dt><dd>Plus Jakarta Sans (single typeface)</dd>
+              <dt>Meta &amp; code</dt><dd>JetBrains Mono (rare)</dd>
+            </dl>
+          </div>
+          <div>
+            <h4>Color</h4>
+            <div class="swatch-row">
+              <span class="swatch" data-hex="#FCFAF5" style="background:#FCFAF5"></span>
+              <span class="swatch" data-hex="#1A1A1F" style="background:#1A1A1F"></span>
+              <span class="swatch" data-hex="#5A6B33" style="background:#5A6B33"></span>
+              <span class="swatch" data-hex="#F5F2EC" style="background:#F5F2EC"></span>
+            </div>
+          </div>
+          <div>
+            <h4>Risks vs current</h4>
+            <dl>
+              <dt>Drop</dt><dd>system-ui, purple, all rules &amp; shadows</dd>
+              <dt>Add</dt><dd>Plus Jakarta, olive accent, 64px rhythm</dd>
+              <dt>Keep</dt><dd>JetBrains Mono (code only)</dd>
+            </dl>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+const tabs = document.querySelectorAll('.tab');
+const layers = document.querySelectorAll('.direction');
+function setActive(id) {
+  tabs.forEach(t => t.setAttribute('aria-selected', t.dataset.id === id ? 'true' : 'false'));
+  layers.forEach(l => l.setAttribute('data-active', l.dataset.id === id ? 'true' : 'false'));
+  history.replaceState(null, '', '#' + id);
+}
+tabs.forEach(t => t.addEventListener('click', () => setActive(t.dataset.id)));
+window.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea')) return;
+  if (e.key === '1' || e.key === 'a') setActive('a');
+  if (e.key === '2' || e.key === 'b') setActive('b');
+  if (e.key === '3' || e.key === 'c') setActive('c');
+});
+const initial = (location.hash || '#a').slice(1);
+if (['a','b','c'].includes(initial)) setActive(initial);
+
+/* Toggle groups inside Direction A — light/dark, accent, density */
+document.querySelectorAll('.toggle-group').forEach(group => {
+  const axis = group.dataset.axis;
+  const root = group.closest('.direction');
+  if (!axis || !root) return;
+  group.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const value = btn.dataset.value;
+      root.setAttribute('data-' + axis, value);
+      group.querySelectorAll('button').forEach(b =>
+        b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+      try {
+        const state = JSON.parse(localStorage.getItem('craft-design-a') || '{}');
+        state[axis] = value;
+        localStorage.setItem('craft-design-a', JSON.stringify(state));
+      } catch {}
+    });
+  });
+});
+/* Restore A's last-chosen toggles on load */
+(function restoreA() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('craft-design-a') || '{}');
+    const root = document.querySelector('.direction[data-id="a"]');
+    if (!root) return;
+    ['mode','accent','density'].forEach(axis => {
+      if (!saved[axis]) return;
+      root.setAttribute('data-' + axis, saved[axis]);
+      const grp = root.querySelector('.toggle-group[data-axis="'+axis+'"]');
+      grp?.querySelectorAll('button').forEach(b =>
+        b.setAttribute('aria-pressed', b.dataset.value === saved[axis] ? 'true' : 'false'));
+    });
+  } catch {}
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+/* Density tokens for the chat surface — driven by [data-density] on <html>.
+   Reading: editorial breathing room. Working: faster scan in long sessions.
+   Default: reading. */
+
+:root[data-density="reading"], :root:not([data-density]) {
+  --turn-gap: 38px;
+  --prose-line-height: 1.62;
+}
+:root[data-density="working"] {
+  --turn-gap: 22px;
+  --prose-line-height: 1.50;
+}

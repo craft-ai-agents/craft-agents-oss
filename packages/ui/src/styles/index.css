@@ -13,7 +13,7 @@
  * 6-Color System:
  * - background: Light/dark surface
  * - foreground: Text and icons
- * - accent: Brand purple (highlights, Auto mode)
+ * - accent: Brand oxblood (highlights, Auto mode)
  * - info: Amber (warnings, Ask mode)
  * - success: Green (connected, checkmarks)
  * - destructive: Red (errors, failed)
@@ -32,17 +32,24 @@
 
 :root {
   /* === 6 BASE COLORS === */
-  --background: oklch(0.98 0.003 265);
-  --foreground: oklch(0.185 0.01 270);
-  --foreground-rgb: 38, 36, 42;             /* RGB for shadow borders */
-  --accent: oklch(0.58 0.22 293);           /* purple - brand, Auto mode */
-  --accent-rgb: 104, 78, 133;               /* darkened RGB for shadow-tinted (70% of accent) */
-  --info: oklch(0.75 0.16 70);              /* amber - warnings, Ask mode */
-  --success: oklch(0.55 0.17 145);          /* green - connected, checkmarks */
-  --destructive: oklch(0.58 0.24 28);       /* red - errors, failed */
+  --background: #FBF9F2;                    /* warm paper white */
+  --background-warm: #F4F0E5;              /* code strip, elevated cards */
+  --foreground: #1F1A14;                    /* warm near-black */
+  --foreground-soft: #4A413A;              /* sepia gray for de-emphasized prose */
+  --foreground-mute: #8C8175;              /* faded for metadata */
+  --foreground-rgb: 31, 26, 20;            /* warm walnut RGB for shadow borders */
+  /* Accent — user-selectable: oxblood (default) / indigo / moss.
+     Set via [data-accent="..."] on <html>. Default below = oxblood.
+     See DESIGN.md → Color → Accents. */
+  --accent: #6B1818;                        /* oxblood */
+  --accent-rgb: 107, 24, 24;
+  --accent-on: #FBF9F2;                    /* foreground when on accent bg */
+  --info: #B5832A;                          /* desaturated amber for serif legibility */
+  --info-rgb: 181, 131, 42;
+  --success: #2D6A3E;
+  --success-rgb: 45, 106, 62;
+  --destructive: oklch(0.58 0.24 28);       /* kept; minor desaturation in dark mode below */
   --destructive-rgb: 180, 60, 50;           /* RGB for shadow-tinted */
-  --info-rgb: 180, 120, 40;                 /* RGB for shadow-tinted */
-  --success-rgb: 34, 120, 60;               /* RGB for shadow-tinted */
 
   /* === TEXT VARIANTS (mixed toward foreground for better contrast) === */
   --success-text: color-mix(in oklab, var(--success) 50%, var(--foreground));
@@ -131,17 +138,45 @@
   --md-bullets: var(--foreground-50);
   --md-counters: var(--foreground-50);
 
-  /* Fonts - System fonts for UI, JetBrains Mono for code */
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-serif: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  /* Fonts — Editorial-Industrial system. See DESIGN.md → Typography. */
+  --font-prose: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-display: "Fraunces", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --font-default: var(--font-sans);
+
+  /* Migration aliases.
+     - --font-sans now resolves to the prose serif: any `font-sans` Tailwind
+       class lands on Newsreader (the new default).
+     - --font-serif is INTENTIONALLY kept on mono. The legacy token never meant
+       "serif"; it was a mono fallback name. Empirically `font-serif` has zero
+       consumers in apps/ and packages/ outside the declaring files, so this
+       preserves intent without behavior change. Verify with:
+         rg "font-serif" apps packages
+       Prefer migrating to `font-prose` / `font-meta` in new code. */
+  --font-sans: var(--font-prose);    /* Newsreader serif */
+  --font-serif: var(--font-mono);    /* legacy alias preserved on mono */
+  --font-meta: var(--font-mono);     /* new explicit name */
+  --font-default: var(--font-prose);
+
+  /* Variable-axis defaults for prose. Per-component overrides may set opsz. */
+  font-variation-settings: "opsz" 18;
 
   /* Layout */
   --font-size-base: 15px;
+  --font-size-prose: 17px;                  /* default agent prose */
+  --font-size-meta: 11px;                   /* uppercase metadata */
   --radius: 0rem;
   --spacing: 0.25rem;
   --tracking-normal: 0em;
+}
+
+/* Named-accent variants — light. Activate via <html data-accent="indigo|moss"> */
+:root[data-accent="indigo"] {
+  --accent: #1F2A55;
+  --accent-rgb: 31, 42, 85;
+}
+:root[data-accent="moss"] {
+  --accent: #2D4A2B;
+  --accent-rgb: 45, 74, 43;
 }
 
 /* =============================================================================
@@ -150,17 +185,23 @@
 
 .dark {
   /* === 6 BASE COLORS === */
-  --background: oklch(0.2 0.005 270);
-  --foreground: oklch(0.92 0.005 270);
-  --foreground-rgb: 227, 226, 229;           /* RGB for shadow borders */
-  --accent: oklch(0.65 0.20 293);            /* brighter purple in dark */
-  --accent-rgb: 118, 92, 147;                /* darkened RGB for shadow-tinted (70% of accent) */
-  --info: oklch(0.70 0.16 70);               /* amber */
-  --success: oklch(0.60 0.17 145);           /* green */
-  --destructive: oklch(0.70 0.19 22);        /* brighter red in dark */
-  --destructive-rgb: 200, 80, 70;            /* RGB for shadow-tinted */
-  --info-rgb: 200, 140, 60;                  /* RGB for shadow-tinted */
-  --success-rgb: 50, 140, 80;                /* RGB for shadow-tinted */
+  --background: #181410;                    /* warm walnut */
+  --background-warm: #221C16;
+  --foreground: #ECE6D6;                    /* cream */
+  --foreground-soft: #B8AE9C;
+  --foreground-mute: #7A7166;
+  --foreground-rgb: 236, 230, 214;          /* warm cream RGB */
+  /* Dark accents are deliberately lifted into reading range —
+     a darker oxblood disappears on warm walnut. */
+  --accent: #C77258;                         /* oxblood, lifted */
+  --accent-rgb: 199, 114, 88;
+  --accent-on: #181410;
+  --info: #D7A858;
+  --info-rgb: 215, 168, 88;
+  --success: #7FAE7A;
+  --success-rgb: 127, 174, 122;
+  --destructive: oklch(0.62 0.20 28);        /* slight desaturation for dark */
+  --destructive-rgb: 199, 89, 76;            /* RGB for shadow-tinted */
 
   /* === TEXT VARIANTS (mixed toward foreground for better contrast) === */
   --success-text: color-mix(in oklab, var(--success) 50%, var(--foreground));
@@ -207,13 +248,14 @@
   --md-counters: var(--foreground-50);
 }
 
-/* Inter font option (requires loading Inter from Google Fonts or locally)
-   For best results, load Inter with optical sizing: family=Inter:opsz,wght@14..32,400;... */
-html[data-font="inter"] {
-  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-default: var(--font-sans);
-  font-optical-sizing: auto;
-  font-feature-settings: "cv01", "cv02", "cv03", "cv04", "case";
+/* Dark named-accent variants */
+.dark[data-accent="indigo"] {
+  --accent: #8190CE;
+  --accent-rgb: 129, 144, 206;
+}
+.dark[data-accent="moss"] {
+  --accent: #8FB58A;
+  --accent-rgb: 143, 181, 138;
 }
 
 /* =============================================================================

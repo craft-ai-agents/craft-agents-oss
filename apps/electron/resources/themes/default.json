@@ -1,6 +1,6 @@
 {
   "name": "Default",
-  "description": "Clean purple-tinted neutral theme",
+  "description": "Editorial-Industrial default theme (oxblood accent)",
   "author": "Craft Agent",
   "license": "MIT",
   "supportedModes": ["light", "dark"],
@@ -10,14 +10,14 @@
   },
   "background": "#faf9fb",
   "foreground": "#1a1625",
-  "accent": "#8b5cf6",
+  "accent": "#6B1818",
   "info": "#d97706",
   "success": "#16a34a",
   "destructive": "#dc2626",
   "dark": {
     "background": "#1e1d21",
     "foreground": "#f5f5f7",
-    "accent": "#a78bfa",
+    "accent": "#C77258",
     "info": "#fbbf24",
     "success": "#22c55e",
     "destructive": "#ef4444"
