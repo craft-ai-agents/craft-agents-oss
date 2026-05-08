@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "motion/react"
 import {
   Archive,
   Settings,
+  ChevronLeft,
   ChevronRight,
   ChevronDown,
   MoreHorizontal,
@@ -142,6 +143,7 @@ import {
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
+import { resolveSidebarDrilldownLayout } from "./sidebar-drilldown-layout"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -589,6 +591,15 @@ function AppShellContent({
   // UNIFIED NAVIGATION STATE - single source of truth from NavigationContext
   // Derived from focused panel's route — all panels are peers
   const navState = useNavigationState()
+  const sidebarDrilldownLayout = resolveSidebarDrilldownLayout({
+    navState,
+    isAutoCompact,
+    isSidebarAndNavigatorHidden: effectiveSidebarAndNavigatorHidden,
+    isSidebarVisible,
+    sidebarWidth,
+    sessionListWidth,
+  })
+  const isSidebarDrilldown = sidebarDrilldownLayout.isDrilldown
 
   const store = useStore()
   const panelStack = useAtomValue(panelStackAtom)
@@ -1231,8 +1242,13 @@ function AppShellContent({
 
     const handleMouseMove = (e: MouseEvent) => {
       if (isResizing === 'sidebar') {
-        const newWidth = Math.min(Math.max(e.clientX, 180), 320)
-        setSidebarWidth(newWidth)
+        if (isSidebarDrilldown) {
+          const newWidth = Math.min(Math.max(e.clientX, 240), 480)
+          setSessionListWidth(newWidth)
+        } else {
+          const newWidth = Math.min(Math.max(e.clientX, 180), 320)
+          setSidebarWidth(newWidth)
+        }
         if (resizeHandleRef.current) {
           const rect = resizeHandleRef.current.getBoundingClientRect()
           setSidebarHandleY(e.clientY - rect.top)
@@ -1250,7 +1266,10 @@ function AppShellContent({
 
     const handleMouseUp = () => {
       if (isResizing === 'sidebar') {
-        storage.set(storage.KEYS.sidebarWidth, sidebarWidth)
+        storage.set(
+          isSidebarDrilldown ? storage.KEYS.sessionListWidth : storage.KEYS.sidebarWidth,
+          isSidebarDrilldown ? sessionListWidth : sidebarWidth,
+        )
         setSidebarHandleY(null)
       } else if (isResizing === 'session-list') {
         storage.set(storage.KEYS.sessionListWidth, sessionListWidth)
@@ -1271,6 +1290,7 @@ function AppShellContent({
     sidebarWidth,
     sessionListWidth,
     isSidebarVisible,
+    isSidebarDrilldown,
   ])
 
   // Spring transition config - shared between sidebar and header
@@ -1724,6 +1744,10 @@ function AppShellContent({
     navigate(routes.view.settings(subpage))
   }, [])
 
+  const handleSidebarBackClick = useCallback(() => {
+    navigate(routes.view.sources())
+  }, [])
+
   // Handler for What's New overlay
   const handleWhatsNewClick = useCallback(async () => {
     const content = await window.electronAPI.getReleaseNotes()
@@ -2175,6 +2199,59 @@ function AppShellContent({
     })
   }, [sessionFilter, labelCounts, activeWorkspace?.id, handleLabelClick, isExpanded, toggleExpanded, openConfigureLabels, handleAddLabel, handleDeleteLabel])
 
+  const sessionListContent = isSessionsNavigation(navState) ? (
+    <SessionList
+      key={sessionFilter?.kind}
+      items={searchActive ? workspaceSessionMetas : filteredSessionMetas}
+      onDelete={handleDeleteSession}
+      onFlag={onFlagSession}
+      onUnflag={onUnflagSession}
+      onArchive={onArchiveSession}
+      onUnarchive={onUnarchiveSession}
+      onMarkUnread={onMarkSessionUnread}
+      onSessionStatusChange={onSessionStatusChange}
+      onRename={onRenameSession}
+      onFocusChatInput={(targetSessionId) => {
+        focusChatInputForSession(targetSessionId ?? focusedSessionId ?? session.selected)
+      }}
+      onSessionSelect={(selectedMeta) => {
+        navigateToSession(selectedMeta.id)
+      }}
+      onOpenInNewWindow={(selectedMeta) => {
+        if (activeWorkspaceId) {
+          window.electronAPI.openSessionInNewWindow(activeWorkspaceId, selectedMeta.id)
+        }
+      }}
+      onNavigateToView={(view) => {
+        if (view === 'allSessions') {
+          navigate(routes.view.allSessions())
+        } else if (view === 'flagged') {
+          navigate(routes.view.flagged())
+        }
+      }}
+      sessionOptions={sessionOptions}
+      searchActive={searchActive}
+      searchQuery={searchQuery}
+      onSearchChange={setSearchQuery}
+      onSearchClose={() => {
+        setSearchActive(false)
+        setSearchQuery('')
+      }}
+      sessionStatuses={effectiveSessionStatuses}
+      evaluateViews={evaluateViews}
+      labels={displayLabelConfigs}
+      onLabelsChange={handleSessionLabelsChange}
+      groupingMode={chatGroupingMode}
+      workspaceId={activeWorkspaceId ?? undefined}
+      statusFilter={listFilter}
+      labelFilterMap={labelFilter}
+      focusedSessionId={panelCount === 0 ? null : panelCount > 1 ? focusedSessionId : undefined}
+      onNavigateToSession={panelCount > 1 ? navigateToSessionInPanel : undefined}
+      hasPendingPrompt={hasPendingPrompt}
+      activeChatMatchInfo={chatMatchInfo}
+    />
+  ) : null
+
   return (
     <AppShellProvider value={appShellContextValue}>
         {/* === TOP BAR === */}
@@ -2213,12 +2290,36 @@ function AppShellContent({
           sidebarSlot={
             <div
               ref={sidebarRef}
-              style={{ width: sidebarWidth }}
+              style={{ width: sidebarDrilldownLayout.sidebarWidth }}
               className="h-full font-sans relative"
               data-focus-zone="sidebar"
               tabIndex={sidebarFocused ? 0 : -1}
               onKeyDown={handleSidebarKeyDown}
             >
+            {isSidebarDrilldown ? (
+              <div
+                className="flex h-full flex-col min-w-0 select-none bg-background shadow-middle"
+                style={{
+                  borderTopLeftRadius: RADIUS_INNER,
+                  borderBottomLeftRadius: RADIUS_EDGE,
+                  borderTopRightRadius: RADIUS_INNER,
+                  borderBottomRightRadius: RADIUS_INNER,
+                }}
+              >
+                <div className="px-2 py-2 shrink-0">
+                  <Button
+                    variant="ghost"
+                    onClick={handleSidebarBackClick}
+                    className="w-full justify-start gap-2 py-[7px] px-2 text-[13px] font-normal rounded-[6px] shadow-minimal"
+                    aria-label={t("common.back")}
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
+                    {t("common.back")}
+                  </Button>
+                </div>
+                {sessionListContent}
+              </div>
+            ) : (
             <div className="flex h-full flex-col select-none">
               {/* Sidebar Top Section */}
               <div className="flex-1 flex flex-col min-h-0">
@@ -2495,9 +2596,10 @@ function AppShellContent({
               </div>
 
             </div>
+            )}
           </div>
           }
-          sidebarWidth={effectiveSidebarAndNavigatorHidden ? 0 : (isSidebarVisible ? sidebarWidth : 0)}
+          sidebarWidth={sidebarDrilldownLayout.sidebarWidth}
           navigatorSlot={
             <div
               style={{ width: isAutoCompact ? '100%' : sessionListWidth }}
@@ -3178,64 +3280,11 @@ function AppShellContent({
             )}
             {isSessionsNavigation(navState) && (
               /* Sessions List */
-              <>
-                {/* SessionList: Scrollable list of session cards */}
-                {/* Key on sidebarMode forces full remount when switching views, skipping animations */}
-                <SessionList
-                  key={sessionFilter?.kind}
-                  items={searchActive ? workspaceSessionMetas : filteredSessionMetas}
-                  onDelete={handleDeleteSession}
-                  onFlag={onFlagSession}
-                  onUnflag={onUnflagSession}
-                  onArchive={onArchiveSession}
-                  onUnarchive={onUnarchiveSession}
-                  onMarkUnread={onMarkSessionUnread}
-                  onSessionStatusChange={onSessionStatusChange}
-                  onRename={onRenameSession}
-                  onFocusChatInput={(targetSessionId) => {
-                    focusChatInputForSession(targetSessionId ?? focusedSessionId ?? session.selected)
-                  }}
-                  onSessionSelect={(selectedMeta) => {
-                    navigateToSession(selectedMeta.id)
-                  }}
-                  onOpenInNewWindow={(selectedMeta) => {
-                    if (activeWorkspaceId) {
-                      window.electronAPI.openSessionInNewWindow(activeWorkspaceId, selectedMeta.id)
-                    }
-                  }}
-                  onNavigateToView={(view) => {
-                    if (view === 'allSessions') {
-                      navigate(routes.view.allSessions())
-                    } else if (view === 'flagged') {
-                      navigate(routes.view.flagged())
-                    }
-                  }}
-                  sessionOptions={sessionOptions}
-                  searchActive={searchActive}
-                  searchQuery={searchQuery}
-                  onSearchChange={setSearchQuery}
-                  onSearchClose={() => {
-                    setSearchActive(false)
-                    setSearchQuery('')
-                  }}
-                  sessionStatuses={effectiveSessionStatuses}
-                  evaluateViews={evaluateViews}
-                  labels={displayLabelConfigs}
-                  onLabelsChange={handleSessionLabelsChange}
-                  groupingMode={chatGroupingMode}
-                  workspaceId={activeWorkspaceId ?? undefined}
-                  statusFilter={listFilter}
-                  labelFilterMap={labelFilter}
-                  focusedSessionId={panelCount === 0 ? null : panelCount > 1 ? focusedSessionId : undefined}
-                  onNavigateToSession={panelCount > 1 ? navigateToSessionInPanel : undefined}
-                  hasPendingPrompt={hasPendingPrompt}
-                  activeChatMatchInfo={chatMatchInfo}
-                />
-              </>
+              !isSidebarDrilldown && sessionListContent
             )}
             </div>
           }
-          navigatorWidth={isAutoCompact ? sessionListWidth : (effectiveSidebarAndNavigatorHidden ? 0 : sessionListWidth)}
+          navigatorWidth={sidebarDrilldownLayout.navigatorWidth}
           isSidebarAndNavigatorHidden={effectiveSidebarAndNavigatorHidden}
           isRightSidebarVisible={true}
           isCompact={isAutoCompact}
@@ -3253,7 +3302,7 @@ function AppShellContent({
         />
 
         {/* Sidebar Resize Handle (absolute, hidden in focused mode) */}
-        {!effectiveSidebarAndNavigatorHidden && (
+        {sidebarDrilldownLayout.showSidebarResizeHandle && (
         <div
           ref={resizeHandleRef}
           onMouseDown={(e) => { e.preventDefault(); setIsResizing('sidebar') }}
@@ -3270,7 +3319,7 @@ function AppShellContent({
             top: PANEL_STACK_VERTICAL_OVERFLOW,
             bottom: PANEL_STACK_VERTICAL_OVERFLOW,
             left: isSidebarVisible
-              ? sidebarWidth + (PANEL_GAP / 2) - PANEL_SASH_HALF_HIT_WIDTH
+              ? sidebarDrilldownLayout.sidebarWidth + (PANEL_GAP / 2) - PANEL_SASH_HALF_HIT_WIDTH
               : -PANEL_GAP,
             transition: isResizing === 'sidebar' ? undefined : 'left 0.15s ease-out',
           }}
@@ -3286,7 +3335,7 @@ function AppShellContent({
         )}
 
         {/* Session List Resize Handle (absolute, hidden in focused mode) */}
-        {!effectiveSidebarAndNavigatorHidden && (
+        {sidebarDrilldownLayout.showSessionListResizeHandle && (
         <div
           ref={sessionListHandleRef}
           onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}
