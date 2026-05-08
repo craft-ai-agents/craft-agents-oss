@@ -23,7 +23,7 @@ export const DEFAULT_STATUS_COLORS: Record<string, EntityColor> = {
   'todo': 'foreground/50',          // Muted — ready to work on
   'in-progress': 'success',         // Green — active work
   'needs-review': 'info',           // Amber — attention needed
-  'done': 'accent',                 // Purple — completed
+  'done': 'accent',                 // Accent — completed
   'cancelled': 'foreground/50',     // Muted — inactive
 }
 

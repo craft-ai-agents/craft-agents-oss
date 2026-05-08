@@ -52,7 +52,7 @@ export function generateCallbackPage(options: {
       height: 100vh;
       /* bg-foreground-2: 2% foreground mixed with background */
       background-color: #f7f7f7;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: "Newsreader", Georgia, serif;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -60,9 +60,9 @@ export function generateCallbackPage(options: {
     }
 
     .logo {
-      /* Purple accent: oklch(0.62 0.13 293) */
-      color: #8b5fb3;
-      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
+      /* Oxblood accent: #6B1818 */
+      color: #6B1818;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
       font-size: 6px;
       line-height: 1;
       white-space: pre;
@@ -122,14 +122,14 @@ export function generateCallbackPage(options: {
       font-size: 14px;
       font-weight: 500;
       color: #fff;
-      background-color: #8b5fb3;
+      background-color: #6B1818;
       border-radius: 6px;
       text-decoration: none;
       transition: background-color 0.15s ease;
     }
 
     .return-link:hover {
-      background-color: #7a4fa3;
+      background-color: #591414;
     }
 
     @media (prefers-color-scheme: dark) {
@@ -137,8 +137,8 @@ export function generateCallbackPage(options: {
         background-color: #1a1a1a;
       }
       .logo {
-        /* Brighter purple in dark mode: oklch(0.68 0.13 293) */
-        color: #a882c9;
+        /* Lifted oxblood in dark mode: #C77258 */
+        color: #C77258;
       }
       .card {
         ${isSuccess

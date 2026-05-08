@@ -22,7 +22,7 @@ const MOCK_LABELS: LabelConfig[] = [
   { id: 'bug', name: 'Bug', color: { light: '#EF4444', dark: '#F87171' } },
   { id: 'priority', name: 'Priority', color: { light: '#F59E0B', dark: '#FBBF24' }, valueType: 'number' },
   { id: 'due-date', name: 'Due Date', color: { light: '#3B82F6', dark: '#60A5FA' }, valueType: 'date' },
-  { id: 'sprint', name: 'Sprint', color: { light: '#8B5CF6', dark: '#A78BFA' }, valueType: 'string' },
+  { id: 'sprint', name: 'Sprint', color: { light: '#2D4A2B', dark: '#8FB58A' }, valueType: 'string' },
   { id: 'feature', name: 'Feature', color: { light: '#10B981', dark: '#34D399' } },
   { id: 'estimate', name: 'Estimate', color: { light: '#EC4899', dark: '#F472B6' }, valueType: 'number' },
 ]

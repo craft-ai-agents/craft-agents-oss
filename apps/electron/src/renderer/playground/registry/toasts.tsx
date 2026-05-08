@@ -16,7 +16,7 @@ const TOAST_TYPES: { id: ToastType; label: string; color: string }[] = [
   { id: 'error', label: 'Error', color: 'bg-red-500' },
   { id: 'warning', label: 'Warning', color: 'bg-amber-500' },
   { id: 'info', label: 'Info', color: 'bg-blue-500' },
-  { id: 'loading', label: 'Loading', color: 'bg-purple-500' },
+  { id: 'loading', label: 'Loading', color: 'bg-emerald-500' },
   { id: 'action', label: 'With Action', color: 'bg-foreground' },
   { id: 'long-url', label: 'With Long URL and Action', color: 'bg-cyan-500' },
 ]

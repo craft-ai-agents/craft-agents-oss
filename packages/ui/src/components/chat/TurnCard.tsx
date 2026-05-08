@@ -2620,7 +2620,7 @@ export function ResponseCard({
 // TodoList Component (for TodoWrite tool visualization)
 // ============================================================================
 
-/** Status icon for a todo item - uses purple filled icon for completed */
+/** Status icon for a todo item - uses accent filled icon for completed */
 function TodoStatusIcon({ status }: { status: TodoStatus }) {
   switch (status) {
     case 'pending':

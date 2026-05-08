@@ -48,7 +48,7 @@ When `colorTheme` is omitted or undefined, the workspace inherits the app defaul
 |-------|---------|-------|
 | `background` | Surface/page background | Light/dark surface color |
 | `foreground` | Text and icons | Primary text color |
-| `accent` | Brand color, Execute mode | Highlights, active states, purple UI elements |
+| `accent` | Brand color, Execute mode | Highlights, active states, accent UI elements |
 | `info` | Warnings, Ask mode | Amber indicators, attention states |
 | `success` | Connected status | Green checkmarks, success states |
 | `destructive` | Errors, delete actions | Red alerts, failed states |
@@ -56,11 +56,11 @@ When `colorTheme` is omitted or undefined, the workspace inherits the app defaul
 ## Color Formats
 
 Any valid CSS color format is supported:
-- **Hex**: `#8b5cf6`, `#8b5cf6cc` (with alpha)
+- **Hex**: `#6B1818`, `#6B1818cc` (with alpha)
 - **RGB**: `rgb(139, 92, 246)`, `rgba(139, 92, 246, 0.8)`
 - **HSL**: `hsl(262, 83%, 58%)`
-- **OKLCH**: `oklch(0.58 0.22 293)` (recommended)
-- **Named**: `purple`, `rebeccapurple`
+- **OKLCH**: `oklch(0.36 0.13 25)` (recommended)
+
 
 **Recommendation**: Use OKLCH for perceptually uniform colors that look consistent across light/dark modes.
 
@@ -70,9 +70,9 @@ Create `~/.craft-agent/theme.json` to override specific colors:
 
 ```json
 {
-  "accent": "oklch(0.58 0.22 293)",
+  "accent": "oklch(0.36 0.13 25)",
   "dark": {
-    "accent": "oklch(0.65 0.22 293)"
+    "accent": "oklch(0.65 0.13 25)"
   }
 }
 ```
@@ -178,15 +178,15 @@ Scenic mode benefits from semi-transparent surface colors:
 The built-in default theme uses OKLCH colors optimized for accessibility:
 
 **Light Mode:**
-- Background: `oklch(0.98 0.003 265)` - Very light gray with slight purple tint
+- Background: `#FBF9F2` - Warm paper white
 - Foreground: `oklch(0.185 0.01 270)` - Near-black for high contrast
-- Accent: `oklch(0.58 0.22 293)` - Vibrant purple
+- Accent: `#6B1818` - Oxblood (default)
 - Info: `oklch(0.75 0.16 70)` - Warm amber
 - Success: `oklch(0.55 0.17 145)` - Clear green
 - Destructive: `oklch(0.58 0.24 28)` - Alert red
 
 **Dark Mode:**
-- Background: `oklch(0.145 0.015 270)` - Deep dark with purple tint
+- Background: `#181410` - Warm walnut
 - Foreground: `oklch(0.95 0.01 270)` - Near-white
 - Accent/Info/Success/Destructive: Slightly brighter versions for visibility
 
@@ -270,5 +270,5 @@ Common hues:
 - Green: ~145
 - Cyan: ~195
 - Blue: ~250
-- Purple: ~293
+- Oxblood: ~25
 - Pink: ~330

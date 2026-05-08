@@ -352,7 +352,7 @@ craft-agent theme set-workspace-color-theme dracula
 craft-agent theme set-workspace-color-theme default
 
 # Replace app-level theme.json override
-craft-agent theme set-override --json '{"accent":"oklch(0.62 0.21 293)","dark":{"accent":"oklch(0.68 0.21 293)"}}'
+craft-agent theme set-override --json '{"accent":"oklch(0.36 0.13 25)","dark":{"accent":"oklch(0.65 0.13 25)"}}'
 
 # Remove app-level override file
 craft-agent theme reset-override

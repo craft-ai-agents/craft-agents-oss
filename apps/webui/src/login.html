@@ -10,7 +10,7 @@
   <meta name="theme-color" content="#1F1F24" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..700,30..100,0..1&family=JetBrains+Mono:wght@300..700&display=swap" rel="stylesheet">
   <style>
     :root {
       color-scheme: light dark;
@@ -23,12 +23,12 @@
       --input-bg: rgba(255, 255, 255, 0.72);
       --input-border: rgba(212, 212, 216, 0.95);
       --placeholder: rgba(26, 26, 46, 0.34);
-      --accent: #6d5dfc;
-      --accent-hover: #5a4be0;
-      --ambient-strong: rgba(104, 78, 133, 0.18);
-      --ambient-soft: rgba(104, 78, 133, 0.1);
-      --grain-1: rgba(104, 78, 133, 0.055);
-      --grain-2: rgba(104, 78, 133, 0.03);
+      --accent: #6B1818;
+      --accent-hover: #591414;
+      --ambient-strong: rgba(107, 24, 24, 0.18);
+      --ambient-soft: rgba(107, 24, 24, 0.1);
+      --grain-1: rgba(107, 24, 24, 0.055);
+      --grain-2: rgba(107, 24, 24, 0.03);
       --error-bg: #fef2f2;
       --error-border: #fecaca;
       --error-fg: #b91c1c;
@@ -37,7 +37,7 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: "Newsreader", Georgia, serif;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -63,8 +63,8 @@
       background:
         radial-gradient(circle at 18% 20%, var(--ambient-strong) 0, transparent 34%),
         radial-gradient(circle at 82% 18%, var(--ambient-soft) 0, transparent 28%),
-        radial-gradient(circle at 76% 76%, rgba(104, 78, 133, 0.16) 0, transparent 34%),
-        radial-gradient(circle at 30% 78%, rgba(104, 78, 133, 0.11) 0, transparent 30%);
+        radial-gradient(circle at 76% 76%, rgba(107, 24, 24, 0.16) 0, transparent 34%),
+        radial-gradient(circle at 30% 78%, rgba(107, 24, 24, 0.11) 0, transparent 30%);
       filter: blur(44px);
       opacity: 0.95;
       transform: scale(1.08);
@@ -73,7 +73,7 @@
 
     body::after {
       background:
-        radial-gradient(circle at center, rgba(104, 78, 133, 0.06), transparent 58%),
+        radial-gradient(circle at center, rgba(107, 24, 24, 0.06), transparent 58%),
         repeating-linear-gradient(135deg, var(--grain-1) 0 1px, transparent 1px 7px),
         repeating-linear-gradient(45deg, var(--grain-2) 0 1px, transparent 1px 11px);
       opacity: 0.45;
@@ -136,7 +136,7 @@
 
     input:focus {
       border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(109, 93, 252, 0.1);
+      box-shadow: 0 0 0 3px rgba(107, 24, 24, 0.10);
     }
 
     button {
@@ -145,18 +145,18 @@
       padding: 10px;
       font-size: 14px;
       font-weight: 500;
-      font-family: 'Inter', sans-serif;
+      font-family: "Newsreader", Georgia, serif;
       color: white;
-      background: linear-gradient(180deg, #7b6dff 0%, var(--accent) 100%);
+      background: linear-gradient(180deg, #8c2222 0%, var(--accent) 100%);
       border: none;
       border-radius: 8px;
       cursor: pointer;
       transition: transform 0.15s, filter 0.15s, background 0.15s;
-      box-shadow: 0 10px 24px rgba(109, 93, 252, 0.28);
+      box-shadow: 0 10px 24px rgba(107, 24, 24, 0.28);
     }
 
     button:hover {
-      background: linear-gradient(180deg, #705fff 0%, var(--accent-hover) 100%);
+      background: linear-gradient(180deg, #7a1d1d 0%, var(--accent-hover) 100%);
       transform: translateY(-1px);
       filter: brightness(1.02);
     }
