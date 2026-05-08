@@ -398,6 +398,41 @@ describe('Renderer — permissions and errors', () => {
     expect(buttons.length).toBe(1)
   })
 
+  it('permission_request fires recordPermissionMessage with the rendering binding, requestId, messageId', async () => {
+    const recorded: Array<{ bindingId: string; sessionId: string; requestId: string; messageId: string }> = []
+    const renderer = new Renderer({
+      recordPermissionMessage: (b, requestId, messageId) => {
+        recorded.push({
+          bindingId: b.id,
+          sessionId: b.sessionId,
+          requestId,
+          messageId,
+        })
+      },
+    })
+    const adapter = makeAdapter()
+    const binding = makeBinding({ approvalChannel: 'chat' })
+    await renderer.handle(
+      {
+        type: 'permission_request',
+        sessionId: 's',
+        request: {
+          requestId: 'r1',
+          toolName: 'bash',
+          description: 'run tests',
+        },
+      } as SessionEvent,
+      binding,
+      adapter,
+    )
+
+    expect(recorded).toHaveLength(1)
+    expect(recorded[0]?.bindingId).toBe(binding.id)
+    expect(recorded[0]?.sessionId).toBe(binding.sessionId)
+    expect(recorded[0]?.requestId).toBe('r1')
+    expect(recorded[0]?.messageId).toBeTruthy()
+  })
+
   it('error event emits ❌ message and resets state', async () => {
     const renderer = new Renderer()
     const adapter = makeAdapter()
