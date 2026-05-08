@@ -60,7 +60,7 @@ jobs:
         if: ${{ !inputs.dry_run }}
         run: |
           # Use HTTPS with OSS_REPO_TOKEN for cross-repo authentication
-          TARGET_REPO="https://x-access-token:${{ secrets.OSS_REPO_TOKEN }}@github.com/lukilabs/craft-agents-oss.git"
+          TARGET_REPO="https://x-access-token:${{ secrets.OSS_REPO_TOKEN }}@github.com/craft-ai-agents/craft-agents-oss.git"
 
           # Build command with optional --force flag
           FORCE_FLAG=""
@@ -135,7 +135,7 @@ jobs:
       - name: Checkout OSS repository
         uses: actions/checkout@v4
         with:
-          repository: lukilabs/craft-agents-oss
+          repository: craft-ai-agents/craft-agents-oss
           token: ${{ secrets.OSS_REPO_TOKEN }}
           path: oss-repo
 

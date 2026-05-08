@@ -195,6 +195,7 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
         mcpUrl: config.url,
         mcpTransport: config.transport,
         mcpHeaders: config.headers,
+        mcpAccessToken: config.accessToken,
       });
       return {
         success: result.success,

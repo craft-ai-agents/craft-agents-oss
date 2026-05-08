@@ -478,8 +478,15 @@ export interface StdioMcpConfig {
 /**
  * Config for HTTP/SSE MCP connection validation.
  * Derived from McpSourceConfig to stay in sync automatically (DRY).
+ *
+ * `accessToken` is the resolved OAuth / bearer token for sources whose
+ * credential lives in the credential store (no `headerNames`). The probe
+ * forwards it to the underlying impl, which builds an
+ * `Authorization: Bearer …` header — matching the runtime path.
  */
-export type HttpMcpConfig = Required<Pick<McpSourceConfig, 'url'>> & Pick<McpSourceConfig, 'authType' | 'headers' | 'headerNames' | 'transport'>;
+export type HttpMcpConfig = Required<Pick<McpSourceConfig, 'url'>>
+  & Pick<McpSourceConfig, 'authType' | 'headers' | 'headerNames' | 'transport'>
+  & { accessToken?: string };
 
 /**
  * Result from stdio MCP validation

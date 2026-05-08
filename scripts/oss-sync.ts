@@ -21,7 +21,7 @@ const scriptDir = dirname(new URL(import.meta.url).pathname);
 const repoRoot = dirname(scriptDir);
 const allowListPath = join(scriptDir, 'oss-allow-list.txt');
 
-const DEFAULT_TARGET = 'https://github.com/lukilabs/craft-agents-oss.git';
+const DEFAULT_TARGET = 'https://github.com/craft-ai-agents/craft-agents-oss.git';
 
 // Colors for console output
 const colors = {
@@ -244,7 +244,7 @@ async function checkOssContributions(ossDir: string): Promise<boolean> {
   console.log(colors.yellow('To merge these contributions:'));
   console.log('');
   console.log('  1. Add the OSS repo as a remote (one-time setup):');
-  console.log('     git remote add oss https://github.com/lukilabs/craft-agents-oss.git');
+  console.log('     git remote add oss https://github.com/craft-ai-agents/craft-agents-oss.git');
   console.log('');
   console.log('  2. Fetch the latest from OSS:');
   console.log('     git fetch oss');

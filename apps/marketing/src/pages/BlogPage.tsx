@@ -14,7 +14,7 @@ const postContent = `
 
 We've released **Craft Agents** as an open source product. It showcases our take on how to effectively work with agents (especially Claude Code). It works great for both engineers and knowledge workers. Most importantly, you can fork it, customize it, so it fits your needs perfectly. It's both a powerful tool, but also an experiment for the future of personal software. Take the base, and make it yours.
 
-You can download it at [agents.craft.do](https://agents.craft.do) and view the source at [github.com/lukilabs/craft-agents-oss](https://github.com/lukilabs/craft-agents-oss).
+You can download it at [agents.craft.do](https://agents.craft.do) and view the source at [github.com/craft-ai-agents/craft-agents-oss](https://github.com/craft-ai-agents/craft-agents-oss).
 
 It has the full power of Claude Code, but packaged in a UX, and workflows which we found to be effective. It's also quickly becoming a daily driver for most of the things we do at Craft.
 

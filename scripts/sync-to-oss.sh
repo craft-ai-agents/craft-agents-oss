@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ALLOW_LIST="$SCRIPT_DIR/oss-allow-list.txt"
-DEFAULT_TARGET="git@github.com:lukilabs/craft-agents-oss.git"
+DEFAULT_TARGET="git@github.com:craft-ai-agents/craft-agents-oss.git"
 TEMP_DIR=""
 
 # Colors
@@ -183,7 +183,7 @@ check_oss_contributions() {
   echo -e "${YELLOW}To merge these contributions:${NC}"
   echo ""
   echo "  1. Add the OSS repo as a remote (one-time setup):"
-  echo "     git remote add oss https://github.com/lukilabs/craft-agents-oss.git"
+  echo "     git remote add oss https://github.com/craft-ai-agents/craft-agents-oss.git"
   echo ""
   echo "  2. Fetch the latest from OSS:"
   echo "     git fetch oss"

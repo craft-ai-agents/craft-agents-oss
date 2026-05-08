@@ -425,7 +425,7 @@ jobs:
           file: Dockerfile.server
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/lukilabs/craft-agents-server:${{ needs.prepare.outputs.version }}
+          tags: ghcr.io/craft-ai-agents/craft-agents-server:${{ needs.prepare.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

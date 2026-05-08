@@ -407,7 +407,25 @@ export class TelegramAdapter implements PlatformAdapter {
         data: ctx.callbackQuery.data ?? undefined,
       }
 
-      await this.buttonHandler(press)
+      // Diagnostic for #726: timestamp callback receipt vs. handler return so
+      // we can tell from logs whether the gateway is slow or grammY's
+      // sequential polling is stalling on a previous update.
+      const receivedAt = Date.now()
+      this.log.info('[telegram] callback_query received', {
+        event: 'telegram_callback_received',
+        buttonId: press.buttonId,
+        senderId: press.senderId,
+      })
+      try {
+        await this.buttonHandler(press)
+      } finally {
+        this.log.info('[telegram] callback_query handler returned', {
+          event: 'telegram_callback_handled',
+          buttonId: press.buttonId,
+          senderId: press.senderId,
+          elapsedMs: Date.now() - receivedAt,
+        })
+      }
     })
 
     this.log.info('[telegram] initializing')

@@ -265,7 +265,7 @@ export default function HomePage() {
 
         {/* View Source Code */}
         <a
-          href="https://github.com/lukilabs/craft-agents-oss"
+          href="https://github.com/craft-ai-agents/craft-agents-oss"
           target="_blank"
           rel="noopener noreferrer"
           className="bg-background rounded-[12px] shadow-strong py-3 px-6 text-center text-[14px] font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2 whitespace-nowrap"
@@ -678,7 +678,7 @@ export default function HomePage() {
           )}
         </div>
         <a
-          href="https://github.com/lukilabs/craft-agents-oss"
+          href="https://github.com/craft-ai-agents/craft-agents-oss"
           target="_blank"
           rel="noopener noreferrer"
           className="flex-1 bg-background rounded-[12px] shadow-strong py-3 px-6 text-center text-[14px] font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2"

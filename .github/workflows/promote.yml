@@ -100,8 +100,8 @@ jobs:
       - name: Tag version as latest
         run: |
           docker buildx imagetools create \
-            ghcr.io/lukilabs/craft-agents-server:${{ needs.promote.outputs.version }} \
-            -t ghcr.io/lukilabs/craft-agents-server:latest
+            ghcr.io/craft-ai-agents/craft-agents-server:${{ needs.promote.outputs.version }} \
+            -t ghcr.io/craft-ai-agents/craft-agents-server:latest
 
   # Sync allowed source files to the public OSS repository
   oss-sync:
@@ -156,7 +156,7 @@ jobs:
 
       - name: Sync to OSS
         run: |
-          TARGET="https://x-access-token:${{ secrets.OSS_REPO_TOKEN }}@github.com/lukilabs/craft-agents-oss.git"
+          TARGET="https://x-access-token:${{ secrets.OSS_REPO_TOKEN }}@github.com/craft-ai-agents/craft-agents-oss.git"
           bun run scripts/oss-sync.ts --target "$TARGET" --yes --force --message-file /tmp/commit-message.md
 
   # Create a GitHub release on the OSS repo with binaries and changelog
@@ -191,7 +191,7 @@ jobs:
           CHANGELOG=$(cat /tmp/changelog.md)
 
           cd /tmp
-          git clone "https://x-access-token:${{ secrets.OSS_REPO_TOKEN }}@github.com/lukilabs/craft-agents-oss.git" oss
+          git clone "https://x-access-token:${{ secrets.OSS_REPO_TOKEN }}@github.com/craft-ai-agents/craft-agents-oss.git" oss
           cd oss
 
           if gh release view "v$VERSION" &>/dev/null; then
