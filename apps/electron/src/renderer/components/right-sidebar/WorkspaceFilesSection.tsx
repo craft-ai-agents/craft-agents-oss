@@ -34,6 +34,7 @@ export interface WorkspaceVisibleTreeRow {
 export interface WorkspaceFilesSectionProps {
   workspaceId?: string
   workspacePath?: string
+  cwdPath?: string
   className?: string
 }
 
@@ -64,12 +65,21 @@ export function resolveCwdRoot(
   return isPathAtOrInside(workspacePath, workingDirectory) ? workingDirectory : undefined
 }
 
+/** Resolves the path opened by the Workspace section header action. */
+export function resolveWorkspaceFilesViewPath(
+  cwdPath: string | undefined,
+  workspacePath: string | undefined,
+): string | undefined {
+  return cwdPath ?? workspacePath
+}
+
 /** Loads the top-level files for a workspace. */
 export function loadWorkspaceRootFiles(
   workspaceId: string,
+  cwdPath?: string,
   getWorkspaceFiles: GetWorkspaceFiles = window.electronAPI.getWorkspaceFiles,
 ): Promise<SessionFile[]> {
-  return getWorkspaceFiles(workspaceId, undefined)
+  return getWorkspaceFiles(workspaceId, cwdPath)
 }
 
 /** Expands a directory, fetching its children only when they are not cached yet. */
@@ -136,11 +146,12 @@ export interface RefreshedWorkspaceFiles {
 export async function refreshWorkspaceVisibleFiles(
   state: WorkspaceFilesTreeState,
   workspaceId: string,
+  cwdPath?: string,
   getWorkspaceFiles: GetWorkspaceFiles = window.electronAPI.getWorkspaceFiles,
 ): Promise<RefreshedWorkspaceFiles> {
   const expandedPaths = new Set(state.expandedPaths)
   const childrenByDirPath = new Map(state.childrenByDirPath)
-  const rootFiles = await getWorkspaceFiles(workspaceId, undefined)
+  const rootFiles = await getWorkspaceFiles(workspaceId, cwdPath)
 
   await Promise.all(Array.from(expandedPaths).map(async (dirPath) => {
     childrenByDirPath.set(dirPath, await getWorkspaceFiles(workspaceId, dirPath))
@@ -318,7 +329,7 @@ function WorkspaceFileRow({
   )
 }
 
-export function WorkspaceFilesSection({ workspaceId, workspacePath, className }: WorkspaceFilesSectionProps) {
+export function WorkspaceFilesSection({ workspaceId, workspacePath, cwdPath, className }: WorkspaceFilesSectionProps) {
   const { onOpenFile } = useAppShellContext()
   const [files, setFiles] = useState<SessionFile[]>([])
   const [treeState, setTreeState] = useState<WorkspaceFilesTreeState>(createEmptyWorkspaceFilesTreeState)
@@ -339,7 +350,7 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, className }:
 
     setIsLoading(true)
     try {
-      const workspaceFiles = await loadWorkspaceRootFiles(workspaceId)
+      const workspaceFiles = await loadWorkspaceRootFiles(workspaceId, cwdPath)
       if (mountedRef.current) {
         setFiles(workspaceFiles)
         setTreeState(createEmptyWorkspaceFilesTreeState())
@@ -355,7 +366,7 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, className }:
         setIsLoading(false)
       }
     }
-  }, [workspaceId])
+  }, [workspaceId, cwdPath])
 
   const refreshVisibleFiles = useCallback(async () => {
     if (!workspaceId) return
@@ -364,6 +375,7 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, className }:
       const refreshed = await refreshWorkspaceVisibleFiles(
         treeStateRef.current,
         workspaceId,
+        cwdPath,
       )
 
       if (mountedRef.current) {
@@ -373,7 +385,7 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, className }:
     } catch (error) {
       console.error('Failed to refresh workspace files:', error)
     }
-  }, [workspaceId])
+  }, [workspaceId, cwdPath])
 
   useEffect(() => {
     mountedRef.current = true
@@ -446,14 +458,16 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, className }:
     return null
   }
 
+  const viewPath = resolveWorkspaceFilesViewPath(cwdPath, workspacePath)
+
   return (
     <div className={cn('flex flex-col h-full min-h-0', className)}>
       <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0 select-none">
         <span className="text-xs font-medium text-muted-foreground">Workspace</span>
-        {workspacePath && (
+        {viewPath && (
           <button
             type="button"
-            onClick={() => window.electronAPI.showInFolder(workspacePath)}
+            onClick={() => window.electronAPI.showInFolder(viewPath)}
             className="text-xs text-foreground/50 hover:text-foreground/80 hover:underline underline-offset-2 transition-colors"
           >
             View

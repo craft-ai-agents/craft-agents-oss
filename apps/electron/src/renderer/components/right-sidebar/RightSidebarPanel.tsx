@@ -8,7 +8,7 @@ import { sessionAtomFamily } from '@/atoms/sessions'
 import { useActiveWorkspace } from '@/context/AppShellContext'
 import { SessionFilesSection } from './SessionFilesSection'
 import { GitPanel } from './GitPanel'
-import { WorkspaceFilesSection } from './WorkspaceFilesSection'
+import { WorkspaceFilesSection, resolveCwdRoot } from './WorkspaceFilesSection'
 import {
   PANEL_EDGE_INSET,
   PANEL_SASH_HIT_WIDTH,
@@ -35,6 +35,13 @@ export interface RightSidebarPanelProps {
   sessionId?: string
 }
 
+export function getWorkspaceFilesCwdPath(
+  workingDirectory: string | undefined,
+  workspacePath: string | undefined,
+): string | undefined {
+  return resolveCwdRoot(workingDirectory, workspacePath)
+}
+
 export function RightSidebarPanel({
   workspaceId,
   sessionId,
@@ -43,6 +50,7 @@ export function RightSidebarPanel({
   const activeWorkspace = useActiveWorkspace()
   const sessionFolderPath = focusedSession?.sessionFolderPath
   const workspacePath = activeWorkspace?.rootPath
+  const workspaceFilesCwdPath = getWorkspaceFilesCwdPath(focusedSession?.workingDirectory, workspacePath)
   const [isOpen, setIsOpen] = useState<boolean>(() =>
     storage.get(storage.KEYS.rightSidebarVisible, true, workspaceId)
   )
@@ -188,6 +196,7 @@ export function RightSidebarPanel({
                 <WorkspaceFilesSection
                   workspaceId={workspaceId}
                   workspacePath={workspacePath}
+                  cwdPath={workspaceFilesCwdPath}
                   className="h-full"
                 />
               )}

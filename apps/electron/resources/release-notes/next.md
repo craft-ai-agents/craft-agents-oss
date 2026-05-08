@@ -6,6 +6,8 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Improvements
 
+- **Workspace files honor session folders** — The Workspace sidebar tab now opens at the focused session's working directory when it is inside the workspace, while falling back to the workspace root for sessions without a valid working directory. (Issue #17)
+
 ## Bug Fixes
 
 ## Breaking Changes

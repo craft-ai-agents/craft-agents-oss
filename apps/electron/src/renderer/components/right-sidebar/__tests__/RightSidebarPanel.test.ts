@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import * as storage from '@/lib/local-storage'
+import { getWorkspaceFilesCwdPath } from '../RightSidebarPanel'
 
 // Minimal localStorage shim for tests
 function makeLocalStorage() {
@@ -69,5 +70,17 @@ describe('RightSidebarPanel persistence', () => {
     storage.set(storage.KEYS.rightSidebarVisible, true, 'ws-z')
     const raw = globalThis.localStorage.getItem('craft-right-sidebar-visible:ws-z')
     expect(raw).toBe('true')
+  })
+})
+
+describe('getWorkspaceFilesCwdPath', () => {
+  it('returns the focused session working directory when it is inside the workspace', () => {
+    expect(getWorkspaceFilesCwdPath('/workspace/src', '/workspace')).toBe('/workspace/src')
+  })
+
+  it('falls back when the focused session working directory is not a valid CWD root', () => {
+    expect(getWorkspaceFilesCwdPath('/other/src', '/workspace')).toBeUndefined()
+    expect(getWorkspaceFilesCwdPath('none', '/workspace')).toBeUndefined()
+    expect(getWorkspaceFilesCwdPath(undefined, '/workspace')).toBeUndefined()
   })
 })

@@ -9,6 +9,7 @@ import {
   loadWorkspaceRootFiles,
   openWorkspaceEntry,
   resolveCwdRoot,
+  resolveWorkspaceFilesViewPath,
   refreshWorkspaceVisibleFiles,
   subscribeToWorkspaceFileChanges,
   type WorkspaceFilesTreeState,
@@ -74,6 +75,18 @@ describe('WorkspaceFilesSection data loading', () => {
 
     expect(result.map((file) => file.path)).toEqual(['/workspace/src', '/workspace/README.md'])
     expect(calls).toEqual([['ws-1', undefined]])
+  })
+
+  it('loads the CWD root when provided', async () => {
+    const cwdFiles: SessionFile[] = [
+      { name: 'index.ts', path: '/workspace/src/index.ts', type: 'file', size: 10 },
+    ]
+    const { calls } = mockWorkspaceElectronApi(new Map([['/workspace/src', cwdFiles]]))
+
+    const result = await loadWorkspaceRootFiles('ws-1', '/workspace/src')
+
+    expect(result.map((file) => file.path)).toEqual(['/workspace/src/index.ts'])
+    expect(calls).toEqual([['ws-1', '/workspace/src']])
   })
 
   it('expanding an unfetched directory loads that directory and renders its children', async () => {
@@ -230,6 +243,40 @@ describe('WorkspaceFilesSection data loading', () => {
     ])
   })
 
+  it('refreshes the CWD root when provided', async () => {
+    const state: WorkspaceFilesTreeState = {
+      childrenByDirPath: new Map([
+        ['/workspace/src/components', [
+          { name: 'old.tsx', path: '/workspace/src/components/old.tsx', type: 'file', size: 3 },
+        ]],
+      ]),
+      expandedPaths: new Set(['/workspace/src/components']),
+    }
+    const refreshedCwdRoot: SessionFile[] = [
+      { name: 'components', path: '/workspace/src/components', type: 'directory' },
+      { name: 'index.ts', path: '/workspace/src/index.ts', type: 'file', size: 10 },
+    ]
+    const refreshedComponents: SessionFile[] = [
+      { name: 'Button.tsx', path: '/workspace/src/components/Button.tsx', type: 'file', size: 25 },
+    ]
+    const { calls } = mockWorkspaceElectronApi(new Map([
+      ['/workspace/src', refreshedCwdRoot],
+      ['/workspace/src/components', refreshedComponents],
+    ]))
+
+    const refreshed = await refreshWorkspaceVisibleFiles(state, 'ws-1', '/workspace/src')
+
+    expect(calls).toEqual([
+      ['ws-1', '/workspace/src'],
+      ['ws-1', '/workspace/src/components'],
+    ])
+    expect(visibleRows(refreshed.rootFiles, refreshed.treeState)).toEqual([
+      ['/workspace/src/components', 0],
+      ['/workspace/src/components/Button.tsx', 1],
+      ['/workspace/src/index.ts', 0],
+    ])
+  })
+
   it('refreshes visible files when workspace file changes fire for the active workspace', () => {
     const refreshed: string[] = []
     const filesChanged = mockWorkspaceElectronApi(new Map())
@@ -273,6 +320,16 @@ describe('resolveCwdRoot', () => {
   it('returns undefined for a working directory outside the workspace', () => {
     expect(resolveCwdRoot('/other-project/src', '/workspace')).toBeUndefined()
     expect(resolveCwdRoot('/workspace-sibling/src', '/workspace')).toBeUndefined()
+  })
+})
+
+describe('resolveWorkspaceFilesViewPath', () => {
+  it('prefers the CWD root over the workspace path', () => {
+    expect(resolveWorkspaceFilesViewPath('/workspace/src', '/workspace')).toBe('/workspace/src')
+  })
+
+  it('falls back to the workspace path when no CWD root exists', () => {
+    expect(resolveWorkspaceFilesViewPath(undefined, '/workspace')).toBe('/workspace')
   })
 })
 
