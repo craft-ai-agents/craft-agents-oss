@@ -50,7 +50,7 @@ function createWorkspaceFileWatchState(
   server: RpcServer,
   clientId: string,
   workspaceId: string,
-  workspaceRootPath: string,
+  rootPath: string,
 ): ClientWorkspaceWatchState {
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -60,7 +60,7 @@ function createWorkspaceFileWatchState(
     debounceTimer = null
   }
 
-  const watcher = watch(workspaceRootPath, { recursive: true }, () => {
+  const watcher = watch(rootPath, { recursive: true }, () => {
     clearDebounce()
 
     debounceTimer = setTimeout(() => {
@@ -78,8 +78,8 @@ function isExcluded(name: string): boolean {
   return name.startsWith('.') || EXCLUDED_NAMES.has(name)
 }
 
-function isInsideWorkspace(workspaceRoot: string, targetPath: string): boolean {
-  const rel = relative(workspaceRoot, targetPath)
+function isInsideRoot(rootPath: string, targetPath: string): boolean {
+  const rel = relative(rootPath, targetPath)
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
 }
 
@@ -107,10 +107,10 @@ function compareSessionFiles(a: SessionFile, b: SessionFile): number {
   return a.name.localeCompare(b.name)
 }
 
-async function listWorkspaceFiles(workspaceRoot: string, dirPath?: string): Promise<SessionFile[]> {
-  const root = resolve(workspaceRoot)
-  const target = dirPath ? resolve(dirPath) : root
-  if (!isInsideWorkspace(root, target)) return []
+async function listWorkspaceFiles(rootPath: string, dirPath?: string): Promise<SessionFile[]> {
+  const resolvedRoot = resolve(rootPath)
+  const target = dirPath ? resolve(dirPath) : resolvedRoot
+  if (!isInsideRoot(resolvedRoot, target)) return []
 
   try {
     const entries = await readdir(target, { withFileTypes: true })
