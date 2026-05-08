@@ -26,12 +26,12 @@ afterEach(() => {
 })
 
 function mockWorkspaceElectronApi(filesByDirPath: Map<string | undefined, SessionFile[]>) {
-  const calls: Array<[string, string | undefined]> = []
+  const calls: Array<[string, string | undefined, string | undefined]> = []
   let filesChangedListener: ((workspaceId: string) => void) | undefined
   let unsubscribed = false
   const api = {
-    getWorkspaceFiles: async (workspaceId: string, dirPath?: string) => {
-      calls.push([workspaceId, dirPath])
+    getWorkspaceFiles: async (workspaceId: string, dirPath?: string, rootPath?: string) => {
+      calls.push([workspaceId, dirPath, rootPath])
       return filesByDirPath.get(dirPath) ?? []
     },
     onWorkspaceFilesChanged: (callback: (workspaceId: string) => void) => {
@@ -74,19 +74,41 @@ describe('WorkspaceFilesSection data loading', () => {
     const result = await loadWorkspaceRootFiles('ws-1')
 
     expect(result.map((file) => file.path)).toEqual(['/workspace/src', '/workspace/README.md'])
-    expect(calls).toEqual([['ws-1', undefined]])
+    expect(calls).toEqual([['ws-1', undefined, undefined]])
   })
 
-  it('loads the CWD root when provided', async () => {
+  it('loads the CWD root as rootPath when provided', async () => {
     const cwdFiles: SessionFile[] = [
       { name: 'index.ts', path: '/workspace/src/index.ts', type: 'file', size: 10 },
     ]
-    const { calls } = mockWorkspaceElectronApi(new Map([['/workspace/src', cwdFiles]]))
+    const { calls } = mockWorkspaceElectronApi(new Map([[undefined, cwdFiles]]))
 
     const result = await loadWorkspaceRootFiles('ws-1', '/workspace/src')
 
     expect(result.map((file) => file.path)).toEqual(['/workspace/src/index.ts'])
-    expect(calls).toEqual([['ws-1', '/workspace/src']])
+    expect(calls).toEqual([['ws-1', undefined, '/workspace/src']])
+  })
+
+  it('expands directories under the CWD rootPath when provided', async () => {
+    const state: WorkspaceFilesTreeState = {
+      childrenByDirPath: new Map(),
+      expandedPaths: new Set(),
+    }
+    const rootFiles: SessionFile[] = [
+      { name: 'components', path: '/workspace/src/components', type: 'directory' },
+    ]
+    const children: SessionFile[] = [
+      { name: 'Button.tsx', path: '/workspace/src/components/Button.tsx', type: 'file', size: 25 },
+    ]
+    const { calls } = mockWorkspaceElectronApi(new Map([['/workspace/src/components', children]]))
+
+    const next = await expandWorkspaceDirectory(state, 'ws-1', '/workspace/src/components', '/workspace/src')
+
+    expect(calls).toEqual([['ws-1', '/workspace/src/components', '/workspace/src']])
+    expect(visibleRows(rootFiles, next)).toEqual([
+      ['/workspace/src/components', 0],
+      ['/workspace/src/components/Button.tsx', 1],
+    ])
   })
 
   it('expanding an unfetched directory loads that directory and renders its children', async () => {
@@ -104,7 +126,7 @@ describe('WorkspaceFilesSection data loading', () => {
 
     const next = await expandWorkspaceDirectory(state, 'ws-1', '/workspace/src')
 
-    expect(calls).toEqual([['ws-1', '/workspace/src']])
+    expect(calls).toEqual([['ws-1', '/workspace/src', undefined]])
     expect(visibleRows(rootFiles, next)).toEqual([
       ['/workspace/src', 0],
       ['/workspace/src/index.ts', 1],
@@ -232,8 +254,8 @@ describe('WorkspaceFilesSection data loading', () => {
     const refreshed = await refreshWorkspaceVisibleFiles(state, 'ws-1')
 
     expect(calls).toEqual([
-      ['ws-1', undefined],
-      ['ws-1', '/workspace/src'],
+      ['ws-1', undefined, undefined],
+      ['ws-1', '/workspace/src', undefined],
     ])
     expect(refreshed.rootFiles.map((file) => file.path)).toEqual(['/workspace/src', '/workspace/README.md'])
     expect(visibleRows(refreshed.rootFiles, refreshed.treeState)).toEqual([
@@ -243,7 +265,7 @@ describe('WorkspaceFilesSection data loading', () => {
     ])
   })
 
-  it('refreshes the CWD root when provided', async () => {
+  it('refreshes the CWD root as rootPath when provided', async () => {
     const state: WorkspaceFilesTreeState = {
       childrenByDirPath: new Map([
         ['/workspace/src/components', [
@@ -260,15 +282,15 @@ describe('WorkspaceFilesSection data loading', () => {
       { name: 'Button.tsx', path: '/workspace/src/components/Button.tsx', type: 'file', size: 25 },
     ]
     const { calls } = mockWorkspaceElectronApi(new Map([
-      ['/workspace/src', refreshedCwdRoot],
+      [undefined, refreshedCwdRoot],
       ['/workspace/src/components', refreshedComponents],
     ]))
 
     const refreshed = await refreshWorkspaceVisibleFiles(state, 'ws-1', '/workspace/src')
 
     expect(calls).toEqual([
-      ['ws-1', '/workspace/src'],
-      ['ws-1', '/workspace/src/components'],
+      ['ws-1', undefined, '/workspace/src'],
+      ['ws-1', '/workspace/src/components', '/workspace/src'],
     ])
     expect(visibleRows(refreshed.rootFiles, refreshed.treeState)).toEqual([
       ['/workspace/src/components', 0],
@@ -313,13 +335,13 @@ describe('resolveCwdRoot', () => {
     expect(resolveCwdRoot('user_default', '/workspace')).toBeUndefined()
   })
 
-  it('returns undefined when the workspace path is absent', () => {
-    expect(resolveCwdRoot('/workspace/src', undefined)).toBeUndefined()
+  it('returns a real working directory when the workspace path is absent', () => {
+    expect(resolveCwdRoot('/workspace/src', undefined)).toBe('/workspace/src')
   })
 
-  it('returns undefined for a working directory outside the workspace', () => {
-    expect(resolveCwdRoot('/other-project/src', '/workspace')).toBeUndefined()
-    expect(resolveCwdRoot('/workspace-sibling/src', '/workspace')).toBeUndefined()
+  it('returns a real working directory outside the workspace', () => {
+    expect(resolveCwdRoot('/other-project/src', '/workspace')).toBe('/other-project/src')
+    expect(resolveCwdRoot('/workspace-sibling/src', '/workspace')).toBe('/workspace-sibling/src')
   })
 })
 
@@ -328,8 +350,8 @@ describe('resolveWorkspaceFilesViewPath', () => {
     expect(resolveWorkspaceFilesViewPath('/workspace/src', '/workspace')).toBe('/workspace/src')
   })
 
-  it('falls back to the workspace path when no CWD root exists', () => {
-    expect(resolveWorkspaceFilesViewPath(undefined, '/workspace')).toBe('/workspace')
+  it('returns undefined when no CWD root exists', () => {
+    expect(resolveWorkspaceFilesViewPath(undefined, '/workspace')).toBeUndefined()
   })
 })
 

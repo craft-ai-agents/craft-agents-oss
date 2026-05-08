@@ -13,7 +13,7 @@ import { useAppShellContext } from '@/context/AppShellContext'
 import { getFileManagerName } from '@/lib/platform'
 import { getFileIcon, FileThumbnail } from './file-tree-shared'
 
-type GetWorkspaceFiles = (workspaceId: string, dirPath?: string) => Promise<SessionFile[]>
+type GetWorkspaceFiles = (workspaceId: string, dirPath?: string, rootPath?: string) => Promise<SessionFile[]>
 type WorkspaceFilesChangedApi = Pick<typeof window.electronAPI, 'onWorkspaceFilesChanged'>
 
 /** Tracks the fetched and currently expanded folders in the workspace file tree. */
@@ -47,30 +47,22 @@ function createEmptyWorkspaceFilesTreeState(): WorkspaceFilesTreeState {
 
 const CWD_SENTINELS = new Set(['none', 'user_default'])
 
-function isPathAtOrInside(rootPath: string, targetPath: string): boolean {
-  return (
-    targetPath === rootPath
-    || targetPath.startsWith(`${rootPath}/`)
-    || targetPath.startsWith(`${rootPath}\\`)
-  )
-}
-
-/** Resolves a session working directory to the workspace file browser root when it is inside the workspace. */
+/** Resolves a session working directory to the workspace file browser root. */
 export function resolveCwdRoot(
   workingDirectory: string | undefined,
-  workspacePath: string | undefined,
+  _workspacePath: string | undefined,
 ): string | undefined {
-  if (!workingDirectory || !workspacePath) return undefined
+  if (!workingDirectory) return undefined
   if (CWD_SENTINELS.has(workingDirectory)) return undefined
-  return isPathAtOrInside(workspacePath, workingDirectory) ? workingDirectory : undefined
+  return workingDirectory
 }
 
 /** Resolves the path opened by the Workspace section header action. */
 export function resolveWorkspaceFilesViewPath(
   cwdPath: string | undefined,
-  workspacePath: string | undefined,
+  _workspacePath: string | undefined,
 ): string | undefined {
-  return cwdPath ?? workspacePath
+  return cwdPath
 }
 
 /** Loads the top-level files for a workspace. */
@@ -79,7 +71,7 @@ export function loadWorkspaceRootFiles(
   cwdPath?: string,
   getWorkspaceFiles: GetWorkspaceFiles = window.electronAPI.getWorkspaceFiles,
 ): Promise<SessionFile[]> {
-  return getWorkspaceFiles(workspaceId, cwdPath)
+  return getWorkspaceFiles(workspaceId, undefined, cwdPath)
 }
 
 /** Expands a directory, fetching its children only when they are not cached yet. */
@@ -87,13 +79,14 @@ export async function expandWorkspaceDirectory(
   state: WorkspaceFilesTreeState,
   workspaceId: string,
   dirPath: string,
+  cwdPath?: string,
   getWorkspaceFiles: GetWorkspaceFiles = window.electronAPI.getWorkspaceFiles,
 ): Promise<WorkspaceFilesTreeState> {
   const childrenByDirPath = new Map(state.childrenByDirPath)
   const expandedPaths = new Set(state.expandedPaths)
 
   if (!childrenByDirPath.has(dirPath)) {
-    childrenByDirPath.set(dirPath, await getWorkspaceFiles(workspaceId, dirPath))
+    childrenByDirPath.set(dirPath, await getWorkspaceFiles(workspaceId, dirPath, cwdPath))
   }
   expandedPaths.add(dirPath)
 
@@ -151,10 +144,10 @@ export async function refreshWorkspaceVisibleFiles(
 ): Promise<RefreshedWorkspaceFiles> {
   const expandedPaths = new Set(state.expandedPaths)
   const childrenByDirPath = new Map(state.childrenByDirPath)
-  const rootFiles = await getWorkspaceFiles(workspaceId, cwdPath)
+  const rootFiles = await getWorkspaceFiles(workspaceId, undefined, cwdPath)
 
   await Promise.all(Array.from(expandedPaths).map(async (dirPath) => {
-    childrenByDirPath.set(dirPath, await getWorkspaceFiles(workspaceId, dirPath))
+    childrenByDirPath.set(dirPath, await getWorkspaceFiles(workspaceId, dirPath, cwdPath))
   }))
 
   return {
@@ -337,39 +330,46 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, cwdPath, cla
   const [isLoading, setIsLoading] = useState(false)
   const mountedRef = useRef(true)
   const treeStateRef = useRef(treeState)
+  const loadRequestRef = useRef(0)
 
   useEffect(() => {
     treeStateRef.current = treeState
   }, [treeState])
 
   const loadFiles = useCallback(async () => {
-    if (!workspaceId) {
+    const requestId = ++loadRequestRef.current
+
+    if (!workspaceId || !cwdPath) {
       setFiles([])
+      setTreeState(createEmptyWorkspaceFilesTreeState())
+      setLoadingPaths(new Set())
+      setIsLoading(false)
       return
     }
 
     setIsLoading(true)
     try {
       const workspaceFiles = await loadWorkspaceRootFiles(workspaceId, cwdPath)
-      if (mountedRef.current) {
+      if (mountedRef.current && loadRequestRef.current === requestId) {
         setFiles(workspaceFiles)
         setTreeState(createEmptyWorkspaceFilesTreeState())
         setLoadingPaths(new Set())
       }
     } catch (error) {
       console.error('Failed to load workspace files:', error)
-      if (mountedRef.current) {
+      if (mountedRef.current && loadRequestRef.current === requestId) {
         setFiles([])
       }
     } finally {
-      if (mountedRef.current) {
+      if (mountedRef.current && loadRequestRef.current === requestId) {
         setIsLoading(false)
       }
     }
   }, [workspaceId, cwdPath])
 
   const refreshVisibleFiles = useCallback(async () => {
-    if (!workspaceId) return
+    if (!workspaceId || !cwdPath) return
+    const requestId = loadRequestRef.current
 
     try {
       const refreshed = await refreshWorkspaceVisibleFiles(
@@ -378,7 +378,7 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, cwdPath, cla
         cwdPath,
       )
 
-      if (mountedRef.current) {
+      if (mountedRef.current && loadRequestRef.current === requestId) {
         setFiles(refreshed.rootFiles)
         setTreeState(refreshed.treeState)
       }
@@ -391,13 +391,13 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, cwdPath, cla
     mountedRef.current = true
     void loadFiles()
 
-    if (!workspaceId) {
+    if (!workspaceId || !cwdPath) {
       return () => {
         mountedRef.current = false
       }
     }
 
-    void window.electronAPI.watchWorkspaceFiles(workspaceId)
+    void window.electronAPI.watchWorkspaceFiles(workspaceId, cwdPath)
     const unsubscribe = subscribeToWorkspaceFileChanges(workspaceId, () => {
       if (mountedRef.current) {
         void refreshVisibleFiles()
@@ -409,10 +409,10 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, cwdPath, cla
       unsubscribe()
       void window.electronAPI.unwatchWorkspaceFiles()
     }
-  }, [loadFiles, refreshVisibleFiles, workspaceId])
+  }, [loadFiles, refreshVisibleFiles, workspaceId, cwdPath])
 
   const handleToggleDirectory = useCallback((file: SessionFile) => {
-    if (!workspaceId || file.type !== 'directory') return
+    if (!workspaceId || !cwdPath || file.type !== 'directory') return
 
     if (treeState.expandedPaths.has(file.path)) {
       setTreeState((prev) => collapseWorkspaceDirectory(prev, file.path))
@@ -428,9 +428,10 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, cwdPath, cla
     }
 
     setLoadingPaths((prev) => new Set(prev).add(file.path))
-    void window.electronAPI.getWorkspaceFiles(workspaceId, file.path)
+    const requestId = loadRequestRef.current
+    void window.electronAPI.getWorkspaceFiles(workspaceId, file.path, cwdPath)
       .then((children) => {
-        if (mountedRef.current) {
+        if (mountedRef.current && loadRequestRef.current === requestId) {
           setTreeState((prev) => {
             const childrenByDirPath = new Map(prev.childrenByDirPath)
             const expandedPaths = new Set(prev.expandedPaths)
@@ -444,7 +445,7 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, cwdPath, cla
         console.error('Failed to load workspace directory:', error)
       })
       .finally(() => {
-        if (mountedRef.current) {
+        if (mountedRef.current && loadRequestRef.current === requestId) {
           setLoadingPaths((prev) => {
             const next = new Set(prev)
             next.delete(file.path)
@@ -452,7 +453,7 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, cwdPath, cla
           })
         }
       })
-  }, [treeState, workspaceId])
+  }, [treeState, workspaceId, cwdPath])
 
   if (!workspaceId) {
     return null
@@ -479,7 +480,7 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, cwdPath, cla
         {files.length === 0 ? (
           <div className="px-4 text-muted-foreground select-none">
             <p className="text-xs">
-              {isLoading ? 'Loading...' : 'No workspace files'}
+              {isLoading ? 'Loading...' : cwdPath ? 'No workspace files' : 'No working directory set'}
             </p>
           </div>
         ) : (

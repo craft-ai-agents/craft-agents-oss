@@ -430,8 +430,8 @@ export interface ElectronAPI {
   updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>
 
   // Workspace files
-  getWorkspaceFiles(workspaceId: string, dirPath?: string): Promise<SessionFile[]>
-  watchWorkspaceFiles(workspaceId: string): Promise<void>
+  getWorkspaceFiles(workspaceId: string, dirPath?: string, rootPath?: string): Promise<SessionFile[]>
+  watchWorkspaceFiles(workspaceId: string, rootPath?: string): Promise<void>
   unwatchWorkspaceFiles(): Promise<void>
   onWorkspaceFilesChanged(callback: (workspaceId: string) => void): () => void
 

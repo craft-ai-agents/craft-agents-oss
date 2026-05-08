@@ -239,13 +239,13 @@ export const mockElectronAPI = {
     return []
   },
 
-  getWorkspaceFiles: async (workspaceId: string, dirPath?: string) => {
-    console.log('[Playground] getWorkspaceFiles called:', workspaceId, dirPath)
+  getWorkspaceFiles: async (workspaceId: string, dirPath?: string, rootPath?: string) => {
+    console.log('[Playground] getWorkspaceFiles called:', workspaceId, dirPath, rootPath)
     return []
   },
 
-  watchWorkspaceFiles: async (workspaceId: string) => {
-    console.log('[Playground] watchWorkspaceFiles called:', workspaceId)
+  watchWorkspaceFiles: async (workspaceId: string, rootPath?: string) => {
+    console.log('[Playground] watchWorkspaceFiles called:', workspaceId, rootPath)
   },
 
   unwatchWorkspaceFiles: async () => {
