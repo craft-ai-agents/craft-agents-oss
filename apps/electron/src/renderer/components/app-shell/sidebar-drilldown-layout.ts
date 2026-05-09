@@ -15,6 +15,7 @@ interface SidebarDrilldownLayout {
   navigatorWidth: number
   showSidebarResizeHandle: boolean
   showSessionListResizeHandle: boolean
+  isRightSidebarVisible: boolean
 }
 
 /**
@@ -37,6 +38,7 @@ export function resolveSidebarDrilldownLayout({
       navigatorWidth: 0,
       showSidebarResizeHandle: false,
       showSessionListResizeHandle: false,
+      isRightSidebarVisible: false,
     }
   }
 
@@ -47,6 +49,7 @@ export function resolveSidebarDrilldownLayout({
       navigatorWidth: 0,
       showSidebarResizeHandle: true,
       showSessionListResizeHandle: false,
+      isRightSidebarVisible: true,
     }
   }
 
@@ -56,5 +59,6 @@ export function resolveSidebarDrilldownLayout({
     navigatorWidth: sessionListWidth,
     showSidebarResizeHandle: true,
     showSessionListResizeHandle: true,
+    isRightSidebarVisible: false,
   }
 }

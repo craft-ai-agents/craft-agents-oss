@@ -23,10 +23,11 @@ describe('resolveSidebarDrilldownLayout', () => {
       navigatorWidth: 0,
       showSidebarResizeHandle: true,
       showSessionListResizeHandle: false,
+      isRightSidebarVisible: true,
     })
   })
 
-  test('keeps the existing sidebar and navigator widths outside sessions mode', () => {
+  test('keeps the existing sidebar and navigator widths and hides the right sidebar outside sessions mode', () => {
     const navState: NavigationState = {
       navigator: 'sources',
       filter: undefined,
@@ -46,6 +47,7 @@ describe('resolveSidebarDrilldownLayout', () => {
       navigatorWidth: 300,
       showSidebarResizeHandle: true,
       showSessionListResizeHandle: true,
+      isRightSidebarVisible: false,
     })
   })
 
@@ -69,6 +71,7 @@ describe('resolveSidebarDrilldownLayout', () => {
       navigatorWidth: 0,
       showSidebarResizeHandle: false,
       showSessionListResizeHandle: false,
+      isRightSidebarVisible: false,
     })
   })
 })

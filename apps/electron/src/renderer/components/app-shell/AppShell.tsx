@@ -144,7 +144,6 @@ import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
 import { resolveSidebarDrilldownLayout } from "./sidebar-drilldown-layout"
-import { resolveRightSidebarVisibility } from "./right-sidebar-visibility"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -3301,7 +3300,7 @@ function AppShellContent({
           }
           navigatorWidth={sidebarDrilldownLayout.navigatorWidth}
           isSidebarAndNavigatorHidden={effectiveSidebarAndNavigatorHidden}
-          isRightSidebarVisible={true}
+          isRightSidebarVisible={sidebarDrilldownLayout.isRightSidebarVisible}
           isCompact={isAutoCompact}
           isResizing={!!isResizing}
         />
@@ -3311,7 +3310,7 @@ function AppShellContent({
           sessionId={focusedSessionId ?? undefined}
         />
 
-        {resolveRightSidebarVisibility(navState) && (
+        {sidebarDrilldownLayout.isRightSidebarVisible && (
           <RightSidebarPanel
             workspaceId={activeWorkspaceId ?? undefined}
             sessionId={focusedSessionId ?? undefined}
