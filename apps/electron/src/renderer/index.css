@@ -1305,13 +1305,13 @@ html.dark[data-scenic] .fullscreen-overlay-background {
 
 /* Settings rows: stack vertically in narrow panels */
 @container panel (max-width: 448px) {
-  [data-layout="settings-row"] {
+  [data-layout="settings-row"]:not(:has(> [data-slot="switch"])) {
     flex-direction: column;
     align-items: stretch;
     gap: 10px;
   }
 
-  [data-layout="settings-row"] > [data-layout="settings-control"] {
+  [data-layout="settings-row"]:not(:has(> [data-slot="switch"])) > [data-layout="settings-control"] {
     width: 100%;
     min-width: 0;
     margin-left: 0;
