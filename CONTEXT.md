@@ -25,3 +25,10 @@ The state in which the left sidebar expands to session list width (~300 px) and 
 
 ### Icon Strip Mode
 The collapsed state of the left sidebar (~40 px) showing only navigation icons for Sources, Skills, Automations, and Settings. Active when the sidebar is NOT in Sidebar Drill-Down Mode. The navigator slot opens to the right when a secondary navigation item is selected.
+
+### Editor Panel
+A resizable panel (`EditorDetailPanel`) that renders to the right of the active content panel(s), showing file contents, git diffs, and git-commit details in a tabbed interface. Tabs are opened automatically when session files change during processing.
+
+Visibility rule: only rendered in **Sidebar Drill-Down Mode** (same gate as the Right Sidebar). Within that mode, it shows when `isEditorPanelOpen && hasOpenTabs`. Opening a new tab auto-forces `isEditorPanelOpen = true` (overrides a manual collapse). Open state is persisted per workspace via the `editorPanelVisible` storage key.
+
+Toggle: a `SquareCode` icon button in the TopBar, positioned to the left of the Right Sidebar toggle, conditionally shown under the same `isRightSidebarContextuallyAvailable` gate.
