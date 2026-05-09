@@ -45,11 +45,11 @@ describe('Level 1 frame surfaces', () => {
 })
 
 describe('Level 2 panel surfaces', () => {
-  test('uses bg-foreground-3 on navigator and content panel slots', () => {
+  test('uses bg-background on navigator slot and bg-foreground-3 on content panel slots', () => {
     expectCnBlockToInclude(
       panelStackContainerSource,
       /data-panel-role="navigator"[\s\S]*?className=\{cn\(([\s\S]*?)\)\}/,
-      'bg-foreground-3',
+      'bg-background',
     )
     expectCnBlockToInclude(
       panelSlotSource,
