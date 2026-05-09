@@ -619,8 +619,9 @@ function AppShellContent({
     sidebarWidth,
     sessionListWidth,
   })
+  const isRightSidebarContextuallyAvailable = sidebarDrilldownLayout.isRightSidebarVisible
   const isPanelStackRightSidebarVisible = resolvePanelStackRightSidebarVisible(
-    sidebarDrilldownLayout.isRightSidebarVisible,
+    isRightSidebarContextuallyAvailable,
     isRightSidebarOpen,
   )
   const isSidebarDrilldown = sidebarDrilldownLayout.isDrilldown
@@ -2316,7 +2317,7 @@ function AppShellContent({
           onToggleFocusMode={() => setIsSidebarAndNavigatorHidden(prev => !prev)}
           onAddSessionPanel={() => handleNewChat(true)}
           onAddBrowserPanel={() => { void handleNewBrowserWindow() }}
-          isRightSidebarVisible={sidebarDrilldownLayout.isRightSidebarVisible}
+          isRightSidebarToggleVisible={isRightSidebarContextuallyAvailable}
           isCompact={isAutoCompact}
         />
 
@@ -3336,7 +3337,7 @@ function AppShellContent({
           sessionId={focusedSessionId ?? undefined}
         />
 
-        {sidebarDrilldownLayout.isRightSidebarVisible && (
+        {isRightSidebarContextuallyAvailable && (
           <RightSidebarPanel
             workspaceId={activeWorkspaceId ?? undefined}
             sessionId={focusedSessionId ?? undefined}

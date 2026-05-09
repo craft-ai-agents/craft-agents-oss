@@ -162,8 +162,8 @@ interface TopBarProps {
   onToggleFocusMode: () => void
   onAddSessionPanel: () => void
   onAddBrowserPanel: () => void
-  /** When true, the right sidebar is available in the current navigation context */
-  isRightSidebarVisible: boolean
+  /** When true, shows the right sidebar toggle in the top bar */
+  isRightSidebarToggleVisible: boolean
   /** When true, hides controls that don't apply in compact/mobile layout */
   isCompact?: boolean
 }
@@ -191,7 +191,7 @@ export function TopBar({
   onToggleFocusMode,
   onAddSessionPanel,
   onAddBrowserPanel,
-  isRightSidebarVisible,
+  isRightSidebarToggleVisible,
   isCompact,
 }: TopBarProps) {
   const { t } = useTranslation()
@@ -487,7 +487,7 @@ export function TopBar({
           </StyledDropdownMenuContent>
         </DropdownMenu>
 
-        {isRightSidebarVisible && (
+        {isRightSidebarToggleVisible && (
           <Tooltip>
             <TooltipTrigger asChild>
               <TopBarButton
