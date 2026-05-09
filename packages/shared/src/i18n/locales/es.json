@@ -494,6 +494,7 @@
   "menu.selectAll": "Seleccionar todo",
   "menu.settings": "Configuración...",
   "menu.toggleFocusMode": "Alternar modo enfoque",
+  "menu.toggleRightSidebar": "Alternar barra lateral derecha",
   "menu.toggleSidebar": "Alternar barra lateral",
   "menu.undo": "Deshacer",
   "menu.view": "Ver",

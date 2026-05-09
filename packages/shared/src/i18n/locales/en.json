@@ -494,6 +494,7 @@
   "menu.selectAll": "Select All",
   "menu.settings": "Settings...",
   "menu.toggleFocusMode": "Toggle Focus Mode",
+  "menu.toggleRightSidebar": "Toggle Right Sidebar",
   "menu.toggleSidebar": "Toggle Sidebar",
   "menu.undo": "Undo",
   "menu.view": "View",

@@ -33,41 +33,37 @@ export interface RightSidebarPanelProps {
   workspaceId?: string
   /** Focused session ID — passed to SessionFilesSection */
   sessionId?: string
+  /** Controlled open state owned by AppShell */
+  isOpen: boolean
+  /** Updates the controlled open state */
+  onOpenChange: (isOpen: boolean) => void
 }
 
 export function RightSidebarPanel({
   workspaceId,
   sessionId,
+  isOpen,
+  onOpenChange,
 }: RightSidebarPanelProps) {
   const focusedSession = useAtomValue(sessionAtomFamily(sessionId ?? ''))
   const activeWorkspace = useActiveWorkspace()
   const sessionFolderPath = focusedSession?.sessionFolderPath
   const workspacePath = activeWorkspace?.rootPath
   const cwdRoot = resolveCwdRoot(focusedSession?.workingDirectory, workspacePath)
-  const [isOpen, setIsOpen] = useState<boolean>(() =>
-    storage.get(storage.KEYS.rightSidebarVisible, true, workspaceId)
-  )
   const [width, setWidth] = useState<number>(() =>
     storage.get(storage.KEYS.rightSidebarWidth, DEFAULT_WIDTH, workspaceId)
   )
   const [activeTab, setActiveTab] = useState<Tab>('files')
   const [sashHandleY, setSashHandleY] = useState<number | null>(null)
 
-  // Tracks current workspaceId so persist effects can write to the correct key
-  // without needing workspaceId in their deps (which would cause them to fire on
-  // workspace switch before the load effect restores the new workspace's values).
+  // Tracks current workspaceId so persist effects can write to the correct key.
   const workspaceIdRef = useRef(workspaceId)
 
   // Re-read from storage when workspaceId changes (workspace switch)
   useEffect(() => {
     workspaceIdRef.current = workspaceId
-    setIsOpen(storage.get(storage.KEYS.rightSidebarVisible, true, workspaceId))
     setWidth(storage.get(storage.KEYS.rightSidebarWidth, DEFAULT_WIDTH, workspaceId))
   }, [workspaceId])
-
-  useEffect(() => {
-    storage.set(storage.KEYS.rightSidebarVisible, isOpen, workspaceIdRef.current)
-  }, [isOpen])
 
   useEffect(() => {
     storage.set(storage.KEYS.rightSidebarWidth, width, workspaceIdRef.current)
@@ -210,7 +206,7 @@ export function RightSidebarPanel({
         >
           <button
             type="button"
-            onClick={() => setIsOpen(v => !v)}
+            onClick={() => onOpenChange(!isOpen)}
             className={cn(
               'mb-2 flex items-center justify-center rounded-[6px]',
               'h-7 w-7 text-foreground/50 hover:text-foreground hover:bg-sidebar-hover',
@@ -229,7 +225,7 @@ export function RightSidebarPanel({
 
           <button
             type="button"
-            onClick={() => { setActiveTab('files'); if (!isOpen) setIsOpen(true) }}
+            onClick={() => { setActiveTab('files'); if (!isOpen) onOpenChange(true) }}
             className={cn(
               'flex items-center justify-center rounded-[6px]',
               'h-7 w-7 transition-colors',
@@ -245,7 +241,7 @@ export function RightSidebarPanel({
 
           <button
             type="button"
-            onClick={() => { setActiveTab('git'); if (!isOpen) setIsOpen(true) }}
+            onClick={() => { setActiveTab('git'); if (!isOpen) onOpenChange(true) }}
             className={cn(
               'flex items-center justify-center rounded-[6px]',
               'h-7 w-7 transition-colors',
@@ -261,7 +257,7 @@ export function RightSidebarPanel({
 
           <button
             type="button"
-            onClick={() => { setActiveTab('workspace'); if (!isOpen) setIsOpen(true) }}
+            onClick={() => { setActiveTab('workspace'); if (!isOpen) onOpenChange(true) }}
             className={cn(
               'flex items-center justify-center rounded-[6px]',
               'h-7 w-7 transition-colors',

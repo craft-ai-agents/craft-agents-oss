@@ -494,6 +494,7 @@
   "menu.selectAll": "全选",
   "menu.settings": "设置...",
   "menu.toggleFocusMode": "切换专注模式",
+  "menu.toggleRightSidebar": "切换右侧栏",
   "menu.toggleSidebar": "切换侧栏",
   "menu.undo": "撤销",
   "menu.view": "视图",

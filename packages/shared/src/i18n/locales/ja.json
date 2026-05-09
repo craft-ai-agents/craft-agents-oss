@@ -494,6 +494,7 @@
   "menu.selectAll": "すべて選択",
   "menu.settings": "設定...",
   "menu.toggleFocusMode": "フォーカスモードを切り替え",
+  "menu.toggleRightSidebar": "右サイドバーを切り替え",
   "menu.toggleSidebar": "サイドバーを切り替え",
   "menu.undo": "元に戻す",
   "menu.view": "表示",

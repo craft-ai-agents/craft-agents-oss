@@ -12,6 +12,7 @@ import * as Icons from "lucide-react"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@craft-agent/ui"
 import { CraftAgentsSymbol } from "../icons/CraftAgentsSymbol"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
+import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { TopBarButton } from "../ui/TopBarButton"
 import { cn } from "@/lib/utils"
 import { isMac } from "@/lib/platform"
@@ -157,9 +158,12 @@ interface TopBarProps {
   canGoBack: boolean
   canGoForward: boolean
   onToggleSidebar: () => void
+  onToggleRightSidebar: () => void
   onToggleFocusMode: () => void
   onAddSessionPanel: () => void
   onAddBrowserPanel: () => void
+  /** When true, the right sidebar is available in the current navigation context */
+  isRightSidebarVisible: boolean
   /** When true, hides controls that don't apply in compact/mobile layout */
   isCompact?: boolean
 }
@@ -183,9 +187,11 @@ export function TopBar({
   canGoBack,
   canGoForward,
   onToggleSidebar,
+  onToggleRightSidebar,
   onToggleFocusMode,
   onAddSessionPanel,
   onAddBrowserPanel,
+  isRightSidebarVisible,
   isCompact,
 }: TopBarProps) {
   const { t } = useTranslation()
@@ -480,6 +486,21 @@ export function TopBar({
             </StyledDropdownMenuItem>
           </StyledDropdownMenuContent>
         </DropdownMenu>
+
+        {isRightSidebarVisible && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <TopBarButton
+                onClick={onToggleRightSidebar}
+                aria-label={t("menu.toggleRightSidebar")}
+                className="h-[26px] w-[26px] rounded-lg"
+              >
+                <PanelRightRounded className="h-[18px] w-[18px] text-foreground/50" />
+              </TopBarButton>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t("menu.toggleRightSidebar")}</TooltipContent>
+          </Tooltip>
+        )}
       </div>
       )}
       </div>

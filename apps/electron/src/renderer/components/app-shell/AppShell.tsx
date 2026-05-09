@@ -144,6 +144,11 @@ import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
 import { resolveSidebarDrilldownLayout } from "./sidebar-drilldown-layout"
+import {
+  loadRightSidebarOpenPreference,
+  persistRightSidebarOpenPreference,
+  resolvePanelStackRightSidebarVisible,
+} from "./right-sidebar-state"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -591,6 +596,21 @@ function AppShellContent({
   // UNIFIED NAVIGATION STATE - single source of truth from NavigationContext
   // Derived from focused panel's route — all panels are peers
   const navState = useNavigationState()
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = React.useState(() => {
+    return loadRightSidebarOpenPreference(activeWorkspaceId ?? undefined)
+  })
+  const rightSidebarWorkspaceIdRef = React.useRef(activeWorkspaceId ?? undefined)
+  useEffect(() => {
+    const workspaceId = activeWorkspaceId ?? undefined
+    rightSidebarWorkspaceIdRef.current = workspaceId
+    setIsRightSidebarOpen(loadRightSidebarOpenPreference(workspaceId))
+  }, [activeWorkspaceId])
+  useEffect(() => {
+    persistRightSidebarOpenPreference(isRightSidebarOpen, rightSidebarWorkspaceIdRef.current)
+  }, [isRightSidebarOpen])
+  const handleToggleRightSidebar = useCallback(() => {
+    setIsRightSidebarOpen(prev => !prev)
+  }, [])
   const sidebarDrilldownLayout = resolveSidebarDrilldownLayout({
     navState,
     isAutoCompact,
@@ -599,6 +619,10 @@ function AppShellContent({
     sidebarWidth,
     sessionListWidth,
   })
+  const isPanelStackRightSidebarVisible = resolvePanelStackRightSidebarVisible(
+    sidebarDrilldownLayout.isRightSidebarVisible,
+    isRightSidebarOpen,
+  )
   const isSidebarDrilldown = sidebarDrilldownLayout.isDrilldown
 
   const store = useStore()
@@ -2288,9 +2312,11 @@ function AppShellContent({
           canGoBack={canGoBack}
           canGoForward={canGoForward}
           onToggleSidebar={handleToggleSidebar}
+          onToggleRightSidebar={handleToggleRightSidebar}
           onToggleFocusMode={() => setIsSidebarAndNavigatorHidden(prev => !prev)}
           onAddSessionPanel={() => handleNewChat(true)}
           onAddBrowserPanel={() => { void handleNewBrowserWindow() }}
+          isRightSidebarVisible={sidebarDrilldownLayout.isRightSidebarVisible}
           isCompact={isAutoCompact}
         />
 
@@ -3300,7 +3326,7 @@ function AppShellContent({
           }
           navigatorWidth={sidebarDrilldownLayout.navigatorWidth}
           isSidebarAndNavigatorHidden={effectiveSidebarAndNavigatorHidden}
-          isRightSidebarVisible={sidebarDrilldownLayout.isRightSidebarVisible}
+          isRightSidebarVisible={isPanelStackRightSidebarVisible}
           isCompact={isAutoCompact}
           isResizing={!!isResizing}
         />
@@ -3314,6 +3340,8 @@ function AppShellContent({
           <RightSidebarPanel
             workspaceId={activeWorkspaceId ?? undefined}
             sessionId={focusedSessionId ?? undefined}
+            isOpen={isRightSidebarOpen}
+            onOpenChange={setIsRightSidebarOpen}
           />
         )}
 
