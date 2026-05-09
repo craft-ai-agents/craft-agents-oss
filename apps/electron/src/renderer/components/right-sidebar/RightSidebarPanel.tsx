@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { Files, GitBranch, FolderTree } from 'lucide-react'
+import { Files, GitBranch, FolderTree, type LucideIcon } from 'lucide-react'
 import { useAtomValue } from 'jotai'
 import { cn } from '@/lib/utils'
 import * as storage from '@/lib/local-storage'
@@ -27,6 +27,16 @@ const MAX_WIDTH = 520
 const SPRING = { type: 'spring' as const, stiffness: 600, damping: 49 }
 
 type Tab = 'files' | 'git' | 'workspace'
+
+const RIGHT_SIDEBAR_TABS: readonly {
+  id: Tab
+  title: string
+  Icon: LucideIcon
+}[] = [
+  { id: 'files', title: 'Files', Icon: Files },
+  { id: 'git', title: 'Git', Icon: GitBranch },
+  { id: 'workspace', title: 'Workspace', Icon: FolderTree },
+]
 
 export interface RightSidebarPanelProps {
   /** Active workspace ID — scopes localStorage persistence */
@@ -204,53 +214,28 @@ export function RightSidebarPanel({
                 paddingBottom: PANEL_EDGE_INSET,
               }}
             >
-              <button
-                type="button"
-                onClick={() => setActiveTab('files')}
-                className={cn(
-                  'flex items-center justify-center rounded-[6px]',
-                  'h-7 w-7 transition-colors',
-                  'focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring outline-none',
-                  activeTab === 'files'
-                    ? 'text-foreground bg-sidebar-hover'
-                    : 'text-foreground/50 hover:text-foreground hover:bg-sidebar-hover',
-                )}
-                title="Files"
-              >
-                <Files className="h-3.5 w-3.5" />
-              </button>
+              {RIGHT_SIDEBAR_TABS.map(({ id, title, Icon }) => {
+                const isActive = activeTab === id
 
-              <button
-                type="button"
-                onClick={() => setActiveTab('git')}
-                className={cn(
-                  'flex items-center justify-center rounded-[6px]',
-                  'h-7 w-7 transition-colors',
-                  'focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring outline-none',
-                  activeTab === 'git'
-                    ? 'text-foreground bg-sidebar-hover'
-                    : 'text-foreground/50 hover:text-foreground hover:bg-sidebar-hover',
-                )}
-                title="Git"
-              >
-                <GitBranch className="h-3.5 w-3.5" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('workspace')}
-                className={cn(
-                  'flex items-center justify-center rounded-[6px]',
-                  'h-7 w-7 transition-colors',
-                  'focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring outline-none',
-                  activeTab === 'workspace'
-                    ? 'text-foreground bg-sidebar-hover'
-                    : 'text-foreground/50 hover:text-foreground hover:bg-sidebar-hover',
-                )}
-                title="Workspace"
-              >
-                <FolderTree className="h-3.5 w-3.5" />
-              </button>
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setActiveTab(id)}
+                    className={cn(
+                      'flex items-center justify-center rounded-[6px]',
+                      'h-7 w-7 transition-colors',
+                      'focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring outline-none',
+                      isActive
+                        ? 'text-foreground bg-sidebar-hover'
+                        : 'text-foreground/50 hover:text-foreground hover:bg-sidebar-hover',
+                    )}
+                    title={title}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                  </button>
+                )
+              })}
             </motion.div>
           )}
         </AnimatePresence>
