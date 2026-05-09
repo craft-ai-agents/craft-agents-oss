@@ -33,6 +33,7 @@ function parseAgent(): AgentProvider {
 
 const MAX_ITERATIONS = parseArg("--iterations", 10);
 const MAX_PARALLEL = parseArg("--parallel", 4);
+const MAX_ISSUES = parseArg("--issues", 2);
 const IDLE_SECONDS = 12 * 60 * 60;
 const ROOT = resolve(import.meta.dir, "..");
 const PROMPTS = import.meta.dir;
@@ -141,7 +142,7 @@ for (let i = 1; i <= MAX_ITERATIONS; i++) {
         throw new Error("Planner did not produce a <plan> tag.\n\n" + plan.stdout);
     }
 
-    const { issues } = JSON.parse(planMatch[1]) as {
+    let { issues } = JSON.parse(planMatch[1]) as {
         issues: { number: number; title: string; branch: string }[];
     };
 
@@ -149,6 +150,8 @@ for (let i = 1; i <= MAX_ITERATIONS; i++) {
         console.log("No unblocked issues. Exiting.");
         break;
     }
+
+    issues = issues.slice(0, MAX_ISSUES)
 
     console.log(`${issues.length} issue(s) to work on:`);
     for (const issue of issues) {

@@ -1,7 +1,7 @@
 # CLAUDE.md — `@craft-agent/shared`
 
 ## Purpose
-Core business logic package for Craft Agent:
+Core business logic package for MDP:
 - Agent backends and session-scoped tools
 - Sources, credentials, sessions, and config
 - Permission modes and validation
@@ -98,7 +98,7 @@ Keys use **flat dot-notation** with a category prefix:
 
 1. **Never call `i18n.t()` at module level** — store `labelKey` strings and resolve in components/functions.
 2. **Use i18next pluralization** (`_one`/`_other`), never manual `count === 1 ?` logic.
-3. **Keep brand names in English**: Craft, Craft Agents, Agents, Workspace, Claude, Anthropic, OpenAI, MCP, API, SDK.
+3. **Keep brand names in English**: MDP, Workspace, Claude, Anthropic, OpenAI, MCP, API, SDK.
 4. **Include `...` in the translation value** if the UI needs an ellipsis — don't append it in JSX.
 5. **Use `<Trans>` component** for translations containing HTML tags (e.g. `<strong>`).
 6. **Use `i18n.resolvedLanguage`** (not `i18n.language`) when comparing against supported language codes.

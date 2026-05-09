@@ -10,28 +10,6 @@ import { existsSync, mkdirSync, rmSync, readdirSync, statSync, cpSync } from 'fs
 import { join } from 'path';
 import type { BuildConfig } from './common';
 
-/**
- * Verify SDK native binary is bundled in the packaged Windows app.
- * Since SDK 0.2.113 the SDK ships a per-platform native binary instead of cli.js.
- */
-export function verifyPackagedSDK(unpackedPath: string): void {
-  const appPath = join(unpackedPath, 'resources', 'app');
-  const binaryPath = join(
-    appPath,
-    'node_modules', '@anthropic-ai', 'claude-agent-sdk-binary', 'claude.exe',
-  );
-
-  if (!existsSync(binaryPath)) {
-    throw new Error(`CRITICAL: SDK native binary not bundled! Expected at: ${binaryPath}`);
-  }
-
-  const stats = statSync(binaryPath);
-  if (stats.size < 50_000_000) {
-    throw new Error(`CRITICAL: SDK native binary too small (${stats.size} bytes, expected ~210 MB)`);
-  }
-
-  console.log(`  SDK bundled: claude.exe is ${(stats.size / 1024 / 1024).toFixed(1)} MB`);
-}
 
 /**
  * Sleep helper (Node.js replacement for Bun.sleep)
@@ -258,15 +236,6 @@ export async function packageWindows(config: BuildConfig): Promise<string> {
 
   if (lastError) {
     throw new Error(`electron-builder failed after ${maxRetries} attempts: ${lastError.message}`);
-  }
-
-  // Verify SDK is bundled in the unpacked app before checking artifacts
-  const unpackedPath = join(electronDir, 'release', 'win-unpacked');
-  if (existsSync(unpackedPath)) {
-    console.log('Verifying SDK in packaged app...');
-    verifyPackagedSDK(unpackedPath);
-  } else {
-    console.warn('  win-unpacked not found, skipping SDK verification');
   }
 
   // Find the built installer

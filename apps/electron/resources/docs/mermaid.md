@@ -1,10 +1,10 @@
 # Mermaid Diagram Syntax Reference
 
-Craft Agent renders Mermaid diagrams natively as beautiful themed SVGs. Use this reference for syntax details.
+MDP renders Mermaid diagrams natively as beautiful themed SVGs. Use this reference for syntax details.
 
 ## Optional YAML Frontmatter
 
-Mermaid code blocks may start with YAML frontmatter. Craft Agent accepts the frontmatter for compatibility and renders the diagram syntax that follows it. For visible chart titles, prefer diagram-level title syntax (for example, `title "Monthly Revenue"` in `xychart-beta`).
+Mermaid code blocks may start with YAML frontmatter. MDP accepts the frontmatter for compatibility and renders the diagram syntax that follows it. For visible chart titles, prefer diagram-level title syntax (for example, `title "Monthly Revenue"` in `xychart-beta`).
 
 ```mermaid
 ---

@@ -54,7 +54,7 @@ export const AGENT_EVENTS: AgentEvent[] = [
 // Action Definitions
 // ============================================================================
 
-/** A prompt action - sends a prompt to Craft Agent */
+/** A prompt action - sends a prompt to MDP */
 export interface PromptAction {
   type: 'prompt';
   prompt: string;
@@ -264,7 +264,7 @@ export interface AutomationResult {
   event: string;
   matched: number;
   results: ActionExecutionResult[];
-  /** Prompts that should be executed by Craft Agent (with metadata) */
+  /** Prompts that should be executed by MDP (with metadata) */
   pendingPrompts: PendingPrompt[];
 }
 

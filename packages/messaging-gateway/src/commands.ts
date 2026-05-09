@@ -425,7 +425,7 @@ export class Commands {
     if (!/^\d{6}$/.test(code)) {
       await adapter.sendText(
         msg.channelId,
-        'Usage: /pair <6-digit code>\n\nGenerate a code from the session menu or the Telegram supergroup setup in the Craft Agent app.',
+        'Usage: /pair <6-digit code>\n\nGenerate a code from the session menu or the Telegram supergroup setup in the MDP app.',
         replyOpts,
       )
       return
@@ -452,7 +452,7 @@ export class Commands {
       })
       await adapter.sendText(
         msg.channelId,
-        'Only existing bot owners can redeem pairing codes. Ask an owner to add you in the Craft Agent app.',
+        'Only existing bot owners can redeem pairing codes. Ask an owner to add you in the MDP app.',
         replyOpts,
       )
       return

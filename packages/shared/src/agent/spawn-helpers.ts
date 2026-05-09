@@ -28,7 +28,7 @@ export function isExistingDirectory(p: string | null | undefined): boolean {
  * Match the SDK's `ReferenceError("Claude Code native binary not found at <path>")`
  * (and the older `executable not found at <path>` variant) and return the
  * captured path. Greedy capture to end-of-line to preserve macOS bundle paths
- * like `/Applications/Craft Agents.app/...`. A single trailing sentence period
+ * like `/Applications/MDP.app/...`. A single trailing sentence period
  * is stripped only when present (the SDK historically appends one).
  */
 const SDK_BINARY_NOT_FOUND_RE = /Claude Code (?:native binary|executable) not found at\s+(.+)$/m;

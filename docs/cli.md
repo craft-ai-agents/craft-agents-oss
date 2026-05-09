@@ -1,12 +1,12 @@
 # craft-cli — CLI Reference
 
-Terminal client for Craft Agent server. Connects over WebSocket (`ws://` or `wss://`) to a running headless server.
+Terminal client for MDP server. Connects over WebSocket (`ws://` or `wss://`) to a running headless server.
 
 ## Prerequisites
 
 - [Bun](https://bun.sh/) runtime installed
 - For `run` and `--validate-server`: an API key via `--api-key`, `$LLM_API_KEY`, or a provider-specific env var (e.g., `$ANTHROPIC_API_KEY`)
-- For all other commands: a running Craft Agent headless server with URL and token
+- For all other commands: a running MDP headless server with URL and token
 
 ## Installation
 

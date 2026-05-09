@@ -288,7 +288,7 @@ function PairedSupergroupSection({ topics }: { topics: TopicBinding[] }) {
         <SubRowIcon icon={MessagesSquare} />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
-            <div className="truncate text-sm font-medium">Craft Agents</div>
+            <div className="truncate text-sm font-medium">MDP</div>
             <div className="truncate text-xs text-foreground/50">(-1003783993623)</div>
           </div>
           <div className="mt-0.5 truncate text-xs text-foreground/50">
