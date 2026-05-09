@@ -12,10 +12,16 @@ const topBarSource = readFileSync(
   'utf8',
 )
 
+function expectClassNameToInclude(source: string, pattern: RegExp, className: string) {
+  const match = source.match(pattern)
+
+  expect(match?.[1].split(/\s+/)).toContain(className)
+}
+
 describe('Level 1 frame surfaces', () => {
   test('uses bg-foreground-5 on the outer shell, icon strip sidebar, and TopBar', () => {
-    expect(appShellSource).toContain('className="flex items-stretch relative bg-foreground-5"')
-    expect(appShellSource).toContain('className="flex h-full flex-col select-none bg-foreground-5"')
-    expect(topBarSource).toContain('className="fixed top-0 left-0 right-0 h-[48px] z-panel titlebar-drag-region bg-foreground-5"')
+    expectClassNameToInclude(appShellSource, /ref=\{shellRef\}\s+className="([^"]+)"/, 'bg-foreground-5')
+    expectClassNameToInclude(appShellSource, /\) : \(\s+<div className="([^"]+)"/, 'bg-foreground-5')
+    expectClassNameToInclude(topBarSource, /return \(\s+<div\s+className="([^"]+)"/, 'bg-foreground-5')
   })
 })
