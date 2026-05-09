@@ -230,7 +230,7 @@ export function EditorDetailPanel({ workspaceId, sessionId }: EditorDetailPanelP
           animate={{ width, opacity: 1 }}
           exit={{ width: 0, opacity: 0 }}
           transition={SPRING}
-          className="shrink-0 h-full flex"
+          className="shrink-0 flex"
           style={{
             paddingBlock: PANEL_STACK_VERTICAL_OVERFLOW,
             marginBlock: -PANEL_STACK_VERTICAL_OVERFLOW,
