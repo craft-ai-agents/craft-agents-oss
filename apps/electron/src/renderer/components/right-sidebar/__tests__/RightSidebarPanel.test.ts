@@ -15,25 +15,25 @@ function makeLocalStorage() {
   } as Storage
 }
 
+const originalLocalStorage = globalThis.localStorage
+
+beforeEach(() => {
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: makeLocalStorage(),
+    writable: true,
+    configurable: true,
+  })
+})
+
+afterEach(() => {
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: originalLocalStorage,
+    writable: true,
+    configurable: true,
+  })
+})
+
 describe('RightSidebarPanel persistence', () => {
-  const originalLocalStorage = globalThis.localStorage
-
-  beforeEach(() => {
-    Object.defineProperty(globalThis, 'localStorage', {
-      value: makeLocalStorage(),
-      writable: true,
-      configurable: true,
-    })
-  })
-
-  afterEach(() => {
-    Object.defineProperty(globalThis, 'localStorage', {
-      value: originalLocalStorage,
-      writable: true,
-      configurable: true,
-    })
-  })
-
   it('rightSidebarVisible key exists in storage.KEYS', () => {
     expect(storage.KEYS.rightSidebarVisible).toBe('right-sidebar-visible')
   })
@@ -77,27 +77,10 @@ describe('RightSidebarPanel persistence', () => {
 })
 
 describe('RightSidebarPanel collapsed layout', () => {
-  const originalLocalStorage = globalThis.localStorage
   const appShellValue = {
     workspaces: [{ id: 'ws-1', rootPath: '/workspace' }],
     activeWorkspaceId: 'ws-1',
   } as AppShellContextType
-
-  beforeEach(() => {
-    Object.defineProperty(globalThis, 'localStorage', {
-      value: makeLocalStorage(),
-      writable: true,
-      configurable: true,
-    })
-  })
-
-  afterEach(() => {
-    Object.defineProperty(globalThis, 'localStorage', {
-      value: originalLocalStorage,
-      writable: true,
-      configurable: true,
-    })
-  })
 
   function renderPanel(isOpen: boolean) {
     return renderToStaticMarkup(
@@ -110,6 +93,11 @@ describe('RightSidebarPanel collapsed layout', () => {
         })
       )
     )
+  }
+
+  function expectNoInternalCollapseButton(markup: string) {
+    expect(markup).not.toContain('Collapse sidebar')
+    expect(markup).not.toContain('Expand sidebar')
   }
 
   it('renders total width as 0px when controlled closed', () => {
@@ -133,15 +121,13 @@ describe('RightSidebarPanel collapsed layout', () => {
   it('does not render the old internal collapse button when controlled closed', () => {
     const markup = renderPanel(false)
 
-    expect(markup).not.toContain('Collapse sidebar')
-    expect(markup).not.toContain('Expand sidebar')
+    expectNoInternalCollapseButton(markup)
   })
 
   it('does not render the old internal collapse button when controlled open', () => {
     const markup = renderPanel(true)
 
-    expect(markup).not.toContain('Collapse sidebar')
-    expect(markup).not.toContain('Expand sidebar')
+    expectNoInternalCollapseButton(markup)
   })
 
   it('renders Files, Git, and Workspace tab icon buttons when controlled open', () => {
