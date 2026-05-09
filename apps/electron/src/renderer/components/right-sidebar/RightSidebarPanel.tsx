@@ -112,7 +112,7 @@ export function RightSidebarPanel({
       initial={false}
       animate={{ width: totalWidth }}
       transition={SPRING}
-      className="shrink-0 h-full flex"
+      className="shrink-0 flex"
       style={{
         // Mirror the vertical overflow trick used in PanelStackContainer
         paddingBlock: PANEL_STACK_VERTICAL_OVERFLOW,

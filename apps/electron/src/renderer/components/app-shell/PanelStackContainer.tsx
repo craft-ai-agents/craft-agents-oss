@@ -154,7 +154,7 @@ export function PanelStackContainer({
           transition={transition}
           className={cn(
             'h-full overflow-hidden relative shrink-0 z-[2]',
-            'bg-foreground-3 shadow-middle',
+            'bg-background shadow-middle',
           )}
           style={{
             // In compact mode (no content selected), navigator fills available space

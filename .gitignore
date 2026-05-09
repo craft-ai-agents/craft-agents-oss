@@ -73,3 +73,5 @@ credentials.enc
 .secrets
 .actrc
 .vscode/settings.json
+
+.sandcastle
