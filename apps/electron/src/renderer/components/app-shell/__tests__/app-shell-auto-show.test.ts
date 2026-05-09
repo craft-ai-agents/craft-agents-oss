@@ -7,6 +7,21 @@ const appShellSource = readFileSync(
   'utf8',
 )
 
+function getEditorPanelAutoShowEffectSource() {
+  const refIndex = appShellSource.indexOf('const prevHasOpenTabsRef')
+  const effectStart = appShellSource.indexOf('useEffect(() => {', refIndex)
+  const effectEnd = appShellSource.indexOf(
+    'const isPanelStackRightSidebarVisible',
+    effectStart,
+  )
+
+  expect(refIndex).toBeGreaterThan(-1)
+  expect(effectStart).toBeGreaterThan(-1)
+  expect(effectEnd).toBeGreaterThan(effectStart)
+
+  return appShellSource.slice(effectStart, effectEnd)
+}
+
 describe('AppShell editor panel auto-show', () => {
   test('imports hasOpenTabsAtom from editor-tabs', () => {
     expect(appShellSource).toContain('hasOpenTabsAtom')
@@ -21,11 +36,13 @@ describe('AppShell editor panel auto-show', () => {
   })
 
   test('auto-shows editor panel on false→true transition independent of the render gate', () => {
-    const effectMatch = appShellSource.match(
-      /useEffect\(\(\) => \{\s*if \(hasOpenTabs && !prevHasOpenTabsRef\.current\) \{\s*setIsEditorPanelOpen\(true\)\s*\}\s*prevHasOpenTabsRef\.current = hasOpenTabs\s*\}, \[hasOpenTabs\]\)/,
-    )
+    const effectSource = getEditorPanelAutoShowEffectSource()
+    const dependencyList = effectSource.match(/\}, \[([^\]]*)\]\)/)?.[1]
 
-    expect(effectMatch).not.toBeNull()
+    expect(effectSource).toContain('if (hasOpenTabs && !prevHasOpenTabsRef.current)')
+    expect(effectSource).toContain('setIsEditorPanelOpen(true)')
+    expect(dependencyList).toBe('hasOpenTabs')
+    expect(effectSource).not.toContain('isRightSidebarContextuallyAvailable')
   })
 
   test('gates the rendered editor panel and top bar toggle behind Sidebar Drill-Down Mode', () => {
