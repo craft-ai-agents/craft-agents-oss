@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/lukilabs-craft-agents-oss-badge.png)](https://mseep.ai/app/lukilabs-craft-agents-oss)
+
 # Craft Agents
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
