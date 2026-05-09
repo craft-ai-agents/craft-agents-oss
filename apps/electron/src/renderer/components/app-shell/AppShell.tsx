@@ -2324,7 +2324,7 @@ function AppShellContent({
       {/* === OUTER LAYOUT: Unified Panel Stack | Right Sidebar === */}
       <div
         ref={shellRef}
-        className="flex items-stretch relative"
+        className="flex items-stretch relative bg-foreground-5"
         style={{ height: '100%', paddingRight: PANEL_EDGE_INSET, paddingBottom: PANEL_EDGE_INSET, paddingLeft: 0, gap: PANEL_GAP }}
       >
         <PanelStackContainer
@@ -2361,7 +2361,7 @@ function AppShellContent({
                 {sessionListContent}
               </div>
             ) : (
-            <div className="flex h-full flex-col select-none bg-background/70">
+            <div className="flex h-full flex-col select-none bg-foreground-5">
               {/* Sidebar Top Section */}
               <div className="flex-1 flex flex-col min-h-0">
                 {/* New Session Button - Gmail-style, with context menu for "Open in New Window" */}
