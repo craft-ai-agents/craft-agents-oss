@@ -3342,7 +3342,6 @@ function AppShellContent({
             workspaceId={activeWorkspaceId ?? undefined}
             sessionId={focusedSessionId ?? undefined}
             isOpen={isRightSidebarOpen}
-            onOpenChange={setIsRightSidebarOpen}
           />
         )}
 

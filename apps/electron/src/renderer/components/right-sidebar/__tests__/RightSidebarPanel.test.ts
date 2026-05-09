@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import * as storage from '@/lib/local-storage'
+import { AppShellProvider, type AppShellContextType } from '@/context/AppShellContext'
+import { RightSidebarPanel } from '../RightSidebarPanel'
 
 // Minimal localStorage shim for tests
 function makeLocalStorage() {
@@ -69,5 +73,32 @@ describe('RightSidebarPanel persistence', () => {
     storage.set(storage.KEYS.rightSidebarVisible, true, 'ws-z')
     const raw = globalThis.localStorage.getItem('craft-right-sidebar-visible:ws-z')
     expect(raw).toBe('true')
+  })
+})
+
+describe('RightSidebarPanel collapsed layout', () => {
+  const appShellValue = {
+    workspaces: [{ id: 'ws-1', rootPath: '/workspace' }],
+    activeWorkspaceId: 'ws-1',
+  } as AppShellContextType
+
+  it('collapses to 0px and removes the internal collapse toggle when closed', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        AppShellProvider,
+        { value: appShellValue },
+        createElement(RightSidebarPanel, {
+          workspaceId: 'ws-1',
+          isOpen: false,
+        })
+      )
+    )
+
+    expect(markup).toContain('width:0')
+    expect(markup).not.toContain('Collapse sidebar')
+    expect(markup).not.toContain('Expand sidebar')
+    expect(markup).not.toContain('title="Files"')
+    expect(markup).not.toContain('title="Git"')
+    expect(markup).not.toContain('title="Workspace"')
   })
 })

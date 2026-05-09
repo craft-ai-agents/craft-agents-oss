@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { Files, GitBranch, ChevronRight, FolderTree } from 'lucide-react'
+import { Files, GitBranch, FolderTree } from 'lucide-react'
 import { useAtomValue } from 'jotai'
 import { cn } from '@/lib/utils'
 import * as storage from '@/lib/local-storage'
@@ -35,15 +35,12 @@ export interface RightSidebarPanelProps {
   sessionId?: string
   /** Controlled open state owned by AppShell */
   isOpen: boolean
-  /** Updates the controlled open state */
-  onOpenChange: (isOpen: boolean) => void
 }
 
 export function RightSidebarPanel({
   workspaceId,
   sessionId,
   isOpen,
-  onOpenChange,
 }: RightSidebarPanelProps) {
   const focusedSession = useAtomValue(sessionAtomFamily(sessionId ?? ''))
   const activeWorkspace = useActiveWorkspace()
@@ -98,7 +95,7 @@ export function RightSidebarPanel({
     document.addEventListener('mouseup', handleMouseUp)
   }, [width])
 
-  const totalWidth = isOpen ? width + TAB_STRIP_WIDTH : TAB_STRIP_WIDTH
+  const totalWidth = isOpen ? width + TAB_STRIP_WIDTH : 0
 
   return (
     <motion.div
@@ -193,84 +190,70 @@ export function RightSidebarPanel({
           )}
         </AnimatePresence>
 
-        <div
-          className={cn(
-            'shrink-0 flex flex-col items-center bg-background',
-            isOpen ? 'border-l border-border/50' : '',
-          )}
-          style={{
-            width: TAB_STRIP_WIDTH,
-            paddingTop: PANEL_EDGE_INSET,
-            paddingBottom: PANEL_EDGE_INSET,
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => onOpenChange(!isOpen)}
-            className={cn(
-              'mb-2 flex items-center justify-center rounded-[6px]',
-              'h-7 w-7 text-foreground/50 hover:text-foreground hover:bg-sidebar-hover',
-              'transition-colors focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring outline-none',
-            )}
-            title={isOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-          >
+        <AnimatePresence>
+          {isOpen && (
             <motion.div
-              initial={false}
-              animate={{ rotate: isOpen ? 0 : 180 }}
-              transition={SPRING}
+              key="tab-strip"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="shrink-0 flex flex-col items-center bg-background border-l border-border/50"
+              style={{
+                width: TAB_STRIP_WIDTH,
+                paddingTop: PANEL_EDGE_INSET,
+                paddingBottom: PANEL_EDGE_INSET,
+              }}
             >
-              <ChevronRight className="h-3.5 w-3.5" />
+              <button
+                type="button"
+                onClick={() => setActiveTab('files')}
+                className={cn(
+                  'flex items-center justify-center rounded-[6px]',
+                  'h-7 w-7 transition-colors',
+                  'focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring outline-none',
+                  activeTab === 'files'
+                    ? 'text-foreground bg-sidebar-hover'
+                    : 'text-foreground/50 hover:text-foreground hover:bg-sidebar-hover',
+                )}
+                title="Files"
+              >
+                <Files className="h-3.5 w-3.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('git')}
+                className={cn(
+                  'flex items-center justify-center rounded-[6px]',
+                  'h-7 w-7 transition-colors',
+                  'focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring outline-none',
+                  activeTab === 'git'
+                    ? 'text-foreground bg-sidebar-hover'
+                    : 'text-foreground/50 hover:text-foreground hover:bg-sidebar-hover',
+                )}
+                title="Git"
+              >
+                <GitBranch className="h-3.5 w-3.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('workspace')}
+                className={cn(
+                  'flex items-center justify-center rounded-[6px]',
+                  'h-7 w-7 transition-colors',
+                  'focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring outline-none',
+                  activeTab === 'workspace'
+                    ? 'text-foreground bg-sidebar-hover'
+                    : 'text-foreground/50 hover:text-foreground hover:bg-sidebar-hover',
+                )}
+                title="Workspace"
+              >
+                <FolderTree className="h-3.5 w-3.5" />
+              </button>
             </motion.div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveTab('files'); if (!isOpen) onOpenChange(true) }}
-            className={cn(
-              'flex items-center justify-center rounded-[6px]',
-              'h-7 w-7 transition-colors',
-              'focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring outline-none',
-              activeTab === 'files' && isOpen
-                ? 'text-foreground bg-sidebar-hover'
-                : 'text-foreground/50 hover:text-foreground hover:bg-sidebar-hover',
-            )}
-            title="Files"
-          >
-            <Files className="h-3.5 w-3.5" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveTab('git'); if (!isOpen) onOpenChange(true) }}
-            className={cn(
-              'flex items-center justify-center rounded-[6px]',
-              'h-7 w-7 transition-colors',
-              'focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring outline-none',
-              activeTab === 'git' && isOpen
-                ? 'text-foreground bg-sidebar-hover'
-                : 'text-foreground/50 hover:text-foreground hover:bg-sidebar-hover',
-            )}
-            title="Git"
-          >
-            <GitBranch className="h-3.5 w-3.5" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveTab('workspace'); if (!isOpen) onOpenChange(true) }}
-            className={cn(
-              'flex items-center justify-center rounded-[6px]',
-              'h-7 w-7 transition-colors',
-              'focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring outline-none',
-              activeTab === 'workspace' && isOpen
-                ? 'text-foreground bg-sidebar-hover'
-                : 'text-foreground/50 hover:text-foreground hover:bg-sidebar-hover',
-            )}
-            title="Workspace"
-          >
-            <FolderTree className="h-3.5 w-3.5" />
-          </button>
-        </div>
+          )}
+        </AnimatePresence>
       </div>
     </motion.div>
   )
