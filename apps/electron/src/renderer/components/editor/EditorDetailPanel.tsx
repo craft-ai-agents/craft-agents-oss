@@ -127,7 +127,6 @@ export interface EditorDetailPanelProps {
 }
 
 export function EditorDetailPanel({ workspaceId, sessionId, isOpen = true }: EditorDetailPanelProps) {
-  if (!isOpen) return null
   const tabs = useAtomValue(editorTabsAtom)
   const activeTabId = useAtomValue(activeTabIdAtom)
   const hasOpenTabs = useAtomValue(hasOpenTabsAtom)
@@ -222,6 +221,8 @@ export function EditorDetailPanel({ workspaceId, sessionId, isOpen = true }: Edi
   )
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null
+
+  if (!isOpen) return null
 
   return (
     <AnimatePresence>
