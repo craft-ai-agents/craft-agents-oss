@@ -1,5 +1,11 @@
 preload = ["./packages/shared/src/unified-network-interceptor.ts"]
 
+[test]
+pathIgnorePatterns = [
+  "apps/electron/release/**",
+  ".sandcastle/**",
+]
+
 # Use the hoisted linker so transitive deps resolve at top-level node_modules.
 # Vite + esbuild bundling expects this layout; bun's default isolated linker
 # leaves only declared deps at the workspace root, which breaks renderer imports

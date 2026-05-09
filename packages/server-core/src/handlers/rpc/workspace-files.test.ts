@@ -61,6 +61,10 @@ function createExternalRoot(): string {
   return root
 }
 
+function waitForFileWatcherReady(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 25))
+}
+
 afterEach(() => {
   cleanupWorkspaceFileWatchForClient('client-1')
   for (const root of tempRoots.splice(0)) {
@@ -187,6 +191,7 @@ describe('workspace files RPC handlers', () => {
     }
 
     await watchFiles(ctx(), 'ws-1')
+    await waitForFileWatcherReady()
     writeFileSync(join(root, 'created.txt'), 'created\n')
     await new Promise(resolve => setTimeout(resolve, 450))
 
@@ -211,6 +216,7 @@ describe('workspace files RPC handlers', () => {
     }
 
     await watchFiles(ctx(), 'ws-1', cwdRoot)
+    await waitForFileWatcherReady()
     writeFileSync(join(cwdRoot, 'created.txt'), 'created\n')
     await new Promise(resolve => setTimeout(resolve, 450))
 
