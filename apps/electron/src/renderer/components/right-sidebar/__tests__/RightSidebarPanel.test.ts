@@ -77,28 +77,78 @@ describe('RightSidebarPanel persistence', () => {
 })
 
 describe('RightSidebarPanel collapsed layout', () => {
+  const originalLocalStorage = globalThis.localStorage
   const appShellValue = {
     workspaces: [{ id: 'ws-1', rootPath: '/workspace' }],
     activeWorkspaceId: 'ws-1',
   } as AppShellContextType
 
-  it('collapses to 0px and removes the internal collapse toggle when closed', () => {
-    const markup = renderToStaticMarkup(
+  beforeEach(() => {
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: makeLocalStorage(),
+      writable: true,
+      configurable: true,
+    })
+  })
+
+  afterEach(() => {
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: originalLocalStorage,
+      writable: true,
+      configurable: true,
+    })
+  })
+
+  function renderPanel(isOpen: boolean) {
+    return renderToStaticMarkup(
       createElement(
         AppShellProvider,
         { value: appShellValue },
         createElement(RightSidebarPanel, {
           workspaceId: 'ws-1',
-          isOpen: false,
+          isOpen,
         })
       )
     )
+  }
+
+  it('renders total width as 0px when controlled closed', () => {
+    const markup = renderPanel(false)
 
     expect(markup).toContain('width:0')
-    expect(markup).not.toContain('Collapse sidebar')
-    expect(markup).not.toContain('Expand sidebar')
     expect(markup).not.toContain('title="Files"')
     expect(markup).not.toContain('title="Git"')
     expect(markup).not.toContain('title="Workspace"')
+  })
+
+  it('renders total width as content width plus tab strip width when controlled open', () => {
+    storage.set(storage.KEYS.rightSidebarWidth, 320, 'ws-1')
+
+    const markup = renderPanel(true)
+
+    expect(markup).toContain('width:356')
+    expect(markup).toContain('width:36')
+  })
+
+  it('does not render the old internal collapse button when controlled closed', () => {
+    const markup = renderPanel(false)
+
+    expect(markup).not.toContain('Collapse sidebar')
+    expect(markup).not.toContain('Expand sidebar')
+  })
+
+  it('does not render the old internal collapse button when controlled open', () => {
+    const markup = renderPanel(true)
+
+    expect(markup).not.toContain('Collapse sidebar')
+    expect(markup).not.toContain('Expand sidebar')
+  })
+
+  it('renders Files, Git, and Workspace tab icon buttons when controlled open', () => {
+    const markup = renderPanel(true)
+
+    expect(markup).toContain('title="Files"')
+    expect(markup).toContain('title="Git"')
+    expect(markup).toContain('title="Workspace"')
   })
 })
