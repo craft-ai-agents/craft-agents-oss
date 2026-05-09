@@ -123,9 +123,11 @@ function renderTabContent(tab: EditorTab, onLineComment: (comment: LineComment) 
 export interface EditorDetailPanelProps {
   workspaceId?: string
   sessionId?: string
+  isOpen?: boolean
 }
 
-export function EditorDetailPanel({ workspaceId, sessionId }: EditorDetailPanelProps) {
+export function EditorDetailPanel({ workspaceId, sessionId, isOpen = true }: EditorDetailPanelProps) {
+  if (!isOpen) return null
   const tabs = useAtomValue(editorTabsAtom)
   const activeTabId = useAtomValue(activeTabIdAtom)
   const hasOpenTabs = useAtomValue(hasOpenTabsAtom)

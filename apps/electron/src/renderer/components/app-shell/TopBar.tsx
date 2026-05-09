@@ -38,6 +38,7 @@ import {
 import type { MenuItem, MenuSection, SettingsMenuItem } from "../../../shared/menu-schema"
 import { SETTINGS_ICONS } from "../icons/SettingsIcons"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
+import { SquareCode } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { BrowserTabStrip } from "../browser/BrowserTabStrip"
 import type { Workspace } from "../../../shared/types"
@@ -164,6 +165,12 @@ interface TopBarProps {
   onAddBrowserPanel: () => void
   /** When true, shows the right sidebar toggle in the top bar */
   isRightSidebarToggleVisible: boolean
+  /** When true, shows the editor panel toggle button in the top bar */
+  isEditorPanelToggleVisible: boolean
+  /** Whether the editor panel is currently open */
+  isEditorPanelOpen: boolean
+  /** Called when the user clicks the editor panel toggle button */
+  onEditorPanelToggle: () => void
   /** When true, hides controls that don't apply in compact/mobile layout */
   isCompact?: boolean
 }
@@ -192,6 +199,9 @@ export function TopBar({
   onAddSessionPanel,
   onAddBrowserPanel,
   isRightSidebarToggleVisible,
+  isEditorPanelToggleVisible,
+  isEditorPanelOpen,
+  onEditorPanelToggle,
   isCompact,
 }: TopBarProps) {
   const { t } = useTranslation()
@@ -486,6 +496,21 @@ export function TopBar({
             </StyledDropdownMenuItem>
           </StyledDropdownMenuContent>
         </DropdownMenu>
+
+        {isEditorPanelToggleVisible && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <TopBarButton
+                onClick={onEditorPanelToggle}
+                aria-label={t("menu.toggleEditorPanel")}
+                className={cn("h-[26px] w-[26px] rounded-lg", isEditorPanelOpen && "bg-foreground/10")}
+              >
+                <SquareCode className="h-[18px] w-[18px] text-foreground/50" strokeWidth={1.5} />
+              </TopBarButton>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t("menu.toggleEditorPanel")}</TooltipContent>
+          </Tooltip>
+        )}
 
         {isRightSidebarToggleVisible && (
           <Tooltip>

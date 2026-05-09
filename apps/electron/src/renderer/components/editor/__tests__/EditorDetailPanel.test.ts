@@ -7,6 +7,16 @@ const editorDetailPanelSource = readFileSync(
   'utf8',
 )
 
+describe('EditorDetailPanel isOpen prop', () => {
+  test('accepts isOpen prop in its exported interface', () => {
+    expect(editorDetailPanelSource).toContain('isOpen')
+  })
+
+  test('returns null when isOpen is false', () => {
+    expect(editorDetailPanelSource).toContain('if (!isOpen)')
+  })
+})
+
 function getEditorPanelOuterMotionDiv() {
   const match = editorDetailPanelSource.match(
     /<motion\.div\s+key="editor-panel"([\s\S]*?)>\s*<div/,

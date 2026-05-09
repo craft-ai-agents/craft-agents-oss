@@ -64,8 +64,9 @@ export const KEYS = {
   rightSidebarVisible: 'right-sidebar-visible',
   rightSidebarWidth: 'right-sidebar-width',
 
-  // Editor detail panel width (workspace-scoped via suffix = workspaceId)
+  // Editor detail panel (workspace-scoped via suffix = workspaceId)
   editorPanelWidth: 'editor-panel-width',
+  editorPanelVisible: 'editor-panel-visible',
 } as const
 
 export type StorageKey = typeof KEYS[keyof typeof KEYS]

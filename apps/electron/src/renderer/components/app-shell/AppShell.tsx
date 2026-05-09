@@ -149,6 +149,10 @@ import {
   persistRightSidebarOpenPreference,
   resolvePanelStackRightSidebarVisible,
 } from "./right-sidebar-state"
+import {
+  loadEditorPanelOpenPreference,
+  persistEditorPanelOpenPreference,
+} from "./editor-panel-state"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -610,6 +614,22 @@ function AppShellContent({
   }, [isRightSidebarOpen])
   const handleToggleRightSidebar = useCallback(() => {
     setIsRightSidebarOpen(prev => !prev)
+  }, [])
+
+  const [isEditorPanelOpen, setIsEditorPanelOpen] = React.useState(() => {
+    return loadEditorPanelOpenPreference(activeWorkspaceId ?? undefined)
+  })
+  const editorPanelWorkspaceIdRef = React.useRef(activeWorkspaceId ?? undefined)
+  useEffect(() => {
+    const workspaceId = activeWorkspaceId ?? undefined
+    editorPanelWorkspaceIdRef.current = workspaceId
+    setIsEditorPanelOpen(loadEditorPanelOpenPreference(workspaceId))
+  }, [activeWorkspaceId])
+  useEffect(() => {
+    persistEditorPanelOpenPreference(isEditorPanelOpen, editorPanelWorkspaceIdRef.current)
+  }, [isEditorPanelOpen])
+  const handleToggleEditorPanel = useCallback(() => {
+    setIsEditorPanelOpen(prev => !prev)
   }, [])
   const sidebarDrilldownLayout = resolveSidebarDrilldownLayout({
     navState,
@@ -2318,6 +2338,9 @@ function AppShellContent({
           onAddSessionPanel={() => handleNewChat(true)}
           onAddBrowserPanel={() => { void handleNewBrowserWindow() }}
           isRightSidebarToggleVisible={isRightSidebarContextuallyAvailable}
+          isEditorPanelToggleVisible={isRightSidebarContextuallyAvailable}
+          isEditorPanelOpen={isEditorPanelOpen}
+          onEditorPanelToggle={handleToggleEditorPanel}
           isCompact={isAutoCompact}
         />
 
@@ -3332,10 +3355,13 @@ function AppShellContent({
           isResizing={!!isResizing}
         />
 
-        <EditorDetailPanel
-          workspaceId={activeWorkspaceId ?? undefined}
-          sessionId={focusedSessionId ?? undefined}
-        />
+        {isRightSidebarContextuallyAvailable && (
+          <EditorDetailPanel
+            workspaceId={activeWorkspaceId ?? undefined}
+            sessionId={focusedSessionId ?? undefined}
+            isOpen={isEditorPanelOpen}
+          />
+        )}
 
         {isRightSidebarContextuallyAvailable && (
           <RightSidebarPanel
