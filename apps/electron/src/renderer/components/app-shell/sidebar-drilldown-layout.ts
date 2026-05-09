@@ -19,7 +19,7 @@ interface SidebarDrilldownLayout {
 }
 
 /**
- * Resolves the left-panel widths and resize handles for sidebar drill-down mode.
+ * Resolves the left-panel widths, resize handles, and right-sidebar gate for sidebar drill-down mode.
  */
 export function resolveSidebarDrilldownLayout({
   navState,
