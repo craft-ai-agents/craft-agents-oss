@@ -585,6 +585,25 @@ function AppShellContent({
   // UNIFIED NAVIGATION STATE - single source of truth from NavigationContext
   // Derived from focused panel's route — all panels are peers
   const navState = useNavigationState()
+  const showPrimarySidebar = !isSessionsNavigation(navState)
+  const legalGuardChatShellStyle = React.useMemo(() => ({
+    width: isAutoCompact ? '100%' : sessionListWidth,
+    '--lg-paper-50': '#fbf8f1',
+    '--lg-paper-100': '#f6f2ea',
+    '--lg-paper-200': '#eee8dc',
+    '--lg-paper-300': '#ded6c8',
+    '--lg-paper-400': '#c9c0ae',
+    '--lg-surface-0': '#fffdf8',
+    '--lg-ink-900': '#141413',
+    '--lg-ink-700': '#37342e',
+    '--lg-ink-500': '#736e65',
+    '--lg-sage': '#536848',
+    '--lg-sage-deep': '#405639',
+    '--lg-sage-soft': '#e8ede2',
+    '--lg-gold': '#b29357',
+    '--lg-gold-deep': '#8a6f40',
+    '--lg-amber': '#c96f4b',
+  }) as React.CSSProperties, [isAutoCompact, sessionListWidth])
 
   const store = useStore()
   const panelStack = useAtomValue(panelStackAtom)
@@ -1022,6 +1041,8 @@ function AppShellContent({
     }
   }, [filterDropdownQuery, effectiveSessionStatuses, flatLabelMenuItems])
 
+  const sessionSearchPlaceholder = "Search chats"
+
   // Reset selected index when query changes
   React.useEffect(() => {
     setFilterDropdownSelectedIdx(0)
@@ -1101,10 +1122,13 @@ function AppShellContent({
 
   const handleToggleSidebar = useCallback(() => {
     if (isSidebarAndNavigatorHidden) {
+      navigate(routes.view.allSessions())
+      setIsSidebarVisible(true)
       setIsSidebarAndNavigatorHidden(false)
       return
     }
-    setIsSidebarVisible(v => !v)
+
+    setIsSidebarAndNavigatorHidden(true)
   }, [isSidebarAndNavigatorHidden])
 
   // Sidebar toggle (CMD+B)
@@ -2491,29 +2515,94 @@ function AppShellContent({
             </div>
           </div>
           }
-          sidebarWidth={effectiveSidebarAndNavigatorHidden ? 0 : (isSidebarVisible ? sidebarWidth : 0)}
+          sidebarWidth={effectiveSidebarAndNavigatorHidden || !showPrimarySidebar ? 0 : sidebarWidth}
           navigatorSlot={
             <div
-              style={{ width: isAutoCompact ? '100%' : sessionListWidth }}
-              className="h-full flex flex-col min-w-0 relative z-panel"
+              style={legalGuardChatShellStyle}
+              className={cn(
+                "h-full flex flex-col min-w-0 relative z-[60]",
+                isSessionsNavigation(navState) && "border-r border-[var(--lg-paper-300)] bg-[var(--lg-surface-0)] text-[var(--lg-ink-900)]"
+              )}
             >
-            <PanelHeader
-              title={isSidebarVisible ? listTitle : undefined}
-              compensateForStoplight={!isSidebarVisible}
-              badge={automationFilter?.automationType === 'scheduled' ? (
+            {isSessionsNavigation(navState) ? (
+              <div className="shrink-0 border-b border-[var(--lg-paper-300)] bg-[var(--lg-surface-0)] px-4 pb-4 pt-3">
+                <div className="flex h-9 items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-[18px] font-semibold leading-tight text-[var(--lg-ink-900)]">Chats</div>
+                    <div className="mt-0.5 truncate text-[11px] uppercase tracking-[0.12em] text-[var(--lg-ink-500)]">Matter conversations</div>
+                  </div>
+                </div>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="text-muted-foreground/50 cursor-default flex items-center titlebar-no-drag">
-                      <Info className="h-3 w-3" />
-                    </span>
+                    <div>
+                      <ContextMenu modal={true}>
+                        <ContextMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            onClick={(e) => handleNewChat(e.metaKey || e.ctrlKey)}
+                            className="mt-3 h-9 w-full justify-start gap-2 rounded-[10px] bg-[var(--lg-sage)] px-3 text-[13px] font-semibold text-[var(--lg-surface-0)] shadow-none transition-colors hover:bg-[var(--lg-sage-deep)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--lg-sage)]"
+                            data-tutorial="new-chat-button"
+                          >
+                            <SquarePenRounded className="h-3.5 w-3.5 shrink-0" />
+                            New chat
+                          </Button>
+                        </ContextMenuTrigger>
+                        <StyledContextMenuContent>
+                          <ContextMenuProvider>
+                            <SidebarMenu type="newSession" />
+                          </ContextMenuProvider>
+                        </StyledContextMenuContent>
+                      </ContextMenu>
+                    </div>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[220px]">
-                    Scheduling requires your machine to be running. It can be locked, but must be powered on.
-                  </TooltipContent>
+                  <TooltipContent side="right">{newChatHotkey}</TooltipContent>
                 </Tooltip>
-              ) : undefined}
-              actions={
-                <>
+                <div className="relative mt-3 rounded-[10px] border border-[var(--lg-paper-300)] bg-[var(--lg-surface-0)] transition-colors hover:border-[var(--lg-paper-400)] focus-within:border-[var(--lg-sage)] focus-within:shadow-[0_0_0_3px_var(--lg-sage-soft)]">
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--lg-ink-500)]" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value)
+                      setSearchActive(true)
+                    }}
+                    onFocus={() => setSearchActive(true)}
+                    placeholder={sessionSearchPlaceholder}
+                    className="h-9 w-full rounded-[10px] border-0 bg-transparent pl-8 pr-8 text-[13px] text-[var(--lg-ink-900)] outline-none placeholder:text-[var(--lg-ink-500)] focus-visible:outline-none"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery('')
+                        setSearchActive(false)
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--lg-ink-500)] hover:bg-[var(--lg-paper-200)] hover:text-[var(--lg-ink-700)]"
+                      title={t("session.clearSearch")}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <PanelHeader
+                title={isSidebarVisible ? listTitle : undefined}
+                compensateForStoplight={!isSidebarVisible}
+                badge={automationFilter?.automationType === 'scheduled' ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-muted-foreground/50 cursor-default flex items-center titlebar-no-drag">
+                        <Info className="h-3 w-3" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[220px]">
+                      Scheduling requires your machine to be running. It can be locked, but must be powered on.
+                    </TooltipContent>
+                  </Tooltip>
+                ) : undefined}
+                actions={
+                  <>
                   {/* Filter dropdown - available in ALL chat views.
                       Shows user-added filters (removable) and pinned filters (non-removable, derived from route).
                       Pinned filters: state views pin a status, label views pin a label, flagged pins the flag. */}
@@ -3117,9 +3206,10 @@ function AppShellContent({
                       {...getEditConfig('automation-config', activeWorkspace.rootPath)}
                     />
                   )}
-                </>
-              }
-            />
+                  </>
+                }
+              />
+            )}
             {/* Content: SessionList, SourcesListPanel, or SettingsNavigator based on navigation state */}
             {isSourcesNavigation(navState) && (
               /* Sources List - filtered by type if sourceFilter is active */
@@ -3219,7 +3309,18 @@ function AppShellContent({
                   onNavigateToSession={panelCount > 1 ? navigateToSessionInPanel : undefined}
                   hasPendingPrompt={hasPendingPrompt}
                   activeChatMatchInfo={chatMatchInfo}
+                  showSearchHeader={false}
                 />
+                <div className="shrink-0 border-t border-[var(--lg-paper-300)] bg-[var(--lg-surface-0)] px-4 py-3">
+                  <Button
+                    variant="ghost"
+                    onClick={handleToggleSidebar}
+                    className="h-9 w-full justify-start gap-2 rounded-[10px] border border-[var(--lg-paper-300)] px-3 text-[13px] font-normal text-[var(--lg-ink-700)] shadow-none transition-colors hover:bg-[var(--lg-paper-50)] hover:text-[var(--lg-ink-900)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--lg-sage)]"
+                  >
+                    <X className="h-3.5 w-3.5 shrink-0" />
+                    Hide sidebar
+                  </Button>
+                </div>
               </>
             )}
             </div>
@@ -3232,7 +3333,7 @@ function AppShellContent({
         />
 
         {/* Sidebar Resize Handle (absolute, hidden in focused mode) */}
-        {!effectiveSidebarAndNavigatorHidden && (
+        {!effectiveSidebarAndNavigatorHidden && showPrimarySidebar && (
         <div
           ref={resizeHandleRef}
           onMouseDown={(e) => { e.preventDefault(); setIsResizing('sidebar') }}
@@ -3248,9 +3349,7 @@ function AppShellContent({
             width: PANEL_SASH_HIT_WIDTH,
             top: PANEL_STACK_VERTICAL_OVERFLOW,
             bottom: PANEL_STACK_VERTICAL_OVERFLOW,
-            left: isSidebarVisible
-              ? sidebarWidth + (PANEL_GAP / 2) - PANEL_SASH_HALF_HIT_WIDTH
-              : -PANEL_GAP,
+            left: sidebarWidth + (PANEL_GAP / 2) - PANEL_SASH_HALF_HIT_WIDTH,
             transition: isResizing === 'sidebar' ? undefined : 'left 0.15s ease-out',
           }}
         >
@@ -3282,7 +3381,7 @@ function AppShellContent({
             top: PANEL_STACK_VERTICAL_OVERFLOW,
             bottom: PANEL_STACK_VERTICAL_OVERFLOW,
             left:
-              (isSidebarVisible ? sidebarWidth + PANEL_GAP : PANEL_EDGE_INSET) +
+              (showPrimarySidebar ? sidebarWidth + PANEL_GAP : PANEL_EDGE_INSET) +
               sessionListWidth +
               (PANEL_GAP / 2) -
               PANEL_SASH_HALF_HIT_WIDTH,

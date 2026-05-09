@@ -72,3 +72,4 @@ credentials.enc
 # act (local GitHub Actions runner)
 .secrets
 .actrc
+.gstack/

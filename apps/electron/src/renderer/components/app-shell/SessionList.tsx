@@ -91,6 +91,8 @@ interface SessionListProps {
   hasPendingPrompt?: (sessionId: string) => boolean
   /** DOM-verified match info for the active session (from ChatDisplay) */
   activeChatMatchInfo?: { sessionId: string | null; count: number; isHighlighting?: boolean }
+  /** Whether SessionList should render its own search field. */
+  showSearchHeader?: boolean
 }
 
 // Re-export SessionStatusId for use by parent components
@@ -141,6 +143,7 @@ export function SessionList({
   onNavigateToSession,
   hasPendingPrompt,
   activeChatMatchInfo,
+  showSearchHeader = true,
 }: SessionListProps) {
   const { t, i18n } = useTranslation()
   const setSendToWorkspace = useSetAtom(sendToWorkspaceAtom)
@@ -661,7 +664,7 @@ export function SessionList({
         }}
         header={
           <>
-            {searchActive && (
+            {showSearchHeader && searchActive && (
               <SessionSearchHeader
                 searchQuery={searchQuery}
                 onSearchChange={onSearchChange}

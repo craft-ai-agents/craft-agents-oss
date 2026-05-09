@@ -28,10 +28,13 @@ export function SessionStatusIcon({ item }: SessionStatusIconProps) {
           type="button"
           className={cn(
             "!h-5 !w-5 flex items-center justify-center rounded-full transition-colors cursor-pointer",
-            "hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            "text-[var(--lg-ink-500)] hover:bg-[var(--lg-paper-50)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--lg-sage)]",
             "[&>svg]:w-full [&>svg]:h-full [&>img]:w-full [&>img]:h-full [&>span]:text-base",
           )}
-          style={getStateIconStyle(status, ctx.sessionStatuses)}
+          style={{
+            ...getStateIconStyle(status, ctx.sessionStatuses),
+            color: `var(--lg-sage, ${getStateIconStyle(status, ctx.sessionStatuses)?.color ?? 'currentColor'})`,
+          }}
           aria-haspopup="menu"
           aria-expanded={open}
           aria-label="Change todo state"
