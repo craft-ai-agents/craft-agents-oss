@@ -20,8 +20,16 @@ describe('AppShell editor panel auto-show', () => {
     expect(appShellSource).toContain('prevHasOpenTabsRef')
   })
 
-  test('auto-shows editor panel on false→true transition only when gate is active', () => {
-    expect(appShellSource).toContain('isRightSidebarContextuallyAvailable')
-    expect(appShellSource).toContain('setIsEditorPanelOpen(true)')
+  test('auto-shows editor panel on false→true transition independent of the render gate', () => {
+    const effectMatch = appShellSource.match(
+      /useEffect\(\(\) => \{\s*if \(hasOpenTabs && !prevHasOpenTabsRef\.current\) \{\s*setIsEditorPanelOpen\(true\)\s*\}\s*prevHasOpenTabsRef\.current = hasOpenTabs\s*\}, \[hasOpenTabs\]\)/,
+    )
+
+    expect(effectMatch).not.toBeNull()
+  })
+
+  test('gates the rendered editor panel and top bar toggle behind Sidebar Drill-Down Mode', () => {
+    expect(appShellSource).toContain('isEditorPanelToggleVisible={isRightSidebarContextuallyAvailable}')
+    expect(appShellSource).toContain('isRightSidebarContextuallyAvailable && (\n          <EditorDetailPanel')
   })
 })

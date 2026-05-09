@@ -643,11 +643,11 @@ function AppShellContent({
   const hasOpenTabs = useAtomValue(hasOpenTabsAtom)
   const prevHasOpenTabsRef = React.useRef(hasOpenTabs)
   useEffect(() => {
-    if (hasOpenTabs && !prevHasOpenTabsRef.current && isRightSidebarContextuallyAvailable) {
+    if (hasOpenTabs && !prevHasOpenTabsRef.current) {
       setIsEditorPanelOpen(true)
     }
     prevHasOpenTabsRef.current = hasOpenTabs
-  }, [hasOpenTabs, isRightSidebarContextuallyAvailable])
+  }, [hasOpenTabs])
   const isPanelStackRightSidebarVisible = resolvePanelStackRightSidebarVisible(
     isRightSidebarContextuallyAvailable,
     isRightSidebarOpen,
