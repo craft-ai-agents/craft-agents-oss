@@ -21,8 +21,6 @@ describe('AppShell editor panel auto-show', () => {
   })
 
   test('auto-shows editor panel on false→true transition only when gate is active', () => {
-    // The effect must call setIsEditorPanelOpen(true) when hasOpenTabs transitions false→true
-    // and isRightSidebarContextuallyAvailable is true
     expect(appShellSource).toContain('isRightSidebarContextuallyAvailable')
     expect(appShellSource).toContain('setIsEditorPanelOpen(true)')
   })
