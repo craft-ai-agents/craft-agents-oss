@@ -292,8 +292,12 @@ export function getSkillIconPath(workspaceRoot: string, slug: string): string | 
 // Create Operations
 // ============================================================
 
+/** Result from creating a workspace skill without overwriting. */
 export type CreateSkillResult = { created: true } | { conflict: true };
 
+/**
+ * Derive the directory slug used for a skill from its display name.
+ */
 export function deriveSkillSlug(name: string): string {
   return name
     .toLowerCase()

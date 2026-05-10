@@ -66,7 +66,6 @@ export function SkillImportModal({
   }, [onOpenChange, resetCreateForm])
 
   const finishInstall = React.useCallback(async (installedSlug: string) => {
-    resetCreateForm()
     closeModal()
     await onSkillInstalled(installedSlug)
   }, [closeModal, onSkillInstalled])
