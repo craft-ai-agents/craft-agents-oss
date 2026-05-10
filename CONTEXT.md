@@ -26,6 +26,15 @@ The state in which the left sidebar expands to session list width (~300 px) and 
 ### Icon Strip Mode
 The collapsed state of the left sidebar (~40 px) showing only navigation icons for Sources, Skills, Automations, and Settings. Active when the sidebar is NOT in Sidebar Drill-Down Mode. The navigator slot opens to the right when a secondary navigation item is selected.
 
+### Skill Import Modal
+A tabbed dialog opened by the `+` button in the Skills panel header (replacing the previous direct `EditPopover` call). Provides four tabs for adding workspace-tier skills without an AI conversation: **Remote** (git-aware URL/shorthand resolver), **Upload** (local zip file), **Create** (manual form), and **AI Assist** (existing EditPopover path). All paths write to `{workspace}/skills/{slug}/` (workspace tier only).
+
+### Skill Picker
+The multi-selection UI shown inside the Skill Import Modal when a resolved remote repo or uploaded zip contains more than one skill. Lists all discovered skills (any directory containing `SKILL.md`, scanned up to 2 levels deep) with checkboxes. For multi-skill installs, shows inline install progress per skill then closes to the list; for single installs, closes and navigates to the new skill's detail page.
+
+### Skill Slug
+The directory name of a skill on disk (e.g. `code-reviewer`). For manually created skills, auto-derived from the name via kebab-case conversion and hidden from the creation form. Displayed on `SkillInfoPage` after creation. Conflict resolution (duplicate slug) prompts the user to overwrite.
+
 ### Editor Panel
 A resizable panel (`EditorDetailPanel`) that renders to the right of the active content panel(s), showing file contents, git diffs, and git-commit details in a tabbed interface. Tabs are opened automatically when session files change during processing.
 
