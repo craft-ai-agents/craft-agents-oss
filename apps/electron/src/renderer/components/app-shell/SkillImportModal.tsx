@@ -147,6 +147,20 @@ export function SkillImportModal({
 
   // ── Upload tab ────────────────────────────────────────────────────────────
 
+  const installSingleSkill = React.useCallback(async (skill: DiscoveredSkill) => {
+    const result: CreateSkillResult = await window.electronAPI.createSkill(
+      workspaceId,
+      skill.slug,
+      skill.metadata,
+      skill.content
+    )
+    if ('conflict' in result) {
+      setUploadPhase({ kind: 'conflict', skill, remaining: [] })
+      return
+    }
+    await finishInstall(skill.slug)
+  }, [finishInstall, workspaceId])
+
   const processZipFile = React.useCallback(async (file: File) => {
     const filePath = window.electronAPI.getFilePath?.(file)
     if (!filePath) {
@@ -171,55 +185,21 @@ export function SkillImportModal({
       const message = err instanceof Error ? err.message : String(err)
       setUploadPhase({ kind: 'error', message })
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [installSingleSkill])
 
-  const installSingleSkill = React.useCallback(async (skill: DiscoveredSkill) => {
-    const result: CreateSkillResult = await window.electronAPI.createSkill(
-      workspaceId,
-      skill.slug,
-      skill.metadata,
-      skill.content
-    )
-    if ('conflict' in result) {
-      setUploadPhase({ kind: 'conflict', skill, remaining: [] })
-      return
-    }
-    await finishInstall(skill.slug)
-  }, [finishInstall, workspaceId])
-
-  const handlePickerConfirm = React.useCallback(async (selected: DiscoveredSkill[]) => {
-    if (selected.length === 0) return
-
-    // Pre-check conflicts before install phase
-    const conflicting: DiscoveredSkill[] = []
-    for (const skill of selected) {
-      const result: CreateSkillResult = await window.electronAPI.createSkill(
-        workspaceId,
-        skill.slug,
-        skill.metadata,
-        skill.content
-      )
-      if ('conflict' in result) {
-        conflicting.push(skill)
-      }
-    }
-
-    // All non-conflicting skills are already installed; handle conflicts one by one
-    if (conflicting.length > 0) {
-      const [first, ...rest] = conflicting
-      setUploadPhase({ kind: 'conflict', skill: first, remaining: rest })
-      return
-    }
-
-    // All installed — run install phase for display
-    await runInstallPhase(selected, new Set())
-  }, [workspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const runInstallPhase = React.useCallback(async (skills: DiscoveredSkill[], overwriteSlugs: Set<string>) => {
-    const statuses = new Map<string, RowStatus>(skills.map(s => [s.slug, 'pending']))
+  const runInstallPhase = React.useCallback(async (
+    skills: DiscoveredSkill[],
+    overwriteSlugs: Set<string>,
+    preInstalled: Set<string>
+  ) => {
+    const statuses = new Map<string, RowStatus>(skills.map(s => [
+      s.slug,
+      preInstalled.has(s.slug) ? 'done' : 'pending',
+    ]))
     setUploadPhase({ kind: 'installing', skills, statuses: new Map(statuses) })
 
     for (const skill of skills) {
+      if (preInstalled.has(skill.slug)) continue
       statuses.set(skill.slug, 'installing')
       setUploadPhase({ kind: 'installing', skills, statuses: new Map(statuses) })
       try {
@@ -238,6 +218,35 @@ export function SkillImportModal({
     closeModal()
     await onSkillInstalled(skills[0].slug)
   }, [closeModal, onSkillInstalled, workspaceId])
+
+  const handlePickerConfirm = React.useCallback(async (selected: DiscoveredSkill[]) => {
+    if (selected.length === 0) return
+
+    // Pre-check conflicts; createSkill installs non-conflicting skills as a side effect
+    const conflicting: DiscoveredSkill[] = []
+    const preInstalled = new Set<string>()
+    for (const skill of selected) {
+      const result: CreateSkillResult = await window.electronAPI.createSkill(
+        workspaceId,
+        skill.slug,
+        skill.metadata,
+        skill.content
+      )
+      if ('conflict' in result) {
+        conflicting.push(skill)
+      } else {
+        preInstalled.add(skill.slug)
+      }
+    }
+
+    if (conflicting.length > 0) {
+      const [first, ...rest] = conflicting
+      setUploadPhase({ kind: 'conflict', skill: first, remaining: rest })
+      return
+    }
+
+    await runInstallPhase(selected, new Set(), preInstalled)
+  }, [runInstallPhase, workspaceId])
 
   const handleConflictOverwrite = React.useCallback(async () => {
     if (uploadPhase.kind !== 'conflict') return

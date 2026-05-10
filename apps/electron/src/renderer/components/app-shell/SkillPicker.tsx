@@ -9,7 +9,6 @@ interface SkillRowState {
   skill: DiscoveredSkill
   selected: boolean
   status: RowStatus
-  error?: string
 }
 
 interface SkillPickerProps {
