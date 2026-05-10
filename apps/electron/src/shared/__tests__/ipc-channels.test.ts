@@ -253,6 +253,7 @@ const EXPECTED_CHANNELS: string[] = [
   'skills:changed',
   'skills:create',
   'skills:delete',
+  'skills:extractZip',
   'skills:forceWrite',
   'skills:get',
   'skills:getFiles',

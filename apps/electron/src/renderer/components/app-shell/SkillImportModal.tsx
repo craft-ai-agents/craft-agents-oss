@@ -1,7 +1,7 @@
 import * as React from 'react'
-import { Bot, FileArchive, Globe2, PencilLine } from 'lucide-react'
+import { Bot, FileArchive, Globe2, PencilLine, Upload } from 'lucide-react'
 import { deriveSkillSlug } from '@craft-agent/shared/skills'
-import type { CreateSkillResult } from '../../../shared/types'
+import type { CreateSkillResult, DiscoveredSkill } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -14,6 +14,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
+import { SkillPicker, type RowStatus } from './SkillPicker'
 
 interface SkillImportModalProps {
   open: boolean
@@ -30,6 +31,17 @@ interface PendingSkill {
   content: string
 }
 
+// ── Upload tab state ──────────────────────────────────────────────────────────
+
+type UploadPhase =
+  | { kind: 'idle' }
+  | { kind: 'extracting' }
+  | { kind: 'error'; message: string }
+  | { kind: 'single'; skill: DiscoveredSkill }
+  | { kind: 'picker'; skills: DiscoveredSkill[] }
+  | { kind: 'installing'; skills: DiscoveredSkill[]; statuses: Map<string, RowStatus> }
+  | { kind: 'conflict'; skill: DiscoveredSkill; remaining: DiscoveredSkill[] }
+
 function PlaceholderTab({ title }: { title: string }) {
   return (
     <div className="flex min-h-48 items-center justify-center rounded-md border border-dashed border-foreground/15 bg-foreground/[0.02] text-sm text-muted-foreground">
@@ -45,6 +57,7 @@ export function SkillImportModal({
   workspaceRootPath,
   onSkillInstalled,
 }: SkillImportModalProps) {
+  // ── Create tab state ──────────────────────────────────────────────────────
   const [name, setName] = React.useState('')
   const [description, setDescription] = React.useState('')
   const [content, setContent] = React.useState('')
@@ -53,6 +66,11 @@ export function SkillImportModal({
   const slug = deriveSkillSlug(name)
   const canSubmit = slug.length > 0 && description.trim().length > 0 && content.trim().length > 0
 
+  // ── Upload tab state ──────────────────────────────────────────────────────
+  const [uploadPhase, setUploadPhase] = React.useState<UploadPhase>({ kind: 'idle' })
+  const [isDragOver, setIsDragOver] = React.useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+
   const resetCreateForm = React.useCallback(() => {
     setName('')
     setDescription('')
@@ -60,15 +78,23 @@ export function SkillImportModal({
     setPendingOverwrite(null)
   }, [])
 
+  const resetUpload = React.useCallback(() => {
+    setUploadPhase({ kind: 'idle' })
+    setIsDragOver(false)
+  }, [])
+
   const closeModal = React.useCallback(() => {
     resetCreateForm()
+    resetUpload()
     onOpenChange(false)
-  }, [onOpenChange, resetCreateForm])
+  }, [onOpenChange, resetCreateForm, resetUpload])
 
   const finishInstall = React.useCallback(async (installedSlug: string) => {
     closeModal()
     await onSkillInstalled(installedSlug)
   }, [closeModal, onSkillInstalled])
+
+  // ── Create tab ────────────────────────────────────────────────────────────
 
   const submitCreate = React.useCallback(async () => {
     if (!canSubmit) return
@@ -119,10 +145,155 @@ export function SkillImportModal({
     }
   }, [finishInstall, pendingOverwrite, workspaceId])
 
+  // ── Upload tab ────────────────────────────────────────────────────────────
+
+  const processZipFile = React.useCallback(async (file: File) => {
+    const filePath = window.electronAPI.getFilePath?.(file)
+    if (!filePath) {
+      setUploadPhase({ kind: 'error', message: 'Could not determine file path.' })
+      return
+    }
+
+    setUploadPhase({ kind: 'extracting' })
+    try {
+      const skills = await window.electronAPI.extractSkillsFromZip(filePath)
+      if (skills.length === 0) {
+        setUploadPhase({ kind: 'error', message: 'No skills found in this zip.' })
+        return
+      }
+      if (skills.length === 1) {
+        setUploadPhase({ kind: 'single', skill: skills[0] })
+        await installSingleSkill(skills[0])
+      } else {
+        setUploadPhase({ kind: 'picker', skills })
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setUploadPhase({ kind: 'error', message })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const installSingleSkill = React.useCallback(async (skill: DiscoveredSkill) => {
+    const result: CreateSkillResult = await window.electronAPI.createSkill(
+      workspaceId,
+      skill.slug,
+      skill.metadata,
+      skill.content
+    )
+    if ('conflict' in result) {
+      setUploadPhase({ kind: 'conflict', skill, remaining: [] })
+      return
+    }
+    await finishInstall(skill.slug)
+  }, [finishInstall, workspaceId])
+
+  const handlePickerConfirm = React.useCallback(async (selected: DiscoveredSkill[]) => {
+    if (selected.length === 0) return
+
+    // Pre-check conflicts before install phase
+    const conflicting: DiscoveredSkill[] = []
+    for (const skill of selected) {
+      const result: CreateSkillResult = await window.electronAPI.createSkill(
+        workspaceId,
+        skill.slug,
+        skill.metadata,
+        skill.content
+      )
+      if ('conflict' in result) {
+        conflicting.push(skill)
+      }
+    }
+
+    // All non-conflicting skills are already installed; handle conflicts one by one
+    if (conflicting.length > 0) {
+      const [first, ...rest] = conflicting
+      setUploadPhase({ kind: 'conflict', skill: first, remaining: rest })
+      return
+    }
+
+    // All installed — run install phase for display
+    await runInstallPhase(selected, new Set())
+  }, [workspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const runInstallPhase = React.useCallback(async (skills: DiscoveredSkill[], overwriteSlugs: Set<string>) => {
+    const statuses = new Map<string, RowStatus>(skills.map(s => [s.slug, 'pending']))
+    setUploadPhase({ kind: 'installing', skills, statuses: new Map(statuses) })
+
+    for (const skill of skills) {
+      statuses.set(skill.slug, 'installing')
+      setUploadPhase({ kind: 'installing', skills, statuses: new Map(statuses) })
+      try {
+        if (overwriteSlugs.has(skill.slug)) {
+          await window.electronAPI.forceWriteSkill(workspaceId, skill.slug, skill.metadata, skill.content)
+        } else {
+          await window.electronAPI.createSkill(workspaceId, skill.slug, skill.metadata, skill.content)
+        }
+        statuses.set(skill.slug, 'done')
+      } catch {
+        statuses.set(skill.slug, 'failed')
+      }
+      setUploadPhase({ kind: 'installing', skills, statuses: new Map(statuses) })
+    }
+
+    closeModal()
+    await onSkillInstalled(skills[0].slug)
+  }, [closeModal, onSkillInstalled, workspaceId])
+
+  const handleConflictOverwrite = React.useCallback(async () => {
+    if (uploadPhase.kind !== 'conflict') return
+    const { skill, remaining } = uploadPhase
+    await window.electronAPI.forceWriteSkill(workspaceId, skill.slug, skill.metadata, skill.content)
+    if (remaining.length > 0) {
+      const [next, ...rest] = remaining
+      setUploadPhase({ kind: 'conflict', skill: next, remaining: rest })
+    } else {
+      closeModal()
+      await onSkillInstalled(skill.slug)
+    }
+  }, [closeModal, onSkillInstalled, uploadPhase, workspaceId])
+
+  const handleConflictSkip = React.useCallback(async () => {
+    if (uploadPhase.kind !== 'conflict') return
+    const { remaining } = uploadPhase
+    if (remaining.length > 0) {
+      const [next, ...rest] = remaining
+      setUploadPhase({ kind: 'conflict', skill: next, remaining: rest })
+    } else {
+      closeModal()
+    }
+  }, [closeModal, uploadPhase])
+
+  function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) void processZipFile(file)
+    e.target.value = ''
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragOver(true)
+  }
+
+  function handleDragLeave() {
+    setIsDragOver(false)
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragOver(false)
+    const file = e.dataTransfer.files[0]
+    if (file) void processZipFile(file)
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
     <>
       <Dialog open={open} onOpenChange={(isOpen) => {
-        if (!isOpen) resetCreateForm()
+        if (!isOpen) {
+          resetCreateForm()
+          resetUpload()
+        }
         onOpenChange(isOpen)
       }}>
         <DialogContent className="sm:max-w-2xl">
@@ -205,12 +376,24 @@ export function SkillImportModal({
             </TabsContent>
 
             <TabsContent value="upload" className="mt-4">
-              <PlaceholderTab title="Upload import" />
+              <UploadTabContent
+                phase={uploadPhase}
+                isDragOver={isDragOver}
+                fileInputRef={fileInputRef}
+                onFileInputChange={handleFileInputChange}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onPickerConfirm={handlePickerConfirm}
+                onPickerCancel={closeModal}
+                onReset={resetUpload}
+              />
             </TabsContent>
           </Tabs>
         </DialogContent>
       </Dialog>
 
+      {/* Create tab overwrite dialog */}
       <Dialog open={pendingOverwrite !== null} onOpenChange={(isOpen) => {
         if (!isOpen) setPendingOverwrite(null)
       }}>
@@ -229,6 +412,129 @@ export function SkillImportModal({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Upload tab conflict dialog */}
+      <Dialog
+        open={uploadPhase.kind === 'conflict'}
+        onOpenChange={(isOpen) => { if (!isOpen) void handleConflictSkip() }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Overwrite skill?</DialogTitle>
+            <DialogDescription>
+              {uploadPhase.kind === 'conflict'
+                ? `"${uploadPhase.skill.metadata.name}" already exists. Overwrite it?`
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => void handleConflictSkip()}>Skip</Button>
+            <Button variant="destructive" onClick={() => void handleConflictOverwrite()}>
+              Overwrite
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
+  )
+}
+
+// ── Upload tab sub-component ─────────────────────────────────────────────────
+
+interface UploadTabContentProps {
+  phase: UploadPhase
+  isDragOver: boolean
+  fileInputRef: React.RefObject<HTMLInputElement>
+  onFileInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onDragOver: (e: React.DragEvent) => void
+  onDragLeave: () => void
+  onDrop: (e: React.DragEvent) => void
+  onPickerConfirm: (selected: DiscoveredSkill[]) => void
+  onPickerCancel: () => void
+  onReset: () => void
+}
+
+function UploadTabContent({
+  phase,
+  isDragOver,
+  fileInputRef,
+  onFileInputChange,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onPickerConfirm,
+  onPickerCancel,
+  onReset,
+}: UploadTabContentProps) {
+  if (phase.kind === 'picker') {
+    return (
+      <SkillPicker
+        skills={phase.skills}
+        onConfirm={onPickerConfirm}
+        onCancel={onPickerCancel}
+      />
+    )
+  }
+
+  if (phase.kind === 'installing') {
+    return (
+      <SkillPicker
+        skills={phase.skills}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+        installing
+        rowStatuses={phase.statuses}
+      />
+    )
+  }
+
+  if (phase.kind === 'error') {
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-md border border-dashed border-destructive/30 bg-destructive/5 p-6 text-center">
+        <p className="text-sm text-destructive">{phase.message}</p>
+        <Button variant="outline" size="sm" onClick={onReset}>Try again</Button>
+      </div>
+    )
+  }
+
+  if (phase.kind === 'extracting' || phase.kind === 'single') {
+    return (
+      <div className="flex min-h-48 items-center justify-center rounded-md border border-dashed border-foreground/15 bg-foreground/[0.02] text-sm text-muted-foreground">
+        Reading zip…
+      </div>
+    )
+  }
+
+  // idle
+  return (
+    <div
+      className={`flex min-h-48 flex-col items-center justify-center gap-3 rounded-md border border-dashed transition-colors ${
+        isDragOver
+          ? 'border-foreground/40 bg-foreground/[0.04]'
+          : 'border-foreground/15 bg-foreground/[0.02]'
+      }`}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      <Upload className="h-8 w-8 text-muted-foreground/50" />
+      <p className="text-sm text-muted-foreground">
+        Drag a <span className="font-medium">.zip</span> file here, or
+      </p>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => fileInputRef.current?.click()}
+      >
+        Browse
+      </Button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".zip"
+        className="sr-only"
+        onChange={onFileInputChange}
+      />
+    </div>
   )
 }

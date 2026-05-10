@@ -24,3 +24,5 @@ export {
 } from './storage.ts';
 
 export type { CreateSkillResult } from './storage.ts';
+
+export { extractSkillsFromZip } from './zip-extractor.ts';

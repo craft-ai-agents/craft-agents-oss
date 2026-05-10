@@ -62,6 +62,7 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   // skills — local filesystem actions (guarded for remote)
   RPC_CHANNELS.skills.OPEN_EDITOR,
   RPC_CHANNELS.skills.OPEN_FINDER,
+  RPC_CHANNELS.skills.EXTRACT_ZIP,
 
   // system — local OS info
   RPC_CHANNELS.system.VERSIONS,

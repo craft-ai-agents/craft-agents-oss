@@ -14,6 +14,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.DELETE,
   RPC_CHANNELS.skills.OPEN_EDITOR,
   RPC_CHANNELS.skills.OPEN_FINDER,
+  RPC_CHANNELS.skills.EXTRACT_ZIP,
 ] as const
 
 export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -155,5 +156,11 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
     const skillDir = join(skillsDir, skillSlug)
     await deps.platform.showItemInFolder?.(skillDir)
+  })
+
+  // Extract skills from a local .zip file
+  server.handle(RPC_CHANNELS.skills.EXTRACT_ZIP, async (_ctx, zipPath: string) => {
+    const { extractSkillsFromZip } = await import('@craft-agent/shared/skills')
+    return extractSkillsFromZip(zipPath)
   })
 }

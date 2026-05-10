@@ -239,6 +239,7 @@ export const CHANNEL_MAP = {
   deleteSkill: invoke(RPC_CHANNELS.skills.DELETE),
   openSkillInEditor: invoke(RPC_CHANNELS.skills.OPEN_EDITOR),
   openSkillInFinder: invoke(RPC_CHANNELS.skills.OPEN_FINDER),
+  extractSkillsFromZip: invoke(RPC_CHANNELS.skills.EXTRACT_ZIP),
   onSkillsChanged: listener(RPC_CHANNELS.skills.CHANGED),
 
   // Statuses
