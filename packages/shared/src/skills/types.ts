@@ -57,3 +57,17 @@ export interface LoadedSkill {
   /** Where this skill was loaded from */
   source: SkillSource;
 }
+
+/**
+ * Skill candidate discovered by non-agent import flows before installation.
+ */
+export interface DiscoveredSkill {
+  /** Directory name (slug) */
+  slug: string;
+  /** Parsed metadata from YAML frontmatter */
+  metadata: SkillMetadata;
+  /** SKILL.md body without frontmatter */
+  content: string;
+  /** Absolute or remote source path where the skill was discovered */
+  sourcePath: string;
+}

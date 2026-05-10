@@ -7,10 +7,12 @@
 
 import {
   existsSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -284,6 +286,61 @@ export function getSkillIconPath(workspaceRoot: string, slug: string): string | 
   }
 
   return findIconFile(skillDir) || null;
+}
+
+// ============================================================
+// Create Operations
+// ============================================================
+
+/** Result from creating a workspace skill without overwriting. */
+export type CreateSkillResult = { created: true } | { conflict: true };
+
+/**
+ * Derive the directory slug used for a skill from its display name.
+ */
+export function deriveSkillSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function writeSkillFile(workspaceRoot: string, slug: string, metadata: SkillMetadata, content: string): void {
+  const skillsDir = getWorkspaceSkillsPath(workspaceRoot);
+  const skillDir = join(skillsDir, slug);
+  mkdirSync(skillDir, { recursive: true });
+  writeFileSync(join(skillDir, 'SKILL.md'), matter.stringify(content, metadata));
+  invalidateSkillsCache();
+}
+
+/**
+ * Create a workspace skill unless the slug already has a SKILL.md.
+ */
+export function createSkill(
+  workspaceRoot: string,
+  slug: string,
+  metadata: SkillMetadata,
+  content: string
+): CreateSkillResult {
+  if (skillExists(workspaceRoot, slug)) {
+    return { conflict: true };
+  }
+
+  writeSkillFile(workspaceRoot, slug, metadata, content);
+  return { created: true };
+}
+
+/**
+ * Create or replace a workspace skill.
+ */
+export function forceWriteSkill(
+  workspaceRoot: string,
+  slug: string,
+  metadata: SkillMetadata,
+  content: string
+): { created: true } {
+  writeSkillFile(workspaceRoot, slug, metadata, content);
+  return { created: true };
 }
 
 // ============================================================

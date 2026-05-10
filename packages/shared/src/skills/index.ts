@@ -13,9 +13,14 @@ export {
   invalidateSkillsCache,
   loadSkillBySlug,
   getSkillIconPath,
+  deriveSkillSlug,
+  createSkill,
+  forceWriteSkill,
   deleteSkill,
   skillExists,
   listSkillSlugs,
   skillNeedsIconDownload,
   downloadSkillIcon,
 } from './storage.ts';
+
+export type { CreateSkillResult } from './storage.ts';

@@ -121,6 +121,7 @@ import {
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
+import { SkillImportModal } from "./SkillImportModal"
 import { AutomationsListPanel } from "../automations/AutomationsListPanel"
 import { APP_EVENTS, AGENT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
 import { useAutomations } from "@/hooks/useAutomations"
@@ -1832,7 +1833,8 @@ function AppShellContent({
   // We use controlled popovers instead of deep links so the user can type
   // their request in the popover UI before opening a new chat window.
   // add-source variants: add-source (generic), add-source-api, add-source-mcp, add-source-local
-  const [editPopoverOpen, setEditPopoverOpen] = useState<'statuses' | 'labels' | 'views' | 'add-source' | 'add-source-api' | 'add-source-mcp' | 'add-source-local' | 'add-skill' | 'add-label' | 'automation-config' | null>(null)
+  const [editPopoverOpen, setEditPopoverOpen] = useState<'statuses' | 'labels' | 'views' | 'add-source' | 'add-source-api' | 'add-source-mcp' | 'add-source-local' | 'add-label' | 'automation-config' | null>(null)
+  const [skillImportOpen, setSkillImportOpen] = useState(false)
 
   // Stores the Y position of the last right-clicked sidebar item so the EditPopover
   // appears near it rather than at a fixed location. Updated synchronously before
@@ -1938,11 +1940,17 @@ function AppShellContent({
   }, [captureContextMenuPosition])
 
   // Handler for "Add Skill" context menu action
-  // Opens the EditPopover for adding a new skill
   const openAddSkill = useCallback(() => {
     captureContextMenuPosition()
-    setTimeout(() => setEditPopoverOpen('add-skill'), 50)
+    setTimeout(() => setSkillImportOpen(true), 50)
   }, [captureContextMenuPosition])
+
+  const handleSkillInstalled = useCallback(async (skillSlug: string) => {
+    if (!activeWorkspaceId) return
+    const loaded = await window.electronAPI.getSkills(activeWorkspaceId, activeSessionWorkingDirectory)
+    setSkills(loaded || [])
+    navigate(routes.view.skills(skillSlug))
+  }, [activeSessionWorkingDirectory, activeWorkspaceId, navigate])
 
   // Handler for "Add Automation" context menu action
   // Opens the EditPopover for adding a new automation
@@ -3279,15 +3287,11 @@ function AppShellContent({
                   )}
                   {/* Add Skill button (only for skills mode) */}
                   {isSkillsNavigation(navState) && activeWorkspace && (
-                    <EditPopover
-                      trigger={
-                        <HeaderIconButton
-                          icon={<Plus className="h-4 w-4" />}
-                          tooltip={t("sidebarMenu.addSkill")}
-                          data-tutorial="add-skill-button"
-                        />
-                      }
-                      {...getEditConfig('add-skill', activeWorkspace.rootPath)}
+                    <HeaderIconButton
+                      icon={<Plus className="h-4 w-4" />}
+                      tooltip={t("sidebarMenu.addSkill")}
+                      data-tutorial="add-skill-button"
+                      onClick={openAddSkill}
                     />
                   )}
                   {/* Add Automation button (only for automations mode) */}
@@ -3324,6 +3328,7 @@ function AppShellContent({
                 skills={skills}
                 workspaceId={activeWorkspaceId}
                 workspaceRootPath={activeWorkspace?.rootPath}
+                onAddSkill={openAddSkill}
                 onSkillClick={handleSkillSelect}
                 onDeleteSkill={handleDeleteSkill}
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
@@ -3557,22 +3562,6 @@ function AppShellContent({
               {...getEditConfig(variant, activeWorkspace.rootPath)}
             />
           ))}
-          {/* Add Skill EditPopover */}
-          <EditPopover
-            open={editPopoverOpen === 'add-skill'}
-            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'add-skill' : null)}
-            modal={true}
-            trigger={
-              <div
-                className="fixed w-0 h-0 pointer-events-none"
-                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
-                aria-hidden="true"
-              />
-            }
-            side="bottom"
-            align="start"
-            {...getEditConfig('add-skill', activeWorkspace.rootPath)}
-          />
           {/* Add Automation EditPopover - triggered from "Add Automation" context menu in automations */}
           <EditPopover
             open={editPopoverOpen === 'automation-config'}
@@ -3624,6 +3613,13 @@ function AppShellContent({
                 },
               }
             })()}
+          />
+          <SkillImportModal
+            open={skillImportOpen}
+            onOpenChange={setSkillImportOpen}
+            workspaceId={activeWorkspace.id}
+            workspaceRootPath={activeWorkspace.rootPath}
+            onSkillInstalled={handleSkillInstalled}
           />
         </>
       )}
