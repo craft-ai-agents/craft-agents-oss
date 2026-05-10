@@ -83,6 +83,7 @@ function parseSkillMd(raw: string): { metadata: SkillMetadata; body: string } | 
 
 const INACCESSIBLE_ERROR =
   'This repository is not accessible. Make sure it is public, or use the Upload tab to install from a zip file.'
+const MAX_SKILL_DIRECTORY_DEPTH = 3
 
 // ── GitHub API ────────────────────────────────────────────────────────────────
 
@@ -133,52 +134,38 @@ async function resolveGithubRepo(owner: string, repo: string): Promise<RemoteRes
     }
   }
 
-  // Scan up to 2 directory levels deep
   const skills: DiscoveredSkill[] = []
-  const depth1Dirs = rootEntries.filter(e => e.type === 'dir')
 
-  for (const dir1 of depth1Dirs) {
-    const depth1Entries = await listGhContents(owner, repo, dir1.path)
-    if (!depth1Entries) continue
+  async function scanDir(dir: GhContent, depth: number): Promise<void> {
+    if (depth > MAX_SKILL_DIRECTORY_DEPTH) return
 
-    const skillMd1 = depth1Entries.find(e => e.type === 'file' && e.name === 'SKILL.md')
-    if (skillMd1?.download_url) {
-      const raw = await fetchGithubSkillMd(skillMd1.download_url)
+    const entries = await listGhContents(owner, repo, dir.path)
+    if (!entries) return
+
+    const skillMd = entries.find(e => e.type === 'file' && e.name === 'SKILL.md')
+    if (skillMd?.download_url) {
+      const raw = await fetchGithubSkillMd(skillMd.download_url)
       if (raw) {
         const parsed = parseSkillMd(raw)
         if (parsed) {
           skills.push({
-            slug: dir1.name,
+            slug: dir.name,
             metadata: parsed.metadata,
             content: parsed.body,
-            sourcePath: `https://github.com/${owner}/${repo}/tree/HEAD/${dir1.path}`,
+            sourcePath: `https://github.com/${owner}/${repo}/tree/HEAD/${dir.path}`,
           })
-          continue
+          return
         }
       }
     }
 
-    const depth2Dirs = depth1Entries.filter(e => e.type === 'dir')
-    for (const dir2 of depth2Dirs) {
-      const depth2Entries = await listGhContents(owner, repo, dir2.path)
-      if (!depth2Entries) continue
-
-      const skillMd2 = depth2Entries.find(e => e.type === 'file' && e.name === 'SKILL.md')
-      if (skillMd2?.download_url) {
-        const raw = await fetchGithubSkillMd(skillMd2.download_url)
-        if (raw) {
-          const parsed = parseSkillMd(raw)
-          if (parsed) {
-            skills.push({
-              slug: dir2.name,
-              metadata: parsed.metadata,
-              content: parsed.body,
-              sourcePath: `https://github.com/${owner}/${repo}/tree/HEAD/${dir2.path}`,
-            })
-          }
-        }
-      }
+    for (const child of entries.filter(e => e.type === 'dir')) {
+      await scanDir(child, depth + 1)
     }
+  }
+
+  for (const dir of rootEntries.filter(e => e.type === 'dir')) {
+    await scanDir(dir, 1)
   }
 
   return skills
@@ -261,50 +248,37 @@ async function resolveGitlabRepo(owner: string, repo: string): Promise<RemoteRes
   }
 
   const skills: DiscoveredSkill[] = []
-  const depth1Dirs = rootEntries.filter(e => e.type === 'tree')
 
-  for (const dir1 of depth1Dirs) {
-    const depth1Entries = await listGlTree(projectId, dir1.path)
-    if (!depth1Entries) continue
+  async function scanDir(dir: GlTreeEntry, depth: number): Promise<void> {
+    if (depth > MAX_SKILL_DIRECTORY_DEPTH) return
 
-    const skillMd1 = depth1Entries.find(e => e.type === 'blob' && e.name === 'SKILL.md')
-    if (skillMd1) {
-      const raw = await fetchGlFile(projectId, skillMd1.path)
+    const entries = await listGlTree(projectId, dir.path)
+    if (!entries) return
+
+    const skillMd = entries.find(e => e.type === 'blob' && e.name === 'SKILL.md')
+    if (skillMd) {
+      const raw = await fetchGlFile(projectId, skillMd.path)
       if (raw) {
         const parsed = parseSkillMd(raw)
         if (parsed) {
           skills.push({
-            slug: dir1.name,
+            slug: dir.name,
             metadata: parsed.metadata,
             content: parsed.body,
-            sourcePath: `https://gitlab.com/${owner}/${repo}/-/tree/HEAD/${dir1.path}`,
+            sourcePath: `https://gitlab.com/${owner}/${repo}/-/tree/HEAD/${dir.path}`,
           })
-          continue
+          return
         }
       }
     }
 
-    const depth2Dirs = depth1Entries.filter(e => e.type === 'tree')
-    for (const dir2 of depth2Dirs) {
-      const depth2Entries = await listGlTree(projectId, dir2.path)
-      if (!depth2Entries) continue
-
-      const skillMd2 = depth2Entries.find(e => e.type === 'blob' && e.name === 'SKILL.md')
-      if (skillMd2) {
-        const raw = await fetchGlFile(projectId, skillMd2.path)
-        if (raw) {
-          const parsed = parseSkillMd(raw)
-          if (parsed) {
-            skills.push({
-              slug: dir2.name,
-              metadata: parsed.metadata,
-              content: parsed.body,
-              sourcePath: `https://gitlab.com/${owner}/${repo}/-/tree/HEAD/${dir2.path}`,
-            })
-          }
-        }
-      }
+    for (const child of entries.filter(e => e.type === 'tree')) {
+      await scanDir(child, depth + 1)
     }
+  }
+
+  for (const dir of rootEntries.filter(e => e.type === 'tree')) {
+    await scanDir(dir, 1)
   }
 
   return skills
@@ -333,20 +307,22 @@ function scanLocalSkills(dir: string): DiscoveredSkill[] {
   }
 
   try {
-    const depth1Entries = readdirSync(dir, { withFileTypes: true })
-    for (const d1 of depth1Entries) {
-      if (!d1.isDirectory() || d1.name.startsWith('.')) continue
-      const d1Path = join(dir, d1.name)
-      if (trySkillMd(join(d1Path, 'SKILL.md'), d1.name, d1Path)) continue
+    function scanDir(currentDir: string, slug: string, depth: number): void {
+      if (depth > MAX_SKILL_DIRECTORY_DEPTH) return
+      if (trySkillMd(join(currentDir, 'SKILL.md'), slug, currentDir)) return
 
       try {
-        const depth2Entries = readdirSync(d1Path, { withFileTypes: true })
-        for (const d2 of depth2Entries) {
-          if (!d2.isDirectory() || d2.name.startsWith('.')) continue
-          const d2Path = join(d1Path, d2.name)
-          trySkillMd(join(d2Path, 'SKILL.md'), d2.name, d2Path)
+        const entries = readdirSync(currentDir, { withFileTypes: true })
+        for (const entry of entries) {
+          if (!entry.isDirectory() || entry.name.startsWith('.')) continue
+          scanDir(join(currentDir, entry.name), entry.name, depth + 1)
         }
       } catch { /* skip unreadable dirs */ }
+    }
+
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue
+      scanDir(join(dir, entry.name), entry.name, 1)
     }
   } catch { /* skip unreadable root */ }
 

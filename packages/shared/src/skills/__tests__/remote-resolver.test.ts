@@ -155,29 +155,175 @@ describe('resolveRemoteSkills — GitHub repo depth cap', () => {
     mock.restore()
   })
 
-  it('does not discover SKILL.md deeper than 2 directory levels', async () => {
+  it('discovers Vercel-style skills under a skills directory at depth 2', async () => {
     const { resolveRemoteSkills } = await import('../remote-resolver.ts')
 
     const originalFetch = globalThis.fetch
     globalThis.fetch = mock(async (url: string) => {
-      // Root: one dir at depth 1
+      if (url.includes('raw.githubusercontent.com')) {
+        if (url.includes('nextjs')) {
+          return new Response(
+            '---\nname: Next.js\ndescription: Build Next.js apps\n---\nNext.js body',
+            { status: 200 }
+          )
+        }
+        if (url.includes('sveltekit')) {
+          return new Response(
+            '---\nname: SvelteKit\ndescription: Build SvelteKit apps\n---\nSvelteKit body',
+            { status: 200 }
+          )
+        }
+        return new Response('Not found', { status: 404 })
+      }
+
+      if (url.endsWith('/contents/')) {
+        return new Response(JSON.stringify([
+          { name: 'skills', type: 'dir', path: 'skills' },
+        ]), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      if (url.includes('/contents/skills/nextjs')) {
+        return new Response(JSON.stringify([
+          {
+            name: 'SKILL.md',
+            type: 'file',
+            path: 'skills/nextjs/SKILL.md',
+            download_url:
+              'https://raw.githubusercontent.com/vercel-labs/agent-skills/main/skills/nextjs/SKILL.md',
+          },
+        ]), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      if (url.includes('/contents/skills/sveltekit')) {
+        return new Response(JSON.stringify([
+          {
+            name: 'SKILL.md',
+            type: 'file',
+            path: 'skills/sveltekit/SKILL.md',
+            download_url:
+              'https://raw.githubusercontent.com/vercel-labs/agent-skills/main/skills/sveltekit/SKILL.md',
+          },
+        ]), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      if (url.includes('/contents/skills')) {
+        return new Response(JSON.stringify([
+          { name: 'nextjs', type: 'dir', path: 'skills/nextjs' },
+          { name: 'sveltekit', type: 'dir', path: 'skills/sveltekit' },
+        ]), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      return new Response('Not found', { status: 404 })
+    }) as unknown as typeof fetch
+
+    try {
+      const result = await resolveRemoteSkills('vercel-labs/agent-skills')
+      expect(Array.isArray(result)).toBe(true)
+      const skills = result as import('../types.ts').DiscoveredSkill[]
+      expect(skills).toHaveLength(2)
+      expect(skills.map(s => s.slug).sort()).toEqual(['nextjs', 'sveltekit'])
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('discovers skills grouped by category at depth 3', async () => {
+    const { resolveRemoteSkills } = await import('../remote-resolver.ts')
+
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = mock(async (url: string) => {
+      if (url.includes('raw.githubusercontent.com')) {
+        if (url.includes('diagnose')) {
+          return new Response(
+            '---\nname: Diagnose\ndescription: Debug hard bugs\n---\nDiagnose body',
+            { status: 200 }
+          )
+        }
+        return new Response('Not found', { status: 404 })
+      }
+
+      if (url.endsWith('/contents/')) {
+        return new Response(JSON.stringify([
+          { name: 'skills', type: 'dir', path: 'skills' },
+          { name: 'README.md', type: 'file', path: 'README.md' },
+        ]), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      if (url.includes('/contents/skills/engineering/diagnose')) {
+        return new Response(JSON.stringify([
+          {
+            name: 'SKILL.md',
+            type: 'file',
+            path: 'skills/engineering/diagnose/SKILL.md',
+            download_url:
+              'https://raw.githubusercontent.com/mattpocock/skills/main/skills/engineering/diagnose/SKILL.md',
+          },
+        ]), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      if (url.includes('/contents/skills/engineering')) {
+        return new Response(JSON.stringify([
+          { name: 'diagnose', type: 'dir', path: 'skills/engineering/diagnose' },
+        ]), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      if (url.includes('/contents/skills')) {
+        return new Response(JSON.stringify([
+          { name: 'engineering', type: 'dir', path: 'skills/engineering' },
+        ]), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      return new Response('Not found', { status: 404 })
+    }) as unknown as typeof fetch
+
+    try {
+      const result = await resolveRemoteSkills('mattpocock/skills')
+      expect(Array.isArray(result)).toBe(true)
+      const skills = result as import('../types.ts').DiscoveredSkill[]
+      expect(skills).toHaveLength(1)
+      expect(skills[0]!.slug).toBe('diagnose')
+      expect(skills[0]!.metadata.name).toBe('Diagnose')
+      expect(skills[0]!.sourcePath).toBe(
+        'https://github.com/mattpocock/skills/tree/HEAD/skills/engineering/diagnose'
+      )
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('does not discover SKILL.md deeper than 3 directory levels', async () => {
+    const { resolveRemoteSkills } = await import('../remote-resolver.ts')
+
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = mock(async (url: string) => {
       if (url.endsWith('/contents/')) {
         return new Response(JSON.stringify([
           { name: 'outer', type: 'dir', path: 'outer' },
         ]), { status: 200, headers: { 'content-type': 'application/json' } })
       }
-      // depth-1 dir contains another dir (no SKILL.md yet)
-      if (url.includes('/outer') && !url.includes('/outer/inner')) {
+      if (url.includes('/outer/inner/deep/too-deep')) {
+        return new Response(JSON.stringify([
+          {
+            name: 'SKILL.md',
+            type: 'file',
+            path: 'outer/inner/deep/too-deep/SKILL.md',
+            download_url:
+              'https://raw.githubusercontent.com/owner/repo/main/outer/inner/deep/too-deep/SKILL.md',
+          },
+        ]), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      if (url.includes('/outer/inner/deep')) {
+        return new Response(JSON.stringify([
+          { name: 'too-deep', type: 'dir', path: 'outer/inner/deep/too-deep' },
+        ]), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      if (url.includes('/outer/inner')) {
+        return new Response(JSON.stringify([
+          { name: 'deep', type: 'dir', path: 'outer/inner/deep' },
+        ]), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      if (url.includes('/outer')) {
         return new Response(JSON.stringify([
           { name: 'inner', type: 'dir', path: 'outer/inner' },
         ]), { status: 200, headers: { 'content-type': 'application/json' } })
       }
-      // depth-2 dir contains another dir (depth 3 — not scanned)
-      if (url.includes('/outer/inner')) {
-        return new Response(JSON.stringify([
-          { name: 'deep', type: 'dir', path: 'outer/inner/deep' },
-          // No SKILL.md here either
-        ]), { status: 200, headers: { 'content-type': 'application/json' } })
+      if (url.includes('raw.githubusercontent.com')) {
+        return new Response(
+          '---\nname: Too Deep\ndescription: Should not be found\n---\nToo deep body',
+          { status: 200 }
+        )
       }
       return new Response('[]', { status: 200 })
     }) as unknown as typeof fetch

@@ -13,7 +13,7 @@ Parse the input string first:
 - If it resolves to a **GitHub or GitLab URL** → use the respective REST API (GitHub Contents API / GitLab Repository Files API) to list directories and fetch `SKILL.md` files. No `git` binary required; plain HTTP in Electron's main process.
 - Otherwise (raw git URL, SSH, self-hosted) → shell out to `git clone --depth 1 --sparse` into a temp directory, then read from disk.
 
-Skill discovery in both cases: scan for any directory containing `SKILL.md`, up to 2 levels deep. If multiple skills are found, show the **Skill Picker**. Only public repos are supported in v1 — 403/404 from the API surfaces a "make sure this repo is public" error.
+Skill discovery in both cases: scan for any directory containing `SKILL.md`, up to 3 levels deep. This supports flat skill collections (`<skill>/SKILL.md`), grouped collections such as `skills/<skill>/SKILL.md`, and category-grouped collections such as `skills/<category>/<skill>/SKILL.md`. If multiple skills are found, show the **Skill Picker**. Only public repos are supported in v1 — 403/404 from the API surfaces a "make sure this repo is public" error.
 
 ## Alternatives considered
 
@@ -23,5 +23,5 @@ Skill discovery in both cases: scan for any directory containing `SKILL.md`, up 
 ## Consequences
 
 - Two fetch code paths to maintain. The URL parser must correctly distinguish GitHub/GitLab URLs from all other git URLs.
-- The depth-2 scan is an intentional cap to avoid traversing large monorepos; skill authors should place skills within 2 directory levels of the repo root.
+- The depth-3 scan is an intentional cap to avoid traversing large monorepos; skill authors should place remote skills within 3 directory levels of the repo root.
 - Private repo support is deferred; the zip upload path is the workaround for private skills in v1.
