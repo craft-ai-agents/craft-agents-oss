@@ -7,13 +7,13 @@ import { EntityListEmptyScreen } from '@/components/ui/entity-list-empty'
 import { skillSelection } from '@/hooks/useEntitySelection'
 import { SkillMenu } from './SkillMenu'
 import { SendResourceToWorkspaceDialog } from './SendResourceToWorkspaceDialog'
-import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { useActiveWorkspace, useAppShellContext } from '@/context/AppShellContext'
 import type { LoadedSkill } from '../../../shared/types'
 
 export interface SkillsListPanelProps {
   skills: LoadedSkill[]
   onDeleteSkill: (skillSlug: string) => void
+  onAddSkill?: () => void
   onSkillClick: (skill: LoadedSkill) => void
   selectedSkillSlug?: string | null
   workspaceId?: string
@@ -24,6 +24,7 @@ export interface SkillsListPanelProps {
 export function SkillsListPanel({
   skills,
   onDeleteSkill,
+  onAddSkill,
   onSkillClick,
   selectedSkillSlug,
   workspaceId,
@@ -57,16 +58,13 @@ export function SkillsListPanel({
           description={t('skillsList.emptyDescription')}
           docKey="skills"
         >
-          {workspaceRootPath && (
-            <EditPopover
-              align="center"
-              trigger={
-                <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
-                  {t('skillsList.addSkill')}
-                </button>
-              }
-              {...getEditConfig('add-skill', workspaceRootPath)}
-            />
+          {workspaceRootPath && onAddSkill && (
+            <button
+              className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors"
+              onClick={onAddSkill}
+            >
+              {t('skillsList.addSkill')}
+            </button>
           )}
         </EntityListEmptyScreen>
       }
