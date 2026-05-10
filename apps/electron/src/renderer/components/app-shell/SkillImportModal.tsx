@@ -42,11 +42,6 @@ type ImportPhase =
   | { kind: 'installing'; skills: DiscoveredSkill[]; statuses: Map<string, RowStatus> }
   | { kind: 'conflict'; skill: DiscoveredSkill; remaining: DiscoveredSkill[] }
 
-// ── Upload tab state ──────────────────────────────────────────────────────────
-
-type UploadPhase = ImportPhase
-
-
 export function SkillImportModal({
   open,
   onOpenChange,
@@ -64,7 +59,7 @@ export function SkillImportModal({
   const canSubmit = slug.length > 0 && description.trim().length > 0 && content.trim().length > 0
 
   // ── Upload tab state ──────────────────────────────────────────────────────
-  const [uploadPhase, setUploadPhase] = React.useState<UploadPhase>({ kind: 'idle' })
+  const [uploadPhase, setUploadPhase] = React.useState<ImportPhase>({ kind: 'idle' })
   const [isDragOver, setIsDragOver] = React.useState(false)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -698,7 +693,7 @@ function RemoteTabContent({
 // ── Upload tab sub-component ─────────────────────────────────────────────────
 
 interface UploadTabContentProps {
-  phase: UploadPhase
+  phase: ImportPhase
   isDragOver: boolean
   fileInputRef: React.RefObject<HTMLInputElement>
   onFileInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void

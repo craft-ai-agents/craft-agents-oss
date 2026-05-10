@@ -117,7 +117,6 @@ async function resolveGithubRepo(owner: string, repo: string): Promise<RemoteRes
   const rootEntries = await listGhContents(owner, repo, '')
   if (rootEntries === null) return { error: INACCESSIBLE_ERROR }
 
-  // Check root for SKILL.md first
   const rootSkillMd = rootEntries.find(e => e.type === 'file' && e.name === 'SKILL.md')
   if (rootSkillMd?.download_url) {
     const raw = await fetchGithubSkillMd(rootSkillMd.download_url)
@@ -159,7 +158,6 @@ async function resolveGithubRepo(owner: string, repo: string): Promise<RemoteRes
       }
     }
 
-    // Check depth-2 subdirectories
     const depth2Dirs = depth1Entries.filter(e => e.type === 'dir')
     for (const dir2 of depth2Dirs) {
       const depth2Entries = await listGhContents(owner, repo, dir2.path)
@@ -246,7 +244,6 @@ async function resolveGitlabRepo(owner: string, repo: string): Promise<RemoteRes
   const rootEntries = await listGlTree(projectId, '')
   if (rootEntries === null) return { error: INACCESSIBLE_ERROR }
 
-  // Check root SKILL.md
   const rootSkillMd = rootEntries.find(e => e.type === 'blob' && e.name === 'SKILL.md')
   if (rootSkillMd) {
     const raw = await fetchGlFile(projectId, 'SKILL.md')

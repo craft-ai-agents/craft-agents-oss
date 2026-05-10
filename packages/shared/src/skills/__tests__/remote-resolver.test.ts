@@ -79,8 +79,8 @@ describe('parseRemoteInput', () => {
 
 // ── resolveRemoteSkills — unit tests with mocked fetch ───────────────────────
 //
-// These tests use mock.module to replace node:fetch so no real network calls
-// are made. Each describe block resets the mock after running.
+// These tests replace globalThis.fetch directly and restore it in try/finally.
+// Each describe block calls mock.restore() in afterEach for module-level mocks.
 
 describe('resolveRemoteSkills — GitHub repo (multi-skill)', () => {
   afterEach(() => {
