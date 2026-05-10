@@ -163,3 +163,6 @@ export {
 
 // Export PowerShell validator root setter (for Electron startup on Windows)
 export { setPowerShellValidatorRoot } from './powershell-validator.ts';
+
+// Export sandbox capability detection (used by the renderer to gate the UI toggle)
+export { getSandboxCapability, type SandboxCapability } from './sandbox-capability.ts';

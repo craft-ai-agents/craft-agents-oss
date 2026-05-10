@@ -2512,6 +2512,12 @@ export class SessionManager implements ISessionManager {
       })
     }
 
+    // Resolve sandboxed default the same way permissionMode is resolved:
+    //   caller override → workspace default → undefined (off).
+    // Existing sessions are intentionally NOT retroactively flipped when the
+    // workspace default changes — defaults only apply at creation time.
+    const effectiveSandboxed = options?.sandboxed ?? wsConfig?.defaults?.sandboxed
+
     // Use storage layer to create and persist the session
     const storedSession = await createStoredSession(workspaceRootPath, {
       name: options?.name,
@@ -2521,7 +2527,7 @@ export class SessionManager implements ISessionManager {
       sessionStatus: options?.sessionStatus,
       labels: options?.labels,
       isFlagged: options?.isFlagged,
-      sandboxed: options?.sandboxed,
+      sandboxed: effectiveSandboxed,
       sandboxFailHard: options?.sandboxFailHard,
     })
 
@@ -6391,6 +6397,21 @@ export class SessionManager implements ISessionManager {
    * Set the thinking level for a session. See {@link ThinkingLevel} for valid values.
    * This is sticky and persisted across messages.
    */
+  /**
+   * Set the per-session sandbox flag. Honored only by the Claude SDK backend;
+   * the Pi backend ignores it. The agent reads this fresh from session config
+   * on every chat turn, so no live agent notification is required — the
+   * change applies starting with the next user message.
+   */
+  setSessionSandboxed(sessionId: string, sandboxed: boolean): void {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.sandboxed = sandboxed
+      sessionLog.info(`Session ${sessionId}: sandboxed set to ${sandboxed}`)
+      this.persistSession(managed)
+    }
+  }
+
   setSessionThinkingLevel(sessionId: string, level: ThinkingLevel): void {
     const managed = this.sessions.get(sessionId)
     if (managed) {

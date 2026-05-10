@@ -4,7 +4,13 @@
 
 import { describe, it, expect } from 'bun:test';
 import { join } from 'node:path';
-import { buildClaudeSandboxOptions } from '../sandbox-config.ts';
+import {
+  buildClaudeSandboxOptions,
+  getSandboxWriteRoots,
+  isPathInsideAllowedRoots,
+  extractSandboxGatedFilePath,
+  SANDBOX_GATED_TOOLS,
+} from '../sandbox-config.ts';
 import type { SessionConfig } from '../../sessions/types.ts';
 
 const WORKSPACE = '/tmp/craft-test-workspace';
@@ -163,5 +169,90 @@ describe('buildClaudeSandboxOptions', () => {
     });
     // Intentionally absent — first-domain prompts are the SDK default.
     expect(result?.network).toBeUndefined();
+  });
+});
+
+describe('getSandboxWriteRoots', () => {
+  it('returns an empty array when not sandboxed', () => {
+    expect(getSandboxWriteRoots({
+      session: makeSession({ sandboxed: false }),
+      workspaceRootPath: WORKSPACE,
+      sdkCwd: WORKSPACE,
+    })).toEqual([]);
+  });
+
+  it('returns the same roots that buildClaudeSandboxOptions feeds the SDK', () => {
+    // The PreToolUse hook and the OS sandbox MUST agree. This test guards
+    // against drift between the two enforcement layers.
+    const args = {
+      session: makeSession({
+        sandboxed: true,
+        workingDirectory: '/Users/me/project',
+      }),
+      workspaceRootPath: WORKSPACE,
+      sdkCwd: '/Users/me/project',
+    };
+    const roots = getSandboxWriteRoots(args);
+    const sandboxOpts = buildClaudeSandboxOptions(args);
+    expect(sandboxOpts?.filesystem?.allowWrite).toEqual(roots);
+  });
+});
+
+describe('isPathInsideAllowedRoots', () => {
+  const ROOTS = ['/Users/me/project', '/tmp/scratch'];
+  const CWD = '/Users/me/project';
+
+  it('matches an exact root path', () => {
+    expect(isPathInsideAllowedRoots('/Users/me/project', ROOTS, CWD)).toBe(true);
+  });
+
+  it('matches a file inside a root', () => {
+    expect(isPathInsideAllowedRoots('/Users/me/project/src/foo.ts', ROOTS, CWD)).toBe(true);
+  });
+
+  it('matches via cwd resolution for relative paths', () => {
+    expect(isPathInsideAllowedRoots('src/foo.ts', ROOTS, CWD)).toBe(true);
+  });
+
+  it('does not match a sibling whose name is a prefix of a root', () => {
+    // Important: /Users/me/projection should NOT be considered inside /Users/me/project.
+    expect(isPathInsideAllowedRoots('/Users/me/projection/x.ts', ROOTS, CWD)).toBe(false);
+  });
+
+  it('rejects paths outside every root', () => {
+    expect(isPathInsideAllowedRoots('/etc/passwd', ROOTS, CWD)).toBe(false);
+    expect(isPathInsideAllowedRoots('/Users/me/Documents/secret.txt', ROOTS, CWD)).toBe(false);
+  });
+});
+
+describe('extractSandboxGatedFilePath', () => {
+  it('extracts file_path for Write/Edit/MultiEdit', () => {
+    expect(extractSandboxGatedFilePath('Write', { file_path: '/x/y.txt' })).toBe('/x/y.txt');
+    expect(extractSandboxGatedFilePath('Edit', { file_path: '/x/y.txt' })).toBe('/x/y.txt');
+    expect(extractSandboxGatedFilePath('MultiEdit', { file_path: '/x/y.txt' })).toBe('/x/y.txt');
+  });
+
+  it('extracts notebook_path for NotebookEdit', () => {
+    expect(extractSandboxGatedFilePath('NotebookEdit', { notebook_path: '/x/y.ipynb' })).toBe('/x/y.ipynb');
+  });
+
+  it('returns null for tools that aren\'t sandbox-gated', () => {
+    expect(extractSandboxGatedFilePath('Read', { file_path: '/x/y.txt' })).toBeNull();
+    expect(extractSandboxGatedFilePath('Bash', { command: 'ls' })).toBeNull();
+  });
+
+  it('returns null when the path field is missing or non-string', () => {
+    expect(extractSandboxGatedFilePath('Write', {})).toBeNull();
+    expect(extractSandboxGatedFilePath('Write', { file_path: 42 })).toBeNull();
+    expect(extractSandboxGatedFilePath('Write', undefined)).toBeNull();
+  });
+
+  it('SANDBOX_GATED_TOOLS covers exactly the SDK\'s built-in writers', () => {
+    // Lock in the gated set — adding a new built-in writer (e.g. a future
+    // notebook-cell editor) requires an explicit code change here, which
+    // forces the author to think about sandbox semantics.
+    expect([...SANDBOX_GATED_TOOLS].sort()).toEqual([
+      'Edit', 'MultiEdit', 'NotebookEdit', 'Write',
+    ]);
   });
 });

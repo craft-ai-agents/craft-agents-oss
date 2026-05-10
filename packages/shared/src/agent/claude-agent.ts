@@ -1,6 +1,12 @@
 import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions, resetClaudeConfigCheck } from './options.ts';
-import { buildClaudeSandboxOptions } from './sandbox-config.ts';
+import {
+  buildClaudeSandboxOptions,
+  getSandboxWriteRoots,
+  isPathInsideAllowedRoots,
+  extractSandboxGatedFilePath,
+  SANDBOX_GATED_TOOLS,
+} from './sandbox-config.ts';
 // Local type for SDK user message content blocks (text, image, document)
 // Replaces import from @anthropic-ai/sdk/resources — keeps SDK as agent-only dependency
 type ContentBlockParam =
@@ -1107,6 +1113,33 @@ export class ClaudeAgent extends BaseAgent {
               this.onDebug?.(`PreToolUse hook: ${input.tool_name} (sessionId=${sessionId}, permissionMode=${permissionMode})`);
 
               const toolInput = input.tool_input as Record<string, unknown>;
+
+              // Sandbox guard for built-in file tools.
+              // The OS-level sandbox (sandbox.filesystem.allowWrite) only
+              // applies to Bash and its subprocesses — the SDK's Write / Edit
+              // / MultiEdit / NotebookEdit tools bypass it by design and would
+              // otherwise let an agent under sandbox edit anywhere on disk.
+              // We use the same write-root list the OS sandbox sees so the
+              // two enforcement layers stay aligned.
+              if (
+                this.config.session?.sandboxed
+                && SANDBOX_GATED_TOOLS.has(input.tool_name)
+              ) {
+                const filePath = extractSandboxGatedFilePath(input.tool_name, toolInput);
+                if (filePath) {
+                  const allowedRoots = getSandboxWriteRoots({
+                    session: this.config.session,
+                    workspaceRootPath: this.workspaceRootPath,
+                    sdkCwd: resolvedSdkCwd,
+                  });
+                  if (!isPathInsideAllowedRoots(filePath, allowedRoots, resolvedSdkCwd)) {
+                    return blockWithReason(
+                      `Sandbox: writes to "${filePath}" are blocked. ` +
+                      `Allowed write roots: ${allowedRoots.join(', ')}.`
+                    );
+                  }
+                }
+              }
 
               // Run centralized PreToolUse checks
               const checkResult = runPreToolUseChecks({

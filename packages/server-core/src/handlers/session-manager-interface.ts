@@ -67,6 +67,7 @@ export interface ISessionManager {
   // ---------------------------------------------------------------------------
 
   setSessionPermissionMode(sessionId: string, mode: PermissionMode): void
+  setSessionSandboxed(sessionId: string, sandboxed: boolean): void
   setSessionThinkingLevel(sessionId: string, level: ThinkingLevel): void
   updateWorkingDirectory(sessionId: string, path: string): void
   setSessionSources(sessionId: string, sourceSlugs: string[]): Promise<void>

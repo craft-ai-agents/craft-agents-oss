@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next"
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { SlashCommandMenu, DEFAULT_SLASH_COMMAND_GROUPS, type SlashCommandId } from '@/components/ui/slash-command-menu'
-import { ChevronDown, Info } from 'lucide-react'
+import { ChevronDown, Info, Shield, ShieldOff } from 'lucide-react'
+import { useAtomValue } from 'jotai'
+import { sandboxCapabilityAtom } from '@/atoms/sandbox-capability'
 import { PERMISSION_MODE_CONFIG, type PermissionMode } from '@craft-agent/shared/agent/modes'
 import type { BackgroundTask } from './ActiveTasksBar'
 import { LabelIcon, LabelValueTypeIcon } from '@/components/ui/label-icon'
@@ -45,6 +47,21 @@ export interface ActiveOptionBadgesProps {
   permissionMode?: PermissionMode
   /** Callback when permission mode changes */
   onPermissionModeChange?: (mode: PermissionMode) => void
+  /**
+   * Whether this session runs under the Claude SDK's OS-level sandbox.
+   * The toggle is only rendered when `sandboxToggleSupported` is true; this
+   * prop drives the toggle's on/off state when present.
+   */
+  sandboxed?: boolean
+  /** Callback when the sandbox toggle is flipped. */
+  onSandboxedChange?: (sandboxed: boolean) => void
+  /**
+   * Whether to render the sandbox toggle for this session. Pass true only
+   * when the session uses the Claude SDK backend (`providerType === 'anthropic'`);
+   * other backends ignore the field at runtime, so showing the toggle there
+   * would be misleading.
+   */
+  sandboxToggleSupported?: boolean
   /** Background tasks to display */
   tasks?: BackgroundTask[]
   /** Session ID for opening preview windows */
@@ -88,6 +105,9 @@ interface ResolvedLabelEntry {
 export function ActiveOptionBadges({
   permissionMode = 'ask',
   onPermissionModeChange,
+  sandboxed = false,
+  onSandboxedChange,
+  sandboxToggleSupported = false,
   tasks = [],
   sessionId,
   sessionFolderPath,
@@ -154,6 +174,18 @@ export function ActiveOptionBadges({
               permissionMode={permissionMode}
               onPermissionModeChange={onPermissionModeChange}
               sessionId={sessionId}
+            />
+          </div>
+        )}
+
+        {/* Sandbox Toggle — Claude-only.
+            Hidden entirely on backends that don't honor the flag (Pi, etc.)
+            so the affordance only appears where it actually does something. */}
+        {sandboxToggleSupported && (
+          <div className="shrink-0">
+            <SandboxToggle
+              sandboxed={sandboxed}
+              onSandboxedChange={onSandboxedChange}
             />
           </div>
         )}
@@ -513,6 +545,77 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessio
         />
       </PopoverContent>
     </Popover>
+  )
+}
+
+// ============================================================================
+// Sandbox Toggle Component
+// ============================================================================
+
+interface SandboxToggleProps {
+  sandboxed: boolean
+  onSandboxedChange?: (next: boolean) => void
+}
+
+/**
+ * Compact icon-only button that flips the per-session sandbox flag.
+ *
+ * Visibility is gated by the parent (`sandboxToggleSupported`); this
+ * component only handles the on/off state and the platform-availability
+ * disable case. When the OS can't run the SDK sandbox at all (Windows
+ * native, Linux without bubblewrap+socat), the button is greyed out and
+ * the tooltip explains why so the user isn't left guessing.
+ */
+function SandboxToggle({ sandboxed, onSandboxedChange }: SandboxToggleProps) {
+  const { t } = useTranslation()
+  const capability = useAtomValue(sandboxCapabilityAtom)
+  // Optimistic local state for instant UI feedback (mirrors PermissionModeDropdown's pattern).
+  const [optimistic, setOptimistic] = React.useState(sandboxed)
+  React.useEffect(() => { setOptimistic(sandboxed) }, [sandboxed])
+
+  // Capability not yet probed → assume disabled until we know.
+  const available = capability?.available === true
+  const disabled = !available
+
+  let title: string
+  if (!available && capability) {
+    title = capability.reason === 'missing-deps'
+      ? t('sandbox.unavailableMissingDeps', { deps: capability.missing.join(', ') })
+      : t('sandbox.unavailablePlatform')
+  } else {
+    title = optimistic ? t('sandbox.tooltipOn') : t('sandbox.tooltipOff')
+  }
+
+  const handleClick = React.useCallback(() => {
+    if (disabled) return
+    const next = !optimistic
+    setOptimistic(next)
+    onSandboxedChange?.(next)
+  }, [disabled, optimistic, onSandboxedChange])
+
+  // Match the height/shape of the permission mode badge so they stack cleanly.
+  const Icon = optimistic && !disabled ? Shield : ShieldOff
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={disabled}
+      title={title}
+      aria-label={title}
+      aria-pressed={optimistic && !disabled}
+      className={cn(
+        "h-[30px] w-[30px] rounded-[8px] flex items-center justify-center shrink-0",
+        "outline-none select-none transition-colors shadow-minimal",
+        "hover:bg-foreground/5",
+        disabled
+          ? "bg-foreground/5 text-foreground/30 cursor-not-allowed"
+          : optimistic
+            ? "bg-accent/5 text-accent"
+            : "bg-[color-mix(in_srgb,var(--background)_97%,var(--foreground)_3%)] text-foreground/60",
+      )}
+    >
+      <Icon className="h-3.5 w-3.5" />
+    </button>
   )
 }
 

@@ -3,6 +3,7 @@ import { join } from 'path'
 import { homedir } from 'os'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { addWorkspace, setActiveWorkspace } from '@craft-agent/shared/config'
+import { getSandboxCapability } from '@craft-agent/shared/agent'
 import { getDefaultWorkspacesDir, ensureDefaultWorkspacesDir } from '@craft-agent/shared/workspaces'
 import type { ServerStatus, ServerHealth } from '@craft-agent/core/types'
 import type { RpcServer } from '@craft-agent/server-core/transport'
@@ -16,6 +17,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.server.GET_HEALTH,
   RPC_CHANNELS.server.GET_ACTIVE_SESSIONS,
   RPC_CHANNELS.server.HOME_DIR,
+  RPC_CHANNELS.server.GET_SANDBOX_CAPABILITY,
 ] as const
 
 export function registerServerHandlers(
@@ -120,6 +122,16 @@ export function registerServerHandlers(
 
   server.handle(RPC_CHANNELS.server.HOME_DIR, async () => {
     return homedir()
+  })
+
+  // -----------------------------------------------------------------------
+  // Sandbox capability — returned to renderer so the toggle can be enabled,
+  // disabled with an explanation, or hidden depending on the platform and
+  // installed dependencies.
+  // -----------------------------------------------------------------------
+
+  server.handle(RPC_CHANNELS.server.GET_SANDBOX_CAPABILITY, async () => {
+    return getSandboxCapability()
   })
 }
 

@@ -318,6 +318,18 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     return connection?.defaultModel ?? ''
   }, [session?.id, session?.model, session?.llmConnection, workspaceDefaultLlmConnection, llmConnections, connectionUnavailable])
 
+  // The sandbox toggle is only meaningful for sessions that route through the
+  // Claude SDK — the Pi backend ignores the `sandboxed` flag at runtime, so
+  // showing the toggle there would be misleading. Resolve the effective
+  // connection and check its providerType.
+  const sandboxToggleSupported = React.useMemo(() => {
+    const connectionSlug = resolveEffectiveConnectionSlug(
+      session?.llmConnection, workspaceDefaultLlmConnection, llmConnections
+    )
+    const connection = connectionSlug ? llmConnections.find(c => c.slug === connectionSlug) : null
+    return connection?.providerType === 'anthropic'
+  }, [session?.llmConnection, workspaceDefaultLlmConnection, llmConnections])
+
   // Working directory for this session
   const workingDirectory = session?.workingDirectory
   const activeWorkspace = React.useMemo(
@@ -716,6 +728,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 onThinkingLevelChange={(level) => setOption('thinkingLevel', level)}
                 permissionMode={sessionOpts.permissionMode}
                 onPermissionModeChange={setPermissionMode}
+                sandboxed={sessionOpts.sandboxed ?? false}
+                onSandboxedChange={(v) => setOption('sandboxed', v)}
+                sandboxToggleSupported={sandboxToggleSupported}
                 enabledModes={enabledModes}
                 inputValue={inputValue}
                 onInputChange={handleInputChange}
@@ -792,6 +807,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             onThinkingLevelChange={(level) => setOption('thinkingLevel', level)}
             permissionMode={sessionOpts.permissionMode}
             onPermissionModeChange={setPermissionMode}
+            sandboxed={sessionOpts.sandboxed ?? false}
+            onSandboxedChange={(v) => setOption('sandboxed', v)}
+            sandboxToggleSupported={sandboxToggleSupported}
             enabledModes={enabledModes}
             inputValue={inputValue}
             onInputChange={handleInputChange}

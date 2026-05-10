@@ -166,6 +166,15 @@ interface ChatDisplayProps {
   /** Current permission mode */
   permissionMode?: PermissionMode
   onPermissionModeChange?: (mode: PermissionMode) => void
+  /** Whether this session runs under the Claude SDK's OS-level sandbox. */
+  sandboxed?: boolean
+  /** Callback when the sandbox toggle is flipped. */
+  onSandboxedChange?: (sandboxed: boolean) => void
+  /**
+   * Whether to show the sandbox toggle for this session. Pass true only for
+   * Claude-backed sessions; other backends ignore the field at runtime.
+   */
+  sandboxToggleSupported?: boolean
   /** Enabled permission modes for Shift+Tab cycling */
   enabledModes?: PermissionMode[]
   // Input value preservation (controlled from parent)
@@ -448,6 +457,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Advanced options
   permissionMode = 'ask',
   onPermissionModeChange,
+  sandboxed = false,
+  onSandboxedChange,
+  sandboxToggleSupported = false,
   enabledModes,
   // Input value preservation
   inputValue,
@@ -1896,6 +1908,10 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             compactMode={compactMode}
             permissionMode={permissionMode}
             onPermissionModeChange={onPermissionModeChange}
+            sandboxed={sandboxed}
+            onSandboxedChange={onSandboxedChange}
+            sandboxToggleSupported={sandboxToggleSupported}
+            workingDirectory={workingDirectory}
             tasks={backgroundTasks}
             sessionId={session.id}
             sessionFolderPath={sessionFolderPath}

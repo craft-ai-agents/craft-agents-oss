@@ -48,6 +48,11 @@ export interface WorkspaceConfig {
     workingDirectory?: string;
     thinkingLevel?: ThinkingLevel; // Default thinking level for new sessions (default: 'medium')
     colorTheme?: string; // Color theme override for this workspace (preset ID). Undefined = inherit from app default.
+    /**
+     * Default sandbox flag for new Claude-backed sessions in this workspace.
+     * Existing sessions are not retroactively flipped — applies at creation only.
+     */
+    sandboxed?: boolean;
   };
 
   /**
