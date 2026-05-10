@@ -31,24 +31,21 @@ interface PendingSkill {
   content: string
 }
 
-// ── Upload tab state ──────────────────────────────────────────────────────────
+// ── Shared phase type used by both Upload and Remote tabs ─────────────────────
 
-type UploadPhase =
+type ImportPhase =
   | { kind: 'idle' }
-  | { kind: 'extracting' }
+  | { kind: 'loading' }
   | { kind: 'error'; message: string }
   | { kind: 'single'; skill: DiscoveredSkill }
   | { kind: 'picker'; skills: DiscoveredSkill[] }
   | { kind: 'installing'; skills: DiscoveredSkill[]; statuses: Map<string, RowStatus> }
   | { kind: 'conflict'; skill: DiscoveredSkill; remaining: DiscoveredSkill[] }
 
-function PlaceholderTab({ title }: { title: string }) {
-  return (
-    <div className="flex min-h-48 items-center justify-center rounded-md border border-dashed border-foreground/15 bg-foreground/[0.02] text-sm text-muted-foreground">
-      {title} coming soon.
-    </div>
-  )
-}
+// ── Upload tab state ──────────────────────────────────────────────────────────
+
+type UploadPhase = ImportPhase
+
 
 export function SkillImportModal({
   open,
@@ -71,6 +68,10 @@ export function SkillImportModal({
   const [isDragOver, setIsDragOver] = React.useState(false)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
+  // ── Remote tab state ──────────────────────────────────────────────────────
+  const [remoteInput, setRemoteInput] = React.useState('')
+  const [remotePhase, setRemotePhase] = React.useState<ImportPhase>({ kind: 'idle' })
+
   const resetCreateForm = React.useCallback(() => {
     setName('')
     setDescription('')
@@ -83,11 +84,17 @@ export function SkillImportModal({
     setIsDragOver(false)
   }, [])
 
+  const resetRemote = React.useCallback(() => {
+    setRemoteInput('')
+    setRemotePhase({ kind: 'idle' })
+  }, [])
+
   const closeModal = React.useCallback(() => {
     resetCreateForm()
     resetUpload()
+    resetRemote()
     onOpenChange(false)
-  }, [onOpenChange, resetCreateForm, resetUpload])
+  }, [onOpenChange, resetCreateForm, resetUpload, resetRemote])
 
   const finishInstall = React.useCallback(async (installedSlug: string) => {
     closeModal()
@@ -168,7 +175,7 @@ export function SkillImportModal({
       return
     }
 
-    setUploadPhase({ kind: 'extracting' })
+    setUploadPhase({ kind: 'loading' })
     try {
       const skills = await window.electronAPI.extractSkillsFromZip(filePath)
       if (skills.length === 0) {
@@ -272,6 +279,127 @@ export function SkillImportModal({
     }
   }, [closeModal, uploadPhase])
 
+  // ── Remote tab ────────────────────────────────────────────────────────────
+
+  const installSingleRemoteSkill = React.useCallback(async (skill: DiscoveredSkill) => {
+    const result: CreateSkillResult = await window.electronAPI.createSkill(
+      workspaceId, skill.slug, skill.metadata, skill.content
+    )
+    if ('conflict' in result) {
+      setRemotePhase({ kind: 'conflict', skill, remaining: [] })
+      return
+    }
+    await finishInstall(skill.slug)
+  }, [finishInstall, workspaceId])
+
+  const runRemoteInstallPhase = React.useCallback(async (
+    skills: DiscoveredSkill[],
+    overwriteSlugs: Set<string>,
+    preInstalled: Set<string>
+  ) => {
+    const statuses = new Map<string, RowStatus>(skills.map(s => [
+      s.slug,
+      preInstalled.has(s.slug) ? 'done' : 'pending',
+    ]))
+    setRemotePhase({ kind: 'installing', skills, statuses: new Map(statuses) })
+
+    for (const skill of skills) {
+      if (preInstalled.has(skill.slug)) continue
+      statuses.set(skill.slug, 'installing')
+      setRemotePhase({ kind: 'installing', skills, statuses: new Map(statuses) })
+      try {
+        if (overwriteSlugs.has(skill.slug)) {
+          await window.electronAPI.forceWriteSkill(workspaceId, skill.slug, skill.metadata, skill.content)
+        } else {
+          await window.electronAPI.createSkill(workspaceId, skill.slug, skill.metadata, skill.content)
+        }
+        statuses.set(skill.slug, 'done')
+      } catch {
+        statuses.set(skill.slug, 'failed')
+      }
+      setRemotePhase({ kind: 'installing', skills, statuses: new Map(statuses) })
+    }
+
+    closeModal()
+    await onSkillInstalled(skills[0].slug)
+  }, [closeModal, onSkillInstalled, workspaceId])
+
+  const handleRemotePickerConfirm = React.useCallback(async (selected: DiscoveredSkill[]) => {
+    if (selected.length === 0) return
+
+    const conflicting: DiscoveredSkill[] = []
+    const preInstalled = new Set<string>()
+    for (const skill of selected) {
+      const result: CreateSkillResult = await window.electronAPI.createSkill(
+        workspaceId, skill.slug, skill.metadata, skill.content
+      )
+      if ('conflict' in result) {
+        conflicting.push(skill)
+      } else {
+        preInstalled.add(skill.slug)
+      }
+    }
+
+    if (conflicting.length > 0) {
+      const [first, ...rest] = conflicting
+      setRemotePhase({ kind: 'conflict', skill: first, remaining: rest })
+      return
+    }
+
+    await runRemoteInstallPhase(selected, new Set(), preInstalled)
+  }, [runRemoteInstallPhase, workspaceId])
+
+  const handleRemoteConflictOverwrite = React.useCallback(async () => {
+    if (remotePhase.kind !== 'conflict') return
+    const { skill, remaining } = remotePhase
+    await window.electronAPI.forceWriteSkill(workspaceId, skill.slug, skill.metadata, skill.content)
+    if (remaining.length > 0) {
+      const [next, ...rest] = remaining
+      setRemotePhase({ kind: 'conflict', skill: next, remaining: rest })
+    } else {
+      closeModal()
+      await onSkillInstalled(skill.slug)
+    }
+  }, [closeModal, onSkillInstalled, remotePhase, workspaceId])
+
+  const handleRemoteConflictSkip = React.useCallback(async () => {
+    if (remotePhase.kind !== 'conflict') return
+    const { remaining } = remotePhase
+    if (remaining.length > 0) {
+      const [next, ...rest] = remaining
+      setRemotePhase({ kind: 'conflict', skill: next, remaining: rest })
+    } else {
+      closeModal()
+    }
+  }, [closeModal, remotePhase])
+
+  const handleRemoteResolve = React.useCallback(async () => {
+    const input = remoteInput.trim()
+    if (!input) return
+
+    setRemotePhase({ kind: 'loading' })
+    try {
+      const result = await window.electronAPI.resolveRemoteSkills(input)
+      if ('error' in result) {
+        setRemotePhase({ kind: 'error', message: result.error })
+        return
+      }
+      if (result.length === 0) {
+        setRemotePhase({ kind: 'error', message: 'No skills found in this repository.' })
+        return
+      }
+      if (result.length === 1) {
+        setRemotePhase({ kind: 'single', skill: result[0] })
+        await installSingleRemoteSkill(result[0])
+      } else {
+        setRemotePhase({ kind: 'picker', skills: result })
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setRemotePhase({ kind: 'error', message })
+    }
+  }, [installSingleRemoteSkill, remoteInput])
+
   function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (file) void processZipFile(file)
@@ -302,6 +430,7 @@ export function SkillImportModal({
         if (!isOpen) {
           resetCreateForm()
           resetUpload()
+          resetRemote()
         }
         onOpenChange(isOpen)
       }}>
@@ -381,7 +510,15 @@ export function SkillImportModal({
             </TabsContent>
 
             <TabsContent value="remote" className="mt-4">
-              <PlaceholderTab title="Remote import" />
+              <RemoteTabContent
+                phase={remotePhase}
+                input={remoteInput}
+                onInputChange={setRemoteInput}
+                onResolve={() => void handleRemoteResolve()}
+                onPickerConfirm={handleRemotePickerConfirm}
+                onPickerCancel={closeModal}
+                onReset={resetRemote}
+              />
             </TabsContent>
 
             <TabsContent value="upload" className="mt-4">
@@ -444,7 +581,117 @@ export function SkillImportModal({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Remote tab conflict dialog */}
+      <Dialog
+        open={remotePhase.kind === 'conflict'}
+        onOpenChange={(isOpen) => { if (!isOpen) void handleRemoteConflictSkip() }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Overwrite skill?</DialogTitle>
+            <DialogDescription>
+              {remotePhase.kind === 'conflict'
+                ? `"${remotePhase.skill.metadata.name}" already exists. Overwrite it?`
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => void handleRemoteConflictSkip()}>Skip</Button>
+            <Button variant="destructive" onClick={() => void handleRemoteConflictOverwrite()}>
+              Overwrite
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
+  )
+}
+
+// ── Remote tab sub-component ─────────────────────────────────────────────────
+
+interface RemoteTabContentProps {
+  phase: ImportPhase
+  input: string
+  onInputChange: (value: string) => void
+  onResolve: () => void
+  onPickerConfirm: (selected: DiscoveredSkill[]) => void
+  onPickerCancel: () => void
+  onReset: () => void
+}
+
+function RemoteTabContent({
+  phase,
+  input,
+  onInputChange,
+  onResolve,
+  onPickerConfirm,
+  onPickerCancel,
+  onReset,
+}: RemoteTabContentProps) {
+  if (phase.kind === 'picker') {
+    return (
+      <SkillPicker
+        skills={phase.skills}
+        onConfirm={onPickerConfirm}
+        onCancel={onPickerCancel}
+      />
+    )
+  }
+
+  if (phase.kind === 'installing') {
+    return (
+      <SkillPicker
+        skills={phase.skills}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+        installing
+        rowStatuses={phase.statuses}
+      />
+    )
+  }
+
+  if (phase.kind === 'error') {
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-md border border-dashed border-destructive/30 bg-destructive/5 p-6 text-center">
+        <p className="text-sm text-destructive">{phase.message}</p>
+        <Button variant="outline" size="sm" onClick={onReset}>Try again</Button>
+      </div>
+    )
+  }
+
+  if (phase.kind === 'loading' || phase.kind === 'single') {
+    return (
+      <div className="flex min-h-48 items-center justify-center rounded-md border border-dashed border-foreground/15 bg-foreground/[0.02] text-sm text-muted-foreground">
+        Resolving…
+      </div>
+    )
+  }
+
+  // idle
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-2">
+        <label className="text-sm font-medium" htmlFor="remote-url">
+          GitHub shorthand, URL, or git remote
+        </label>
+        <div className="flex gap-2">
+          <Input
+            id="remote-url"
+            value={input}
+            onChange={(e) => onInputChange(e.target.value)}
+            placeholder="owner/repo  or  https://github.com/owner/repo"
+            onKeyDown={(e) => { if (e.key === 'Enter') onResolve() }}
+          />
+          <Button onClick={onResolve} disabled={!input.trim()}>
+            Resolve
+          </Button>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Supports GitHub, GitLab, or any git remote (requires git for non-GitHub/GitLab URLs).
+      </p>
+    </div>
   )
 }
 
@@ -506,7 +753,7 @@ function UploadTabContent({
     )
   }
 
-  if (phase.kind === 'extracting' || phase.kind === 'single') {
+  if (phase.kind === 'loading' || phase.kind === 'single') {
     return (
       <div className="flex min-h-48 items-center justify-center rounded-md border border-dashed border-foreground/15 bg-foreground/[0.02] text-sm text-muted-foreground">
         Reading zip…

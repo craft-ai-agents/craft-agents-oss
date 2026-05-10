@@ -15,6 +15,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.OPEN_EDITOR,
   RPC_CHANNELS.skills.OPEN_FINDER,
   RPC_CHANNELS.skills.EXTRACT_ZIP,
+  RPC_CHANNELS.skills.RESOLVE_REMOTE,
 ] as const
 
 export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -162,5 +163,11 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
   server.handle(RPC_CHANNELS.skills.EXTRACT_ZIP, async (_ctx, zipPath: string) => {
     const { extractSkillsFromZip } = await import('@craft-agent/shared/skills')
     return extractSkillsFromZip(zipPath)
+  })
+
+  // Resolve skills from a remote URL, shorthand, or git remote
+  server.handle(RPC_CHANNELS.skills.RESOLVE_REMOTE, async (_ctx, input: string) => {
+    const { resolveRemoteSkills } = await import('@craft-agent/shared/skills')
+    return resolveRemoteSkills(input)
   })
 }

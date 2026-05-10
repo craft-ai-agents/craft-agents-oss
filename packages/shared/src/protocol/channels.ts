@@ -269,6 +269,7 @@ export const RPC_CHANNELS = {
     OPEN_EDITOR: 'skills:openEditor',
     OPEN_FINDER: 'skills:openFinder',
     EXTRACT_ZIP: 'skills:extractZip',
+    RESOLVE_REMOTE: 'skills:resolveRemote',
     CHANGED: 'skills:changed',
   },
   statuses: {
