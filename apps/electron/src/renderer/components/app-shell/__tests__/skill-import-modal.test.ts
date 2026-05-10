@@ -43,6 +43,11 @@ describe('Skill Import Modal shell', () => {
     expect(skillImportModalSource).toContain('window.electronAPI.forceWriteSkill')
   })
 
+  test('slug derivation import stays browser-safe for renderer startup', () => {
+    expect(skillImportModalSource).toContain("@craft-agent/shared/skills/slug")
+    expect(skillImportModalSource).not.toContain("from '@craft-agent/shared/skills'")
+  })
+
   test('AI Assist tab keeps the existing add-skill EditPopover configuration', () => {
     expect(skillImportModalSource).toContain('EditPopover')
     expect(skillImportModalSource).toContain("getEditConfig('add-skill', workspaceRootPath)")

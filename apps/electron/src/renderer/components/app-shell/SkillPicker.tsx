@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Check, Loader2, X } from 'lucide-react'
-import type { DiscoveredSkill } from '../../shared/types'
+import type { DiscoveredSkill } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 
 export type RowStatus = 'pending' | 'installing' | 'done' | 'failed'

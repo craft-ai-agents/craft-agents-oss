@@ -26,6 +26,7 @@ import {
   needsIconDownload,
   isIconUrl,
 } from '../utils/icon.ts';
+export { deriveSkillSlug } from './slug.ts';
 
 // ============================================================
 // Agent Skills Paths (Issue #171)
@@ -294,16 +295,6 @@ export function getSkillIconPath(workspaceRoot: string, slug: string): string | 
 
 /** Result from creating a workspace skill without overwriting. */
 export type CreateSkillResult = { created: true } | { conflict: true };
-
-/**
- * Derive the directory slug used for a skill from its display name.
- */
-export function deriveSkillSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
 
 function writeSkillFile(workspaceRoot: string, slug: string, metadata: SkillMetadata, content: string): void {
   const skillsDir = getWorkspaceSkillsPath(workspaceRoot);
