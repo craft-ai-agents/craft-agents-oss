@@ -760,6 +760,7 @@ export function SessionList({
         containerRef={zoneRef}
         containerProps={{
           'data-focus-zone': 'navigator',
+          'data-list-role': 'sessions',
           role: 'listbox',
           'aria-label': 'Sessions',
         }}

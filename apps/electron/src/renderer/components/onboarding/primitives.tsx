@@ -161,7 +161,7 @@ export function StepFormLayout({
 }: StepFormLayoutProps) {
   return (
     <div className={cn(
-      "flex w-[28rem] flex-col items-center",
+      "flex w-full max-w-[28rem] flex-col items-center",
       grow && !fillHeight && "h-full max-h-[600px]",
       fillHeight && "h-full",
       className

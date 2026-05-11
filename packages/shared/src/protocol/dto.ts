@@ -316,7 +316,7 @@ export interface DirectoryListingResult {
 // ---------------------------------------------------------------------------
 
 export interface FileAttachment {
-  type: 'image' | 'text' | 'pdf' | 'office' | 'unknown'
+  type: 'image' | 'text' | 'pdf' | 'office' | 'audio' | 'unknown'
   path: string
   name: string
   mimeType: string

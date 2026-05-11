@@ -491,6 +491,7 @@
   "menu.resetZoom": "Zoom zurücksetzen",
   "menu.selectAll": "Alles auswählen",
   "menu.settings": "Einstellungen...",
+  "menu.toggleDevTools": "Entwicklertools umschalten",
   "menu.toggleFocusMode": "Fokusmodus umschalten",
   "menu.toggleSidebar": "Seitenleiste umschalten",
   "menu.undo": "Rückgängig",
