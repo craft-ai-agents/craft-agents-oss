@@ -70,6 +70,16 @@ export interface PanelHeaderProps {
   badge?: React.ReactNode
   /** Optional dropdown menu content for interactive title (renders chevron when provided) */
   titleMenu?: React.ReactNode
+  /**
+   * Compact-mode replacement for the interactive title. When provided AND
+   * `isCompactMode === true`, this node is rendered in place of the desktop
+   * Radix DropdownMenu wrapper of `titleMenu`. Caller is responsible for
+   * rendering its own trigger button (matching the title styling) — see
+   * `CompactSessionMenu` for the canonical example. Radix popovers + nested
+   * submenus get clipped by the panel container query on narrow viewports;
+   * this lets consumers swap to a vaul `Drawer` instead.
+   */
+  compactTitleMenu?: React.ReactNode
   /** Optional leading action rendered before the title (e.g., back button in compact mode) */
   leadingAction?: React.ReactNode
   /** Optional center button rendered between title and right actions */
@@ -95,6 +105,7 @@ export function PanelHeader({
   title,
   badge,
   titleMenu,
+  compactTitleMenu,
   leadingAction: explicitLeadingAction,
   centerButton,
   actions,
@@ -120,6 +131,13 @@ export function PanelHeader({
   // Controlled dropdown state for anchoring to chevron while keeping full title clickable
   const [dropdownOpen, setDropdownOpen] = useState(false)
 
+  // Force-close the desktop dropdown when compact mode takes over the title
+  // slot — otherwise the open state survives unmount and the dropdown
+  // resurrects open the next time the user resizes back to desktop width.
+  React.useEffect(() => {
+    if (isCompactMode && dropdownOpen) setDropdownOpen(false)
+  }, [isCompactMode, dropdownOpen])
+
   // Title content - either static or interactive with dropdown
   // Shimmer effect shows during title regeneration
   const titleContent = (
@@ -139,7 +157,10 @@ export function PanelHeader({
 
   // Title node — wrapped in interactive dropdown trigger when titleMenu is provided,
   // bare when not. Shared between the desktop and compact layouts below.
-  const titleNode = titleMenu ? (
+  // In compact mode, `compactTitleMenu` (if provided) takes over the slot so
+  // consumers can render a Drawer-based menu instead of a Radix popover that
+  // would otherwise get clipped by the panel container query.
+  const desktopTitleNode = titleMenu ? (
     <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
       {/* Wrapper button for the whole clickable area */}
       <button
@@ -164,6 +185,8 @@ export function PanelHeader({
       </StyledDropdownMenuContent>
     </DropdownMenu>
   ) : titleContent
+
+  const titleNode = (isCompactMode && compactTitleMenu) ? compactTitleMenu : desktopTitleNode
 
   // Compact (mobile) layout puts the title in an absolute-positioned overlay.
   // The side insets are based on the actual number of control slots so a long
