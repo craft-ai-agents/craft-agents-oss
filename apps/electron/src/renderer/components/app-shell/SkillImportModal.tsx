@@ -42,6 +42,9 @@ type ImportPhase =
   | { kind: 'installing'; skills: DiscoveredSkill[]; statuses: Map<string, RowStatus> }
   | { kind: 'conflict'; skill: DiscoveredSkill; remaining: DiscoveredSkill[] }
 
+const REMOTE_EMPTY_DISCOVERY_MESSAGE =
+  'The repository was reached, but no supported SKILL.md files were found. Remote discovery supports a top-level SKILL.md or skill directories up to three levels deep; when multiple skills are found, the Skill Picker will let you choose. Open a direct GitHub subpath to a skill, or use the Upload tab to install from a zip file.'
+
 export function SkillImportModal({
   open,
   onOpenChange,
@@ -380,7 +383,7 @@ export function SkillImportModal({
         return
       }
       if (result.length === 0) {
-        setRemotePhase({ kind: 'error', message: 'No skills found in this repository.' })
+        setRemotePhase({ kind: 'error', message: REMOTE_EMPTY_DISCOVERY_MESSAGE })
         return
       }
       if (result.length === 1) {

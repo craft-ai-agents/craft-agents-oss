@@ -52,4 +52,12 @@ describe('Skill Import Modal shell', () => {
     expect(skillImportModalSource).toContain('EditPopover')
     expect(skillImportModalSource).toContain("getEditConfig('add-skill', workspaceRootPath)")
   })
+
+  test('Remote tab explains empty discovery separately from resolver errors', () => {
+    expect(skillImportModalSource).toContain("if ('error' in result)")
+    expect(skillImportModalSource).toContain('setRemotePhase({ kind: \'error\', message: result.error })')
+    expect(skillImportModalSource).toContain('The repository was reached, but no supported SKILL.md files were found.')
+    expect(skillImportModalSource).toContain('Open a direct GitHub subpath to a skill, or use the Upload tab')
+    expect(skillImportModalSource).toContain('Skill Picker')
+  })
 })
