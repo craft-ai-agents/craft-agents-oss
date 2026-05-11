@@ -13,7 +13,7 @@ Parse the input string first:
 - If it resolves to a **GitHub or GitLab URL** → use the respective REST API (GitHub Contents API / GitLab Repository Files API) to list directories and fetch `SKILL.md` files. No `git` binary required; plain HTTP in Electron's main process.
 - Otherwise (raw git URL, SSH, self-hosted) → shell out to `git clone --depth 1 --sparse` into a temp directory, then read from disk.
 
-Skill discovery in both cases: scan for any directory containing `SKILL.md`, up to 3 levels deep. This supports flat skill collections (`<skill>/SKILL.md`), grouped collections such as `skills/<skill>/SKILL.md`, and category-grouped collections such as `skills/<category>/<skill>/SKILL.md`. If multiple skills are found, show the **Skill Picker**. Only public repos are supported in v1 — 403/404 from the API surfaces a "make sure this repo is public" error.
+Skill discovery in both cases: scan for any directory containing `SKILL.md`, up to 3 levels deep. This supports flat skill collections (`<skill>/SKILL.md`), grouped collections such as `skills/<skill>/SKILL.md`, and category-grouped collections such as `skills/<category>/<skill>/SKILL.md`. If multiple skills are found, show the **Skill Picker**. Only public repos are supported in v1 — private/not-found 403/404 responses surface a "make sure this repo is public" error, while GitHub API rate-limit 403 responses surface a rate-limit-specific retry/options message.
 
 ## Alternatives considered
 

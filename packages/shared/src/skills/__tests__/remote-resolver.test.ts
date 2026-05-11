@@ -376,6 +376,36 @@ describe('resolveRemoteSkills — API 404 error shape', () => {
       globalThis.fetch = originalFetch
     }
   })
+
+  it('returns a rate-limit-specific error on GitHub API 403 rate limits', async () => {
+    const { resolveRemoteSkills } = await import('../remote-resolver.ts')
+
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = mock(async (_url: string) => {
+      return new Response(
+        JSON.stringify({
+          message: 'API rate limit exceeded for 203.0.113.1.',
+        }),
+        {
+          status: 403,
+          headers: {
+            'content-type': 'application/json',
+            'x-ratelimit-remaining': '0',
+            'x-ratelimit-reset': '1783756800',
+          },
+        }
+      )
+    }) as unknown as typeof fetch
+
+    try {
+      const result = await resolveRemoteSkills('owner/public-repo')
+      expect('error' in result).toBe(true)
+      expect((result as { error: string }).error).toContain('GitHub API rate limit')
+      expect((result as { error: string }).error).not.toContain('not accessible')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
 })
 
 describe('resolveRemoteSkills — GitHub subpath (single skill)', () => {

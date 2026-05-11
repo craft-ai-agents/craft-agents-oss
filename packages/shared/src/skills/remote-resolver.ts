@@ -83,6 +83,8 @@ function parseSkillMd(raw: string): { metadata: SkillMetadata; body: string } | 
 
 const INACCESSIBLE_ERROR =
   'This repository is not accessible. Make sure it is public, or use the Upload tab to install from a zip file.'
+const GITHUB_RATE_LIMIT_ERROR =
+  'GitHub API rate limit reached. Try again later, use a GitHub-authenticated session if available, or use the Upload tab to install from a zip file.'
 const MAX_SKILL_DIRECTORY_DEPTH = 3
 
 // ── GitHub API ────────────────────────────────────────────────────────────────
@@ -93,6 +95,10 @@ type GhContent = {
   path: string
   download_url?: string
 }
+
+type GhContentsResult =
+  | { ok: true; entries: GhContent[] }
+  | { ok: false; error: string }
 
 async function ghApiGet(path: string): Promise<Response> {
   return fetch(`https://api.github.com/${path}`, {
@@ -106,17 +112,43 @@ async function fetchGithubSkillMd(downloadUrl: string): Promise<string | null> {
   return res.text()
 }
 
-async function listGhContents(owner: string, repo: string, path: string): Promise<GhContent[] | null> {
+function githubRateLimitResetDetail(res: Response): string {
+  const reset = Number(res.headers.get('x-ratelimit-reset'))
+  if (!Number.isFinite(reset) || reset <= 0) return ''
+  return ` Retry after ${new Date(reset * 1000).toISOString()}.`
+}
+
+function isGithubRateLimitResponse(res: Response, body: string): boolean {
+  const lowerBody = body.toLowerCase()
+  return (
+    res.headers.get('x-ratelimit-remaining') === '0' ||
+    lowerBody.includes('rate limit') ||
+    lowerBody.includes('secondary rate') ||
+    lowerBody.includes('abuse detection') ||
+    lowerBody.includes('abuse limit')
+  )
+}
+
+async function githubForbiddenError(res: Response): Promise<string> {
+  const body = await res.text().catch(() => '')
+  if (!isGithubRateLimitResponse(res, body)) return INACCESSIBLE_ERROR
+  return `${GITHUB_RATE_LIMIT_ERROR}${githubRateLimitResetDetail(res)}`
+}
+
+async function listGhContents(owner: string, repo: string, path: string): Promise<GhContentsResult> {
   const res = await ghApiGet(`repos/${owner}/${repo}/contents/${path}`)
-  if (res.status === 403 || res.status === 404) return null
-  if (!res.ok) return []
+  if (res.status === 403) return { ok: false, error: await githubForbiddenError(res) }
+  if (res.status === 404) return { ok: false, error: INACCESSIBLE_ERROR }
+  if (!res.ok) return { ok: true, entries: [] }
   const data = await res.json() as GhContent | GhContent[]
-  return Array.isArray(data) ? data : [data]
+  return { ok: true, entries: Array.isArray(data) ? data : [data] }
 }
 
 async function resolveGithubRepo(owner: string, repo: string): Promise<RemoteResolveResult> {
-  const rootEntries = await listGhContents(owner, repo, '')
-  if (rootEntries === null) return { error: INACCESSIBLE_ERROR }
+  const rootContents = await listGhContents(owner, repo, '')
+  if (!rootContents.ok) return { error: rootContents.error }
+
+  const rootEntries = rootContents.entries
 
   const rootSkillMd = rootEntries.find(e => e.type === 'file' && e.name === 'SKILL.md')
   if (rootSkillMd?.download_url) {
@@ -136,11 +168,13 @@ async function resolveGithubRepo(owner: string, repo: string): Promise<RemoteRes
 
   const skills: DiscoveredSkill[] = []
 
-  async function scanDir(dir: GhContent, depth: number): Promise<void> {
-    if (depth > MAX_SKILL_DIRECTORY_DEPTH) return
+  async function scanDir(dir: GhContent, depth: number): Promise<string | null> {
+    if (depth > MAX_SKILL_DIRECTORY_DEPTH) return null
 
-    const entries = await listGhContents(owner, repo, dir.path)
-    if (!entries) return
+    const contents = await listGhContents(owner, repo, dir.path)
+    if (!contents.ok) return contents.error
+
+    const entries = contents.entries
 
     const skillMd = entries.find(e => e.type === 'file' && e.name === 'SKILL.md')
     if (skillMd?.download_url) {
@@ -154,18 +188,22 @@ async function resolveGithubRepo(owner: string, repo: string): Promise<RemoteRes
             content: parsed.body,
             sourcePath: `https://github.com/${owner}/${repo}/tree/HEAD/${dir.path}`,
           })
-          return
+          return null
         }
       }
     }
 
     for (const child of entries.filter(e => e.type === 'dir')) {
-      await scanDir(child, depth + 1)
+      const error = await scanDir(child, depth + 1)
+      if (error) return error
     }
+
+    return null
   }
 
   for (const dir of rootEntries.filter(e => e.type === 'dir')) {
-    await scanDir(dir, 1)
+    const error = await scanDir(dir, 1)
+    if (error) return { error }
   }
 
   return skills
@@ -180,7 +218,8 @@ async function resolveGithubSubpath(
   const rawUrl =
     `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${subpath}/SKILL.md`
   const res = await fetch(rawUrl)
-  if (res.status === 403 || res.status === 404) return { error: INACCESSIBLE_ERROR }
+  if (res.status === 403) return { error: await githubForbiddenError(res) }
+  if (res.status === 404) return { error: INACCESSIBLE_ERROR }
   if (!res.ok) return { error: `Failed to fetch skill: HTTP ${res.status}` }
 
   const raw = await res.text()
