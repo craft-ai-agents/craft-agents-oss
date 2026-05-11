@@ -7,8 +7,13 @@ import { join } from 'node:path';
 import {
   buildClaudeSandboxOptions,
   getSandboxWriteRoots,
+  getSandboxAllowedHosts,
   isPathInsideAllowedRoots,
+  isHostAllowed,
   extractSandboxGatedFilePath,
+  extractSandboxGatedUrl,
+  isSandboxNetworkGatedTool,
+  safeExtractHost,
   SANDBOX_GATED_TOOLS,
 } from '../sandbox-config.ts';
 import type { SessionConfig } from '../../sessions/types.ts';
@@ -161,14 +166,104 @@ describe('buildClaudeSandboxOptions', () => {
     expect(allowWrite).toHaveLength(2);
   });
 
-  it('does not preset network.allowedDomains (defers to SDK prompt UX)', () => {
+  it('always allows api.anthropic.com in network.allowedDomains', () => {
     const result = buildClaudeSandboxOptions({
       session: makeSession({ sandboxed: true }),
       workspaceRootPath: WORKSPACE,
       sdkCwd: EXPECTED_SESSION_DIR,
     });
-    // Intentionally absent — first-domain prompts are the SDK default.
-    expect(result?.network).toBeUndefined();
+    expect(result?.network?.allowedDomains).toContain('api.anthropic.com');
+  });
+
+  it('uses strict managed-domains mode under allow-all permission', () => {
+    const result = buildClaudeSandboxOptions({
+      session: makeSession({ sandboxed: true, permissionMode: 'allow-all' }),
+      workspaceRootPath: WORKSPACE,
+      sdkCwd: EXPECTED_SESSION_DIR,
+    });
+    expect(result?.network?.allowManagedDomainsOnly).toBe(true);
+  });
+
+  it('lets the SDK prompt under safe / ask permission modes', () => {
+    for (const mode of ['safe', 'ask'] as const) {
+      const result = buildClaudeSandboxOptions({
+        session: makeSession({ sandboxed: true, permissionMode: mode }),
+        workspaceRootPath: WORKSPACE,
+        sdkCwd: EXPECTED_SESSION_DIR,
+      });
+      expect(result?.network?.allowManagedDomainsOnly).toBe(false);
+    }
+  });
+
+  it('includes hosts passed via allowedHosts', () => {
+    const result = buildClaudeSandboxOptions({
+      session: makeSession({ sandboxed: true }),
+      workspaceRootPath: WORKSPACE,
+      sdkCwd: EXPECTED_SESSION_DIR,
+      allowedHosts: ['api.linear.app', 'mcp.example.com'],
+    });
+    expect(result?.network?.allowedDomains).toContain('api.linear.app');
+    expect(result?.network?.allowedDomains).toContain('mcp.example.com');
+    expect(result?.network?.allowedDomains).toContain('api.anthropic.com');
+  });
+});
+
+describe('getSandboxAllowedHosts', () => {
+  it('returns an empty array when not sandboxed', () => {
+    expect(getSandboxAllowedHosts({
+      session: makeSession({ sandboxed: false }),
+      workspaceRootPath: WORKSPACE,
+      sdkCwd: WORKSPACE,
+    })).toEqual([]);
+  });
+
+  it('always includes api.anthropic.com when sandboxed', () => {
+    const hosts = getSandboxAllowedHosts({
+      session: makeSession({ sandboxed: true }),
+      workspaceRootPath: WORKSPACE,
+      sdkCwd: WORKSPACE,
+    });
+    expect(hosts).toEqual(['api.anthropic.com']);
+  });
+
+  it('lowercases and deduplicates hosts', () => {
+    const hosts = getSandboxAllowedHosts({
+      session: makeSession({ sandboxed: true }),
+      workspaceRootPath: WORKSPACE,
+      sdkCwd: WORKSPACE,
+      allowedHosts: ['API.LINEAR.APP', 'api.linear.app', 'api.anthropic.com'],
+    });
+    expect(hosts.filter((h) => h === 'api.linear.app').length).toBe(1);
+    expect(hosts.filter((h) => h === 'api.anthropic.com').length).toBe(1);
+  });
+
+  it('drops empty / whitespace-only entries defensively', () => {
+    const hosts = getSandboxAllowedHosts({
+      session: makeSession({ sandboxed: true }),
+      workspaceRootPath: WORKSPACE,
+      sdkCwd: WORKSPACE,
+      allowedHosts: ['', '   ', 'api.linear.app'],
+    });
+    expect(hosts).toContain('api.linear.app');
+    expect(hosts).not.toContain('');
+  });
+});
+
+describe('safeExtractHost', () => {
+  it('extracts lowercased hostname from valid URLs', () => {
+    expect(safeExtractHost('https://API.Linear.App/v1/issues')).toBe('api.linear.app');
+    expect(safeExtractHost('http://localhost:8080/mcp')).toBe('localhost');
+  });
+
+  it('returns null for non-URL strings', () => {
+    expect(safeExtractHost('not a url')).toBeNull();
+    expect(safeExtractHost('')).toBeNull();
+    expect(safeExtractHost('/just/a/path')).toBeNull();
+  });
+
+  it('returns null for missing host', () => {
+    // Custom schemes without a host
+    expect(safeExtractHost('file:///etc/passwd')).toBeNull();
   });
 });
 
@@ -179,6 +274,39 @@ describe('getSandboxWriteRoots', () => {
       workspaceRootPath: WORKSPACE,
       sdkCwd: WORKSPACE,
     })).toEqual([]);
+  });
+
+  it('includes active local source paths in the write roots', () => {
+    const roots = getSandboxWriteRoots({
+      session: makeSession({ sandboxed: true, workingDirectory: '/Users/me/project' }),
+      workspaceRootPath: WORKSPACE,
+      sdkCwd: '/Users/me/project',
+      localSourcePaths: ['/Users/me/notes', '/Users/me/research'],
+    });
+    expect(roots).toContain('/Users/me/notes');
+    expect(roots).toContain('/Users/me/research');
+  });
+
+  it('deduplicates a local source path that matches workingDirectory', () => {
+    const roots = getSandboxWriteRoots({
+      session: makeSession({ sandboxed: true, workingDirectory: '/Users/me/project' }),
+      workspaceRootPath: WORKSPACE,
+      sdkCwd: '/Users/me/project',
+      localSourcePaths: ['/Users/me/project'],
+    });
+    const occurrences = roots.filter((p) => p === '/Users/me/project').length;
+    expect(occurrences).toBe(1);
+  });
+
+  it('skips empty / falsy local source paths defensively', () => {
+    const roots = getSandboxWriteRoots({
+      session: makeSession({ sandboxed: true }),
+      workspaceRootPath: WORKSPACE,
+      sdkCwd: EXPECTED_SESSION_DIR,
+      localSourcePaths: ['', '/Users/me/notes'],
+    });
+    expect(roots).toContain('/Users/me/notes');
+    expect(roots).not.toContain('');
   });
 
   it('returns the same roots that buildClaudeSandboxOptions feeds the SDK', () => {
@@ -254,5 +382,105 @@ describe('extractSandboxGatedFilePath', () => {
     expect([...SANDBOX_GATED_TOOLS].sort()).toEqual([
       'Edit', 'MultiEdit', 'NotebookEdit', 'Write',
     ]);
+  });
+});
+
+describe('isSandboxNetworkGatedTool', () => {
+  it('matches WebFetch exactly', () => {
+    expect(isSandboxNetworkGatedTool('WebFetch')).toBe(true);
+  });
+
+  it('matches canonical browser_tool and namespaced variants', () => {
+    expect(isSandboxNetworkGatedTool('browser_tool')).toBe(true);
+    expect(isSandboxNetworkGatedTool('mcp__session__browser_tool')).toBe(true);
+  });
+
+  it('matches legacy browser_navigate / browser_open aliases', () => {
+    expect(isSandboxNetworkGatedTool('browser_navigate')).toBe(true);
+    expect(isSandboxNetworkGatedTool('browser_open')).toBe(true);
+    expect(isSandboxNetworkGatedTool('browser_snapshot')).toBe(true);
+  });
+
+  it('does not match non-network tools', () => {
+    expect(isSandboxNetworkGatedTool('Bash')).toBe(false);
+    expect(isSandboxNetworkGatedTool('Write')).toBe(false);
+    expect(isSandboxNetworkGatedTool('Read')).toBe(false);
+    expect(isSandboxNetworkGatedTool('WebSearch')).toBe(false);
+  });
+});
+
+describe('extractSandboxGatedUrl', () => {
+  it('extracts url from WebFetch input', () => {
+    expect(extractSandboxGatedUrl('WebFetch', { url: 'https://example.com/api' })).toBe('https://example.com/api');
+  });
+
+  it('extracts the URL from browser_tool navigate subcommand (string form)', () => {
+    expect(extractSandboxGatedUrl('browser_tool', { command: 'navigate https://example.com' }))
+      .toBe('https://example.com');
+  });
+
+  it('extracts the URL from browser_tool open subcommand', () => {
+    expect(extractSandboxGatedUrl('browser_tool', { command: 'open https://example.com' }))
+      .toBe('https://example.com');
+  });
+
+  it('extracts the URL from browser_tool with array command', () => {
+    expect(extractSandboxGatedUrl('browser_tool', { command: ['navigate', 'https://example.com'] }))
+      .toBe('https://example.com');
+  });
+
+  it('returns null for non-URL browser_tool subcommands', () => {
+    expect(extractSandboxGatedUrl('browser_tool', { command: 'snapshot' })).toBeNull();
+    expect(extractSandboxGatedUrl('browser_tool', { command: 'click #login' })).toBeNull();
+    expect(extractSandboxGatedUrl('browser_tool', { command: 'wait network-idle' })).toBeNull();
+  });
+
+  it('extracts url from legacy browser_navigate alias', () => {
+    expect(extractSandboxGatedUrl('browser_navigate', { url: 'https://example.com' }))
+      .toBe('https://example.com');
+  });
+
+  it('returns null for non-network-gated tools', () => {
+    expect(extractSandboxGatedUrl('Write', { file_path: '/x/y.txt' })).toBeNull();
+    expect(extractSandboxGatedUrl('Bash', { command: 'ls' })).toBeNull();
+  });
+
+  it('returns null on missing or malformed input', () => {
+    expect(extractSandboxGatedUrl('WebFetch', {})).toBeNull();
+    expect(extractSandboxGatedUrl('browser_tool', {})).toBeNull();
+    expect(extractSandboxGatedUrl('browser_tool', { command: '' })).toBeNull();
+    expect(extractSandboxGatedUrl('browser_tool', { command: 42 as unknown as string })).toBeNull();
+  });
+});
+
+describe('isHostAllowed', () => {
+  const ALLOWED = ['api.anthropic.com', 'api.linear.app'];
+
+  it('matches an exact host', () => {
+    expect(isHostAllowed('api.anthropic.com', ALLOWED)).toBe(true);
+    expect(isHostAllowed('api.linear.app', ALLOWED)).toBe(true);
+  });
+
+  it('matches a subdomain of an allowed host', () => {
+    expect(isHostAllowed('cdn.api.linear.app', ALLOWED)).toBe(true);
+  });
+
+  it('rejects a hostname that is a PREFIX of an allowed host', () => {
+    // 'linear.app' ≠ 'api.linear.app'; allowing this would be a leak.
+    expect(isHostAllowed('linear.app', ALLOWED)).toBe(false);
+    expect(isHostAllowed('apxlinear.app', ALLOWED)).toBe(false);
+  });
+
+  it('is case-insensitive', () => {
+    expect(isHostAllowed('API.Linear.App', ALLOWED)).toBe(true);
+  });
+
+  it('rejects null / empty hosts', () => {
+    expect(isHostAllowed(null, ALLOWED)).toBe(false);
+    expect(isHostAllowed('', ALLOWED)).toBe(false);
+  });
+
+  it('rejects when allowed list is empty', () => {
+    expect(isHostAllowed('api.anthropic.com', [])).toBe(false);
   });
 });
