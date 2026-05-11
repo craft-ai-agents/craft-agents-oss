@@ -24,6 +24,7 @@ describe('isSidebarDrilldownMode', () => {
   it('returns false for skills navigation', () => {
     const navState: NavigationState = {
       navigator: 'skills',
+      destination: 'local',
       details: null,
     }
 

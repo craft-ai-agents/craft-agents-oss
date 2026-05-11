@@ -19,6 +19,7 @@ import * as React from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAtomValue } from 'jotai'
 import { useTranslation } from 'react-i18next'
+import { Store } from 'lucide-react'
 import { Panel } from './Panel'
 import { MultiSelectPanel } from './MultiSelectPanel'
 import { useAppShellContext } from '@/context/AppShellContext'
@@ -276,6 +277,20 @@ export function MainContentPanel({
 
   // Skills navigator - show skill info, multi-select panel, or empty state
   if (isSkillsNavigation(navState)) {
+    if (navState.destination === 'marketplace') {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <div className="flex h-full items-center justify-center text-muted-foreground">
+            <div className="flex max-w-sm flex-col items-center gap-2 text-center">
+              <Store className="h-5 w-5" />
+              <p className="text-sm font-medium text-foreground">{t("skillMarketplace.title")}</p>
+              <p className="text-xs">{t("skillMarketplace.emptyDescription")}</p>
+            </div>
+          </div>
+        </Panel>
+      )
+    }
+
     if (isSkillMultiSelectActive) {
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>

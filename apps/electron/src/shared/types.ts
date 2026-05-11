@@ -841,8 +841,11 @@ export interface SettingsNavigationState {
 /**
  * Skills navigation state
  */
+export type SkillDestination = 'local' | 'marketplace'
+
 export interface SkillsNavigationState {
   navigator: 'skills'
+  destination: SkillDestination
   details: { type: 'skill'; skillSlug: string } | null
   rightSidebar?: RightSidebarPanel
 }
@@ -907,10 +910,11 @@ export const getNavigationStateKey = (state: NavigationState): string => {
     return 'sources'
   }
   if (state.navigator === 'skills') {
+    if (state.destination === 'marketplace') return 'skills/marketplace'
     if (state.details?.type === 'skill') {
       return `skills/skill/${state.details.skillSlug}`
     }
-    return 'skills'
+    return 'skills/local'
   }
   if (state.navigator === 'automations') {
     if (state.details?.type === 'automation') {
@@ -946,13 +950,14 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   }
 
   // Handle skills
-  if (key === 'skills') return { navigator: 'skills', details: null }
+  if (key === 'skills' || key === 'skills/local') return { navigator: 'skills', destination: 'local', details: null }
+  if (key === 'skills/marketplace') return { navigator: 'skills', destination: 'marketplace', details: null }
   if (key.startsWith('skills/skill/')) {
     const skillSlug = key.slice(13)
     if (skillSlug) {
-      return { navigator: 'skills', details: { type: 'skill', skillSlug } }
+      return { navigator: 'skills', destination: 'local', details: { type: 'skill', skillSlug } }
     }
-    return { navigator: 'skills', details: null }
+    return { navigator: 'skills', destination: 'local', details: null }
   }
 
   // Handle automations

@@ -46,6 +46,8 @@ export interface ParsedCompoundRoute {
   sourceFilter?: SourceFilter
   /** Automation filter (only for automations navigator) */
   automationFilter?: AutomationFilter
+  /** Skills destination (only for skills navigator) */
+  skillDestination?: 'local' | 'marketplace'
   /** Details page info (null for empty state) */
   details: {
     type: string
@@ -85,6 +87,8 @@ export function isCompoundRoute(route: string): boolean {
  *   'sources/local' -> { navigator: 'sources', sourceFilter: { kind: 'type', sourceType: 'local' }, details: null }
  *   'sources/source/github' -> { navigator: 'sources', details: { type: 'source', id: 'github' } }
  *   'sources/api/source/gmail' -> { navigator: 'sources', sourceFilter: { kind: 'type', sourceType: 'api' }, details: { type: 'source', id: 'gmail' } }
+ *   'skills/local' -> { navigator: 'skills', skillDestination: 'local', details: null }
+ *   'skills/marketplace' -> { navigator: 'skills', skillDestination: 'marketplace', details: null }
  *   'settings' -> { navigator: 'settings', details: { type: 'app', id: 'app' } }
  *   'settings/shortcuts' -> { navigator: 'settings', details: { type: 'shortcuts', id: 'shortcuts' } }
  */
@@ -143,13 +147,22 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   // Skills navigator
   if (first === 'skills') {
     if (segments.length === 1) {
-      return { navigator: 'skills', details: null }
+      return { navigator: 'skills', skillDestination: 'local', details: null }
+    }
+
+    if (segments[1] === 'local') {
+      return { navigator: 'skills', skillDestination: 'local', details: null }
+    }
+
+    if (segments[1] === 'marketplace') {
+      return { navigator: 'skills', skillDestination: 'marketplace', details: null }
     }
 
     // skills/skill/{skillSlug}
     if (segments[1] === 'skill' && segments[2]) {
       return {
         navigator: 'skills',
+        skillDestination: 'local',
         details: { type: 'skill', id: segments[2] },
       }
     }
@@ -271,6 +284,8 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   }
 
   if (parsed.navigator === 'skills') {
+    if (parsed.skillDestination === 'marketplace') return 'skills/marketplace'
+    if (parsed.skillDestination === 'local' && !parsed.details) return 'skills/local'
     if (!parsed.details) return 'skills'
     return `skills/skill/${parsed.details.id}`
   }
@@ -516,11 +531,13 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
 
   // Skills
   if (compound.navigator === 'skills') {
+    const destination = compound.skillDestination ?? 'local'
     if (!compound.details) {
-      return { navigator: 'skills', details: null }
+      return { navigator: 'skills', destination, details: null }
     }
     return {
       navigator: 'skills',
+      destination: 'local',
       details: { type: 'skill', skillSlug: compound.details.id },
     }
   }
@@ -593,18 +610,19 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       }
       return { navigator: 'sources', details: null }
     case 'skills':
-      return { navigator: 'skills', details: null }
+      return { navigator: 'skills', destination: 'local', details: null }
     case 'skill-info':
       if (parsed.id) {
         return {
           navigator: 'skills',
+          destination: 'local',
           details: {
             type: 'skill',
             skillSlug: parsed.id,
           },
         }
       }
-      return { navigator: 'skills', details: null }
+      return { navigator: 'skills', destination: 'local', details: null }
     case 'automations':
       return { navigator: 'automations', details: null }
     case 'automation-info':
@@ -711,6 +729,7 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
   if (state.navigator === 'skills') {
     return {
       navigator: 'skills',
+      skillDestination: state.destination,
       details: state.details?.type === 'skill' ? { type: 'skill', id: state.details.skillSlug } : null,
     }
   }

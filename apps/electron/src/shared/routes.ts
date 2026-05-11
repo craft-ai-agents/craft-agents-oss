@@ -151,9 +151,15 @@ export const routes = {
         ? `sources/local/source/${sourceSlug}` as const
         : 'sources/local' as const,
 
+    /** Local Skills view (installed/runtime skills destination). */
+    localSkills: () => 'skills/local' as const,
+
+    /** Skill Marketplace catalog destination. */
+    skillMarketplace: () => 'skills/marketplace' as const,
+
     /** Skills view (skills navigator). Pass a slug string for a local skill detail view. */
     skills: (skillSlug?: string) => {
-      if (!skillSlug) return 'skills' as const
+      if (!skillSlug) return 'skills/local' as const
       return `skills/skill/${skillSlug}` as const
     },
 
