@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { SkillPicker, type RowStatus } from './SkillPicker'
+import { getRemoteResolvePhase } from './remote-skill-import-state'
 
 interface SkillImportModalProps {
   open: boolean
@@ -41,9 +42,6 @@ type ImportPhase =
   | { kind: 'picker'; skills: DiscoveredSkill[] }
   | { kind: 'installing'; skills: DiscoveredSkill[]; statuses: Map<string, RowStatus> }
   | { kind: 'conflict'; skill: DiscoveredSkill; remaining: DiscoveredSkill[] }
-
-const REMOTE_EMPTY_DISCOVERY_MESSAGE =
-  'The repository was reached, but no supported SKILL.md files were found. Remote discovery supports a top-level SKILL.md or skill directories up to three levels deep; when multiple skills are found, the Skill Picker will let you choose. Open a direct GitHub subpath to a skill, or use the Upload tab to install from a zip file.'
 
 export function SkillImportModal({
   open,
@@ -378,19 +376,10 @@ export function SkillImportModal({
     setRemotePhase({ kind: 'loading' })
     try {
       const result = await window.electronAPI.resolveRemoteSkills(input)
-      if ('error' in result) {
-        setRemotePhase({ kind: 'error', message: result.error })
-        return
-      }
-      if (result.length === 0) {
-        setRemotePhase({ kind: 'error', message: REMOTE_EMPTY_DISCOVERY_MESSAGE })
-        return
-      }
-      if (result.length === 1) {
-        setRemotePhase({ kind: 'single', skill: result[0] })
-        await installSingleRemoteSkill(result[0])
-      } else {
-        setRemotePhase({ kind: 'picker', skills: result })
+      const nextPhase = getRemoteResolvePhase(result)
+      setRemotePhase(nextPhase)
+      if (nextPhase.kind === 'single') {
+        await installSingleRemoteSkill(nextPhase.skill)
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)

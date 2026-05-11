@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { getRemoteResolvePhase } from '../remote-skill-import-state'
+import type { DiscoveredSkill } from '../../../../shared/types'
 
 const appShellSource = readFileSync(
   join(import.meta.dir, '../AppShell.tsx'),
@@ -16,6 +18,16 @@ const skillImportModalSource = readFileSync(
   join(import.meta.dir, '../SkillImportModal.tsx'),
   'utf8',
 )
+
+const discoveredSkill: DiscoveredSkill = {
+  slug: 'code-reviewer',
+  metadata: {
+    name: 'Code Reviewer',
+    description: 'Reviews code changes',
+  },
+  content: 'Review code.',
+  sourcePath: 'https://github.com/example/skills/tree/HEAD/code-reviewer',
+}
 
 describe('Skill Import Modal shell', () => {
   test('AppShell renders SkillImportModal for add-skill actions', () => {
@@ -53,11 +65,35 @@ describe('Skill Import Modal shell', () => {
     expect(skillImportModalSource).toContain("getEditConfig('add-skill', workspaceRootPath)")
   })
 
-  test('Remote tab explains empty discovery separately from resolver errors', () => {
-    expect(skillImportModalSource).toContain("if ('error' in result)")
-    expect(skillImportModalSource).toContain('setRemotePhase({ kind: \'error\', message: result.error })')
-    expect(skillImportModalSource).toContain('The repository was reached, but no supported SKILL.md files were found.')
-    expect(skillImportModalSource).toContain('Open a direct GitHub subpath to a skill, or use the Upload tab')
-    expect(skillImportModalSource).toContain('Skill Picker')
+  test('Remote tab preserves resolver errors', () => {
+    expect(getRemoteResolvePhase({ error: 'This repository is not accessible.' })).toEqual({
+      kind: 'error',
+      message: 'This repository is not accessible.',
+    })
+  })
+
+  test('Remote tab explains empty discovery results', () => {
+    const phase = getRemoteResolvePhase([])
+
+    expect(phase.kind).toBe('error')
+    if (phase.kind !== 'error') throw new Error('Expected empty discovery to map to an error phase')
+    expect(phase.message).toContain('The repository was reached, but no supported SKILL.md files were found.')
+    expect(phase.message).toContain('SKILL.md')
+    expect(phase.message).toContain('skill directories up to three levels deep')
+    expect(phase.message).toContain('Skill Picker')
+    expect(phase.message).toContain('Open a direct GitHub subpath to a skill, or use the Upload tab')
+  })
+
+  test('Remote tab routes discovered skills to install or picker phases', () => {
+    expect(getRemoteResolvePhase([discoveredSkill])).toEqual({
+      kind: 'single',
+      skill: discoveredSkill,
+    })
+
+    const secondSkill = { ...discoveredSkill, slug: 'test-writer' }
+    expect(getRemoteResolvePhase([discoveredSkill, secondSkill])).toEqual({
+      kind: 'picker',
+      skills: [discoveredSkill, secondSkill],
+    })
   })
 })
