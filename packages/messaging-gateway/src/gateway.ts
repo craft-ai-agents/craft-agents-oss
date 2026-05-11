@@ -90,6 +90,27 @@ interface PlanMessageRecord {
   messageId: string
 }
 
+/**
+ * Per-permission-prompt metadata tracked while inline Approve/Deny buttons
+ * are live on a chat. Keyed by `requestId`. Two roles:
+ *
+ *  1. Idempotency claim — `handleButtonPress` removes the entry before doing
+ *     anything visible, so a second tap on the same prompt finds nothing and
+ *     silently no-ops. Stops the duplicate "✅ Allowed / ❌ Denied" flood.
+ *  2. Stale-prompt cleanup — when the agent moves past the permission
+ *     (resolved from any channel — desktop, MCP, etc.), `onSessionEvent`
+ *     sweeps the entry and clears the inline keyboard so the user can't
+ *     even produce a callback by tapping a stale button.
+ */
+interface PermissionMessageRecord {
+  bindingId: string
+  sessionId: string
+  platform: PlatformType
+  channelId: string
+  messageId: string
+  threadId?: number
+}
+
 interface PendingCompactAccept {
   token: string
   sessionId: string
@@ -115,6 +136,8 @@ export class MessagingGateway {
   private readonly renderer: Renderer
   private readonly planTokens: PlanTokenRegistry
   private readonly planMessages = new Map<string, PlanMessageRecord>()
+  /** Live permission prompts, keyed by `requestId`. See PermissionMessageRecord. */
+  private readonly permissionMessages = new Map<string, PermissionMessageRecord>()
   private readonly pendingCompactAccepts = new Map<string, PendingCompactAccept>()
   private readonly adapters = new Map<PlatformType, PlatformAdapter>()
   private readonly log: MessagingLogger
@@ -193,6 +216,16 @@ export class MessagingGateway {
           platform: binding.platform,
           channelId: binding.channelId,
           messageId,
+        })
+      },
+      recordPermissionMessage: (binding, requestId, messageId) => {
+        this.permissionMessages.set(requestId, {
+          bindingId: binding.id,
+          sessionId: binding.sessionId,
+          platform: binding.platform,
+          channelId: binding.channelId,
+          messageId,
+          ...(binding.threadId !== undefined ? { threadId: binding.threadId } : {}),
         })
       },
     })
@@ -322,12 +355,28 @@ export class MessagingGateway {
       void this.finishPendingCompactAccept(event.sessionId)
     }
 
+    // Drop stale permission prompts for this session. The agent halts while
+    // a permission is pending, so any non-permission_request event implies
+    // the prior prompt was resolved (from the desktop, an MCP allow-list,
+    // remember-window auto-approval, etc.). Without this sweep the inline
+    // keyboard stays live in Telegram and users keep tapping stale buttons,
+    // which is the visible side of #726.
+    this.sweepStalePermissions(event)
+
     const bindings = this.bindingStore.findBySession(event.sessionId)
     if (bindings.length === 0) return
 
     for (const binding of bindings) {
       const adapter = this.adapters.get(binding.platform)
-      if (!adapter || !adapter.isConnected()) continue
+      if (!adapter || !adapter.isConnected()) {
+        this.log.warn('dropping session event — adapter not connected', {
+          event: 'adapter_not_connected',
+          sessionId: event.sessionId,
+          platform: binding.platform,
+          eventType: event.type,
+        })
+        continue
+      }
       this.renderer.handle(event, binding, adapter).catch((err) => {
         this.log.error('renderer failed to emit event to chat', {
           event: 'renderer_failed',
@@ -337,6 +386,42 @@ export class MessagingGateway {
           channelId: binding.channelId,
           error: err,
         })
+      })
+    }
+  }
+
+  /**
+   * Drop entries from `permissionMessages` whose requestId differs from the
+   * event's current permission request (or all of them, for non-permission
+   * events). For each dropped entry we also fire-and-forget a `clearButtons`
+   * so Telegram won't deliver any further callbacks for the stale prompt.
+   *
+   * Same-requestId `permission_request` events are preserved so a re-render
+   * (rare but possible when the renderer retries) doesn't blow away the
+   * record we'd then need to re-create.
+   */
+  private sweepStalePermissions(event: SessionEvent): void {
+    if (this.permissionMessages.size === 0) return
+
+    const eventRequestId =
+      event.type === 'permission_request'
+        ? ((event.request as { requestId?: string } | undefined)?.requestId ?? null)
+        : null
+
+    for (const [requestId, record] of this.permissionMessages) {
+      if (record.sessionId !== event.sessionId) continue
+      if (requestId === eventRequestId) continue
+      this.permissionMessages.delete(requestId)
+
+      const adapter = this.adapters.get(record.platform)
+      if (adapter?.clearButtons && adapter.isConnected()) {
+        adapter.clearButtons(record.channelId, record.messageId).catch(() => {})
+      }
+      this.log.info('cleared stale permission prompt after agent moved on', {
+        event: 'perm_prompt_cleared_stale',
+        requestId,
+        sessionId: record.sessionId,
+        triggerEventType: event.type,
       })
     }
   }
@@ -403,23 +488,7 @@ export class MessagingGateway {
         return
       }
 
-      const parts = press.buttonId.split(':')
-      const action = parts[1]
-      const requestId = parts[2]
-      if (!requestId) return
-
-      const binding = this.bindingStore.findByChannel(platform, press.channelId, press.threadId)
-      if (!binding) return
-
-      const allowed = action === 'allow'
-      this.sessionManager.respondToPermission(
-        binding.sessionId,
-        requestId,
-        allowed,
-        false,
-      )
-
-      await adapter.sendText(press.channelId, allowed ? '✅ Allowed' : '❌ Denied', pressOpts)
+      await this.handlePermissionButton(adapter, press)
       return
     }
 
@@ -427,6 +496,76 @@ export class MessagingGateway {
       await this.handlePlanButton(platform, adapter, press)
       return
     }
+  }
+
+  /**
+   * Handle an inline `perm:allow:<id>` / `perm:deny:<id>` press.
+   *
+   * Brought to parity with `handlePlanButton` (#726): claim the prompt via
+   * `permissionMessages.delete()` before any visible action so a second tap
+   * silently no-ops, clear the inline keyboard so Telegram won't even
+   * deliver further callbacks for it, and only post the user-facing
+   * `✅ Allowed / ❌ Denied` confirmation when `respondToPermission` reports
+   * the response was actually delivered to a live agent.
+   */
+  private async handlePermissionButton(
+    adapter: PlatformAdapter,
+    press: ButtonPress,
+  ): Promise<void> {
+    const startedAt = Date.now()
+    const pressOpts = press.threadId !== undefined ? { threadId: press.threadId } : {}
+
+    const parts = press.buttonId.split(':')
+    const action = parts[1]
+    const requestId = parts[2]
+    if (!requestId || (action !== 'allow' && action !== 'deny')) return
+
+    // Idempotency claim: remove the entry up-front. A concurrent second tap
+    // (or a race with the stale-prompt sweep in onSessionEvent) finds nothing
+    // here and exits silently — no duplicate "✅ Allowed" message.
+    const record = this.permissionMessages.get(requestId)
+    if (!record) {
+      this.log.info('perm press dropped: no live prompt for requestId', {
+        event: 'perm_press_stale',
+        requestId,
+        channelId: press.channelId,
+        senderId: press.senderId,
+      })
+      return
+    }
+    this.permissionMessages.delete(requestId)
+
+    // Clear the inline keyboard before doing anything else so Telegram won't
+    // deliver further callbacks for this prompt at all.
+    if (adapter.clearButtons) {
+      await adapter.clearButtons(record.channelId, record.messageId).catch(() => {})
+    }
+
+    const allowed = action === 'allow'
+    const delivered = this.sessionManager.respondToPermission(
+      record.sessionId,
+      requestId,
+      allowed,
+      false,
+    )
+
+    this.log.info('perm response routed to session manager', {
+      event: 'perm_response_routed',
+      requestId,
+      sessionId: record.sessionId,
+      action,
+      delivered,
+      elapsedMs: Date.now() - startedAt,
+    })
+
+    if (!delivered) {
+      // Session/agent gone or the prompt was already resolved by another
+      // channel between our `permissionMessages.get()` and here. Don't post a
+      // misleading "✅ Allowed" — the action did not take effect on this side.
+      return
+    }
+
+    await adapter.sendText(press.channelId, allowed ? '✅ Allowed' : '❌ Denied', pressOpts)
   }
 
   private async handlePlanButton(

@@ -1303,15 +1303,18 @@ html.dark[data-scenic] .fullscreen-overlay-background {
   }
 }
 
-/* Settings rows: stack vertically in narrow panels */
+/* Settings rows: stack vertically in narrow panels.
+   Toggle rows (anything containing a Switch) stay horizontal — iOS-style:
+   label on the left, switch on the right. Stretching the switch to 100% width
+   produced a long black pill bar that looked broken. */
 @container panel (max-width: 448px) {
-  [data-layout="settings-row"] {
+  [data-layout="settings-row"]:not(:has([data-slot="switch"])) {
     flex-direction: column;
     align-items: stretch;
     gap: 10px;
   }
 
-  [data-layout="settings-row"] > [data-layout="settings-control"] {
+  [data-layout="settings-row"]:not(:has([data-slot="switch"])) > [data-layout="settings-control"] {
     width: 100%;
     min-width: 0;
     margin-left: 0;
@@ -1320,9 +1323,9 @@ html.dark[data-scenic] .fullscreen-overlay-background {
   }
 
   /* Full-width form controls (selects, inputs) in stacked layout */
-  [data-layout="settings-row"] [data-slot="select-trigger"],
-  [data-layout="settings-control"] > .w-\[180px\],
-  [data-layout="settings-control"] > .w-\[200px\] {
+  [data-layout="settings-row"]:not(:has([data-slot="switch"])) [data-slot="select-trigger"],
+  [data-layout="settings-row"]:not(:has([data-slot="switch"])) [data-layout="settings-control"] > .w-\[180px\],
+  [data-layout="settings-row"]:not(:has([data-slot="switch"])) [data-layout="settings-control"] > .w-\[200px\] {
     width: 100%;
     max-width: 100%;
     min-width: 0;
@@ -1334,10 +1337,21 @@ html.dark[data-scenic] .fullscreen-overlay-background {
    Formula: round(desktop_value × 1.3)
    ========================================================================== */
 @container shell (max-width: 768px) {
-  /* Panel header buttons: X, share, back chevron (desktop: p-1.5 = 6px → 8px) */
+  /* Panel header buttons: X, share, back chevron.
+     Apple HIG minimum tap target is 44pt; min-width/height enforces the floor
+     even if internal padding alone wouldn't reach it. */
   .panel-header-btn {
-    padding: 8px;
-    border-radius: 8px;
+    padding: 10px;
+    border-radius: 10px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Compact panel header icons: keep desktop icons at their caller-provided
+     size, but make compact-mode icons read clearly inside the 44px target. */
+  [data-compact] .panel-header-btn > svg {
+    width: 24px;
+    height: 24px;
   }
 
   /* Session/source/skill list rows (desktop: py-3 = 12px → 16px) */
@@ -1362,6 +1376,91 @@ html.dark[data-scenic] .fullscreen-overlay-background {
   .send-btn {
     width: 36px;
     height: 36px;
+  }
+
+  /* Settings form controls: 44px minimum height + 16px font.
+     The 16px font-size prevents iOS Safari from auto-zooming into the field
+     on focus (it triggers below 16px). Compact-only override so desktop stays
+     at the original tighter sizing. */
+  [data-layout="settings-row"] [data-slot="select-trigger"],
+  [data-layout="settings-row"] [data-slot="input"],
+  [data-layout="settings-row"] [data-slot="textarea"] {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  /* Hover-reveal opt-in for touch.
+     Components that use `opacity-0 group-hover:opacity-100` (more menus,
+     row deletes, etc.) become invisible on touch — hover never fires.
+     Adding `data-touch-reveal="true"` opts the element into always-visible
+     in compact. Desktop keeps the hover-reveal behavior unchanged.
+     `!important` is necessary to beat Tailwind's `opacity-0` utility. */
+  [data-touch-reveal="true"] {
+    opacity: 1 !important;
+  }
+
+  /* Bottom safe area for iOS home indicator + FAB clearance.
+     Sessions list keeps a 72px buffer (FAB is ~56px + bottom inset 16px)
+     so the last row never sits underneath the floating action button.
+     Other list roles (sources/skills/automations) only need the iOS
+     safe-area inset since they don't have a FAB. */
+  [data-list-role] {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  [data-list-role="sessions"] {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Top safe area: keep the navigator's first row clear of the iOS notch
+     when the app runs as a PWA / mobile webui. Desktop builds report 0px
+     for the inset so this is a no-op there. */
+  [data-panel-role="navigator"] {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* Workspace pill chevron: 12px is hard to read at narrow widths,
+     bump to 16px so the dropdown affordance is clearly tappable. */
+  [data-workspace-switcher="topbar"] [data-slot="chevron"] {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+/* TopBar lives outside the shell container, so the workspace pill chevron
+   needs a viewport-media equivalent for the topbar variant specifically. */
+@media (max-width: 768px) {
+  /* TopBar lives outside the shell container, so mirror the compact 36px
+     button target here instead of relying only on @container shell rules. */
+  .header-icon-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+  }
+
+  [data-workspace-switcher="topbar"] [data-slot="chevron"] {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+/* ==========================================================================
+   TopBar height — bumps to 56px on narrow viewports so it matches the larger
+   touch targets and feels less cramped on mobile. The TopBar uses position:
+   fixed so the App content area reads the same variable for its padding-top.
+   ========================================================================== */
+:root {
+  --topbar-height: 48px;
+}
+@media (max-width: 768px) {
+  :root {
+    --topbar-height: 56px;
+  }
+
+  /* Bump TopBar icons from 18px → 20px in compact mode. Kept tight inside the
+     36×36 button so it doesn't dominate the bar. */
+  .header-icon-btn svg {
+    width: 20px;
+    height: 20px;
   }
 }
 

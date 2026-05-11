@@ -29,6 +29,7 @@ import type {
   PlatformConfig,
   AdapterCapabilities,
   IncomingMessage,
+  IncomingAttachment,
   SendOptions,
   SentMessage,
   InlineButton,
@@ -450,6 +451,18 @@ export class WhatsAppAdapter implements PlatformAdapter {
         return
       case 'incoming':
         if (this.messageHandler) {
+          // WhatsApp has no separate file_id like Telegram; reuse messageId
+          // for traceability. The worker has already written the bytes to
+          // `localPath`, so the router can wrap each attachment via
+          // `readFileAttachment()` directly.
+          const attachments: IncomingAttachment[] | undefined = ev.attachments?.map((a) => ({
+            type: a.type,
+            fileId: ev.messageId,
+            fileName: a.fileName,
+            mimeType: a.mimeType,
+            fileSize: a.fileSize,
+            localPath: a.localPath,
+          }))
           const msg: IncomingMessage = {
             platform: 'whatsapp',
             channelId: ev.channelId,
@@ -457,6 +470,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
             senderId: ev.senderId,
             senderName: ev.senderName,
             text: ev.text,
+            attachments,
             timestamp: ev.timestamp,
             raw: ev,
           }

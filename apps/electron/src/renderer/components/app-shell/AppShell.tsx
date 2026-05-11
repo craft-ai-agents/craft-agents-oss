@@ -72,6 +72,7 @@ import {
 import { SessionList, type ChatGroupingMode } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
 import { PanelStackContainer } from "./PanelStackContainer"
+import { CompactSessionListFilter } from "./CompactSessionListFilter"
 import type { ChatDisplayHandle } from "./ChatDisplay"
 import { LeftSidebar } from "./LeftSidebar"
 import { useSession } from "@/hooks/useSession"
@@ -122,6 +123,7 @@ import { APP_EVENTS, AGENT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO
 import { useAutomations } from "@/hooks/useAutomations"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { PanelHeader } from "./PanelHeader"
+import { FabNewChat } from "./FabNewChat"
 import { SendToWorkspaceDialog } from "./SendToWorkspaceDialog"
 import { MessagingDialogHost } from "@/components/messaging/MessagingDialogHost"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
@@ -1714,8 +1716,9 @@ function AppShellContent({
     navigate(routes.view.automationsAgentic())
   }, [])
 
-  // Handler for settings view
-  const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
+  // Handler for settings view. With no arg → bare `settings` route (navigator-only
+  // in compact mode, App fallback on desktop). With an arg → `settings/<subpage>`.
+  const handleSettingsClick = useCallback((subpage?: SettingsSubpage) => {
     navigate(routes.view.settings(subpage))
   }, [])
 
@@ -1958,7 +1961,7 @@ function AppShellContent({
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
     result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
-    result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
+    result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick() })
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
 
     return result
@@ -2202,7 +2205,13 @@ function AppShellContent({
       <div
         ref={shellRef}
         className="flex items-stretch relative"
-        style={{ height: '100%', paddingRight: PANEL_EDGE_INSET, paddingBottom: PANEL_EDGE_INSET, paddingLeft: 0, gap: PANEL_GAP }}
+        style={{
+          height: '100%',
+          paddingRight: isAutoCompact ? 0 : PANEL_EDGE_INSET,
+          paddingBottom: isAutoCompact ? 0 : PANEL_EDGE_INSET,
+          paddingLeft: 0,
+          gap: PANEL_GAP,
+        }}
       >
         <PanelStackContainer
           sidebarSlot={
@@ -2467,7 +2476,7 @@ function AppShellContent({
                       title: t("sidebar.settings"),
                       icon: Settings,
                       variant: isSettingsNavigation(navState) ? "default" : "ghost",
-                      onClick: () => handleSettingsClick('app'),
+                      onClick: () => handleSettingsClick(),
                     },
                     // --- What's New ---
                     {
@@ -2519,6 +2528,22 @@ function AppShellContent({
                       Shows user-added filters (removable) and pinned filters (non-removable, derived from route).
                       Pinned filters: state views pin a status, label views pin a label, flagged pins the flag. */}
                   {isSessionsNavigation(navState) && (
+                    isAutoCompact ? (
+                      <CompactSessionListFilter
+                        listFilter={listFilter}
+                        setListFilter={setListFilter}
+                        labelFilter={labelFilter}
+                        setLabelFilter={setLabelFilter}
+                        pinnedFilters={pinnedFilters}
+                        effectiveSessionStatuses={effectiveSessionStatuses}
+                        displayLabelConfigs={displayLabelConfigs}
+                        labelConfigs={labelConfigs}
+                        chatGroupingMode={chatGroupingMode}
+                        setChatGroupingMode={setChatGroupingMode}
+                        isStateSubView={isStateSubView}
+                        onOpenSearch={() => setSearchActive(true)}
+                      />
+                    ) : (
                     <DropdownMenu onOpenChange={(open) => { if (!open) { setFilterDropdownQuery(''); setFilterAltHeld(false) } }}>
                       <DropdownMenuTrigger asChild>
                         <HeaderIconButton
@@ -3081,6 +3106,7 @@ function AppShellContent({
                         )}
                       </StyledDropdownMenuContent>
                     </DropdownMenu>
+                    )
                   )}
                   {/* Add Source button (only for sources mode) - uses filter-aware edit config */}
                   {isSourcesNavigation(navState) && activeWorkspace && (
@@ -3227,6 +3253,12 @@ function AppShellContent({
                   activeChatMatchInfo={chatMatchInfo}
                 />
               </>
+            )}
+            {/* Mobile/compact-only FAB for starting a new chat — only on the
+                session list itself, not when a chat is open (it would overlap
+                the chat input). */}
+            {isAutoCompact && isSessionsNavigation(navState) && !navState.details && (
+              <FabNewChat onClick={() => handleNewChat()} />
             )}
             </div>
           }
