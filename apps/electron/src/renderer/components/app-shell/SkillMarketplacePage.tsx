@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { AlertTriangle, CheckCircle2, Download, Flag, Search, ShieldAlert, Store, UserCog } from 'lucide-react'
 
+/** Install/update state shown for a Marketplace Skill before install behavior exists. */
 export type MarketplaceInstallState =
   | 'install'
   | 'installed'
@@ -9,8 +10,10 @@ export type MarketplaceInstallState =
   | 'unavailable'
   | 'safety-blocked'
 
+/** Product-owned category vocabulary for Marketplace browsing filters. */
 export const PRODUCT_MARKETPLACE_CATEGORIES = ['Documentation', 'Product', 'Quality', 'Security'] as const
 
+/** Summary data shown on Marketplace listing cards. */
 export interface MarketplaceSkillListing {
   id: string
   slug: string
@@ -25,12 +28,14 @@ export interface MarketplaceSkillListing {
   installState: MarketplaceInstallState
 }
 
+/** Published version metadata shown in Marketplace Skill detail. */
 export interface MarketplaceSkillVersion {
   version: string
   publishedAt: string
   releaseNotes: string
 }
 
+/** Full read-only Marketplace Skill detail payload. */
 export interface MarketplaceSkillDetail extends MarketplaceSkillListing {
   skillMarkdown: string
   requiredSources: string[]
@@ -43,17 +48,20 @@ export interface MarketplaceSkillDetail extends MarketplaceSkillListing {
   }
 }
 
+/** Catalog filters supported by the Marketplace browsing surface. */
 export interface MarketplaceCatalogFilters {
   search?: string
   category?: string
   tag?: string
 }
 
+/** Minimal Marketplace API boundary used by the read-only browsing slice. */
 export interface MarketplaceApi {
   listSkills: () => Promise<MarketplaceSkillListing[]>
   getSkillDetail: (slug: string) => Promise<MarketplaceSkillDetail>
 }
 
+/** Result of loading and filtering the Marketplace catalog. */
 export type MarketplaceCatalogState =
   | {
       status: 'ready'
@@ -63,9 +71,18 @@ export type MarketplaceCatalogState =
     }
   | { status: 'error'; message: string }
 
+/** Result of loading a Marketplace Skill detail page. */
 export type MarketplaceDetailState =
   | { status: 'ready'; detail: MarketplaceSkillDetail }
   | { status: 'error'; message: string }
+
+/** Static API configuration used for the mocked Marketplace boundary. */
+export interface StaticMarketplaceApiOptions {
+  listings?: MarketplaceSkillListing[]
+  details?: Record<string, MarketplaceSkillDetail>
+  listError?: string
+  detailError?: string
+}
 
 const DEFAULT_MARKETPLACE_LISTINGS: MarketplaceSkillListing[] = [
   {
@@ -222,12 +239,8 @@ const DEFAULT_MARKETPLACE_DETAILS: Record<string, MarketplaceSkillDetail> = {
   },
 }
 
-export function createStaticMarketplaceApi(options?: {
-  listings?: MarketplaceSkillListing[]
-  details?: Record<string, MarketplaceSkillDetail>
-  listError?: string
-  detailError?: string
-}): MarketplaceApi {
+/** Creates the mocked Marketplace API used until the service-backed API exists. */
+export function createStaticMarketplaceApi(options?: StaticMarketplaceApiOptions): MarketplaceApi {
   const listings = options?.listings ?? DEFAULT_MARKETPLACE_LISTINGS
   const details = options?.details ?? DEFAULT_MARKETPLACE_DETAILS
 
@@ -245,6 +258,7 @@ export function createStaticMarketplaceApi(options?: {
   }
 }
 
+/** Applies Marketplace search, category, and tag filters to listing summaries. */
 export function filterMarketplaceListings(
   listings: MarketplaceSkillListing[],
   filters: MarketplaceCatalogFilters,
@@ -266,6 +280,7 @@ export function filterMarketplaceListings(
   })
 }
 
+/** Loads Marketplace listings and returns a UI-safe catalog state. */
 export async function loadMarketplaceCatalog(
   api: MarketplaceApi,
   filters: MarketplaceCatalogFilters,
@@ -286,6 +301,7 @@ export async function loadMarketplaceCatalog(
   }
 }
 
+/** Loads one Marketplace Skill detail and returns a UI-safe detail state. */
 export async function loadMarketplaceDetail(
   api: MarketplaceApi,
   slug: string,
@@ -344,14 +360,22 @@ function installStateClassName(state: MarketplaceInstallState): string {
 }
 
 function disabledActionLabel(state: MarketplaceInstallState): string {
-  if (state === 'installed') return 'Installed'
-  if (state === 'update-available') return 'Update placeholder'
-  if (state === 'modified-locally') return 'Update placeholder'
-  if (state === 'unavailable') return 'Unavailable'
-  if (state === 'safety-blocked') return 'Safety blocked'
-  return 'Install placeholder'
+  switch (state) {
+    case 'installed':
+      return 'Installed'
+    case 'update-available':
+    case 'modified-locally':
+      return 'Update placeholder'
+    case 'unavailable':
+      return 'Unavailable'
+    case 'safety-blocked':
+      return 'Safety blocked'
+    case 'install':
+      return 'Install placeholder'
+  }
 }
 
+/** Read-only Marketplace browsing page with catalog filters and detail inspection. */
 export function SkillMarketplacePage({ api = defaultMarketplaceApi }: { api?: MarketplaceApi }) {
   const [search, setSearch] = React.useState('')
   const [category, setCategory] = React.useState('')
@@ -490,6 +514,7 @@ export function SkillMarketplacePage({ api = defaultMarketplaceApi }: { api?: Ma
   )
 }
 
+/** Read-only Marketplace listing card used in catalog results. */
 export function MarketplaceListingCard({
   listing,
   selected,
@@ -532,6 +557,7 @@ export function MarketplaceListingCard({
   )
 }
 
+/** Read-only Marketplace detail view for published Skill metadata and SKILL.md content. */
 export function MarketplaceDetail({
   detail,
 }: {
@@ -627,6 +653,7 @@ export function MarketplaceDetail({
   )
 }
 
+/** Marketplace-scoped outage display with retry behavior. */
 export function MarketplaceError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
