@@ -19,7 +19,6 @@ import * as React from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAtomValue } from 'jotai'
 import { useTranslation } from 'react-i18next'
-import { Store } from 'lucide-react'
 import { Panel } from './Panel'
 import { MultiSelectPanel } from './MultiSelectPanel'
 import { useAppShellContext } from '@/context/AppShellContext'
@@ -44,6 +43,7 @@ import { AutomationInfoPage } from '../automations/AutomationInfoPage'
 import type { ExecutionEntry } from '../automations/types'
 import { automationsAtom } from '@/atoms/automations'
 import { SendResourceToWorkspaceDialog, type SendResourceType } from './SendResourceToWorkspaceDialog'
+import { SkillMarketplacePage } from './SkillMarketplacePage'
 
 export interface MainContentPanelProps {
   /** Whether both sidebar and navigator are hidden (focus mode / CMD+.) */
@@ -280,13 +280,7 @@ export function MainContentPanel({
     if (navState.destination === 'marketplace') {
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            <div className="flex max-w-sm flex-col items-center gap-2 text-center">
-              <Store className="h-5 w-5" />
-              <p className="text-sm font-medium text-foreground">{t("skillMarketplace.title")}</p>
-              <p className="text-xs">{t("skillMarketplace.emptyDescription")}</p>
-            </div>
-          </div>
+          <SkillMarketplacePage />
         </Panel>
       )
     }
