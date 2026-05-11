@@ -85,6 +85,12 @@ const INACCESSIBLE_ERROR =
   'This repository is not accessible. Make sure it is public, or use the Upload tab to install from a zip file.'
 const GITHUB_RATE_LIMIT_ERROR =
   'GitHub API rate limit reached. Try again later, use a GitHub-authenticated session if available, or use the Upload tab to install from a zip file.'
+const GITHUB_RATE_LIMIT_BODY_MARKERS = [
+  'rate limit',
+  'secondary rate',
+  'abuse detection',
+  'abuse limit',
+]
 const MAX_SKILL_DIRECTORY_DEPTH = 3
 
 // ── GitHub API ────────────────────────────────────────────────────────────────
@@ -112,7 +118,7 @@ async function fetchGithubSkillMd(downloadUrl: string): Promise<string | null> {
   return res.text()
 }
 
-function githubRateLimitResetDetail(res: Response): string {
+function formatGithubRateLimitResetDetail(res: Response): string {
   const reset = Number(res.headers.get('x-ratelimit-reset'))
   if (!Number.isFinite(reset) || reset <= 0) return ''
   return ` Retry after ${new Date(reset * 1000).toISOString()}.`
@@ -122,22 +128,19 @@ function isGithubRateLimitResponse(res: Response, body: string): boolean {
   const lowerBody = body.toLowerCase()
   return (
     res.headers.get('x-ratelimit-remaining') === '0' ||
-    lowerBody.includes('rate limit') ||
-    lowerBody.includes('secondary rate') ||
-    lowerBody.includes('abuse detection') ||
-    lowerBody.includes('abuse limit')
+    GITHUB_RATE_LIMIT_BODY_MARKERS.some(marker => lowerBody.includes(marker))
   )
 }
 
-async function githubForbiddenError(res: Response): Promise<string> {
+async function githubForbiddenMessage(res: Response): Promise<string> {
   const body = await res.text().catch(() => '')
   if (!isGithubRateLimitResponse(res, body)) return INACCESSIBLE_ERROR
-  return `${GITHUB_RATE_LIMIT_ERROR}${githubRateLimitResetDetail(res)}`
+  return `${GITHUB_RATE_LIMIT_ERROR}${formatGithubRateLimitResetDetail(res)}`
 }
 
 async function listGhContents(owner: string, repo: string, path: string): Promise<GhContentsResult> {
   const res = await ghApiGet(`repos/${owner}/${repo}/contents/${path}`)
-  if (res.status === 403) return { ok: false, error: await githubForbiddenError(res) }
+  if (res.status === 403) return { ok: false, error: await githubForbiddenMessage(res) }
   if (res.status === 404) return { ok: false, error: INACCESSIBLE_ERROR }
   if (!res.ok) return { ok: true, entries: [] }
   const data = await res.json() as GhContent | GhContent[]
@@ -218,7 +221,7 @@ async function resolveGithubSubpath(
   const rawUrl =
     `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${subpath}/SKILL.md`
   const res = await fetch(rawUrl)
-  if (res.status === 403) return { error: await githubForbiddenError(res) }
+  if (res.status === 403) return { error: await githubForbiddenMessage(res) }
   if (res.status === 404) return { error: INACCESSIBLE_ERROR }
   if (!res.ok) return { error: `Failed to fetch skill: HTTP ${res.status}` }
 
