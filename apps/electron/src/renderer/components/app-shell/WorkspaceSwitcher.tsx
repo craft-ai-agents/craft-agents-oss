@@ -189,8 +189,9 @@ export function WorkspaceSwitcher({
           {variant === 'topbar' ? (
             <button
               type="button"
+              data-workspace-switcher="topbar"
               className="header-icon-btn titlebar-no-drag ml-1 flex-1 min-w-0 flex items-center justify-start gap-0.5 h-[30px] px-3 rounded-[8px] border border-foreground/6 text-[13px] text-foreground/50 hover:bg-foreground/5 hover:text-foreground transition-colors cursor-pointer data-[state=open]:bg-foreground/5 data-[state=open]:text-foreground"
-              aria-label="Select workspace"
+              aria-label={t('workspace.selectWorkspace')}
             >
               <CrossfadeAvatar
                 src={selectedWorkspace ? workspaceIconMap.get(selectedWorkspace.id) : undefined}
@@ -205,7 +206,7 @@ export function WorkspaceSwitcher({
                   ? <CloudOff className="h-3 w-3 text-destructive shrink-0" />
                   : <Cloud className="h-3 w-3 opacity-60 shrink-0" />
               )}
-              <ChevronDown className="h-3 w-3 opacity-60 shrink-0" />
+              <ChevronDown data-slot="chevron" className="h-3 w-3 opacity-60 shrink-0" />
               {hasUnreadInOtherWorkspaces && <span className="h-2 w-2 rounded-full bg-accent shrink-0" />}
             </button>
           ) : (
@@ -216,7 +217,7 @@ export function WorkspaceSwitcher({
                 "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 isCollapsed && "h-9 w-9 shrink-0 justify-center p-0"
               )}
-              aria-label="Select workspace"
+              aria-label={t('workspace.selectWorkspace')}
             >
               <CrossfadeAvatar
                 src={selectedWorkspace ? workspaceIconMap.get(selectedWorkspace.id) : undefined}
@@ -289,6 +290,7 @@ export function WorkspaceSwitcher({
                   {/* Action buttons - only visible on hover for non-active workspaces */}
                   {activeWorkspaceId !== workspace.id && (
                     <button
+                      data-touch-reveal="true"
                       className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive/20 hover:text-destructive transition-opacity"
                       onClick={(e) => {
                         e.stopPropagation()
@@ -301,6 +303,7 @@ export function WorkspaceSwitcher({
                   )}
                   {activeWorkspaceId !== workspace.id && !disconnected && (
                     <button
+                      data-touch-reveal="true"
                       className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-foreground/10 transition-opacity"
                       onClick={(e) => {
                         e.stopPropagation()

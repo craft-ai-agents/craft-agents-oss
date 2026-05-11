@@ -72,6 +72,7 @@ import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { SourceSelectorPopover } from '@/components/ui/SourceSelectorPopover'
+import { CompactSourceSelector } from '@/components/ui/CompactSourceSelector'
 import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import { derivePickerMode } from './picker-mode'
@@ -1883,10 +1884,9 @@ export function FreeFormInput({
                 onClick={() => setSourceDropdownOpen(prev => !prev)}
                 tooltip={t("chat.sourcesTooltip")}
               />
-              <SourceSelectorPopover
+              <CompactSourceSelector
                 open={sourceDropdownOpen}
                 onOpenChange={setSourceDropdownOpen}
-                anchorRef={sourceButtonRef}
                 sources={sources}
                 selectedSlugs={optimisticSourceSlugs}
                 onToggleSlug={(slug) => {
@@ -2672,6 +2672,7 @@ function WorkingDirectoryBadge({
                   <button
                     type="button"
                     onClick={(e) => handleRemoveRecent(e, path)}
+                    data-touch-reveal="true"
                     className="shrink-0 h-3 w-3 rounded-[3px] flex items-center justify-center opacity-0 group-hover/item:opacity-100 text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-all"
                   >
                     <X className="h-3 w-3" />
