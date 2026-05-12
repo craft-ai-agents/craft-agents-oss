@@ -75,3 +75,9 @@ credentials.enc
 .vscode/settings.json
 
 .sandcastle
+
+.claude
+.agents
+CLADUE.md
+AGENTS.md
+skills-lock.json
