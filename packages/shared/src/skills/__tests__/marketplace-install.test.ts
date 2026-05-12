@@ -291,6 +291,71 @@ describe('installMarketplaceSkill', () => {
 })
 
 describe('checkMarketplaceSkillUpdates', () => {
+  test('marks marketplace-installed Local Skills modified after local edits while preserving origin metadata', async () => {
+    const workspaceRoot = makeWorkspace()
+    const installedBundle = makeSkillZip('---\nname: API Docs\ndescription: Writes docs.\n---\n\nInstalled body\n')
+    const api = makeApi(installedBundle)
+
+    try {
+      await installMarketplaceSkill({
+        workspaceRoot,
+        user: { id: 'user_1' },
+        skill: {
+          marketplaceId: 'mkt_skill_api_docs',
+          marketplaceSlug: 'api-docs',
+          skillSlug: 'api-docs',
+          ownerId: 'owner_1',
+          ownerDisplayName: 'Docs Guild',
+          version: '2.1.0',
+        },
+        api,
+        now: () => new Date('2026-05-12T10:00:00.000Z'),
+        downloadBundle: async () => installedBundle,
+      })
+
+      writeFileSync(
+        join(workspaceRoot, 'skills', 'api-docs', 'SKILL.md'),
+        '---\nname: API Docs\ndescription: Writes docs.\n---\n\nLocally edited body\n',
+      )
+      writeFileSync(join(workspaceRoot, 'skills', 'api-docs', 'references', 'guide.md'), '# Edited guide\n')
+
+      const result = await checkMarketplaceSkillUpdates({
+        workspaceRoot,
+        now: () => new Date('2026-05-12T12:00:00.000Z'),
+        api: {
+          async checkUpdates() {
+            return [{ marketplaceId: 'mkt_skill_api_docs', status: 'installed' }]
+          },
+        },
+      })
+
+      expect(result).toEqual([{
+        slug: 'api-docs',
+        marketplaceId: 'mkt_skill_api_docs',
+        marketplaceSlug: 'api-docs',
+        installedVersion: '2.1.0',
+        status: 'installed',
+        modified: true,
+        isOwnerLinked: false,
+        hasUnpublishedChanges: false,
+        canSyncLatest: true,
+      }])
+      expect(readMarketplaceOriginMetadata(workspaceRoot, 'api-docs')).toMatchObject({
+        marketplaceId: 'mkt_skill_api_docs',
+        marketplaceSlug: 'api-docs',
+        ownerId: 'owner_1',
+        ownerDisplayName: 'Docs Guild',
+        installedVersion: '2.1.0',
+        modified: true,
+        safetyStatus: 'ok',
+        sourceBundleHash: sha256(installedBundle),
+        lastCheckedAt: '2026-05-12T12:00:00.000Z',
+      })
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
   test('checks marketplace-installed Local Skills in a batch and preserves files for unavailable and safety-blocked states', async () => {
     const workspaceRoot = makeWorkspace()
     const installedBundle = makeSkillZip('---\nname: Release Notes\ndescription: Writes notes.\n---\n\nInstalled body\n')
@@ -353,7 +418,7 @@ describe('checkMarketplaceSkillUpdates', () => {
         { marketplaceId: 'mkt_skill_release_notes', marketplaceSlug: 'release-notes', installedVersion: '1.7.1' },
         { marketplaceId: 'mkt_skill_security_review', marketplaceSlug: 'security-review', installedVersion: '3.0.0' },
       ]])
-      expect(result).toEqual([
+      expect(result).toMatchObject([
         {
           slug: 'release-notes',
           marketplaceId: 'mkt_skill_release_notes',
@@ -361,6 +426,7 @@ describe('checkMarketplaceSkillUpdates', () => {
           installedVersion: '1.7.1',
           status: 'unavailable',
           message: 'Owner unpublished this Marketplace Skill.',
+          modified: false,
         },
         {
           slug: 'security-review',
@@ -369,6 +435,7 @@ describe('checkMarketplaceSkillUpdates', () => {
           installedVersion: '3.0.0',
           status: 'safety-blocked',
           message: 'Admin blocked this Marketplace Skill.',
+          modified: false,
         },
       ])
       expect(readFileSync(join(workspaceRoot, 'skills', 'release-notes', 'SKILL.md'), 'utf-8')).toContain('Installed body')
@@ -379,6 +446,59 @@ describe('checkMarketplaceSkillUpdates', () => {
       expect(readMarketplaceOriginMetadata(workspaceRoot, 'security-review')).toMatchObject({
         safetyStatus: 'safety-blocked',
         lastCheckedAt: '2026-05-12T12:00:00.000Z',
+      })
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('reports unpublished changes for owner-linked modified Local Skills during update checks', async () => {
+    const workspaceRoot = makeWorkspace()
+    const installedBundle = makeSkillZip('---\nname: Release Notes\ndescription: Writes notes.\n---\n\nInstalled body\n')
+    const api = makeApi(installedBundle)
+
+    try {
+      await installMarketplaceSkill({
+        workspaceRoot,
+        user: { id: 'owner_1' },
+        skill: {
+          marketplaceId: 'mkt_skill_release_notes',
+          marketplaceSlug: 'release-notes',
+          skillSlug: 'release-notes',
+          ownerId: 'owner_1',
+          ownerDisplayName: 'Launch Team',
+          version: '1.7.1',
+        },
+        api,
+        downloadBundle: async () => installedBundle,
+      })
+      writeFileSync(
+        join(workspaceRoot, 'skills', 'release-notes', 'SKILL.md'),
+        '---\nname: Release Notes\ndescription: Writes notes.\n---\n\nUnpublished owner edits\n',
+      )
+
+      const result = await checkMarketplaceSkillUpdates({
+        workspaceRoot,
+        currentUserId: 'owner_1',
+        api: {
+          async checkUpdates() {
+            return [{ marketplaceId: 'mkt_skill_release_notes', status: 'update-available', latestVersion: '1.8.0' }]
+          },
+        },
+      })
+
+      expect(result).toMatchObject([{
+        slug: 'release-notes',
+        status: 'update-available',
+        latestVersion: '1.8.0',
+        modified: true,
+        isOwnerLinked: true,
+        hasUnpublishedChanges: true,
+        canSyncLatest: false,
+      }])
+      expect(readMarketplaceOriginMetadata(workspaceRoot, 'release-notes')).toMatchObject({
+        modified: true,
+        ownerId: 'owner_1',
       })
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true })
@@ -429,6 +549,66 @@ describe('checkMarketplaceSkillUpdates', () => {
 })
 
 describe('applyMarketplaceSkillUpdate', () => {
+  test('blocks owner-linked sync latest when local edits are unpublished', async () => {
+    const workspaceRoot = makeWorkspace()
+    const installedBundle = makeSkillZip('---\nname: Release Notes\ndescription: Writes notes.\n---\n\nOld body\n')
+    const installApi = makeApi(installedBundle)
+    const requestedUpdates: unknown[] = []
+
+    try {
+      await installMarketplaceSkill({
+        workspaceRoot,
+        user: { id: 'owner_1' },
+        skill: {
+          marketplaceId: 'mkt_skill_release_notes',
+          marketplaceSlug: 'release-notes',
+          skillSlug: 'release-notes',
+          ownerId: 'owner_1',
+          ownerDisplayName: 'Launch Team',
+          version: '1.7.1',
+        },
+        api: installApi,
+        downloadBundle: async () => installedBundle,
+      })
+
+      writeFileSync(
+        join(workspaceRoot, 'skills', 'release-notes', 'SKILL.md'),
+        '---\nname: Release Notes\ndescription: Writes notes.\n---\n\nUnpublished owner edits\n',
+      )
+
+      await expect(applyMarketplaceSkillUpdate({
+        workspaceRoot,
+        user: { id: 'owner_1' },
+        slug: 'release-notes',
+        targetVersion: '1.8.0',
+        api: {
+          async createUpdateIntent(input) {
+            requestedUpdates.push(input)
+            return {
+              intentId: 'update_intent_1',
+              downloadUrl: 'https://marketplace.example/bundles/release-notes-1.8.0.zip',
+              expectedSha256: sha256(installedBundle),
+            }
+          },
+          async recordUpdateComplete() {
+            throw new Error('should not complete')
+          },
+        },
+        downloadBundle: async () => installedBundle,
+      })).rejects.toThrow('unpublished changes cannot sync latest')
+
+      expect(requestedUpdates).toEqual([])
+      expect(readFileSync(join(workspaceRoot, 'skills', 'release-notes', 'SKILL.md'), 'utf-8')).toContain('Unpublished owner edits')
+      expect(readMarketplaceOriginMetadata(workspaceRoot, 'release-notes')).toMatchObject({
+        modified: true,
+        installedVersion: '1.7.1',
+        sourceBundleHash: sha256(installedBundle),
+      })
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
   test('manually applies an available Marketplace update through intent, hash verification, local overwrite, sidecar update, and completion reporting', async () => {
     const workspaceRoot = makeWorkspace()
     const installedBundle = makeSkillZip('---\nname: Release Notes\ndescription: Writes notes.\n---\n\nOld body\n')

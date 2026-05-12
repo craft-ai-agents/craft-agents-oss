@@ -4,12 +4,13 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from 'fs'
 import { tmpdir } from 'os'
 import { dirname, join, normalize, sep } from 'path'
-import { unzipSync } from 'fflate'
+import { unzipSync, zipSync } from 'fflate'
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts'
 import { invalidateSkillsCache, listSkillSlugs, skillExists } from './storage.ts'
 
@@ -26,6 +27,7 @@ export interface MarketplaceOriginMetadata {
   lastCheckedAt: string
   modified: boolean
   sourceBundleHash: string
+  sourceBundleContentHash?: string
   safetyStatus: MarketplaceOriginSafetyStatus
   basedOn?: {
     marketplaceId: string
@@ -98,6 +100,7 @@ export interface MarketplaceUpdateCheckApi {
 export interface MarketplaceUpdateCheckRequest {
   workspaceRoot: string
   api: MarketplaceUpdateCheckApi
+  currentUserId?: string | null
   now?: () => Date
 }
 
@@ -110,6 +113,10 @@ export interface MarketplaceUpdateCheckResult {
   status: MarketplaceUpdateStatus
   latestVersion?: string
   message?: string
+  modified: boolean
+  isOwnerLinked: boolean
+  hasUnpublishedChanges: boolean
+  canSyncLatest: boolean
 }
 
 /** Service boundary used to authorize, complete, and report Marketplace updates. */
@@ -244,6 +251,7 @@ export async function installMarketplaceSkill(request: MarketplaceInstallRequest
       lastCheckedAt: (request.now?.() ?? new Date()).toISOString(),
       modified: false,
       sourceBundleHash: actualSha256,
+      sourceBundleContentHash: hashBundleContent(bundle),
       safetyStatus: 'ok',
       basedOn: request.skill.basedOn,
     })
@@ -310,9 +318,13 @@ export async function checkMarketplaceSkillUpdates(request: MarketplaceUpdateChe
     const safetyStatus = response.status === 'unavailable' || response.status === 'safety-blocked'
       ? response.status
       : 'ok'
+    const modified = isMarketplaceInstalledSkillModified(request.workspaceRoot, slug, metadata)
+    const isOwnerLinked = Boolean(request.currentUserId && request.currentUserId === metadata.ownerId)
+    const hasUnpublishedChanges = isOwnerLinked && modified
     writeMarketplaceOriginMetadata(request.workspaceRoot, slug, {
       ...metadata,
       lastCheckedAt: checkedAt,
+      modified,
       safetyStatus,
     })
 
@@ -324,6 +336,10 @@ export async function checkMarketplaceSkillUpdates(request: MarketplaceUpdateChe
       status: response.status,
       latestVersion: response.latestVersion,
       message: response.message,
+      modified,
+      isOwnerLinked,
+      hasUnpublishedChanges,
+      canSyncLatest: !hasUnpublishedChanges,
     }
   })
 }
@@ -343,6 +359,11 @@ export async function applyMarketplaceSkillUpdate(request: MarketplaceUpdateAppl
   }
   if (metadata.safetyStatus === 'safety-blocked') {
     throw new Error('Marketplace Skill is safety blocked and cannot be updated.')
+  }
+  const modified = isMarketplaceInstalledSkillModified(request.workspaceRoot, request.slug, metadata)
+  if (modified && request.user.id === metadata.ownerId) {
+    writeMarketplaceOriginMetadata(request.workspaceRoot, request.slug, { ...metadata, modified })
+    throw new Error('Owner-linked Local Skills with unpublished changes cannot sync latest until changes are published or discarded.')
   }
 
   const intent = await request.api.createUpdateIntent({
@@ -375,6 +396,7 @@ export async function applyMarketplaceSkillUpdate(request: MarketplaceUpdateAppl
       lastCheckedAt: (request.now?.() ?? new Date()).toISOString(),
       modified: false,
       sourceBundleHash: actualSha256,
+      sourceBundleContentHash: hashBundleContent(bundle),
       safetyStatus: 'ok',
     })
     invalidateSkillsCache()
@@ -445,6 +467,46 @@ function writeSkillBundle(workspaceRoot: string, slug: string, bundle: Uint8Arra
     mkdirSync(dirname(target), { recursive: true })
     writeFileSync(target, data)
   }
+}
+
+function isMarketplaceInstalledSkillModified(
+  workspaceRoot: string,
+  slug: string,
+  metadata: MarketplaceOriginMetadata,
+): boolean {
+  return hashSkillDirectory(workspaceRoot, slug) !== (metadata.sourceBundleContentHash ?? metadata.sourceBundleHash)
+}
+
+function hashBundleContent(bundle: Uint8Array): string {
+  const files = normalizeBundleFiles(unzipSync(bundle)).sort(([a], [b]) => a.localeCompare(b))
+  return sha256(zipSync(Object.fromEntries(files)))
+}
+
+function hashSkillDirectory(workspaceRoot: string, slug: string): string {
+  const skillDir = join(getWorkspaceSkillsPath(workspaceRoot), slug)
+  const files: Record<string, Uint8Array> = {}
+
+  for (const relativePath of listSkillFilePaths(skillDir)) {
+    files[relativePath] = readFileSync(join(skillDir, relativePath))
+  }
+
+  return sha256(zipSync(files))
+}
+
+function listSkillFilePaths(root: string, dir = root): string[] {
+  const paths: string[] = []
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const absolutePath = join(dir, entry.name)
+    const relativePath = normalize(absolutePath.slice(root.length + 1)).replace(/\\/g, '/')
+    if (relativePath === MARKETPLACE_ORIGIN_METADATA_FILE) continue
+    if (entry.isDirectory()) {
+      paths.push(...listSkillFilePaths(root, absolutePath))
+      continue
+    }
+    if (!entry.isFile()) continue
+    paths.push(relativePath)
+  }
+  return paths.sort((a, b) => a.localeCompare(b))
 }
 
 function normalizeBundleFiles(files: Record<string, Uint8Array>): Array<[string, Uint8Array]> {

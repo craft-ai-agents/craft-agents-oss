@@ -176,6 +176,36 @@ describe('SkillMarketplacePage API boundary', () => {
     expect(blockedHtml).toContain('prevents Marketplace install and update distribution')
   })
 
+  test('renders an overwrite warning before updating modified Marketplace-installed Local Skills', async () => {
+    const api = createStaticMarketplaceApi()
+    const result = await loadMarketplaceDetail(api, 'release-notes')
+    if (result.status !== 'ready') throw new Error('Expected ready detail state')
+
+    const html = renderToStaticMarkup(React.createElement(MarketplaceDetail, {
+      detail: { ...result.detail, installState: 'modified-locally' },
+      currentUserId: 'user_1',
+    }))
+
+    expect(html).toContain('Modified locally')
+    expect(html).toContain('Updating will overwrite local changes.')
+    expect(html).toContain('Update')
+  })
+
+  test('renders unpublished changes and blocks sync latest for owner-linked modified Local Skills', async () => {
+    const api = createStaticMarketplaceApi()
+    const result = await loadMarketplaceDetail(api, 'release-notes')
+    if (result.status !== 'ready') throw new Error('Expected ready detail state')
+
+    const html = renderToStaticMarkup(React.createElement(MarketplaceDetail, {
+      detail: { ...result.detail, installState: 'modified-locally', ownerId: 'owner_1' },
+      currentUserId: 'owner_1',
+    }))
+
+    expect(html).toContain('Unpublished changes')
+    expect(html).toContain('Publish or discard changes')
+    expect(html).toContain('cannot sync latest')
+  })
+
   test('renders install progress and conflict recovery states', async () => {
     const api = createStaticMarketplaceApi()
     const result = await loadMarketplaceDetail(api, 'test-writer')

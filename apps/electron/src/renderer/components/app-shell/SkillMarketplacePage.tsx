@@ -25,6 +25,7 @@ export const PRODUCT_MARKETPLACE_CATEGORIES = ['Documentation', 'Product', 'Qual
 export interface MarketplaceSkillListing {
   id: string
   slug: string
+  ownerId: string
   icon: string
   name: string
   description: string
@@ -109,6 +110,7 @@ const DEFAULT_MARKETPLACE_LISTINGS: MarketplaceSkillListing[] = [
   {
     id: 'mkt_skill_test_writer',
     slug: 'test-writer',
+    ownerId: 'owner_craft_labs',
     icon: 'TW',
     name: 'Test Writer',
     description: 'Creates focused regression tests for bug fixes and feature slices.',
@@ -122,6 +124,7 @@ const DEFAULT_MARKETPLACE_LISTINGS: MarketplaceSkillListing[] = [
   {
     id: 'mkt_skill_api-docs',
     slug: 'api-docs',
+    ownerId: 'owner_docs_guild',
     icon: 'AD',
     name: 'API Docs Companion',
     description: 'Keeps endpoint references and examples aligned with source changes.',
@@ -135,6 +138,7 @@ const DEFAULT_MARKETPLACE_LISTINGS: MarketplaceSkillListing[] = [
   {
     id: 'mkt_skill_release-notes',
     slug: 'release-notes',
+    ownerId: 'owner_1',
     icon: 'RN',
     name: 'Release Notes',
     description: 'Turns merged changes into concise release notes for product teams.',
@@ -148,6 +152,7 @@ const DEFAULT_MARKETPLACE_LISTINGS: MarketplaceSkillListing[] = [
   {
     id: 'mkt_skill_security-review',
     slug: 'security-review',
+    ownerId: 'owner_secure_build',
     icon: 'SR',
     name: 'Security Review',
     description: 'Checks code and configuration changes for common security risks.',
@@ -388,7 +393,7 @@ export async function installMarketplaceSkillFromDetail({
         marketplaceId: detail.metadata.marketplaceId,
         marketplaceSlug: detail.metadata.marketplaceSlug,
         skillSlug: detail.slug,
-        ownerId: detail.owner,
+        ownerId: detail.ownerId,
         ownerDisplayName: detail.owner,
         version: detail.latestVersion,
       },
@@ -544,20 +549,27 @@ function marketplaceInstallStateFromResult(
 }
 
 function getMarketplaceInstallActionLabel(
-  detailInstallState: MarketplaceInstallState,
+  detail: MarketplaceSkillDetail,
   installState: MarketplaceDetailInstallState,
   canInstall: boolean,
+  currentUserId?: string | null,
 ): string {
   if (installState.status === 'installing') return 'Installing...'
+  if (isOwnerLinked(detail, currentUserId) && detail.installState === 'modified-locally') return 'Publish or discard changes'
   if (!canInstall) {
-    if (isMarketplaceUpdateAction(detailInstallState)) return 'Sign in to update'
+    if (isMarketplaceUpdateAction(detail.installState)) return 'Sign in to update'
     return 'Sign in to install'
   }
-  return disabledActionLabel(detailInstallState)
+  if (isOwnerLinked(detail, currentUserId) && detail.installState === 'update-available') return 'Sync latest'
+  return disabledActionLabel(detail.installState)
 }
 
 function isMarketplaceUpdateAction(state: MarketplaceInstallState): boolean {
   return state === 'update-available' || state === 'modified-locally'
+}
+
+function isOwnerLinked(detail: MarketplaceSkillDetail, currentUserId?: string | null): boolean {
+  return Boolean(currentUserId && currentUserId === detail.ownerId)
 }
 
 function marketplaceInstallAlertClassName(status: Exclude<MarketplaceDetailInstallState['status'], 'idle' | 'installing'>): string {
@@ -747,6 +759,7 @@ export function SkillMarketplacePage({
               installState={installStateBySlug[detailState.detail.slug] ?? { status: 'idle' }}
               onInstall={(conflictResolution) => installDetail(detailState.detail, conflictResolution)}
               canInstall={Boolean(currentUserId)}
+              currentUserId={currentUserId}
             />
           )}
         </section>
@@ -804,15 +817,20 @@ export function MarketplaceDetail({
   installState = { status: 'idle' },
   onInstall,
   canInstall = true,
+  currentUserId = null,
 }: {
   detail: MarketplaceSkillDetail
   installState?: MarketplaceDetailInstallState
   onInstall?: (conflictResolution?: MarketplaceInstallConflictResolution) => void
   canInstall?: boolean
+  currentUserId?: string | null
 }) {
   const isBlocked = detail.installState === 'safety-blocked' || detail.installState === 'unavailable'
   const isInstalling = installState.status === 'installing'
-  const actionLabel = getMarketplaceInstallActionLabel(detail.installState, installState, canInstall)
+  const ownerLinked = isOwnerLinked(detail, currentUserId)
+  const hasUnpublishedChanges = ownerLinked && detail.installState === 'modified-locally'
+  const canRunPrimaryAction = !isInstalling && !hasUnpublishedChanges
+  const actionLabel = getMarketplaceInstallActionLabel(detail, installState, canInstall, currentUserId)
 
   return (
     <div className="space-y-5 p-5">
@@ -837,7 +855,7 @@ export function MarketplaceDetail({
           ) : (
             <button
               type="button"
-              disabled={isInstalling}
+              disabled={!canRunPrimaryAction}
               onClick={() => onInstall?.()}
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
             >
@@ -872,6 +890,17 @@ export function MarketplaceDetail({
         <div className="flex gap-2 rounded-md border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{installStateLabel(detail.installState)} prevents Marketplace install and update distribution. Existing Local Skills remain separate.</span>
+        </div>
+      )}
+
+      {detail.installState === 'modified-locally' && (
+        <div className="flex gap-2 rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          {hasUnpublishedChanges ? (
+            <span>Unpublished changes cannot sync latest until they are published or discarded.</span>
+          ) : (
+            <span>Updating will overwrite local changes.</span>
+          )}
         </div>
       )}
 
