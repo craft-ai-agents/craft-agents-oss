@@ -270,6 +270,7 @@ export const RPC_CHANNELS = {
     OPEN_FINDER: 'skills:openFinder',
     EXTRACT_ZIP: 'skills:extractZip',
     RESOLVE_REMOTE: 'skills:resolveRemote',
+    INSTALL_MARKETPLACE: 'skills:installMarketplace',
     CHANGED: 'skills:changed',
   },
   statuses: {

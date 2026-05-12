@@ -280,7 +280,7 @@ export function MainContentPanel({
     if (navState.destination === 'marketplace') {
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
-          <SkillMarketplacePage />
+          <SkillMarketplacePage workspaceId={activeWorkspaceId || ''} currentUserId={activeWorkspaceId ? 'local-marketplace-user' : null} />
         </Panel>
       )
     }

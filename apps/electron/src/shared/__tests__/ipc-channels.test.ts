@@ -257,6 +257,7 @@ const EXPECTED_CHANNELS: string[] = [
   'skills:forceWrite',
   'skills:get',
   'skills:getFiles',
+  'skills:installMarketplace',
   'skills:openEditor',
   'skills:openFinder',
   'skills:resolveRemote',

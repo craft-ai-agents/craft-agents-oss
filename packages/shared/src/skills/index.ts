@@ -28,3 +28,17 @@ export type { CreateSkillResult } from './storage.ts';
 export { extractSkillsFromZip } from './zip-extractor.ts';
 export { resolveRemoteSkills, parseRemoteInput } from './remote-resolver.ts';
 export type { RemoteResolveResult } from './remote-resolver.ts';
+export {
+  MARKETPLACE_ORIGIN_METADATA_FILE,
+  downloadMarketplaceBundle,
+  installMarketplaceSkill,
+  readMarketplaceOriginMetadata,
+} from './marketplace-install.ts';
+export type {
+  MarketplaceInstallApi,
+  MarketplaceInstallIntent,
+  MarketplaceInstallRequest,
+  MarketplaceInstallResult,
+  MarketplaceSkillInstallInput,
+  MarketplaceOriginMetadata,
+} from './marketplace-install.ts';

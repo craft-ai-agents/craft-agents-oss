@@ -16,6 +16,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.OPEN_FINDER,
   RPC_CHANNELS.skills.EXTRACT_ZIP,
   RPC_CHANNELS.skills.RESOLVE_REMOTE,
+  RPC_CHANNELS.skills.INSTALL_MARKETPLACE,
 ] as const
 
 export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -169,5 +170,17 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
   server.handle(RPC_CHANNELS.skills.RESOLVE_REMOTE, async (_ctx, input: string) => {
     const { resolveRemoteSkills } = await import('@craft-agent/shared/skills')
     return resolveRemoteSkills(input)
+  })
+
+  server.handle(RPC_CHANNELS.skills.INSTALL_MARKETPLACE, async (_ctx, workspaceId: string, input: import('@craft-agent/shared/skills').MarketplaceSkillInstallInput) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { installMarketplaceSkillFromIntent } = await import('@craft-agent/shared/skills')
+    const result = await installMarketplaceSkillFromIntent(workspace.rootPath, input)
+    if (result.status === 'installed' || result.status === 'install-complete-failed') {
+      await pushSkillsChanged(workspace.id, workspace.rootPath)
+    }
+    return result
   })
 }

@@ -3,6 +3,7 @@ import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import {
   createStaticMarketplaceApi,
+  installMarketplaceSkillFromDetail,
   loadMarketplaceCatalog,
   loadMarketplaceDetail,
   MarketplaceDetail,
@@ -61,9 +62,89 @@ describe('SkillMarketplacePage API boundary', () => {
     expect(html).toContain('Required Sources')
     expect(html).toContain('GitHub repository')
     expect(html).toContain('Marketplace ID')
-    expect(html).toContain('Install placeholder')
+    expect(html).toContain('Install')
     expect(html).toContain('Report placeholder')
     expect(html).toContain('Owner actions')
+  })
+
+  test('installs Marketplace Skill detail only after authenticated intent and local install succeed', async () => {
+    const api = createStaticMarketplaceApi()
+    const result = await loadMarketplaceDetail(api, 'test-writer')
+    if (result.status !== 'ready') throw new Error('Expected ready detail state')
+    const completed: string[] = []
+
+    const installResult = await installMarketplaceSkillFromDetail({
+      workspaceId: 'workspace_1',
+      userId: 'user_1',
+      detail: result.detail,
+      api: {
+        ...api,
+        async createInstallIntent() {
+          return { intentId: 'intent_1', downloadUrl: 'data:application/zip;base64,AA==', expectedSha256: 'hash' }
+        },
+        async recordInstallComplete(intentId) {
+          completed.push(intentId)
+        },
+      },
+      electronAPI: {
+        async installMarketplaceSkill(_workspaceId, input) {
+          expect(input.userId).toBe('user_1')
+          expect(input.skill.marketplaceId).toBe('mkt_skill_test_writer')
+          return { status: 'installed', slug: 'test-writer' }
+        },
+      },
+    })
+
+    expect(installResult).toEqual({ status: 'installed', slug: 'test-writer' })
+    expect(completed).toEqual(['intent_1'])
+  })
+
+  test('does not request install intent for anonymous Marketplace install action', async () => {
+    const api = createStaticMarketplaceApi()
+    const result = await loadMarketplaceDetail(api, 'test-writer')
+    if (result.status !== 'ready') throw new Error('Expected ready detail state')
+
+    const installResult = await installMarketplaceSkillFromDetail({
+      workspaceId: 'workspace_1',
+      userId: null,
+      detail: result.detail,
+      api: {
+        ...api,
+        async createInstallIntent() {
+          throw new Error('should not request intent')
+        },
+      },
+      electronAPI: {
+        async installMarketplaceSkill() {
+          throw new Error('should not install locally')
+        },
+      },
+    })
+
+    expect(installResult).toEqual({
+      status: 'auth-required',
+      message: 'Sign in is required to install Marketplace Skills.',
+    })
+  })
+
+  test('renders install progress and conflict recovery states', async () => {
+    const api = createStaticMarketplaceApi()
+    const result = await loadMarketplaceDetail(api, 'test-writer')
+    if (result.status !== 'ready') throw new Error('Expected ready detail state')
+
+    const installingHtml = renderToStaticMarkup(React.createElement(MarketplaceDetail, {
+      detail: result.detail,
+      installState: { status: 'installing' },
+    }))
+    const conflictHtml = renderToStaticMarkup(React.createElement(MarketplaceDetail, {
+      detail: result.detail,
+      installState: { status: 'conflict', message: 'A Local Skill with this slug already exists.' },
+    }))
+
+    expect(installingHtml).toContain('Installing...')
+    expect(conflictHtml).toContain('A Local Skill with this slug already exists.')
+    expect(conflictHtml).toContain('Overwrite')
+    expect(conflictHtml).toContain('Skip')
   })
 
   test('returns and renders Marketplace outage states without local skills coupling', async () => {

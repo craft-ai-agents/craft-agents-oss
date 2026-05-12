@@ -1,5 +1,12 @@
 import * as React from 'react'
 import { AlertTriangle, CheckCircle2, Download, Flag, Search, ShieldAlert, Store, UserCog } from 'lucide-react'
+import { strToU8, zipSync } from 'fflate'
+import type {
+  MarketplaceInstallConflictResolution,
+  MarketplaceInstallIntent,
+  MarketplaceInstallResult,
+  MarketplaceSkillInstallInput,
+} from '@craft-agent/shared/skills'
 
 /** Install/update state shown for a Marketplace Skill before install behavior exists. */
 export type MarketplaceInstallState =
@@ -59,6 +66,12 @@ export interface MarketplaceCatalogFilters {
 export interface MarketplaceApi {
   listSkills: () => Promise<MarketplaceSkillListing[]>
   getSkillDetail: (slug: string) => Promise<MarketplaceSkillDetail>
+  createInstallIntent: (detail: MarketplaceSkillDetail, userId: string) => Promise<MarketplaceInstallIntent>
+  recordInstallComplete: (intentId: string) => Promise<void>
+}
+
+export interface MarketplaceInstallElectronApi {
+  installMarketplaceSkill(workspaceId: string, input: MarketplaceSkillInstallInput): Promise<MarketplaceInstallResult>
 }
 
 /** Result of loading and filtering the Marketplace catalog. */
@@ -255,6 +268,17 @@ export function createStaticMarketplaceApi(options?: StaticMarketplaceApiOptions
       if (!detail) throw new Error('Marketplace Skill not found.')
       return detail
     },
+    async createInstallIntent(detail) {
+      const bytes = zipSync({ 'SKILL.md': strToU8(detail.skillMarkdown) })
+      return {
+        intentId: `intent_${detail.id}`,
+        downloadUrl: `data:application/zip;base64,${toBase64(bytes)}`,
+        expectedSha256: await sha256Hex(bytes),
+      }
+    },
+    async recordInstallComplete() {
+      // Static Marketplace API records no hosted metrics.
+    },
   }
 }
 
@@ -316,7 +340,69 @@ export async function loadMarketplaceDetail(
   }
 }
 
+export async function installMarketplaceSkillFromDetail({
+  workspaceId,
+  userId,
+  detail,
+  api,
+  electronAPI,
+  conflictResolution,
+}: {
+  workspaceId: string
+  userId: string | null
+  detail: MarketplaceSkillDetail
+  api: MarketplaceApi
+  electronAPI: MarketplaceInstallElectronApi
+  conflictResolution?: MarketplaceInstallConflictResolution
+}): Promise<MarketplaceInstallResult | { status: 'auth-required'; message: string } | { status: 'error'; message: string }> {
+  if (!userId) {
+    return { status: 'auth-required', message: 'Sign in is required to install Marketplace Skills.' }
+  }
+
+  try {
+    const intent = await api.createInstallIntent(detail, userId)
+    const result = await electronAPI.installMarketplaceSkill(workspaceId, {
+      userId,
+      conflictResolution,
+      intent,
+      skill: {
+        marketplaceId: detail.metadata.marketplaceId,
+        marketplaceSlug: detail.metadata.marketplaceSlug,
+        skillSlug: detail.slug,
+        ownerId: detail.owner,
+        ownerDisplayName: detail.owner,
+        version: detail.latestVersion,
+      },
+    })
+    if (result.status !== 'installed') return result
+
+    try {
+      await api.recordInstallComplete(intent.intentId)
+      return result
+    } catch (error) {
+      return {
+        status: 'install-complete-failed',
+        slug: detail.slug,
+        message: error instanceof Error ? error.message : 'Marketplace install completion failed.',
+      }
+    }
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Marketplace install failed.',
+    }
+  }
+}
+
 const defaultMarketplaceApi = createStaticMarketplaceApi()
+
+type MarketplaceDetailInstallState =
+  | { status: 'idle' }
+  | { status: 'installing' }
+  | { status: 'installed'; message: string }
+  | { status: 'conflict'; message: string }
+  | { status: 'skipped'; message: string }
+  | { status: 'error'; message: string }
 
 function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b))
@@ -376,13 +462,22 @@ function disabledActionLabel(state: MarketplaceInstallState): string {
 }
 
 /** Read-only Marketplace browsing page with catalog filters and detail inspection. */
-export function SkillMarketplacePage({ api = defaultMarketplaceApi }: { api?: MarketplaceApi }) {
+export function SkillMarketplacePage({
+  api = defaultMarketplaceApi,
+  workspaceId = '',
+  currentUserId = null,
+}: {
+  api?: MarketplaceApi
+  workspaceId?: string
+  currentUserId?: string | null
+}) {
   const [search, setSearch] = React.useState('')
   const [category, setCategory] = React.useState('')
   const [tag, setTag] = React.useState('')
   const [catalogState, setCatalogState] = React.useState<MarketplaceCatalogState | { status: 'loading' }>({ status: 'loading' })
   const [selectedSlug, setSelectedSlug] = React.useState<string | null>(null)
   const [detailState, setDetailState] = React.useState<MarketplaceDetailState | { status: 'idle' | 'loading' }>({ status: 'idle' })
+  const [installStateBySlug, setInstallStateBySlug] = React.useState<Record<string, MarketplaceDetailInstallState>>({})
 
   const refreshCatalog = React.useCallback(() => {
     setCatalogState({ status: 'loading' })
@@ -405,6 +500,36 @@ export function SkillMarketplacePage({ api = defaultMarketplaceApi }: { api?: Ma
     }
     refreshDetail(selectedSlug)
   }, [refreshDetail, selectedSlug])
+
+  const installDetail = React.useCallback(async (detail: MarketplaceSkillDetail, conflictResolution?: MarketplaceInstallConflictResolution) => {
+    if (!workspaceId) {
+      setInstallStateBySlug((previous) => ({
+        ...previous,
+        [detail.slug]: { status: 'error', message: 'Open a workspace before installing Marketplace Skills.' },
+      }))
+      return
+    }
+
+    setInstallStateBySlug((previous) => ({ ...previous, [detail.slug]: { status: 'installing' } }))
+    const result = await installMarketplaceSkillFromDetail({
+      workspaceId,
+      userId: currentUserId,
+      detail,
+      api,
+      electronAPI: window.electronAPI,
+      conflictResolution,
+    })
+
+    const nextState: MarketplaceDetailInstallState =
+      result.status === 'installed'
+        ? { status: 'installed', message: 'Installed into Local Skills.' }
+        : result.status === 'conflict'
+          ? { status: 'conflict', message: 'A Local Skill with this slug already exists.' }
+          : result.status === 'skipped'
+            ? { status: 'skipped', message: 'Marketplace install skipped. Existing Local Skill was kept.' }
+            : { status: 'error', message: result.message }
+    setInstallStateBySlug((previous) => ({ ...previous, [detail.slug]: nextState }))
+  }, [api, currentUserId, workspaceId])
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
@@ -506,7 +631,12 @@ export function SkillMarketplacePage({ api = defaultMarketplaceApi }: { api?: Ma
             </div>
           )}
           {detailState.status === 'ready' && (
-            <MarketplaceDetail detail={detailState.detail} />
+            <MarketplaceDetail
+              detail={detailState.detail}
+              installState={installStateBySlug[detailState.detail.slug] ?? { status: 'idle' }}
+              onInstall={(conflictResolution) => installDetail(detailState.detail, conflictResolution)}
+              canInstall={Boolean(currentUserId)}
+            />
           )}
         </section>
       </div>
@@ -560,10 +690,17 @@ export function MarketplaceListingCard({
 /** Read-only Marketplace detail view for published Skill metadata and SKILL.md content. */
 export function MarketplaceDetail({
   detail,
+  installState = { status: 'idle' },
+  onInstall,
+  canInstall = true,
 }: {
   detail: MarketplaceSkillDetail
+  installState?: MarketplaceDetailInstallState
+  onInstall?: (conflictResolution?: MarketplaceInstallConflictResolution) => void
+  canInstall?: boolean
 }) {
   const isBlocked = detail.installState === 'safety-blocked' || detail.installState === 'unavailable'
+  const isInstalling = installState.status === 'installing'
 
   return (
     <div className="space-y-5 p-5">
@@ -583,11 +720,47 @@ export function MarketplaceDetail({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <DisabledAction icon={<Download className="h-3.5 w-3.5" />} label={disabledActionLabel(detail.installState)} />
+          {isBlocked ? (
+            <DisabledAction icon={<Download className="h-3.5 w-3.5" />} label={disabledActionLabel(detail.installState)} />
+          ) : (
+            <button
+              type="button"
+              disabled={isInstalling}
+              onClick={() => onInstall?.()}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {isInstalling ? 'Installing...' : canInstall ? disabledActionLabel(detail.installState) : 'Sign in to install'}
+            </button>
+          )}
           <DisabledAction icon={<Flag className="h-3.5 w-3.5" />} label="Report placeholder" />
           <DisabledAction icon={<UserCog className="h-3.5 w-3.5" />} label="Owner actions" />
         </div>
       </div>
+
+      {installState.status !== 'idle' && installState.status !== 'installing' && (
+        <div className={`rounded-md border p-3 text-sm ${
+          installState.status === 'installed'
+            ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+            : installState.status === 'conflict'
+              ? 'border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-200'
+              : 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300'
+        }`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span>{installState.message}</span>
+            {installState.status === 'conflict' && (
+              <>
+                <button type="button" className="rounded-md border border-current px-2 py-1 text-xs font-medium" onClick={() => onInstall?.('overwrite')}>
+                  Overwrite
+                </button>
+                <button type="button" className="rounded-md border border-current px-2 py-1 text-xs font-medium" onClick={() => onInstall?.('skip')}>
+                  Skip
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {isBlocked && (
         <div className="flex gap-2 rounded-md border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">
@@ -651,6 +824,19 @@ export function MarketplaceDetail({
       </div>
     </div>
   )
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes)
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function toBase64(bytes: Uint8Array): string {
+  const maybeBuffer = (globalThis as { Buffer?: { from: (bytes: Uint8Array) => { toString: (encoding: string) => string } } }).Buffer
+  if (maybeBuffer) return maybeBuffer.from(bytes).toString('base64')
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary)
 }
 
 /** Marketplace-scoped outage display with retry behavior. */

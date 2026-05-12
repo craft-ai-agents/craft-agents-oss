@@ -241,6 +241,7 @@ export const CHANNEL_MAP = {
   openSkillInFinder: invoke(RPC_CHANNELS.skills.OPEN_FINDER),
   extractSkillsFromZip: invoke(RPC_CHANNELS.skills.EXTRACT_ZIP),
   resolveRemoteSkills: invoke(RPC_CHANNELS.skills.RESOLVE_REMOTE),
+  installMarketplaceSkill: invoke(RPC_CHANNELS.skills.INSTALL_MARKETPLACE),
   onSkillsChanged: listener(RPC_CHANNELS.skills.CHANGED),
 
   // Statuses
