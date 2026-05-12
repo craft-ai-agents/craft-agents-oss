@@ -69,14 +69,17 @@ export interface MarketplaceInstallApi {
   }): Promise<void>
 }
 
+/** Marketplace update states returned for an installed Local Skill. */
 export type MarketplaceUpdateStatus = 'installed' | 'update-available' | 'unavailable' | 'safety-blocked'
 
+/** Installed Marketplace Skill version sent to the batch update endpoint. */
 export interface MarketplaceUpdateCheckItem {
   marketplaceId: string
   marketplaceSlug: string
   installedVersion: string
 }
 
+/** Marketplace response for one installed Skill in a batch update check. */
 export interface MarketplaceUpdateCheckResponse {
   marketplaceId: string
   status: MarketplaceUpdateStatus
@@ -84,18 +87,21 @@ export interface MarketplaceUpdateCheckResponse {
   message?: string
 }
 
+/** Service boundary used to batch-check installed Marketplace Skill updates. */
 export interface MarketplaceUpdateCheckApi {
   checkUpdates(input: {
     installed: MarketplaceUpdateCheckItem[]
   }): Promise<MarketplaceUpdateCheckResponse[]>
 }
 
+/** Dependencies and workspace target for checking installed Marketplace Skill updates. */
 export interface MarketplaceUpdateCheckRequest {
   workspaceRoot: string
   api: MarketplaceUpdateCheckApi
   now?: () => Date
 }
 
+/** UI-safe local result for one checked Marketplace-installed Skill. */
 export interface MarketplaceUpdateCheckResult {
   slug: string
   marketplaceId: string
@@ -106,6 +112,7 @@ export interface MarketplaceUpdateCheckResult {
   message?: string
 }
 
+/** Service boundary used to authorize, complete, and report Marketplace updates. */
 export interface MarketplaceUpdateApplyApi {
   createUpdateIntent(input: {
     marketplaceId: string
@@ -123,6 +130,7 @@ export interface MarketplaceUpdateApplyApi {
   }): Promise<void>
 }
 
+/** Dependencies and update target for applying one Marketplace Skill update. */
 export interface MarketplaceUpdateApplyRequest {
   workspaceRoot: string
   user: { id: string } | null

@@ -9,7 +9,7 @@ import type {
   MarketplaceSkillUpdateInput,
 } from '@craft-agent/shared/skills'
 
-/** Install/update state shown for a Marketplace Skill before install behavior exists. */
+/** Install/update state shown for a Marketplace Skill in the catalog and detail views. */
 export type MarketplaceInstallState =
   | 'install'
   | 'installed'
@@ -77,6 +77,7 @@ export interface MarketplaceInstallElectronApi {
   installMarketplaceSkill(workspaceId: string, input: MarketplaceSkillInstallInput): Promise<MarketplaceInstallResult>
 }
 
+/** Electron bridge used to apply Marketplace updates to Local Skills. */
 export interface MarketplaceUpdateElectronApi {
   updateMarketplaceSkill(workspaceId: string, input: MarketplaceSkillUpdateInput): Promise<MarketplaceInstallResult>
 }
@@ -412,6 +413,7 @@ export async function installMarketplaceSkillFromDetail({
   }
 }
 
+/** Requests an update intent, applies the local update, and reports hosted completion. */
 export async function updateMarketplaceSkillFromDetail({
   workspaceId,
   userId,
@@ -547,9 +549,10 @@ function getMarketplaceInstallActionLabel(
   canInstall: boolean,
 ): string {
   if (installState.status === 'installing') return 'Installing...'
-  if (!canInstall) return detailInstallState === 'update-available' || detailInstallState === 'modified-locally'
-    ? 'Sign in to update'
-    : 'Sign in to install'
+  if (!canInstall) {
+    if (isMarketplaceUpdateAction(detailInstallState)) return 'Sign in to update'
+    return 'Sign in to install'
+  }
   return disabledActionLabel(detailInstallState)
 }
 
