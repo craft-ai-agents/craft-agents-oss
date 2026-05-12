@@ -1,5 +1,6 @@
 import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions, resetClaudeConfigCheck } from './options.ts';
+import { discoverEnabledClaudePlugins } from './claude-plugins.ts';
 // Local type for SDK user message content blocks (text, image, document)
 // Replaces import from @anthropic-ai/sdk/resources — keeps SDK as agent-only dependency
 type ContentBlockParam =
@@ -1345,9 +1346,11 @@ export class ClaudeAgent extends BaseAgent {
         },
         // Selectively disable tools - file tools are disabled (use MCP), web/code controlled by settings
         disallowedTools,
-        // No plugins — skills are handled by BaseAgent.chat() via read-before-execute
-        // (the model reads SKILL.md files directly, enforced by PrerequisiteManager)
-        plugins: [],
+        // Load CLI-installed plugins enabled via ~/.claude/settings.json (enabledPlugins).
+        // Plugin skills bypass craft's PrerequisiteManager read-before-execute — they're
+        // surfaced through the SDK's own plugin namespace (`<plugin>:<skill>`), not the
+        // [skill:slug] syntax. Set CRAFT_DISABLE_CLAUDE_PLUGINS=1 to opt out.
+        plugins: discoverEnabledClaudePlugins(),
       };
 
       // Capture the binary path the SDK will actually use (Electron-bundled custom
