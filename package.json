@@ -23,6 +23,7 @@
   "scripts": {
     "afk": "bun run .afk/main.ts",
     "ralph": "bun run .afk/run.ts",
+    "ralph:local": "bun run .afk/run-local.ts",
     "test": "bun test && for f in $(find . -name '*.isolated.ts' -not -path './node_modules/*' -not -path './.sandcastle/*' -not -path './apps/electron/release/*'); do bun test \"$f\" || exit 1; done",
     "typecheck": "bun run typecheck:shared",
     "typecheck:shared": "cd packages/shared && bun run tsc --noEmit",
