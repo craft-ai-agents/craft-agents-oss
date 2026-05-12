@@ -775,7 +775,8 @@ async function testMcpConnection(
       try {
         // Merge static headers with credential-store headers (if headerNames configured)
         let headers = source.mcp.headers ? { ...source.mcp.headers } : undefined;
-        if (source.mcp.headerNames?.length && ctx.credentialManager) {
+        let accessToken: string | undefined;
+        if (ctx.credentialManager) {
           const workspaceId = basename(ctx.workspacePath) || '';
           const loadedSource = {
             config: source,
@@ -783,14 +784,31 @@ async function testMcpConnection(
             workspaceRootPath: ctx.workspacePath,
             workspaceId,
           };
-          try {
-            const rawCred = await ctx.credentialManager.getToken(loadedSource);
-            if (rawCred) {
-              const parsed = JSON.parse(rawCred) as Record<string, string>;
-              headers = { ...headers, ...parsed };
+
+          if (source.mcp.headerNames?.length) {
+            // Multi-header credential — credential value is JSON keyed by header name.
+            try {
+              const rawCred = await ctx.credentialManager.getToken(loadedSource);
+              if (rawCred) {
+                const parsed = JSON.parse(rawCred) as Record<string, string>;
+                headers = { ...headers, ...parsed };
+              }
+            } catch {
+              // Not JSON or no credential — continue without credential headers
             }
-          } catch {
-            // Not JSON or no credential — continue without credential headers
+          } else if (source.mcp.authType === 'oauth' || source.mcp.authType === 'bearer') {
+            // OAuth / bearer single-token path — mirror the runtime so the probe
+            // sends an Authorization header. Cached token first, refresh fallback
+            // only on miss (matches checkAuthStatus and TokenRefreshManager).
+            try {
+              accessToken =
+                (await ctx.credentialManager.getToken(loadedSource)) ??
+                (await ctx.credentialManager.refresh(loadedSource)) ??
+                undefined;
+            } catch {
+              // Token resolution failed — fall through; the probe will surface
+              // the resulting `needsAuth` / 401 the same way it always has.
+            }
           }
         }
         const result = await ctx.validateMcpConnection({
@@ -798,6 +816,7 @@ async function testMcpConnection(
           transport: source.mcp.transport,
           authType: source.mcp.authType,
           headers,
+          accessToken,
         });
         if (result.success) {
           success = true;

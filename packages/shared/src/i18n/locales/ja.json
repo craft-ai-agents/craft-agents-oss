@@ -491,6 +491,7 @@
   "menu.resetZoom": "ズームをリセット",
   "menu.selectAll": "すべて選択",
   "menu.settings": "設定...",
+  "menu.toggleDevTools": "DevToolsを切り替え",
   "menu.toggleFocusMode": "フォーカスモードを切り替え",
   "menu.toggleSidebar": "サイドバーを切り替え",
   "menu.undo": "元に戻す",

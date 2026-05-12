@@ -986,7 +986,7 @@ export function clearWorkspacePlan(workspaceId: string): void {
 const DRAFTS_FILE = join(CONFIG_DIR, 'drafts.json');
 
 export interface DraftAttachmentContent {
-  type: 'image' | 'pdf' | 'text' | 'office' | 'unknown';
+  type: 'image' | 'pdf' | 'text' | 'office' | 'audio' | 'unknown';
   mimeType: string;
   size: number;
   base64?: string;
@@ -1012,7 +1012,7 @@ interface DraftsData {
   updatedAt: number;
 }
 
-const ATTACHMENT_CONTENT_TYPES = new Set(['image', 'pdf', 'text', 'office', 'unknown']);
+const ATTACHMENT_CONTENT_TYPES = new Set(['image', 'pdf', 'text', 'office', 'audio', 'unknown']);
 
 function isAbsoluteDraftPath(p: string): boolean {
   if (!p) return false;

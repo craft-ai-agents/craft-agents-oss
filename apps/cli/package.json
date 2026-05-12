@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/cli",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "license": "Apache-2.0",
   "description": "Terminal client for Craft Agent server",
   "type": "module",

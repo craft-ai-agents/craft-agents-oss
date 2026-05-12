@@ -272,6 +272,22 @@ export const mockElectronAPI = {
     alert(`Would reveal in file manager:\n${path}`)
   },
 
+  // NavigationProvider subscribes to deep-link IPC on mount; in the playground
+  // there is no main process firing these events, so the listener is a no-op.
+  onDeepLinkNavigate: (_callback: unknown) => {
+    void _callback
+    return () => {}
+  },
+
+  // Debug menu actions invoked by the mobile menu's Debug sub-page in dev mode.
+  // The real implementations call into the auto-updater; the playground just logs.
+  checkForUpdates: () => {
+    console.log('[Playground] checkForUpdates called')
+  },
+  installUpdate: () => {
+    console.log('[Playground] installUpdate called')
+  },
+
   // ChatDisplay required mocks
   readPreferences: async () => {
     return { diffViewerSettings: { showFilePath: true, expandedSections: {} } }
