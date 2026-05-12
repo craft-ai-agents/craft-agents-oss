@@ -1,17 +1,20 @@
+/** Approved Marketplace service environments controlled by the product build. */
 export type MarketplaceServiceEnvironment = 'production' | 'staging' | 'local'
 
+/** Product release channels that determine whether non-production Marketplace services are selectable. */
 export type MarketplaceBuildChannel = 'production' | 'development' | 'internal'
 
+/** Resolved Marketplace service endpoint used by product code. */
 export interface MarketplaceServiceConfig {
   environment: MarketplaceServiceEnvironment
   label: string
   baseUrl: string
 }
 
+/** Product-controlled inputs used to select an approved Marketplace service environment. */
 export interface MarketplaceServiceConfigInput {
   buildChannel?: MarketplaceBuildChannel
   requestedEnvironment?: string | null
-  requestedBaseUrl?: string | null
 }
 
 const PRODUCT_MARKETPLACE_SERVICE_CONFIGS: Record<MarketplaceServiceEnvironment, MarketplaceServiceConfig> = {
@@ -34,6 +37,7 @@ const PRODUCT_MARKETPLACE_SERVICE_CONFIGS: Record<MarketplaceServiceEnvironment,
 
 const INTERNAL_BUILD_CHANNELS = new Set<MarketplaceBuildChannel>(['development', 'internal'])
 
+/** Resolves the Marketplace service endpoint, ignoring unapproved environment selections. */
 export function resolveMarketplaceServiceConfig(input: MarketplaceServiceConfigInput = {}): MarketplaceServiceConfig {
   const buildChannel = input.buildChannel ?? 'production'
   const requestedEnvironment = parseMarketplaceServiceEnvironment(input.requestedEnvironment)

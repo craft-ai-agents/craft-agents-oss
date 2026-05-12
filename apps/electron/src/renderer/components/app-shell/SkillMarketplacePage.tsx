@@ -75,15 +75,18 @@ export interface MarketplaceApi {
   recordUpdateComplete: (intentId: string) => Promise<void>
 }
 
+/** Service boundary used to publish a Local Skill into Marketplace. */
 export interface MarketplacePublishApi {
   publishSkill: (input: { userId: string; skillSlug: string }) => Promise<MarketplacePublishResult>
 }
 
+/** UI-safe result returned after attempting a Marketplace publish handoff. */
 export type MarketplacePublishResult =
   | { status: 'published'; marketplaceSlug: string }
   | { status: 'auth-required'; message: string }
   | { status: 'error'; message: string }
 
+/** Electron bridge used to install Marketplace Skills into Local Skills. */
 export interface MarketplaceInstallElectronApi {
   installMarketplaceSkill(workspaceId: string, input: MarketplaceSkillInstallInput): Promise<MarketplaceInstallResult>
 }
@@ -790,6 +793,7 @@ export function SkillMarketplacePage({
   )
 }
 
+/** Header for Marketplace browsing, publish auth state, and selected service environment. */
 export function SkillMarketplacePageHeader({
   currentUserId,
   serviceEnvironmentLabel,

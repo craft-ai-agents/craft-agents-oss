@@ -30,11 +30,10 @@ describe('resolveMarketplaceServiceConfig', () => {
     })
   })
 
-  test('ignores user-supplied URLs and unapproved environment names', () => {
+  test('ignores production overrides and unapproved environment names', () => {
     expect(resolveMarketplaceServiceConfig({
       buildChannel: 'production',
       requestedEnvironment: 'local',
-      requestedBaseUrl: 'https://attacker.example',
     })).toEqual({
       environment: 'production',
       label: 'Production',
@@ -44,7 +43,6 @@ describe('resolveMarketplaceServiceConfig', () => {
     expect(resolveMarketplaceServiceConfig({
       buildChannel: 'development',
       requestedEnvironment: 'https://attacker.example',
-      requestedBaseUrl: 'https://attacker.example',
     })).toEqual({
       environment: 'production',
       label: 'Production',
