@@ -148,7 +148,7 @@ export function TopBar({
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 z-panel titlebar-drag-region"
+      className="fixed top-0 left-0 right-0 z-panel titlebar-drag-region bg-foreground-5"
       style={{ height: 'var(--topbar-height)' }}
     >
       <div className="flex h-full w-full items-center justify-between gap-2">
