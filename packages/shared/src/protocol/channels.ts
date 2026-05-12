@@ -271,6 +271,7 @@ export const RPC_CHANNELS = {
     EXTRACT_ZIP: 'skills:extractZip',
     RESOLVE_REMOTE: 'skills:resolveRemote',
     INSTALL_MARKETPLACE: 'skills:installMarketplace',
+    UPDATE_MARKETPLACE: 'skills:updateMarketplace',
     CHANGED: 'skills:changed',
   },
   statuses: {

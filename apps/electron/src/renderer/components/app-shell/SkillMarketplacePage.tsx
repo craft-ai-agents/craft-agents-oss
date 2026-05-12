@@ -6,6 +6,7 @@ import type {
   MarketplaceInstallIntent,
   MarketplaceInstallResult,
   MarketplaceSkillInstallInput,
+  MarketplaceSkillUpdateInput,
 } from '@craft-agent/shared/skills'
 
 /** Install/update state shown for a Marketplace Skill before install behavior exists. */
@@ -68,10 +69,16 @@ export interface MarketplaceApi {
   getSkillDetail: (slug: string) => Promise<MarketplaceSkillDetail>
   createInstallIntent: (detail: MarketplaceSkillDetail, userId: string) => Promise<MarketplaceInstallIntent>
   recordInstallComplete: (intentId: string) => Promise<void>
+  createUpdateIntent: (detail: MarketplaceSkillDetail, userId: string) => Promise<MarketplaceInstallIntent>
+  recordUpdateComplete: (intentId: string) => Promise<void>
 }
 
 export interface MarketplaceInstallElectronApi {
   installMarketplaceSkill(workspaceId: string, input: MarketplaceSkillInstallInput): Promise<MarketplaceInstallResult>
+}
+
+export interface MarketplaceUpdateElectronApi {
+  updateMarketplaceSkill(workspaceId: string, input: MarketplaceSkillUpdateInput): Promise<MarketplaceInstallResult>
 }
 
 /** Result of loading and filtering the Marketplace catalog. */
@@ -279,6 +286,17 @@ export function createStaticMarketplaceApi(options?: StaticMarketplaceApiOptions
     async recordInstallComplete() {
       // Static Marketplace API records no hosted metrics.
     },
+    async createUpdateIntent(detail) {
+      const bytes = zipSync({ 'SKILL.md': strToU8(detail.skillMarkdown) })
+      return {
+        intentId: `update_intent_${detail.id}`,
+        downloadUrl: `data:application/zip;base64,${toBase64(bytes)}`,
+        expectedSha256: await sha256Hex(bytes),
+      }
+    },
+    async recordUpdateComplete() {
+      // Static Marketplace API records no hosted metrics.
+    },
   }
 }
 
@@ -394,6 +412,51 @@ export async function installMarketplaceSkillFromDetail({
   }
 }
 
+export async function updateMarketplaceSkillFromDetail({
+  workspaceId,
+  userId,
+  detail,
+  api,
+  electronAPI,
+}: {
+  workspaceId: string
+  userId: string | null
+  detail: MarketplaceSkillDetail
+  api: MarketplaceApi
+  electronAPI: MarketplaceUpdateElectronApi
+}): Promise<MarketplaceInstallResult | { status: 'auth-required'; message: string } | { status: 'error'; message: string }> {
+  if (!userId) {
+    return { status: 'auth-required', message: 'Sign in is required to update Marketplace Skills.' }
+  }
+
+  try {
+    const intent = await api.createUpdateIntent(detail, userId)
+    const result = await electronAPI.updateMarketplaceSkill(workspaceId, {
+      userId,
+      slug: detail.slug,
+      targetVersion: detail.latestVersion,
+      intent,
+    })
+    if (result.status !== 'installed') return result
+
+    try {
+      await api.recordUpdateComplete(intent.intentId)
+      return result
+    } catch (error) {
+      return {
+        status: 'install-complete-failed',
+        slug: detail.slug,
+        message: error instanceof Error ? error.message : 'Marketplace update completion failed.',
+      }
+    }
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Marketplace update failed.',
+    }
+  }
+}
+
 const defaultMarketplaceApi = createStaticMarketplaceApi()
 
 type MarketplaceDetailInstallState =
@@ -451,7 +514,7 @@ function disabledActionLabel(state: MarketplaceInstallState): string {
       return 'Installed'
     case 'update-available':
     case 'modified-locally':
-      return 'Update placeholder'
+      return 'Update'
     case 'unavailable':
       return 'Unavailable'
     case 'safety-blocked':
@@ -484,8 +547,14 @@ function getMarketplaceInstallActionLabel(
   canInstall: boolean,
 ): string {
   if (installState.status === 'installing') return 'Installing...'
-  if (!canInstall) return 'Sign in to install'
+  if (!canInstall) return detailInstallState === 'update-available' || detailInstallState === 'modified-locally'
+    ? 'Sign in to update'
+    : 'Sign in to install'
   return disabledActionLabel(detailInstallState)
+}
+
+function isMarketplaceUpdateAction(state: MarketplaceInstallState): boolean {
+  return state === 'update-available' || state === 'modified-locally'
 }
 
 function marketplaceInstallAlertClassName(status: Exclude<MarketplaceDetailInstallState['status'], 'idle' | 'installing'>): string {
@@ -544,20 +613,28 @@ export function SkillMarketplacePage({
     if (!workspaceId) {
       setInstallStateBySlug((previous) => ({
         ...previous,
-        [detail.slug]: { status: 'error', message: 'Open a workspace before installing Marketplace Skills.' },
+        [detail.slug]: { status: 'error', message: 'Open a workspace before installing or updating Marketplace Skills.' },
       }))
       return
     }
 
     setInstallStateBySlug((previous) => ({ ...previous, [detail.slug]: { status: 'installing' } }))
-    const result = await installMarketplaceSkillFromDetail({
-      workspaceId,
-      userId: currentUserId,
-      detail,
-      api,
-      electronAPI: window.electronAPI,
-      conflictResolution,
-    })
+    const result = isMarketplaceUpdateAction(detail.installState)
+      ? await updateMarketplaceSkillFromDetail({
+        workspaceId,
+        userId: currentUserId,
+        detail,
+        api,
+        electronAPI: window.electronAPI,
+      })
+      : await installMarketplaceSkillFromDetail({
+        workspaceId,
+        userId: currentUserId,
+        detail,
+        api,
+        electronAPI: window.electronAPI,
+        conflictResolution,
+      })
 
     setInstallStateBySlug((previous) => ({ ...previous, [detail.slug]: marketplaceInstallStateFromResult(result) }))
   }, [api, currentUserId, workspaceId])

@@ -30,6 +30,9 @@ export { resolveRemoteSkills, parseRemoteInput } from './remote-resolver.ts';
 export type { RemoteResolveResult } from './remote-resolver.ts';
 export {
   MARKETPLACE_ORIGIN_METADATA_FILE,
+  applyMarketplaceSkillUpdate,
+  applyMarketplaceSkillUpdateFromIntent,
+  checkMarketplaceSkillUpdates,
   downloadMarketplaceBundle,
   installMarketplaceSkill,
   installMarketplaceSkillFromIntent,
@@ -42,5 +45,14 @@ export type {
   MarketplaceInstallRequest,
   MarketplaceInstallResult,
   MarketplaceSkillInstallInput,
+  MarketplaceSkillUpdateInput,
   MarketplaceOriginMetadata,
+  MarketplaceUpdateApplyApi,
+  MarketplaceUpdateApplyRequest,
+  MarketplaceUpdateCheckApi,
+  MarketplaceUpdateCheckItem,
+  MarketplaceUpdateCheckRequest,
+  MarketplaceUpdateCheckResponse,
+  MarketplaceUpdateCheckResult,
+  MarketplaceUpdateStatus,
 } from './marketplace-install.ts';

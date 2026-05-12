@@ -261,6 +261,7 @@ const EXPECTED_CHANNELS: string[] = [
   'skills:openEditor',
   'skills:openFinder',
   'skills:resolveRemote',
+  'skills:updateMarketplace',
   'sources:changed',
   'sources:create',
   'sources:delete',

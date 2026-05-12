@@ -11,7 +11,7 @@ import { tmpdir } from 'os'
 import { dirname, join, normalize, sep } from 'path'
 import { unzipSync } from 'fflate'
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts'
-import { invalidateSkillsCache, skillExists } from './storage.ts'
+import { invalidateSkillsCache, listSkillSlugs, skillExists } from './storage.ts'
 
 export type MarketplaceOriginSafetyStatus = 'ok' | 'unavailable' | 'safety-blocked'
 
@@ -69,6 +69,70 @@ export interface MarketplaceInstallApi {
   }): Promise<void>
 }
 
+export type MarketplaceUpdateStatus = 'installed' | 'update-available' | 'unavailable' | 'safety-blocked'
+
+export interface MarketplaceUpdateCheckItem {
+  marketplaceId: string
+  marketplaceSlug: string
+  installedVersion: string
+}
+
+export interface MarketplaceUpdateCheckResponse {
+  marketplaceId: string
+  status: MarketplaceUpdateStatus
+  latestVersion?: string
+  message?: string
+}
+
+export interface MarketplaceUpdateCheckApi {
+  checkUpdates(input: {
+    installed: MarketplaceUpdateCheckItem[]
+  }): Promise<MarketplaceUpdateCheckResponse[]>
+}
+
+export interface MarketplaceUpdateCheckRequest {
+  workspaceRoot: string
+  api: MarketplaceUpdateCheckApi
+  now?: () => Date
+}
+
+export interface MarketplaceUpdateCheckResult {
+  slug: string
+  marketplaceId: string
+  marketplaceSlug: string
+  installedVersion: string
+  status: MarketplaceUpdateStatus
+  latestVersion?: string
+  message?: string
+}
+
+export interface MarketplaceUpdateApplyApi {
+  createUpdateIntent(input: {
+    marketplaceId: string
+    marketplaceSlug: string
+    fromVersion: string
+    toVersion: string
+    userId: string
+  }): Promise<MarketplaceInstallIntent>
+  recordUpdateComplete(intentId: string): Promise<void>
+  reportIntegrityFailure?(input: {
+    intentId: string
+    marketplaceId: string
+    expectedSha256: string
+    actualSha256: string
+  }): Promise<void>
+}
+
+export interface MarketplaceUpdateApplyRequest {
+  workspaceRoot: string
+  user: { id: string } | null
+  slug: string
+  targetVersion: string
+  api: MarketplaceUpdateApplyApi
+  downloadBundle: (downloadUrl: string) => Promise<Uint8Array>
+  now?: () => Date
+}
+
 /** User choice when the Marketplace Skill slug already exists locally. */
 export type MarketplaceInstallConflictResolution = 'skip' | 'overwrite'
 
@@ -89,6 +153,14 @@ export interface MarketplaceSkillInstallInput {
   skill: MarketplaceInstallSkill
   intent: MarketplaceInstallIntent
   conflictResolution?: MarketplaceInstallConflictResolution
+}
+
+/** Renderer-to-main payload for applying an update from an existing intent. */
+export interface MarketplaceSkillUpdateInput {
+  userId: string
+  slug: string
+  targetVersion: string
+  intent: MarketplaceInstallIntent
 }
 
 /** Observable local install outcomes reported back to the Marketplace UI. */
@@ -205,6 +277,142 @@ export async function installMarketplaceSkillFromIntent(
     },
     downloadBundle: downloadMarketplaceBundle,
   })
+}
+
+/** Checks all Marketplace-installed Local Skills and updates local safety metadata. */
+export async function checkMarketplaceSkillUpdates(request: MarketplaceUpdateCheckRequest): Promise<MarketplaceUpdateCheckResult[]> {
+  const installed = listMarketplaceInstalledSkills(request.workspaceRoot)
+  if (installed.length === 0) return []
+
+  const responses = await request.api.checkUpdates({
+    installed: installed.map(({ metadata }) => ({
+      marketplaceId: metadata.marketplaceId,
+      marketplaceSlug: metadata.marketplaceSlug,
+      installedVersion: metadata.installedVersion,
+    })),
+  })
+  const responseById = new Map(responses.map((response) => [response.marketplaceId, response]))
+  const checkedAt = (request.now?.() ?? new Date()).toISOString()
+
+  return installed.map(({ slug, metadata }) => {
+    const response = responseById.get(metadata.marketplaceId) ?? {
+      marketplaceId: metadata.marketplaceId,
+      status: 'installed' as const,
+    }
+    const safetyStatus = response.status === 'unavailable' || response.status === 'safety-blocked'
+      ? response.status
+      : 'ok'
+    writeMarketplaceOriginMetadata(request.workspaceRoot, slug, {
+      ...metadata,
+      lastCheckedAt: checkedAt,
+      safetyStatus,
+    })
+
+    return {
+      slug,
+      marketplaceId: metadata.marketplaceId,
+      marketplaceSlug: metadata.marketplaceSlug,
+      installedVersion: metadata.installedVersion,
+      status: response.status,
+      latestVersion: response.latestVersion,
+      message: response.message,
+    }
+  })
+}
+
+/** Applies one user-requested Marketplace update to an installed Local Skill. */
+export async function applyMarketplaceSkillUpdate(request: MarketplaceUpdateApplyRequest): Promise<MarketplaceInstallResult> {
+  if (!request.user) {
+    throw new Error('Sign in is required to update Marketplace Skills.')
+  }
+
+  const metadata = readMarketplaceOriginMetadata(request.workspaceRoot, request.slug)
+  if (!metadata) {
+    throw new Error('Local Skill is not installed from Marketplace.')
+  }
+  if (metadata.safetyStatus === 'unavailable') {
+    throw new Error('Marketplace Skill is unavailable for updates.')
+  }
+  if (metadata.safetyStatus === 'safety-blocked') {
+    throw new Error('Marketplace Skill is safety blocked and cannot be updated.')
+  }
+
+  const intent = await request.api.createUpdateIntent({
+    marketplaceId: metadata.marketplaceId,
+    marketplaceSlug: metadata.marketplaceSlug,
+    fromVersion: metadata.installedVersion,
+    toVersion: request.targetVersion,
+    userId: request.user.id,
+  })
+
+  const bundle = await request.downloadBundle(intent.downloadUrl)
+  const actualSha256 = sha256(bundle)
+  const tempDir = mkdtempSync(join(tmpdir(), 'marketplace-skill-update-'))
+  try {
+    writeFileSync(join(tempDir, 'bundle.zip'), bundle)
+    if (actualSha256 !== intent.expectedSha256) {
+      await request.api.reportIntegrityFailure?.({
+        intentId: intent.intentId,
+        marketplaceId: metadata.marketplaceId,
+        expectedSha256: intent.expectedSha256,
+        actualSha256,
+      })
+      throw new Error('Marketplace bundle hash mismatch.')
+    }
+
+    writeSkillBundle(request.workspaceRoot, request.slug, bundle, true)
+    writeMarketplaceOriginMetadata(request.workspaceRoot, request.slug, {
+      ...metadata,
+      installedVersion: request.targetVersion,
+      lastCheckedAt: (request.now?.() ?? new Date()).toISOString(),
+      modified: false,
+      sourceBundleHash: actualSha256,
+      safetyStatus: 'ok',
+    })
+    invalidateSkillsCache()
+
+    try {
+      await request.api.recordUpdateComplete(intent.intentId)
+      return { status: 'installed', slug: request.slug }
+    } catch (error) {
+      return {
+        status: 'install-complete-failed',
+        slug: request.slug,
+        message: error instanceof Error ? error.message : 'Marketplace update completion failed.',
+      }
+    }
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true })
+  }
+}
+
+/** Applies a Marketplace Skill update locally from an intent already issued to the renderer. */
+export async function applyMarketplaceSkillUpdateFromIntent(
+  workspaceRoot: string,
+  input: MarketplaceSkillUpdateInput,
+): Promise<MarketplaceInstallResult> {
+  return applyMarketplaceSkillUpdate({
+    workspaceRoot,
+    user: { id: input.userId },
+    slug: input.slug,
+    targetVersion: input.targetVersion,
+    api: {
+      async createUpdateIntent() {
+        return input.intent
+      },
+      async recordUpdateComplete() {
+        // The renderer calls the Marketplace service completion endpoint after
+        // this local update succeeds, keeping hosted API credentials out here.
+      },
+    },
+    downloadBundle: downloadMarketplaceBundle,
+  })
+}
+
+function listMarketplaceInstalledSkills(workspaceRoot: string): Array<{ slug: string; metadata: MarketplaceOriginMetadata }> {
+  return listSkillSlugs(workspaceRoot)
+    .map((slug) => ({ slug, metadata: readMarketplaceOriginMetadata(workspaceRoot, slug) }))
+    .filter((entry): entry is { slug: string; metadata: MarketplaceOriginMetadata } => Boolean(entry.metadata))
 }
 
 function writeMarketplaceOriginMetadata(workspaceRoot: string, slug: string, metadata: MarketplaceOriginMetadata): void {

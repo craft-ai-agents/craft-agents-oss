@@ -9,6 +9,7 @@ import {
   MarketplaceDetail,
   MarketplaceError,
   MarketplaceListingCard,
+  updateMarketplaceSkillFromDetail,
 } from '../SkillMarketplacePage'
 
 describe('SkillMarketplacePage API boundary', () => {
@@ -125,6 +126,54 @@ describe('SkillMarketplacePage API boundary', () => {
       status: 'auth-required',
       message: 'Sign in is required to install Marketplace Skills.',
     })
+  })
+
+  test('updates Marketplace Skill detail only after authenticated update intent and local update succeed', async () => {
+    const api = createStaticMarketplaceApi()
+    const result = await loadMarketplaceDetail(api, 'release-notes')
+    if (result.status !== 'ready') throw new Error('Expected ready detail state')
+    const completed: string[] = []
+
+    const updateResult = await updateMarketplaceSkillFromDetail({
+      workspaceId: 'workspace_1',
+      userId: 'user_1',
+      detail: result.detail,
+      api: {
+        ...api,
+        async createUpdateIntent() {
+          return { intentId: 'update_1', downloadUrl: 'data:application/zip;base64,AA==', expectedSha256: 'hash' }
+        },
+        async recordUpdateComplete(intentId) {
+          completed.push(intentId)
+        },
+      },
+      electronAPI: {
+        async updateMarketplaceSkill(_workspaceId, input) {
+          expect(input.userId).toBe('user_1')
+          expect(input.slug).toBe('release-notes')
+          expect(input.targetVersion).toBe('1.8.0')
+          return { status: 'installed', slug: 'release-notes' }
+        },
+      },
+    })
+
+    expect(updateResult).toEqual({ status: 'installed', slug: 'release-notes' })
+    expect(completed).toEqual(['update_1'])
+  })
+
+  test('renders Marketplace update actions without auto-updating unavailable or safety-blocked skills', async () => {
+    const api = createStaticMarketplaceApi()
+    const updateResult = await loadMarketplaceDetail(api, 'release-notes')
+    const blockedResult = await loadMarketplaceDetail(api, 'security-review')
+    if (updateResult.status !== 'ready' || blockedResult.status !== 'ready') throw new Error('Expected ready detail state')
+
+    const updateHtml = renderToStaticMarkup(React.createElement(MarketplaceDetail, { detail: updateResult.detail }))
+    const blockedHtml = renderToStaticMarkup(React.createElement(MarketplaceDetail, { detail: blockedResult.detail }))
+
+    expect(updateHtml).toContain('Update')
+    expect(updateHtml).not.toContain('Update placeholder')
+    expect(blockedHtml).toContain('Safety blocked')
+    expect(blockedHtml).toContain('prevents Marketplace install and update distribution')
   })
 
   test('renders install progress and conflict recovery states', async () => {
