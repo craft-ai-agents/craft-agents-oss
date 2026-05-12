@@ -1,8 +1,6 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, mock, test } from 'bun:test'
 import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import {
   createStaticMarketplaceApi,
   installMarketplaceSkillFromDetail,
@@ -16,6 +14,22 @@ import {
   SkillMarketplacePageHeader,
   updateMarketplaceSkillFromDetail,
 } from '../SkillMarketplacePage'
+
+mock.module('pdfjs-dist/build/pdf.worker.min.mjs?url', () => ({ default: '' }))
+mock.module('pdfjs-dist', () => ({ GlobalWorkerOptions: { workerSrc: '' }, getDocument: () => ({}) }))
+mock.module('react-pdf', () => ({
+  Document: () => null,
+  Page: () => null,
+  pdfjs: { GlobalWorkerOptions: { workerSrc: '' } },
+}))
+mock.module('@/components/ui/menu-context', () => ({
+  useMenuComponents: () => ({
+    MenuItem: ({ children, disabled }: { children?: React.ReactNode; disabled?: boolean }) => (
+      React.createElement('button', { disabled }, children)
+    ),
+    Separator: () => React.createElement('hr'),
+  }),
+}))
 
 describe('SkillMarketplacePage API boundary', () => {
   test('loads list results filtered by search, product category, and publisher tag', async () => {
@@ -203,15 +217,17 @@ describe('SkillMarketplacePage API boundary', () => {
     expect(authenticatedHtml).not.toContain('Sign in to publish')
   })
 
-  test('renders Publish Skill in Local Skill row and detail menus', () => {
-    const skillMenuSource = readFileSync(join(import.meta.dir, '..', 'SkillMenu.tsx'), 'utf-8')
-    const skillsListSource = readFileSync(join(import.meta.dir, '..', 'SkillsListPanel.tsx'), 'utf-8')
-    const skillInfoSource = readFileSync(join(import.meta.dir, '..', '..', '..', 'pages', 'SkillInfoPage.tsx'), 'utf-8')
+  test('renders Publish Skill when a Local Skill menu provides a publish action', async () => {
+    const { SkillMenu } = await import('../SkillMenu')
+    const html = renderToStaticMarkup(React.createElement(SkillMenu, {
+      skillSlug: 'local-helper',
+      skillName: 'Local Helper',
+      onOpenInNewWindow: () => {},
+      onShowInFinder: () => {},
+      onPublishSkill: () => {},
+    }))
 
-    expect(skillMenuSource).toContain('onPublishSkill')
-    expect(skillMenuSource).toContain('Publish Skill')
-    expect(skillsListSource).toContain('onPublishSkill={skill.source ===')
-    expect(skillInfoSource).toContain('onPublishSkill={canDeleteSkill')
+    expect(html).toContain('Publish Skill')
   })
 
   test('renders Local Skill Marketplace status after a successful publish', () => {

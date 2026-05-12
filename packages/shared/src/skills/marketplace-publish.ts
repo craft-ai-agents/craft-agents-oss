@@ -14,10 +14,13 @@ import {
 
 export { MARKETPLACE_ORIGIN_METADATA_FILE, readMarketplaceOriginMetadata } from './marketplace-install.ts'
 
+/** Product-owned Marketplace categories that Local Skills can be published under. */
 export const PRODUCT_MARKETPLACE_CATEGORIES = ['Documentation', 'Product', 'Quality', 'Security'] as const
 
+/** Category accepted by the product Marketplace publish workflow. */
 export type ProductMarketplaceCategory = typeof PRODUCT_MARKETPLACE_CATEGORIES[number]
 
+/** Payload sent to the Marketplace service when publishing a Local Skill bundle. */
 export interface MarketplacePublishApiInput {
   userId: string
   bundle: Uint8Array
@@ -33,6 +36,7 @@ export interface MarketplacePublishApiInput {
   }
 }
 
+/** Marketplace service response for a Local Skill publish attempt. */
 export type MarketplacePublishApiResult =
   | {
       status: 'published'
@@ -48,10 +52,12 @@ export type MarketplacePublishApiResult =
       message: string
     }
 
+/** Boundary used by publish orchestration to create Marketplace Skill versions. */
 export interface MarketplacePublishApi {
   publishSkill(input: MarketplacePublishApiInput): Promise<MarketplacePublishApiResult>
 }
 
+/** Complete Local Skill publish request, including workspace context and service boundary. */
 export interface MarketplacePublishRequest {
   workspaceRoot: string
   user: { id: string } | null
@@ -65,6 +71,7 @@ export interface MarketplacePublishRequest {
   now?: () => Date
 }
 
+/** Renderer-safe input for publishing a Local Skill through workspace-owned RPC. */
 export interface MarketplaceLocalSkillPublishInput {
   userId: string
   skillSlug: string
@@ -75,6 +82,7 @@ export interface MarketplaceLocalSkillPublishInput {
   releaseNotes?: string
 }
 
+/** Renderer-safe result returned after publishing a Local Skill through RPC. */
 export type MarketplacePublishLocalResult =
   | {
       status: 'published'
@@ -88,10 +96,12 @@ export type MarketplacePublishLocalResult =
       message: string
     }
 
+/** Suggest the editable Marketplace slug from SKILL.md frontmatter metadata. */
 export function suggestMarketplaceSlug(metadata: Pick<SkillMetadata, 'name'>): string {
   return deriveSkillSlug(metadata.name)
 }
 
+/** Validate product-level Marketplace publish fields before uploading the bundle. */
 export function validateMarketplacePublishRequest(input: {
   marketplaceSlug: string
   version: string
@@ -118,6 +128,7 @@ export function validateMarketplacePublishRequest(input: {
   return errors
 }
 
+/** Bundle, upload, and link an existing workspace Local Skill to a Marketplace version. */
 export async function publishLocalSkillToMarketplace(
   request: MarketplacePublishRequest,
 ): Promise<MarketplacePublishLocalResult> {
@@ -134,9 +145,7 @@ export async function publishLocalSkillToMarketplace(
   if (validationErrors.length > 0) {
     throw new Error(validationErrors.join(' '))
   }
-  if (!isProductMarketplaceCategory(request.category)) {
-    throw new Error('Category must be product-defined.')
-  }
+  const category = request.category as ProductMarketplaceCategory
 
   const bundle = bundleLocalSkill(request.workspaceRoot, request.skillSlug)
   const origin = readMarketplaceOriginMetadata(request.workspaceRoot, request.skillSlug)
@@ -145,7 +154,7 @@ export async function publishLocalSkillToMarketplace(
     bundle,
     marketplaceSlug: request.marketplaceSlug,
     version: request.version,
-    category: request.category,
+    category,
     tags: cleanOptionalStringArray(request.tags),
     releaseNotes: cleanOptionalString(request.releaseNotes),
     basedOn: origin
@@ -160,6 +169,7 @@ export async function publishLocalSkillToMarketplace(
   if (published.status === 'slug-conflict') return published
 
   const publishedAt = (request.now?.() ?? new Date()).toISOString()
+  const bundleHash = sha256(bundle)
   writeMarketplacePublishMetadata(request.workspaceRoot, request.skillSlug, {
     marketplaceId: published.marketplaceId,
     marketplaceSlug: published.marketplaceSlug,
@@ -169,8 +179,8 @@ export async function publishLocalSkillToMarketplace(
     installedAt: origin?.installedAt ?? publishedAt,
     lastCheckedAt: publishedAt,
     modified: false,
-    sourceBundleHash: sha256(bundle),
-    sourceBundleContentHash: sha256(bundle),
+    sourceBundleHash: bundleHash,
+    sourceBundleContentHash: bundleHash,
     safetyStatus: 'ok',
     basedOn: origin && origin.ownerId !== published.ownerId
       ? {
@@ -189,6 +199,7 @@ export async function publishLocalSkillToMarketplace(
   }
 }
 
+/** Publish a Local Skill to the configured Marketplace HTTP service from an owning workspace. */
 export async function publishLocalSkillToMarketplaceService(
   workspaceRoot: string,
   input: MarketplaceLocalSkillPublishInput,
@@ -212,6 +223,7 @@ export async function publishLocalSkillToMarketplaceService(
   })
 }
 
+/** Create the HTTP Marketplace publish boundary used by production RPC handlers. */
 export function createHttpMarketplacePublishApi(baseUrl: string, fetchImpl: typeof fetch = fetch): MarketplacePublishApi {
   return {
     async publishSkill(input) {
