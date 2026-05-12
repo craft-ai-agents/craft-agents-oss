@@ -7,7 +7,7 @@
  *   bun .afk/linear.ts resolve
  *   bun .afk/linear.ts create --title <t> [--desc <d>] [--label <label-id>]
  *   bun .afk/linear.ts read <RPI-N>
- *   bun .afk/linear.ts list [--label <name>] [--all]
+ *   bun .afk/linear.ts list [--label <name>] [--all] [--closed]
  *   bun .afk/linear.ts label <issue-id> <label-id>
  *   bun .afk/linear.ts unlabel <issue-id> <label-id>
  *   bun .afk/linear.ts comment <issue-id> --body <text>
@@ -20,6 +20,7 @@ import { LinearClient } from "@linear/sdk";
 
 const TEAM_KEY = "RPI";
 const PROJECT_NAME = "MDP";
+const TERMINAL_STATE_NAMES = new Set(["Done", "Canceled", "Cancelled"]);
 
 // Bun auto-loads .env from the project root
 const LINEAR_API_KEY = Bun.env.LINEAR_API_KEY;
@@ -164,12 +165,17 @@ switch (cmd) {
             filter.labels = { name: { eq: flags.label } };
         }
         const issues = await linear.issues({ filter } as Parameters<typeof linear.issues>[0]);
-        print(issues.nodes.map(i => ({
-            id: i.id,
-            identifier: i.identifier,
-            title: i.title,
-            ...(flags.full ? { description: i.description } : {}),
-        })));
+        const output = await Promise.all(issues.nodes.map(async i => {
+            const state = await i.state;
+            return {
+                id: i.id,
+                identifier: i.identifier,
+                title: i.title,
+                state: state?.name,
+                ...(flags.full ? { description: i.description } : {}),
+            };
+        }));
+        print(output.filter(i => flags.closed || !TERMINAL_STATE_NAMES.has(i.state ?? "")));
         break;
     }
 
