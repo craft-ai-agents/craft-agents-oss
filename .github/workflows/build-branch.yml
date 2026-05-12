@@ -1,0 +1,413 @@
+name: Build Branch Binaries
+
+on:
+  push:
+    branches:
+      - feature/native-sound-notifications-pr
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a draft GitHub Release with the binaries'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+concurrency:
+  group: build-branch-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Disable code signing / notarization for branch builds
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+  # Dev runtime mode — skips update checks, enables dev features
+  CRAFT_DEV_RUNTIME: '1'
+
+permissions:
+  contents: write
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Determine a human-readable version string from the branch + commit
+  # ─────────────────────────────────────────────────────────────────────────────
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      short_sha: ${{ steps.version.outputs.short_sha }}
+      branch_slug: ${{ steps.version.outputs.branch_slug }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute version string
+        id: version
+        run: |
+          # Read the app version from electron package.json
+          APP_VERSION=$(node -p "require('./apps/electron/package.json').version")
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          # Slugify branch name (feature/native-sound-notifications-pr → feature-native-sound-notifications-pr)
+          BRANCH_SLUG=$(echo "${GITHUB_REF_NAME}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          echo "version=${APP_VERSION}-branch+${BRANCH_SLUG}.${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "branch_slug=${BRANCH_SLUG}" >> "$GITHUB_OUTPUT"
+          echo "📋 Build version: ${APP_VERSION}-branch+${BRANCH_SLUG}.${SHORT_SHA}"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Build: Windows x64
+  # ─────────────────────────────────────────────────────────────────────────────
+  build-windows:
+    needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.10'
+
+      - name: Install dependencies
+        run: bun install
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build MCP servers
+        run: bun run server:build:subprocess
+
+      - name: Build WhatsApp worker
+        run: bun run build:wa-worker
+
+      - name: Stage vendor + SDK for electron-builder
+        shell: pwsh
+        run: |
+          # ── Stage @anthropic-ai/claude-agent-sdk into apps/electron/node_modules ──
+          # electron-builder.yml extraResources references node_modules/@anthropic-ai/claude-agent-sdk
+          # relative to apps/electron/. With Bun's hoisted linker, deps are in root node_modules/.
+          New-Item -Path "apps/electron/node_modules/@anthropic-ai" -ItemType Directory -Force | Out-Null
+
+          $sdkSource = "node_modules/@anthropic-ai/claude-agent-sdk"
+          $sdkDest = "apps/electron/node_modules/@anthropic-ai/claude-agent-sdk"
+          if (Test-Path $sdkSource) {
+            Copy-Item -Recurse -Force $sdkSource $sdkDest
+            Write-Host "✅ Copied claude-agent-sdk"
+          } else {
+            Write-Error "❌ claude-agent-sdk not found in node_modules"
+            exit 1
+          }
+
+          # ── Stage vendor dirs ──
+          New-Item -Path "apps/electron/vendor/copilot/win32-x64" -ItemType Directory -Force | Out-Null
+          New-Item -Path "apps/electron/vendor/codex/win32-x64" -ItemType Directory -Force | Out-Null
+
+          if (Test-Path "node_modules/@github/copilot-win32-x64/copilot.exe") {
+            Copy-Item "node_modules/@github/copilot-win32-x64/copilot.exe" "apps/electron/vendor/copilot/win32-x64/copilot.exe"
+            Write-Host "✅ Copied copilot.exe"
+          } else {
+            Write-Host "⚠️ copilot binary not found, creating placeholder"
+            New-Item -Path "apps/electron/vendor/copilot/win32-x64/.gitkeep" -ItemType File -Force | Out-Null
+          }
+
+          # ── Stage koffi for pi-agent-server ──
+          if (Test-Path "node_modules/koffi") {
+            Copy-Item -Recurse -Force "node_modules/koffi" "apps/electron/node_modules/koffi"
+            Write-Host "✅ Copied koffi"
+          }
+
+      - name: Copy MCP servers to electron resources
+        shell: pwsh
+        run: |
+          New-Item -Path "apps/electron/resources/session-mcp-server" -ItemType Directory -Force | Out-Null
+          New-Item -Path "apps/electron/resources/pi-agent-server" -ItemType Directory -Force | Out-Null
+          Copy-Item "packages/session-mcp-server/dist/index.js" "apps/electron/resources/session-mcp-server/index.js"
+          Copy-Item "packages/pi-agent-server/dist/index.js" "apps/electron/resources/pi-agent-server/index.js"
+
+      - name: Build Electron app + package (Windows)
+        run: bun run electron:dist:dev:win
+        env:
+          NODE_OPTIONS: '--max-old-space-size=8192'
+
+      - name: Rename installer with version
+        shell: pwsh
+        run: |
+          $exe = "apps/electron/release/Craft-Agents-x64.exe"
+          $newName = "Craft-Agents-${{ needs.prepare.outputs.version }}-win-x64.exe"
+          if (Test-Path $exe) {
+            Move-Item $exe $newName -Force
+            Write-Host "✅ Renamed to $newName"
+          } else {
+            Write-Error "Installer not found!"
+            exit 1
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Craft-Agents-win-x64
+          path: Craft-Agents-*-win-x64.exe
+          retention-days: 30
+          if-no-files-found: error
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Build: macOS arm64 + x64
+  # ─────────────────────────────────────────────────────────────────────────────
+  build-macos:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x64]
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.10'
+
+      - name: Install dependencies
+        run: bun install
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build MCP servers
+        run: bun run server:build:subprocess
+
+      - name: Build WhatsApp worker
+        run: bun run build:wa-worker
+
+      - name: Stage vendor + SDK for electron-builder
+        run: |
+          # ── Stage @anthropic-ai/claude-agent-sdk into apps/electron/node_modules ──
+          mkdir -p apps/electron/node_modules/@anthropic-ai
+          if [ -d "node_modules/@anthropic-ai/claude-agent-sdk" ]; then
+            cp -r node_modules/@anthropic-ai/claude-agent-sdk apps/electron/node_modules/@anthropic-ai/claude-agent-sdk
+            echo "✅ Copied claude-agent-sdk"
+          else
+            echo "❌ claude-agent-sdk not found in node_modules"
+            exit 1
+          fi
+
+          # ── Stage vendor dirs ──
+          mkdir -p apps/electron/vendor/copilot/darwin-${{ matrix.arch }}
+          mkdir -p apps/electron/vendor/codex/darwin-${{ matrix.arch }}
+
+          if [ -f "node_modules/@github/copilot-darwin-${{ matrix.arch }}/copilot" ]; then
+            cp "node_modules/@github/copilot-darwin-${{ matrix.arch }}/copilot" "apps/electron/vendor/copilot/darwin-${{ matrix.arch }}/copilot"
+            echo "✅ Copied copilot"
+          else
+            echo "⚠️ copilot binary not found, creating placeholder"
+            touch "apps/electron/vendor/copilot/darwin-${{ matrix.arch }}/.gitkeep"
+          fi
+
+          # ── Stage koffi for pi-agent-server ──
+          if [ -d "node_modules/koffi" ]; then
+            cp -r node_modules/koffi apps/electron/node_modules/koffi
+            echo "✅ Copied koffi"
+          fi
+
+      - name: Copy MCP servers to electron resources
+        run: |
+          mkdir -p apps/electron/resources/session-mcp-server
+          mkdir -p apps/electron/resources/pi-agent-server
+          cp packages/session-mcp-server/dist/index.js apps/electron/resources/session-mcp-server/index.js
+          cp packages/pi-agent-server/dist/index.js apps/electron/resources/pi-agent-server/index.js
+
+      - name: Build Electron app + package (macOS ${{ matrix.arch }})
+        run: |
+          # Build all electron components, then package
+          bun run electron:build
+          cd apps/electron
+          npx electron-builder --mac --${{ matrix.arch }}
+        env:
+          NODE_OPTIONS: '--max-old-space-size=8192'
+
+      - name: Rename DMG with version
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          ARCH="${{ matrix.arch }}"
+          # Find the dmg
+          DMG=$(find apps/electron/release -name "Craft-Agents-*.dmg" -o -name "Craft-Agents-${ARCH}.dmg" | head -1)
+          if [ -n "$DMG" ]; then
+            NEW_NAME="Craft-Agents-${VERSION}-mac-${ARCH}.dmg"
+            mv "$DMG" "$NEW_NAME"
+            echo "✅ Renamed to $NEW_NAME"
+          else
+            echo "⚠️ DMG not found, listing release dir:"
+            ls -la apps/electron/release/ || true
+            # Check for zip as fallback
+            ZIP=$(find apps/electron/release -name "Craft-Agents-*.zip" -o -name "Craft-Agents-${ARCH}.zip" | head -1)
+            if [ -n "$ZIP" ]; then
+              NEW_NAME="Craft-Agents-${VERSION}-mac-${ARCH}.zip"
+              mv "$ZIP" "$NEW_NAME"
+              echo "✅ Found zip instead, renamed to $NEW_NAME"
+            fi
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Craft-Agents-mac-${{ matrix.arch }}
+          path: |
+            Craft-Agents-*-mac-${{ matrix.arch }}.dmg
+            Craft-Agents-*-mac-${{ matrix.arch }}.zip
+          retention-days: 30
+          if-no-files-found: warn
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Build: Linux x64
+  # ─────────────────────────────────────────────────────────────────────────────
+  build-linux:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-tools rpm
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.10'
+
+      - name: Install dependencies
+        run: bun install
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build MCP servers
+        run: bun run server:build:subprocess
+
+      - name: Build WhatsApp worker
+        run: bun run build:wa-worker
+
+      - name: Stage vendor + SDK for electron-builder
+        run: |
+          # ── Stage @anthropic-ai/claude-agent-sdk into apps/electron/node_modules ──
+          mkdir -p apps/electron/node_modules/@anthropic-ai
+          if [ -d "node_modules/@anthropic-ai/claude-agent-sdk" ]; then
+            cp -r node_modules/@anthropic-ai/claude-agent-sdk apps/electron/node_modules/@anthropic-ai/claude-agent-sdk
+            echo "✅ Copied claude-agent-sdk"
+          else
+            echo "❌ claude-agent-sdk not found in node_modules"
+            exit 1
+          fi
+
+          # ── Stage vendor dirs ──
+          mkdir -p apps/electron/vendor/copilot/linux-x64
+          mkdir -p apps/electron/vendor/codex/linux-x64
+
+          if [ -f "node_modules/@github/copilot-linux-x64-gnu/copilot" ]; then
+            cp "node_modules/@github/copilot-linux-x64-gnu/copilot" "apps/electron/vendor/copilot/linux-x64/copilot"
+            echo "✅ Copied copilot"
+          else
+            echo "⚠️ copilot binary not found, creating placeholder"
+            touch "apps/electron/vendor/copilot/linux-x64/.gitkeep"
+          fi
+
+          # ── Stage koffi for pi-agent-server ──
+          if [ -d "node_modules/koffi" ]; then
+            cp -r node_modules/koffi apps/electron/node_modules/koffi
+            echo "✅ Copied koffi"
+          fi
+
+      - name: Copy MCP servers to electron resources
+        run: |
+          mkdir -p apps/electron/resources/session-mcp-server
+          mkdir -p apps/electron/resources/pi-agent-server
+          cp packages/session-mcp-server/dist/index.js apps/electron/resources/session-mcp-server/index.js
+          cp packages/pi-agent-server/dist/index.js apps/electron/resources/pi-agent-server/index.js
+
+      - name: Build Electron app + package (Linux)
+        run: |
+          bun run electron:build
+          cd apps/electron
+          npx electron-builder --linux --x64
+        env:
+          NODE_OPTIONS: '--max-old-space-size=8192'
+
+      - name: Rename AppImage with version
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          APPIMAGE=$(find apps/electron/release -name "Craft-Agents-*.AppImage" | head -1)
+          if [ -n "$APPIMAGE" ]; then
+            NEW_NAME="Craft-Agents-${VERSION}-linux-x64.AppImage"
+            mv "$APPIMAGE" "$NEW_NAME"
+            echo "✅ Renamed to $NEW_NAME"
+          else
+            echo "⚠️ AppImage not found, listing release dir:"
+            ls -la apps/electron/release/ || true
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Craft-Agents-linux-x64
+          path: Craft-Agents-*-linux-x64.AppImage
+          retention-days: 30
+          if-no-files-found: warn
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Create a draft prerelease with all binaries
+  # ─────────────────────────────────────────────────────────────────────────────
+  release:
+    needs: [prepare, build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.create_release == 'true')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: false
+
+      - name: List downloaded artifacts
+        run: find artifacts -type f | sort
+
+      - name: Create draft prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "build/${{ needs.prepare.outputs.branch_slug }}/${{ needs.prepare.outputs.short_sha }}"
+          name: "🔊 Sound Notifications PR — ${{ needs.prepare.outputs.short_sha }}"
+          draft: true
+          prerelease: true
+          body: |
+            ## Branch Build: `${{ github.ref_name }}`
+
+            **Commit:** `${{ needs.prepare.outputs.short_sha }}`
+            **Version:** `${{ needs.prepare.outputs.version }}`
+
+            ### 📦 Downloads
+
+            | Platform | File |
+            |----------|------|
+            | Windows x64 | `Craft-Agents-*-win-x64.exe` |
+            | macOS arm64 (Apple Silicon) | `Craft-Agents-*-mac-arm64.dmg` |
+            | macOS x64 (Intel) | `Craft-Agents-*-mac-x64.dmg` |
+            | Linux x64 | `Craft-Agents-*-linux-x64.AppImage` |
+
+            > ⚠️ **Dev build** — unsigned, no auto-update. Install over the top of an existing install or fresh.
+
+            **Built from:** ${{ github.event.head_commit.message }}
+          files: |
+            artifacts/Craft-Agents-win-x64/*
+            artifacts/Craft-Agents-mac-arm64/*
+            artifacts/Craft-Agents-mac-x64/*
+            artifacts/Craft-Agents-linux-x64/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
