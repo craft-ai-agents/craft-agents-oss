@@ -157,6 +157,12 @@ export const routes = {
       return `skills/skill/${skillSlug}` as const
     },
 
+    /** Notes view (local markdown note vault). Pass a note id for detail view. */
+    notes: (noteId?: string) => {
+      if (!noteId) return 'notes' as const
+      return `notes/note/${encodeURIComponent(noteId)}` as const
+    },
+
     /** Automations view (automations navigator) - supports type filtering */
     automations: (params?: { automationId?: string; type?: 'scheduled' | 'event' | 'agentic' }) => {
       const { automationId, type } = params ?? {}

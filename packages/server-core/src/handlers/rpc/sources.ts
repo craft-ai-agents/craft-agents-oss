@@ -1,8 +1,11 @@
+import { mkdirSync } from 'fs'
+import { join } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import { loadWorkspaceSources } from '@craft-agent/shared/sources'
+import { loadSourceConfig, loadWorkspaceSources, saveSourceConfig, saveSourceGuide, type FolderSourceConfig } from '@craft-agent/shared/sources'
 import { safeJsonParse } from '@craft-agent/shared/utils/files'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
+import { getDefaultWorkspacesDir, loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
@@ -18,6 +21,67 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sources.GET_MCP_TOOLS,
 ] as const
 
+const NOTES_SOURCE_SLUG = 'notes'
+const NOTES_SOURCE_PROVIDER = 'craft-notes'
+
+function buildNotesSourceGuide(notesPath: string): string {
+  return `# Notes vault
+
+Workspace markdown notes live at:
+
+${notesPath}
+
+## Scope
+
+Use this source when the user asks you to use their notes as context, search personal/work knowledge, update markdown notes, or create new notes.
+
+## Guidelines
+
+- Notes are plain markdown files under the path above.
+- Use file tools to read, search, create, rename, and update notes in that folder.
+- Preserve wiki links such as [[Note name]], markdown links, tags, YAML frontmatter, and asset references.
+- Assets are stored under ${join(notesPath, 'assets')}.
+- Daily notes are stored under ${join(notesPath, 'daily')}.
+- When you mention a note in chat, prefer [[Note name]] or notes/path/to/note.md so the UI can open it directly.
+
+## Context
+
+This source is maintained automatically from the built-in Notes feature. It has no external API or authentication.
+`
+}
+
+function ensureNotesSource(workspaceRoot: string, workspaceId: string): void {
+  const wsConfig = loadWorkspaceConfig(workspaceRoot)
+  const notesPath = wsConfig?.notesPath ?? join(getDefaultWorkspacesDir(), workspaceId, 'notes')
+  mkdirSync(notesPath, { recursive: true })
+
+  const existing = loadSourceConfig(workspaceRoot, NOTES_SOURCE_SLUG)
+  if (existing && existing.provider !== NOTES_SOURCE_PROVIDER) return
+
+  const now = Date.now()
+  const sourceConfig: FolderSourceConfig = {
+    id: existing?.id ?? 'notes-vault',
+    name: 'Notes vault',
+    slug: NOTES_SOURCE_SLUG,
+    enabled: true,
+    provider: NOTES_SOURCE_PROVIDER,
+    type: 'local',
+    local: {
+      path: notesPath,
+      format: 'obsidian',
+    },
+    icon: '📓',
+    tagline: 'Markdown notes, backlinks, tags, properties, daily notes, and assets',
+    isAuthenticated: true,
+    connectionStatus: 'connected',
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  }
+
+  saveSourceConfig(workspaceRoot, sourceConfig)
+  saveSourceGuide(workspaceRoot, NOTES_SOURCE_SLUG, { raw: buildNotesSourceGuide(notesPath) })
+}
+
 export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): void {
   const log = deps.platform.logger
 
@@ -28,6 +92,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       log.error(`SOURCES_GET: Workspace not found: ${workspaceId}`)
       return []
     }
+    ensureNotesSource(workspace.rootPath, workspaceId)
     return loadWorkspaceSources(workspace.rootPath)
   })
 

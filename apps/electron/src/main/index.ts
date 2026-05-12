@@ -72,7 +72,7 @@ import { existsSync, readFileSync } from 'fs'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
 import { registerAllRpcHandlers } from './handlers/index'
-import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient } from '@craft-agent/server-core/handlers/rpc'
+import { registerCoreRpcHandlers, cleanupCoreClientResources } from '@craft-agent/server-core/handlers/rpc'
 import type { PlatformServices } from '../runtime/platform'
 import { createElectronPlatform } from './platform'
 import type { HandlerDeps } from './handlers/handler-deps'
@@ -527,6 +527,24 @@ app.whenReady().then(async () => {
       const result = await dialog.showOpenDialog(win, spec)
       return { canceled: result.canceled, filePaths: result.filePaths }
     })
+    ipcMain.handle('notes:exportPdf', async (event, opts: { html: string; defaultPath: string }) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+        || BrowserWindow.getFocusedWindow()
+        || BrowserWindow.getAllWindows()[0]
+      if (!win) return { canceled: true }
+      const result = await dialog.showSaveDialog(win, {
+        defaultPath: opts.defaultPath,
+        filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      })
+      if (result.canceled || !result.filePath) return { canceled: true }
+      const hidden = new BrowserWindow({ show: false, webPreferences: { nodeIntegration: false, contextIsolation: true } })
+      await hidden.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(opts.html)}`)
+      const pdfBuffer = await hidden.webContents.printToPDF({ printBackground: true })
+      hidden.destroy()
+      const { writeFile } = await import('fs/promises')
+      await writeFile(result.filePath, pdfBuffer)
+      return { canceled: false, filePath: result.filePath }
+    })
 
     if (!isClientOnly) {
       // Restore persisted Git Bash path on Windows (must happen before any SDK subprocess spawn)
@@ -700,7 +718,7 @@ app.whenReady().then(async () => {
           for (const [wcId, cId] of clientMap) {
             if (cId === clientId) { clientMap.delete(wcId); break }
           }
-          cleanupSessionFileWatchForClient(clientId)
+          cleanupCoreClientResources(clientId)
         },
       })
 

@@ -424,6 +424,10 @@ client.onConnectionStateChanged((state) => {
 // i18n: sync language changes to main process (for native menus/dialogs)
 ;(api as ElectronAPI).changeLanguage = (lang: string) => ipcRenderer.invoke('i18n:changeLanguage', lang)
 
+// Notes PDF export — direct ipcMain.handle (needs BrowserWindow.printToPDF, not WS RPC)
+;(api as ElectronAPI).exportNotePdf = (opts: { html: string; defaultPath: string }) =>
+  ipcRenderer.invoke('notes:exportPdf', opts)
+
 // webUtils.getPathForFile: returns the absolute OS path of a File object obtained
 // from <input type="file"> or OS drag-drop. Returns null for Files fabricated from
 // Blobs (clipboard paste, web-drag) — those are content-only, no filesystem path.

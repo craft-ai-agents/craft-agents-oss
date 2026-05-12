@@ -64,6 +64,7 @@ export default function WorkspaceSettingsPage() {
   const [isUploadingIcon, setIsUploadingIcon] = useState(false)
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('ask')
   const [workingDirectory, setWorkingDirectory] = useState('')
+  const [notesPath, setNotesPath] = useState('')
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true)
 
@@ -91,6 +92,7 @@ export default function WorkspaceSettingsPage() {
           setWsNameEditing(settings.name || '')
           setPermissionMode(settings.permissionMode || 'ask')
           setWorkingDirectory(settings.workingDirectory || '')
+          setNotesPath(settings.notesPath || '')
           setLocalMcpEnabled(settings.localMcpEnabled ?? true)
           // Load cyclable permission modes from workspace settings
           if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
@@ -257,6 +259,20 @@ export default function WorkspaceSettingsPage() {
     }
   }, [updateWorkspaceSetting])
 
+  const handleNotesPathSelected = useCallback(async (selectedPath: string) => {
+    const saved = await updateWorkspaceSetting('notesPath', selectedPath)
+    if (saved) {
+      setNotesPath(selectedPath)
+    }
+  }, [updateWorkspaceSetting])
+
+  const handleClearNotesPath = useCallback(async () => {
+    const saved = await updateWorkspaceSetting('notesPath', undefined)
+    if (saved) {
+      setNotesPath('')
+    }
+  }, [updateWorkspaceSetting])
+
   const {
     pickDirectory: handleChangeWorkingDirectory,
     showServerBrowser: showWdBrowser,
@@ -264,6 +280,14 @@ export default function WorkspaceSettingsPage() {
     cancelServerBrowser: cancelWdBrowser,
     confirmServerBrowser: confirmWdBrowser,
   } = useDirectoryPicker(handleWorkingDirectorySelected)
+
+  const {
+    pickDirectory: handleChangeNotesPath,
+    showServerBrowser: showNotesBrowser,
+    serverBrowserMode: notesBrowserMode,
+    cancelServerBrowser: cancelNotesBrowser,
+    confirmServerBrowser: confirmNotesBrowser,
+  } = useDirectoryPicker(handleNotesPathSelected)
 
   const handleClearWorkingDirectory = useCallback(async () => {
     if (!window.electronAPI) return
@@ -539,6 +563,30 @@ export default function WorkspaceSettingsPage() {
                     </div>
                   }
                 />
+                <SettingsRow
+                  label={t("settings.workspace.notesStoragePath")}
+                  description={notesPath || t("settings.workspace.notesStoragePathDesc")}
+                  action={
+                    <div className="flex items-center gap-2">
+                      {notesPath && (
+                        <button
+                          type="button"
+                          onClick={handleClearNotesPath}
+                          className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors text-foreground/60 hover:text-foreground"
+                        >
+                          {t("common.clear")}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleChangeNotesPath}
+                        className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
+                      >
+                        {t("common.change")}
+                      </button>
+                    </div>
+                  }
+                />
                 <SettingsToggle
                   label={t("settings.workspace.localMcpServers")}
                   description={t("settings.workspace.localMcpServersDesc")}
@@ -558,6 +606,13 @@ export default function WorkspaceSettingsPage() {
         onSelect={confirmWdBrowser}
         onCancel={cancelWdBrowser}
         initialPath={workingDirectory || undefined}
+      />
+      <ServerDirectoryBrowser
+        open={showNotesBrowser}
+        mode={notesBrowserMode}
+        onSelect={confirmNotesBrowser}
+        onCancel={cancelNotesBrowser}
+        initialPath={notesPath || undefined}
       />
     </div>
   )

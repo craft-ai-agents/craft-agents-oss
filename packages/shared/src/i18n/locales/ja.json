@@ -1043,6 +1043,8 @@
   "settings.workspace.modeCyclingDesc": "Shift+Tabでサイクルするモードを選択",
   "settings.workspace.noSourcesConfigured": "このWorkspaceにはソースが設定されていません。",
   "settings.workspace.noWorkspaceSelected": "Workspaceが選択されていません",
+  "settings.workspace.notesStoragePath": "ノート保存パス",
+  "settings.workspace.notesStoragePathDesc": "デフォルト (~/.craft-agent/workspaces/{id}/notes)",
   "settings.workspace.permissionsSection": "権限",
   "settings.workspace.renameWorkspace": "Workspaceの名前を変更",
   "settings.workspace.title": "Workspace",

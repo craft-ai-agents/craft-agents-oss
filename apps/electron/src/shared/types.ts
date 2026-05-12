@@ -209,6 +209,15 @@ import type {
   TestAutomationResult,
   WindowCloseRequest,
   DirectoryListingResult,
+  NoteChangedPayload,
+  NoteAsset,
+  NoteAssetImportResult,
+  NoteAssetRenameResult,
+  NoteBacklink,
+  NoteDocument,
+  NoteRenameImpact,
+  NoteRenameResult,
+  NoteSummary,
   RemoteSessionTransferPayload,
   ImportRemoteSessionTransferResult,
 } from '@craft-agent/shared/protocol'
@@ -321,6 +330,28 @@ export interface ElectronAPI {
 
   // Server filesystem browsing (remote mode)
   listServerDirectory(dirPath: string): Promise<DirectoryListingResult>
+
+  // Notes
+  listNotes(workspaceId: string): Promise<NoteSummary[]>
+  readNote(workspaceId: string, noteId: string): Promise<NoteDocument>
+  saveNote(workspaceId: string, noteId: string, content: string): Promise<NoteDocument>
+  createNote(workspaceId: string, title: string, folder?: string): Promise<NoteDocument>
+  renameNote(workspaceId: string, noteId: string, nextTitle: string): Promise<NoteRenameResult>
+  deleteNote(workspaceId: string, noteId: string): Promise<boolean>
+  renameFolderNote(workspaceId: string, folder: string, nextName: string): Promise<{ movedNotes: string[] }>
+  deleteFolderNote(workspaceId: string, folder: string): Promise<{ deletedNotes: string[] }>
+  searchNotes(workspaceId: string, query: string): Promise<NoteSummary[]>
+  getNoteBacklinks(workspaceId: string, noteId: string): Promise<NoteBacklink[]>
+  getNoteRenameImpact(workspaceId: string, noteId: string, nextTitle: string): Promise<NoteRenameImpact>
+  getDailyNote(workspaceId: string, date?: string): Promise<NoteDocument>
+  importNoteAsset(workspaceId: string, attachment: FileAttachment): Promise<NoteAssetImportResult>
+  listNoteAssets(workspaceId: string): Promise<NoteAsset[]>
+  deleteNoteAsset(workspaceId: string, relativePath: string): Promise<boolean>
+  renameNoteAsset(workspaceId: string, relativePath: string, nextName: string): Promise<NoteAssetRenameResult>
+  updateNoteProperties(workspaceId: string, noteId: string, properties: Record<string, unknown>): Promise<NoteDocument>
+  watchNotes(workspaceId: string): Promise<void>
+  unwatchNotes(workspaceId: string): Promise<void>
+  onNotesChanged(callback: (payload: NoteChangedPayload | string) => void): () => void
   // Debug: send renderer logs to main process log file
   debugLog(...args: unknown[]): void
 
@@ -366,6 +397,7 @@ export interface ElectronAPI {
   openUrl(url: string): Promise<void>
   openFile(path: string): Promise<void>
   showInFolder(path: string): Promise<void>
+  exportNotePdf(opts: { html: string; defaultPath: string }): Promise<{ canceled: boolean; filePath?: string }>
 
   // Menu event listeners
   onMenuNewChat(callback: () => void): () => void
@@ -836,6 +868,15 @@ export interface SkillsNavigationState {
 }
 
 /**
+ * Notes navigation state
+ */
+export interface NotesNavigationState {
+  navigator: 'notes'
+  details: { type: 'note'; noteId: string } | null
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Automations navigation state
  */
 export interface AutomationsNavigationState {
@@ -853,6 +894,7 @@ export type NavigationState =
   | SourcesNavigationState
   | SettingsNavigationState
   | SkillsNavigationState
+  | NotesNavigationState
   | AutomationsNavigationState
 
 export const isSessionsNavigation = (
@@ -870,6 +912,10 @@ export const isSettingsNavigation = (
 export const isSkillsNavigation = (
   state: NavigationState
 ): state is SkillsNavigationState => state.navigator === 'skills'
+
+export const isNotesNavigation = (
+  state: NavigationState
+): state is NotesNavigationState => state.navigator === 'notes'
 
 export const isAutomationsNavigation = (
   state: NavigationState
@@ -893,6 +939,12 @@ export const getNavigationStateKey = (state: NavigationState): string => {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'
+  }
+  if (state.navigator === 'notes') {
+    if (state.details?.type === 'note') {
+      return `notes/note/${encodeURIComponent(state.details.noteId)}`
+    }
+    return 'notes'
   }
   if (state.navigator === 'automations') {
     if (state.details?.type === 'automation') {
@@ -936,6 +988,16 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
       return { navigator: 'skills', details: { type: 'skill', skillSlug } }
     }
     return { navigator: 'skills', details: null }
+  }
+
+  // Handle notes
+  if (key === 'notes') return { navigator: 'notes', details: null }
+  if (key.startsWith('notes/note/')) {
+    const noteId = decodeURIComponent(key.slice(11))
+    if (noteId) {
+      return { navigator: 'notes', details: { type: 'note', noteId } }
+    }
+    return { navigator: 'notes', details: null }
   }
 
   // Handle automations

@@ -16,12 +16,14 @@ import { MermaidBlock } from './extensions/MermaidBlock'
 import { looksLikeMermaidSource } from './mermaid-source'
 import { LatexBlock } from './extensions/LatexBlock'
 import { RichBlockInteractions } from './extensions/RichBlockInteractions'
+import { WikiLink } from './extensions/WikiLink'
 import { cn } from '../../lib/utils'
 import 'katex/dist/katex.min.css'
 import './tiptap-editor.css'
 import './extensions/animated-task-item.css'
 
 export type MarkdownEngine = 'legacy' | 'official'
+export type TiptapEditorHandle = NonNullable<ReturnType<typeof useEditor>>
 
 
 function getLegacyMarkdown(editor: { storage: { markdown?: { getMarkdown?: () => string } } }): string {
@@ -203,6 +205,10 @@ export interface TiptapMarkdownEditorProps {
   className?: string
   /** Whether the editor is editable */
   editable?: boolean
+  /** Exposes the editor instance for host-level integrations such as custom autocomplete. */
+  onEditorReady?: (editor: TiptapEditorHandle | null) => void
+  /** Called when the user clicks a [[wiki link]] in the editor. */
+  onWikiLinkClick?: (target: string) => void
   /**
    * Migration flag for markdown engine foundations.
    * - `legacy`: tiptap-markdown (default for safe rollout)
@@ -217,10 +223,15 @@ export function TiptapMarkdownEditor({
   placeholder = 'Write something...',
   className,
   editable = true,
+  onEditorReady,
+  onWikiLinkClick,
   markdownEngine = 'legacy',
 }: TiptapMarkdownEditorProps) {
   const onUpdateRef = React.useRef(onUpdate)
   onUpdateRef.current = onUpdate
+
+  const onWikiLinkClickRef = React.useRef(onWikiLinkClick)
+  onWikiLinkClickRef.current = onWikiLinkClick
 
   // Ref for the editor instance — used by the Mathematics onClick callback
   // which is created at extension-configure time (before useEditor returns).
@@ -259,6 +270,9 @@ export function TiptapMarkdownEditor({
         },
       }),
       RichBlockInteractions,
+      WikiLink.configure({
+        onWikiLinkClick: (target) => onWikiLinkClickRef.current?.(target),
+      }),
       ...(editable ? [TiptapSlashMenu] : []),
     ]
 
@@ -355,6 +369,10 @@ export function TiptapMarkdownEditor({
   // Keep editorRef in sync for the Mathematics onClick callback
   editorRef.current = editor
 
+  React.useEffect(() => {
+    onEditorReady?.(editor as TiptapEditorHandle | null)
+    return () => onEditorReady?.(null)
+  }, [editor, onEditorReady])
 
   // Sync editable prop
   React.useEffect(() => {

@@ -1043,6 +1043,8 @@
   "settings.workspace.modeCyclingDesc": "选择使用 Shift+Tab 循环切换的模式",
   "settings.workspace.noSourcesConfigured": "此 Workspace 未配置数据源。",
   "settings.workspace.noWorkspaceSelected": "未选择 Workspace",
+  "settings.workspace.notesStoragePath": "笔记存储路径",
+  "settings.workspace.notesStoragePathDesc": "默认 (~/.craft-agent/workspaces/{id}/notes)",
   "settings.workspace.permissionsSection": "权限",
   "settings.workspace.renameWorkspace": "重命名 Workspace",
   "settings.workspace.title": "Workspace",

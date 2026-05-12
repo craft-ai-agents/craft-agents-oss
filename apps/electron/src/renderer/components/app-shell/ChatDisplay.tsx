@@ -109,6 +109,30 @@ interface MarkdownOverlayState {
   forceCodeView?: boolean
 }
 
+function encodeNoteTarget(target: string): string {
+  return encodeURIComponent(target.trim().replace(/\.md$/i, ''))
+}
+
+function linkifyNoteReferenceText(content: string): string {
+  let next = content.replace(/\[\[([^\]|#]+)(#[^\]|]*)?(?:\|([^\]]+))?\]\]/g, (_match, target: string, heading = '', alias?: string) => {
+    const label = alias?.trim() || `${target.trim()}${heading || ''}`
+    return `[${label}](craft-note:${encodeNoteTarget(target)})`
+  })
+
+  next = next.replace(/(^|[\s(])((?:\.\/)?notes\/[^\s)\]]+?\.md)(?=$|[\s).,;:!?])/g, (_match, prefix: string, path: string) => {
+    return `${prefix}[${path}](craft-note:${encodeNoteTarget(path.replace(/^\.\//, '').replace(/^notes\//, ''))})`
+  })
+
+  return next
+}
+
+function linkifyNoteReferences(content: string): string {
+  return content
+    .split(/(```[\s\S]*?```|`[^`\n]+`)/g)
+    .map((segment) => segment.startsWith('`') ? segment : linkifyNoteReferenceText(segment))
+    .join('')
+}
+
 /** Union of all overlay states, or null for no overlay */
 type OverlayState =
   | { type: 'activity'; activity: ActivityItem }
@@ -2207,12 +2231,13 @@ function MessageBubble({
   onRetry,
 }: MessageBubbleProps) {
   const { t } = useTranslation()
+  const messageContent = useMemo(() => linkifyNoteReferences(message.content), [message.content])
 
   // === USER MESSAGE: Right-aligned bubble with attachments above ===
   if (message.role === 'user') {
     return (
       <UserMessageBubble
-        content={message.content}
+        content={messageContent}
         attachments={message.attachments}
         badges={message.badges}
         isPending={message.isPending}
@@ -2243,7 +2268,7 @@ function MessageBubble({
           {/* Use StreamingMarkdown for block-level memoization during streaming */}
           {message.isStreaming ? (
             <StreamingMarkdown
-              content={message.content}
+              content={messageContent}
               isStreaming={true}
               mode={renderMode}
               onUrlClick={onOpenUrl}
@@ -2259,7 +2284,7 @@ function MessageBubble({
                 className="text-sm"
                 collapsible
               >
-                {message.content}
+                {messageContent}
               </Markdown>
             </CollapsibleMarkdownProvider>
           )}
