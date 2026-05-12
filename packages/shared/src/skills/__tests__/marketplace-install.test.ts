@@ -418,7 +418,7 @@ describe('checkMarketplaceSkillUpdates', () => {
         { marketplaceId: 'mkt_skill_release_notes', marketplaceSlug: 'release-notes', installedVersion: '1.7.1' },
         { marketplaceId: 'mkt_skill_security_review', marketplaceSlug: 'security-review', installedVersion: '3.0.0' },
       ]])
-      expect(result).toMatchObject([
+      expect(result).toEqual([
         {
           slug: 'release-notes',
           marketplaceId: 'mkt_skill_release_notes',
@@ -427,6 +427,9 @@ describe('checkMarketplaceSkillUpdates', () => {
           status: 'unavailable',
           message: 'Owner unpublished this Marketplace Skill.',
           modified: false,
+          isOwnerLinked: false,
+          hasUnpublishedChanges: false,
+          canSyncLatest: true,
         },
         {
           slug: 'security-review',
@@ -436,6 +439,9 @@ describe('checkMarketplaceSkillUpdates', () => {
           status: 'safety-blocked',
           message: 'Admin blocked this Marketplace Skill.',
           modified: false,
+          isOwnerLinked: false,
+          hasUnpublishedChanges: false,
+          canSyncLatest: true,
         },
       ])
       expect(readFileSync(join(workspaceRoot, 'skills', 'release-notes', 'SKILL.md'), 'utf-8')).toContain('Installed body')
