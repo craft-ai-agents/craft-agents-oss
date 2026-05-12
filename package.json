@@ -22,7 +22,8 @@
   ],
   "scripts": {
     "afk": "bun run .afk/main.ts",
-    "ralph": "bun run .afk/run.ts",
+    "ralph": "bun run .afk/run-linear.ts",
+    "ralph:github": "bun run .afk/run.ts",
     "ralph:local": "bun run .afk/run-local.ts",
     "issue": "bun run .afk/create-issue.ts",
     "issue:local": "bun run .afk/create-local-issue.ts",
@@ -149,6 +150,7 @@
     "@dnd-kit/dom": "^0.4.0-beta-20260227032529",
     "@dnd-kit/helpers": "^0.4.0-beta-20260227032529",
     "@github/copilot-sdk": "^0.1.23",
+    "@linear/sdk": "^84.0.0",
     "@mariozechner/pi-ai": "0.72.1",
     "@mariozechner/pi-coding-agent": "0.72.1",
     "@modelcontextprotocol/sdk": "^1.24.3",
